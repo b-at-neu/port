@@ -12,6 +12,13 @@ export interface PortResolved {
   readonly sessionRequiredPaths: readonly string[]
 }
 
+/** A file read from the repository's default branch at `origin/HEAD`, the ref stage agents read. */
+export type RefRead =
+  | { readonly ok: true; readonly text: string }
+  | { readonly ok: false; readonly kind: 'ref-unreadable' | 'not-found' | 'unreadable'; readonly message: string }
+
+export type RefReader = (relPath: string) => Promise<RefRead>
+
 export interface RegistryDeps {
   readonly registryDir: string
   readonly git: GitRunner

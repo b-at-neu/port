@@ -3,7 +3,7 @@ import type { StageRegistry } from '@/types/stage'
 
 // The real StageLauncher: a worktree, a hosted session, a send, and the hand-back watcher that closes and removes it.
 import type { GitRunner } from '@/types/platform'
-import type { CreateSessionWorktreeParams, CreateSessionWorktreeResult, RemoveSessionWorktreeOutcome } from '@/types/workspace'
+import type { CreateStageWorktreeParams, CreateStageWorktreeResult, ReleaseBranchOutcome, RemoveSessionWorktreeOutcome } from '@/types/workspace'
 import type { StageLaunchRequest, StageLaunchResult } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '@/types/hosting'
 
@@ -28,8 +28,11 @@ function inputSummaryOf(input: Readonly<Record<string, unknown>>): string {
 interface CreateStageLauncherParams {
   readonly store: HostedStore
   readonly git: GitRunner
-  readonly createWorktree: (params: CreateSessionWorktreeParams) => Promise<CreateSessionWorktreeResult>
+  readonly createWorktree: (params: CreateStageWorktreeParams) => Promise<CreateStageWorktreeResult>
   readonly removeWorktree: (path: string, force: boolean) => Promise<RemoveSessionWorktreeOutcome>
+  readonly releaseBranch: (root: string, branch: string, baseSha: string) => Promise<ReleaseBranchOutcome>
+  /** Runs once per repository root per process, never awaited as a gate. */
+  readonly sweepBranches: (root: string) => Promise<unknown>
   readonly now: () => Date
   readonly onOutcome: (repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome) => void
   /** `stage-sessions.json`'s sole writer — every launch records `running` here, every hand-back clears or marks it. */
@@ -60,7 +63,14 @@ function startFailureMessage(result: Extract<SessionStartResult, { readonly ok: 
 }
 
 export function createStageLauncher(params: CreateStageLauncherParams): StageLauncherHandle {
-  const tracked = new Map<SessionKey, { readonly repoId: RepoId; readonly registryId: string; lastSeenResultAt: string | null; sawSessionId: boolean }>()
+  const tracked = new Map<SessionKey, { readonly repoId: RepoId; readonly registryId: string; readonly root: string; readonly branch: string | null; readonly baseSha: string; lastSeenResultAt: string | null; sawSessionId: boolean }>()
+  const swept = new Set<string>()
+
+  async function removeAndRelease(root: string, path: string, branch: string | null, baseSha: string): Promise<RemoveSessionWorktreeOutcome> {
+    const removed = await params.removeWorktree(path, false)
+    if (removed.outcome === 'removed' && branch !== null) await params.releaseBranch(root, branch, baseSha)
+    return removed
+  }
   // Serializes observe() per session key so two status pushes for the same session never race the hand-back.
   let chain: Promise<void> = Promise.resolve()
 
@@ -69,7 +79,13 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
   }
 
   async function launch(request: StageLaunchRequest): Promise<StageLaunchResult> {
-    const wt = await params.createWorktree({ root: request.entry.path, git: params.git })
+    const root = request.entry.path
+    if (!swept.has(root)) {
+      swept.add(root)
+      void params.sweepBranches(root).catch(() => undefined)
+    }
+
+    const wt = await params.createWorktree({ root, git: params.git, agent: request.agent, number: request.number, integration: request.entry.config.branches.integration, target: request.target })
     if (!wt.ok) return { ok: false, kind: 'failed', message: `Couldn't create the stage worktree: ${wt.message}` }
 
     const registryId = params.newId()
@@ -90,7 +106,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       repoId: request.entry.id,
       mode: { kind: 'fresh' },
       initialTitle: stageTitle(request.title),
-      workspace: { folder: wt.path, root: request.entry.path, worktree: { path: wt.path, branch: wt.branch }, base: { sha: wt.baseSha, label: wt.branch } },
+      workspace: { folder: wt.path, root: request.entry.path, worktree: { path: wt.path, branch: wt.branch }, base: { sha: wt.baseSha, label: wt.baseLabel } },
       stage: {
         tag: { agent: request.agent, number: request.number, kind: request.kind, trigger: request.trigger },
         agentName: STAGE_AGENT_NAMES[request.agent],
@@ -101,7 +117,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     })
 
     if (!startResult.ok) {
-      await params.removeWorktree(wt.path, false)
+      await removeAndRelease(root, wt.path, wt.branch, wt.baseSha)
       if (startResult.kind === 'at-capacity') return { ok: false, kind: 'at-capacity', limit: startResult.limit }
       return { ok: false, kind: 'failed', message: startFailureMessage(startResult) }
     }
@@ -110,11 +126,11 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     const sendResult = params.store.send(sessionKey, request.prompt)
     if (!sendResult.ok) {
       await params.store.close(sessionKey)
-      await params.removeWorktree(wt.path, false)
+      await removeAndRelease(root, wt.path, wt.branch, wt.baseSha)
       return { ok: false, kind: 'failed', message: `could not send the stage prompt: ${sendResult.kind}` }
     }
 
-    tracked.set(sessionKey, { repoId: request.entry.id, registryId, lastSeenResultAt: null, sawSessionId: false })
+    tracked.set(sessionKey, { repoId: request.entry.id, registryId, root, branch: wt.branch, baseSha: wt.baseSha, lastSeenResultAt: null, sawSessionId: false })
     params.registry.recordRunning({
       id: registryId,
       repoId: request.entry.id,
@@ -170,7 +186,9 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       if (outcome.kind === 'completed') {
         await params.store.close(sessionKey)
         const dismissResult = await params.store.dismiss(sessionKey, 'remove')
-        const worktree = dismissResult.ok ? 'removed' : dismissResult.kind === 'worktree-dirty' ? 'kept-dirty' : dismissResult.kind === 'worktree-remove-failed' ? 'remove-failed' : outcome.worktree
+        const held = tracked.get(sessionKey)
+        if (dismissResult.ok && held !== undefined && held.branch !== null) await params.releaseBranch(held.root, held.branch, held.baseSha)
+        const worktree =dismissResult.ok ? 'removed' : dismissResult.kind === 'worktree-dirty' ? 'kept-dirty' : dismissResult.kind === 'worktree-remove-failed' ? 'remove-failed' : outcome.worktree
         tracked.delete(sessionKey)
         params.registry.remove(registryId)
         params.onOutcome(repoId, sessionKey, { ...outcome, worktree })

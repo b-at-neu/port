@@ -40,6 +40,16 @@ export const operatorWorktreePayload = (overrides = {}) => ({
   ...overrides,
 });
 
+// An app stage session running in an `impl-<n>` worktree: the same cwd as `operatorWorktreePayload`, but carrying an agent identity.
+export const stageInImplWorktreePayload = (overrides = {}) => ({
+  cwd: '/home/operator/some-other-project/.claude/worktrees/impl-503',
+  session_id: 'sess-stage-impl',
+  transcript_path: '/home/operator/.claude/projects/some-other-project/sess-stage-impl.jsonl',
+  agent_type: 'port:impl-agent',
+  tool_name: 'Bash',
+  ...overrides,
+});
+
 // Deliberately neither an `agent-` nor an `impl-` name, isolating `isManagedWorktree` from the two other signals.
 export const managedWorktreePayload = (overrides = {}) => ({
   cwd: '/home/operator/some-other-project/.claude/worktrees/other-9',

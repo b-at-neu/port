@@ -117,8 +117,10 @@ export function repoProblemCopy(problem: RepoProblem): string {
       return "Not a git repository. Pick the repository's root folder."
     case 'not-port-managed':
       return problem.carriedBy.length > 0
-        ? `Not port-managed on ${problem.currentBranch}. The harness is on ${problem.carriedBy.join(', ')} — check one of those out and rescan.`
+        ? `Not port-managed on ${problem.ref}. ${problem.carriedBy.join(', ')} carry the harness — merge one into the default branch, then rescan.`
         : "Not port-managed. There's no .claude/port.config.json on any branch here."
+    case 'config-ref-unreadable':
+      return `Can't read the default branch at origin/HEAD — ${problem.message}.`
     case 'config-malformed':
       return `.claude/port.config.json isn't valid JSON — ${problem.message}.`
     case 'config-invalid':

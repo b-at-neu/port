@@ -1,46 +1,91 @@
-import { mkdir, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { CommandResult } from '@/types/platform'
-import { currentBranch, permissionsState, refsCarryingConfig } from '@/main/registry/harness'
+import { defaultRefName, permissionsStateOf, readAtDefaultRef, refsCarryingConfig } from '@/main/registry/harness'
 import type { GitRunner } from '@/types/platform'
-import { makeTempDir } from '../../../fixtures/fs'
 
 function ok(stdout: string): CommandResult {
   return { ok: true, stdout, stderr: '' }
 }
 
+function nonzero(code: number, stderr: string): CommandResult {
+  return { ok: false, kind: 'nonzero', code, stdout: '', stderr }
+}
+
 const NOT_FOUND: CommandResult = { ok: false, kind: 'not-found', command: 'git', searched: [] }
 
-describe('currentBranch', () => {
-  it('reports a normal branch', async () => {
+describe('readAtDefaultRef', () => {
+  it('reads the blob straight from origin/HEAD', async () => {
+    const calls: string[][] = []
     const git: GitRunner = (args) => {
-      expect(args).toEqual(['rev-parse', '--abbrev-ref', 'HEAD'])
-      return Promise.resolve(ok('main\n'))
+      calls.push([...args])
+      if (args[0] === 'rev-parse') return Promise.resolve(ok('deadbeef\n'))
+      return Promise.resolve(ok('{"repo":"o/n"}'))
     }
-    expect(await currentBranch(git, '/repo')).toEqual({ kind: 'branch', name: 'main' })
+    expect(await readAtDefaultRef(git, '/repo', '.claude/port.config.json')).toEqual({ ok: true, text: '{"repo":"o/n"}' })
+    expect(calls).toEqual([
+      ['rev-parse', '--verify', '--quiet', 'refs/remotes/origin/HEAD'],
+      ['show', 'refs/remotes/origin/HEAD:.claude/port.config.json'],
+    ])
   })
 
-  it('promotes a literal HEAD to detached-head with the short sha', async () => {
+  it('restores a missing origin/HEAD once with set-head, then reads', async () => {
+    const calls: string[][] = []
+    let restored = false
     const git: GitRunner = (args) => {
-      if (args[0] === 'rev-parse' && args.includes('--abbrev-ref')) return Promise.resolve(ok('HEAD\n'))
-      if (args[0] === 'rev-parse' && args.includes('--short')) return Promise.resolve(ok('abc1234\n'))
-      throw new Error(`unexpected call: ${args.join(' ')}`)
+      calls.push([...args])
+      if (args[0] === 'remote') {
+        restored = true
+        return Promise.resolve(ok(''))
+      }
+      if (args[0] === 'rev-parse') return Promise.resolve(restored ? ok('deadbeef\n') : nonzero(1, ''))
+      return Promise.resolve(ok('x'))
     }
-    expect(await currentBranch(git, '/repo')).toEqual({ kind: 'detached', sha: 'abc1234' })
+    expect(await readAtDefaultRef(git, '/repo', 'CLAUDE.md')).toEqual({ ok: true, text: 'x' })
+    expect(calls.filter((call) => call[0] === 'remote')).toEqual([['remote', 'set-head', 'origin', '--auto']])
   })
 
-  it('reports unavailable when git itself is not found, without throwing', async () => {
-    const git: GitRunner = () => Promise.resolve(NOT_FOUND)
-    expect(await currentBranch(git, '/repo')).toEqual({ kind: 'unavailable' })
+  it('reports ref-unreadable with git’s own message when set-head fails', async () => {
+    const git: GitRunner = (args) => Promise.resolve(args[0] === 'rev-parse' ? nonzero(1, '') : nonzero(128, "error: No such remote 'origin'"))
+    expect(await readAtDefaultRef(git, '/repo', 'CLAUDE.md')).toEqual({ ok: false, kind: 'ref-unreadable', message: "error: No such remote 'origin'" })
   })
 
-  it('reports unavailable when the second call (resolving the detached sha) fails', async () => {
-    const git: GitRunner = (args) => {
-      if (args.includes('--abbrev-ref')) return Promise.resolve(ok('HEAD\n'))
-      return Promise.resolve(NOT_FOUND)
+  it('reports ref-unreadable when origin/HEAD is still missing after set-head', async () => {
+    const git: GitRunner = (args) => Promise.resolve(args[0] === 'remote' ? ok('') : nonzero(1, ''))
+    const result = await readAtDefaultRef(git, '/repo', 'CLAUDE.md')
+    expect(result).toEqual({ ok: false, kind: 'ref-unreadable', message: 'origin/HEAD is not set' })
+  })
+
+  it('maps both "does not exist" wordings to not-found', async () => {
+    for (const stderr of ["fatal: path 'CLAUDE.md' does not exist in 'refs/remotes/origin/HEAD'", "fatal: path 'CLAUDE.md' exists on disk, but not in 'refs/remotes/origin/HEAD'"]) {
+      const git: GitRunner = (args) => Promise.resolve(args[0] === 'rev-parse' ? ok('deadbeef\n') : nonzero(128, stderr))
+      const result = await readAtDefaultRef(git, '/repo', 'CLAUDE.md')
+      expect(result).toMatchObject({ ok: false, kind: 'not-found' })
     }
-    expect(await currentBranch(git, '/repo')).toEqual({ kind: 'unavailable' })
+  })
+
+  it('maps any other show failure to unreadable', async () => {
+    const git: GitRunner = (args) => Promise.resolve(args[0] === 'rev-parse' ? ok('deadbeef\n') : nonzero(128, 'fatal: unable to read blob'))
+    expect(await readAtDefaultRef(git, '/repo', 'CLAUDE.md')).toEqual({ ok: false, kind: 'unreadable', message: 'fatal: unable to read blob' })
+  })
+
+  it('maps a failure to run git at all to unreadable', async () => {
+    const git: GitRunner = (args) => Promise.resolve(args[0] === 'rev-parse' ? ok('deadbeef\n') : NOT_FOUND)
+    expect(await readAtDefaultRef(git, '/repo', 'CLAUDE.md')).toEqual({ ok: false, kind: 'unreadable', message: 'not-found' })
+  })
+})
+
+describe('defaultRefName', () => {
+  it('names what origin/HEAD points at', async () => {
+    const git: GitRunner = (args) => {
+      expect(args).toEqual(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'])
+      return Promise.resolve(ok('origin/dev\n'))
+    }
+    expect(await defaultRefName(git, '/repo')).toBe('origin/dev')
+  })
+
+  it('is null when the symref cannot be resolved', async () => {
+    const git: GitRunner = () => Promise.resolve(nonzero(128, 'fatal: ref refs/remotes/origin/HEAD is not a symbolic ref'))
+    expect(await defaultRefName(git, '/repo')).toBeNull()
   })
 })
 
@@ -89,30 +134,28 @@ describe('refsCarryingConfig', () => {
   })
 })
 
-describe('permissionsState', () => {
-  it('reports missing when .claude/settings.json does not exist', async () => {
-    const root = await makeTempDir()
-    expect(await permissionsState(root)).toBe('missing')
+describe('permissionsStateOf', () => {
+  it('reports missing when the settings file is not on the default branch', () => {
+    expect(permissionsStateOf({ ok: false, kind: 'not-found', message: 'gone' })).toBe('missing')
   })
 
-  it('reports missing when permissions.allow is absent', async () => {
-    const root = await makeTempDir()
-    await mkdir(join(root, '.claude'), { recursive: true })
-    await writeFile(join(root, '.claude', 'settings.json'), JSON.stringify({}))
-    expect(await permissionsState(root)).toBe('missing')
+  it('reports missing when the settings file is unreadable', () => {
+    expect(permissionsStateOf({ ok: false, kind: 'unreadable', message: 'io' })).toBe('missing')
   })
 
-  it('reports empty when permissions.allow is an empty array', async () => {
-    const root = await makeTempDir()
-    await mkdir(join(root, '.claude'), { recursive: true })
-    await writeFile(join(root, '.claude', 'settings.json'), JSON.stringify({ permissions: { allow: [] } }))
-    expect(await permissionsState(root)).toBe('empty')
+  it('reports missing when the settings file is not JSON', () => {
+    expect(permissionsStateOf({ ok: true, text: '{nope' })).toBe('missing')
   })
 
-  it('reports populated when permissions.allow is non-empty', async () => {
-    const root = await makeTempDir()
-    await mkdir(join(root, '.claude'), { recursive: true })
-    await writeFile(join(root, '.claude', 'settings.json'), JSON.stringify({ permissions: { allow: ['Bash(git *)'] } }))
-    expect(await permissionsState(root)).toBe('populated')
+  it('reports missing when permissions.allow is absent', () => {
+    expect(permissionsStateOf({ ok: true, text: JSON.stringify({}) })).toBe('missing')
+  })
+
+  it('reports empty when permissions.allow is an empty array', () => {
+    expect(permissionsStateOf({ ok: true, text: JSON.stringify({ permissions: { allow: [] } }) })).toBe('empty')
+  })
+
+  it('reports populated when permissions.allow is non-empty', () => {
+    expect(permissionsStateOf({ ok: true, text: JSON.stringify({ permissions: { allow: ['Bash(git *)'] } }) })).toBe('populated')
   })
 })

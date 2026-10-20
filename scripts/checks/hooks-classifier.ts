@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { root } from '#lib/files.ts';
-import { resolveMatchers, subagentPayload, topLevelAgentPayload, makeCheck, makeDecide } from '#lib/guard-fixtures.ts';
+import { resolveMatchers, subagentPayload, topLevelAgentPayload, stageInImplWorktreePayload, operatorWorktreePayload, makeCheck, makeDecide, bash } from '#lib/guard-fixtures.ts';
 import type { Reporter } from '#lib/report.ts';
 
 export default async function ({ fail, ok, expect }: Reporter) {
@@ -151,6 +151,28 @@ export default async function ({ fail, ok, expect }: Reporter) {
     fail('guard-classifier', 'callerKind set isTopLevelAgent despite agent_id being present');
   }
   ok();
+
+  // An app stage session in `impl-<n>` carries an agent identity, so it is never `/port:implement`'s operator worktree.
+  expect(
+    callerKind(stageInImplWorktreePayload()).isOperatorWorktree === false,
+    'guard-classifier',
+    'callerKind treated an agent caller in impl-<n> as the operator worktree',
+  );
+  expect(
+    callerKind(stageInImplWorktreePayload({ agent_id: 'agent-1' })).isOperatorWorktree === false,
+    'guard-classifier',
+    'callerKind treated an agent_id caller in impl-<n> as the operator worktree',
+  );
+  expect(
+    callerKind(operatorWorktreePayload()).isOperatorWorktree === true,
+    'guard-classifier',
+    'callerKind no longer recognises the operator session in impl-<n>',
+  );
+  check(
+    'gh in a shell loop from an app stage session in impl-<n>',
+    gate({ payload: bash('for n in 63 67 71; do gh issue view $n --repo b-at-neu/port; done', stageInImplWorktreePayload) }),
+    'deny',
+  );
 
   // globToRegExp: '**' spans directories, '*' does not.
   if (!globToRegExp('.claude/**').test('.claude/settings.json')) {

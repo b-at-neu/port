@@ -202,7 +202,7 @@ describe('createDispatcher — budget bookkeeping', () => {
         launch,
         budget,
         readOwnership: () => Promise.resolve(ownership),
-        fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
+        fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'], headRefName: null }], unavailable: [], fetchedAt: 'r' }),
       }),
     )
 
@@ -225,7 +225,7 @@ describe('createDispatcher — the budget gate itself', () => {
     const deps = baseDeps({
       store,
       launch,
-      fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
+      fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'], headRefName: null }], unavailable: [], fetchedAt: 'r' }),
       ...overrides,
     })
     return { dispatcher: createDispatcher(deps) }

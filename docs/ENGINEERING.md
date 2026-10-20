@@ -116,6 +116,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 
 **`apps/desktop/src/main/registry/effective.ts`**
 - resolves effective config: `CLAUDE.md` overrides folded over port-resolved values
+- reads `CLAUDE.md` and the approval workflow through an injected ref reader (`harness.ts`'s `readAtDefaultRef`, `origin/HEAD`), the same ref stage agents read — never the checked-out files
 - fails closed (`effective-config-unreadable`) rather than silently running on port defaults
 - imports `scripts/port-tick/overrides.ts` directly — no app-owned copy
 
@@ -137,6 +138,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `agents.ts`'s `STAGE_AGENT_NAMES` is the only place a bare `StageAgent` key becomes an `agent:` value — instructions come from the plugin agent file itself, never a second system prompt
 - `handback.ts`'s `classifyHandback` is pure, built on `utils/stage/handback-text.ts`'s `classifyHandbackText`, which also backs `renderer/board/needs-you.ts`; its `QUESTIONS FOR HUMAN:`/`BLOCKED:` prefixes live there and are pinned against the pipeline skill's own completion text
 - removes a worktree only on `completed`, never forced; every other outcome keeps it
+- releases the branch after every worktree removal — launch failure paths, `completed`, and Restart — through `main/workspace/stage-worktree.ts`'s `releaseStageBranch`; a one-time sweep per repository root runs before the first launch and is never a gate on it
 - writes no label itself (phase 1) — stage sessions still write their own, the same way a terminal-dispatched agent does
 - "operator joined" is stamped by the hosted handle (`main/hosting/handle.ts`) on the first `session:send` into a stage session carrying `source: 'operator'`; the launcher's own prompt send never counts
 
@@ -153,8 +155,9 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - called fire-and-forget from the watcher, never awaited
 
 **`apps/desktop/src/main/workspace/`** (#404)
-- sole creator/remover of session worktrees (`worktree.ts`); never deletes a branch; never forces removal without an explicit caller choice
-- `target.ts` is the only place a start target becomes a cwd; it creates a worktree only on an explicit `worktree: true`. `main/stage/launcher.ts` is the second `createSessionWorktree` caller
+- sole creator/remover of session worktrees (`worktree.ts` for interactive sessions, `stage-worktree.ts` for stage sessions); never forces removal without an explicit caller choice
+- `stage-worktree.ts` creates every stage worktree from a fresh `git fetch origin`, never the main checkout's `HEAD`, and is the only place a local branch is deleted: `releaseStageBranch` deletes it only when its tip equals its start commit or is contained in its remote branch, and keeps it on any doubt; `sweepSessionBranches` applies the same predicate once to leftover `session/*` branches
+- `target.ts` is the only place a start target becomes a cwd; it creates a worktree only on an explicit `worktree: true`. `main/stage/launcher.ts` creates its worktrees through `stage-worktree.ts` instead
 - `main/local/` stays the only reader of the worktree list — this directory never reads it back
 - `resolve.ts`'s `resolveWorkspace`/`toFolderEntry` are the only callers of a session's `GitRunner` for workspace identity; `changes.ts` reuses the same `GitRunner` contract for the Changes diff, never a second invocation shape
 - `diff.ts` is pure — no `GitRunner`, no filesystem; `changes.ts` owns every git invocation and hands it parsed output

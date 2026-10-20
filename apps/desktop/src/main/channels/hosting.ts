@@ -291,6 +291,7 @@ function problemReason(problem: RepoProblem): string {
     case 'config-invalid':
       return '.claude/port.config.json has no usable repo'
     case 'config-unreadable':
+    case 'config-ref-unreadable':
       return "its config can't be read"
     case 'effective-config-unreadable':
       return `${problem.file} can't be read`

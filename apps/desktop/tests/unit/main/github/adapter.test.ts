@@ -73,6 +73,7 @@ describe('fetchItemsByNumber', () => {
             state: 'MERGED',
             mergedAt: '2026-01-01T00:00:00Z',
             closedAt: '2026-01-01T00:00:00Z',
+            headRefName: '195-the-branch',
             assignees: { nodes: [] },
             labels: { nodes: [{ name: 'claude' }, { name: 'approved' }] },
           },
@@ -87,7 +88,7 @@ describe('fetchItemsByNumber', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.resolved).toEqual([
-      { number: 79, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 'issue', url: 'u1', labels: ['ready'], assignees: ['alice'] },
+      { number: 79, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 'issue', url: 'u1', labels: ['ready'], assignees: ['alice'], headRefName: null },
       {
         number: 196,
         kind: 'pull-request',
@@ -98,9 +99,20 @@ describe('fetchItemsByNumber', () => {
         url: 'u2',
         labels: ['claude', 'approved'],
         assignees: [],
+        headRefName: '195-the-branch',
       },
     ])
     expect(result.unavailable).toEqual([])
+  })
+
+  it('maps a pull request without a head branch to null, and never reads one off an issue', async () => {
+    const stdout = JSON.stringify({
+      data: { repository: { n0: { __typename: 'PullRequest', number: 1, title: 't', url: 'u', state: 'OPEN' }, n1: { __typename: 'Issue', number: 2, title: 't', url: 'u', state: 'OPEN', headRefName: 'stray' } } },
+    })
+    const result = await fetchItemsByNumber({ repo: { owner: 'o', name: 'r' }, numbers: [1, 2], gh: fakeRunner({ ok: true, stdout, stderr: '' }) })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.resolved.map((r) => r.headRefName)).toEqual([null, null])
   })
 
   it('a merged pull request carries mergedAt', async () => {

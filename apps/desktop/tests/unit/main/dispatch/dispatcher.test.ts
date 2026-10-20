@@ -255,14 +255,14 @@ describe('createDispatcher — launching', () => {
       store,
       launch,
       readOwnership: () => Promise.resolve(OWNED_BY_APP),
-      fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
+      fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'], headRefName: null }], unavailable: [], fetchedAt: 'r' }),
       ...overrides,
     })
     return { dispatcher: createDispatcher(deps), launched }
   }
 
   it('a candidate that moved (label no longer present) is dropped — nothing launches', async () => {
-    const { dispatcher, launched } = readyToDispatch({ fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['in progress'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }) })
+    const { dispatcher, launched } = readyToDispatch({ fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['in progress'], assignees: ['op'], headRefName: null }], unavailable: [], fetchedAt: 'r' }) })
     await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
     expect(launched).toHaveLength(0)
     expect(dispatcher.status()[0]?.state).toEqual({ kind: 'idle' })
@@ -281,6 +281,21 @@ describe('createDispatcher — launching', () => {
     ])
   })
 
+  it("builds an issue launch's worktree target from the re-read title", async () => {
+    const { dispatcher, launched } = readyToDispatch()
+    await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
+    expect(launched[0]?.target).toEqual({ kind: 'issue', title: 't' })
+  })
+
+  it("builds a pull request launch's worktree target from the re-read head branch", async () => {
+    const review = [{ number: 47, kind: 'pull-request' as const, trigger: 'readyForReview' as const, agent: 'review' as const, unchecked: false, cycle: null }]
+    const { dispatcher, launched } = readyToDispatch({
+      fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 47, kind: 'pull-request', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['ready for review'], assignees: ['op'], headRefName: '46-sync-time' }], unavailable: [], fetchedAt: 'r' }),
+    })
+    await dispatcher.consider(snapshotWith([tickReport({ actionable: review })]))
+    expect(launched[0]?.target).toEqual({ kind: 'pr', headRefName: '46-sync-time' })
+  })
+
   it('titles a launch for a number outside the sweep with its bare number', async () => {
     const { dispatcher, launched } = readyToDispatch()
     await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
@@ -296,7 +311,7 @@ describe('createDispatcher — launching', () => {
     const snapshot = snapshotWith([tickReport({ actionable: review })])
     const withItems = { ...snapshot, state: { ...snapshot.state, repositories: [{ ok: true, repoId: REPO_ID, repo: 'o/a', displayName: 'o/a', viewer: 'op', items } as never] } }
     const { dispatcher, launched } = readyToDispatch({
-      fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 47, kind: 'pull-request', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['ready for review'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
+      fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 47, kind: 'pull-request', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['ready for review'], assignees: ['op'], headRefName: null }], unavailable: [], fetchedAt: 'r' }),
     })
     await dispatcher.consider(withItems)
     expect(launched[0]).toMatchObject({ agent: 'review', number: 47, title: '#46 Show the last sync time' })
@@ -374,7 +389,7 @@ describe('createDispatcher — stopFor and standDown', () => {
         store,
         launch,
         readOwnership: () => Promise.resolve(OWNED_BY_APP),
-        fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
+        fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'], headRefName: null }], unavailable: [], fetchedAt: 'r' }),
       }),
     )
     await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
@@ -396,7 +411,7 @@ describe('createDispatcher — run state (#314)', () => {
         launch,
         runState: () => 'draining',
         readOwnership: () => Promise.resolve(OWNED_BY_APP),
-        fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
+        fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'], headRefName: null }], unavailable: [], fetchedAt: 'r' }),
       }),
     )
     await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))

@@ -10,7 +10,7 @@ import type { StartSessionParams } from '@/types/hosting'
 const ENTRY = FIXTURE_REPOSITORIES.find((r) => r.id === WIDGETS_ID) as ReadyEntry
 
 function request(overrides: Partial<StageLaunchRequest> = {}): StageLaunchRequest {
-  return { entry: ENTRY, agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', model: 'sonnet', prompt: 'Run your pipeline stage for #52.', title: '#52 Add a dark-mode icon for the tray', ...overrides }
+  return { entry: ENTRY, agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', model: 'sonnet', prompt: 'Run your pipeline stage for #52.', title: '#52 Add a dark-mode icon for the tray', target: { kind: 'issue', title: 'Add a dark-mode icon for the tray' }, ...overrides }
 }
 
 function baseSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSessionSnapshot {
@@ -48,13 +48,15 @@ function fakeDeps(overrides: Partial<{ start: SessionStartResult }> = {}) {
   const start = vi.fn<(params: StartSessionParams) => Promise<SessionStartResult>>().mockResolvedValue(started)
   const store = { start, send, close, dismiss } as unknown as Parameters<typeof createStageLauncher>[0]['store']
   const removeWorktree = vi.fn().mockResolvedValue({ outcome: 'removed' })
-  const createWorktree = vi.fn().mockResolvedValue({ ok: true, path: '/repo/.claude/worktrees/session-abc123', branch: 'session/abc123', baseSha: 'abc' })
+  const createWorktree = vi.fn().mockResolvedValue({ ok: true, path: '/repo/.claude/worktrees/impl-52', branch: '52-add-a-dark-mode-icon', baseSha: 'abc', baseLabel: '52-add-a-dark-mode-icon' })
+  const releaseBranch = vi.fn().mockResolvedValue('deleted')
+  const sweepBranches = vi.fn().mockResolvedValue({ done: true, deleted: [] })
   const onOutcome = vi.fn()
   const registry = { recordRunning: vi.fn(), setSessionId: vi.fn(), markInterrupted: vi.fn(), markAllQuit: vi.fn(), remove: vi.fn(), list: vi.fn(() => []), load: vi.fn() } as unknown as Parameters<typeof createStageLauncher>[0]['registry']
   const onDenial = vi.fn()
   let nextId = 0
   const newId = vi.fn(() => `id-${String((nextId += 1))}`)
-  return { store, removeWorktree, createWorktree, onOutcome, close, dismiss, send, start, registry, onDenial, newId }
+  return { store, removeWorktree, createWorktree, releaseBranch, sweepBranches, onOutcome, close, dismiss, send, start, registry, onDenial, newId }
 }
 
 describe('createStageLauncher.launch', () => {
@@ -94,7 +96,44 @@ describe('createStageLauncher.launch', () => {
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     const result = await launcher.launch(request())
     expect(result).toEqual({ ok: false, kind: 'at-capacity', limit: 3 })
-    expect(deps.removeWorktree).toHaveBeenCalledWith('/repo/.claude/worktrees/session-abc123', false)
+    expect(deps.removeWorktree).toHaveBeenCalledWith('/repo/.claude/worktrees/impl-52', false)
+    expect(deps.releaseBranch).toHaveBeenCalledWith(ENTRY.path, '52-add-a-dark-mode-icon', 'abc')
+  })
+
+  it('does not release the branch when the worktree could not be removed', async () => {
+    const deps = fakeDeps({ start: { ok: false, kind: 'not-git' } })
+    deps.removeWorktree.mockResolvedValue({ outcome: 'dirty' })
+    const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
+    await launcher.launch(request())
+    expect(deps.releaseBranch).not.toHaveBeenCalled()
+  })
+
+  it('asks for a stage worktree built from the request and the configured integration branch', async () => {
+    const deps = fakeDeps()
+    const git = vi.fn() as never
+    const launcher = createStageLauncher({ ...deps, git, now: () => new Date() })
+    await launcher.launch(request())
+    expect(deps.createWorktree).toHaveBeenCalledWith({ root: ENTRY.path, git, agent: 'impl', number: 52, integration: ENTRY.config.branches.integration, target: { kind: 'issue', title: 'Add a dark-mode icon for the tray' } })
+  })
+
+  it('sweeps stale session branches once per repository root, never as a gate', async () => {
+    const deps = fakeDeps()
+    deps.sweepBranches.mockRejectedValue(new Error('boom'))
+    const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
+    const first = await launcher.launch(request())
+    await launcher.launch(request({ number: 53 }))
+    expect(first.ok).toBe(true)
+    expect(deps.sweepBranches).toHaveBeenCalledTimes(1)
+    expect(deps.sweepBranches).toHaveBeenCalledWith(ENTRY.path)
+  })
+
+  it('records no branch for a detached worktree and releases nothing', async () => {
+    const deps = fakeDeps({ start: { ok: false, kind: 'not-git' } })
+    deps.createWorktree.mockResolvedValue({ ok: true, path: '/repo/.claude/worktrees/plan-52', branch: null, baseSha: 'abc', baseLabel: 'origin/dev' })
+    const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
+    await launcher.launch(request({ agent: 'plan', trigger: 'ready' }))
+    expect(deps.removeWorktree).toHaveBeenCalled()
+    expect(deps.releaseBranch).not.toHaveBeenCalled()
   })
 
   it('removes the worktree and returns failed on any other start failure', async () => {
@@ -126,6 +165,7 @@ describe('createStageLauncher.observe', () => {
     expect(deps.close).toHaveBeenCalledWith('hosted-1')
     expect(deps.dismiss).toHaveBeenCalledWith('hosted-1', 'remove')
     expect(deps.onOutcome).toHaveBeenCalledWith(WIDGETS_ID, 'hosted-1', expect.objectContaining({ kind: 'completed', worktree: 'removed' }))
+    expect(deps.releaseBranch).toHaveBeenCalledWith(ENTRY.path, '52-add-a-dark-mode-icon', 'abc')
   })
 
   it('on a dirty dismiss, reports kept-dirty rather than removed', async () => {
@@ -136,6 +176,7 @@ describe('createStageLauncher.observe', () => {
     launcher.observe(baseSnapshot({ lastResult: { subtype: 'success', isError: false, text: 'all done', at: 't1' } }))
     await vi.waitFor(() => expect(deps.onOutcome).toHaveBeenCalled())
     expect(deps.onOutcome).toHaveBeenCalledWith(WIDGETS_ID, 'hosted-1', expect.objectContaining({ worktree: 'kept-dirty' }))
+    expect(deps.releaseBranch).not.toHaveBeenCalled()
   })
 
   it('on questions, leaves the session open and tracked, but still reports the outcome', async () => {

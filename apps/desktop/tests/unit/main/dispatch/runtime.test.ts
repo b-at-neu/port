@@ -24,7 +24,7 @@ function runtimeDeps(overrides: Partial<Parameters<typeof createDispatchRuntime>
     runState: () => 'dispatching',
     readOwnership: () => Promise.resolve({ kind: 'app', since: '2026-01-01T00:00:00Z', path: 'p', readAt: 'r' }),
     takeOwnership: () => Promise.resolve({ ok: true, path: 'p' }),
-    fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
+    fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'], headRefName: null }], unavailable: [], fetchedAt: 'r' }),
     listRepositories: () =>
       Promise.resolve({
         ok: true,

@@ -111,17 +111,18 @@ export function callerKind(payload) {
     !looksLikeSubagentTranscript &&
     !(typeof cwd === 'string' && cwd.includes('/.claude/worktrees/agent-'));
 
+  // Any agent caller is never an operator worktree, even inside `impl-<n>`: an app stage session runs there too.
   if (payload?.agent_type || payload?.agent_id) {
-    return { isSubagent: true, isOperatorWorktree, isManagedWorktree, isTopLevelAgent, agent: payload.agent_type ?? null, signal: 'agent_type' };
+    return { isSubagent: true, isOperatorWorktree: false, isManagedWorktree, isTopLevelAgent, agent: payload.agent_type ?? null, signal: 'agent_type' };
   }
   const transcript = toPosix(payload?.transcript_path);
   if (typeof transcript === 'string' && transcript.includes('/subagents/agent-')) {
-    return { isSubagent: true, isOperatorWorktree, isManagedWorktree, isTopLevelAgent: false, agent: null, signal: 'transcript' };
+    return { isSubagent: true, isOperatorWorktree: false, isManagedWorktree, isTopLevelAgent: false, agent: null, signal: 'transcript' };
   }
   // Only a dispatched agent's own `agent-<hash>` worktree is in scope here — `/port:implement`'s
   // `impl-<n>` worktrees are the operator's own session and must never match.
   if (typeof cwd === 'string' && cwd.includes('/.claude/worktrees/agent-')) {
-    return { isSubagent: true, isOperatorWorktree, isManagedWorktree, isTopLevelAgent: false, agent: null, signal: 'worktree' };
+    return { isSubagent: true, isOperatorWorktree: false, isManagedWorktree, isTopLevelAgent: false, agent: null, signal: 'worktree' };
   }
   return { isSubagent: false, isOperatorWorktree, isManagedWorktree, isTopLevelAgent: false, agent: null, signal: null };
 }
