@@ -4,7 +4,7 @@ import type { StageDenial } from '@/types/stage'
 import type { RepoId } from '@/utils/repos'
 
 function denial(overrides: Partial<StageDenial> = {}): StageDenial {
-  return { id: 'd1', repoId: 'repo1' as RepoId, agent: 'impl', number: 1, toolName: 'Bash', inputSummary: 'git push', rule: 'Bash(git push *)', at: '2026-01-01T00:00:00.000Z', ...overrides }
+  return { id: 'd1', repoId: 'repo1' as RepoId, agent: 'impl', number: 1, toolName: 'Bash', inputSummary: 'git push', rule: 'Bash(git push *)', at: '2026-01-01T00:00:00.000Z', sessionKey: null, ...overrides }
 }
 
 describe('withDenial', () => {

@@ -76,7 +76,7 @@ import { createAppNotifier } from '@/main/hosting/notify'
 import { createStageRegistry } from '@/main/stage/registry'
 import type { StageRegistry } from '@/types/stage'
 import { readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
-import { resolveStageAllow, resolveStageDismissDenial, resolveStageResume, resolveStageRestart } from '@/main/channels/stage'
+import { createStageSweeper, resolveStageAllow, resolveStageDismissDenial, resolveStageResume, resolveStageRestart } from '@/main/channels/stage'
 import type { StageChannelDeps } from '@/types/channels'
 import { resolveForceDispatch } from '@/main/channels/held'
 import type { ReadWorktreeReportParams } from '@/types/reclaimer'
@@ -329,6 +329,7 @@ export function registerIpc(): RegisteredIpc {
     },
     onTick: (snapshot) => {
       void dispatcher.consider(snapshot)
+      void stageSweeper.consider(snapshot, dispatcher.status())
     },
   })
   bindWatcher(watcher)
@@ -461,6 +462,7 @@ export function registerIpc(): RegisteredIpc {
     registry: stageRegistry,
     dispatcher,
     store: hostedStore,
+    launcher: stageLauncher,
     removeWorktree: (path, force) => removeSessionWorktreeAt({ path, force, git: defaultGitRunner() }),
     releaseBranch: (root, branch, baseSha) => releaseStageBranch({ root, git: defaultGitRunner(), branch, baseSha }),
     applyItemAction,
@@ -469,6 +471,7 @@ export function registerIpc(): RegisteredIpc {
     readJson: readJsonFile,
     writeJsonAtomic: writeJsonFileAtomic,
   }
+  const stageSweeper = createStageSweeper(registryDeps, stageChannelDeps, { fetchItemsByNumber, onChange: () => watcher.republish() })
 
   handle('stage:allow', (_event, request) => resolveStageAllow(registryDeps, request, stageChannelDeps))
 
