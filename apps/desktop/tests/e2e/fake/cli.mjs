@@ -41,12 +41,18 @@ function gitArgsAfterGlobalFlags() {
   return args.slice(i)
 }
 
+const DEFAULT_REF_PREFIX = 'refs/remotes/origin/HEAD:'
+
 function handleGit() {
   const state = loadState()
   const gitArgs = gitArgsAfterGlobalFlags()
   const sub = gitArgs[0]
 
   if (sub === 'rev-parse') {
+    if (gitArgs.includes('--verify')) {
+      process.stdout.write(`${state.gitSha ?? 'abc1234'}\n`)
+      return process.exit(0)
+    }
     if (gitArgs.includes('--show-toplevel')) {
       process.stdout.write(`${process.cwd()}\n`)
       return process.exit(0)
@@ -64,6 +70,16 @@ function handleGit() {
       return process.exit(0)
     }
     return unscripted()
+  }
+  if (sub === 'show' && gitArgs[1]?.startsWith(DEFAULT_REF_PREFIX)) {
+    const relPath = gitArgs[1].slice(DEFAULT_REF_PREFIX.length)
+    try {
+      process.stdout.write(readFileSync(relPath, 'utf8'))
+      return process.exit(0)
+    } catch {
+      process.stderr.write(`fatal: path '${relPath}' does not exist in 'refs/remotes/origin/HEAD'\n`)
+      return process.exit(128)
+    }
   }
   if (sub === 'status') {
     process.stdout.write('')

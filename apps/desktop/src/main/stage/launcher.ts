@@ -188,7 +188,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
         const dismissResult = await params.store.dismiss(sessionKey, 'remove')
         const held = tracked.get(sessionKey)
         if (dismissResult.ok && held !== undefined && held.branch !== null) await params.releaseBranch(held.root, held.branch, held.baseSha)
-        const worktree =dismissResult.ok ? 'removed' : dismissResult.kind === 'worktree-dirty' ? 'kept-dirty' : dismissResult.kind === 'worktree-remove-failed' ? 'remove-failed' : outcome.worktree
+        const worktree = dismissResult.ok ? 'removed' : dismissResult.kind === 'worktree-dirty' ? 'kept-dirty' : dismissResult.kind === 'worktree-remove-failed' ? 'remove-failed' : outcome.worktree
         tracked.delete(sessionKey)
         params.registry.remove(registryId)
         params.onOutcome(repoId, sessionKey, { ...outcome, worktree })

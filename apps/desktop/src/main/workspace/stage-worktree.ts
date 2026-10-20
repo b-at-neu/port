@@ -113,15 +113,28 @@ export async function createStageWorktree(params: CreateStageWorktreeParams): Pr
   const added = await git(addArgs, root)
   if (!added.ok) return failed(`git worktree add failed: ${reasonOf(added)}`)
 
+  const undo = (): Promise<void> => discardNewWorktree(git, root, path, local.exists ? null : branch)
+
   const ignored = await ensureIgnored(git, root, `.claude/worktrees/${folder}`)
-  if (!ignored.ok) return failed(ignored.message)
+  if (!ignored.ok) {
+    await undo()
+    return failed(ignored.message)
+  }
 
   if (branch !== null) {
     const configured = await git(['config', `branch.${branch}.portBase`, baseSha], root)
-    if (!configured.ok) return failed(`could not record portBase: ${reasonOf(configured)}`)
+    if (!configured.ok) {
+      await undo()
+      return failed(`could not record portBase: ${reasonOf(configured)}`)
+    }
   }
 
   return { ok: true, path, branch, baseSha, baseLabel }
+}
+
+async function discardNewWorktree(git: GitRunner, root: string, path: string, createdBranch: string | null): Promise<void> {
+  await git(['worktree', 'remove', '--force', path], root)
+  if (createdBranch !== null) await git(['branch', '-D', createdBranch], root)
 }
 
 interface ReleaseStageBranchParams {

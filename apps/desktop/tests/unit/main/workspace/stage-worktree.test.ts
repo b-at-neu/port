@@ -181,6 +181,49 @@ describe('createStageWorktree — refusals', () => {
     const result = await createStageWorktree(await params({ git, agent: 'plan' }))
     expect(result).toEqual({ ok: false, message: 'git worktree add failed: fatal: boom' })
   })
+
+  it('removes the new worktree and its branch when the ignore check fails', async () => {
+    const { git, calls } = recorder(withStart((args) => (args[0] === 'check-ignore' ? nonzero(128, 'fatal: boom') : undefined)))
+    const p = await params({ git })
+    const result = await createStageWorktree(p)
+    const path = join(p.root, '.claude', 'worktrees', 'impl-467')
+    expect(result.ok).toBe(false)
+    expect(argvOf(calls, 'worktree', 'remove')).toEqual([['worktree', 'remove', '--force', path]])
+    expect(argvOf(calls, 'branch')).toEqual([['branch', '-D', '467-stage-worktrees-use-the-issue-branch']])
+  })
+
+  it('removes the new worktree and its branch when portBase cannot be recorded', async () => {
+    const { git, calls } = recorder(withStart((args) => (args[0] === 'config' ? nonzero(1, 'error: could not lock config file') : undefined)))
+    const p = await params({ git })
+    const result = await createStageWorktree(p)
+    const path = join(p.root, '.claude', 'worktrees', 'impl-467')
+    expect(result).toEqual({ ok: false, message: 'could not record portBase: error: could not lock config file' })
+    expect(argvOf(calls, 'worktree', 'remove')).toEqual([['worktree', 'remove', '--force', path]])
+    expect(argvOf(calls, 'branch')).toEqual([['branch', '-D', '467-stage-worktrees-use-the-issue-branch']])
+  })
+
+  it('keeps a detached stage with no branch to delete', async () => {
+    const { git, calls } = recorder(withStart((args) => (args[0] === 'check-ignore' ? nonzero(128, 'fatal: boom') : undefined)))
+    const result = await createStageWorktree(await params({ git, agent: 'plan' }))
+    expect(result.ok).toBe(false)
+    expect(argvOf(calls, 'worktree', 'remove')).toHaveLength(1)
+    expect(argvOf(calls, 'branch')).toEqual([])
+  })
+
+  it('never deletes a local branch that existed before the call', async () => {
+    const derived = '467-stage-worktrees-use-the-issue-branch'
+    const { git, calls } = recorder(
+      withStart((args) => {
+        if (args[0] === 'for-each-ref') return forEachRef(derived, 'aaaa')
+        if (args[0] === 'check-ignore') return nonzero(128, 'fatal: boom')
+        return undefined
+      }),
+    )
+    const result = await createStageWorktree(await params({ git }))
+    expect(result.ok).toBe(false)
+    expect(argvOf(calls, 'worktree', 'remove')).toHaveLength(1)
+    expect(argvOf(calls, 'branch')).toEqual([])
+  })
 })
 
 describe('createStageWorktree — the folder', () => {
