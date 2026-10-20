@@ -1,9 +1,10 @@
 // The Needs you row: a status dot, lead copy, a repo tag, relative age,
 // and one inline action, with a caret to expand more detail in place.
 import type { ReactNode } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, X } from 'lucide-react'
 import { cn } from '@/renderer/lib/utils'
 import { Button } from '@/renderer/components/ui/button'
+import { IconButton } from '@/renderer/components/icon-button'
 import { PhaseDot } from '@/renderer/components/phase-dot'
 import { NEEDS_YOU_TONE } from '@/renderer/lib/phase-tone'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
@@ -20,6 +21,8 @@ interface NeedsYouItemProps {
   readonly onAction: () => void
   readonly secondaryActionLabel?: string
   readonly onSecondaryAction?: () => void
+  /** Adds a trailing icon-only Dismiss button. */
+  readonly onDismiss?: () => void
   readonly expandable: boolean
   readonly expanded: boolean
   readonly onToggleExpand: () => void
@@ -37,6 +40,7 @@ export function NeedsYouItem({
   onAction,
   secondaryActionLabel,
   onSecondaryAction,
+  onDismiss,
   expandable,
   expanded,
   onToggleExpand,
@@ -81,6 +85,11 @@ export function NeedsYouItem({
           <Button variant="outline" size="small" onClick={onSecondaryAction} disabled={actionPending} className="shrink-0">
             {secondaryActionLabel}
           </Button>
+        ) : null}
+        {onDismiss !== undefined ? (
+          <IconButton label="Dismiss" onClick={onDismiss}>
+            <X aria-hidden="true" />
+          </IconButton>
         ) : null}
       </div>
       {expanded ? children : null}

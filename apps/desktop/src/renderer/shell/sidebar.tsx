@@ -4,8 +4,7 @@ import { useSidebarCollapsed, toggleSidebarCollapsed } from '@/renderer/shell/st
 import { FolderGit2, Inbox, LayoutList, ListTodo, PanelLeftClose, PanelLeftOpen, Settings } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { cn } from '@/renderer/lib/utils'
-import { needsYouItems } from '@/renderer/board/needs-you'
-import { useIpcQuery } from '@/renderer/data/query'
+import { useNeedsYouItems } from '@/renderer/needs-you/use-items'
 import { IconButton } from '@/renderer/components/icon-button'
 import { PhaseDot } from '@/renderer/components/phase-dot'
 import { NEEDS_YOU_TONE } from '@/renderer/lib/phase-tone'
@@ -63,8 +62,7 @@ function Rail({ onExpand, needsYouCount }: { readonly onExpand: () => void; read
 
 export function Sidebar() {
   const collapsed = useSidebarCollapsed()
-  const snapshot = useIpcQuery('board:snapshot')
-  const needsYouCount = snapshot.data !== undefined ? needsYouItems(snapshot.data, new Date()).length : 0
+  const needsYouCount = useNeedsYouItems().length
 
   function toggle(): void {
     setSidebarCollapsed(toggleSidebarCollapsed())

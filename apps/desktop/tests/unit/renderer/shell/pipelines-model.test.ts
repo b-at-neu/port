@@ -5,7 +5,8 @@ import type { BoardSnapshot } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/types/board'
 import type { PipelineRow, ReadyPipelineRow } from '@/types/shell'
-import { pipelinesModel } from '@/renderer/shell/pipelines-model'
+import { pipelinesModel as pipelinesModelOf } from '@/renderer/shell/pipelines-model'
+import { needsYouItems } from '@/renderer/board/needs-you'
 import { stageSession } from '../../../fixtures/stage-session'
 
 function assertReady(row: PipelineRow | undefined): ReadyPipelineRow {
@@ -15,6 +16,11 @@ function assertReady(row: PipelineRow | undefined): ReadyPipelineRow {
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 const REPO_ID = 'repo-a' as RepoId
+
+/** `useNeedsYouItems` with nothing dismissed: the visible list is derived from the snapshot, then handed to the model. */
+function pipelinesModel(repos: readonly RepositoryEntry[], snapshot: BoardSnapshot | undefined, now: Date = NOW, sessions: readonly HostedSessionSnapshot[] = []) {
+  return pipelinesModelOf(repos, snapshot, snapshot !== undefined ? needsYouItems(snapshot, now) : [], sessions)
+}
 
 function agent(overrides: Partial<AttachedAgent> = {}): AttachedAgent {
   return { agentId: 'a1', agentType: 'impl-agent', stage: 'impl-agent', model: 'sonnet', activity: 'active', idleMs: 0, lastActivityAt: NOW.toISOString(), match: 'direct', sessionId: 'sess-1', ...overrides }
@@ -198,6 +204,12 @@ describe('pipelinesModel', () => {
     const row = assertReady(pipelinesModel([readyEntry()], snapshot)[0])
     expect(row.sessions[0]).toMatchObject({ tone: { palette: 'plan', fill: 'active', pulse: true }, statusText: 'Plan review' })
     expect(row.needsYou).toBe(true)
+  })
+
+  it('lights no dot for an item the visible list leaves out', () => {
+    const waiting = item({ stage: 'gate', stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }], waitingOn: 'cockpit', agents: [agent()] })
+    const snapshot = snapshotOf([readyRepoState({ items: [waiting] })])
+    expect(assertReady(pipelinesModelOf([readyEntry()], snapshot, [])[0]).needsYou).toBe(false)
   })
 
   it('shows a needs-you gate in red with the Needs you status text', () => {

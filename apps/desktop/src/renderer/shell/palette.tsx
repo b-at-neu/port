@@ -1,7 +1,7 @@
 // The command palette (Ctrl/Cmd+K) — Go to, Sessions, Pipelines, View.
 import { useNavigate } from '@tanstack/react-router'
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut } from '@/renderer/components/ui/command'
-import { needsYouItems } from '@/renderer/board/needs-you'
+import { useNeedsYouItems } from '@/renderer/needs-you/use-items'
 import { sessionTitle } from '@/utils/hosting/label'
 import type { RepositoryEntry } from '@/utils/repos'
 import { useIpcQuery } from '@/renderer/data/query'
@@ -25,7 +25,7 @@ export function CommandPalette() {
   const [, setThemePreference] = useThemePreference()
   const runState = useRunStateCommand()
 
-  const needsYouCount = snapshot.data !== undefined ? needsYouItems(snapshot.data, new Date()).length : 0
+  const needsYouCount = useNeedsYouItems().length
   const readyRepos = repos.data?.ok === true ? repos.data.repositories.filter(isReady) : []
   const live = (sessions.data ?? []).filter((s) => s.phase !== 'ended')
 
