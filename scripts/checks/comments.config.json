@@ -110,7 +110,6 @@
     "apps/desktop/src/renderer/settings/theme-section.tsx",
     "apps/desktop/src/renderer/theme/store.ts",
     "apps/desktop/tests/unit/renderer/board/dispatch.test.ts",
-    "apps/desktop/tests/unit/renderer/board/owner.test.ts",
     "apps/desktop/tests/unit/renderer/board/run-state.test.ts",
     "apps/desktop/tests/unit/renderer/board/tick.test.ts",
     "apps/desktop/tests/visual/app.mts",

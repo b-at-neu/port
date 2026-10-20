@@ -4,7 +4,7 @@
 // no DOM here.
 import type { ItemStatus, LinkReason, RepositoryFreshness, RepositoryState, StatusEvidence, WaitingOn } from '@/types/state'
 import type { BoardSnapshot, DisplayStatus, SourceHealth, SourceKind } from '@/types/board'
-import { SOURCE_KINDS } from '@/types/board'
+import { SOURCE_KINDS, isDeferred } from '@/types/board'
 import type { RepoProblem } from '@/utils/repos'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { RETRY_TRIGGER } from '@/utils/actions/plan'
@@ -148,7 +148,8 @@ function ageCopy(at: string | null, now: Date): string {
   const seconds = Math.round(ms / 1000)
   if (seconds < 60) return `${seconds}s ago`
   const minutes = Math.round(seconds / 60)
-  return `${minutes}m ago`
+  if (minutes < 60) return `${minutes}m ago`
+  return `${Math.round(minutes / 60)}h ago`
 }
 
 /** One source's own freshness-strip clause — healthy, retrying, or never
@@ -169,42 +170,54 @@ export function rateLimitCopy(freshness: RepositoryFreshness | null, remaining: 
   return `${remaining.toLocaleString()} API points left, resets ${label}`
 }
 
-function freshnessAgeCopy(at: string, now: Date): string {
-  const seconds = Math.round((now.getTime() - Date.parse(at)) / 1000)
-  const minutes = Math.round(seconds / 60)
-  return minutes >= 1 ? `${String(minutes)}m ago` : `${String(seconds)}s ago`
+function nextCheckCopy(nextWakeupAt: string | null, now: Date): string {
+  const dueAt = nextWakeupAt !== null ? Date.parse(nextWakeupAt) : Number.NaN
+  if (Number.isNaN(dueAt)) return 'no check scheduled'
+  const remainingMs = dueAt - now.getTime()
+  if (remainingMs <= 0) return 'next check now'
+  const totalSeconds = Math.ceil(remainingMs / 1000)
+  return `next check in ${String(Math.floor(totalSeconds / 60))}:${String(totalSeconds % 60).padStart(2, '0')}`
 }
 
-/** A source counts against the header indicator when it has failed at least
- *  once, or — GitHub only — its last success is older than twice its own
- *  poll interval. */
-function isUnhealthySource(kind: SourceKind, health: SourceHealth, now: Date): boolean {
-  if (health.consecutiveFailures > 0) return true
-  if (kind !== 'github' || health.lastSuccessAt === null) return false
-  return now.getTime() - Date.parse(health.lastSuccessAt) > health.intervalMs * 2
+/** The earliest rate-limit deferral still in the future across every repository, `null` when none. */
+function earliestDeferral(snapshot: BoardSnapshot, now: Date): string | null {
+  const pending = snapshot.health.flatMap((h) => (isDeferred(h.github, now) && h.github.deferredUntil !== null ? [h.github.deferredUntil] : []))
+  if (pending.length === 0) return null
+  return pending.reduce((a, b) => (Date.parse(a) <= Date.parse(b) ? a : b))
 }
 
-/** The Board header's single freshness indicator (replacing the old
- *  `FreshnessStrip` plus stale label) — `null` whenever every source reads
- *  healthy, or there is no health to read at all. */
-export function freshnessIndicator(snapshot: BoardSnapshot, now: Date): { readonly label: string; readonly lines: readonly string[] } | null {
-  if (snapshot.health.length === 0) return null
+type IndicatorTone = 'muted' | 'attention'
 
-  const unhealthy = SOURCE_KINDS.filter((kind) => {
-    const worst = worstHealth(snapshot.health, kind)
-    return worst !== null && isUnhealthySource(kind, worst, now)
-  })
-  if (unhealthy.length === 0) return null
+/** The head of the Board header's label — GitHub's own state, first matching rule wins. A rate-limited read also counts as a failure, so the deferral is checked before the failing rule. */
+function githubClause(snapshot: BoardSnapshot, github: SourceHealth, now: Date): { readonly text: string; readonly tone: IndicatorTone } {
+  const lastSuccessAt = github.lastSuccessAt
+  if (lastSuccessAt === null && github.consecutiveFailures === 0) return { text: 'Checking GitHub…', tone: 'muted' }
 
-  const unhealthyHealths = unhealthy.map((kind) => worstHealth(snapshot.health, kind)).filter((h): h is SourceHealth => h !== null)
-  const neverRead = unhealthyHealths.some((h) => h.lastSuccessAt === null)
-  let label: string
-  if (neverRead) {
-    label = 'Not updated yet'
-  } else {
-    const oldest = unhealthyHealths.reduce((a, b) => (Date.parse(a.lastSuccessAt ?? '') <= Date.parse(b.lastSuccessAt ?? '') ? a : b))
-    label = `Updated ${freshnessAgeCopy(oldest.lastSuccessAt as string, now)}`
+  const deferredUntil = earliestDeferral(snapshot, now)
+  if (deferredUntil !== null) {
+    const wait = `waiting for GitHub's rate limit until ${timeOf(deferredUntil)}`
+    return { text: lastSuccessAt !== null ? `Checked GitHub ${ageCopy(lastSuccessAt, now)} · ${wait}` : `Checking GitHub — ${wait}`, tone: 'muted' }
   }
+
+  if (github.consecutiveFailures > 0) {
+    const lastGood = lastSuccessAt !== null ? `last good ${ageCopy(lastSuccessAt, now)}` : 'never read'
+    return { text: `GitHub check failing — ${lastGood}`, tone: 'attention' }
+  }
+
+  if (lastSuccessAt === null) return { text: 'Checking GitHub…', tone: 'muted' }
+  const stale = now.getTime() - Date.parse(lastSuccessAt) > github.intervalMs * 2
+  return { text: `Checked GitHub ${ageCopy(lastSuccessAt, now)} · ${nextCheckCopy(snapshot.nextWakeupAt, now)}`, tone: stale ? 'attention' : 'muted' }
+}
+
+/** The Board header's always-on timing label — `null` only when there is no repository health to read. */
+export function freshnessIndicator(snapshot: BoardSnapshot, now: Date): { readonly label: string; readonly tone: IndicatorTone; readonly lines: readonly string[] } | null {
+  const github = worstHealth(snapshot.health, 'github')
+  if (github === null) return null
+
+  const head = githubClause(snapshot, github, now)
+  const failing = SOURCE_KINDS.filter((kind) => kind !== 'github' && (worstHealth(snapshot.health, kind)?.consecutiveFailures ?? 0) > 0)
+  const label = failing.length > 0 ? `${head.text} · ${failing.map(sourceName).join(', ')} failing` : head.text
+  const tone = failing.length > 0 ? 'attention' : head.tone
 
   const sourceLines = SOURCE_KINDS.map((kind) => {
     const worst = worstHealth(snapshot.health, kind)
@@ -213,7 +226,7 @@ export function freshnessIndicator(snapshot: BoardSnapshot, now: Date): { readon
   const rateLimit = snapshot.state.repositories.find((r): r is Extract<RepositoryState, { readonly ok: true }> => r.ok)?.rateLimit ?? null
   const rateLimitText = rateLimit !== null ? rateLimitCopy(null, rateLimit.remaining, rateLimit.resetAt) : null
 
-  return { label, lines: rateLimitText !== null ? [...sourceLines, rateLimitText] : sourceLines }
+  return { label, tone, lines: rateLimitText !== null ? [...sourceLines, rateLimitText] : sourceLines }
 }
 
 // --- The phase list's history lines (R6) -----------------------------------

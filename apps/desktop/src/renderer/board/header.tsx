@@ -1,11 +1,12 @@
-// The Board's own header — title, the freshness indicator, the Phase/Repo
-// toggle, the repo filter, and Refresh — all on one line.
+// The Board's own header — title, the always-on GitHub timing label, the
+// Phase/Repo toggle, the repo filter, and Refresh — all on one line.
 import { RefreshCw } from 'lucide-react'
 import { Button } from '@/renderer/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/renderer/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/renderer/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { ScreenHeader } from '@/renderer/components/screen-header'
+import { cn } from '@/renderer/lib/utils'
 import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
 import type { RepositoryState } from '@/types/state'
@@ -34,7 +35,7 @@ export function BoardHeader({ snapshot, now, refreshing, onRefresh, group, onGro
         {indicator !== null ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span tabIndex={0} className="truncate text-meta font-normal text-attention-dot">
+              <span tabIndex={0} className={cn('truncate text-meta font-normal', indicator.tone === 'attention' ? 'text-attention-dot' : 'text-muted-foreground')}>
                 {indicator.label}
               </span>
             </TooltipTrigger>

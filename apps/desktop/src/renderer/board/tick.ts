@@ -1,122 +1,17 @@
-// The tick strip's own pure copy (#105, #319) — one switch per union so a
-// new variant is a compile error rather than a silently blank line, the
-// same rule `board/copy.ts`'s own header states. `board/pipeline-status.tsx`
-// renders this through `repositoryDetailLines`/`itemDetailLines` below,
-// re-reading on every poll so the countdown and the hover detail stay live.
-import { isDeferred } from '@/types/board'
-import type { RepositoryHealth } from '@/types/board'
-import type { DispatchOwner, RunState, RunStatesSnapshot } from '@/types/dispatch'
+// The Board's tick detail copy — one switch per union, so a new variant is a compile error.
+import type { DispatchOwner, RunStatesSnapshot } from '@/types/dispatch'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import type { LabelKey } from '@/utils/labels/vocabulary'
-import type { TickActionable, TickBlind, TickClaim, TickHeld, TickObservation, TickReport } from '@/types/tick'
+import type { TickActionable, TickClaim, TickHeld, TickObservation, TickReport } from '@/types/tick'
 
 function labelNameOf(key: LabelKey): string {
   return LABEL_DEFAULTS.find((def) => def.key === key)?.name ?? key
 }
 
-/** `nextWakeupAt` first: `null` renders the honest "no wakeup scheduled"
- *  (#62). A due instant that came from a rate-limit deferral (any
- *  repository's `github.deferredUntil` matching it) reads as the wait it
- *  actually is, never an ordinary countdown. */
-export function clockLineCopy(nextWakeupAt: string | null, health: readonly RepositoryHealth[], now: Date): string {
-  if (nextWakeupAt === null) return 'No wakeup scheduled.'
-  const dueAt = Date.parse(nextWakeupAt)
-  if (Number.isNaN(dueAt)) return 'No wakeup scheduled.'
-
-  const deferred = health.some((h) => h.github.deferredUntil !== null && Date.parse(h.github.deferredUntil) === dueAt)
-  if (deferred) {
-    const label = new Date(dueAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    return `Next wakeup ${label} — waiting out the GitHub rate-limit window.`
-  }
-
-  const remainingMs = dueAt - now.getTime()
-  if (remainingMs <= 0) return 'Next wakeup — now'
-  const totalSeconds = Math.ceil(remainingMs / 1000)
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  return `Next wakeup in ${String(minutes)}:${String(seconds).padStart(2, '0')}`
-}
-
-/** Under a repository's tick line while its GitHub reads are deferred — muted, since the operator has nothing to do. */
-export function deferralLineCopy(health: RepositoryHealth | undefined, now: Date): string | null {
-  if (health === undefined || !isDeferred(health.github, now)) return null
-  const label = new Date(health.github.deferredUntil ?? '').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  return `GitHub's rate limit is spent until ${label}. Reads and dispatch wait until then.`
-}
-
-/** The store line, directly above the clock line (#110, #314's own **UX
- *  states**) — `null` once the run-state store has actually loaded, since
- *  the clock line already carries the countdown and nothing more needs
- *  saying; the two store-level problems both apply regardless of what any
- *  individual repository's own run state is. `title` is the full
- *  dispatch.json path, set only for the `unreadable` reason, so the line
- *  itself stays one sentence while the path is still reachable on hover. */
-export function storeLineFor(store: RunStatesSnapshot['store']): { readonly text: string; readonly title: string | null } | null {
-  switch (store.kind) {
-    case 'loaded':
-      return null
-    case 'unread':
-      return { text: 'Reading the saved pipeline state…', title: null }
-    case 'unreadable':
-      return { text: `Every pipeline is paused — dispatch.json can't be read (${store.message}). Fix or delete it, then run each repository again.`, title: store.path }
-  }
-}
-
-function blindCopy(blind: TickBlind): string {
-  switch (blind.reason) {
-    case 'not-ready':
-      return "can't decide: this repository isn't ready."
-    case 'github-unavailable':
-      return "can't decide: GitHub is unavailable. Showing the last good read."
-    case 'viewer-unknown':
-      return "can't decide: can't tell whose items these are."
-    case 'stale-read': {
-      const minutes = Math.max(1, Math.round(blind.ageMs / 60_000))
-      return `can't decide: the label list is ${String(minutes)}m old.`
-    }
-  }
-}
-
-/** `matched` folds in `session-required` — both are claims this app has an
- *  actual answer for, never a stall; every other class is summarized as
- *  `stalled` here, with the precise class left to each claim's own hover
- *  detail (`stalledDetailCopy`). */
-function livenessSummary(claims: readonly TickClaim[]): string {
-  if (claims.length === 0) return 'Liveness: nothing in flight.'
-  const matched = claims.filter((c) => c.class === 'matched' || c.class === 'session-required').length
-  const stalled = claims.length - matched
-  const parts: string[] = []
-  if (matched > 0) parts.push(`${String(matched)} claim${matched === 1 ? '' : 's'} matched`)
-  if (stalled > 0) parts.push(`${String(stalled)} stalled`)
-  return `Liveness: ${parts.join(', ')}`
-}
-
-/** Draining or paused never renders as "nothing to dispatch" (#110, #314's
- *  own **UX states**) — a held set and an empty one are different facts, so
- *  a non-dispatching repository still names what it would have dispatched.
- *  #265: "would dispatch" becomes "dispatched" when this app itself owns
- *  dispatch for this repository — the cockpit is no longer the one
- *  deciding. */
-function dispatchPartOf(report: TickReport, runState: RunState, dispatchedByApp: boolean): string {
-  const verb = runState === 'draining' ? 'draining' : 'paused'
-  if (report.actionable.length === 0) return runState !== 'dispatching' ? `${verb}: nothing would dispatch` : 'nothing to dispatch'
-  const named = report.actionable.map((a) => `${a.agent} #${String(a.number)}`).join(', ')
-  if (runState !== 'dispatching') return `${verb}: ${String(report.actionable.length)} would dispatch, held back (${named})`
-  return dispatchedByApp ? `dispatched ${named}` : `would dispatch ${named}`
-}
-
-/** `owner` defaults to `'none'` — every pre-#265 caller (and test) reads
- *  exactly as before. */
-export function repositoryLineCopy(report: TickReport, runState: RunState, owner: DispatchOwner = 'none'): string {
-  if (report.blind !== null) return `${report.displayName} — ${blindCopy(report.blind)}`
-
-  const dispatchPart = dispatchPartOf(report, runState, owner === 'app')
-  const uncheckedCount = report.actionable.filter((a) => a.unchecked).length
-  // Never omitted: an unchecked dispatch is exactly the case an operator may
-  // want to look at (plan's own **UX states**).
-  const uncheckedPart = uncheckedCount > 0 ? ` · ${String(uncheckedCount)} plan${uncheckedCount === 1 ? '' : 's'} unchecked` : ''
-  const heldPart = report.held.length > 0 ? ` · ${String(report.held.length)} held` : ''
-  return `${report.displayName} — ${dispatchPart}${uncheckedPart}${heldPart} · ${livenessSummary(report.claims)}`
+/** `null` unless the run-state store can't be read — the transient `unread` state needs no banner. The full path stays reachable in the sentence itself. */
+export function storeBannerCopy(store: RunStatesSnapshot['store']): string | null {
+  if (store.kind !== 'unreadable') return null
+  return `Every pipeline is paused — dispatch.json can't be read (${store.message}). Fix or delete ${store.path}, then run each repository again.`
 }
 
 /** Truncates a contended path list to the first three, naming the remainder
@@ -243,22 +138,6 @@ export function observationDetailCopy(observation: TickObservation): string | nu
     case 'plan-missing':
       return null
   }
-}
-
-/** One repository's whole hover detail, the same five sources
- *  `buildTickStrip` used to concatenate into a single `title` — now a list,
- *  for `pipeline-status.tsx`'s own `Tooltip` to render as separate lines.
- *  `[]` for a blind repository: none of these five sources mean anything
- *  when the repository itself could not be read. */
-export function repositoryDetailLines(report: TickReport, owner: DispatchOwner): readonly string[] {
-  if (report.blind !== null) return []
-  return [
-    ...report.held.map((h) => heldDetailCopy(h, owner)),
-    ...report.actionable.filter((a) => a.unchecked).map(uncheckedDetailCopy),
-    ...report.actionable.map(cycleDetailCopy),
-    ...report.claims.map((c) => stalledDetailCopy(c, owner)),
-    ...report.observations.map(observationDetailCopy),
-  ].filter((d): d is string => d !== null)
 }
 
 /** The same five sources, narrowed to one item — the Board's detail pane's

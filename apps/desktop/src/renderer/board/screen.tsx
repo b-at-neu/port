@@ -1,5 +1,5 @@
-// The Board screen — header, pipeline status, banners, the three-section
-// list, and the detail pane.
+// The Board screen — header, Waiting on you, banners, the remaining
+// sections, and the detail pane.
 import { useState } from 'react'
 import type { QueryClient } from '@tanstack/react-query'
 import { useQueryClient } from '@tanstack/react-query'
@@ -22,7 +22,6 @@ import { BoardBanners } from '@/renderer/board/banners'
 import { BoardHeader } from '@/renderer/board/header'
 import { ItemPane } from '@/renderer/board/item-pane'
 import { Screen, ScreenBody } from '@/renderer/components/screen'
-import { PipelineStatus } from '@/renderer/board/pipeline-status'
 import { boardSections } from '@/renderer/board/sections'
 import type { BoardGroupBy } from '@/types/board'
 import { operatorJoinedOf } from '@/renderer/board/row-model'
@@ -93,6 +92,7 @@ export function BoardScreen() {
   const selection = useListSelection(flatRows.map(rowKey), {
     value: selectedRow !== null ? rowKey(selectedRow) : null,
     onChange: (key) => selectRow(key !== null ? (flatRows.find((row) => rowKey(row) === key) ?? null) : null),
+    toggle: true,
   })
 
   registerListNavigator('board', {
@@ -101,6 +101,9 @@ export function BoardScreen() {
     // J/K already opens the pane on every move (above); Enter on an
     // already-selected row has nothing further to do.
     open: () => undefined,
+    close: () => {
+      if (selectedRow !== null) selectRow(null)
+    },
   })
 
   const report = selectedRow !== null && snapshot !== null ? snapshot.tick.find((r) => r.repoId === selectedRow.item.repoId) : undefined
@@ -109,6 +112,27 @@ export function BoardScreen() {
   function recordsFor(repoId: RepoId): readonly DispatchRecord[] {
     const status = snapshot?.dispatch.find((d) => d.repoId === repoId)
     return status !== undefined && status.state.kind === 'active' ? status.state.recent : []
+  }
+
+  const waitingSection = sections.find((section) => section.key === 'waiting-on-you')
+  const otherSections = sections.filter((section) => section.key !== 'waiting-on-you')
+
+  function renderSection(section: (typeof sections)[number]) {
+    return (
+      <div key={section.key}>
+        <div className="bg-sidebar px-4 py-1 text-small font-medium text-foreground-secondary">
+          {section.name} · {section.count}
+        </div>
+        {section.subGroups.map((group) => (
+          <div key={group.key}>
+            <div className="px-4 py-0.5 text-meta text-muted-foreground">{group.name}</div>
+            {group.rows.map((row) => (
+              <TicketRow key={rowKey(row)} row={row} rowProps={selection.rowProps(rowKey(row))} operatorJoined={operatorJoinedOf(recordsFor(row.item.repoId), row)} />
+            ))}
+          </div>
+        ))}
+      </div>
+    )
   }
 
   return (
@@ -126,7 +150,6 @@ export function BoardScreen() {
         />
       }
     >
-      {snapshot !== null ? <PipelineStatus snapshot={snapshot} now={now} /> : null}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <ScreenBody variant="list" className="flex-1">
           <div>
@@ -138,7 +161,8 @@ export function BoardScreen() {
               </div>
             ) : projection !== null ? (
               <>
-                <BoardBanners projection={projection} ungated={ungatedRows} selection={selection} />
+                {waitingSection !== undefined ? renderSection(waitingSection) : null}
+                <BoardBanners snapshot={snapshot} projection={projection} ungated={ungatedRows} selection={selection} />
                 {snapshot.state.repositories.length === 0 ? (
                   <EmptyState icon={LayoutGrid} message="Add a repository to see its pipeline." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.repos }) }} className="px-4 py-6" />
                 ) : flatRows.length === 0 ? (
@@ -149,21 +173,7 @@ export function BoardScreen() {
                     className="px-4 py-6"
                   />
                 ) : (
-                  sections.map((section) => (
-                    <div key={section.key}>
-                      <div className="bg-sidebar px-4 py-1 text-small font-medium text-foreground-secondary">
-                        {section.name} · {section.count}
-                      </div>
-                      {section.subGroups.map((group) => (
-                        <div key={group.key}>
-                          <div className="px-4 py-0.5 text-meta text-muted-foreground">{group.name}</div>
-                          {group.rows.map((row) => (
-                            <TicketRow key={rowKey(row)} row={row} rowProps={selection.rowProps(rowKey(row))} operatorJoined={operatorJoinedOf(recordsFor(row.item.repoId), row)} />
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  ))
+                  otherSections.map(renderSection)
                 )}
               </>
             ) : null}

@@ -11,7 +11,7 @@ export interface KeyboardDeps {
   readonly selectSession: (key: SessionKey) => void
   readonly toggleSidebar: () => void
   readonly startRename: () => void
-  readonly currentListNavigator: () => { next(): void; prev(): void; open(): void } | undefined
+  readonly currentListNavigator: () => { next(): void; prev(): void; open(): void; close?(): void } | undefined
 }
 
 export interface PipelineSessionRow {

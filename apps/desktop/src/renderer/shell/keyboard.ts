@@ -19,10 +19,11 @@ type KeyboardAction =
   | { readonly kind: 'list-next' }
   | { readonly kind: 'list-prev' }
   | { readonly kind: 'list-open' }
+  | { readonly kind: 'list-close' }
 
 const DIGIT_RE = /^[1-9]$/
 
-/** Pure. Bare `J`/`K`/`Enter`/`F2` resolve only outside editable focus and a dialog; mod-chorded keys always resolve. */
+/** Pure. Bare `J`/`K`/`Enter`/`Escape`/`F2` resolve only outside editable focus and a dialog; mod-chorded keys always resolve. */
 export function resolveKey(key: string, ctx: KeyboardContext): KeyboardAction | null {
   if (ctx.mod && key.toLowerCase() === 'k') return { kind: 'palette' }
   if (ctx.mod && key.toLowerCase() === 'n') return { kind: 'new-session' }
@@ -35,6 +36,7 @@ export function resolveKey(key: string, ctx: KeyboardContext): KeyboardAction | 
   if (key.toLowerCase() === 'j') return { kind: 'list-next' }
   if (key.toLowerCase() === 'k') return { kind: 'list-prev' }
   if (key === 'Enter') return { kind: 'list-open' }
+  if (key === 'Escape') return { kind: 'list-close' }
   return null
 }
 
@@ -86,6 +88,9 @@ export function runAction(action: KeyboardAction, deps: KeyboardDeps): void {
       return
     case 'list-open':
       deps.currentListNavigator()?.open()
+      return
+    case 'list-close':
+      deps.currentListNavigator()?.close?.()
   }
 }
 
@@ -125,7 +130,7 @@ export function installKeyboardMap(deps: KeyboardDeps): void {
     const mod = navigator.platform.toLowerCase().includes('mac') ? event.metaKey : event.ctrlKey
     const action = resolveKey(event.key, { mod, editableFocused: isEditable(event.target), dialogOpen: isDialogOpen() })
     if (action === null) return
-    if (action.kind !== 'list-next' && action.kind !== 'list-prev' && action.kind !== 'list-open') event.preventDefault()
+    if (action.kind !== 'list-next' && action.kind !== 'list-prev' && action.kind !== 'list-open' && action.kind !== 'list-close') event.preventDefault()
     runAction(action, deps)
   })
 }

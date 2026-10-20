@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { nextKey, prevKey, reconcile } from '@/renderer/shell/list-selection'
+import { clearsOnPress, nextKey, prevKey, reconcile } from '@/renderer/shell/list-selection'
 
 const KEYS = ['a', 'b', 'c']
 
@@ -44,6 +44,25 @@ describe('prevKey', () => {
 
   it('returns null for an empty list', () => {
     expect(prevKey([], null)).toBeNull()
+  })
+})
+
+describe('clearsOnPress', () => {
+  it('clears on a primary press of the selected row in a toggle list', () => {
+    expect(clearsOnPress(true, 'b', 'b', 0)).toBe(true)
+  })
+
+  it('ignores a secondary or middle press on the selected row', () => {
+    expect(clearsOnPress(true, 'b', 'b', 2)).toBe(false)
+    expect(clearsOnPress(true, 'b', 'b', 1)).toBe(false)
+  })
+
+  it('selects as before when the row is not the selected one', () => {
+    expect(clearsOnPress(true, 'a', 'b', 0)).toBe(false)
+  })
+
+  it('never clears in a list without toggle', () => {
+    expect(clearsOnPress(false, 'b', 'b', 0)).toBe(false)
   })
 })
 

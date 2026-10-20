@@ -137,6 +137,7 @@ interface ListNavigator {
   next(): void
   prev(): void
   open(): void
+  close?(): void
 }
 
 type ScreenKey = 'board' | 'backlog' | 'needsYou'

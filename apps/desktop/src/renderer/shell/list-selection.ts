@@ -1,5 +1,6 @@
 // One selection model for every row list, keyed by row key so a reorder keeps the right row selected. No `useEffect`.
 import { useState } from 'react'
+import type { MouseEvent } from 'react'
 
 export function nextKey(keys: readonly string[], selected: string | null): string | null {
   if (keys.length === 0) return null
@@ -21,6 +22,11 @@ export function reconcile(keys: readonly string[], selected: string | null): str
   return selected !== null && keys.includes(selected) ? selected : null
 }
 
+/** Only a primary-button press on the selected row of a `toggle` list clears it. */
+export function clearsOnPress(toggle: boolean, key: string, selected: string | null, button: number): boolean {
+  return toggle && key === selected && button === 0
+}
+
 export function listRowClass(selected: boolean): string {
   return selected ? 'outline-none bg-selection ring-2 ring-ring ring-inset' : 'outline-none'
 }
@@ -29,13 +35,15 @@ interface RowProps {
   readonly 'data-row-key': string
   readonly tabIndex: 0
   readonly onFocus: () => void
-  readonly onMouseDown: () => void
+  readonly onMouseDown: (event: MouseEvent) => void
   readonly className: string
 }
 
 interface UseListSelectionOptions {
   readonly value?: string | null
   readonly onChange?: (key: string | null) => void
+  /** Pressing the selected row clears it, instead of keeping it selected. */
+  readonly toggle?: boolean
 }
 
 interface ListSelection {
@@ -99,7 +107,15 @@ export function useListSelection(keys: readonly string[], options: UseListSelect
       'data-row-key': key,
       tabIndex: 0,
       onFocus: () => select(key),
-      onMouseDown: () => select(key),
+      onMouseDown: (event) => {
+        if (clearsOnPress(options.toggle === true, key, selectedKey, event.button)) {
+          // Without this the focus that follows the press would select the row again.
+          event.preventDefault()
+          clear()
+          return
+        }
+        select(key)
+      },
       className: listRowClass(key === selectedKey),
     }
   }

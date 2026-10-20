@@ -7,6 +7,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { Button } from '@/renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { DetailPane } from '@/renderer/components/detail-pane'
+import { PaneCloseButton } from '@/renderer/components/pane-close-button'
 import { PhaseList } from '@/renderer/components/phase-list'
 import { PhasePill } from '@/renderer/components/phase-pill'
 import { OPERATOR_ACTIONS, OPERATOR_DECISIONS } from '@/types/actions'
@@ -103,7 +104,10 @@ export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps
   return (
     <DetailPane onClose={onClose}>
       <div className="flex flex-col gap-1">
-        <h2 className="text-title font-semibold text-foreground">{ticket.ref.title}</h2>
+        <div className="flex items-start justify-between gap-2">
+          <h2 className="text-title font-semibold text-foreground">{ticket.ref.title}</h2>
+          <PaneCloseButton label="Close details" onClick={onClose} />
+        </div>
         <div className="flex items-center gap-2 text-small text-muted-foreground">
           <span>
             {ticket.ref.kind === 'issue' ? '#' : 'PR#'}
