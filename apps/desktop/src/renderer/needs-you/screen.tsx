@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { RefreshCw, Inbox } from 'lucide-react'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
+import { Button } from '@/renderer/components/ui/button'
 import { ScreenHeader } from '@/renderer/components/screen-header'
 import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { EmptyState } from '@/renderer/components/empty-state'
@@ -14,7 +15,11 @@ import { needsYouItems } from '@/renderer/board/needs-you'
 import type { NeedsYouItem as NeedsYouItemModel } from '@/types/board'
 import { registerListNavigator } from '@/renderer/shell/stores'
 import { useListSelection } from '@/renderer/shell/list-selection'
-import { REFRESH_FAILED_TOAST, needsYouLeadCopy, refreshedToast } from '@/renderer/needs-you/copy'
+import { REFRESH_FAILED_TOAST, UNDO_LABEL, dismissedToast, needsYouLeadCopy, refreshedToast, usageLimitEntryLine } from '@/renderer/needs-you/copy'
+import { dismiss, dismissedKeys, undismiss, visibleItems } from '@/renderer/needs-you/dismissed'
+import { dismissKeyOf } from '@/renderer/needs-you/dismiss-key'
+import { groupNeedsYou } from '@/renderer/needs-you/groups'
+import { useNeedsYouItems } from '@/renderer/needs-you/use-items'
 import { BlockerAnswer } from '@/renderer/needs-you/blocker-answer'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import { actionFor, runAction, runSecondaryAction } from '@/renderer/needs-you/actions'
@@ -23,12 +28,9 @@ import { QuestionCard } from '@/renderer/session/question-card'
 import { invoke } from '@/renderer/data/invoke'
 import { QUESTION_SKIPPED_MESSAGE } from '@/renderer/session/interaction-copy'
 
-function itemKey(item: NeedsYouItemModel): string {
-  return `${item.kind}:${String(item.repoId)}:${String(item.ticket?.number ?? item.number)}`
-}
-
 function hasDetail(item: NeedsYouItemModel): boolean {
   if (item.kind === 'held') return item.held.reason === 'contended' && item.held.contention !== null
+  if (item.kind === 'usage-limit') return true
   if (item.kind === 'stage-question') return true
   if (item.kind === 'stage-denial') return true
   if (item.kind === 'stage-blocked') return true
@@ -48,6 +50,15 @@ function DetailBody({ item, onSent }: { readonly item: NeedsYouItemModel; readon
           ))}
         </ul>
       </div>
+    )
+  }
+  if (item.kind === 'usage-limit') {
+    return (
+      <ul className="border-t border-border px-4 py-2 text-meta text-muted-foreground">
+        {item.entries.map((entry) => (
+          <li key={entry.id}>{usageLimitEntryLine(item, entry)}</li>
+        ))}
+      </ul>
     )
   }
   if (item.kind === 'stage-question') {
@@ -104,7 +115,6 @@ function StageQuestionCard({ item }: { readonly item: Extract<NeedsYouItemModel,
 
 export function NeedsYouScreen() {
   const snapshotQuery = useIpcQuery('board:snapshot')
-  const sessionsQuery = useIpcQuery('session:list')
   const queryClient = useQueryClient()
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
   const [pendingKey, setPendingKey] = useState<string | null>(null)
@@ -112,17 +122,26 @@ export function NeedsYouScreen() {
   const sessionListKey = ipcQueryOptions('session:list').queryKey
   const now = new Date()
 
-  const items = snapshotQuery.data !== undefined ? needsYouItems(snapshotQuery.data, now, sessionsQuery.data ?? []) : []
-  const selection = useListSelection(items.map(itemKey))
+  const items = useNeedsYouItems()
+  const groups = groupNeedsYou(items)
+  // Keyboard navigation walks the rows in the order they render.
+  const ordered = groups.flatMap((group) => group.items)
+  const selection = useListSelection(ordered.map(dismissKeyOf))
 
   registerListNavigator('needsYou', {
     next: () => selection.next(),
     prev: () => selection.prev(),
     open: () => {
-      const item = items.find((candidate) => itemKey(candidate) === selection.selectedKey)
+      const item = ordered.find((candidate) => dismissKeyOf(candidate) === selection.selectedKey)
       if (item !== undefined) runRowAction(item)
     },
   })
+
+  function dismissItems(dismissing: readonly NeedsYouItemModel[]): void {
+    const keys = dismissing.map(dismissKeyOf)
+    dismiss(keys)
+    toast(dismissedToast(dismissing), { action: { label: UNDO_LABEL, onClick: () => undismiss(keys) } })
+  }
 
   async function refresh({ announce }: { readonly announce: boolean }): Promise<void> {
     setRefreshing(true)
@@ -132,7 +151,7 @@ export function NeedsYouScreen() {
       await queryClient.refetchQueries({ queryKey: sessionListKey })
       if (announce) {
         const sessions = queryClient.getQueryData<readonly HostedSessionSnapshot[]>(sessionListKey) ?? []
-        toast(refreshedToast(needsYouItems(fresh, new Date(), sessions).length))
+        toast(refreshedToast(visibleItems(needsYouItems(fresh, new Date(), sessions), dismissedKeys()).length))
       }
     } catch (error) {
       console.error('Failed to refresh the board', error)
@@ -143,7 +162,7 @@ export function NeedsYouScreen() {
   }
 
   function runRowAction(item: NeedsYouItemModel): void {
-    const key = itemKey(item)
+    const key = dismissKeyOf(item)
     const action = actionFor(item)
     if (action.kind === 'retry' || action.kind === 'refresh') setPendingKey(key)
     if (action.kind === 'answer') setExpandedKey(key)
@@ -195,21 +214,34 @@ export function NeedsYouScreen() {
               {items.length === 0 ? (
                 <EmptyState icon={Inbox} message="Nothing needs you right now." className="px-4 py-6" data-slot="needs-you-empty" />
               ) : (
-                items.map((item) => {
-                  const key = itemKey(item)
-                  return (
-                    <Row
-                      key={key}
-                      item={item}
-                      rowProps={selection.rowProps(key)}
-                      now={now}
-                      expanded={expandedKey === key}
-                      pending={pendingKey === key}
-                      onToggle={() => setExpandedKey((c) => (c === key ? null : key))}
-                      onAction={() => runRowAction(item)}
-                    />
-                  )
-                })
+                groups.map((group) => (
+                  <section key={group.key} aria-label={group.name}>
+                    <div className="flex h-9 items-center justify-between border-b border-border px-4 text-meta text-muted-foreground">
+                      <span>
+                        {group.name} · {group.items.length}
+                      </span>
+                      <Button variant="ghost" size="small" onClick={() => dismissItems(group.items)}>
+                        Dismiss all
+                      </Button>
+                    </div>
+                    {group.items.map((item) => {
+                      const key = dismissKeyOf(item)
+                      return (
+                        <Row
+                          key={key}
+                          item={item}
+                          rowProps={selection.rowProps(key)}
+                          now={now}
+                          expanded={expandedKey === key}
+                          pending={pendingKey === key}
+                          onToggle={() => setExpandedKey((c) => (c === key ? null : key))}
+                          onAction={() => runRowAction(item)}
+                          onDismiss={() => dismissItems([item])}
+                        />
+                      )
+                    })}
+                  </section>
+                ))
               )}
             </>
           )}
@@ -227,6 +259,7 @@ function Row({
   pending,
   onToggle,
   onAction,
+  onDismiss,
 }: {
   readonly item: NeedsYouItemModel
   readonly rowProps: ReturnType<ReturnType<typeof useListSelection>['rowProps']>
@@ -235,12 +268,13 @@ function Row({
   readonly pending: boolean
   readonly onToggle: () => void
   readonly onAction: () => void
+  readonly onDismiss: () => void
 }) {
-  const action = actionFor(item)
+  const action = actionFor(item, now)
   return (
     <div {...rowProps}>
       <NeedsYouItem
-        leadCopy={needsYouLeadCopy(item)}
+        leadCopy={needsYouLeadCopy(item, now)}
         repo={item.repo}
         at={item.at}
         now={now}
@@ -250,6 +284,7 @@ function Row({
         onAction={onAction}
         secondaryActionLabel={action.secondaryLabel}
         onSecondaryAction={action.secondaryLabel !== undefined ? () => runSecondaryAction(item, { onToast: () => undefined }) : undefined}
+        onDismiss={onDismiss}
         expandable={hasDetail(item)}
         expanded={expanded}
         onToggleExpand={onToggle}

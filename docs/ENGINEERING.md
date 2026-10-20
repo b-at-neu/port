@@ -141,6 +141,9 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - releases the branch after every worktree removal — launch failure paths, `completed`, and Restart — through `main/workspace/stage-worktree.ts`'s `releaseStageBranch`; a one-time sweep per repository root runs before the first launch and is never a gate on it
 - writes no label itself (phase 1) — stage sessions still write their own, the same way a terminal-dispatched agent does
 - "operator joined" is stamped by the hosted handle (`main/hosting/handle.ts`) on the first `session:send` into a stage session carrying `source: 'operator'`; the launcher's own prompt send never counts
+- `launcher.ts`'s `resume` (#554) is the only place an interrupted entry is restarted as a session: it is tracked like a launch, so its hand-back settles the same registry entry, and the entry flips back to `running` in place — never a second entry with the same id
+- `sweep.ts`'s `createInterruptedSweeper` (#554) is the registry's third remover, after a `completed` hand-back and Restart; `stale.ts` holds its pure decisions, and every one fails toward keeping the entry (a blind, partial or too-old read clears nothing)
+- the sweeper removes a worktree only without force, and auto-resumes a usage-limit entry only on an app-owned, running repository, through `main/channels/stage.ts`'s `resolveStageResume` so the capacity and root checks exist once; a failed auto-resume becomes an ordinary `error` entry, never a retry loop
 
 **`apps/desktop/src/main/tick/`**
 - `RepositoryState` → `TickReport`; computes, never writes
@@ -193,6 +196,8 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `screen.tsx` reads `board:snapshot` through `renderer/board/needs-you.ts`'s `needsYouItems`, never a second derivation; writes go through the existing `item:action`/`item:decide` channels, no new IPC
 - `components/needs-you-item.tsx` is the shared row (DESIGN §4's `NeedsYouItem`); a screen never builds its own version
 - a live stage session's `BLOCKED:` hand-back and the blocked label on the same item are one row (`stage-blocked`); its answer card (`blocker-answer.tsx`) sends into that session through `session/actions.ts`'s `send`, never a label write — the agent clears its own block
+- dismissals (#554) live only in the renderer's `localStorage` (`dismissed.ts`), keyed per event by `dismiss-key.ts` so the same event stays dismissed and a new event on the same ticket shows; a malformed stored value reads as empty, which fails toward showing everything
+- `use-items.ts`'s `useNeedsYouItems` is the one visible-items read: the screen, the sidebar count, the palette and the per-repository dots all go through it, so a dismissed or auto-cleared item can never disagree between them
 
 **`apps/desktop/src/renderer/session/`**
 - `entries-store.ts`'s `createEntriesRegistry` is the per-`sessionKey` attach/re-attach/buffering registry — injectable for its own tests, a thin app-wide singleton for `useSessionEntries`

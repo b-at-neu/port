@@ -2,16 +2,14 @@
 import { Link } from '@tanstack/react-router'
 import { FolderGit2, Inbox, LayoutList, ListTodo } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
-import { needsYouItems } from '@/renderer/board/needs-you'
-import { useIpcQuery } from '@/renderer/data/query'
+import { useNeedsYouItems } from '@/renderer/needs-you/use-items'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 
 const ROW_CLASS =
   'flex h-7 items-center gap-2 rounded-md px-2 text-body text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring [&.active]:bg-accent [&.active]:text-foreground'
 
 export function SidebarScreens() {
-  const snapshot = useIpcQuery('board:snapshot')
-  const count = snapshot.data !== undefined ? needsYouItems(snapshot.data, new Date()).length : 0
+  const count = useNeedsYouItems().length
 
   return (
     <div className="flex flex-col gap-0.5 py-1">

@@ -10,6 +10,7 @@ import { ErrorBanner } from '@/renderer/components/error-banner'
 import { StatusPillMenu } from '@/renderer/components/status-pill-menu'
 import { useIpcQuery } from '@/renderer/data/query'
 import { pipelinesModel } from '@/renderer/shell/pipelines-model'
+import { useNeedsYouItems } from '@/renderer/needs-you/use-items'
 import type { PipelineRow, PipelineSessionRow } from '@/types/shell'
 import { useRunStateCommand } from '@/renderer/shell/run-state-command'
 import { shellPrefs, setRepoCollapsed } from '@/renderer/shell/prefs'
@@ -121,6 +122,7 @@ export function SidebarPipelines() {
   const repos = useIpcQuery('repos:list')
   const snapshot = useIpcQuery('board:snapshot')
   const sessions = useIpcQuery('session:list')
+  const needsYou = useNeedsYouItems()
   const navigate = useNavigate()
   const [collapsedRepos, setCollapsedRepos] = useState<ReadonlySet<string>>(() => new Set(shellPrefs().collapsedRepos))
 
@@ -145,7 +147,7 @@ export function SidebarPipelines() {
       ) : repos.data.repositories.length === 0 ? (
         <EmptyState icon={ChevronRight} message="No repositories yet." action={{ label: 'Add a repository', onClick: () => void navigate({ to: ROUTE_IDS.repos }) }} className="px-2 py-2 text-left" />
       ) : (
-        pipelinesModel(repos.data.repositories, snapshot.data, new Date(), sessions.data ?? []).map((row) => (
+        pipelinesModel(repos.data.repositories, snapshot.data, needsYou, sessions.data ?? []).map((row) => (
           <RepoRow key={row.repoId} row={row} collapsed={row.ready && collapsedRepos.has(row.repoId)} onToggle={() => toggle(row.repoId)} />
         ))
       )}

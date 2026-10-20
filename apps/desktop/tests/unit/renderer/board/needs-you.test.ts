@@ -200,9 +200,11 @@ describe('needsYouItems', () => {
     expect(items[0]).toMatchObject({ kind: 'budget', number: 5 })
   })
 
-  it('derives a stage-denial item from dispatch[].denials', () => {
-    const denial = { id: 'd1', repoId: 'repo-a' as RepoId, agent: 'impl' as const, number: 300, toolName: 'Bash', inputSummary: 'pnpm exec playwright test', rule: 'Bash(pnpm *)', at: NOW.toISOString() }
-    const items = needsYouItems(snapshotOf([], { dispatch: [dispatchStatus({ denials: [denial] })] }), NOW)
+  it('derives a stage-denial item from dispatch[].denials while its session is idle', () => {
+    const stage = { agent: 'impl' as const, number: 300, kind: 'issue' as const, trigger: 'planApproved' as const }
+    const denial = { id: 'd1', repoId: 'repo-a' as RepoId, agent: 'impl' as const, number: 300, toolName: 'Bash', inputSummary: 'pnpm exec playwright test', rule: 'Bash(pnpm *)', at: NOW.toISOString(), sessionKey: 'hosted-300' as SessionKey }
+    const live = stageSession({ key: 'hosted-300', repoId: 'repo-a' as RepoId, stage, phase: 'ready', lastResult: { subtype: 'success', isError: false, text: 'stopped', at: NOW.toISOString() } })
+    const items = needsYouItems(snapshotOf([], { dispatch: [dispatchStatus({ denials: [denial] })] }), NOW, [live])
     expect(items).toHaveLength(1)
     expect(items[0]).toMatchObject({ kind: 'stage-denial', number: 300 })
   })
@@ -220,9 +222,10 @@ describe('needsYouItems', () => {
       claudeSessionId: null,
       worktree: { path: '/wt', branch: 'b', baseSha: 's' },
       startedAt: NOW.toISOString(),
-      reason: 'usage-limit' as const,
+      interruptedAt: NOW.toISOString(),
+      reason: 'crash' as const,
       detail: null,
-      resetsAt: '2026-01-01T15:00:00.000Z',
+      resetsAt: null,
       costUsd: null,
     }
     const items = needsYouItems(snapshotOf([], { dispatch: [dispatchStatus({ interrupted: [interrupted] })] }), NOW)
@@ -443,8 +446,10 @@ describe('needsYouItems sort order', () => {
     const repo = readyRepo({ items: [row, heldMatch] })
     const held = [{ number: 11, kind: 'pull-request' as const, trigger: 'readyForReview' as const, reason: 'conflicting' as const, contention: null, escalation: null }]
     const claims = [{ number: 12, kind: 'issue' as const, inFlight: 'inProgress' as const, class: 'stalled-confirmed' as const, retryKey: 'inProgress' as const }]
-    const denial = { id: 'd1', repoId: 'repo-a' as RepoId, agent: 'impl' as const, number: 300, toolName: 'Bash', inputSummary: 'x', rule: 'Bash(x)', at: '2026-01-01T00:50:00.000Z' }
-    const items = needsYouItems(snapshotOf([repo], { tick: [tickReport({ held, claims })], dispatch: [dispatchStatus({ denials: [denial] })] }), NOW)
+    const denial = { id: 'd1', repoId: 'repo-a' as RepoId, agent: 'impl' as const, number: 300, toolName: 'Bash', inputSummary: 'x', rule: 'Bash(x)', at: '2026-01-01T00:50:00.000Z', sessionKey: 'hosted-300' as SessionKey }
+    const stage = { agent: 'impl' as const, number: 300, kind: 'issue' as const, trigger: 'planApproved' as const }
+    const live = stageSession({ key: 'hosted-300', repoId: 'repo-a' as RepoId, stage, phase: 'ready', lastResult: { subtype: 'success', isError: false, text: 'stopped', at: '2026-01-01T00:55:00.000Z' } })
+    const items = needsYouItems(snapshotOf([repo], { tick: [tickReport({ held, claims })], dispatch: [dispatchStatus({ denials: [denial] })] }), NOW, [live])
     expect(items.map((i) => i.number)).toEqual([300, 11, 10, 12])
   })
 

@@ -19,6 +19,7 @@
     "tests/unit/renderer/**/*",
     "tests/unit/utils/**/*",
     "tests/fixtures/stage-session.ts",
+    "tests/fixtures/board-state.ts",
     "../../scripts/port-tick/liveness.ts",
     "../../scripts/port-tick/overrides.ts",
     "../../scripts/port-tick/gates.ts"
