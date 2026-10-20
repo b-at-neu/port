@@ -133,6 +133,19 @@ describe('createInterruptedSweeper — stale entries', () => {
     expect(deps.registry.list().map((e) => e.id)).toEqual(['e1'])
   })
 
+  it('keeps an entry the operator resumed while its worktree was being removed', async () => {
+    const deps = setup()
+    interrupt(deps.registry)
+    deps.removeWorktree.mockImplementation(() => {
+      deps.registry.markRunning('e1')
+      return Promise.resolve({ outcome: 'removed' })
+    })
+    await deps.sweeper.consider(snapshotWith(moved), [status()])
+    expect(deps.onChange).not.toHaveBeenCalled()
+    void deps.registry.markAllQuit()
+    expect(deps.registry.list().map((e) => e.id)).toEqual(['e1'])
+  })
+
   it('keeps every entry when the recheck itself fails', async () => {
     const deps = setup()
     interrupt(deps.registry)
