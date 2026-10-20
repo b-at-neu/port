@@ -1,9 +1,9 @@
-// `freshnessIndicator` — the Board header's single indicator, replacing the old `FreshnessStrip` plus stale label.
+// `freshnessIndicator` — the Board header's always-on GitHub timing label.
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { PipelineState, RepositoryState } from '@/types/state'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS, initialHealth } from '@/types/board'
-import type { BoardSnapshot, RepositoryHealth } from '@/types/board'
+import type { BoardSnapshot, RepositoryHealth, SourceHealth } from '@/types/board'
 import { decisionRefusalNote, dispatchedTagLabel, dispatchedTagTitle, freshnessIndicator, stageAgentPhaseName } from '@/renderer/board/copy'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
@@ -58,44 +58,84 @@ function snapshotOf(healths: readonly RepositoryHealth[], repositories: readonly
   }
 }
 
+function githubRead(agoMs: number): SourceHealth {
+  return { ...initialHealth('github'), lastSuccessAt: new Date(NOW.getTime() - agoMs).toISOString() }
+}
+
+function withWakeup(snapshot: BoardSnapshot, inMs: number): BoardSnapshot {
+  return { ...snapshot, nextWakeupAt: new Date(NOW.getTime() + inMs).toISOString() }
+}
+
 describe('freshnessIndicator', () => {
   it('is null when there is no health yet', () => {
     expect(freshnessIndicator(snapshotOf([]), NOW)).toBeNull()
   })
 
-  it('is null when every source is healthy', () => {
-    const snapshot = snapshotOf([health({ github: { ...initialHealth('github'), lastSuccessAt: NOW.toISOString() } })])
-    expect(freshnessIndicator(snapshot, NOW)).toBeNull()
+  it('says GitHub is being checked before the first read', () => {
+    const result = freshnessIndicator(snapshotOf([health()]), NOW)
+    expect(result?.label).toBe('Checking GitHub…')
+    expect(result?.tone).toBe('muted')
   })
 
-  it('shows "Updated Nm ago" once GitHub is older than twice its interval', () => {
-    const staleAt = new Date(NOW.getTime() - SOURCE_BASE_INTERVAL_MS.github * 3).toISOString()
-    const snapshot = snapshotOf([health({ github: { ...initialHealth('github'), lastSuccessAt: staleAt } })])
+  it('shows the age and a countdown while healthy', () => {
+    const snapshot = withWakeup(snapshotOf([health({ github: githubRead(40_000) })]), 80_000)
     const result = freshnessIndicator(snapshot, NOW)
-    expect(result?.label).toBe('Updated 3m ago')
+    expect(result?.label).toBe('Checked GitHub 40s ago · next check in 1:20')
+    expect(result?.tone).toBe('muted')
   })
 
-  it('shows the indicator, aged from sessions, when sessions is failing while GitHub is fresh', () => {
-    const sessionsAt = new Date(NOW.getTime() - 5 * 60_000).toISOString()
-    const snapshot = snapshotOf([
-      health({
-        github: { ...initialHealth('github'), lastSuccessAt: NOW.toISOString() },
-        sessions: { ...initialHealth('sessions'), lastSuccessAt: sessionsAt, consecutiveFailures: 2 },
-      }),
-    ])
-    const result = freshnessIndicator(snapshot, NOW)
-    expect(result?.label).toBe('Updated 5m ago')
+  it('says no check is scheduled when there is no wakeup', () => {
+    const result = freshnessIndicator(snapshotOf([health({ github: githubRead(40_000) })]), NOW)
+    expect(result?.label).toBe('Checked GitHub 40s ago · no check scheduled')
   })
 
-  it('shows "Not updated yet" for a failing source that has never read', () => {
-    const snapshot = snapshotOf([health({ worktrees: { ...initialHealth('worktrees'), consecutiveFailures: 1, lastSuccessAt: null } })])
+  it('says the next check is now once the wakeup is due', () => {
+    const snapshot = withWakeup(snapshotOf([health({ github: githubRead(40_000) })]), -1)
+    expect(freshnessIndicator(snapshot, NOW)?.label).toBe('Checked GitHub 40s ago · next check now')
+  })
+
+  it('names the rate-limit reset instead of failing, even though a limited read counts as a failure', () => {
+    const until = new Date(NOW.getTime() + 3_600_000)
+    const github = { ...githubRead(6 * 60_000), consecutiveFailures: 1, deferredUntil: until.toISOString() }
+    const result = freshnessIndicator(snapshotOf([health({ github })]), NOW)
+    const clock = until.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    expect(result?.label).toBe(`Checked GitHub 6m ago · waiting for GitHub's rate limit until ${clock}`)
+    expect(result?.tone).toBe('muted')
+  })
+
+  it('reads as failing, in attention, with the last good read', () => {
+    const github = { ...githubRead(6 * 60_000), consecutiveFailures: 2 }
+    const result = freshnessIndicator(snapshotOf([health({ github })]), NOW)
+    expect(result?.label).toBe('GitHub check failing — last good 6m ago')
+    expect(result?.tone).toBe('attention')
+  })
+
+  it('reads as failing when GitHub has never been read', () => {
+    const github = { ...initialHealth('github'), consecutiveFailures: 1 }
+    expect(freshnessIndicator(snapshotOf([health({ github })]), NOW)?.label).toBe('GitHub check failing — never read')
+  })
+
+  it('turns attention once the last read is older than twice the interval', () => {
+    const snapshot = withWakeup(snapshotOf([health({ github: githubRead(SOURCE_BASE_INTERVAL_MS.github * 3) })]), 40_000)
     const result = freshnessIndicator(snapshot, NOW)
-    expect(result?.label).toBe('Not updated yet')
+    expect(result?.label).toBe('Checked GitHub 3m ago · next check in 0:40')
+    expect(result?.tone).toBe('attention')
+  })
+
+  it('appends the failing sources and turns attention while GitHub is fresh', () => {
+    const snapshot = snapshotOf([health({ github: githubRead(40_000), sessions: { ...initialHealth('sessions'), consecutiveFailures: 2 } })])
+    const result = freshnessIndicator(snapshot, NOW)
+    expect(result?.label).toBe('Checked GitHub 40s ago · no check scheduled · Sessions failing')
+    expect(result?.tone).toBe('attention')
+  })
+
+  it('counts hours for an old read', () => {
+    const github = { ...githubRead(2 * 3_600_000), consecutiveFailures: 1 }
+    expect(freshnessIndicator(snapshotOf([health({ github })]), NOW)?.label).toBe('GitHub check failing — last good 2h ago')
   })
 
   it('lists the tooltip lines in SOURCE_KINDS order, with the rate-limit line last only when known', () => {
-    const staleAt = new Date(NOW.getTime() - SOURCE_BASE_INTERVAL_MS.github * 3).toISOString()
-    const snapshot = snapshotOf([health({ github: { ...initialHealth('github'), lastSuccessAt: staleAt } })])
+    const snapshot = snapshotOf([health({ github: githubRead(SOURCE_BASE_INTERVAL_MS.github * 3) })])
     const result = freshnessIndicator(snapshot, NOW)
     expect(result?.lines).toHaveLength(5)
     expect(result?.lines[0]).toMatch(/^GitHub/)
@@ -106,8 +146,7 @@ describe('freshnessIndicator', () => {
   })
 
   it('omits the rate-limit line when it is unknown', () => {
-    const staleAt = new Date(NOW.getTime() - SOURCE_BASE_INTERVAL_MS.github * 3).toISOString()
-    const snapshot = snapshotOf([health({ github: { ...initialHealth('github'), lastSuccessAt: staleAt } })], [])
+    const snapshot = snapshotOf([health({ github: githubRead(SOURCE_BASE_INTERVAL_MS.github * 3) })], [])
     const result = freshnessIndicator(snapshot, NOW)
     expect(result?.lines).toHaveLength(4)
   })

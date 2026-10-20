@@ -39,7 +39,7 @@ function describePlatformFailure(result: Exclude<CommandResult, { ok: true }>): 
   }
 }
 
-/** Assembled here, where the failure is classified, so `ownerLineCopy` stays generic. */
+/** Assembled here, where the failure is classified, so the renderer's copy stays generic. */
 function unavailableMessage(reason: string): string {
   return `commands.budget can't run (${reason}). Fix it in .claude/port.config.json, or release dispatch to hand it back to the cockpit.`
 }

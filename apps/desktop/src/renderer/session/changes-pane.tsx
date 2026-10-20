@@ -1,11 +1,12 @@
 // Polls session:changes every 5s while mounted, without useEffect.
-import { FileDiff as FileDiffIcon, RefreshCw, X } from 'lucide-react'
+import { FileDiff as FileDiffIcon, RefreshCw } from 'lucide-react'
 import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { DetailPane } from '@/renderer/components/detail-pane'
 import { DiffView } from '@/renderer/components/diff-view'
 import { EmptyState } from '@/renderer/components/empty-state'
+import { PaneCloseButton } from '@/renderer/components/pane-close-button'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { useIpcQuery } from '@/renderer/data/query'
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
@@ -47,14 +48,7 @@ export function ChangesPane({ snapshot, onClose }: { readonly snapshot: HostedSe
             </TooltipTrigger>
             <TooltipContent>{REFRESH_CHANGES}</TooltipContent>
           </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="small" aria-label={CLOSE_CHANGES} onClick={onClose}>
-                <X aria-hidden="true" className="size-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{CLOSE_CHANGES}</TooltipContent>
-          </Tooltip>
+          <PaneCloseButton label={CLOSE_CHANGES} onClick={onClose} />
         </div>
       </div>
       {query.isError ? (

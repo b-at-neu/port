@@ -1,5 +1,6 @@
 // One selection model for every row list, keyed by row key so a reorder keeps the right row selected. No `useEffect`.
 import { useState } from 'react'
+import type { MouseEvent } from 'react'
 
 export function nextKey(keys: readonly string[], selected: string | null): string | null {
   if (keys.length === 0) return null
@@ -29,13 +30,15 @@ interface RowProps {
   readonly 'data-row-key': string
   readonly tabIndex: 0
   readonly onFocus: () => void
-  readonly onMouseDown: () => void
+  readonly onMouseDown: (event: MouseEvent) => void
   readonly className: string
 }
 
 interface UseListSelectionOptions {
   readonly value?: string | null
   readonly onChange?: (key: string | null) => void
+  /** Pressing the selected row clears it, instead of keeping it selected. */
+  readonly toggle?: boolean
 }
 
 interface ListSelection {
@@ -95,11 +98,20 @@ export function useListSelection(keys: readonly string[], options: UseListSelect
   }
 
   function rowProps(key: string): RowProps {
+    const reselect = options.toggle === true && key === selectedKey
     return {
       'data-row-key': key,
       tabIndex: 0,
       onFocus: () => select(key),
-      onMouseDown: () => select(key),
+      onMouseDown: (event) => {
+        if (reselect) {
+          // Without this the focus that follows the press would select the row again.
+          event.preventDefault()
+          clear()
+          return
+        }
+        select(key)
+      },
       className: listRowClass(key === selectedKey),
     }
   }

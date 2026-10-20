@@ -1,5 +1,5 @@
 // Operator control over dispatch (#331): Take over, called directly from
-// `pipeline-status.tsx`'s own button. Halt everything is gone;
+// `banners.tsx`'s own button. Halt everything is gone;
 // per-repository run/drain/pause lives in `board/run-state.ts`.
 import type { RepoId } from '@/utils/repos'
 
