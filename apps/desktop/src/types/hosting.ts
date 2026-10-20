@@ -107,7 +107,7 @@ interface HostedSendResult {
   readonly queued: boolean
 }
 
-/** `blocked-command` is an operator action, not a bug — a typed value, never a thrown refusal. */
+/** `blocked-command` is an operator action, not a bug — a typed value, never a thrown refusal. A stage session refuses every `port:` command, an interactive one only pipeline. */
 export type HostedSendOutcome = ({ readonly ok: true } & HostedSendResult) | { readonly ok: false; readonly kind: 'blocked-command'; readonly name: string }
 
 /** A `session:start` target — a registered/recent folder by its `FolderId`, or the cwd of a named transcript. `worktree: true` on a folder target creates a session worktree before starting. */
@@ -132,7 +132,7 @@ export type SessionStartResult =
   /** `worktree: true` whose `git worktree add` failed. */
   | { readonly ok: false; readonly kind: 'worktree-failed'; readonly message: string }
 
-/** `'session:send'`'s response — always `queued` rather than refusing mid-turn, since the SDK owns the queue. `blocked-command` is `/port:pipeline` (or bare `pipeline`, when this session reports no unqualified command of its own) sent by hand — an operator action, not a bug, so it is a typed value rather than a thrown refusal. */
+/** `'session:send'`'s response — always `queued` rather than refusing mid-turn, since the SDK owns the queue. `blocked-command` is `/port:pipeline` (or bare `pipeline`, when this session reports no unqualified command of its own) sent by hand, or any port command sent into a stage session — an operator action, not a bug, so it is a typed value rather than a thrown refusal. */
 export type SessionSendResult =
   | { readonly ok: true; readonly uuid: string; readonly queued: boolean }
   | { readonly ok: false; readonly kind: 'unknown-session' }
@@ -363,7 +363,7 @@ export interface HostedHandle {
   readonly cwd: string
   snapshot(): HostedSessionSnapshot
   replay(): HostedHandleReplay
-  /** Refuses `/port:pipeline` (or an unreported bare `/pipeline`) as `blocked-command`, pushing nothing. `source` defaults to `'app'` — only a `'operator'` send into a stage session can ever stamp `operatorJoinedAt`. */
+  /** Refuses `/port:pipeline` (or an unreported bare `/pipeline`) as `blocked-command`, pushing nothing; a stage session refuses every port command the same way. `source` defaults to `'app'` — only a `'operator'` send into a stage session can ever stamp `operatorJoinedAt`. */
   send(text: string, attachments?: readonly ComposerAttachment[], source?: 'operator' | 'app'): HostedSendOutcome
   /** The interrupt receipt's `still_queued` count, or `null` when the CLI returned no receipt. */
   interrupt(): Promise<number | null>

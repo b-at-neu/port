@@ -5,7 +5,7 @@ import type { HostedQuery } from '@/main/hosting/sdk'
 import type { AgentSummary, CommandSummary, SessionCapabilities, SlashCommandSummary } from '@/types/hosting'
 import { isRecord } from '@/main/guards'
 import { sanitize } from '@/main/sessions/transcript-entries'
-import { checkComponents, checkPluginLoad, isPipelineCommand, PLUGIN_NAME } from '@/main/hosting/verify'
+import { checkComponents, checkPluginLoad, isBlockedCommand, PLUGIN_NAME } from '@/main/hosting/verify'
 
 
 import type { AgentInfo, SlashCommand } from '@/main/hosting/sdk'
@@ -20,6 +20,8 @@ interface CreateCapabilityTrackerParams {
   readonly readExpectedComponents: (pluginPath: string) => Promise<ExpectedComponents | null>
   readonly samePath: (a: string, b: string) => boolean
   readonly onChange: () => void
+  /** A stage session hides and refuses every `port:` command, not just pipeline. */
+  readonly stage: boolean
   /** Test-only override of `CAPABILITIES_TIMEOUT_MS`. */
   readonly timeoutMs?: number
 }
@@ -29,32 +31,37 @@ interface CapabilityTracker {
   observe(message: unknown): void
   current(): SessionCapabilities
   has(name: string): boolean
-  /** Whether this session's own command list names an unqualified `pipeline` of its own. */
-  hasOwnPipelineCommand(): boolean
+  /** Whether this session refuses `name`, read against its latest reported command list. */
+  isBlocked(name: string): boolean
 }
 
 function isPortQualified(name: string): boolean {
   return name.startsWith(QUALIFIER) && name.length > QUALIFIER.length
 }
 
-function hasUnqualifiedPipeline(raw: readonly SlashCommand[]): boolean {
-  return raw.some((command) => command.name === 'pipeline')
+function blockContext(raw: readonly SlashCommand[], stage: boolean): Parameters<typeof isBlockedCommand>[1] {
+  return {
+    stage,
+    portNames: raw.filter((command) => isPortQualified(command.name)).map((command) => command.name.slice(QUALIFIER.length)),
+    unqualifiedNames: raw.filter((command) => !isPortQualified(command.name)).map((command) => command.name),
+  }
 }
 
+/** Every `port:` command except pipeline, whatever the session kind — the component check reads this list. */
 function toCommandSummaries(raw: readonly SlashCommand[]): CommandSummary[] {
-  const unqualifiedPipeline = hasUnqualifiedPipeline(raw)
+  const context = blockContext(raw, false)
   return raw
-    .filter((command) => isPortQualified(command.name) && !isPipelineCommand(command.name, unqualifiedPipeline))
+    .filter((command) => isPortQualified(command.name) && !isBlockedCommand(command.name, context))
     .map((command) => ({ name: command.name.slice(QUALIFIER.length), description: sanitize(command.description), argumentHint: command.argumentHint }))
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
 /** The composer's `/` autocomplete source — every reported command, namespace
  *  intact, unlike `toCommandSummaries`'s own `port:`-qualified filter. */
-function toSlashCommandSummaries(raw: readonly SlashCommand[]): SlashCommandSummary[] {
-  const unqualifiedPipeline = hasUnqualifiedPipeline(raw)
+function toSlashCommandSummaries(raw: readonly SlashCommand[], stage: boolean): SlashCommandSummary[] {
+  const context = blockContext(raw, stage)
   return raw
-    .filter((command) => !isPipelineCommand(command.name, unqualifiedPipeline))
+    .filter((command) => !isBlockedCommand(command.name, context))
     .map((command) => ({ name: command.name, description: sanitize(command.description), argumentHint: command.argumentHint }))
     .sort((a, b) => a.name.localeCompare(b.name))
 }
@@ -84,21 +91,32 @@ export function createCapabilityTracker(params: CreateCapabilityTrackerParams): 
   let expectedRequested = false
   /** Settles only once the read actually finishes, distinct from `expectedRequested`. */
   let expectedSettled = false
-  let commands: CommandSummary[] = []
+  let rawCommands: readonly SlashCommand[] = []
+  let portCommands: CommandSummary[] = []
   let agents: AgentSummary[] = []
   let slashCommands: SlashCommandSummary[] = []
-  let ownPipelineCommand = false
   let initPlugins: readonly InitPlugin[] | null = null
+
+  /** The command strip and the invoke path; empty in a stage session, so neither can run a port command. */
+  function exposedCommands(): CommandSummary[] {
+    return params.stage ? [] : portCommands
+  }
+
+  function adoptCommands(raw: readonly SlashCommand[]): void {
+    rawCommands = raw
+    portCommands = toCommandSummaries(raw)
+    slashCommands = toSlashCommandSummaries(raw, params.stage)
+  }
 
   function recompute(): void {
     const plugin = checkPluginLoad({ request: params.request, initPlugins, samePath: params.samePath })
     const components = checkComponents({
       expected,
       expectedAttempted: expectedSettled,
-      commandNames: commands.map((command) => command.name),
+      commandNames: portCommands.map((command) => command.name),
       agentNames: agents.map((agent) => agent.name),
     })
-    state = { kind: 'ready', request: params.request, commands, agents, plugin, components, slashCommands }
+    state = { kind: 'ready', request: params.request, commands: exposedCommands(), agents, plugin, components, slashCommands }
   }
 
   async function ensureExpected(pluginPath: string): Promise<void> {
@@ -112,11 +130,9 @@ export function createCapabilityTracker(params: CreateCapabilityTrackerParams): 
     if (params.request.source === 'repository') await ensureExpected(params.request.path)
 
     try {
-      const [rawCommands, rawAgents] = await Promise.race([Promise.all([query.supportedCommands(), query.supportedAgents()]), timeoutRejection(params.timeoutMs ?? CAPABILITIES_TIMEOUT_MS)])
-      commands = toCommandSummaries(rawCommands)
-      agents = toAgentSummaries(rawAgents)
-      slashCommands = toSlashCommandSummaries(rawCommands)
-      ownPipelineCommand = hasUnqualifiedPipeline(rawCommands)
+      const [reportedCommands, reportedAgents] = await Promise.race([Promise.all([query.supportedCommands(), query.supportedAgents()]), timeoutRejection(params.timeoutMs ?? CAPABILITIES_TIMEOUT_MS)])
+      adoptCommands(reportedCommands)
+      agents = toAgentSummaries(reportedAgents)
       recompute()
     } catch (error) {
       state = { kind: 'unavailable', request: params.request, message: error instanceof Error ? error.message : String(error) }
@@ -144,11 +160,9 @@ export function createCapabilityTracker(params: CreateCapabilityTrackerParams): 
     }
 
     if (message['subtype'] === 'commands_changed') {
-      const rawCommands = message['commands']
-      if (!Array.isArray(rawCommands)) return
-      commands = toCommandSummaries(rawCommands as SlashCommand[])
-      slashCommands = toSlashCommandSummaries(rawCommands as SlashCommand[])
-      ownPipelineCommand = hasUnqualifiedPipeline(rawCommands as SlashCommand[])
+      const changedCommands = message['commands']
+      if (!Array.isArray(changedCommands)) return
+      adoptCommands(changedCommands as SlashCommand[])
       recompute()
       params.onChange()
     }
@@ -158,7 +172,7 @@ export function createCapabilityTracker(params: CreateCapabilityTrackerParams): 
     start,
     observe,
     current: () => state,
-    has: (name) => commands.some((command) => command.name === name),
-    hasOwnPipelineCommand: () => ownPipelineCommand,
+    has: (name) => exposedCommands().some((command) => command.name === name),
+    isBlocked: (name) => isBlockedCommand(name, blockContext(rawCommands, params.stage)),
   }
 }

@@ -16,8 +16,8 @@ prompt: |
   session, carry out the brief yourself.
 
   Brief:
-  Run your pipeline stage for #254. Follow your Pre-flight, Label swap,
-  Work, and Handoff steps exactly.
+  Implementation stage for issue #254. Run your pipeline stage for #254.
+  Follow your Pre-flight, Label swap, Work, and Handoff steps exactly.
 
   There is no `gh` CLI available here — treat the following as the
   authoritative result of every `gh` call you would normally make, and do

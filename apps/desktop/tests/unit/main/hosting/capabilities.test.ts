@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createCapabilityTracker } from '@/main/hosting/capabilities'
+import { createCapabilityTracker as createTracker } from '@/main/hosting/capabilities'
 import type { PluginRequest } from '@/types/hosting-plugin'
 import type { HostedQuery } from '@/main/hosting/sdk'
 
+function createCapabilityTracker(params: Omit<Parameters<typeof createTracker>[0], 'stage'> & { readonly stage?: boolean }): ReturnType<typeof createTracker> {
+  return createTracker({ stage: false, ...params })
+}
 
 const INSTALLED: PluginRequest = { source: 'installed' }
 const REPOSITORY: PluginRequest = { source: 'repository', path: '/repo/plugins/port' }
@@ -192,6 +195,71 @@ describe('createCapabilityTracker', () => {
     expect(state.kind).toBe('ready')
     if (state.kind !== 'ready') return
     expect(state.components).toEqual({ kind: 'unchecked', reason: 'unreadable' })
+  })
+
+  describe('in a stage session', () => {
+    const RELEASE_COMMAND = { name: 'port:release', description: 'Release', argumentHint: '' }
+
+    function stageTracker() {
+      return createCapabilityTracker({ request: REPOSITORY, readExpectedComponents: () => Promise.resolve({ skills: ['scope', 'release'], agents: [] }), samePath, onChange: vi.fn(), stage: true })
+    }
+
+    it('exposes no commands, no port: autocomplete entries, and refuses has()', async () => {
+      const tracker = stageTracker()
+      await tracker.start(fakeQuery([SCOPE_COMMAND, RELEASE_COMMAND, PIPELINE_COMMAND, NON_PORT_COMMAND], []))
+      const state = tracker.current()
+      expect(state.kind).toBe('ready')
+      if (state.kind !== 'ready') return
+      expect(state.commands).toEqual([])
+      expect(state.slashCommands.map((c) => c.name)).toEqual(['other:cmd'])
+      expect(tracker.has('scope')).toBe(false)
+    })
+
+    it('still reports the plugin components complete', async () => {
+      const tracker = stageTracker()
+      await tracker.start(fakeQuery([SCOPE_COMMAND, RELEASE_COMMAND], []))
+      const state = tracker.current()
+      expect(state.kind).toBe('ready')
+      if (state.kind !== 'ready') return
+      expect(state.components).toEqual({ kind: 'complete' })
+    })
+
+    it('holds all of it after commands_changed', async () => {
+      const tracker = stageTracker()
+      await tracker.start(fakeQuery([], []))
+      tracker.observe({ type: 'system', subtype: 'commands_changed', commands: [SCOPE_COMMAND, RELEASE_COMMAND, NON_PORT_COMMAND] })
+      const state = tracker.current()
+      expect(state.kind).toBe('ready')
+      if (state.kind !== 'ready') return
+      expect(state.commands).toEqual([])
+      expect(state.slashCommands.map((c) => c.name)).toEqual(['other:cmd'])
+      expect(state.components).toEqual({ kind: 'complete' })
+      expect(tracker.has('scope')).toBe(false)
+    })
+
+    it('isBlocked refuses port commands, qualified or reported-bare, and allows the rest', async () => {
+      const tracker = stageTracker()
+      await tracker.start(fakeQuery([SCOPE_COMMAND, NON_PORT_COMMAND], []))
+      expect(tracker.isBlocked('port:scope')).toBe(true)
+      expect(tracker.isBlocked('scope')).toBe(true)
+      expect(tracker.isBlocked('other:cmd')).toBe(false)
+    })
+  })
+
+  it('isBlocked in an interactive session refuses only pipeline', async () => {
+    const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents: () => Promise.resolve(null), samePath, onChange: vi.fn() })
+    await tracker.start(fakeQuery([SCOPE_COMMAND, PIPELINE_COMMAND], []))
+    expect(tracker.isBlocked('port:pipeline')).toBe(true)
+    expect(tracker.isBlocked('pipeline')).toBe(true)
+    expect(tracker.isBlocked('port:scope')).toBe(false)
+    expect(tracker.isBlocked('scope')).toBe(false)
+  })
+
+  it('isBlocked lets a bare pipeline through when the session reports one of its own', async () => {
+    const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents: () => Promise.resolve(null), samePath, onChange: vi.fn() })
+    await tracker.start(fakeQuery([UNQUALIFIED_PIPELINE, PIPELINE_COMMAND], []))
+    expect(tracker.isBlocked('pipeline')).toBe(false)
+    expect(tracker.isBlocked('port:pipeline')).toBe(true)
   })
 
   it('observe() ignores anything but system/init and system/commands_changed', async () => {

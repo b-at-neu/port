@@ -54,3 +54,5 @@ export function removeAttachmentLabel(name: string): string {
 export const AGENTS_DISCLOSURE_NOTE = 'Stage agents are started by the pipeline, never from here.'
 
 export const PIPELINE_SEND_BLOCKED = "/port:pipeline runs in a terminal session, not in port. Start it with `claude` in the repository."
+
+export const STAGE_COMMAND_BLOCKED = "port commands don't run inside a stage session. Start them from a new session."

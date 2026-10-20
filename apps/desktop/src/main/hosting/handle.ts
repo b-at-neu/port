@@ -40,7 +40,7 @@ import { readUsage } from '@/main/hosting/usage'
 import { promptTitle } from '@/main/hosting/title'
 import { buildUserContent } from '@/main/hosting/content'
 
-import { composeInvocation, isPipelineCommand, validateCommandName } from '@/main/hosting/verify'
+import { composeInvocation, validateCommandName } from '@/main/hosting/verify'
 
 import type { SDKMessage } from '@/main/hosting/sdk'
 import { pathOps } from '@/main/platform/paths'
@@ -137,6 +137,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     readExpectedComponents: params.readExpectedComponents,
     samePath: params.samePath,
     onChange: () => emitStatus(),
+    stage: params.stage !== null,
   })
   const tasks = createTaskTracker()
 
@@ -307,7 +308,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     },
     send(text, attachments = [], source = 'app') {
       const commandName = leadingCommandName(text)
-      if (commandName !== null && isPipelineCommand(commandName, capabilities.hasOwnPipelineCommand())) {
+      if (commandName !== null && capabilities.isBlocked(commandName)) {
         return { ok: false, kind: 'blocked-command', name: commandName }
       }
       const content = buildUserContent(text, attachments)

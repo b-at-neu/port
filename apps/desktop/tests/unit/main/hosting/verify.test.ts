@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkComponents, checkPluginLoad, composeInvocation, isPipelineCommand, validateCommandName } from '@/main/hosting/verify'
+import { checkComponents, checkPluginLoad, composeInvocation, isBlockedCommand, validateCommandName } from '@/main/hosting/verify'
 
 import type { PluginRequest, InitPlugin } from '@/types/hosting-plugin'
 
@@ -106,20 +106,51 @@ describe('validateCommandName', () => {
   })
 })
 
-describe('isPipelineCommand', () => {
-  it('is true for port:pipeline regardless of the unqualified flag', () => {
-    expect(isPipelineCommand('port:pipeline', false)).toBe(true)
-    expect(isPipelineCommand('port:pipeline', true)).toBe(true)
+describe('isBlockedCommand', () => {
+  const NONE = { stage: false, portNames: [], unqualifiedNames: [] }
+  const OWN_PIPELINE = { stage: false, portNames: [], unqualifiedNames: ['pipeline'] }
+  const STAGE = { stage: true, portNames: ['scope', 'release'], unqualifiedNames: ['review'] }
+
+  it('is true for port:pipeline regardless of what the session reports', () => {
+    expect(isBlockedCommand('port:pipeline', NONE)).toBe(true)
+    expect(isBlockedCommand('port:pipeline', OWN_PIPELINE)).toBe(true)
   })
 
   it('is true for a bare pipeline only when the session reports no unqualified pipeline of its own', () => {
-    expect(isPipelineCommand('pipeline', false)).toBe(true)
-    expect(isPipelineCommand('pipeline', true)).toBe(false)
+    expect(isBlockedCommand('pipeline', NONE)).toBe(true)
+    expect(isBlockedCommand('pipeline', OWN_PIPELINE)).toBe(false)
   })
 
   it('never matches on a substring', () => {
-    expect(isPipelineCommand('pipeline-report', false)).toBe(false)
-    expect(isPipelineCommand('port:pipeline-status', false)).toBe(false)
+    expect(isBlockedCommand('pipeline-report', NONE)).toBe(false)
+    expect(isBlockedCommand('port:pipeline-status', NONE)).toBe(false)
+  })
+
+  it('leaves every other port command alone in an interactive session', () => {
+    expect(isBlockedCommand('port:scope', { ...NONE, portNames: ['scope'] })).toBe(false)
+    expect(isBlockedCommand('scope', { ...NONE, portNames: ['scope'] })).toBe(false)
+  })
+
+  it('blocks any port:-qualified name in a stage session', () => {
+    expect(isBlockedCommand('port:scope', STAGE)).toBe(true)
+    expect(isBlockedCommand('port:release', STAGE)).toBe(true)
+    expect(isBlockedCommand('port:pipeline', STAGE)).toBe(true)
+  })
+
+  it('blocks a bare port command name in a stage session unless the session reports it as its own', () => {
+    expect(isBlockedCommand('scope', STAGE)).toBe(true)
+    expect(isBlockedCommand('scope', { ...STAGE, unqualifiedNames: ['scope'] })).toBe(false)
+  })
+
+  it('allows a command that is not a port command in a stage session', () => {
+    expect(isBlockedCommand('review', STAGE)).toBe(false)
+    expect(isBlockedCommand('other:cmd', STAGE)).toBe(false)
+  })
+
+  it('matches exactly in a stage session, never a near-miss', () => {
+    expect(isBlockedCommand('scope-x', STAGE)).toBe(false)
+    expect(isBlockedCommand('sco', STAGE)).toBe(false)
+    expect(isBlockedCommand('portscope', STAGE)).toBe(false)
   })
 })
 

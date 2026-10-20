@@ -36,7 +36,7 @@ import { nextMode } from '@/renderer/session/controls-model'
 import { QUESTION_SKIPPED_MESSAGE, COMPOSER_PLAN_PLACEHOLDER, COMPOSER_QUESTION_PLACEHOLDER, modeToast } from '@/renderer/session/interaction-copy'
 import { toast } from 'sonner'
 import { PromptInput } from '@/renderer/session/prompt-input'
-import { PIPELINE_SEND_BLOCKED } from '@/renderer/session/composer-copy'
+import { PIPELINE_SEND_BLOCKED, STAGE_COMMAND_BLOCKED } from '@/renderer/session/composer-copy'
 import { COMPOSER_HINT, composerCopy, CLOSE_CONFIRM_NO, CLOSE_CONFIRM_PROMPT, EMPTY_TITLE, interruptNote, originDividerLabel, RECONNECTING, SEND_FAILED_UNKNOWN_SESSION, SEND_FAILED_UNREACHABLE, windowNote } from '@/renderer/session/copy'
 import { BackgroundTasksPanel } from '@/renderer/session/background-tasks'
 
@@ -119,8 +119,7 @@ function SessionLive({ snapshot, repoLabel, paneOpen }: { readonly snapshot: Hos
         setSessionGone(true)
         setSendError(SEND_FAILED_UNKNOWN_SESSION)
       } else if (outcome.error === 'blocked-command') {
-        setDraft(key, trimmed)
-        setSendError(PIPELINE_SEND_BLOCKED)
+        setSendError(snapshot.stage !== null ? STAGE_COMMAND_BLOCKED : PIPELINE_SEND_BLOCKED)
       } else {
         setSendError(SEND_FAILED_UNREACHABLE)
       }
