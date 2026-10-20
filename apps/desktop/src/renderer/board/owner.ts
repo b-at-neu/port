@@ -1,6 +1,4 @@
-// The Board's ownership banners — pure copy for the two owners that need the
-// operator's attention. `banners.tsx` renders them and routes Take over to
-// `board/dispatch.ts`'s `takeOver`.
+// Copy for the two owners that need the operator's attention.
 import type { RepoDispatchStatus } from '@/types/dispatch'
 
 interface OwnershipBanner {

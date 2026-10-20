@@ -1,8 +1,4 @@
-// The Board's tick detail copy (#105, #319) — one switch per union so a new
-// variant is a compile error rather than a silently blank line, the same rule
-// `board/copy.ts`'s own header states. `itemDetailLines` feeds the item pane's
-// Held section, re-read on every poll; `storeBannerCopy` feeds the store-error
-// banner in `board/banners.tsx`.
+// The Board's tick detail copy — one switch per union, so a new variant is a compile error.
 import type { DispatchOwner, RunStatesSnapshot } from '@/types/dispatch'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import type { LabelKey } from '@/utils/labels/vocabulary'

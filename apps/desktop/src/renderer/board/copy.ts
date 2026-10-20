@@ -181,7 +181,7 @@ function nextCheckCopy(nextWakeupAt: string | null, now: Date): string {
 
 /** The earliest rate-limit deferral still in the future across every repository, `null` when none. */
 function earliestDeferral(snapshot: BoardSnapshot, now: Date): string | null {
-  const pending = snapshot.health.filter((h) => isDeferred(h.github, now)).map((h) => h.github.deferredUntil as string)
+  const pending = snapshot.health.flatMap((h) => (isDeferred(h.github, now) && h.github.deferredUntil !== null ? [h.github.deferredUntil] : []))
   if (pending.length === 0) return null
   return pending.reduce((a, b) => (Date.parse(a) <= Date.parse(b) ? a : b))
 }
@@ -190,21 +190,23 @@ type IndicatorTone = 'muted' | 'attention'
 
 /** The head of the Board header's label — GitHub's own state, first matching rule wins. A rate-limited read also counts as a failure, so the deferral is checked before the failing rule. */
 function githubClause(snapshot: BoardSnapshot, github: SourceHealth, now: Date): { readonly text: string; readonly tone: IndicatorTone } {
-  if (github.lastSuccessAt === null && github.consecutiveFailures === 0) return { text: 'Checking GitHub…', tone: 'muted' }
+  const lastSuccessAt = github.lastSuccessAt
+  if (lastSuccessAt === null && github.consecutiveFailures === 0) return { text: 'Checking GitHub…', tone: 'muted' }
 
   const deferredUntil = earliestDeferral(snapshot, now)
   if (deferredUntil !== null) {
     const wait = `waiting for GitHub's rate limit until ${timeOf(deferredUntil)}`
-    return { text: github.lastSuccessAt !== null ? `Checked GitHub ${ageCopy(github.lastSuccessAt, now)} · ${wait}` : `Checking GitHub — ${wait}`, tone: 'muted' }
+    return { text: lastSuccessAt !== null ? `Checked GitHub ${ageCopy(lastSuccessAt, now)} · ${wait}` : `Checking GitHub — ${wait}`, tone: 'muted' }
   }
 
   if (github.consecutiveFailures > 0) {
-    const lastGood = github.lastSuccessAt !== null ? `last good ${ageCopy(github.lastSuccessAt, now)}` : 'never read'
+    const lastGood = lastSuccessAt !== null ? `last good ${ageCopy(lastSuccessAt, now)}` : 'never read'
     return { text: `GitHub check failing — ${lastGood}`, tone: 'attention' }
   }
 
-  const stale = now.getTime() - Date.parse(github.lastSuccessAt as string) > github.intervalMs * 2
-  return { text: `Checked GitHub ${ageCopy(github.lastSuccessAt, now)} · ${nextCheckCopy(snapshot.nextWakeupAt, now)}`, tone: stale ? 'attention' : 'muted' }
+  if (lastSuccessAt === null) return { text: 'Checking GitHub…', tone: 'muted' }
+  const stale = now.getTime() - Date.parse(lastSuccessAt) > github.intervalMs * 2
+  return { text: `Checked GitHub ${ageCopy(lastSuccessAt, now)} · ${nextCheckCopy(snapshot.nextWakeupAt, now)}`, tone: stale ? 'attention' : 'muted' }
 }
 
 /** The Board header's always-on timing label — `null` only when there is no repository health to read. */

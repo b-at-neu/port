@@ -22,6 +22,11 @@ export function reconcile(keys: readonly string[], selected: string | null): str
   return selected !== null && keys.includes(selected) ? selected : null
 }
 
+/** Only a primary-button press on the selected row of a `toggle` list clears it. */
+export function clearsOnPress(toggle: boolean, key: string, selected: string | null, button: number): boolean {
+  return toggle && key === selected && button === 0
+}
+
 export function listRowClass(selected: boolean): string {
   return selected ? 'outline-none bg-selection ring-2 ring-ring ring-inset' : 'outline-none'
 }
@@ -98,13 +103,12 @@ export function useListSelection(keys: readonly string[], options: UseListSelect
   }
 
   function rowProps(key: string): RowProps {
-    const reselect = options.toggle === true && key === selectedKey
     return {
       'data-row-key': key,
       tabIndex: 0,
       onFocus: () => select(key),
       onMouseDown: (event) => {
-        if (reselect) {
+        if (clearsOnPress(options.toggle === true, key, selectedKey, event.button)) {
           // Without this the focus that follows the press would select the row again.
           event.preventDefault()
           clear()
