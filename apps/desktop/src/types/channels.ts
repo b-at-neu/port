@@ -16,7 +16,7 @@ type FileListingResult = { readonly ok: true; readonly files: readonly string[];
 import type { RegistryDeps } from '@/types/registry'
 import type { SessionScan } from '@/types/sessions'
 import type { RunSearchParams, SearchResult } from '@/types/search'
-import type { StageRegistry } from '@/types/stage'
+import type { StageLauncherHandle, StageRegistry } from '@/types/stage'
 import type { Dispatcher, RepoDispatchStatus } from '@/types/dispatch'
 import type { ForceDispatch } from '@/types/tick'
 import type { IpcChannel, ReposListResponse } from '@/types/ipc'
@@ -58,7 +58,8 @@ export interface StageChannelDeps {
   readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
   readonly registry: StageRegistry
   readonly dispatcher: Pick<Dispatcher, 'status' | 'clearDenialsFor' | 'dismissDenial'>
-  readonly store: Pick<HostedStore, 'start' | 'send' | 'close' | 'list' | 'capacity'>
+  readonly store: Pick<HostedStore, 'list' | 'capacity'>
+  readonly launcher: Pick<StageLauncherHandle, 'resume'>
   readonly removeWorktree: (path: string, force: boolean) => Promise<RemoveSessionWorktreeOutcome>
   readonly applyItemAction: (params: ApplyItemActionParams) => Promise<ItemActionResult>
   readonly snapshot: () => BoardSnapshot

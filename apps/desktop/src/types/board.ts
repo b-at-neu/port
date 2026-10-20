@@ -183,7 +183,7 @@ interface NeedsYouItemBase {
   readonly url: string | null
   /** The ticket this row belongs to, for display; `null` when no board row matches `number`. */
   readonly ticket: TicketRef | null
-  /** `null` for every current kind — no kind left carries a real timestamp. */
+  /** The event's own time where the kind has one, else the matched row's `updatedAt`; `null` when neither is known. */
   readonly at: string | null
   /** The board row at this (repoId, number), when one exists — lets `held`/`stalled` reuse its `decisions.unblock` too. */
   readonly matchedRow: BoardItemRow | null
@@ -203,7 +203,12 @@ export type NeedsYouItem =
   | (NeedsYouItemBase & { readonly kind: 'stage-questions' | 'stage-blocked'; readonly sessionKey: SessionKey; readonly text: string | null })
   | (NeedsYouItemBase & { readonly kind: 'stage-denial'; readonly denial: StageDenial })
   | (NeedsYouItemBase & { readonly kind: 'stage-interrupted'; readonly interrupted: InterruptedStage })
+  /** Every usage-limit interruption across all repositories, collapsed into one row — `resetsAt` is the latest known reset, `null` when none is. */
+  | (NeedsYouItemBase & { readonly kind: 'usage-limit'; readonly entries: readonly InterruptedStage[]; readonly resetsAt: string | null; readonly repoNames: ReadonlyMap<RepoId, string> })
   | (NeedsYouItemBase & { readonly kind: 'half-labelled'; readonly repair: TickLabelRepair })
+
+/** The groups Needs you renders — `stage-question`/`stage-questions` share `questions`, and `stage-blocked` joins `blocked`. */
+export type NeedsYouGroupKey = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'blocked' | 'questions' | 'denied' | 'interrupted' | 'usage-limit' | 'held' | 'stalled' | 'budget' | 'half-labelled'
 
 export const PHASE_KEYS = ['plan', 'planReview', 'implement', 'review', 'revision', 'merge'] as const
 

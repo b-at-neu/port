@@ -9,6 +9,7 @@ import type { BoardSnapshot, RepositoryHealth, SourceKind } from '@/types/board'
 import type { DenialEntry, DenialsRead } from '@/types/local'
 import type { RepositoryState } from '@/types/state'
 import type { SessionKey } from '@/types/hosting'
+import type { InterruptedStage } from '@/types/stage'
 import { reconcileRepository } from '@/main/state/reconcile'
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
 import { planTick } from '@/main/tick/plan'
@@ -390,8 +391,32 @@ export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'pop
         },
         observed: [],
         denials: [],
-        interrupted: [],
+        interrupted: scenario === 'empty' ? [] : interruptedStages(now),
       },
     ],
   }
+}
+
+/** Three sessions stopped by the same usage limit, plus one crash — Needs you shows the collapsed line beside an ordinary Interrupted row. */
+function interruptedStages(now: Date): readonly InterruptedStage[] {
+  const resetsAt = offsetMinutes(now, 95)
+  const stopped = (id: string, number: number, agent: InterruptedStage['agent'], reason: InterruptedStage['reason'], minutesAgo: number): InterruptedStage => ({
+    id,
+    repoId: WIDGETS_ID,
+    agent,
+    number,
+    kind: agent === 'revise' ? 'pull-request' : 'issue',
+    trigger: agent === 'plan' ? 'ready' : agent === 'revise' ? 'needsRevision' : 'planApproved',
+    inFlight: agent === 'plan' ? 'planning' : agent === 'revise' ? 'revising' : 'inProgress',
+    model: agent === 'plan' ? 'opus' : 'sonnet',
+    claudeSessionId: `fixture-session-${id}`,
+    worktree: { path: `/home/you/src/widgets/.claude/worktrees/session-${id}`, branch: `session/${id}`, baseSha: 'abc1234' },
+    startedAt: offsetMinutes(now, -minutesAgo - 20),
+    interruptedAt: offsetMinutes(now, -minutesAgo),
+    reason,
+    detail: null,
+    resetsAt: reason === 'usage-limit' ? resetsAt : null,
+    costUsd: 1.1,
+  })
+  return [stopped('limit-38', 38, 'impl', 'usage-limit', 12), stopped('limit-36', 36, 'impl', 'usage-limit', 11), stopped('limit-52', 52, 'plan', 'usage-limit', 10), stopped('crash-35', 35, 'revise', 'crash', 25)]
 }

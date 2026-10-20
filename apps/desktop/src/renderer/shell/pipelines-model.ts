@@ -1,11 +1,11 @@
 // Pure projection onto the sidebar's Pipelines section — one row per
 // registered repository.
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
-import type { BoardSnapshot } from '@/types/board'
+import type { BoardSnapshot, NeedsYouItem } from '@/types/board'
 import type { DispatchOwner } from '@/types/dispatch'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import type { TicketIndex } from '@/types/ticket'
-import { needsYouItems, repoNeedsYou } from '@/renderer/board/needs-you'
+import { repoNeedsYou } from '@/renderer/board/needs-you'
 import { ticketIndex, ticketLabel } from '@/utils/tickets/ticket'
 import type { PhaseTone, PillStatus } from '@/types/components'
 import type { PipelineRow, PipelineSessionRow } from '@/types/shell'
@@ -66,15 +66,14 @@ function pillFor(snapshot: BoardSnapshot | undefined, repoId: RepoId, owner: Dis
   return { status: 'idle', label: 'Paused' }
 }
 
-/** A not-`ready` repository gets a bare row with no menu. `snapshot` may be
- *  `undefined` before the first read; a ready row then falls back to paused. */
+/** A not-`ready` repository gets a bare row with no menu; before the first read a ready row falls back to paused.
+ *  `needsYou` is the visible list, never re-derived here, so a dismissed item lights no dot. */
 export function pipelinesModel(
   repos: readonly RepositoryEntry[],
   snapshot: BoardSnapshot | undefined,
-  now: Date = new Date(),
+  needsYou: readonly NeedsYouItem[],
   sessions: readonly HostedSessionSnapshot[] = [],
 ): readonly PipelineRow[] {
-  const needsYou = snapshot !== undefined ? needsYouItems(snapshot, now) : []
   const needsYouNumbers = new Map<RepoId, Set<number>>()
   for (const item of needsYou) {
     const number = item.ticket?.number ?? item.number

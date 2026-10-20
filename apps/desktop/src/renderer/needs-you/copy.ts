@@ -1,9 +1,65 @@
 // Every lead-copy string the Needs you screen renders, one switch over
 // `NeedsYouItem.kind` — a new kind is a compile error, never a blank row.
-import type { NeedsYouItem } from '@/types/board'
+import type { NeedsYouGroupKey, NeedsYouItem } from '@/types/board'
+import type { InterruptedStage } from '@/types/stage'
 import type { StageAgent } from '@/types/tick'
 
 const STAGE_PHASE_NAME: Readonly<Record<StageAgent, string>> = { plan: 'Planning', impl: 'Implementing', review: 'Reviewing', revise: 'Revising' }
+
+export const GROUP_NAMES: Readonly<Record<NeedsYouGroupKey, string>> = {
+  'plan-review': 'Plan reviews',
+  'ready-to-merge': 'Ready to merge',
+  'needs-human': 'Escalated',
+  blocked: 'Blocked',
+  questions: 'Questions',
+  denied: 'Denied commands',
+  interrupted: 'Interrupted',
+  'usage-limit': 'Usage limit',
+  held: 'Held',
+  stalled: 'Stalled',
+  budget: 'Over budget',
+  'half-labelled': 'Label problems',
+}
+
+function clockTime(at: string): string {
+  return new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+function plural(count: number, noun: string): string {
+  return `${String(count)} ${noun}${count === 1 ? '' : 's'}`
+}
+
+/** `Usage limit — resets 14:05 · 3 sessions waiting`; once the reset has passed it reads `reset at`, and without a known reset it says so. */
+function usageLimitCopy(item: Extract<NeedsYouItem, { readonly kind: 'usage-limit' }>, now: Date): string {
+  const waiting = `${plural(item.entries.length, 'session')} waiting`
+  if (item.resetsAt === null) return `Usage limit — reset time unknown · ${waiting}`
+  if (Date.parse(item.resetsAt) <= now.getTime()) return `Usage limit reset at ${clockTime(item.resetsAt)} · ${waiting}`
+  return `Usage limit — resets ${clockTime(item.resetsAt)} · ${waiting}`
+}
+
+/** One expanded line per waiting session: its number, phase and repository. */
+export function usageLimitEntryLine(item: Extract<NeedsYouItem, { readonly kind: 'usage-limit' }>, entry: InterruptedStage): string {
+  const repo = item.repoNames.get(entry.repoId)
+  return `#${String(entry.number)} ${STAGE_PHASE_NAME[entry.agent]}${repo !== undefined ? ` · ${repo}` : ''}`
+}
+
+export const UNDO_LABEL = 'Undo'
+
+export function resumeAllDisabledReason(resetsAt: string): string {
+  return `The limit resets at ${clockTime(resetsAt)}. port resumes these sessions then.`
+}
+
+export function dismissedToast(items: readonly Pick<NeedsYouItem, 'number'>[]): string {
+  const only = items.length === 1 ? items[0] : undefined
+  if (only !== undefined) return only.number !== null ? `Dismissed #${String(only.number)}.` : 'Dismissed this item.'
+  return `Dismissed ${plural(items.length, 'item')}.`
+}
+
+export function resumeAllToast(resumed: number, total: number, slotLimit: number | null, failure: { readonly number: number; readonly reason: string } | null): string {
+  if (failure !== null) return `Couldn't resume #${String(failure.number)}: ${failure.reason}.`
+  if (resumed === total) return `Resumed ${plural(total, 'session')}.`
+  return `Resumed ${String(resumed)} of ${String(total)}. All ${String(slotLimit ?? 0)} session slots are busy.`
+}
 
 function labelOf(item: Pick<NeedsYouItem, 'number' | 'ticket'>): string {
   if (item.ticket !== null) return `${item.ticket.kind === 'issue' ? '#' : 'PR#'}${String(item.ticket.number)}`
@@ -54,7 +110,7 @@ function halfLabelledCopy(item: Extract<NeedsYouItem, { readonly kind: 'half-lab
   }
 }
 
-export function needsYouLeadCopy(item: NeedsYouItem): string {
+export function needsYouLeadCopy(item: NeedsYouItem, now: Date = new Date()): string {
   const label = labelOf(item)
   switch (item.kind) {
     case 'plan-review':
@@ -99,6 +155,8 @@ export function needsYouLeadCopy(item: NeedsYouItem): string {
       return `${STAGE_PHASE_NAME[item.denial.agent]} ${label} was denied ${item.denial.rule}`
     case 'stage-interrupted':
       return interruptedCopy(item, label)
+    case 'usage-limit':
+      return usageLimitCopy(item, now)
     case 'half-labelled':
       return halfLabelledCopy(item, label)
   }

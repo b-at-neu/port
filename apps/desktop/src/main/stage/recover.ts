@@ -2,7 +2,6 @@
 // from the dispatch loop itself. Nothing here restarts anything on its own.
 import type { StageResumeResult, StageRestartResult } from '@/types/stage'
 
-import { STAGE_AGENT_NAMES } from '@/main/stage/agents'
 import type { RecoverDeps } from '@/types/stage'
 
 /** Byte-identical restatement sent after a resumed session's `init` — the label swap already ran, so the resumed agent must never repeat its Pre-flight. */
@@ -12,7 +11,7 @@ function freeSlotsOf(limit: number, open: number): number {
   return Math.max(0, limit - open)
 }
 
-/** `resumeStage(deps, id)` — the kept worktree, resumed through `mode: 'resume'`, then sent `RESUME_PROMPT`. On `ok`, the registry entry flips back to `running`. */
+/** `resumeStage(deps, id)` — the kept worktree, resumed through the launcher and sent `RESUME_PROMPT`. The launcher flips the registry entry back to `running` in place. */
 export async function resumeStage(deps: RecoverDeps, id: string): Promise<StageResumeResult> {
   const entry = deps.registry.list().find((e) => e.id === id)
   if (entry === undefined) return { kind: 'unknown-stage' }
@@ -25,37 +24,10 @@ export async function resumeStage(deps: RecoverDeps, id: string): Promise<StageR
   const root = deps.resolveEntry(entry.repoId)
   if (root === null) return { kind: 'start-failed', message: `repository ${entry.repoId} is no longer configured` }
 
-  const startResult = await deps.store.start({
-    repoId: entry.repoId,
-    mode: { kind: 'resume', sessionId: entry.claudeSessionId },
-    workspace: {
-      folder: entry.worktree.path,
-      root: root.path,
-      worktree: { path: entry.worktree.path, branch: entry.worktree.branch },
-      base: { sha: entry.worktree.baseSha, label: entry.worktree.branch },
-    },
-    stage: {
-      tag: { agent: entry.agent, number: entry.number, kind: entry.kind, trigger: entry.trigger },
-      agentName: STAGE_AGENT_NAMES[entry.agent],
-      model: entry.model,
-      sessionRequiredPaths: root.sessionRequiredPaths,
-    },
-  })
-
-  if (!startResult.ok) {
-    if (startResult.kind === 'at-capacity') return { kind: 'at-capacity', limit: startResult.limit }
-    return { kind: 'start-failed', message: startResult.kind }
-  }
-
-  const sessionKey = startResult.snapshot.sessionKey
-  const sendResult = deps.store.send(sessionKey, RESUME_PROMPT.replace('<n>', String(entry.number)))
-  if (!sendResult.ok) {
-    await deps.store.close(sessionKey)
-    return { kind: 'start-failed', message: `could not send the resume prompt: ${sendResult.kind}` }
-  }
-
-  deps.registry.recordRunning(entry)
-  return { kind: 'ok', sessionKey }
+  const result = await deps.resume({ entry, root, prompt: RESUME_PROMPT.replace('<n>', String(entry.number)) })
+  if (result.ok) return { kind: 'ok', sessionKey: result.sessionKey }
+  if (result.kind === 'at-capacity') return { kind: 'at-capacity', limit: result.limit }
+  return { kind: 'start-failed', message: result.message }
 }
 
 /** `restartStage(deps, id)` — removes the kept worktree without force, applies the existing `retry` plan, then removes the registry entry. Stops at the first failure; a dirty worktree never reaches the label step. */
