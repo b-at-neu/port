@@ -1,6 +1,5 @@
-// Pure decisions for the interrupted-entry sweeper: which entries have moved on, and which usage-limit
-// entries may resume themselves. Every rule fails toward keeping an entry, since a wrongly kept row costs
-// a glance and a wrongly cleared one hides work.
+// Pure decisions for the interrupted-entry sweeper: which entries moved on, and which usage-limit ones may resume.
+// Every rule fails toward keeping an entry — a wrongly kept row costs a glance, a wrongly cleared one hides work.
 import { RUN_TARGET } from '@/types/dispatch'
 import type { DispatchRecord, RepoDispatchStatus } from '@/types/dispatch'
 import type { ItemsByNumberFetch } from '@/types/github'
