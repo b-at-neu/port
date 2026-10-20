@@ -48,6 +48,7 @@ export function createInterruptedSweeper(params: CreateInterruptedSweeperParams)
     const removed = await params.removeWorktree(entry.worktree.path, false)
     if (removed.outcome === 'dirty') console.error(`[stage] kept ${entry.worktree.path}: it has uncommitted changes`)
     if (removed.outcome === 'failed') console.error(`[stage] could not remove ${entry.worktree.path}: ${removed.message}`)
+    if (!params.registry.list().some((e) => e.id === entry.id)) return false
     params.registry.remove(entry.id)
     return true
   }
