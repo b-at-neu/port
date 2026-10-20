@@ -8,6 +8,7 @@ import { chooseDirectory } from '@/main/dialogs'
 import { defaultWorkspaceChannelDeps, resolveFoldersChoose, resolveFoldersList, resolveSessionChanges } from '@/main/channels/workspace'
 import { createRecentsStore } from '@/main/workspace/recents'
 import { createSessionWorktree, removeSessionWorktreeAt } from '@/main/workspace/worktree'
+import { createStageWorktree, releaseStageBranch, sweepSessionBranches } from '@/main/workspace/stage-worktree'
 import { createStageLauncher } from '@/main/stage/launcher'
 import type { StageLauncherHandle } from '@/types/stage'
 import { defaultForkListSessions } from '@/main/hosting/fork'
@@ -279,8 +280,10 @@ export function registerIpc(): RegisteredIpc {
   const stageLauncher: StageLauncherHandle = createStageLauncher({
     store: hostedStore,
     git: defaultGitRunner(),
-    createWorktree: createSessionWorktree,
+    createWorktree: createStageWorktree,
     removeWorktree: (path, force) => removeSessionWorktreeAt({ path, force, git: defaultGitRunner() }),
+    releaseBranch: (root, branch, baseSha) => releaseStageBranch({ root, git: defaultGitRunner(), branch, baseSha }),
+    sweepBranches: (root) => sweepSessionBranches({ root, git: defaultGitRunner() }),
     now: () => new Date(),
     onOutcome: (repoId, sessionKey, outcome) => dispatcherRef?.recordOutcome(repoId, sessionKey, outcome),
     registry: stageRegistry,
@@ -459,6 +462,7 @@ export function registerIpc(): RegisteredIpc {
     dispatcher,
     store: hostedStore,
     removeWorktree: (path, force) => removeSessionWorktreeAt({ path, force, git: defaultGitRunner() }),
+    releaseBranch: (root, branch, baseSha) => releaseStageBranch({ root, git: defaultGitRunner(), branch, baseSha }),
     applyItemAction,
     snapshot: watcher.snapshot,
     auditDir: app.getPath('userData'),

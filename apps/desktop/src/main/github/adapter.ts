@@ -166,6 +166,7 @@ export async function fetchItemsByNumber(params: FetchItemsByNumberParams): Prom
       url: typeof raw.url === 'string' ? raw.url : '',
       labels: fieldListOf(raw.labels, 'name'),
       assignees: fieldListOf(raw.assignees, 'login'),
+      headRefName: kind === 'pull-request' && typeof raw.headRefName === 'string' ? raw.headRefName : null,
     })
   }
 

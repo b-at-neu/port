@@ -1,4 +1,4 @@
-// Sole creator/remover of session worktrees. Never deletes a branch; never forces removal without an explicit caller choice. Through `GitRunner` only — never a direct subprocess call.
+// Interactive-session worktree creation and the shared removal path. Never deletes a branch here (`stage-worktree.ts` releases stage branches); never forces removal without an explicit caller choice. Through `GitRunner` only — never a direct subprocess call.
 import { randomBytes } from 'node:crypto'
 import type { GitRunner } from '@/types/platform'
 import { resolveGitBaseRoot } from '@/main/platform/git'
@@ -7,11 +7,11 @@ import type { PathOps } from '@/types/platform'
 import { readTextFile, writeTextFile } from '@/main/platform/files'
 import type { RemoveSessionWorktreeOutcome, CreateSessionWorktreeParams, CreateSessionWorktreeResult } from '@/types/workspace'
 
-function hex6(random: () => string): string {
+export function hex6(random: () => string): string {
   return random().slice(0, 6)
 }
 
-const defaultRandom = (): string => randomBytes(4).toString('hex')
+export const defaultRandom = (): string => randomBytes(4).toString('hex')
 
 async function headSha(git: GitRunner, root: string): Promise<string | null> {
   const result = await git(['rev-parse', 'HEAD'], root)
@@ -22,7 +22,7 @@ async function headSha(git: GitRunner, root: string): Promise<string | null> {
 
 /** `check-ignore` exits 1 for "not ignored" — only that exit means a line must be appended; any
  *  other failure is reported rather than silently skipping the exclude step. */
-async function ensureIgnored(git: GitRunner, root: string, relativePath: string): Promise<{ ok: true } | { ok: false; message: string }> {
+export async function ensureIgnored(git: GitRunner, root: string, relativePath: string): Promise<{ ok: true } | { ok: false; message: string }> {
   const checked = await git(['check-ignore', '-q', relativePath], root)
   if (checked.ok) return { ok: true }
   if (!(checked.kind === 'nonzero' && checked.code === 1)) {
@@ -90,8 +90,8 @@ interface RemoveSessionWorktreeParams {
   readonly git: GitRunner
 }
 
-/** `git worktree remove` without `--force` unless the caller explicitly asks; the branch is never
- *  deleted either way. "contains modified or untracked files" classifies as `dirty`, never `failed`. */
+/** `git worktree remove` without `--force` unless the caller explicitly asks; the branch is left
+ *  for the caller to release. "contains modified or untracked files" classifies as `dirty`, never `failed`. */
 export async function removeSessionWorktree(params: RemoveSessionWorktreeParams): Promise<RemoveSessionWorktreeOutcome> {
   const args = params.force ? ['worktree', 'remove', '--force', params.path] : ['worktree', 'remove', params.path]
   const result = await params.git(args, params.root)

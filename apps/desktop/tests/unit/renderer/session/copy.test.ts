@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionEnd } from '@/types/hosting'
-import { composerCopy, endBody, interruptNote, startFailureCopy } from '@/renderer/session/copy'
+import { archiveBody, composerCopy, endBody, interruptNote, startFailureCopy } from '@/renderer/session/copy'
 import type { RenderableStartFailure } from '@/types/session'
+
+describe('archiveBody', () => {
+  it('names the branch that is kept', () => {
+    expect(archiveBody('/repo/.claude/worktrees/impl-5', '5-thing')).toBe('/repo/.claude/worktrees/impl-5 on branch 5-thing. The branch is kept.')
+  })
+
+  it('says a detached checkout keeps no branch', () => {
+    expect(archiveBody('/repo/.claude/worktrees/plan-5', null)).toBe('/repo/.claude/worktrees/plan-5, a detached checkout. No branch is kept.')
+  })
+})
 
 describe('composerCopy', () => {
   it('ready and starting offer Send, never disabled', () => {

@@ -5,7 +5,6 @@
 import type { ItemStatus, LinkReason, RepositoryFreshness, RepositoryState, StatusEvidence, WaitingOn } from '@/types/state'
 import type { BoardSnapshot, DisplayStatus, SourceHealth, SourceKind } from '@/types/board'
 import { SOURCE_KINDS, isDeferred } from '@/types/board'
-import type { RepoProblem } from '@/utils/repos'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { RETRY_TRIGGER } from '@/utils/actions/plan'
 import type { ActionPlan, ActionRefusal, ItemActionResult, OperatorAction, OperatorDecision } from '@/types/actions'
@@ -107,32 +106,6 @@ export function subLineFor(params: {
   if (worktreeCount === 1) return '1 worktree'
   if (worktreeCount > 1) return `${worktreeCount} worktrees`
   return null
-}
-
-export function repoProblemCopy(problem: RepoProblem): string {
-  switch (problem.kind) {
-    case 'directory-missing':
-      return "That folder is gone. It may have moved, or be on a drive that isn't mounted."
-    case 'not-a-git-repository':
-      return "Not a git repository. Pick the repository's root folder."
-    case 'not-port-managed':
-      return problem.carriedBy.length > 0
-        ? `Not port-managed on ${problem.currentBranch}. The harness is on ${problem.carriedBy.join(', ')} — check one of those out and rescan.`
-        : "Not port-managed. There's no .claude/port.config.json on any branch here."
-    case 'config-malformed':
-      return `.claude/port.config.json isn't valid JSON — ${problem.message}.`
-    case 'config-invalid':
-      return `.claude/port.config.json has no usable repo: ${problem.violations[0]?.message ?? 'invalid'}.`
-    case 'config-unreadable':
-      return `Can't read .claude/port.config.json — ${problem.message}.`
-    case 'effective-config-unreadable':
-      return `Can't read ${problem.file} — ${problem.message}.`
-  }
-}
-
-export function notReadyCopy(state: Extract<RepositoryState, { readonly ok: false }>): string {
-  if (state.reason === 'not-ready') return repoProblemCopy(state.problem)
-  return `Couldn't reach GitHub: ${state.message}. Retrying automatically.`
 }
 
 const SOURCE_NAMES: Readonly<Record<SourceKind, string>> = { github: 'GitHub', sessions: 'Sessions', worktrees: 'Worktrees', denials: 'Denials' }

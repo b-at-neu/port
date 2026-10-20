@@ -26,7 +26,8 @@ import { withDenial, withoutDenialId, withoutDenialRule } from '@/main/dispatch/
 import { boundRecords, endedStagesOf, freeSlots, refreshRecords } from '@/main/dispatch/launch'
 
 
-import type { PipelineItemKind } from '@/types/github'
+import type { PipelineItemKind, ResolvedItem } from '@/types/github'
+import type { StageWorktreeTarget } from '@/types/workspace'
 import type { EndedStage, StageAgent, TickActionable } from '@/types/tick'
 import type { StageOutcome } from '@/types/stage-session'
 import type { Dispatcher, CreateDispatcherParams } from '@/types/dispatch'
@@ -78,6 +79,11 @@ function emptyRepoState(): RepoDispatcherState {
     observedWriteAt: new Map(),
     denials: [],
   }
+}
+
+function targetOf(kind: PipelineItemKind, resolved: ResolvedItem | undefined): StageWorktreeTarget {
+  if (kind === 'pull-request') return { kind: 'pr', headRefName: resolved?.headRefName ?? null }
+  return { kind: 'issue', title: resolved?.title ?? '' }
 }
 
 function newStageRecord(candidate: TickActionable, state: 'started' | 'failed', at: string, sessionKey: SessionKey | null, detail: string | null): StageRecord {
@@ -272,13 +278,13 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
         return
       }
 
-      await launchSurvivors(entry, survivors, state, owner, runState, viewer)
+      await launchSurvivors(entry, survivors, resolvedByNumber, state, owner, runState, viewer)
     } finally {
       inFlight.delete(entry.id)
     }
   }
 
-  async function launchSurvivors(entry: ReadyEntry, survivors: readonly TickActionable[], state: RepoDispatcherState, owner: DispatchOwner, runState: RunState, viewer: string): Promise<void> {
+  async function launchSurvivors(entry: ReadyEntry, survivors: readonly TickActionable[], resolvedByNumber: ReadonlyMap<number, ResolvedItem>, state: RepoDispatcherState, owner: DispatchOwner, runState: RunState, viewer: string): Promise<void> {
     const launch = deps.launch
     if (launch === null) return
 
@@ -342,6 +348,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
             model: entry.config.models[candidate.agent],
             prompt: promptFor(candidate),
             title: ticketLabelFor(index, candidate.number, candidate.kind),
+            target: targetOf(candidate.kind, resolvedByNumber.get(candidate.number)),
           })
           const at = deps.now().toISOString()
           if (result.ok) {

@@ -99,7 +99,7 @@ function harness(overrides: Partial<CreateDispatcherParams> = {}) {
     fetchItemsByNumber: (params) =>
       Promise.resolve({
         ok: true,
-        resolved: params.numbers.map((number) => ({ number, kind: 'issue' as const, state: 'OPEN' as const, mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] })),
+        resolved: params.numbers.map((number) => ({ number, kind: 'issue' as const, state: 'OPEN' as const, mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'], headRefName: null })),
         unavailable: [],
         fetchedAt: 'r',
       }),

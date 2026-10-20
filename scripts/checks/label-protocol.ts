@@ -97,6 +97,14 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     expect(!(firstPushIdx === -1 || runChecksIdx === -1 || !(firstPushIdx < runChecksIdx)), 'label-protocol', `${rel} does not push a checkpoint before its 'Run the checks' step — a killed run must leave a pushed branch behind it`);
 
     expect(text.includes('every failure in the resume path degrades to a fresh start'), 'label-protocol', `${rel} is missing the literal phrase "every failure in the resume path degrades to a fresh start"`);
+
+    // The branch a desktop-started session is already on overrides the lookup, so it must be read before the label swap.
+    const showCurrentIdx = text.indexOf('git branch --show-current');
+    expect(!(preflightIdx === -1 ||
+    labelSwapIdx === -1 ||
+    showCurrentIdx === -1 ||
+    !(preflightIdx < showCurrentIdx && showCurrentIdx < labelSwapIdx) ||
+    !text.includes('session branch')), 'label-protocol', `${rel}'s Pre-flight is missing the session-branch read ('git branch --show-current', between Pre-flight and Label swap)`);
   }
   {
     const rel = 'plugins/port/skills/implement/SKILL.md';

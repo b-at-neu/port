@@ -1,13 +1,11 @@
-// Resolves a repository's *effective* config: the port-resolved values `inspect.ts` built, with a root `CLAUDE.md` `port-overrides` block folded on top. Composition only — `overrides.ts` does the actual parsing and validation.
-import { pathOps } from '@/main/platform/paths'
-import { readTextFile } from '@/main/platform/files'
+// Resolves a repository's *effective* config: the port-resolved values `inspect.ts` built, with the default branch's `CLAUDE.md` `port-overrides` block folded on top. Composition only — `overrides.ts` does the actual parsing and validation.
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { LABEL_KEYS } from '@/utils/labels/vocabulary'
 import type { LabelKey } from '@/utils/labels/vocabulary'
-import type { AppliedOverride, CheckDisposition, RepoConfigReadFailureKind, RepoProblem } from '@/utils/repos'
+import type { AppliedOverride, CheckDisposition, RepoProblem } from '@/utils/repos'
 import { applyOverrides, parseOverrides } from '../../../../../scripts/port-tick/overrides'
 import type { EffectiveConfigShape } from '../../../../../scripts/port-tick/overrides'
-import type { PortResolved } from '@/types/registry'
+import type { PortResolved, RefReader } from '@/types/registry'
 
 type EffectiveConfigResult =
   | {
@@ -97,13 +95,13 @@ export function foldDispositions(excusedCheck: string | null, applied: readonly 
 }
 
 /** Fails closed (`effective-config-unreadable`) when a config file exists but cannot be read, since an unread override could rename a label or change a gate. Absent file is not a failure. */
-export async function resolveEffectiveConfig(root: string, portResolved: PortResolved, rawLabels: Readonly<Record<string, unknown>>): Promise<EffectiveConfigResult> {
-  const claudeMdResult = await readTextFile(pathOps.join(root, 'CLAUDE.md'))
+export async function resolveEffectiveConfig(read: RefReader, portResolved: PortResolved, rawLabels: Readonly<Record<string, unknown>>): Promise<EffectiveConfigResult> {
+  const claudeMdResult = await read('CLAUDE.md')
   let claudeMdText = ''
   if (claudeMdResult.ok) {
-    claudeMdText = claudeMdResult.value
+    claudeMdText = claudeMdResult.text
   } else if (claudeMdResult.kind !== 'not-found') {
-    return { ok: false, problem: { kind: 'effective-config-unreadable', file: 'CLAUDE.md', reason: claudeMdResult.kind as RepoConfigReadFailureKind, message: claudeMdResult.message } }
+    return { ok: false, problem: { kind: 'effective-config-unreadable', file: 'CLAUDE.md', reason: 'io', message: claudeMdResult.message } }
   }
 
   const parsed = parseOverrides(claudeMdText)
@@ -111,14 +109,11 @@ export async function resolveEffectiveConfig(root: string, portResolved: PortRes
 
   let excusedCheckName: string | null = null
   if (cfg.modules.approvalGate) {
-    const workflowResult = await readTextFile(pathOps.join(root, '.github', 'workflows', 'approval-check.yml'))
+    const workflowResult = await read('.github/workflows/approval-check.yml')
     if (workflowResult.ok) {
-      excusedCheckName = parseExcusedCheckName(workflowResult.value)
+      excusedCheckName = parseExcusedCheckName(workflowResult.text)
     } else if (workflowResult.kind !== 'not-found') {
-      return {
-        ok: false,
-        problem: { kind: 'effective-config-unreadable', file: '.github/workflows/approval-check.yml', reason: workflowResult.kind as RepoConfigReadFailureKind, message: workflowResult.message },
-      }
+      return { ok: false, problem: { kind: 'effective-config-unreadable', file: '.github/workflows/approval-check.yml', reason: 'io', message: workflowResult.message } }
     }
   }
 

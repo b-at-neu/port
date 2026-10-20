@@ -24,7 +24,7 @@ import { createDispatchLedger, createForceDispatch, createRefreshMemo, createUnk
 import { planTick } from '@/main/tick/plan'
 import { reconcileRepository } from '@/main/state/reconcile'
 import type { ReadyEntry } from '@/types/actions'
-import type { CreateSessionWorktreeResult, RemoveSessionWorktreeOutcome } from '@/types/workspace'
+import type { CreateStageWorktreeResult, RemoveSessionWorktreeOutcome } from '@/types/workspace'
 
 const REPO_ID = 'repo-scratch' as RepoId
 const VIEWER = 'op'
@@ -234,11 +234,11 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
     const removedWorktrees: { path: string; force: boolean }[] = []
     let worktreeCounter = 0
 
-    function createWorktree(): Promise<CreateSessionWorktreeResult> {
+    function createWorktree(): Promise<CreateStageWorktreeResult> {
       worktreeCounter += 1
       const path = `/scratch/session-${String(worktreeCounter)}`
       createdWorktrees.push(path)
-      return Promise.resolve({ ok: true, path, branch: `session-${String(worktreeCounter)}`, baseSha: 'base-sha' })
+      return Promise.resolve({ ok: true, path, branch: `session-${String(worktreeCounter)}`, baseSha: 'base-sha', baseLabel: `session-${String(worktreeCounter)}` })
     }
     function removeWorktree(path: string, force: boolean): Promise<RemoveSessionWorktreeOutcome> {
       removedWorktrees.push({ path, force })
@@ -254,7 +254,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
           unavailable.push(number)
           continue
         }
-        resolved.push({ number, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: `issue ${String(number)}`, url: `https://example.test/issues/${String(number)}`, labels: namesOf(VOCABULARY, set), assignees: [VIEWER] })
+        resolved.push({ number, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: `issue ${String(number)}`, url: `https://example.test/issues/${String(number)}`, labels: namesOf(VOCABULARY, set), assignees: [VIEWER], headRefName: null })
       }
       return Promise.resolve({ ok: true, resolved, unavailable, fetchedAt: NOW_ISO })
     }
@@ -299,6 +299,8 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       git: () => Promise.reject(new Error('git should not be invoked in this test')),
       createWorktree,
       removeWorktree,
+      releaseBranch: () => Promise.resolve('deleted'),
+      sweepBranches: () => Promise.resolve(undefined),
       now: () => new Date(NOW_ISO),
       onOutcome: (repoId, sessionKey, outcome) => dispatcherRef?.recordOutcome(repoId, sessionKey, outcome),
       registry: stageRegistry,
