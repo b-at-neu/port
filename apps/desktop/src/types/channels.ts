@@ -3,7 +3,7 @@ import type { GatePreflightResponse, GateAnswerResponse } from '@/types/gate'
 import type { IpcMap } from '@/types/ipc'
 import type { BoardSnapshot } from '@/types/board'
 import type { HostedSessionSnapshot, HostedStore, SessionStartTarget, SessionStartMode } from '@/types/hosting'
-import type { ResolveStartTargetDeps, RemoveSessionWorktreeOutcome, ResolvedStartTarget } from '@/types/workspace'
+import type { ResolveStartTargetDeps, ReleaseBranchOutcome, RemoveSessionWorktreeOutcome, ResolvedStartTarget } from '@/types/workspace'
 import type { DirEntry, FileResult, GitLinesResult, RunCommandOptions } from '@/types/platform'
 
 /** `main/hosting/files.ts`'s own injectable seam, inlined here since a `types/` file may not import a
@@ -60,6 +60,7 @@ export interface StageChannelDeps {
   readonly dispatcher: Pick<Dispatcher, 'status' | 'clearDenialsFor' | 'dismissDenial'>
   readonly store: Pick<HostedStore, 'start' | 'send' | 'close' | 'list' | 'capacity'>
   readonly removeWorktree: (path: string, force: boolean) => Promise<RemoveSessionWorktreeOutcome>
+  readonly releaseBranch: (root: string, branch: string, baseSha: string) => Promise<ReleaseBranchOutcome>
   readonly applyItemAction: (params: ApplyItemActionParams) => Promise<ItemActionResult>
   readonly snapshot: () => BoardSnapshot
   readonly auditDir: string

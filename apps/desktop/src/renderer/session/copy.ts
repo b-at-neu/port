@@ -150,7 +150,8 @@ export const ARCHIVE_KEEP = 'Keep worktree'
 export const ARCHIVE_REMOVE = 'Remove worktree'
 export const ARCHIVE_REMOVE_ANYWAY = 'Remove anyway'
 
-export function archiveBody(path: string, branch: string): string {
+export function archiveBody(path: string, branch: string | null): string {
+  if (branch === null) return `${path}, a detached checkout. No branch is kept.`
   return `${path} on branch ${branch}. The branch is kept.`
 }
 

@@ -59,7 +59,7 @@ export function SessionHeader({
         {snapshot.workspace.worktree !== null ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="truncate font-mono text-meta text-muted-foreground">{snapshot.workspace.worktree.branch}</span>
+              <span className="truncate font-mono text-meta text-muted-foreground">{snapshot.workspace.worktree.branch ?? 'detached'}</span>
             </TooltipTrigger>
             <TooltipContent>{snapshot.workspace.worktree.path}</TooltipContent>
           </Tooltip>

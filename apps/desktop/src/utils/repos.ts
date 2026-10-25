@@ -21,7 +21,8 @@ export type RepoConfigReadFailureKind = 'not-a-file' | 'permission-denied' | 'to
 export type RepoProblem =
   | { readonly kind: 'directory-missing' }
   | { readonly kind: 'not-a-git-repository' }
-  | { readonly kind: 'not-port-managed'; readonly carriedBy: readonly string[]; readonly currentBranch: string }
+  | { readonly kind: 'not-port-managed'; readonly carriedBy: readonly string[]; readonly ref: string }
+  | { readonly kind: 'config-ref-unreadable'; readonly message: string }
   | { readonly kind: 'config-unreadable'; readonly reason: RepoConfigReadFailureKind; readonly message: string }
   | { readonly kind: 'config-malformed'; readonly message: string }
   | { readonly kind: 'config-invalid'; readonly violations: readonly SchemaViolation[] }
@@ -29,8 +30,6 @@ export type RepoProblem =
 
 /** Non-disqualifying — carried on a `ready` entry, listed but never blocking. */
 export type RepoDiagnostic =
-  | { readonly kind: 'off-integration-branch'; readonly branch: string; readonly integration: string }
-  | { readonly kind: 'detached-head'; readonly sha: string }
   | { readonly kind: 'permissions-missing' }
   | { readonly kind: 'permissions-empty' }
   | { readonly kind: 'schema-violations'; readonly violations: readonly SchemaViolation[] }

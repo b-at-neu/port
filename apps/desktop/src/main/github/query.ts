@@ -149,7 +149,7 @@ export function buildItemsByNumberQuery(numbers: readonly number[]): ItemsByNumb
     const labelsField = `labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }`
     const assigneesField = `assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }`
     fields.push(
-      `  ${alias}: issueOrPullRequest(number: ${number}) { __typename ... on Issue { number title url state closedAt ${assigneesField} ${labelsField} } ... on PullRequest { number title url state mergedAt closedAt ${assigneesField} ${labelsField} } }`,
+      `  ${alias}: issueOrPullRequest(number: ${number}) { __typename ... on Issue { number title url state closedAt ${assigneesField} ${labelsField} } ... on PullRequest { number title url state mergedAt closedAt headRefName ${assigneesField} ${labelsField} } }`,
     )
     aliases.push({ alias, number })
   })

@@ -50,7 +50,7 @@ function labelEntry(entry: AuditEntry | undefined): LabelAuditEntry {
 }
 
 function resolvedItem(overrides: Partial<ResolvedItem> = {}): ResolvedItem {
-  return { number: 1, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: [], assignees: [], ...overrides }
+  return { number: 1, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: [], assignees: [], headRefName: null, ...overrides }
 }
 
 function fetcherReturning(fetch: ItemsByNumberFetch): { readonly fn: (params: unknown) => Promise<ItemsByNumberFetch>; calls: number } {

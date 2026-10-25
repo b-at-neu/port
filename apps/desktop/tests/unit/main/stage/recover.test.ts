@@ -3,7 +3,7 @@ import { resumeStage, restartStage, RESUME_PROMPT } from '@/main/stage/recover'
 import { createStageRegistry } from '@/main/stage/registry'
 import type { FileResult } from '@/types/platform'
 import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '@/types/hosting'
-import type { RemoveSessionWorktreeOutcome } from '@/types/workspace'
+import type { ReleaseBranchOutcome, RemoveSessionWorktreeOutcome } from '@/types/workspace'
 
 import type { InterruptedStage } from '@/types/stage'
 import type { RepoId } from '@/utils/repos'
@@ -49,9 +49,10 @@ function setup(sessionId: string | null = 'claude-session-1') {
   }
   const removeWorktree = vi.fn((): Promise<RemoveSessionWorktreeOutcome> => Promise.resolve({ outcome: 'removed' }))
   const applyRetry = vi.fn(() => Promise.resolve({ ok: true as const, outcome: { kind: 'applied' as const, argv: [] } }))
+  const releaseBranch = vi.fn((): Promise<ReleaseBranchOutcome> => Promise.resolve('deleted'))
   const resolveEntry = vi.fn(() => ({ path: '/repo', sessionRequiredPaths: ['CLAUDE.md'] }))
   const capacity = vi.fn(() => Promise.resolve({ limit: 4 }))
-  return { registry, store, removeWorktree, applyRetry, resolveEntry, capacity }
+  return { registry, store, removeWorktree, releaseBranch, applyRetry, resolveEntry, capacity }
 }
 
 describe('resumeStage', () => {
@@ -96,8 +97,19 @@ describe('restartStage', () => {
     const result = await restartStage(deps, 's1')
     expect(result).toEqual({ kind: 'ok' })
     expect(deps.removeWorktree).toHaveBeenCalledWith('/tmp/wt', false)
+    expect(deps.releaseBranch).toHaveBeenCalledWith('/repo', 'b', 'sha')
     expect(deps.applyRetry).toHaveBeenCalled()
     expect(deps.registry.list()).toHaveLength(0)
+  })
+
+  it('releases no branch for a detached worktree', async () => {
+    const deps = setup()
+    deps.registry.remove('s1')
+    deps.registry.recordRunning({ ...entry, worktree: { path: '/tmp/wt', branch: null, baseSha: 'sha' } })
+    deps.registry.markInterrupted('s1', 'crash', null, null, null)
+    const result = await restartStage(deps, 's1')
+    expect(result).toEqual({ kind: 'ok' })
+    expect(deps.releaseBranch).not.toHaveBeenCalled()
   })
 
   it('stops at a dirty worktree and applies no label', async () => {
@@ -105,6 +117,7 @@ describe('restartStage', () => {
     deps.removeWorktree.mockResolvedValue({ outcome: 'dirty' })
     const result = await restartStage(deps, 's1')
     expect(result).toEqual({ kind: 'worktree-dirty' })
+    expect(deps.releaseBranch).not.toHaveBeenCalled()
     expect(deps.applyRetry).not.toHaveBeenCalled()
     expect(deps.registry.list()).toHaveLength(1)
   })

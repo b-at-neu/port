@@ -101,6 +101,8 @@ Closing the cockpit session also halts dispatch, since it is the only dispatcher
 | Item stuck in an in-flight label with no agent running | Agent crashed or the session closed mid-flight | `retry #N` in the cockpit, or re-apply the trigger label |
 | A branch named `<n>-…` exists with no open pull request | Normal — a prior `impl-agent` attempt pushed a checkpoint and then died | The next `retry #N` adopts it automatically (see "Resume protocol") — nothing to do |
 | Two or more branches named `<n>-…` exist with no open pull request | Two prior attempts both pushed checkpoints under the same issue | `impl-agent` starts fresh and names both in its final message — delete the stale one to let the next retry adopt cleanly |
+| A local `<n>-…` branch is left after a stage handed back | It holds commits that aren't on origin, so the desktop application kept it rather than lose them | Push it, or delete it once you've checked nothing there is needed |
+| A stage launch fails: branch is checked out in another worktree | An interrupted stage still holds that branch | Restart or Resume the interrupted stage holding it |
 | A retried `impl-agent` reports it abandoned an adopted branch and started fresh | Its rebase onto `<integration>` hit an ambiguous conflict | Expected, not an escalation — re-implementing is always a valid outcome for this stage; no human decision needed |
 | Nothing dispatches for an item | It has no trigger label (paused, in-flight, or gated) | `status` shows where it is; `resume #N` re-applies the right trigger |
 | Nothing dispatches **and** `status` does not list it at all | It is unassigned, or owned by another operator — queries are assignee-filtered | The tick's unowned sweep reports it; claim it with `work on #N` |

@@ -57,6 +57,7 @@ function recoverDepsOf(registryDeps: RegistryDeps, roots: ReadonlyMap<RepoId, Re
     registry: deps.registry,
     store: deps.store,
     removeWorktree: deps.removeWorktree,
+    releaseBranch: deps.releaseBranch,
     resolveEntry: (repoId) => roots.get(repoId) ?? null,
     applyRetry: async (interrupted) => {
       const found = await requireReadyRepo(registryDeps, "'stage:restart'", interrupted.repoId, deps.listRepositories)

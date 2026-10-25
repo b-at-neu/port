@@ -5,6 +5,7 @@ import type { RepositoryEntry } from '@/utils/repos'
 
 // Renderer-safe workspace shapes — folders, session worktrees, and the Changes diff. No Node import here; `main/workspace/` derives these from real git state.
 import type { RepoId } from '@/utils/repos'
+import type { StageAgent } from '@/types/tick'
 import type { FileDiff } from '@/utils/sessions/transcript'
 
 export interface RecentFolder {
@@ -31,7 +32,8 @@ export interface FolderEntry {
 export interface SessionWorkspace {
   readonly folder: string
   readonly root: string | null
-  readonly worktree: { readonly path: string; readonly branch: string } | null
+  /** `branch` is `null` for a detached worktree. */
+  readonly worktree: { readonly path: string; readonly branch: string | null } | null
   readonly base: { readonly sha: string; readonly label: string } | null
 }
 
@@ -92,3 +94,22 @@ export interface CreateSessionWorktreeParams {
 }
 
 export type CreateSessionWorktreeResult = { readonly ok: true; readonly path: string; readonly branch: string; readonly baseSha: string } | { readonly ok: false; readonly message: string }
+
+/** What a stage worktree is for: an issue's title seeds a new branch name, a pull request's head names the branch to check out. */
+export type StageWorktreeTarget = { readonly kind: 'issue'; readonly title: string } | { readonly kind: 'pr'; readonly headRefName: string | null }
+
+export interface CreateStageWorktreeParams {
+  readonly root: string
+  readonly git: GitRunner
+  readonly agent: StageAgent
+  readonly number: number
+  readonly integration: string
+  readonly target: StageWorktreeTarget
+  readonly random?: () => string
+  readonly pathOps?: PathOps
+}
+
+/** `branch` is `null` for a detached worktree; `baseLabel` is the branch, or `origin/<ref>` when detached. */
+export type CreateStageWorktreeResult = { readonly ok: true; readonly path: string; readonly branch: string | null; readonly baseSha: string; readonly baseLabel: string } | { readonly ok: false; readonly message: string }
+
+export type ReleaseBranchOutcome = 'deleted' | 'kept'

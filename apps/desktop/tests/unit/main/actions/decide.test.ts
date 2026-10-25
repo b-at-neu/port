@@ -48,7 +48,7 @@ function entry(overrides: Partial<Parameters<typeof readyEntry>[0]> = {}): Retur
 }
 
 function resolvedItem(overrides: Partial<ResolvedItem> = {}): ResolvedItem {
-  return { number: 300, kind: 'pull-request', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['needs human'], assignees: ['op'], ...overrides }
+  return { number: 300, kind: 'pull-request', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['needs human'], assignees: ['op'], headRefName: null, ...overrides }
 }
 
 function fetchReturning(fetch: ItemsByNumberFetch): ApplyItemDecisionDeps['fetchItemsByNumber'] {

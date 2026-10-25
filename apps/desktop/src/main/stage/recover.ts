@@ -32,7 +32,7 @@ export async function resumeStage(deps: RecoverDeps, id: string): Promise<StageR
       folder: entry.worktree.path,
       root: root.path,
       worktree: { path: entry.worktree.path, branch: entry.worktree.branch },
-      base: { sha: entry.worktree.baseSha, label: entry.worktree.branch },
+      base: { sha: entry.worktree.baseSha, label: entry.worktree.branch ?? 'detached' },
     },
     stage: {
       tag: { agent: entry.agent, number: entry.number, kind: entry.kind, trigger: entry.trigger },
@@ -66,6 +66,9 @@ export async function restartStage(deps: RecoverDeps, id: string): Promise<Stage
   const removed = await deps.removeWorktree(entry.worktree.path, false)
   if (removed.outcome === 'dirty') return { kind: 'worktree-dirty' }
   if (removed.outcome === 'failed') return { kind: 'worktree-remove-failed', message: removed.message }
+
+  const root = deps.resolveEntry(entry.repoId)
+  if (entry.worktree.branch !== null && root !== null) await deps.releaseBranch(root.path, entry.worktree.branch, entry.worktree.baseSha)
 
   const retried = await deps.applyRetry(entry)
   if (!retried.ok) return { kind: 'label-refused', reason: retried.reason }

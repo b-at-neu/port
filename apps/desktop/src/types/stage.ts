@@ -1,6 +1,6 @@
 import type { StageLauncher } from '@/types/dispatch'
 import type { HostedSessionSnapshot, HostedStore } from '@/types/hosting'
-import type { RemoveSessionWorktreeOutcome } from '@/types/workspace'
+import type { ReleaseBranchOutcome, RemoveSessionWorktreeOutcome } from '@/types/workspace'
 import type { ItemActionResult } from '@/types/actions'
 
 // Renderer-safe types for stage-session "needs you" attention: a denied tool call waiting on an
@@ -38,7 +38,8 @@ export interface InterruptedStage {
   readonly model: string
   /** `null` when the session died before the SDK ever minted one — Resume has nothing to resume. */
   readonly claudeSessionId: string | null
-  readonly worktree: { readonly path: string; readonly branch: string; readonly baseSha: string }
+  /** `branch` is `null` for a detached worktree. */
+  readonly worktree: { readonly path: string; readonly branch: string | null; readonly baseSha: string }
   readonly startedAt: string
   readonly reason: InterruptedReason
   readonly detail: string | null
@@ -76,6 +77,7 @@ export interface RecoverDeps {
   readonly registry: StageRegistry
   readonly store: Pick<HostedStore, 'start' | 'send' | 'close' | 'list'>
   readonly removeWorktree: (path: string, force: boolean) => Promise<RemoveSessionWorktreeOutcome>
+  readonly releaseBranch: (root: string, branch: string, baseSha: string) => Promise<ReleaseBranchOutcome>
   readonly resolveEntry: (repoId: InterruptedStage['repoId']) => ResolvedStageRoot | null
   readonly applyRetry: (interrupted: InterruptedStage) => Promise<ItemActionResult>
   readonly capacity: () => Promise<{ readonly limit: number }>

@@ -36,11 +36,27 @@ describe('problemCopy', () => {
   })
 })
 
+describe('problemCopy — default branch reads', () => {
+  it('names the ref and the carriers, and says to merge into the default branch', () => {
+    expect(problemCopy({ kind: 'not-port-managed', carriedBy: ['main', 'dev'], ref: 'origin/dev' })).toBe('Not port-managed on origin/dev. main, dev carry the harness — merge one into the default branch, then rescan.')
+  })
+
+  it('keeps the init hint when no branch carries the config', () => {
+    expect(problemCopy({ kind: 'not-port-managed', carriedBy: [], ref: 'origin/dev' })).toContain('Run /port:init')
+  })
+
+  it('names the unreadable ref, why agents care, and the fix', () => {
+    const copy = problemCopy({ kind: 'config-ref-unreadable', message: "No such remote 'origin'" })
+    expect(copy).toBe("Can't read the default branch at origin/HEAD — No such remote 'origin'. Stage agents read their config there, so port won't act on this repository until it can. Run `git fetch origin` in it, then rescan.")
+  })
+})
+
 describe('problemLabel', () => {
   it('gives every problem kind a short pill label', () => {
     expect(problemLabel({ kind: 'directory-missing' })).toBe('Folder missing')
     expect(problemLabel({ kind: 'not-a-git-repository' })).toBe('Not a git repo')
-    expect(problemLabel({ kind: 'not-port-managed', carriedBy: [], currentBranch: 'dev' })).toBe('Not port-managed')
+    expect(problemLabel({ kind: 'not-port-managed', carriedBy: [], ref: 'origin/dev' })).toBe('Not port-managed')
+    expect(problemLabel({ kind: 'config-ref-unreadable', message: 'x' })).toBe('Config unreadable')
     expect(problemLabel({ kind: 'config-malformed', message: 'x' })).toBe('Config invalid')
     expect(problemLabel({ kind: 'config-invalid', violations: [] })).toBe('Config invalid')
     expect(problemLabel({ kind: 'config-unreadable', reason: 'permission-denied', message: 'x' })).toBe('Config unreadable')
@@ -49,6 +65,11 @@ describe('problemLabel', () => {
 })
 
 describe('diagnosticCopy', () => {
+  it('names the default branch for a missing or empty permissions block', () => {
+    expect(diagnosticCopy({ kind: 'permissions-missing' })).toBe('No .claude/settings.json on the default branch — stage agents would auto-deny every command.')
+    expect(diagnosticCopy({ kind: 'permissions-empty' })).toBe('No permissions.allow on the default branch — stage agents would auto-deny every command.')
+  })
+
   it('names a refused override with its line and reason, and that the port value stands', () => {
     const copy = diagnosticCopy({ kind: 'override-refused', path: 'commands.checks', line: 'commands.checks = node x.ts  # different runner', reason: "'commands.checks' is the permission surface the guard hook allowlists from — never overridable, no exception" })
     expect(copy).toBe(

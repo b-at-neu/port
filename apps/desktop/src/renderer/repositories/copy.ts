@@ -17,8 +17,10 @@ export function problemCopy(problem: RepoProblem): string {
       return "Not a git repository. Pick the repository's root folder."
     case 'not-port-managed':
       return problem.carriedBy.length > 0
-        ? `Not port-managed on ${problem.currentBranch}. The harness is on ${problem.carriedBy.join(', ')} — check one of those out and rescan.`
+        ? `Not port-managed on ${problem.ref}. ${problem.carriedBy.join(', ')} carry the harness — merge one into the default branch, then rescan.`
         : "Not port-managed. There's no .claude/port.config.json on any branch here. Run /port:init in this repository to adopt the pipeline."
+    case 'config-ref-unreadable':
+      return `Can't read the default branch at origin/HEAD — ${problem.message}. Stage agents read their config there, so port won't act on this repository until it can. Run \`git fetch origin\` in it, then rescan.`
     case 'config-malformed':
       return `.claude/port.config.json isn't valid JSON — ${problem.message}.`
     case 'config-invalid':
@@ -46,6 +48,7 @@ export function problemLabel(problem: RepoProblem): string {
     case 'config-invalid':
       return 'Config invalid'
     case 'config-unreadable':
+    case 'config-ref-unreadable':
     case 'effective-config-unreadable':
       return 'Config unreadable'
   }
@@ -53,14 +56,10 @@ export function problemLabel(problem: RepoProblem): string {
 
 export function diagnosticCopy(diagnostic: RepoDiagnostic): string {
   switch (diagnostic.kind) {
-    case 'off-integration-branch':
-      return `On ${diagnostic.branch}, not ${diagnostic.integration}. Dispatched agents work from ${diagnostic.integration}, so what's on disk here isn't what they see.`
-    case 'detached-head':
-      return `Detached at ${diagnostic.sha}.`
     case 'permissions-missing':
-      return 'No .claude/settings.json on this branch — dispatched agents would auto-deny every command.'
+      return 'No .claude/settings.json on the default branch — stage agents would auto-deny every command.'
     case 'permissions-empty':
-      return 'No permissions.allow on this branch — dispatched agents would auto-deny every command.'
+      return 'No permissions.allow on the default branch — stage agents would auto-deny every command.'
     case 'schema-violations': {
       const first = diagnostic.violations[0]
       return `Config doesn't match the schema in ${diagnostic.violations.length} place(s): ${first ? `${first.path} ${first.message}` : ''}. Reading it anyway, with defaults for those fields.`

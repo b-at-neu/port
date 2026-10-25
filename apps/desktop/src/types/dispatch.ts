@@ -27,6 +27,7 @@ import type { WriteOutcome } from '@/types/writes'
 import type { StageOutcome } from '@/types/stage-session'
 import type { SessionKey } from '@/types/hosting'
 import type { InterruptedStage, StageDenial } from '@/types/stage'
+import type { StageWorktreeTarget } from '@/types/workspace'
 
 /** `dispatch.json`'s own per-repository run state — `dispatching`, `draining` (scoped to one repository), or `paused` (the hard stop: the transition into it also stops every in-flight agent). */
 export const RUN_STATES = ['dispatching', 'draining', 'paused'] as const
@@ -321,6 +322,8 @@ export interface StageLaunchRequest {
   readonly prompt: string
   /** The ticket label (`#<issue> <issue title>`) the session is titled with. */
   readonly title: string
+  /** Built by the dispatcher from its own fresh re-read, never from the renderer. */
+  readonly target: StageWorktreeTarget
 }
 
 /** Every `TickObservation` kind this module writes — excludes the one report-only kind, `refresh-deferred`. */

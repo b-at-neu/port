@@ -40,7 +40,7 @@ describe('applyClaimLabels', () => {
       fetchItemsByNumber: () =>
         Promise.resolve({
           ok: true,
-          resolved: [{ number: 1, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['ready'], assignees: [] }],
+          resolved: [{ number: 1, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['ready'], assignees: [], headRefName: null }],
           unavailable: [],
           fetchedAt: '2026-01-01T00:00:00.000Z',
         }),

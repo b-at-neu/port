@@ -123,6 +123,14 @@ Three-way outcome, carried into step 2:
 - **Zero matches** → fresh start.
 - **Two or more matches** → fresh start, naming every match in the final message so the operator can see the orphans.
 
+**Session branch.** A session started by the desktop app is already on its branch. Run:
+
+```bash
+git branch --show-current
+```
+
+When it prints a name starting `N-`, that is the **session branch**, and it replaces the lookup's outcome: **adopted** when the lookup's matches include it, **fresh start** otherwise. Any other output, including empty, leaves the lookup's outcome as it stands. Step 3's "Fresh branch, first commit" pushes to the session branch when there is one, and derives the slug only otherwise.
+
 The governing rule, stated once and true for every branch point below: **every failure in the resume path degrades to a fresh start** — resume is an optimisation, never a correctness dependency. A missed resume costs one re-implementation, the cost this ticket is already paying; a wrongly-adopted branch would ship another attempt's commits under this issue, which review would have to catch.
 
 ## Label swap (first action after pre-flight)
@@ -181,7 +189,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
    **When `commands.artifacts` is set**, run the `check commit` command above before every commit. A non-zero exit means rewrite `.temp/commit-msg.txt` and re-run it — never `git commit` past a failing check. Skip this when `commands.artifacts` is null.
 
-   **Push a checkpoint after every commit**, so a killed run leaves the branch behind it, not nothing. **Fresh branch, first commit** — derive the slug once and never re-derive it: `git push -u origin HEAD:N-ticket-name-in-kebab-case`; every checkpoint after reuses the same name: `git push origin HEAD:<branch>`. **Adopted branch, every commit** — `git push --force-with-lease origin HEAD:<branch>`: the rebase already rewrote history, and the lease is also what stops a second agent clobbering a branch it never read.
+   **Push a checkpoint after every commit**, so a killed run leaves the branch behind it, not nothing. **Fresh branch, first commit** — push to the session branch when there is one: `git push -u origin HEAD:<session branch>`. Otherwise derive the slug once and never re-derive it: `git push -u origin HEAD:N-ticket-name-in-kebab-case`. Every checkpoint after reuses the same name: `git push origin HEAD:<branch>`. **Adopted branch, every commit** — `git push --force-with-lease origin HEAD:<branch>`: the rebase already rewrote history, and the lease is also what stops a second agent clobbering a branch it never read.
 
 4. **Blockers — report back, stay resumable.** If something the plan did not cover blocks you and you cannot resolve it within the plan's intent: **push the checkpoint first**, by the same idiom as step 3 — the blocker may outlive this run, and the branch, not this run, is what a resumed attempt continues from. Then write the blocker text to `.temp/blocker-N.md` (the Write tool creates `.temp/`), then re-read labels (compare-and-swap — the last read was steps ago) and swap:
 
@@ -204,7 +212,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
    Every check must pass before the **final** push in step 6 — the checkpoint pushes in step 3 already ran ahead of this gate, deliberately, so a killed run's commits survive regardless of whether checks ever ran. If `commands.checks` is empty, there is nothing to run — do not invent checks by guessing at the repository's tooling.
 
-6. **Final push, and open the pull request.** Push whatever remains, by the same idiom as every checkpoint before it — the adopted branch's name, or the slug chosen at the first checkpoint of a fresh branch, never a freshly derived one:
+6. **Final push, and open the pull request.** Push whatever remains, by the same idiom as every checkpoint before it — the adopted branch's name, or the session branch or slug chosen at the first checkpoint of a fresh branch, never a freshly derived one:
 
    ```bash
    git push origin HEAD:<branch>                       # fresh branch, unchanged since the first checkpoint
