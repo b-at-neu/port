@@ -7,6 +7,7 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
+  define: { __PORT_BUILD_COMMIT__: 'null' },
   test: {
     environment: 'node',
     include: ['tests/unit/**/*.test.ts']

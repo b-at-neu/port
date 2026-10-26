@@ -15,6 +15,7 @@ import type { Dispatcher } from '@/types/dispatch'
 import { confirmQuit } from '@/main/dialogs'
 import { applyNavigationGuards } from '@/main/navigation'
 import { ABOUT_NOTICE, ABOUT_POWERED_BY } from '@/utils/about/copy'
+import { formatAppVersion } from '@/utils/about/version'
 import { menuTemplate } from '@/main/menu'
 import { chromeSandboxPath, needsNoSandbox } from '@/main/sandbox'
 import type { StageRegistry } from '@/types/stage'
@@ -143,7 +144,7 @@ if (fixture.kind === 'invalid') {
     }
 
     void sandboxConfigured.then(() => app.whenReady()).then(async () => {
-      app.setAboutPanelOptions({ applicationName: 'port', applicationVersion: app.getVersion(), credits: [ABOUT_POWERED_BY, ABOUT_NOTICE].join('\n') })
+      app.setAboutPanelOptions({ applicationName: 'port', applicationVersion: formatAppVersion(app.getVersion(), __PORT_BUILD_COMMIT__), credits: [ABOUT_POWERED_BY, ABOUT_NOTICE].join('\n') })
 
       const dockIconPath = devDockIconPath({ platform: process.platform, isPackaged: app.isPackaged, mainDir: __dirname, resourcesPath: process.resourcesPath })
       if (dockIconPath !== null && (await pathExists(dockIconPath))) {

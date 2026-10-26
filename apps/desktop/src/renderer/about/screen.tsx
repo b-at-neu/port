@@ -7,12 +7,13 @@ import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { useIpcQuery } from '@/renderer/data/query'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { ABOUT_NOTICE, ABOUT_POWERED_BY } from '@/utils/about/copy'
+import { formatAppVersion } from '@/utils/about/version'
 
 function VersionLine() {
   const query = useIpcQuery('app:info')
   if (query.status === 'pending') return <Skeleton className="h-4 w-24" />
   if (query.status === 'error') return <p className="font-mono text-small text-muted-foreground">Version unavailable</p>
-  return <p className="font-mono text-small text-muted-foreground">Version {query.data.app}</p>
+  return <p className="font-mono text-small text-muted-foreground">Version {formatAppVersion(query.data.app, query.data.commit)}</p>
 }
 
 export function AboutScreen() {
