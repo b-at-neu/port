@@ -50,7 +50,7 @@ export function onTriggers(text: string): string[] | null {
 
 export default async function ({ expect, fail, note, ok }: Reporter) {
   const { classifyCorridor, releaseInFlight } = await import(pathToFileURL(join(root, 'scripts/release-corridor.ts')).href);
-  const { parseVersion, nextDevWindow, decide, devWindowSubject } = await import(pathToFileURL(join(root, 'scripts/dev-window.ts')).href);
+  const { parseVersion, nextDevWindow, decide, devWindowSubject, versionFileDisagreement } = await import(pathToFileURL(join(root, 'scripts/dev-window.ts')).href);
 
   // --- Integration branch stays on a prerelease version, so a dev-loop install never
   // resolves to the same cache directory as a released consumer. Layer 1 cannot see GitHub, so it must never guess "no release in flight" for a clean integration branch. ---
@@ -288,5 +288,38 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     expect(!/#\d+ open dev window/.test(devWindowSource), 'dev-window', 'scripts/dev-window.ts must not carry an inline "#<n> open dev window" literal — use devWindowSubject at every call site');
   }
 
-  note('release: corridor rail (#224, #275), one-check-per-commit trigger guard, postPublishHook three-way shape, SKILL.md pin, dev-window.ts decision cases, dev-window subject (#278)');
+  // --- version-files-agree: every release.versionFiles manifest must carry the same version,
+  // so the plugin and the desktop app never report two different numbers after a release. ---
+  {
+    const agreeCases: { name: string; entries: { path: string; version: unknown }[]; want: string | null }[] = [
+      { name: 'agreeing pair', entries: [{ path: 'a', version: '0.4.1-dev' }, { path: 'b', version: '0.4.1-dev' }], want: null },
+      { name: 'disagreeing pair', entries: [{ path: 'a', version: '0.4.1-dev' }, { path: 'b', version: '0.4.0' }], want: "'a' is '0.4.1-dev' but 'b' is '0.4.0'" },
+      { name: 'single entry', entries: [{ path: 'a', version: '0.4.1-dev' }], want: null },
+      { name: 'missing version', entries: [{ path: 'a', version: undefined }], want: "'a' is 'missing'" },
+    ];
+    for (const c of agreeCases) {
+      const got = versionFileDisagreement(c.entries);
+      expect(!(got !== c.want), 'version-files-agree', `versionFileDisagreement self-test '${c.name}': expected ${JSON.stringify(c.want)}, got ${JSON.stringify(got)}`);
+    }
+
+    const releaseCfg = readJson('.claude/port.config.json');
+    const agreeVersionFiles: string[] = releaseCfg.release?.versionFiles ?? [];
+    if (releaseCfg.release?.versionSource !== 'package') {
+      note('version-files-agree: release.versionSource is not package — nothing to compare');
+      ok();
+    } else if (agreeVersionFiles.length < 2) {
+      note('version-files-agree: fewer than two release.versionFiles entries — nothing to compare');
+      ok();
+    } else {
+      const entries = agreeVersionFiles.map((path) => ({ path, version: readJson(path).version }));
+      const disagreement = versionFileDisagreement(entries);
+      if (disagreement) {
+        fail('version-files-agree', `${disagreement} — fix: run /port:release, or node scripts/dev-window.ts for a '-dev' drift; never hand-edit one manifest`);
+      } else {
+        ok();
+      }
+    }
+  }
+
+  note('release: corridor rail (#224, #275), one-check-per-commit trigger guard, postPublishHook three-way shape, SKILL.md pin, dev-window.ts decision cases, dev-window subject (#278), version-files-agree (#560)');
 }
