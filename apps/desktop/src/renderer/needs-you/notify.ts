@@ -1,9 +1,8 @@
 // Sends one OS notification per read that brought new items into Needs you. Main owns the focus rule.
 import type { QueryClient } from '@tanstack/react-query'
-import { needsYouItems } from '@/renderer/board/needs-you'
 import { invoke } from '@/renderer/data/invoke'
 import { ipcQueryOptions, observeIpcQuery } from '@/renderer/data/query'
-import { dismissedKeys, visibleItems } from '@/renderer/needs-you/dismissed'
+import { dismissedKeys, visibleNeedsYouItems } from '@/renderer/needs-you/dismissed'
 import { diffNeedsYou, displayNamesOf, needsYouNotification, readableRepoIds } from '@/renderer/needs-you/notify-model'
 import type { BoardSnapshot, NeedsYouBaseline } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
@@ -47,7 +46,7 @@ function writeBaseline(storage: KeyValueStore, baseline: NeedsYouBaseline): void
 export function createNeedsYouNotifier(deps: NeedsYouNotifierDeps): { readonly evaluate: (snapshot: BoardSnapshot, sessions: readonly HostedSessionSnapshot[]) => void } {
   return {
     evaluate(snapshot, sessions) {
-      const items = visibleItems(needsYouItems(snapshot, deps.now(), sessions), deps.dismissed())
+      const items = visibleNeedsYouItems(snapshot, deps.now(), sessions, deps.dismissed())
       const { baseline, fresh } = diffNeedsYou(readBaseline(deps.storage), items, readableRepoIds(snapshot))
       writeBaseline(deps.storage, baseline)
       const notification = needsYouNotification(fresh, displayNamesOf(snapshot))

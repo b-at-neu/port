@@ -20,7 +20,7 @@ function endedBody(snapshot: HostedSessionSnapshot): string {
   return snapshot.end?.reason === 'completed' ? 'The session ended.' : 'The session ended unexpectedly. Open it to see why.'
 }
 
-/** `previous === null` (the first snapshot of a session) never notifies. A stage session's routine end is silent, and so is its question, which Needs you already lists; only its other permission waits fire. */
+/** A stage session notifies only for a permission Needs you has no row for. */
 export function notificationFor(previous: HostedSessionSnapshot | null, next: HostedSessionSnapshot, repoLabel: string): SessionNotification | null {
   if (previous === null) return null
   const title = sessionDisplayLabel(next, repoLabel)

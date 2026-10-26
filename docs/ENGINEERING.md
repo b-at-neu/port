@@ -198,8 +198,8 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `components/needs-you-item.tsx` is the shared row (DESIGN §4's `NeedsYouItem`); a screen never builds its own version
 - a live stage session's `BLOCKED:` hand-back and the blocked label on the same item are one row (`stage-blocked`); its answer card (`blocker-answer.tsx`) sends into that session through `session/actions.ts`'s `send`, never a label write — the agent clears its own block
 - dismissals (#554) live only in the renderer's `localStorage` (`dismissed.ts`), keyed per event by `dismiss-key.ts` so the same event stays dismissed and a new event on the same ticket shows; a malformed stored value reads as empty, which fails toward showing everything
-- `notify-model.ts` is the only "new item" diff, over the same visible items the screen renders and keyed by `dismissKeyOf`, never a second derivation; `notify.ts` persists its baseline in `localStorage` and a malformed value seeds silently
-- `use-items.ts`'s `useNeedsYouItems` is the one visible-items read: the screen, the sidebar count, the palette and the per-repository dots all go through it, so a dismissed or auto-cleared item can never disagree between them
+- `notify-model.ts` is the only "new item" diff, over `visibleNeedsYouItems`'s items and keyed by `dismissKeyOf`, never a second derivation; `notify.ts` persists its baseline in `localStorage` and a malformed value seeds silently
+- `dismissed.ts`'s `visibleNeedsYouItems` is the one visible-items composition: `use-items.ts`'s `useNeedsYouItems` (the screen, the sidebar count, the palette and the per-repository dots) and `notify.ts`'s notifier both call it, so a dismissed or auto-cleared item can never disagree between them
 
 **`apps/desktop/src/renderer/session/`**
 - `entries-store.ts`'s `createEntriesRegistry` is the per-`sessionKey` attach/re-attach/buffering registry — injectable for its own tests, a thin app-wide singleton for `useSessionEntries`
