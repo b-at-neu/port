@@ -34,6 +34,7 @@ const SNAPSHOT: BoardSnapshot = {
   nextWakeupAt: null,
   emittedAt: 't',
   dispatch: [],
+  autoPlan: [],
 }
 
 async function readyEntry(path?: string): Promise<ReadyEntry> {

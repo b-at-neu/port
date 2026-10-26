@@ -18,6 +18,7 @@ function row(overrides: {
   readonly number?: number
   readonly stageKey?: StageLabel['key'] | null
   readonly status?: ReconciledItem['status']
+  readonly autoApproving?: boolean
 }): BoardItemRow {
   const repoId = (overrides.repoId ?? 'repo-a') as RepoId
   const stageLabel: StageLabel | null = overrides.stageKey != null ? { key: overrides.stageKey, name: overrides.stageKey, role: 'trigger' } : null
@@ -65,6 +66,7 @@ function row(overrides: {
     actions: NO_ACTIONS,
     decisions: NO_DECISIONS,
     viewer: null,
+    autoApproving: overrides.autoApproving ?? false,
   }
 }
 
@@ -76,6 +78,16 @@ describe('boardSections', () => {
     expect(sections[0]?.count).toBe(1)
     expect(sections[1]?.count).toBe(1)
     expect(sections[2]?.count).toBe(1)
+  })
+
+  it('puts an auto-approving plan-review row in In progress, never Waiting on you', () => {
+    const sections = boardSections([row({ number: 1, stageKey: 'planReview', autoApproving: true })], { group: 'repo', repo: null })
+    expect(sections.map((s) => s.key)).toEqual(['in-progress'])
+  })
+
+  it('keeps a plan-review row that is not auto-approving in Waiting on you', () => {
+    const sections = boardSections([row({ number: 1, stageKey: 'planReview', autoApproving: false })], { group: 'repo', repo: null })
+    expect(sections.map((s) => s.key)).toEqual(['waiting-on-you'])
   })
 
   it('puts a dispatched row, still labelled ready, in In progress', () => {

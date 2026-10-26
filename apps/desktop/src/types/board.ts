@@ -90,6 +90,12 @@ export const DEFAULT_POLL_POLICY: PollPolicy = {
   staleGraceMs: STALE_GRACE_MS,
 }
 
+/** The issue numbers one ready repository's auto-plan swap will act on, so the renderer reads the planner's own answer instead of deriving a second one. */
+export interface AutoPlanStatus {
+  readonly repoId: RepoId
+  readonly approving: readonly number[]
+}
+
 /** The one payload the watcher pushes and the renderer ever reads; `health` and `policy` are carried alongside `state` rather than folded into it. */
 export interface BoardSnapshot {
   readonly state: PipelineState
@@ -104,6 +110,8 @@ export interface BoardSnapshot {
   readonly emittedAt: string
   /** One row per ready repository, this app's own dispatcher state, computed inside `buildSnapshot()` from `dispatcher.status()`. `[]` when no dispatcher is wired. */
   readonly dispatch: readonly RepoDispatchStatus[]
+  /** One entry per ready repository; a missing owner, a blind read or a refused swap leaves an issue out, so it stays with the operator. */
+  readonly autoPlan: readonly AutoPlanStatus[]
 }
 
 export type GroupBy = 'stage' | 'repo'
@@ -136,6 +144,8 @@ export interface BoardItemRow {
   readonly decisions: Readonly<Record<OperatorDecision, DecisionAvailability>>
   /** This item's repository's own `RepositoryState.viewer`, copied onto the row so `phase-history.ts`'s "you" resolution never needs a second repository lookup. */
   readonly viewer: string | null
+  /** The auto-plan swap will approve this ticket's plan on its own, so it is not waiting on the operator. */
+  readonly autoApproving: boolean
 }
 
 export interface BoardGroup {

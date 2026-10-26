@@ -17,13 +17,12 @@ import { stageLinksFor } from '@/renderer/board/stage-links'
 import type { StageLink } from '@/types/board'
 import type { DispatchOwner, DispatchRecord } from '@/types/dispatch'
 import type { TickReport } from '@/types/tick'
-import { PHASE_NAMES } from '@/renderer/lib/phase'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { openDecision } from '@/renderer/decision/controller'
 import { openReviewDialog } from '@/renderer/gate/controller'
 import { itemActionState, runItemAction, subscribeItemActions } from '@/renderer/board/actions'
 import { actionButtonLabel, actionPendingLabel, actionResultCopy, decisionButtonLabel, openPrLinkLabel, openTicketLinkLabel, reviewPlanButtonLabel, stageLinkLabel, stageSessionsSectionLabel } from '@/renderer/board/copy'
-import { actionNoteFor, agentSummaryOf, decisionNoteFor, phaseToneFor, stageTargetsOf } from '@/renderer/board/row-model'
+import { actionNoteFor, agentSummaryOf, decisionNoteFor, phaseLabelFor, phaseToneFor, stageTargetsOf } from '@/renderer/board/row-model'
 import { itemDetailLines } from '@/renderer/board/tick'
 import { phaseDetailsFor } from '@/renderer/board/phase-history'
 import { useIpcQuery } from '@/renderer/data/query'
@@ -35,10 +34,6 @@ interface ItemPaneProps {
   /** This item's repository's own dispatch records — `[]` for a repository this app doesn't dispatch. */
   readonly records: readonly DispatchRecord[]
   readonly onClose: () => void
-}
-
-function phaseLabel(row: BoardItemRow): string {
-  return row.stageLabel !== null ? (PHASE_NAMES[row.stageLabel.key] ?? row.stageLabel.key) : 'Unstaged'
 }
 
 export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps) {
@@ -128,7 +123,7 @@ export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps
           ) : null}
         </div>
       </div>
-      <PhasePill tone={phaseToneFor(row)} label={phaseLabel(row)} />
+      <PhasePill tone={phaseToneFor(row)} label={phaseLabelFor(row)} />
       <PhaseList stageKey={row.stageLabel?.key ?? null} kind={item.kind} merged={item.mergedAt !== null} details={phaseDetails} extraCurrentLine={agentSummary} />
       {stageLinks.length > 0 ? (
         <div className="flex flex-col gap-1">

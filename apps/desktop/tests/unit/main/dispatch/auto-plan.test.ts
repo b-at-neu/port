@@ -115,6 +115,7 @@ function deps(overrides: Partial<AutoPlannerDeps> = {}): AutoPlannerDeps {
     runState: () => 'dispatching',
     autoApprove: () => Promise.resolve(APPLIED),
     requestRead: () => undefined,
+    onChange: () => undefined,
     auditDir: '/audit',
     now: () => new Date('2026-01-01T00:00:01Z'),
     ...overrides,
@@ -191,5 +192,64 @@ describe('createAutoPlanner', () => {
     const planner = createAutoPlanner(deps({ autoApprove: () => Promise.reject(new Error('boom')), requestRead: (repoId) => reads.push(repoId) }))
     await planner.consider(snapshotWith([tickReport()], [item()]))
     expect(reads).toEqual([])
+  })
+
+  describe('refused swaps', () => {
+    const REFUSED: WriteOutcome = { kind: 'verify-failed', message: 'no' }
+
+    it('records a non-applied outcome as refused and signals the change once', async () => {
+      let changes = 0
+      const planner = createAutoPlanner(deps({ autoApprove: () => Promise.resolve(REFUSED), onChange: () => { changes += 1 } }))
+      await planner.consider(snapshotWith([tickReport()], [item()]))
+      expect([...planner.refused(REPO_ID)]).toEqual([7])
+      expect(changes).toBe(1)
+    })
+
+    it('records a throw as refused', async () => {
+      const planner = createAutoPlanner(deps({ autoApprove: () => Promise.reject(new Error('boom')) }))
+      await planner.consider(snapshotWith([tickReport()], [item()]))
+      expect([...planner.refused(REPO_ID)]).toEqual([7])
+    })
+
+    it('does not signal a change when the refused set stays the same', async () => {
+      let changes = 0
+      const planner = createAutoPlanner(deps({ autoApprove: () => Promise.resolve(REFUSED), onChange: () => { changes += 1 } }))
+      await planner.consider(snapshotWith([tickReport()], [item()], '2026-01-01T00:00:00Z'))
+      await planner.consider(snapshotWith([tickReport()], [item()], '2026-01-01T00:01:00Z'))
+      expect(changes).toBe(1)
+    })
+
+    it('does not treat an applied or no-op write as refused, and no signal fires', async () => {
+      let changes = 0
+      const planner = createAutoPlanner(deps({ autoApprove: () => Promise.resolve({ kind: 'no-op' }), onChange: () => { changes += 1 } }))
+      await planner.consider(snapshotWith([tickReport()], [item()]))
+      expect(planner.refused(REPO_ID).size).toBe(0)
+      expect(changes).toBe(0)
+    })
+
+    it('clears a refusal once a later attempt lands', async () => {
+      let outcome: WriteOutcome = REFUSED
+      const planner = createAutoPlanner(deps({ autoApprove: () => Promise.resolve(outcome) }))
+      await planner.consider(snapshotWith([tickReport()], [item()], '2026-01-01T00:00:00Z'))
+      outcome = APPLIED
+      await planner.consider(snapshotWith([tickReport()], [item()], '2026-01-01T00:01:00Z'))
+      expect(planner.refused(REPO_ID).size).toBe(0)
+    })
+
+    it('prunes a refusal whose label has moved on and signals the change', async () => {
+      let changes = 0
+      const planner = createAutoPlanner(deps({ autoApprove: () => Promise.resolve(REFUSED), onChange: () => { changes += 1 } }))
+      await planner.consider(snapshotWith([tickReport()], [item()], '2026-01-01T00:00:00Z'))
+      await planner.consider(snapshotWith([tickReport({ autoApprovals: [] })], [item()], '2026-01-01T00:01:00Z'))
+      expect(planner.refused(REPO_ID).size).toBe(0)
+      expect(changes).toBe(2)
+    })
+
+    it('keeps a refusal across a blind report', async () => {
+      const planner = createAutoPlanner(deps({ autoApprove: () => Promise.resolve(REFUSED) }))
+      await planner.consider(snapshotWith([tickReport()], [item()], '2026-01-01T00:00:00Z'))
+      await planner.consider(snapshotWith([tickReport({ autoApprovals: [], blind: { reason: 'github-unavailable' } as never })], [item()], '2026-01-01T00:01:00Z'))
+      expect([...planner.refused(REPO_ID)]).toEqual([7])
+    })
   })
 })

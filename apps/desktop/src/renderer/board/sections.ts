@@ -1,6 +1,6 @@
 // The Board's three-section split — Waiting on you, In progress, Queued —
 // each optionally broken into phase or repo sub-groups.
-import { needsYouReasonOf } from '@/renderer/board/needs-you'
+import { waitsOnYou } from '@/renderer/board/needs-you'
 import type { BoardGroupBy, BoardItemRow } from '@/types/board'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import type { RepoId } from '@/utils/repos'
@@ -34,7 +34,8 @@ const SECTION_NAMES: Readonly<Record<BoardSectionKey, string>> = {
 }
 
 function sectionOf(row: BoardItemRow): BoardSectionKey {
-  if (needsYouReasonOf(row.stageLabel?.key) !== undefined) return 'waiting-on-you'
+  if (waitsOnYou(row)) return 'waiting-on-you'
+  if (row.autoApproving) return 'in-progress'
   if (row.displayStatus.status === 'in-flight' || row.displayStatus.status === 'stalled') return 'in-progress'
   return 'queued'
 }

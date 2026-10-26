@@ -177,6 +177,8 @@ export interface RepoDispatchStatus {
 
 export interface AutoPlanner {
   consider(snapshot: BoardSnapshot): Promise<void>
+  /** The issue numbers whose last swap was refused or threw and that still carry the trigger. */
+  refused(repoId: RepoId): ReadonlySet<number>
 }
 
 export interface AutoPlannerDeps {
@@ -188,6 +190,8 @@ export interface AutoPlannerDeps {
   readonly autoApprove: (params: AutoApprovePlanParams) => Promise<WriteOutcome>
   /** Asks for one GitHub read of this repository alone, so the next stage sees the label just written. */
   readonly requestRead: (repoId: RepoId) => void
+  /** Fired once per pass when the refused set changed, so the board can republish. */
+  readonly onChange: () => void
   readonly auditDir: string
   readonly now: () => Date
 }

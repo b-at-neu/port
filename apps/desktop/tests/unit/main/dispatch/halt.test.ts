@@ -121,6 +121,7 @@ function snapshotOf(repositories: readonly RepositoryState[]): BoardSnapshot {
     nextWakeupAt: null,
     emittedAt: '2026-01-01T00:00:00Z',
     dispatch: [],
+    autoPlan: [],
   }
 }
 

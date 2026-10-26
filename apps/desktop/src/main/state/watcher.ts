@@ -12,6 +12,7 @@ import type { BoardSnapshot, RepositoryHealth, SourceHealth, SourceKind } from '
 import type { RepoDispatchStatus, RunStatesSnapshot } from '@/types/dispatch'
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
 import { planTick } from '@/main/tick/plan'
+import { autoPlanStatusOf } from '@/main/tick/auto-plan'
 
 import type { EndedStage } from '@/types/tick'
 import { buildDesktopTickEvent, recordTick as defaultRecordTick } from '@/main/trajectory/log'
@@ -21,13 +22,7 @@ import { isReady, projectFromCache } from '@/main/state/read'
 import { afterFailure, afterSuccess, budgetedIntervalMs, deferredUntil, dueSources, nextDueAt } from '@/main/state/schedule'
 import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/state/sources'
 
-import type { PipelineWatcher, RefreshRequest } from '@/types/state'
-
-export interface TimerHandle {
-  readonly clear: () => void
-}
-
-export type TimerFactory = (callback: () => void, ms: number) => TimerHandle
+import type { PipelineWatcher, RefreshRequest, TimerFactory, TimerHandle } from '@/types/state'
 
 const defaultSetTimer: TimerFactory = (callback, ms) => {
   const handle = setTimeout(callback, ms)
@@ -69,6 +64,8 @@ interface CreatePipelineWatcherParams {
   readonly stageLiveness?: (repoId: RepoId) => { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
   /** `planTick`'s own `endedStages` input, read fresh per repository. `undefined` reads as `[]` for every repository — byte-identical to today. */
   readonly endedStages?: (repoId: RepoId) => readonly EndedStage[]
+  /** The auto-planner's refused swaps, read fresh per repository. `undefined` reads as none. */
+  readonly autoPlanRefused?: (repoId: RepoId) => ReadonlySet<number>
 }
 
 function repoRefOf(entry: Extract<RepositoryEntry, { status: 'ready' }>): { readonly owner: string; readonly name: string } {
@@ -121,7 +118,11 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     nextWakeupAt: null,
     emittedAt: now().toISOString(),
     dispatch: params.dispatchStatus?.() ?? [],
+    autoPlan: [],
   }
+
+  const noRefusals: ReadonlySet<number> = new Set()
+  const autoPlanOf = (tick: BoardSnapshot['tick'], dispatch: BoardSnapshot['dispatch']): BoardSnapshot['autoPlan'] => autoPlanStatusOf(tick, dispatch, (repoId) => params.autoPlanRefused?.(repoId) ?? noRefusals)
 
   function ensureHealth(repoId: RepoId): RepositoryHealth {
     const existing = health.get(repoId)
@@ -188,6 +189,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     }
 
     const nextWakeupAt = stopped ? null : earliestDueAt().toISOString()
+    const dispatch = params.dispatchStatus?.() ?? []
     latest = {
       state,
       health: healthList,
@@ -196,7 +198,8 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       runStates: runStatesOf(repositories.map((entry) => entry.id)),
       nextWakeupAt,
       emittedAt: now().toISOString(),
-      dispatch: params.dispatchStatus?.() ?? [],
+      dispatch,
+      autoPlan: autoPlanOf(tick, dispatch),
     }
     return latest
   }
@@ -357,7 +360,8 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     },
     republish(): void {
       if (stopped) return
-      latest = { ...latest, dispatch: params.dispatchStatus?.() ?? [], emittedAt: now().toISOString() }
+      const dispatch = params.dispatchStatus?.() ?? []
+      latest = { ...latest, dispatch, autoPlan: autoPlanOf(latest.tick, dispatch), emittedAt: now().toISOString() }
       params.onSnapshot(latest)
     },
   }

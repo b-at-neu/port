@@ -74,6 +74,7 @@ function snapshotWith(state: RepositoryState | null): BoardSnapshot | undefined 
     nextWakeupAt: null,
     emittedAt: NOW.toISOString(),
     dispatch: [],
+    autoPlan: [],
   }
 }
 

@@ -26,6 +26,11 @@ export function needsYouReasonOf(stageKey: string | undefined): RowNeedsYouKind 
   return ROW_KIND[stageKey ?? '']
 }
 
+/** A row is the operator's only when its stage is a gate and no auto-approval is about to clear it. */
+export function waitsOnYou(row: BoardItemRow): boolean {
+  return needsYouReasonOf(row.stageLabel?.key) !== undefined && !row.autoApproving
+}
+
 // A held reason outside this set is routine queueing, never something waiting on the operator.
 const HELD_KINDS: ReadonlySet<TickHeld['reason']> = new Set(['conflicting', 'contended', 'cycle-cap'])
 
@@ -216,7 +221,7 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
 
   for (const row of rows) {
     const kind = needsYouReasonOf(row.stageLabel?.key)
-    if (kind === undefined) continue
+    if (kind === undefined || !waitsOnYou(row)) continue
     if (kind === 'blocked' && stageBlockedKeys.has(rowKey(row.item.repoId, row.ticket.ref.number))) continue
     const viewer = viewerByRepo.get(row.item.repoId) ?? null
     if (viewer !== null && !row.item.assignees.includes(viewer)) continue

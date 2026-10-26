@@ -261,6 +261,11 @@ export function autoPlanTagTitle(): string {
   return 'Opted in with auto-approve: its plan is approved without a review.'
 }
 
+/** The phase name for an `autoPlan` ticket at plan review that the app is about to approve — `docs/DESIGN.md` §6's own "Plan auto-approving" sentence. */
+export function autoApprovingPhaseLabel(): string {
+  return 'Plan auto-approving'
+}
+
 /** The tag on a pull request that closes no ticket — `docs/DESIGN.md` §6's own "No ticket" tag sentence, pinned by `scripts/checks/desktop-board.ts`. */
 export function noTicketTagLabel(): string {
   return 'No ticket'

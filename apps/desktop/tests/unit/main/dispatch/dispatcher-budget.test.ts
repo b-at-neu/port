@@ -67,6 +67,7 @@ function snapshotWith(tick: readonly TickReport[]): BoardSnapshot {
     nextWakeupAt: null,
     emittedAt: '2026-01-01T00:00:00Z',
     dispatch: [],
+    autoPlan: [],
   }
 }
 

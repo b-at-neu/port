@@ -129,6 +129,7 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
 
   // A row whose (repoId, number) is interrupted overrides to `interrupted`, whatever `item.status` says.
   const interruptedKeys = new Set(snapshot.dispatch.flatMap((d) => d.interrupted.map((i) => `${d.repoId}:${String(i.number)}`)))
+  const autoApprovingKeys = new Set(snapshot.autoPlan.flatMap((status) => status.approving.map((number) => `${status.repoId}:${String(number)}`)))
 
   const rows: BoardItemRow[] = []
   for (const repo of readyRepos) {
@@ -144,7 +145,7 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
       if (members.some((member) => interruptedKeys.has(`${repo.repoId}:${String(member.number)}`))) ds = { status: 'interrupted', staleGithub: false, githubAgeMs: null }
       else if (found?.working === true && item.status === 'waiting') ds = { status: 'in-flight', staleGithub: false, githubAgeMs: null }
       else ds = displayStatus(item, health, repo.freshness, now)
-      rows.push({ item, ticket, displayStatus: ds, liveStage, stageLabel: stageLabelOf(item), actions, decisions, viewer: repo.viewer })
+      rows.push({ item, ticket, displayStatus: ds, liveStage, stageLabel: stageLabelOf(item), actions, decisions, viewer: repo.viewer, autoApproving: autoApprovingKeys.has(`${repo.repoId}:${String(item.number)}`) })
     }
   }
   rows.sort((a, b) => compareRows(a, b, displayNameOf))
