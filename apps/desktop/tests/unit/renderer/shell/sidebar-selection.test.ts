@@ -3,7 +3,7 @@ import type { PhaseTone } from '@/types/components'
 import type { SessionKey } from '@/types/hosting'
 import type { RepoId } from '@/utils/repos'
 import type { PipelineRow, PipelineSessionRow, SidebarSelection } from '@/types/shell'
-import { isPipelineRowSelected, isUserSessionSelected, selectedPipelineRowKey, sidebarSelectionOf } from '@/renderer/shell/sidebar-selection'
+import { isPipelineRowSelected, isUserSessionSelected, repoHoldsSelection, repoToggleLabel, selectedPipelineRowKey, sidebarSelectionOf } from '@/renderer/shell/sidebar-selection'
 
 const key = (value: string) => value as SessionKey
 
@@ -80,6 +80,34 @@ describe('isPipelineRowSelected', () => {
   it('never matches a session selection to a transcript-only row, and none matches nothing', () => {
     expect(isPipelineRowSelected(detectedRow('r2', 's1', null), { kind: 'session', sessionKey: key('s1') })).toBe(false)
     expect(isPipelineRowSelected(stageRow('r1', 'k1'), null)).toBe(false)
+  })
+})
+
+describe('repoHoldsSelection', () => {
+  const row = repo('a', [stageRow('a1', 'x'), stageRow('a2', 'y')])
+
+  it('is true for a collapsed repo holding the selected row', () => {
+    expect(repoHoldsSelection(row, true, 'a2')).toBe(true)
+  })
+
+  it('is false for an expanded repo, since the row itself carries the selection', () => {
+    expect(repoHoldsSelection(row, false, 'a2')).toBe(false)
+  })
+
+  it('is false when nothing is selected or the selection is in another repo', () => {
+    expect(repoHoldsSelection(row, true, null)).toBe(false)
+    expect(repoHoldsSelection(row, true, 'b1')).toBe(false)
+  })
+})
+
+describe('repoToggleLabel', () => {
+  it('names the action by collapse state', () => {
+    expect(repoToggleLabel('acme/widgets', false, false)).toBe('Collapse acme/widgets')
+    expect(repoToggleLabel('acme/widgets', true, false)).toBe('Expand acme/widgets')
+  })
+
+  it('says a collapsed repo contains the open session', () => {
+    expect(repoToggleLabel('acme/widgets', true, true)).toBe('Expand acme/widgets, contains the open session')
   })
 })
 

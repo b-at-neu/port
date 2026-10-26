@@ -31,6 +31,16 @@ export function selectedPipelineRowKey(rows: readonly PipelineRow[], selection: 
   return null
 }
 
+/** A collapsed repo hides its sessions, so it takes the selected style when one of them is open. */
+export function repoHoldsSelection(row: PipelineRow, collapsed: boolean, selectedKey: string | null): boolean {
+  return collapsed && selectedKey !== null && row.sessions.some((session) => session.key === selectedKey)
+}
+
+export function repoToggleLabel(name: string, collapsed: boolean, holdsSelection: boolean): string {
+  if (!collapsed) return `Collapse ${name}`
+  return holdsSelection ? `Expand ${name}, contains the open session` : `Expand ${name}`
+}
+
 export function useSidebarSelection(): SidebarSelection {
   const sessionKey = useMatch({ from: ROUTE_IDS.session, shouldThrow: false, select: (match) => match.search.key })
   const transcriptSessionId = useMatch({ from: ROUTE_IDS.transcript, shouldThrow: false, select: (match) => match.params.sessionId })

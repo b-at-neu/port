@@ -30,7 +30,7 @@ Components use roles, never values. Tailwind arbitrary colour values (`bg-[#…]
 | `primary-foreground` | `#ffffff` | `#172554` | Text and icons on `primary` |
 | `primary-text` | `#172554` | `#a5b8e3` | Links, row actions, `ContextMeter` fill |
 | `ring` | `#172554` | `#a5b8e3` | Focus ring, selection outline |
-| `selection` | `#eef1f8` | `#121a2e` | The selected row in a list |
+| `selection` | `#f4f6fb` | `#121a2e` | The selected row in a list |
 | `brand` | `#172554` | `#172554`, with a 1px `#4b5f8f` border | The mark's tile (§8), never anything else |
 | `brand-foreground` | `#ffffff` | `#ffffff` | The mark's own strokes inside its `brand` tile (§8) — never inverts, since the tile's background does not either |
 | `overlay` | `rgb(0 0 0 / 50%)` | `rgb(0 0 0 / 50%)` | The Dialog/AlertDialog/CommandDialog scrim — dims what is behind it rather than reading as a surface of its own |
@@ -91,12 +91,13 @@ WCAG ratios for the pairings the interface uses. The requirement itself is in `E
 | `faint` on `background` | **2.6: fails** | **4.1: fails** |
 | `primary-foreground` on `primary` | 14.7 | 12.0 |
 | `primary-text` on `background` / `sidebar` | 14.7 / 14.0 | 10.0 / 9.5 |
-| `primary-text` on `selection` | 13.0 | 10.1 |
+| `primary-text` on `selection` | 13.6 | 10.1 |
 | `working` pill text on its background | 5.5 | 7.7 |
 | Status pill text on its background | 6.4 – 6.8 | 8.9 – 10.6 |
 | Phase pill text on its pill | 5.5 – 9.5 | 7.7 – 11.5 |
 | Phase dot on `background` | 3.3 – 5.7 | 4.7 – 8.7 |
 | Phase dot on `sidebar` | 3.2 – 5.5 | 4.4 – 8.3 |
+| Phase dot on `selection` | 3.0 – 5.3 | 4.1 – 7.6 |
 | Phase dot on its own pill | 3.0 – 4.8 | 3.6 – 6.6 |
 | Diff text on its background | 6.8 / 7.6 | 11.8 / 9.6 |
 | `syntax-keyword` on `muted` | 5.3 | 7.9 |

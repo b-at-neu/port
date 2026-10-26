@@ -13,7 +13,7 @@ import { pipelinesModel } from '@/renderer/shell/pipelines-model'
 import { useNeedsYouItems } from '@/renderer/needs-you/use-items'
 import type { PipelineRow, PipelineSessionRow, SidebarSelection } from '@/types/shell'
 import { cn } from '@/renderer/lib/utils'
-import { SELECTED_ROW_CLASS, selectedPipelineRowKey, useSidebarSelection } from '@/renderer/shell/sidebar-selection'
+import { SELECTED_ROW_CLASS, repoHoldsSelection, repoToggleLabel, selectedPipelineRowKey, useSidebarSelection } from '@/renderer/shell/sidebar-selection'
 import { useRunStateCommand } from '@/renderer/shell/run-state-command'
 import { shellPrefs, setRepoCollapsed } from '@/renderer/shell/prefs'
 import { ROUTE_IDS } from '@/renderer/router/routes'
@@ -114,8 +114,8 @@ function RepoRow({ row, collapsed, selectedKey, onToggle }: { readonly row: Pipe
     )
   }
 
-  const holdsSelection = collapsed && selectedKey !== null && row.sessions.some((session) => session.key === selectedKey)
-  const toggleLabel = collapsed ? (holdsSelection ? `Expand ${row.name}, contains the open session` : `Expand ${row.name}`) : `Collapse ${row.name}`
+  const holdsSelection = repoHoldsSelection(row, collapsed, selectedKey)
+  const toggleLabel = repoToggleLabel(row.name, collapsed, holdsSelection)
 
   return (
     <div>
