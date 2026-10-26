@@ -136,7 +136,7 @@ describe('staleInterrupted — a read that cannot be trusted clears nothing', ()
 })
 
 describe('clearedByRecheck', () => {
-  const resolved = (overrides: Partial<ResolvedItem> = {}): ResolvedItem => ({ number: 38, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: [], assignees: [], ...overrides })
+  const resolved = (overrides: Partial<ResolvedItem> = {}): ResolvedItem => ({ number: 38, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: [], assignees: [], headRefName: null, ...overrides })
   const fetched = (items: readonly ResolvedItem[], unavailable: readonly number[] = []): ItemsByNumberFetch => ({ ok: true, resolved: items, unavailable, fetchedAt: AFTER })
 
   it('clears a merged, a closed and an open-but-unlabelled ticket', () => {

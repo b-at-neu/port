@@ -112,7 +112,7 @@ describe('createInterruptedSweeper — stale entries', () => {
     const deps = setup()
     interrupt(deps.registry, { id: 'a', number: 38 })
     interrupt(deps.registry, { id: 'b', number: 39 })
-    deps.fetchItemsByNumber.mockResolvedValue({ ok: true, resolved: [{ number: 38, kind: 'issue', state: 'CLOSED', mergedAt: null, closedAt: POLL_AT, title: 't', url: 'u', labels: [], assignees: [] }], unavailable: [39], fetchedAt: POLL_AT })
+    deps.fetchItemsByNumber.mockResolvedValue({ ok: true, resolved: [{ number: 38, kind: 'issue', state: 'CLOSED', mergedAt: null, closedAt: POLL_AT, title: 't', url: 'u', labels: [], assignees: [], headRefName: null }], unavailable: [39], fetchedAt: POLL_AT })
     await deps.sweeper.consider(snapshotWith(), [status()])
     expect(deps.fetchItemsByNumber).toHaveBeenCalledTimes(1)
     expect(deps.fetchItemsByNumber).toHaveBeenCalledWith({ repo: { owner: 'o', name: 'a' }, numbers: [38, 39] })
@@ -124,7 +124,7 @@ describe('createInterruptedSweeper — stale entries', () => {
     interrupt(deps.registry)
     deps.fetchItemsByNumber.mockImplementation(() => {
       deps.registry.markRunning('e1')
-      return Promise.resolve({ ok: true, resolved: [{ number: 38, kind: 'issue', state: 'CLOSED', mergedAt: null, closedAt: POLL_AT, title: 't', url: 'u', labels: [], assignees: [] }], unavailable: [], fetchedAt: POLL_AT })
+      return Promise.resolve({ ok: true, resolved: [{ number: 38, kind: 'issue', state: 'CLOSED', mergedAt: null, closedAt: POLL_AT, title: 't', url: 'u', labels: [], assignees: [], headRefName: null }], unavailable: [], fetchedAt: POLL_AT })
     })
     await deps.sweeper.consider(snapshotWith(), [status()])
     expect(deps.removeWorktree).not.toHaveBeenCalled()

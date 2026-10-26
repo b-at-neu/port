@@ -129,7 +129,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       return { ok: false, kind: 'failed', message: `could not send the resume prompt: ${sendResult.kind}` }
     }
 
-    tracked.set(sessionKey, { repoId: entry.repoId, registryId: entry.id, lastSeenResultAt: null, sawSessionId: false })
+    tracked.set(sessionKey, { repoId: entry.repoId, registryId: entry.id, root: root.path, branch: entry.worktree.branch, baseSha: entry.worktree.baseSha, lastSeenResultAt: null, sawSessionId: false })
     params.registry.markRunning(entry.id)
     return { ok: true, sessionKey }
   }
