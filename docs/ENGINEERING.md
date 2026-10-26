@@ -93,7 +93,8 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `capabilities.ts`'s per-session tracker races `supportedCommands()`/`supportedAgents()` against a timeout, going `unavailable` rather than ever reading either as an empty list
 - an operator's own session defaults (`options.ts`'s `defaults` param) apply only to an operator-role start — the stage role (#327) always uses `permissionMode: 'default'` and its own `stagePolicy`, reading `agent`/`model` from `main/stage/`'s own request instead of `defaults`, never bypass/dontAsk/auto
 - `usage.ts`'s `readUsage` narrows `assistant`/`result` messages structurally, the same rule as `rate-limit.ts`; the figures are cumulative for this `claude` process, so a resumed session's totals mean "since port opened it," never lifetime cost
-- `notify.ts`'s `notificationFor` is the one notification decider; `createNotifier` fires only when no port window is focused, and a focused transition still updates the baseline so refocusing then blurring never replays a stale one
+- `notify.ts`'s `notificationFor` decides per manual session and stays silent for a stage session's finish, end and question; `createNotifier` fires only when no port window is focused, and a focused transition still updates the baseline so refocusing then blurring never replays a stale one
+- `notify.ts`'s `showNeedsYou` is the one shower for Needs you notifications, behind the same focus rule; a click broadcasts `open-needs-you`
 - `marks.ts`'s pin/archive sets persist only through `persist.ts`; `store.ts` is their one composition point, never a second writer
 
 **`apps/desktop/src/main/local/`**
@@ -197,6 +198,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `components/needs-you-item.tsx` is the shared row (DESIGN §4's `NeedsYouItem`); a screen never builds its own version
 - a live stage session's `BLOCKED:` hand-back and the blocked label on the same item are one row (`stage-blocked`); its answer card (`blocker-answer.tsx`) sends into that session through `session/actions.ts`'s `send`, never a label write — the agent clears its own block
 - dismissals (#554) live only in the renderer's `localStorage` (`dismissed.ts`), keyed per event by `dismiss-key.ts` so the same event stays dismissed and a new event on the same ticket shows; a malformed stored value reads as empty, which fails toward showing everything
+- `notify-model.ts` is the only "new item" diff, over the same visible items the screen renders and keyed by `dismissKeyOf`, never a second derivation; `notify.ts` persists its baseline in `localStorage` and a malformed value seeds silently
 - `use-items.ts`'s `useNeedsYouItems` is the one visible-items read: the screen, the sidebar count, the palette and the per-repository dots all go through it, so a dismissed or auto-cleared item can never disagree between them
 
 **`apps/desktop/src/renderer/session/`**

@@ -1,7 +1,7 @@
 // Every route id `router.tsx` registers, plus the search-param parsers each
 // route needs — the one literal spelling both files read, so they never drift.
 import type { RepoId } from '@/utils/repos'
-import type { BoardItemRef, BoardSearch, HistorySearch, RepoSearch, SearchSearch, SessionSearch, TranscriptSearch } from '@/types/router'
+import type { BoardItemRef, BoardSearch, HistorySearch, NeedsYouSearch, RepoSearch, SearchSearch, SessionSearch, TranscriptSearch } from '@/types/router'
 
 export const ROUTE_IDS = {
   board: '/board',
@@ -58,6 +58,12 @@ export function repoSearchFromRaw(search: Readonly<Record<string, unknown>>): Re
 export function historySearchFromRaw(search: Readonly<Record<string, unknown>>): HistorySearch {
   const { repo, archived } = search
   return { repo: typeof repo === 'string' && repo !== '' ? (repo as RepoId) : null, archived: archived === true }
+}
+
+/** `focus` is a non-empty string, else `null`. */
+export function needsYouSearchFromRaw(search: Readonly<Record<string, unknown>>): NeedsYouSearch {
+  const { focus } = search
+  return { focus: typeof focus === 'string' && focus !== '' ? focus : null }
 }
 
 export function searchSearchFromRaw(search: Readonly<Record<string, unknown>>): SearchSearch {

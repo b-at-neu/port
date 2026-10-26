@@ -4,6 +4,7 @@ import { ROUTE_IDS } from '@/renderer/router/routes'
 import { createQueryClient, ipcQueryOptions } from '@/renderer/data/query'
 import { connectQueryCache } from '@/renderer/data/subscriptions'
 import { connectItemActionPruning } from '@/renderer/board/screen'
+import { connectNeedsYouNotifications } from '@/renderer/needs-you/notify'
 import { mountReact } from '@/renderer/react/mount'
 import { themeStore } from '@/renderer/theme/store'
 import { trackLastRoute } from '@/renderer/shell/prefs'
@@ -31,6 +32,7 @@ themeStore().apply()
 const queryClient = createQueryClient()
 connectQueryCache(queryClient)
 connectItemActionPruning(queryClient)
+connectNeedsYouNotifications(queryClient)
 setSessionsQueryClient(queryClient)
 initSidebarCollapsed(shellPrefs().sidebarCollapsed)
 if (app) mountReact(app, queryClient)
@@ -42,6 +44,7 @@ const actionDeps: KeyboardDeps = {
   liveSessionKeys,
   currentSessionKey: () => selectedSession(),
   selectSession,
+  openNeedsYou: (focus) => void router.navigate({ to: ROUTE_IDS.needsYou, search: { focus } }),
   toggleSidebar: () => setSidebarCollapsed(toggleSidebarCollapsed()),
   startRename: () => {
     const key = selectedSession()

@@ -121,5 +121,6 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'stage:resume': () => ({ kind: 'unknown-stage' }),
     'stage:restart': () => ({ kind: 'unknown-stage' }),
     'held:force-dispatch': () => ({ kind: 'ok' }),
+    'notify:needs-you': () => undefined,
   }
 }

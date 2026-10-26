@@ -79,6 +79,7 @@ import { readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
 import { createStageSweeper, resolveStageAllow, resolveStageDismissDenial, resolveStageResume, resolveStageRestart } from '@/main/channels/stage'
 import type { StageChannelDeps } from '@/types/channels'
 import { resolveForceDispatch } from '@/main/channels/held'
+import { resolveNotifyNeedsYou } from '@/main/channels/notify'
 import type { ReadWorktreeReportParams } from '@/types/reclaimer'
 import { createSessionMenuRefresher } from '@/main/session-menu'
 
@@ -480,6 +481,8 @@ export function registerIpc(): RegisteredIpc {
   handle('stage:resume', (_event, request) => resolveStageResume(registryDeps, request, stageChannelDeps))
 
   handle('stage:restart', (_event, request) => resolveStageRestart(registryDeps, request, stageChannelDeps))
+
+  handle('notify:needs-you', (_event, request) => resolveNotifyNeedsYou(request, { show: (notification) => notifier.showNeedsYou(notification) }))
 
   handle('held:force-dispatch', (_event, request) => resolveForceDispatch(request, { snapshot: watcher.snapshot, dispatcherStatus: () => dispatcher.status(), forceDispatch, republish: () => watcher.republish() }))
 

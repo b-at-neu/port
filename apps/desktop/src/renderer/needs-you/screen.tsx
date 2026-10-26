@@ -11,6 +11,8 @@ import { ErrorBanner } from '@/renderer/components/error-banner'
 import { NeedsYouItem } from '@/renderer/components/needs-you-item'
 import { useIpcQuery, ipcQueryOptions } from '@/renderer/data/query'
 import { useQueryClient } from '@tanstack/react-query'
+import { useNavigate, useSearch } from '@tanstack/react-router'
+import { ROUTE_IDS } from '@/renderer/router/routes'
 import { needsYouItems } from '@/renderer/board/needs-you'
 import type { NeedsYouItem as NeedsYouItemModel } from '@/types/board'
 import { registerListNavigator } from '@/renderer/shell/stores'
@@ -114,6 +116,8 @@ function StageQuestionCard({ item }: { readonly item: Extract<NeedsYouItemModel,
 }
 
 export function NeedsYouScreen() {
+  const search = useSearch({ from: ROUTE_IDS.needsYou })
+  const navigate = useNavigate()
   const snapshotQuery = useIpcQuery('board:snapshot')
   const queryClient = useQueryClient()
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
@@ -126,7 +130,10 @@ export function NeedsYouScreen() {
   const groups = groupNeedsYou(items)
   // Keyboard navigation walks the rows in the order they render.
   const ordered = groups.flatMap((group) => group.items)
-  const selection = useListSelection(ordered.map(dismissKeyOf))
+  const selection = useListSelection(ordered.map(dismissKeyOf), {
+    value: search.focus ?? null,
+    onChange: (focus) => void navigate({ to: ROUTE_IDS.needsYou, search: { focus }, replace: true }),
+  })
 
   registerListNavigator('needsYou', {
     next: () => selection.next(),

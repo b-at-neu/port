@@ -347,6 +347,11 @@ export interface IpcMap {
     request: { repoId: RepoId; number: number }
     response: HeldForceDispatchResult
   }
+  /** One OS notification for Needs you items that just appeared. Shown only while no port window is focused; a click opens Needs you with `focus` selected. */
+  'notify:needs-you': {
+    request: { title: string; body: string; focus: string | null }
+    response: void
+  }
 }
 
 /** `'held:force-dispatch'`'s own result. `not-held` covers both "never held" and "held for a
@@ -411,6 +416,7 @@ export const IPC_CHANNELS = [
   'stage:resume',
   'stage:restart',
   'held:force-dispatch',
+  'notify:needs-you',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]

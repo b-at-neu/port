@@ -2,7 +2,7 @@
 // costs one glance, a spurious one trains the operator to ignore them.
 import { BrowserWindow, Notification } from 'electron'
 import type { HostedSessionSnapshot } from '@/types/hosting'
-import type { IpcEventMap } from '@/types/ipc'
+import type { IpcEventMap, IpcMap } from '@/types/ipc'
 import type { RegistryDeps } from '@/types/registry'
 import { listRepositories } from '@/main/registry'
 import { sessionDisplayLabel } from '@/utils/hosting/label'
@@ -20,22 +20,23 @@ function endedBody(snapshot: HostedSessionSnapshot): string {
   return snapshot.end?.reason === 'completed' ? 'The session ended.' : 'The session ended unexpectedly. Open it to see why.'
 }
 
-/** `previous === null` (the first snapshot of a session) never notifies. */
+/** `previous === null` (the first snapshot of a session) never notifies. A stage session's routine end is silent, and so is its question, which Needs you already lists; only its other permission waits fire. */
 export function notificationFor(previous: HostedSessionSnapshot | null, next: HostedSessionSnapshot, repoLabel: string): SessionNotification | null {
   if (previous === null) return null
   const title = sessionDisplayLabel(next, repoLabel)
+  const isStage = next.stage !== null
 
   if (next.phase === 'ended' && previous.phase !== 'ended') {
-    return { kind: 'ended', title, body: endedBody(next) }
+    return isStage ? null : { kind: 'ended', title, body: endedBody(next) }
   }
 
   const previousIds = new Set(previous.pendingPermissions.map((p) => p.permissionId))
-  const newPermission = next.pendingPermissions.find((p) => !previousIds.has(p.permissionId))
+  const newPermission = next.pendingPermissions.find((p) => !previousIds.has(p.permissionId) && !(isStage && p.interaction?.kind === 'question'))
   if (newPermission !== undefined) {
     return { kind: 'needs-you', title, body: `Allow or deny ${newPermission.toolName}: Claude is waiting for your permission.` }
   }
 
-  if (next.phase === 'ready' && (previous.phase === 'streaming' || previous.phase === 'interrupting') && next.pendingPermissions.length === 0) {
+  if (!isStage && next.phase === 'ready' && (previous.phase === 'streaming' || previous.phase === 'interrupting') && next.pendingPermissions.length === 0) {
     return { kind: 'finished', title, body: "Claude finished. Reply when you're ready." }
   }
 
@@ -83,11 +84,25 @@ export function createNotifier(params: CreateNotifierParams): SessionNotifier {
   }
 }
 
+function focusFirstWindow(): void {
+  const [window] = BrowserWindow.getAllWindows()
+  if (window === undefined) return
+  if (window.isMinimized()) window.restore()
+  window.show()
+  window.focus()
+}
+
+interface AppNotifier extends SessionNotifier {
+  /** Shows nothing while a port window is focused. A click opens Needs you with `focus` selected. */
+  showNeedsYou(notification: IpcMap['notify:needs-you']['request']): void
+}
+
 /** The real notifier wired to Electron and the repo registry, kept out of `ipc.ts` for its size.
  *  A click focuses (and restores) the first window and asks it to open the session. */
-export function createAppNotifier(params: { readonly registryDeps: RegistryDeps; readonly broadcast: (command: IpcEventMap['app:command']) => void }): SessionNotifier {
-  return createNotifier({
-    isAppFocused: () => BrowserWindow.getFocusedWindow() !== null,
+export function createAppNotifier(params: { readonly registryDeps: RegistryDeps; readonly broadcast: (command: IpcEventMap['app:command']) => void }): AppNotifier {
+  const isAppFocused = (): boolean => BrowserWindow.getFocusedWindow() !== null
+  const sessionNotifier = createNotifier({
+    isAppFocused,
     repoLabel: async (snapshot) => {
       if (snapshot.repoId === null) return folderLabel(snapshot.workspace.folder)
       const list = await listRepositories(params.registryDeps)
@@ -98,15 +113,23 @@ export function createAppNotifier(params: { readonly registryDeps: RegistryDeps;
       if (!Notification.isSupported()) return
       const native = new Notification({ title: notification.title, body: notification.body })
       native.on('click', () => {
-        const [window] = BrowserWindow.getAllWindows()
-        if (window !== undefined) {
-          if (window.isMinimized()) window.restore()
-          window.show()
-          window.focus()
-        }
+        focusFirstWindow()
         params.broadcast({ kind: 'open-session', sessionKey: snapshot.sessionKey })
       })
       native.show()
     },
   })
+
+  return {
+    observe: (snapshot) => sessionNotifier.observe(snapshot),
+    showNeedsYou: ({ title, body, focus }) => {
+      if (isAppFocused() || !Notification.isSupported()) return
+      const native = new Notification({ title, body })
+      native.on('click', () => {
+        focusFirstWindow()
+        params.broadcast({ kind: 'open-needs-you', focus })
+      })
+      native.show()
+    },
+  }
 }

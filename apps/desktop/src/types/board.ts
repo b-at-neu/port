@@ -207,6 +207,9 @@ export type NeedsYouItem =
   | (NeedsYouItemBase & { readonly kind: 'usage-limit'; readonly entries: readonly InterruptedStage[]; readonly resetsAt: string | null; readonly repoNames: ReadonlyMap<RepoId, string> })
   | (NeedsYouItemBase & { readonly kind: 'half-labelled'; readonly repair: TickLabelRepair })
 
+/** The Needs you item keys last seen, by repository — `''` for an item with no repository. */
+export type NeedsYouBaseline = Readonly<Record<string, readonly string[]>>
+
 /** The groups Needs you renders — `stage-question`/`stage-questions` share `questions`, and `stage-blocked` joins `blocked`. */
 export type NeedsYouGroupKey = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'blocked' | 'questions' | 'denied' | 'interrupted' | 'usage-limit' | 'held' | 'stalled' | 'budget' | 'half-labelled'
 

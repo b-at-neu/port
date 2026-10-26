@@ -1,8 +1,8 @@
 // The app's one router — code-based, hash history (`loadFile` serves
 // `file://`, where path history cannot resolve).
 import { createHashHistory, createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router'
-import { ROUTE_IDS, boardSearchFromRaw, historySearchFromRaw, repoSearchFromRaw, searchSearchFromRaw, sessionSearchFromRaw, transcriptSearchFromRaw } from '@/renderer/router/routes'
-import type { BoardSearch, HistorySearch, RepoSearch, SearchSearch, SessionSearch, TranscriptSearch } from '@/types/router'
+import { ROUTE_IDS, boardSearchFromRaw, historySearchFromRaw, needsYouSearchFromRaw, repoSearchFromRaw, searchSearchFromRaw, sessionSearchFromRaw, transcriptSearchFromRaw } from '@/renderer/router/routes'
+import type { BoardSearch, HistorySearch, NeedsYouSearch, RepoSearch, SearchSearch, SessionSearch, TranscriptSearch } from '@/types/router'
 import { SettingsScreen } from '@/renderer/settings/screen'
 import { BacklogScreen } from '@/renderer/backlog/screen'
 import { NeedsYouScreen } from '@/renderer/needs-you/screen'
@@ -69,7 +69,12 @@ const sessionRoute = createRoute({
 })
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.settings, component: SettingsScreen })
 const backlogRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.backlog, component: BacklogScreen })
-const needsYouRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.needsYou, component: NeedsYouScreen })
+const needsYouRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: ROUTE_IDS.needsYou,
+  component: NeedsYouScreen,
+  validateSearch: (search: Record<string, unknown>): NeedsYouSearch => needsYouSearchFromRaw(search),
+})
 const setupRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.setup, component: SetupScreen })
 const aboutRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.about, component: AboutScreen })
 

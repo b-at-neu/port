@@ -86,6 +86,45 @@ describe('notificationFor', () => {
   })
 })
 
+describe('notificationFor — stage sessions', () => {
+  const stage = { agent: 'review', number: 47, kind: 'pull-request', trigger: 'readyForReview' } as const
+  const permission = { permissionId: 'p1', toolName: 'Edit', input: {}, title: null, displayName: null, description: null, decisionReason: null, blockedPath: null, protectedPath: null, agentId: null, requestedAt: 't', sessionGrant: null, interaction: null }
+  const question = { ...permission, toolName: 'AskUserQuestion', interaction: { kind: 'question' } } as unknown as typeof permission
+  const plan = { ...permission, toolName: 'ExitPlanMode', interaction: { kind: 'plan' } } as unknown as typeof permission
+
+  it('does not notify when a stage session finishes a turn', () => {
+    expect(notificationFor(snapshot({ stage, phase: 'streaming' }), snapshot({ stage, phase: 'ready' }), 'widgets')).toBeNull()
+  })
+
+  it.each([
+    ['completed', { reason: 'completed', exitCode: 0, signal: null, message: null, diagnosis: null }],
+    ['unexpected', { reason: 'exit-nonzero', exitCode: 1, signal: null, message: null, diagnosis: null }],
+  ] as const)('does not notify when a stage session ends (%s)', (_name, end) => {
+    expect(notificationFor(snapshot({ stage, phase: 'ready' }), snapshot({ stage, phase: 'ended', end }), 'widgets')).toBeNull()
+  })
+
+  it('does not notify for a stage question, which Needs you already lists', () => {
+    expect(notificationFor(snapshot({ stage }), snapshot({ stage, pendingPermissions: [question] }), 'widgets')).toBeNull()
+  })
+
+  it('still notifies for a stage permission that has no Needs you row', () => {
+    expect(notificationFor(snapshot({ stage }), snapshot({ stage, pendingPermissions: [permission] }), 'widgets')?.kind).toBe('needs-you')
+    expect(notificationFor(snapshot({ stage }), snapshot({ stage, pendingPermissions: [plan] }), 'widgets')?.kind).toBe('needs-you')
+  })
+
+  it('notifies for a stage permission that arrives beside an already-pending question', () => {
+    const previous = snapshot({ stage, pendingPermissions: [question] })
+    const next = snapshot({ stage, pendingPermissions: [question, { ...permission, permissionId: 'p2' }] })
+    expect(notificationFor(previous, next, 'widgets')?.kind).toBe('needs-you')
+  })
+
+  it('keeps a manual session notifying for a question, a finish and an end', () => {
+    expect(notificationFor(snapshot(), snapshot({ pendingPermissions: [question] }), 'widgets')?.kind).toBe('needs-you')
+    expect(notificationFor(snapshot({ phase: 'streaming' }), snapshot({ phase: 'ready' }), 'widgets')?.kind).toBe('finished')
+    expect(notificationFor(snapshot({ phase: 'ready' }), snapshot({ phase: 'ended', end: { reason: 'completed', exitCode: 0, signal: null, message: null, diagnosis: null } }), 'widgets')?.kind).toBe('ended')
+  })
+})
+
 describe('createNotifier', () => {
   function resolvedLabel(label: string): () => Promise<string> {
     return () => Promise.resolve(label)

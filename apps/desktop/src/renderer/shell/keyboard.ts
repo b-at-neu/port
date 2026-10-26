@@ -103,6 +103,10 @@ export function runAppCommand(command: AppCommand, deps: KeyboardDeps): void {
     deps.selectSession(command.sessionKey)
     return
   }
+  if (command.kind === 'open-needs-you') {
+    deps.openNeedsYou(command.focus)
+    return
+  }
   const jumpMatch = JUMP_RE.exec(command.kind)
   if (jumpMatch?.[1] !== undefined) {
     runAction({ kind: 'jump-to-session', index: Number(jumpMatch[1]) - 1 }, deps)

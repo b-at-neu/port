@@ -9,6 +9,7 @@ export interface KeyboardDeps {
   readonly liveSessionKeys: () => readonly SessionKey[]
   readonly currentSessionKey: () => SessionKey | null
   readonly selectSession: (key: SessionKey) => void
+  readonly openNeedsYou: (focus: string | null) => void
   readonly toggleSidebar: () => void
   readonly startRename: () => void
   readonly currentListNavigator: () => { next(): void; prev(): void; open(): void; close?(): void } | undefined
