@@ -12,12 +12,15 @@ interface StoredEntry extends InterruptedStage {
   readonly state: RegistryState
 }
 
+/** An old file's entry carries no `interruptedAt`. */
+type RawEntry = Omit<StoredEntry, 'interruptedAt'> & { readonly interruptedAt?: string }
+
 interface RegistryFileShape {
   readonly version: number
   readonly entries: readonly unknown[]
 }
 
-function isStoredEntry(value: unknown): value is StoredEntry {
+function isRawEntry(value: unknown): value is RawEntry {
   if (typeof value !== 'object' || value === null) return false
   const e = value as Record<string, unknown>
   return (
@@ -34,8 +37,14 @@ function isStoredEntry(value: unknown): value is StoredEntry {
     typeof e.worktree === 'object' &&
     e.worktree !== null &&
     typeof e.startedAt === 'string' &&
+    (e.interruptedAt === undefined || typeof e.interruptedAt === 'string') &&
     (e.state === 'running' || e.state === 'interrupted')
   )
+}
+
+/** Keeps the last occurrence of each id, in file order — the newest append wins. */
+function dedupedById<T extends { readonly id: string }>(items: readonly T[]): T[] {
+  return items.filter((item, index) => items.findLastIndex((other) => other.id === item.id) === index)
 }
 
 interface CreateStageRegistryParams {
@@ -59,6 +68,7 @@ function toInterrupted(entries: readonly StoredEntry[]): readonly InterruptedSta
       claudeSessionId: e.claudeSessionId,
       worktree: e.worktree,
       startedAt: e.startedAt,
+      interruptedAt: e.interruptedAt,
       reason: e.reason,
       detail: e.detail,
       resetsAt: e.resetsAt,
@@ -88,15 +98,29 @@ export function createStageRegistry(params: CreateStageRegistryParams): StageReg
       entries = []
       return []
     }
-    const valid = value.entries.filter(isStoredEntry)
+    const loadedAt = params.now().toISOString()
     // Every `running` entry at boot means the process died before it could mark itself otherwise.
-    entries = valid.map((e) => (e.state === 'running' ? { ...e, state: 'interrupted', reason: 'crash', detail: null } : e))
+    entries = dedupedById(value.entries.filter(isRawEntry)).map((e): StoredEntry => {
+      const stamped = { ...e, interruptedAt: e.interruptedAt ?? loadedAt }
+      return e.state === 'running' ? { ...stamped, state: 'interrupted', reason: 'crash', detail: null } : stamped
+    })
     void persist()
     return toInterrupted(entries)
   }
 
-  function recordRunning(entry: Omit<InterruptedStage, 'reason' | 'detail' | 'resetsAt' | 'costUsd'>): void {
-    entries = [...entries, { ...entry, reason: 'crash', detail: null, resetsAt: null, costUsd: null, state: 'running' }]
+  function recordRunning(entry: Omit<InterruptedStage, 'reason' | 'detail' | 'resetsAt' | 'costUsd' | 'interruptedAt'>): void {
+    const next: StoredEntry = { ...entry, interruptedAt: entry.startedAt, reason: 'crash', detail: null, resetsAt: null, costUsd: null, state: 'running' }
+    entries = [...entries.filter((e) => e.id !== entry.id), next]
+    void persist()
+  }
+
+  function markRunning(id: string): void {
+    const idx = entries.findIndex((e) => e.id === id)
+    const existing = entries[idx]
+    if (existing === undefined) return
+    const next = [...entries]
+    next[idx] = { ...existing, state: 'running', reason: 'crash', detail: null, resetsAt: null, costUsd: null }
+    entries = next
     void persist()
   }
 
@@ -117,13 +141,14 @@ export function createStageRegistry(params: CreateStageRegistryParams): StageReg
     const next = [...entries]
     const existing = next[idx]
     if (existing === undefined) return
-    next[idx] = { ...existing, state: 'interrupted', reason, detail, resetsAt, costUsd }
+    next[idx] = { ...existing, state: 'interrupted', reason, detail, resetsAt, costUsd, interruptedAt: params.now().toISOString() }
     entries = next
     void persist()
   }
 
   function markAllQuit(): Promise<void> {
-    entries = entries.map((e) => (e.state === 'running' ? { ...e, state: 'interrupted', reason: 'quit', detail: null } : e))
+    const at = params.now().toISOString()
+    entries = entries.map((e) => (e.state === 'running' ? { ...e, state: 'interrupted', reason: 'quit', detail: null, interruptedAt: at } : e))
     return persist()
   }
 
@@ -136,5 +161,5 @@ export function createStageRegistry(params: CreateStageRegistryParams): StageReg
     return toInterrupted(entries.filter((e) => e.state === 'interrupted'))
   }
 
-  return { load, recordRunning, setSessionId, markInterrupted, markAllQuit, remove, list }
+  return { load, recordRunning, markRunning, setSessionId, markInterrupted, markAllQuit, remove, list }
 }

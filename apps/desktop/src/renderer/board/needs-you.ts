@@ -1,7 +1,8 @@
 // Pure "needs you" derivation, built on `projectBoard`'s own rows so
 // `actions`/`decisions` availability is reused, never re-derived.
 import type { BudgetNote } from '@/types/dispatch'
-import type { HostedSessionSnapshot } from '@/types/hosting'
+import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
+import type { InterruptedStage, StageDenial } from '@/types/stage'
 import type { RepoId } from '@/utils/repos'
 import type { RepositoryState } from '@/types/state'
 import type { TickHeld } from '@/types/tick'
@@ -71,6 +72,38 @@ function blockedText(line: string): string {
   return capped(line.slice(BLOCKED_PREFIX.length).trim())
 }
 
+/** A denial blocks only while its own session is still open and idle after it — an ended session's denial stays on Repositories → Denials alone. */
+function isBlockingDenial(denial: StageDenial, sessionByKey: ReadonlyMap<SessionKey, HostedSessionSnapshot>): boolean {
+  if (denial.sessionKey === null) return false
+  const session = sessionByKey.get(denial.sessionKey)
+  if (session === undefined || session.phase !== 'ready' || session.lastResult === null) return false
+  return Date.parse(session.lastResult.at) >= Date.parse(denial.at)
+}
+
+function latest(instants: readonly string[]): string | null {
+  const parsed = instants.filter((at) => !Number.isNaN(Date.parse(at))).sort((a, b) => Date.parse(b) - Date.parse(a))
+  return parsed[0] ?? null
+}
+
+/** Every usage-limit entry across repositories is one line: the sessions wait on the same reset. */
+function usageLimitItem(entries: readonly InterruptedStage[], repoNames: ReadonlyMap<RepoId, string>): NeedsYouItem | null {
+  if (entries.length === 0) return null
+  return {
+    kind: 'usage-limit',
+    repoId: null,
+    repo: null,
+    number: null,
+    title: null,
+    url: null,
+    ticket: null,
+    at: latest(entries.map((entry) => entry.interruptedAt)),
+    matchedRow: null,
+    entries,
+    repoNames,
+    resetsAt: latest(entries.flatMap((entry) => (entry.resetsAt === null ? [] : [entry.resetsAt]))),
+  }
+}
+
 /** One entry per (repoId, number, kind), newest `at` first where known, then by repo then number descending. Session and dispatch kinds keep their own event time; row kinds and held/stalled/budget/half-labelled fall back to the matched item's `updatedAt`, or `null` when there is no matched row. `sessions` is `session:list`'s own read — `[]` when the caller has none (the empty default keeps every pre-existing call site byte-identical). */
 export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: readonly HostedSessionSnapshot[] = []): readonly NeedsYouItem[] {
   const projection = projectBoard({ snapshot, groupBy: 'repo', now, sessions })
@@ -137,8 +170,12 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
     })
   }
 
+  const sessionByKey = new Map(sessions.map((session) => [session.sessionKey, session] as const))
+  const usageLimited: InterruptedStage[] = []
+
   for (const dispatch of snapshot.dispatch) {
     for (const denial of dispatch.denials) {
+      if (!isBlockingDenial(denial, sessionByKey)) continue
       const matched = rowByKey.get(rowKey(dispatch.repoId, denial.number)) ?? null
       items.push({
         kind: 'stage-denial',
@@ -154,6 +191,10 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
       })
     }
     for (const interrupted of dispatch.interrupted) {
+      if (interrupted.reason === 'usage-limit') {
+        usageLimited.push(interrupted)
+        continue
+      }
       const matched = rowByKey.get(rowKey(dispatch.repoId, interrupted.number)) ?? null
       items.push({
         kind: 'stage-interrupted',
@@ -163,12 +204,15 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
         title: matched?.item.title ?? null,
         url: matched?.item.url ?? null,
         ticket: matched?.ticket.ref ?? null,
-        at: interrupted.startedAt,
+        at: interrupted.interruptedAt,
         matchedRow: matched,
         interrupted,
       })
     }
   }
+
+  const usageLimit = usageLimitItem(usageLimited, displayNameOf)
+  if (usageLimit !== null) items.push(usageLimit)
 
   for (const row of rows) {
     const kind = needsYouReasonOf(row.stageLabel?.key)

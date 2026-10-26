@@ -9,7 +9,7 @@ import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '@/ty
 
 import type { StageOutcome } from '@/types/stage-session'
 import type { RepoId } from '@/utils/repos'
-import type { StageDenial } from '@/types/stage'
+import type { StageDenial, StageResumeRequest } from '@/types/stage'
 import { proposedRule } from '@/main/stage/rule'
 import { STAGE_AGENT_NAMES } from '@/main/stage/agents'
 import { classifyHandback } from '@/main/stage/handback'
@@ -78,6 +78,62 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     chain = chain.then(fn, fn)
   }
 
+  // `sessionKey` is read lazily: a denial can only fire after the session exists, never inside `start`.
+  function denialRecorder(repoId: RepoId, agent: StageDenial['agent'], number: number, sessionKey: () => SessionKey | null) {
+    return (toolName: string, input: Readonly<Record<string, unknown>>): void => {
+      params.onDenial(repoId, {
+        id: params.newId(),
+        repoId,
+        agent,
+        number,
+        toolName,
+        inputSummary: inputSummaryOf(input),
+        rule: proposedRule(toolName, input),
+        at: params.now().toISOString(),
+        sessionKey: sessionKey(),
+      })
+    }
+  }
+
+  async function resume(request: StageResumeRequest): Promise<StageLaunchResult> {
+    const { entry, root, prompt } = request
+    if (entry.claudeSessionId === null) return { ok: false, kind: 'failed', message: 'the session ended before Claude started it' }
+
+    let sessionKey: SessionKey | null = null
+    const startResult = await params.store.start({
+      repoId: entry.repoId,
+      mode: { kind: 'resume', sessionId: entry.claudeSessionId },
+      workspace: {
+        folder: entry.worktree.path,
+        root: root.path,
+        worktree: { path: entry.worktree.path, branch: entry.worktree.branch },
+        base: { sha: entry.worktree.baseSha, label: entry.worktree.branch ?? 'detached' },
+      },
+      stage: {
+        tag: { agent: entry.agent, number: entry.number, kind: entry.kind, trigger: entry.trigger },
+        agentName: STAGE_AGENT_NAMES[entry.agent],
+        model: entry.model,
+        sessionRequiredPaths: root.sessionRequiredPaths,
+        onDeny: denialRecorder(entry.repoId, entry.agent, entry.number, () => sessionKey),
+      },
+    })
+    if (!startResult.ok) {
+      if (startResult.kind === 'at-capacity') return { ok: false, kind: 'at-capacity', limit: startResult.limit }
+      return { ok: false, kind: 'failed', message: startFailureMessage(startResult) }
+    }
+
+    sessionKey = startResult.snapshot.sessionKey
+    const sendResult = params.store.send(sessionKey, prompt)
+    if (!sendResult.ok) {
+      await params.store.close(sessionKey)
+      return { ok: false, kind: 'failed', message: `could not send the resume prompt: ${sendResult.kind}` }
+    }
+
+    tracked.set(sessionKey, { repoId: entry.repoId, registryId: entry.id, root: root.path, branch: entry.worktree.branch, baseSha: entry.worktree.baseSha, lastSeenResultAt: null, sawSessionId: false })
+    params.registry.markRunning(entry.id)
+    return { ok: true, sessionKey }
+  }
+
   async function launch(request: StageLaunchRequest): Promise<StageLaunchResult> {
     const root = request.entry.path
     if (!swept.has(root)) {
@@ -89,18 +145,8 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     if (!wt.ok) return { ok: false, kind: 'failed', message: `Couldn't create the stage worktree: ${wt.message}` }
 
     const registryId = params.newId()
-    const onDeny = (toolName: string, input: Readonly<Record<string, unknown>>): void => {
-      params.onDenial(request.entry.id, {
-        id: params.newId(),
-        repoId: request.entry.id,
-        agent: request.agent,
-        number: request.number,
-        toolName,
-        inputSummary: inputSummaryOf(input),
-        rule: proposedRule(toolName, input),
-        at: params.now().toISOString(),
-      })
-    }
+    let launchedKey: SessionKey | null = null
+    const onDeny = denialRecorder(request.entry.id, request.agent, request.number, () => launchedKey)
 
     const startResult = await params.store.start({
       repoId: request.entry.id,
@@ -123,6 +169,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     }
 
     const sessionKey = startResult.snapshot.sessionKey
+    launchedKey = sessionKey
     const sendResult = params.store.send(sessionKey, request.prompt)
     if (!sendResult.ok) {
       await params.store.close(sessionKey)
@@ -210,5 +257,5 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     }
   }
 
-  return { launch, observe }
+  return { launch, observe, resume }
 }

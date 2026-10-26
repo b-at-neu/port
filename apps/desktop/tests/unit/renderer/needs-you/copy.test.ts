@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { NeedsYouItem } from '@/types/board'
-import { blockerSendError, blockerSentToast, needsYouLeadCopy, refreshedToast } from '@/renderer/needs-you/copy'
+import type { InterruptedStage } from '@/types/stage'
+import { GROUP_NAMES, blockerSendError, blockerSentToast, dismissedToast, needsYouLeadCopy, refreshedToast, resumeAllDisabledReason, resumeAllToast, usageLimitEntryLine } from '@/renderer/needs-you/copy'
 
 function base(overrides: Partial<NeedsYouItem> = {}): Pick<NeedsYouItem, 'repoId' | 'repo' | 'number' | 'title' | 'url' | 'ticket' | 'at' | 'matchedRow'> {
   return { repoId: 'repo-a' as RepoId, repo: 'o/a', number: 41, title: 't', url: 'https://github.com/o/a/issues/41', ticket: null, at: null, matchedRow: null, ...overrides }
@@ -120,6 +121,67 @@ describe('needsYouLeadCopy', () => {
   it('stage-blocked leads with the blocker text, without its BLOCKED: prefix', () => {
     const item = { ...base({ number: 51 }), kind: 'stage-blocked', sessionKey: 'hosted-1', text: 'The ledger export has no currency column.' } as unknown as NeedsYouItem
     expect(needsYouLeadCopy(item)).toBe('#51 is blocked: The ledger export has no currency column.')
+  })
+})
+
+describe('usage-limit copy', () => {
+  const RESET = '2026-01-01T14:05:00.000Z'
+  const clock = new Date(RESET).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const entry = (id: string, number: number, repoId = 'repo-a') => ({ id, number, repoId: repoId as RepoId, agent: 'impl' as const })
+  function limited(count: number, resetsAt: string | null): Extract<NeedsYouItem, { readonly kind: 'usage-limit' }> {
+    const entries = Array.from({ length: count }, (_, i) => entry(`e${String(i)}`, 38 + i)) as unknown as Extract<NeedsYouItem, { readonly kind: 'usage-limit' }>['entries']
+    return { ...base({ repoId: null, repo: null, number: null }), kind: 'usage-limit', entries, resetsAt, repoNames: new Map([['repo-a' as RepoId, 'widgets']]) }
+  }
+  const before = new Date('2026-01-01T13:00:00.000Z')
+  const after = new Date('2026-01-01T15:00:00.000Z')
+
+  it('says when the limit resets and how many sessions wait', () => {
+    expect(needsYouLeadCopy(limited(3, RESET), before)).toBe(`Usage limit — resets ${clock} · 3 sessions waiting`)
+  })
+
+  it('uses the singular for one session', () => {
+    expect(needsYouLeadCopy(limited(1, RESET), before)).toBe(`Usage limit — resets ${clock} · 1 session waiting`)
+  })
+
+  it('says so when the reset time is unknown', () => {
+    expect(needsYouLeadCopy(limited(3, null), before)).toBe('Usage limit — reset time unknown · 3 sessions waiting')
+  })
+
+  it('reads in the past tense once the reset has passed', () => {
+    expect(needsYouLeadCopy(limited(3, RESET), after)).toBe(`Usage limit reset at ${clock} · 3 sessions waiting`)
+  })
+
+  it('lists each waiting session with its phase and repository', () => {
+    const item = limited(2, RESET)
+    expect(usageLimitEntryLine(item, item.entries[0] as InterruptedStage)).toBe('#38 Implementing · widgets')
+  })
+
+  it('names the reset in the Resume all tooltip', () => {
+    expect(resumeAllDisabledReason(RESET)).toBe(`The limit resets at ${clock}. port resumes these sessions then.`)
+  })
+})
+
+describe('GROUP_NAMES', () => {
+  it('names every group the way the screen shows it', () => {
+    expect(Object.values(GROUP_NAMES)).toEqual(['Plan reviews', 'Ready to merge', 'Escalated', 'Blocked', 'Questions', 'Denied commands', 'Interrupted', 'Usage limit', 'Held', 'Stalled', 'Over budget', 'Label problems'])
+  })
+})
+
+describe('dismiss and resume-all toasts', () => {
+  it('names the ticket when one item is dismissed, and says "this item" when it has no number', () => {
+    expect(dismissedToast([{ number: 554 }])).toBe('Dismissed #554.')
+    expect(dismissedToast([{ number: null }])).toBe('Dismissed this item.')
+  })
+
+  it('counts a group dismissal', () => {
+    expect(dismissedToast([{ number: 1 }, { number: 2 }, { number: null }, { number: 4 }])).toBe('Dismissed 4 items.')
+  })
+
+  it('summarizes a resume-all run', () => {
+    expect(resumeAllToast(3, 3, null, null)).toBe('Resumed 3 sessions.')
+    expect(resumeAllToast(1, 1, null, null)).toBe('Resumed 1 session.')
+    expect(resumeAllToast(1, 3, 4, null)).toBe('Resumed 1 of 3. All 4 session slots are busy.')
+    expect(resumeAllToast(1, 3, null, { number: 38, reason: 'runtime problem' })).toBe("Couldn't resume #38: runtime problem.")
   })
 })
 

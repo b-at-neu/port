@@ -2,6 +2,8 @@
 // dispatches it, one switch over `NeedsYouItem.kind`.
 import type { DecisionRefusal } from '@/types/actions'
 import type { NeedsYouItem } from '@/types/board'
+import type { InterruptedStage, StageResumeResult } from '@/types/stage'
+import { resumeAllDisabledReason, resumeAllToast } from '@/renderer/needs-you/copy'
 import { openReviewDialog } from '@/renderer/gate/controller'
 import { openDecision } from '@/renderer/decision/controller'
 import { openAllowDialog } from '@/renderer/needs-you/allow-dialog'
@@ -11,7 +13,7 @@ import { router } from '@/renderer/router/router'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { invoke } from '@/renderer/data/invoke'
 
-type NeedsYouActionKind = 'review-plan' | 'open' | 'unblock' | 'retry' | 'refresh' | 'answer' | 'allow' | 'resume' | 'restart' | 'force'
+type NeedsYouActionKind = 'review-plan' | 'open' | 'unblock' | 'retry' | 'refresh' | 'answer' | 'allow' | 'resume' | 'resume-all' | 'restart' | 'force'
 
 interface NeedsYouAction {
   readonly label: string
@@ -57,7 +59,12 @@ function heldAction(item: Extract<NeedsYouItem, { readonly kind: 'held' }>): Nee
   return { label: 'Open ticket', kind: 'open', disabledReason: null }
 }
 
-export function actionFor(item: NeedsYouItem): NeedsYouAction {
+function resumeAllAction(item: Extract<NeedsYouItem, { readonly kind: 'usage-limit' }>, now: Date): NeedsYouAction {
+  const waiting = item.resetsAt !== null && Date.parse(item.resetsAt) > now.getTime()
+  return { label: 'Resume all', kind: 'resume-all', disabledReason: waiting && item.resetsAt !== null ? resumeAllDisabledReason(item.resetsAt) : null }
+}
+
+export function actionFor(item: NeedsYouItem, now: Date = new Date()): NeedsYouAction {
   switch (item.kind) {
     case 'plan-review':
       return { label: 'Review plan', kind: 'review-plan', disabledReason: null }
@@ -82,6 +89,8 @@ export function actionFor(item: NeedsYouItem): NeedsYouAction {
       return { label: 'Allow from now on', kind: 'allow', disabledReason: null }
     case 'stage-interrupted':
       return { label: 'Resume', kind: 'resume', disabledReason: item.interrupted.claudeSessionId === null ? "This session ended before Claude started it, so there's nothing to resume." : null, secondaryLabel: 'Restart' }
+    case 'usage-limit':
+      return resumeAllAction(item, now)
     case 'half-labelled':
       return { label: 'Open on GitHub', kind: 'open', disabledReason: null }
   }
@@ -123,6 +132,9 @@ export function runAction(item: NeedsYouItem, deps: RunActionDeps): void {
       return
     case 'resume':
       if (item.kind === 'stage-interrupted') void runStageResume(item.interrupted.id, item.interrupted.number, deps)
+      return
+    case 'resume-all':
+      if (item.kind === 'usage-limit') void runResumeAll(item.entries, deps)
       return
     case 'restart':
       if (item.kind === 'stage-interrupted') openRestartDialog(item.interrupted)
@@ -167,6 +179,37 @@ async function runStageResume(id: string, number: number, deps: RunActionDeps): 
   } catch (error) {
     console.error('Failed to reach the main process while resuming a stage session', error)
     deps.onToast(`Couldn't reach the main process to resume #${String(number)}.`)
+  }
+}
+
+function resumeFailureReason(result: Exclude<StageResumeResult, { readonly kind: 'ok' | 'at-capacity' | 'unknown-stage' }>): string {
+  return result.kind === 'no-session-id' ? 'it ended before Claude started it' : result.message
+}
+
+/** Resumes one entry at a time, stopping at the first full house or failure so the one summary toast names what happened. */
+async function runResumeAll(entries: readonly InterruptedStage[], deps: RunActionDeps): Promise<void> {
+  let resumed = 0
+  let attempted = 0
+  try {
+    for (const entry of entries) {
+      const result = await invoke('stage:resume', { id: entry.id })
+      if (result.kind === 'unknown-stage') continue
+      attempted += 1
+      if (result.kind === 'ok') {
+        resumed += 1
+        continue
+      }
+      if (result.kind === 'at-capacity') {
+        deps.onToast(resumeAllToast(resumed, entries.length, result.limit, null))
+        return
+      }
+      deps.onToast(resumeAllToast(resumed, entries.length, null, { number: entry.number, reason: resumeFailureReason(result) }))
+      return
+    }
+    deps.onToast(resumeAllToast(resumed, attempted, null, null))
+  } catch (error) {
+    console.error('Failed to reach the main process while resuming usage-limit sessions', error)
+    deps.onToast("Couldn't reach the main process to resume the waiting sessions.")
   }
 }
 
