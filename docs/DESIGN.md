@@ -156,8 +156,8 @@ The dark `brand` tile's `#4b5f8f` border measures 3.0 against `sidebar`, enough 
    - the repo name;
    - its run-state `StatusPill` menu (§4).
 
-   The repo's live stage sessions are nested under it, labelled `#N <title>`. Each has a `PhaseDot` in its phase colour, so the colour alone says which phase it is in; it turns red and pulses while the session needs you. A collapsed repo with a session that needs you shows a red dot next to its name.
-4. **Your sessions:** a header with **New session** and **History** as icon buttons on its right, then your own live sessions.
+   The repo's live stage sessions are nested under it, labelled `#N <title>`. Each has a `PhaseDot` in its phase colour, so the colour alone says which phase it is in; it turns red and pulses while the session needs you. The row for the session on screen, a live stage session or a stage transcript, is drawn in `selection`. If its repo is collapsed, the repo row is drawn in `selection` instead. A collapsed repo with a session that needs you shows a red dot next to its name.
+4. **Your sessions:** a header with **New session** and **History** as icon buttons on its right, then your own live sessions. The open one is drawn in `selection`.
 5. **Footer:** Settings, plus one status dot for the `claude` CLI and `gh`, red when either is missing or signed out.
 
 **Screens in the first release:**
