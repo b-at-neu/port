@@ -1,8 +1,10 @@
 import { readJsonFile, readTextFile } from '@/main/platform/files'
+import { defaultGitRunner } from '@/main/platform/git'
 import { pathOps } from '@/main/platform/paths'
+import { readAtDefaultRef } from '@/main/registry/harness'
 import { defaultClaudeHome } from '@/main/sessions/locate'
 import type { StageLaunchRequest } from '@/types/dispatch'
-import type { FileResult, PathOps } from '@/types/platform'
+import type { FileResult, GitRunner, PathOps } from '@/types/platform'
 import type { StageInstructionsLoader, StageInstructionsResult } from '@/types/stage'
 import type { StageAgent } from '@/types/tick'
 import { LABEL_KEYS, labelName } from '@/utils/labels/vocabulary'
@@ -123,17 +125,29 @@ export type StageConfigPointers =
   | { readonly ok: true; readonly docs: Readonly<Record<'engineering' | 'design', string | null>>; readonly commands: Readonly<Record<string, string>> }
   | { readonly ok: false; readonly message: string }
 
-/** `commands.*` stays schema-only: it is read from the worktree's own config file, never from `CLAUDE.md`. */
-export async function readStageConfigPointers(worktree: string, ops: Pick<PathOps, 'join'>, readJsonFile: ReadJsonFile): Promise<StageConfigPointers> {
-  const file = ops.join(worktree, '.claude', 'port.config.json')
-  const read = await readJsonFile<StageConfigFile>(file)
-  if (!read.ok) return { ok: false, message: `couldn't read ${file}: ${read.message}` }
+const STAGE_CONFIG_PATH = '.claude/port.config.json'
+
+function parseStageConfig(text: string): StageConfigFile | null {
+  try {
+    const parsed: unknown = JSON.parse(text)
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+/** `commands.*` stays schema-only: it is read from the default branch's config, never from the stage worktree, whose checkout a pull request can edit. */
+export async function readStageConfigPointers(root: string, git: GitRunner): Promise<StageConfigPointers> {
+  const read = await readAtDefaultRef(git, root, STAGE_CONFIG_PATH)
+  if (!read.ok) return { ok: false, message: `couldn't read ${STAGE_CONFIG_PATH} on the default branch: ${read.message}` }
+  const config = parseStageConfig(read.text)
+  if (config === null) return { ok: false, message: `${STAGE_CONFIG_PATH} on the default branch is not a JSON object` }
   const commands: Record<string, string> = {}
-  for (const [key, value] of Object.entries(read.value.commands ?? {})) {
+  for (const [key, value] of Object.entries(config.commands ?? {})) {
     if (value === null || value === undefined) continue
     commands[key] = typeof value === 'string' ? value : JSON.stringify(value)
   }
-  return { ok: true, docs: { engineering: read.value.docs?.engineering ?? null, design: read.value.docs?.design ?? null }, commands }
+  return { ok: true, docs: { engineering: config.docs?.engineering ?? null, design: config.docs?.design ?? null }, commands }
 }
 
 function oneLine(text: string): string {
@@ -172,10 +186,11 @@ export interface StageInstructionsLoaderDeps {
   readonly ops: PathReader
   readonly readTextFile: ReadTextFile
   readonly readJsonFile: ReadJsonFile
+  readonly git: GitRunner
 }
 
 export function defaultStageInstructionsLoader(): StageInstructionsLoader {
-  return createStageInstructionsLoader({ claudeHome: defaultClaudeHome(), ops: pathOps, readTextFile, readJsonFile })
+  return createStageInstructionsLoader({ claudeHome: defaultClaudeHome(), ops: pathOps, readTextFile, readJsonFile, git: defaultGitRunner() })
 }
 
 export function createStageInstructionsLoader(deps: StageInstructionsLoaderDeps): StageInstructionsLoader {
@@ -184,7 +199,7 @@ export function createStageInstructionsLoader(deps: StageInstructionsLoaderDeps)
     if (!resolved.ok) return resolved
     const instructions = await loadStageInstructions({ pluginRoot: resolved.root, agent: request.agent, ops: deps.ops, readTextFile: deps.readTextFile })
     if (!instructions.ok) return instructions
-    const pointers = await readStageConfigPointers(worktreePath, deps.ops, deps.readJsonFile)
+    const pointers = await readStageConfigPointers(request.entry.path, deps.git)
     if (!pointers.ok) return pointers
     const pluginRoot = deps.ops.toPosix(resolved.root)
     return { ok: true, text: composeStagePrompt({ header: request.prompt, context: buildStageContext(request, pluginRoot, pointers), instructions: instructions.text, source: pluginRoot }) }

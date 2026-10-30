@@ -8,9 +8,8 @@ import { chooseDirectory } from '@/main/dialogs'
 import { defaultWorkspaceChannelDeps, resolveFoldersChoose, resolveFoldersList, resolveSessionChanges } from '@/main/channels/workspace'
 import { createRecentsStore } from '@/main/workspace/recents'
 import { createSessionWorktree, removeSessionWorktreeAt } from '@/main/workspace/worktree'
-import { createStageWorktree, releaseStageBranch, sweepSessionBranches } from '@/main/workspace/stage-worktree'
-import { createStageLauncher } from '@/main/stage/launcher'
-import { defaultStageInstructionsLoader } from '@/main/stage/instructions'
+import { releaseStageBranch } from '@/main/workspace/stage-worktree'
+import { createDefaultStageLauncher } from '@/main/stage/default'
 import type { StageLauncherHandle, StageRegistry } from '@/types/stage'
 import { defaultForkListSessions } from '@/main/hosting/fork'
 import { statPath } from '@/main/platform/files'
@@ -281,19 +280,11 @@ export function registerIpc(): RegisteredIpc {
   })
   const sessionMenu = createSessionMenuRefresher({ store: hostedStore, platform: process.platform, isPackaged: app.isPackaged, send: broadcastAppCommand })
 
-  const stageLauncher: StageLauncherHandle = createStageLauncher({
+  const stageLauncher: StageLauncherHandle = createDefaultStageLauncher({
     store: hostedStore,
-    git: defaultGitRunner(),
-    createWorktree: createStageWorktree,
-    removeWorktree: (path, force) => removeSessionWorktreeAt({ path, force, git: defaultGitRunner() }),
-    releaseBranch: (root, branch, baseSha) => releaseStageBranch({ root, git: defaultGitRunner(), branch, baseSha }),
-    sweepBranches: (root) => sweepSessionBranches({ root, git: defaultGitRunner() }),
-    now: () => new Date(),
-    onOutcome: (repoId, sessionKey, outcome) => dispatcherRef?.recordOutcome(repoId, sessionKey, outcome),
     registry: stageRegistry,
+    onOutcome: (repoId, sessionKey, outcome) => dispatcherRef?.recordOutcome(repoId, sessionKey, outcome),
     onDenial: (repoId, denial) => dispatcherRef?.recordDenial(repoId, denial),
-    newId: () => globalThis.crypto.randomUUID(),
-    loadInstructions: defaultStageInstructionsLoader(),
   })
   const hostingChannelDeps = defaultHostingChannelDeps(hostedStore, sessionIndex, {
     git: (args, cwd) => git(args, { cwd }),
