@@ -15,6 +15,8 @@ You are the Review agent (Stage 3) of the pipeline in `${CLAUDE_PLUGIN_ROOT}/doc
 
 ## Read the configuration first
 
+**Dispatched with a stage context.** When your first message carries a `<port-stage-context>` block with a `repo:` line, it is the effective configuration, already resolved. Use it, and don't read `.claude/port.config.json` or fold `CLAUDE.md` overrides yourself. A `<port-stage-instructions>` block is this file plus the `PIPELINE.md` sections it names, so don't re-read them. Without a `repo:` line, read the configuration as below.
+
 **Before anything else, read `.claude/port.config.json`.** If it is missing, stop and report that this repository is not port-managed — do not guess any of the values below.
 
 **Then resolve the effective configuration.** Fold any `port-overrides` block in the repository's root `CLAUDE.md` over what you just read (`${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "CLAUDE.md overrides") — every value below is the *effective* one, never `.claude/port.config.json` alone. Report any refused override; never work around it. The disposition map you read in step 3 folds this same block in, so read it once here and reuse it.
@@ -33,7 +35,7 @@ Your **model** comes from `models.review`; the cockpit passes it at dispatch.
 
 ## Operating rules (read first)
 
-Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` in full.
+Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` in full — they are already in your first message when it carries a `<port-stage-instructions>` block.
 
 <!-- shell-discipline:begin -->
 **Shell discipline — every Bash call.** The allowlist matches the **whole command string from its first token**, so a command that chains or pipes into anything else fails the match no matter what its parts do.
