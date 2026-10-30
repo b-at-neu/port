@@ -21,11 +21,13 @@ import type { ResolveStartTargetDeps } from '@/types/workspace'
 import { removeSessionWorktreeAt } from '@/main/workspace/worktree'
 import { resolveWorkspace } from '@/main/workspace/resolve'
 import type { HostingChannelDeps } from '@/types/channels'
+import type { SessionIndex } from '@/types/session-index'
 
-export function defaultHostingChannelDeps(store: HostedStore, targetDeps: Omit<ResolveStartTargetDeps, 'repositories'>): HostingChannelDeps {
+export function defaultHostingChannelDeps(store: HostedStore, sessionIndex: SessionIndex, targetDeps: Omit<ResolveStartTargetDeps, 'repositories'>): HostingChannelDeps {
   return {
     listRepositories,
     store,
+    sessionIndex,
     listSessionFiles,
     resolveStartTarget,
     targetDeps,
@@ -208,6 +210,11 @@ export function resolveSessionAttach(request: IpcMap['session:attach']['request'
 export function resolveSessionList(request: IpcMap['session:list']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['list']> {
   if (request !== undefined) throw new Error("'session:list' takes no payload")
   return deps.store.list()
+}
+
+export function resolveSessionIndex(request: IpcMap['session:index']['request'], deps: HostingChannelDeps): IpcMap['session:index']['response'] {
+  if (request !== undefined) throw new Error("'session:index' takes no payload")
+  return deps.sessionIndex.list()
 }
 
 /** `name`'s content is **not** validated here — that is a typed result from

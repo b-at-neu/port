@@ -250,6 +250,21 @@ export interface StageLinkTarget {
   readonly kind: PipelineItemKind
 }
 
-export type StageLink =
-  | { readonly kind: 'live'; readonly agent: StageAgent; readonly sessionKey: SessionKey; readonly at: string; readonly operatorJoined: boolean }
-  | { readonly kind: 'transcript'; readonly agent: StageAgent; readonly sessionId: string; readonly at: string; readonly operatorJoined: boolean }
+/** One session that worked on a ticket. `state` is `seen` for a link known only from a transcript scan or a terminal-dispatched agent — recency, never called live. */
+export interface TicketSessionLink {
+  readonly key: string
+  readonly who: { readonly kind: 'stage'; readonly agent: StageAgent } | { readonly kind: 'you' }
+  readonly state: 'live' | 'ended' | 'started' | 'seen'
+  readonly at: string
+  readonly endedAt: string | null
+  readonly costUsd: number | null
+  readonly operatorJoined: boolean
+  readonly title: string | null
+  readonly open: { readonly kind: 'session'; readonly sessionKey: SessionKey } | { readonly kind: 'transcript'; readonly sessionId: string; readonly agentId: string | null }
+}
+
+/** `unplaced` holds the manual sessions no phase can claim. */
+export interface TicketSessions {
+  readonly byPhase: Partial<Record<PhaseKey, readonly TicketSessionLink[]>>
+  readonly unplaced: readonly TicketSessionLink[]
+}

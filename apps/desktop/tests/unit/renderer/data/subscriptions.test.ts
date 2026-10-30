@@ -110,6 +110,27 @@ describe('connectQueryCache', () => {
     expect(setSpy).toHaveBeenCalledWith(key, { snapshot: true })
   })
 
+  describe('session:index invalidation', () => {
+    const indexKey = ipcQueryOptions('session:index').queryKey
+
+    function invalidationsFor(phase: string): number {
+      const client = new QueryClient()
+      const invalidate = vi.spyOn(client, 'invalidateQueries').mockResolvedValue(undefined)
+      const bridge = fakeBridge()
+      connectQueryCache(client, createSubscriptions(bridge))
+      bridge.fire('session:status', { sessionKey: 'hosted-1', phase })
+      return invalidate.mock.calls.filter(([filter]) => JSON.stringify(filter?.queryKey) === JSON.stringify(indexKey)).length
+    }
+
+    it('invalidates the index when a pushed snapshot has ended', () => {
+      expect(invalidationsFor('ended')).toBe(1)
+    })
+
+    it('leaves it alone for a streaming push', () => {
+      expect(invalidationsFor('streaming')).toBe(0)
+    })
+  })
+
   describe('repos:list invalidation', () => {
     const reposKey = ipcQueryOptions('repos:list').queryKey
     const notReady = { id: 'repo-a', path: '/a', displayName: 'o/a', problem: { kind: 'directory-missing' }, diagnostics: [] }

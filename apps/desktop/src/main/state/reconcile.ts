@@ -23,7 +23,7 @@ import type {
 } from '@/types/state'
 import type { LabelEventNode } from '@/types/github'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
-import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers } from '@/main/state/attach'
+import { attachAgents, attachSessions, attachWorkSessions, attachWorktrees, collectOrphanNumbers } from '@/main/state/attach'
 import { closingReference, IMPLEMENTATION_PLAN_HEADING, sessionRequiredAt } from '@/main/state/link'
 import { stageOf } from '@/main/state/stage'
 import { codeReviewCount } from '../../../../../scripts/port-tick/gates'
@@ -146,6 +146,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     const agents = attachAgents(attachTarget, repoSessions.agents)
     const sessions = attachSessions(attachTarget, repoSessions.sessions)
     const worktreeAttachments = attachWorktrees(attachTarget, worktreeEntries)
+    const workSessions = attachWorkSessions(item, repoSessions.sessions, worktreeEntries, worktreeAttachments)
 
     const { status, statusEvidence } = statusOf(stageResult.stage, repoSessions.available, agents, sessions)
     const waitingOn: WaitingOn | null =
@@ -188,6 +189,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
       agents,
       sessions,
       worktrees: worktreeAttachments,
+      workSessions,
       state: item.state,
       mergedAt: item.mergedAt,
       updatedAt: item.updatedAt,

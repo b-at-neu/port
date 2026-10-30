@@ -27,6 +27,7 @@ export function reconciledItem(overrides: Partial<ReconciledItem> = {}): Reconci
     agents: [],
     sessions: [],
     worktrees: [],
+    workSessions: [],
     state: 'OPEN',
     mergedAt: null,
     updatedAt: null,

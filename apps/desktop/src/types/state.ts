@@ -74,6 +74,15 @@ export interface AttachedSession {
   readonly match: AgentAttachMatch
 }
 
+/** A `SessionRecord` that worked on this item, matched by worktree, branch or ticket-label title — display only, never read by `statusOf`. */
+export interface WorkSession {
+  readonly sessionId: string
+  readonly title: string | null
+  readonly lastActivityAt: string
+  readonly activity: 'active' | 'idle' | 'dormant'
+  readonly match: 'worktree' | 'branch' | 'title'
+}
+
 /** A `WorktreeEntry` whose `correlation.number` matches this item. An entry with `unresolved` set is never guessed onto an item — it lands in `uncorrelatedWorktrees` instead. */
 export interface AttachedWorktree {
   readonly path: string
@@ -117,6 +126,8 @@ export interface ReconciledItem {
   readonly agents: readonly AttachedAgent[]
   readonly sessions: readonly AttachedSession[]
   readonly worktrees: readonly AttachedWorktree[]
+  /** Every session on this item's worktree or branch, or titled with its ticket label — the Board pane's "Your sessions" source. */
+  readonly workSessions: readonly WorkSession[]
   readonly state: string
   readonly mergedAt: string | null
   /** Copied straight off `PipelineItem.updatedAt` — Needs you's own newest-first sort key. */

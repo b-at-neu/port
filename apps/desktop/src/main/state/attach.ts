@@ -1,7 +1,9 @@
 // The agent, session, and worktree attachment ladders, plus the orphan-number collector — pure, no I/O.
 import type { AgentRecord, SessionRecord } from '@/types/sessions'
 import type { WorktreeEntry } from '@/types/local'
-import type { AttachedAgent, AttachedSession, AttachedWorktree } from '@/types/state'
+import type { PipelineItemKind } from '@/types/github'
+import type { AttachedAgent, AttachedSession, AttachedWorktree, WorkSession } from '@/types/state'
+import { pathOps } from '@/main/platform/paths'
 
 interface AttachTarget {
   readonly number: number
@@ -67,6 +69,60 @@ export function attachWorktrees(item: AttachTarget, worktrees: readonly Worktree
     })
   }
   return attached
+}
+
+function insideOrSame(parent: string, child: string): boolean {
+  try {
+    return pathOps.samePath(parent, child) || pathOps.contains(parent, child)
+  } catch {
+    return false
+  }
+}
+
+function hasTicketPrefix(title: string | null, prefix: string): boolean {
+  if (title === null || !title.startsWith(prefix)) return false
+  const next = title.charAt(prefix.length)
+  return next === '' || next === ' '
+}
+
+/** First hit wins per session: the most specific worktree its cwd sits in, its git branch, then a title naming this ticket — never a branch-name pattern, and cockpit sessions never count. */
+export function attachWorkSessions(
+  item: { readonly number: number; readonly kind: PipelineItemKind },
+  sessions: readonly SessionRecord[],
+  allWorktrees: readonly WorktreeEntry[],
+  attachedWorktrees: readonly AttachedWorktree[],
+): readonly WorkSession[] {
+  const prefix = `${item.kind === 'issue' ? '#' : 'PR#'}${String(item.number)}`
+  const attachedBranches = new Set(attachedWorktrees.flatMap((worktree) => (worktree.branch === null ? [] : [worktree.branch])))
+  const attached: WorkSession[] = []
+  for (const session of sessions) {
+    if (session.role === 'cockpit') continue
+    const match = matchOf(session, prefix, allWorktrees, attachedWorktrees, attachedBranches)
+    if (match === null) continue
+    attached.push({ sessionId: session.sessionId, title: session.customTitle, lastActivityAt: session.lastActivityAt, activity: session.activity, match })
+  }
+  return attached
+}
+
+function matchOf(
+  session: SessionRecord,
+  prefix: string,
+  allWorktrees: readonly WorktreeEntry[],
+  attachedWorktrees: readonly AttachedWorktree[],
+  attachedBranches: ReadonlySet<string>,
+): WorkSession['match'] | null {
+  if (session.cwd !== null) {
+    const cwd = session.cwd
+    let deepest: string | null = null
+    for (const worktree of allWorktrees) {
+      if (insideOrSame(worktree.path, cwd) && (deepest === null || worktree.path.length > deepest.length)) deepest = worktree.path
+    }
+    const owner = deepest
+    if (owner !== null && attachedWorktrees.some((worktree) => pathOps.samePath(worktree.path, owner))) return 'worktree'
+  }
+  if (session.gitBranch !== null && attachedBranches.has(session.gitBranch)) return 'branch'
+  if (hasTicketPrefix(session.customTitle, prefix)) return 'title'
+  return null
 }
 
 /** Every number a worktree's correlation or an agent's `itemNumber` names, absent from the open sweep's own item numbers. `#0` is excluded at both sources, so it never reaches here. */

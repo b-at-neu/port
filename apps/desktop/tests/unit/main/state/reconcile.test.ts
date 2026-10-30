@@ -395,6 +395,20 @@ describe('reconcileRepository — headRefOid/reviews/comments/reviewCycleCount (
   })
 })
 
+describe('reconcileRepository — workSessions', () => {
+  it('lists a manual session in the item’s worktree without touching status evidence', () => {
+    const manual = session({ sessionId: 'manual', role: 'other', roleEvidence: null, itemNumber: null, cwd: '/w/1/src', worktreePath: null, activity: 'active' })
+    const state = reconcile([item({ number: 79, matchedKeys: ['inProgress'] })], {
+      repoSessions: sessionsOf({ sessions: [manual] }),
+      worktrees: worktreesOf([worktreeEntry({ path: '/w/1', correlation: { number: 79, rung: 'branch-name' } })]),
+    })
+    if (!state.ok) throw new Error('unreachable')
+    expect(state.items[0]?.workSessions.map((s) => [s.sessionId, s.match])).toEqual([['manual', 'worktree']])
+    expect(state.items[0]?.status).toBe('stalled')
+    expect(state.items[0]?.statusEvidence).toBe('no-claimant')
+  })
+})
+
 describe('reconcileRepository — worktreeTotals (#80 Decision 6)', () => {
   it('null, never 0, when the worktree read itself failed', () => {
     const state = reconcile([item()], { worktrees: { ok: false, kind: 'not-found', message: 'no git', readAt: '2026-01-01T00:00:00Z' } })

@@ -1,4 +1,5 @@
 import type { AssertEqual } from '@/types/assert-type'
+import type { SessionIndexEntry } from '@/types/session-index'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import type { WorktreesReclaimResult, WorktreesReport } from '@/types/reclaimer'
 import type { SessionScan } from '@/types/sessions'
@@ -203,6 +204,10 @@ export interface IpcMap {
     request: void
     response: readonly HostedSessionSnapshot[]
   }
+  'session:index': {
+    request: void
+    response: readonly SessionIndexEntry[]
+  }
   /** The permission dialog's own write. `message` is required (non-null) only when `decision` is `'deny'`, optional even then. */
   'session:permission:answer': {
     request: { sessionKey: SessionKey; permissionId: string; decision: PermissionDecision; message: string | null }
@@ -388,6 +393,7 @@ export const IPC_CHANNELS = [
   'session:close',
   'session:attach',
   'session:list',
+  'session:index',
   'session:permission:answer',
   'session:invoke',
   'session:dismiss',

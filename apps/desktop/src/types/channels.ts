@@ -14,6 +14,7 @@ type FileListingDeps = {
 }
 type FileListingResult = { readonly ok: true; readonly files: readonly string[]; readonly truncated: boolean } | { readonly ok: false; readonly message: string }
 import type { RegistryDeps } from '@/types/registry'
+import type { SessionIndex } from '@/types/session-index'
 import type { SessionScan } from '@/types/sessions'
 import type { RunSearchParams, SearchResult } from '@/types/search'
 import type { StageLauncherHandle, StageRegistry } from '@/types/stage'
@@ -31,6 +32,7 @@ export interface GateChannelDeps {
 export interface HostingChannelDeps {
   readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
   readonly store: HostedStore
+  readonly sessionIndex: SessionIndex
   /** Injectable so a test never touches a real `git` subprocess or filesystem. */
   readonly listSessionFiles: (cwd: string, deps?: FileListingDeps) => Promise<FileListingResult>
   readonly resolveStartTarget: (target: SessionStartTarget, mode: SessionStartMode, deps: ResolveStartTargetDeps) => Promise<ResolvedStartTarget>
@@ -95,6 +97,7 @@ export const QUERY_CHANNELS = [
   'runtime:preflight',
   'gate:preflight',
   'session:list',
+  'session:index',
   'session:capacity',
   'session:restore:list',
   'gh:status',

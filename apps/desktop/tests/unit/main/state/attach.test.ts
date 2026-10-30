@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentRecord, SessionRecord } from '@/types/sessions'
 import type { WorktreeEntry } from '@/types/local'
-import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers } from '@/main/state/attach'
+import { attachAgents, attachSessions, attachWorkSessions, attachWorktrees, collectOrphanNumbers } from '@/main/state/attach'
 
 function agent(overrides: Partial<AgentRecord> = {}): AgentRecord {
   return {
@@ -113,6 +113,65 @@ describe('attachWorktrees', () => {
   it('a worktree whose unresolved is set never attaches', () => {
     const attached = attachWorktrees({ number: 79, linked: null }, [worktreeEntry({ correlation: null, unresolved: 'no-rung-matched' })])
     expect(attached).toEqual([])
+  })
+})
+
+describe('attachWorkSessions', () => {
+  function work(overrides: Partial<SessionRecord> = {}): SessionRecord {
+    return {
+      sessionId: 'work1',
+      repoId: 'r1' as SessionRecord['repoId'],
+      cwd: null,
+      worktreePath: null,
+      role: 'other',
+      roleEvidence: null,
+      itemNumber: null,
+      customTitle: null,
+      summary: null,
+      firstPrompt: null,
+      gitBranch: null,
+      lastActivityAt: '2026-01-01T00:00:00Z',
+      idleMs: 0,
+      activity: 'idle',
+      agentIds: [],
+      ...overrides,
+    }
+  }
+  const main = worktreeEntry({ path: '/repo', isMain: true, branch: 'dev', correlation: null, unresolved: 'no-rung-matched' })
+  const mine = worktreeEntry({ path: '/repo/.claude/worktrees/x', branch: '79-ticket' })
+  const attached = attachWorktrees({ number: 79, linked: null }, [mine])
+  const issue = { number: 79, kind: 'issue' as const }
+
+  it('matches a session whose cwd sits inside the ticket’s worktree', () => {
+    const result = attachWorkSessions(issue, [work({ cwd: '/repo/.claude/worktrees/x/src' })], [main, mine], attached)
+    expect(result.map((s) => s.match)).toEqual(['worktree'])
+  })
+
+  it('uses the most specific worktree, so a nested worktree never matches the main checkout’s ticket', () => {
+    const mainTicket = attachWorktrees({ number: 5, linked: null }, [worktreeEntry({ path: '/repo', isMain: true, correlation: { number: 5, rung: 'branch-name' } })])
+    const result = attachWorkSessions({ number: 5, kind: 'issue' }, [work({ cwd: '/repo/.claude/worktrees/x' })], [main, mine], mainTicket)
+    expect(result).toEqual([])
+  })
+
+  it('matches by git branch when the cwd is elsewhere', () => {
+    const result = attachWorkSessions(issue, [work({ cwd: '/elsewhere', gitBranch: '79-ticket' })], [main, mine], attached)
+    expect(result.map((s) => s.match)).toEqual(['branch'])
+  })
+
+  it('matches a ticket-label title for an issue and a pull request, never a longer number', () => {
+    const titled = (customTitle: string) => work({ customTitle })
+    expect(attachWorkSessions({ number: 47, kind: 'issue' }, [titled('#47 x'), titled('#47'), titled('#470 x'), titled('PR#47 x')], [], []).map((s) => s.title)).toEqual(['#47 x', '#47'])
+    expect(attachWorkSessions({ number: 47, kind: 'pull-request' }, [titled('PR#47 x'), titled('#47 x')], [], []).map((s) => s.title)).toEqual(['PR#47 x'])
+  })
+
+  it('skips cockpit sessions', () => {
+    const result = attachWorkSessions(issue, [work({ role: 'cockpit', cwd: '/repo/.claude/worktrees/x' })], [main, mine], attached)
+    expect(result).toEqual([])
+  })
+
+  it('never matches a branch by name pattern', () => {
+    const result = attachWorkSessions(issue, [work({ cwd: '/elsewhere', gitBranch: '79-other-slug' })], [main, mine], attached)
+    expect(result).toEqual([])
   })
 })
 

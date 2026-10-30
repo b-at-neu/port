@@ -5,8 +5,9 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { PipelineItemKind } from '@/types/github'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
 import { phaseSegmentsFor } from '@/renderer/board/phase-model'
-import type { PhaseDetail, PhaseKey } from '@/types/board'
+import type { PhaseDetail, PhaseKey, TicketSessionLink, TicketSessions } from '@/types/board'
 import { segmentClass } from '@/renderer/components/phase-classes'
+import { SessionLinkRow } from '@/renderer/components/session-link-row'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 
 // One representative LabelKey per phase group, for every row but the
@@ -34,10 +35,14 @@ interface PhaseListProps {
   readonly details: Partial<Record<PhaseKey, PhaseDetail>>
   /** The current phase's own extra line (the agent summary), kept as a second meta line under its detail. */
   readonly extraCurrentLine: string | null
+  /** The session links that ran each phase, rendered under its lines — a caller with no sessions to show omits all three. */
+  readonly sessions?: TicketSessions['byPhase']
+  readonly now?: Date
+  readonly onOpenSession?: (link: TicketSessionLink) => void
   readonly className?: string
 }
 
-export function PhaseList({ stageKey, kind, merged, details, extraCurrentLine, className }: PhaseListProps) {
+export function PhaseList({ stageKey, kind, merged, details, extraCurrentLine, sessions = {}, now = new Date(), onOpenSession, className }: PhaseListProps) {
   const segments = phaseSegmentsFor({ stageKey, kind, merged })
 
   return (
@@ -45,6 +50,7 @@ export function PhaseList({ stageKey, kind, merged, details, extraCurrentLine, c
       {segments.map((segment) => {
         const isCurrent = segment.state === 'current-working' || segment.state === 'current-attention'
         const detail = details[segment.phase] ?? null
+        const links = sessions[segment.phase] ?? []
         return (
           <div key={segment.phase} className="flex items-start gap-2">
             <span aria-hidden="true" className={cn('mt-1 size-2 shrink-0 rounded-full', segmentClass(segment))} />
@@ -63,6 +69,13 @@ export function PhaseList({ stageKey, kind, merged, details, extraCurrentLine, c
                 )
               ) : null}
               {isCurrent && extraCurrentLine !== null ? <span className="text-meta text-muted-foreground">{extraCurrentLine}</span> : null}
+              {links.length > 0 && onOpenSession !== undefined ? (
+                <div className="mt-0.5 flex flex-col gap-0.5">
+                  {links.map((link) => (
+                    <SessionLinkRow key={link.key} link={link} now={now} onOpen={onOpenSession} />
+                  ))}
+                </div>
+              ) : null}
             </div>
           </div>
         )

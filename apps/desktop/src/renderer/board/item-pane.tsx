@@ -1,42 +1,45 @@
 // The Board's detail pane content, inside the shared `DetailPane` shell:
-// title, phase pill, `PhaseList`, held detail, actions.
+// header, actions and decisions, `PhaseList` with its session links, held detail.
 import { useSyncExternalStore } from 'react'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useNavigate } from '@tanstack/react-router'
 import { Button } from '@/renderer/components/ui/button'
+import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { DetailPane } from '@/renderer/components/detail-pane'
+import { ErrorBanner } from '@/renderer/components/error-banner'
 import { PaneCloseButton } from '@/renderer/components/pane-close-button'
 import { PhaseList } from '@/renderer/components/phase-list'
 import { PhasePill } from '@/renderer/components/phase-pill'
+import { SessionLinkRow } from '@/renderer/components/session-link-row'
 import { OPERATOR_ACTIONS, OPERATOR_DECISIONS } from '@/types/actions'
 import type { OperatorAction } from '@/types/actions'
-import type { BoardItemRow } from '@/types/board'
-import { stageLinksFor } from '@/renderer/board/stage-links'
-import type { StageLink } from '@/types/board'
-import type { DispatchOwner, DispatchRecord } from '@/types/dispatch'
+import type { BoardItemRow, TicketSessionLink } from '@/types/board'
+import type { DispatchOwner } from '@/types/dispatch'
 import type { TickReport } from '@/types/tick'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { openDecision } from '@/renderer/decision/controller'
 import { openReviewDialog } from '@/renderer/gate/controller'
 import { itemActionState, runItemAction, subscribeItemActions } from '@/renderer/board/actions'
-import { actionButtonLabel, actionPendingLabel, actionResultCopy, decisionButtonLabel, openPrLinkLabel, openTicketLinkLabel, reviewPlanButtonLabel, stageLinkLabel, stageSessionsSectionLabel } from '@/renderer/board/copy'
+import { actionButtonLabel, actionPendingLabel, actionResultCopy, decisionButtonLabel, openPrLinkLabel, openTicketLinkLabel, reviewPlanButtonLabel } from '@/renderer/board/copy'
+import { yourSessionsLabel } from '@/renderer/board/session-copy'
 import { actionNoteFor, agentSummaryOf, decisionNoteFor, phaseLabelFor, phaseToneFor, stageTargetsOf } from '@/renderer/board/row-model'
 import { itemDetailLines } from '@/renderer/board/tick'
 import { phaseDetailsFor } from '@/renderer/board/phase-history'
+import { currentPhaseFor } from '@/renderer/board/phase-model'
+import { ticketSessionsFor } from '@/renderer/board/ticket-sessions'
 import { useIpcQuery } from '@/renderer/data/query'
+import { prSuffixOf } from '@/utils/tickets/ticket'
 
 interface ItemPaneProps {
   readonly row: BoardItemRow
   readonly report: TickReport | undefined
   readonly owner: DispatchOwner
-  /** This item's repository's own dispatch records — `[]` for a repository this app doesn't dispatch. */
-  readonly records: readonly DispatchRecord[]
   readonly onClose: () => void
 }
 
-export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps) {
+export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
   const { item, ticket } = row
   const navigate = useNavigate()
   const state = useSyncExternalStore(subscribeItemActions, () => itemActionState(item.repoId, item.number))
@@ -46,13 +49,20 @@ export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps
   const availableActions = OPERATOR_ACTIONS.filter((action) => row.actions[action].available)
   const availableDecisions = OPERATOR_DECISIONS.filter((decision) => row.decisions[decision].available)
   const agentSummary = agentSummaryOf(item.agents, item.sessions)
-  const stageLinks = stageLinksFor(records, stageTargetsOf(row))
 
-  const sessions = useIpcQuery('session:list')
-  const liveLink = stageLinks.find((link): link is Extract<StageLink, { readonly kind: 'live' }> => link.kind === 'live')
-  const liveSnapshot = liveLink !== undefined ? ((sessions.data ?? []).find((snapshot) => snapshot.sessionKey === liveLink.sessionKey) ?? null) : null
-  const currentCostUsd = liveSnapshot?.usage?.costUsd ?? null
+  const liveSessions = useIpcQuery('session:list')
+  const sessionIndex = useIpcQuery('session:index')
   const now = new Date()
+  const ticketSessions = ticketSessionsFor({
+    repoId: item.repoId,
+    targets: stageTargetsOf(row),
+    index: sessionIndex.data ?? [],
+    snapshots: liveSessions.data ?? [],
+    issue: ticket.issue,
+    pullRequest: ticket.pullRequest,
+  })
+  const currentPhase = currentPhaseFor({ stageKey: row.stageLabel?.key ?? null, kind: item.kind })
+  const liveStageLink = currentPhase === null ? undefined : (ticketSessions.byPhase[currentPhase] ?? []).findLast((link) => link.state === 'live' && link.who.kind === 'stage')
   const phaseDetails = phaseDetailsFor({
     history: item.stageHistory,
     kind: item.kind,
@@ -60,18 +70,18 @@ export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps
     merged: item.mergedAt !== null,
     viewer: row.viewer,
     now,
-    currentCostUsd,
+    currentCostUsd: liveStageLink?.costUsd ?? null,
   })
 
-  function openStageLink(link: StageLink): void {
-    if (link.kind === 'live') {
-      void navigate({ to: ROUTE_IDS.session, search: { key: link.sessionKey, pane: null } })
+  function openSession(link: TicketSessionLink): void {
+    if (link.open.kind === 'session') {
+      void navigate({ to: ROUTE_IDS.session, search: { key: link.open.sessionKey, pane: null } })
       return
     }
     void navigate({
       to: ROUTE_IDS.transcript,
-      params: { sessionId: link.sessionId },
-      search: { agentId: null, from: 'board', focusIndex: null, title: ticket.ref.title, item: null },
+      params: { sessionId: link.open.sessionId },
+      search: { agentId: link.open.agentId, from: 'board', focusIndex: null, title: ticket.ref.title, item: null },
     })
   }
 
@@ -95,6 +105,7 @@ export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps
 
   const note = actionNoteFor(row, state)
   const decisionNote = decisionNoteFor(row)
+  const prSuffix = prSuffixOf(ticket.ref)
 
   return (
     <DetailPane onClose={onClose}>
@@ -103,12 +114,14 @@ export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps
           <h2 className="text-title font-semibold text-foreground">{ticket.ref.title}</h2>
           <PaneCloseButton label="Close details" onClick={onClose} />
         </div>
-        <div className="flex items-center gap-2 text-small text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2 text-small text-muted-foreground">
           <span>
             {ticket.ref.kind === 'issue' ? '#' : 'PR#'}
             {ticket.ref.number}
+            {prSuffix !== null ? ` ${prSuffix}` : ''}
           </span>
           <span>{item.repo}</span>
+          <PhasePill tone={phaseToneFor(row)} label={phaseLabelFor(row)} />
         </div>
         <div className="flex items-center gap-3 text-small">
           {ticket.issue !== null ? (
@@ -123,30 +136,6 @@ export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps
           ) : null}
         </div>
       </div>
-      <PhasePill tone={phaseToneFor(row)} label={phaseLabelFor(row)} />
-      <PhaseList stageKey={row.stageLabel?.key ?? null} kind={item.kind} merged={item.mergedAt !== null} details={phaseDetails} extraCurrentLine={agentSummary} />
-      {stageLinks.length > 0 ? (
-        <div className="flex flex-col gap-1">
-          <span className="text-meta text-muted-foreground">{stageSessionsSectionLabel()}</span>
-          {stageLinks.map((link) => (
-            <button
-              key={link.kind === 'live' ? link.sessionKey : `${link.sessionId}-${link.at}`}
-              type="button"
-              onClick={() => openStageLink(link)}
-              className="text-left text-small text-primary-text hover:underline"
-            >
-              {stageLinkLabel(link)}
-            </button>
-          ))}
-        </div>
-      ) : null}
-      {heldLines.length > 0 ? (
-        <div className="flex flex-col gap-1 rounded-md bg-muted px-3 py-2 text-meta text-muted-foreground">
-          {heldLines.map((line) => (
-            <div key={line}>{line}</div>
-          ))}
-        </div>
-      ) : null}
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap gap-2">
           {availableActions.map((action) => (
@@ -185,6 +174,33 @@ export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps
         {note !== null ? <p className="text-small text-muted-foreground">{note}</p> : null}
         {decisionNote !== null ? <p className="text-small text-muted-foreground">{decisionNote}</p> : null}
       </div>
+      <PhaseList
+        stageKey={row.stageLabel?.key ?? null}
+        kind={item.kind}
+        merged={item.mergedAt !== null}
+        details={phaseDetails}
+        extraCurrentLine={agentSummary}
+        sessions={ticketSessions.byPhase}
+        now={now}
+        onOpenSession={openSession}
+      />
+      {sessionIndex.isPending ? <Skeleton className="h-3 w-32" /> : null}
+      {sessionIndex.isError ? <ErrorBanner message="Couldn't load past sessions. Live sessions still show." /> : null}
+      {ticketSessions.unplaced.length > 0 ? (
+        <div className="flex flex-col gap-0.5">
+          <span className="text-meta text-muted-foreground">{yourSessionsLabel()}</span>
+          {ticketSessions.unplaced.map((link) => (
+            <SessionLinkRow key={link.key} link={link} now={now} onOpen={openSession} />
+          ))}
+        </div>
+      ) : null}
+      {heldLines.length > 0 ? (
+        <div className="flex flex-col gap-1 rounded-md bg-muted px-3 py-2 text-meta text-muted-foreground">
+          {heldLines.map((line) => (
+            <div key={line}>{line}</div>
+          ))}
+        </div>
+      ) : null}
     </DetailPane>
   )
 }
