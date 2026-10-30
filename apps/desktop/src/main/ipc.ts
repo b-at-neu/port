@@ -121,7 +121,8 @@ function getAppInfo(): AppInfo {
     app: app.getVersion(),
     electron: process.versions.electron,
     node: process.versions.node,
-    chromium: process.versions.chrome
+    chromium: process.versions.chrome,
+    commit: __PORT_BUILD_COMMIT__
   }
 }
 

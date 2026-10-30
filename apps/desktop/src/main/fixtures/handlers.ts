@@ -28,7 +28,7 @@ function transcriptSourceFor(sessionId: string, agentId: string | null, now: Dat
 export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populated'): FixtureHandlers {
   return {
     // --- Screen reads, populated -------------------------------------------
-    'app:info': () => ({ app: '0.1.0', electron: '38.2.1', node: '22.14.0', chromium: '140.0.0.0' }),
+    'app:info': () => ({ app: '0.1.0', electron: '38.2.1', node: '22.14.0', chromium: '140.0.0.0', commit: null }),
 
     'repos:list': () => ({ ok: true, repositories: FIXTURE_REPOSITORIES }),
 

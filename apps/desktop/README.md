@@ -25,7 +25,9 @@ This renders `build/icon.png` from `docs/design/port-app-icon.svg`, builds the a
 
 ## Versioning
 
-The installer version is read from `.claude/port.config.json` → `release.versionFiles[0]` (currently `plugins/port/.claude-plugin/plugin.json`), never `apps/desktop/package.json`'s own placeholder.
+The plugin and the desktop app ship at one version: `.claude/port.config.json` → `release.versionFiles` lists both manifests, and `/port:release` and the dev window bump them together. The `version-files-agree` check fails if they ever disagree.
+
+A dev build also shows the git commit next to its version, e.g. `<X.Y.Z>-dev · <sha>` (`<sha>+dirty` for an uncommitted tree) — baked in at build time, so it only updates on the next `pnpm dev` restart. A clean release shows just the version.
 
 ## Data locations
 

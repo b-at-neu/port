@@ -41,7 +41,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 **`apps/desktop/electron-builder.config.mjs`**
 - the packaging boundary, with `apps/desktop/scripts/`
 - `bundle-audit.mjs` is pure — `node:` builtins only, no `node_modules` needed
-- release version only from `release.versionFiles[0]`, never desktop's own `package.json`
+- release version read from `release.versionFiles[0]`; `apps/desktop/package.json` is itself a `versionFiles` entry, kept equal to it by the `version-files-agree` check
 
 **`apps/desktop/src/main/actions/`**
 - only `applyLabels` caller across pause/resume/retry/gate/refresh/claim/escalate/observe/decide

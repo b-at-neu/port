@@ -27,6 +27,14 @@ export function nextDevWindow(productionVersion: string, suffix = DEV_SUFFIX): s
   return `${v.major}.${v.minor}.${v.patch + 1}-${suffix}`;
 }
 
+/** `null` when every entry's `version` agrees (a single entry always agrees); otherwise one
+ *  message naming each path with its version, a non-string counted as `missing`. */
+export function versionFileDisagreement(entries: { path: string; version: unknown }[]): string | null {
+  const versions = entries.map((e) => (typeof e.version === 'string' ? e.version : null));
+  if (versions.every((v) => v === versions[0] && v !== null)) return null;
+  return entries.map((e, i) => `'${e.path}' is '${versions[i] ?? 'missing'}'`).join(' but ');
+}
+
 /** The one constructor for a dev-window branch name, shared with
  *  `scripts/release-corridor.ts` so the shape never drifts between them. */
 export function devWindowBranch(next: string): string {
@@ -63,10 +71,10 @@ function loadConfig(root: string): any {
   const repo = cfg.repo;
   const integration = cfg.branches?.integration ?? 'dev';
   const production = cfg.branches?.production ?? 'main';
-  const versionFile = cfg.release?.versionFiles?.[0];
+  const versionFiles: string[] = cfg.release?.versionFiles ?? [];
   if (!repo) throw new Error('.claude/port.config.json: repo is required');
-  if (!versionFile) throw new Error('.claude/port.config.json: release.versionFiles must name at least one file');
-  return { repo, integration, production, versionFile };
+  if (versionFiles.length === 0) throw new Error('.claude/port.config.json: release.versionFiles must name at least one file');
+  return { repo, integration, production, versionFiles, versionFile: versionFiles[0] };
 }
 
 function git(args: string[]): string {
@@ -122,17 +130,30 @@ function openDevWindow({ root, cfg, next, branch }: { root: string; cfg: any; ne
   try {
     git(['checkout', '--detach', `origin/${cfg.integration}`]);
 
-    const path = join(root, cfg.versionFile);
-    const manifest = JSON.parse(readFileSync(path, 'utf8'));
-    manifest.version = next;
-    writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
+    // Read and parse every manifest before writing any of them, so a bad entry never leaves the set half-written.
+    const manifests: { path: string; manifest: any }[] = (cfg.versionFiles as string[]).map((versionFile) => {
+      const path = join(root, versionFile);
+      let raw: string;
+      try {
+        raw = readFileSync(path, 'utf8');
+      } catch (e) {
+        throw new Error(`FAIL: could not read '${versionFile}': ${message(e)}`);
+      }
+      try {
+        return { path, manifest: JSON.parse(raw) };
+      } catch (e) {
+        throw new Error(`FAIL: '${versionFile}' is not valid JSON: ${message(e)}`);
+      }
+    });
+    for (const { manifest } of manifests) manifest.version = next;
+    for (const { path, manifest } of manifests) writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
 
     const commitMsgPath = join(root, '.temp/commit-msg.txt');
     writeFileSync(
       commitMsgPath,
       `${devWindowSubject(next)}\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n`,
     );
-    git(['add', cfg.versionFile]);
+    git(['add', ...(cfg.versionFiles as string[])]);
     git(['commit', '-F', commitMsgPath]);
     // Deliberately not bump/v<next> — release/SKILL.md's case 1 would adopt that as an in-flight release.
     git(['push', 'origin', `HEAD:refs/heads/${branch}`]);
@@ -190,6 +211,7 @@ function main(): void {
 
   if (dryRun) {
     console.log(`plan: open ${result.branch} at ${result.version} against ${cfg.integration} (dry run — nothing written or pushed)`);
+    console.log(`would write: ${cfg.versionFiles.join(', ')}`);
     return;
   }
 

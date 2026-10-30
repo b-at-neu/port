@@ -51,6 +51,7 @@ export interface AppInfo {
   electron: string
   node: string
   chromium: string
+  commit: string | null
 }
 
 /** Every failure kind `readRegistry`/`writeRegistry` can report, shared by all three channels below. */

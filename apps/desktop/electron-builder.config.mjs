@@ -12,9 +12,8 @@ const root = join(import.meta.dirname, '../..')
 
 /** Reads the release version from the one place the rest of the repository
  *  already treats as authoritative (`.claude/port.config.json` →
- *  `release.versionFiles[0]`), never `apps/desktop/package.json`'s own
- *  unbumped `0.0.0`. Throws a named error at every link that could be
- *  missing rather than falling back to a default. */
+ *  `release.versionFiles[0]`). Throws a named error at every link that
+ *  could be missing rather than falling back to a default. */
 function readVersion() {
   const configPath = join(root, '.claude/port.config.json')
   let config

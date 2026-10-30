@@ -15,6 +15,7 @@ import { ROUTE_IDS } from '@/renderer/router/routes'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import { problemLabel, registryBannerCopy } from '@/renderer/repositories/copy'
 import { useListSelection } from '@/renderer/shell/list-selection'
+import { formatAppVersion } from '@/utils/about/version'
 
 function repoName(entry: RepositoryEntry): string {
   return 'config' in entry ? entry.config.repo : entry.displayName
@@ -117,7 +118,7 @@ export function RepositoriesScreen() {
           <span>
             Electron {infoQuery.data.electron} · Chromium {infoQuery.data.chromium} · Node {infoQuery.data.node}
           </span>
-          <span>port {infoQuery.data.app}</span>
+          <span>port {formatAppVersion(infoQuery.data.app, infoQuery.data.commit)}</span>
         </div>
       ) : null}
     </Screen>
