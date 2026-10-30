@@ -222,11 +222,15 @@ export function buildGatePreflightQuery(number: number): GatePreflightQuery {
   return { document }
 }
 
+/** The one `blockedBy` selection, shared by every read that feeds `toBlockerRead`. */
+export function blockedByField(pageSize: number): string {
+  return `blockedBy(first: ${pageSize}) { totalCount nodes { number title url state } }`
+}
+
 export function buildClaimPreflightQuery(number: number): ClaimPreflightQuery {
   const labelsField = `labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }`
   const assigneesField = `assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }`
-  const blockedByField = `blockedBy(first: ${BLOCKER_PAGE_SIZE}) { totalCount nodes { number title url state } }`
-  const issueFields = `number title url state ${labelsField} ${assigneesField} ${blockedByField}`
+  const issueFields = `number title url state ${labelsField} ${assigneesField} ${blockedByField(BLOCKER_PAGE_SIZE)}`
 
   const document = [
     'query($owner: String!, $name: String!) {',

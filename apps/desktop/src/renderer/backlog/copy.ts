@@ -54,8 +54,30 @@ export function backlogFilteredEmptyCopy(repo: string): string {
   return `No open tickets in ${repo} match the label filter.`
 }
 
-export function backlogParentCopy(subIssueCount: number): string {
-  return subIssueCount === 1 ? 'This ticket has 1 sub-issue. Work on that instead.' : `This ticket has ${String(subIssueCount)} sub-issues. Work on those instead.`
+export const BACKLOG_BLOCKED_LABEL = 'Blocked'
+
+export const BACKLOG_START_ANYWAY = 'Start anyway'
+
+export const BACKLOG_BLOCKED_TOOLTIP_HEADING = 'Blocked by:'
+
+export function backlogBlockerLine(blocker: { readonly number: number; readonly title: string }): string {
+  return `#${String(blocker.number)} ${blocker.title}`
+}
+
+export function backlogBlockerTruncatedCopy(shown: number, total: number): string {
+  return `Showing ${String(shown)} of ${String(total)} blockers.`
+}
+
+export function backlogStartAnywayTitle(number: number): string {
+  return `Start #${String(number)} anyway?`
+}
+
+export function backlogBlockedReasonCopy(count: number): string {
+  return count === 1 ? "It's blocked by 1 open ticket:" : `It's blocked by ${String(count)} open tickets:`
+}
+
+export function backlogEpicReasonCopy(subIssueCount: number): string {
+  return subIssueCount === 1 ? 'It has 1 sub-issue. Work on it happens in its sub-issue.' : `It has ${String(subIssueCount)} sub-issues. Work on it happens in its sub-issues.`
 }
 
 export function backlogInvokeErrorCopy(repo: string): string {

@@ -14,6 +14,7 @@ test.beforeEach(async () => {
       issues: [
         { number: 101, title: 'Fix the thing', labels: [] },
         { number: 102, title: 'Tidy the other thing', labels: [], assignees: ['alice'] },
+        { number: 103, title: 'Ship the follow-up', labels: [], blockedBy: [{ number: 101, title: 'Fix the thing', url: 'https://github.com/acme/widgets/issues/101', state: 'OPEN' }] },
       ],
     }),
   })
@@ -83,4 +84,33 @@ test('takes over an issue assigned to someone else only after one explicit click
   const issue = state.issues.find((i) => i.number === 102)
   expect(issue?.labels).toEqual(expect.arrayContaining(['claude', 'ready', 'auto plan']))
   expect(issue?.assignees).toEqual(['octocat'])
+})
+
+test('asks before claiming a blocked issue, and claims only after Start anyway', async () => {
+  const { page } = harness
+
+  await page.getByRole('link', { name: 'Backlog', exact: true }).click()
+
+  const row = page.locator('[data-slot="backlog-row"]', { hasText: '#103' })
+  await row.waitFor({ state: 'visible' })
+  await expect(row.locator('[data-slot="backlog-blocked"]')).toContainText('Blocked')
+
+  await row.getByRole('button', { name: 'Work on' }).click()
+  await page.getByRole('menuitem', { name: 'Review the plan' }).click()
+
+  const dialog = page.getByRole('alertdialog')
+  await expect(dialog).toContainText('Start #103 anyway?')
+  await expect(dialog).toContainText("It's blocked by 1 open ticket:")
+  await expect(dialog.getByRole('link', { name: '#101 Fix the thing' })).toBeVisible()
+
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  await expect(dialog).toHaveCount(0)
+  expect(editCallsFor(await harness.calls(), '103')).toHaveLength(0)
+
+  await row.getByRole('button', { name: 'Work on' }).click()
+  await page.getByRole('menuitem', { name: 'Review the plan' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Start anyway' }).click()
+
+  await expect(page.locator('[data-sonner-toast]')).toContainText('#103 claimed')
+  expect(editCallsFor(await harness.calls(), '103')).toHaveLength(1)
 })

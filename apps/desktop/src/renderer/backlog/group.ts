@@ -29,6 +29,7 @@ export function buildBacklogGroup(repoId: RepoId, repo: string, query: BacklogQu
     updatedAt: item.updatedAt,
     labels: item.labels,
     subIssueCount: item.subIssueCount,
+    blockers: item.blockers,
   }))
   const truncatedNote = response.total > response.scanned ? backlogTruncatedCopy(response.scanned) : null
   return { kind: 'loaded', repoId, repo, items: applyLabelFilter(rows, filter), totalCount: rows.length, labelOptions: labelOptionsOf(rows, filter), truncatedNote }
