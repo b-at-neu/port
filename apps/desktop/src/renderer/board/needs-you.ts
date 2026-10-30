@@ -148,6 +148,30 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
     })
   }
 
+  for (const session of sessions) {
+    if (session.stage === null || session.repoId === null || session.phase === 'ended') continue
+    const matched = rowByKey.get(rowKey(session.repoId, session.stage.number)) ?? null
+    for (const permission of session.pendingPermissions) {
+      if (permission.protectedPath === null || permission.interaction !== null) continue
+      items.push({
+        kind: 'stage-approval',
+        repoId: session.repoId,
+        repo: matched?.item.repo ?? null,
+        number: session.stage.number,
+        title: matched?.item.title ?? null,
+        url: matched?.item.url ?? null,
+        ticket: matched?.ticket.ref ?? null,
+        at: permission.requestedAt,
+        matchedRow: matched,
+        sessionKey: session.sessionKey,
+        permissionId: permission.permissionId,
+        agent: session.stage.agent,
+        toolName: permission.toolName,
+        path: permission.protectedPath,
+      })
+    }
+  }
+
   // A blocked label on the same item is the same fact as its live session's hand-back, so only one row renders.
   const stageBlockedKeys = new Set<string>()
   for (const session of sessions) {

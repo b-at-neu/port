@@ -71,6 +71,12 @@ describe('dismissKeyOf — stage kinds', () => {
     expect(dismissKeyOf(question('p1'))).not.toBe(dismissKeyOf(question('p2')))
   })
 
+  it('stage-approval: keyed by the permission request, so each pending edit is its own event', () => {
+    const approval = (permissionId: string) => asItem({ ...base(), kind: 'stage-approval', permissionId, sessionKey: 'hosted-1', agent: 'impl', toolName: 'Edit', path: '.claude/settings.json' })
+    expect(dismissKeyOf(approval('p1'))).toBe('stage-approval:repo-a:554:p1')
+    expect(dismissKeyOf(approval('p1'))).not.toBe(dismissKeyOf(approval('p2')))
+  })
+
   it.each(['stage-questions', 'stage-blocked'] as const)('%s: keyed by the session and when it handed back', (kind) => {
     const handback = (at: string) => asItem({ ...base({ at }), kind, sessionKey: 'hosted-1', text: null })
     expect(dismissKeyOf(handback('t1'))).toBe(dismissKeyOf(handback('t1')))

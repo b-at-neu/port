@@ -13,6 +13,7 @@ import { useIpcQuery, ipcQueryOptions } from '@/renderer/data/query'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { ROUTE_IDS } from '@/renderer/router/routes'
+import { router } from '@/renderer/router/router'
 import { needsYouItems } from '@/renderer/board/needs-you'
 import type { NeedsYouItem as NeedsYouItemModel } from '@/types/board'
 import { registerListNavigator } from '@/renderer/shell/stores'
@@ -35,6 +36,7 @@ function hasDetail(item: NeedsYouItemModel): boolean {
   if (item.kind === 'usage-limit') return true
   if (item.kind === 'stage-question') return true
   if (item.kind === 'stage-denial') return true
+  if (item.kind === 'stage-approval') return true
   if (item.kind === 'stage-blocked') return true
   return false
 }
@@ -76,6 +78,21 @@ function DetailBody({ item, onSent }: { readonly item: NeedsYouItemModel; readon
         <p className="font-mono">
           {item.denial.toolName}: {item.denial.inputSummary}
         </p>
+      </div>
+    )
+  }
+  if (item.kind === 'stage-approval') {
+    return (
+      <div className="flex items-start justify-between gap-3 border-t border-border px-4 py-2 text-meta text-muted-foreground">
+        <div>
+          <p className="font-mono">
+            {item.toolName}: {item.path}
+          </p>
+          <p>This path is protected by sessionRequiredPaths. Approving lets this one edit through; port asks again for the next one.</p>
+        </div>
+        <Button variant="ghost" size="small" onClick={() => void router.navigate({ to: ROUTE_IDS.session, search: { key: item.sessionKey } })}>
+          Open session
+        </Button>
       </div>
     )
   }
@@ -243,6 +260,14 @@ export function NeedsYouScreen() {
                           pending={pendingKey === key}
                           onToggle={() => setExpandedKey((c) => (c === key ? null : key))}
                           onAction={() => runRowAction(item)}
+                          onSecondaryAction={() =>
+                            runSecondaryAction(item, {
+                              onToast: (message) => {
+                                toast(message)
+                                void refresh({ announce: false })
+                              },
+                            })
+                          }
                           onDismiss={() => dismissItems([item])}
                         />
                       )
@@ -266,6 +291,7 @@ function Row({
   pending,
   onToggle,
   onAction,
+  onSecondaryAction,
   onDismiss,
 }: {
   readonly item: NeedsYouItemModel
@@ -275,6 +301,7 @@ function Row({
   readonly pending: boolean
   readonly onToggle: () => void
   readonly onAction: () => void
+  readonly onSecondaryAction: () => void
   readonly onDismiss: () => void
 }) {
   const action = actionFor(item, now)
@@ -290,7 +317,7 @@ function Row({
         actionPending={pending}
         onAction={onAction}
         secondaryActionLabel={action.secondaryLabel}
-        onSecondaryAction={action.secondaryLabel !== undefined ? () => runSecondaryAction(item, { onToast: () => undefined }) : undefined}
+        onSecondaryAction={action.secondaryLabel !== undefined ? onSecondaryAction : undefined}
         onDismiss={onDismiss}
         expandable={hasDetail(item)}
         expanded={expanded}

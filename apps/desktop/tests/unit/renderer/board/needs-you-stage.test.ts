@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
 import type { RepoDispatchStatus } from '@/types/dispatch'
-import type { SessionKey } from '@/types/hosting'
+import type { PendingPermission, SessionKey } from '@/types/hosting'
 import type { InterruptedStage, StageDenial } from '@/types/stage'
 import type { RepositoryState } from '@/types/state'
 import { needsYouItems } from '@/renderer/board/needs-you'
@@ -54,6 +54,52 @@ describe('stage-denial liveness', () => {
     expect(needsYouItems(snapshot, NOW, [])).toEqual([])
     const unkeyed = snapshotOf([dispatchStatus({ denials: [{ ...denial, sessionKey: null }] })])
     expect(needsYouItems(unkeyed, NOW, [idleAfter('2026-01-01T00:40:00.000Z')])).toEqual([])
+  })
+})
+
+describe('stage-approval items', () => {
+  const stage = { agent: 'impl' as const, number: 300, kind: 'issue' as const, trigger: 'planApproved' as const }
+  const permission = (permissionId: string, overrides: Partial<PendingPermission> = {}): PendingPermission => ({
+    permissionId,
+    toolName: 'Edit',
+    input: {},
+    title: null,
+    displayName: null,
+    description: null,
+    decisionReason: null,
+    blockedPath: null,
+    protectedPath: '.claude/settings.json',
+    agentId: null,
+    requestedAt: '2026-01-01T00:30:00.000Z',
+    sessionGrant: null,
+    interaction: null,
+    ...overrides,
+  })
+  const sessionWith = (pendingPermissions: PendingPermission[], phase: 'streaming' | 'ended' = 'streaming') => stageSession({ key: 'hosted-300', repoId: REPO_A, stage, phase, pendingPermissions })
+
+  it('derives one item for a pending protected edit', () => {
+    const items = needsYouItems(snapshotOf([]), NOW, [sessionWith([permission('p1')])])
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ kind: 'stage-approval', number: 300, sessionKey: 'hosted-300', permissionId: 'p1', agent: 'impl', toolName: 'Edit', path: '.claude/settings.json', at: '2026-01-01T00:30:00.000Z' })
+  })
+
+  it('derives one row per pending protected edit', () => {
+    const items = needsYouItems(snapshotOf([]), NOW, [sessionWith([permission('p1'), permission('p2', { requestedAt: '2026-01-01T00:40:00.000Z', protectedPath: 'CLAUDE.md' })])])
+    expect(items.map((i) => (i.kind === 'stage-approval' ? i.permissionId : null))).toEqual(['p2', 'p1'])
+  })
+
+  it('yields nothing for an ended session', () => {
+    expect(needsYouItems(snapshotOf([]), NOW, [sessionWith([permission('p1')], 'ended')])).toEqual([])
+  })
+
+  it('yields nothing for a permission with no protected path', () => {
+    expect(needsYouItems(snapshotOf([]), NOW, [sessionWith([permission('p1', { protectedPath: null })])])).toEqual([])
+  })
+
+  it('keeps a question as a stage-question, never a stage-approval', () => {
+    const question = permission('p1', { toolName: 'AskUserQuestion', protectedPath: null, interaction: { kind: 'question' as const, questions: [{ question: 'Which?', header: 'Branch', multiSelect: false, options: [] }] } })
+    const items = needsYouItems(snapshotOf([]), NOW, [sessionWith([question])])
+    expect(items.map((i) => i.kind)).toEqual(['stage-question'])
   })
 })
 

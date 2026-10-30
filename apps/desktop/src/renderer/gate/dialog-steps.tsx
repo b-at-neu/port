@@ -30,6 +30,7 @@ export function LoadingStep({ hint }: { readonly hint: string }) {
 export function ReviewingStep({ state }: { readonly state: Extract<GateState, { readonly step: 'reviewing' }> }) {
   const { preflight, verdict, ownership } = state
   const disabledReason = gateDisabledReason(ownership)
+  const required = preflight.sessionRequired && preflight.sessionRequiredReason !== null ? sessionRequiredCopy(preflight.number, preflight.title, preflight.sessionRequiredReason, ownership) : null
 
   return (
     <>
@@ -41,11 +42,11 @@ export function ReviewingStep({ state }: { readonly state: Extract<GateState, { 
       <a href={preflight.url} target="_blank" rel="noreferrer" className="text-small text-primary-text hover:underline">
         Open on GitHub
       </a>
-      {preflight.sessionRequired && preflight.sessionRequiredReason !== null ? (
+      {required !== null ? (
         <div className="flex flex-col gap-1 rounded-md bg-attention-pill px-3 py-2 text-small text-attention-pill-foreground">
-          <span className="font-medium">{sessionRequiredCopy(preflight.number, preflight.title, preflight.sessionRequiredReason).banner}</span>
-          <span>{sessionRequiredCopy(preflight.number, preflight.title, preflight.sessionRequiredReason).note}</span>
-          <code className="rounded bg-background/50 px-1.5 py-1 font-mono text-meta">{sessionRequiredCopy(preflight.number, preflight.title, preflight.sessionRequiredReason).launchLine}</code>
+          <span className="font-medium">{required.banner}</span>
+          <span>{required.note}</span>
+          {required.launchLine !== null ? <code className="rounded bg-background/50 px-1.5 py-1 font-mono text-meta">{required.launchLine}</code> : null}
         </div>
       ) : null}
       {preflight.autoPlan ? <p className="text-small text-muted-foreground">{autoPlanNoteCopy(ownership)}</p> : null}
@@ -65,7 +66,7 @@ export function ReviewingStep({ state }: { readonly state: Extract<GateState, { 
           Request changes
         </Button>
         <Button onClick={submitApprove} disabled={disabledReason !== null}>
-          {primaryApproveLabel(preflight.sessionRequired)}
+          {primaryApproveLabel(preflight.sessionRequired, ownership)}
         </Button>
       </DialogFooter>
     </>
@@ -128,7 +129,7 @@ export function ErrorStep({ line, note }: { readonly line: string; readonly note
 }
 
 export function ResultStep({ state }: { readonly state: Extract<GateState, { readonly step: 'result' }> }) {
-  const copy = resultCopy({ number: state.preflight.number, decision: state.decision, response: state.response, sessionRequired: state.preflight.sessionRequired })
+  const copy = resultCopy({ number: state.preflight.number, decision: state.decision, response: state.response, sessionRequired: state.preflight.sessionRequired, ownership: state.ownership })
   return (
     <>
       <DialogHeader>

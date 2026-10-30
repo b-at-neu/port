@@ -210,6 +210,7 @@ export type NeedsYouItem =
   | (NeedsYouItemBase & { readonly kind: 'held'; readonly held: TickHeld; readonly owner: DispatchOwner | null })
   | (NeedsYouItemBase & { readonly kind: 'stalled'; readonly claim: TickClaim })
   | (NeedsYouItemBase & { readonly kind: 'stage-question'; readonly sessionKey: SessionKey; readonly permissionId: string; readonly questions: readonly AskQuestion[] })
+  | (NeedsYouItemBase & { readonly kind: 'stage-approval'; readonly sessionKey: SessionKey; readonly permissionId: string; readonly agent: StageAgent; readonly toolName: string; readonly path: string })
   | (NeedsYouItemBase & { readonly kind: 'stage-questions' | 'stage-blocked'; readonly sessionKey: SessionKey; readonly text: string | null })
   | (NeedsYouItemBase & { readonly kind: 'stage-denial'; readonly denial: StageDenial })
   | (NeedsYouItemBase & { readonly kind: 'stage-interrupted'; readonly interrupted: InterruptedStage })
@@ -220,8 +221,8 @@ export type NeedsYouItem =
 /** The Needs you item keys last seen, by repository — `''` for an item with no repository. */
 export type NeedsYouBaseline = Readonly<Record<string, readonly string[]>>
 
-/** The groups Needs you renders — `stage-question`/`stage-questions` share `questions`, and `stage-blocked` joins `blocked`. */
-export type NeedsYouGroupKey = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'blocked' | 'questions' | 'denied' | 'interrupted' | 'usage-limit' | 'held' | 'stalled' | 'budget' | 'half-labelled'
+/** The groups Needs you renders — `stage-question`/`stage-questions` share `questions`, `stage-approval` is `approvals`, and `stage-blocked` joins `blocked`. */
+export type NeedsYouGroupKey = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'blocked' | 'questions' | 'approvals' | 'denied' | 'interrupted' | 'usage-limit' | 'held' | 'stalled' | 'budget' | 'half-labelled'
 
 export const PHASE_KEYS = ['plan', 'planReview', 'implement', 'review', 'revision', 'merge'] as const
 

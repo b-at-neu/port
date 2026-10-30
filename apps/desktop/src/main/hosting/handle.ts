@@ -228,6 +228,11 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
       claudeSessionId = message.session_id
       // Only 'starting' -> 'ready' is assigned here, so a send() already in 'streaming' stays there.
       if (phase === 'starting') phase = 'ready'
+      if (firstInit && params.stage !== null && message.permissionMode !== 'default') {
+        console.warn(`[hosting] stage session ${params.sessionKey} started in ${message.permissionMode}; reset to default`)
+        pinDefaultMode()
+        controls.adoptApprovedMode('default')
+      }
       emitStatus()
       if (firstInit) params.onSessionId?.(message.session_id)
       return
@@ -245,6 +250,14 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
 
   // buildSessionOptions sets pathToClaudeCodeExecutable unconditionally, never the SDK's own bundled fallback.
   const stream = query({ prompt: input.stream, options })
+
+  // The agent file's own mode can override the one in options, which would deny a protected edit instead of pausing it.
+  function pinDefaultMode(): void {
+    stream.setPermissionMode('default').catch((error: unknown) => {
+      console.error(`[hosting] could not reset stage session ${params.sessionKey} to the default permission mode`, error)
+    })
+  }
+  if (params.stage !== null) pinDefaultMode()
   void capabilities.start(stream)
   void controls.start(stream)
 

@@ -37,13 +37,20 @@ export function noPlanNoteCopy(): string {
 interface SessionRequiredCopy {
   readonly banner: string
   readonly note: string
-  readonly launchLine: string
+  readonly launchLine: string | null
 }
 
 /** The `SESSION REQUIRED` banner — names `/port:implement` and the fact that
  *  no agent picks it up, literally, so `scripts/checks/desktop-gate.ts` can
- *  pin the consequence mechanically. */
-export function sessionRequiredCopy(number: number, title: string, reason: string): SessionRequiredCopy {
+ *  pin the consequence mechanically. An app-owned repository runs the plan itself and asks per edit. */
+export function sessionRequiredCopy(number: number, title: string, reason: string, ownership: OwnershipSummary): SessionRequiredCopy {
+  if (ownership.kind === 'app') {
+    return {
+      banner: 'This plan edits protected paths.',
+      note: `${reason}. port runs it as usual and asks you in Needs you before each protected edit.`,
+      launchLine: null,
+    }
+  }
   return {
     banner: "⚠️ You'll run this one yourself.",
     note: `The plan is marked session-required: ${reason}. Approving labels it \`plan approved\`, but no agent will ever pick it up — open a named session and run /port:implement ${String(number)}.`,
@@ -51,8 +58,8 @@ export function sessionRequiredCopy(number: number, title: string, reason: strin
   }
 }
 
-export function primaryApproveLabel(sessionRequired: boolean): string {
-  return sessionRequired ? "Approve — I'll run it myself" : 'Approve'
+export function primaryApproveLabel(sessionRequired: boolean, ownership: OwnershipSummary): string {
+  return sessionRequired && ownership.kind !== 'app' ?"Approve — I'll run it myself" : 'Approve'
 }
 
 export function feedbackHint(number: number): string {
@@ -69,8 +76,8 @@ interface ResultCopy {
  *  own **Result step** table). `sessionRequired` only changes the `approve`/
  *  `applied` line's own wording — announce-instead-of-dispatch, rather than
  *  "a cockpit dispatches next". */
-export function resultCopy(params: { readonly number: number; readonly decision: GateDecision; readonly response: GateAnswerResponse; readonly sessionRequired: boolean }): ResultCopy {
-  const { number, decision, response, sessionRequired } = params
+export function resultCopy(params: { readonly number: number; readonly decision: GateDecision; readonly response: GateAnswerResponse; readonly sessionRequired: boolean; readonly ownership: OwnershipSummary }): ResultCopy {
+  const { number, decision, response, sessionRequired, ownership } = params
   const n = String(number)
 
   switch (response.kind) {
@@ -87,7 +94,7 @@ export function resultCopy(params: { readonly number: number; readonly decision:
         actions: ['try-again'],
       }
     case 'answered':
-      return answeredCopy(n, decision, response, sessionRequired)
+      return answeredCopy(n, decision, response, sessionRequired, ownership)
   }
 }
 
@@ -106,16 +113,13 @@ export function refusedVerdictCopy(number: number, verdict: Exclude<GateVerdict,
   }
 }
 
-function answeredCopy(n: string, decision: GateDecision, response: Extract<GateAnswerResponse, { kind: 'answered' }>, sessionRequired: boolean): ResultCopy {
+function answeredCopy(n: string, decision: GateDecision, response: Extract<GateAnswerResponse, { kind: 'answered' }>, sessionRequired: boolean, ownership: OwnershipSummary): ResultCopy {
   const { comment, labels } = response
 
   if (labels.kind === 'applied') {
     if (decision === 'approve') {
       const line = `#${n} approved.`
-      const note = sessionRequired
-        ? 'Session-required — this announces the /port:implement command instead of dispatching.'
-        : 'A cockpit assigned to you dispatches implementation on its next tick.'
-      return { line, note, actions: ['dismiss'] }
+      return { line, note: approvedNote(sessionRequired, ownership), actions: ['dismiss'] }
     }
     return { line: `#${n} moved to \`plan changes requested\`.`, note: 'Your feedback is on the issue.', actions: ['dismiss'] }
   }
@@ -129,6 +133,12 @@ function answeredCopy(n: string, decision: GateDecision, response: Extract<GateA
   }
 
   return labelOnlyCopy(n, labels)
+}
+
+function approvedNote(sessionRequired: boolean, ownership: OwnershipSummary): string {
+  if (sessionRequired && ownership.kind === 'app') return 'port dispatches implementation on its next poll and asks you in Needs you before each protected edit.'
+  if (sessionRequired) return 'Session-required — this announces the /port:implement command instead of dispatching.'
+  return 'A cockpit assigned to you dispatches implementation on its next tick.'
 }
 
 function labelAbortDetail(labels: Extract<GateAnswerResponse, { kind: 'answered' }>['labels']): string {

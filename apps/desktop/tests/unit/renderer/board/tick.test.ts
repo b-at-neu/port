@@ -36,6 +36,13 @@ describe('heldDetailCopy', () => {
     expect(heldDetailCopy({ ...base, reason: 'session-required' })).toBe('#118 session required — run /port:implement.')
   })
 
+  it('names Needs you, not /port:implement, for a session-required hold while this app owns dispatch', () => {
+    const held: TickHeld = { ...base, reason: 'session-required' }
+    expect(heldDetailCopy(held, 'app')).toBe('#118 is marked session-required — port runs it and asks you in Needs you before each protected edit.')
+    expect(heldDetailCopy(held, 'terminal')).toBe('#118 session required — run /port:implement.')
+    expect(heldDetailCopy(held, 'none')).toBe('#118 session required — run /port:implement.')
+  })
+
   it('names the blocker and contended files for a contended hold (#106)', () => {
     const held: TickHeld = {
       number: 118,

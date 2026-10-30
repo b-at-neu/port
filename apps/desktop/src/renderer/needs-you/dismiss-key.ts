@@ -22,6 +22,7 @@ function eventOf(item: NeedsYouItem): string {
     case 'stage-denial':
       return item.denial.id
     case 'stage-question':
+    case 'stage-approval':
       return item.permissionId
     case 'stage-questions':
     case 'stage-blocked':

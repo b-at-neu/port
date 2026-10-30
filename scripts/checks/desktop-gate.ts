@@ -145,6 +145,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     const missing: string[] = [];
     if (!text.includes('/port:implement')) missing.push("'/port:implement'");
     if (!text.includes('no agent will ever pick it up')) missing.push("'no agent will ever pick it up'");
+    if (!text.includes('asks you in Needs you')) missing.push("the app-owned session-required line ('asks you in Needs you')");
     if (!text.includes('this app owns nothing here')) missing.push(`the terminal-owned disabled reason ("this app owns nothing here")`);
     if (!text.includes("can't be read")) missing.push(`the unreadable disabled reason ("can't be read")`);
     if (!text.includes('stand down from the plan gate')) missing.push('the unreadable disabled reason\'s stand-down note');

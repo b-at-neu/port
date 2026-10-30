@@ -89,4 +89,5 @@ export type GateState =
       readonly decision: GateDecision
       readonly feedback: string | null
       readonly response: GateAnswerResponse
+      readonly ownership: OwnershipSummary
     }

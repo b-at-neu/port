@@ -107,6 +107,16 @@ describe('notificationFor — stage sessions', () => {
     expect(notificationFor(snapshot({ stage }), snapshot({ stage, pendingPermissions: [question] }), 'widgets')).toBeNull()
   })
 
+  it('does not notify for a protected stage edit, which Needs you lists as an approval', () => {
+    const protectedEdit = { ...permission, protectedPath: '.claude/settings.json' }
+    expect(notificationFor(snapshot({ stage }), snapshot({ stage, pendingPermissions: [protectedEdit] }), 'widgets')).toBeNull()
+  })
+
+  it('still notifies an operator session for the same protected-path permission', () => {
+    const protectedEdit = { ...permission, protectedPath: '.claude/settings.json' }
+    expect(notificationFor(snapshot(), snapshot({ pendingPermissions: [protectedEdit] }), 'widgets')?.kind).toBe('needs-you')
+  })
+
   it('still notifies for a stage permission that has no Needs you row', () => {
     expect(notificationFor(snapshot({ stage }), snapshot({ stage, pendingPermissions: [permission] }), 'widgets')?.kind).toBe('needs-you')
     expect(notificationFor(snapshot({ stage }), snapshot({ stage, pendingPermissions: [plan] }), 'widgets')?.kind).toBe('needs-you')
