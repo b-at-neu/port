@@ -21,5 +21,8 @@ export const APP_COMMANDS: readonly AppCommandSpec[] = [
 ]
 
 /** Every command a menu click or a notification click can push — the renderer validates
- *  `kind` against `APP_COMMANDS` (plus `open-session`) and ignores anything unknown. */
-export type AppCommand = { readonly kind: AppCommandSpec['kind'] } | { readonly kind: 'open-session'; readonly sessionKey: SessionKey }
+ *  `kind` against `APP_COMMANDS` (plus `open-session` and `open-needs-you`) and ignores anything unknown. */
+export type AppCommand =
+  | { readonly kind: AppCommandSpec['kind'] }
+  | { readonly kind: 'open-session'; readonly sessionKey: SessionKey }
+  | { readonly kind: 'open-needs-you'; readonly focus: string | null }

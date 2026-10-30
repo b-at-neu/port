@@ -1,7 +1,9 @@
 // Dismissals live only in this renderer's localStorage, per event key — never on GitHub or in main.
 // A malformed stored value reads as empty, which fails toward showing every item.
 import { useSyncExternalStore } from 'react'
-import type { NeedsYouItem } from '@/types/board'
+import type { BoardSnapshot, NeedsYouItem } from '@/types/board'
+import type { HostedSessionSnapshot } from '@/types/hosting'
+import { needsYouItems } from '@/renderer/board/needs-you'
 import { dismissKeyOf } from '@/renderer/needs-you/dismiss-key'
 
 const STORAGE_KEY = 'port.needsYou.dismissed'
@@ -109,4 +111,9 @@ export function useDismissed(): ReadonlySet<string> {
 /** Items whose event key is not dismissed — every count and list reads through this. */
 export function visibleItems(items: readonly NeedsYouItem[], dismissed: ReadonlySet<string>): readonly NeedsYouItem[] {
   return items.filter((item) => !dismissed.has(dismissKeyOf(item)))
+}
+
+/** The one composition of derived items and dismissals, shared by the hook and the notifier. */
+export function visibleNeedsYouItems(snapshot: BoardSnapshot, now: Date, sessions: readonly HostedSessionSnapshot[], dismissed: ReadonlySet<string>): readonly NeedsYouItem[] {
+  return visibleItems(needsYouItems(snapshot, now, sessions), dismissed)
 }

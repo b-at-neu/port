@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { boardSearchFromRaw, historySearchFromRaw, repoSearchFromRaw, searchSearchFromRaw, sessionSearchFromRaw, transcriptSearchFromRaw } from '@/renderer/router/routes'
+import { boardSearchFromRaw, historySearchFromRaw, needsYouSearchFromRaw, repoSearchFromRaw, searchSearchFromRaw, sessionSearchFromRaw, transcriptSearchFromRaw } from '@/renderer/router/routes'
 
 describe('transcriptSearchFromRaw', () => {
   it('reads an invalid focusIndex as null', () => {
@@ -80,6 +80,19 @@ describe('historySearchFromRaw', () => {
     expect(historySearchFromRaw({}).archived).toBe(false)
     expect(historySearchFromRaw({ archived: 'true' }).archived).toBe(false)
     expect(historySearchFromRaw({ archived: false }).archived).toBe(false)
+  })
+})
+
+describe('needsYouSearchFromRaw', () => {
+  it('keeps a non-empty focus key', () => {
+    expect(needsYouSearchFromRaw({ focus: 'plan-review:repo-a:552:2026-01-01T00:00:00Z' }).focus).toBe('plan-review:repo-a:552:2026-01-01T00:00:00Z')
+  })
+
+  it('reads an absent, empty or non-string focus as null', () => {
+    expect(needsYouSearchFromRaw({}).focus).toBeNull()
+    expect(needsYouSearchFromRaw({ focus: '' }).focus).toBeNull()
+    expect(needsYouSearchFromRaw({ focus: 7 }).focus).toBeNull()
+    expect(needsYouSearchFromRaw({ focus: { key: 'x' } }).focus).toBeNull()
   })
 })
 

@@ -78,6 +78,11 @@ export interface HeldChannelDeps {
   readonly republish: () => void
 }
 
+/** The seam `'notify:needs-you'` composes through — `show` owns the focus rule and the Electron notification. */
+export interface NotifyChannelDeps {
+  readonly show: (notification: IpcMap['notify:needs-you']['request']) => void
+}
+
 // The read/write partition over IpcChannel — hand-maintained, never derived from IPC_CHANNELS.
 export const QUERY_CHANNELS = [
   'app:info',
@@ -143,6 +148,7 @@ export const MUTATION_CHANNELS = [
   'stage:resume',
   'stage:restart',
   'held:force-dispatch',
+  'notify:needs-you',
 ] as const
 
 export type MutationChannel = (typeof MUTATION_CHANNELS)[number]

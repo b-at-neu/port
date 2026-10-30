@@ -29,6 +29,11 @@ export interface HistorySearch {
   readonly archived?: boolean
 }
 
+export interface NeedsYouSearch {
+  /** The selected row's `dismissKeyOf` key. */
+  readonly focus?: string | null
+}
+
 export interface SearchSearch {
   readonly repo?: RepoId | null
 }
