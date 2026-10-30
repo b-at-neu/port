@@ -57,22 +57,25 @@ export function createSessionIndex(params: CreateSessionIndexParams): SessionInd
   let entries = new Map<string, SessionIndexEntry>()
   const costBases = new Map<string, number>()
   let writing = false
+  let loading = false
+  let deferred = false
   let pending: string | null = null
   let lastWritten: string | null = null
 
-  function serialize(): string {
-    return JSON.stringify({ version: CURRENT_VERSION, entries: capped([...entries.values()]) })
-  }
-
   function flush(): void {
-    const json = serialize()
+    if (loading) {
+      deferred = true
+      return
+    }
+    const document = { version: CURRENT_VERSION, entries: capped([...entries.values()]) }
+    const json = JSON.stringify(document)
     if (json === lastWritten) return
     if (writing) {
       pending = json
       return
     }
     writing = true
-    void params.writeJsonAtomic(params.path, JSON.parse(json)).then((result) => {
+    void params.writeJsonAtomic(params.path, document).then((result) => {
       if (result.ok) lastWritten = json
       else console.error(`[hosting] could not write ${params.path}: ${result.message}`)
       writing = false
@@ -85,6 +88,19 @@ export function createSessionIndex(params: CreateSessionIndexParams): SessionInd
   }
 
   async function load(): Promise<void> {
+    loading = true
+    try {
+      await readFile()
+    } finally {
+      loading = false
+      if (deferred) {
+        deferred = false
+        flush()
+      }
+    }
+  }
+
+  async function readFile(): Promise<void> {
     const result = await params.readJson<IndexFileShape>(params.path)
     if (!result.ok) {
       if (result.kind !== 'not-found') console.error(`[hosting] could not read ${params.path}: ${result.message}`)

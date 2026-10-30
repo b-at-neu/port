@@ -115,6 +115,36 @@ describe('createSessionIndex', () => {
     expect(index.list().map((entry) => entry.claudeSessionId)).toEqual(['a'])
   })
 
+  it('holds a write until the load settles, then writes the file history with the new entry', async () => {
+    const old = { claudeSessionId: 'old', repoId: null, cwd: '/x', branch: null, title: null, stage: null, startedAt: '2026-01-01T00:00:00.000Z', endedAt: null, costUsd: 1, operatorJoinedAt: null }
+    const written: unknown[] = []
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const index = createSessionIndex({
+      path: PATH,
+      readJson: async <T>() => {
+        await gate
+        return { ok: true, value: { version: 1, entries: [old] } } as FileResult<T>
+      },
+      writeJsonAtomic: (_path, value) => {
+        written.push(value)
+        return Promise.resolve({ ok: true } as FileResult<void>)
+      },
+      now: () => new Date('2026-01-01T01:00:00.000Z'),
+    })
+    const loading = index.load()
+    index.observe(snapshot())
+    await flush()
+    expect(written).toEqual([])
+    release()
+    await loading
+    await flush()
+    expect(written).toHaveLength(1)
+    expect((written[0] as { entries: { claudeSessionId: string }[] }).entries.map((entry) => entry.claudeSessionId).sort()).toEqual(['claude-1', 'old'])
+  })
+
   it.each([
     ['a missing file', { ok: false, kind: 'not-found', message: 'missing' }],
     ['a malformed file', { ok: true, value: 'nope' }],
