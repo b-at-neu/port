@@ -314,7 +314,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       const entries = agreeVersionFiles.map((path) => ({ path, version: readJson(path).version }));
       const disagreement = versionFileDisagreement(entries);
       if (disagreement) {
-        fail('version-files-agree', `${disagreement} — fix: run /port:release, or node scripts/dev-window.ts for a '-dev' drift; never hand-edit one manifest`);
+        fail('version-files-agree', `${disagreement} — fix: set the lagging manifest to the version in '${agreeVersionFiles[0]}', or run /port:release for a release drift`);
       } else {
         ok();
       }
