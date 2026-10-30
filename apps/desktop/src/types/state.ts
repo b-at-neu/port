@@ -254,3 +254,9 @@ export interface RefreshRequest {
   readonly repoId?: RepoId
   readonly source?: SourceKind
 }
+
+export interface TimerHandle {
+  readonly clear: () => void
+}
+
+export type TimerFactory = (callback: () => void, ms: number) => TimerHandle

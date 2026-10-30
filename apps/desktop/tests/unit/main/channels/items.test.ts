@@ -58,6 +58,7 @@ const EMPTY_SNAPSHOT: BoardSnapshot = {
   nextWakeupAt: null,
   emittedAt: 't',
   dispatch: [],
+  autoPlan: [],
 }
 
 function itemActionDepsWith(overrides: Partial<ItemActionDeps>): ItemActionDeps {

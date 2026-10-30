@@ -28,6 +28,7 @@ interface WatcherDeps {
   readonly holdSessionRequired: (repoId: RepoId) => boolean
   readonly stageLiveness: (repoId: RepoId) => { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
   readonly endedStages: (repoId: RepoId) => readonly EndedStage[]
+  readonly autoPlanRefused: (repoId: RepoId) => ReadonlySet<number>
 }
 
 interface DispatchRuntime {
@@ -61,6 +62,7 @@ export function createDispatchRuntime(deps: Omit<CreateDispatcherParams, 'ledger
     runState: deps.runState,
     autoApprove: autoApprovePlan,
     requestRead,
+    onChange: () => bound?.republish(),
     auditDir: deps.dirs.audit,
     now: deps.now,
   }
@@ -82,6 +84,7 @@ export function createDispatchRuntime(deps: Omit<CreateDispatcherParams, 'ledger
       holdSessionRequired: (repoId) => dispatcher.holdsSessionRequired(repoId),
       stageLiveness: (repoId) => dispatcher.stageLiveness(repoId),
       endedStages: (repoId) => dispatcher.endedStages(repoId),
+      autoPlanRefused: (repoId) => autoPlanner.refused(repoId),
     },
     bindWatcher: (watcher) => {
       bound = watcher

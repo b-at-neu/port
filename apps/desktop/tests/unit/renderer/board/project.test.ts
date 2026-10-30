@@ -97,6 +97,7 @@ function snapshotOf(repositories: readonly RepositoryState[], healths: readonly 
     nextWakeupAt: null,
     emittedAt: NOW.toISOString(),
     dispatch: [],
+    autoPlan: [],
   }
 }
 
@@ -240,6 +241,17 @@ describe('projectBoard — one row per ticket', () => {
     expect(project(linkedPair(), [review]).rows[0]?.liveStage?.sessionKey).toBe('hosted-review')
     const plan = stageSession({ repoId: 'repo-a' as RepoId, key: 'hosted-plan', stage: { agent: 'plan', number: 464, kind: 'issue', trigger: 'ready' } })
     expect(project(linkedPair(), [plan]).rows[0]?.liveStage?.sessionKey).toBe('hosted-plan')
+  })
+
+  it('stamps autoApproving from the snapshot list, by repository and number', () => {
+    const snapshot = { ...snapshotOf([readyRepo({ items: [item({ number: 5 }), item({ number: 6 })] })], [health()]), autoPlan: [{ repoId: 'repo-a' as RepoId, approving: [5] }] }
+    const rows = projectBoard({ snapshot, groupBy: 'stage', now: NOW }).rows
+    expect(rows.map((row) => [row.item.number, row.autoApproving])).toEqual([[5, true], [6, false]])
+  })
+
+  it('ignores an approving number listed under another repository', () => {
+    const snapshot = { ...snapshotOf([readyRepo({ items: [item({ number: 5 })] })], [health()]), autoPlan: [{ repoId: 'repo-b' as RepoId, approving: [5] }] }
+    expect(projectBoard({ snapshot, groupBy: 'stage', now: NOW }).rows[0]?.autoApproving).toBe(false)
   })
 
   it('sorts rows by the ticket number', () => {

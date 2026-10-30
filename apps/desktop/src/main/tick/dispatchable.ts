@@ -17,10 +17,14 @@ export function observableFrom(report: TickReport, runState: RunState): readonly
   return report.observations.filter((o) => o.kind !== 'refresh-deferred')
 }
 
-/** The auto-plan swap's own gate: draining must stand this down too, while a blind report
- *  authorises nothing regardless. */
-export function autoApprovableFrom(report: TickReport, runState: RunState): readonly TickAutoApproval[] {
-  if (runState !== 'dispatching') return []
+/** Every issue the auto-plan swap qualifies for, whatever the run state — a blind report authorises nothing. */
+export function autoApprovalCandidatesFrom(report: TickReport): readonly TickAutoApproval[] {
   if (report.blind !== null) return []
   return report.autoApprovals
+}
+
+/** The auto-plan swap's own gate: draining must stand this down too. */
+export function autoApprovableFrom(report: TickReport, runState: RunState): readonly TickAutoApproval[] {
+  if (runState !== 'dispatching') return []
+  return autoApprovalCandidatesFrom(report)
 }

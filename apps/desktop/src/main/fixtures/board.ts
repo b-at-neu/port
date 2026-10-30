@@ -394,6 +394,7 @@ export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'pop
         interrupted: scenario === 'empty' ? [] : interruptedStages(now),
       },
     ],
+    autoPlan: [],
   }
 }
 

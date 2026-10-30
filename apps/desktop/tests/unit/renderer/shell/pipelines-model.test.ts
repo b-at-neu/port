@@ -128,6 +128,7 @@ function snapshotOf(repositories: readonly RepositoryState[]): BoardSnapshot {
     nextWakeupAt: null,
     emittedAt: NOW.toISOString(),
     dispatch: [],
+    autoPlan: [],
   }
 }
 

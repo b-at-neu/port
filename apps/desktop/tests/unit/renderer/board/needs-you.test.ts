@@ -117,7 +117,7 @@ function dispatchStatus(overrides: Partial<RepoDispatchStatus> = {}): RepoDispat
   }
 }
 
-function snapshotOf(repositories: readonly RepositoryState[], overrides: Partial<Pick<BoardSnapshot, 'tick' | 'dispatch'>> = {}): BoardSnapshot {
+function snapshotOf(repositories: readonly RepositoryState[], overrides: Partial<Pick<BoardSnapshot, 'tick' | 'dispatch' | 'autoPlan'>> = {}): BoardSnapshot {
   const state: PipelineState = { repositories, sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: NOW.toISOString() }, readAt: NOW.toISOString() }
   return {
     state,
@@ -128,6 +128,7 @@ function snapshotOf(repositories: readonly RepositoryState[], overrides: Partial
     nextWakeupAt: null,
     emittedAt: NOW.toISOString(),
     dispatch: [],
+    autoPlan: [],
     ...overrides,
   }
 }
@@ -146,6 +147,18 @@ describe('needsYouItems', () => {
       expect(items).toHaveLength(1)
       expect(items[0]?.kind).toBe(kind)
     }
+  })
+
+  it('a plan-review item the swap will approve produces no item', () => {
+    const repo = readyRepo({ items: [item({ autoPlan: true })] })
+    const autoPlan = [{ repoId: 'repo-a' as RepoId, approving: [1] }]
+    expect(needsYouItems(snapshotOf([repo], { autoPlan }), NOW)).toEqual([])
+  })
+
+  it('an auto-plan item left out of the approving list still needs the operator', () => {
+    const repo = readyRepo({ items: [item({ autoPlan: true })] })
+    const autoPlan = [{ repoId: 'repo-a' as RepoId, approving: [] }]
+    expect(needsYouItems(snapshotOf([repo], { autoPlan }), NOW).map((i) => i.kind)).toEqual(['plan-review'])
   })
 
   it('a stage key with no mapped kind is excluded', () => {

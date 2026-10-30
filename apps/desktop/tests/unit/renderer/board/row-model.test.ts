@@ -24,6 +24,7 @@ function row(overrides: {
   readonly agents?: readonly AttachedAgent[]
   readonly sessions?: readonly AttachedSession[]
   readonly liveStage?: LiveStage | null
+  readonly autoApproving?: boolean
 }): BoardItemRow {
   const stageLabel: StageLabel | null = overrides.stageKey != null ? { key: overrides.stageKey as never, name: overrides.stageKey, role: 'trigger' } : null
   const item = {
@@ -70,6 +71,7 @@ function row(overrides: {
     actions: { ...NO_ACTIONS, ...overrides.actions },
     decisions: { ...NO_DECISIONS, ...overrides.decisions },
     viewer: null,
+    autoApproving: overrides.autoApproving ?? false,
   }
 }
 
@@ -162,6 +164,10 @@ describe('phaseLabelFor', () => {
     expect(phaseLabelFor({ ...base, displayStatus: { status: 'interrupted', staleGithub: false, githubAgeMs: null } })).toBe('Interrupted')
   })
 
+  it('names an auto-approving plan gate Plan auto-approving', () => {
+    expect(phaseLabelFor(row({ stageKey: 'planReview', autoApproving: true }))).toBe('Plan auto-approving')
+  })
+
   it("names the dispatched stage while the label still says it's queued", () => {
     expect(phaseLabelFor(row({ stageKey: 'ready', status: 'waiting', liveStage: LIVE_PLAN }))).toBe('Planning')
   })
@@ -241,6 +247,10 @@ describe('phaseToneFor', () => {
     expect(phaseToneFor(row({ stageKey: 'inProgress', status }))).toEqual({ palette: 'needs-you', fill: 'active', pulse: true })
   })
 
+  it('an auto-approving plan gate is filled in the plan colour and does not pulse', () => {
+    expect(phaseToneFor(row({ stageKey: 'planReview', autoApproving: true }))).toEqual({ palette: 'plan', fill: 'active', pulse: false })
+  })
+
   it('an unstaged row is the idle grey', () => {
     expect(phaseToneFor(row({ stageKey: null, status: 'unstaged' }))).toEqual({ palette: 'unstaged', fill: 'active', pulse: false })
   })
@@ -249,6 +259,10 @@ describe('phaseToneFor', () => {
 describe('nextActionFor', () => {
   it('Review plan for an issue at planReview', () => {
     expect(nextActionFor(row({ kind: 'issue', stageKey: 'planReview' }))).toEqual({ kind: 'review-plan', label: 'Review plan' })
+  })
+
+  it('no Review plan action while the plan is auto-approving', () => {
+    expect(nextActionFor(row({ kind: 'issue', stageKey: 'planReview', autoApproving: true }))).toBeNull()
   })
 
   it('a pull request at planReview carries no Review plan action (issue-only)', () => {

@@ -91,6 +91,7 @@ export function boardSnapshot(repositories: readonly RepositoryState[] = [], at 
     nextWakeupAt: null,
     emittedAt: at,
     dispatch: [],
+    autoPlan: [],
   }
 }
 

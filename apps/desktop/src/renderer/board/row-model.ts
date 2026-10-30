@@ -2,7 +2,7 @@
 // state is passed in explicitly rather than read from a module global.
 import { OPERATOR_DECISIONS } from '@/types/actions'
 import type { ActionAvailability, OperatorAction, OperatorDecision } from '@/types/actions'
-import { needsYouReasonOf } from '@/renderer/board/needs-you'
+import { waitsOnYou } from '@/renderer/board/needs-you'
 import type { BoardItemRow } from '@/types/board'
 import { operatorJoinedOf as operatorJoinedOfRecords } from '@/renderer/board/stage-links'
 import type { DispatchRecord } from '@/types/dispatch'
@@ -13,7 +13,7 @@ import type { PhaseTone } from '@/types/components'
 import { phaseTone } from '@/renderer/lib/phase-tone'
 import type { ItemActionState, StageLinkTarget } from '@/types/board'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
-import { actionRefusalNote, actionResultCopy, decisionButtonLabel, decisionRefusalNote, openPrButtonLabel, reviewPlanButtonLabel, stageAgentPhaseName } from '@/renderer/board/copy'
+import { actionRefusalNote, actionResultCopy, autoApprovingPhaseLabel, decisionButtonLabel, decisionRefusalNote, openPrButtonLabel, reviewPlanButtonLabel, stageAgentPhaseName } from '@/renderer/board/copy'
 
 /** The current winning stage's own `LabelKey`, or `null` when `stage` resolves to nothing — the one place an item's `stages`/`stage` pair becomes a single phase key. */
 export function stageKeyOf(stages: readonly StageLabel[], stage: LabelRole | null): LabelKey | null {
@@ -27,7 +27,7 @@ export function phaseToneFor(row: BoardItemRow): PhaseTone {
   return phaseTone({
     stageKey: row.stageLabel?.key ?? null,
     active: status === 'in-flight',
-    waitingOnYou: needsYouReasonOf(row.stageLabel?.key) !== undefined,
+    waitingOnYou: waitsOnYou(row),
     operatorNeeded: status === 'interrupted' || status === 'stalled',
   })
 }
@@ -39,6 +39,7 @@ export function isDispatchedRow(row: BoardItemRow): boolean {
 
 export function phaseLabelFor(row: BoardItemRow): string {
   if (row.displayStatus.status === 'interrupted') return 'Interrupted'
+  if (row.autoApproving) return autoApprovingPhaseLabel()
   if (row.liveStage !== null && isDispatchedRow(row)) return stageAgentPhaseName(row.liveStage.agent)
   return row.stageLabel !== null ? (PHASE_NAMES[row.stageLabel.key] ?? row.stageLabel.key) : 'Unstaged'
 }
@@ -124,7 +125,7 @@ type NextAction =
 // First hit wins: review the plan, open a ready-to-merge pull request, then
 // the first available decision.
 export function nextActionFor(row: BoardItemRow): NextAction | null {
-  if (row.item.kind === 'issue' && row.stageLabel?.key === 'planReview') {
+  if (row.item.kind === 'issue' && row.stageLabel?.key === 'planReview' && !row.autoApproving) {
     return { kind: 'review-plan', label: reviewPlanButtonLabel() }
   }
   if (row.stageLabel?.key === 'approved') {

@@ -288,7 +288,7 @@ Scoping epics, releases and analytics are out of scope for the first release.
 | `blocked` | Blocked |
 | `refreshBranch` / `refreshing` | Refreshing |
 
-The markers `marker` and `autoPlan` are never shown as phases; `autoPlan` appears as an "Auto-plan" tag on the row. **Paused** is not a label role. It is shown when the app reports an item as paused, using the `idle` status.
+The markers `marker` and `autoPlan` are never shown as phases; `autoPlan` appears as an "Auto-plan" tag on the row. **Paused** is not a label role. It is shown when the app reports an item as paused, using the `idle` status. **Plan auto-approving** is not a label role either. It replaces Plan review on an auto-plan ticket the swap will act on, using the `working` status, and that ticket is In progress, not Waiting on you.
 
 **Every pipeline item is identified by its ticket.** A ticket is one row, `#464 Title`, and its open pull request follows as muted `(PR#537)` text, never as a row of its own. A pull request that closes no ticket is `PR#35 Title` with a "No ticket" tag. A stage session is titled `#464 Title`, and its phase shows on the status dot.
 

@@ -381,6 +381,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
         nextWakeupAt: null,
         emittedAt: NOW_ISO,
         dispatch: [],
+        autoPlan: [],
       }
       await dispatcher.consider(snapshot)
     }

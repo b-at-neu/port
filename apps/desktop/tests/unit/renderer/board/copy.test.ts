@@ -55,6 +55,7 @@ function snapshotOf(healths: readonly RepositoryHealth[], repositories: readonly
     nextWakeupAt: null,
     emittedAt: NOW.toISOString(),
     dispatch: [],
+    autoPlan: [],
   }
 }
 
