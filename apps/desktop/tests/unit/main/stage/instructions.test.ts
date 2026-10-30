@@ -45,6 +45,7 @@ function installed(records: readonly object[]): string {
 }
 
 const INSTALLED_FILE = `${HOME}/plugins/installed_plugins.json`
+const INSTALLED_FILE_MESSAGE_PATH = pathOps.join(HOME, 'plugins', 'installed_plugins.json')
 
 function resolve(records: readonly object[], overrides: { readonly repoRoot?: string } = {}) {
   const { readJsonFile: readJson } = fakeFiles({ [INSTALLED_FILE]: installed(records) })
@@ -68,7 +69,7 @@ describe('resolveInstalledPluginRoot', () => {
 
   it('fails with a named message when the file has no record', async () => {
     const result = await resolve([])
-    expect(result).toEqual({ ok: false, message: `no port@port install record in ${INSTALLED_FILE}` })
+    expect(result).toEqual({ ok: false, message: `no port@port install record in ${INSTALLED_FILE_MESSAGE_PATH}` })
   })
 
   it('fails when the install file cannot be read', async () => {
@@ -250,7 +251,7 @@ describe('createStageInstructionsLoader', () => {
   it('fails with the resolver message when the plugin is not installed', async () => {
     const load = createStageInstructionsLoader({ claudeHome: HOME, ops: pathOps, ...fakeFiles({ [INSTALLED_FILE]: installed([]) }), git: fakeGit(defaultBranchConfig) })
     const result = await load(launchRequest(), WORKTREE)
-    expect(result).toEqual({ ok: false, message: `no port@port install record in ${INSTALLED_FILE}` })
+    expect(result).toEqual({ ok: false, message: `no port@port install record in ${INSTALLED_FILE_MESSAGE_PATH}` })
   })
 
   it('fails when the default branch has no config', async () => {
