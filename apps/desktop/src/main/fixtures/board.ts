@@ -3,10 +3,10 @@ import { labelName } from '@/utils/labels/vocabulary'
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import type { LabelEventNode, PipelineFetch, PipelineItem, QueriedLabel } from '@/types/github'
-import type { AgentRecord } from '@/types/sessions'
+import type { AgentRecord, SessionRecord } from '@/types/sessions'
 import { DEFAULT_POLL_POLICY, SOURCE_BASE_INTERVAL_MS } from '@/types/board'
 import type { BoardSnapshot, RepositoryHealth, SourceKind } from '@/types/board'
-import type { DenialEntry, DenialsRead } from '@/types/local'
+import type { DenialEntry, DenialsRead, WorktreeEntry } from '@/types/local'
 import type { RepositoryState } from '@/types/state'
 import type { SessionKey } from '@/types/hosting'
 import type { InterruptedStage } from '@/types/stage'
@@ -139,8 +139,34 @@ const POPULATED_ITEM_SEEDS: readonly ItemSeed[] = [
   },
   { kind: 'pull-request', number: 35, title: 'Cache avatar thumbnails', stageKey: 'needsRevision' },
   // An issue and the pull request that closes it, so the Board folds them into one row; the unlabelled-body pull request above stays the one with no ticket.
-  { kind: 'issue', number: 46, title: 'Show the last sync time in the header', stageKey: 'prOpened' },
-  { kind: 'pull-request', number: 47, title: 'Show the last sync time in the header', stageKey: 'reviewing', body: 'Closes #46' },
+  {
+    kind: 'issue',
+    number: 46,
+    title: 'Show the last sync time in the header',
+    stageKey: 'prOpened',
+    history: [
+      { key: 'planning', actor: 'port-bot', offsetMinutes: -170 },
+      { key: 'planReview', actor: 'port-bot', offsetMinutes: -160 },
+      { key: 'planApproved', actor: VIEWER, offsetMinutes: -150 },
+      { key: 'inProgress', actor: 'port-bot', offsetMinutes: -140 },
+      { key: 'prOpened', actor: 'port-bot', offsetMinutes: -90 },
+    ],
+  },
+  {
+    kind: 'pull-request',
+    number: 47,
+    title: 'Show the last sync time in the header',
+    stageKey: 'reviewing',
+    body: 'Closes #46',
+    history: [
+      { key: 'readyForReview', actor: 'port-bot', offsetMinutes: -90 },
+      { key: 'reviewing', actor: 'port-bot', offsetMinutes: -80 },
+      { key: 'needsRevision', actor: 'port-bot', offsetMinutes: -60 },
+      { key: 'revising', actor: 'port-bot', offsetMinutes: -50 },
+      { key: 'readyForReview', actor: 'port-bot', offsetMinutes: -30 },
+      { key: 'reviewing', actor: 'port-bot', offsetMinutes: -10 },
+    ],
+  },
   // A rebase escalation with two decisions, so the Needs you screen's Unblock dialog has picks to show.
   { kind: 'pull-request', number: 37, title: 'Normalize currency rounding', stageKey: 'needsHuman', comments: [{ body: CURRENCY_ESCALATION, offsetMinutes: -8 }] },
   { kind: 'issue', number: 50, title: 'Rotate the webhook signing secret', stageKey: 'needsHuman' },
@@ -244,10 +270,51 @@ function readyRepositoryState(now: Date, scenario: FixtureScenario): RepositoryS
     entry,
     pipelineFetch,
     itemsByNumberFetch: null,
-    repoSessions: { agents: [agent], sessions: [], available: true, freshness: { at: now.toISOString() } },
-    worktrees: { ok: true, mainPath: '/home/you/src/widgets', entries: [], subjectsAvailable: true, readAt: now.toISOString() },
+    repoSessions: { agents: [agent], sessions: scenario === 'empty' ? [] : [operatorSession(now)], available: true, freshness: { at: now.toISOString() } },
+    worktrees: { ok: true, mainPath: '/home/you/src/widgets', entries: scenario === 'empty' ? [] : [OPERATOR_WORKTREE], subjectsAvailable: true, readAt: now.toISOString() },
     denials: widgetsDenialsRead(now, '/home/you/src/widgets/.agents/denials.log'),
   })
+}
+
+const OPERATOR_WORKTREE_PATH = '/home/you/src/widgets/.claude/worktrees/impl-46'
+
+/** The operator's own worktree on the linked ticket's branch, so a hand-opened session in it lands on the ticket. */
+const OPERATOR_WORKTREE: WorktreeEntry = {
+  path: OPERATOR_WORKTREE_PATH,
+  isMain: false,
+  branch: '46-last-sync-time',
+  head: 'c3d4e5f',
+  detached: false,
+  bare: false,
+  locked: false,
+  lockReason: null,
+  prunable: false,
+  prunableReason: null,
+  producer: 'operator',
+  insideMain: true,
+  correlation: { number: 46, rung: 'branch-name' },
+  unresolved: null,
+}
+
+/** Last active between the pull request's revision starting and its second review being queued. */
+function operatorSession(now: Date): SessionRecord {
+  return {
+    sessionId: 'fixture-operator-46',
+    repoId: WIDGETS_ID,
+    cwd: OPERATOR_WORKTREE_PATH,
+    worktreePath: OPERATOR_WORKTREE_PATH,
+    role: 'other',
+    roleEvidence: null,
+    itemNumber: null,
+    customTitle: 'Tidy the sync header copy',
+    summary: null,
+    firstPrompt: null,
+    gitBranch: '46-last-sync-time',
+    lastActivityAt: offsetMinutes(now, -40),
+    idleMs: 40 * 60_000,
+    activity: 'dormant',
+    agentIds: [],
+  }
 }
 
 function denialEntry(raw: DenialEntry['raw'], timestamp: string, decision: DenialEntry['decision'], actor: DenialEntry['actor'], subject: string): DenialEntry {

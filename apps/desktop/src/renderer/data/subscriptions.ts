@@ -86,7 +86,9 @@ export function sharedSubscriptions(): Subscriptions {
  *  the eventual real list. */
 function connectSessionListCache(client: QueryClient, subscriptions: Subscriptions): () => void {
   const key = ipcQueryOptions('session:list').queryKey
+  const indexKey = ipcQueryOptions('session:index').queryKey
   return subscriptions.subscribe('session:status', (snapshot: HostedSessionSnapshot) => {
+    if (snapshot.phase === 'ended') void client.invalidateQueries({ queryKey: indexKey })
     const state = client.getQueryState(key)
     if (state === undefined || state.fetchStatus === 'fetching') {
       void client.invalidateQueries({ queryKey: key })

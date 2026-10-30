@@ -15,6 +15,7 @@ import {
   resolveSessionDismiss,
   resolveSessionInterrupt,
   resolveSessionInvoke,
+  resolveSessionIndex,
   resolveSessionList,
   resolveSessionPermissionAnswer,
   resolveSessionRename,
@@ -77,6 +78,7 @@ function depsWith(overrides: Partial<HostingChannelDeps> = {}): HostingChannelDe
   return {
     listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
     store: storeStub(),
+    sessionIndex: { load: () => Promise.resolve(), observe: () => undefined, list: () => [] },
     listSessionFiles: () => {
       throw new Error('listSessionFiles should not be invoked in this case')
     },
@@ -184,7 +186,16 @@ describe('resolveSessionList', () => {
   it('rejects a payload', () => {
     expect(() => resolveSessionList({} as unknown as void, depsWith())).toThrow("'session:list' takes no payload")
   })
+})
 
+describe('resolveSessionIndex', () => {
+  it('rejects a payload', () => {
+    expect(() => resolveSessionIndex({} as unknown as void, depsWith())).toThrow("'session:index' takes no payload")
+  })
+
+  it('returns the index list', () => {
+    expect(resolveSessionIndex(undefined, depsWith())).toEqual([])
+  })
 })
 
 describe('resolveSessionInvoke', () => {

@@ -179,7 +179,7 @@ export function BoardScreen() {
             ) : null}
           </div>
         </ScreenBody>
-        {selectedRow !== null ? <ItemPane row={selectedRow} report={report} owner={owner} records={recordsFor(selectedRow.item.repoId)} onClose={() => selectRow(null)} /> : null}
+        {selectedRow !== null ? <ItemPane row={selectedRow} report={report} owner={owner} onClose={() => selectRow(null)} /> : null}
       </div>
     </Screen>
   )

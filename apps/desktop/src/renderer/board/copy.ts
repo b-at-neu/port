@@ -9,15 +9,15 @@ import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { RETRY_TRIGGER } from '@/utils/actions/plan'
 import type { ActionPlan, ActionRefusal, ItemActionResult, OperatorAction, OperatorDecision } from '@/types/actions'
 import type { Conflict } from '@/types/writes'
-import type { StageLink } from '@/types/board'
+import type { StageAgent } from '@/types/tick'
 import { worstHealth } from '@/renderer/board/project'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
 
-const STAGE_NAME: Readonly<Record<StageLink['agent'], string>> = { plan: 'Planning', impl: 'Implementing', review: 'Reviewing', revise: 'Revising' }
+const STAGE_NAME: Readonly<Record<StageAgent, string>> = { plan: 'Planning', impl: 'Implementing', review: 'Reviewing', revise: 'Revising' }
 
 /** The phase name a dispatched stage shows before its agent has swapped a label. */
-export function stageAgentPhaseName(agent: StageLink['agent']): string {
+export function stageAgentPhaseName(agent: StageAgent): string {
   return STAGE_NAME[agent]
 }
 
@@ -26,19 +26,6 @@ function timeOf(iso: string): string {
   return Number.isNaN(parsed.getTime()) ? iso : parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-/** The item pane's "Stage sessions" section header. */
-export function stageSessionsSectionLabel(): string {
-  return 'Stage sessions'
-}
-
-/** One `StageLink`'s own row text — `live: Open live session · Implementing (plus operator joined)`, `transcript: View transcript · Planning · 14:07`. */
-export function stageLinkLabel(link: StageLink): string {
-  const name = STAGE_NAME[link.agent]
-  if (link.kind === 'live') {
-    return `Open live session · ${name}${link.operatorJoined ? ' · operator joined' : ''}`
-  }
-  return `View transcript · ${name} · ${timeOf(link.at)}`
-}
 
 /** The board row's "Operator joined" pill label and its accessible tooltip. */
 export function operatorJoinedTagLabel(): string {

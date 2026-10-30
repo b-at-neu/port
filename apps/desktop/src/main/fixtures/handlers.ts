@@ -11,6 +11,7 @@ import { fixtureFolders, fixtureSessionChanges } from '@/main/fixtures/folders'
 import { FIXTURE_REPOSITORIES } from '@/main/fixtures/repos'
 import { fixtureAttachEntries } from '@/main/fixtures/entries'
 import { fixturePermissionSnapshots, fixtureSearchResult, fixtureSessionAttach, fixtureSessionsScan, fixtureSessionSnapshots, STREAMING_KEY } from '@/main/fixtures/sessions'
+import { fixtureSessionIndex } from '@/main/fixtures/session-index'
 import type { FixtureScenario } from '@/types/fixtures'
 import { fixtureWorktreesReclaim, fixtureWorktreesReport } from '@/main/fixtures/worktrees'
 
@@ -48,6 +49,7 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'sessions:scan': () => fixtureSessionsScan(now),
 
     'session:list': () => (scenario === 'empty' ? fixturePermissionSnapshots(now) : fixtureSessionSnapshots(now)),
+    'session:index': () => (scenario === 'empty' ? [] : fixtureSessionIndex(now)),
     'session:capacity': () => ({ limit: 4, ceiling: 8 }),
     'session:capacity:set': () => ({ limit: 4, ceiling: 8 }),
     'session:restore:list': () => ({ entries: [] }),

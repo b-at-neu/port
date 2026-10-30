@@ -74,6 +74,7 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
     ready: '[data-slot="ticket-row"]',
     variants: [
       { name: 'detail', hash: '#/board?item=fixture-acme-widgets:38', ready: '[role="complementary"]' },
+      { name: 'detail-sessions', hash: '#/board?item=fixture-acme-widgets:46', ready: '[role="complementary"]' },
       { name: 'gate-review', click: 'text=Review plan', ready: '[data-slot="dialog-content"]' },
     ],
   },

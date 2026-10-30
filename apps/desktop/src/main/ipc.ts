@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { join } from 'node:path'
 import { IPC_CHANNELS, type IpcChannel, type IpcEvent, type IpcEventMap, type IpcMap } from '@/types/ipc'
-import type { WorktreesReport } from '@/types/reclaimer'
+import type { ReadWorktreeReportParams, WorktreesReport } from '@/types/reclaimer'
 import { SOURCE_KINDS, type BoardSnapshot } from '@/types/board'
 import { chooseDirectory } from '@/main/dialogs'
 import { defaultWorkspaceChannelDeps, resolveFoldersChoose, resolveFoldersList, resolveSessionChanges } from '@/main/channels/workspace'
@@ -10,7 +10,7 @@ import { createRecentsStore } from '@/main/workspace/recents'
 import { createSessionWorktree, removeSessionWorktreeAt } from '@/main/workspace/worktree'
 import { createStageWorktree, releaseStageBranch, sweepSessionBranches } from '@/main/workspace/stage-worktree'
 import { createStageLauncher } from '@/main/stage/launcher'
-import type { StageLauncherHandle } from '@/types/stage'
+import type { StageLauncherHandle, StageRegistry } from '@/types/stage'
 import { defaultForkListSessions } from '@/main/hosting/fork'
 import { statPath } from '@/main/platform/files'
 import type { HostedStore, SessionKey } from '@/types/hosting'
@@ -29,9 +29,8 @@ import type { Dispatcher } from '@/types/dispatch'
 import { fetchItemsByNumber } from '@/main/github/adapter'
 import { readOwnership, releaseOwnership, takeOwnership } from '@/main/dispatch/ownership'
 import { resolveGateAnswer, resolveGatePreflight } from '@/main/channels/gate'
-import type { GateChannelDeps } from '@/types/channels'
+import type { GateChannelDeps, ItemDecisionDeps, StageChannelDeps } from '@/types/channels'
 import { resolveItemAction, resolveItemDecision } from '@/main/channels/items'
-import type { ItemDecisionDeps } from '@/types/channels'
 import { resolveRuntimeProbe } from '@/main/channels/runtime'
 import { resolveSearchQuery, resolveSessionsScan, resolveTranscriptTailClose, resolveTranscriptTailOpen, resolveTranscriptTailPoll } from '@/main/channels/sessions'
 import {
@@ -44,6 +43,7 @@ import {
   resolveSessionDefaultsSet,
   resolveSessionDismiss,
   resolveSessionFiles,
+  resolveSessionIndex,
   resolveSessionInterrupt,
   resolveSessionInvoke,
   resolveSessionList,
@@ -71,16 +71,13 @@ import type { PipelineWatcher } from '@/types/state'
 import { runtimePreflight } from '@/main/runtime/preflight'
 import { createHostedStore, defaultHostedStoreDeps } from '@/main/hosting/store'
 import { createHostingPersistence } from '@/main/hosting/persist'
-
+import { createSessionIndex } from '@/main/hosting/session-index'
 import { createAppNotifier } from '@/main/hosting/notify'
 import { createStageRegistry } from '@/main/stage/registry'
-import type { StageRegistry } from '@/types/stage'
 import { readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
 import { createStageSweeper, resolveStageAllow, resolveStageDismissDenial, resolveStageResume, resolveStageRestart } from '@/main/channels/stage'
-import type { StageChannelDeps } from '@/types/channels'
 import { resolveForceDispatch } from '@/main/channels/held'
 import { resolveNotifyNeedsYou } from '@/main/channels/notify'
-import type { ReadWorktreeReportParams } from '@/types/reclaimer'
 import { createSessionMenuRefresher } from '@/main/session-menu'
 
 type AppInfo = IpcMap['app:info']['response']
@@ -266,10 +263,14 @@ export function registerIpc(): RegisteredIpc {
   const stageRegistry = createStageRegistry({ path: join(app.getPath('userData'), 'stage-sessions.json'), readJson: readJsonFile, writeJsonAtomic: writeJsonFileAtomic, now: () => new Date() })
   void stageRegistry.load()
 
+  const sessionIndex = createSessionIndex({ path: join(app.getPath('userData'), 'session-index.json'), readJson: readJsonFile, writeJsonAtomic: writeJsonFileAtomic, now: () => new Date() })
+  void sessionIndex.load()
+
   const hostedStore = createHostedStore({
     ...defaultHostedStoreDeps,
     onStatus: (snapshot) => {
       broadcast('session:status', snapshot)
+      sessionIndex.observe(snapshot)
       notifier.observe(snapshot)
       stageLauncher.observe(snapshot)
       sessionMenu.refresh()
@@ -292,7 +293,7 @@ export function registerIpc(): RegisteredIpc {
     onDenial: (repoId, denial) => dispatcherRef?.recordDenial(repoId, denial),
     newId: () => globalThis.crypto.randomUUID(),
   })
-  const hostingChannelDeps = defaultHostingChannelDeps(hostedStore, {
+  const hostingChannelDeps = defaultHostingChannelDeps(hostedStore, sessionIndex, {
     git: (args, cwd) => git(args, { cwd }),
     recents,
     exists: async (path) => (await statPath(path)).ok,
@@ -428,6 +429,8 @@ export function registerIpc(): RegisteredIpc {
   handle('session:attach', (_event, request) => resolveSessionAttach(request, hostingChannelDeps))
 
   handle('session:list', (_event, request) => resolveSessionList(request, hostingChannelDeps))
+
+  handle('session:index', (_event, request) => resolveSessionIndex(request, hostingChannelDeps))
 
   handle('session:permission:answer', (_event, request) => resolveSessionPermissionAnswer(request, hostingChannelDeps))
 

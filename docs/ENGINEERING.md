@@ -97,6 +97,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `notify.ts`'s `notificationFor` decides per manual session and stays silent for a stage session's finish, end and question; `createNotifier` fires only when no port window is focused, and a focused transition still updates the baseline so refocusing then blurring never replays a stale one
 - `notify.ts`'s `showNeedsYou` is the one shower for Needs you notifications, behind the same focus rule; a click broadcasts `open-needs-you`
 - `marks.ts`'s pin/archive sets persist only through `persist.ts`; `store.ts` is their one composition point, never a second writer
+- `session-index.ts`'s `createSessionIndex` is `session-index.json`'s only writer, observing every hosted snapshot. It is history for the Board pane, never a restore set, so it takes no `freeze()`. A missing or malformed file loads empty
 
 **`apps/desktop/src/main/local/`**
 - only reader of worktrees and the denial log

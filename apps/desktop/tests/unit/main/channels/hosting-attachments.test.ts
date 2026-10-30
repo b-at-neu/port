@@ -10,6 +10,7 @@ function depsWith(overrides: Partial<HostingChannelDeps> = {}): HostingChannelDe
   return {
     listRepositories: () => Promise.resolve({ ok: true, repositories: [] }),
     store: storeStub(),
+    sessionIndex: { load: () => Promise.resolve(), observe: () => undefined, list: () => [] },
     listSessionFiles: () => {
       throw new Error('listSessionFiles should not be invoked in this case')
     },

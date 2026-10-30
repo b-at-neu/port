@@ -4,8 +4,7 @@ import type { PipelineState, ReconciledItem, RepositoryState } from '@/types/sta
 import type { TickReport } from '@/types/tick'
 import type { RepoDispatchStatus } from '@/types/dispatch'
 import type { SessionKey } from '@/types/hosting'
-import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/types/board'
-import type { BoardSnapshot } from '@/types/board'
+import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS, type BoardSnapshot } from '@/types/board'
 import { needsYouCount, needsYouItems, repoNeedsYou } from '@/renderer/board/needs-you'
 import { stageSession } from '../../../fixtures/stage-session'
 
@@ -34,6 +33,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     agents: [],
     sessions: [],
     worktrees: [],
+    workSessions: [],
     state: 'OPEN',
     mergedAt: null,
     updatedAt: null,

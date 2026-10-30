@@ -44,6 +44,7 @@ function row(overrides: {
     agents: [],
     sessions: [],
     worktrees: [],
+    workSessions: [],
     state: 'OPEN',
     mergedAt: null,
     matchedKeys: [],

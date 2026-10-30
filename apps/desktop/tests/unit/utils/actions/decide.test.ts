@@ -27,6 +27,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     agents: [],
     sessions: [],
     worktrees: [],
+    workSessions: [],
     state: 'OPEN',
     mergedAt: null,
     updatedAt: null,

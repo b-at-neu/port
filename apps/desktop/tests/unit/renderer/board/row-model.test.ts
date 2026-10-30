@@ -49,6 +49,7 @@ function row(overrides: {
     agents: overrides.agents ?? [],
     sessions: overrides.sessions ?? [],
     worktrees: [],
+    workSessions: [],
     state: 'OPEN',
     mergedAt: null,
     matchedKeys: [],
