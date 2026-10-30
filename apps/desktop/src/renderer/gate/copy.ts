@@ -59,7 +59,7 @@ export function sessionRequiredCopy(number: number, title: string, reason: strin
 }
 
 export function primaryApproveLabel(sessionRequired: boolean, ownership: OwnershipSummary): string {
-  return sessionRequired && ownership.kind !== 'app' ?"Approve — I'll run it myself" : 'Approve'
+  return sessionRequired && ownership.kind !== 'app' ? "Approve — I'll run it myself" : 'Approve'
 }
 
 export function feedbackHint(number: number): string {

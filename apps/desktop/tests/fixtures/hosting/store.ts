@@ -10,6 +10,7 @@ export const REPO_ID = 'repo-1' as RepoId
 export function idleQuery(): HostedQuery {
   return {
     interrupt: vi.fn(() => Promise.resolve({ still_queued: [] })),
+    setPermissionMode: vi.fn(() => Promise.resolve()),
     close: vi.fn(),
     [Symbol.asyncIterator]() {
       return { next: () => new Promise<IteratorResult<unknown>>(() => undefined) }

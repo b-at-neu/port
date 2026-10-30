@@ -104,7 +104,10 @@ describe('actionFor — stage-approval', () => {
 })
 
 describe('stage-approval answers', () => {
-  beforeEach(() => invokeMock.mockReset())
+  // A block body: vitest runs a function a hook returns as its cleanup, and mockReset returns the mock itself.
+  beforeEach(() => {
+    invokeMock.mockReset()
+  })
 
   it('Approve edit allows the edit once and toasts', async () => {
     invokeMock.mockResolvedValue({ ok: true })
