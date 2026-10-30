@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/renderer/components/ui/collapsible'
 import { Markdown } from '@/renderer/components/markdown'
+import { StageCard } from '@/renderer/components/stage-card'
 import { ToolCallRow } from '@/renderer/components/tool-call-row'
 import { buildRow, PROMPT_CLAMP_LINES } from '@/renderer/components/conversation-model'
 import type { GroupedNode, RowView } from '@/types/components'
@@ -51,6 +52,8 @@ function EntryBody({ node }: { readonly node: GroupedNode }) {
   switch (row.kind) {
     case 'user-text':
       return <PromptText row={row} />
+    case 'stage-prompt':
+      return <StageCard row={row} />
     case 'assistant-text':
       return (
         <div>

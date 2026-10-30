@@ -1,5 +1,7 @@
 // Shared view-model types for components/ and their renderer callers — multi-file or test-only.
 import type { ReactNode } from 'react'
+import type { PipelineItemKind } from '@/types/github'
+import type { StageAgent } from '@/types/tick'
 import type { LabelPalette } from '@/utils/labels/defaults'
 import type { FileDiff, ToolDetail, TranscriptEntry } from '@/utils/sessions/transcript'
 
@@ -19,6 +21,7 @@ export type ToolResultView = { readonly kind: 'none' } | { readonly kind: 'ok'; 
 
 export type RowView =
   | { readonly kind: 'user-text'; readonly uuid: string; readonly text: PayloadView }
+  | { readonly kind: 'stage-prompt'; readonly uuid: string; readonly stage: StageAgent | 'refresh'; readonly itemKind: PipelineItemKind; readonly number: number; readonly instructions: PayloadView | null; readonly source: string | null }
   | { readonly kind: 'assistant-text'; readonly uuid: string; readonly text: PayloadView }
   | { readonly kind: 'thinking'; readonly uuid: string; readonly wordCount: number; readonly text: PayloadView }
   | {

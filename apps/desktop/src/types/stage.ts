@@ -1,4 +1,4 @@
-import type { StageLauncher, StageLaunchResult } from '@/types/dispatch'
+import type { StageLaunchRequest, StageLauncher, StageLaunchResult } from '@/types/dispatch'
 import type { HostedSessionSnapshot, HostedStore, SessionKey } from '@/types/hosting'
 import type { ReleaseBranchOutcome, RemoveSessionWorktreeOutcome } from '@/types/workspace'
 import type { ItemActionResult } from '@/types/actions'
@@ -71,6 +71,11 @@ export type StageRestartResult =
   | { readonly kind: 'worktree-remove-failed'; readonly message: string }
   | { readonly kind: 'label-refused'; readonly reason: string }
   | { readonly kind: 'unknown-stage' }
+
+export type StageInstructionsResult = { readonly ok: true; readonly text: string } | { readonly ok: false; readonly message: string }
+
+/** Resolves to the full first message: the dispatch line, the stage context, and the installed plugin's instructions. */
+export type StageInstructionsLoader = (request: StageLaunchRequest, worktreePath: string) => Promise<StageInstructionsResult>
 
 export interface StageResumeRequest {
   readonly entry: InterruptedStage

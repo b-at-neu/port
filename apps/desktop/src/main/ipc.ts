@@ -10,6 +10,7 @@ import { createRecentsStore } from '@/main/workspace/recents'
 import { createSessionWorktree, removeSessionWorktreeAt } from '@/main/workspace/worktree'
 import { createStageWorktree, releaseStageBranch, sweepSessionBranches } from '@/main/workspace/stage-worktree'
 import { createStageLauncher } from '@/main/stage/launcher'
+import { defaultStageInstructionsLoader } from '@/main/stage/instructions'
 import type { StageLauncherHandle, StageRegistry } from '@/types/stage'
 import { defaultForkListSessions } from '@/main/hosting/fork'
 import { statPath } from '@/main/platform/files'
@@ -292,6 +293,7 @@ export function registerIpc(): RegisteredIpc {
     registry: stageRegistry,
     onDenial: (repoId, denial) => dispatcherRef?.recordDenial(repoId, denial),
     newId: () => globalThis.crypto.randomUUID(),
+    loadInstructions: defaultStageInstructionsLoader(),
   })
   const hostingChannelDeps = defaultHostingChannelDeps(hostedStore, sessionIndex, {
     git: (args, cwd) => git(args, { cwd }),

@@ -6,7 +6,7 @@ import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '@/ty
 import { WIDGETS_ID, FIXTURE_REPOSITORIES } from '@/main/fixtures/repos'
 import type { ReadyEntry } from '@/types/actions'
 import type { StartSessionParams } from '@/types/hosting'
-import type { InterruptedStage, StageResumeRequest } from '@/types/stage'
+import type { InterruptedStage, StageInstructionsLoader, StageResumeRequest } from '@/types/stage'
 
 const ENTRY = FIXTURE_REPOSITORIES.find((r) => r.id === WIDGETS_ID) as ReadyEntry
 
@@ -58,7 +58,8 @@ function fakeDeps(overrides: Partial<{ start: SessionStartResult }> = {}) {
   const onDenial = vi.fn()
   let nextId = 0
   const newId = vi.fn(() => `id-${String((nextId += 1))}`)
-  return { store, removeWorktree, createWorktree, releaseBranch, sweepBranches, onOutcome, close, dismiss, send, start, registry, registryMock, onDenial, newId }
+  const loadInstructions = vi.fn<StageInstructionsLoader>().mockImplementation((req) => Promise.resolve({ ok: true, text: `${req.prompt}\n\n<port-stage-context>\nrepo: widgets\n</port-stage-context>\n\n<port-stage-instructions source="/plugin">\nbody\n</port-stage-instructions>` }))
+  return { store, removeWorktree, createWorktree, releaseBranch, sweepBranches, onOutcome, close, dismiss, send, start, registry, registryMock, onDenial, newId, loadInstructions }
 }
 
 describe('createStageLauncher.launch', () => {
@@ -74,7 +75,31 @@ describe('createStageLauncher.launch', () => {
         stage: expect.objectContaining({ agentName: 'port:impl-agent', model: 'sonnet' }) as unknown as StartSessionParams['stage'],
       }),
     )
-    expect(deps.send).toHaveBeenCalledWith('hosted-1', 'Run your pipeline stage for #52.')
+    expect(deps.send).toHaveBeenCalledWith('hosted-1', expect.stringContaining('Run your pipeline stage for #52.'))
+  })
+
+  it('sends the composed text, which opens with the dispatch prompt and carries both blocks', async () => {
+    const deps = fakeDeps()
+    const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
+    await launcher.launch(request())
+    const sent = String(deps.send.mock.calls[0]?.[1])
+    expect(sent.startsWith('Run your pipeline stage for #52.')).toBe(true)
+    expect(sent).toContain('<port-stage-context>')
+    expect(sent).toContain('<port-stage-instructions')
+    expect(deps.loadInstructions).toHaveBeenCalledWith(expect.objectContaining({ number: 52 }), '/repo/.claude/worktrees/impl-52')
+  })
+
+  it('sends nothing, removes the worktree and fails when the instructions cannot be loaded', async () => {
+    const deps = fakeDeps()
+    deps.loadInstructions.mockResolvedValue({ ok: false, message: 'no port@port install record in /home/u/.claude/plugins/installed_plugins.json' })
+    const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
+    const result = await launcher.launch(request())
+    expect(result).toEqual({ ok: false, kind: 'failed', message: "Couldn't load the stage instructions from the installed port plugin: no port@port install record in /home/u/.claude/plugins/installed_plugins.json" })
+    expect(deps.start).not.toHaveBeenCalled()
+    expect(deps.send).not.toHaveBeenCalled()
+    expect(deps.registryMock.recordRunning).not.toHaveBeenCalled()
+    expect(deps.removeWorktree).toHaveBeenCalledWith('/repo/.claude/worktrees/impl-52', false)
+    expect(deps.releaseBranch).toHaveBeenCalledWith(ENTRY.path, '52-add-a-dark-mode-icon', 'abc')
   })
 
   it('titles a review launch with the ticket label it was given', async () => {
@@ -202,6 +227,7 @@ describe('createStageLauncher.resume', () => {
     expect(params?.workspace.folder).toBe('/repo/.claude/worktrees/session-abc123')
     expect(params?.stage?.agentName).toBe('port:impl-agent')
     expect(deps.createWorktree).not.toHaveBeenCalled()
+    expect(deps.loadInstructions).not.toHaveBeenCalled()
     expect(deps.send).toHaveBeenCalledWith('hosted-1', 'You were interrupted.')
     expect(deps.registryMock.markRunning).toHaveBeenCalledWith('reg-1')
     expect(deps.registryMock.recordRunning).not.toHaveBeenCalled()
