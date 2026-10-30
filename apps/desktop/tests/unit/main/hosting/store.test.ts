@@ -244,6 +244,7 @@ describe('createHostedStore', () => {
       const query = (): HostedQuery =>
         ({
           interrupt: vi.fn(),
+          setPermissionMode: vi.fn(() => Promise.resolve()),
           close: vi.fn(),
           [Symbol.asyncIterator]() {
             return { next: () => new Promise<IteratorResult<unknown>>((resolve) => (box.deliver = (message) => resolve({ done: false, value: message }))) }

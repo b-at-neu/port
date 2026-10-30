@@ -94,7 +94,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `capabilities.ts`'s per-session tracker races `supportedCommands()`/`supportedAgents()` against a timeout, going `unavailable` rather than ever reading either as an empty list
 - an operator's own session defaults (`options.ts`'s `defaults` param) apply only to an operator-role start — the stage role (#327) always uses `permissionMode: 'default'` and its own `stagePolicy`, reading `agent`/`model` from `main/stage/`'s own request instead of `defaults`, never bypass/dontAsk/auto
 - `usage.ts`'s `readUsage` narrows `assistant`/`result` messages structurally, the same rule as `rate-limit.ts`; the figures are cumulative for this `claude` process, so a resumed session's totals mean "since port opened it," never lifetime cost
-- `notify.ts`'s `notificationFor` decides per manual session and stays silent for a stage session's finish, end and question; `createNotifier` fires only when no port window is focused, and a focused transition still updates the baseline so refocusing then blurring never replays a stale one
+- `notify.ts`'s `notificationFor` decides per manual session and stays silent for a stage session's finish, end, question and protected edit; `createNotifier` fires only when no port window is focused, and a focused transition still updates the baseline so refocusing then blurring never replays a stale one
 - `notify.ts`'s `showNeedsYou` is the one shower for Needs you notifications, behind the same focus rule; a click broadcasts `open-needs-you`
 - `marks.ts`'s pin/archive sets persist only through `persist.ts`; `store.ts` is their one composition point, never a second writer
 - `session-index.ts`'s `createSessionIndex` is `session-index.json`'s only writer, observing every hosted snapshot. It is history for the Board pane, never a restore set, so it takes no `freeze()`. A missing or malformed file loads empty
@@ -197,7 +197,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 
 **`apps/desktop/src/renderer/needs-you/`**
 - the Needs you screen (#315): its own copy (`copy.ts`), action resolution and dispatch (`actions.ts`), and the relay compose form (`relay-form.tsx`), ported out of `board/relay.ts`'s former banner
-- `screen.tsx` reads `board:snapshot` through `renderer/board/needs-you.ts`'s `needsYouItems`, never a second derivation; writes go through the existing `item:action`/`item:decide` channels, no new IPC
+- `screen.tsx` reads `board:snapshot` through `renderer/board/needs-you.ts`'s `needsYouItems`, never a second derivation; writes go through the existing `item:action`/`item:decide` channels, or `session:permission:answer` for a `stage-approval` row, no new IPC
 - `components/needs-you-item.tsx` is the shared row (DESIGN §4's `NeedsYouItem`); a screen never builds its own version
 - a live stage session's `BLOCKED:` hand-back and the blocked label on the same item are one row (`stage-blocked`); its answer card (`blocker-answer.tsx`) sends into that session through `session/actions.ts`'s `send`, never a label write — the agent clears its own block
 - dismissals (#554) live only in the renderer's `localStorage` (`dismissed.ts`), keyed per event by `dismiss-key.ts` so the same event stays dismissed and a new event on the same ticket shows; a malformed stored value reads as empty, which fails toward showing everything

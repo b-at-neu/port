@@ -11,6 +11,7 @@ const GROUP_OF: Readonly<Record<NeedsYouItem['kind'], NeedsYouGroupKey>> = {
   'stage-blocked': 'blocked',
   'stage-question': 'questions',
   'stage-questions': 'questions',
+  'stage-approval': 'approvals',
   'stage-denial': 'denied',
   'stage-interrupted': 'interrupted',
   'usage-limit': 'usage-limit',

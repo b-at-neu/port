@@ -8,6 +8,7 @@
 import { invoke } from '@/renderer/data/invoke'
 import type { RepoId } from '@/utils/repos'
 import type { GateDecision, GatePreflight, GateState } from '@/types/gate'
+import type { OwnershipSummary } from '@/types/writes'
 
 let state: GateState = { step: 'closed' }
 const listeners = new Set<() => void>()
@@ -87,12 +88,12 @@ export function setFeedbackText(text: string): void {
   setState({ ...state, text })
 }
 
-async function runAnswer(repoId: RepoId, preflight: GatePreflight, decision: GateDecision, feedback: string | null, skipComment: boolean): Promise<void> {
+async function runAnswer(repoId: RepoId, preflight: GatePreflight, ownership: OwnershipSummary, decision: GateDecision, feedback: string | null, skipComment: boolean): Promise<void> {
   setState({ step: 'answering', repoId, number: preflight.number })
   try {
     const response = await invoke('gate:answer', { repoId, number: preflight.number, decision, feedback, skipComment })
     if (getState().step !== 'answering') return
-    setState({ step: 'result', repoId, preflight, decision, feedback, response })
+    setState({ step: 'result', repoId, preflight, decision, feedback, response, ownership })
     if (response.kind === 'answered' && response.labels.kind === 'applied') {
       void invoke('board:refresh', { repoId, source: 'github' })
     }
@@ -104,24 +105,24 @@ async function runAnswer(repoId: RepoId, preflight: GatePreflight, decision: Gat
 
 export function submitApprove(): void {
   if (state.step !== 'reviewing') return
-  void runAnswer(state.repoId, state.preflight, 'approve', null, false)
+  void runAnswer(state.repoId, state.preflight, state.ownership, 'approve', null, false)
 }
 
 export function submitFeedback(): void {
   if (state.step !== 'feedback' || state.text.trim() === '') return
-  void runAnswer(state.repoId, state.preflight, 'request-changes', state.text, false)
+  void runAnswer(state.repoId, state.preflight, state.ownership, 'request-changes', state.text, false)
 }
 
 /** The one retry affordance that suppresses the comment — a landed comment
  *  followed by an aborted label swap retries the swap alone. */
 export function retryLabelOnly(): void {
   if (state.step !== 'result') return
-  void runAnswer(state.repoId, state.preflight, state.decision, null, true)
+  void runAnswer(state.repoId, state.preflight, state.ownership, state.decision, null, true)
 }
 
 export function tryCommentAgain(): void {
   if (state.step !== 'result') return
-  void runAnswer(state.repoId, state.preflight, state.decision, state.feedback, false)
+  void runAnswer(state.repoId, state.preflight, state.ownership, state.decision, state.feedback, false)
 }
 
 export function closeGateDialog(): void {

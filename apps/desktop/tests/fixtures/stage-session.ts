@@ -9,6 +9,7 @@ interface StageSessionOptions {
   readonly phase?: HostedSessionSnapshot['phase']
   readonly startedAt?: string
   readonly lastResult?: HostedSessionSnapshot['lastResult']
+  readonly pendingPermissions?: HostedSessionSnapshot['pendingPermissions']
 }
 
 /** A hosted stage session with every unrelated field at its idle default. */
@@ -24,7 +25,7 @@ export function stageSession(options: StageSessionOptions): HostedSessionSnapsho
     queuedAfterInterrupt: null,
     end: null,
     titled: null,
-    pendingPermissions: [],
+    pendingPermissions: options.pendingPermissions ?? [],
     capabilities: { kind: 'pending', request: { source: 'installed' } },
     title: null,
     rateLimit: null,

@@ -93,6 +93,58 @@ describe('runAction — usage-limit Resume all', () => {
   })
 })
 
+function stageApproval(): NeedsYouItem {
+  return { kind: 'stage-approval', repoId: 'repo-a' as RepoId, repo: 'o/a', number: 466, title: 't', url: null, ticket: null, at: null, matchedRow: null, sessionKey: 'hosted-466' as SessionKey, permissionId: 'perm-1', agent: 'impl', toolName: 'Edit', path: '.claude/settings.json' }
+}
+
+describe('actionFor — stage-approval', () => {
+  it('approves the edit, with Deny as its secondary', () => {
+    expect(actionFor(stageApproval())).toEqual({ label: 'Approve edit', kind: 'approve', disabledReason: null, secondaryLabel: 'Deny' })
+  })
+})
+
+describe('stage-approval answers', () => {
+  // A block body: vitest runs a function a hook returns as its cleanup, and mockReset returns the mock itself.
+  beforeEach(() => {
+    invokeMock.mockReset()
+  })
+
+  it('Approve edit allows the edit once and toasts', async () => {
+    invokeMock.mockResolvedValue({ ok: true })
+    const toasts: string[] = []
+    runAction(stageApproval(), { onToast: (m) => toasts.push(m) })
+    await vi.waitFor(() => expect(toasts).toEqual(['Approved the edit to .claude/settings.json.']))
+    expect(invokeMock).toHaveBeenCalledWith('session:permission:answer', { sessionKey: 'hosted-466', permissionId: 'perm-1', decision: 'allow-once', message: null })
+  })
+
+  it('Deny sends the deny message and toasts', async () => {
+    invokeMock.mockResolvedValue({ ok: true })
+    const toasts: string[] = []
+    runSecondaryAction(stageApproval(), { onToast: (m) => toasts.push(m) })
+    await vi.waitFor(() => expect(toasts).toEqual(['Denied the edit to .claude/settings.json.']))
+    expect(invokeMock).toHaveBeenCalledWith('session:permission:answer', {
+      sessionKey: 'hosted-466',
+      permissionId: 'perm-1',
+      decision: 'deny',
+      message: 'The operator denied this protected edit. Carry on without it, or end with BLOCKED: naming the file.',
+    })
+  })
+
+  it('reports an edit that is no longer waiting', async () => {
+    invokeMock.mockResolvedValue({ ok: false, kind: 'unknown-permission' })
+    const toasts: string[] = []
+    runAction(stageApproval(), { onToast: (m) => toasts.push(m) })
+    await vi.waitFor(() => expect(toasts).toEqual(['That edit is no longer waiting — the session moved on.']))
+  })
+
+  it('reports an unreachable main process', async () => {
+    invokeMock.mockRejectedValue(new Error('ipc down'))
+    const toasts: string[] = []
+    runAction(stageApproval(), { onToast: (m) => toasts.push(m) })
+    await vi.waitFor(() => expect(toasts).toEqual(["Couldn't reach the main process. Nothing was answered."]))
+  })
+})
+
 describe('runSecondaryAction — stage-blocked', () => {
   beforeEach(() => navigate.mockClear())
 

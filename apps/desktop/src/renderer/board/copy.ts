@@ -2,8 +2,8 @@
 // new variant is a compile error rather than a silently blank row (#80),
 // the same rule `worktrees.ts`'s own header states. Pure string functions;
 // no DOM here.
-import type { ItemStatus, LinkReason, RepositoryFreshness, RepositoryState, StatusEvidence, WaitingOn } from '@/types/state'
-import type { BoardSnapshot, DisplayStatus, SourceHealth, SourceKind } from '@/types/board'
+import type { ItemStatus, RepositoryFreshness, RepositoryState } from '@/types/state'
+import type { BoardSnapshot, SourceHealth, SourceKind } from '@/types/board'
 import { SOURCE_KINDS, isDeferred } from '@/types/board'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { RETRY_TRIGGER } from '@/utils/actions/plan'
@@ -62,37 +62,6 @@ export function statusWord(status: ItemStatus): string {
     case 'interrupted':
       return 'Interrupted'
   }
-}
-
-/** The item row's sub-line — first hit wins. A suppressed stall (Decision 5)
- *  is checked before the ordinary status-evidence copy, since it overrides
- *  what the raw status would otherwise say. */
-export function subLineFor(params: {
-  readonly displayStatus: DisplayStatus
-  readonly statusEvidence: StatusEvidence | null
-  readonly waitingOn: WaitingOn | null
-  readonly linkReason: LinkReason | null
-  readonly stageAmbiguous: boolean
-  readonly agentSummary: string | null
-  readonly worktreeCount: number
-}): string | null {
-  const { displayStatus, statusEvidence, waitingOn, linkReason, stageAmbiguous, agentSummary, worktreeCount } = params
-
-  if (displayStatus.staleGithub && displayStatus.status === 'in-flight') {
-    const ageS = displayStatus.githubAgeMs !== null ? Math.round(displayStatus.githubAgeMs / 1000) : null
-    return ageS !== null ? `Checking — the label list is ${ageS}s old.` : 'Checking — the label list could not be read.'
-  }
-  if (agentSummary !== null) return agentSummary
-  if (statusEvidence === 'no-claimant') return 'Nothing claims this. No agent and no session are working on it.'
-  if (statusEvidence === 'all-dormant') return "Nothing has been active recently — it may have stalled."
-  if (statusEvidence === 'sessions-unavailable') return "Can't see local sessions, so a stall can't be told from live work."
-  if (waitingOn === 'nobody') return 'Unassigned — no cockpit will pick this up.'
-  if (waitingOn === 'operator-session') return 'Session required — run /port:implement.'
-  if (linkReason === 'counterpart-not-open') return 'Its pull request is no longer open.'
-  if (stageAmbiguous) return 'Also carries another stage label.'
-  if (worktreeCount === 1) return '1 worktree'
-  if (worktreeCount > 1) return `${worktreeCount} worktrees`
-  return null
 }
 
 const SOURCE_NAMES: Readonly<Record<SourceKind, string>> = { github: 'GitHub', sessions: 'Sessions', worktrees: 'Worktrees', denials: 'Denials' }

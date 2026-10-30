@@ -12,6 +12,7 @@ const KINDS: readonly NeedsYouItem['kind'][] = [
   'stalled',
   'stage-question',
   'stage-questions',
+  'stage-approval',
   'stage-blocked',
   'stage-denial',
   'stage-interrupted',
@@ -31,7 +32,7 @@ describe('groupNeedsYou', () => {
 
   it('names the groups the way the screen shows them', () => {
     const groups = groupNeedsYou(KINDS.map((kind, index) => item(kind, index)))
-    expect(groups.map((g) => g.name)).toEqual(['Plan reviews', 'Ready to merge', 'Escalated', 'Blocked', 'Over budget', 'Held', 'Stalled', 'Questions', 'Denied commands', 'Interrupted', 'Usage limit', 'Label problems'])
+    expect(groups.map((g) => g.name)).toEqual(['Plan reviews', 'Ready to merge', 'Escalated', 'Blocked', 'Over budget', 'Held', 'Stalled', 'Questions', 'Edit approvals', 'Denied commands', 'Interrupted', 'Usage limit', 'Label problems'])
   })
 
   it('puts a live session’s blocker and a blocked label in one Blocked group', () => {
@@ -45,6 +46,14 @@ describe('groupNeedsYou', () => {
     const groups = groupNeedsYou([item('stage-question', 1), item('stage-questions', 2)])
     expect(groups).toHaveLength(1)
     expect(groups[0]?.name).toBe('Questions')
+  })
+
+  it('collects protected-edit approvals in their own Edit approvals group', () => {
+    const groups = groupNeedsYou([item('stage-approval', 1), item('stage-question', 2), item('stage-approval', 3)])
+    expect(groups.map((g) => [g.key, g.name, g.items.map((i) => i.number)])).toEqual([
+      ['approvals', 'Edit approvals', [1, 3]],
+      ['questions', 'Questions', [2]],
+    ])
   })
 
   it('orders groups by their first item and keeps each group’s own order', () => {

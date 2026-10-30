@@ -31,7 +31,7 @@ export function notificationFor(previous: HostedSessionSnapshot | null, next: Ho
   }
 
   const previousIds = new Set(previous.pendingPermissions.map((p) => p.permissionId))
-  const newPermission = next.pendingPermissions.find((p) => !previousIds.has(p.permissionId) && !(isStage && p.interaction?.kind === 'question'))
+  const newPermission = next.pendingPermissions.find((p) => !previousIds.has(p.permissionId) && !(isStage && (p.interaction?.kind === 'question' || p.protectedPath !== null)))
   if (newPermission !== undefined) {
     return { kind: 'needs-you', title, body: `Allow or deny ${newPermission.toolName}: Claude is waiting for your permission.` }
   }

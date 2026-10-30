@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createHostedHandle } from '@/main/hosting/handle'
 import { baseParams, fakeQuery, flush } from '../../../fixtures/hosting/handle'
 
@@ -49,5 +49,58 @@ describe('setControls / answerQuestion / answerPlan', () => {
     expect(handle.answerPlan(permissionId, { kind: 'approve', mode: 'acceptEdits' })).toEqual({ ok: true })
     expect(handle.snapshot().controls.permissionMode).toBe('acceptEdits')
     expect(fake.setPermissionMode).not.toHaveBeenCalled()
+  })
+})
+
+describe('a stage session pins the default permission mode at runtime', () => {
+  const STAGE = { tag: { agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved' } as const, agentName: 'port:impl-agent', model: 'sonnet', sessionRequiredPaths: [], editAllow: [] }
+
+  it('calls setPermissionMode("default") once at start', () => {
+    const fake = fakeQuery()
+    createHostedHandle(baseParams({ stage: STAGE }), () => fake.query)
+    expect(fake.setPermissionMode).toHaveBeenCalledTimes(1)
+    expect(fake.setPermissionMode).toHaveBeenCalledWith('default')
+  })
+
+  it('never calls it for an operator session', async () => {
+    const fake = fakeQuery()
+    createHostedHandle(baseParams(), () => fake.query)
+    fake.push({ type: 'system', subtype: 'init', session_id: 'sdk-session-1', permissionMode: 'acceptEdits' })
+    await flush()
+    expect(fake.setPermissionMode).not.toHaveBeenCalled()
+  })
+
+  it('resets and warns once when init reports another mode', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const fake = fakeQuery()
+    const handle = createHostedHandle(baseParams({ stage: STAGE }), () => fake.query)
+    fake.push({ type: 'system', subtype: 'init', session_id: 'sdk-session-1', permissionMode: 'acceptEdits' })
+    await flush()
+    expect(fake.setPermissionMode).toHaveBeenCalledTimes(2)
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith('[hosting] stage session hosted-1 started in acceptEdits; reset to default')
+    expect(handle.snapshot().controls.permissionMode).toBe('default')
+    warn.mockRestore()
+  })
+
+  it('does not reset again when init reports the default mode', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const fake = fakeQuery()
+    createHostedHandle(baseParams({ stage: STAGE }), () => fake.query)
+    fake.push({ type: 'system', subtype: 'init', session_id: 'sdk-session-1', permissionMode: 'default' })
+    await flush()
+    expect(fake.setPermissionMode).toHaveBeenCalledTimes(1)
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it('logs a rejected reset instead of throwing', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const fake = fakeQuery()
+    fake.setPermissionMode.mockRejectedValueOnce(new Error('refused'))
+    createHostedHandle(baseParams({ stage: STAGE }), () => fake.query)
+    await flush()
+    expect(error).toHaveBeenCalledTimes(1)
+    error.mockRestore()
   })
 })

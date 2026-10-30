@@ -3,7 +3,15 @@
 import type { DecisionRefusal } from '@/types/actions'
 import type { NeedsYouItem } from '@/types/board'
 import type { InterruptedStage, StageResumeResult } from '@/types/stage'
-import { resumeAllDisabledReason, resumeAllToast } from '@/renderer/needs-you/copy'
+import {
+  APPROVAL_GONE_TOAST,
+  APPROVAL_UNREACHABLE_TOAST,
+  PROTECTED_EDIT_DENY_MESSAGE,
+  approvedEditToast,
+  deniedEditToast,
+  resumeAllDisabledReason,
+  resumeAllToast,
+} from '@/renderer/needs-you/copy'
 import { openReviewDialog } from '@/renderer/gate/controller'
 import { openDecision } from '@/renderer/decision/controller'
 import { openAllowDialog } from '@/renderer/needs-you/allow-dialog'
@@ -13,7 +21,7 @@ import { router } from '@/renderer/router/router'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { invoke } from '@/renderer/data/invoke'
 
-type NeedsYouActionKind = 'review-plan' | 'open' | 'unblock' | 'retry' | 'refresh' | 'answer' | 'allow' | 'resume' | 'resume-all' | 'restart' | 'force'
+type NeedsYouActionKind = 'review-plan' | 'open' | 'unblock' | 'retry' | 'refresh' | 'answer' | 'approve' | 'allow' | 'resume' | 'resume-all' | 'restart' | 'force'
 
 interface NeedsYouAction {
   readonly label: string
@@ -85,6 +93,8 @@ export function actionFor(item: NeedsYouItem, now: Date = new Date()): NeedsYouA
       return { label: 'Open session', kind: 'open', disabledReason: null }
     case 'stage-blocked':
       return { label: 'Unblock', kind: 'answer', disabledReason: null, secondaryLabel: 'Open session' }
+    case 'stage-approval':
+      return { label: 'Approve edit', kind: 'approve', disabledReason: null, secondaryLabel: 'Deny' }
     case 'stage-denial':
       return { label: 'Allow from now on', kind: 'allow', disabledReason: null }
     case 'stage-interrupted':
@@ -130,6 +140,9 @@ export function runAction(item: NeedsYouItem, deps: RunActionDeps): void {
     case 'allow':
       if (item.kind === 'stage-denial' && item.repoId !== null) openAllowDialog(item.repoId, item.denial)
       return
+    case 'approve':
+      if (item.kind === 'stage-approval') void answerProtectedEdit(item, 'allow-once', deps)
+      return
     case 'resume':
       if (item.kind === 'stage-interrupted') void runStageResume(item.interrupted.id, item.interrupted.number, deps)
       return
@@ -154,7 +167,18 @@ export function runSecondaryAction(item: NeedsYouItem, deps: RunActionDeps): voi
   const action = actionFor(item)
   if (action.kind === 'resume' && item.kind === 'stage-interrupted') openRestartDialog(item.interrupted)
   if (action.kind === 'answer' && item.kind === 'stage-blocked') void router.navigate({ to: ROUTE_IDS.session, search: { key: item.sessionKey } })
-  void deps
+  if (action.kind === 'approve' && item.kind === 'stage-approval') void answerProtectedEdit(item, 'deny', deps)
+}
+
+async function answerProtectedEdit(item: Extract<NeedsYouItem, { readonly kind: 'stage-approval' }>, decision: 'allow-once' | 'deny', deps: RunActionDeps): Promise<void> {
+  try {
+    const result = await invoke('session:permission:answer', { sessionKey: item.sessionKey, permissionId: item.permissionId, decision, message: decision === 'deny' ? PROTECTED_EDIT_DENY_MESSAGE : null })
+    if (!result.ok) deps.onToast(APPROVAL_GONE_TOAST)
+    else deps.onToast(decision === 'deny' ? deniedEditToast(item.path) : approvedEditToast(item.path))
+  } catch (error) {
+    console.error('Failed to reach the main process while answering a protected edit', error)
+    deps.onToast(APPROVAL_UNREACHABLE_TOAST)
+  }
 }
 
 async function runStageResume(id: string, number: number, deps: RunActionDeps): Promise<void> {

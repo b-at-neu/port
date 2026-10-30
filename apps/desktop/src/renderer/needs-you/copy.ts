@@ -12,6 +12,7 @@ export const GROUP_NAMES: Readonly<Record<NeedsYouGroupKey, string>> = {
   'needs-human': 'Escalated',
   blocked: 'Blocked',
   questions: 'Questions',
+  approvals: 'Edit approvals',
   denied: 'Denied commands',
   interrupted: 'Interrupted',
   'usage-limit': 'Usage limit',
@@ -147,6 +148,8 @@ export function needsYouLeadCopy(item: NeedsYouItem, now: Date = new Date()): st
       return `Retry ${label}: its agent stopped responding`
     case 'stage-question':
       return `${label} is asking: ${item.questions[0]?.header ?? 'a question'}`
+    case 'stage-approval':
+      return `${STAGE_PHASE_NAME[item.agent]} ${label} wants to edit ${item.path}`
     case 'stage-questions':
       return `${label} has questions for you — open its session to answer`
     case 'stage-blocked':
@@ -164,6 +167,20 @@ export function needsYouLeadCopy(item: NeedsYouItem, now: Date = new Date()): st
 
 export function refreshedToast(count: number): string {
   return count === 0 ? 'Refreshed. Nothing needs you.' : `Refreshed. ${String(count)} item${count === 1 ? '' : 's'} need${count === 1 ? 's' : ''} you.`
+}
+
+export const PROTECTED_EDIT_DENY_MESSAGE = 'The operator denied this protected edit. Carry on without it, or end with BLOCKED: naming the file.'
+
+export const APPROVAL_GONE_TOAST = 'That edit is no longer waiting — the session moved on.'
+
+export const APPROVAL_UNREACHABLE_TOAST = "Couldn't reach the main process. Nothing was answered."
+
+export function approvedEditToast(path: string): string {
+  return `Approved the edit to ${path}.`
+}
+
+export function deniedEditToast(path: string): string {
+  return `Denied the edit to ${path}.`
 }
 
 export const REFRESH_FAILED_TOAST = "Couldn't reach the main process. Nothing was refreshed."

@@ -37,7 +37,7 @@ export function heldDetailCopy(held: TickHeld, owner: DispatchOwner = 'none'): s
     case 'other-operator':
       return `#${n} assigned to someone else.`
     case 'session-required':
-      return `#${n} session required — run /port:implement.`
+      return byApp ? `#${n} is marked session-required — port runs it and asks you in Needs you before each protected edit.` : `#${n} session required — run /port:implement.`
     case 'contended': {
       const c = held.contention
       // Defensive: `planTick` never emits `reason: 'contended'` without a

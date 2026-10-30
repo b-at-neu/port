@@ -2,7 +2,22 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { NeedsYouItem } from '@/types/board'
 import type { InterruptedStage } from '@/types/stage'
-import { GROUP_NAMES, blockerSendError, blockerSentToast, dismissedToast, needsYouLeadCopy, refreshedToast, resumeAllDisabledReason, resumeAllToast, usageLimitEntryLine } from '@/renderer/needs-you/copy'
+import {
+  APPROVAL_GONE_TOAST,
+  APPROVAL_UNREACHABLE_TOAST,
+  GROUP_NAMES,
+  PROTECTED_EDIT_DENY_MESSAGE,
+  approvedEditToast,
+  blockerSendError,
+  blockerSentToast,
+  deniedEditToast,
+  dismissedToast,
+  needsYouLeadCopy,
+  refreshedToast,
+  resumeAllDisabledReason,
+  resumeAllToast,
+  usageLimitEntryLine,
+} from '@/renderer/needs-you/copy'
 
 function base(overrides: Partial<NeedsYouItem> = {}): Pick<NeedsYouItem, 'repoId' | 'repo' | 'number' | 'title' | 'url' | 'ticket' | 'at' | 'matchedRow'> {
   return { repoId: 'repo-a' as RepoId, repo: 'o/a', number: 41, title: 't', url: 'https://github.com/o/a/issues/41', ticket: null, at: null, matchedRow: null, ...overrides }
@@ -118,6 +133,11 @@ describe('needsYouLeadCopy', () => {
     expect(needsYouLeadCopy(item)).toBe('#52 says a pull request is open, but none is. Reopen it or move the issue back.')
   })
 
+  it('stage-approval names the phase, the ticket and the protected path', () => {
+    const item = { ...base({ number: 466 }), kind: 'stage-approval', sessionKey: 'hosted-1', permissionId: 'p1', agent: 'impl', toolName: 'Edit', path: '.claude/settings.json' } as unknown as NeedsYouItem
+    expect(needsYouLeadCopy(item)).toBe('Implementing #466 wants to edit .claude/settings.json')
+  })
+
   it('stage-blocked leads with the blocker text, without its BLOCKED: prefix', () => {
     const item = { ...base({ number: 51 }), kind: 'stage-blocked', sessionKey: 'hosted-1', text: 'The ledger export has no currency column.' } as unknown as NeedsYouItem
     expect(needsYouLeadCopy(item)).toBe('#51 is blocked: The ledger export has no currency column.')
@@ -163,7 +183,7 @@ describe('usage-limit copy', () => {
 
 describe('GROUP_NAMES', () => {
   it('names every group the way the screen shows it', () => {
-    expect(Object.values(GROUP_NAMES)).toEqual(['Plan reviews', 'Ready to merge', 'Escalated', 'Blocked', 'Questions', 'Denied commands', 'Interrupted', 'Usage limit', 'Held', 'Stalled', 'Over budget', 'Label problems'])
+    expect(Object.values(GROUP_NAMES)).toEqual(['Plan reviews', 'Ready to merge', 'Escalated', 'Blocked', 'Questions', 'Edit approvals', 'Denied commands', 'Interrupted', 'Usage limit', 'Held', 'Stalled', 'Over budget', 'Label problems'])
   })
 })
 
@@ -196,6 +216,22 @@ describe('blocker answer copy', () => {
     ['blocked-command', "That text is a command the session can't run here. Reword your answer."],
   ] as const)('explains %s', (error, copy) => {
     expect(blockerSendError(error, 51)).toBe(copy)
+  })
+})
+
+describe('protected edit approval copy', () => {
+  it('names the path in the answer toasts', () => {
+    expect(approvedEditToast('.claude/settings.json')).toBe('Approved the edit to .claude/settings.json.')
+    expect(deniedEditToast('.claude/settings.json')).toBe('Denied the edit to .claude/settings.json.')
+  })
+
+  it('has fixed copy for a stale and an unreachable answer', () => {
+    expect(APPROVAL_GONE_TOAST).toBe('That edit is no longer waiting — the session moved on.')
+    expect(APPROVAL_UNREACHABLE_TOAST).toBe("Couldn't reach the main process. Nothing was answered.")
+  })
+
+  it('tells the agent to carry on or report BLOCKED when the edit is denied', () => {
+    expect(PROTECTED_EDIT_DENY_MESSAGE).toBe('The operator denied this protected edit. Carry on without it, or end with BLOCKED: naming the file.')
   })
 })
 
