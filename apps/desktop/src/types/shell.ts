@@ -50,3 +50,9 @@ interface NotReadyPipelineRow {
 }
 
 export type PipelineRow = ReadyPipelineRow | NotReadyPipelineRow
+
+/** The session the routed screen shows, as far as the sidebar can mark its row. */
+export type SidebarSelection =
+  | { readonly kind: 'session'; readonly sessionKey: SessionKey }
+  | { readonly kind: 'transcript'; readonly sessionId: string; readonly agentId: string | null }
+  | null

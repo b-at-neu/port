@@ -11,7 +11,9 @@ import { StatusPillMenu } from '@/renderer/components/status-pill-menu'
 import { useIpcQuery } from '@/renderer/data/query'
 import { pipelinesModel } from '@/renderer/shell/pipelines-model'
 import { useNeedsYouItems } from '@/renderer/needs-you/use-items'
-import type { PipelineRow, PipelineSessionRow } from '@/types/shell'
+import type { PipelineRow, PipelineSessionRow, SidebarSelection } from '@/types/shell'
+import { cn } from '@/renderer/lib/utils'
+import { SELECTED_ROW_CLASS, repoHoldsSelection, repoToggleLabel, selectedPipelineRowKey, useSidebarSelection } from '@/renderer/shell/sidebar-selection'
 import { useRunStateCommand } from '@/renderer/shell/run-state-command'
 import { shellPrefs, setRepoCollapsed } from '@/renderer/shell/prefs'
 import { ROUTE_IDS } from '@/renderer/router/routes'
@@ -58,34 +60,45 @@ function RunStateMenu({ row }: { readonly row: Extract<PipelineRow, { readonly r
   )
 }
 
-function SessionLinks({ sessions }: { readonly sessions: readonly PipelineSessionRow[] }) {
+function SessionLinks({ sessions, selectedKey }: { readonly sessions: readonly PipelineSessionRow[]; readonly selectedKey: string | null }) {
+  const navigate = useNavigate()
   if (sessions.length === 0) return null
+
+  function open(session: PipelineSessionRow): void {
+    if (session.sessionKey !== null) {
+      void navigate({ to: ROUTE_IDS.session, search: { key: session.sessionKey } })
+    } else if (session.transcript !== null) {
+      void navigate({
+        to: ROUTE_IDS.transcript,
+        params: { sessionId: session.transcript.sessionId },
+        search: { agentId: session.transcript.agentId, from: 'pipeline', focusIndex: null, title: session.label, item: { repoId: session.repoId, number: session.number } },
+      })
+    }
+  }
+
   return (
     <div className="flex flex-col">
-      {sessions.map((session) => (
-        <Link
-          key={session.key}
-          to={session.sessionKey !== null ? ROUTE_IDS.session : ROUTE_IDS.transcript}
-          params={session.transcript !== null ? { sessionId: session.transcript.sessionId } : undefined}
-          search={
-            session.sessionKey !== null
-              ? { key: session.sessionKey }
-              : session.transcript !== null
-                ? { agentId: session.transcript.agentId, from: 'pipeline', focusIndex: null, title: session.label, item: { repoId: session.repoId, number: session.number } }
-                : undefined
-          }
-          className="flex h-6.5 items-center gap-1.5 rounded-md py-0 pr-2 pl-8 text-small text-foreground-secondary hover:bg-accent"
-        >
-          <PhaseDot tone={session.tone} />
-          <span className="truncate">{session.label}</span>
-          <span className="sr-only">{session.statusText}</span>
-        </Link>
-      ))}
+      {sessions.map((session) => {
+        const selected = session.key === selectedKey
+        return (
+          <button
+            key={session.key}
+            type="button"
+            onClick={() => open(session)}
+            aria-current={selected ? 'page' : undefined}
+            className={cn('flex h-6.5 items-center gap-1.5 rounded-md py-0 pr-2 pl-8 text-left text-small text-foreground-secondary outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring', selected && SELECTED_ROW_CLASS)}
+          >
+            <PhaseDot tone={session.tone} />
+            <span className="truncate">{session.label}</span>
+            <span className="sr-only">{session.statusText}</span>
+          </button>
+        )
+      })}
     </div>
   )
 }
 
-function RepoRow({ row, collapsed, onToggle }: { readonly row: PipelineRow; readonly collapsed: boolean; readonly onToggle: () => void }) {
+function RepoRow({ row, collapsed, selectedKey, onToggle }: { readonly row: PipelineRow; readonly collapsed: boolean; readonly selectedKey: string | null; readonly onToggle: () => void }) {
   if (!row.ready) {
     return (
       <div>
@@ -96,15 +109,18 @@ function RepoRow({ row, collapsed, onToggle }: { readonly row: PipelineRow; read
           </span>
           <span className="rounded-full bg-idle-pill px-1.5 py-0.5 text-meta text-idle-pill-foreground">Not ready</span>
         </Link>
-        <SessionLinks sessions={row.sessions} />
+        <SessionLinks sessions={row.sessions} selectedKey={selectedKey} />
       </div>
     )
   }
 
+  const holdsSelection = repoHoldsSelection(row, collapsed, selectedKey)
+  const toggleLabel = repoToggleLabel(row.name, collapsed, holdsSelection)
+
   return (
     <div>
-      <div className="flex h-7 items-center gap-1.5 rounded-md px-2 text-body text-foreground-secondary hover:bg-accent">
-        <button type="button" onClick={onToggle} className="shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={collapsed ? `Expand ${row.name}` : `Collapse ${row.name}`}>
+      <div className={cn('flex h-7 items-center gap-1.5 rounded-md px-2 text-body text-foreground-secondary hover:bg-accent', holdsSelection && SELECTED_ROW_CLASS)}>
+        <button type="button" onClick={onToggle} className="shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={toggleLabel}>
           {collapsed ? <ChevronRight className="size-3.5" /> : <ChevronDown className="size-3.5" />}
         </button>
         <span className="flex-1 truncate" title={row.name}>
@@ -113,9 +129,14 @@ function RepoRow({ row, collapsed, onToggle }: { readonly row: PipelineRow; read
         {collapsed && row.needsYou ? <PhaseDot tone={NEEDS_YOU_TONE} /> : null}
         <RunStateMenu row={row} />
       </div>
-      {!collapsed ? <SessionLinks sessions={row.sessions} /> : null}
+      {!collapsed ? <SessionLinks sessions={row.sessions} selectedKey={selectedKey} /> : null}
     </div>
   )
+}
+
+function PipelineRows({ rows, selection, collapsedRepos, onToggle }: { readonly rows: readonly PipelineRow[]; readonly selection: SidebarSelection; readonly collapsedRepos: ReadonlySet<string>; readonly onToggle: (repoId: string) => void }) {
+  const selectedKey = selectedPipelineRowKey(rows, selection)
+  return rows.map((row) => <RepoRow key={row.repoId} row={row} collapsed={row.ready && collapsedRepos.has(row.repoId)} selectedKey={selectedKey} onToggle={() => onToggle(row.repoId)} />)
 }
 
 export function SidebarPipelines() {
@@ -124,6 +145,7 @@ export function SidebarPipelines() {
   const sessions = useIpcQuery('session:list')
   const needsYou = useNeedsYouItems()
   const navigate = useNavigate()
+  const selection = useSidebarSelection()
   const [collapsedRepos, setCollapsedRepos] = useState<ReadonlySet<string>>(() => new Set(shellPrefs().collapsedRepos))
 
   function toggle(repoId: string): void {
@@ -147,9 +169,7 @@ export function SidebarPipelines() {
       ) : repos.data.repositories.length === 0 ? (
         <EmptyState icon={ChevronRight} message="No repositories yet." action={{ label: 'Add a repository', onClick: () => void navigate({ to: ROUTE_IDS.repos }) }} className="px-2 py-2 text-left" />
       ) : (
-        pipelinesModel(repos.data.repositories, snapshot.data, needsYou, sessions.data ?? []).map((row) => (
-          <RepoRow key={row.repoId} row={row} collapsed={row.ready && collapsedRepos.has(row.repoId)} onToggle={() => toggle(row.repoId)} />
-        ))
+        <PipelineRows rows={pipelinesModel(repos.data.repositories, snapshot.data, needsYou, sessions.data ?? [])} selection={selection} collapsedRepos={collapsedRepos} onToggle={toggle} />
       )}
     </div>
   )

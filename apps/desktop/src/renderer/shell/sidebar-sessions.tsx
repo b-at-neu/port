@@ -13,7 +13,7 @@ import { sessionTitle } from '@/utils/hosting/label'
 import { folderLabel } from '@/utils/workspace/label'
 import type { RepositoryEntry } from '@/utils/repos'
 import { useIpcMutation, useIpcQuery } from '@/renderer/data/query'
-import { useSelectedSession } from '@/renderer/session/selection'
+import { SELECTED_ROW_CLASS, isUserSessionSelected, useSidebarSelection } from '@/renderer/shell/sidebar-selection'
 import { waitingLabelOf } from '@/renderer/session/interaction-copy'
 import { useRenaming, setRenaming, openNewSessionDialog } from '@/renderer/shell/stores'
 import { ROUTE_IDS } from '@/renderer/router/routes'
@@ -76,9 +76,10 @@ function SessionRow({ session, repos, marks, selected }: { readonly session: Hos
   }
 
   return (
-    <div className={cn('group/row flex h-7 w-full items-center gap-1 rounded-md pr-1 text-body text-foreground-secondary', selected && 'bg-selection text-primary-text')}>
+    <div className={cn('group/row flex h-7 w-full items-center gap-1 rounded-md pr-1 text-body text-foreground-secondary', selected && SELECTED_ROW_CLASS)}>
       <button
         type="button"
+        aria-current={selected ? 'page' : undefined}
         onClick={() => void navigate({ to: ROUTE_IDS.session, search: { key: session.sessionKey } })}
         className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
       >
@@ -104,7 +105,7 @@ export function SidebarSessions() {
   const sessions = useIpcQuery('session:list')
   const repos = useIpcQuery('repos:list')
   const marks = useSessionMarks()
-  const selectedKey = useSelectedSession()
+  const selection = useSidebarSelection()
   const live = orderSessions(sessions.data ?? [], marks.data)
 
   return (
@@ -127,7 +128,7 @@ export function SidebarSessions() {
       ) : live.length === 0 ? (
         <p className="px-2 py-1 text-meta text-muted-foreground">No sessions open.</p>
       ) : (
-        live.map((session) => <SessionRow key={session.sessionKey} session={session} repos={repos.data?.ok === true ? repos.data.repositories : undefined} marks={marks.data} selected={session.sessionKey === selectedKey} />)
+        live.map((session) => <SessionRow key={session.sessionKey} session={session} repos={repos.data?.ok === true ? repos.data.repositories : undefined} marks={marks.data} selected={isUserSessionSelected(session.sessionKey, selection)} />)
       )}
     </div>
   )

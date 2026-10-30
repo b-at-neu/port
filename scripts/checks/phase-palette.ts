@@ -208,17 +208,17 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!bad) ok();
   }
 
-  // --- (f) WCAG: pill text 4.5:1 on its pill, every dot 3:1 on the background, the sidebar and its own pill, in both themes ---
+  // --- (f) WCAG: pill text 4.5:1 on its pill, every dot 3:1 on the background, the sidebar, the selected row and its own pill, in both themes ---
   {
     let bad = false;
     for (const theme of ['light', 'dark'] as const) {
       const block = themes[theme];
-      const [background, sidebar] = [resolved(block, 'background'), resolved(block, 'sidebar')];
+      const [background, sidebar, selection] = [resolved(block, 'background'), resolved(block, 'sidebar'), resolved(block, 'selection')];
       for (const row of rows) {
         const pill = resolved(block, `phase-${row.palette}-pill`);
         const text = resolved(block, `phase-${row.palette}-pill-foreground`);
         const dot = resolved(block, `phase-${row.palette}-dot`);
-        if (pill === null || text === null || dot === null || background === null || sidebar === null) {
+        if (pill === null || text === null || dot === null || background === null || sidebar === null || selection === null) {
           bad = true;
           fail('phase-palette', `palette '${row.palette}' has an unresolvable colour in the ${theme} theme of ${THEME_REL} — every --phase-${row.palette}-* must resolve to a hex`);
           continue;
@@ -227,7 +227,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
           bad = true;
           fail('phase-palette', `palette '${row.palette}' pill text ${text} on ${pill} is ${contrast(text, pill).toFixed(2)}:1 in the ${theme} theme, below ${TEXT_CONTRAST} — darken the text or lighten the pill`);
         }
-        for (const [against, name] of [[background, 'background'], [sidebar, 'sidebar'], [pill, 'its own pill']] as const) {
+        for (const [against, name] of [[background, 'background'], [sidebar, 'sidebar'], [selection, 'selection'], [pill, 'its own pill']] as const) {
           if (contrast(dot, against) < DOT_CONTRAST) {
             bad = true;
             fail('phase-palette', `palette '${row.palette}' dot ${dot} on ${name} (${against}) is ${contrast(dot, against).toFixed(2)}:1 in the ${theme} theme, below ${DOT_CONTRAST} — darken the light dot (and its anchor label) or lighten the dark one`);

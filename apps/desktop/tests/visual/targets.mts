@@ -115,6 +115,7 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
     ready: '[data-slot="session-empty"]',
     variants: [
       { name: 'streaming', hash: `#/session?key=${FIXTURE_SESSION_ID}`, ready: '[data-slot="tool-call-row"]' },
+      { name: 'stage', hash: '#/session?key=fixture-stage-impl-38', ready: 'aside [aria-current="page"]' },
       { name: 'ended', hash: '#/session?key=fixture-session-ended', ready: 'text=Crashed' },
       { name: 'starting', hash: '#/session?key=fixture-session-starting', ready: 'text=Starting' },
       { name: 'question', hash: '#/session?key=fixture-session-question', ready: '[data-slot="question-card"]' },
