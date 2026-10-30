@@ -13,8 +13,17 @@ function query(overrides: Partial<BacklogQueryLike> = {}): BacklogQueryLike {
 const OK_RESPONSE: Extract<BacklogResponse, { ok: true }> = {
   ok: true,
   items: [
-    { number: 47, title: 'Add dark mode', url: 'https://github.com/acme/widgets/issues/47', updatedAt: '2026-01-01T00:00:00Z', assignees: [], labels: [{ name: 'bug', color: 'd73a4a' }], subIssueCount: 0 },
-    { number: 45, title: 'Document retries', url: 'https://github.com/acme/widgets/issues/45', updatedAt: '2026-01-01T00:00:00Z', assignees: ['alice'], labels: [{ name: 'docs', color: null }], subIssueCount: 2 },
+    { number: 47, title: 'Add dark mode', url: 'https://github.com/acme/widgets/issues/47', updatedAt: '2026-01-01T00:00:00Z', assignees: [], labels: [{ name: 'bug', color: 'd73a4a' }], subIssueCount: 0, blockers: { ok: true, open: [], shown: 0, total: 0 } },
+    {
+      number: 45,
+      title: 'Document retries',
+      url: 'https://github.com/acme/widgets/issues/45',
+      updatedAt: '2026-01-01T00:00:00Z',
+      assignees: ['alice'],
+      labels: [{ name: 'docs', color: null }],
+      subIssueCount: 2,
+      blockers: { ok: true, open: [{ number: 43, title: 'Rate-limit search', url: 'u43', state: 'OPEN' }], shown: 1, total: 1 },
+    },
   ],
   scanned: 2,
   total: 2,
@@ -60,6 +69,13 @@ describe('buildBacklogGroup', () => {
     if (group.kind !== 'loaded') throw new Error('expected loaded')
     expect(group.items[0]?.labels).toEqual([{ name: 'bug', color: 'd73a4a' }])
     expect(group.items[1]?.subIssueCount).toBe(2)
+  })
+
+  it('passes each row\'s blockers through unchanged', () => {
+    const group = buildBacklogGroup(REPO_ID, 'acme/widgets', query({ data: OK_RESPONSE }))
+    if (group.kind !== 'loaded') throw new Error('expected loaded')
+    expect(group.items[0]?.blockers).toEqual({ ok: true, open: [], shown: 0, total: 0 })
+    expect(group.items[1]?.blockers).toEqual(OK_RESPONSE.items[1]?.blockers)
   })
 
   it('applies the filter to items while totalCount and labelOptions stay unfiltered', () => {

@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import type { PipelineFailureKind } from '@/types/github'
-import { backlogEmptyGroupCopy, backlogFailureCopy, backlogInvokeErrorCopy, backlogNotReadyCopy, backlogTruncatedCopy } from '@/renderer/backlog/copy'
+import {
+  backlogBlockedReasonCopy,
+  backlogBlockerLine,
+  backlogBlockerTruncatedCopy,
+  backlogEmptyGroupCopy,
+  backlogEpicReasonCopy,
+  backlogFailureCopy,
+  backlogInvokeErrorCopy,
+  backlogNotReadyCopy,
+  backlogStartAnywayTitle,
+  backlogTruncatedCopy,
+} from '@/renderer/backlog/copy'
 
 const EVERY_KIND: readonly PipelineFailureKind[] = [
   'not-found',
@@ -67,5 +78,29 @@ describe('other backlog copy', () => {
 
   it('not-ready names the repository', () => {
     expect(backlogNotReadyCopy('acme/legacy-site')).toContain('acme/legacy-site')
+  })
+})
+
+describe('blocked and epic confirmation copy', () => {
+  it('names the ticket in the dialog title', () => {
+    expect(backlogStartAnywayTitle(552)).toBe('Start #552 anyway?')
+  })
+
+  it('pluralises the blocked reason', () => {
+    expect(backlogBlockedReasonCopy(1)).toBe("It's blocked by 1 open ticket:")
+    expect(backlogBlockedReasonCopy(2)).toBe("It's blocked by 2 open tickets:")
+  })
+
+  it('pluralises the epic reason', () => {
+    expect(backlogEpicReasonCopy(1)).toBe('It has 1 sub-issue. Work on it happens in its sub-issue.')
+    expect(backlogEpicReasonCopy(21)).toBe('It has 21 sub-issues. Work on it happens in its sub-issues.')
+  })
+
+  it('renders a blocker as its number and title', () => {
+    expect(backlogBlockerLine({ number: 454, title: 'Audit log screen' })).toBe('#454 Audit log screen')
+  })
+
+  it('states how many blockers are shown of the total', () => {
+    expect(backlogBlockerTruncatedCopy(10, 14)).toBe('Showing 10 of 14 blockers.')
   })
 })

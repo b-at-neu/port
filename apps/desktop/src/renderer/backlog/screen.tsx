@@ -1,5 +1,5 @@
-// The Backlog screen — open, unclaimed issues per ready repo; Work on claims at once and reports by toast. No `useEffect`: the list navigator is registered directly in the render body.
-import { useState } from 'react'
+// The Backlog screen — open, unclaimed issues per ready repo; Work on claims at once, or after a confirmation for a blocked ticket or an epic, and reports by toast. No `useEffect`: the list navigator is registered directly in the render body.
+import { useRef, useState } from 'react'
 import { useQueries, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { RefreshCw, ListTodo, ChevronDown, Loader2 } from 'lucide-react'
@@ -19,7 +19,10 @@ import { useListSelection } from '@/renderer/shell/list-selection'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { buildBacklogGroup, relativeAge, exactTime, staleSinceAt } from '@/renderer/backlog/group'
 import type { BacklogGroupView, BacklogLabelFilter, BacklogRowView } from '@/types/backlog'
-import { BACKLOG_FILTER_CLEAR, backlogCountCopy, backlogEmptyGroupCopy, backlogFilteredEmptyCopy, backlogNotReadyCopy, backlogParentCopy } from '@/renderer/backlog/copy'
+import { BACKLOG_FILTER_CLEAR, backlogCountCopy, backlogEmptyGroupCopy, backlogFilteredEmptyCopy, backlogNotReadyCopy } from '@/renderer/backlog/copy'
+import { workOnReasons } from '@/renderer/backlog/confirm'
+import { BlockedTag } from '@/renderer/backlog/blocked-tag'
+import { WorkOnConfirm } from '@/renderer/backlog/work-on-confirm'
 import { EMPTY_FILTER } from '@/renderer/backlog/filter'
 import { readBacklogFilters, setBacklogFilter } from '@/renderer/backlog/prefs'
 import { LabelFilterMenu } from '@/renderer/backlog/label-filter-menu'
@@ -39,36 +42,18 @@ function rowKey(repoId: RepoId, number: number): string {
   return `${repoId}:${String(number)}`
 }
 
-function WorkOnMenu({ row, open, onOpenChange }: { readonly row: BacklogRowView; readonly open: boolean; readonly onOpenChange: (open: boolean) => void }) {
-  const queryClient = useQueryClient()
-  const [pending, setPending] = useState(false)
+type PlanGate = 'review' | 'auto'
 
-  function pick(planGate: 'review' | 'auto'): void {
-    setPending(true)
-    void workOn({
-      repoId: row.repoId,
-      repo: row.repo,
-      number: row.number,
-      planGate,
-      onClaimed: () => void queryClient.invalidateQueries({ queryKey: ['backlog:list'] }),
-    }).finally(() => setPending(false))
-  }
+interface WorkOnMenuProps {
+  readonly open: boolean
+  readonly pending: boolean
+  readonly onOpenChange: (open: boolean) => void
+  // Returns true when it opened the confirm dialog, which then owns focus.
+  readonly onPick: (planGate: PlanGate) => boolean
+}
 
-  if (row.subIssueCount > 0) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span tabIndex={0} className={`inline-flex rounded-md ${FOCUS_RING}`}>
-            <Button variant="ghost" size="small" disabled data-slot="backlog-work-on">
-              Work on
-              <ChevronDown aria-hidden="true" className="size-3.5" />
-            </Button>
-          </span>
-        </TooltipTrigger>
-        <TooltipContent>{backlogParentCopy(row.subIssueCount)}</TooltipContent>
-      </Tooltip>
-    )
-  }
+function WorkOnMenu({ open, pending, onOpenChange, onPick }: WorkOnMenuProps) {
+  const picked = useRef<PlanGate | null>(null)
 
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
@@ -78,11 +63,18 @@ function WorkOnMenu({ row, open, onOpenChange }: { readonly row: BacklogRowView;
           {pending ? <Loader2 aria-hidden="true" className="size-3.5 animate-spin" /> : <ChevronDown aria-hidden="true" className="size-3.5" />}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent
+        align="end"
+        onCloseAutoFocus={(event) => {
+          const planGate = picked.current
+          picked.current = null
+          if (planGate !== null && onPick(planGate)) event.preventDefault()
+        }}
+      >
         {PLAN_GATE_OPTIONS.map((option) => (
           <Tooltip key={option.value}>
             <TooltipTrigger asChild>
-              <DropdownMenuItem onSelect={() => pick(option.value)}>{option.label}</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => (picked.current = option.value)}>{option.label}</DropdownMenuItem>
             </TooltipTrigger>
             <TooltipContent>{option.hint}</TooltipContent>
           </Tooltip>
@@ -96,13 +88,17 @@ function BacklogRow({
   row,
   rowProps,
   menuOpen,
+  pending,
   onMenuOpenChange,
+  onPick,
   now,
 }: {
   readonly row: BacklogRowView
   readonly rowProps: ReturnType<ReturnType<typeof useListSelection>['rowProps']>
   readonly menuOpen: boolean
+  readonly pending: boolean
   readonly onMenuOpenChange: (open: boolean) => void
+  readonly onPick: (planGate: PlanGate) => boolean
   readonly now: Date
 }) {
   return (
@@ -111,6 +107,7 @@ function BacklogRow({
       <a href={row.url} target="_blank" rel="noreferrer" className="min-w-24 flex-1 truncate text-foreground hover:underline">
         {row.title}
       </a>
+      <BlockedTag row={row} />
       {row.labels.length > 0 ? (
         <div className="flex min-w-0 max-w-48 gap-1">
           {row.labels.slice(0, MAX_CHIPS).map((label) => (
@@ -138,7 +135,7 @@ function BacklogRow({
         </TooltipTrigger>
         <TooltipContent>{exactTime(row.updatedAt)}</TooltipContent>
       </Tooltip>
-      <WorkOnMenu row={row} open={menuOpen} onOpenChange={onMenuOpenChange} />
+      <WorkOnMenu open={menuOpen} pending={pending} onOpenChange={onMenuOpenChange} onPick={onPick} />
     </div>
   )
 }
@@ -157,14 +154,18 @@ function GroupBody({
   now,
   rowPropsFor,
   menuOpenKey,
+  pendingKeys,
   setMenuOpenKey,
+  onPick,
   onClearFilter,
 }: {
   readonly group: BacklogGroupView
   readonly now: Date
   readonly rowPropsFor: (key: string) => ReturnType<ReturnType<typeof useListSelection>['rowProps']>
   readonly menuOpenKey: string | null
+  readonly pendingKeys: ReadonlySet<string>
   readonly setMenuOpenKey: (key: string | null) => void
+  readonly onPick: (row: BacklogRowView, planGate: PlanGate) => boolean
   readonly onClearFilter: () => void
 }) {
   if (group.kind === 'loading') {
@@ -201,7 +202,9 @@ function GroupBody({
             now={now}
             rowProps={rowPropsFor(key)}
             menuOpen={menuOpenKey === key}
+            pending={pendingKeys.has(key)}
             onMenuOpenChange={(open) => setMenuOpenKey(open ? key : null)}
+            onPick={(planGate) => onPick(row, planGate)}
           />
         )
       })}
@@ -212,7 +215,10 @@ function GroupBody({
 export function BacklogScreen() {
   const reposQuery = useIpcQuery('repos:list')
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [menuOpenKey, setMenuOpenKey] = useState<string | null>(null)
+  const [pendingKeys, setPendingKeys] = useState<ReadonlySet<string>>(new Set())
+  const [confirm, setConfirm] = useState<{ readonly row: BacklogRowView; readonly planGate: PlanGate } | null>(null)
   const [filters, setFilters] = useState<ReadonlyMap<RepoId, BacklogLabelFilter>>(() => readBacklogFilters())
   const now = new Date()
 
@@ -236,12 +242,49 @@ export function BacklogScreen() {
   const flatKeys = flatRows.map((row) => rowKey(row.repoId, row.number))
   const selection = useListSelection(flatKeys)
 
+  function setPending(key: string, pending: boolean): void {
+    setPendingKeys((previous) => {
+      const next = new Set(previous)
+      if (pending) next.add(key)
+      else next.delete(key)
+      return next
+    })
+  }
+
+  function start(row: BacklogRowView, planGate: PlanGate): void {
+    const key = rowKey(row.repoId, row.number)
+    setPending(key, true)
+    void workOn({
+      repoId: row.repoId,
+      repo: row.repo,
+      number: row.number,
+      planGate,
+      onClaimed: () => void queryClient.invalidateQueries({ queryKey: ['backlog:list'] }),
+    }).finally(() => setPending(key, false))
+  }
+
+  function pick(row: BacklogRowView, planGate: PlanGate): boolean {
+    if (workOnReasons(row) === null) {
+      start(row, planGate)
+      return false
+    }
+    setConfirm({ row, planGate })
+    return true
+  }
+
+  function confirmStart(): void {
+    if (confirm === null) return
+    const { row, planGate } = confirm
+    setConfirm(null)
+    start(row, planGate)
+  }
+
   registerListNavigator('backlog', {
     next: () => selection.next(),
     prev: () => selection.prev(),
     open: () => {
       const selected = flatRows.find((row) => rowKey(row.repoId, row.number) === selection.selectedKey)
-      if (selected !== undefined && selected.subIssueCount === 0) setMenuOpenKey(rowKey(selected.repoId, selected.number))
+      if (selected !== undefined) setMenuOpenKey(rowKey(selected.repoId, selected.number))
     },
   })
 
@@ -280,7 +323,7 @@ export function BacklogScreen() {
             groups.map((group) => (
               <div key={group.repoId}>
                 <GroupHeader group={group} filter={filterOf(group.repoId)} onFilterChange={(filter) => changeFilter(group.repoId, filter)} />
-                <GroupBody group={group} now={now} rowPropsFor={(key) => selection.rowProps(key)} menuOpenKey={menuOpenKey} setMenuOpenKey={setMenuOpenKey} onClearFilter={() => changeFilter(group.repoId, EMPTY_FILTER)} />
+                <GroupBody group={group} now={now} rowPropsFor={(key) => selection.rowProps(key)} menuOpenKey={menuOpenKey} pendingKeys={pendingKeys} setMenuOpenKey={setMenuOpenKey} onPick={pick} onClearFilter={() => changeFilter(group.repoId, EMPTY_FILTER)} />
               </div>
             ))
           )}
@@ -291,6 +334,7 @@ export function BacklogScreen() {
           ))}
         </div>
       </ScreenBody>
+      <WorkOnConfirm open={confirm !== null} number={confirm?.row.number ?? 0} reasons={confirm === null ? null : workOnReasons(confirm.row)} onCancel={() => setConfirm(null)} onConfirm={confirmStart} />
     </Screen>
   )
 }

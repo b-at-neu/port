@@ -5,6 +5,8 @@ import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { BacklogItem, BacklogLabel, BacklogResponse } from '@/types/backlog'
 import { classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
+import { toBlockerRead } from '@/main/github/blockers'
+import { blockedByField } from '@/main/github/query'
 import type { GitHubRepoRef } from '@/types/github'
 import { isHexColor } from '@/utils/hex-color'
 
@@ -12,6 +14,7 @@ import { isHexColor } from '@/utils/hex-color'
 const PAGE_SIZE = 100
 const ASSIGNEE_PAGE_SIZE = 10
 const ITEM_LABEL_PAGE_SIZE = 20
+const BLOCKER_PAGE_SIZE = 10
 
 function stdoutOf(result: GhResult): string | undefined {
   return 'stdout' in result ? result.stdout : undefined
@@ -49,6 +52,7 @@ function buildBacklogQuery(): string {
     `        labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name color } }`,
     '        subIssues { totalCount }',
     `        assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }`,
+    `        ${blockedByField(BLOCKER_PAGE_SIZE)}`,
     '      }',
     '    }',
     '  }',
@@ -106,10 +110,14 @@ export async function fetchBacklog(params: FetchBacklogParams): Promise<BacklogR
   const vocabularyNames = new Set(params.vocabulary.labels.map((label) => label.name))
 
   const items: BacklogItem[] = []
-  for (const node of nodes) {
+  for (const [index, node] of nodes.entries()) {
     if (typeof node !== 'object' || node === null) continue
     const issue = node as Record<string, unknown>
     if (fieldListOf(issue.labels, 'name').some((name) => vocabularyNames.has(name))) continue
+    const blockersErrored = errors.some((error) => {
+      const path = error.path
+      return path?.[0] === 'repository' && path[1] === 'issues' && path[2] === 'nodes' && path[3] === index && path[4] === 'blockedBy'
+    })
     items.push({
       number: typeof issue.number === 'number' ? issue.number : 0,
       title: typeof issue.title === 'string' ? issue.title : '',
@@ -118,6 +126,7 @@ export async function fetchBacklog(params: FetchBacklogParams): Promise<BacklogR
       assignees: fieldListOf(issue.assignees, 'login'),
       labels: labelsOf(issue.labels),
       subIssueCount: subIssueCountOf(issue.subIssues),
+      blockers: toBlockerRead(issue.blockedBy, blockersErrored),
     })
   }
 

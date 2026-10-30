@@ -1,5 +1,5 @@
 // Renderer-safe contract for the Backlog screen's list; no import here may reach a Node builtin.
-import type { PipelineFailureKind } from '@/types/github'
+import type { BlockerRead, ClaimBlocker, PipelineFailureKind } from '@/types/github'
 import type { RepoId } from '@/utils/repos'
 
 // `color` is GitHub's own six-digit lowercase hex without the `#`, or `null` when missing or malformed.
@@ -17,6 +17,7 @@ export interface BacklogItem {
   readonly assignees: readonly string[]
   readonly labels: readonly BacklogLabel[]
   readonly subIssueCount: number
+  readonly blockers: BlockerRead
 }
 
 // `exclude` wins over `include`; a non-empty `include` keeps an item carrying any one of its names.
@@ -45,6 +46,14 @@ export interface BacklogRowView {
   readonly assignee: string | null
   readonly updatedAt: string
   readonly labels: readonly BacklogLabel[]
+  readonly subIssueCount: number
+  readonly blockers: BlockerRead
+}
+
+// What Work on must confirm before claiming; `truncation` is set when the blocker page held fewer than exist.
+export interface WorkOnReasons {
+  readonly blockers: readonly ClaimBlocker[]
+  readonly truncation: { readonly shown: number; readonly total: number } | null
   readonly subIssueCount: number
 }
 
