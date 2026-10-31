@@ -3,6 +3,8 @@
 import { describe, expect, it } from 'vitest'
 import { approvedReverify, capRefreshes, codeReviewCount, cycleCapExceeded, mergeabilityRoute, refreshDecision, refreshWins, zeroDiffGate } from '../../../../../../scripts/port-tick/gates'
 import type { ReviewNode } from '../../../../../../scripts/port-tick/gates'
+import { zeroDiffChecksOf } from '../../../../../../scripts/port-tick/checks'
+import type { CheckContext, Disposition } from '../../../../../../scripts/port-tick/checks'
 import { toReviewNode } from '../../../../../../scripts/port-tick/wire'
 import cases from '../../../../../../scripts/port-tick/cases/gates.cases.json'
 
@@ -15,7 +17,12 @@ interface RawReview {
 interface ZeroDiffCase {
   readonly function: 'zeroDiffGate'
   readonly name: string
-  readonly input: { readonly reviews: readonly RawReview[]; readonly comments: readonly { readonly body: string; readonly createdAt: string }[]; readonly headRefOid: string }
+  readonly input: {
+    readonly reviews: readonly RawReview[]
+    readonly comments: readonly { readonly body: string; readonly createdAt: string }[]
+    readonly headRefOid: string
+    readonly checks?: { readonly contexts: readonly CheckContext[] | null; readonly dispositions: Readonly<Record<string, Disposition>>; readonly now: string | null }
+  }
   readonly expected: { readonly action: string }
 }
 
@@ -87,8 +94,9 @@ describe('gates — shared case table', () => {
   for (const row of table) {
     it(`${row.function} — ${row.name}`, () => {
       if (row.function === 'zeroDiffGate') {
-        const { reviews, comments, headRefOid } = row.input
-        expect(zeroDiffGate({ reviews: reviews.map(toReviewNode), comments, headRefOid })).toEqual(row.expected)
+        const { reviews, comments, headRefOid, checks: raw } = row.input
+        const checks = raw === undefined ? undefined : zeroDiffChecksOf(raw.contexts, raw.dispositions, raw.now)
+        expect(zeroDiffGate({ reviews: reviews.map(toReviewNode), comments, headRefOid, checks })).toEqual(row.expected)
         return
       }
       if (row.function === 'cycleCapExceeded') {
