@@ -19,6 +19,7 @@ const GROUP_OF: Readonly<Record<NeedsYouItem['kind'], NeedsYouGroupKey>> = {
   stalled: 'stalled',
   budget: 'budget',
   'half-labelled': 'half-labelled',
+  'dispatch-failed': 'launch-failed',
 }
 
 export interface NeedsYouGroup {

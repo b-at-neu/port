@@ -13,13 +13,24 @@ import { KIND_PROMPT_NAMES, composeStagePrompt, stageModeOf } from '@/utils/stag
 /** Every agent file is told to follow these `PIPELINE.md` sections, so they travel with its body. */
 export const STAGE_PIPELINE_SECTIONS = ['CLAUDE.md overrides', 'Operating rules (all stage agents)', 'Label lifecycle'] as const
 
-const PLUGIN_KEY = 'port@port'
+const PLUGIN_NAME = 'port'
+const MARKETPLACE = 'port'
+const PLUGIN_KEY = `${PLUGIN_NAME}@${MARKETPLACE}`
 const PLUGIN_ROOT_VARIABLE = '${CLAUDE_PLUGIN_ROOT}'
 
 interface InstallRecord {
   readonly scope?: string
   readonly projectPath?: string
   readonly installPath?: string
+  readonly version?: string
+}
+
+interface KnownMarketplaces {
+  readonly [marketplace: string]: { readonly source?: { readonly source?: unknown; readonly path?: unknown }; readonly installLocation?: unknown } | undefined
+}
+
+interface MarketplaceManifest {
+  readonly plugins?: readonly { readonly name?: unknown; readonly source?: unknown }[]
 }
 
 interface InstalledPlugins {
@@ -28,9 +39,29 @@ interface InstalledPlugins {
 
 type ReadJsonFile = <T>(path: string) => Promise<FileResult<T>>
 type ReadTextFile = (path: string) => Promise<FileResult<string>>
-type PathReader = Pick<PathOps, 'join' | 'samePath' | 'contains' | 'toPosix'>
+type PathReader = Pick<PathOps, 'join' | 'samePath' | 'contains' | 'toPosix' | 'resolveFrom'>
 
-export type PluginRootResult = { readonly ok: true; readonly root: string } | { readonly ok: false; readonly message: string }
+export type PluginRootResult =
+  | { readonly ok: true; readonly root: string; readonly origin: 'directory' | 'install-record'; readonly version: string | null }
+  | { readonly ok: false; readonly message: string }
+
+type LiveDirectoryRoot = { readonly kind: 'live'; readonly root: string } | { readonly kind: 'not-directory' } | { readonly kind: 'failed'; readonly message: string }
+
+/** A directory-source marketplace is read live, the way the CLI reads it, so a frozen install path can never go stale. */
+async function resolveLiveDirectoryRoot(claudeHome: string, ops: PathReader, readJsonFile: ReadJsonFile): Promise<LiveDirectoryRoot> {
+  const known = await readJsonFile<KnownMarketplaces>(ops.join(claudeHome, 'plugins', 'known_marketplaces.json'))
+  if (!known.ok) return { kind: 'not-directory' }
+  const entry = known.value[MARKETPLACE]
+  if (entry?.source?.source !== 'directory') return { kind: 'not-directory' }
+  const dir = [entry.source.path, entry.installLocation].find((value): value is string => typeof value === 'string' && value !== '')
+  if (dir === undefined) return { kind: 'failed', message: `the ${MARKETPLACE} marketplace in known_marketplaces.json has no directory path` }
+  const manifestFile = ops.join(dir, '.claude-plugin', 'marketplace.json')
+  const manifest = await readJsonFile<MarketplaceManifest>(manifestFile)
+  if (!manifest.ok) return { kind: 'failed', message: `couldn't read ${manifestFile}: ${manifest.message}` }
+  const source = manifest.value.plugins?.find((plugin) => plugin.name === PLUGIN_NAME)?.source
+  if (typeof source !== 'string') return { kind: 'failed', message: `${manifestFile} has no ${PLUGIN_NAME} plugin with a directory source` }
+  return { kind: 'live', root: ops.resolveFrom(dir, source) }
+}
 
 export interface ResolveInstalledPluginRootParams {
   readonly claudeHome: string
@@ -50,8 +81,11 @@ export async function resolveInstalledPluginRoot(params: ResolveInstalledPluginR
   const forRepo = (scope: string) => records.find((record) => record.scope === scope && record.projectPath !== undefined && params.ops.samePath(record.projectPath, params.repoRoot))
   const chosen = forRepo('local') ?? forRepo('project') ?? records.find((record) => record.scope === 'user')
   if (chosen?.installPath === undefined) return { ok: false, message: `no ${PLUGIN_KEY} install record in ${file}` }
-  if (params.ops.contains(params.worktree, chosen.installPath)) return { ok: false, message: `the ${PLUGIN_KEY} install path ${chosen.installPath} is inside the stage worktree` }
-  return { ok: true, root: chosen.installPath }
+  const live = await resolveLiveDirectoryRoot(params.claudeHome, params.ops, params.readJsonFile)
+  if (live.kind === 'failed') return { ok: false, message: live.message }
+  const root = live.kind === 'live' ? live.root : chosen.installPath
+  if (params.ops.contains(params.worktree, root)) return { ok: false, message: `the ${PLUGIN_KEY} install path ${root} is inside the stage worktree` }
+  return { ok: true, root, origin: live.kind === 'live' ? 'directory' : 'install-record', version: chosen.version ?? null }
 }
 
 function stripFrontmatter(text: string): string {
@@ -109,7 +143,7 @@ export async function loadStageInstructions(params: LoadStageInstructionsParams)
   const sections: string[] = []
   for (const title of STAGE_PIPELINE_SECTIONS) {
     const section = extractSection(pipelineText, title)
-    if (section === null) return { ok: false, message: `${pipelineFile} has no "${title}" section` }
+    if (section === null) return { ok: false, kind: 'missing-section', message: `${pipelineFile} has no "${title}" section` }
     sections.push(withoutDuplicateBlocks(section, body).replace(/\n{3,}/g, '\n\n').trim())
   }
   const text = [body, ...sections].join('\n\n').replaceAll(PLUGIN_ROOT_VARIABLE, params.ops.toPosix(params.pluginRoot))
@@ -198,7 +232,10 @@ export function createStageInstructionsLoader(deps: StageInstructionsLoaderDeps)
     const resolved = await resolveInstalledPluginRoot({ claudeHome: deps.claudeHome, repoRoot: request.entry.path, worktree: worktreePath, ops: deps.ops, readJsonFile: deps.readJsonFile })
     if (!resolved.ok) return resolved
     const instructions = await loadStageInstructions({ pluginRoot: resolved.root, agent: request.agent, ops: deps.ops, readTextFile: deps.readTextFile })
-    if (!instructions.ok) return instructions
+    if (!instructions.ok) {
+      if (instructions.kind !== 'missing-section' || resolved.origin !== 'install-record') return instructions
+      return { ok: false, message: `${instructions.message} — the ${PLUGIN_KEY} install at ${resolved.root} (version ${resolved.version ?? 'unknown'}) looks out of date. Update or reinstall the plugin, then the next dispatch picks it up.` }
+    }
     const pointers = await readStageConfigPointers(request.entry.path, deps.git)
     if (!pointers.ok) return pointers
     const pluginRoot = deps.ops.toPosix(resolved.root)

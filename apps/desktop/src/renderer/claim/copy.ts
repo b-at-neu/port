@@ -1,4 +1,5 @@
 // Every string Work on's toasts show lives here, one function per union — a new variant is a compile error rather than a silently blank toast. Pure string functions; no DOM here.
+import { lastLaunchFailed } from '@/renderer/board/dispatch-failures'
 import type { ClaimApplyResponse, ClaimToast, ClaimVerdict, PlanGateChoice } from '@/types/claim'
 import type { RepoDispatchStatus } from '@/types/dispatch'
 import type { WriteOutcome } from '@/types/writes'
@@ -46,8 +47,9 @@ export function dispatchLine(repo: string, status: RepoDispatchStatus | undefine
   const { state } = status
   switch (state.kind) {
     case 'idle':
-    case 'active':
       return 'Planning starts now.'
+    case 'active':
+      return lastLaunchFailed(state.recent) === null ? 'Planning starts now.' : `The last stage launch in ${repo} failed, so planning may not start. Check Needs you.`
     case 'at-capacity':
       return `All ${String(state.limit)} session slots are busy. Planning starts when one frees up.`
     case 'budget-unavailable':

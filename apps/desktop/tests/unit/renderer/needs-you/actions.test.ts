@@ -26,6 +26,13 @@ function stageBlocked(): NeedsYouItem {
   return { kind: 'stage-blocked', repoId: 'repo-a' as RepoId, repo: 'o/a', number: 51, title: 't', url: null, ticket: null, at: null, matchedRow: null, sessionKey: 'hosted-51' as SessionKey, text: 'BLOCKED: x' }
 }
 
+describe('actionFor — dispatch-failed', () => {
+  it('opens the ticket', () => {
+    const item = { kind: 'dispatch-failed', repoId: 'repo-a' as RepoId, repo: 'o/a', number: 52, title: 't', url: 'https://github.com/o/a/issues/52', ticket: null, at: null, matchedRow: null, attempts: 2, record: {} } as unknown as NeedsYouItem
+    expect(actionFor(item)).toEqual({ label: 'Open ticket', kind: 'open', disabledReason: null })
+  })
+})
+
 describe('actionFor — stage-blocked', () => {
   it('answers inline, with Open session as its secondary', () => {
     expect(actionFor(stageBlocked())).toEqual({ label: 'Unblock', kind: 'answer', disabledReason: null, secondaryLabel: 'Open session' })

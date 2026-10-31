@@ -35,6 +35,8 @@ function eventOf(item: NeedsYouItem): string {
       return `${item.note.kind}|${newestStageAt(item.matchedRow)}`
     case 'half-labelled':
       return `${item.repair.shape}|${[...item.repair.labels].sort().join(',')}`
+    case 'dispatch-failed':
+      return `${item.record.agent}|${item.record.detail ?? ''}`
   }
 }
 

@@ -6,6 +6,7 @@ import type { InterruptedStage, StageDenial } from '@/types/stage'
 import type { RepoId } from '@/utils/repos'
 import type { RepositoryState } from '@/types/state'
 import type { TickHeld } from '@/types/tick'
+import { failingDispatches } from '@/renderer/board/dispatch-failures'
 import { projectBoard } from '@/renderer/board/project'
 import type { BoardItemRow, BoardSnapshot, NeedsYouItem } from '@/types/board'
 import { BLOCKED_PREFIX, classifyHandbackText } from '@/utils/stage/handback-text'
@@ -218,6 +219,25 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
         matchedRow: matched,
         denial,
       })
+    }
+    if (dispatch.owner === 'app' && dispatch.state.kind === 'active') {
+      for (const { record, attempts } of failingDispatches(dispatch.state.recent)) {
+        const matched = rowByKey.get(rowKey(dispatch.repoId, record.number)) ?? null
+        if (matched?.stageLabel?.key !== record.trigger) continue
+        items.push({
+          kind: 'dispatch-failed',
+          repoId: dispatch.repoId,
+          repo: matched.item.repo,
+          number: record.number,
+          title: matched.item.title,
+          url: matched.item.url,
+          ticket: matched.ticket.ref,
+          at: record.at,
+          matchedRow: matched,
+          record,
+          attempts,
+        })
+      }
     }
     for (const interrupted of dispatch.interrupted) {
       if (interrupted.reason === 'usage-limit') {

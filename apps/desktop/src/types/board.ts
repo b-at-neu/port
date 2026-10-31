@@ -3,7 +3,7 @@ import type { RepoId } from '@/utils/repos'
 import type { ItemStatus, PipelineState, ReconciledItem, RepositoryState, StageLabel } from '@/types/state'
 import type { ActionAvailability, DecisionAvailability, ItemActionResult, OperatorAction, OperatorDecision } from '@/types/actions'
 import type { StageAgent, TickClaim, TickHeld, TickLabelRepair, TickReport } from '@/types/tick'
-import type { BudgetNote, DispatchOwner, RepoDispatchStatus, RunStatesSnapshot } from '@/types/dispatch'
+import type { BudgetNote, DispatchOwner, DispatchRecord, RepoDispatchStatus, RunStatesSnapshot } from '@/types/dispatch'
 import type { SessionKey } from '@/types/hosting'
 import type { AskQuestion } from '@/utils/hosting/controls'
 import type { LabelKey } from '@/utils/labels/vocabulary'
@@ -217,12 +217,14 @@ export type NeedsYouItem =
   /** Every usage-limit interruption across all repositories, collapsed into one row — `resetsAt` is the latest known reset, `null` when none is. */
   | (NeedsYouItemBase & { readonly kind: 'usage-limit'; readonly entries: readonly InterruptedStage[]; readonly resetsAt: string | null; readonly repoNames: ReadonlyMap<RepoId, string> })
   | (NeedsYouItemBase & { readonly kind: 'half-labelled'; readonly repair: TickLabelRepair })
+  /** `attempts` counts the consecutive failed launches at the tail of this ticket's own records. */
+  | (NeedsYouItemBase & { readonly kind: 'dispatch-failed'; readonly record: DispatchRecord; readonly attempts: number })
 
 /** The Needs you item keys last seen, by repository — `''` for an item with no repository. */
 export type NeedsYouBaseline = Readonly<Record<string, readonly string[]>>
 
 /** The groups Needs you renders — `stage-question`/`stage-questions` share `questions`, `stage-approval` is `approvals`, and `stage-blocked` joins `blocked`. */
-export type NeedsYouGroupKey = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'blocked' | 'questions' | 'approvals' | 'denied' | 'interrupted' | 'usage-limit' | 'held' | 'stalled' | 'budget' | 'half-labelled'
+export type NeedsYouGroupKey = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'blocked' | 'questions' | 'approvals' | 'denied' | 'interrupted' | 'usage-limit' | 'held' | 'stalled' | 'budget' | 'half-labelled' | 'launch-failed'
 
 export const PHASE_KEYS = ['plan', 'planReview', 'implement', 'review', 'revision', 'merge'] as const
 
