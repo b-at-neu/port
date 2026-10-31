@@ -23,6 +23,8 @@ export interface PipelineSessionRow {
   readonly tone: PhaseTone
   /** The dot's screen-reader text: `Needs you`, or the phase name. */
   readonly statusText: string
+  /** The phase name, kept even when `statusText` reads `Needs you`. */
+  readonly phaseName: string
   /** Non-`null` for a row backed by one of this app's own stage sessions — the row then links to that session, not the board. */
   readonly sessionKey: SessionKey | null
   /** Non-`null` for a detected row (no app-hosted session) — the row then links to that session's live Transcript. Exactly one of `sessionKey`/`transcript` is non-null. */

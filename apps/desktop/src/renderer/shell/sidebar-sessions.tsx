@@ -14,7 +14,7 @@ import { folderLabel } from '@/utils/workspace/label'
 import type { RepositoryEntry } from '@/utils/repos'
 import { useIpcMutation, useIpcQuery } from '@/renderer/data/query'
 import { SELECTED_ROW_CLASS, isUserSessionSelected, useSidebarSelection } from '@/renderer/shell/sidebar-selection'
-import { waitingLabelOf } from '@/renderer/session/interaction-copy'
+import { dotFor } from '@/renderer/shell/session-row-model'
 import { useRenaming, setRenaming, openNewSessionDialog } from '@/renderer/shell/stores'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { useSessionMarks } from '@/renderer/session/marks'
@@ -26,13 +26,6 @@ function repoTag(repos: readonly RepositoryEntry[] | undefined, session: HostedS
   const entry = repos?.find((r) => r.id === session.repoId)
   if (entry === undefined) return session.repoId
   return 'config' in entry ? entry.config.repo : entry.displayName
-}
-
-function dotFor(session: HostedSessionSnapshot): { readonly className: string; readonly label: string } {
-  const waiting = waitingLabelOf(session)
-  if (waiting !== null) return { className: 'bg-phase-needs-you-dot animate-pulse', label: waiting }
-  if (session.phase === 'starting' || session.phase === 'streaming') return { className: 'bg-working-dot', label: 'Working' }
-  return { className: 'bg-idle-dot', label: 'Idle' }
 }
 
 function SessionRow({ session, repos, marks, selected }: { readonly session: HostedSessionSnapshot; readonly repos: readonly RepositoryEntry[] | undefined; readonly marks: SessionMarks | undefined; readonly selected: boolean }) {
@@ -77,22 +70,26 @@ function SessionRow({ session, repos, marks, selected }: { readonly session: Hos
 
   return (
     <div className={cn('group/row flex h-7 w-full items-center gap-1 rounded-md pr-1 text-body text-foreground-secondary', selected && SELECTED_ROW_CLASS)}>
-      <button
-        type="button"
-        aria-current={selected ? 'page' : undefined}
-        onClick={() => void navigate({ to: ROUTE_IDS.session, search: { key: session.sessionKey } })}
-        className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <Tooltip>
-          <TooltipTrigger asChild>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-current={selected ? 'page' : undefined}
+            onClick={() => void navigate({ to: ROUTE_IDS.session, search: { key: session.sessionKey } })}
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+          >
             <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', dot.className)} />
-          </TooltipTrigger>
-          <TooltipContent>{dot.label}</TooltipContent>
-        </Tooltip>
-        {pinned ? <SessionPinGlyph /> : null}
-        <span className="flex-1 truncate">{sessionTitle(session)}</span>
-        <span className="shrink-0 truncate text-meta text-muted-foreground">{repoTag(repos, session)}</span>
-      </button>
+            {pinned ? <SessionPinGlyph /> : null}
+            <span className="flex-1 truncate">{sessionTitle(session)}</span>
+            <span className="sr-only">{dot.label}</span>
+            <span className="shrink-0 truncate text-meta text-muted-foreground">{repoTag(repos, session)}</span>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right">
+          <div className="break-words font-medium">{sessionTitle(session)}</div>
+          <div className="opacity-80">{dot.label}</div>
+        </TooltipContent>
+      </Tooltip>
       <div className="shrink-0 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 group-has-[[data-state=open]]/row:opacity-100">
         <SessionMarkMenu sessionId={session.claudeSessionId} marks={marks} onRename={() => setRenaming(session.sessionKey)} />
       </div>

@@ -5,7 +5,7 @@ import type { BoardSnapshot } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/types/board'
 import type { PipelineRow, ReadyPipelineRow } from '@/types/shell'
-import { pipelinesModel as pipelinesModelOf } from '@/renderer/shell/pipelines-model'
+import { phaseLineOf, pipelinesModel as pipelinesModelOf } from '@/renderer/shell/pipelines-model'
 import { needsYouItems } from '@/renderer/board/needs-you'
 import { stageSession } from '../../../fixtures/stage-session'
 
@@ -190,7 +190,7 @@ describe('pipelinesModel', () => {
     const snapshot = snapshotOf([readyRepoState({ items: [live, dormant] })])
     const row = assertReady(pipelinesModel([readyEntry()], snapshot)[0])
     expect(row.sessions).toEqual([
-      { key: `${REPO_ID}-42`, repoId: REPO_ID, number: 42, label: '#42 a ticket', tone: { palette: 'implement', fill: 'active', pulse: false }, statusText: 'Implementing', sessionKey: null, transcript: { sessionId: 'sess-1', agentId: 'a1' } },
+      { key: `${REPO_ID}-42`, repoId: REPO_ID, number: 42, label: '#42 a ticket', tone: { palette: 'implement', fill: 'active', pulse: false }, statusText: 'Implementing', phaseName: 'Implementing', sessionKey: null, transcript: { sessionId: 'sess-1', agentId: 'a1' } },
     ])
   })
 
@@ -225,8 +225,20 @@ describe('pipelinesModel', () => {
     const waiting = { ...stageSession({ key: 'hosted-impl', repoId: REPO_ID, stage }), pendingPermissions: [pendingPermission()] }
     const answered = stageSession({ key: 'hosted-impl', repoId: REPO_ID, stage })
     const snapshot = snapshotOf([readyRepoState({ items: [item()] })])
-    expect(assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [waiting])[0]).sessions[0]).toMatchObject({ tone: { palette: 'needs-you', fill: 'active', pulse: true }, statusText: 'Needs you' })
+    expect(assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [waiting])[0]).sessions[0]).toMatchObject({ tone: { palette: 'needs-you', fill: 'active', pulse: true }, statusText: 'Needs you', phaseName: 'Implementing' })
     expect(assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [answered])[0]).sessions[0]).toMatchObject({ tone: { palette: 'implement', fill: 'active', pulse: false }, statusText: 'Implementing' })
+  })
+
+  it('reads the phase line as the phase, with Needs you appended while waiting on the operator', () => {
+    const stage = { agent: 'impl', number: 42, kind: 'issue', trigger: 'planApproved' } as const
+    const waiting = { ...stageSession({ key: 'hosted-impl', repoId: REPO_ID, stage }), pendingPermissions: [pendingPermission()] }
+    const plain = stageSession({ key: 'hosted-impl', repoId: REPO_ID, stage })
+    const snapshot = snapshotOf([readyRepoState({ items: [item()] })])
+    const waitingRow = assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [waiting])[0]).sessions[0]
+    const plainRow = assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [plain])[0]).sessions[0]
+    if (waitingRow === undefined || plainRow === undefined) throw new Error('expected a session row')
+    expect(phaseLineOf(waitingRow)).toBe('Implementing · Needs you')
+    expect(phaseLineOf(plainRow)).toBe('Implementing')
   })
 
   it.each([
@@ -293,7 +305,7 @@ describe('pipelinesModel', () => {
     const snapshot = snapshotOf([readyRepoState({ items: linked })])
     const revise = { ...stageSession({ key: 'hosted-revise', repoId: REPO_ID, stage: { agent: 'revise', number: 47, kind: 'pull-request', trigger: 'needsRevision' } }), title: '#46 the ticket' }
     const row = assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [revise])[0])
-    expect(row.sessions).toEqual([{ key: 'hosted-revise', repoId: REPO_ID, number: 46, label: '#46 the ticket', tone: { palette: 'revise', fill: 'active', pulse: false }, statusText: 'Revising', sessionKey: 'hosted-revise', transcript: null }])
+    expect(row.sessions).toEqual([{ key: 'hosted-revise', repoId: REPO_ID, number: 46, label: '#46 the ticket', tone: { palette: 'revise', fill: 'active', pulse: false }, statusText: 'Revising', phaseName: 'Revising', sessionKey: 'hosted-revise', transcript: null }])
   })
 
   it('shows a ticket with a linked pull request as one item row, never a second for the pull request', () => {

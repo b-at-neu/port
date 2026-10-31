@@ -9,7 +9,8 @@ import { EmptyState } from '@/renderer/components/empty-state'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { StatusPillMenu } from '@/renderer/components/status-pill-menu'
 import { useIpcQuery } from '@/renderer/data/query'
-import { pipelinesModel } from '@/renderer/shell/pipelines-model'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
+import { phaseLineOf, pipelinesModel } from '@/renderer/shell/pipelines-model'
 import { useNeedsYouItems } from '@/renderer/needs-you/use-items'
 import type { PipelineRow, PipelineSessionRow, SidebarSelection } from '@/types/shell'
 import { cn } from '@/renderer/lib/utils'
@@ -81,17 +82,24 @@ function SessionLinks({ sessions, selectedKey }: { readonly sessions: readonly P
       {sessions.map((session) => {
         const selected = session.key === selectedKey
         return (
-          <button
-            key={session.key}
-            type="button"
-            onClick={() => open(session)}
-            aria-current={selected ? 'page' : undefined}
-            className={cn('flex h-6.5 items-center gap-1.5 rounded-md py-0 pr-2 pl-8 text-left text-small text-foreground-secondary outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring', selected && SELECTED_ROW_CLASS)}
-          >
-            <PhaseDot tone={session.tone} />
-            <span className="truncate">{session.label}</span>
-            <span className="sr-only">{session.statusText}</span>
-          </button>
+          <Tooltip key={session.key}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => open(session)}
+                aria-current={selected ? 'page' : undefined}
+                className={cn('flex h-6.5 items-center gap-1.5 rounded-md py-0 pr-2 pl-8 text-left text-small text-foreground-secondary outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring', selected && SELECTED_ROW_CLASS)}
+              >
+                <PhaseDot tone={session.tone} />
+                <span className="truncate">{session.label}</span>
+                <span className="sr-only">{session.statusText}</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <div className="break-words font-medium">{session.label}</div>
+              <div className="opacity-80">{phaseLineOf(session)}</div>
+            </TooltipContent>
+          </Tooltip>
         )
       })}
     </div>
