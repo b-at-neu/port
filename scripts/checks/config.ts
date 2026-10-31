@@ -229,6 +229,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       cfg.commands?.worktrees,
       cfg.commands?.budget,
       cfg.commands?.tick,
+      cfg.commands?.screenshots?.run,
       cfg.release?.postPublishHook,
       ...(cfg.extraAllow ?? []),
       ...(settings.permissions?.allow ?? []),

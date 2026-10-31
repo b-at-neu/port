@@ -1,0 +1,6 @@
+{
+  "repo": "b-at-neu/port",
+  "commands": {
+    "screenshots": { "run": "pnpm screenshots", "dir": "apps/desktop/out/screenshots" }
+  }
+}
