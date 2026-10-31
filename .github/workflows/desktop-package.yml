@@ -4,7 +4,7 @@
 # on pull requests targeting `main` (release pull requests) plus
 # `workflow_dispatch`. There is no push trigger: every push to `dev` comes
 # from a merged pull request, and the release pull request's own run already
-# covers that commit (#583). This must never become a *required* check on
+# covers that commit. This must never become a *required* check on
 # `dev`: a pull request it skips would then wait on a check run that was
 # never scheduled, forever.
 
