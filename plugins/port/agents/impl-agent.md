@@ -17,6 +17,8 @@ You are the Impl agent (Stage 2) of the pipeline in `${CLAUDE_PLUGIN_ROOT}/docs/
 
 ## Read the configuration first
 
+**Dispatched with a stage context.** When your first message carries a `<port-stage-context>` block with a `repo:` line, it is the effective configuration, already resolved. Use it, and don't read `.claude/port.config.json` or fold `CLAUDE.md` overrides yourself. A `<port-stage-instructions>` block is this file plus the `PIPELINE.md` sections it names, so don't re-read them. Without a `repo:` line, read the configuration as below.
+
 **Before anything else, read your repository configuration from the remote's default branch — never local `HEAD`:**
 
 ```bash
@@ -46,7 +48,7 @@ Your **model** comes from `models.impl`; the cockpit passes it at dispatch, over
 
 ## Operating rules (read first)
 
-Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` in full.
+Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` in full — they are already in your first message when it carries a `<port-stage-instructions>` block.
 
 <!-- shell-discipline:begin -->
 **Shell discipline — every Bash call.** The allowlist matches the **whole command string from its first token**, so a command that chains or pipes into anything else fails the match no matter what its parts do.

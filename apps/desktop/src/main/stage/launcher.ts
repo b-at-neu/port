@@ -9,7 +9,7 @@ import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '@/ty
 
 import type { StageOutcome } from '@/types/stage-session'
 import type { RepoId } from '@/utils/repos'
-import type { StageDenial, StageResumeRequest } from '@/types/stage'
+import type { StageDenial, StageInstructionsLoader, StageResumeRequest } from '@/types/stage'
 import { proposedRule } from '@/main/stage/rule'
 import { STAGE_AGENT_NAMES } from '@/main/stage/agents'
 import { classifyHandback } from '@/main/stage/handback'
@@ -40,6 +40,8 @@ interface CreateStageLauncherParams {
   /** The policy's `deny` arm, turned into a `StageDenial` — deduped and bounded on the dispatcher's own side. */
   readonly onDenial: (repoId: RepoId, denial: StageDenial) => void
   readonly newId: () => string
+  /** The first message's composed text, loaded from the installed plugin; a failure fails the launch. */
+  readonly loadInstructions: StageInstructionsLoader
 }
 
 /** The one place a failed `SessionStartResult` becomes a message for a dispatch record — never re-derived at a second call site. */
@@ -144,6 +146,12 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     const wt = await params.createWorktree({ root, git: params.git, agent: request.agent, number: request.number, integration: request.entry.config.branches.integration, target: request.target })
     if (!wt.ok) return { ok: false, kind: 'failed', message: `Couldn't create the stage worktree: ${wt.message}` }
 
+    const instructions = await params.loadInstructions(request, wt.path)
+    if (!instructions.ok) {
+      await removeAndRelease(root, wt.path, wt.branch, wt.baseSha)
+      return { ok: false, kind: 'failed', message: `Couldn't load the stage instructions from the installed port plugin: ${instructions.message}` }
+    }
+
     const registryId = params.newId()
     let launchedKey: SessionKey | null = null
     const onDeny = denialRecorder(request.entry.id, request.agent, request.number, () => launchedKey)
@@ -170,7 +178,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
 
     const sessionKey = startResult.snapshot.sessionKey
     launchedKey = sessionKey
-    const sendResult = params.store.send(sessionKey, request.prompt)
+    const sendResult = params.store.send(sessionKey, instructions.text)
     if (!sendResult.ok) {
       await params.store.close(sessionKey)
       await removeAndRelease(root, wt.path, wt.branch, wt.baseSha)

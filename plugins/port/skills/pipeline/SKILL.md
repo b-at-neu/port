@@ -268,9 +268,11 @@ Agent({
   subagent_type: "<plan-agent|impl-agent|review-agent|revise-agent>",
   model: "<the matching entry from models>",
   run_in_background: true,
-  prompt: "<Stage> stage for <kind> #<n>. Run your pipeline stage for #<n>. Follow your Pre-flight, Label swap, Work, and Handoff steps exactly."
+  prompt: "<Stage> stage for <kind> #<n>. Run your pipeline stage for #<n>. Follow your Pre-flight, Label swap, Work, and Handoff steps exactly.\n\n<port-stage-context>\nstage: <plan|impl|review|revise>\nitem: <kind> #<n>\nmode: <Mode>\n</port-stage-context>"
 })
 ```
+
+The context block carries only `stage`, `item`, and `mode` (the Stage mapping's `Mode` column), and the refresh prompt below carries the same block after its sentence. A native subagent already receives its agent definition, so nothing more is inlined here; the desktop app additionally inlines the effective configuration and the instructions in the same block shape.
 
 **`model` is the one field you set beyond the stage.** Agent frontmatter is static, so an agent file cannot read `models` from config; passing it here is what honours the configuration, and it takes precedence over the frontmatter default. Everything else — tool scope, permission mode, `maxTurns`, worktree isolation — comes from the agent definition. For a refresh, say so in the `prompt` so the agent takes its refresh path: `Refresh stage for pull request #<n>. Run your pipeline stage for pull request #<n> in refresh mode.` — agent-facing, not operator-facing copy, so `<n>` stays the pull request's own number here: `revise-agent` keys its refresh path off labels, never off this string.
 
@@ -278,14 +280,14 @@ Agent({
 
 Stage mapping:
 
-| Trigger | `subagent_type` | Model | Prompt `<Stage>` |
-| --- | --- | --- | --- |
-| Issue at `<labels.ready>` | `plan-agent` (fresh plan) — **after the budget gate** | `models.plan` | `Plan` |
-| Issue at `<labels.planChangesRequested>` | `plan-agent` (revision) — **after the budget gate** | `models.plan` | `Plan` |
-| Issue at `<labels.planApproved>` | `impl-agent` — **unless `SESSION REQUIRED` at its slot: announce, never dispatch**; otherwise **after the budget gate** | `models.impl` | `Implementation` |
-| Pull request at `<labels.readyForReview>` | `review-agent` — **unless `mergeable` is `CONFLICTING`: refresh instead, see "Refresh sweep"; or the newest review already covers the current head with no `## Gate cleared` since: escalate instead, see "Zero-diff review gate"; or it also carries `<labels.refreshBranch>`/`<labels.refreshing>`: refresh wins, never dispatch review this tick**; otherwise **after the budget gate** | `models.review` | `Review` |
-| Pull request at `<labels.needsRevision>` | `revise-agent` — **after the cycle-cap check**; **unless `SESSION REQUIRED` at its slot: announce, never dispatch**; **or it also carries `<labels.refreshBranch>`/`<labels.refreshing>`: refresh wins, never dispatch revision this tick**; otherwise **after the budget gate** | `models.revise` | `Revision` |
-| Pull request at `<labels.refreshBranch>` | `revise-agent` in **refresh mode** — **after the budget gate** | `models.revise` | `Refresh` |
+| Trigger | `subagent_type` | Model | Prompt `<Stage>` | `<Mode>` |
+| --- | --- | --- | --- | --- |
+| Issue at `<labels.ready>` | `plan-agent` (fresh plan) — **after the budget gate** | `models.plan` | `Plan` | `fresh` |
+| Issue at `<labels.planChangesRequested>` | `plan-agent` (revision) — **after the budget gate** | `models.plan` | `Plan` | `revision` |
+| Issue at `<labels.planApproved>` | `impl-agent` — **unless `SESSION REQUIRED` at its slot: announce, never dispatch**; otherwise **after the budget gate** | `models.impl` | `Implementation` | `implement` |
+| Pull request at `<labels.readyForReview>` | `review-agent` — **unless `mergeable` is `CONFLICTING`: refresh instead, see "Refresh sweep"; or the newest review already covers the current head with no `## Gate cleared` since: escalate instead, see "Zero-diff review gate"; or it also carries `<labels.refreshBranch>`/`<labels.refreshing>`: refresh wins, never dispatch review this tick**; otherwise **after the budget gate** | `models.review` | `Review` | `review` |
+| Pull request at `<labels.needsRevision>` | `revise-agent` — **after the cycle-cap check**; **unless `SESSION REQUIRED` at its slot: announce, never dispatch**; **or it also carries `<labels.refreshBranch>`/`<labels.refreshing>`: refresh wins, never dispatch revision this tick**; otherwise **after the budget gate** | `models.revise` | `Revision` | `revise` |
+| Pull request at `<labels.refreshBranch>` | `revise-agent` in **refresh mode** — **after the budget gate** | `models.revise` | `Refresh` | `refresh` |
 
 `<kind>` is `issue` for the three issue rows and `pull request` for the three pull-request rows. The refresh row uses its own template, above, which carries no `<kind>`.
 

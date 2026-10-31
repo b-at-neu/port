@@ -16,6 +16,7 @@ import { dispatchableFrom, observableFrom } from '@/main/tick/dispatchable'
 
 
 import { labelName } from '@/utils/labels/vocabulary'
+import { KIND_PROMPT_NAMES, STAGE_PROMPT_NAMES } from '@/utils/stage/prompt'
 import { ticketIndex, ticketLabelFor } from '@/utils/tickets/ticket'
 import { runObservationPass } from '@/main/dispatch/observe-pass'
 import { commentFailureMessage, selectDispatches, survived } from '@/main/dispatch/select'
@@ -28,7 +29,7 @@ import { boundRecords, endedStagesOf, freeSlots, refreshRecords } from '@/main/d
 
 import type { PipelineItemKind, ResolvedItem } from '@/types/github'
 import type { StageWorktreeTarget } from '@/types/workspace'
-import type { EndedStage, StageAgent, TickActionable } from '@/types/tick'
+import type { EndedStage, TickActionable } from '@/types/tick'
 import type { StageOutcome } from '@/types/stage-session'
 import type { Dispatcher, CreateDispatcherParams } from '@/types/dispatch'
 
@@ -38,9 +39,6 @@ const NOTE_LIMIT = 20
 /** Byte-identical to the pipeline skill's own "Dispatching" block, pinned by desktop-dispatch.ts. */
 export const DISPATCH_PROMPT = '<Stage> stage for <kind> #<n>. Run your pipeline stage for #<n>. Follow your Pre-flight, Label swap, Work, and Handoff steps exactly.'
 export const REFRESH_PROMPT = 'Refresh stage for pull request #<n>. Run your pipeline stage for pull request #<n> in refresh mode.'
-
-const STAGE_PROMPT_NAMES: Record<StageAgent, string> = { plan: 'Plan', impl: 'Implementation', review: 'Review', revise: 'Revision' }
-const KIND_PROMPT_NAMES: Record<PipelineItemKind, string> = { issue: 'issue', 'pull-request': 'pull request' }
 
 /** `launch.ts`'s own `StageLaunchRequest.prompt` is filled from this, never re-derived at the launcher. */
 export function promptFor(actionable: Pick<TickActionable, 'trigger' | 'number' | 'agent' | 'kind'>): string {

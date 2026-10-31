@@ -2,8 +2,15 @@
 // view and the on-disk transcript view. `buildRow`'s exact signature is pinned by `scripts/checks/desktop-renderer.ts`.
 import type { DiffHunk, FileDiff, Payload, TranscriptEntry } from '@/utils/sessions/transcript'
 import type { GroupedNode, PayloadView, RowView, ToolResultView } from '@/types/components'
+import { STAGE_PROMPT_NAMES, parseStagePrompt } from '@/utils/stage/prompt'
 
 export const PROMPT_CLAMP_LINES = 12
+
+/** An issue reads as a ticket, a pull request as a PR (DESIGN §6). */
+export function stageCardTitle(row: Extract<RowView, { readonly kind: 'stage-prompt' }>): string {
+  const name = row.stage === 'refresh' ? 'Refresh' : STAGE_PROMPT_NAMES[row.stage]
+  return `${name} stage · ${row.itemKind === 'issue' ? 'ticket #' : 'PR#'}${String(row.number)}`
+}
 
 function payloadView(payload: Payload): PayloadView {
   return { text: payload.text, omittedChars: payload.omittedChars }
@@ -20,8 +27,12 @@ function toolResultView(entry: Extract<TranscriptEntry, { type: 'tool-call' }>):
 
 export function buildRow(entry: TranscriptEntry): RowView {
   switch (entry.type) {
-    case 'user-text':
-      return { kind: 'user-text', uuid: entry.uuid, text: payloadView(entry.text) }
+    case 'user-text': {
+      const stagePrompt = parseStagePrompt(entry.text.text)
+      if (stagePrompt === null) return { kind: 'user-text', uuid: entry.uuid, text: payloadView(entry.text) }
+      const instructions = stagePrompt.instructions === null ? null : { text: stagePrompt.instructions, omittedChars: entry.text.omittedChars }
+      return { kind: 'stage-prompt', uuid: entry.uuid, stage: stagePrompt.stage, itemKind: stagePrompt.kind, number: stagePrompt.number, instructions, source: stagePrompt.source }
+    }
     case 'assistant-text':
       return { kind: 'assistant-text', uuid: entry.uuid, text: payloadView(entry.text) }
     case 'thinking':

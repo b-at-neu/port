@@ -306,6 +306,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       registry: stageRegistry,
       onDenial: (repoId, denial: StageDenial) => dispatcherRef?.recordDenial(repoId, denial),
       newId: () => `id-${String(Math.random())}`,
+      loadInstructions: (launchRequest) => Promise.resolve({ ok: true, text: launchRequest.prompt }),
     })
 
     const ledger = createDispatchLedger()

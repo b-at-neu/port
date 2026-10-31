@@ -138,7 +138,11 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 
 **`apps/desktop/src/main/stage/`** (#327)
 - implements `main/dispatch/launch.ts`'s `StageLauncher` seam: a session worktree, a hosted session started with the `agent:` option, the prompt sent, and the hand-back watched
-- `agents.ts`'s `STAGE_AGENT_NAMES` is the only place a bare `StageAgent` key becomes an `agent:` value — instructions come from the plugin agent file itself, never a second system prompt
+- `agents.ts`'s `STAGE_AGENT_NAMES` is the only place a bare `StageAgent` key becomes an `agent:` value; `agent:` applies the definition's tools and model only, not its body
+- the instructions travel in the first message: `instructions.ts` loads the agent body and the `PIPELINE.md` sections it is told to follow from the installed plugin (`installed_plugins.json`), never from the worktree and never as a second system prompt; `utils/stage/prompt.ts` composes and parses that message for the launcher and the transcript card
+- the `docs.*` and `commands.*` pointers in that message come from `.claude/port.config.json` at the default branch through `registry/harness.ts`'s `readAtDefaultRef`, never the stage worktree, whose checkout a pull request can edit
+- `default.ts`'s `createDefaultStageLauncher` binds every I/O seam of `createStageLauncher` to its production implementation, so `main/ipc.ts` passes only the store, the registry and the two dispatcher callbacks
+- a load failure fails the launch and removes the worktree — a stage is never dispatched without its instructions
 - `handback.ts`'s `classifyHandback` is pure, built on `utils/stage/handback-text.ts`'s `classifyHandbackText`, which also backs `renderer/board/needs-you.ts`; its `QUESTIONS FOR HUMAN:`/`BLOCKED:` prefixes live there and are pinned against the pipeline skill's own completion text
 - removes a worktree only on `completed`, never forced; every other outcome keeps it
 - releases the branch after every worktree removal — launch failure paths, `completed`, and Restart — through `main/workspace/stage-worktree.ts`'s `releaseStageBranch`; a one-time sweep per repository root runs before the first launch and is never a gate on it
