@@ -107,6 +107,7 @@ export interface DispatchRecord {
   readonly agent: StageAgent
   readonly number: number
   readonly kind: PipelineItemKind
+  readonly trigger: LabelKey
   readonly state: 'started' | 'ended' | 'failed'
   readonly at: string
   readonly detail: string | null

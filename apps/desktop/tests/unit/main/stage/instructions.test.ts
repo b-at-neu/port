@@ -47,24 +47,68 @@ function installed(records: readonly object[]): string {
 const INSTALLED_FILE = `${HOME}/plugins/installed_plugins.json`
 const INSTALLED_FILE_MESSAGE_PATH = pathOps.join(HOME, 'plugins', 'installed_plugins.json')
 
-function resolve(records: readonly object[], overrides: { readonly repoRoot?: string } = {}) {
-  const { readJsonFile: readJson } = fakeFiles({ [INSTALLED_FILE]: installed(records) })
+const MARKETPLACES_FILE = `${HOME}/plugins/known_marketplaces.json`
+const MARKETPLACE_DIR = '/work/port-source'
+const MANIFEST_FILE = `${MARKETPLACE_DIR}/.claude-plugin/marketplace.json`
+const LIVE_ROOT = pathOps.resolveFrom(MARKETPLACE_DIR, './plugins/port')
+
+function resolve(records: readonly object[], overrides: { readonly repoRoot?: string; readonly extra?: Readonly<Record<string, string>> } = {}) {
+  const { readJsonFile: readJson } = fakeFiles({ [INSTALLED_FILE]: installed(records), ...overrides.extra })
   return resolveInstalledPluginRoot({ claudeHome: HOME, repoRoot: overrides.repoRoot ?? REPO, worktree: WORKTREE, ops: pathOps, readJsonFile: readJson })
+}
+
+function directoryMarketplace(source: object = { source: 'directory', path: MARKETPLACE_DIR }): string {
+  return JSON.stringify({ port: { source, installLocation: MARKETPLACE_DIR } })
 }
 
 describe('resolveInstalledPluginRoot', () => {
   const user = { scope: 'user', installPath: '/cache/user' }
   const project = { scope: 'project', projectPath: REPO, installPath: '/cache/project' }
-  const local = { scope: 'local', projectPath: REPO, installPath: '/cache/local' }
+  const local = { scope: 'local', projectPath: REPO, installPath: '/cache/local', version: '0.2.1-dev' }
 
   it('prefers a local record for this repository, then a project one, then the user one', async () => {
-    expect(await resolve([user, project, local])).toEqual({ ok: true, root: '/cache/local' })
-    expect(await resolve([user, project])).toEqual({ ok: true, root: '/cache/project' })
-    expect(await resolve([user])).toEqual({ ok: true, root: '/cache/user' })
+    expect(await resolve([user, project, local])).toEqual({ ok: true, root: '/cache/local', origin: 'install-record', version: '0.2.1-dev' })
+    expect(await resolve([user, project])).toEqual({ ok: true, root: '/cache/project', origin: 'install-record', version: null })
+    expect(await resolve([user])).toEqual({ ok: true, root: '/cache/user', origin: 'install-record', version: null })
   })
 
   it('ignores a local or project record that belongs to another repository', async () => {
-    expect(await resolve([user, { ...local, projectPath: '/work/elsewhere' }, { ...project, projectPath: '/work/elsewhere' }])).toEqual({ ok: true, root: '/cache/user' })
+    expect(await resolve([user, { ...local, projectPath: '/work/elsewhere' }, { ...project, projectPath: '/work/elsewhere' }])).toMatchObject({ ok: true, root: '/cache/user' })
+  })
+
+  it('reads a directory-source install live and ignores the frozen install path', async () => {
+    const extra = { [MARKETPLACES_FILE]: directoryMarketplace(), [MANIFEST_FILE]: JSON.stringify({ plugins: [{ name: 'port', source: './plugins/port' }] }) }
+    expect(await resolve([local], { extra })).toEqual({ ok: true, root: LIVE_ROOT, origin: 'directory', version: '0.2.1-dev' })
+  })
+
+  it('still needs an install record for a directory-source install', async () => {
+    const extra = { [MARKETPLACES_FILE]: directoryMarketplace(), [MANIFEST_FILE]: JSON.stringify({ plugins: [{ name: 'port', source: './plugins/port' }] }) }
+    expect(await resolve([], { extra })).toMatchObject({ ok: false })
+  })
+
+  it('fails without falling back when a directory-source marketplace has no readable manifest', async () => {
+    const result = await resolve([local], { extra: { [MARKETPLACES_FILE]: directoryMarketplace() } })
+    expect(result).toMatchObject({ ok: false })
+    expect(result.ok ? '' : result.message).toContain('marketplace.json')
+  })
+
+  it.each([
+    ['has no port plugin', { plugins: [{ name: 'other', source: './x' }] }],
+    ['has a non-string source', { plugins: [{ name: 'port', source: { source: 'github' } }] }],
+  ])('fails without falling back when the manifest %s', async (_name, manifest) => {
+    const extra = { [MARKETPLACES_FILE]: directoryMarketplace(), [MANIFEST_FILE]: JSON.stringify(manifest) }
+    expect(await resolve([local], { extra })).toMatchObject({ ok: false })
+  })
+
+  it('falls back to the install path for a marketplace that is not a directory source', async () => {
+    const extra = { [MARKETPLACES_FILE]: directoryMarketplace({ source: 'github', repo: 'b-at-neu/port' }) }
+    expect(await resolve([local], { extra })).toMatchObject({ ok: true, root: '/cache/local', origin: 'install-record' })
+  })
+
+  it('refuses a live root inside the stage worktree', async () => {
+    const extra = { [MARKETPLACES_FILE]: JSON.stringify({ port: { source: { source: 'directory', path: WORKTREE } } }), [`${WORKTREE}/.claude-plugin/marketplace.json`]: JSON.stringify({ plugins: [{ name: 'port', source: './plugins/port' }] }) }
+    const result = await resolve([local], { extra })
+    expect(result.ok ? '' : result.message).toContain('inside the stage worktree')
   })
 
   it('fails with a named message when the file has no record', async () => {
@@ -252,6 +296,16 @@ describe('createStageInstructionsLoader', () => {
     const load = createStageInstructionsLoader({ claudeHome: HOME, ops: pathOps, ...fakeFiles({ [INSTALLED_FILE]: installed([]) }), git: fakeGit(defaultBranchConfig) })
     const result = await load(launchRequest(), WORKTREE)
     expect(result).toEqual({ ok: false, message: `no port@port install record in ${INSTALLED_FILE_MESSAGE_PATH}` })
+  })
+
+  it('says an install-record plugin looks out of date when a section is missing, and a directory source does not', async () => {
+    const stale = { ...files, [INSTALLED_FILE]: installed([{ scope: 'user', installPath: ROOT, version: '0.2.1-dev' }]), [`${ROOT}/docs/PIPELINE.md`]: '## Quick start\nq\n' }
+    const result = await createStageInstructionsLoader({ claudeHome: HOME, ops: pathOps, ...fakeFiles(stale), git: fakeGit(defaultBranchConfig) })(launchRequest(), WORKTREE)
+    expect(result.ok ? '' : result.message).toContain(`has no "CLAUDE.md overrides" section — the port@port install at ${ROOT} (version 0.2.1-dev) looks out of date.`)
+    const live = { ...stale, [MARKETPLACES_FILE]: directoryMarketplace(), [MANIFEST_FILE]: JSON.stringify({ plugins: [{ name: 'port', source: './plugins/port' }] }), [pathOps.toPosix(pathOps.join(LIVE_ROOT, 'agents', 'impl-agent.md'))]: 'x', [pathOps.toPosix(pathOps.join(LIVE_ROOT, 'docs', 'PIPELINE.md'))]:'## Quick start\nq\n' }
+    const liveResult = await createStageInstructionsLoader({ claudeHome: HOME, ops: pathOps, ...fakeFiles(live), git: fakeGit(defaultBranchConfig) })(launchRequest(), WORKTREE)
+    expect(liveResult.ok ? '' : liveResult.message).not.toContain('out of date')
+    expect(liveResult.ok ? '' : liveResult.message).toContain('has no "CLAUDE.md overrides" section')
   })
 
   it('fails when the default branch has no config', async () => {
