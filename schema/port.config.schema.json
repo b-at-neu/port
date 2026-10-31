@@ -108,6 +108,18 @@
           "description": "Command prefix the operator and the cockpit-tick housekeeping sweep append `report` to for the forensics engine, which asserts on what a dispatched agent's transcript actually shows (terminations, missing task-notifications, orphaned in-flight labels, shell loops, Bash timeouts, and BLOCKED: compliance after a denial) rather than only on the artifacts a run leaves behind. Reads a machine-local transcript tree outside the repository, so it is never run from `commands.checks`. Null means the repository has no forensics engine wired up, and the cockpit skips it silently.",
           "default": null,
           "examples": ["node scripts/port-forensics.mjs"]
+        },
+        "screenshots": {
+          "type": ["object", "null"],
+          "description": "The repository's own screenshot harness, which `impl-agent` runs once, verbatim, when the plan has a `## UX states` section, then publishes the chosen captures into the pull request's `## Screenshots`. `run` is allowlisted like any `commands.*` entry — cover it in `extraAllow` when the base list does not — and must never go in `commands.checks`, since it may launch a display-bound app. `dir` is the repo-relative directory the PNGs land in. Null means no capture, and the pull request says so.",
+          "default": null,
+          "required": ["run", "dir"],
+          "additionalProperties": false,
+          "properties": {
+            "run": { "type": "string", "minLength": 1, "description": "The command that writes the captures." },
+            "dir": { "type": "string", "minLength": 1, "description": "Repo-relative directory the captures are written to." }
+          },
+          "examples": [{ "run": "pnpm screenshots", "dir": "out/screenshots" }]
         }
       }
     },

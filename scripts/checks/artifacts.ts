@@ -124,6 +124,56 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
+  // --- Screenshots: the pr-body section rules and the publisher's pure helpers accept a good case and reject each bad one. ---
+  {
+    const { CHECKS, manifestViolation, screenshotUrl, renderScreenshots } =
+      await import(pathToFileURL(join(root, 'plugins/port/bin/artifacts.mjs')).href);
+    const head = 'Closes #1\n\n## Summary\n- s\n\n## Changes\n- c\n\n## Testing plan\n- [ ] t\n\n';
+    const tail = '\n## Automated checks\n- ok\n';
+    const body = (shots: string | null) => head + (shots === null ? '' : `## Screenshots\n${shots}\n`) + tail;
+    const prBody = CHECKS['pr-body'].run;
+    const image = '**Sidebar — light**\n\n![Sidebar — light](https://github.com/o/r/blob/abc1234/issue-1/x.png?raw=true)\n';
+    const good: [string, string | null][] = [
+      ['an absent section', null],
+      ['an image with alt', image],
+      ['the no-change sentinel', 'No UI-visible change.'],
+      ['the not-captured sentinel', 'Not captured — this repository configures no screenshot command.'],
+      ['images with a refresh note', `${image}\nNot refreshed after abc1234 — capture failed`],
+    ];
+    for (const [name, shots] of good) expect(prBody(body(shots)).ok, 'artifacts-screenshots', `pr-body rejects ${name}`);
+    const bad: [string, string][] = [
+      ['an empty section', ''],
+      ['an image with an empty alt', '![](https://github.com/o/r/blob/abc1234/x.png?raw=true)'],
+      ['prose with no image', 'It looks fine.'],
+      ['a sentinel beside prose', 'No UI-visible change.\nIt looks fine.'],
+      ['a non-https image', '![x](http://example.com/x.png)'],
+    ];
+    for (const [name, shots] of bad) expect(!prBody(body(shots)).ok, 'artifacts-screenshots', `pr-body accepts ${name}`);
+
+    const exists = (rel: string) => rel !== 'missing.png';
+    const entry = (file: string, label = 'Sidebar — light') => ({ file, label });
+    const many = Array.from({ length: 13 }, (_, i) => entry(`out/${i}.png`));
+    expect(manifestViolation([entry('out/a.png'), entry('out/b.png', 'Sidebar — dark')], exists) === null, 'artifacts-screenshots', 'manifestViolation rejects a good manifest');
+    const badManifests: [string, unknown][] = [
+      ['an empty array', []],
+      ['13 entries', many],
+      ['a non-png', [entry('out/a.jpg')]],
+      ['a .. escape', [entry('../a.png')]],
+      ['an absolute path', [entry('/etc/a.png')]],
+      ['a missing file', [entry('missing.png')]],
+      ['a label with ]', [entry('out/a.png', 'a ] b')]],
+      ['a blank label', [entry('out/a.png', '  ')]],
+      ['a duplicate basename', [entry('one/a.png'), entry('two/a.png', 'other')]],
+      ['a non-array', { file: 'a.png' }],
+    ];
+    for (const [name, m] of badManifests) expect(manifestViolation(m, exists) !== null, 'artifacts-screenshots', `manifestViolation accepts ${name}`);
+
+    expect(screenshotUrl('o/r', 'abc1234', 'issue-1/ab/a b.png') === 'https://github.com/o/r/blob/abc1234/issue-1/ab/a%20b.png?raw=true', 'artifacts-screenshots', 'screenshotUrl does not encode a space per path segment');
+    const rendered = renderScreenshots([entry('a.png', 'One'), entry('b.png', 'Two')], ['https://x/1', 'https://x/2']);
+    expect(rendered.indexOf('![One](https://x/1)') !== -1 && rendered.indexOf('![One](https://x/1)') < rendered.indexOf('![Two](https://x/2)'), 'artifacts-screenshots', 'renderScreenshots loses manifest order');
+    expect(rendered.startsWith('**One**\n\n![One]'), 'artifacts-screenshots', 'renderScreenshots does not put the bold label, a blank line, then the image');
+  }
+
   // --- stageViolation: pair-wise pull-request stage legality. Legal: at most one stage
   // label, beside at most one refresh label — the sanctioned co-presence. A failing case's message must name the labels actually offending, not just a count. ---
   {

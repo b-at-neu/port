@@ -40,6 +40,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
         ...(cfg.commands?.checks ?? []).map((e: any) => e.fix).filter((f: any) => typeof f === 'string'),
         cfg.commands?.artifacts,
         cfg.commands?.worktrees,
+        cfg.commands?.screenshots?.run,
         cfg.release?.postPublishHook,
       ].filter((c) => typeof c === 'string' && c.length > 0);
 
