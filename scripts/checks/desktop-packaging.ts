@@ -135,6 +135,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
           fail('desktop-packaging', `${relOf(workflowPath)} must include '${os}' in its matrix`);
         }
       }
+      // pin: desktop-package.yml has no push trigger ↔ docs/TESTING.md
+      expect(!/^ {2}push:/m.test(text), 'desktop-packaging', `${relOf(workflowPath)} must not trigger on push — the release pull request's own run already covers the commit`);
       ok();
     }
   }
