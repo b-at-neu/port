@@ -1,12 +1,13 @@
 // Run/Drain/Pause for one repository, as a React mutation with toasts.
 import { toast } from 'sonner'
 import type { RepoId } from '@/utils/repos'
-import type { DispatchControlResult } from '@/types/dispatch'
+import type { DispatchControlResult, RunState } from '@/types/dispatch'
+import { UNDO_LABEL } from '@/renderer/lib/copy'
 import { useIpcMutation, ipcQueryOptions } from '@/renderer/data/query'
 import { useQueryClient } from '@tanstack/react-query'
 import type { BoardSnapshot } from '@/types/board'
 import { haltHeadingCopy, haltItemLine } from '@/renderer/board/halt-copy'
-import { runStateResultNote, pauseReportNote, pauseAbortedCopy } from '@/renderer/board/run-state'
+import { runStateResultNote, pauseReportNote, pauseAbortedCopy, undoCommandFor } from '@/renderer/board/run-state'
 import { setPauseRequest, setTakeOverRequest } from '@/renderer/shell/stores'
 
 function applyRunState(client: ReturnType<typeof useQueryClient>, repoId: RepoId, result: Extract<DispatchControlResult, { readonly command: 'run' | 'drain' | 'pause' | 'take-over' }>): void {
@@ -22,7 +23,33 @@ export function useRunStateCommand() {
   const mutation = useIpcMutation('dispatch:control')
   const client = useQueryClient()
 
-  async function send(command: 'run' | 'drain' | 'pause', repoId: RepoId, repoName: string): Promise<void> {
+  function priorState(repoId: RepoId): RunState | null {
+    const snapshot = client.getQueryData(ipcQueryOptions('board:snapshot').queryKey)
+    return snapshot?.runStates.repositories.find((entry) => entry.repoId === repoId)?.state ?? null
+  }
+
+  function inFlightOf(repoId: RepoId): number {
+    const snapshot = client.getQueryData(ipcQueryOptions('board:snapshot').queryKey)
+    return snapshot?.tick.find((entry) => entry.repoId === repoId)?.claims.length ?? 0
+  }
+
+  function undoActionFor(prior: RunState | null, command: 'run' | 'drain', repoId: RepoId, repoName: string): { label: string; onClick: () => void } | undefined {
+    const undo = undoCommandFor(prior, command)
+    if (undo === null) return undefined
+    const onClick = undo === 'pause' ? () => requestPause(repoId, repoName, inFlightOf(repoId)) : () => void send(undo, repoId, repoName, false)
+    return { label: UNDO_LABEL, onClick }
+  }
+
+  function requestPause(repoId: RepoId, repoName: string, inFlight: number): void {
+    if (inFlight === 0) {
+      void send('pause', repoId, repoName, false)
+      return
+    }
+    setPauseRequest({ repoId, name: repoName, inFlight })
+  }
+
+  async function send(command: 'run' | 'drain' | 'pause', repoId: RepoId, repoName: string, undoable = true): Promise<void> {
+    const prior = priorState(repoId)
     try {
       const result = await mutation.mutateAsync({ command, repoId })
       if (result.command === 'run') {
@@ -31,7 +58,7 @@ export function useRunStateCommand() {
           return
         }
         applyRunState(client, repoId, result)
-        toast.success(`${repoName} is running`)
+        toast.success(`${repoName} is running`, { action: undoable ? undoActionFor(prior, 'run', repoId, repoName) : undefined })
       } else if (result.command === 'drain') {
         if (!result.ok) {
           toast.error(runStateResultNote(result) ?? `Couldn't drain ${repoName}.`)
@@ -40,7 +67,7 @@ export function useRunStateCommand() {
         applyRunState(client, repoId, result)
         const note = runStateResultNote(result)
         if (note !== null) toast.error(note)
-        else toast('Work in progress finishes; nothing new starts.', { description: `${repoName} is draining` })
+        else toast('Work in progress finishes; nothing new starts.', { description: `${repoName} is draining`, action: undoable ? undoActionFor(prior, 'drain', repoId, repoName) : undefined })
       } else if (result.command === 'pause') {
         applyRunState(client, repoId, result)
         if (result.report.kind === 'aborted') {
@@ -66,13 +93,7 @@ export function useRunStateCommand() {
     },
     /** Applies at once with zero in flight; otherwise arms the pause-confirm
      *  dialog (DESIGN §4: a consequential action opens an `AlertDialog`). */
-    requestPause(repoId: RepoId, repoName: string, inFlight: number): void {
-      if (inFlight === 0) {
-        void send('pause', repoId, repoName)
-        return
-      }
-      setPauseRequest({ repoId, name: repoName, inFlight })
-    },
+    requestPause,
     confirmPause(repoId: RepoId, repoName: string): void {
       setPauseRequest(null)
       void send('pause', repoId, repoName)

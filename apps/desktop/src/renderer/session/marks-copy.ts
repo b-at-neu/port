@@ -27,4 +27,3 @@ export function markFailureToast(kind: MarkKind, result: Extract<SessionMarkResu
 
 export const SESSION_ACTIONS_LABEL = 'Session actions'
 export const RENAME_LABEL = 'Rename'
-export const UNDO_LABEL = 'Undo'

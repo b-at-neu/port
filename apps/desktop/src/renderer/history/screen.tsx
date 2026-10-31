@@ -14,7 +14,7 @@ import { ROUTE_IDS } from '@/renderer/router/routes'
 import { relativeTime } from '@/renderer/lib/relative-time'
 import { startFromTranscript } from '@/renderer/session/actions'
 import { useSessionMarks } from '@/renderer/session/marks'
-import { SessionMarkMenu, SessionPinGlyph } from '@/renderer/components/session-mark-menu'
+import { SessionRow } from '@/renderer/components/session-row'
 import { groupHistory } from '@/renderer/history/model'
 import type { HistoryGroups } from '@/types/history'
 import { agentLabel, sessionLabel } from '@/utils/sessions/label'
@@ -173,15 +173,7 @@ function HistoryList({
         <div key={group.kind} data-slot={`history-group-${group.kind}`}>
           {showHeaders ? <div className="px-4 py-2 text-meta font-medium text-muted-foreground">{groupHeader(group.kind)}</div> : null}
           {group.rows.map((session) => (
-            <SessionRow
-              key={session.sessionId}
-              session={session}
-              agents={agentsBySession.get(session.sessionId) ?? []}
-              repoTag={repoTagFor(repos, session.repoId)}
-              pinned={marks?.pinned.includes(session.sessionId) ?? false}
-              marks={marks}
-              onOpen={onOpen}
-            />
+            <HistoryEntry key={session.sessionId} session={session} agents={agentsBySession.get(session.sessionId) ?? []} repoTag={repoTagFor(repos, session.repoId)} marks={marks} onOpen={onOpen} />
           ))}
         </div>
       ))}
@@ -190,18 +182,16 @@ function HistoryList({
   )
 }
 
-function SessionRow({
+function HistoryEntry({
   session,
   agents,
   repoTag,
-  pinned,
   marks,
   onOpen,
 }: {
   readonly session: SessionRecord
   readonly agents: readonly AgentRecord[]
   readonly repoTag: string
-  readonly pinned: boolean
   readonly marks: SessionMarks | undefined
   readonly onOpen: (sessionId: string, agentId: string | null, title: string) => void
 }) {
@@ -212,26 +202,28 @@ function SessionRow({
   )
 
   return (
-    <div className="flex flex-col" data-slot="session-row">
-      <div className="flex h-9 items-center gap-2 px-4">
-        <button type="button" onClick={() => onOpen(session.sessionId, null, label)} className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring">
-          {pinned ? <SessionPinGlyph /> : null}
-          <span className="truncate text-small">{label}</span>
-          <span className="shrink-0 truncate text-meta text-muted-foreground">{metaParts.join(' · ')}</span>
-        </button>
-        <span className="shrink-0 text-meta text-muted-foreground">{repoTag}</span>
-        {canHost ? (
-          <div className="flex shrink-0 gap-1">
-            <Button variant="outline" size="small" onClick={() => void startFromTranscript(session.repoId as RepoId, session.sessionId, 'resume')}>
-              Resume
-            </Button>
-            <Button variant="outline" size="small" onClick={() => void startFromTranscript(session.repoId as RepoId, session.sessionId, 'fork')}>
-              Fork
-            </Button>
-          </div>
-        ) : null}
-        <SessionMarkMenu sessionId={session.sessionId} marks={marks} />
-      </div>
+    <SessionRow
+      density="list"
+      title={label}
+      meta={metaParts.join(' · ')}
+      onOpen={() => onOpen(session.sessionId, null, label)}
+      marks={{ sessionId: session.sessionId, marks }}
+      trailing={
+        <>
+          <span className="shrink-0 text-meta text-muted-foreground">{repoTag}</span>
+          {canHost ? (
+            <div className="flex shrink-0 gap-1">
+              <Button variant="outline" size="small" onClick={() => void startFromTranscript(session.repoId as RepoId, session.sessionId, 'resume')}>
+                Resume
+              </Button>
+              <Button variant="outline" size="small" onClick={() => void startFromTranscript(session.repoId as RepoId, session.sessionId, 'fork')}>
+                Fork
+              </Button>
+            </div>
+          ) : null}
+        </>
+      }
+    >
       {agents.length > 0 ? (
         <div className="flex flex-col pl-6">
           {agents.map((agent) => (
@@ -246,6 +238,6 @@ function SessionRow({
           ))}
         </div>
       ) : null}
-    </div>
+    </SessionRow>
   )
 }

@@ -49,8 +49,6 @@ export function usageLimitEntryLine(item: Extract<NeedsYouItem, { readonly kind:
   return `#${String(entry.number)} ${STAGE_PHASE_NAME[entry.agent]}${repo !== undefined ? ` · ${repo}` : ''}`
 }
 
-export const UNDO_LABEL = 'Undo'
-
 export function resumeAllDisabledReason(resetsAt: string): string {
   return `The limit resets at ${clockTime(resetsAt)}. port resumes these sessions then.`
 }

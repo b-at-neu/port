@@ -2,7 +2,7 @@
 // to `shell/sidebar-pipelines.tsx`'s `StatusPillMenu`, driven by
 // `shell/run-state-command.ts`'s mutation instead of this file's own
 // click-handler/pending-map pair. Only the pure copy survives here.
-import type { DispatchControlResult, HaltReport, RepoRunState, RunStatesSnapshot } from '@/types/dispatch'
+import type { DispatchControlResult, HaltReport, RepoRunState, RunState, RunStatesSnapshot } from '@/types/dispatch'
 
 function timeOf(iso: string): string {
   const parsed = new Date(iso)
@@ -57,6 +57,16 @@ export function runStateResultNote(result: DispatchControlResult): string | null
     return `Couldn't take over: ${result.path} couldn't be written (${result.message}).`
   }
   return null
+}
+
+/** The command that restores the state a run/drain just left, or `null` when it was not a reversible step. */
+export function undoCommandFor(prior: RunState | null, command: 'run' | 'drain'): 'run' | 'drain' | 'pause' | null {
+  if (command === 'run') {
+    if (prior === 'draining') return 'drain'
+    if (prior === 'paused') return 'pause'
+    return null
+  }
+  return prior === 'dispatching' ? 'run' : null
 }
 
 /** `pause`'s own stop report, reusing `halt-copy.ts`'s halt copy — the same

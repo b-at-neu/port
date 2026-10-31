@@ -5,7 +5,8 @@ import { ipcQueryOptions, useIpcQuery } from '@/renderer/data/query'
 import { invoke } from '@/renderer/data/invoke'
 import type { SessionKey, SessionMarkResult, SessionMarks } from '@/types/hosting'
 import { close } from '@/renderer/session/actions'
-import { markFailureToast, markSuccessToast, UNDO_LABEL } from '@/renderer/session/marks-copy'
+import { UNDO_LABEL } from '@/renderer/lib/copy'
+import { markFailureToast, markSuccessToast } from '@/renderer/session/marks-copy'
 
 export function useSessionMarks() {
   return useIpcQuery('session:marks')
