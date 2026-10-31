@@ -124,6 +124,21 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
+  // --- Review validator's check-only marker: accepted on `needs revision`, rejected on any other verdict or when malformed. ---
+  {
+    const { CHECKS } = await import(pathToFileURL(join(root, 'plugins/port/bin/artifacts.mjs')).href);
+    const review = (verdict: string, marker: string | null) =>
+      JSON.stringify({ event: 'COMMENT', body: `## Code Review — Cycle 2 · ${verdict}\n${marker === null ? '1 Critical' : `1 Critical\n${marker}`}`, comments: [] });
+    const run = CHECKS.review.run;
+    const marker = 'Blocked only by checks: `test`, `lint`';
+    expect(run(review('needs revision', marker)).ok, 'artifacts-review-marker', 'review rejects a valid check-only marker under needs revision');
+    expect(run(review('needs revision', null)).ok, 'artifacts-review-marker', 'review rejects a body with no marker');
+    expect(!run(review('approved', marker)).ok, 'artifacts-review-marker', 'review accepts the check-only marker under approved');
+    expect(!run(review('blocked — checks pending', marker)).ok, 'artifacts-review-marker', 'review accepts the check-only marker under blocked — checks pending');
+    expect(!run(review('needs revision', 'Blocked only by checks: test')).ok, 'artifacts-review-marker', 'review accepts a marker whose names are not backtick-quoted');
+    expect(!run(review('needs revision', 'Blocked only by checks:')).ok, 'artifacts-review-marker', 'review accepts a marker naming no check');
+  }
+
   // --- Screenshots: the pr-body section rules and the publisher's pure helpers accept a good case and reject each bad one. ---
   {
     const { CHECKS, manifestViolation, screenshotUrl, renderScreenshots } =

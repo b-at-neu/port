@@ -300,7 +300,7 @@ function runCase(fn: string, impl: any, input: any): any {
       return { toRefreshNumbers: result.toRefresh.map((c: any) => c.number), deferredNumbers: result.deferred.map((c: any) => c.number) };
     }
     case 'zeroDiffGate':
-      return impl({ reviews: (input.reviews ?? []).map(toReviewNode), comments: input.comments, headRefOid: input.headRefOid });
+      return impl({ reviews: (input.reviews ?? []).map(toReviewNode), comments: input.comments, headRefOid: input.headRefOid, checks: input.checks });
     case 'cycleCapExceeded': {
       const [reviews, cap, comments] = input;
       return impl((reviews ?? []).map(toReviewNode), cap, comments);

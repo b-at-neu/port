@@ -54,6 +54,11 @@ export function conclusionOf(entry: CheckContext): string | null {
   return entry.conclusion ?? entry.state ?? null;
 }
 
+/** A concluded entry whose conclusion counts as passing. */
+export function isGreen(entry: CheckContext): boolean {
+  return isConcluded(entry) && GREEN.has(conclusionOf(entry) ?? '');
+}
+
 /** A single check's disposition: `blocking` (default — a red conclusion forms a finding and
  *  blocks) or `infrastructure` (reported, no finding, never blocks). `source` names where it came from. */
 export interface Disposition {

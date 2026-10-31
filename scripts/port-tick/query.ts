@@ -39,7 +39,7 @@ export function buildQuery({
     prSet(
       'readyForReview',
       labels.readyForReview,
-      'mergeable headRefOid reviews(first: 30) { nodes { body submittedAt commit { oid } } } comments(last: 20) { nodes { body createdAt } }',
+      `mergeable headRefOid reviews(first: 30) { nodes { body submittedAt commit { oid } } } comments(last: 20) { nodes { body createdAt } } ${ROLLUP}`,
     ),
   );
   parts.push(prSet('needsRevision', labels.needsRevision, 'mergeable reviews(first: 30) { nodes { body } } comments(last: 20) { nodes { body createdAt } }'));
