@@ -190,6 +190,8 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
    **Body is the title plus one counts line.** No per-finding list, no provenance, no footer, no resolved-or-still-open sections. Thread state is the truth, so delta reviews look the same as first reviews.
 
+   **Check-only marker.** Under `needs revision`, when every finding at this cycle's bar is a red `blocking`-disposition check Critical, add line 3: ``Blocked only by checks: `<name>`[, `<name>`…]``, naming each red check. A code finding anywhere at the bar means no marker. Never name an `infrastructure` check — those draw no finding. Never write it under any other verdict.
+
    Build the payload **with the Write tool** at `.temp/review-<pr>.json` — never shell redirection, never an inline `--field body="…"` — the validator is authoritative on the exact shape:
 
    ```json

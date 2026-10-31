@@ -105,7 +105,7 @@ function cmdPlan(root: string, cfg: any): void {
 
   const acc = freshAccumulator();
   planTriggers(cfg, actionable, partitions, acc);
-  planReadyForReview(cfg, actionable, refreshBranchNumbers, refreshingNumbers, unknownStreakState, acc);
+  planReadyForReview(cfg, actionable, refreshBranchNumbers, refreshingNumbers, unknownStreakState, clock, acc);
   planNeedsRevision(cfg, actionable, refreshBranchNumbers, refreshingNumbers, acc);
   planApproved(cfg, actionable, refreshBranchNumbers, refreshingNumbers, acc);
   planRefreshSweep(cfg, refreshedState, acc);
@@ -143,7 +143,7 @@ function cmdPlan(root: string, cfg: any): void {
   const denialsDelta = summarizeDelta(denialAll.slice(tickState.denialsConsumed ?? 0));
 
   const tickId = `${clock ?? Date.now()}`;
-  const willMoveWithoutHuman = dispatch.length > 0 || partitions.planning.mine.length + partitions.inProgress.mine.length + partitions.reviewing.mine.length + partitions.revising.mine.length + partitions.refreshing.mine.length > 0;
+  const willMoveWithoutHuman = dispatch.length > 0 || announce.some((a: any) => a.kind === 'zero-diff-check-hold') || partitions.planning.mine.length + partitions.inProgress.mine.length + partitions.reviewing.mine.length + partitions.revising.mine.length + partitions.refreshing.mine.length > 0;
   const wakeup = willMoveWithoutHuman ? 270 : nextDelay(tickState.cadenceStep ?? 0, { willMoveWithoutHuman: false, observedChange: false }).delay;
 
   const plan = {

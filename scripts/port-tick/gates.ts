@@ -22,19 +22,51 @@ export function codeReviewCount(reviews: readonly ReviewNode[] | undefined): num
   return (reviews ?? []).filter((r) => r.body.startsWith(CODE_REVIEW_PREFIX)).length;
 }
 
-export type ZeroDiffAction = 'dispatch' | 'dispatch-once' | 'escalate';
+const CHECK_ONLY_PREFIX = 'Blocked only by checks:';
+const CHECK_ONLY_LINE = /^Blocked only by checks: `[^`]+`(, `[^`]+`)*$/;
 
-/** A head already reviewed gets no second cycle unless it moved, or the operator authorised
- *  exactly one more re-review (a `## Gate cleared` comment newer than that review). */
+/** Minutes a check-only block is held at `ready for review` waiting for a re-run before it escalates. */
+export const ZERO_DIFF_CHECK_HOLD_MINUTES = 120;
+
+/** The check names a review body's line 3 marks as its only blockers, or null when the line is absent or malformed. */
+export function checkOnlyNames(body: string): string[] | null {
+  const line = body.split('\n')[2]?.trimEnd();
+  if (line === undefined || !CHECK_ONLY_LINE.test(line)) return null;
+  return [...line.slice(CHECK_ONLY_PREFIX.length).matchAll(/`([^`]+)`/g)].flatMap((m) => (m[1] === undefined ? [] : [m[1]]));
+}
+
+export type ZeroDiffAction = 'dispatch' | 'dispatch-once' | 'recheck-dispatch' | 'hold-checks' | 'escalate';
+
+export type CheckStatus = 'green' | 'pending' | 'red';
+
+/** The rollup, already reduced: each check's status by name, and whether the whole rollup is clear of red and pending. */
+export interface ZeroDiffChecks {
+  readonly statuses: ReadonlyMap<string, CheckStatus>;
+  readonly rollupClear: boolean;
+  readonly now: string | null;
+}
+
+export interface ZeroDiffFacts {
+  readonly checks: readonly string[];
+  readonly sha: string;
+  readonly cycle: number;
+  readonly state: 'pending' | 'red';
+  readonly escalateAt?: string;
+}
+
+/** A reviewed head gets no second cycle unless it moved or a newer `## Gate cleared` authorised one;
+ *  a check-only block holds then re-reviews once, and a missing `checks` or clock escalates. */
 export function zeroDiffGate({
   reviews,
   comments,
   headRefOid,
+  checks,
 }: {
   readonly reviews: readonly ReviewNode[] | undefined;
   readonly comments: readonly CommentNode[] | undefined;
   readonly headRefOid: string;
-}): { readonly action: ZeroDiffAction } {
+  readonly checks?: ZeroDiffChecks;
+}): { readonly action: ZeroDiffAction; readonly facts?: ZeroDiffFacts } {
   const codeReviews = (reviews ?? []).filter((r) => r.body.startsWith(CODE_REVIEW_PREFIX));
   if (codeReviews.length === 0) return { action: 'dispatch' };
 
@@ -44,7 +76,31 @@ export function zeroDiffGate({
   const clearedAfter = (comments ?? []).some((c) => c.body.startsWith(GATE_CLEARED_PREFIX) && c.createdAt > (newest.submittedAt ?? ''));
   if (clearedAfter) return { action: 'dispatch-once' };
 
-  return { action: 'escalate' };
+  const named = checkOnlyNames(newest.body);
+  const reviewsOnHead = codeReviews.filter((r) => (r.commitOid ?? null) === headRefOid).length;
+  if (named === null || checks === undefined || reviewsOnHead !== 1) return { action: 'escalate' };
+
+  const present: CheckStatus[] = [];
+  for (const n of named) {
+    const status = checks.statuses.get(n);
+    if (status === undefined) return { action: 'escalate' };
+    present.push(status);
+  }
+
+  const cycle = codeReviewCount(reviews);
+  const facts = { checks: named, sha: headRefOid, cycle };
+
+  if (present.every((s) => s === 'green')) {
+    return checks.rollupClear ? { action: 'recheck-dispatch', facts: { ...facts, state: 'pending' } } : { action: 'escalate' };
+  }
+  if (present.some((s) => s === 'pending')) return { action: 'hold-checks', facts: { ...facts, state: 'pending' } };
+
+  const submitted = Date.parse(newest.submittedAt ?? '');
+  const now = checks.now === null ? Number.NaN : Date.parse(checks.now);
+  if (Number.isNaN(submitted) || Number.isNaN(now)) return { action: 'escalate' };
+  const deadline = submitted + ZERO_DIFF_CHECK_HOLD_MINUTES * 60_000;
+  if (now >= deadline) return { action: 'escalate' };
+  return { action: 'hold-checks', facts: { ...facts, state: 'red', escalateAt: new Date(deadline).toISOString() } };
 }
 
 const CYCLE_GRANT_LINE = '### Cycle grant';

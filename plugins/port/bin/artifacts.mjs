@@ -32,6 +32,8 @@ export const LABELS = {
 // --- Format contracts --------------------------------------------------------
 export const BODY_HEADINGS = ['## Summary', '## Changes', '## Testing plan', '## Automated checks'];
 export const REVIEW_PREFIX = '## Code Review';
+const CHECK_ONLY_PREFIX = 'Blocked only by checks:';
+const CHECK_ONLY_LINE = /^Blocked only by checks: `[^`]+`(, `[^`]+`)*$/;
 // Third verdict: posted when the head commit's checks never concluded within the bounded wait.
 export const REVIEW_HEADING = /^## Code Review — Cycle (\d+) · (approved|needs revision|blocked — checks pending)$/;
 export const REVISION_HEADING = /^## Revision — Cycle (\d+)$/;
@@ -196,6 +198,15 @@ function checkReview(text, { cycle } = {}) {
   }
   if ((bodyLines[1] ?? '').trim() === '') {
     return fail('body line 2 must be a non-empty counts line', 'a non-empty counts line directly under the heading');
+  }
+  const marker = (bodyLines[2] ?? '').trim();
+  if (marker.startsWith(CHECK_ONLY_PREFIX)) {
+    if (!CHECK_ONLY_LINE.test(marker)) {
+      return fail(`body line 3 is a malformed check-only marker, got ${JSON.stringify(marker)}`, "'Blocked only by checks: `<name>`[, `<name>`…]'");
+    }
+    if (m[2] !== 'needs revision') {
+      return fail(`the check-only marker is only valid under 'needs revision', got '${m[2]}'`, "no 'Blocked only by checks:' line under any other verdict");
+    }
   }
   for (const c of payload.comments ?? []) {
     if (typeof c.path !== 'string' || c.path === '') {
@@ -464,7 +475,7 @@ function runAudit(argv) {
         if (count >= 3) {
           auditFail(at('review'), `${count} reviews share commit ${oid} — the zero-diff gate should stop at one authorized repeat`);
         } else if (count === 2) {
-          note(`#${n}: 2 reviews share commit ${oid} — the operator-authorized zero-diff re-review, not a failure`);
+          note(`#${n}: 2 reviews share commit ${oid} — the one authorized zero-diff re-review (operator override or check-only recheck), not a failure`);
         } else {
           auditOk();
         }

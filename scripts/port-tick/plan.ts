@@ -2,7 +2,7 @@
 // budget. Pure: never imports events.ts/report.ts, never touches fs.
 import { partitionOwnership, issueSessionRequiredReason, prSessionRequiredReason } from './classify.ts';
 import { parseFilesBlock, gateCandidates } from './contention.ts';
-import { rollupVerdict } from './checks.ts';
+import { rollupVerdict, zeroDiffChecksOf } from './checks.ts';
 import { mergeabilityRoute, refreshDecision, capRefreshes, zeroDiffGate, cycleCapExceeded, cycleGrantCount, approvedReverify, refreshWins } from './gates.ts';
 import { toReviewNode, toCheckContexts, assigneeLoginsOf } from './wire.ts';
 import { refreshSweepWrite, zeroDiffWrite, cycleCapWrite, approvalWithdrawnWrite, strandedRestoreWrite } from './writes.ts';
@@ -74,7 +74,7 @@ export function planTriggers(cfg: any, actionable: any, partitions: Record<strin
 
 // Mergeability routing, the zero-diff gate, then dispatch — vetoed first by
 // refreshWins; a CONFLICTING read goes to acc.refreshCandidates instead.
-export function planReadyForReview(cfg: any, actionable: any, refreshBranchNumbers: number[], refreshingNumbers: number[], unknownStreakState: Record<string, number>, acc: PlanAccumulator): void {
+export function planReadyForReview(cfg: any, actionable: any, refreshBranchNumbers: number[], refreshingNumbers: number[], unknownStreakState: Record<string, number>, clock: string | null, acc: PlanAccumulator): void {
   for (const item of actionable.readyForReview.mine) {
     const veto = refreshWins({ number: item.number, refreshBranch: refreshBranchNumbers, refreshing: refreshingNumbers });
     if (veto.action === 'veto') {
@@ -99,7 +99,17 @@ export function planReadyForReview(cfg: any, actionable: any, refreshBranchNumbe
       acc.unknownStreakUpdates.push({ item: item.number, remove: true });
     }
 
-    const zd = zeroDiffGate({ reviews: (item.reviews?.nodes ?? []).map(toReviewNode), comments: item.comments?.nodes, headRefOid: item.headRefOid });
+    const checks = zeroDiffChecksOf(toCheckContexts(item.commits?.nodes?.[0]?.commit?.statusCheckRollup), cfg.checkDispositions, clock);
+    const zd = zeroDiffGate({ reviews: (item.reviews?.nodes ?? []).map(toReviewNode), comments: item.comments?.nodes, headRefOid: item.headRefOid, checks });
+    if (zd.action === 'hold-checks') {
+      acc.announce.push({ kind: 'zero-diff-check-hold', item: item.number, facts: zd.facts });
+      continue;
+    }
+    if (zd.action === 'recheck-dispatch') {
+      acc.announce.push({ kind: 'zero-diff-recheck', item: item.number, facts: zd.facts });
+      acc.dispatch.push({ stage: 'review-agent', item: item.number, kind: 'review', model: cfg.models.review, reason: 'zero-diff: check-only, now green' });
+      continue;
+    }
     if (zd.action === 'escalate') {
       acc.writes.push(zeroDiffWrite({ repo: cfg.repo, labels: cfg.labels, number: item.number }));
       acc.announce.push({ kind: 'zero-diff', item: item.number, facts: {} });
