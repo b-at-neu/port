@@ -142,7 +142,7 @@ function AuditRow({ row, readAt }: { readonly row: AuditRowView; readonly readAt
         ) : (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="min-w-0 flex-1 truncate font-mono text-meta">{row.command}</span>
+              <span tabIndex={0} className="min-w-0 flex-1 truncate rounded-sm font-mono text-meta focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{row.command}</span>
             </TooltipTrigger>
             <TooltipContent>{row.command}</TooltipContent>
           </Tooltip>
@@ -153,7 +153,7 @@ function AuditRow({ row, readAt }: { readonly row: AuditRowView; readonly readAt
           </Button>
         ) : null}
       </div>
-      {open && row.detail !== null ? <p className="px-4 pb-2 pl-[8.5rem] text-meta text-muted-foreground">{row.detail}</p> : null}
+      {open && row.detail !== null ? <p className="px-4 pb-2 text-meta text-muted-foreground">{row.detail}</p> : null}
     </div>
   )
 }
