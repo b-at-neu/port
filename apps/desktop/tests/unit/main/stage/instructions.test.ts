@@ -50,6 +50,7 @@ const INSTALLED_FILE_MESSAGE_PATH = pathOps.join(HOME, 'plugins', 'installed_plu
 const MARKETPLACES_FILE = `${HOME}/plugins/known_marketplaces.json`
 const MARKETPLACE_DIR = '/work/port-source'
 const MANIFEST_FILE = `${MARKETPLACE_DIR}/.claude-plugin/marketplace.json`
+const LIVE_ROOT = pathOps.resolveFrom(MARKETPLACE_DIR, './plugins/port')
 
 function resolve(records: readonly object[], overrides: { readonly repoRoot?: string; readonly extra?: Readonly<Record<string, string>> } = {}) {
   const { readJsonFile: readJson } = fakeFiles({ [INSTALLED_FILE]: installed(records), ...overrides.extra })
@@ -77,7 +78,7 @@ describe('resolveInstalledPluginRoot', () => {
 
   it('reads a directory-source install live and ignores the frozen install path', async () => {
     const extra = { [MARKETPLACES_FILE]: directoryMarketplace(), [MANIFEST_FILE]: JSON.stringify({ plugins: [{ name: 'port', source: './plugins/port' }] }) }
-    expect(await resolve([local], { extra })).toEqual({ ok: true, root: `${MARKETPLACE_DIR}/plugins/port`, origin: 'directory', version: '0.2.1-dev' })
+    expect(await resolve([local], { extra })).toEqual({ ok: true, root: LIVE_ROOT, origin: 'directory', version: '0.2.1-dev' })
   })
 
   it('still needs an install record for a directory-source install', async () => {
@@ -301,7 +302,7 @@ describe('createStageInstructionsLoader', () => {
     const stale = { ...files, [INSTALLED_FILE]: installed([{ scope: 'user', installPath: ROOT, version: '0.2.1-dev' }]), [`${ROOT}/docs/PIPELINE.md`]: '## Quick start\nq\n' }
     const result = await createStageInstructionsLoader({ claudeHome: HOME, ops: pathOps, ...fakeFiles(stale), git: fakeGit(defaultBranchConfig) })(launchRequest(), WORKTREE)
     expect(result.ok ? '' : result.message).toContain(`has no "CLAUDE.md overrides" section — the port@port install at ${ROOT} (version 0.2.1-dev) looks out of date.`)
-    const live = { ...stale, [MARKETPLACES_FILE]: directoryMarketplace(), [MANIFEST_FILE]: JSON.stringify({ plugins: [{ name: 'port', source: './plugins/port' }] }), [`${MARKETPLACE_DIR}/plugins/port/agents/impl-agent.md`]: 'x', [`${MARKETPLACE_DIR}/plugins/port/docs/PIPELINE.md`]: '## Quick start\nq\n' }
+    const live = { ...stale, [MARKETPLACES_FILE]: directoryMarketplace(), [MANIFEST_FILE]: JSON.stringify({ plugins: [{ name: 'port', source: './plugins/port' }] }), [pathOps.toPosix(pathOps.join(LIVE_ROOT, 'agents', 'impl-agent.md'))]: 'x', [pathOps.toPosix(pathOps.join(LIVE_ROOT, 'docs', 'PIPELINE.md'))]:'## Quick start\nq\n' }
     const liveResult = await createStageInstructionsLoader({ claudeHome: HOME, ops: pathOps, ...fakeFiles(live), git: fakeGit(defaultBranchConfig) })(launchRequest(), WORKTREE)
     expect(liveResult.ok ? '' : liveResult.message).not.toContain('out of date')
     expect(liveResult.ok ? '' : liveResult.message).toContain('has no "CLAUDE.md overrides" section')
