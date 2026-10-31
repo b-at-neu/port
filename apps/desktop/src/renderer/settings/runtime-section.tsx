@@ -88,7 +88,7 @@ export function RuntimeSection() {
           {note}
         </p>
       ))}
-      <p className="text-small text-muted-foreground">Checked {formatAgo(Date.now() - Date.parse(checkedAt))}</p>
+      <p className="text-small text-muted-foreground">Checked {formatAgo(new Date().getTime() - Date.parse(checkedAt))}</p>
       {model.probeErrorMessage !== null ? <ErrorBanner message={model.probeErrorMessage} /> : null}
       {model.action !== null ? (
         model.action.disabledReason !== null ? (

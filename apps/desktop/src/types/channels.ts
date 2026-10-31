@@ -23,6 +23,7 @@ import type { ForceDispatch } from '@/types/tick'
 import type { IpcChannel, ReposListResponse } from '@/types/ipc'
 import type { AssertEqual } from '@/types/assert-type'
 import type { NotificationPrefs } from '@/types/settings'
+import type { ReadWorktreeReportParams, WorktreesReport } from '@/types/reclaimer'
 
 export interface GateChannelDeps {
   readonly gatePreflight: (params: GatePreflightParams) => Promise<GatePreflightResponse>
@@ -90,6 +91,12 @@ export interface NotifyChannelDeps {
 export interface NotifyPrefsDeps {
   readonly prefs: () => Promise<NotificationPrefs>
   readonly setPrefs: (next: NotificationPrefs) => Promise<NotificationPrefs>
+}
+
+/** The seam `'worktrees:report'` composes through. */
+export interface WorktreesReportDeps {
+  readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
+  readonly readWorktreeReport: (params: ReadWorktreeReportParams) => Promise<WorktreesReport>
 }
 
 // The read/write partition over IpcChannel — hand-maintained, never derived from IPC_CHANNELS.

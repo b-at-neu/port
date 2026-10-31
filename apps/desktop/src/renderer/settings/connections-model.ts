@@ -5,18 +5,8 @@ import type { BoardSnapshot } from '@/types/board'
 import { RATE_LIMIT_FLOOR } from '@/types/board'
 import type { GhStatus } from '@/types/gh'
 import type { RuntimePreflight } from '@/types/runtime'
+import type { ConnectionLine } from '@/types/settings'
 import { formatAgo } from '@/renderer/lib/relative-time'
-
-type ConnectionTone = 'success' | 'attention' | 'danger' | 'idle'
-
-export interface ConnectionLine {
-  readonly key: string
-  readonly label: string
-  readonly state: string
-  /** `checked 2m ago`; `null` when the state already carries its own age. */
-  readonly age: string | null
-  readonly tone: ConnectionTone
-}
 
 type QueryLike<T> = Pick<QueryObserverResult<T>, 'status' | 'data'>
 
@@ -33,7 +23,7 @@ function checkedAgo(checkedAt: string, now: Date): string {
 }
 
 function claudeLine(query: QueryLike<RuntimePreflight>, now: Date): ConnectionLine {
-  const key = 'claude'
+  const key = 'claude-code'
   const label = 'Claude Code'
   if (query.status === 'pending') return { key, label, state: 'checking…', age: null, tone: 'idle' }
   if (query.status === 'error' || query.data === undefined) return { key, label, state: "couldn't check", age: null, tone: 'idle' }

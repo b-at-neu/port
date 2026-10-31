@@ -13,6 +13,16 @@ export interface NotificationPrefs {
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = { needsYou: true, sessions: true }
 
+/** One connection's line in the Connections tab and the status popover. */
+export interface ConnectionLine {
+  readonly key: string
+  readonly label: string
+  readonly state: string
+  /** `checked 2m ago`; `null` when the state already carries its own age. */
+  readonly age: string | null
+  readonly tone: 'success' | 'attention' | 'danger' | 'idle'
+}
+
 /** A failed read is data, never a rejection, and never `0` — an empty reading is not a zero. */
 export type SizeRead = { readonly ok: true; readonly bytes: number; readonly truncated: boolean } | { readonly ok: false; readonly message: string }
 

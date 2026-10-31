@@ -36,7 +36,7 @@ export function GhSection() {
       <StatusPill status={model.pillStatus} label={model.pillLabel} />
       <p className="text-small text-foreground-secondary">{model.body}</p>
       {model.scopesLine !== null ? <p className="font-mono text-small text-muted-foreground">{model.scopesLine}</p> : null}
-      <p className="text-small text-muted-foreground">Checked {formatAgo(Date.now() - Date.parse(query.data.checkedAt))}</p>
+      <p className="text-small text-muted-foreground">Checked {formatAgo(new Date().getTime() - Date.parse(query.data.checkedAt))}</p>
       <Button className="w-fit" disabled={query.isFetching} onClick={() => void query.refetch()}>
         {query.isFetching ? (
           <>

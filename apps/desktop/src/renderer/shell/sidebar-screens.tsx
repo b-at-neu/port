@@ -1,6 +1,6 @@
-// The Screens section — Needs you (red count), Board, Backlog, Repositories.
+// The Screens section — Needs you (red count), Board, Backlog.
 import { Link } from '@tanstack/react-router'
-import { FolderGit2, Inbox, LayoutList, ListTodo } from 'lucide-react'
+import { Inbox, LayoutList, ListTodo } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { useNeedsYouItems } from '@/renderer/needs-you/use-items'
 import { ROUTE_IDS } from '@/renderer/router/routes'
@@ -34,10 +34,6 @@ export function SidebarScreens() {
       <Link to={ROUTE_IDS.backlog} className={ROW_CLASS} activeProps={{ className: 'active' }}>
         <ListTodo className="size-4 shrink-0" />
         Backlog
-      </Link>
-      <Link to={ROUTE_IDS.repos} className={ROW_CLASS} activeProps={{ className: 'active' }}>
-        <FolderGit2 className="size-4 shrink-0" />
-        Repositories
       </Link>
     </div>
   )

@@ -102,7 +102,7 @@ function RepoRow({ row, collapsed, selectedKey, onToggle }: { readonly row: Pipe
   if (!row.ready) {
     return (
       <div>
-        <Link to={ROUTE_IDS.repos} className="flex h-7 items-center gap-1.5 rounded-md px-2 text-body text-foreground-secondary hover:bg-accent">
+        <Link to={ROUTE_IDS.settings} search={{ section: 'repositories' }} className="flex h-7 items-center gap-1.5 rounded-md px-2 text-body text-foreground-secondary hover:bg-accent">
           <span className="w-3.5 shrink-0" />
           <span className="flex-1 truncate" title={row.name}>
             {row.name}
@@ -167,7 +167,7 @@ export function SidebarPipelines() {
       ) : !repos.data.ok ? (
         <ErrorBanner message="Couldn't load pipelines. Restart port to try again." className="mx-2" />
       ) : repos.data.repositories.length === 0 ? (
-        <EmptyState icon={ChevronRight} message="No repositories yet." action={{ label: 'Add a repository', onClick: () => void navigate({ to: ROUTE_IDS.repos }) }} className="px-2 py-2 text-left" />
+        <EmptyState icon={ChevronRight} message="No repositories yet." action={{ label: 'Add a repository', onClick: () => void navigate({ to: ROUTE_IDS.settings, search: { section: 'repositories' } }) }} className="px-2 py-2 text-left" />
       ) : (
         <PipelineRows rows={pipelinesModel(repos.data.repositories, snapshot.data, needsYou, sessions.data ?? [])} selection={selection} collapsedRepos={collapsedRepos} onToggle={toggle} />
       )}

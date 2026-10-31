@@ -2,18 +2,14 @@
 // registry lookup, `runReclaim`, then exactly one `appendAudit` call, aborts included.
 import type { IpcMap } from '@/types/ipc'
 import type { ReclaimAuditEntry } from '@/types/writes'
-import type { ReadWorktreeReportParams, ReclaimedWorktree, RunReclaimParams, WorktreesReclaimResult, WorktreesReport } from '@/types/reclaimer'
+import type { ReclaimedWorktree, RunReclaimParams, WorktreesReclaimResult, WorktreesReport } from '@/types/reclaimer'
+import type { WorktreesReportDeps } from '@/types/channels'
 import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/registry'
 import type { RegistryDeps } from '@/types/registry'
 import { runReclaim } from '@/main/reclaimer/reclaim'
 import { readWorktreeReport } from '@/main/reclaimer/report'
 
 import { appendAudit } from '@/main/writes/audit'
-
-export interface WorktreesReportDeps {
-  readonly listRepositories: typeof listRepositories
-  readonly readWorktreeReport: (params: ReadWorktreeReportParams) => Promise<WorktreesReport>
-}
 
 const defaultWorktreesReportDeps: WorktreesReportDeps = { listRepositories, readWorktreeReport }
 

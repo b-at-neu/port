@@ -5,7 +5,7 @@ import type { WorktreesReport } from '@/types/reclaimer'
 import { resolveBoardRefresh } from '@/main/ipc'
 import type { BoardRefreshDeps } from '@/main/ipc'
 import { resolveWorktreesReport } from '@/main/channels/worktrees'
-import type { WorktreesReportDeps } from '@/main/channels/worktrees'
+import type { WorktreesReportDeps } from '@/types/channels'
 import type { RegistryDeps } from '@/types/registry'
 import { boardSnapshot, readyEntry } from '../../fixtures/board-state'
 
