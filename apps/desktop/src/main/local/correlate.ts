@@ -1,11 +1,5 @@
-// The four-rung correlation ladder, pure and I/O-free so it is directly
-// unit-testable and directly comparable to the reclaimer's own copy
-// (`plugins/port/bin/worktrees.mjs`'s `correlate`). Byte-for-byte the
-// same ladder, first hit wins (PIPELINE.md → "Worktree lifecycle" →
-// "Correlation"); the shared case table (`correlation.cases.json`) is what
-// pins the two together, run by both `correlate.test.ts` here and
-// `scripts/checks/desktop-local.mjs` over the reclaimer's export.
-import type { CorrelationRung, WorktreeCorrelation } from '../../shared/local/types'
+// Byte-for-byte the same ladder as the reclaimer's own copy; `correlation.cases.json` pins the two together.
+import type { CorrelationRung, WorktreeCorrelation } from '@/types/local'
 
 export interface CorrelationInput {
   readonly upstreamMergeRef: string | null
@@ -28,9 +22,7 @@ function positiveMatch(pattern: RegExp, value: string | null): number | null {
   return number > 0 ? number : null
 }
 
-/** First hit wins. Deliberately redundant across rungs — a detached
- *  worktree carries no upstream and falls through to the head-subject
- *  rung. */
+/** First hit wins. Deliberately redundant: a detached worktree falls through to the head-subject rung. */
 export function correlate(input: CorrelationInput): WorktreeCorrelation | null {
   const upstream = positiveMatch(UPSTREAM_PATTERN, input.upstreamMergeRef)
   if (upstream !== null) return { number: upstream, rung: 'upstream-branch' as CorrelationRung }

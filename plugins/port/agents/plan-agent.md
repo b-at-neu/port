@@ -15,6 +15,8 @@ You are the Plan agent (Stage 1) of the pipeline in `${CLAUDE_PLUGIN_ROOT}/docs/
 
 ## Read the configuration first
 
+**Dispatched with a stage context.** When your first message carries a `<port-stage-context>` block with a `repo:` line, it is the effective configuration, already resolved. Use it, and don't read `.claude/port.config.json` or fold `CLAUDE.md` overrides yourself. A `<port-stage-instructions>` block is this file plus the `PIPELINE.md` sections it names, so don't re-read them. Without a `repo:` line, read the configuration as below.
+
 **Before anything else, read `.claude/port.config.json`.** If it is missing, stop and report that this repository is not port-managed — do not guess any of the values below.
 
 **Then resolve the effective configuration.** Fold any `port-overrides` block in the repository's root `CLAUDE.md` over what you just read (`${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "CLAUDE.md overrides") — every value below is the *effective* one, never `.claude/port.config.json` alone. Report any refused override; never work around it.
@@ -35,7 +37,7 @@ Your **model** comes from `models.plan`; the cockpit passes it at dispatch, over
 
 ## Operating rules (read first)
 
-Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` in full.
+Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` in full — they are already in your first message when it carries a `<port-stage-instructions>` block.
 
 <!-- shell-discipline:begin -->
 **Shell discipline — every Bash call.** The allowlist matches the **whole command string from its first token**, so a command that chains or pipes into anything else fails the match no matter what its parts do.
@@ -56,7 +58,7 @@ Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROO
 
 1. **Re-read the item's labels immediately before the edit** — `gh issue view <n> --repo <repo> --json labels` or `gh pr view <n> --repo <repo> --json labels`. A read from an earlier step does not count; the gap between it and the write is exactly where another writer moves in.
 2. **Source label present, and it is the only role-bearing label** → issue the edit, then re-read once more and confirm the source is gone and the target is there. The *source label* is the trigger or in-flight label this transition is defined on — an incidental conditional removal alongside it is not a source.
-3. **Source label absent, or a second role-bearing label is present** → **write nothing.** Markers (`<labels.marker>`, `<labels.autoPlan>`) never count toward this, and `<labels.refreshBranch>`/`<labels.refreshing>` are the one sanctioned pair that may sit beside another stage label — a refresh deliberately leaves the others in place. Anything else is a state the label protocol says is impossible. Stop, and report the item, the label you expected, and the labels actually present, in the abort form this file already defines (`BLOCKED:` where it has one, otherwise its Pre-flight's plain stop-and-report).
+3. **Source label absent, or a second role-bearing label is present** → **write nothing.** Markers (`<labels.marker>`, `<labels.autoPlan>`) never count toward this, and `<labels.refreshBranch>`/`<labels.refreshing>` are sanctioned beside `<labels.approved>` only — refresh is otherwise the only trigger in flight, and a leftover `<labels.readyForReview>`/`<labels.needsRevision>` beside it is a pre-#494 writer, not a second role-bearing label to tolerate going forward. Anything else is a state the label protocol says is impossible. Stop, and report the item, the label you expected, and the labels actually present, in the abort form this file already defines (`BLOCKED:` where it has one, otherwise its Pre-flight's plain stop-and-report).
 
 **This fails closed on the write and open on the report**, deliberately: an unnecessary stop costs one dispatch and a glance from the operator, while writing through a stale view costs a duplicate pull request or a silently lost stage label, and neither is visible until someone reads the labels by hand. **Never repair the state yourself** — reporting it is the whole job here.
 <!-- label-cas:end -->
@@ -141,6 +143,8 @@ gh issue edit N --repo <repo> --body-file .temp/plan-N.md
 - **A verification-only touch** (the write appears **only** in `## Testing`) leaves the ticket dispatchable — emit **no** whole-plan marker — and instead marks that one step **operator-only**: `- [ ] **operator-only** — <step> (<why a dispatched agent cannot run it>)`. `impl-agent` must never execute that step; the pull request's testing plan carries the prefix verbatim.
 
 Never move a session-required write out of `## Testing` into `## Implementation` (or vice versa) to dodge either outcome — the section it actually lives in decides the routing. The literal string `SESSION REQUIRED` is the contract — **never reword it**; the reason after the colon is free text and is the part that generalizes. **Render the marker exactly once, at the slot.** The cockpit reads that one line, never a substring search of the whole body — so when a plan needs to *discuss* the marker (why a step is, or is not, session-required), write `SESSION REQUIRED` in inline code, never as a blockquote line; a second blockquote rendering anywhere else in the body is never read as a marker, but it does mislead a human skimming the ticket. Emit it in **revision mode** too, since a revised plan can change the routing, and never emit it for a plan that does not need a session. Full rules: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Session-required tickets" → "Detection".
+
+**App-owned repository.** Before deciding a deliverable touch, read the ownership record: `git rev-parse --path-format=absolute --git-common-dir`, then Read `<that directory's parent>/.agents/cockpit.json`. Verdict `app` when it parses, `repo` matches `.claude/port.config.json`'s `repo`, and `owner` is `"app"` — emit **no** whole-plan marker; the app owns the pause and `tick/plan.ts` no longer holds the ticket on it. Still mark a `## Testing`-only protected step **operator-only** as above — the app's pause covers deliverable writes, not a human-runnable manual step. Any other verdict → the rules above, unchanged.
 
 **Use the fixed structure** in `${CLAUDE_PLUGIN_ROOT}/docs/FORMATS.md` → "Implementation plan" for the canonical section list, order, and writing style. Think through how the feature should actually work and look — it is a product and interaction design, not just a file checklist — but write it tight: bullets, short sentences, do not restate the ticket, omit sections that do not apply. Brevity does not excuse indecision; the plan must still **decide the substance**:
 

@@ -1,21 +1,24 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { root, readJson } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { join, resolve } from 'node:path';
+import { root, readJson, walk, relOf, frontmatter } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
-// `ref` is legitimately either the release branch ('main') — this
-// repository's own committed, contributor-facing pin — or a `v<semver>`
-// release tag, which is what `/port:init` resolves for an adopting
-// repository once a version has actually been published. Both forms are a
-// deliberate pin; only the unpinned, ref-less shape `marketplace add` leaves
-// behind is the drift this check guards against.
+// Structural equality for the small JSON-shaped values this module compares — never relies on key order, unlike JSON.stringify.
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  const ak = Object.keys(a as object).sort();
+  const bk = Object.keys(b as object).sort();
+  if (ak.length !== bk.length || ak.some((k, i) => k !== bk[i])) return false;
+  return ak.every((k) => deepEqual((a as any)[k], (b as any)[k]));
+}
+
+// `ref` is legitimately either the release branch ('main') or a `v<semver>` release tag;
+// only the unpinned, ref-less shape `marketplace add` leaves behind is the drift to guard against.
 const MARKETPLACE_REF_PATTERN = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 
-export default async function ({ fail, ok }: Reporter) {
-  // --- Self-hosted marketplace entry stays pinned -----------------------------
-  // guard(#146): a bare `claude plugin marketplace add` rewriting the entry
-  // back to its unpinned form, silently tracking the default branch instead
-  // of a release.
+export default async function ({ expect, fail, ok }: Reporter) {
+  // --- Self-hosted marketplace entry stays pinned — a bare `marketplace add` must never rewrite it back to unpinned, default-branch tracking. ---
   {
     const settings = readJson('.claude/settings.json');
     const port = settings.extraKnownMarketplaces?.port;
@@ -29,26 +32,17 @@ export default async function ({ fail, ok }: Reporter) {
     ok();
   }
 
-  // --- CONTRIBUTING's cache path names no hard-coded version (#224) -----------
-  // guard(#224): the three-way ground-truth recipe naming a literal released
-  // version instead of '<version>' — the observed failure was the recipe
-  // still reading '0.1.0' two releases later, which by then pointed at the
-  // wrong directory entirely rather than merely a stale one.
+  // --- CONTRIBUTING's cache path names no hard-coded version — a literal released version
+  // reads wrong the moment this repository releases again. Also matches the dev-loop's own cache segment. ---
   {
     const readme = readFileSync(join(root, 'CONTRIBUTING.md'), 'utf8');
-    for (const m of readme.matchAll(/cache\/port\/port\/(\S+?)[\s/`]/g)) {
-      if (m[1] !== '<version>') {
-        fail('install-cache-path', `CONTRIBUTING.md's cache path names a literal version ('${m[1]}') instead of '<version>' — it will read wrong the moment this repository releases again`);
-      } else {
-        ok();
-      }
+    for (const m of readme.matchAll(/cache\/port(?:-dev)?\/port\/(\S+?)[\s/`]/g)) {
+      expect(!(m[1] !== '<version>'), 'install-cache-path', `CONTRIBUTING.md's cache path names a literal version ('${m[1]}') instead of '<version>' — it will read wrong the moment this repository releases again`);
     }
   }
 
-  // --- README's documented install source stays pinned ------------------------
-  // guard(#146): a docs edit quietly restoring default-branch tracking on
-  // the very command adopters copy-paste. `owner/repo@ref` and
-  // `owner/repo#ref` both parse; only a bare, ref-less source is disallowed.
+  // --- README's documented install source stays pinned — a docs edit must never quietly
+  // restore default-branch tracking on the command adopters copy-paste. ---
   {
     const readme = readFileSync(join(root, 'README.md'), 'utf8');
     for (const line of readme.split('\n')) {
@@ -61,10 +55,8 @@ export default async function ({ fail, ok }: Reporter) {
     ok();
   }
 
-  // --- Install docs keep live source and pinned install apart (#282) ----------
-  // guard(#282): README's inventory section presenting `claude plugin details`
-  // alone as what is installed, and the machine-wide marketplace-name note
-  // dropping out of README or CONTRIBUTING.
+  // --- Install docs keep live source and pinned install apart — never presenting `claude
+  // plugin details` alone as what is installed, and never dropping the marketplace-name note. ---
   {
     const readme = readFileSync(join(root, 'README.md'), 'utf8');
     const contributing = readFileSync(join(root, 'CONTRIBUTING.md'), 'utf8');
@@ -79,19 +71,196 @@ export default async function ({ fail, ok }: Reporter) {
       const section = nextHeading ? after.slice(0, nextHeading.index) : after;
       if (!section.includes('claude plugin details')) {
         fail('install-docs', 'README.md\'s inventory section no longer mentions `claude plugin details`');
-      } else if (!section.includes('claude plugin list')) {
-        fail('install-docs', 'README.md\'s inventory section no longer mentions `claude plugin list`');
-      } else {
-        ok();
-      }
+      } else expect(section.includes('claude plugin list'), 'install-docs', 'README.md\'s inventory section no longer mentions `claude plugin list`');
     }
 
     for (const [name, text] of [['README.md', readme], ['CONTRIBUTING.md', contributing]] as const) {
-      if (!/one live source per marketplace name/i.test(text)) {
-        fail('install-docs', `${name} no longer states 'one live source per marketplace name'`);
+      expect(/one live source per marketplace name/i.test(text), 'install-docs', `${name} no longer states 'one live source per marketplace name'`);
+    }
+  }
+
+  // --- Joining section precedes the adopter section and never says to run `/port:init` — a
+  // joining teammate must never be routed through /port:init with nothing telling them not to. ---
+  {
+    const readme = readFileSync(join(root, 'README.md'), 'utf8');
+    const joiningHeading = '## Joining a repository that already has port';
+    const adopterHeading = '## Adopting port in a repository';
+    const joiningIndex = readme.indexOf(joiningHeading);
+    const adopterIndex = readme.indexOf(adopterHeading);
+    if (joiningIndex === -1) {
+      fail('install-docs', 'README.md: "## Joining a repository that already has port" heading not found');
+    } else if (adopterIndex === -1) {
+      fail('install-docs', 'README.md: "## Adopting port in a repository" heading not found');
+    } else if (joiningIndex > adopterIndex) {
+      fail('install-docs', 'README.md: the joining section must precede the adopter section, so a joining teammate meets it first');
+    } else {
+      const section = readme.slice(joiningIndex, adopterIndex);
+      if (!section.includes('/port:init')) {
+        fail('install-docs', "README.md's joining section no longer mentions `/port:init`");
+      } else if (!/Do not run/.test(section)) {
+        fail('install-docs', "README.md's joining section no longer says \"Do not run\" `/port:init`");
       } else {
         ok();
       }
     }
+  }
+
+  // --- Dev-loop marketplace stays apart from the consumer one, or the most recently added
+  // source silently wins. pin: plugins/.claude-plugin/marketplace.json ↔ .claude-plugin/marketplace.json
+  {
+    const devManifestRel = 'plugins/.claude-plugin/marketplace.json';
+    const rootManifestRel = '.claude-plugin/marketplace.json';
+    let dev: any;
+    try {
+      dev = readJson(devManifestRel);
+    } catch {
+      fail('install-dev-marketplace', `${devManifestRel} is missing or does not parse as JSON`);
+    }
+
+    if (dev !== undefined) {
+      const rootManifest = readJson(rootManifestRel);
+
+      expect(!(dev.name === rootManifest.name), 'install-dev-marketplace', `${devManifestRel}'s name ('${dev.name}') must differ from ${rootManifestRel}'s — that is the collision this ticket exists to prevent`);
+
+      expect(deepEqual(dev.owner, rootManifest.owner), 'install-dev-marketplace', `${devManifestRel}'s owner must deep-equal ${rootManifestRel}'s`);
+
+      const devPlugins = Array.isArray(dev.plugins) ? dev.plugins : [];
+      if (devPlugins.length !== 1) {
+        fail('install-dev-marketplace', `${devManifestRel} must declare exactly one plugin entry, found ${devPlugins.length}`);
+      } else {
+        ok();
+        const devEntry = devPlugins[0];
+        const rootEntry = (rootManifest.plugins ?? [])[0];
+
+        expect(!(!rootEntry || devEntry.name !== rootEntry.name), 'install-dev-marketplace', `${devManifestRel}'s plugin entry name must match ${rootManifestRel}'s`);
+        expect(!(!rootEntry || devEntry.description !== rootEntry.description), 'install-dev-marketplace', `${devManifestRel}'s plugin entry description must match ${rootManifestRel}'s`);
+
+        const devResolved = resolve(root, 'plugins', devEntry.source ?? '');
+        const rootResolved = resolve(root, rootEntry?.source ?? '');
+        expect(!(devResolved !== rootResolved), 'install-dev-marketplace', `${devManifestRel}'s plugin source ('${devEntry.source}', resolved from plugins/) must resolve to the same directory as ${rootManifestRel}'s ('${rootEntry?.source}', resolved from the repository root)`);
+
+        // devName is read off the manifest, never typed as a literal, so a later rename never needs this check rewritten.
+        const devName: string = dev.name;
+        const rootName: string = rootManifest.name;
+        const pluginName: string = devEntry.name;
+
+        const readmeText = readFileSync(join(root, 'README.md'), 'utf8');
+        expect(!readmeText.includes(devName), 'install-dev-marketplace', `README.md names the dev-loop marketplace ('${devName}') — a surface every consumer reads`);
+
+        let anyShippedHit = false;
+        for (const f of walk(join(root, 'plugins/port'))) {
+          if (readFileSync(f, 'utf8').includes(devName)) {
+            anyShippedHit = true;
+            fail('install-dev-marketplace', `${relOf(f)} names the dev-loop marketplace ('${devName}') — every file under plugins/port/ ships to an adopter`);
+          }
+        }
+        if (!anyShippedHit) ok();
+
+        const contributingText = readFileSync(join(root, 'CONTRIBUTING.md'), 'utf8');
+        expect(contributingText.includes(`claude plugin install ${pluginName}@${devName} --scope local`), 'install-dev-marketplace', `CONTRIBUTING.md is missing 'claude plugin install ${pluginName}@${devName} --scope local'`);
+        expect(contributingText.includes(`claude plugin disable ${pluginName}@${rootName} --scope local`), 'install-dev-marketplace', `CONTRIBUTING.md is missing 'claude plugin disable ${pluginName}@${rootName} --scope local'`);
+        expect(!contributingText.includes(`claude plugin install ${pluginName}@${rootName} --scope local`), 'install-dev-marketplace', `CONTRIBUTING.md still carries the old shared-name recipe ('claude plugin install ${pluginName}@${rootName} --scope local')`);
+
+        let anyBadAddSrc = false;
+        for (const m of contributingText.matchAll(/claude plugin marketplace add\s+(\S+)/g)) {
+          const src = m[1];
+          if (!src.startsWith('b-at-neu/port') && !src.endsWith('/plugins')) {
+            anyBadAddSrc = true;
+            fail('install-dev-marketplace', `CONTRIBUTING.md's 'marketplace add ${src}' is neither the GitHub source nor a path ending '/plugins'`);
+          }
+        }
+        if (!anyBadAddSrc) ok();
+
+        // Every `<plugin>@<x>` token not preceded by `/` must name a declared marketplace — catches a later rename that misses one of these three files.
+        let anyBadAt = false;
+        for (const [name, text] of [
+          ['CONTRIBUTING.md', contributingText],
+          ['docs/TESTING.md', readFileSync(join(root, 'docs/TESTING.md'), 'utf8')],
+          ['evals/README.md', readFileSync(join(root, 'evals/README.md'), 'utf8')],
+        ] as const) {
+          for (const m of text.matchAll(/(?<!\/)\b([A-Za-z0-9_-]+)@([A-Za-z0-9_-]+)\b/g)) {
+            const [, p, x] = m;
+            if (p !== pluginName || x === rootName || x === devName) continue;
+            anyBadAt = true;
+            fail('install-dev-marketplace', `${name} names '${p}@${x}', which is neither '${p}@${rootName}' nor '${p}@${devName}'`);
+          }
+        }
+        if (!anyBadAt) ok();
+      }
+    }
+  }
+
+  // --- Pin agreement: init applies and verifies, PREFLIGHT reports drift — a startup line
+  // must never print an unflagged 'current with' when the registered source disagrees. ---
+  {
+    const initRel = 'plugins/port/skills/init/SKILL.md';
+    const initPath = join(root, initRel);
+    const initText = readFileSync(initPath, 'utf8');
+    const initAllowedTools = frontmatter(initPath)?.['allowed-tools'] ?? '';
+
+    for (const entry of ['Bash(claude plugin marketplace remove *)', 'Bash(claude plugin marketplace add *)', 'Bash(claude plugin install *)']) {
+      expect(initAllowedTools.includes(entry), 'pin-agreement', `${initRel}'s frontmatter allowed-tools is missing '${entry}'`);
+    }
+
+    const removeIdx = initText.indexOf('claude plugin marketplace remove');
+    const addIdx = initText.indexOf('claude plugin marketplace add');
+    const installIdx = initText.indexOf('claude plugin install');
+    if (removeIdx === -1 || addIdx === -1 || installIdx === -1) {
+      fail(
+        'pin-agreement',
+        `${initRel} is missing one of 'claude plugin marketplace remove'/'claude plugin marketplace add'/'claude plugin install'`,
+      );
+    } else expect((removeIdx < addIdx && addIdx < installIdx), 'pin-agreement', `${initRel} does not name 'claude plugin marketplace remove', then 'claude plugin marketplace add', then 'claude plugin install', in that order`);
+
+    for (const literal of ['Never report the pin applied until', 'verify-only']) {
+      expect(initText.includes(literal), 'pin-agreement', `${initRel} is missing the literal '${literal}'`);
+    }
+
+    const preflightRel = 'plugins/port/skills/pipeline/PREFLIGHT.md';
+    const preflightText = readFileSync(join(root, preflightRel), 'utf8');
+
+    for (const phrase of ['extraKnownMarketplaces', 'aheadBy']) {
+      expect(preflightText.includes(phrase), 'pin-agreement', `${preflightRel} never names '${phrase}'`);
+    }
+
+    const uxHeadingIdx = preflightText.indexOf('## UX states (startup preflight)');
+    if (uxHeadingIdx === -1) {
+      fail('pin-agreement', `${preflightRel} is missing the '## UX states (startup preflight)' heading`);
+    } else {
+      const uxSection = preflightText.slice(uxHeadingIdx);
+      const driftMarker = "- **Running plugin doesn't match the committed pin**";
+      const misconfigMarker = '- **Committed pin misconfigured**';
+      const driftIdx = uxSection.indexOf(driftMarker);
+      const misconfigIdx = uxSection.indexOf(misconfigMarker);
+
+      expect(!(driftIdx === -1), 'pin-agreement', `${preflightRel}'s UX states are missing "${driftMarker}"`);
+      expect(!(misconfigIdx === -1), 'pin-agreement', `${preflightRel}'s UX states are missing "${misconfigMarker}"`);
+
+      // Each entry's text is bounded by the next top-level '- **' bullet, never the whole section.
+      if (driftIdx !== -1) {
+        const nextBulletIdx = uxSection.indexOf('\n- **', driftIdx + driftMarker.length);
+        const driftEntry = nextBulletIdx === -1 ? uxSection.slice(driftIdx) : uxSection.slice(driftIdx, nextBulletIdx);
+        expect(driftEntry.includes('claude plugin marketplace remove'), 'pin-agreement', `${preflightRel}'s drift UX state is missing 'claude plugin marketplace remove'`);
+        expect(!driftEntry.includes('/port:init'), 'pin-agreement', `${preflightRel}'s drift UX state names '/port:init' — this is the operator's own machine, never the repository maintainer's fix`);
+      }
+
+      if (misconfigIdx !== -1) {
+        const nextBulletIdx = uxSection.indexOf('\n- **', misconfigIdx + misconfigMarker.length);
+        const misconfigEntry = nextBulletIdx === -1 ? uxSection.slice(misconfigIdx) : uxSection.slice(misconfigIdx, nextBulletIdx);
+        expect(misconfigEntry.includes('/port:init'), 'pin-agreement', `${preflightRel}'s misconfiguration UX state is missing '/port:init'`);
+      }
+    }
+  }
+
+  // pin: scripts/checks/install.ts's MARKETPLACE_REF_PATTERN ↔ the prose in init/SKILL.md and PREFLIGHT.md stating what it accepts
+  {
+    const refFormPhrase = '`main` or a `v<semver>` tag';
+    const initRel = 'plugins/port/skills/init/SKILL.md';
+    const preflightRel = 'plugins/port/skills/pipeline/PREFLIGHT.md';
+    const initText = readFileSync(join(root, initRel), 'utf8');
+    const preflightText = readFileSync(join(root, preflightRel), 'utf8');
+
+    expect(initText.includes(refFormPhrase), 'pin-agreement', `${initRel} never states the accepted ref forms as '${refFormPhrase}'`);
+    expect(preflightText.includes(refFormPhrase), 'pin-agreement', `${preflightRel} never states the accepted ref forms as '${refFormPhrase}'`);
   }
 }

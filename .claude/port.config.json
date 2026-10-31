@@ -31,7 +31,7 @@
   },
   "release": {
     "versionSource": "package",
-    "versionFiles": ["plugins/port/.claude-plugin/plugin.json"],
+    "versionFiles": ["plugins/port/.claude-plugin/plugin.json", "apps/desktop/package.json"],
     "versionCommand": null,
     "postPublishHook": "node scripts/dev-window.ts"
   },

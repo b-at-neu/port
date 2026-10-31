@@ -1,0 +1,96 @@
+// #103: every string the rail and the restore banner render — pure, no DOM.
+// Window names and the reset clock reuse `startedClock` (`utils/hosting/
+// label.ts`), the same "14:02 today, else Mon 14:02" rule the rail's own row
+// meta line and the restore banner's "opened" line both need too.
+import type { SessionRateLimit } from '@/types/hosting'
+import type { UsageNotice } from '@/types/session'
+import { startedClock } from '@/utils/hosting/label'
+import { contextPercent, formatCost, formatTokens, type SessionUsage, type UsageTotals } from '@/utils/hosting/usage'
+
+export const LIMIT_STEPPER_TITLE = "Each session is its own Claude Code process. They all share your subscription's usage limit."
+export const CAPACITY_SET_FAILED = "Couldn't reach the main process. The limit wasn't changed."
+
+export const DISMISS_BUTTON = 'Dismiss'
+
+const WINDOW_NAMES: Readonly<Record<'five-hour' | 'weekly' | 'weekly-opus' | 'weekly-sonnet' | 'overage' | 'unknown', string>> = {
+  'five-hour': '5-hour',
+  weekly: 'weekly',
+  'weekly-opus': 'weekly Opus',
+  'weekly-sonnet': 'weekly Sonnet',
+  overage: 'extra usage',
+  unknown: 'usage',
+}
+
+function windowName(window: SessionRateLimit['window']): string {
+  return WINDOW_NAMES[window ?? 'unknown']
+}
+
+function capitalize(text: string): string {
+  return text.length === 0 ? text : `${text.charAt(0).toUpperCase()}${text.slice(1)}`
+}
+
+function resetsSuffix(resetsAt: string | null, now: Date): string {
+  return resetsAt === null ? '' : ` · resets ${startedClock(resetsAt, now)}`
+}
+
+interface UsageNoticeLines {
+  readonly main: string
+  readonly sub: string
+}
+
+/** `warning` — "Nearing your <window> usage limit"; `rejected` — "<Window>
+ *  usage limit reached". `· resets …` is omitted when there is no reset
+ *  time. */
+export function usageNoticeLines(notice: UsageNotice, now: Date): UsageNoticeLines {
+  const window = windowName(notice.window)
+  const resets = resetsSuffix(notice.resetsAt, now)
+  if (notice.status === 'warning') {
+    return { main: `⚠ Nearing your ${window} usage limit${resets}`, sub: 'Every open session draws on the same limit.' }
+  }
+  return { main: `⛔ ${capitalize(window)} usage limit reached${resets}`, sub: 'New turns in every session will fail until then.' }
+}
+
+export function restoreBannerLine(count: number): string {
+  const verb = count === 1 ? 'was' : 'were'
+  return `${String(count)} session${count === 1 ? '' : 's'} ${verb} open when Port last closed.`
+}
+
+export const RESTORE_RESUME_ALL = 'Resume all'
+export const RESTORE_REVIEW = 'Review'
+export const RESTORE_DISMISS = 'Dismiss'
+export const RESTORE_FORGET = 'Forget'
+export const RESTORE_RESUME_ONE = 'Resume'
+
+export function restoreUnavailableLine(reason: string): string {
+  return `This repository isn't ready — ${reason}`
+}
+
+export function restoreOpenedLine(startedAt: string, now: Date): string {
+  return `opened ${startedClock(startedAt, now)}`
+}
+
+export function restorePartialLine(resumed: number, total: number, limit: number): string {
+  return `Resumed ${String(resumed)} of ${String(total)} — the limit is ${String(limit)}. Raise it or close a session to resume the rest.`
+}
+
+export const USAGE_HEADING = 'Usage'
+export const USAGE_THIS_SESSION = 'This session'
+export const USAGE_ALL_SESSIONS = 'All sessions'
+export const USAGE_NONE = 'No usage reported yet.'
+export const CONTEXT_UNKNOWN = 'No context reading yet.'
+export const CONTEXT_METER_LABEL = 'Context'
+
+export function usageValue(totals: UsageTotals): string {
+  return `${formatCost(totals.costUsd)} · ${formatTokens(totals.totalTokens)} tokens`
+}
+
+export function usageSessionsLine(count: number): string {
+  return `${String(count)} session${count === 1 ? '' : 's'} with a reading`
+}
+
+/** `84k of 200k tokens in context`, or `CONTEXT_UNKNOWN` when `contextPercent`
+ *  is null (no reading, or a non-positive context window). */
+export function contextMeterLabel(usage: SessionUsage | null): string {
+  if (usage === null || contextPercent(usage) === null) return CONTEXT_UNKNOWN
+  return `${formatTokens(usage.contextTokens)} of ${formatTokens(usage.contextWindow)} tokens in context`
+}

@@ -1,54 +1,30 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, readJson } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, readJson } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
-// The four worktree-reclamation blocks split out of scripts/checks/cockpit.ts
-// (issue 181, splitting that module's own file-size ratchet entry) — named to
-// mirror scripts/checks/artifacts.ts, which pins plugins/port/bin/
-// artifacts.mjs the same way this pins bin/worktrees.mjs.
-export default async function ({ fail, ok }: Reporter) {
-  // --- Worktree reclamation template reaches outside its contract ------------
-  // guard(#144): the one file an adopting repository copies alone reaching
-  // outside its contract — never shell out via a POSIX-only binary name or a
-  // shell string. Self-containment itself is now the directory-wide
-  // `layout.ts` check (issue 171); this module keeps only this file's own
-  // contract-specific assertions.
+// The four worktree-reclamation blocks, named to mirror scripts/checks/artifacts.ts, which pins bin/artifacts.mjs the same way this pins bin/worktrees.mjs.
+export default async function ({ expect, fail, ok }: Reporter) {
+  // --- Worktree reclamation template reaches outside its contract: never shell out via a
+  // POSIX-only binary name or a shell string. Self-containment is layout.ts's job; this keeps only contract-specific assertions. ---
   {
     const rel = 'plugins/port/bin/worktrees.mjs';
     const text = readFileSync(join(root, rel), 'utf8');
 
-    if (/\bexecSync\b/.test(text)) {
-      fail('worktrees-template', `${rel} uses execSync — every child process must use spawnSync with an explicit argv array`);
-    } else {
-      ok();
-    }
+    expect(!/\bexecSync\b/.test(text), 'worktrees-template', `${rel} uses execSync — every child process must use spawnSync with an explicit argv array`);
 
-    if (/shell:\s*true/.test(text)) {
-      fail('worktrees-template', `${rel} passes shell: true to a child process — every call must be an explicit argv array, never a shell string`);
-    } else {
-      ok();
-    }
+    expect(!/shell:\s*true/.test(text), 'worktrees-template', `${rel} passes shell: true to a child process — every call must be an explicit argv array, never a shell string`);
 
-    // Strip comment-only lines first — the file's own docstring names both
-    // forbidden calls as a disclaimer ("Never in this script: `git fetch`,
-    // `git worktree add`, …"), which must not itself trip this check.
+    // Strip comment-only lines first — the file's own docstring names both calls as a disclaimer, which must not itself trip this check.
     const codeOnly = text
       .split('\n')
       .filter((l) => !/^\s*(\/\/|\*)/.test(l))
       .join('\n');
-    if (/git\(\[['"]fetch['"]|git\(\[[^\]]*['"]worktree['"],\s*['"]add['"]/.test(codeOnly)) {
-      fail('worktrees-template', `${rel} must never run 'git fetch' or 'git worktree add' — those are outside its contract`);
-    } else {
-      ok();
-    }
+    expect(!/git\(\[['"]fetch['"]|git\(\[[^\]]*['"]worktree['"],\s*['"]add['"]/.test(codeOnly), 'worktrees-template', `${rel} must never run 'git fetch' or 'git worktree add' — those are outside its contract`);
   }
 
-  // --- Worktree reclamation classifier ----------------------------------------
-  // guard(#144): the correlation ladder or the classification precedence
-  // silently drifting from what PIPELINE.md documents. Unit-tests the pure
-  // functions in isolation from every git/gh call.
+  // --- Worktree reclamation classifier: unit-tests the pure functions in isolation from every git/gh call. ---
   {
     const { parsePorcelain, correlate, classifyCandidate } =
       await import(pathToFileURL(join(root, 'plugins/port/bin/worktrees.mjs')).href);
@@ -76,11 +52,7 @@ export default async function ({ fail, ok }: Reporter) {
         fail('worktrees-classifier', `parsePorcelain: expected 3 records, got ${records.length}`);
       } else if (records[0].path !== '/repo' || records[1].branch !== '144-worktree-reclaim-install-guard') {
         fail('worktrees-classifier', `parsePorcelain: unexpected record shape ${JSON.stringify(records)}`);
-      } else if (!records[2].locked || records[2].lockReason !== 'reason: agent still running' || !records[2].detached) {
-        fail('worktrees-classifier', `parsePorcelain: locked/detached record parsed wrong: ${JSON.stringify(records[2])}`);
-      } else {
-        ok();
-      }
+      } else expect(!(!records[2].locked || records[2].lockReason !== 'reason: agent still running' || !records[2].detached), 'worktrees-classifier', `parsePorcelain: locked/detached record parsed wrong: ${JSON.stringify(records[2])}`);
     }
 
     // correlate: each rung in turn, first hit wins, and #0 is never a
@@ -101,11 +73,7 @@ export default async function ({ fail, ok }: Reporter) {
         const got = correlate(input);
         const gotStr = JSON.stringify(got);
         const expStr = JSON.stringify(expected);
-        if (gotStr !== expStr) {
-          fail('worktrees-classifier', `correlate(${JSON.stringify(input)}): expected ${expStr}, got ${gotStr}`);
-        } else {
-          ok();
-        }
+        expect(!(gotStr !== expStr), 'worktrees-classifier', `correlate(${JSON.stringify(input)}): expected ${expStr}, got ${gotStr}`);
       }
     }
 
@@ -128,31 +96,18 @@ export default async function ({ fail, ok }: Reporter) {
       for (const [label, input, expectedState, expectedRemovable] of cases) {
         const full = { isOutside: false, isProtected: false, locked: false, dirty: false, itemState: null, isAncestor: null, ...input };
         const got = classifyCandidate(full);
-        if (got.state !== expectedState || got.removable !== expectedRemovable) {
-          fail(
-            'worktrees-classifier',
-            `classifyCandidate — ${label}: expected {state: '${expectedState}', removable: ${expectedRemovable}}, got ${JSON.stringify(got)}`,
-          );
-        } else {
-          ok();
-        }
+        expect(!(got.state !== expectedState || got.removable !== expectedRemovable), 'worktrees-classifier', `classifyCandidate — ${label}: expected {state: '${expectedState}', removable: ${expectedRemovable}}, got ${JSON.stringify(got)}`);
       }
     }
   }
 
-  // --- Cockpit hygiene invokes the worktree script, never bare git worktree --
-  // guard(#144): the cockpit's worktree hygiene collapsing back into the
-  // prose issue 62 already tried once. The cockpit's hygiene section must
-  // call `commands.worktrees` and must not itself run `git worktree remove`.
+  // --- Cockpit hygiene invokes the worktree script, never bare git worktree: must call
+  // `commands.worktrees` and must not itself run `git worktree remove`. ---
   {
     const rel = 'plugins/port/skills/pipeline/SKILL.md';
     const text = readFileSync(join(root, rel), 'utf8');
 
-    if (!text.includes('commands.worktrees')) {
-      fail('worktree-hygiene', `${rel} never names 'commands.worktrees' — hygiene must be delegated to the script, not reimplemented in prose`);
-    } else {
-      ok();
-    }
+    expect(text.includes('commands.worktrees'), 'worktree-hygiene', `${rel} never names 'commands.worktrees' — hygiene must be delegated to the script, not reimplemented in prose`);
 
     const hygieneStart = text.indexOf('Worktree hygiene');
     if (hygieneStart === -1) {
@@ -160,37 +115,19 @@ export default async function ({ fail, ok }: Reporter) {
     } else {
       const hygieneEnd = text.indexOf('\n**Denial report', hygieneStart);
       const hygieneSection = hygieneEnd === -1 ? text.slice(hygieneStart) : text.slice(hygieneStart, hygieneEnd);
-      if (/git worktree remove --force/.test(hygieneSection)) {
-        fail('worktree-hygiene', `${rel}'s hygiene section still invokes 'git worktree remove --force' directly — this must be the script's job now`);
-      } else {
-        ok();
-      }
+      expect(!/git worktree remove --force/.test(hygieneSection), 'worktree-hygiene', `${rel}'s hygiene section still invokes 'git worktree remove --force' directly — this must be the script's job now`);
     }
   }
 
-  // --- Cockpit's config table carries commands.worktrees ----------------------
-  // guard(#144): the config key existing in only some of the places that
-  // must agree on it — the cockpit would read a placeholder nothing sets.
+  // --- Cockpit's config table carries commands.worktrees everywhere, or it would read a placeholder nothing sets. ---
   {
     const schemaProps = readJson('schema/port.config.schema.json').properties.commands.properties;
-    if (!schemaProps.worktrees) {
-      fail('worktree-hygiene', "schema/port.config.schema.json's commands object has no 'worktrees' property");
-    } else {
-      ok();
-    }
+    expect(schemaProps.worktrees, 'worktree-hygiene', "schema/port.config.schema.json's commands object has no 'worktrees' property");
 
     const template = readJson('plugins/port/templates/port.config.json');
-    if (!('worktrees' in (template.commands ?? {}))) {
-      fail('worktree-hygiene', 'plugins/port/templates/port.config.json has no commands.worktrees key');
-    } else {
-      ok();
-    }
+    expect(('worktrees' in (template.commands ?? {})), 'worktree-hygiene', 'plugins/port/templates/port.config.json has no commands.worktrees key');
 
     const selfHost = readJson('.claude/port.config.json');
-    if (typeof selfHost.commands?.worktrees !== 'string') {
-      fail('worktree-hygiene', ".claude/port.config.json's commands.worktrees must be set for this repository's own self-hosting");
-    } else {
-      ok();
-    }
+    expect(!(typeof selfHost.commands?.worktrees !== 'string'), 'worktree-hygiene', ".claude/port.config.json's commands.worktrees must be set for this repository's own self-hosting");
   }
 }

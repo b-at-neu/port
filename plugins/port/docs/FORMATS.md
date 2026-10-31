@@ -62,6 +62,19 @@ Conflicts with `<base>` at `<head-sha>` — GitHub can't build a merge ref, so n
 
 Names the base branch and the head SHA the conflict was read against — enough for `revise-agent` to enter refresh mode (see `revise-agent.md`) without re-deriving anything, and enough for a human reading the thread to know the pipeline never had checks to go on.
 
+### Gate cleared (cockpit writes it via `--body-file`)
+
+Posted at `unblock #N`, **before** the label swap so the clear is durable even if the swap then fails. The heading is fixed; what follows names what was decided:
+
+```
+## Gate cleared
+
+### Cycle grant
+One extra review cycle for this PR only; reviewCycleCap is unchanged.
+```
+
+A `### Cycle grant` block appears **only** when the escalation being cleared was the cycle cap and the operator picked **Grant one more cycle** — never on a rebase, zero-diff, or budget clear, and never inferred from anything but that explicit pick. `gates.ts`'s `cycleGrantCount` counts exactly these comments (body starting `## Gate cleared`, containing a line equal to `### Cycle grant`) off the `needsRevision` alias's `comments(last: 20)` to compute the effective cap (`PIPELINE.md` → "Raising `reviewCycleCap` vs. granting one ticket an extra cycle"). A rebase clear instead carries the `### Rebase decisions` block `SKILL.md` → "Gate clear" already describes; the two never appear in the same comment.
+
 ### Changes requested (cockpit writes it via `--body-file`)
 
 Posted the moment an operator says `revise #N: <the change>` on an approved pull request (see `PIPELINE.md` → "Check evidence" → the `<labels.approved>` carve-out), **before** the label swap so the request is durable even if the swap's compare-and-swap then fails:

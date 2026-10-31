@@ -1,62 +1,11 @@
-// PreToolUse hook (matchers: Bash, Edit|Write|NotebookEdit, Agent) for the
-// port agent pipeline.
-//
-// This is the component that actually denies. It decides, for every Bash
-// call and every write-tool call, whether the caller is a dispatched
-// subagent and whether the call misses the repository's allowlist (Bash) or
-// targets a `sessionRequiredPaths` path (writes) — and when both are true it
-// returns an explicit `permissionDecision: "deny"`, so no permission dialog
-// ever reaches the operator regardless of the parent session's mode.
-// `permissionMode: dontAsk` on the stage agents is a second line of defence,
-// not the mechanism this relies on.
-//
-// Six more rules apply to *any* caller, cockpit included: a `gh`/`git` call
-// wrapped in a shell loop (#120), an unauthorised removal of the
-// `needsHuman` gate label (#138) — which now also carries an **audit-only**
-// approval arm (#288): an operator-named removal of the `approved` label
-// (the `revise #N` route) is logged as `gate-clear`, never denied, since the
-// hook cannot see the facts (a red check, a conflict, a stuck refresh loop)
-// that actually authorise the removal — see `hooks/lib/guard-rules.mjs`'s
-// own approval-arm comment — an add/remove of a plan-gate label while an
-// external claim holds it (#206), a `claude plugin` install/uninstall/
-// marketplace mutation run from inside any `.claude/worktrees/` cwd (#144),
-// a cockpit session `git checkout`/`git switch`ing branches out from under
-// its own startup refusal (#216), and a cockpit session calling `Agent`
-// while the claim holds `dispatch` — the app dispatches for this checkout
-// instead (#265). Loop, gate, claim, and branch exempt an `/port:implement`
-// operator worktree; the install rule deliberately does not, since every
-// install scope shares one `installPath` regardless of who is typing the
-// command — and the claim rule's own write-tool arm (denying a write to the
-// claim file itself) does not exempt it either, for the same reason. The
-// gate, branch, and approval rules are the Bash call paths that do extra
-// I/O — reading the calling session's transcript — and only when the
-// command actually matches what each rule guards, from a non-subagent,
-// non-operator-worktree caller; the dispatch rule's own `Agent`-arm
-// transcript read follows the same shape, only when the claim names
-// `dispatch` or is unreadable. The claim rule's own read
-// (the claim file itself) runs whenever a Bash call carries
-// `--add-label`/`--remove-label`, an `Agent` call is made, or a write
-// targets the claim file path, independent of caller identity — the
-// write-tool arm needs the result for every caller, not only a non-subagent
-// one.
-//
-// Every decision — deny, a same-shape miss from a non-subagent session, an
-// allowed gate clear, or an internal failure — is logged to a gitignored
-// `.agents/denials.log` in the base repository, so the cockpit can surface
-// clusters without interrupting the operator. An `allow` decision is never
-// logged.
-//
-// It no-ops (no stdout, no log line) unless the repository has a
-// `.claude/port.config.json`. A plugin's hooks fire in EVERY session once
-// installed at user scope, regardless of working directory, so without this
-// guard installing port would start deciding and logging in unrelated
-// projects.
+// PreToolUse hook: denies a subagent call missing the allowlist or targeting a sessionRequiredPaths
+// path, plus rules for any caller — except an app-owned top-level agent's protected edit, passed through with no decision. No-ops outside a port-managed repository.
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { allowMatchers, decide, callerKind, invokedCockpitSkill } from './lib/guard-rules.mjs';
+import { allowMatchers, decide, callerKind, invokedCockpitSkill, realCanonical } from './lib/guard-rules.mjs';
 import { gateClearAttempt, switchesBranch } from './lib/command-rules.mjs';
-import { classifyGateClaim } from './lib/claim-rules.mjs';
+import { classifyOwnership } from './lib/ownership-rules.mjs';
 import { recentOperatorMessages } from './lib/operator-rules.mjs';
 
 /** Nearest ancestor of `from` containing `rel`, or null. */
@@ -121,56 +70,27 @@ if (configRoot) {
       join(configRoot, '.claude', 'settings.local.json'),
     ]);
 
-    // The claim rule's own path — every worktree of a checkout resolves to
-    // the one file, the base repository root, never a per-worktree copy.
+    // Every worktree of a checkout resolves to the one ownership record, the base repository root.
     const baseRoot = baseRepoRoot(cwd);
-    const claimFilePath = join(baseRoot, '.agents', 'gate-claim.json');
-    const planGateLabels = [
-      config?.labels?.planReview ?? 'plan review',
-      config?.labels?.planApproved ?? 'plan approved',
-      config?.labels?.planChangesRequested ?? 'plan changes requested',
-    ];
+    const cockpitFilePath = join(baseRoot, '.agents', 'cockpit.json');
+    const isWriteToolCall = payload?.tool_name === 'Write' || payload?.tool_name === 'Edit' || payload?.tool_name === 'NotebookEdit';
+    const writeTargetsCockpitFile =
+      isWriteToolCall &&
+      typeof payload?.tool_input?.file_path === 'string' &&
+      payload.tool_input.file_path.length > 0 &&
+      realCanonical(resolve(configRoot, payload.tool_input.file_path)) === realCanonical(cockpitFilePath);
+    const writeFromTopLevelAgent = isWriteToolCall && callerKind(payload).isTopLevelAgent;
 
-    // The claim rule's own extra I/O — reading and classifying the claim
-    // file — runs only when a Bash call actually carries a label-editing
-    // flag, the same "extra I/O only where the rule might fire" shape the
-    // gate/branch transcript read below already uses. The write-tool arm
-    // needs no read at all: it only compares `file_path` against
-    // `claimFilePath`, decided inside `decide` itself.
-    let planGateClaim;
-    if (
-      payload?.tool_name === 'Bash' &&
-      typeof payload?.tool_input?.command === 'string' &&
-      /--(?:add|remove)-label/.test(payload.tool_input.command)
-    ) {
-      const exists = existsSync(claimFilePath);
-      const text = exists ? readFileSync(claimFilePath, 'utf8') : '';
-      planGateClaim = classifyGateClaim(exists, text, config?.repo);
+    // Reads and classifies the ownership record for an Agent call, a write targeting it, or a
+    // write-tool call from a top-level agent session (needed for the protected-path pass-through).
+    let ownership;
+    if (payload?.tool_name === 'Agent' || writeTargetsCockpitFile || writeFromTopLevelAgent) {
+      const exists = existsSync(cockpitFilePath);
+      const text = exists ? readFileSync(cockpitFilePath, 'utf8') : '';
+      ownership = classifyOwnership(exists, text, config?.repo);
     }
 
-    // The dispatch rule's own extra I/O (#265) — reading and classifying the
-    // same claim file, but keyed for `Agent` calls instead of label edits.
-    // Read unconditionally for an `Agent` call (never gated on the command's
-    // own shape the way the Bash reads above are, since there is no second
-    // predicate to test first): the claim is what the `dispatch` rule's own
-    // denial check consumes next.
-    let dispatchClaim;
-    if (payload?.tool_name === 'Agent') {
-      const exists = existsSync(claimFilePath);
-      const text = exists ? readFileSync(claimFilePath, 'utf8') : '';
-      dispatchClaim = classifyGateClaim(exists, text, config?.repo);
-    }
-
-    // The gate, branch, and approval rules are the Bash paths that need extra
-    // I/O — the calling session's transcript — so the read only happens when
-    // one of their own command tests says it might apply, and only for a
-    // caller `decide` will not already deny outright (a subagent) or exempt
-    // outright (an operator worktree). One read serves all three. The
-    // dispatch rule's own `Agent`-arm read follows the same "only where the
-    // rule can fire" shape, gated on the claim just read naming `dispatch`
-    // or being unreadable, rather than a second command predicate. A
-    // missing path, an unreadable file, or a parse failure all yield `null`
-    // (unverifiable) in every case, never a throw.
+    // Gate/branch/approval need the session transcript, read once for all three; any read failure yields `null`.
     let operatorMessages = null;
     let isCockpitSession = null;
     if (payload?.tool_name === 'Bash' && typeof payload?.tool_input?.command === 'string') {
@@ -191,12 +111,11 @@ if (configRoot) {
           }
         }
       }
-    } else if (payload?.tool_name === 'Agent') {
+    } else if (payload?.tool_name === 'Agent' || writeTargetsCockpitFile) {
       const who = callerKind(payload);
-      const claimsDispatch =
-        dispatchClaim?.state === 'unreadable' ||
-        (dispatchClaim?.state === 'held' && (dispatchClaim.scopes ?? []).includes('dispatch'));
-      if (!who.isSubagent && claimsDispatch && typeof payload?.transcript_path === 'string') {
+      const appOwnsItOrUnknown = ownership?.kind === 'app' || ownership?.kind === 'unreadable';
+      const needsTranscript = payload?.tool_name === 'Agent' ? !who.isSubagent && appOwnsItOrUnknown : !who.isSubagent;
+      if (needsTranscript && typeof payload?.transcript_path === 'string') {
         try {
           isCockpitSession = invokedCockpitSkill(readFileSync(payload.transcript_path, 'utf8'));
         } catch {
@@ -213,10 +132,9 @@ if (configRoot) {
       needsHumanLabel,
       operatorMessages,
       isCockpitSession,
-      planGateClaim,
-      planGateLabels,
-      dispatchClaim,
-      claimFilePath,
+      ownership,
+      cockpitFilePath,
+      repo: config?.repo,
       approvedLabel,
     });
     const logDir = join(baseRoot, '.agents');
@@ -239,6 +157,10 @@ if (configRoot) {
       // Allowed — no stdout, so the call proceeds — but logged as the
       // auditable record of a human gate being removed.
       log(logDir, 'gate-clear', actor, result.subject);
+    } else if (result.decision === 'pass') {
+      // Allowed — no stdout, so the SDK's canUseTool → stagePolicy pause runs — but logged so
+      // the audit trail shows a protected edit went through to the app's permission handler.
+      log(logDir, 'protected-pass', actor, result.subject);
     }
     // 'allow' — nothing to log, nothing to emit.
   } catch {
@@ -251,9 +173,6 @@ if (configRoot) {
     }
   }
 }
-// Nothing runs after this line in either branch, so setting exitCode and
-// letting the process end naturally is equivalent to exiting immediately —
-// except on Windows, where process.stdout is asynchronous when connected to
-// a pipe, and an immediate process.exit(0) can truncate the deny JSON this
-// hook just wrote to stdout.
+// Setting exitCode and letting the process end naturally avoids process.exit(0) truncating
+// the deny JSON on Windows, where stdout is asynchronous when piped.
 process.exitCode = 0;

@@ -1,34 +1,6 @@
 #!/usr/bin/env node
-// Worktree reclamation — one deterministic call whose stdout *is* the report.
-// Replaces the cockpit's prose worktree-hygiene procedure (which never
-// executed reliably — see #144) with a shipped script, following the
-// bin/artifacts.mjs precedent #149 established: self-contained, copied
-// into a managed repository by `/port:init`, addressed through
-// `commands.worktrees`.
-//
-//   report [--issue N] [--protect <path>]... [--offline] [--json]
-//     Classify every worktree, remove nothing.
-//
-//   reclaim [--issue N] [--max <k>] [--protect <path>]... [--offline]
-//           [--json] [--unlock] [--force-dirty]
-//     Classify, then remove what is reclaimable, capped at --max (default 5).
-//
-//   purge --orphan <path>... [--json]
-//     Delete a directory this run's own orphan scan classifies `orphan-dir`.
-//     Any other path is refused, never deleted. Needs only git — no config
-//     read, no integration ref, no `gh`.
-//
-// Self-contained — no relative imports, so an adopting repository can copy
-// this file alone. Every path is built with node:path; every child process is
-// invoked with an explicit argv array via node:child_process.spawnSync, never
-// a shell string — cross-platform by construction, and testable by importing
-// its pure functions directly (the port repository's own layer 1 checks do).
-//
-// Never in this script: `git fetch`, `git worktree add`, or a write to the
-// main checkout. An untracked directory is deleted only through `purge`, and
-// only when this run classified it `orphan-dir` — never by `report`/
-// `reclaim`, and never a path not reported by `git worktree list` or this
-// run's own orphan scan.
+// Worktree reclamation — one deterministic call whose stdout is the report. `report`
+// classifies, `reclaim` also removes what is reclaimable, `purge --orphan` deletes one path.
 import { spawnSync } from 'node:child_process';
 import { readFileSync, existsSync, readdirSync, statSync, rmSync, realpathSync } from 'node:fs';
 import { join, dirname, basename, relative, resolve, isAbsolute } from 'node:path';
@@ -42,24 +14,16 @@ const die = (msg) => {
   process.exit(1);
 };
 
-// --- Process helpers ---------------------------------------------------------
-/** Runs `cmd` with an explicit argv array — never a shell string. Returns
- *  `{ ok, stdout, stderr, status }`; never throws on a non-zero exit, since a
- *  non-zero exit is routine (e.g. `merge-base --is-ancestor` failing) and
- *  callers decide what it means. */
+// --- Process helpers --- Runs `cmd` with an explicit argv array, never a shell string.
+/** Never throws on a non-zero exit, since that is routine and callers decide what it means. */
 function run(cmd, args, opts = {}) {
   const res = spawnSync(cmd, args, { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, ...opts });
   if (res.error) return { ok: false, stdout: '', stderr: String(res.error.message ?? res.error), status: null };
   return { ok: res.status === 0, stdout: res.stdout ?? '', stderr: res.stderr ?? '', status: res.status };
 }
 
-// Every git call runs with `-c core.longpaths=true` — Git for Windows needs
-// it to create or delete a path over 260 characters, and non-Windows git
-// silently ignores the key, so this is one code path on all three OSes
-// rather than a win32-only branch. `readLongpaths` below is the one
-// exception: it reads the repository's *actual* persisted setting, so it
-// bypasses this helper deliberately (prepending `-c` would always read back
-// `true`, masking the real value).
+// Every git call runs with `-c core.longpaths=true` (needed on Windows, ignored elsewhere).
+// `readLongpaths` below bypasses this deliberately to read the real persisted value.
 const git = (args, opts) => run('git', ['-c', 'core.longpaths=true', ...args], opts);
 const gitOut = (args, opts) => {
   const res = git(args, opts);
@@ -68,10 +32,8 @@ const gitOut = (args, opts) => {
 
 // --- Pure functions (exported for this repository's own layer 1 checks) -----
 
-/** Parses `git worktree list --porcelain` into one record per entry, in the
- *  order git printed them (main worktree first). `branch` is `null` for a
- *  detached HEAD; `locked`/`lockReason` come straight off the `locked` line,
- *  which may carry no reason at all. */
+/** Parses `git worktree list --porcelain` into one record per entry, main worktree first.
+ *  `branch` is `null` for a detached HEAD. */
 export function parsePorcelain(text) {
   const records = [];
   let cur = null;
@@ -95,11 +57,8 @@ export function parsePorcelain(text) {
   return records;
 }
 
-/** The correlation ladder, first hit wins. Every input is a fact already
- *  gathered by the caller — this function does no I/O, so it is directly
- *  unit-testable. Returns `{ number, rung }` or `null` when nothing resolves.
- *  `#0` is explicitly not a correlation (never a real issue/pull-request
- *  number in this pipeline). */
+/** The correlation ladder, first hit wins. Returns `{ number, rung }` or `null`. `#0` is
+ *  explicitly not a correlation — never a real issue/pull-request number. */
 export function correlate({ upstreamMergeRef, branch, dirBasename, headSubject }) {
   const fromRef = (ref) => {
     const m = /^refs\/heads\/(\d+)-/.exec(ref ?? '');
@@ -121,16 +80,8 @@ export function correlate({ upstreamMergeRef, branch, dirBasename, headSubject }
   return null;
 }
 
-/** Classifies one candidate into exactly one state, given facts already
- *  gathered by the caller. Precedence: outside → (protect forces active,
- *  short-circuiting the rest) → locked → dirty → active → done/no-work →
- *  unresolved — so a locked-and-done worktree reports as locked-and-
- *  reclaimable rather than silently skipped, and a protected path is never
- *  reported as merely locked or dirty. `itemState` is the resolved
- *  `issueOrPullRequest` state (`'OPEN'`, `'CLOSED'`, `'MERGED'`) or `null`
- *  when there was nothing to resolve or resolution came back `NOT_FOUND`.
- *  `isAncestor` is only consulted when `itemState` is `null` — a correlated
- *  item's state always wins over the ancestor fact. */
+/** Classifies one candidate into exactly one state. Precedence: outside → protected → locked
+ *  → dirty → active → done/no-work → unresolved. `isAncestor` only matters when `itemState` is `null`. */
 export function classifyCandidate({ isOutside, isProtected, locked, dirty, itemState, isAncestor }) {
   if (isOutside) return { state: 'outside', removable: false };
   if (isProtected) return { state: 'active', removable: false };
@@ -148,49 +99,16 @@ export function classifyCandidate({ isOutside, isProtected, locked, dirty, itemS
   return { state: base, removable: otherwiseRemovable };
 }
 
-/** Strips the Windows extended-length path prefix (`\\?\`, or its UNC form
- *  `\\?\UNC\`) that a realpath call adds to *some* resolved paths and not
- *  others on win32: a `mainRoot` derived through `git rev-parse --show-toplevel`
- *  and a sibling path built from the same ancestor directly can come back one
- *  prefixed and one not, even though both name the same directory, because the
- *  prefix depends on the exact call Node's implementation takes (it is not
- *  purely a function of path length). A no-op on a string that already lacks
- *  the prefix, so it is always safe to apply before the final case-fold.
- *  Exported so this repository's own checks can assert both prefix forms
- *  without a real Windows filesystem. */
+/** Strips the Windows extended-length path prefix (`\\?\`, or its UNC form) that a realpath
+ *  call adds to some resolved paths and not others on win32. A no-op otherwise. */
 export function stripExtendedPrefix(p) {
   if (p.startsWith('\\\\?\\UNC\\')) return '\\\\' + p.slice('\\\\?\\UNC\\'.length);
   if (p.startsWith('\\\\?\\')) return p.slice('\\\\?\\'.length);
   return p;
 }
 
-/** Resolves a path to the key its identity is compared by: canonicalized
- *  with `fs.realpathSync.native` (falling back to `resolve(p)` only when the
- *  path does not exist yet, e.g. a `purge --orphan` argument whose directory
- *  this same run is about to delete), then — on `win32` only — stripped of
- *  its own extended-length prefix (`stripExtendedPrefix`) and lowercased. A
- *  plain `resolve(p)` is not enough — it collapses `.`/`..` and normalizes
- *  separators, but leaves a symlinked or substituted ancestor (macOS's
- *  `/var` → `/private/var` `mkdtemp` symlink, a Windows `subst` drive, or a
- *  Windows runner's own temp-directory junction) unresolved, while `mainRoot`
- *  comes from `git rev-parse --show-toplevel`, which git itself canonicalizes.
- *  **`.native` specifically, never the plain JS `realpathSync`**: on a
- *  Windows runner, `os.tmpdir()` resolves through the 8.3 short-name alias
- *  Windows assigns the profile directory (`C:\Users\RUNNER~1\...`), while
- *  `git rev-parse --show-toplevel` reports the long form
- *  (`C:\Users\runneradmin\...`) for the identical directory. The plain
- *  `fs.realpathSync` walks components via `lstat`/`readlink` and never
- *  queries the OS for the canonical long name, so a short-alias path and its
- *  long-form sibling resolve to two different strings for one real directory.
- *  `fs.realpathSync.native` opens a handle and calls `GetFinalPathNameByHandleW`
- *  on win32 (`uv_fs_realpath`), which does expand the short alias — at the
- *  cost of also prefixing the result with `\\?\`, which `stripExtendedPrefix`
- *  already exists to remove. Two paths naming the same directory through a
- *  different ancestor spelling must still compare equal — a protect path
- *  from `TaskList`, a registered worktree path, or a `purge --orphan`
- *  argument must match its counterpart regardless of which side derived it,
- *  which differ only in case, separator style, a short-name alias, or which
- *  realpath call happened to come back with the extended-length prefix. */
+/** Resolves a path to the key its identity is compared by: `realpathSync.native` (it alone
+ *  expands a Windows short-name alias), then on win32 stripped and lowercased. */
 export function pathKey(p) {
   let r;
   try {
@@ -202,21 +120,8 @@ export function pathKey(p) {
   return r;
 }
 
-/** Decides what `removeWorktree` does after `git worktree remove` has
- *  already been attempted once. Every input is a fact the caller already
- *  gathered — no I/O here. Precedence:
- *  - the directory is gone → `done` (`git worktree prune` still runs once,
- *    at the end of the whole reclaim pass, to clear the registration);
- *  - the directory remains but git already deregistered it → `fallback`
- *    (the half-removal case this script exists to recover: git's own
- *    `remove_worktree` deletes the registration even when it fails to
- *    delete the files);
- *  - the directory remains, still registered, and `HEAD` has not moved →
- *    `fallback` too;
- *  - still registered with a moved `HEAD` → `abort` — the classification
- *    this removal was based on no longer holds, so this fails toward
- *    keeping the files rather than deleting something that changed under
- *    it mid-run. */
+/** Decides what `removeWorktree` does after `git worktree remove` has already been attempted
+ *  once: gone → `done`; deregistered-but-present or unmoved HEAD → `fallback`; moved HEAD → `abort`. */
 export function fallbackDecision({ dirExists, stillRegistered, headNow, headClassified }) {
   if (!dirExists) return { action: 'done' };
   if (!stillRegistered) return { action: 'fallback' };
@@ -224,32 +129,16 @@ export function fallbackDecision({ dirExists, stillRegistered, headNow, headClas
   return { action: 'abort', reason: 'changed during removal' };
 }
 
-/** Classifies a filesystem error code from the `fs.rmSync` fallback into one
- *  of three causes a human can act on. `EBUSY`/`EPERM`/`EACCES`/`ENOTEMPTY`
- *  are all "something still has a file under this directory open" in
- *  practice (an editor, a dev server, an antivirus scan); `ENAMETOOLONG`
- *  names the other known Windows cause this ticket investigated (though
- *  Node's own `\\?\` long-form paths make it rare); anything else is
- *  reported as `unknown` rather than guessed. */
+/** Classifies a filesystem error code from the `fs.rmSync` fallback into a cause a human can
+ *  act on. `EBUSY`/`EPERM`/`EACCES`/`ENOTEMPTY` mean a file is still open; `ENAMETOOLONG` is Windows. */
 export function classifyRemovalFailure(code) {
   if (code === 'EBUSY' || code === 'EPERM' || code === 'EACCES' || code === 'ENOTEMPTY') return 'file-in-use';
   if (code === 'ENAMETOOLONG') return 'long-path';
   return 'unknown';
 }
 
-/** Removes one already-classified, already-removable, non-`isOutside`
- *  candidate: `git worktree remove` first, then `fallbackDecision`, then
- *  (only on `fallback`) `fs.rmSync` as the recovery route `git worktree
- *  remove` itself cannot take — Node's `fs` clears a read-only attribute and
- *  retries on `EPERM`, and its `\\?\` long-form paths carry no 260-character
- *  limit, which is why the fallback can succeed where git's own call just
- *  failed. `deps` is the injectable seam this repository's own checks use to
- *  exercise every branch without a real git repository. Returns
- *  `{ removed, removedBy: 'git' | 'fallback' | null, gitError, error, cause }`
- *  — `cause` is set only when both routes failed; `error` carries the
- *  user-facing reason either way (the HEAD-moved message, or the fallback's
- *  own error message). Never runs `git worktree prune` itself — the caller
- *  runs that once, after the whole reclaim pass. */
+/** Removes one already-classified, removable candidate: `git worktree remove`, then
+ *  `fallbackDecision`, then `fs.rmSync` as recovery. `deps` is the injectable test seam. */
 export function removeWorktree(mainRoot, candidate, deps = {}) {
   const d = {
     git,
@@ -259,9 +148,7 @@ export function removeWorktree(mainRoot, candidate, deps = {}) {
     ...deps,
   };
 
-  // stdio: ['ignore', ...] so Git for Windows' own "Unlink of file … failed.
-  // Should I try again?" retry prompt can never wait on stdin — this call
-  // must never block on a confirmation nothing will ever answer.
+  // stdio: ['ignore', ...] so Git for Windows' own retry prompt can never wait on stdin.
   const removeRes = d.git(['-C', mainRoot, 'worktree', 'remove', '--force', candidate.path], { stdio: ['ignore', 'pipe', 'pipe'] });
   const gitError = removeRes.ok ? null : (removeRes.stderr.trim().split('\n')[0] || 'git worktree remove failed');
 
@@ -293,17 +180,8 @@ export function removeWorktree(mainRoot, candidate, deps = {}) {
   }
 }
 
-/** Classifies one directory beside a registered worktree, given facts
- *  already gathered by the caller — no I/O here, mirroring every other pure
- *  classifier in this file. Replaces the bare `existsSync(join(full,
- *  '.git'))` skip this script used to apply: that test could not tell a
- *  live independent repository (a `.git` directory) from a worktree's own
- *  `.git` *file* whose target the main checkout has since forgotten (a
- *  stale half-removal — exactly the thing this ticket's reclaim fix now
- *  prevents from recurring, but which already-accumulated directories may
- *  still carry). An unreadable `.git` fails toward `skip`, the same
- *  direction every uncertain fact in this file already fails toward never
- *  deleting something this run cannot actually account for. */
+/** Classifies one directory beside a registered worktree. Tells a live independent repository
+ *  (`.git` dir) from a worktree's own `.git` file whose target is now forgotten. */
 export function orphanVerdict({ gitEntry, gitdirTargetExists }) {
   if (gitEntry === 'dir') return 'skip';
   if (gitEntry === 'unreadable') return 'skip';
@@ -311,23 +189,16 @@ export function orphanVerdict({ gitEntry, gitdirTargetExists }) {
   return 'orphan'; // gitEntry === 'none'
 }
 
-/** The Windows advisory copy, or `null` when it does not apply. Only ever
- *  fires on `win32` with `core.longpaths` not already `'true'` — every other
- *  platform, and a Windows repository that already enabled it, gets `null`.
- *  Exported so this repository's own checks can assert the exact three
- *  cases without faking a platform-dependent git config read. */
+/** The Windows advisory copy, or `null` when it does not apply — only ever fires on win32
+ *  with `core.longpaths` not already `'true'`. */
 export function longPathAdvisory({ platform, longpaths }) {
   if (platform !== 'win32') return null;
   if (longpaths === 'true') return null;
   return 'core.longpaths is off — git on Windows cannot create or delete paths over 260 characters, which a populated node_modules under .claude/worktrees/ can exceed. Enable it once for this repository: git config core.longpaths true';
 }
 
-// --- gh -----------------------------------------------------------------------
-/** `gh api graphql` exits non-zero whenever the response's `errors` array is
- *  present, even when `data` is still usable — so this always returns the
- *  parsed body when there is one, and only treats the call as a hard failure
- *  when no body could be parsed at all (auth failure, no network, `gh`
- *  missing). */
+// --- gh --- `gh api graphql` exits non-zero whenever `errors` is present, even with usable
+/** `data`, so this always returns the parsed body and fails only when nothing parses. */
 function ghGraphql(query) {
   const res = run('gh', ['api', 'graphql', '-f', `query=${query}`]);
   const text = res.stdout || res.stderr;
@@ -338,9 +209,8 @@ function ghGraphql(query) {
   }
 }
 
-/** One `issueOrPullRequest(number:)` alias per number, in a single round
- *  trip. Returns a `Map<number, 'OPEN'|'CLOSED'|'MERGED'|null>` — `null`
- *  means the alias came back `NOT_FOUND` or absent, never treated as done. */
+/** One `issueOrPullRequest(number:)` alias per number, in a single round trip. `null` means
+ *  the alias came back `NOT_FOUND` or absent, never treated as done. */
 function resolveStates(owner, name, numbers) {
   if (numbers.length === 0) return { ok: true, states: new Map() };
   const aliases = numbers.map((n) => `n${n}: issueOrPullRequest(number: ${n}) { __typename ... on Issue { state } ... on PullRequest { state } }`).join(' ');
@@ -370,10 +240,8 @@ function readConfig(mainRoot) {
   }
 }
 
-/** `origin/<integration>` when the remote-tracking ref exists locally, else
- *  the local `<integration>` branch. Never fetches — a stale `origin/<…>` can
- *  only make `no-work` *under*-report, never over-report, which is the safe
- *  direction. Returns `null` when neither ref exists at all. */
+/** `origin/<integration>` when the remote-tracking ref exists locally, else the local branch.
+ *  Never fetches — a stale ref only makes `no-work` under-report, the safe direction. */
 function resolveIntegrationRef(mainRoot, integration) {
   const remote = gitOut(['-C', mainRoot, 'rev-parse', '--verify', '--quiet', `refs/remotes/origin/${integration}`]);
   if (remote) return `origin/${integration}`;
@@ -396,12 +264,8 @@ function upstreamMergeRefOf(mainRoot, branch) {
   return gitOut(['-C', mainRoot, 'config', '--get', `branch.${branch}.merge`]);
 }
 
-/** A `git status --porcelain` failure fails toward **dirty**, not clean —
- *  every other uncertain fact in this file (the missing-ref case, a
- *  `NOT_FOUND` resolution) fails toward *under*-reporting removability, and
- *  this is the one check whose whole point is never discarding uncommitted
- *  work, so it must not be the one place that fails the other way. `files:
- *  -1` marks "unknown count", never a real file count. */
+/** A `git status --porcelain` failure fails toward dirty, not clean — the one check whose
+ *  whole point is never discarding uncommitted work. `files: -1` marks "unknown count". */
 function isDirty(path) {
   const res = git(['-C', path, 'status', '--porcelain']);
   if (!res.ok) return { dirty: true, files: -1 };
@@ -409,19 +273,15 @@ function isDirty(path) {
   return { dirty: files > 0, files };
 }
 
-/** Reads the repository's own persisted `core.longpaths`, bypassing the
- *  `git` helper's own `-c core.longpaths=true` deliberately — that override
- *  would make this read always come back `'true'`, masking whatever the
- *  repository's committed config actually says. Returns `null` when unset
- *  (git exits non-zero and prints nothing) or on any other read failure. */
+/** Reads the repository's own persisted `core.longpaths`, bypassing the `git` helper's
+ *  `-c core.longpaths=true` override deliberately. `null` when unset or unreadable. */
 function readLongpaths(mainRoot) {
   const res = run('git', ['-C', mainRoot, 'config', '--type=bool', '--get', 'core.longpaths']);
   return res.ok ? res.stdout.trim() : null;
 }
 
-// --- Orphan directories -------------------------------------------------------
-/** Gathers the one fact `orphanVerdict` needs about a candidate directory's
- *  `.git` entry — the only I/O `findOrphanDirs` defers to this helper. */
+// --- Orphan directories --- Gathers the one fact `orphanVerdict` needs about a candidate
+/** directory's `.git` entry — the only I/O `findOrphanDirs` defers to this helper. */
 function gitEntryOf(full) {
   const gitPath = join(full, '.git');
   let stat;
@@ -441,15 +301,8 @@ function gitEntryOf(full) {
   }
 }
 
-/** Directories that sit beside a registered worktree but that git does not
- *  track at all — never deleted here, only reported for `/port:worktree-
- *  clean` (or `purge`, this script's own deletion route). Scanning covers
- *  every registered worktree's own parent directory **plus**
- *  `.claude/worktrees/` itself whenever it exists: a repository with zero
- *  registered linked worktrees used to scan nothing at all, making every
- *  orphan there invisible, even though `.claude/worktrees/` is the
- *  conventional location both producers (the harness and `/port:implement`)
- *  write to. */
+/** Directories that sit beside a registered worktree but that git does not track at all —
+ *  never deleted here, only reported. Also scans `.claude/worktrees/` itself when it exists. */
 function findOrphanDirs(mainRoot, candidates) {
   const registered = new Set(candidates.map((c) => pathKey(c.path)));
   registered.add(pathKey(mainRoot));
@@ -496,10 +349,8 @@ function parseArgs(argv) {
   return opts;
 }
 
-/** `purge --orphan <path>... [--json]` — needs only git: no config read, no
- *  integration ref, no `gh`. Re-derives this run's own orphan set and
- *  deletes a requested path only when it is a member; anything else is
- *  refused and never deleted, regardless of what it actually is. */
+/** `purge --orphan <path>... [--json]` — needs only git. Re-derives this run's own orphan
+ *  set and deletes a requested path only when it is a member; anything else is refused. */
 function runPurge(argv) {
   const paths = [];
   let json = false;
@@ -581,9 +432,8 @@ function main() {
   if (!repo) die('.claude/port.config.json declares no `repo`.');
   const [owner, name] = repo.split('/');
 
-  // Resolving the integration ref and checking ancestry against it are both
-  // purely local git facts — no network, no `gh` — so neither is gated on
-  // `--offline`. Only the `gh issueOrPullRequest` resolution below is.
+  // Resolving the integration ref and ancestry are purely local git facts, so neither is
+  // gated on `--offline`; only the gh resolution below is.
   const integrationRef = resolveIntegrationRef(mainRoot, integration);
   if (!integrationRef) {
     die(`neither 'origin/${integration}' nor a local '${integration}' branch exists — the 'no-work' rung has nothing to compare against.`);
@@ -630,9 +480,7 @@ function main() {
     c.isAncestor = !c.head ? null : isAncestorOfIntegration(mainRoot, c.head, integrationRef);
   }
 
-  // Classify every candidate, `outside` ones included — `classifyCandidate`'s
-  // documented precedence puts `outside` first, and the report must be fully
-  // populated for it too, even though it is never removable.
+  // Classify every candidate, `outside` ones included — the report must be fully populated for it too.
   for (const c of candidates) {
     if (c.isOutside) {
       const classified = classifyCandidate({ isOutside: true, isProtected: false, locked: false, dirty: false, itemState: null, isAncestor: null });
@@ -737,12 +585,8 @@ function describeReason(c) {
       return `no work not already on the integration branch`;
     case 'locked': {
       const base = c.lockReason ? `locked: ${c.lockReason}` : 'locked';
-      // Only ever call this reclaimable when the underlying item is
-      // actually `done`/`no-work` — a locked worktree whose item is still
-      // `active` gets no such claim, so an operator is never walked into
-      // unlocking a live agent's worktree on the strength of this message
-      // alone (see `${CLAUDE_PLUGIN_ROOT}/skills/worktree-clean/SKILL.md`
-      // step 3, which gates `--unlock` on this exact wording).
+      // Only ever call this reclaimable when the item is actually done/no-work — an operator
+      // must never be walked into unlocking a live agent's worktree.
       if (!c.otherwiseRemovable) return base;
       const dirtyClause =
         c.dirtyFiles === -1

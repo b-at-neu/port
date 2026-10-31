@@ -1,33 +1,24 @@
-// The search orchestrator (#87): scope -> index skip -> budgeted scan ->
-// warm-on-read. Indexing is not a separate pass -- it is the side effect of
-// scanning: a transcript with no fresh signature is a candidate, read
-// through `openTranscript` (the barrel, never a deep `../sessions/*`
-// import), matched, and its signature rebuilt from the same entries.
-import { statPath } from '../platform'
-import { buildProjectIndex, defaultClaudeHome, openTranscript, resolveTranscriptPath } from '../sessions'
-import type { ProjectIndex } from '../sessions'
-import type { AgentRecord, SessionRecord, SessionScan } from '../../shared/sessions/types'
-import { agentLabel, sessionLabel } from '../../shared/sessions/label'
-import { MAX_HITS_PER_TRANSCRIPT, MAX_TOTAL_HITS, SCAN_BUDGET_MS } from '../../shared/search/types'
-import type { RepoId } from '../../shared/repos'
-import type { SearchGroup, SearchHit, SearchResult, SearchScope } from '../../shared/search/types'
-import type { TranscriptEntry } from '../../shared/sessions/transcript'
-import { parseQuery } from './terms'
-import { buildSignature, decodeSignature, encodeSignature, mightContain } from './signature'
-import { hitsFor, searchableFields } from './match'
-import { readSignatureIndex, writeSignatureIndex } from './store'
-import type { SignatureIndexEntry } from './store'
+import type { ProjectIndex } from '@/types/sessions'
+import type { SignatureIndexEntry } from '@/types/search'
 
-export interface RunSearchParams {
-  readonly scan: SessionScan
-  /** Where `search-index.json` lives -- main passes `app.getPath('userData')`,
-   *  the same directory `main/registry/store.ts`'s `registry.json` sits in. */
-  readonly indexDir: string
-  readonly query: string
-  readonly scope: SearchScope
-  readonly claudeHome?: string
-  readonly now?: () => Date
-}
+// scope -> index skip -> budgeted scan -> warm-on-read. Indexing is not a separate pass -- it is
+// the side effect of scanning.
+import { statPath } from '@/main/platform/files'
+import { buildProjectIndex, defaultClaudeHome, resolveTranscriptPath } from '@/main/sessions/locate'
+import { openTranscript } from '@/main/sessions/transcript'
+
+import type { AgentRecord, SessionRecord, SessionScan } from '@/types/sessions'
+import { agentLabel, sessionLabel } from '@/utils/sessions/label'
+import { MAX_HITS_PER_TRANSCRIPT, MAX_TOTAL_HITS, SCAN_BUDGET_MS } from '@/types/search'
+import type { RepoId } from '@/utils/repos'
+import type { SearchGroup, SearchHit, SearchResult, SearchScope } from '@/types/search'
+import type { TranscriptEntry } from '@/utils/sessions/transcript'
+import { parseQuery } from '@/main/search/terms'
+import { buildSignature, decodeSignature, encodeSignature, mightContain } from '@/main/search/signature'
+import { hitsFor, searchableFields } from '@/main/search/match'
+import { readSignatureIndex, writeSignatureIndex } from '@/main/search/store'
+
+import type { RunSearchParams } from '@/types/search'
 
 interface Candidate {
   readonly sessionId: string
@@ -50,11 +41,7 @@ function fromAgent(agent: AgentRecord): Candidate {
   return { sessionId: agent.sessionId, agentId: agent.agentId, repoId: agent.repoId, label: agentLabel(agent), itemNumber: agent.itemNumber, idleMs: agent.idleMs }
 }
 
-/** `repo` filters on `repoId`; `all` includes every session and agent,
- *  including the `repoId: null` ones no registered repository claims --
- *  those are only ever reachable under `all` (Scope, in the plan). Sorted
- *  newest-activity-first (`idleMs` ascending) so a budget cutoff loses the
- *  coldest transcripts first. */
+// Sorted newest-activity-first (`idleMs` ascending) so a budget cutoff loses the coldest transcripts first.
 function candidatesFor(scan: Extract<SessionScan, { ok: true }>, scope: SearchScope): readonly Candidate[] {
   const inScope = (repoId: RepoId | null): boolean => scope.kind === 'all' || repoId === scope.repoId
   const candidates = [...scan.sessions.filter((s) => inScope(s.repoId)).map(fromSession), ...scan.agents.filter((a) => inScope(a.repoId)).map(fromAgent)]
@@ -114,9 +101,7 @@ export async function runSearch(params: RunSearchParams): Promise<SearchResult> 
     const manifestEntry = manifest.get(key)
     const upToDate = manifestEntry !== undefined && manifestEntry.path === resolved.path && manifestEntry.sizeBytes === stat.value.size && manifestEntry.modifiedAt === stat.value.modifiedAt
 
-    // Direction of failure: closed on the answer. The index may only ever
-    // remove work it can *prove* unnecessary -- an absent or stale
-    // signature is always a candidate, never a skip.
+    // The index may only ever remove work it can *prove* unnecessary.
     if (upToDate) {
       const signature = decodeSignature(manifestEntry.bits, manifestEntry.signature)
       const provablyAbsent = parsed.terms.some((term) => !mightContain(signature, term))
@@ -126,9 +111,7 @@ export async function runSearch(params: RunSearchParams): Promise<SearchResult> 
       }
     }
 
-    // Both budgets gate *before* the open -- once either is exhausted, every
-    // remaining candidate is unreached, never opened just to discard its
-    // hits (that would spend the scan budget on results nobody sees).
+    // Both budgets gate *before* the open -- an exhausted budget never opens a transcript just to discard its hits.
     budgetExhausted ||= now().getTime() - start >= SCAN_BUDGET_MS
     const hitsBudgetExhausted = totalHits >= MAX_TOTAL_HITS
     if (budgetExhausted || hitsBudgetExhausted) {

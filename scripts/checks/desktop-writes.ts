@@ -1,22 +1,17 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, walk, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, walk, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
-// #90: apps/desktop/src/main/writes/ is the app's only GitHub writer, the
-// mirror of main/github/'s own reader rail. Eight assertions pin its plan's
-// decisions mechanically, dependency-free and regex-based, in the shape of
-// desktop-github.ts's and desktop-platform.ts's own guards — reading these
-// directories by explicit path (never walk('apps/'), which descends into
-// node_modules).
-export default async function ({ fail, ok }: Reporter) {
+// apps/desktop/src/main/writes/ is the app's only GitHub writer, the mirror of main/github/'s
+// own reader rail. These assertions pin its plan's decisions mechanically.
+export default async function ({ expect, fail, ok }: Reporter) {
   const platformDir = 'apps/desktop/src/main/platform';
   const githubDir = 'apps/desktop/src/main/github';
   const writesDir = 'apps/desktop/src/main/writes';
   const commandFile = `${writesDir}/command.ts`;
-  const claimFile = `${writesDir}/claim.ts`;
-  const scopeFile = `${writesDir}/scope.ts`;
-  const typesFile = 'apps/desktop/src/shared/writes/types.ts';
+  const ownershipFile = 'apps/desktop/src/main/dispatch/ownership.ts';
+  const typesFile = 'apps/desktop/src/types/writes.ts';
   const coordinationFile = 'docs/COORDINATION.md';
 
   const srcDir = join(root, 'apps/desktop/src');
@@ -28,39 +23,34 @@ export default async function ({ fail, ok }: Reporter) {
     return;
   }
 
-  // --- '../platform/gh' is imported under apps/desktop/src/ only from -------
-  // guard(#90): a second GitHub writer bypassing the chokepoint, or the
-  // chokepoint itself losing its only caller.
-  // main/github/ and main/writes/, and both do import it. `gh`/`ghJson` are
-  // always called through an injected seam (`params.gh ?? defaultGh`), never
-  // as a bare literal call at every call site, so the import path — not a
-  // call-site regex — is the mechanically checkable fact here.
+  // --- '@/main/platform/gh' is imported under apps/desktop/src/ only from main/github/ and
+  // main/writes/, and both do import it. The import path is the mechanically checkable fact, since `gh`/`ghJson` are always called through an injected seam. ---
   {
     let sawGithub = false;
     let sawWrites = false;
+    // '@/main/platform/gh' also exports `ghAuthStatus`/`classifyGhExit`, legitimately imported
+    // anywhere — only an import of `gh` or `ghJson` themselves is this rail's concern.
+    const importsGhOrGhJson = /import\s*(?:type\s*)?\{[^}]*\b(?:gh|ghJson)\b[^}]*\}\s*from\s*'@\/main\/platform\/gh'/;
     for (const f of allFiles) {
       const rel = relOf(f);
       if (rel.startsWith(`${platformDir}/`) || rel.endsWith('.test.ts')) continue;
       const text = readFileSync(f, 'utf8');
-      if (!text.includes("from '../platform/gh'")) continue;
+      if (!importsGhOrGhJson.test(text)) continue;
       if (rel.startsWith(`${githubDir}/`)) {
         sawGithub = true;
       } else if (rel.startsWith(`${writesDir}/`)) {
         sawWrites = true;
       } else {
-        fail('desktop-writes', `${rel} imports '../platform/gh' — only main/github/ and main/writes/ may call gh/ghJson`);
+        fail('desktop-writes', `${rel} imports 'gh'/'ghJson' from '@/main/platform/gh' — only main/github/ and main/writes/ may call gh/ghJson`);
       }
     }
-    if (!sawGithub) fail('desktop-writes', `no file under ${githubDir} imports '../platform/gh' — the guard cannot pass vacuously`);
-    if (!sawWrites) fail('desktop-writes', `no file under ${writesDir} imports '../platform/gh' — the guard cannot pass vacuously`);
+    if (!sawGithub) fail('desktop-writes', `no file under ${githubDir} imports 'gh'/'ghJson' from '@/main/platform/gh' — the guard cannot pass vacuously`);
+    if (!sawWrites) fail('desktop-writes', `no file under ${writesDir} imports 'gh'/'ghJson' from '@/main/platform/gh' — the guard cannot pass vacuously`);
     if (sawGithub && sawWrites) ok();
   }
 
-  // --- No file under main/writes/ contains 'graphql' or builds a query ------
-  // guard(#90): the observed state coming from anywhere but
-  // fetchItemsByNumber, re-implementing a second query builder.
-  // The observed state comes only from fetchItemsByNumber (../github) —
-  // never a second GraphQL caller.
+  // --- No file under main/writes/ contains 'graphql' or builds a query — the observed state
+  // comes only from fetchItemsByNumber (../github), never a second GraphQL caller. ---
   {
     let found = false;
     for (const f of writesFiles) {
@@ -73,10 +63,8 @@ export default async function ({ fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- No file under main/writes/ passes merge/close/--delete-branch/ready --
-  // guard(#90): merging or closing a pull request stopping being a
-  // human-only action.
-  // as a gh subcommand argument — merging and closing stay human actions.
+  // --- No file under main/writes/ passes merge/close/--delete-branch/ready as a gh
+  // subcommand argument — merging and closing stay human actions. ---
   {
     let found = false;
     const forbidden = /['"](merge|close|--delete-branch|ready)['"]/;
@@ -91,9 +79,7 @@ export default async function ({ fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- --add-label/--remove-label appear only in main/writes/command.ts -----
-  // guard(#90): a label name reaching gh without resolving through the
-  // vocabulary.
+  // --- --add-label/--remove-label appear only in main/writes/command.ts — a label name must never reach gh without resolving through the vocabulary. ---
   {
     let found = false;
     for (const f of allFiles) {
@@ -118,45 +104,7 @@ export default async function ({ fail, ok }: Reporter) {
     }
   }
 
-  // --- PLAN_GATE_KEYS matches docs/COORDINATION.md's claim contract, both ---
-  // guard(#90): the claim gating a different set of labels than the doc
-  // that defines it.
-  // directions.
-  // pin: `main/writes/scope.ts`'s `PLAN_GATE_KEYS` ↔ `docs/COORDINATION.md`'s claim-contract keys, both directions
-  {
-    const scopeText = readFileSync(join(root, scopeFile), 'utf8');
-    const scopeMatch = /PLAN_GATE_KEYS[^=]*=\s*\[([^\]]*)\]/.exec(scopeText);
-    const coordinationText = readFileSync(join(root, coordinationFile), 'utf8');
-    const coordinationMatch = /adding or removing the resolved names for ([^.]*)\./.exec(coordinationText);
-
-    if (!scopeMatch) {
-      fail('desktop-writes', `${scopeFile} has no 'PLAN_GATE_KEYS = [...]' array`);
-    } else if (!coordinationMatch) {
-      fail('desktop-writes', `${coordinationFile} has no "adding or removing the resolved names for ..." sentence to compare against`);
-    } else {
-      const scopeKeys = [...scopeMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
-      const coordinationKeys = [...coordinationMatch[1].matchAll(/`([^`]+)`/g)].map((m) => m[1]).sort();
-      const scopeSet = new Set(scopeKeys);
-      const coordinationSet = new Set(coordinationKeys);
-      const onlyInScope = scopeKeys.filter((k) => !coordinationSet.has(k));
-      const onlyInDoc = coordinationKeys.filter((k) => !scopeSet.has(k));
-      if (onlyInScope.length > 0 || onlyInDoc.length > 0) {
-        fail(
-          'desktop-writes',
-          `${scopeFile}'s PLAN_GATE_KEYS (${JSON.stringify(scopeKeys)}) and ${coordinationFile}'s claim contract (${JSON.stringify(coordinationKeys)}) disagree`,
-        );
-      } else {
-        ok();
-      }
-    }
-  }
-
-  // --- The Conflict union matches COORDINATION.md's fenced block, both ------
-  // guard(#90): the app's conflict shape drifting from the copy decided in
-  // COORDINATION.md.
-  // directions — by literal kind and field-name set, not byte-identity (the
-  // doc's fence omits the `readonly` modifiers this app's style requires).
-  // pin: `shared/writes/types.ts`'s `Conflict` union ↔ `docs/COORDINATION.md`'s fenced `type Conflict` block — kind literals and field-name sets, both directions, not byte-identity
+  // pin: `types/writes.ts`'s `Conflict` union ↔ `docs/COORDINATION.md`'s fenced `type Conflict` block — kind literals and field-name sets, both directions, not byte-identity
   {
     const typesText = readFileSync(join(root, typesFile), 'utf8');
     const typesMatch = /export type Conflict =\n([\s\S]*?)\n\n/.exec(typesText);
@@ -179,29 +127,18 @@ export default async function ({ fail, ok }: Reporter) {
     }
   }
 
-  // --- .agents/gate-claim.json appears in both claim.ts and COORDINATION.md -
-  // guard(#90): the claim file's path silently diverging between the code
-  // and its own contract doc.
+  // --- .agents/cockpit.json appears in both ownership.ts and COORDINATION.md — the ownership
+  // record's path must never diverge between the code and its own contract doc. ---
   {
-    const claimText = readFileSync(join(root, claimFile), 'utf8');
+    const ownershipText = readFileSync(join(root, ownershipFile), 'utf8');
     const coordinationText = readFileSync(join(root, coordinationFile), 'utf8');
-    if (!claimText.includes('.agents/gate-claim.json') && !claimText.includes("'.agents', 'gate-claim.json'")) {
-      fail('desktop-writes', `${claimFile} does not reference the gate-claim.json path`);
-    } else if (!coordinationText.includes('.agents/gate-claim.json')) {
-      fail('desktop-writes', `${coordinationFile} does not reference '.agents/gate-claim.json'`);
-    } else {
-      ok();
-    }
+    if (!ownershipText.includes("'.agents', 'cockpit.json'")) {
+      fail('desktop-writes', `${ownershipFile} does not reference the cockpit.json path`);
+    } else expect(coordinationText.includes('.agents/cockpit.json'), 'desktop-writes', `${coordinationFile} does not reference '.agents/cockpit.json'`);
   }
 
-  // --- appendTextFile( is called under apps/desktop/src/ only from ----------
-  // guard(#90, #111): a second path writing an audit entry that skipped the
-  // chokepoint.
-  // main/writes/audit.ts — one appender for the write audit log, joined by
-  // main/trajectory/log.ts (#111) as the one appender for the desktop
-  // trajectory record (a separate file, a separate chokepoint, the same
-  // "no second path skips it" rail) — no third caller under apps/desktop/src/
-  // may append to anything.
+  // --- appendTextFile( is called under apps/desktop/src/ only from main/writes/audit.ts
+  // (the write audit log) and main/trajectory/log.ts (the trajectory record) — no third caller may append to anything. ---
   {
     const auditFile = `${writesDir}/audit.ts`;
     const trajectoryFile = 'apps/desktop/src/main/trajectory/log.ts';
@@ -229,10 +166,7 @@ export default async function ({ fail, ok }: Reporter) {
   }
 }
 
-/** Parses a `type X = | { kind: 'a'; f1: T; f2: T } | { kind: 'b'; ... }`
- *  block into `Map<kind, Set<fieldName>>` — flat single-line object types
- *  with no nested braces, which is the shape both the app's own union and
- *  COORDINATION.md's fenced copy use. */
+/** Parses a `type X = | { kind: 'a'; f1: T } | ...` block into `Map<kind, Set<fieldName>>`. */
 function extractVariants(text: string): Map<string, Set<string>> {
   const variants = new Map<string, Set<string>>();
   const objectRegex = /\{([^{}]*)\}/g;

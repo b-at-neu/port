@@ -13,7 +13,8 @@ max_turns: 80
 timeout_seconds: 1200
 
 prompt: |
-  Run /port:init on this repository. Accept the defaults it proposes.
+  Run /port:init on this repository. Accept the defaults it proposes. When
+  it offers to apply the plugin pin to this machine, skip it.
 
 scaffold_script: |
   set -euo pipefail

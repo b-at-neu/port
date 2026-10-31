@@ -1,38 +1,29 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, walk, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, walk, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
-// #80: apps/desktop/src/shared/board/ and renderer/src/board/ are the first
-// screen — a pure projection plus plain-DOM rendering, reading nothing
-// itself. Five assertions pin its plan's decisions mechanically,
-// dependency-free and regex-based, in the shape of desktop-state.ts's own
-// guards — reading these directories by explicit path (never walk('apps/'),
-// which descends into node_modules).
-export default async function ({ fail, ok }: Reporter) {
-  const boardDir = 'apps/desktop/src/shared/board';
-  const rendererBoardDir = 'apps/desktop/src/renderer/src/board';
-  const stateTypesFile = 'apps/desktop/src/shared/state/types.ts';
+// apps/desktop/src/renderer/board/ is a pure projection plus
+// plain-DOM rendering, reading nothing itself. Reads directories by explicit path, never walk('apps/').
+export default async function ({ expect, fail, ok }: Reporter) {
+  const rendererBoardDir = 'apps/desktop/src/renderer/board';
+  const boardTypesFile = 'apps/desktop/src/types/board.ts';
+  const stateTypesFile = 'apps/desktop/src/types/state.ts';
   const mainDir = 'apps/desktop/src/main';
 
-  const boardFiles = walk(join(root, boardDir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
+  const boardFiles = walk(join(root, rendererBoardDir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
 
-  // --- The directory has source files, so nothing below passes vacuously ---
-  // guard(#80): the board screen becoming a fifth reader instead of
-  // projecting an already-fetched BoardSnapshot, or this guard passing
-  // vacuously once the directory is deleted.
+  // --- The directory has source files, so nothing below passes vacuously once deleted. ---
   if (boardFiles.length === 0) {
-    fail('desktop-board', `${boardDir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
+    fail('desktop-board', `${rendererBoardDir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
     return;
   }
   ok();
 
   // --- The board screen reads nothing itself ----------------------------------
-  // No file under shared/board/ or renderer/src/ imports src/main/, a
-  // node: builtin, or names gh(/runCommand( — every fact it renders arrives
-  // already fetched, over IPC, from main/state/'s own watcher.
+  // No file here imports src/main/, a node: builtin, or calls gh(/runCommand( — every fact arrives over IPC.
   {
-    const dirs = [join(root, boardDir), join(root, 'apps/desktop/src/renderer/src')];
+    const dirs = [join(root, 'apps/desktop/src/renderer')];
     let found = false;
     for (const dir of dirs) {
       for (const f of walk(dir).filter((p) => (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.test.ts'))) {
@@ -57,9 +48,7 @@ export default async function ({ fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- One clock: watcher.ts is the only non-test file under main/ naming a timer ---
-  // guard(#80): a second clock landing beside the watcher's own single
-  // rescheduled timer (Decision 2).
+  // --- One clock: watcher.ts is the only non-test file under main/ naming a timer. ---
   {
     const timerWords = ['setTimeout', 'setInterval', 'setImmediate'];
     const offenders = [];
@@ -69,26 +58,18 @@ export default async function ({ fail, ok }: Reporter) {
       const text = readFileSync(f, 'utf8');
       if (timerWords.some((word) => text.includes(word))) offenders.push(rel);
     }
-    if (offenders.length > 0) {
-      fail('desktop-board', `${offenders.join(', ')} name a timer — main/state/watcher.ts is the only file under src/main/ allowed to (#80 Decision 2)`);
-    } else {
-      ok();
-    }
+    expect(!(offenders.length > 0), 'desktop-board', `${offenders.join(', ')} name a timer — main/state/watcher.ts is the only file under src/main/ allowed to (#80 Decision 2)`);
   }
 
-  // --- SOURCE_KINDS and RepositoryFreshness's keys agree, itemStates excepted ---
-  // guard(#80): the board's four pollable sources drifting from the
-  // freshness shape issue 79 already established, or itemStates becoming
-  // independently schedulable.
+  // --- SOURCE_KINDS and RepositoryFreshness's keys agree, itemStates excepted. ---
   {
-    const boardTypesFile = join(root, boardDir, 'types.ts');
-    const boardTypesText = readFileSync(boardTypesFile, 'utf8');
+    const boardTypesText = readFileSync(join(root, boardTypesFile), 'utf8');
     const sourceKindsMatch = /SOURCE_KINDS\s*=\s*\[([^\]]*)\]/.exec(boardTypesText);
     const stateTypesText = readFileSync(join(root, stateTypesFile), 'utf8');
     const freshnessMatch = /interface RepositoryFreshness\s*{([^}]*)}/.exec(stateTypesText);
 
     if (!sourceKindsMatch) {
-      fail('desktop-board', `${boardDir}/types.ts has no 'SOURCE_KINDS' array literal to check`);
+      fail('desktop-board', `${boardTypesFile} has no 'SOURCE_KINDS' array literal to check`);
     } else if (!freshnessMatch) {
       fail('desktop-board', `${stateTypesFile} has no 'RepositoryFreshness' interface to check`);
     } else {
@@ -102,20 +83,13 @@ export default async function ({ fail, ok }: Reporter) {
         fail('desktop-board', `SOURCE_KINDS names ${missingFromFreshness.join(', ')}, absent from RepositoryFreshness's keys`);
       } else if (extraNonItemStates.length > 0) {
         fail('desktop-board', `RepositoryFreshness carries ${extraNonItemStates.join(', ')} outside SOURCE_KINDS and 'itemStates'`);
-      } else if (!freshnessKeys.includes('itemStates')) {
-        fail('desktop-board', `RepositoryFreshness is missing 'itemStates', the one key deliberately outside SOURCE_KINDS`);
-      } else {
-        ok();
-      }
+      } else expect(freshnessKeys.includes('itemStates'), 'desktop-board', `RepositoryFreshness is missing 'itemStates', the one key deliberately outside SOURCE_KINDS`);
     }
   }
 
-  // --- No running/alive/isLive identifier or string literal outside a comment ---
-  // guard(#80): a suppressed-stall verdict being reported as liveness rather
-  // than a report derived from recency, the same rail issue 78/issue 79
-  // already pin, extended to the surface that displays it.
+  // --- No running/alive/isLive identifier outside a comment — a stall is a report, never liveness. ---
   {
-    const dirs = [join(root, boardDir), join(root, rendererBoardDir)];
+    const dirs = [join(root, rendererBoardDir)];
     const forbidden = ['running', 'alive', 'isLive'];
     let found = false;
     for (const dir of dirs) {
@@ -132,6 +106,19 @@ export default async function ({ fail, ok }: Reporter) {
       }
     }
     if (!found) ok();
+  }
+
+  // pin: `renderer/board/copy.ts`'s tag labels ↔ `docs/DESIGN.md` §6's tag sentences
+  {
+    const copyFile = join(root, rendererBoardDir, 'copy.ts');
+    const copyText = readFileSync(copyFile, 'utf8');
+    const designText = readFileSync(join(root, 'docs/DESIGN.md'), 'utf8');
+    for (const fn of ['autoPlanTagLabel', 'noTicketTagLabel']) {
+      const labelMatch = new RegExp(`function ${fn}\\(\\): string \\{\\s*return '([^']+)'`).exec(copyText);
+      if (!labelMatch) {
+        fail('desktop-board', `${rendererBoardDir}/copy.ts has no ${fn}() returning a string literal`);
+      } else expect(designText.includes(`"${labelMatch[1]}" tag`), 'desktop-board', `docs/DESIGN.md §6 no longer names the "${labelMatch[1]}" tag — ${rendererBoardDir}/copy.ts's ${fn}() has drifted from it`);
+    }
   }
 }
 

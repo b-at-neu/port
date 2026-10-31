@@ -1,31 +1,17 @@
-// readSessionState — the orchestration (#78): call the reader once, build
-// the project index once, then per attributed session list
-// `<sessionDir>/subagents/` and read each `*.meta.json` beside its sibling
-// `.jsonl`. A pure consumer of the caller's repository list: reads no
-// config (#74's), enumerates no worktrees (#77's), reconciles nothing
-// against labels (#79's).
-import { listDirectory, pathOps, readJsonFile, statPath } from '../platform'
-import type { AgentRecord, MetaProblem, SessionRecord, SessionRef, SessionScan } from '../../shared/sessions/types'
-import { activityOf, attributeSession, itemNumberOf, parseAgentMeta, sessionRole, stageOf } from './classify'
-import type { RepoRef } from './classify'
-import { buildProjectIndex, defaultClaudeHome, resolveSessionDir } from './locate'
-import { createSdkSessionReader } from './sdk'
-import type { SessionReader } from './sdk'
+// A pure consumer of the caller's repository list: reads no config, enumerates no worktrees, reconciles nothing against labels.
+import { listDirectory, readJsonFile, statPath } from '@/main/platform/files'
+import { pathOps } from '@/main/platform/paths'
+import type { AgentRecord, MetaProblem, SessionRecord, SessionRef, SessionScan } from '@/types/sessions'
+import { activityOf, attributeSession, itemNumberOf, parseAgentMeta, sessionRole, stageOf } from '@/main/sessions/classify'
+import { buildProjectIndex, defaultClaudeHome, resolveSessionDir } from '@/main/sessions/locate'
+import { createSdkSessionReader } from '@/main/sessions/sdk'
 
-export interface ReadSessionStateParams {
-  readonly repos: readonly RepoRef[]
-  readonly claudeHome?: string
-  readonly reader?: SessionReader
-  readonly now?: () => Date
-}
+import type { ReadSessionStateParams } from '@/types/sessions'
 
 const AGENT_META_SUFFIX = '.meta.json'
 const AGENT_ID_PREFIX = /^agent-/
 
-/** Reads every `*.meta.json` under `subagentsDir`, pairing each with its
- *  sibling `.jsonl`'s mtime for `lastActivityAt`. Never throws on a
- *  malformed file — it lands in `unreadable` and every other agent in the
- *  same directory is read regardless. */
+/** Never throws on a malformed file — it lands in `unreadable` and every other agent in the same directory is still read. */
 async function readAgents(
   sessionId: string,
   repoId: AgentRecord['repoId'],
@@ -56,9 +42,7 @@ async function readAgents(
       continue
     }
 
-    // The sibling `.jsonl`'s mtime is the activity source (files.ts's
-    // `modifiedAt`); a stat hiccup on it falls back to the session's own
-    // last-modified time rather than dropping an otherwise-valid record.
+    // A stat hiccup on the sibling `.jsonl` falls back to the session's last-modified time rather than dropping the record.
     const stat = await statPath(jsonlPath)
     const lastActivityAt = stat.ok ? stat.value.modifiedAt : sessionLastModified
     const { idleMs, activity } = activityOf(lastActivityAt, now)

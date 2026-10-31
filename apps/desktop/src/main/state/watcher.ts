@@ -1,54 +1,43 @@
-// The only clock in the main process (#80 Decision 2) — one timer,
-// rescheduled to the earliest `nextDueAt` across every (repository, source),
-// never a fixed tick that wakes to do nothing and never one timer per
-// source. `schedule.ts` decides *when*; this file is the only place under
-// `src/main/` allowed to name `setTimeout`.
-import type { GhRunner } from '../github'
-import type { WorktreesGitRunner as GitRunner } from '../local'
-import { readSessionState } from '../sessions'
-import { createRelayReader } from '../relay'
-import type { RepoId } from '../../shared/repos'
-import type { RepositoryEntry } from '../../shared/repos'
-import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth } from '../../shared/board/types'
-import type { BoardSnapshot, RepositoryHealth, SourceHealth, SourceKind } from '../../shared/board/types'
-import type { DrainState, RepoDispatchStatus } from '../../shared/dispatch/types'
-import type { RelayScan } from '../../shared/relay/types'
-import { createDispatchLedger, createRefreshMemo, createUnknownStreaks, planTick } from '../tick'
-import type { DispatchLedger, RefreshMemo, UnknownStreaks } from '../tick'
-import { buildDesktopTickEvent, recordTick as defaultRecordTick } from '../trajectory'
-import type { DesktopTickEvent, RecordTickDeps } from '../trajectory'
-import { isReady, projectFromCache } from './read'
-import { afterFailure, afterSuccess, deferredUntil, dueSources, nextDueAt } from './schedule'
-import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from './sources'
-import type { RefreshOutcome, SourceCache } from './sources'
+import type { DispatchLedger, UnknownStreaks, RefreshMemo, ForceDispatch } from '@/types/tick'
+import type { SourceCache, RefreshOutcome } from '@/types/state'
 
-export interface RefreshRequest {
-  readonly repoId?: RepoId
-  readonly source?: SourceKind
-}
+// The only clock in main — one timer, rescheduled to the earliest `nextDueAt`. `schedule.ts` decides *when*; this file is the only place under `src/main/` allowed to name `setTimeout`.
+import type { GhRunner } from '@/types/platform'
+import type { GitRunner } from '@/types/platform'
+import { readSessionState } from '@/main/sessions/adapter'
+import type { RepoId } from '@/utils/repos'
+import type { RepositoryEntry } from '@/utils/repos'
+import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth, isDeferred } from '@/types/board'
+import type { BoardSnapshot, RepositoryHealth, SourceHealth, SourceKind } from '@/types/board'
+import type { RepoDispatchStatus, RunStatesSnapshot } from '@/types/dispatch'
+import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
+import { planTick } from '@/main/tick/plan'
+import { autoPlanStatusOf } from '@/main/tick/auto-plan'
 
-export interface TimerHandle {
-  readonly clear: () => void
-}
+import type { EndedStage } from '@/types/tick'
+import { buildDesktopTickEvent, recordTick as defaultRecordTick } from '@/main/trajectory/log'
+import type { DesktopTickEvent } from '@/types/trajectory'
+import type { RecordTickDeps } from '@/types/trajectory'
+import { isReady, projectFromCache } from '@/main/state/read'
+import { afterFailure, afterSuccess, budgetedIntervalMs, deferredUntil, dueSources, nextDueAt } from '@/main/state/schedule'
+import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/state/sources'
 
-export type TimerFactory = (callback: () => void, ms: number) => TimerHandle
+import type { PipelineWatcher, RefreshRequest, TimerFactory, TimerHandle } from '@/types/state'
 
 const defaultSetTimer: TimerFactory = (callback, ms) => {
   const handle = setTimeout(callback, ms)
   return { clear: () => clearTimeout(handle) }
 }
 
-/** The same seam `gh`/`git`/`sessionReader` already declare below — injected
- *  so `watcher.test.ts` never touches a real filesystem for the trajectory
- *  record either (#111). */
-export type RecordTickFn = (repoRoot: string, event: DesktopTickEvent, deps?: RecordTickDeps) => Promise<void>
+/** Injected so `watcher.test.ts` never touches a real filesystem for the trajectory record. */
+type RecordTickFn = (repoRoot: string, event: DesktopTickEvent, deps?: RecordTickDeps) => Promise<void>
 
-export interface CreatePipelineWatcherParams {
-  /** A static list, or a provider re-invoked on the GitHub cadence — so a
-   *  repository added or removed on the Repositories view appears on the
-   *  board without a restart. */
+interface CreatePipelineWatcherParams {
+  /** A static list, or a provider re-invoked on the GitHub cadence, so a repository added or removed appears on the board without a restart. */
   readonly repositories: readonly RepositoryEntry[] | (() => Promise<readonly RepositoryEntry[]>)
   readonly onSnapshot: (snapshot: BoardSnapshot) => void
+  /** Fired after `buildSnapshot()` on the timer path and in `refresh()` — never in `republish()`, so a dispatch pass never re-triggers itself off its own state change. */
+  readonly onTick?: (snapshot: BoardSnapshot) => void
   readonly gh?: GhRunner
   readonly git?: GitRunner
   readonly sessionReader?: Parameters<typeof readSessionState>[0]['reader']
@@ -56,45 +45,27 @@ export interface CreatePipelineWatcherParams {
   readonly now?: () => Date
   readonly setTimer?: TimerFactory
   readonly recordTick?: RecordTickFn
-  /** The app's own drain switch (#110) — read fresh on every
-   *  `buildSnapshot()`, never cached, so a drain applied mid-session is
-   *  visible on the very next snapshot. Defaults to `{ gate: 'open' }`, the
-   *  same default a repository with no drain source at all reads as. */
-  readonly drain?: () => DrainState
-  /** Injectable the same way `drain` is (#265) — a dispatcher built after
-   *  the watcher needs the *same* ledger/streak memo this watcher's own
-   *  `planTick` calls read and write, never a second instance that would
-   *  disagree with what the board just reported. Defaulting to a fresh one
-   *  keeps every existing caller (and test) unchanged. */
+  /** Read fresh on every `buildSnapshot()`, never cached. Defaults to every repository reading paused. */
+  readonly runStates?: (repoIds: readonly RepoId[]) => RunStatesSnapshot
+  /** A dispatcher built after the watcher needs this same ledger/streak memo, never a second instance that would disagree with what the board just reported. */
   readonly ledger?: DispatchLedger
   readonly unknownStreaks?: UnknownStreaks
-  /** #292: the app's own process-scoped refresh memo, shared with the
-   *  dispatcher's own observation pass the same way `ledger`/`unknownStreaks`
-   *  already are — never a second instance that would disagree with what the
-   *  dispatcher just wrote. */
+  /** Shared with the dispatcher's own observation pass, never a second instance that would disagree with what the dispatcher just wrote. */
   readonly refreshMemo?: RefreshMemo
-  /** #292: `dispatcher.startedTasks` — this repository's own dispatcher
-   *  session's `started` tasks, as descriptions. `undefined` (every caller
-   *  until `main/ipc.ts` wires one) reads as `[]` for every repository. */
+  /** The Needs-you "Dispatch anyway" override — shared with the dispatcher's own consumption pass, never a second instance that would disagree on which entries are still live. */
+  readonly forceDispatch?: ForceDispatch
+  /** This repository's own dispatcher session's `started` tasks, as descriptions. `undefined` reads as `[]`. */
   readonly startedTasks?: (repoId: RepoId) => readonly string[]
-  /** #265: the dispatcher's own `status()` — read fresh inside
-   *  `buildSnapshot()`, the same "never cached" rule `drain` above follows,
-   *  so a claim taken or released mid-session is reflected on the very next
-   *  snapshot. `undefined` (every caller until `main/ipc.ts` wires one)
-   *  reads as `[]`. */
+  /** Read fresh inside `buildSnapshot()`, never cached. `undefined` reads as `[]`. */
   readonly dispatchStatus?: () => readonly RepoDispatchStatus[]
-}
-
-export interface PipelineWatcher {
-  readonly refresh: (request?: RefreshRequest) => Promise<BoardSnapshot>
-  readonly snapshot: () => BoardSnapshot
-  readonly stop: () => void
-  /** #265: re-reads `dispatchStatus()` onto the existing snapshot and pushes
-   *  it through `onSnapshot` — never a second `buildSnapshot()` call, so the
-   *  dispatcher's own `onChange` (firing between ticks, as its state moves)
-   *  never produces a duplicate trajectory-record line or re-runs a poll.
-   *  `emittedAt` still advances, since this is a real, newly-observed state. */
-  readonly republish: () => void
+  /** `planTick`'s own `holdSessionRequired` input, read fresh per repository. `undefined` reads as `true` — the terminal-cockpit default, unchanged. */
+  readonly holdSessionRequired?: (repoId: RepoId) => boolean
+  /** `planTick`'s own `stageLiveness` input, read fresh per repository. `undefined` reads as `null` for every repository — byte-identical to today. */
+  readonly stageLiveness?: (repoId: RepoId) => { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
+  /** `planTick`'s own `endedStages` input, read fresh per repository. `undefined` reads as `[]` for every repository — byte-identical to today. */
+  readonly endedStages?: (repoId: RepoId) => readonly EndedStage[]
+  /** The auto-planner's refused swaps, read fresh per repository. `undefined` reads as none. */
+  readonly autoPlanRefused?: (repoId: RepoId) => ReadonlySet<number>
 }
 
 function repoRefOf(entry: Extract<RepositoryEntry, { status: 'ready' }>): { readonly owner: string; readonly name: string } {
@@ -116,33 +87,24 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
   const health = new Map<RepoId, RepositoryHealth>()
   let sessionsHealth: SourceHealth = initialHealth('sessions')
   const inFlight = new Set<string>()
+  const active = new Map<string, Promise<void>>()
+  const queued = new Map<string, Promise<void>>()
   let repositories: readonly RepositoryEntry[] = Array.isArray(params.repositories) ? params.repositories : []
   let hasListedRepositories = Array.isArray(params.repositories)
   let stopped = false
   let timer: TimerHandle | null = null
-  // One process-scoped ledger, this watcher's whole lifetime (#105) — a
-  // restarted app gets a fresh one, so every in-flight item reads
-  // `no-record` on the first tick after a restart, never a false reset.
+  // One process-scoped ledger, this watcher's whole lifetime — a restarted app gets a fresh one, so every in-flight item reads `no-record`, never a false reset.
   const ledger = params.ledger ?? createDispatchLedger()
-  // This app's own process-scoped mergeability-UNKNOWN memo (#265) — same
-  // lifetime and restart behaviour as `ledger` above.
+  // Same lifetime and restart behaviour as `ledger` above.
   const unknownStreaks = params.unknownStreaks ?? createUnknownStreaks()
-  // The app's own process-scoped refresh memo (#292) — same lifetime and
-  // restart behaviour as `ledger`/`unknownStreaks` above.
+  // Same lifetime and restart behaviour as `ledger`/`unknownStreaks` above.
   const refreshMemo = params.refreshMemo ?? createRefreshMemo()
   const startedTasks = params.startedTasks ?? ((): readonly string[] => [])
-  // The trajectory record's one appender for this watcher's whole lifetime
-  // (#111) — injectable the same way `gh`/`git`/`sessionReader` already are,
-  // so a test never touches a real filesystem for it.
+  // Injectable the same way `gh`/`git`/`sessionReader` already are, so a test never touches a real filesystem for it.
   const recordTickFn: RecordTickFn = params.recordTick ?? defaultRecordTick
-  // The relay reader (#107) — one instance for the watcher's whole
-  // lifetime, run inside `runSessions()` right after `refreshSessions`, over
-  // the same session scan that call just refreshed. Relay carries no new
-  // `SourceKind`: it never schedules its own cadence, only rides the
-  // sessions source's.
-  const relayReader = createRelayReader()
-  const drain = params.drain ?? ((): DrainState => ({ gate: 'open' }))
-  let relay: RelayScan = { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: now().toISOString() }
+  const runStatesOf =
+    params.runStates ??
+    ((repoIds: readonly RepoId[]): RunStatesSnapshot => ({ store: { kind: 'loaded' }, repositories: repoIds.map((repoId) => ({ repoId, state: 'paused', since: null })) }))
   let latest: BoardSnapshot = {
     state: {
       repositories: [],
@@ -152,12 +114,15 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     health: [],
     policy: DEFAULT_POLL_POLICY,
     tick: [],
-    relay,
-    drain: drain(),
+    runStates: runStatesOf(repositories.map((entry) => entry.id)),
     nextWakeupAt: null,
     emittedAt: now().toISOString(),
     dispatch: params.dispatchStatus?.() ?? [],
+    autoPlan: [],
   }
+
+  const noRefusals: ReadonlySet<number> = new Set()
+  const autoPlanOf = (tick: BoardSnapshot['tick'], dispatch: BoardSnapshot['dispatch']): BoardSnapshot['autoPlan'] => autoPlanStatusOf(tick, dispatch, (repoId) => params.autoPlanRefused?.(repoId) ?? noRefusals)
 
   function ensureHealth(repoId: RepoId): RepositoryHealth {
     const existing = health.get(repoId)
@@ -167,10 +132,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     return created
   }
 
-  /** The earliest instant across every (repository, source) — shared by
-   *  `scheduleNext()`'s own `setTimeout` delay and `buildSnapshot()`'s
-   *  `nextWakeupAt`, so the UI can never announce a wakeup this watcher did
-   *  not actually schedule (#62). */
+  /** Shared by `scheduleNext()`'s `setTimeout` delay and `buildSnapshot()`'s `nextWakeupAt`, so the UI never announces a wakeup this watcher did not actually schedule. */
   function earliestDueAt(): Date {
     const readyEntries = repositories.filter(isReady)
     const candidates = [nextDueAt(sessionsHealth, now()).getTime()]
@@ -188,15 +150,9 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       const h = ensureHealth(entry.id)
       return { ...h, sessions: sessionsHealth }
     })
-    // One TickReport per ready repository (#105) — over the same
-    // PipelineState above, never a second poll or a second cadence. Each
-    // repository's own `nextDecisionAt` is its GitHub source's next-due
-    // instant, the same `nextDueAt` call `dueSources`/`isDue` already make.
+    // One TickReport per ready repository, over the same PipelineState above, never a second poll or cadence.
     const readyIds = new Set(readyEntries.map((entry) => entry.id))
-    // `entry.config.reviewCycleCap` per repository (#108) — read from config,
-    // never hardcoded; guarded the same way `gated.dispatch`'s lookup already
-    // is in `plan.ts`: `readyIds`/`cycleCapByRepo` are built from the same
-    // `readyEntries`, so a miss here is a defect, not a runtime case.
+    // Read from config, never hardcoded; a miss here is a defect, not a runtime case.
     const cycleCapByRepo = new Map(readyEntries.map((entry) => [entry.id, entry.config.reviewCycleCap]))
     const checkDispositionsByRepo = new Map(readyEntries.map((entry) => [entry.id, entry.config.checkDispositions]))
     const tick = state.repositories
@@ -216,15 +172,14 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
           startedTasks: startedTasks(repository.repoId),
           refreshMemo,
           checkDispositions,
+          holdSessionRequired: params.holdSessionRequired?.(repository.repoId) ?? true,
+          stageLiveness: params.stageLiveness?.(repository.repoId) ?? null,
+          endedStages: params.endedStages?.(repository.repoId) ?? [],
+          forceDispatch: params.forceDispatch,
         })
       })
 
-    // The trajectory record's desktop-side twin (#111) — fire-and-forget,
-    // right after computing tick, never awaited and never part of the
-    // BoardSnapshot returned below: a write failure here must not change
-    // what the board renders. Skipped for a blind report — an empty
-    // dispatch/held/claims set standing in for "nothing recorded" would be
-    // exactly the ambiguity a blind tick exists to remove.
+    // Fire-and-forget, never part of the BoardSnapshot returned below — a write failure here must not change what the board renders. Skipped for a blind report.
     const entryById = new Map(readyEntries.map((entry) => [entry.id, entry] as const))
     for (const report of tick) {
       if (report.blind !== null) continue
@@ -234,45 +189,83 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     }
 
     const nextWakeupAt = stopped ? null : earliestDueAt().toISOString()
-    latest = { state, health: healthList, policy: DEFAULT_POLL_POLICY, tick, relay, drain: drain(), nextWakeupAt, emittedAt: now().toISOString(), dispatch: params.dispatchStatus?.() ?? [] }
+    const dispatch = params.dispatchStatus?.() ?? []
+    latest = {
+      state,
+      health: healthList,
+      policy: DEFAULT_POLL_POLICY,
+      tick,
+      runStates: runStatesOf(repositories.map((entry) => entry.id)),
+      nextWakeupAt,
+      emittedAt: now().toISOString(),
+      dispatch,
+      autoPlan: autoPlanOf(tick, dispatch),
+    }
     return latest
   }
 
-  async function runRepoSource(entry: Extract<RepositoryEntry, { status: 'ready' }>, kind: 'github' | 'worktrees' | 'denials'): Promise<void> {
+  /** The latest successful poll cost of every ready repository — the entry just written included. */
+  function githubCosts(): readonly number[] {
+    return repositories.filter(isReady).flatMap((entry) => {
+      const read = cache.github.get(entry.id)
+      return read?.ok ? [read.rateLimit.cost] : []
+    })
+  }
+
+  function track(key: string, read: Promise<void>): Promise<void> {
+    const tracked = read.finally(() => {
+      if (active.get(key) === tracked) active.delete(key)
+    })
+    active.set(key, tracked)
+    return tracked
+  }
+
+  /** A forced read that finds one in flight waits for one follow-up read, shared by every forced request meanwhile; an unforced one just skips. */
+  function runRepoSource(entry: Extract<RepositoryEntry, { status: 'ready' }>, kind: 'github' | 'worktrees' | 'denials', forced: boolean): Promise<void> {
     const key = `${entry.id}:${kind}`
-    if (inFlight.has(key)) return
-    inFlight.add(key)
-    try {
-      let outcome: RefreshOutcome
-      if (kind === 'worktrees') {
-        outcome = await refreshWorktrees(cache, { repoId: entry.id, repoRoot: entry.path, git: params.git, now })
-      } else if (kind === 'denials') {
-        outcome = await refreshDenials(cache, { repoId: entry.id, repoRoot: entry.path, git: params.git, now })
-      } else {
-        const worktrees = cache.worktrees.get(entry.id)
-        const worktreeEntries = worktrees?.ok ? worktrees.entries : []
-        const sessions = cache.sessions
-        const agents = sessions?.ok ? sessions.agents.filter((a) => a.repoId === entry.id) : []
-        outcome = await refreshGithub(cache, { repoId: entry.id, repo: repoRefOf(entry), vocabulary: entry.config.vocabulary, worktreeEntries, agents, gh: params.gh, now })
-      }
-      const current = ensureHealth(entry.id)
-      const previous = current[kind]
-      let updated: SourceHealth
-      if (outcome.ok) {
-        updated = afterSuccess(previous, kind, now())
-        // A known reset instant always beats a doubled guess, even on a
-        // success whose own window reports low headroom (Decision 4).
-        if (kind === 'github') {
-          const defer = deferredUntil(outcome.rateLimit ?? null, null)
-          if (defer !== null) updated = { ...updated, deferredUntil: defer }
-        }
-      } else {
-        updated = afterFailure(previous, kind, now(), outcome.error ?? 'unknown error', kind === 'github' ? deferredUntil(outcome.rateLimit ?? null, outcome.failureKind ?? null) : null)
-      }
-      health.set(entry.id, { ...current, [kind]: updated })
-    } finally {
-      inFlight.delete(key)
+    const outstanding = active.get(key)
+    if (outstanding === undefined) return track(key, readRepoSource(entry, kind))
+    if (!forced) return Promise.resolve()
+    const waiting = queued.get(key)
+    if (waiting !== undefined) return waiting
+    const followUp = outstanding
+      .catch(() => undefined)
+      .then(() => {
+        queued.delete(key)
+        return track(key, readRepoSource(entry, kind))
+      })
+    queued.set(key, followUp)
+    return followUp
+  }
+
+  async function readRepoSource(entry: Extract<RepositoryEntry, { status: 'ready' }>, kind: 'github' | 'worktrees' | 'denials'): Promise<void> {
+    let outcome: RefreshOutcome
+    if (kind === 'worktrees') {
+      outcome = await refreshWorktrees(cache, { repoId: entry.id, repoRoot: entry.path, git: params.git, now })
+    } else if (kind === 'denials') {
+      outcome = await refreshDenials(cache, { repoId: entry.id, repoRoot: entry.path, git: params.git, now })
+    } else {
+      const worktrees = cache.worktrees.get(entry.id)
+      const worktreeEntries = worktrees?.ok ? worktrees.entries : []
+      const sessions = cache.sessions
+      const agents = sessions?.ok ? sessions.agents.filter((a) => a.repoId === entry.id) : []
+      outcome = await refreshGithub(cache, { repoId: entry.id, repo: repoRefOf(entry), vocabulary: entry.config.vocabulary, worktreeEntries, agents, gh: params.gh, now })
     }
+    const current = ensureHealth(entry.id)
+    const previous = current[kind]
+    let updated: SourceHealth
+    if (outcome.ok) {
+      updated = afterSuccess(previous, kind, now())
+      if (kind === 'github') {
+        if (outcome.rateLimit) updated = { ...updated, intervalMs: budgetedIntervalMs({ costs: githubCosts(), rateLimit: outcome.rateLimit, now: now() }) }
+        // A known reset instant always beats a doubled guess, even on a success whose own window reports low headroom.
+        const defer = deferredUntil(outcome.rateLimit ?? null, null)
+        if (defer !== null) updated = { ...updated, deferredUntil: defer }
+      }
+    } else {
+      updated = afterFailure(previous, kind, now(), outcome.error ?? 'unknown error', kind === 'github' ? deferredUntil(outcome.rateLimit ?? null, outcome.failureKind ?? null) : null)
+    }
+    health.set(entry.id, { ...current, [kind]: updated })
   }
 
   async function runSessions(readyEntries: readonly Extract<RepositoryEntry, { status: 'ready' }>[]): Promise<void> {
@@ -287,11 +280,6 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
         now,
       })
       sessionsHealth = outcome.ok ? afterSuccess(sessionsHealth, 'sessions', now()) : afterFailure(sessionsHealth, 'sessions', now(), outcome.error ?? 'unknown error')
-      // Right after the sessions scan, over the same fresh `cache.sessions`
-      // (#107) — never a second poll or a second cadence of its own.
-      if (cache.sessions !== null) {
-        relay = await relayReader.read({ scan: cache.sessions, claudeHome: params.claudeHome, now })
-      }
     } finally {
       inFlight.delete(key)
     }
@@ -319,17 +307,17 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     }
 
     for (const entry of readyEntries) {
-      // `dueSources` sorts github last, so a cheap local read due the same
-      // tick as a GitHub call never waits behind it (#80 R2-M1) — forced
-      // sources join the same ordered run, not a separate unordered pass.
+      // `dueSources` sorts github last, so a cheap local read due the same tick never waits behind it.
       const entryHealth = ensureHealth(entry.id)
       const toRun = new Set<SourceKind>(dueSources(entryHealth, now()))
       for (const kind of SOURCE_KINDS) {
-        if (kind !== 'sessions' && isForced(request, kind, entry.id)) toRun.add(kind)
+        if (kind === 'sessions' || !isForced(request, kind, entry.id)) continue
+        if (kind === 'github' && isDeferred(entryHealth.github, now())) continue
+        toRun.add(kind)
       }
       const ordered = [...toRun].filter((kind) => kind !== 'sessions').sort((a, b) => (a === 'github' ? 1 : b === 'github' ? -1 : 0))
       for (const kind of ordered) {
-        await runRepoSource(entry, kind)
+        await runRepoSource(entry, kind, isForced(request, kind, entry.id))
       }
     }
   }
@@ -340,7 +328,9 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     const delay = Math.max(0, earliestDueAt().getTime() - now().getTime())
     timer = setTimer(() => {
       void tick().then(() => {
-        params.onSnapshot(buildSnapshot())
+        const snap = buildSnapshot()
+        params.onSnapshot(snap)
+        params.onTick?.(snap)
         scheduleNext()
       })
     }, delay)
@@ -354,6 +344,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       await tick(request)
       const snap = buildSnapshot()
       params.onSnapshot(snap)
+      params.onTick?.(snap)
       scheduleNext()
       return snap
     },
@@ -364,13 +355,13 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       stopped = true
       if (timer !== null) timer.clear()
       timer = null
-      // The honest rendering of "no wakeup scheduled" (#62) — applied to the
-      // cached snapshot directly, since a stopped watcher never rebuilds one.
+      // The honest rendering of "no wakeup scheduled" — applied to the cached snapshot directly, since a stopped watcher never rebuilds one.
       latest = { ...latest, nextWakeupAt: null }
     },
     republish(): void {
       if (stopped) return
-      latest = { ...latest, dispatch: params.dispatchStatus?.() ?? [], emittedAt: now().toISOString() }
+      const dispatch = params.dispatchStatus?.() ?? []
+      latest = { ...latest, dispatch, autoPlan: autoPlanOf(latest.tick, dispatch), emittedAt: now().toISOString() }
       params.onSnapshot(latest)
     },
   }

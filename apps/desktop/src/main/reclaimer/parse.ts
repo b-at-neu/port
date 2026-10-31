@@ -1,18 +1,15 @@
-// Validates `bin/worktrees.mjs report --json`'s stdout field by field
-// into `ParsedWorktree[]` plus `orphanDirs`/`mainRoot`/`integrationRef`/
-// `registered`/`byState`. A missing field, a non-array `candidates`, or a
-// `state` outside `WORKTREE_STATES` fails the whole payload as
-// `report-unparseable`, naming the field — never a partial list (ENGINEERING
-// §4: an absent signal is never read as a passing one).
-import type { PathOps } from '../platform'
-import type { CorrelationRung } from '../../shared/local/types'
-import type { WorktreeState } from '../../shared/reclaimer/types'
-import { WORKTREE_STATES } from '../../shared/reclaimer/types'
+// A missing field, a non-array `candidates`, or an unknown `state` fails the whole payload,
+// naming the field — never a partial list.
+import type { PathOps } from '@/types/platform'
+import type { CorrelationRung } from '@/types/local'
+import type { ReclaimedWorktree, WorktreeState } from '@/types/reclaimer'
+import { WORKTREE_STATES } from '@/types/reclaimer'
+import { isRecord } from '@/main/guards'
 
 const RUNGS: ReadonlySet<string> = new Set<CorrelationRung>(['upstream-branch', 'branch-name', 'directory-basename', 'head-subject'])
 const STATES: ReadonlySet<string> = new Set<string>(WORKTREE_STATES)
 
-export interface ParsedWorktree {
+interface ParsedWorktree {
   readonly path: string
   readonly branch: string | null
   readonly head: string | null
@@ -25,7 +22,7 @@ export interface ParsedWorktree {
   readonly dirtyFiles: number
 }
 
-export type ParsedReport =
+type ParsedReport =
   | {
       readonly ok: true
       readonly mainRoot: string
@@ -39,10 +36,6 @@ export type ParsedReport =
 
 function fail(message: string): ParsedReport {
   return { ok: false, message }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
 }
 
 function stringOrNull(value: unknown): value is string | null {
@@ -100,10 +93,7 @@ function parseCandidate(raw: unknown, index: number, pathOps: PathOps): ParsedWo
   }
 }
 
-/** Parses the script's `--json` stdout. Every path is run through
- *  `pathOps.toNative` — the script emits `C:/Users/…`-style paths even on
- *  Windows, and #77's join (in `report.ts`) compares by `pathOps.pathKey`,
- *  which requires the same native form on both sides. */
+// Every path is run through `pathOps.toNative` — the script emits `C:/Users/…`-style paths even on Windows.
 export function parseReportPayload(stdout: string, pathOps: PathOps): ParsedReport {
   let value: unknown
   try {
@@ -150,4 +140,59 @@ export function parseReportPayload(stdout: string, pathOps: PathOps): ParsedRepo
   }
 
   return { ok: true, mainRoot: pathOps.toNative(mainRoot), integrationRef, worktrees, orphanDirs, registered, byState }
+}
+
+type ParsedReclaim =
+  | { readonly ok: true; readonly removed: number; readonly results: readonly ReclaimedWorktree[] }
+  | { readonly ok: false; readonly message: string }
+
+// Parses `reclaim --json`'s stdout, reusing parseReportPayload's shape plus
+// each candidate's own removed/error/branchDeleted fields.
+export function parseReclaimPayload(stdout: string, pathOps: PathOps): ParsedReclaim {
+  const base = parseReportPayload(stdout, pathOps)
+  if (!base.ok) return { ok: false, message: base.message }
+
+  let value: unknown
+  try {
+    value = JSON.parse(stdout)
+  } catch {
+    return { ok: false, message: "the script's stdout was not valid JSON" }
+  }
+  if (!isRecord(value)) return { ok: false, message: "the script's stdout was not a JSON object" }
+  const rawCandidates = value.candidates
+  if (!Array.isArray(rawCandidates)) return { ok: false, message: 'candidates is missing or not an array' }
+
+  const results: ReclaimedWorktree[] = []
+  let removedCount = 0
+  for (const [index, raw] of rawCandidates.entries()) {
+    if (!isRecord(raw)) return { ok: false, message: `candidates[${index}] is not an object` }
+
+    const removedFlag = raw.removed
+    if (typeof removedFlag !== 'boolean') return { ok: false, message: `candidates[${index}].removed is missing or not a boolean` }
+
+    const error = raw.error
+    if (!stringOrNull(error)) return { ok: false, message: `candidates[${index}].error is not a string or null` }
+
+    const branchDeleted = raw.branchDeleted
+    if (!(branchDeleted === null || typeof branchDeleted === 'boolean')) {
+      return { ok: false, message: `candidates[${index}].branchDeleted is not a boolean or null` }
+    }
+
+    const matched = base.worktrees[index]
+    if (matched === undefined) return { ok: false, message: `candidates[${index}] has no matching parsed worktree` }
+
+    const outcome: ReclaimedWorktree['outcome'] = removedFlag ? 'removed' : error !== null ? 'failed' : 'kept'
+    if (outcome === 'removed') removedCount++
+
+    results.push({
+      path: matched.path,
+      pathBasename: pathOps.basename(matched.path),
+      issue: matched.issue,
+      outcome,
+      error,
+      branchDeleted,
+    })
+  }
+
+  return { ok: true, removed: removedCount, results }
 }

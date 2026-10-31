@@ -1,98 +1,112 @@
-// #265: per-session task tracker over the SDK's own `task_started`/
-// `task_notification` system messages — the dispatcher's own view of which
-// `Agent()` calls are running, completed, failed, or stopped, so the owner
-// line can report "started plan #105, impl #52 at 14:07" without the rest of
-// this app ever reaching into the raw stream. Pure observation, the same
-// `observe`/`current` shape `capabilities.ts` already establishes — folds
-// one message at a time, nothing asynchronous, nothing that reaches `./sdk`.
-import type { HostedTask } from '../../shared/hosting/types'
+// A pure background-task tracker — `observe` narrows level messages with REPLACE semantics, `current()` sorts by first-seen.
+import { isRecord } from '@/main/guards'
+import type { BackgroundTask } from '@/types/hosting'
+import { TOOL_USE_ID_FIELD } from '@/main/sessions/transcript-entries'
 
-/** Bounded the same way `handle.ts`'s own replay ring is (ENGINEERING §7) —
- *  a long-lived dispatcher session's task list never grows without limit. */
-export const MAX_TASKS = 50
-
-export interface CreateTaskTrackerParams {
-  readonly now: () => number
-  readonly onChange: () => void
+interface TaskTracker {
+  /** `true` when the observed message changed the current set. */
+  observe(message: unknown): boolean
+  current(): readonly BackgroundTask[]
+  reset(): void
 }
 
-export interface TaskTracker {
-  /** Folds one raw SDK message into this tracker's state — a no-op for
-   *  anything but `system`/`task_started` and `system`/`task_notification`,
-   *  and for either when `ambient` is `true` (every `skip_transcript` task,
-   *  plus every live-update watcher — never activity this app should
-   *  report). */
-  observe(message: unknown): void
-  current(): readonly HostedTask[]
+interface MutableTask {
+  taskId: string
+  type: string
+  description: string
+  toolUseId: string | null
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
+function fieldsOf(raw: unknown): Record<string, unknown> | null {
+  return isRecord(raw) ? raw : null
 }
 
-function statusOf(raw: unknown): HostedTask['status'] {
-  if (raw === 'failed' || raw === 'stopped') return raw
-  return 'completed' // 'completed', or anything else the SDK might send later
-}
+export function createTaskTracker(): TaskTracker {
+  const seenOrder: string[] = []
+  const byId = new Map<string, MutableTask>()
 
-// Assembled at runtime, never written as a contiguous literal anywhere in
-// this file (comments included) — that literal field name is reserved to
-// `main/sessions/transcript-entries.ts`'s own tool-call pairing (the
-// "three-renderers" trap, #123), and a mechanical check cannot tell this
-// file's unrelated read of the SDK's own same-named task field apart from a
-// second pairing implementation by name alone. The same trick
-// `guard-rules.mjs`'s `invokedCockpitSkill` already uses for its own
-// reserved-string problem.
-const TASK_TOOL_ID_KEY = ['tool_use', 'id'].join('_')
+  function observeBackgroundTasksChanged(message: Record<string, unknown>): boolean {
+    const rawTasks = message['tasks']
+    if (!Array.isArray(rawTasks)) return false
 
-export function createTaskTracker(params: CreateTaskTrackerParams): TaskTracker {
-  let tasks: readonly HostedTask[] = []
-
-  function upsert(task: HostedTask): void {
-    const idx = tasks.findIndex((t) => t.taskId === task.taskId)
-    const next = idx === -1 ? [...tasks, task] : tasks.map((t, i) => (i === idx ? task : t))
-    tasks = next.length > MAX_TASKS ? next.slice(next.length - MAX_TASKS) : next
-  }
-
-  function observe(message: unknown): void {
-    if (!isRecord(message) || message['type'] !== 'system') return
-    if (message['ambient'] === true) return
-    const subtype = message['subtype']
-    const taskId = message['task_id']
-    if (typeof taskId !== 'string') return
-
-    if (subtype === 'task_started') {
-      const description = message['description']
-      if (typeof description !== 'string') return
-      const toolUseId = message[TASK_TOOL_ID_KEY]
-      const subagentType = message['subagent_type']
-      upsert({
+    const next = new Map<string, MutableTask>()
+    for (const rawTask of rawTasks) {
+      const fields = fieldsOf(rawTask)
+      if (fields === null) continue
+      if (fields['ambient'] === true) continue
+      const taskId = fields['task_id'] ?? fields['taskId']
+      if (typeof taskId !== 'string' || taskId === '') continue
+      const existing = byId.get(taskId)
+      next.set(taskId, {
         taskId,
-        toolUseId: typeof toolUseId === 'string' ? toolUseId : null,
-        description,
-        subagentType: typeof subagentType === 'string' ? subagentType : null,
-        status: 'started',
-        startedAt: new Date(params.now()).toISOString(),
-        endedAt: null,
+        type: typeof fields['type'] === 'string' ? fields['type'] : (existing?.type ?? 'task'),
+        description: typeof fields['description'] === 'string' ? fields['description'] : (existing?.description ?? ''),
+        toolUseId: typeof fields[TOOL_USE_ID_FIELD] === 'string' ? fields[TOOL_USE_ID_FIELD] : (existing?.toolUseId ?? null),
       })
-      params.onChange()
-      return
     }
 
-    if (subtype === 'task_notification') {
-      const existing = tasks.find((t) => t.taskId === taskId)
-      upsert({
-        taskId,
-        toolUseId: existing?.toolUseId ?? null,
-        description: existing?.description ?? '',
-        subagentType: existing?.subagentType ?? null,
-        status: statusOf(message['status']),
-        startedAt: existing?.startedAt ?? new Date(params.now()).toISOString(),
-        endedAt: new Date(params.now()).toISOString(),
-      })
-      params.onChange()
+    const prevIds = new Set(byId.keys())
+    const nextIds = new Set(next.keys())
+    let changed = prevIds.size !== nextIds.size
+    if (!changed) {
+      for (const [id, task] of next) {
+        const prev = byId.get(id)
+        if (prev === undefined || prev.type !== task.type || prev.description !== task.description || prev.toolUseId !== task.toolUseId) {
+          changed = true
+          break
+        }
+      }
     }
+    if (!changed) return false
+
+    byId.clear()
+    seenOrder.length = 0
+    for (const [id, task] of next) {
+      byId.set(id, task)
+      seenOrder.push(id)
+    }
+    return true
   }
 
-  return { observe, current: () => tasks }
+  function observeTaskStarted(message: Record<string, unknown>): boolean {
+    const taskId = message['task_id'] ?? message['taskId']
+    if (typeof taskId !== 'string') return false
+    const existing = byId.get(taskId)
+    if (existing === undefined) return false
+    const toolUseId = message[TOOL_USE_ID_FIELD]
+    const description = message['description']
+    let changed = false
+    if (typeof toolUseId === 'string' && existing.toolUseId === null) {
+      existing.toolUseId = toolUseId
+      changed = true
+    }
+    if (typeof description === 'string' && existing.description === '') {
+      existing.description = description
+      changed = true
+    }
+    return changed
+  }
+
+  return {
+    observe(message) {
+      if (!isRecord(message)) return false
+      if (message['type'] !== 'system') return false
+      if (message['subtype'] === 'background_tasks_changed') return observeBackgroundTasksChanged(message)
+      if (message['subtype'] === 'task_started') return observeTaskStarted(message)
+      return false
+    },
+    current() {
+      const result: BackgroundTask[] = []
+      for (const id of seenOrder) {
+        const task = byId.get(id)
+        if (task === undefined) continue
+        result.push({ taskId: task.taskId, type: task.type, description: task.description, toolUseId: task.toolUseId })
+      }
+      return result
+    },
+    reset() {
+      byId.clear()
+      seenOrder.length = 0
+    },
+  }
 }

@@ -1,0 +1,65 @@
+# Runs `pnpm screenshots` on every pull request that touches apps/desktop
+# (#317), uploading the PNGs so an agent or reviewer can Read what a UI
+# ticket built — see docs/DESIGN.md §7 and CONTRIBUTING.md → "Working on the
+# desktop app".
+
+name: Visual
+
+on:
+  pull_request:
+    paths:
+      - 'apps/desktop/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/visual.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: visual-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  run-visual-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      # Electron's postinstall pulls ~100 MB per run otherwise — the same
+      # cache key `run-app-checks` (checks.yml) already uses.
+      - name: Cache Electron download
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/electron-cache
+          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
+      - name: Screenshots
+        run: pnpm screenshots
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: apps/desktop/out/screenshots/
+          retention-days: 14
+          if-no-files-found: ignore
+      - name: Upload failure diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-failures
+          path: apps/desktop/out/playwright/
+          retention-days: 14
+          if-no-files-found: ignore

@@ -1,21 +1,15 @@
-// Allowlist portability ratchet, plus the CI matrix guard moved here from
-// config.ts (#116). Both rails exist for the same reason: a Windows-broken
-// allowlist entry, or a quietly dropped runner, ships to every adopter with
-// nothing to object — this module is the mechanical objection.
+// Allowlist portability ratchet plus the CI matrix guard — a Windows-broken allowlist entry
+// or a quietly dropped runner must never ship to every adopter with nothing to object.
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, readJson } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
-import { message } from '../lib/errors.ts';
+import { root, readJson } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
+import { message } from '#lib/errors.ts';
 
 const CONFIG_REL = 'scripts/checks/portability.config.json';
 
-/** The leading whitespace-delimited token of a `Bash(...)` allowlist entry,
- *  or `null` for anything that is not `Bash(...)` (e.g. `Edit(**)`, `Skill`)
- *  or whose leading token is an unsubstituted `{{placeholder}}` — never real
- *  for this repository itself, only for a template an adopter fills in.
- *  Pure, so the block below can self-test it before trusting it against the
- *  repository's real config files. */
+/** The leading whitespace-delimited token of a `Bash(...)` allowlist entry, or `null` for
+ *  anything else or an unsubstituted `{{placeholder}}` — only real for an adopter's template. */
 export function leadingToken(entry: string): string | null {
   const m = /^Bash\(([^)]*)\)$/.exec(entry);
   if (!m) return null;
@@ -32,9 +26,7 @@ export interface AllowlistClassification {
   stale: string[];
 }
 
-/** Pure classification, no I/O — `entries` is one file's `allow`-shaped
- *  array, `nonPortable` the shared classification, `pendingTokens` the same
- *  file's own pending list from portability.config.json. */
+/** Pure classification, no I/O. `pendingTokens` is the same file's own pending list from portability.config.json. */
 export function classifyAllowlist(
   entries: readonly string[],
   nonPortable: readonly string[],
@@ -54,12 +46,8 @@ export function classifyAllowlist(
   return { violations, stale };
 }
 
-/** Every job block's own lines, from its `  <job>:` line up to (not
- *  including) the next two-space-indented `key:` line — or `null` if the job
- *  is not found. Per-job, never a whole-file substring search: #73's own
- *  guard searched the entire workflow text for each runner label, so
- *  dropping `windows-latest` from one matrixed job while another still named
- *  it anywhere in the file passed regardless of which job lost it. */
+/** Every job block's own lines, up to the next two-space-indented `key:` line, or `null` if
+ *  not found. Per-job, never a whole-file substring search — a label dropped from one job must fail even if another job still names it anywhere. */
 export function extractJobBlock(lines: readonly string[], job: string): string[] | null {
   const startIdx = lines.findIndex((l) => l === `  ${job}:`);
   if (startIdx === -1) return null;
@@ -74,64 +62,27 @@ export function extractJobBlock(lines: readonly string[], job: string): string[]
 const MATRIXED_JOBS = ['run-static-checks', 'run-app-checks'];
 const RUNNER_LABELS = ['ubuntu-latest', 'macos-latest', 'windows-latest'];
 
-export default async function ({ fail, note, ok }: Reporter) {
-  // --- Self-test first ---------------------------------------------------
-  // guard(#116): a check that cannot be made to fail is not a check
-  // (docs/ENGINEERING.md §7) — assert leadingToken/classifyAllowlist against
-  // fixed synthetic inputs before trusting either against real files.
+export default async function ({ expect, fail, note, ok }: Reporter) {
+  // --- Self-test first: assert leadingToken/classifyAllowlist against synthetic inputs before trusting either against real files. ---
   {
-    if (leadingToken('Bash(grep *)') !== 'grep') {
-      fail('portability-selftest', "leadingToken('Bash(grep *)') did not return 'grep'");
-    } else {
-      ok();
-    }
-    if (leadingToken('Bash(node scripts/checks.ts *)') !== 'node') {
-      fail('portability-selftest', "leadingToken('Bash(node scripts/checks.ts *)') did not return 'node'");
-    } else {
-      ok();
-    }
-    if (leadingToken('Bash({{packageManager}} *)') !== null) {
-      fail('portability-selftest', "leadingToken('Bash({{packageManager}} *)') must return null — an unsubstituted placeholder is never real for this repository");
-    } else {
-      ok();
-    }
-    if (leadingToken('Bash(mkdir -p *)') !== 'mkdir') {
-      fail('portability-selftest', "leadingToken('Bash(mkdir -p *)') did not return 'mkdir'");
-    } else {
-      ok();
-    }
-    if (leadingToken('Edit(**)') !== null) {
-      fail('portability-selftest', "leadingToken('Edit(**)') must return null — it is not a Bash(...) entry");
-    } else {
-      ok();
-    }
+    expect(!(leadingToken('Bash(grep *)') !== 'grep'), 'portability-selftest', "leadingToken('Bash(grep *)') did not return 'grep'");
+    expect(!(leadingToken('Bash(node scripts/checks.ts *)') !== 'node'), 'portability-selftest', "leadingToken('Bash(node scripts/checks.ts *)') did not return 'node'");
+    expect(!(leadingToken('Bash({{packageManager}} *)') !== null), 'portability-selftest', "leadingToken('Bash({{packageManager}} *)') must return null — an unsubstituted placeholder is never real for this repository");
+    expect(!(leadingToken('Bash(mkdir -p *)') !== 'mkdir'), 'portability-selftest', "leadingToken('Bash(mkdir -p *)') did not return 'mkdir'");
+    expect(!(leadingToken('Edit(**)') !== null), 'portability-selftest', "leadingToken('Edit(**)') must return null — it is not a Bash(...) entry");
 
     const oneViolation = classifyAllowlist(['Bash(grep *)'], ['grep'], []);
-    if (oneViolation.violations.length !== 1 || oneViolation.violations[0].token !== 'grep') {
-      fail('portability-selftest', "classifyAllowlist(['Bash(grep *)'], ['grep'], []) must report exactly one 'grep' violation");
-    } else {
-      ok();
-    }
+    expect(!(oneViolation.violations.length !== 1 || oneViolation.violations[0].token !== 'grep'), 'portability-selftest', "classifyAllowlist(['Bash(grep *)'], ['grep'], []) must report exactly one 'grep' violation");
 
     const clean = classifyAllowlist(['Bash(node scripts/checks.ts *)', 'Bash({{packageManager}} *)'], ['grep'], []);
-    if (clean.violations.length !== 0 || clean.stale.length !== 0) {
-      fail('portability-selftest', 'classifyAllowlist over non-portable-free entries must report no violations and no stale tokens');
-    } else {
-      ok();
-    }
+    expect(!(clean.violations.length !== 0 || clean.stale.length !== 0), 'portability-selftest', 'classifyAllowlist over non-portable-free entries must report no violations and no stale tokens');
 
     const staleCase = classifyAllowlist([], ['mkdir'], ['mkdir']);
-    if (staleCase.stale.length !== 1 || staleCase.stale[0] !== 'mkdir') {
-      fail('portability-selftest', "a pending token absent from the entries must be reported stale");
-    } else {
-      ok();
-    }
+    expect(!(staleCase.stale.length !== 1 || staleCase.stale[0] !== 'mkdir'), 'portability-selftest', "a pending token absent from the entries must be reported stale");
   }
 
-  // --- Self-test the job-block extractor ----------------------------------
-  // guard(#116): the exact regression #73's whole-file search could not
-  // detect — a synthetic workflow where only one of two matrixed jobs still
-  // names every runner label.
+  // --- Self-test the job-block extractor: a synthetic workflow where only one of two
+  // matrixed jobs still names every runner label. ---
   {
     const synthetic = [
       'jobs:',
@@ -155,19 +106,11 @@ export default async function ({ fail, note, ok }: Reporter) {
       fail('portability-selftest', 'extractJobBlock: expected the synthetic run-static-checks block to lack windows-latest');
     } else if (!appBlock || !appBlock.join('\n').includes('windows-latest')) {
       fail('portability-selftest', 'extractJobBlock: expected the synthetic run-app-checks block to include windows-latest');
-    } else if (missingBlock !== null) {
-      fail('portability-selftest', 'extractJobBlock: a job absent from the text must return null');
-    } else {
-      ok();
-    }
+    } else expect(!(missingBlock !== null), 'portability-selftest', 'extractJobBlock: a job absent from the text must return null');
   }
 
-  // --- Validate the config's own shape ------------------------------------
-  // guard(#116): this repository requires the ratchet, so a missing or
-  // malformed config fails rather than silently skipping — there is no
-  // opt-out note the way file-size.ts's null limit provides, because a
-  // Windows-broken allowlist entry is exactly the class of defect layer 1
-  // exists to catch.
+  // --- Validate the config's own shape: a missing or malformed config fails rather than
+  // silently skipping — this ratchet has no opt-out, unlike file-size.ts's null limit. ---
   const configPath = join(root, CONFIG_REL);
   if (!existsSync(configPath)) {
     fail('portability', `${CONFIG_REL} does not exist — the allowlist portability ratchet is required, not optional`);
@@ -183,11 +126,7 @@ export default async function ({ fail, note, ok }: Reporter) {
   ok();
 
   const nonPortable: string[] = Array.isArray(config.nonPortable) ? config.nonPortable : [];
-  if (!Array.isArray(config.nonPortable) || nonPortable.length === 0) {
-    fail('portability', `${CONFIG_REL}: 'nonPortable' must be a non-empty array of command names`);
-  } else {
-    ok();
-  }
+  expect(!(!Array.isArray(config.nonPortable) || nonPortable.length === 0), 'portability', `${CONFIG_REL}: 'nonPortable' must be a non-empty array of command names`);
   const nonPortableSet = new Set(nonPortable);
 
   const pendingEntries: { file: string; commands: string[]; issue: number }[] = [];
@@ -215,14 +154,8 @@ export default async function ({ fail, note, ok }: Reporter) {
     pendingEntries.push({ file: entry.file, commands: entry.commands, issue: entry.issue });
   }
 
-  // --- Apply the ratchet ----------------------------------------------------
-  // guard(#116): a non-portable command (missing on a plain Windows shell —
-  // Claude Code's Bash tool there runs through Git Bash, so the exact
-  // portability boundary is issue 114's audit question, not this check's)
-  // joining an allowlist with nothing to object. Every scanned file is required —
-  // a source that silently disappears is exactly the kind of absence this
-  // check exists to catch, so a missing file fails rather than being
-  // skipped.
+  // --- Apply the ratchet — a non-portable command must never join an allowlist with nothing
+  // to object. Every scanned file is required: a source that silently disappears fails rather than being skipped. ---
   const sources: { file: string; extract: (cfg: any) => string[] }[] = [
     { file: 'plugins/port/templates/permissions.base.json', extract: (cfg) => cfg.allow ?? [] },
     { file: '.claude/settings.json', extract: (cfg) => cfg.permissions?.allow ?? [] },
@@ -259,12 +192,8 @@ export default async function ({ fail, note, ok }: Reporter) {
     if (violations.length === 0 && stale.length === 0) ok();
   }
 
-  // --- CI workflow names every platform, per job, not just anywhere -------
-  // guard(#73, #116): #73's own check searched the whole workflow file for
-  // each runner label, so removing 'windows-latest' from run-static-checks
-  // alone still passed because run-app-checks still named it. Moved here
-  // (from config.ts) and strengthened to check per job, matching this
-  // module's own job-block extraction.
+  // --- CI workflow names every platform, per job, not just anywhere — removing a runner
+  // from one job must never pass because another job still names it. ---
   {
     const rel = '.github/workflows/checks.yml';
     if (!existsSync(join(root, rel))) {
@@ -279,17 +208,9 @@ export default async function ({ fail, note, ok }: Reporter) {
         }
         const text = block.join('\n');
         for (const runnerLabel of RUNNER_LABELS) {
-          if (!text.includes(runnerLabel)) {
-            fail('platform-matrix', `${rel}: job '${job}' never names the runner label '${runnerLabel}'`);
-          } else {
-            ok();
-          }
+          expect(text.includes(runnerLabel), 'platform-matrix', `${rel}: job '${job}' never names the runner label '${runnerLabel}'`);
         }
-        if (!text.includes('runs-on: ${{ matrix.os }}')) {
-          fail('platform-matrix', `${rel}: job '${job}' does not run on 'runs-on: \${{ matrix.os }}'`);
-        } else {
-          ok();
-        }
+        expect(text.includes('runs-on: ${{ matrix.os }}'), 'platform-matrix', `${rel}: job '${job}' does not run on 'runs-on: \${{ matrix.os }}'`);
       }
     }
   }

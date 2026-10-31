@@ -1,0 +1,84 @@
+/* The renderer's one entry stylesheet and one React root's own styling. */
+@layer theme, base, components, utilities;
+
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/preflight.css' layer(base);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+@import 'tw-animate-css';
+
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/jetbrains-mono';
+
+@import './theme.css';
+
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+html,
+body {
+  height: 100%;
+}
+
+#app {
+  display: flex;
+  height: 100vh;
+  box-sizing: border-box;
+  @apply font-sans text-body bg-background text-foreground;
+}
+
+/* DESIGN §5 / ENGINEERING §5: the OS reduce-motion setting turns off every
+ * transition and the attention pulse. Scoped to the whole app and Radix's
+ * portaled popover/menu/tooltip/dialog/toast content. */
+@media (prefers-reduced-motion: reduce) {
+  #app *,
+  #app *::before,
+  #app *::after,
+  [data-radix-popper-content-wrapper],
+  [data-radix-popper-content-wrapper] *,
+  [data-radix-popper-content-wrapper] *::before,
+  [data-radix-popper-content-wrapper] *::after,
+  [role='dialog'],
+  [role='dialog'] *,
+  [role='dialog'] *::before,
+  [role='dialog'] *::after,
+  [role='alertdialog'],
+  [role='alertdialog'] *,
+  [role='alertdialog'] *::before,
+  [role='alertdialog'] *::after,
+  [data-slot='dialog-overlay'],
+  [data-slot='alert-dialog-overlay'],
+  [data-sonner-toaster] *,
+  [data-sonner-toaster] *::before,
+  [data-sonner-toaster] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* `scrollbar-width` is not inherited, so the rule has to reach every element. */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-faint) transparent;
+  }
+}
+
+/* Tailwind v4 dropped the default pointer cursor; restore it by element/role so new controls get it free. */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  [role='tab'],
+  [role='menuitem'],
+  [role='menuitemcheckbox'],
+  [role='menuitemradio'],
+  [role='option'],
+  [role='checkbox'],
+  [role='switch'],
+  [role='combobox'],
+  summary,
+  label[for] {
+    cursor: pointer;
+  }
+}

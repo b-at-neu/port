@@ -1,0 +1,354 @@
+import { describe, expect, it, vi } from 'vitest'
+import type { RepoId } from '@/utils/repos'
+import type { SessionKey } from '@/types/hosting'
+import type { RegistryDeps } from '@/types/registry'
+import type { ResolveStartTargetDeps, ResolvedStartTarget } from '@/types/workspace'
+import { storeStub } from '../../../fixtures/store'
+import {
+  MAX_INVOKE_ARGS_CHARS,
+  resolveSessionAttach,
+  resolveSessionCapacity,
+  resolveSessionCapacitySet,
+  resolveSessionClose,
+  resolveSessionDefaults,
+  resolveSessionDefaultsSet,
+  resolveSessionDismiss,
+  resolveSessionInterrupt,
+  resolveSessionInvoke,
+  resolveSessionIndex,
+  resolveSessionList,
+  resolveSessionPermissionAnswer,
+  resolveSessionRename,
+  resolveSessionSend,
+  resolveSessionStart,
+} from '@/main/channels/hosting'
+import type { HostingChannelDeps } from '@/types/channels'
+
+const REPO_ID = 'repo-1' as unknown as RepoId
+const SESSION_KEY = 'hosted-1' as SessionKey
+
+const registryDeps: RegistryDeps = {
+  registryDir: '/registry',
+  git: () => {
+    throw new Error('git should not be invoked directly by the hosting channel')
+  },
+  chooseDirectory: () => Promise.resolve(null),
+}
+
+const READY_ENTRY = {
+  id: REPO_ID,
+  path: '/repo',
+  displayName: 'widgets',
+  status: 'ready' as const,
+  config: {
+    repo: 'acme/widgets',
+    owner: 'acme',
+    name: 'widgets',
+    branches: { integration: 'dev', production: 'main' },
+    models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
+    modules: { approvalGate: true, release: true, scope: true },
+    reviewCycleCap: 3,
+    vocabulary: {} as never,
+    commands: { worktrees: null, budget: null },
+    concurrency: { sharedFiles: [], overlapThreshold: 2 },
+    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
+    checkDispositions: {},
+    overrides: [],
+  },
+  diagnostics: [],
+}
+
+const WORKSPACE = { folder: '/repo', root: '/repo', worktree: null, base: null }
+const FOLDER_TARGET = { kind: 'folder' as const, folderId: 'folder-1', worktree: false }
+
+function targetDepsStub(overrides: Partial<ResolveStartTargetDeps> = {}): Omit<ResolveStartTargetDeps, 'repositories'> {
+  return {
+    git: () => {
+      throw new Error('git should not be invoked directly in this case')
+    },
+    recents: { load: () => Promise.resolve([]), record: () => Promise.resolve() },
+    exists: () => Promise.resolve(true),
+    readSessions: () => Promise.resolve({ ok: true, sessions: [] }),
+    createWorktree: () => Promise.resolve({ ok: false, message: 'should not be called' }),
+    ...overrides,
+  }
+}
+
+function depsWith(overrides: Partial<HostingChannelDeps> = {}): HostingChannelDeps {
+  return {
+    listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
+    store: storeStub(),
+    sessionIndex: { load: () => Promise.resolve(), observe: () => undefined, list: () => [] },
+    listSessionFiles: () => {
+      throw new Error('listSessionFiles should not be invoked in this case')
+    },
+    resolveStartTarget: () => Promise.resolve({ ok: true, cwd: '/repo', workspace: WORKSPACE, repoId: REPO_ID, createdWorktree: null, recordPath: '/repo' } satisfies ResolvedStartTarget),
+    targetDeps: targetDepsStub(),
+    now: () => new Date('2026-01-01T00:00:00.000Z'),
+    removeCreatedWorktree: () => Promise.resolve(),
+    ...overrides,
+  }
+}
+
+describe('resolveSessionStart', () => {
+  it('rejects an unrecognised mode.kind', async () => {
+    await expect(resolveSessionStart(registryDeps, { target: FOLDER_TARGET, mode: { kind: 'bogus' } as never }, depsWith())).rejects.toThrow(
+      "'session:start' requires 'mode.kind' to be one of fresh | resume | resume-at | fork",
+    )
+  })
+
+  it('rejects resume with no sessionId', async () => {
+    await expect(resolveSessionStart(registryDeps, { target: FOLDER_TARGET, mode: { kind: 'resume', sessionId: '' } as never }, depsWith())).rejects.toThrow(
+      "'session:start' requires 'mode.kind'",
+    )
+  })
+
+  it('rejects resume-at with no messageUuid', async () => {
+    await expect(
+      resolveSessionStart(registryDeps, { target: FOLDER_TARGET, mode: { kind: 'resume-at', sessionId: 'x', messageUuid: '' } as never }, depsWith()),
+    ).rejects.toThrow("'session:start' requires 'mode.kind'")
+  })
+
+  it('rejects a malformed target', async () => {
+    await expect(resolveSessionStart(registryDeps, { target: { kind: 'bogus' } as never, mode: { kind: 'fresh' } }, depsWith())).rejects.toThrow(
+      "'session:start' requires 'target.kind'",
+    )
+  })
+
+  it('rejects a transcript target with mode.kind fresh', async () => {
+    await expect(resolveSessionStart(registryDeps, { target: { kind: 'transcript' }, mode: { kind: 'fresh' } }, depsWith())).rejects.toThrow(
+      "'session:start' requires 'target.kind'",
+    )
+  })
+
+  it('resolves the target and delegates to the store with its workspace', async () => {
+    const start = vi.fn(() => Promise.resolve({ ok: true as const, snapshot: {} as never }))
+    const deps = depsWith({ store: storeStub({ start }) })
+    await resolveSessionStart(registryDeps, { target: FOLDER_TARGET, mode: { kind: 'fresh' } }, deps)
+    expect(start).toHaveBeenCalledWith({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
+  })
+
+  it('records recents on a successful start with a non-null recordPath', async () => {
+    const start = vi.fn(() => Promise.resolve({ ok: true as const, snapshot: {} as never }))
+    const record = vi.fn(() => Promise.resolve())
+    const deps = depsWith({ store: storeStub({ start }), targetDeps: targetDepsStub({ recents: { load: () => Promise.resolve([]), record } }) })
+    await resolveSessionStart(registryDeps, { target: FOLDER_TARGET, mode: { kind: 'fresh' } }, deps)
+    expect(record).toHaveBeenCalledWith('/repo', expect.any(Date))
+  })
+
+  it('removes a created worktree when the store start fails', async () => {
+    const start = vi.fn(() => Promise.resolve({ ok: false as const, kind: 'at-capacity' as const, limit: 4 }))
+    const removeCreatedWorktree = vi.fn(() => Promise.resolve())
+    const deps = depsWith({
+      store: storeStub({ start }),
+      resolveStartTarget: () => Promise.resolve({ ok: true, cwd: '/repo/.claude/worktrees/session-a', workspace: WORKSPACE, repoId: REPO_ID, createdWorktree: { path: '/repo/.claude/worktrees/session-a' }, recordPath: '/repo' }),
+      removeCreatedWorktree,
+    })
+    await resolveSessionStart(registryDeps, { target: { ...FOLDER_TARGET, worktree: true }, mode: { kind: 'fresh' } }, deps)
+    expect(removeCreatedWorktree).toHaveBeenCalledWith('/repo/.claude/worktrees/session-a')
+  })
+
+  it('returns a typed target failure without ever reaching the store', async () => {
+    const deps = depsWith({ resolveStartTarget: () => Promise.resolve({ ok: false, kind: 'not-git' }) })
+    await expect(resolveSessionStart(registryDeps, { target: { ...FOLDER_TARGET, worktree: true }, mode: { kind: 'fresh' } }, deps)).resolves.toEqual({ ok: false, kind: 'not-git' })
+  })
+})
+
+describe('resolveSessionSend', () => {
+  it('rejects a missing sessionKey', () => {
+    expect(() => resolveSessionSend({ sessionKey: undefined as unknown as SessionKey, text: 'hi' }, depsWith())).toThrow(
+      "'session:send' requires a non-empty 'sessionKey'",
+    )
+  })
+
+  it('rejects empty text with no attachments', () => {
+    expect(() => resolveSessionSend({ sessionKey: SESSION_KEY, text: '' }, depsWith())).toThrow("'session:send' requires a non-empty 'text' when there are no attachments")
+  })
+
+  it('delegates to the store, marking the send as the operator’s own', () => {
+    const send = vi.fn(() => ({ ok: true as const, uuid: 'u', queued: true }))
+    resolveSessionSend({ sessionKey: SESSION_KEY, text: 'hi' }, depsWith({ store: storeStub({ send }) }))
+    expect(send).toHaveBeenCalledWith(SESSION_KEY, 'hi', [], { source: 'operator' })
+  })
+
+})
+
+describe('resolveSessionInterrupt / resolveSessionClose / resolveSessionAttach', () => {
+  it('all reject a missing sessionKey', () => {
+    const deps = depsWith()
+    expect(() => resolveSessionInterrupt({ sessionKey: '' as SessionKey }, deps)).toThrow("'session:interrupt' requires a non-empty 'sessionKey'")
+    expect(() => resolveSessionClose({ sessionKey: '' as SessionKey }, deps)).toThrow("'session:close' requires a non-empty 'sessionKey'")
+    expect(() => resolveSessionAttach({ sessionKey: '' as SessionKey }, deps)).toThrow("'session:attach' requires a non-empty 'sessionKey'")
+  })
+})
+
+describe('resolveSessionList', () => {
+  it('rejects a payload', () => {
+    expect(() => resolveSessionList({} as unknown as void, depsWith())).toThrow("'session:list' takes no payload")
+  })
+})
+
+describe('resolveSessionIndex', () => {
+  it('rejects a payload', () => {
+    expect(() => resolveSessionIndex({} as unknown as void, depsWith())).toThrow("'session:index' takes no payload")
+  })
+
+  it('returns the index list', () => {
+    expect(resolveSessionIndex(undefined, depsWith())).toEqual([])
+  })
+})
+
+describe('resolveSessionInvoke', () => {
+  it('rejects a missing sessionKey', () => {
+    expect(() => resolveSessionInvoke({ sessionKey: '' as SessionKey, name: 'pipeline', args: '' }, depsWith())).toThrow(
+      "'session:invoke' requires a non-empty 'sessionKey'",
+    )
+  })
+
+  it('rejects an empty name', () => {
+    expect(() => resolveSessionInvoke({ sessionKey: SESSION_KEY, name: '', args: '' }, depsWith())).toThrow("'session:invoke' requires a non-empty 'name'")
+  })
+
+  it('rejects args over the character cap', () => {
+    expect(() => resolveSessionInvoke({ sessionKey: SESSION_KEY, name: 'pipeline', args: 'x'.repeat(MAX_INVOKE_ARGS_CHARS + 1) }, depsWith())).toThrow(
+      `'session:invoke' requires 'args' to be a string of at most ${MAX_INVOKE_ARGS_CHARS} characters`,
+    )
+  })
+
+  it('delegates to the store, never validating the name itself here', () => {
+    const invoke = vi.fn(() => ({ ok: true as const, uuid: 'u', queued: true }))
+    resolveSessionInvoke({ sessionKey: SESSION_KEY, name: '/not-canonical', args: 'hi' }, depsWith({ store: storeStub({ invoke }) }))
+    expect(invoke).toHaveBeenCalledWith(SESSION_KEY, '/not-canonical', 'hi')
+  })
+})
+
+describe('resolveSessionPermissionAnswer', () => {
+  const base = { sessionKey: SESSION_KEY, permissionId: 'perm-1', decision: 'deny' as const, message: null }
+
+  it('rejects a missing sessionKey', () => {
+    expect(() => resolveSessionPermissionAnswer({ ...base, sessionKey: '' as SessionKey }, depsWith())).toThrow(
+      "'session:permission:answer' requires a non-empty 'sessionKey'",
+    )
+  })
+
+  it('rejects a missing permissionId', () => {
+    expect(() => resolveSessionPermissionAnswer({ ...base, permissionId: '' }, depsWith())).toThrow(
+      "'session:permission:answer' requires a non-empty 'permissionId'",
+    )
+  })
+
+  it('rejects an unrecognised decision', () => {
+    expect(() => resolveSessionPermissionAnswer({ ...base, decision: 'bogus' as never }, depsWith())).toThrow(
+      "'session:permission:answer' requires 'decision' to be one of allow-once, allow-session, deny",
+    )
+  })
+
+  it('rejects an empty-string message', () => {
+    expect(() => resolveSessionPermissionAnswer({ ...base, message: '' }, depsWith())).toThrow(
+      "'session:permission:answer' requires 'message' to be null or a string of 1-2000 characters",
+    )
+  })
+
+  it('rejects a message over 2000 characters', () => {
+    expect(() => resolveSessionPermissionAnswer({ ...base, message: 'x'.repeat(2001) }, depsWith())).toThrow(
+      "'session:permission:answer' requires 'message' to be null or a string of 1-2000 characters",
+    )
+  })
+
+  it('rejects a non-null message alongside a decision other than deny', () => {
+    expect(() => resolveSessionPermissionAnswer({ ...base, decision: 'allow-once', message: 'why' }, depsWith())).toThrow(
+      "'session:permission:answer' requires 'message' to be null when 'decision' is not 'deny'",
+    )
+  })
+
+})
+
+describe('resolveSessionDismiss', () => {
+  it('rejects a missing sessionKey', () => {
+    expect(() => resolveSessionDismiss({ sessionKey: '' as SessionKey, worktree: 'keep' }, depsWith({ store: storeStub({ snapshotOf: () => null }) }))).toThrow(
+      "'session:dismiss' requires a non-empty 'sessionKey'",
+    )
+  })
+
+  it('rejects an unrecognised worktree choice', () => {
+    expect(() => resolveSessionDismiss({ sessionKey: SESSION_KEY, worktree: 'bogus' as never }, depsWith({ store: storeStub({ snapshotOf: () => null }) }))).toThrow(
+      "'session:dismiss' requires 'worktree' to be one of keep, remove, force",
+    )
+  })
+
+  it('rejects a non-keep choice for a non-worktree session', () => {
+    const snapshotOf = () => ({ workspace: { folder: '/repo', root: '/repo', worktree: null, base: null } }) as never
+    expect(() => resolveSessionDismiss({ sessionKey: SESSION_KEY, worktree: 'remove' }, depsWith({ store: storeStub({ snapshotOf }) }))).toThrow(
+      "'session:dismiss' requires 'worktree' to be 'keep' for a non-worktree session",
+    )
+  })
+
+})
+
+describe('resolveSessionCapacity', () => {
+  it('rejects a payload', () => {
+    expect(() => resolveSessionCapacity({} as unknown as void, depsWith())).toThrow("'session:capacity' takes no payload")
+  })
+
+})
+
+describe('resolveSessionCapacitySet', () => {
+  it('rejects a non-integer limit', () => {
+    expect(() => resolveSessionCapacitySet({ limit: 1.5 }, depsWith())).toThrow("'session:capacity:set' requires 'limit' to be an integer from 1 to 8")
+  })
+
+  it('rejects a limit below 1', () => {
+    expect(() => resolveSessionCapacitySet({ limit: 0 }, depsWith())).toThrow("'session:capacity:set' requires 'limit' to be an integer from 1 to 8")
+  })
+
+  it('rejects a limit above the ceiling', () => {
+    expect(() => resolveSessionCapacitySet({ limit: 9 }, depsWith())).toThrow("'session:capacity:set' requires 'limit' to be an integer from 1 to 8")
+  })
+
+})
+
+describe('resolveSessionDefaults', () => {
+  it('rejects a payload', () => {
+    expect(() => resolveSessionDefaults({} as unknown as undefined, depsWith())).toThrow("'session:defaults' takes no payload")
+  })
+
+})
+
+describe('resolveSessionDefaultsSet', () => {
+  it('rejects an out-of-list model', () => {
+    expect(() => resolveSessionDefaultsSet({ model: 'gpt-5', permissionMode: 'default' } as never, depsWith())).toThrow(
+      "'session:defaults:set' requires 'model' to be null or one of opus, sonnet, haiku",
+    )
+  })
+
+  it('rejects an out-of-list permissionMode', () => {
+    expect(() => resolveSessionDefaultsSet({ model: null, permissionMode: 'bypassPermissions' } as never, depsWith())).toThrow(
+      "'session:defaults:set' requires 'permissionMode' to be one of default, acceptEdits, plan",
+    )
+  })
+
+})
+
+describe('resolveSessionRename', () => {
+  it('rejects an empty-string sessionKey', () => {
+    expect(() => resolveSessionRename({ sessionKey: '' as SessionKey, title: 'New title' }, depsWith())).toThrow("'session:rename' requires a non-empty 'sessionKey'")
+  })
+
+  it('rejects an empty or whitespace-only title', () => {
+    expect(() => resolveSessionRename({ sessionKey: SESSION_KEY, title: '   ' }, depsWith())).toThrow(
+      "'session:rename' requires 'title' to be non-empty and at most 80 characters once trimmed",
+    )
+  })
+
+  it('rejects a title over SESSION_TITLE_MAX once trimmed', () => {
+    expect(() => resolveSessionRename({ sessionKey: SESSION_KEY, title: 'x'.repeat(81) }, depsWith())).toThrow(
+      "'session:rename' requires 'title' to be non-empty and at most 80 characters once trimmed",
+    )
+  })
+
+  it('delegates the trimmed title', () => {
+    const rename = vi.fn(() => Promise.resolve({ ok: true as const }))
+    void resolveSessionRename({ sessionKey: SESSION_KEY, title: '  New title  ' }, depsWith({ store: storeStub({ rename }) }))
+    expect(rename).toHaveBeenCalledWith(SESSION_KEY, 'New title')
+  })
+})

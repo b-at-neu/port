@@ -8,25 +8,40 @@ This plugin is almost entirely prompts, which makes it easy to change confidentl
 node scripts/checks.ts
 ```
 
-No dependencies, no plugin install, no model calls. Runs in seconds, in an agent's worktree before it pushes, and in CI's `run-static-checks` job on every pull request, matrixed across `ubuntu-latest`, `macos-latest`, and `windows-latest` with no install step — the empty `node_modules` in that job is what makes the dependency-free invariant an executed assertion rather than a comment (`scripts/` is TypeScript, type-stripped at load by Node's own runtime — no toolchain needed to run it, only to type-check it). This is the only thing an agent runs before pushing; `.github/workflows/checks.yml` runs three further jobs CI-only: `run-schema-fixtures` (ubuntu only, full JSON Schema validation), `run-scripts-typecheck` (ubuntu only, `pnpm typecheck:scripts` — real type checking, which needs a toolchain a dispatched agent's worktree never has), `run-plugin-validate` (ubuntu only, `claude plugin validate ./plugins/port --strict` — built into the CLI, so nothing extra to install beyond it), and `run-app-checks` (the same three-OS matrix, `apps/desktop`'s typecheck/lint/test/build — see CONTRIBUTING.md → "Working on the desktop app" for why it stays out of `commands.checks`). The release corridor's own network-aware verdict (#275) is not among these — it runs separately, in `release-corridor.yml`, on push to `dev`/`main` only, since it needs `gh` and layer 1 must stay offline.
+No dependencies, no plugin install, no model calls. Runs in seconds, in an agent's worktree before it pushes, and in CI's `run-static-checks` job on every pull request, matrixed across `ubuntu-latest`, `macos-latest`, and `windows-latest` with no install step — the empty `node_modules` in that job is what makes the dependency-free invariant an executed assertion rather than a comment (`scripts/` is TypeScript, type-stripped at load by Node's own runtime — no toolchain needed to run it, only to type-check it). This is the only thing an agent runs before pushing; `.github/workflows/checks.yml` runs three further jobs CI-only: `run-schema-fixtures` (ubuntu only, full JSON Schema validation), `run-scripts-typecheck` (ubuntu only, `pnpm typecheck:scripts` — real type checking, which needs a toolchain a dispatched agent's worktree never has), `run-plugin-validate` (ubuntu only, `claude plugin validate ./plugins/port --strict` — built into the CLI, so nothing extra to install beyond it), and `run-app-checks` (the same three-OS matrix, `apps/desktop`'s typecheck/lint/test/build — see CONTRIBUTING.md → "Working on the desktop app" for why it stays out of `commands.checks`). `run-visual-check` (#317, `.github/workflows/visual.yml`, ubuntu only, path-filtered to `apps/desktop/**` and the toolchain root files) runs `pnpm screenshots` and uploads the `screenshots` and `visual-failures` artifacts — also out of `commands.checks`, since the command launches Electron. `run-app-checks-on-push` (#336, `.github/workflows/app-checks-push.yml`) runs the same `apps/desktop` typecheck/lint/test/build matrix on every push to `dev`, under a job name distinct from `run-app-checks` so #275's one-result-per-SHA rule still holds — `checks.yml` itself stays `pull_request`-only. `desktop-package.yml` (#335/#336) builds installers and smoke-tests the packaged binary (`smoke:packaged`) on pull requests targeting `main`, on push to `dev`, plus `workflow_dispatch`; the packaged smoke spec (`apps/desktop/tests/smoke/packaged.spec.mts`) launches the real electron-builder output with fixtures off and asserts a clean launch, mount, and quit. The same job also builds a separate fixture-enabled smoke copy (`dist:smoke`, into `dist/smoke/`) and runs the visual capture against it on all three OSes, uploading `packaged-screenshots-<os>`.
+
+The release corridor's own network-aware verdict (#275) is not among these — it runs separately, in `release-corridor.yml`, on push to `dev`/`main` only, since it needs `gh` and layer 1 must stay offline.
 
 **`claude plugin validate` is additive, never a replacement for the hand-rolled frontmatter checks above.** It covers `plugin.json` schema and `hooks/hooks.json` validity more thoroughly than layer 1 does, but it needs the `claude` binary — exactly the toolchain a dispatched agent's worktree never has, and exactly why layer 1's own component checks stay: trading a check every agent runs *before* pushing for one that only runs after would be a net loss in coverage where it matters most.
 
 **These guard against silence.** A skill or agent whose frontmatter is malformed is *absent* from Claude Code's component inventory rather than reported as an error, so nothing complains — the component simply is not there. Same for a hook.
 
-**Each guard is declared on the check that pins it, in `scripts/checks/`** — a `// guard(#N): <one line>` marker colocated on the block it describes, never a shared registry file every guard-adding pull request has to touch (#217; see `docs/ENGINEERING.md` §7).
-
-```bash
-node scripts/checks.ts --guards               # the whole guard index, one section per check module
-node scripts/checks.ts --guards --issue 149    # is there a guard for this fix? at least one row, or exit 1
-node scripts/checks.ts --pins                  # the whole copy-pin index, one section per check module
-```
+**Guards live in their topic module, on the check block they describe, never a shared registry file.**
 
 Each rule is worth testing by breaking it deliberately. If a check cannot be made to fail, it is not a check.
 
 The script reports full schema validation as **skipped**, because a draft 2020-12 validator is a dependency and the script must run where none is installed. CI does that part.
 
-**Every guard-adding pull request stays out of this file.** A guard's own description lives on the check block that pins it (`--guards` above), and a duplicated-content pin lives the same way (`--pins`, `docs/ENGINEERING.md` §2) — never restated here in prose, which is what regrew `docs/TESTING.md` into a hub after #217 first relieved it (#255).
+**Every guard-adding pull request stays out of this file.** A guard's own description lives on the check block that pins it, and a duplicated-content pin lives the same way (`docs/ENGINEERING.md` §2) — never restated here in prose, which is what regrew `docs/TESTING.md` into a hub after #217 first relieved it (#255).
+
+## Desktop app unit tests
+
+- Unit tests mirror `src/` under `apps/desktop/tests/unit/`: `src/main/hosting/store.ts` → `tests/unit/main/hosting/store.test.ts`.
+- Shared data, fakes and helpers used by more than one test live in `apps/desktop/tests/fixtures/`. A helper used by one test stays in that test.
+- Tests import source with `@/…`, never `../`. vitest reads tests only from `tests/unit/`.
+
+## Desktop E2E flows
+
+`apps/desktop/tests/e2e/` (#442) runs the **real, built** desktop app — fixtures off, real `registerIpc()` — with every `gh`/`git`/`node`/`claude` call routed to one fake CLI (`tests/e2e/fake/cli.mjs`) instead of the host's own binaries. It drives the app with Playwright's Electron support, asserting both the recorded calls and the resulting screen: clicks, dialogs, and IPC round-trips that no unit test or the visual harness's screenshot-only capture ever exercises.
+
+This is CI-only (`.github/workflows/e2e.yml`, a three-OS matrix) and never named in `commands.checks` — it builds and launches Electron, which an agent's own check run must never do. Run it locally with `pnpm e2e` (`pnpm --filter @port/desktop e2e`, which builds first).
+
+To add a flow:
+
+1. Build its scripted state with `sandboxState` (`tests/e2e/fake/state.mts`) — the only way a flow writes `fake-state.json`.
+2. Drive the UI by role or label (`page.getByRole(...)`), the same as the rest of the suite, never a CSS class a later refactor would break.
+3. Assert both `calls()` (every `gh`/`git` invocation the fake recorded, in order) and `state()` (the fake's own mutated copy of the scripted issues/pulls) through the `E2EApp` the harness (`tests/e2e/harness/app.mts`) returns, plus the resulting screen.
+4. Script every new call shape the flow needs in `cli.mjs` — an unscripted `gh`/`git` call exits 1 with `fake: unscripted <command> <args>` on stderr, and the flow's own assertion against an incomplete `state()` is what surfaces it as a failure.
 
 ## Layer 2 — artifact assertions on real runs
 
@@ -115,9 +130,9 @@ Every transcript byte is untrusted data: parsed and classified, never interprete
 ## Layer 3 — behavioural evals
 
 ```bash
-claude plugin eval port@port --scaffold --ablation with-without                                  # whole suite
-claude plugin eval port@port --scaffold --ablation with-without --case analyze-refuses-to-edit-source
-claude plugin eval port@port --scaffold --ablation with-without --tag init
+claude plugin eval port@port-dev --scaffold --ablation with-without                                  # whole suite
+claude plugin eval port@port-dev --scaffold --ablation with-without --case analyze-refuses-to-edit-source
+claude plugin eval port@port-dev --scaffold --ablation with-without --tag init
 ```
 
 Static checks cannot tell you whether a prompt *works* — whether the model actually refuses to edit source, or presents the rule set before writing. That needs running it, which costs money, so this layer is deliberate.
@@ -155,4 +170,4 @@ The pipeline's own two evaluation tiers — end-to-end (`evals/`) and component-
 | The 8 MB rotation cap is a literal | `scripts/checks/tick-events.ts` |
 | `SKILL.md` names `<commands.tick> start` and `--live`; `TICK-PROSE.md` carries the moved "Denial report" section | `scripts/checks/tick.ts` |
 | `computeParity` asserted against every row of `parity.cases.json`; `parity.ts` imports neither `events.ts` nor `report.ts`; `report.ts`'s `--desktop-events` mode calls `computeParity` rather than re-deriving the diff | `scripts/checks/tick-parity.ts` |
-| The dispatch/contention join-key field names (`item`/`stage`, `blocker`/`depth`) pinned between `apps/desktop/src/main/trajectory/types.ts` / `shared/tick/types.ts` and `events.ts`'s `tickEventPayload`, both directions | `scripts/checks/tick-parity.ts` |
+| The dispatch/contention join-key field names (`item`/`stage`, `blocker`/`depth`) pinned between `apps/desktop/src/types/trajectory.ts` / `types/tick.ts` and `events.ts`'s `tickEventPayload`, both directions | `scripts/checks/tick-parity.ts` |

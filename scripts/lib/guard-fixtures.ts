@@ -1,11 +1,7 @@
-// Shared fixtures for the guard-hook classifier tests split across
-// scripts/checks/hooks-classifier.ts, hooks-cockpit-rules.ts, and
-// hooks-gate-rule.ts (#181) — the payload factories and the `check()`
-// helper each of those three files needs, colocated here (outside
-// scripts/checks/, so neither harness.ts nor guards.ts scans it) rather
-// than reimplemented three times and drifting.
+// Shared fixtures for the guard-hook classifier tests split across scripts/checks/
+// hooks-classifier.ts, hooks-cockpit-rules.ts, and hooks-gate-rule.ts, colocated outside scripts/checks/ so neither harness.ts nor guards.ts scans it.
 import { join } from 'node:path';
-import { allowMatchers } from '../../plugins/port/hooks/lib/guard-rules.mjs';
+import { allowMatchers } from '#plugins/port/hooks/lib/guard-rules.mjs';
 import { root } from './files.ts';
 
 /** Resolves the repository's real Bash allow entries once. `fail` is called
@@ -17,13 +13,8 @@ export function resolveMatchers(fail: (check: string, detail: string) => void) {
   return matchers;
 }
 
-// A fixed, synthetic dispatched-agent worktree path — deliberately not
-// derived from `root`. `root` is wherever this script actually runs from,
-// which for a SESSION REQUIRED ticket is an `/port:implement` `impl-<n>`
-// worktree (this very ticket's own testing step runs from one) — reusing
-// it here would coincidentally satisfy `isOperatorWorktree` and silently
-// change what several cases below are actually testing, depending on
-// nothing but the directory the suite happens to run in.
+// A fixed, synthetic dispatched-agent worktree path, deliberately not derived from `root` —
+// reusing `root` could coincidentally satisfy `isOperatorWorktree` depending on the suite's own run directory.
 export const subagentPayload = (overrides = {}) => ({
   cwd: '/home/operator/some-project/.claude/worktrees/agent-fixture123',
   session_id: 'sess-1',
@@ -41,11 +32,7 @@ export const plainPayload = (overrides = {}) => ({
   ...overrides,
 });
 
-// A fabricated root-level path, not this checkout's own — this script may
-// itself be running inside a dispatched agent's worktree
-// (`.claude/worktrees/agent-<hash>`), whose ancestor path would otherwise
-// make `.claude/worktrees/impl-503` match the *agent* worktree signal too,
-// for the wrong reason. Same rationale as `subagentPayload` above.
+// A fabricated root-level path, not this checkout's own, for the same reason as `subagentPayload` above.
 export const operatorWorktreePayload = (overrides = {}) => ({
   cwd: '/home/operator/some-other-project/.claude/worktrees/impl-503',
   session_id: 'sess-implement',
@@ -53,15 +40,33 @@ export const operatorWorktreePayload = (overrides = {}) => ({
   ...overrides,
 });
 
-// Deliberately neither an `agent-` nor an `impl-` name — a naming scheme
-// this repository's harness doesn't use, so this isolates
-// `isManagedWorktree` (any `.claude/worktrees/` path) from the two *other*
-// signals (`isSubagent` via `agent-`, `isOperatorWorktree` via `impl-`)
-// that would otherwise make a case pass for the wrong reason.
+// An app stage session running in an `impl-<n>` worktree: the same cwd as `operatorWorktreePayload`, but carrying an agent identity.
+export const stageInImplWorktreePayload = (overrides = {}) => ({
+  cwd: '/home/operator/some-other-project/.claude/worktrees/impl-503',
+  session_id: 'sess-stage-impl',
+  transcript_path: '/home/operator/.claude/projects/some-other-project/sess-stage-impl.jsonl',
+  agent_type: 'port:impl-agent',
+  tool_name: 'Bash',
+  ...overrides,
+});
+
+// Deliberately neither an `agent-` nor an `impl-` name, isolating `isManagedWorktree` from the two other signals.
 export const managedWorktreePayload = (overrides = {}) => ({
   cwd: '/home/operator/some-other-project/.claude/worktrees/other-9',
   session_id: 'sess-worktree',
   tool_name: 'Bash',
+  ...overrides,
+});
+
+// The main thread of an app-launched `agent:`-option stage session: `agent_type` present,
+// `agent_id` absent, a non-subagent transcript, cwd under the app's own `session-` worktree.
+export const topLevelAgentPayload = (overrides = {}) => ({
+  cwd: '/home/operator/some-project/.claude/worktrees/session-abc123',
+  session_id: 'sess-toplevel',
+  transcript_path: '/home/operator/.claude/projects/some-project/sess-toplevel.jsonl',
+  agent_type: 'port:impl-agent',
+  tool_name: 'Edit',
+  tool_input: { file_path: '.claude/port.config.json' },
   ...overrides,
 });
 
@@ -73,3 +78,11 @@ export const makeCheck = (fail: (check: string, detail: string) => void, ok: () 
     ok();
   }
 };
+
+/** Binds a module's repeated `decide({ …fixed-base… })` literal to its own defaults, so each case passes only what differs. */
+export const makeDecide = (decide: (args: Record<string, unknown>) => { decision: string; reason?: string }, base: Record<string, unknown>) =>
+  (overrides: Record<string, unknown> = {}) => decide({ ...base, ...overrides });
+
+/** A payload shorthand for the common case of varying only the command. */
+export const bash = (command: string, payloadFn: (overrides?: object) => object = plainPayload) =>
+  payloadFn({ tool_input: { command } });

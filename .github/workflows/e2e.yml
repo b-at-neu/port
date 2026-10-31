@@ -1,0 +1,61 @@
+# Runs `pnpm e2e` on every pull request that touches apps/desktop —
+# the three E2E flows against the real app, every `gh`/`git` call routed to
+# the fake CLI under tests/e2e/fake. CI-only: never named in
+# `commands.checks` (see docs/TESTING.md → "Desktop E2E flows").
+
+name: E2E
+
+on:
+  pull_request:
+    paths:
+      - 'apps/desktop/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/e2e.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  run-e2e:
+    concurrency:
+      group: e2e-${{ github.ref }}-${{ matrix.os }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      # Electron's postinstall pulls ~100 MB per run otherwise — the same
+      # cache key `run-app-checks` (checks.yml) and `visual.yml` already use.
+      - name: Cache Electron download
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/electron-cache
+          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install xvfb
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
+      - name: E2E
+        run: pnpm e2e
+      - name: Upload failure diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failures-${{ matrix.os }}
+          path: apps/desktop/out/playwright-e2e/
+          retention-days: 14
+          if-no-files-found: ignore

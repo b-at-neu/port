@@ -1,9 +1,6 @@
-// Nodes → `PipelineItem`, merging by `kind + number` and unioning
-// `matchedKeys`. Never reconstruct a label key by comparing strings — every
-// item's `matchedKeys` comes from the alias table `query.ts` built, not from
-// re-matching `labels` against the vocabulary.
-import type { LabelKey } from '../../shared/labels/vocabulary'
-import type { CheckContext, ItemState, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, QueriedLabel, ReviewNode } from '../../shared/github/types'
+// Nodes → PipelineItem. matchedKeys is bucketed here, client-side, against the resolved vocabulary.
+import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { CheckContext, ItemDetail, ItemState, LabelEventNode, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, ReviewNode } from '@/types/github'
 
 interface ConnectionLike {
   readonly totalCount?: unknown
@@ -21,6 +18,7 @@ interface RawNode {
   readonly body?: unknown
   readonly state?: unknown
   readonly mergedAt?: unknown
+  readonly updatedAt?: unknown
   readonly assignees?: unknown
   readonly labels?: unknown
   readonly headRefOid?: unknown
@@ -28,6 +26,7 @@ interface RawNode {
   readonly reviews?: unknown
   readonly comments?: unknown
   readonly commits?: unknown
+  readonly timelineItems?: unknown
 }
 
 function isRawNode(value: unknown): value is RawNode {
@@ -42,11 +41,8 @@ function numberField(value: unknown): number | undefined {
   return typeof value === 'number' ? value : undefined
 }
 
-/** Reads `{ nodes: [{ <field>: string }] }`, filtering out anything that
- *  isn't a string — an unassigned item legitimately has an empty
- *  `assignees.nodes` and must map to `[]`, not be dropped. Exported so
- *  `fetchItemsByNumber` (`adapter.ts`) reads `ResolvedItem.labels` the same
- *  way, rather than a second ad hoc reader. */
+/** Reads `{ nodes: [{ <field>: string }] }`, filtering out non-strings — an unassigned item
+ *  legitimately has an empty `assignees.nodes` and must map to `[]`, not be dropped. */
 export function fieldListOf(value: unknown, field: 'login' | 'name'): readonly string[] {
   const connection = asConnection(value)
   const nodes = connection?.nodes
@@ -60,19 +56,14 @@ export function fieldListOf(value: unknown, field: 'login' | 'name'): readonly s
   return out
 }
 
-/** Maps GitHub's own mergeability enum to `Mergeable` verbatim — anything
- *  else (an unrecognized string, or absence) reads as `null`, never guessed
- *  as one of the three real values. */
+/** Maps GitHub's own mergeability enum to `Mergeable` verbatim — anything else reads as `null`. */
 function mergeableOf(value: unknown): Mergeable {
   if (value === 'MERGEABLE' || value === 'CONFLICTING' || value === 'UNKNOWN') return value
   return null
 }
 
-/** Reads `{ nodes: [{ body, submittedAt, commit: { oid } }] }` — the
- *  review's own `commit.oid` is flattened to `commitOid` here so nothing
- *  downstream (`main/tick/gates.ts`) ever reaches into a nested GraphQL
- *  shape. Filters out anything that is not string-shaped the same way
- *  `fieldListOf` does. */
+/** `commit.oid` is flattened to `commitOid` here so nothing downstream reaches into a nested
+ *  GraphQL shape. */
 function reviewNodesOf(value: unknown): readonly ReviewNode[] {
   const connection = asConnection(value)
   const nodes = connection?.nodes
@@ -89,13 +80,8 @@ function reviewNodesOf(value: unknown): readonly ReviewNode[] {
   return out
 }
 
-/** Reads the `CheckRollupFields` selection (#292): `{ commits: { nodes: [{
- *  commit: { statusCheckRollup: { contexts: { nodes: [...] } } } }] } }`.
- *  `undefined` — `commits` was never selected on this alias — reads as
- *  `null` ("this alias did not select it"); selected but reducing to no
- *  contexts at all (a missing `commits`/`statusCheckRollup` node, or a
- *  genuinely empty rollup) reads as `[]` ("selected but GitHub returned no
- *  rollup"), never conflated with "not selected". */
+/** Reads the `CheckRollupFields` selection. `undefined` — commits was never selected on this
+ *  alias — reads as `null`; selected but empty reads as `[]`, never conflated with "not selected". */
 function checkRollupOf(node: RawNode): readonly CheckContext[] | null {
   if (!('commits' in node)) return null
   const commits = asConnection(node.commits)
@@ -127,8 +113,7 @@ function checkRollupOf(node: RawNode): readonly CheckContext[] | null {
   return out
 }
 
-/** Reads `{ nodes: [{ body, createdAt }] }` — the `## Gate cleared`
- *  carve-out's own evidence, the same shape `reviewNodesOf` establishes. */
+/** The `## Gate cleared` carve-out's own evidence, the same shape `reviewNodesOf` establishes. */
 function commentNodesOf(value: unknown): readonly PullRequestCommentNode[] {
   const connection = asConnection(value)
   const nodes = connection?.nodes
@@ -143,9 +128,39 @@ function commentNodesOf(value: unknown): readonly PullRequestCommentNode[] {
   return out
 }
 
-function nodeToItem(node: RawNode, kind: PipelineItemKind, repo: string, key: LabelKey): PipelineItem | undefined {
+/** `LabeledEvent` nodes, raw label name unresolved — a node missing `createdAt`/`label.name` is
+ *  dropped; a ghost/deleted `actor` reads as `null`, never dropped. Absent `timelineItems` → `[]`. */
+function labelEventsOf(value: unknown): readonly LabelEventNode[] {
+  const connection = asConnection(value)
+  const nodes = connection?.nodes
+  if (!Array.isArray(nodes)) return []
+  const out: LabelEventNode[] = []
+  for (const node of nodes) {
+    if (typeof node !== 'object' || node === null) continue
+    const raw = node as Record<string, unknown>
+    if (typeof raw.createdAt !== 'string') continue
+    const label = typeof raw.label === 'object' && raw.label !== null ? (raw.label as Record<string, unknown>) : undefined
+    const labelName = typeof label?.name === 'string' ? label.name : undefined
+    if (labelName === undefined) continue
+    const actor = typeof raw.actor === 'object' && raw.actor !== null ? (raw.actor as Record<string, unknown>) : undefined
+    const login = typeof actor?.login === 'string' ? actor.login : null
+    out.push({ label: labelName, actor: login, at: raw.createdAt })
+  }
+  return out
+}
+
+/** The vocabulary keys, in vocabulary order, whose name matches one of `labels` — case-insensitively, as GitHub's own `labels:` filter does. */
+function matchedKeysOf(labels: readonly string[], vocabulary: LabelVocabulary): readonly LabelKey[] {
+  const present = new Set(labels.map((label) => label.toLowerCase()))
+  return vocabulary.labels.filter((label) => present.has(label.name.toLowerCase())).map((label) => label.key)
+}
+
+function nodeToItem(node: RawNode, kind: PipelineItemKind, repo: string, vocabulary: LabelVocabulary): PipelineItem | undefined {
   const number = numberField(node.number)
   if (number === undefined) return undefined
+  const labels = fieldListOf(node.labels, 'name')
+  const matchedKeys = matchedKeysOf(labels, vocabulary)
+  if (matchedKeys.length === 0) return undefined
   const isPullRequest = kind === 'pull-request'
   return {
     repo,
@@ -156,68 +171,51 @@ function nodeToItem(node: RawNode, kind: PipelineItemKind, repo: string, key: La
     body: stringField(node.body),
     state: stringField(node.state),
     mergedAt: typeof node.mergedAt === 'string' ? node.mergedAt : null,
+    updatedAt: typeof node.updatedAt === 'string' ? node.updatedAt : null,
     assignees: fieldListOf(node.assignees, 'login'),
-    labels: fieldListOf(node.labels, 'name'),
-    matchedKeys: [key],
+    labels,
+    matchedKeys,
+    labelEvents: [],
     headRefOid: isPullRequest && typeof node.headRefOid === 'string' ? node.headRefOid : null,
     mergeable: isPullRequest ? mergeableOf(node.mergeable) : null,
-    reviews: isPullRequest ? reviewNodesOf(node.reviews) : null,
-    comments: isPullRequest ? commentNodesOf(node.comments) : null,
-    checkRollup: isPullRequest ? checkRollupOf(node) : null,
+    reviews: isPullRequest ? [] : null,
+    comments: isPullRequest ? [] : null,
+    checkRollup: null,
   }
 }
 
-/**
- * `repository` is the envelope's `data.repository` object; `aliases` is the
- * table `buildPipelineQuery` returned alongside the document it built.
- * Merging by `kind + number` is why an item returned by three aliases (three
- * pipeline labels at once) appears exactly once, with the union of the three
- * `matchedKeys`.
- */
-export function mapPipelineItems(repository: Readonly<Record<string, unknown>>, aliases: readonly QueriedLabel[], repo: string): readonly PipelineItem[] {
-  const merged = new Map<string, PipelineItem>()
+/** Sweep nodes of one surface → light items; an item seen on two pages is kept once, and a node
+ *  matching no vocabulary label is dropped. */
+export function mapPipelineItems(nodes: readonly unknown[], kind: PipelineItemKind, vocabulary: LabelVocabulary, repo: string): readonly PipelineItem[] {
+  const byNumber = new Map<number, PipelineItem>()
+  for (const raw of nodes) {
+    if (!isRawNode(raw)) continue
+    const item = nodeToItem(raw, kind, repo, vocabulary)
+    if (item) byNumber.set(item.number, item)
+  }
+  return [...byNumber.values()]
+}
 
-  function ingest(aliasName: string, kind: PipelineItemKind, key: LabelKey): void {
-    const connection = asConnection(repository[aliasName])
-    const nodes = connection?.nodes
-    if (!Array.isArray(nodes)) return
-    for (const raw of nodes) {
-      if (!isRawNode(raw)) continue
-      const item = nodeToItem(raw, kind, repo, key)
-      if (!item) continue
-      const mapKey = `${kind}:${item.number}`
-      const existing = merged.get(mapKey)
-      if (!existing) {
-        merged.set(mapKey, item)
-        continue
-      }
-      // #292: the cross-alias merge keeps whichever copy of `checkRollup` is
-      // non-null — only the `approved` alias ever selects it, so this never
-      // overwrites a real rollup with an unselected `null` from another
-      // alias the same item also matched.
-      if (!existing.matchedKeys.includes(key) || existing.checkRollup === null) {
-        merged.set(mapKey, {
-          ...existing,
-          matchedKeys: existing.matchedKeys.includes(key) ? existing.matchedKeys : [...existing.matchedKeys, key],
-          checkRollup: existing.checkRollup ?? item.checkRollup,
-        })
-      }
+/** Overlays the detail read onto the swept items. An item with no detail keeps its placeholders —
+ *  `fetchPipelineItems` fails the whole read before that can reach a caller. */
+export function applyItemDetails(items: readonly PipelineItem[], details: readonly ItemDetail[]): readonly PipelineItem[] {
+  const byKey = new Map(details.map((detail) => [`${detail.kind}:${detail.number}`, detail.node]))
+  return items.map((item) => {
+    const node = byKey.get(`${item.kind}:${item.number}`)
+    if (!isRawNode(node)) return item
+    const isPullRequest = item.kind === 'pull-request'
+    return {
+      ...item,
+      labelEvents: labelEventsOf(node.timelineItems),
+      reviews: isPullRequest ? reviewNodesOf(node.reviews) : null,
+      comments: isPullRequest ? commentNodesOf(node.comments) : null,
+      checkRollup: isPullRequest ? checkRollupOf(node) : null,
     }
-  }
-
-  for (const alias of aliases) {
-    ingest(alias.issueAlias, 'issue', alias.key)
-    ingest(alias.prAlias, 'pull-request', alias.key)
-  }
-
-  return [...merged.values()]
+  })
 }
 
-/** Overlays `fetchItemStates` results onto an already-mapped item list —
- *  `state`/`mergedAt` are constant (`OPEN`/`null`) on the open-only sweep, so
- *  this is the only place either field changes. An item with no matching
- *  state is returned unchanged; a state with no matching item is ignored
- *  (the caller reports it via `unavailable` instead). */
+/** Overlays `fetchItemStates` results onto an already-mapped item list. An item with no matching
+ *  state is returned unchanged; a state with no matching item is ignored. */
 export function applyItemStates(items: readonly PipelineItem[], states: readonly ItemState[]): readonly PipelineItem[] {
   const byKey = new Map(states.map((state) => [`${state.kind}:${state.number}`, state]))
   return items.map((item) => {

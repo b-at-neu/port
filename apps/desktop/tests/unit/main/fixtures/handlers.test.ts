@@ -1,0 +1,254 @@
+import { describe, expect, it } from 'vitest'
+import { IPC_CHANNELS } from '@/types/ipc'
+import type { IpcChannel } from '@/types/ipc'
+import { needsYouItems } from '@/renderer/board/needs-you'
+import { projectBoard } from '@/renderer/board/project'
+import type { RepoId } from '@/utils/repos'
+import { fixtureHandlers } from '@/main/fixtures/handlers'
+import { RESUMED_KEY, STREAMING_KEY } from '@/main/fixtures/sessions'
+
+const WIDGETS = 'fixture-acme-widgets' as RepoId
+
+// A representative request for every channel whose request is not `void` —
+// fixture handlers never validate, so any well-typed shape exercises them.
+const SAMPLE_REQUESTS: Partial<Record<IpcChannel, unknown>> = {
+  'repos:remove': { id: 'fixture-acme-widgets' },
+  'worktrees:report': { id: 'fixture-acme-widgets' },
+  'worktrees:reclaim': { id: 'fixture-acme-widgets', issue: null },
+  'transcript:tail:open': { sessionId: 'fixture-session', agentId: null },
+  'transcript:tail:poll': { tailId: 'fixture-tail' },
+  'transcript:tail:close': { tailId: 'fixture-tail' },
+  'search:query': { query: 'reports', scope: { kind: 'all' } },
+  'board:refresh': {},
+  'claim:preflight': { repoId: 'fixture-acme-widgets', number: 41 },
+  'claim:apply': { repoId: 'fixture-acme-widgets', number: 41, planGate: 'review', confirmedAssignees: [] },
+  'item:action': { repoId: 'fixture-acme-widgets', kind: 'issue', number: 44, action: 'retry', expectedStage: null },
+  'dispatch:control': { command: 'drain' },
+  'runtime:probe': { repoId: 'fixture-acme-widgets' },
+  'gate:preflight': { repoId: 'fixture-acme-widgets', number: 41 },
+  'gate:answer': { repoId: 'fixture-acme-widgets', number: 41, decision: 'approve', feedback: null, skipComment: false },
+  'session:start': { target: { kind: 'folder', folderId: 'fixture-folder-1', worktree: false }, mode: { kind: 'fresh' } },
+  'session:send': { sessionKey: 'hosted-1', text: 'hello' },
+  'session:interrupt': { sessionKey: 'hosted-1' },
+  'session:close': { sessionKey: 'hosted-1' },
+  'session:attach': { sessionKey: 'hosted-1' },
+  'session:permission:answer': { sessionKey: 'hosted-1', permissionId: 'p1', decision: 'deny', message: null },
+  'session:invoke': { sessionKey: 'hosted-1', name: 'pipeline', args: '' },
+  'session:dismiss': { sessionKey: 'hosted-1', worktree: 'keep' },
+  'session:capacity:set': { limit: 4 },
+  'session:restore': { restoreId: 'r1' },
+  'session:restore:discard': { restoreId: null },
+  'backlog:list': { repoId: 'fixture-acme-widgets' },
+  'session:changes': { sessionKey: STREAMING_KEY },
+  'session:pin:set': { sessionId: 'fixture-claude-1', pinned: true },
+  'session:archive:set': { sessionId: 'fixture-claude-1', archived: true },
+}
+
+describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', (scenario) => {
+  const now = new Date('2026-09-05T14:00:00.000Z')
+  const handlers = fixtureHandlers(now, scenario)
+
+  it('has a handler for every IPC channel', () => {
+    for (const channel of IPC_CHANNELS) {
+      expect(typeof handlers[channel]).toBe('function')
+    }
+  })
+
+  it('returns without throwing for every channel, called with a representative request', () => {
+    for (const channel of IPC_CHANNELS) {
+      const request = SAMPLE_REQUESTS[channel]
+      expect(() => (handlers[channel] as (req: unknown) => unknown)(request)).not.toThrow()
+    }
+  })
+
+  it('reports repos:list with two ready and one not-ready entry', () => {
+    const result = handlers['repos:list'](undefined)
+    if (!result.ok) throw new Error('fixture repos:list unexpectedly failed')
+    expect(result.repositories).toHaveLength(3)
+    expect(result.repositories.filter((r) => 'config' in r)).toHaveLength(2)
+    expect(result.repositories.filter((r) => !('config' in r))).toHaveLength(1)
+  })
+
+  it('reports runtime:preflight as unverified', () => {
+    expect(handlers['runtime:preflight'](undefined).diagnosis).toBe('unverified')
+  })
+
+  describe('board:snapshot', () => {
+    const snapshot = handlers['board:snapshot'](undefined)
+
+    it('has two ok repositories and one not-ready repository', () => {
+      expect(snapshot.state.repositories).toHaveLength(3)
+      expect(snapshot.state.repositories.filter((r) => r.ok)).toHaveLength(2)
+      expect(snapshot.state.repositories.filter((r) => !r.ok)).toHaveLength(1)
+    })
+
+    it.runIf(scenario === 'populated')('has one item each with status gated, in-flight, waiting, and terminal', () => {
+      const ok = snapshot.state.repositories.find((r) => r.ok)
+      if (ok === undefined || !ok.ok) throw new Error('fixture board carries no ok repository')
+      const statuses = new Set(ok.items.map((item) => item.status))
+      expect(statuses.has('gated')).toBe(true)
+      expect(statuses.has('in-flight')).toBe(true)
+      expect(statuses.has('waiting')).toBe(true)
+      expect(statuses.has('terminal')).toBe(true)
+    })
+
+    it.runIf(scenario === 'empty')('produces an empty Needs you list', () => {
+      expect(needsYouItems(snapshot, now)).toHaveLength(0)
+    })
+
+    it.runIf(scenario === 'populated')('produces a non-empty Needs you list', () => {
+      expect(needsYouItems(snapshot, now).length).toBeGreaterThan(0)
+    })
+
+    it('never times anything after now', () => {
+      const ok = snapshot.state.repositories.find((r) => r.ok)
+      if (ok === undefined || !ok.ok) throw new Error('fixture board carries no ok repository')
+      const github = ok.freshness.github
+      if ('at' in github) expect(Date.parse(github.at)).toBeLessThanOrEqual(now.getTime())
+      for (const item of ok.items) {
+        for (const agent of item.agents) {
+          expect(Date.parse(agent.lastActivityAt)).toBeLessThanOrEqual(now.getTime())
+        }
+      }
+    })
+
+    it.runIf(scenario === 'populated')('holds #52 as unowned, for a held note on the Board', () => {
+      const report = snapshot.tick.find((r) => r.held.some((h) => h.number === 52))
+      expect(report?.held.find((h) => h.number === 52)?.reason).toBe('unowned')
+    })
+
+    it.runIf(scenario === 'populated')('carries a held #53 (conflicting) and a stalled #54 in the Needs you list', () => {
+      const items = needsYouItems(snapshot, now)
+      const held = items.find((i) => i.kind === 'held' && i.number === 53)
+      const stalled = items.find((i) => i.kind === 'stalled' && i.number === 54)
+      expect(held).toMatchObject({ held: { reason: 'conflicting' } })
+      expect(stalled).toBeDefined()
+    })
+
+    it.runIf(scenario === 'populated')('carries #37 at needs human with an Unblock that lists its two rebase decisions', () => {
+      const item = needsYouItems(snapshot, now).find((i) => i.kind === 'needs-human' && i.number === 37)
+      const unblock = item !== undefined && item.kind === 'needs-human' ? item.matchedRow?.decisions.unblock : undefined
+      expect(unblock).toMatchObject({
+        available: true,
+        context: {
+          decisions: [
+            { id: 'D1', path: 'src/money.ts', recommended: 'B' },
+            { id: 'D2', path: 'src/format.ts', recommended: 'C' },
+          ],
+        },
+      })
+    })
+  })
+
+  it('reports gate:preflight as answerable, with a plan body carrying a heading, list, code, table and link', () => {
+    const response = handlers['gate:preflight']({ repoId: WIDGETS, number: 41 })
+    if (response.kind !== 'resolved') throw new Error('fixture gate:preflight did not resolve')
+    expect(response.verdict.kind).toBe('answerable')
+    const plan = response.preflight.planMarkdown ?? ''
+    expect(plan).toContain('## Overview')
+    expect(plan).toContain('1. ')
+    expect(plan).toContain('```ts')
+    expect(plan).toContain('| Column | Type |')
+    expect(plan).toContain('[the report spec]')
+  })
+
+  it('reports claim:preflight as claimable', () => {
+    const response = handlers['claim:preflight']({ repoId: WIDGETS, number: 44 })
+    if (response.kind !== 'resolved') throw new Error('fixture claim:preflight did not resolve')
+    expect(response.verdict.kind).toBe('claimable')
+  })
+
+  it('reports worktrees:report with one each of active, done, dirty and locked, plus one orphan dir', () => {
+    const report = handlers['worktrees:report']({ id: WIDGETS })
+    if (!report.ok) throw new Error('fixture worktrees:report unexpectedly failed')
+    const states = report.worktrees.map((w) => w.state).sort()
+    expect(states).toEqual(['active', 'dirty', 'done', 'locked'])
+    expect(report.orphanDirs).toHaveLength(1)
+  })
+
+  it.runIf(scenario === 'populated')('reports session:list with nine snapshots covering streaming, ended, starting, a question, a plan, three stage sessions, and a resumed session', () => {
+    const snapshots = handlers['session:list'](undefined)
+    expect(snapshots.map((s) => s.phase).sort()).toEqual(['ended', 'ready', 'ready', 'starting', 'streaming', 'streaming', 'streaming', 'streaming', 'streaming'])
+    expect(snapshots.find((s) => s.phase === 'ended')?.end?.diagnosis).not.toBeNull()
+    expect(snapshots.filter((s) => s.pendingPermissions.some((p) => p.interaction?.kind === 'question'))).toHaveLength(1)
+    expect(snapshots.filter((s) => s.pendingPermissions.some((p) => p.interaction?.kind === 'plan'))).toHaveLength(1)
+    expect(snapshots.filter((s) => s.stage !== null).map((s) => s.stage?.number).sort()).toEqual([38, 44, 51])
+  })
+
+  it.runIf(scenario === 'populated')('shows exactly one #51 row in Needs you, carrying the blocker text and its live session', () => {
+    const snapshot = handlers['board:snapshot'](undefined)
+    const items = needsYouItems(snapshot, now, handlers['session:list'](undefined)).filter((i) => i.number === 51)
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ kind: 'stage-blocked', sessionKey: 'fixture-stage-impl-51' })
+    expect(items[0]?.kind === 'stage-blocked' ? items[0].text : null).toMatch(/^The Q3 ledger export has no currency column\./)
+  })
+
+  it.runIf(scenario === 'populated')('dispatches #44 on the Board: in flight, with a live plan stage, before its label moves', () => {
+    const snapshot = handlers['board:snapshot'](undefined)
+    const rows = projectBoard({ snapshot, groupBy: 'repo', now, sessions: handlers['session:list'](undefined) }).rows
+    const row = rows.find((r) => r.item.number === 44)
+    expect(row?.liveStage).toMatchObject({ agent: 'plan', trigger: 'ready' })
+    expect(row?.displayStatus.status).toBe('in-flight')
+    expect(row?.item.status).toBe('waiting')
+  })
+
+  // The permission dialog is app-wide, so its one fixture session is kept out of the
+  // populated scenario's own session:list — see sessions.ts's own note on fixturePermissionSnapshots.
+  it.runIf(scenario === 'empty')('reports session:list with the one pending-permission snapshot', () => {
+    const snapshots = handlers['session:list'](undefined)
+    expect(snapshots.map((s) => s.phase)).toEqual(['ready'])
+    expect(snapshots[0]?.pendingPermissions).toHaveLength(1)
+  })
+
+  it('reports session:attach for the streaming fixture with tool cards and a nested subagent', () => {
+    const result = handlers['session:attach']({ sessionKey: STREAMING_KEY })
+    if (!result.ok) throw new Error('fixture session:attach unexpectedly failed')
+    expect(result.entries[0]?.type).toBe('user-text')
+    expect(result.entries.filter((e) => e.type === 'tool-call')).not.toHaveLength(0)
+    expect(result.entries.some((e) => e.parentToolUseId !== undefined)).toBe(true)
+    expect(result.history).toEqual({ kind: 'none' })
+  })
+
+  it('reports session:attach for the resumed fixture with loaded history', () => {
+    const result = handlers['session:attach']({ sessionKey: RESUMED_KEY })
+    if (!result.ok) throw new Error('fixture session:attach unexpectedly failed')
+    expect(result.history.kind).toBe('loaded')
+  })
+
+  it('reports sessions:scan with at least one session and one agent', () => {
+    const scan = handlers['sessions:scan'](undefined)
+    if (!scan.ok) throw new Error('fixture sessions:scan unexpectedly failed')
+    expect(scan.sessions.length).toBeGreaterThan(0)
+    expect(scan.agents.length).toBeGreaterThan(0)
+  })
+
+  it('reports search:query with at least one group and hit', () => {
+    const result = handlers['search:query']({ query: 'widgets', scope: { kind: 'all' } })
+    if (!result.ok) throw new Error('fixture search:query unexpectedly failed')
+    expect(result.groups.length).toBeGreaterThan(0)
+    expect(result.groups[0]?.hits.length).toBeGreaterThan(0)
+  })
+
+  it('reports folders:list with one port repo and one plain folder', () => {
+    const result = handlers['folders:list'](undefined)
+    expect(result.folders).toHaveLength(2)
+    expect(result.folders.filter((folder) => folder.git !== null)).toHaveLength(1)
+    expect(result.folders.filter((folder) => folder.git === null)).toHaveLength(1)
+  })
+
+  it('reports folders:choose as cancelled', () => {
+    expect(handlers['folders:choose'](undefined)).toEqual({ outcome: 'cancelled' })
+  })
+
+  it('reports session:changes with a two-file diff for the streaming session', () => {
+    const result = handlers['session:changes']({ sessionKey: STREAMING_KEY })
+    if (!result.ok) throw new Error('fixture session:changes unexpectedly failed')
+    expect(result.files).toHaveLength(2)
+  })
+
+  it('reports session:changes as unknown-session for any other key', () => {
+    const result = handlers['session:changes']({ sessionKey: 'hosted-999' as typeof STREAMING_KEY })
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.kind).toBe('unknown-session')
+  })
+})

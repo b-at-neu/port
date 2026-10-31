@@ -1,20 +1,17 @@
-// The agent, session, and worktree attachment ladders (#79 Decision 3), plus
-// the orphan-number collector (Decision 4) — pure, no I/O.
-import type { AgentRecord, SessionRecord } from '../../shared/sessions/types'
-import type { WorktreeEntry } from '../../shared/local/types'
-import type { AttachedAgent, AttachedSession, AttachedWorktree } from '../../shared/state/types'
+// The agent, session, and worktree attachment ladders, plus the orphan-number collector — pure, no I/O.
+import type { AgentRecord, SessionRecord } from '@/types/sessions'
+import type { WorktreeEntry } from '@/types/local'
+import type { PipelineItemKind } from '@/types/github'
+import type { AttachedAgent, AttachedSession, AttachedWorktree, WorkSession } from '@/types/state'
+import { pathOps } from '@/main/platform/paths'
 
-export interface AttachTarget {
+interface AttachTarget {
   readonly number: number
-  /** This item's linked counterpart (issue ↔ pull request), or `null` — the
-   *  `match: 'linked'` rung is how a `review #<pr>` dispatch, whose
-   *  `itemNumber` names the pull request, attaches to the issue instead. */
+  /** This item's linked counterpart (issue ↔ pull request), or `null` — how a `review #<pr>` dispatch attaches to the issue instead. */
   readonly linked: number | null
 }
 
-/** Direct number match first, then the linked counterpart — an agent record
- *  with `itemNumber: null` (a non-port agent like `Explore`) attaches to
- *  nothing. */
+/** Direct number match first, then the linked counterpart — an agent with `itemNumber: null` attaches to nothing. */
 export function attachAgents(item: AttachTarget, agents: readonly AgentRecord[]): readonly AttachedAgent[] {
   const attached: AttachedAgent[] = []
   for (const agent of agents) {
@@ -30,15 +27,13 @@ export function attachAgents(item: AttachTarget, agents: readonly AgentRecord[])
       idleMs: agent.idleMs,
       lastActivityAt: agent.lastActivityAt,
       match,
+      sessionId: agent.sessionId,
     })
   }
   return attached
 }
 
-/** The same ladder as `attachAgents`, over `SessionRecord`s instead — a
- *  `SESSION REQUIRED` ticket's `/port:implement` session carries
- *  `role: 'implement'` and its own `itemNumber` (from the `impl-<n>`
- *  worktree name), and matches here even though it spawns no subagent. */
+/** The same ladder as `attachAgents`, over `SessionRecord`s — an `/port:implement` session matches even though it spawns no subagent. */
 export function attachSessions(item: AttachTarget, sessions: readonly SessionRecord[]): readonly AttachedSession[] {
   const attached: AttachedSession[] = []
   for (const session of sessions) {
@@ -58,9 +53,7 @@ export function attachSessions(item: AttachTarget, sessions: readonly SessionRec
   return attached
 }
 
-/** A worktree whose `unresolved` is set never attaches to anything here — it
- *  goes to the repository-level `uncorrelatedWorktrees` instead, with its
- *  reason intact (`reconcile.ts`'s job, not this ladder's). */
+/** A worktree with no correlation never attaches here — it goes to `uncorrelatedWorktrees` instead, which is `reconcile.ts`'s job. */
 export function attachWorktrees(item: AttachTarget, worktrees: readonly WorktreeEntry[]): readonly AttachedWorktree[] {
   const attached: AttachedWorktree[] = []
   for (const worktree of worktrees) {
@@ -78,13 +71,61 @@ export function attachWorktrees(item: AttachTarget, worktrees: readonly Worktree
   return attached
 }
 
-/**
- * Every number a worktree's correlation or an agent record's `itemNumber`
- * names, absent from the open sweep's own item numbers — the deduplicated
- * re-check set `fetchItemsByNumber` (#79 Decision 4) resolves. `#0` is
- * already excluded at both sources (`correlate.ts`, `itemNumberOf`), so it
- * never reaches here.
- */
+function insideOrSame(parent: string, child: string): boolean {
+  try {
+    return pathOps.samePath(parent, child) || pathOps.contains(parent, child)
+  } catch {
+    return false
+  }
+}
+
+function hasTicketPrefix(title: string | null, prefix: string): boolean {
+  if (title === null || !title.startsWith(prefix)) return false
+  const next = title.charAt(prefix.length)
+  return next === '' || next === ' '
+}
+
+/** First hit wins per session: the most specific worktree its cwd sits in, its git branch, then a title naming this ticket — never a branch-name pattern, and cockpit sessions never count. */
+export function attachWorkSessions(
+  item: { readonly number: number; readonly kind: PipelineItemKind },
+  sessions: readonly SessionRecord[],
+  allWorktrees: readonly WorktreeEntry[],
+  attachedWorktrees: readonly AttachedWorktree[],
+): readonly WorkSession[] {
+  const prefix = `${item.kind === 'issue' ? '#' : 'PR#'}${String(item.number)}`
+  const attachedBranches = new Set(attachedWorktrees.flatMap((worktree) => (worktree.branch === null ? [] : [worktree.branch])))
+  const attached: WorkSession[] = []
+  for (const session of sessions) {
+    if (session.role === 'cockpit') continue
+    const match = matchOf(session, prefix, allWorktrees, attachedWorktrees, attachedBranches)
+    if (match === null) continue
+    attached.push({ sessionId: session.sessionId, title: session.customTitle, lastActivityAt: session.lastActivityAt, activity: session.activity, match })
+  }
+  return attached
+}
+
+function matchOf(
+  session: SessionRecord,
+  prefix: string,
+  allWorktrees: readonly WorktreeEntry[],
+  attachedWorktrees: readonly AttachedWorktree[],
+  attachedBranches: ReadonlySet<string>,
+): WorkSession['match'] | null {
+  if (session.cwd !== null) {
+    const cwd = session.cwd
+    let deepest: string | null = null
+    for (const worktree of allWorktrees) {
+      if (insideOrSame(worktree.path, cwd) && (deepest === null || worktree.path.length > deepest.length)) deepest = worktree.path
+    }
+    const owner = deepest
+    if (owner !== null && attachedWorktrees.some((worktree) => pathOps.samePath(worktree.path, owner))) return 'worktree'
+  }
+  if (session.gitBranch !== null && attachedBranches.has(session.gitBranch)) return 'branch'
+  if (hasTicketPrefix(session.customTitle, prefix)) return 'title'
+  return null
+}
+
+/** Every number a worktree's correlation or an agent's `itemNumber` names, absent from the open sweep's own item numbers. `#0` is excluded at both sources, so it never reaches here. */
 export function collectOrphanNumbers(
   items: readonly { readonly number: number }[],
   worktrees: readonly WorktreeEntry[],

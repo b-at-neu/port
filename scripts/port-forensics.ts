@@ -1,16 +1,6 @@
 #!/usr/bin/env node
-// The forensics engine's CLI entry (#123): arg parse, the one `report`
-// subcommand, exit codes, text vs `--json`. Every decision is imported from
-// scripts/lib/transcript.ts and scripts/port-forensics/ — this file only
-// wires, the same runner-plus-modules split scripts/port-tick.ts already
-// establishes (docs/ENGINEERING.md §1).
-//
-// An operator and cockpit-tick tool, never `commands.checks`
-// (scripts/checks/evals.ts pins the absence): it reads a machine-local path
-// outside the repository and shells out to `gh`, so it is meaningless in CI
-// and unavailable to a dispatched agent's own worktree.
-//
-//   report [--session <id>] [--since <iso>] [--json] [--claude-home <path>]
+// CLI entry: arg parse, the one `report` subcommand, text vs `--json`. Wiring only.
+// An operator tool, never `commands.checks` — it shells out to `gh` and reads machine-local paths.
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { runReport, renderText, renderJson } from './port-forensics/report.ts';

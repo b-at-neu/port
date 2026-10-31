@@ -1,19 +1,12 @@
-// The registry module's only public surface: list/add/remove orchestration.
-// Every later adapter (#76-#81) takes its owner/name, branches, modules,
-// reviewCycleCap and resolved label vocabulary from the entries this
-// returns, rather than reading a config itself.
-import { pathOps } from '../platform'
-import type { ReposAddResponse, ReposListResponse, ReposRemoveResponse } from '../../shared/ipc'
-import type { RepoId } from '../../shared/repos'
-import type { GitRunner } from './harness'
-import { inspectRepository, resolveGitRoot } from './inspect'
-import { readRegistry, writeRegistry } from './store'
-
-export interface RegistryDeps {
-  readonly registryDir: string
-  readonly git: GitRunner
-  readonly chooseDirectory: () => Promise<string | null>
-}
+// The registry module's only public surface: list/add/remove orchestration. Every later adapter takes its config from the entries this returns, rather than reading a config itself.
+import { pathOps } from '@/main/platform/paths'
+import type { ReposAddResponse, ReposListResponse, ReposRemoveResponse } from '@/types/ipc'
+import type { RepoId, RepositoryEntry } from '@/utils/repos'
+import type { ReadyEntry } from '@/types/actions'
+import type { GitRunner } from '@/types/platform'
+import { inspectRepository, resolveGitRoot } from '@/main/registry/inspect'
+import { readRegistry, writeRegistry } from '@/main/registry/store'
+import type { RegistryDeps } from '@/types/registry'
 
 async function inspectAll(paths: readonly string[], git: GitRunner) {
   return Promise.all(paths.map((path) => inspectRepository(path, { git })))
@@ -33,10 +26,7 @@ export async function addRepository(deps: RegistryDeps): Promise<ReposAddRespons
   const picked = await deps.chooseDirectory()
   if (picked === null) return { ok: true, outcome: 'cancelled' }
 
-  // Resolve to the git root before the duplicate check, so a subdirectory
-  // of an already-registered repository is not registered a second time. A
-  // directory that is not a repository at all still gets added — its own
-  // `not-a-git-repository` problem is the point of surfacing it.
+  // Resolve to the git root before the duplicate check, so a subdirectory of an already-registered repository is not registered a second time.
   const rootResult = await resolveGitRoot(deps.git, picked)
   const effectivePath = rootResult.ok ? rootResult.root : picked
 
@@ -59,6 +49,33 @@ export async function addRepository(deps: RegistryDeps): Promise<ReposAddRespons
   const repositories = await inspectAll(newPaths, deps.git)
   const added = repositories.find((entry) => pathOps.samePath(entry.path, effectivePath))
   return { ok: true, outcome: 'added', added: added?.id ?? (pathOps.pathKey(effectivePath) as unknown as RepoId), repositories }
+}
+
+/** The one `RepositoryEntry` -> `ReadyEntry` narrowing every channel that resolves a repository by id needs. */
+export function isReadyEntry(entry: RepositoryEntry): entry is ReadyEntry {
+  return 'config' in entry
+}
+
+/** The non-empty-string check every channel that takes a `repoId` opens with, before ever reaching `requireReadyRepo`. */
+export function requireRepoId(repoId: unknown, channel: string): RepoId {
+  if (typeof repoId !== 'string' || repoId === '') throw new Error(`${channel} requires a non-empty 'repoId'`)
+  return repoId as RepoId
+}
+
+/** "Find a registered, ready repository by id, or throw" — every repository-scoped channel composes this. `notListableMessage` lets a caller keep its own original wording. */
+export async function requireReadyRepo(
+  registryDeps: RegistryDeps,
+  subject: string,
+  repoId: RepoId,
+  list: typeof listRepositories,
+  notListableMessage: (message: string) => string = (message) => `${subject} could not list repositories: ${message}`,
+): Promise<ReadyEntry> {
+  const result = await list(registryDeps)
+  if (!result.ok) throw new Error(notListableMessage(result.message))
+  const entry = result.repositories.find((repository) => repository.id === repoId)
+  if (!entry) throw new Error(`${subject} found no repository registered with id '${repoId}'`)
+  if (!isReadyEntry(entry)) throw new Error(`${subject} requires a 'ready' repository, got '${entry.problem.kind}'`)
+  return entry
 }
 
 export async function removeRepository(deps: RegistryDeps, id: RepoId): Promise<ReposRemoveResponse> {

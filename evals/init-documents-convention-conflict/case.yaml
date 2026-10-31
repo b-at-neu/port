@@ -16,7 +16,8 @@ timeout_seconds: 1200
 prompt: |
   Run /port:init on this repository. Accept the defaults it proposes for
   everything except where its own reconciliation step raises a question —
-  answer "keep our rule" there.
+  answer "keep our rule" there. When it offers to apply the plugin pin to
+  this machine, skip it.
 
 scaffold_script: |
   set -euo pipefail

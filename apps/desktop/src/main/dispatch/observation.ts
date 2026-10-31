@@ -1,23 +1,14 @@
-// Pure: one machine-observation write's label plan, precondition, and
-// comment body (#292) — `main/actions/observe.ts`'s `applyObservation` is
-// the only caller. Labels mirror `scripts/port-tick/writes.ts`'s own
-// `refreshSweepWrite`/`zeroDiffWrite`/`cycleCapWrite`/`approvalWithdrawnWrite`/
-// `livenessResetWrite` exactly, pinned by `scripts/checks/desktop-dispatch.ts`'s
-// label-table comparison, both directions. Comment bodies reuse the exact
-// fenced shapes `docs/FORMATS.md` ("Approval withdrawn", "Rebase required")
-// and `TICK-PROSE.md` (the zero-diff escalation, the cycle cap, the refresh
-// sweep's same-SHA/consecutive-cap escalation) already define — pinned the
-// same way.
-import type { LabelKey, LabelVocabulary } from '../../shared/labels/vocabulary'
-import type { ReconciledItem } from '../../shared/state/types'
-import type { TickObservation } from '../../shared/tick/types'
+// Pure: one machine-observation write's label plan, precondition, and comment body.
+// Mirrors scripts/port-tick/writes.ts exactly, pinned by scripts/checks/desktop-dispatch.ts.
+import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { ReconciledItem } from '@/types/state'
+import type { TickObservation } from '@/types/tick'
+import type { WriteObservation } from '@/types/dispatch'
 
-/** Every `TickObservation` kind this module writes — `observableFrom` never
- *  yields the one report-only kind (`refresh-deferred`), so this is the type
- *  `main/dispatch/dispatcher.ts` actually passes through. */
-export type WriteObservation = Exclude<TickObservation, { readonly kind: 'refresh-deferred' }>
+// A literal, not an import — this module loads standalone and can't resolve a relative import.
+const CYCLE_CAP_ESCALATION_MARKER = 'review cycles reached the cap of'
 
-export interface ObservationWritePlan {
+interface ObservationWritePlan {
   readonly add: readonly LabelKey[]
   readonly remove: readonly LabelKey[]
   readonly expect: {
@@ -47,22 +38,18 @@ function approvalWithdrawnComment(red: Extract<TickObservation, { readonly kind:
   return `## Approval withdrawn\n${lines.join('\n')}`
 }
 
-/**
- * The write chokepoint's own request shape for one observation — labels,
- * precondition, and comment, never decided a second way elsewhere. `item` is
- * the snapshot this pass read the observation against (never a second,
- * independent read); `integration` is `branches.integration`, for the
- * "Rebase required" comment's own `<base>`.
- */
+/** The write chokepoint's own request shape for one observation. `integration` is
+ *  `branches.integration`, for the "Rebase required" comment's own `<base>`. */
 export function observationWrite(observation: WriteObservation, item: ReconciledItem, vocabulary: LabelVocabulary, integration: string): ObservationWritePlan {
   switch (observation.kind) {
     case 'liveness-reset': {
       const add: readonly LabelKey[] = [observation.retryKey]
-      return { add, remove: [observation.inFlight], expect: precondition(item, vocabulary, add), action: 'observe-liveness-reset', comment: null }
+      const action = observation.evidence === 'stage-error' ? 'observe-stage-error-reset' : 'observe-liveness-reset'
+      return { add, remove: [observation.inFlight], expect: precondition(item, vocabulary, add), action, comment: null }
     }
     case 'cycle-cap': {
       const add: readonly LabelKey[] = ['needsHuman']
-      const comment = `${PIPELINE_ESCALATION}\n${String(observation.count)} review cycles reached the cap of ${String(observation.cap)} without merging.`
+      const comment = `${PIPELINE_ESCALATION}\n${String(observation.count)} ${CYCLE_CAP_ESCALATION_MARKER} ${String(observation.cap)} without merging.`
       return { add, remove: ['needsRevision'], expect: precondition(item, vocabulary, add), action: 'observe-cycle-cap', comment }
     }
     case 'zero-diff': {
@@ -72,7 +59,8 @@ export function observationWrite(observation: WriteObservation, item: Reconciled
     }
     case 'refresh': {
       const add: readonly LabelKey[] = ['refreshBranch']
-      return { add, remove: [], expect: precondition(item, vocabulary, add), action: 'observe-refresh', comment: rebaseRequiredComment(observation.headRefOid, integration) }
+      const remove: readonly LabelKey[] = observation.sourceLabel === 'readyForReview' ? ['readyForReview'] : []
+      return { add, remove, expect: precondition(item, vocabulary, add), action: 'observe-refresh', comment: rebaseRequiredComment(observation.headRefOid, integration) }
     }
     case 'refresh-stuck': {
       const add: readonly LabelKey[] = ['needsHuman']
@@ -86,6 +74,13 @@ export function observationWrite(observation: WriteObservation, item: Reconciled
     case 'withdraw-approval': {
       const add: readonly LabelKey[] = ['needsRevision']
       return { add, remove: ['approved'], expect: precondition(item, vocabulary, add), action: 'observe-withdraw-approval', comment: approvalWithdrawnComment(observation.red, observation.headRefOid) }
+    }
+    case 'plan-missing': {
+      const add: readonly LabelKey[] = ['ready']
+      const planReviewName = vocabulary.labels.find((l) => l.key === 'planReview')?.name ?? 'planReview'
+      const readyName = vocabulary.labels.find((l) => l.key === 'ready')?.name ?? 'ready'
+      const comment = `## Plan missing\nThis issue was at \`${planReviewName}\` but its body has no \`## Implementation Plan\` section, so it was moved back to \`${readyName}\` to be planned again.`
+      return { add, remove: ['planReview'], expect: precondition(item, vocabulary, add), action: 'observe-plan-missing', comment }
     }
   }
 }

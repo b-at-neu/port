@@ -1,29 +1,22 @@
-// readPipelineState — the cross-repo I/O orchestrator (#79), re-expressed
-// over #80's per-source cache (Decision 3): refresh every source once into a
-// fresh `SourceCache`, then `projectFromCache` builds the same
-// `PipelineState` it always has. There stays exactly one orchestrator —
-// `watcher.ts` calls the same two primitives (`refreshGithub` and friends,
-// `projectFromCache`) on its own cadence rather than a second copy of this
-// composition.
-import type { GhRunner } from '../github'
-import { readSessionState } from '../sessions'
-import type { WorktreesGitRunner as GitRunner } from '../local'
-import type { RepositoryEntry } from '../../shared/repos'
-import type { FreshnessEntry, PipelineState, RepositoryState } from '../../shared/state/types'
-import { reconcileRepository } from './reconcile'
-import type { RepoSessionSlice } from './reconcile'
-import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from './sources'
-import type { SourceCache } from './sources'
+import type { SourceCache, RepoSessionSlice } from '@/types/state'
 
-export interface ReadPipelineStateParams {
+// `watcher.ts` calls the same two primitives (`refreshGithub` and friends, `projectFromCache`) on its own cadence rather than a second copy of this composition.
+import type { GhRunner } from '@/types/platform'
+import { readSessionState } from '@/main/sessions/adapter'
+import type { GitRunner } from '@/types/platform'
+import type { RepositoryEntry } from '@/utils/repos'
+import type { FreshnessEntry, PipelineState, RepositoryState } from '@/types/state'
+import { reconcileRepository } from '@/main/state/reconcile'
+
+import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/state/sources'
+
+
+interface ReadPipelineStateParams {
   readonly repositories: readonly RepositoryEntry[]
   readonly gh?: GhRunner
   readonly git?: GitRunner
   readonly sessionReader?: Parameters<typeof readSessionState>[0]['reader']
-  /** Forwarded verbatim to `readSessionState` — the seam its own tests use
-   *  to point at a temporary `~/.claude` fixture, needed here too so
-   *  `read.test.ts` can attribute a fake session without touching the real
-   *  machine's transcripts. */
+  /** Forwarded verbatim to `readSessionState`, so `read.test.ts` can attribute a fake session without touching the real machine's transcripts. */
   readonly claudeHome?: string
   readonly now?: () => Date
 }
@@ -37,12 +30,7 @@ function splitRepo(repo: string): { readonly owner: string; readonly name: strin
   return { owner: owner ?? '', name: name ?? '' }
 }
 
-/**
- * Builds one `PipelineState` from whatever a `SourceCache` currently holds —
- * no I/O of its own. Shared by `readPipelineState` (a fresh cache, one-shot)
- * and `watcher.ts` (a long-lived cache, refreshed on its own cadence), so
- * the join logic exists exactly once.
- */
+/** Builds one `PipelineState` from whatever a `SourceCache` currently holds — no I/O of its own. Shared by `readPipelineState` and `watcher.ts` so the join logic exists once. */
 export function projectFromCache(cache: SourceCache, repositories: readonly RepositoryEntry[], now: () => Date = () => new Date()): PipelineState {
   const readAt = now().toISOString()
   const sessionScan = cache.sessions ?? { ok: false as const, kind: 'sdk-unavailable' as const, message: 'sessions have not been scanned yet', scannedAt: readAt }
@@ -70,14 +58,7 @@ export function projectFromCache(cache: SourceCache, repositories: readonly Repo
   return { repositories: repositoriesOut, sessions: sessionScan, readAt }
 }
 
-/**
- * One `readSessionState` call for the whole machine first (#78's own
- * Decision 1), then per `ready` repository: `refreshWorktrees`,
- * `refreshDenials`, `refreshGithub` (which owns its own conditional
- * `fetchItemsByNumber` re-check) — into a fresh, one-shot `SourceCache` —
- * then `projectFromCache`. A non-`ready` entry becomes its
- * `reason: 'not-ready'` state without any read at all.
- */
+/** A non-`ready` entry becomes its `reason: 'not-ready'` state without any read at all. */
 export async function readPipelineState(params: ReadPipelineStateParams): Promise<PipelineState> {
   const now = params.now ?? (() => new Date())
   const cache = createSourceCache()

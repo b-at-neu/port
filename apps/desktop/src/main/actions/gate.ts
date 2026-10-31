@@ -1,35 +1,29 @@
-// The plan gate's composition root (#92): registry lookup, the preflight
-// fetch, pure classification, the claim read/write, and — for an answer —
-// the ordered comment-then-swap write. No `gh` import here — the read comes
-// from `../github`, the write from `../writes`, exactly the `main/claim.ts`
-// idiom of composing rather than reaching into either directly.
-import { buildGatePlan, classifyGate } from '../../shared/gate/classify'
-import type { GateClassifyItem, GatePlan } from '../../shared/gate/classify'
-import { GATE_CLAIM_OWNER } from '../../shared/gate/types'
-import type { GateAction, GateAnswerResponse, GateClaimResponse, GateDecision, GatePreflight, GatePreflightResponse } from '../../shared/gate/types'
-import type { GatePreflightFetch } from '../../shared/github/types'
-import { labelName } from '../../shared/labels/vocabulary'
-import type { RepoId, RepositoryEntry } from '../../shared/repos'
-import type { ClaimRead, LabelWriteRequest, WriteOutcome } from '../../shared/writes/types'
-import { fetchGatePreflight } from '../github'
-import { IMPLEMENTATION_PLAN_HEADING, sessionRequiredMarkerAt } from '../state'
-import { listRepositories } from '../registry'
-import type { RegistryDeps } from '../registry'
-import { applyLabels, postComment, readGateClaim, releaseClaimScope, takeClaimScope } from '../writes'
-import type { ApplyLabelsParams, PostCommentParams } from '../writes'
+import type { ApplyLabelsParams, PostCommentParams } from '@/types/writes'
+import type { GateClassifyItem, GatePlan } from '@/types/gate'
+import type { ReadyEntry } from '@/types/actions'
 
-type ReadyEntry = Extract<RepositoryEntry, { readonly status: 'ready' }>
+// No `gh` import here — the read comes from `../github`, the write from `../writes`.
+import { buildAutoApprovePlan, buildGatePlan, classifyGate } from '@/main/gate/classify'
 
-/** The seam every composition below is testable through, without Electron,
- *  a real registry, or a real `gh`/`git` — the same idiom `main/claim.ts`'s
- *  own `ClaimDeps` gives. Every default export is what production wiring
- *  supplies. */
+import type { GateAction, GateAnswerResponse, GatePreflight, GatePreflightResponse } from '@/types/gate'
+import type { GatePreflightFetch } from '@/types/github'
+import { labelName } from '@/utils/labels/vocabulary'
+import type { RepoId } from '@/utils/repos'
+import type { LabelWriteRequest, OwnershipSummary, WriteOutcome } from '@/types/writes'
+import { fetchGatePreflight } from '@/main/github/gate'
+import { IMPLEMENTATION_PLAN_HEADING, sessionRequiredMarkerAt } from '@/main/state/link'
+import { listRepositories, requireReadyRepo } from '@/main/registry'
+import type { RegistryDeps } from '@/types/registry'
+
+import { applyLabels, postComment } from '@/main/writes/apply'
+import { readOwnership, toOwnershipSummary } from '@/main/dispatch/ownership'
+
+import type { AutoApprovePlanParams, GateAnswerParams, GatePreflightParams } from '@/types/actions'
+
 export interface GateDeps {
   readonly listRepositories: typeof listRepositories
   readonly fetchGatePreflight: typeof fetchGatePreflight
-  readonly readGateClaim: typeof readGateClaim
-  readonly takeClaimScope: typeof takeClaimScope
-  readonly releaseClaimScope: typeof releaseClaimScope
+  readonly readOwnership: typeof readOwnership
   readonly applyLabels: (params: ApplyLabelsParams) => Promise<WriteOutcome>
   readonly postComment: (params: PostCommentParams) => Promise<WriteOutcome>
   readonly now: () => Date
@@ -38,28 +32,23 @@ export interface GateDeps {
 export const defaultGateDeps: GateDeps = {
   listRepositories,
   fetchGatePreflight,
-  readGateClaim,
-  takeClaimScope,
-  releaseClaimScope,
+  readOwnership,
   applyLabels,
   postComment,
   now: () => new Date(),
 }
 
-async function resolveReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, deps: Pick<GateDeps, 'listRepositories'>): Promise<ReadyEntry> {
-  const list = await deps.listRepositories(registryDeps)
-  if (!list.ok) throw new Error(`gate requires the registry, which could not be listed: ${list.message}`)
-  const entry = list.repositories.find((repository) => repository.id === repoId)
-  if (!entry) throw new Error(`gate found no repository registered with id '${repoId}'`)
-  if (!('config' in entry)) throw new Error(`gate requires a 'ready' repository, got '${entry.problem.kind}'`)
-  return entry
+function resolveReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, deps: Pick<GateDeps, 'listRepositories'>) {
+  return requireReadyRepo(
+    registryDeps,
+    'gate',
+    repoId,
+    deps.listRepositories,
+    (message) => `gate requires the registry, which could not be listed: ${message}`,
+  )
 }
 
-/** Splits the fetched issue body at `IMPLEMENTATION_PLAN_HEADING` — the
- *  ticket half above it (trimmed of trailing blank lines), the plan half
- *  (heading included) below, `null` when the heading is absent entirely —
- *  the same "no plan section" case the Reviewing step's own no-plan note
- *  renders. */
+/** Splits at `IMPLEMENTATION_PLAN_HEADING`; `null` plan half when the heading is absent. */
 function splitBody(body: string): { readonly ticketMarkdown: string; readonly planMarkdown: string | null } {
   const idx = body.indexOf(IMPLEMENTATION_PLAN_HEADING)
   if (idx === -1) return { ticketMarkdown: body, planMarkdown: null }
@@ -93,72 +82,19 @@ function toClassifyItem(item: Extract<GatePreflightFetch, { readonly ok: true }>
   return { kind: item.kind, number: item.number, labels: item.labels, assignees: item.assignees, viewer, noPlanBlock: !item.body.includes(IMPLEMENTATION_PLAN_HEADING) }
 }
 
-export interface GatePreflightParams {
-  readonly registryDeps: RegistryDeps
-  readonly repoId: RepoId
-  readonly number: number
-}
-
-/** `'gate:preflight'`'s composition: resolve the `ready` entry, read the
- *  claim, then fetch and classify against that entry's own resolved
- *  vocabulary — never a second config read. The claim rides along on every
- *  response arm, since the Claim step renders regardless of whether the item
- *  itself resolved. */
+// Ownership rides along on every response arm; the dialog disables controls under terminal/unreadable regardless.
 export async function gatePreflight(params: GatePreflightParams, deps: GateDeps = defaultGateDeps): Promise<GatePreflightResponse> {
   const entry = await resolveReadyEntry(params.registryDeps, params.repoId, deps)
-  const claim = await deps.readGateClaim({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
+  const ownership: OwnershipSummary = toOwnershipSummary(await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now }))
 
   const fetch = await deps.fetchGatePreflight({ repo: { owner: entry.config.owner, name: entry.config.name }, number: params.number })
-  if (!fetch.ok) return { kind: 'failed', message: fetch.message, claim }
+  if (!fetch.ok) return { kind: 'failed', message: fetch.message, ownership }
 
   const autoPlanName = labelName(entry.config.vocabulary, 'autoPlan')
   const preflight = toGatePreflight(fetch, autoPlanName)
   const verdict = classifyGate({ item: toClassifyItem(fetch.item, fetch.viewer), vocabulary: entry.config.vocabulary })
-  if (preflight === null) return { kind: 'unresolved', claim }
-  return { kind: 'resolved', preflight, verdict, claim }
-}
-
-export interface GateClaimReadParams {
-  readonly registryDeps: RegistryDeps
-  readonly repoId: RepoId
-}
-
-/** `'gate:claim:read'`'s composition — the Claim step's own re-read, called
- *  fresh every time the dialog opens at that step rather than reusing the
- *  preflight's own (potentially stale) claim reading. */
-export async function gateClaimRead(params: GateClaimReadParams, deps: GateDeps = defaultGateDeps): Promise<ClaimRead> {
-  const entry = await resolveReadyEntry(params.registryDeps, params.repoId, deps)
-  return deps.readGateClaim({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
-}
-
-export interface GateClaimSetParams {
-  readonly registryDeps: RegistryDeps
-  readonly repoId: RepoId
-  /** The target state the operator's own button names — `true` to take the
-   *  claim, `false` to release it. Never a toggle read off the current
-   *  state, so a stale dialog can only ever ask for the state its own button
-   *  showed. */
-  readonly held: boolean
-}
-
-/**
- * `'gate:claim:set'`'s composition. A claim is created or released only by
- * this explicit operator action (`docs/COORDINATION.md`'s own lifecycle
- * rule) — nothing here takes or releases a claim on any machine-observed
- * condition. Always re-reads afterwards, so the response carries the state
- * as it now is rather than as it was asked to be. Goes through the
- * scope-preserving pair with `scope: 'plan-gate'` — taking the plan gate
- * must never drop a held `dispatch` scope, and releasing it must never
- * drop one either.
- */
-export async function gateClaimSet(params: GateClaimSetParams, deps: GateDeps = defaultGateDeps): Promise<GateClaimResponse> {
-  const entry = await resolveReadyEntry(params.registryDeps, params.repoId, deps)
-  const result = params.held
-    ? await deps.takeClaimScope({ repoRoot: entry.path, repo: entry.config.repo, owner: GATE_CLAIM_OWNER, scope: 'plan-gate', now: deps.now })
-    : await deps.releaseClaimScope({ repoRoot: entry.path, repo: entry.config.repo, scope: 'plan-gate' })
-  if (!result.ok) return { kind: 'failed', result }
-  const claim = await deps.readGateClaim({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
-  return { kind: 'ok', claim }
+  if (preflight === null) return { kind: 'unresolved', ownership }
+  return { kind: 'resolved', preflight, verdict, ownership }
 }
 
 function buildWriteRequest(entry: ReadyEntry, number: number, plan: GatePlan, action: GateAction): LabelWriteRequest {
@@ -177,32 +113,7 @@ function buildWriteRequest(entry: ReadyEntry, number: number, plan: GatePlan, ac
   }
 }
 
-export interface GateAnswerParams {
-  readonly registryDeps: RegistryDeps
-  readonly repoId: RepoId
-  readonly number: number
-  readonly decision: GateDecision
-  /** The operator's own feedback text, verbatim — required for
-   *  `request-changes` unless `skipComment` is set; ignored for `approve`. */
-  readonly feedback: string | null
-  /** `true` only on a retry after a comment already landed and the label
-   *  swap alone failed — suppresses the comment, never widens the write
-   *  (plan's own **Ordering**: a renderer-supplied `skipComment` can only
-   *  ever suppress a write, never widen one). */
-  readonly skipComment: boolean
-  readonly auditDir: string
-  readonly scratchDir: string
-}
-
-/**
- * `'gate:answer'`'s composition, in the plan's own fixed order: resolve
- * entry → fetch preflight → classify (refuse anything but `answerable`) →
- * for `request-changes` with `skipComment: false`, `postComment` — a
- * non-`applied` outcome aborts as `comment-failed`, with no label ever
- * touched — → `applyLabels`. The feedback comment is the operator's text
- * verbatim, with no heading added, so `plan-agent` in revision mode sees one
- * artifact regardless of which writer produced it.
- */
+// A non-`applied` comment outcome aborts as `comment-failed`, with no label ever touched.
 export async function gateAnswer(params: GateAnswerParams, deps: GateDeps = defaultGateDeps): Promise<GateAnswerResponse> {
   const entry = await resolveReadyEntry(params.registryDeps, params.repoId, deps)
   const fetch = await deps.fetchGatePreflight({ repo: { owner: entry.config.owner, name: entry.config.name }, number: params.number })
@@ -223,6 +134,7 @@ export async function gateAnswer(params: GateAnswerParams, deps: GateDeps = defa
         action: 'request-plan-changes',
         scratchDir: params.scratchDir,
       },
+      repoRoot: entry.path,
       auditDir: params.auditDir,
     })
     if (comment.kind !== 'applied') return { kind: 'comment-failed', comment }
@@ -232,4 +144,10 @@ export async function gateAnswer(params: GateAnswerParams, deps: GateDeps = defa
   const action: GateAction = params.decision === 'approve' ? 'approve-plan' : 'request-plan-changes'
   const labels = await deps.applyLabels({ request: buildWriteRequest(entry, params.number, plan, action), repoRoot: entry.path, auditDir: params.auditDir })
   return { kind: 'answered', comment, labels }
+}
+
+// No ownership read here — the caller already confirmed it, and `applyLabels` re-checks at write time.
+export async function autoApprovePlan(params: AutoApprovePlanParams, deps: GateDeps = defaultGateDeps): Promise<WriteOutcome> {
+  const plan = buildAutoApprovePlan({ vocabulary: params.entry.config.vocabulary, assignees: params.item.assignees })
+  return deps.applyLabels({ request: buildWriteRequest(params.entry, params.item.number, plan, 'auto-approve-plan'), repoRoot: params.entry.path, auditDir: params.auditDir })
 }

@@ -1,148 +1,115 @@
-// The 'dispatch:control' channel's own validation and composition (#110) —
-// all the branching lives here, not in `main/ipc.ts`, the same split every
-// other multi-call channel in this app already follows. #265 adds
-// 'dispatch:claim:set' and 'dispatch:relay' alongside it, same shape.
-import { DISPATCH_COMMANDS } from '../../shared/dispatch/types'
-import type { DispatchClaimSetResult, DispatchCommand, DispatchControlResult, DispatchRelayResult, HaltReport, RepoDispatchStatus } from '../../shared/dispatch/types'
-import type { BoardSnapshot } from '../../shared/board/types'
-import type { RefreshRequest } from '../state'
-import type { RepoId, RepositoryEntry } from '../../shared/repos'
-import { listRepositories } from '../registry'
-import type { RegistryDeps } from '../registry'
-import type { ReadyEntry } from '../actions'
-import { GATE_CLAIM_OWNER } from '../../shared/gate/types'
-import { releaseClaimScope, takeClaimScope } from '../writes'
-import type { ClaimWriteResult } from '../writes'
-import type { Dispatcher } from './dispatcher'
-import type { HaltDispatchDeps, HaltDispatchParams } from './halt'
-import type { DrainStore } from './store'
+import type { RunStateStore, HaltDispatchParams, HaltDispatchDeps } from '@/types/dispatch'
+
+// The 'dispatch:control' channel's own validation and composition — all the branching lives here,
+// not in main/ipc.ts, the same split every other multi-call channel in this app follows.
+import { DISPATCH_COMMANDS, RUN_TARGET } from '@/types/dispatch'
+import type { DispatchCommand, DispatchControlResult, HaltReport } from '@/types/dispatch'
+import type { BoardSnapshot } from '@/types/board'
+import type { RefreshRequest } from '@/types/state'
+import type { RepoId } from '@/utils/repos'
+import { isReadyEntry, listRepositories } from '@/main/registry'
+import type { RegistryDeps } from '@/types/registry'
+import { releaseOwnership, takeOwnership } from '@/main/dispatch/ownership'
+
+
 
 export interface ResolveDispatchControlDeps {
   readonly listRepositories: typeof listRepositories
-  readonly drain: DrainStore
+  readonly runStates: RunStateStore
   readonly haltDispatch: (params: HaltDispatchParams, deps?: HaltDispatchDeps) => Promise<HaltReport>
+  readonly takeOwnership: typeof takeOwnership
+  readonly releaseOwnership: typeof releaseOwnership
   readonly snapshot: () => BoardSnapshot
   readonly refresh: (request?: RefreshRequest) => Promise<BoardSnapshot>
   readonly auditDir: string
   readonly now: () => Date
 }
 
-function isReadyEntry(entry: RepositoryEntry): entry is ReadyEntry {
-  return 'config' in entry
+/** Every currently registered repository's id, any status — `null` when the registry itself
+ *  could not be listed. */
+export async function registeredRepoIds(registryDeps: RegistryDeps, deps: { readonly listRepositories: typeof listRepositories } = { listRepositories }): Promise<readonly RepoId[] | null> {
+  const list = await deps.listRepositories(registryDeps)
+  return list.ok ? list.repositories.map((r) => r.id) : null
 }
 
-/**
- * `command` validated against `DISPATCH_COMMANDS` by name — the same rail
- * `resolveItemAction` already follows for `OPERATOR_ACTIONS` — then: `drain`
- * → `drain.set(true)`, never followed by a refresh (the plan's own "Drain
- * gates dispatch, never the poll" — nothing about the poll needs to change);
- * `resume` → `drain.set(false)`, refused outright on a failed write, then one
- * `refresh({})` (the ticket's own "run one tick immediately"); `halt` →
- * `haltDispatch` (which itself calls `drain.set(true)` first), then one
- * `refresh({})` regardless of whether the halt completed or aborted, since
- * the drain state itself may have changed either way.
- */
+async function findReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, deps: Pick<ResolveDispatchControlDeps, 'listRepositories'>) {
+  const list = await deps.listRepositories(registryDeps)
+  if (!list.ok) return null
+  const entry = list.repositories.find((e) => e.id === repoId)
+  return entry !== undefined && isReadyEntry(entry) ? entry : null
+}
+
+/** Maps a failed `takeOwnership`/`releaseOwnership` write into the same reasons a run-state write failure carries. */
+function ownershipWriteFailureReason(result: Extract<Awaited<ReturnType<typeof takeOwnership>>, { readonly ok: false }>): { readonly reason: 'terminal-owned'; readonly since: string } | { readonly reason: 'ownership-unreadable'; readonly message: string; readonly path: string } | { readonly reason: 'unwritable'; readonly message: string; readonly path: string } {
+  if (result.kind === 'refused') {
+    return result.verdict.kind === 'terminal'
+      ? { reason: 'terminal-owned', since: result.verdict.since }
+      : { reason: 'ownership-unreadable', message: result.verdict.message, path: result.verdict.path }
+  }
+  return { reason: 'unwritable', message: result.message, path: result.path }
+}
+
+/** Every command requires a registered `repoId`; `run`/`drain`/`take-over` take or release
+ *  ownership before writing the run state and refreshing. */
 export async function resolveDispatchControl(
   registryDeps: RegistryDeps,
-  request: { readonly command: DispatchCommand },
+  request: { readonly command: DispatchCommand; readonly repoId?: RepoId },
   deps: ResolveDispatchControlDeps,
 ): Promise<DispatchControlResult> {
   if (typeof request?.command !== 'string' || !(DISPATCH_COMMANDS as readonly string[]).includes(request.command)) {
     throw new Error(`'dispatch:control' requires 'command' to be one of ${DISPATCH_COMMANDS.join(', ')}`)
   }
 
+  if (typeof request.repoId !== 'string' || request.repoId === '') {
+    throw new Error(`'dispatch:control' requires a non-empty 'repoId' for command '${request.command}'`)
+  }
+  const repoId = request.repoId
+  const ids = await registeredRepoIds(registryDeps, deps)
+  if (ids === null) throw new Error(`'dispatch:control' could not list repositories to validate '${repoId}'`)
+  if (!ids.includes(repoId)) throw new Error(`'dispatch:control' found no repository registered with id '${repoId}'`)
+
+  if (request.command === 'run') {
+    const entry = await findReadyEntry(registryDeps, repoId, deps)
+    if (entry !== null) {
+      const taken = await deps.takeOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
+      if (!taken.ok) return { ok: false, command: 'run', repoId, ...ownershipWriteFailureReason(taken) }
+    }
+    const written = await deps.runStates.set([repoId], RUN_TARGET.run, deps.now().toISOString())
+    if (!written.ok) return { ok: false, command: 'run', repoId, reason: written.reason, message: written.message, path: deps.runStates.path }
+    await deps.refresh({ repoId })
+    return { ok: true, command: 'run', repoId, runState: deps.runStates.current(repoId) }
+  }
+
+  if (request.command === 'take-over') {
+    const entry = await findReadyEntry(registryDeps, repoId, deps)
+    if (entry === null) throw new Error(`'dispatch:control' take-over requires '${repoId}' to be a ready repository`)
+    const taken = await deps.takeOwnership({ repoRoot: entry.path, repo: entry.config.repo, force: true, now: deps.now })
+    // `force: true` means `taken.kind` can never actually be `'refused'`.
+    if (!taken.ok) return { ok: false, command: 'take-over', repoId, reason: 'unwritable', message: taken.kind === 'refused' ? 'ownership write unexpectedly refused despite force' : taken.message, path: taken.path }
+    const written = await deps.runStates.set([repoId], RUN_TARGET.run, deps.now().toISOString())
+    if (!written.ok) return { ok: false, command: 'take-over', repoId, reason: 'unwritable', message: written.message, path: deps.runStates.path }
+    await deps.refresh({ repoId })
+    return { ok: true, command: 'take-over', repoId, runState: deps.runStates.current(repoId) }
+  }
+
   if (request.command === 'drain') {
-    const written = await deps.drain.set(true, deps.now().toISOString())
-    return { ok: true, command: 'drain', drain: deps.drain.current(), persisted: written.ok }
+    const entry = await findReadyEntry(registryDeps, repoId, deps)
+    if (entry !== null) {
+      const taken = await deps.takeOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
+      if (!taken.ok) return { ok: false, command: 'drain', repoId, ...ownershipWriteFailureReason(taken) }
+    }
+    const written = await deps.runStates.set([repoId], RUN_TARGET.drain, deps.now().toISOString())
+    if (!written.ok && written.reason === 'unreadable') {
+      return { ok: false, command: 'drain', repoId, reason: 'unreadable', message: written.message, path: deps.runStates.path }
+    }
+    return { ok: true, command: 'drain', repoId, runState: deps.runStates.current(repoId), persisted: written.ok }
   }
 
-  if (request.command === 'resume') {
-    const written = await deps.drain.set(false, deps.now().toISOString())
-    if (!written.ok) return { ok: false, command: 'resume', reason: 'drain-unwritable', message: written.message, path: deps.drain.path }
-    await deps.refresh({})
-    return { ok: true, command: 'resume', drain: deps.drain.current() }
-  }
-
-  // 'halt'
+  // 'pause'
   const list = await deps.listRepositories(registryDeps)
-  const entries = list.ok ? list.repositories.filter(isReadyEntry) : []
-  const report = await deps.haltDispatch({ snapshot: deps.snapshot(), entries, drain: deps.drain, auditDir: deps.auditDir, now: deps.now })
-  await deps.refresh({})
-  return { ok: true, command: 'halt', drain: deps.drain.current(), report }
-}
-
-export interface ResolveDispatchClaimSetDeps {
-  readonly listRepositories: typeof listRepositories
-  readonly dispatcher: Dispatcher
-  readonly refresh: (request?: RefreshRequest) => Promise<BoardSnapshot>
-  readonly now: () => Date
-}
-
-async function resolveReadyRepoRoot(registryDeps: RegistryDeps, repoId: RepoId, deps: Pick<ResolveDispatchClaimSetDeps, 'listRepositories'>): Promise<ReadyEntry> {
-  const list = await deps.listRepositories(registryDeps)
-  if (!list.ok) throw new Error(`dispatch claim requires the registry, which could not be listed: ${list.message}`)
-  const entry = list.repositories.find((repository) => repository.id === repoId)
-  if (entry === undefined) throw new Error(`dispatch claim found no repository registered with id '${String(repoId)}'`)
-  if (!isReadyEntry(entry)) throw new Error(`dispatch claim requires a 'ready' repository, got '${entry.problem.kind}'`)
-  return entry
-}
-
-/**
- * `'dispatch:claim:set'`'s composition (#265) — the mirror of
- * `main/actions/gate.ts`'s own `gateClaimSet`, for the `dispatch` scope
- * instead of `plan-gate`. A claim is created or released only by this
- * explicit operator action, through the scope-preserving pair so a held
- * `plan-gate` is never dropped by taking or releasing `dispatch`. Runs one
- * `refresh({ repoId })` afterwards — the dispatcher's own `consider` rides
- * that refresh's `onSnapshot`, so the owner line reflects the new claim on
- * its very next render rather than waiting for the next scheduled tick.
- */
-export async function resolveDispatchClaimSet(
-  registryDeps: RegistryDeps,
-  request: { readonly repoId: RepoId; readonly held: boolean },
-  deps: ResolveDispatchClaimSetDeps,
-): Promise<DispatchClaimSetResult> {
-  const entry = await resolveReadyRepoRoot(registryDeps, request.repoId, deps)
-  const result: ClaimWriteResult = request.held
-    ? await takeClaimScope({ repoRoot: entry.path, repo: entry.config.repo, owner: GATE_CLAIM_OWNER, scope: 'dispatch', now: deps.now })
-    : await releaseClaimScope({ repoRoot: entry.path, repo: entry.config.repo, scope: 'dispatch' })
-  if (!result.ok) return { kind: 'failed', result }
-
-  await deps.refresh({ repoId: request.repoId })
-  const status: RepoDispatchStatus = deps.dispatcher.status().find((s) => s.repoId === request.repoId) ?? {
-    repoId: request.repoId,
-    owner: request.held ? 'app' : 'cockpit',
-    state: { kind: 'idle' },
-    draining: false,
-    claudeSessionId: null,
-    claimedAt: null,
-    budget: null,
-    observed: [],
-  }
-  return { kind: 'ok', status }
-}
-
-export interface ResolveDispatchRelayDeps {
-  readonly listRepositories: typeof listRepositories
-  readonly dispatcher: Dispatcher
-  readonly maxReplyChars: number
-}
-
-/**
- * `'dispatch:relay'`'s composition (#265) — validates the request shape
- * itself (a bad shape throws, the same rail every other channel in this
- * app follows), resolves the repository is actually `ready`, then delegates
- * to `dispatcher.relay`, which itself refuses `not-owner`/`unknown-agent`/
- * `no-dispatcher`.
- */
-export async function resolveDispatchRelay(
-  registryDeps: RegistryDeps,
-  request: { readonly repoId: RepoId; readonly agentId: string; readonly text: string },
-  deps: ResolveDispatchRelayDeps,
-): Promise<DispatchRelayResult> {
-  if (typeof request?.repoId !== 'string' || typeof request.agentId !== 'string' || request.agentId === '' || typeof request.text !== 'string' || request.text === '' || request.text.length > deps.maxReplyChars) {
-    throw new Error("'dispatch:relay' requires a ready repoId, a non-empty agentId, and non-empty text within MAX_REPLY_CHARS")
-  }
-  await resolveReadyRepoRoot(registryDeps, request.repoId, deps)
-  return deps.dispatcher.relay({ repoId: request.repoId, agentId: request.agentId, text: request.text })
+  const scoped = list.ok ? list.repositories.filter(isReadyEntry).filter((e) => e.id === repoId) : []
+  const report = await deps.haltDispatch({ snapshot: deps.snapshot(), entries: scoped, runStates: deps.runStates, repoIds: [repoId], auditDir: deps.auditDir, now: deps.now })
+  const released = (await Promise.all(scoped.map((entry) => deps.releaseOwnership({ repoRoot: entry.path, repo: entry.config.repo })))).every((r) => r.ok)
+  await deps.refresh({ repoId })
+  return { ok: true, command: 'pause', repoId, runState: deps.runStates.current(repoId), report, released }
 }

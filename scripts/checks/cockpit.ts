@@ -1,69 +1,31 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, pipelineSkillText } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, pipelineSkillText } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
-// The worktree-reclamation blocks live in scripts/checks/worktrees.ts and
-// the tick-query/pacing/ownership blocks in scripts/checks/cockpit-tick.ts
-// (issue 181, splitting this module's own file-size ratchet entry) — this module
-// keeps the cockpit rails, the liveness reset, the cycle cap and zero-diff
-// gate, the TaskList liveness contract, and running-plugin staleness.
-export default async function ({ fail, ok }: Reporter) {
-  // --- Cockpit rails stay checkable preconditions, not bare prohibitions ------
-  // guard(#120, #138, #143): the cockpit looping gh and losing everything
-  // but the first iteration mid-loop, clearing its own needs-human gate
-  // unprompted under throughput pressure, or widening the terminal-state
-  // rail back into a general licence to revisit approved — each rail was
-  // "never do X" prose once, and the cockpit did X anyway.
+// Keeps the cockpit rails, liveness reset, cycle cap and zero-diff gate, the TaskList
+// liveness contract, and running-plugin staleness.
+export default async function ({ expect, fail, ok }: Reporter) {
+  // --- Cockpit rails stay checkable preconditions, not bare prohibitions — each was
+  // "never do X" prose once, and the cockpit did X anyway. ---
   {
     const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
     const text = readFileSync(join(root, skillRel), 'utf8');
 
-    if (!/\bunblock\b/i.test(text)) {
-      fail('cockpit-rails', `${skillRel} never declares an 'unblock' command`);
-    } else {
-      ok();
-    }
+    expect(/\bunblock\b/i.test(text), 'cockpit-rails', `${skillRel} never declares an 'unblock' command`);
 
     const batchForm = [...text.matchAll(/gh issue edit(?:\s+\d+){2,}/g)];
-    if (batchForm.length < 2) {
-      fail('cockpit-rails', `${skillRel}: expected the batch form 'gh issue edit <n> <n> ...' to appear at least twice, found ${batchForm.length}`);
-    } else {
-      ok();
-    }
+    expect(!(batchForm.length < 2), 'cockpit-rails', `${skillRel}: expected the batch form 'gh issue edit <n> <n> ...' to appear at least twice, found ${batchForm.length}`);
 
-    if (!text.includes('only when an operator instruction names that item')) {
-      fail('cockpit-rails', `${skillRel} is missing the gate rail's precondition phrase 'only when an operator instruction names that item'`);
-    } else {
-      ok();
-    }
+    expect(text.includes('only when an operator instruction names that item'), 'cockpit-rails', `${skillRel} is missing the gate rail's precondition phrase 'only when an operator instruction names that item'`);
 
-    // Regression guard: the `<labels.approved>` never-touch rail is a
-    // precondition too, not a bare prohibition — and the announcement that
-    // claims a pull request is merge-ready has to show its work.
-    if (!text.includes('only when a check on it has gone red, or a same-SHA refresh loop is stuck')) {
-      fail('cockpit-rails', `${skillRel} is missing the approved-carve-out precondition phrase 'only when a check on it has gone red, or a same-SHA refresh loop is stuck'`);
-    } else {
-      ok();
-    }
+    // The `<labels.approved>` never-touch rail is a precondition too, and the announcement claiming merge-ready has to show its work.
+    expect(text.includes('only when a check on it has gone red, or a same-SHA refresh loop is stuck'), 'cockpit-rails', `${skillRel} is missing the approved-carve-out precondition phrase 'only when a check on it has gone red, or a same-SHA refresh loop is stuck'`);
 
-    if (!/every check and its conclusion/.test(text)) {
-      fail('cockpit-rails', `${skillRel}'s approved-announcement copy never shows a check conclusion`);
-    } else {
-      ok();
-    }
+    expect(/every check and its conclusion/.test(text), 'cockpit-rails', `${skillRel}'s approved-announcement copy never shows a check conclusion`);
 
-    // guard(#288): the revise #N route's own precondition phrase, and the
-    // comment-before-swap ordering inside its own bullet (so the request is
-    // durable even when the swap's own compare-and-swap then fails).
-    if (!text.includes("only when an operator's own message names that pull request and states the change it wants")) {
-      fail(
-        'cockpit-rails',
-        `${skillRel} is missing the revise #N precondition phrase "only when an operator's own message names that pull request and states the change it wants"`,
-      );
-    } else {
-      ok();
-    }
+    // The revise #N route's own precondition, and comment-before-swap ordering so the request survives a failed compare-and-swap.
+    expect(text.includes("only when an operator's own message names that pull request and states the change it wants"), 'cockpit-rails', `${skillRel} is missing the revise #N precondition phrase "only when an operator's own message names that pull request and states the change it wants"`);
 
     const reviseBulletStart = text.indexOf('**"revise #N:');
     if (reviseBulletStart === -1) {
@@ -73,69 +35,28 @@ export default async function ({ fail, ok }: Reporter) {
       const reviseBullet = reviseBulletEnd === -1 ? text.slice(reviseBulletStart) : text.slice(reviseBulletStart, reviseBulletEnd);
       const commentIdx = reviseBullet.indexOf('gh pr comment');
       const swapIdx = reviseBullet.indexOf('--remove-label "<labels.approved>"');
-      if (commentIdx === -1 || swapIdx === -1 || commentIdx > swapIdx) {
-        fail(
-          'cockpit-rails',
-          `${skillRel}'s "revise #N" bullet must post 'gh pr comment' before '--remove-label "<labels.approved>"', so the request survives a failed swap`,
-        );
-      } else {
-        ok();
-      }
+      expect(!(commentIdx === -1 || swapIdx === -1 || commentIdx > swapIdx), 'cockpit-rails', `${skillRel}'s "revise #N" bullet must post 'gh pr comment' before '--remove-label "<labels.approved>"', so the request survives a failed swap`);
     }
   }
 
-  // --- Liveness reset — the cockpit resets only what it can prove it dispatched
-  // guard(#150): a dead-agent reset firing on an item this session never
-  // dispatched, or firing more than once per crash loop — every no-match
-  // used to be treated identically (report, never act), leaving issues
-  // 66/67 parked at `in progress` with no way to tell a dead dispatch from
-  // someone else's live agent. This checks the split, its proof artifact,
-  // and its one-reset cap are all still named.
+  // --- Liveness reset — the cockpit resets only what it can prove it dispatched: checks the
+  // split, its proof artifact, and its one-reset cap are all still named. ---
   {
     const rel = 'plugins/port/skills/pipeline/*.md';
     const text = pipelineSkillText();
 
-    if (!text.includes('.temp/dispatch-log.md')) {
-      fail('liveness-reset', `${rel} never names the '.temp/dispatch-log.md' artifact`);
-    } else {
-      ok();
-    }
+    expect(text.includes('.temp/dispatch-log.md'), 'liveness-reset', `${rel} never names the '.temp/dispatch-log.md' artifact`);
 
-    if (!text.includes("reset only an item this session's own dispatch log records")) {
-      fail(
-        'liveness-reset',
-        `${rel} is missing the literal precondition phrase "reset only an item this session's own dispatch log records"`,
-      );
-    } else {
-      ok();
-    }
+    expect(text.includes("reset only an item this session's own dispatch log records"), 'liveness-reset', `${rel} is missing the literal precondition phrase "reset only an item this session's own dispatch log records"`);
 
-    if (!text.includes('at most one automatic reset per item per session')) {
-      fail(
-        'liveness-reset',
-        `${rel} is missing the literal phrase 'at most one automatic reset per item per session'`,
-      );
-    } else {
-      ok();
-    }
+    expect(text.includes('at most one automatic reset per item per session'), 'liveness-reset', `${rel} is missing the literal phrase 'at most one automatic reset per item per session'`);
 
-    // Issue 189: CONFLICTING no longer removes '<labels.approved>' — it adds
-    // '<labels.refreshBranch>' instead, leaving the approval in place.
-    if (!text.includes('adding `<labels.refreshBranch>` to an approved pull request when `mergeable` reads `CONFLICTING` is permitted')) {
-      fail('liveness-reset', `${rel}'s '<labels.approved>' carve-out never documents the refresh-without-withdrawal fact`);
-    } else {
-      ok();
-    }
+    // CONFLICTING no longer removes '<labels.approved>' — it adds '<labels.refreshBranch>' instead, leaving the approval in place.
+    expect(text.includes('adding `<labels.refreshBranch>` to an approved pull request when `mergeable` reads `CONFLICTING` is permitted'), 'liveness-reset', `${rel}'s '<labels.approved>' carve-out never documents the refresh-without-withdrawal fact`);
   }
 
-  // --- Unconditional cycle cap and the zero-diff review gate -----------------
-  // guard(#162): a review cycle cap that never fires on a clean-but-unmerged
-  // bounce, and a review dispatched twice against a diff it already graded.
-  // Pull request 157 ran 7 cycles because the cap only fired "and the latest
-  // review still produced Critical or Medium findings" — a condition every
-  // CI-only bounce arrives at clean, so it never fired. This checks the cap
-  // dropped that qualifier, and that the zero-diff gate names the fields
-  // and comment it reads.
+  // --- Unconditional cycle cap and the zero-diff review gate: the cap must never carry a
+  // "findings still exist" qualifier that a clean-but-unmerged bounce never trips. ---
   {
     const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
     const pipelineRel = 'plugins/port/docs/PIPELINE.md';
@@ -149,20 +70,9 @@ export default async function ({ fail, ok }: Reporter) {
       const capEnd = skillText.indexOf('\n## ', capStart);
       const capSection = capEnd === -1 ? skillText.slice(capStart) : skillText.slice(capStart, capEnd);
 
-      if (capSection.includes('and the latest review still produced Critical or Medium findings')) {
-        fail(
-          'cycle-cap',
-          `${skillRel}'s cycle cap still carries the 'and the latest review still produced Critical or Medium findings' qualifier — this is exactly what let #157 bounce through 7 clean cycles`,
-        );
-      } else {
-        ok();
-      }
+      expect(!capSection.includes('and the latest review still produced Critical or Medium findings'), 'cycle-cap', `${skillRel}'s cycle cap still carries the 'and the latest review still produced Critical or Medium findings' qualifier — this is exactly what let #157 bounce through 7 clean cycles`);
 
-      if (!capSection.includes('unconditional')) {
-        fail('cycle-cap', `${skillRel}'s cycle cap section never states the cap is 'unconditional'`);
-      } else {
-        ok();
-      }
+      expect(capSection.includes('unconditional'), 'cycle-cap', `${skillRel}'s cycle cap section never states the cap is 'unconditional'`);
     }
 
     const combinedText = pipelineSkillText();
@@ -173,68 +83,28 @@ export default async function ({ fail, ok }: Reporter) {
       const zeroDiffEnd = combinedText.indexOf('\n**File contention gate', zeroDiffStart);
       const zeroDiffSection = zeroDiffEnd === -1 ? combinedText.slice(zeroDiffStart) : combinedText.slice(zeroDiffStart, zeroDiffEnd);
       for (const phrase of ['commit.oid', 'headRefOid', '## Gate cleared']) {
-        if (!zeroDiffSection.includes(phrase)) {
-          fail('zero-diff-review', `plugins/port/skills/pipeline/*.md's zero-diff review gate never names '${phrase}'`);
-        } else {
-          ok();
-        }
+        expect(zeroDiffSection.includes(phrase), 'zero-diff-review', `plugins/port/skills/pipeline/*.md's zero-diff review gate never names '${phrase}'`);
       }
     }
 
-    if (!pipelineText.includes('unconditional')) {
-      fail('cycle-cap', `${pipelineRel} never states the cycle cap is 'unconditional'`);
-    } else {
-      ok();
-    }
+    expect(pipelineText.includes('unconditional'), 'cycle-cap', `${pipelineRel} never states the cycle cap is 'unconditional'`);
 
-    if (!pipelineText.includes('Zero-diff review')) {
-      fail('zero-diff-review', `${pipelineRel} carries no 'Zero-diff review' rule`);
-    } else {
-      ok();
-    }
+    expect(pipelineText.includes('Zero-diff review'), 'zero-diff-review', `${pipelineRel} carries no 'Zero-diff review' rule`);
   }
 
-  // --- Liveness is a TaskList call, never a label inference -------------------
-  // guard(#158): TaskList was granted and referenced but never actually
-  // called across 96 ticks and 62 dispatches, and when asked a direct
-  // liveness question the cockpit answered from labels, then blamed the
-  // operator's own observation on a stale UI element. This checks the
-  // unconditional-call contract, the inverse-sign rail, the
-  // liveness-question recipe's three prohibitions, and that both stop paths
-  // name TaskList and TaskStop.
+  // --- Liveness is a TaskList call, never a label inference: checks the unconditional-call
+  // contract, the inverse-sign rail, and that both stop paths name TaskList and TaskStop. ---
   {
     const rel = 'plugins/port/skills/pipeline/*.md';
     const text = pipelineSkillText();
 
-    if (!/a tick that reports on liveness without a `?TaskList`? call this tick has failed/i.test(text)) {
-      fail(
-        'liveness-call',
-        `${rel} is missing the literal unconditional-call phrase 'a tick that reports on liveness without a TaskList call this tick has failed'`,
-      );
-    } else {
-      ok();
-    }
+    expect(/a tick that reports on liveness without a `?TaskList`? call this tick has failed/i.test(text), 'liveness-call', `${rel} is missing the literal unconditional-call phrase 'a tick that reports on liveness without a TaskList call this tick has failed'`);
 
-    if (!text.includes('not evidence of liveness or of non-liveness')) {
-      fail(
-        'liveness-call',
-        `${rel} is missing the literal inverse-sign phrase 'not evidence of liveness or of non-liveness'`,
-      );
-    } else {
-      ok();
-    }
+    expect(text.includes('not evidence of liveness or of non-liveness'), 'liveness-call', `${rel} is missing the literal inverse-sign phrase 'not evidence of liveness or of non-liveness'`);
 
-    if (!text.includes('stale UI element')) {
-      fail('liveness-call', `${rel} never names the 'stale UI element' failure the liveness recipe exists to prevent`);
-    } else {
-      ok();
-    }
+    expect(text.includes('stale UI element'), 'liveness-call', `${rel} never names the 'stale UI element' failure the liveness recipe exists to prevent`);
 
-    if (/\bI don't have a way to\b.*\bagent\b/i.test(text) || /the tool is unavailable\.[^N]/i.test(text)) {
-      fail('liveness-call', `${rel} appears to claim the TaskList tool is unavailable somewhere outside the never-do rail`);
-    } else {
-      ok();
-    }
+    expect(!(/\bI don't have a way to\b.*\bagent\b/i.test(text) || /the tool is unavailable\.[^N]/i.test(text)), 'liveness-call', `${rel} appears to claim the TaskList tool is unavailable somewhere outside the never-do rail`);
 
     const stopN = /- \*\*"stop #N"[\s\S]*?(?=\n- \*\*"stop everything")/.exec(text)?.[0] ?? '';
     const stopAll = /- \*\*"stop everything"[\s\S]*?(?=\n## Pacing)/.exec(text)?.[0] ?? '';
@@ -244,25 +114,13 @@ export default async function ({ fail, ok }: Reporter) {
         continue;
       }
       for (const tool of ['TaskList', 'TaskStop']) {
-        if (!section.includes(tool)) {
-          fail('liveness-call', `${rel}'s '${label}' entry never names '${tool}'`);
-        } else {
-          ok();
-        }
+        expect(section.includes(tool), 'liveness-call', `${rel}'s '${label}' entry never names '${tool}'`);
       }
     }
   }
 
-  // --- Running-plugin staleness is resolved, not printed from a path ---------
-  // guard(#158, #127): the startup line used to report only a path,
-  // identical for a current and a days-stale copy. This checks the
-  // resolution mechanism is named (the registry, the marketplace record, the
-  // scope precedence), that the new tick-state field is written in both
-  // places that must stay in sync, that CONTRIBUTING.md carries the three-way
-  // ground-truth test and the corrected cache-path claim, and that the new
-  // staleness prose in PREFLIGHT.md never hard-codes this repository's own
-  // name — the generality requirement the feature is supposed to satisfy for
-  // every consumer, not just this one.
+  // --- Running-plugin staleness is resolved, not printed from a path: the resolution
+  // mechanism, the tick-state field, CONTRIBUTING.md's ground-truth test, and that staleness prose in PREFLIGHT.md never hard-codes this repository's own name. ---
   {
     const unionRel = 'plugins/port/skills/pipeline/*.md';
     const preflightRel = 'plugins/port/skills/pipeline/PREFLIGHT.md';
@@ -272,50 +130,20 @@ export default async function ({ fail, ok }: Reporter) {
     const contributingText = readFileSync(join(root, contributingRel), 'utf8');
 
     for (const phrase of ['installed_plugins.json', 'gitCommitSha', 'known_marketplaces.json', 'commits behind']) {
-      if (!unionText.includes(phrase)) {
-        fail('plugin-staleness', `${unionRel} never names '${phrase}'`);
-      } else {
-        ok();
-      }
+      expect(unionText.includes(phrase), 'plugin-staleness', `${unionRel} never names '${phrase}'`);
     }
 
-    if (!unionText.includes('local > project > user')) {
-      fail('plugin-staleness', `${unionRel} never states the 'local > project > user' scope precedence`);
-    } else {
-      ok();
-    }
+    expect(unionText.includes('local > project > user'), 'plugin-staleness', `${unionRel} never states the 'local > project > user' scope precedence`);
 
     const tickStateMentions = [...unionText.matchAll(/Plugin staleness/g)].length;
-    if (tickStateMentions < 2) {
-      fail(
-        'plugin-staleness',
-        `${unionRel} names 'Plugin staleness' only ${tickStateMentions} time(s) — it must appear in both the Startup preflight tick-state template and the Tick procedure's field list`,
-      );
-    } else {
-      ok();
-    }
+    expect(!(tickStateMentions < 2), 'plugin-staleness', `${unionRel} names 'Plugin staleness' only ${tickStateMentions} time(s) — it must appear in both the Startup preflight tick-state template and the Tick procedure's field list`);
 
-    if (!contributingText.includes('git rev-list --count') || !contributingText.includes('diff -rq')) {
-      fail(`plugin-staleness`, `${contributingRel} is missing one half of the three-way test ('git rev-list --count' and 'diff -rq')`);
-    } else {
-      ok();
-    }
+    expect(!(!contributingText.includes('git rev-list --count') || !contributingText.includes('diff -rq')), `plugin-staleness`, `${contributingRel} is missing one half of the three-way test ('git rev-list --count' and 'diff -rq')`);
 
-    if (!/a cache path is not evidence of a stale copy/i.test(contributingText)) {
-      fail(
-        'plugin-staleness',
-        `${contributingRel} is missing the literal correction 'a cache path is not evidence of a stale copy'`,
-      );
-    } else {
-      ok();
-    }
+    expect(/a cache path is not evidence of a stale copy/i.test(contributingText), 'plugin-staleness', `${contributingRel} is missing the literal correction 'a cache path is not evidence of a stale copy'`);
 
-    // Generality: the staleness prose (Startup preflight step 4 through the
-    // start of step 5, now in PREFLIGHT.md) must derive the marketplace,
-    // owner, and target ref from config/the plugin registry — never
-    // hard-code this repository's own name. UX-state blockquote lines are
-    // exempt, matching how the existing UX-state copy already shows
-    // concrete example names.
+    // The staleness prose must derive the marketplace, owner, and target ref from
+    // config/the plugin registry — never hard-code this repository's own name. UX-state blockquote lines are exempt.
     const start = preflightText.indexOf('**Step 4 — integration drift');
     const end = preflightText.indexOf('**Step 5 — label vocabulary');
     if (start === -1 || end === -1) {
@@ -327,24 +155,13 @@ export default async function ({ fail, ok }: Reporter) {
         .filter((line) => !line.trim().startsWith('>'));
       const prose = proseLines.join('\n');
       for (const literal of ['b-at-neu/port', '`dev`', '0.1.0']) {
-        if (prose.includes(literal)) {
-          fail(
-            'plugin-staleness',
-            `${preflightRel}'s staleness step names the literal '${literal}' outside a UX-state example — it must derive from config or the plugin registry`,
-          );
-        } else {
-          ok();
-        }
+        expect(!prose.includes(literal), 'plugin-staleness', `${preflightRel}'s staleness step names the literal '${literal}' outside a UX-state example — it must derive from config or the plugin registry`);
       }
     }
   }
 
-  // --- Operator-facing copy names the ticket, never a bare PR number ---------
-  // guard(#281): the cockpit's own report prose mixing the issue (ticket)
-  // number and the pull request's own GitHub-assigned number for one piece of
-  // pipeline work — a bare `PR #<n>` is always the pull request's own
-  // number, silently divergent from the ticket number the rest of the report
-  // names, with nothing marking it as such.
+  // --- Operator-facing copy names the ticket, never a bare PR number — a bare `PR #<n>` is
+  // always the pull request's own number, silently divergent from the ticket number. ---
   {
     const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
     const pipelineRel = 'plugins/port/docs/PIPELINE.md';
@@ -361,21 +178,9 @@ export default async function ({ fail, ok }: Reporter) {
       ok();
     }
 
-    if (!skillText.includes("names the ticket number, never the pull request's own")) {
-      fail('cockpit-numbering', `${skillRel} is missing the literal rule phrase 'names the ticket number, never the pull request's own'`);
-    } else {
-      ok();
-    }
+    expect(skillText.includes("names the ticket number, never the pull request's own"), 'cockpit-numbering', `${skillRel} is missing the literal rule phrase 'names the ticket number, never the pull request's own'`);
 
-    if (pipelineText.includes('the command takes the pull request number')) {
-      fail('cockpit-numbering', `${pipelineRel} still carries the stale caveat 'the command takes the pull request number' — /port:implement now resolves a ticket to its pull request (#281)`);
-    } else {
-      ok();
-    }
-    if (unionText.includes('the command takes the pull request number')) {
-      fail('cockpit-numbering', `${unionRel} still carries the stale caveat 'the command takes the pull request number' — /port:implement now resolves a ticket to its pull request (#281)`);
-    } else {
-      ok();
-    }
+    expect(!pipelineText.includes('the command takes the pull request number'), 'cockpit-numbering', `${pipelineRel} still carries the stale caveat 'the command takes the pull request number' — /port:implement now resolves a ticket to its pull request (#281)`);
+    expect(!unionText.includes('the command takes the pull request number'), 'cockpit-numbering', `${unionRel} still carries the stale caveat 'the command takes the pull request number' — /port:implement now resolves a ticket to its pull request (#281)`);
   }
 }

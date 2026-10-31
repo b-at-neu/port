@@ -1,17 +1,10 @@
-// The tail store (#84): one Map<tailId, TailState> in main, giving the
-// renderer a follow primitive over openTranscript/advanceTranscript without
-// ever exposing a TranscriptCursor -- main-process-only, per transcript.ts --
-// across IPC. tailId is a module-local counter (tail-<n>), not randomUUID:
-// no node:crypto import is needed for an opaque token whose whole scope is
-// one main process.
-import type { TranscriptTailOpen, TranscriptTailPoll } from '../../shared/sessions/transcript'
-import { advanceTranscript, openTranscript } from './transcript'
-import type { OpenTranscriptParams, TranscriptCursor } from './transcript'
+import type { TranscriptCursor, OpenTranscriptParams, OpenTailParams, PollTailParams, CloseTailParams, TranscriptTailStore } from '@/types/sessions'
 
-/** Swept lazily at the head of every `open` and `poll` -- no periodic timer
- *  and no `webContents` bookkeeping. A renderer reload or a closed window
- *  therefore leaks at most `MAX_OPEN_TAILS` small cursors for at most this
- *  long. */
+// Gives the renderer a follow primitive without ever exposing a TranscriptCursor across IPC. tailId is a module-local counter, not randomUUID, since its whole scope is one main process.
+import type { TranscriptTailOpen, TranscriptTailPoll } from '@/utils/sessions/transcript'
+import { advanceTranscript, openTranscript } from '@/main/sessions/transcript'
+
+/** Swept lazily at the head of every `open`/`poll` -- no periodic timer or `webContents` bookkeeping. */
 const TAIL_IDLE_MS = 5 * 60_000
 
 /** Evicting least-recently-touched on `open` -- bounded memory even if a
@@ -23,48 +16,24 @@ interface TailState {
   readonly touchedAt: number
 }
 
-export interface TailStoreDeps {
+interface TranscriptTailStoreDeps {
   readonly openTranscript: typeof openTranscript
   readonly advanceTranscript: typeof advanceTranscript
   readonly now: () => number
 }
 
-const defaultDeps: TailStoreDeps = {
+const defaultDeps: TranscriptTailStoreDeps = {
   openTranscript,
   advanceTranscript,
   now: () => Date.now(),
-}
-
-export interface OpenTailParams {
-  readonly sessionId: string
-  readonly agentId: string | null
-  readonly claudeHome?: string
-}
-
-export interface PollTailParams {
-  readonly tailId: string
-}
-
-export interface CloseTailParams {
-  readonly tailId: string
-}
-
-export interface TailStore {
-  openTail(params: OpenTailParams): Promise<TranscriptTailOpen>
-  pollTail(params: PollTailParams): Promise<TranscriptTailPoll>
-  closeTail(params: CloseTailParams): void
-  /** Test-only introspection -- how many tails are currently held open. */
-  readonly size: number
 }
 
 function paramsToOpen(params: OpenTailParams): OpenTranscriptParams {
   return { sessionId: params.sessionId, agentId: params.agentId, claudeHome: params.claudeHome }
 }
 
-/** `createTailStore` is a factory, never a shared module-level singleton by
- *  itself, so a test gets its own `Map` and its own injected clock;
- *  `main/ipc.ts` binds the one instance the running app actually uses. */
-export function createTailStore(deps: TailStoreDeps = defaultDeps): TailStore {
+/** A factory, never a shared module-level singleton, so a test gets its own `Map` and injected clock. */
+export function createTailStore(deps: TranscriptTailStoreDeps = defaultDeps): TranscriptTailStore {
   const tails = new Map<string, TailState>()
   let nextId = 0
 
@@ -93,9 +62,7 @@ export function createTailStore(deps: TailStoreDeps = defaultDeps): TailStore {
     const { read, cursor } = await deps.openTranscript(paramsToOpen(params))
     if (!read.ok) return { ok: false, kind: read.kind, message: read.message, path: read.path }
     if (cursor === null) {
-      // openTranscript's own contract: a successful read always carries a
-      // cursor. Guarded rather than cast, so a future drift between the two
-      // fails loudly here instead of silently losing follow state.
+      // Guarded rather than cast, so a future drift from the contract fails loudly here instead of silently losing follow state.
       throw new Error('openTranscript returned ok: true with no cursor')
     }
 
@@ -115,10 +82,7 @@ export function createTailStore(deps: TailStoreDeps = defaultDeps): TailStore {
 
     const advanced = await deps.advanceTranscript(state.cursor)
     if (!advanced.ok) {
-      // Direction of failure: a stale cursor re-opens, it never goes quiet.
-      // Dropping the tail here means a later poll against the same id
-      // reports unknown-tail (itself a re-open signal) rather than repeating
-      // the same failure forever.
+      // Dropping the tail means a later poll reports unknown-tail rather than repeating the same failure forever.
       tails.delete(params.tailId)
       return { ok: false, kind: advanced.kind, message: advanced.message, path: advanced.path }
     }
@@ -142,4 +106,4 @@ export function createTailStore(deps: TailStoreDeps = defaultDeps): TailStore {
 }
 
 /** The one instance `main/ipc.ts`'s three tail channels bind to. */
-export const tailStore: TailStore = createTailStore()
+export const tailStore: TranscriptTailStore = createTailStore()

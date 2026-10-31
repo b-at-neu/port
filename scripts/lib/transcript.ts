@@ -1,21 +1,5 @@
-// Dependency-free JSONL parsing and record classification (#123) —
-// scripts/'s only reader of a Claude Code transcript. Pure: no `node:fs`,
-// no child process, nothing but string and array operations, so every
-// export here is directly unit-testable against
-// scripts/port-forensics/cases/transcript.cases.json.
-//
-// Behaviourally pinned, for the record-classification and tool-call-pairing
-// slice both sides share, against apps/desktop/src/main/sessions/
-// transcript-entries.ts's own `createDeriver` — via the shared case table
-// apps/desktop/src/main/sessions/transcript.cases.json
-// (scripts/checks/forensics.ts runs this module against it;
-// transcript-entries.test.ts runs the desktop deriver against the same
-// file) — so scripts/port-forensics/ and the desktop app can never silently
-// disagree about what a record means (docs/ENGINEERING.md §2).
-//
-// Every transcript byte is untrusted data (the ticket's own "Two hard
-// constraints"): parsed and classified here, never interpreted as
-// instructions and never executed.
+// Dependency-free JSONL parsing and record classification — scripts/'s only reader of a
+// transcript. Pure, pinned against apps/desktop's `createDeriver` via a shared case table.
 
 const CONTROL_RANGES = [
   [0x00, 0x08],
@@ -32,10 +16,8 @@ function isInRanges(codePoint: number, ranges: number[][]): boolean {
   return ranges.some(([start, end]) => codePoint >= start && codePoint <= end);
 }
 
-/** Strips C0/C1 control characters (tab/newline excepted) and bidi override
- *  characters — the same ranges apps/desktop's own `sanitize` strips, so a
- *  transcript's untrusted bytes can never inject a terminal escape or
- *  reverse how a finding reads in the operator's console. */
+/** Strips C0/C1 control characters (tab/newline excepted) and bidi override characters, so
+ *  untrusted bytes can never inject a terminal escape or reverse how a finding reads. */
 export function sanitize(text: string): string {
   let out = '';
   for (const ch of text) {
@@ -48,20 +30,16 @@ export function sanitize(text: string): string {
 
 const EXCERPT_CAP = 200;
 
-/** The one chokepoint for transcript-derived text reaching a finding: sanitize,
- *  then cap at `cap` (default 200) characters, with an `omittedChars` count.
- *  Nothing else under scripts/port-forensics/ may print record-derived text —
- *  scripts/checks/forensics.ts pins that mechanically. */
+/** The one chokepoint for transcript-derived text reaching a finding: sanitize, then cap.
+ *  Nothing else under scripts/port-forensics/ may print record-derived text. */
 export function excerpt(text: string | null | undefined, cap = EXCERPT_CAP): { text: string; omittedChars: number } {
   const sanitized = sanitize(text ?? '');
   if (sanitized.length <= cap) return { text: sanitized, omittedChars: 0 };
   return { text: sanitized.slice(0, cap), omittedChars: sanitized.length - cap };
 }
 
-/** JSONL text -> parsed records, never throwing. A line that fails to parse
- *  is counted in `malformed`, never dropped silently — the count is a
- *  findings-report fact, not swallowed. Blank lines are skipped without
- *  counting, matching apps/desktop's own `parseLines`. */
+/** JSONL text -> parsed records, never throwing. A line that fails to parse is counted in
+ *  `malformed`, never dropped silently. Blank lines are skipped without counting. */
 export function parseLines(text: string): { records: any[]; malformed: number } {
   const records: any[] = [];
   let malformed = 0;
@@ -81,13 +59,8 @@ function isPlainObject(value: unknown): boolean {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** One already-parsed JSONL record -> zero or more generic events, in the
- *  vocabulary apps/desktop's own `TranscriptEntry` kinds already use
- *  (`user-text`/`assistant-text`/`thinking`/`tool-use`/`tool-result`/`meta`).
- *  Unrecognizable content (missing `uuid`/`timestamp`, an unknown block
- *  type) is skipped, never thrown on — a transcript is untrusted input from
- *  disk, the same contract `parseLines` holds for a line that is not even
- *  valid JSON. */
+/** One already-parsed JSONL record -> zero or more generic events, in apps/desktop's own
+ *  `TranscriptEntry` vocabulary. Unrecognizable content is skipped, never thrown on. */
 export function classifyRecord(raw: any): any[] {
   if (!isPlainObject(raw)) return [];
   const { uuid, timestamp } = raw;
@@ -129,8 +102,7 @@ export function classifyRecord(raw: any): any[] {
         content: block.content,
       });
     }
-    // Any other block type (redacted_thinking, an image, ...) is skipped —
-    // not this module's concern; forensics never renders tool payloads.
+    // Any other block type is skipped — forensics never renders tool payloads.
   }
   return events;
 }
@@ -145,15 +117,8 @@ function resultTextOf(content: any): string {
   return parts.join('\n');
 }
 
-/** Folds a flat, ordered list of already-classified events (`classifyRecord`)
- *  into `{ emitted, paired }` — `tool-use` and the `tool-result` that later
- *  carries its id pair by id, never by position, first-result-wins (a
- *  duplicate `tool_result` for the same id is a no-op), the exact contract
- *  apps/desktop's own `createDeriver` implements independently. Order-only:
- *  concatenating what were originally separate reads produces the same
- *  result as reading them in one pass, since pairing has no batch boundary
- *  of its own — which is what lets a whole-file read (this module's use)
- *  and a streamed, chunked read (the desktop app's) agree. */
+/** Folds classified events into `{ emitted, paired }` — `tool-use`/`tool-result` pair by id,
+ *  never by position, first-result-wins. Order-only, so a whole-file read and a streamed one agree. */
 export function pairToolResults(events: any[]): { emitted: any[]; paired: any[] } {
   const emitted: any[] = [];
   const pendingIndexById = new Map<string, number>();
@@ -184,9 +149,7 @@ export function pairToolResults(events: any[]): { emitted: any[]; paired: any[] 
   return { emitted, paired };
 }
 
-/** The whole-session convenience: already-parsed records -> `{ emitted,
- *  paired }`, in one call. `scan.ts` is the only caller that reads a file;
- *  this stays pure. */
+/** The whole-session convenience: already-parsed records -> `{ emitted, paired }`, in one call. */
 export function deriveEvents(records: any[]): { emitted: any[]; paired: any[] } {
   return pairToolResults(records.flatMap((r) => classifyRecord(r)));
 }

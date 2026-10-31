@@ -1,19 +1,8 @@
-// Operator-transcript predicates for the agent-guard PreToolUse hook.
-//
-// Split out of guard-rules.mjs (#288) — that file was at 486/500 lines and
-// the approval arm needed room the ceiling did not have. This module holds
-// the two functions that read a session transcript's operator (human)
-// messages and test whether they name a set of item numbers; guard-rules.mjs
-// keeps `callerKind`, `allowMatchers`, `invokedCockpitSkill`, and `decide`
-// itself, importing these two back in unchanged. Moved verbatim, docblocks
-// included — no behaviour change, only location.
+// Operator-transcript predicates for the agent-guard PreToolUse hook: reads a session
+// transcript's operator (human) messages and tests whether they name a set of item numbers.
 
-/** The last `limit` operator (human) messages found in a session transcript's
- *  JSONL text, oldest first. Drops harness-injected wrapper texts (slash
- *  command expansions, the `Caveat:` preamble) and `tool_result`-only user
- *  entries, which are not something a human typed. Returns `null` when
- *  **no** parseable user entry exists at all, so "unreadable" is
- *  distinguishable from "read, and the item is not named". */
+/** The last `limit` operator (human) messages in a session transcript's JSONL text, oldest
+ *  first, dropping harness wrapper texts. Returns `null` when nothing parseable exists at all. */
 export function recentOperatorMessages(jsonlText, limit = 5) {
   if (typeof jsonlText !== 'string' || jsonlText.length === 0) return null;
   const texts = [];
@@ -50,15 +39,8 @@ export function recentOperatorMessages(jsonlText, limit = 5) {
   return texts.slice(-limit);
 }
 
-/** True when every number in `numbers` is named in at least one of
- *  `messages`, as `#N` or as a standalone `N`. `messages === null` means the
- *  transcript could not be read at all — unverifiable, not unauthorised, so
- *  this returns `null` rather than `false`. An empty `numbers` means there is
- *  nothing to verify a name against, so this returns `false` rather than the
- *  vacuously-true result `[].every(...)` would otherwise give — a caller
- *  should prefer checking `gateClearAttempt`'s `hasNumbers` directly so it
- *  can give a specific "no identifier found" reason, but this is the
- *  defense-in-depth backstop if it doesn't. */
+/** True when every number is named in some message, as `#N` or standalone. `null` messages
+ *  means unreadable; empty `numbers` returns `false`, never the vacuously-true `[].every(...)`. */
 export function operatorNamed(numbers, messages) {
   if (messages === null) return null;
   if (numbers.length === 0) return false;

@@ -1,21 +1,16 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, readJson, walk, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, readJson, walk, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
-// Issue 77: apps/desktop/src/main/local/ is the app's only reader of the two
-// local sources the pipeline writes (`git worktree list --porcelain` and
-// `.agents/denials.log`). Four assertions pin its decisions mechanically, in
-// the shape of desktop-github.ts's/desktop-registry.ts's own guards.
-export default async function ({ fail, ok }: Reporter) {
+// apps/desktop/src/main/local/ is the app's only reader of the two local sources the
+// pipeline writes. These assertions pin its decisions mechanically.
+export default async function ({ expect, fail, ok }: Reporter) {
   const dir = 'apps/desktop/src/main/local';
   const files = walk(join(root, dir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
 
-  // --- (1) The directory has source files at all ------------------------------
-  // guard(#77): a second gh-calling adapter landing beside the one issue 76
-  // already established, or this local-only rail passing vacuously once the
-  // directory is deleted.
+  // --- (1) The directory has source files at all, so this rail cannot pass vacuously once deleted. ---
   if (files.length === 0) {
     fail('desktop-local-adapter', `${dir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
     return;
@@ -28,9 +23,7 @@ export default async function ({ fail, ok }: Reporter) {
     let violated = false;
     for (const f of files) {
       const text = readFileSync(f, 'utf8');
-      // Strip comment-only lines first — this file's own header prose (and
-      // `worktrees.mjs`'s doc comments) name `main/github/adapter.ts` as a
-      // precedent to follow, which must not itself trip the guard.
+      // Strip comment-only lines first — this file's own header prose names main/github/ as a precedent, which must not itself trip the guard.
       const codeOnly = text
         .split('\n')
         .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
@@ -39,7 +32,8 @@ export default async function ({ fail, ok }: Reporter) {
         violated = true;
         fail('desktop-local-adapter', `${relOf(f)} references gh(/ghJson(/main/github — this directory is local-only (Decision 1), never a second GitHub caller`);
       }
-      if (/import\s*\{[^}]*\bgit\b[^}]*\}\s*from\s*'\.\.\/platform'/.test(codeOnly)) {
+      // The platform layer's barrel is gone — `git` arrives from `'@/main/platform/git'` or still `'@/main/platform'` for anything not yet re-pointed.
+      if (/import\s*\{[^}]*\bgit\b[^}]*\}\s*from\s*'@\/main\/platform(?:\/git)?'/.test(codeOnly)) {
         usesGit = true;
       }
     }
@@ -50,9 +44,7 @@ export default async function ({ fail, ok }: Reporter) {
     }
   }
 
-  // --- (3) Decision 4: never hard-code .claude/worktrees ----------------------
-  // guard(#77): the worktree producer/scan being hard-coded to one directory
-  // name instead of derived from the registered worktree's own basename.
+  // --- (3) Decision 4: never hard-code .claude/worktrees — derived from the registered worktree's own basename. ---
   {
     let found = false;
     for (const f of files) {
@@ -65,13 +57,11 @@ export default async function ({ fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- (4) The shared case table pins both correlate ladders together --------
-  // guard(#77): the reclaimer's and the desktop app's correlation ladders
-  // silently disagreeing about which issue a worktree belongs to.
   // pin: `bin/worktrees.mjs`'s `correlate` ↔ the desktop `correlate` (`apps/desktop/src/main/local/correlate.ts`)
   {
-    const casesPath = join(root, dir, 'correlation.cases.json');
-    const cases = readJson(`${dir}/correlation.cases.json`);
+    const testsDir = 'apps/desktop/tests/unit/main/local';
+    const casesPath = join(root, testsDir, 'correlation.cases.json');
+    const cases = readJson(`${testsDir}/correlation.cases.json`);
 
     const rungs = new Set<string>(cases.map((c: any) => c.expect?.rung).filter(Boolean));
     for (const rung of ['upstream-branch', 'branch-name', 'directory-basename', 'head-subject']) {
@@ -102,26 +92,18 @@ export default async function ({ fail, ok }: Reporter) {
     ok();
   }
 
-  // --- (5) inspect.ts exists and exports inspectDenials, and carries all three attribution literals ---
-  // guard(#85): collapsing a distinct SessionAttribution arm into another,
-  // most likely 'attribution-unavailable' into 'unknown-session'.
-  // apps/desktop/src/shared/local/ is the pure denial inspector — joins
-  // issue 77's DenialsRead with issue 78's SessionScan, so it must never
-  // itself read a file, spawn `git`, or import anything main-process-only
-  // (Decision 2).
-  const sharedLocalDir = 'apps/desktop/src/shared/local';
-  const inspectRel = `${sharedLocalDir}/inspect.ts`;
+  // --- (5) inspect.ts exists and exports inspectDenials, and carries all three attribution
+  // literals — must never collapse a distinct SessionAttribution arm into another. ---
+  const rendererLocalDir = 'apps/desktop/src/renderer/local';
+  const utilsLocalDir = 'apps/desktop/src/utils/local';
+  const inspectRel = `${rendererLocalDir}/inspect.ts`;
   const inspectPath = join(root, inspectRel);
 
   if (!existsSync(inspectPath)) {
     fail('desktop-local-inspector', `${inspectRel} does not exist — the guards below cannot pass vacuously if the file is deleted`);
   } else {
     const text = readFileSync(inspectPath, 'utf8');
-    if (!/\bexport function inspectDenials\b/.test(text)) {
-      fail('desktop-local-inspector', `${inspectRel} does not export 'inspectDenials'`);
-    } else {
-      ok();
-    }
+    expect(/\bexport function inspectDenials\b/.test(text), 'desktop-local-inspector', `${inspectRel} does not export 'inspectDenials'`);
 
     let literalMissing = false;
     for (const literal of ["'attributed'", "'unknown-session'", "'attribution-unavailable'"]) {
@@ -133,18 +115,16 @@ export default async function ({ fail, ok }: Reporter) {
     if (!literalMissing) ok();
   }
 
-  // --- (6) Decision 2: shared/local/ imports no node: builtin and nothing from src/main/ ---
-  // guard(#85): shared/local/inspect.ts losing the purity that lets it
-  // compile under typecheck:web and be called from the renderer over IPC'd
-  // data.
+  // --- (6) Decision 2: renderer/local/ and utils/local/ import no node: builtin and nothing from src/main/,
+  // preserving the purity that lets them compile under typecheck:web. ---
   {
     let violated = false;
-    for (const f of walk(join(root, sharedLocalDir)).filter((p) => (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.test.ts'))) {
+    for (const f of [...walk(join(root, rendererLocalDir)), ...walk(join(root, utilsLocalDir))].filter((p) => (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.test.ts'))) {
       const rel = relOf(f);
       const codeOnly = stripComments(readFileSync(f, 'utf8'));
       if (/from\s+['"]node:/.test(codeOnly)) {
         violated = true;
-        fail('desktop-local-inspector', `${rel} imports a node: builtin — shared/local/ must compile under typecheck:web with no Node types (Decision 2)`);
+        fail('desktop-local-inspector', `${rel} imports a node: builtin — renderer/local/ and utils/local/ must compile under typecheck:web with no Node types (Decision 2)`);
       }
       if (/from\s+['"][^'"]*\bmain\//.test(codeOnly)) {
         violated = true;
@@ -154,10 +134,8 @@ export default async function ({ fail, ok }: Reporter) {
     if (!violated) ok();
   }
 
-  // --- (7) The presentation contract's first rule, made mechanical: no non-test file anywhere under apps/desktop/src/ presents the log's line count as a denial count ---
-  // guard(#85): the log's line count being presented as a denial count — a
-  // wrong attribution is unrecoverable misinformation an operator would act
-  // on.
+  // --- (7) No non-test file under apps/desktop/src/ presents the log's line count as a
+  // denial count — a wrong attribution is unrecoverable misinformation an operator would act on. ---
   {
     const forbidden = ['totalDenials', 'denialCount', 'denialsCount', 'allDenials'];
     let violated = false;

@@ -16,7 +16,7 @@ git cat-file -e <ref>:.claude/port.config.json
 
 A literal `HEAD` from the first command means detached — report the short sha instead. Take the **first 10** refs from the second command and test each directly with the third — one command per call, never a shell loop — rather than asking where the file was last *edited*, which answers a different question and breaks across a rebase. Emit the matching **UX states** message, naming the actual bound checked (`none of the <n> local branches I checked`, never "every ref I can see"), and **stop — no tick, no dispatch, no `ScheduleWakeup`,** with the checked-out branch unchanged: the guard hook denies `git checkout`/`git switch` from this session (see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Cockpit rules"), so switching branches is never a route out — the only exits are checking out a branch that carries the config, or `/port:init`.
 
-**Step 2 — permissions.** Read `<root>/.claude/settings.json`. Missing, unparseable, or `permissions.allow` absent or empty → warn with the matching **UX states** message and ask (`AskUserQuestion`): **Stop (recommended)** / **Start anyway**. Stop → end the session with no wakeup. Start anyway → continue, and never re-ask this session. The override exists because permissions can legitimately be granted at user scope, in `~/.claude/settings.json`, which this session cannot read — a hard stop would strand a valid setup on evidence it cannot gather.
+**Step 2 — permissions.** Read `<root>/.claude/settings.json`. Missing, unparseable, or `permissions.allow` absent or empty → warn with the matching **UX states** message and ask (`AskUserQuestion`): **Stop (recommended)** / **Start anyway**. Stop → end the session with no wakeup. Start anyway → continue, and never re-ask this session. The override exists because permissions can legitimately be granted at user scope, in `~/.claude/settings.json`, which this session cannot read — a hard stop would strand a valid setup on evidence it cannot gather. **Keep this read's `extraKnownMarketplaces`** — step 4's pin-agreement check compares against it, so there is no second read of this file.
 
 Read `permissions.defaultMode` from the same file, for step 3's report. **Warn only when it is `acceptEdits`, `bypassPermissions`, or `auto`** — see the matching **UX states** message — and say in the same clause that a launch flag overrides this setting and cannot be read from inside the session. `default`, or the key absent (the harness's own default is `default`), needs no warning.
 
@@ -51,8 +51,22 @@ Then check for self-host drift. Read `<root>/.claude-plugin/marketplace.json`:
 **Resolve the staleness comparison target first**, from `~/.claude/plugins/known_marketplaces.json`, keyed by the `<marketplace>` segment step 3 already derived from `${CLAUDE_PLUGIN_ROOT}` — never from `repo`/`branches.integration`, which describe the *managed* repository and are only incidentally the same one here. **The ref about to be named is this resolved `<target-ref>` and nothing else** — never `branches.production`, never the plugin repository's own default branch guessed some other way; if the ref about to be named is not this one, render `staleness not computable` instead of a number:
 
 - `source.source == "github"` → `<po>`/`<pn>` from `source.repo`; `<target-ref>` is `source.ref`, or that repository's default branch when unset.
-- `source.source == "directory"` whose `path` is this working tree (the self-hosting case) → `<po>`/`<pn>` is `<owner>`/`<name>`; `<target-ref>` is `<integration>`.
+- `source.source == "directory"` whose `path` is this working tree or a directory inside it (the self-hosting case) → `<po>`/`<pn>` is `<owner>`/`<name>`; `<target-ref>` is `<integration>`.
 - Anything else (a directory source pointing elsewhere, no marketplace record, no resolvable owner/name) → **not computable** — say so once at startup (see **UX states**) and omit the `pluginRepo` alias below for the rest of the session; never print a number.
+
+**Pin agreement.** A third, independent question from staleness above — not "how far behind the source I update from" but "does that source match what this repository commits". Report-only, it never blocks startup, and it runs here, at startup only; the per-tick staleness alias is unchanged.
+
+`<committed>` is `extraKnownMarketplaces.<marketplace>` from the `.claude/settings.json` step 2 already read, keyed by the same `<marketplace>` segment step 3 derived — never a literal name.
+
+- **Repo misconfiguration** fires when `<committed>` is absent, its `source.source` is not `github`, or its `source.ref` is absent or does not match one of the accepted forms — `main` or a `v<semver>` tag. Show the **Committed pin misconfigured** UX state once, naming which case. When it fires, skip the personal-drift check below — there is no valid pin to compare a machine against, and telling someone to move their machine onto a broken pin is the wrong advice.
+- **Personal drift**: otherwise, compare `<committed>` with the same `known_marketplaces.json` record the staleness target above was resolved from. Drift means that record is absent, its `source.source` is not `github`, or its `source.repo` (case-insensitive) or `source.ref` differs from `<committed>`'s — an unset registered ref differs from every committed one. **Exempt**: a `directory` source whose `path` is this working tree, in a repository step 3 already found to be the plugin's own source — the deliberate dev loop, already covered by step 3's self-host check.
+- **Install drift**: add `aheadBy` to the `pluginRepo` compare selection and its `--jq` projection below (REST fallback: `.ahead_by`). The registration agrees, the source is `github`, but `aheadBy` is non-zero — the installed commit is not contained in the committed ref. Show the same drift state, with reason `installed <sha> carries <n> commits <ref> doesn't`.
+
+**Precedence for the identity line's trailing clause**: drift, then stale, then `current with`, then not computable. The line never renders `current with` while drift holds.
+
+The drift remediation runs from `<root>` and substitutes `<committed repo>@<committed ref>`, `<plugin>@<marketplace>`, and `--scope <scope of the resolved install record>` (or `project` when unresolved — a `local` record outranks a project-scope fix, so the scope has to match).
+
+Neither check asks whether a newer release exists — moving the pin stays the operator's call, through `/port:init`. An unreadable registry or settings file reports the check as **not run**, with the reason; it never produces a silent all-clear.
 
 When a target resolved, fold a second aliased root selection into the same query:
 
@@ -60,12 +74,12 @@ When a target resolved, fold a second aliased root selection into the same query
 gh api graphql --include -f query='query {
   repository(owner: "<owner>", name: "<name>") { object(expression: "<integration>:.claude/settings.json") { ... on Blob { text } } }
   pluginRepo: repository(owner: "<po>", name: "<pn>") {
-    ref(qualifiedName: "<target-ref>") { compare(headRef: "<installed-sha>") { behindBy } }
+    ref(qualifiedName: "<target-ref>") { compare(headRef: "<installed-sha>") { behindBy aheadBy } }
   }
-}' --jq '{settings: .data.repository.object.text, behindBy: .data.pluginRepo.ref.compare.behindBy}'
+}' --jq '{settings: .data.repository.object.text, behindBy: .data.pluginRepo.ref.compare.behindBy, aheadBy: .data.pluginRepo.ref.compare.aheadBy}'
 ```
 
-Verify the field names against a live call during implementation; if `Ref.compare` is unavailable, fall back to `gh api "repos/<po>/<pn>/compare/<target-ref>...<installed-sha>" --jq '.behind_by'` and widen `allowed-tools` from `Bash(gh api graphql *)` to `Bash(gh api *)` — the repository allowlist already grants `Bash(gh *)`, so no settings change either way.
+Verify the field names against a live call during implementation; if `Ref.compare` is unavailable, fall back to `gh api "repos/<po>/<pn>/compare/<target-ref>...<installed-sha>" --jq '{behindBy: .behind_by, aheadBy: .ahead_by}'` and widen `allowed-tools` from `Bash(gh api graphql *)` to `Bash(gh api *)` — the repository allowlist already grants `Bash(gh *)`, so no settings change either way.
 
 Compare the `settings` half's returned `enabledPlugins` keys against the local file's, and warn on either direction of difference, or on `object` being null (`<integration>` carries no settings file at all) — see **UX states**. **If the call errors, say so in one line and continue.** Never block a tick on it.
 
@@ -195,16 +209,17 @@ If the file does not exist, baseline at `0`. Every field after this step is writ
 
 **Step 9 — budget reset.** Read `commands.budget` (a `string | null` field — the full command prefix, e.g. `node scripts/port-budget.mjs`); **absent or `null` → skip silently, say nothing** for the rest of the session — no dispatch ceiling and no cost reporting, matching `commands.artifacts`. **Set** → run `<commands.budget> reset` once, before the first tick, closing any open dispatch a crashed prior session left running (flushed to its ticket's ledger as `lost`); echo its output only if it closed anything.
 
-**Step 10 — gate claim.** Full contract: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "External gate claim". A second surface (a desktop application) can claim the plan-review gate, dispatch itself (#265), or both, for itself; this step is what makes the cockpit notice and stand down from whichever it holds, once at startup and again every tick (see Tick procedure → Housekeeping for the per-tick re-read).
+**Step 10 — cockpit ownership.** Full contract: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Cockpit ownership". One cockpit runs a checkout at a time (#331) — this terminal skill or a desktop application, never both; this step is what decides which, once at startup and again every tick (see Tick procedure → Housekeeping for the per-tick re-read).
 
-1. **Resolve `<base-root>`**: `git rev-parse --git-common-dir`, then take that path's parent directory (resolved against `<root>` when the output is relative, e.g. a bare `.git`) — the same resolution `.agents/denials.log` already uses, so every worktree of a checkout sees the one claim rather than a per-worktree copy.
-2. **Read `<base-root>/.agents/gate-claim.json`** (Read tool).
-3. **Classify into exactly one of three verdicts**, mirroring the desktop app's own claim reader field-for-field:
-   - **`absent`** — the file does not exist, or it parses but its `repo` field names a different repository than this session's `<repo>`. Say nothing; both gates are answered as always for the rest of this session.
-   - **`held`** — parses as a JSON object, `repo` matches, and `owner`/`claimedAt` are both strings. `scopes` (an array) is checked for each recognized entry independently — `"plan-gate"` and `"dispatch"` never imply anything about the other: if it includes `"plan-gate"`, the plan-review gate is claimed — report the matching **UX states** message below and hold this verdict for the rest of the session (see Human gates → Plan review, and Tick procedure step 3). If it includes `"dispatch"`, this session dispatches no stage agent at all — report **Dispatch claimed** (**UX states** below) and hold this verdict the same way (see Safety rails, Dispatching, Tick procedure step 3). Report any entry in `scopes` that is neither as an unrecognized scope (**UX states**, appended clause) — never silently dropped, and never itself a reason to stand down from either gate. A `held` claim naming no recognized scope at all answers both gates normally.
-   - **`unreadable`** — the file exists but fails to parse as JSON, does not parse to an object, or is missing `owner` or `claimedAt`. Treat exactly like a `held` claim naming **both** `plan-gate` and `dispatch` — report both matching **UX states** messages, naming the parse reason, and hold this verdict for the rest of the session. A malformed claim's only ambiguity is which writer owns which gate; standing both down is the one reading that cannot produce an unintended decision.
+1. **Resolve `<base-root>`**: `git rev-parse --git-common-dir`, then take that path's parent directory (resolved against `<root>` when the output is relative, e.g. a bare `.git`) — the same resolution `.agents/denials.log` already uses, so every worktree of a checkout sees the one record rather than a per-worktree copy.
+2. **Read `<base-root>/.agents/cockpit.json`** (Read tool).
+3. **Classify into exactly one of four verdicts**, mirroring the app's own classifier field-for-field:
+   - **`absent`** — the file does not exist, or it parses but its `repo` field names a different repository than this session's `<repo>`. **Write** `{repo: <repo>, owner: "terminal", since: <now, ISO 8601>}` to the same path (Write tool) — this session takes ownership. Report **Taken** (**UX states** below) and proceed; the rest of the session runs normally.
+   - **`app`** — parses as a JSON object, `repo` matches, `owner` is `"app"`, and `since` is a string. Report **App owns it** (**UX states** below) and **end the session** — no `ScheduleWakeup`. The app runs this checkout; this session makes no write and launches no stage agent.
+   - **`terminal`** — same, `owner` is `"terminal"`. Proceed without writing again — re-entrant, so a crashed earlier terminal session resumes under the same record.
+   - **`unreadable`** — the file exists but fails to parse as JSON, does not parse to an object, has an `owner` that is neither `"app"` nor `"terminal"`, or is missing `since`. Report **Unreadable** (**UX states** below), naming the parse reason, and **end the session** — no `ScheduleWakeup`. The ambiguity is which side should run the checkout; standing both down is the one reading that cannot produce an unintended decision.
 
-**Never compare `claimedAt` against a clock.** A claim never expires — expiring it would silently transfer the gate back to this session, which is a wrong decision dressed as a timeout, never this step's call to make.
+**Never compare `since` against a clock.** The record never expires — expiring it would silently transfer ownership, which is a wrong decision dressed as a timeout, never this step's call to make.
 
 ## UX states (startup preflight)
 
@@ -258,6 +273,18 @@ Exact copy, one message per state, `<…>` substituted:
 
   > `port` `v<version>` · `4634fc1` (project scope, installed 2026-08-23) · staleness not computable — `<reason>` · model `claude-haiku-4-5` · mode `default`
 
+- **Running plugin doesn't match the committed pin** (warn, in place of the staleness clause — personal drift or install drift, per "Pin agreement" above):
+
+  > ⚠️ `port` `v<version>` · `1a12608` (project scope, installed 2026-10-01) · **not the committed pin**. This repository commits `b-at-neu/port@<tag>`, but this machine registered `b-at-neu/port@dev`, so that's what I'm running. That's this machine, not the repository. Run these from `/home/you/widgets` (never a worktree), then start a new session:
+  > `claude plugin marketplace remove port` · `claude plugin marketplace add b-at-neu/port@<tag> --scope project` · `claude plugin install port@port --scope project`
+  > `.claude/settings.json` should be unchanged afterwards. Discard anything the CLI rewrote there. · model `claude-haiku-4-5` · mode `default`
+
+  The install-drift variant replaces the "registered" clause: `the registration matches, but installed 1a12608 carries 7 commits <tag> doesn't`.
+
+- **Committed pin misconfigured** (warn once, continue):
+
+  > ⚠️ This repository's committed plugin pin is wrong: `.claude/settings.json` `<declares port with no ref | declares port at dev, a branch, not a release tag | declares port from a directory source | doesn't declare port at all>`. Every machine that clones this repository runs whatever that resolves to. Whoever maintains this repository should re-run `/port:init` and choose **Reconcile**.
+
 - **Install record pinned to a worktree** (warn once):
 
   > ⚠️ The install record for `port` was made from `<path>`, a worktree — and every install scope shares one `installPath`, so that commit is what **every** session on this machine loads, worktree or not. Reinstall from the main checkout to correct it.
@@ -274,22 +301,14 @@ Exact copy, one message per state, `<…>` substituted:
 
   > ⚠️ `commands.worktrees` isn't set, so I can't reclaim worktrees — and the pipeline creates one per ticket. Re-run `/port:init` to install the script, or run `/port:worktree-clean` by hand.
 
-- **Plan gate claimed** (at startup, then again **every** tick while it holds — see `SKILL.md` → "Tick procedure" → Housekeeping — deliberately not change-only, unlike the unowned and ungated sweeps, because a silent omission is indistinguishable from a gate nobody is watching):
+- **App owns it** (at preflight, and again every tick if taken over mid-session — see `SKILL.md` → "Tick procedure" → Housekeeping — deliberately not change-only, unlike the unowned and ungated sweeps, because a silent omission is indistinguishable from nobody watching):
 
-  > 🖥️ **Plan gate claimed by `port-desktop`** since 2026-09-05T14:02Z. 2 issues wait at `plan review`: #148, #151 — I won't approve or bounce them. Release the claim in the app, or delete `.agents/gate-claim.json`, to take the gate back.
+  > 🖥️ **port-desktop runs `<repo>`** since 2026-10-06T14:02Z. One cockpit per repository — this one won't start here. Pause the repo in the app (that hands it back), then run `/port:pipeline` again.
 
-  With no issues currently at `<labels.planReview>`, keep the first sentence and drop the rest — the claim is still worth stating, since it changes what this session will do the moment one arrives.
+- **Unreadable** (the loud stall the fail direction chooses — nobody can tell who should run the checkout):
 
-- **Dispatch claimed** (#265 — same cadence as "Plan gate claimed" above, and independent of it: a repository can hold neither, either, or both at once):
+  > ⚠️ `.agents/cockpit.json` can't be read (`<reason>`). One cockpit per repository can't be decided, so this one won't start. Fix or delete the file.
 
-  > 🖥️ **Dispatch claimed by `port-desktop`** since 2026-09-05T14:02Z. 2 items are actionable this tick: plan #105, impl #52 — I won't launch a stage agent for either, and the app makes the refresh, escalation, and approval-withdrawal writes here. Release the claim in the app, or delete `.agents/gate-claim.json`, to take dispatch back.
+- **Taken** (`absent` → wrote `terminal`; at preflight only, one line):
 
-  With nothing currently actionable, keep the first sentence and drop the rest, the same carve-out "Plan gate claimed" takes.
-
-- **Claim unreadable** (the loud stall the fail direction chooses for **both** gates at once — same cadence as the two states above):
-
-  > ⚠️ `.agents/gate-claim.json` can't be read (`<reason>`). Until it's valid or removed, I stand down from the plan gate and from dispatch exactly as if both were claimed — nothing will answer an issue at `plan review`, and I'll launch no stage agent. Fix or delete the file.
-
-- **Unrecognized scope** (appended to whichever of the lines above applies):
-
-  > · it also claims `<scope>`, which I don't recognize — that claim is reported, never acted on.
+  > This terminal cockpit now runs `<repo>` — the app won't run it until you choose Take over there.

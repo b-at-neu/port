@@ -2,18 +2,13 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { root, readJson, walk, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, readJson, walk, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
-// The guard hook's classifier tests live in scripts/checks/hooks-classifier.ts,
-// scripts/checks/hooks-cockpit-rules.ts, and scripts/checks/hooks-gate-rule.ts
-// (issue 181, splitting this module's own file-size ratchet entry) — this module
-// keeps the hook as a declared artifact: its command shape, its PreToolUse
-// wiring, and the end-to-end stdin/stdout/exit-code spawn.
-export default async function ({ fail, ok }: Reporter) {
-  // --- hooks.json command shape ----------------------------------------------
-  // guard: the hook loading as Hooks (0) — no error, just absent. Regression
-  // test for the argv-array form.
+// The guard hook's classifier tests live in hooks-classifier.ts, hooks-cockpit-rules.ts, and
+// hooks-gate-rule.ts; this module keeps the hook as a declared artifact: its command shape, PreToolUse wiring, and end-to-end stdin/stdout/exit-code spawn.
+export default async function ({ expect, fail, ok }: Reporter) {
+  // --- hooks.json command shape — a malformed command loads as Hooks (0): no error, just absent. Regression test for the argv-array form. ---
   {
     const hooks = readJson('plugins/port/hooks/hooks.json');
     const entries = Object.values<any>(hooks.hooks ?? {}).flat();
@@ -31,10 +26,8 @@ export default async function ({ fail, ok }: Reporter) {
     }
   }
 
-  // --- Guard hook is wired on PreToolUse for Bash and the write tools --------
-  // guard(#67): the guard hook silently absent after a rename or a dropped
-  // matcher — nothing errors, it simply never fires. The deny is a hook
-  // decision now, not a prediction from `dontAsk`.
+  // --- Guard hook is wired on PreToolUse for Bash and the write tools — a dropped matcher
+  // means nothing errors, the hook simply never fires. ---
   {
     const hooksJson = readJson('plugins/port/hooks/hooks.json');
     const entries = Object.entries<any>(hooksJson.hooks ?? {});
@@ -44,11 +37,7 @@ export default async function ({ fail, ok }: Reporter) {
         for (const h of matcher.hooks ?? []) {
           const m = /\$\{CLAUDE_PLUGIN_ROOT\}\/(.+?)"/.exec(h.command ?? '');
           const rel = m?.[1];
-          if (!rel || !existsSync(join(root, 'plugins/port', rel))) {
-            fail('hook-wiring', `${event}/${matcher.matcher}: command references a missing file (${JSON.stringify(h.command)})`);
-          } else {
-            ok();
-          }
+          expect(!(!rel || !existsSync(join(root, 'plugins/port', rel))), 'hook-wiring', `${event}/${matcher.matcher}: command references a missing file (${JSON.stringify(h.command)})`);
         }
       }
     }
@@ -61,11 +50,8 @@ export default async function ({ fail, ok }: Reporter) {
     ok();
   }
 
-  // --- No shell-string child-process spawning in shipped hook code -----------
-  // guard(#114): shipped hook code spawning a child through a shell string,
-  // which parses differently under cmd.exe than under sh. Comment-only lines
-  // are stripped first, the same way worktrees.ts strips its own docstring
-  // before scanning — this file's own disclaimer above must not trip itself.
+  // --- No shell-string child-process spawning in shipped hook code — a shell string parses
+  // differently under cmd.exe than under sh. Comment-only lines are stripped first. ---
   {
     const stripComments = (text: string) =>
       text
@@ -73,50 +59,23 @@ export default async function ({ fail, ok }: Reporter) {
         .filter((l) => !/^\s*(\/\/|\*)/.test(l))
         .join('\n');
 
-    // Self-test first — a check that cannot be made to fail is not a check
-    // (docs/ENGINEERING.md §7).
-    if (!/\bexecSync\b/.test(stripComments("const out = execSync('x');"))) {
-      fail('hooks-shell', "self-test: a synthetic execSync('x') call did not trip the pattern");
-    } else {
-      ok();
-    }
-    if (/\bexecSync\b/.test(stripComments("const out = execFileSync('x', []);"))) {
-      fail('hooks-shell', "self-test: execFileSync('x', []) must not trip the execSync pattern");
-    } else {
-      ok();
-    }
-    if (!/shell:\s*true/.test(stripComments("spawn('x', [], { shell: true });"))) {
-      fail('hooks-shell', "self-test: a synthetic { shell: true } call did not trip the pattern");
-    } else {
-      ok();
-    }
-    if (/shell:\s*true/.test(stripComments("spawn('x', [], { shell: false });"))) {
-      fail('hooks-shell', "self-test: { shell: false } must not trip the shell: true pattern");
-    } else {
-      ok();
-    }
+    // Self-test first — a check that cannot be made to fail is not a check.
+    expect(/\bexecSync\b/.test(stripComments("const out = execSync('x');")), 'hooks-shell', "self-test: a synthetic execSync('x') call did not trip the pattern");
+    expect(!/\bexecSync\b/.test(stripComments("const out = execFileSync('x', []);")), 'hooks-shell', "self-test: execFileSync('x', []) must not trip the execSync pattern");
+    expect(/shell:\s*true/.test(stripComments("spawn('x', [], { shell: true });")), 'hooks-shell', "self-test: a synthetic { shell: true } call did not trip the pattern");
+    expect(!/shell:\s*true/.test(stripComments("spawn('x', [], { shell: false });")), 'hooks-shell', "self-test: { shell: false } must not trip the shell: true pattern");
 
     const hookFiles = walk(join(root, 'plugins/port/hooks')).filter((f) => f.endsWith('.mjs'));
     for (const f of hookFiles) {
       const rel = relOf(f);
       const codeOnly = stripComments(readFileSync(f, 'utf8'));
-      if (/\bexecSync\b/.test(codeOnly)) {
-        fail('hooks-shell', `${rel} uses execSync — every child process must spawn with an explicit argv array (execFileSync/spawnSync), never a shell string`);
-      } else {
-        ok();
-      }
-      if (/shell:\s*true/.test(codeOnly)) {
-        fail('hooks-shell', `${rel} passes shell: true to a child process — every call must be an explicit argv array, never a shell string`);
-      } else {
-        ok();
-      }
+      expect(!/\bexecSync\b/.test(codeOnly), 'hooks-shell', `${rel} uses execSync — every child process must spawn with an explicit argv array (execFileSync/spawnSync), never a shell string`);
+      expect(!/shell:\s*true/.test(codeOnly), 'hooks-shell', `${rel} passes shell: true to a child process — every call must be an explicit argv array, never a shell string`);
     }
   }
 
-  // --- Guard hook end-to-end wiring -------------------------------------------
-  // guard(#67): stdin/stdout/exit-code wiring the classifier's direct import
-  // cannot see. The fixture directory must sit outside any git repository,
-  // or `git rev-parse --git-common-dir` resolves to this checkout.
+  // --- Guard hook end-to-end wiring: stdin/stdout/exit-code wiring the classifier's direct
+  // import cannot see. The fixture directory must sit outside any git repository. ---
   {
     const hookPath = join(root, 'plugins/port/hooks/agent-guard.mjs');
     const fixture = mkdtempSync(join(tmpdir(), 'port-guard-hook-'));
@@ -183,11 +142,7 @@ export default async function ({ fail, ok }: Reporter) {
       if (readLog().length !== 2) fail('guard-hook-fixture', 'an allowed command should not append a line');
       ok();
 
-      // guard(#288): the real hook reading a real transcript_path for the
-      // approval arm — a wiring bug the decide()-only cases in
-      // hooks-gate-rule.ts cannot see. A transcript naming the pull request
-      // makes the approval arm log 'gate-clear' for an operator-named
-      // 'approved' removal.
+      // The real hook reading a real transcript_path for the approval arm — a wiring bug the decide()-only cases cannot see.
       const transcriptNamed = join(fixture, 'transcript-named.jsonl');
       writeFileSync(
         transcriptNamed,
@@ -205,11 +160,7 @@ export default async function ({ fail, ok }: Reporter) {
       else if (!lines[2].includes('\tgate-clear\t')) fail('guard-hook-fixture', `expected a 'gate-clear' line, got ${JSON.stringify(lines[2])}`);
       ok();
 
-      // Same command, a transcript naming a different item → never a
-      // gate-clear line. The command still misses this fixture's own narrow
-      // allowlist (`Bash(git *)` only), so it logs 'miss' as it always would
-      // — the point is that this arm never mistakes an unnamed removal for
-      // an authorised one.
+      // Same command, a transcript naming a different item → never a gate-clear line — this arm must never mistake an unnamed removal for an authorised one.
       const transcriptOther = join(fixture, 'transcript-other.jsonl');
       writeFileSync(
         transcriptOther,

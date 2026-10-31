@@ -3,7 +3,36 @@
   "compilerOptions": {
     "composite": true,
     "rootDir": "../..",
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   },
-  "include": ["src/main/**/*", "src/preload/**/*", "src/shared/**/*"]
+  "include": [
+    "scripts/type-moves.d.mts",
+    "src/main/**/*",
+    "src/preload/**/*",
+    "src/renderer/local/inspect.ts",
+    "src/renderer/local/shape.ts",
+    "src/renderer/board/needs-you.ts",
+    "src/renderer/board/project.ts",
+    "src/renderer/board/stage-links.ts",
+    "src/types/**/*",
+    "src/utils/**/*",
+    "tests/unit/main/**/*",
+    "tests/unit/preload/**/*",
+    "tests/unit/scripts/**/*",
+    "tests/unit/utils/**/*",
+    "tests/fixtures/**/*",
+    "tests/visual/**/*",
+    "tests/smoke/**/*",
+    "tests/e2e/**/*",
+    "../../scripts/port-tick/gates.ts",
+    "../../scripts/port-tick/contention.ts",
+    "../../scripts/port-tick/checks.ts",
+    "../../scripts/port-tick/liveness.ts",
+    "../../scripts/port-tick/classify.ts",
+    "../../scripts/port-tick/overrides.ts",
+    "../../scripts/port-tick/wire.ts"
+  ]
 }

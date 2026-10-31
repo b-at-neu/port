@@ -17,8 +17,8 @@ prompt: |
   session, carry out the brief yourself.
 
   Brief:
-  Run your pipeline stage for #91. Follow your Pre-flight, Label swap,
-  Work, and Handoff steps exactly.
+  Review stage for pull request #91. Run your pipeline stage for #91.
+  Follow your Pre-flight, Label swap, Work, and Handoff steps exactly.
 
   This scaffold repository has no real PR #91 — treat the following as the
   authoritative result of every `gh` call you would normally make, and do

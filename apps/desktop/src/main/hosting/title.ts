@@ -1,13 +1,8 @@
-// #103: pure title resolution — `promptTitle` for a fresh session's first
-// send, `recordTitle` for the disk record a resume/fork's title comes from,
-// and `resolveStartTitle` composing the two before spawn so the rail never
-// shows a bare session id while `init` is still in flight. `sanitize` comes
-// through the `../sessions` barrel (#219's own rule for this directory),
-// never a second control/bidi stripper.
-import { sanitize } from '../sessions'
-import type { RawSession, SessionReader } from '../sessions/sdk'
-import { forkTitle } from './fork'
-import type { SessionStartMode } from '../../shared/hosting/types'
+// Pure title resolution, composed before spawn so the rail never shows a bare session id while init is in flight.
+import { sanitize } from '@/main/sessions/transcript-entries'
+import type { RawSession, SessionReader } from '@/types/sessions'
+import { forkTitle } from '@/main/hosting/fork'
+import type { SessionStartMode } from '@/types/hosting'
 
 const MAX_TITLE_LENGTH = 60
 
@@ -19,8 +14,15 @@ function normalize(text: string): string | null {
   return collapsed.length > MAX_TITLE_LENGTH ? `${collapsed.slice(0, MAX_TITLE_LENGTH)}…` : collapsed
 }
 
-/** A fresh session's own title source: the first prompt it was sent. */
-export function promptTitle(text: string): string | null {
+/** A fresh session's title source: the first prompt sent, or its first attachment's name when the text is empty. */
+export function promptTitle(text: string, firstAttachmentName: string | null = null): string | null {
+  const fromText = normalize(text)
+  if (fromText !== null) return fromText
+  return firstAttachmentName === null ? null : normalize(firstAttachmentName)
+}
+
+/** A stage session's title source: the ticket label the dispatcher resolved, same normalization. */
+export function stageTitle(text: string): string | null {
   return normalize(text)
 }
 
@@ -31,12 +33,8 @@ export function recordTitle(record: Pick<RawSession, 'customTitle' | 'summary' |
   return raw === null ? null : normalize(raw)
 }
 
-/** Resolves the title a `resume`/`resume-at`/`fork` start should carry
- *  before `init` ever arrives — `fresh` always resolves `null` (there is
- *  nothing to read yet; `promptTitle` takes over on the first `send()`). A
- *  reader failure, or a target the reader no longer lists, resolves `null`
- *  rather than throwing — a missing title is never fatal to starting the
- *  session itself. */
+/** `fresh` always resolves `null`. A reader failure, or a target the reader no longer lists,
+ *  resolves `null` rather than throwing — a missing title is never fatal to starting the session. */
 export async function resolveStartTitle(mode: SessionStartMode, listSessions: SessionReader): Promise<string | null> {
   if (mode.kind === 'fresh') return null
   try {

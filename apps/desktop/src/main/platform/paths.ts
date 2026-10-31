@@ -1,53 +1,25 @@
 import { homedir } from 'node:os'
 import { posix as posixImpl, win32 as win32Impl } from 'node:path'
+import type { PathOps, PathFlavour, RepoKey } from '@/types/platform'
 
 type PathImpl = typeof posixImpl
 
-export type PathFlavour = 'posix' | 'win32'
-
-declare const repoKeyBrand: unique symbol
-
-/** Branded string: the canonical identity `pathKey` produces. A raw path
- *  cannot be passed where an identity is expected — nothing else can mint
- *  one, so a call site importing this type is asserting "this came from
- *  `pathKey`", not "this looks like a path". */
-export type RepoKey = string & { readonly [repoKeyBrand]: true }
-
-export interface PathOpsOptions {
+interface PathOpsOptions {
   readonly home: string
-}
-
-export interface PathOps {
-  readonly flavour: PathFlavour
-  toNative(p: string): string
-  toPosix(p: string): string
-  pathKey(p: string): RepoKey
-  samePath(a: string, b: string): boolean
-  contains(parent: string, child: string): boolean
-  expandHome(p: string): string
-  resolveFrom(base: string, p: string): string
-  join(base: string, ...segments: string[]): string
-  dirname(p: string): string
-  basename(p: string): string
 }
 
 function implFor(flavour: PathFlavour): PathImpl {
   return flavour === 'win32' ? win32Impl : posixImpl
 }
 
-/** A relative or empty input to an absolute-only op is a programmer mistake —
- *  no config or operator action can produce one — so it throws rather than
- *  returning a value, unlike every other failure mode this layer models. */
+// A relative or empty input to an absolute-only op is a programmer mistake, so this throws.
 function assertAbsolute(impl: PathImpl, p: string, fnName: string): void {
   if (p === '' || !impl.isAbsolute(p)) {
     throw new TypeError(`${fnName} requires an absolute path, got ${JSON.stringify(p)}`)
   }
 }
 
-/** A leading run of exactly two separators is a UNC prefix (`\\server\share`)
- *  and must survive normalization as two separators, not collapse to one —
- *  collapsing it silently turns a network path into a root-relative one on
- *  the current drive. Everything after that prefix collapses as usual. */
+// A UNC prefix (`\\server\share`) must survive normalization as two separators, not collapse to one.
 const uncPrefix = /^[\\/]{2}(?=[^\\/])/
 
 function withSeparator(p: string, sep: string): string {
@@ -65,12 +37,8 @@ function dropTrailingSeparator(impl: PathImpl, p: string): string {
   return p
 }
 
-/**
- * Binds every op to one `node:path` flavour, taking that flavour as a
- * parameter rather than reading `process.platform` — this is what makes the
- * acceptance criterion (Windows-style *and* POSIX-style normalization tests)
- * runnable on any host rather than only on Windows.
- */
+// Takes the flavour as a parameter rather than reading `process.platform`, so both normalization
+// styles are testable on any host.
 export function createPathOps(flavour: PathFlavour, options: PathOpsOptions): PathOps {
   const impl = implFor(flavour)
   const home = options.home
@@ -89,11 +57,7 @@ export function createPathOps(flavour: PathFlavour, options: PathOpsOptions): Pa
     assertAbsolute(impl, p, 'pathKey')
     let key = dropTrailingSeparator(impl, impl.normalize(withSeparator(p, impl.sep)))
     if (flavour === 'win32') {
-      // Windows case-insensitivity is a filesystem-level guarantee, and drive
-      // letters genuinely arrive in both cases from different callers — fold
-      // the whole string, then re-uppercase the drive letter so `C:` reads
-      // consistently. Folding on darwin would instead merge two genuinely
-      // distinct paths, which is why this branch is win32-only.
+      // Win32-only: folding case on darwin would merge two genuinely distinct paths.
       key = key.toLowerCase().replace(/^([a-z]):/, (_m, drive: string) => `${drive.toUpperCase()}:`)
     }
     return key as RepoKey

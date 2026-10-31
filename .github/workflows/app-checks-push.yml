@@ -1,0 +1,54 @@
+# Runs the desktop app's checks (typecheck/lint/test/build) on every push to
+# `dev` (#336) — `checks.yml`'s own `run-app-checks` is `pull_request`-only
+# (#275), so a direct push, a merge commit, or a rebase-and-fast-forward onto
+# `dev` otherwise never gets a result at all. This job's name
+# (`run-app-checks-on-push`) must never collide with `run-app-checks` — the
+# same one-result-per-SHA reasoning `checks.yml`'s own header documents: two
+# differently-triggered workflows producing the same check-run name for one
+# commit is exactly the ambiguity #275 removed from this repository.
+
+name: App checks (push)
+
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-checks-push-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  run-app-checks-on-push:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      - name: Cache Electron download
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/electron-cache
+          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Lint
+        run: pnpm lint
+      - name: Test
+        run: pnpm test
+      - name: Build
+        run: pnpm build

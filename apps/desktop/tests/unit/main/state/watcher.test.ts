@@ -1,0 +1,409 @@
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { describe, expect, it } from 'vitest'
+import type { RepositoryEntry } from '@/utils/repos'
+import type { GhResult } from '@/types/platform'
+import type { BoardSnapshot } from '@/types/board'
+import { createPipelineWatcher } from '@/main/state/watcher'
+import { EMPTY_PIPELINE_STDOUT, RATE_LIMIT_REPLY, connection } from '../../../fixtures/pipeline-reply'
+import { fakeGit, makeFakeTimer, readyEntry, readyItemGh } from '../../../fixtures/watcher-harness'
+
+function makeSnapshotWaiter(): { readonly onSnapshot: (snapshot: BoardSnapshot) => void; readonly next: () => Promise<BoardSnapshot> } {
+  let resolvers: ((snapshot: BoardSnapshot) => void)[] = []
+  return {
+    onSnapshot: (snapshot) => {
+      const current = resolvers
+      resolvers = []
+      for (const resolve of current) resolve(snapshot)
+    },
+    next: () => new Promise((resolve) => resolvers.push(resolve)),
+  }
+}
+
+describe('createPipelineWatcher — cadence', () => {
+  it('a cheap source ticks four times while GitHub ticks once', async () => {
+    let currentMs = Date.parse('2026-01-01T00:00:00.000Z')
+    const now = () => new Date(currentMs)
+    const timer = makeFakeTimer()
+    const waiter = makeSnapshotWaiter()
+    const gitCounts = { worktreeList: 0 }
+    let ghCalls = 0
+    const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
+
+    const watcher = createPipelineWatcher({
+      repositories: [readyEntry('repo-a', root, 'o/a')],
+      onSnapshot: waiter.onSnapshot,
+      now,
+      setTimer: timer.factory,
+      git: fakeGit(gitCounts),
+      gh: () => {
+        ghCalls += 1
+        return Promise.resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' } satisfies GhResult)
+      },
+      sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+    })
+
+    // The initial refresh reads every source once, from a cold cache.
+    await watcher.refresh()
+    gitCounts.worktreeList = 0
+    ghCalls = 0
+
+    for (let i = 0; i < 4; i++) {
+      const p = waiter.next()
+      currentMs += 15_000
+      timer.fire()
+      await p
+    }
+
+    expect(gitCounts.worktreeList).toBe(4)
+    expect(ghCalls).toBe(1)
+  })
+})
+
+describe('createPipelineWatcher — budgeted interval', () => {
+  it('a costly poll stretches the GitHub interval from the reported budget, a cheap one keeps the base', async () => {
+    const now = () => new Date('2026-01-01T00:00:00.000Z')
+    const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
+    const intervalFor = async (cost: number): Promise<number | undefined> => {
+      const watcher = createPipelineWatcher({
+        repositories: [readyEntry('repo-a', root, 'o/a')],
+        onSnapshot: () => undefined,
+        now,
+        setTimer: makeFakeTimer().factory,
+        git: fakeGit({ worktreeList: 0 }),
+        gh: readyItemGh('op', ['op'], { ...RATE_LIMIT_REPLY, cost, resetAt: '2026-01-01T00:00:10Z' }),
+        sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+      })
+      const snap = await watcher.refresh()
+      watcher.stop()
+      return snap.health[0]?.github.intervalMs
+    }
+
+    // Two round trips per poll (sweep, then detail) each report the cost, so a poll costs twice it.
+    expect(await intervalFor(73)).toBe(210_240)
+    expect(await intervalFor(1)).toBe(60_000)
+  })
+})
+
+const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
+
+/** A watcher whose first `gh` call answers at once and every later one hangs until the test releases it by hand. */
+async function watcherWithHungReads(now: () => Date, timer: ReturnType<typeof makeFakeTimer>): Promise<{ readonly watcher: ReturnType<typeof createPipelineWatcher>; readonly release: (index: number) => void; readonly calls: () => number }> {
+  const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
+  const hung: (() => void)[] = []
+  let ghCalls = 0
+  const gh = (): Promise<GhResult> => {
+    ghCalls += 1
+    if (ghCalls === 1) return Promise.resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' })
+    return new Promise((resolve) => {
+      hung.push(() => resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' }))
+    })
+  }
+  const watcher = createPipelineWatcher({
+    repositories: [readyEntry('repo-a', root, 'o/a')],
+    onSnapshot: () => undefined,
+    now,
+    setTimer: timer.factory,
+    git: fakeGit({ worktreeList: 0 }),
+    gh,
+    sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+  })
+  // Prime every source once, so the race in each test is isolated to `github` alone.
+  await watcher.refresh()
+  return { watcher, release: (index) => hung[index]?.(), calls: () => ghCalls }
+}
+
+describe('createPipelineWatcher — in-flight reads', () => {
+  it('two forced github refreshes during a hung read share exactly one follow-up read', async () => {
+    const { watcher, release, calls } = await watcherWithHungReads(() => new Date('2026-01-01T00:00:00.000Z'), makeFakeTimer())
+    expect(calls()).toBe(1)
+
+    const p1 = watcher.refresh({ source: 'github' })
+    const p2 = watcher.refresh({ source: 'github' })
+    await flush()
+    expect(calls()).toBe(2)
+
+    release(0)
+    await flush()
+    expect(calls()).toBe(3)
+
+    release(1)
+    await Promise.all([p1, p2])
+    expect(calls()).toBe(3)
+  })
+
+  it('an unforced due read during a hung read still skips', async () => {
+    let currentMs = Date.parse('2026-01-01T00:00:00.000Z')
+    const timer = makeFakeTimer()
+    const { watcher, release, calls } = await watcherWithHungReads(() => new Date(currentMs), timer)
+
+    currentMs += 60_000
+    timer.fire()
+    // The due local reads run first, so the hung github read starts a few turns later.
+    for (let turn = 0; turn < 50 && calls() < 2; turn++) await flush()
+    expect(calls()).toBe(2)
+
+    await watcher.refresh({ source: 'worktrees' })
+    expect(calls()).toBe(2)
+
+    release(0)
+    await flush()
+    expect(calls()).toBe(2)
+  })
+})
+
+describe('createPipelineWatcher — rate-limit deferral', () => {
+  it('a forced github refresh makes no gh call while the repository is deferred', async () => {
+    const now = () => new Date('2026-01-01T00:00:00.000Z')
+    const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
+    let ghCalls = 0
+    const limited = JSON.stringify({ data: { repository: { issues: connection([]), pullRequests: connection([]) }, rateLimit: { ...RATE_LIMIT_REPLY, remaining: 10, resetAt: '2026-01-01T01:00:00Z' } } })
+    const watcher = createPipelineWatcher({
+      repositories: [readyEntry('repo-a', root, 'o/a')],
+      onSnapshot: () => undefined,
+      now,
+      setTimer: makeFakeTimer().factory,
+      git: fakeGit({ worktreeList: 0 }),
+      gh: () => {
+        ghCalls += 1
+        return Promise.resolve({ ok: true, stdout: limited, stderr: '' } satisfies GhResult)
+      },
+      sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+    })
+
+    const first = await watcher.refresh()
+    expect(first.health[0]?.github.deferredUntil).toBe('2026-01-01T01:00:00Z')
+    expect(ghCalls).toBe(1)
+
+    await watcher.refresh({ repoId: 'repo-a' as RepositoryEntry['id'], source: 'github' })
+    expect(ghCalls).toBe(1)
+  })
+})
+
+describe('createPipelineWatcher — refresh() bypasses backoff', () => {
+  it('forces an immediate re-read of the named source even though its interval has not elapsed', async () => {
+    const now = () => new Date('2026-01-01T00:00:00.000Z')
+    const timer = makeFakeTimer()
+    const waiter = makeSnapshotWaiter()
+    const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
+    const gitCounts = { worktreeList: 0 }
+
+    const watcher = createPipelineWatcher({
+      repositories: [readyEntry('repo-a', root, 'o/a')],
+      onSnapshot: waiter.onSnapshot,
+      now,
+      setTimer: timer.factory,
+      git: fakeGit(gitCounts),
+      gh: () => Promise.resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' } satisfies GhResult),
+      sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+    })
+
+    await watcher.refresh()
+    const afterFirst = gitCounts.worktreeList
+    expect(afterFirst).toBeGreaterThan(0)
+
+    await watcher.refresh({ repoId: 'repo-a' as RepositoryEntry['id'], source: 'worktrees' })
+    expect(gitCounts.worktreeList).toBe(afterFirst + 1)
+  })
+})
+
+describe('createPipelineWatcher — stop()', () => {
+  it('makes every later callback a no-op', async () => {
+    const now = () => new Date('2026-01-01T00:00:00.000Z')
+    const timer = makeFakeTimer()
+    const waiter = makeSnapshotWaiter()
+    const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
+    const gitCounts = { worktreeList: 0 }
+
+    const watcher = createPipelineWatcher({
+      repositories: [readyEntry('repo-a', root, 'o/a')],
+      onSnapshot: waiter.onSnapshot,
+      now,
+      setTimer: timer.factory,
+      git: fakeGit(gitCounts),
+      gh: () => Promise.resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' } satisfies GhResult),
+      sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+    })
+
+    await watcher.refresh()
+    expect(timer.isScheduled()).toBe(true)
+
+    watcher.stop()
+    expect(timer.isScheduled()).toBe(false)
+
+    timer.fire() // no scheduled callback — a no-op
+    const before = gitCounts.worktreeList
+    const snap = await watcher.refresh()
+    expect(gitCounts.worktreeList).toBe(before)
+    expect(snap).toBe(watcher.snapshot())
+  })
+})
+
+describe('createPipelineWatcher — registry re-list', () => {
+  it('a repository added between ticks appears on the board without a restart', async () => {
+    let currentMs = Date.parse('2026-01-01T00:00:00.000Z')
+    const now = () => new Date(currentMs)
+    const timer = makeFakeTimer()
+    const waiter = makeSnapshotWaiter()
+    const rootA = await mkdtemp(join(tmpdir(), 'port-watcher-a-'))
+    const rootB = await mkdtemp(join(tmpdir(), 'port-watcher-b-'))
+    let repos: readonly RepositoryEntry[] = [readyEntry('repo-a', rootA, 'o/a')]
+
+    const watcher = createPipelineWatcher({
+      repositories: () => Promise.resolve(repos),
+      onSnapshot: waiter.onSnapshot,
+      now,
+      setTimer: timer.factory,
+      git: fakeGit({ worktreeList: 0 }),
+      gh: () => Promise.resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' } satisfies GhResult),
+      sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+    })
+
+    const first = await watcher.refresh()
+    expect(first.state.repositories).toHaveLength(1)
+
+    repos = [readyEntry('repo-a', rootA, 'o/a'), readyEntry('repo-b', rootB, 'o/b')]
+    const p = waiter.next()
+    currentMs += 60_000 // the GitHub cadence, which re-lists the registry
+    timer.fire()
+    const second = await p
+
+    expect(second.state.repositories).toHaveLength(2)
+  })
+})
+
+describe('createPipelineWatcher — tick wiring (#105)', () => {
+  it('buildSnapshot().tick carries a real ready repository through to an actionable dispatch', async () => {
+    const now = () => new Date('2026-01-01T00:00:00.000Z')
+    const timer = makeFakeTimer()
+    const waiter = makeSnapshotWaiter()
+    const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
+
+    const watcher = createPipelineWatcher({
+      repositories: [readyEntry('repo-a', root, 'o/a')],
+      onSnapshot: waiter.onSnapshot,
+      now,
+      setTimer: timer.factory,
+      git: fakeGit({ worktreeList: 0 }),
+      gh: readyItemGh('op', ['op']),
+      sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+    })
+
+    const snap = await watcher.refresh()
+    expect(snap.tick).toHaveLength(1)
+    expect(snap.tick[0]?.repoId).toBe('repo-a')
+    expect(snap.tick[0]?.blind).toBeNull()
+    expect(snap.tick[0]?.actionable).toEqual([{ number: 42, kind: 'issue', trigger: 'ready', agent: 'plan', unchecked: false, cycle: null }])
+    expect(snap.tick[0]?.held).toEqual([])
+  })
+
+  it('a ready item not assigned to the viewer is held, unowned, in the same TickReport', async () => {
+    const now = () => new Date('2026-01-01T00:00:00.000Z')
+    const timer = makeFakeTimer()
+    const waiter = makeSnapshotWaiter()
+    const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
+
+    const watcher = createPipelineWatcher({
+      repositories: [readyEntry('repo-a', root, 'o/a')],
+      onSnapshot: waiter.onSnapshot,
+      now,
+      setTimer: timer.factory,
+      git: fakeGit({ worktreeList: 0 }),
+      gh: readyItemGh('op', []),
+      sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+    })
+
+    const snap = await watcher.refresh()
+    expect(snap.tick[0]?.actionable).toEqual([])
+    expect(snap.tick[0]?.held).toEqual([{ number: 42, kind: 'issue', trigger: 'ready', reason: 'unowned', contention: null, escalation: null }])
+  })
+})
+
+describe('createPipelineWatcher — trajectory wiring (#111)', () => {
+  it('calls recordTick once per ready, non-blind repository per poll, fire-and-forget', async () => {
+    const now = () => new Date('2026-01-01T00:00:00.000Z')
+    const timer = makeFakeTimer()
+    const waiter = makeSnapshotWaiter()
+    const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
+    const calls: { repoRoot: string; event: unknown }[] = []
+
+    const watcher = createPipelineWatcher({
+      repositories: [readyEntry('repo-a', root, 'o/a')],
+      onSnapshot: waiter.onSnapshot,
+      now,
+      setTimer: timer.factory,
+      git: fakeGit({ worktreeList: 0 }),
+      gh: readyItemGh('op', ['op']),
+      sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+      recordTick: (repoRoot, event) => {
+        calls.push({ repoRoot, event })
+        return Promise.resolve()
+      },
+    })
+
+    const snap = await watcher.refresh()
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.repoRoot).toBe(root)
+    expect(calls[0]?.event).toMatchObject({
+      v: 1,
+      repo: 'o/a',
+      repoId: 'repo-a',
+      blind: null,
+      dispatch: [{ item: 42, stage: 'plan-agent', agent: 'plan' }],
+    })
+    expect(snap.tick).toHaveLength(1)
+  })
+
+  it('never awaits recordTick — refresh() resolves even while it is still pending', async () => {
+    const now = () => new Date('2026-01-01T00:00:00.000Z')
+    const timer = makeFakeTimer()
+    const waiter = makeSnapshotWaiter()
+    const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
+    const pending: { resolve: (() => void) | null } = { resolve: null }
+
+    const watcher = createPipelineWatcher({
+      repositories: [readyEntry('repo-a', root, 'o/a')],
+      onSnapshot: waiter.onSnapshot,
+      now,
+      setTimer: timer.factory,
+      git: fakeGit({ worktreeList: 0 }),
+      gh: readyItemGh('op', ['op']),
+      sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+      recordTick: () =>
+        new Promise((resolve) => {
+          pending.resolve = () => resolve()
+        }),
+    })
+
+    await watcher.refresh()
+    expect(pending.resolve).not.toBeNull()
+    pending.resolve?.()
+  })
+})
+
+describe('createPipelineWatcher — stop() and nextWakeupAt', () => {
+  it('nextWakeupAt on the snapshot itself is null after stop(), not just the timer', async () => {
+    const now = () => new Date('2026-01-01T00:00:00.000Z')
+    const timer = makeFakeTimer()
+    const waiter = makeSnapshotWaiter()
+    const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
+
+    const watcher = createPipelineWatcher({
+      repositories: [readyEntry('repo-a', root, 'o/a')],
+      onSnapshot: waiter.onSnapshot,
+      now,
+      setTimer: timer.factory,
+      git: fakeGit({ worktreeList: 0 }),
+      gh: () => Promise.resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' } satisfies GhResult),
+      sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+    })
+
+    const before = await watcher.refresh()
+    expect(before.nextWakeupAt).not.toBeNull()
+
+    watcher.stop()
+    expect(watcher.snapshot().nextWakeupAt).toBeNull()
+  })
+})

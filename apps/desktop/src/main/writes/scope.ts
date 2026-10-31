@@ -1,41 +1,7 @@
-// Pure claim-scope derivation and precondition evaluation — no `gh`, no
-// filesystem, no `git`. `scopeFor` derives the required claim scope from a
-// request's own `add`/`remove` keys, never from a caller-declared field a
-// caller could understate.
-import type { LabelKey } from '../../shared/labels/vocabulary'
-import type { AssigneeExpectation, ClaimScope, LabelWriteRequest, ObservedItem } from '../../shared/writes/types'
+// Pure precondition evaluation — no `gh`, no filesystem, no `git`.
+import type { AssigneeExpectation, ObservedItem } from '@/types/writes'
 
-/** Byte-for-byte `docs/COORDINATION.md` → "The claim contract"'s own set —
- *  pinned both directions by `scripts/checks/desktop-writes.mjs`. `autoPlan`
- *  is deliberately excluded: the cockpit's opt-in path still sets it, and
- *  its auto-plan swap is already covered by `planApproved` being in the
- *  set. */
-export const PLAN_GATE_KEYS: readonly LabelKey[] = ['planReview', 'planApproved', 'planChangesRequested']
-
-/** `applyLabels` requires a held `plan-gate` claim iff `add ∪ remove`
- *  intersects `PLAN_GATE_KEYS`; every other label or assignee write is
- *  "either — convergent" per `docs/COORDINATION.md`'s ownership table and
- *  needs none (plan's own **Authorization, per entry point**). */
-export function scopeFor(request: Pick<LabelWriteRequest, 'add' | 'remove'>): ClaimScope | null {
-  const touched = new Set<LabelKey>([...request.add, ...request.remove])
-  return PLAN_GATE_KEYS.some((key) => touched.has(key)) ? 'plan-gate' : null
-}
-
-/** #292: every scope `applyLabels` must hold before it writes — `scopeFor`'s
- *  own derived requirement, unioned with the request's own `requiredScopes`.
- *  It can only ever add a requirement, never drop the derived one: a caller
- *  cannot understate what its own label keys already demand. Order is
- *  derived-first, so `applyLabels` checks the two known scopes
- *  (`'plan-gate'`, `'dispatch'`) in a stable, predictable order when a
- *  request happens to need both. */
-export function scopesFor(request: Pick<LabelWriteRequest, 'add' | 'remove' | 'requiredScopes'>): readonly ClaimScope[] {
-  const derived = scopeFor(request)
-  const required = request.requiredScopes ?? []
-  const scopes = derived !== null ? [derived, ...required] : [...required]
-  return [...new Set(scopes)]
-}
-
-export type PreconditionVerdict = { readonly satisfied: true } | { readonly satisfied: false; readonly expected: readonly string[]; readonly observed: readonly string[] }
+type PreconditionVerdict = { readonly satisfied: true } | { readonly satisfied: false; readonly expected: readonly string[]; readonly observed: readonly string[] }
 
 function assigneesSatisfied(expectation: AssigneeExpectation, observedAssignees: readonly string[]): boolean {
   switch (expectation.kind) {
@@ -62,24 +28,12 @@ function assigneeExpectationNames(expectation: AssigneeExpectation): readonly st
   }
 }
 
-/** Display form for an `absentNames` entry — distinguishes "expected
- *  present" from "expected absent" in the flattened `expected` list, since
- *  both share the same `string[]` shape. */
+/** Distinguishes "expected present" from "expected absent" in the flattened `expected` list. */
 function absentLabelName(name: string): string {
   return `not ${name}`
 }
 
-/** Evaluates an already name-resolved precondition against `observed`.
- *  `presentNames`/`absentNames` are the caller's `expect.present`/
- *  `expect.absent` keys, already resolved through `labelName` — this
- *  function never resolves a key itself, so it stays pure and label-key
- *  agnostic. `expected`/`observed` in the failing case are display names,
- *  exactly what the `Conflict` payload needs — `expected` always carries
- *  `presentNames` in full (the positive half of the expectation), plus
- *  whichever `absentNames` entries actually turned up (rendered
- *  `not <name>`) and the assignee expectation when *that* is what
- *  violated (including the `unassigned` case), so an absent-label or
- *  assignee violation is never silently missing from the payload. */
+// Never resolves a key itself, so it stays pure and label-key agnostic.
 export function evaluate(
   precondition: { readonly presentNames: readonly string[]; readonly absentNames: readonly string[]; readonly assignees: AssigneeExpectation },
   observed: ObservedItem,
@@ -102,10 +56,8 @@ export function evaluate(
   return { satisfied: false, expected, observed: observedNames }
 }
 
-/** `no-op` when the write would change nothing observable: every `add` key's
- *  name is already present, every `remove` key's name is already absent,
- *  and no assignee change is requested. Pure over already-resolved names —
- *  `apply.ts` supplies them from the same resolution `command.ts` performed. */
+/** `no-op` when every `add` key's name is already present, every `remove` key's name is already
+ *  absent, and no assignee change is requested. */
 export function wouldChangeNothing(
   request: { readonly addNames: readonly string[]; readonly removeNames: readonly string[]; readonly addAssignees: readonly string[]; readonly removeAssignees: readonly string[] },
   observed: ObservedItem,

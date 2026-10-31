@@ -1,16 +1,11 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join, sep } from 'node:path';
-import { root, readJson, walk, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
-import { message } from '../lib/errors.ts';
+import { root, readJson, walk, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
+import { message } from '#lib/errors.ts';
 
-/** Substitutes every `{{name}}` in `text` with `subs[name]`. A multi-line
- *  value has its continuation lines indented to the leading whitespace of the
- *  line the placeholder sits on, which is what reproduces a YAML block
- *  scalar's own indentation (the shell strips it before it ever sees the
- *  value). Throws naming the placeholder if any `{{...}}` survives, so a
- *  template that gains a new one forces the caller's map to grow rather than
- *  being silently ignored. */
+/** Substitutes every `{{name}}` in `text` with `subs[name]`. A multi-line value has its
+ *  continuation lines indented to its placeholder's own column. Throws naming any surviving placeholder, so a new one forces the caller's map to grow. */
 export function renderTemplate(text: string, subs: Record<string, string>): string {
   const rendered = text
     .split('\n')
@@ -33,21 +28,14 @@ export function renderTemplate(text: string, subs: Record<string, string>): stri
       return out;
     })
     .join('\n');
-  // Deliberately excludes GitHub Actions' own `${{ expression }}` syntax — the
-  // `$` prefix and the space/dot inside are what distinguish it from one of
-  // this template's own `{{name}}` placeholders, which are bare identifiers.
+  // Deliberately excludes GitHub Actions' own `${{ expression }}` syntax — the `$` prefix distinguishes it from a bare `{{name}}` placeholder.
   const leftover = /(?<!\$)\{\{[A-Za-z][A-Za-z0-9]*\}\}/.exec(rendered);
   if (leftover) throw new Error(`unresolved placeholder ${leftover[0]}`);
   return rendered;
 }
 
-/** Reduces `text` to an array of comparable entries: a run of consecutive
- *  full-line `#` comments at the same indent, with non-empty text, collapses
- *  to one `indent + whitespace-collapsed text` entry, tolerating reflow across
- *  a line break. A bare `#` line ends the run without merging into it. Every
- *  other line — including one with trailing code after a `#` — is kept
- *  verbatim (trailing whitespace stripped only), so a YAML indentation or
- *  wording change on a real line is never normalized away. */
+/** Reduces `text` to comparable entries: a run of consecutive full-line `#` comments at the
+ *  same indent collapses to one entry, tolerating reflow. Every other line is kept verbatim (trailing whitespace stripped only). */
 export function normalizeYaml(text: string): string[] {
   const lines = text.replace(/\r/g, '').split('\n');
   const out: string[] = [];
@@ -75,11 +63,9 @@ export function normalizeYaml(text: string): string[] {
   return out;
 }
 
-export default async function ({ fail, note, ok }: Reporter) {
-  // --- Label vocabulary matches the schema -----------------------------------
-  // guard: two files listing the same vocabulary and drifting. Two files
-  // independently list the same label keys. They have drifted before.
-  // pin: `data/labels.json` ↔ the schema
+export default async function ({ expect, fail, note, ok }: Reporter) {
+  // --- Label vocabulary matches the schema — two files independently list the same label
+  // keys, and have drifted before. pin: `data/labels.json` ↔ the schema
   {
     const templateKeys = new Set<string>(readJson('plugins/port/data/labels.json').labels.map((l: any) => l.key));
     const schemaKeys = new Set(
@@ -94,21 +80,9 @@ export default async function ({ fail, note, ok }: Reporter) {
     ok();
   }
 
-  // --- Cockpit's inline label-vocabulary table matches labels.json ------------
-  // guard(#61, #170): the cockpit resolving a config key it cannot map to a
-  // real label name, and the role field the blocking-label derivation reads
-  // from drifting from the table it was copied from. The cockpit resolves
-  // `labels[key] ?? default` from an inline copy of the vocabulary rather
-  // than reading labels.json directly, so the two tables must name the same
-  // keys and the same default name per key. Extended for the role column:
-  // it is what the workflow-render check below derives `{{blockingLabels}}`
-  // from, so it is pinned against `labels.json`'s own `role` field too, both
-  // directions.
   // pin: `pipeline/SKILL.md`'s inline label table ↔ `labels.json`
   {
-    // issue 181: the inline vocabulary table is Startup preflight step 5, which
-    // moved into PREFLIGHT.md — a structural table parse, so this names one
-    // file directly rather than the skill union.
+    // The inline vocabulary table lives in PREFLIGHT.md — a structural table parse, so this names one file directly rather than the skill union.
     const skillRel = 'plugins/port/skills/pipeline/PREFLIGHT.md';
     const skillText = readFileSync(join(root, skillRel), 'utf8');
     const tableMatch =
@@ -151,18 +125,8 @@ export default async function ({ fail, note, ok }: Reporter) {
     }
   }
 
-  // --- No config key appears as a literal --label argument --------------------
-  // guard(#61, #148): a key typed where a resolved label name belongs,
-  // matching nothing silently, and a config key surviving the tick's
-  // collapse into a GraphQL query and matching nothing silently — the exact
-  // same failure mode one syntax over. `gh ... --label <unknown>` exits 0
-  // with an empty result, so a config key (e.g. `planApproved`) typed
-  // directly into a `--label`/`--add-label`/`--remove-label` argument
-  // silently matches no real label instead of erroring. `<labels.planApproved>`
-  // is the placeholder and must not match; the bare string `planApproved`
-  // must. Extended for the collapsed tick query, which expresses the same
-  // thing as a GraphQL `labels: [...]` list, which the original regex —
-  // keyed on `--label` flags only — would silently miss.
+  // --- No config key appears as a literal --label argument — `gh ... --label <unknown>`
+  // exits 0 with an empty result, so a config key typed directly matches nothing silently. Also checked against the collapsed tick query's GraphQL `labels: [...]` list. ---
   {
     const mismatched = readJson('plugins/port/data/labels.json')
       .labels.filter((l: any) => l.key !== l.name)
@@ -201,15 +165,10 @@ export default async function ({ fail, note, ok }: Reporter) {
     ok();
   }
 
-  // --- Desktop app's LABEL_ROLES matches labels.json's role field, both directions ---
-  // guard(#79): the stage ladder's role union drifting from the template it
-  // must read. Decision 1: the stage ladder reads `role` off `LABEL_DEFAULTS`
-  // rather than a hand-transcribed key→stage table. `LabelRole` itself can't
-  // be derived from the template import (TypeScript widens JSON strings to
-  // `string`), so it is hand-maintained in shared/labels/defaults.ts and must
-  // agree with every distinct role labels.json actually uses, both ways.
+  // --- Desktop app's LABEL_ROLES matches labels.json's role field, both directions — hand-
+  // maintained in utils/labels/defaults.ts since TypeScript widens JSON strings, so it must agree with every distinct role labels.json uses. ---
   {
-    const rel = 'apps/desktop/src/shared/labels/defaults.ts';
+    const rel = 'apps/desktop/src/utils/labels/defaults.ts';
     const text = readFileSync(join(root, rel), 'utf8');
     const m = /LABEL_ROLES\s*=\s*\[([^\]]*)\]\s*as const/.exec(text);
     if (!m) {
@@ -227,10 +186,28 @@ export default async function ({ fail, note, ok }: Reporter) {
     }
   }
 
-  // --- Label colours are well-formed and distinct -----------------------------
-  // guard: a role's ramp collapsing back to one repeated hex. Every label's
-  // position within its role ramp depends on a unique hex; a duplicate
-  // collapses two labels back to pixel-identical, silently.
+  // --- Desktop app's LABEL_PALETTES matches labels.json's palette field, both directions — hand-
+  // maintained in utils/labels/defaults.ts for the same widening reason, so it must agree with every distinct palette labels.json uses. ---
+  {
+    const rel = 'apps/desktop/src/utils/labels/defaults.ts';
+    const text = readFileSync(join(root, rel), 'utf8');
+    const m = /LABEL_PALETTES\s*=\s*\[([^\]]*)\]\s*as const/.exec(text);
+    if (!m) {
+      fail('labels', `${rel} has no 'LABEL_PALETTES = [...] as const' array`);
+    } else {
+      const declared = new Set([...m[1].matchAll(/'([^']+)'/g)].map((t) => t[1]));
+      const real = new Set<string>(readJson('plugins/port/data/labels.json').labels.map((l: any) => l.palette).filter((p: unknown) => p !== null));
+      for (const p of declared) {
+        if (!real.has(p)) fail('labels', `${rel}'s LABEL_PALETTES has '${p}', which no labels.json entry uses`);
+      }
+      for (const p of real) {
+        if (!declared.has(p)) fail('labels', `labels.json uses palette '${p}', missing from ${rel}'s LABEL_PALETTES`);
+      }
+      ok();
+    }
+  }
+
+  // --- Label colours are well-formed and distinct — a shared colour collapses two labels pixel-identical, and previousColors entries must be well-formed too ---
   {
     const labels = readJson('plugins/port/data/labels.json').labels;
     const seen = new Map();
@@ -244,57 +221,53 @@ export default async function ({ fail, note, ok }: Reporter) {
       } else {
         seen.set(l.color, l.key);
       }
+      if (!Array.isArray(l.previousColors)) {
+        fail('label-colors', `'${l.key}' has no previousColors array — use [] when port never shipped another colour for it`);
+        continue;
+      }
+      for (const previous of l.previousColors) {
+        if (typeof previous !== 'string' || !/^[0-9A-F]{6}$/.test(previous)) {
+          fail('label-colors', `'${l.key}' has a malformed previousColors entry ${JSON.stringify(previous)}, expected six uppercase hex digits`);
+        }
+      }
     }
     ok();
   }
 
-  // --- Workflow copies stay rendered from their templates ---------------------
-  // guard(#170): the live workflow that actually gates merges drifting
-  // silently from the template every adopter installs, or vice versa.
-  // `.github/workflows/approval-check.yml` and `artifacts.yml` are rendered
-  // copies of `plugins/port/templates/*.yml` with the substitutions applied.
-  // Nothing pinned them together.
-  // pin: `.github/workflows/*.yml` ↔ `plugins/port/templates/*.yml`
+  // --- Every label carries a palette — null for a marker and a phase for everything else, so a new label cannot ship uncoloured by phase ---
   {
-    // Self-test both helpers first — a check that cannot be made to fail is not
-    // a check.
+    const labels = readJson('plugins/port/data/labels.json').labels;
+    for (const l of labels) {
+      const expectsNull = l.role === 'marker';
+      if (expectsNull !== (l.palette === null)) {
+        fail('label-colors', `'${l.key}' (role ${l.role}) has palette ${JSON.stringify(l.palette)} — ${expectsNull ? 'a marker has none' : 'every non-marker label belongs to a phase palette'}`);
+      }
+    }
+    ok();
+  }
+
+  // pin: `.github/workflows/*.yml` ↔ `plugins/port/templates/*.yml` — the live workflow that
+  // gates merges must never drift silently from the template every adopter installs.
+  {
+    // Self-test both helpers first.
     {
       const a = normalizeYaml('# one\n# two three\ncode: here');
       const b = normalizeYaml('# one two\n# three\ncode: here');
-      if (JSON.stringify(a) !== JSON.stringify(b)) {
-        fail('workflow-templates', 'normalizeYaml: reflowing a comment across a line break must compare equal');
-      } else {
-        ok();
-      }
+      expect(!(JSON.stringify(a) !== JSON.stringify(b)), 'workflow-templates', 'normalizeYaml: reflowing a comment across a line break must compare equal');
     }
     {
       const a = normalizeYaml('code: here');
       const b = normalizeYaml('code: there');
-      if (JSON.stringify(a) === JSON.stringify(b)) {
-        fail('workflow-templates', 'normalizeYaml: a changed word on a non-comment line must compare unequal');
-      } else {
-        ok();
-      }
+      expect(!(JSON.stringify(a) === JSON.stringify(b)), 'workflow-templates', 'normalizeYaml: a changed word on a non-comment line must compare unequal');
     }
     {
       const a = normalizeYaml('  code: here');
       const b = normalizeYaml('    code: here');
-      if (JSON.stringify(a) === JSON.stringify(b)) {
-        fail('workflow-templates', 'normalizeYaml: a changed indent on a non-comment line must compare unequal');
-      } else {
-        ok();
-      }
+      expect(!(JSON.stringify(a) === JSON.stringify(b)), 'workflow-templates', 'normalizeYaml: a changed indent on a non-comment line must compare unequal');
     }
     {
       const rendered = renderTemplate('          X="{{v}}"', { v: 'a\nb\nc' });
-      if (rendered !== '          X="a\n          b\n          c"') {
-        fail(
-          'workflow-templates',
-          `renderTemplate: a multi-line value's continuation lines must indent to the placeholder's own column, got ${JSON.stringify(rendered)}`,
-        );
-      } else {
-        ok();
-      }
+      expect(!(rendered !== '          X="a\n          b\n          c"'), 'workflow-templates', `renderTemplate: a multi-line value's continuation lines must indent to the placeholder's own column, got ${JSON.stringify(rendered)}`);
     }
 
     const cfg = readJson('.claude/port.config.json');
@@ -375,17 +348,10 @@ export default async function ({ fail, note, ok }: Reporter) {
     }
   }
 
-  // --- Desktop app's LABEL_KEYS matches labels.json, both directions ---------
-  // guard(#75): the one literal union that can't be derived from the JSON
-  // import (TypeScript widens JSON strings to `string`) drifting from the
-  // template it must mirror. apps/desktop imports the shipped template
-  // directly (it can — same repository, bundled at build time), so there is
-  // no second transcription to drift there, but LABEL_KEYS itself must be
-  // diffed against the template here, the same shape as the cockpit-table
-  // and artifacts-labels guards above.
-  // pin: `apps/desktop`'s `LABEL_KEYS` ↔ `labels.json`
+  // pin: `apps/desktop`'s `LABEL_KEYS` ↔ `labels.json` — the one literal union that can't be
+  // derived from the JSON import (TypeScript widens JSON strings to `string`) must be diffed here instead.
   {
-    const rel = 'apps/desktop/src/shared/labels/vocabulary.ts';
+    const rel = 'apps/desktop/src/utils/labels/vocabulary.ts';
     const text = readFileSync(join(root, rel), 'utf8');
     const m = /LABEL_KEYS\s*=\s*\[([^\]]*)\]\s*as const/.exec(text);
     if (!m) {
@@ -403,30 +369,16 @@ export default async function ({ fail, note, ok }: Reporter) {
     }
   }
 
-  // --- Desktop app never retypes a resolved label name it should import ------
-  // guard(#75, #74, #97): the app retyping a resolved label name by hand
-  // instead of reading it from the LABEL_DEFAULTS import — the same
-  // second-transcription drift this rail exists to prevent — and the
-  // registry or the renderer retyping a resolved label name instead of
-  // importing it, now that both are consumers. The strings where
-  // `key !== name` (`plan approved`, `ready for review`, …) must come from
-  // the LABEL_DEFAULTS import, never be hand-typed again. Single-word names
-  // where `key === name` are excluded, since LABEL_KEYS legitimately
-  // contains them as literals. Widened from shared/labels/ to all of
-  // apps/desktop/src/.
-  //
-  // `main/platform/` and `main/runtime/` are excluded from this scan:
-  // the marker label's `name` is `'claude'`, the same literal as the Claude
-  // Code CLI binary these two label-vocabulary-free directories spawn and
-  // resolve — neither imports label vocabulary or reads a label name, so a
-  // hit there can only ever be the binary name, never a retyped label.
+  // --- Desktop app never retypes a resolved label name it should import — every string where
+  // `key !== name` must come from LABEL_DEFAULTS. `main/platform/`/`main/runtime/`/`types/platform.ts` excluded: their `'claude'` hits are the CLI binary name. ---
   {
     const mismatched = readJson('plugins/port/data/labels.json')
       .labels.filter((l: any) => l.key !== l.name)
       .map((l: any) => l.name);
     const dir = join(root, 'apps/desktop/src');
     const labelFreeDirs = [join(dir, 'main/platform'), join(dir, 'main/runtime')];
-    for (const f of walk(dir).filter((p) => p.endsWith('.ts') && !p.endsWith('.test.ts') && !labelFreeDirs.some((d) => p === d || p.startsWith(`${d}${sep}`)))) {
+    const labelFreeFiles = [join(dir, 'types/platform.ts')];
+    for (const f of walk(dir).filter((p) => p.endsWith('.ts') && !p.endsWith('.test.ts') && !labelFreeDirs.some((d) => p === d || p.startsWith(`${d}${sep}`)) && !labelFreeFiles.includes(p))) {
       const rel = relOf(f);
       const text = readFileSync(f, 'utf8');
       for (const name of mismatched) {

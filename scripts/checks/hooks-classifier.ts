@@ -1,44 +1,31 @@
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root } from '../lib/files.ts';
-import { resolveMatchers, subagentPayload, makeCheck } from '../lib/guard-fixtures.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root } from '#lib/files.ts';
+import { resolveMatchers, subagentPayload, topLevelAgentPayload, stageInImplWorktreePayload, operatorWorktreePayload, makeCheck, makeDecide, bash } from '#lib/guard-fixtures.ts';
+import type { Reporter } from '#lib/report.ts';
 
-export default async function ({ fail, ok }: Reporter) {
-  // --- Guard hook classifier ---------------------------------------------------
-  // guard(#67): the mechanism that actually denies, independent of
-  // parent-session mode. Unit-tests the pure decision logic in isolation
-  // from stdin/stdout/exit-code plumbing.
+export default async function ({ fail, ok, expect }: Reporter) {
+  // --- Guard hook classifier: unit-tests the pure decision logic, isolated from stdin/stdout/exit-code plumbing. ---
   const { decide, callerKind, globToRegExp } =
     await import(pathToFileURL(join(root, 'plugins/port/hooks/lib/guard-rules.mjs')).href);
 
   const matchers = resolveMatchers(fail);
   const check = makeCheck(fail, ok);
+  const gate = makeDecide(decide, { matchers, sessionRequiredPaths: [], root });
 
   // Subagent + non-allowlisted Bash → deny.
-  check(
-    'subagent non-allowlisted bash',
-    decide({ payload: subagentPayload(), matchers, sessionRequiredPaths: [], root }),
-    'deny',
-  );
+  check('subagent non-allowlisted bash', gate({ payload: subagentPayload() }), 'deny');
 
-  // Same command, no agent signal → miss, never deny. A fabricated cwd, not
-  // this checkout's own path — this script may itself be running inside a
-  // dispatched agent's worktree, whose path legitimately matches the
-  // worktree signal, which would otherwise make this case pass for the
-  // wrong reason.
+  // Same command, no agent signal → miss, never deny. A fabricated cwd, not this checkout's own path.
   check(
     'no-signal non-allowlisted bash',
-    decide({
+    gate({
       payload: {
         cwd: '/home/operator/some-other-project',
         session_id: 'sess-2',
         tool_name: 'Bash',
         tool_input: { command: 'which claude' },
       },
-      matchers,
-      sessionRequiredPaths: [],
-      root,
     }),
     'miss',
   );
@@ -46,26 +33,19 @@ export default async function ({ fail, ok }: Reporter) {
   // Allowlisted command with an agent signal → allow.
   check(
     'subagent allowlisted bash',
-    decide({
-      payload: subagentPayload({ tool_input: { command: 'git status' } }),
-      matchers,
-      sessionRequiredPaths: [],
-      root,
-    }),
+    gate({ payload: subagentPayload({ tool_input: { command: 'git status' } }) }),
     'allow',
   );
 
   // Subagent write to a sessionRequiredPaths path → deny.
   check(
     'subagent write to session-required path',
-    decide({
+    gate({
       payload: subagentPayload({
         tool_name: 'Write',
         tool_input: { file_path: join(root, '.claude/port.config.json') },
       }),
-      matchers,
       sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
-      root,
     }),
     'deny',
   );
@@ -73,14 +53,12 @@ export default async function ({ fail, ok }: Reporter) {
   // Subagent write outside sessionRequiredPaths → allow.
   check(
     'subagent write outside session-required paths',
-    decide({
+    gate({
       payload: subagentPayload({
         tool_name: 'Write',
         tool_input: { file_path: join(root, 'plugins/port/x.md') },
       }),
-      matchers,
       sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
-      root,
     }),
     'allow',
   );
@@ -89,7 +67,7 @@ export default async function ({ fail, ok }: Reporter) {
   // with no agent_type/agent_id present.
   check(
     'transcript signal alone',
-    decide({
+    gate({
       payload: {
         cwd: root,
         session_id: 'sess-3',
@@ -97,24 +75,18 @@ export default async function ({ fail, ok }: Reporter) {
         tool_name: 'Bash',
         tool_input: { command: 'which claude' },
       },
-      matchers,
-      sessionRequiredPaths: [],
-      root,
     }),
     'deny',
   );
   check(
     'worktree signal alone',
-    decide({
+    gate({
       payload: {
         cwd: join(root, '.claude/worktrees/agent-abc123'),
         session_id: 'sess-4',
         tool_name: 'Bash',
         tool_input: { command: 'which claude' },
       },
-      matchers,
-      sessionRequiredPaths: [],
-      root,
     }),
     'deny',
   );
@@ -125,6 +97,82 @@ export default async function ({ fail, ok }: Reporter) {
     fail('guard-classifier', 'callerKind missed a namespaced agent_type');
   }
   ok();
+
+  // --- App-owned pass-through: a top-level agent session's protected edit gets 'pass' only on
+  // verdict 'app'; every other verdict, and every other caller, still denies. ---
+  const protectedWrite = { sessionRequiredPaths: ['.claude/**'], matchers };
+
+  check(
+    'top-level agent + app owner → pass',
+    gate({ ...protectedWrite, payload: topLevelAgentPayload(), ownership: { kind: 'app', since: 'x' } }),
+    'pass',
+  );
+  for (const ownership of [{ kind: 'absent' }, { kind: 'terminal', since: 'x' }, { kind: 'unreadable', message: 'x' }]) {
+    check(
+      `top-level agent + ${ownership.kind} owner → deny`,
+      gate({ ...protectedWrite, payload: topLevelAgentPayload(), ownership }),
+      'deny',
+    );
+  }
+  check(
+    'terminal subagent (agent_id present) + app owner → deny',
+    gate({
+      ...protectedWrite,
+      payload: topLevelAgentPayload({ agent_id: 'agent-1' }),
+      ownership: { kind: 'app', since: 'x' },
+    }),
+    'deny',
+  );
+  check(
+    'transcript-signal subagent + app owner → deny',
+    gate({
+      ...protectedWrite,
+      payload: topLevelAgentPayload({ transcript_path: '/home/x/.claude/subagents/agent-abc123.jsonl' }),
+      ownership: { kind: 'app', since: 'x' },
+    }),
+    'deny',
+  );
+  check(
+    'top-level agent + app owner, non-protected path → allow',
+    gate({
+      ...protectedWrite,
+      payload: topLevelAgentPayload({ tool_input: { file_path: 'plugins/port/x.md' } }),
+      ownership: { kind: 'app', since: 'x' },
+    }),
+    'allow',
+  );
+
+  // callerKind: agent_type without agent_id → isSubagent and isTopLevelAgent both true;
+  // with agent_id → isTopLevelAgent false.
+  if (!callerKind({ agent_type: 'port:impl-agent' }).isTopLevelAgent) {
+    fail('guard-classifier', 'callerKind missed isTopLevelAgent for agent_type without agent_id');
+  }
+  if (callerKind({ agent_type: 'port:impl-agent', agent_id: 'agent-1' }).isTopLevelAgent) {
+    fail('guard-classifier', 'callerKind set isTopLevelAgent despite agent_id being present');
+  }
+  ok();
+
+  // An app stage session in `impl-<n>` carries an agent identity, so it is never `/port:implement`'s operator worktree.
+  expect(
+    callerKind(stageInImplWorktreePayload()).isOperatorWorktree === false,
+    'guard-classifier',
+    'callerKind treated an agent caller in impl-<n> as the operator worktree',
+  );
+  expect(
+    callerKind(stageInImplWorktreePayload({ agent_id: 'agent-1' })).isOperatorWorktree === false,
+    'guard-classifier',
+    'callerKind treated an agent_id caller in impl-<n> as the operator worktree',
+  );
+  expect(
+    callerKind(operatorWorktreePayload()).isOperatorWorktree === true,
+    'guard-classifier',
+    'callerKind no longer recognises the operator session in impl-<n>',
+  );
+  check(
+    'gh in a shell loop from an app stage session in impl-<n>',
+    gate({ payload: bash('for n in 63 67 71; do gh issue view $n --repo b-at-neu/port; done', stageInImplWorktreePayload) }),
+    'deny',
+  );
 
   // globToRegExp: '**' spans directories, '*' does not.
   if (!globToRegExp('.claude/**').test('.claude/settings.json')) {

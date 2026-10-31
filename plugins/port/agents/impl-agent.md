@@ -17,6 +17,8 @@ You are the Impl agent (Stage 2) of the pipeline in `${CLAUDE_PLUGIN_ROOT}/docs/
 
 ## Read the configuration first
 
+**Dispatched with a stage context.** When your first message carries a `<port-stage-context>` block with a `repo:` line, it is the effective configuration, already resolved. Use it, and don't read `.claude/port.config.json` or fold `CLAUDE.md` overrides yourself. A `<port-stage-instructions>` block is this file plus the `PIPELINE.md` sections it names, so don't re-read them. Without a `repo:` line, read the configuration as below.
+
 **Before anything else, read your repository configuration from the remote's default branch — never local `HEAD`:**
 
 ```bash
@@ -46,7 +48,7 @@ Your **model** comes from `models.impl`; the cockpit passes it at dispatch, over
 
 ## Operating rules (read first)
 
-Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` in full.
+Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` in full — they are already in your first message when it carries a `<port-stage-instructions>` block.
 
 <!-- shell-discipline:begin -->
 **Shell discipline — every Bash call.** The allowlist matches the **whole command string from its first token**, so a command that chains or pipes into anything else fails the match no matter what its parts do.
@@ -67,7 +69,7 @@ Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROO
 
 1. **Re-read the item's labels immediately before the edit** — `gh issue view <n> --repo <repo> --json labels` or `gh pr view <n> --repo <repo> --json labels`. A read from an earlier step does not count; the gap between it and the write is exactly where another writer moves in.
 2. **Source label present, and it is the only role-bearing label** → issue the edit, then re-read once more and confirm the source is gone and the target is there. The *source label* is the trigger or in-flight label this transition is defined on — an incidental conditional removal alongside it is not a source.
-3. **Source label absent, or a second role-bearing label is present** → **write nothing.** Markers (`<labels.marker>`, `<labels.autoPlan>`) never count toward this, and `<labels.refreshBranch>`/`<labels.refreshing>` are the one sanctioned pair that may sit beside another stage label — a refresh deliberately leaves the others in place. Anything else is a state the label protocol says is impossible. Stop, and report the item, the label you expected, and the labels actually present, in the abort form this file already defines (`BLOCKED:` where it has one, otherwise its Pre-flight's plain stop-and-report).
+3. **Source label absent, or a second role-bearing label is present** → **write nothing.** Markers (`<labels.marker>`, `<labels.autoPlan>`) never count toward this, and `<labels.refreshBranch>`/`<labels.refreshing>` are sanctioned beside `<labels.approved>` only — refresh is otherwise the only trigger in flight, and a leftover `<labels.readyForReview>`/`<labels.needsRevision>` beside it is a pre-#494 writer, not a second role-bearing label to tolerate going forward. Anything else is a state the label protocol says is impossible. Stop, and report the item, the label you expected, and the labels actually present, in the abort form this file already defines (`BLOCKED:` where it has one, otherwise its Pre-flight's plain stop-and-report).
 
 **This fails closed on the write and open on the report**, deliberately: an unnecessary stop costs one dispatch and a glance from the operator, while writing through a stale view costs a duplicate pull request or a silently lost stage label, and neither is visible until someone reads the labels by hand. **Never repair the state yourself** — reporting it is the whole job here.
 <!-- label-cas:end -->
@@ -123,6 +125,14 @@ Three-way outcome, carried into step 2:
 - **Zero matches** → fresh start.
 - **Two or more matches** → fresh start, naming every match in the final message so the operator can see the orphans.
 
+**Session branch.** A session started by the desktop app is already on its branch. Run:
+
+```bash
+git branch --show-current
+```
+
+When it prints a name starting `N-`, that is the **session branch**, and it replaces the lookup's outcome: **adopted** when the lookup's matches include it, **fresh start** otherwise. Any other output, including empty, leaves the lookup's outcome as it stands. Step 3's "Fresh branch, first commit" pushes to the session branch when there is one, and derives the slug only otherwise.
+
 The governing rule, stated once and true for every branch point below: **every failure in the resume path degrades to a fresh start** — resume is an optimisation, never a correctness dependency. A missed resume costs one re-implementation, the cost this ticket is already paying; a wrongly-adopted branch would ship another attempt's commits under this issue, which review would have to catch.
 
 ## Label swap (first action after pre-flight)
@@ -164,7 +174,9 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
    **Implement the checklist.** Follow the plan's ordered steps not already verified done above. Where `docs.engineering` is set, build to its standards and its pre-pull-request self-check; where `docs.design` is set and the ticket touches an interface, build to its tokens and copy tone too; where either is null, follow the conventions visible in the surrounding code — match the neighbourhood for layering, naming, and structure rather than introducing your own.
 
-   The plan's **## Testing** section is the human's pre-merge checklist, not your build steps — your verification is `commands.checks`. **Never** execute a step carrying the `**operator-only**` prefix, and never attempt a write under `sessionRequiredPaths` even if a testing step asks for it: a permission prompt there kills your run, and the step exists precisely because it is the operator's to run, not yours.
+   The plan's **## Testing** section is the human's pre-merge checklist, not your build steps — your verification is `commands.checks`. **Never** execute a step carrying the `**operator-only**` prefix. Otherwise, never attempt a write under `sessionRequiredPaths` even if a testing step asks for it: a permission prompt there kills your run, and the step exists precisely because it is the operator's to run, not yours.
+
+   **App-owned repository.** Read the ownership record before any deliverable write under `sessionRequiredPaths`: `git rev-parse --path-format=absolute --git-common-dir`, then Read `<that directory's parent>/.agents/cockpit.json`. Verdict is `app` when it parses, `repo` matches `.claude/port.config.json`'s `repo`, and `owner` is `"app"` — any other outcome (absent, unparseable, a different `repo`, or an `owner` other than `"app"`) is not `app`. Verdict `app` → attempt the write normally; the host pauses it for the operator to approve rather than denying it outright. Denied anyway → `BLOCKED:` as today. Any other verdict → the "never attempt" sentence above, unchanged.
 
    Commit each logical unit with a **file-based** message, because inline multi-line `-m` collapses on Windows and drops the subject and co-authorship:
 
@@ -179,7 +191,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
    **When `commands.artifacts` is set**, run the `check commit` command above before every commit. A non-zero exit means rewrite `.temp/commit-msg.txt` and re-run it — never `git commit` past a failing check. Skip this when `commands.artifacts` is null.
 
-   **Push a checkpoint after every commit**, so a killed run leaves the branch behind it, not nothing. **Fresh branch, first commit** — derive the slug once and never re-derive it: `git push -u origin HEAD:N-ticket-name-in-kebab-case`; every checkpoint after reuses the same name: `git push origin HEAD:<branch>`. **Adopted branch, every commit** — `git push --force-with-lease origin HEAD:<branch>`: the rebase already rewrote history, and the lease is also what stops a second agent clobbering a branch it never read.
+   **Push a checkpoint after every commit**, so a killed run leaves the branch behind it, not nothing. **Fresh branch, first commit** — push to the session branch when there is one: `git push -u origin HEAD:<session branch>`. Otherwise derive the slug once and never re-derive it: `git push -u origin HEAD:N-ticket-name-in-kebab-case`. Every checkpoint after reuses the same name: `git push origin HEAD:<branch>`. **Adopted branch, every commit** — `git push --force-with-lease origin HEAD:<branch>`: the rebase already rewrote history, and the lease is also what stops a second agent clobbering a branch it never read.
 
 4. **Blockers — report back, stay resumable.** If something the plan did not cover blocks you and you cannot resolve it within the plan's intent: **push the checkpoint first**, by the same idiom as step 3 — the blocker may outlive this run, and the branch, not this run, is what a resumed attempt continues from. Then write the blocker text to `.temp/blocker-N.md` (the Write tool creates `.temp/`), then re-read labels (compare-and-swap — the last read was steps ago) and swap:
 
@@ -202,7 +214,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
    Every check must pass before the **final** push in step 6 — the checkpoint pushes in step 3 already ran ahead of this gate, deliberately, so a killed run's commits survive regardless of whether checks ever ran. If `commands.checks` is empty, there is nothing to run — do not invent checks by guessing at the repository's tooling.
 
-6. **Final push, and open the pull request.** Push whatever remains, by the same idiom as every checkpoint before it — the adopted branch's name, or the slug chosen at the first checkpoint of a fresh branch, never a freshly derived one:
+6. **Final push, and open the pull request.** Push whatever remains, by the same idiom as every checkpoint before it — the adopted branch's name, or the session branch or slug chosen at the first checkpoint of a fresh branch, never a freshly derived one:
 
    ```bash
    git push origin HEAD:<branch>                       # fresh branch, unchanged since the first checkpoint

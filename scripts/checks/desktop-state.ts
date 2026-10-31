@@ -1,33 +1,24 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, walk, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, walk, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
-// Issue 79: apps/desktop/src/main/state/ is the app's spine — it composes
-// issue 74/76/77/78's adapters into one reconciled view and reads nothing
-// itself. Four assertions pin its plan's decisions mechanically,
-// dependency-free and regex-based, in the shape of desktop-github.ts's own
-// guards — reading these directories by explicit path (never walk('apps/'),
-// which descends into node_modules).
-export default async function ({ fail, ok }: Reporter) {
+// apps/desktop/src/main/state/ is the app's spine — it composes the adapters into one
+// reconciled view and reads nothing itself. These assertions pin its plan's decisions mechanically.
+export default async function ({ expect, fail, ok }: Reporter) {
   const stateDir = 'apps/desktop/src/main/state';
-  const sharedStateDir = 'apps/desktop/src/shared/state';
+  const stateTypesFile = 'apps/desktop/src/types/state.ts';
   const files = walk(join(root, stateDir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
 
-  // --- The directory has source files, so nothing below passes vacuously ---
-  // guard(#79): a fifth GitHub/local reader landing beside the four
-  // adapters this module composes, or this guard passing vacuously once the
-  // directory is deleted.
+  // --- The directory has source files, so nothing below passes vacuously once deleted. ---
   if (files.length === 0) {
     fail('desktop-state', `${stateDir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
     return;
   }
   ok();
 
-  // --- main/state/ composes adapters and never becomes a fifth reader --------
-  // No file imports ../platform directly, and no file names gh(/ghJson(/
-  // runCommand( — every read this module needs goes through main/github,
-  // main/local, and main/sessions, which already hold those rails.
+  // --- main/state/ composes adapters and never becomes a fifth reader: no file imports
+  // ../platform directly or names gh(/ghJson(/runCommand( — every read goes through the existing adapters. ---
   {
     let found = false;
     for (const f of files) {
@@ -47,11 +38,8 @@ export default async function ({ fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- The SESSION REQUIRED rendering in link.ts matches PIPELINE.md's own ---
-  // guard(#79): the cockpit's and the desktop app's session-required
-  // detection silently disagreeing about what counts as the marker. The
-  // canonical rendering is a byte-identical contract between the cockpit and
-  // this app (PIPELINE.md → "The marker").
+  // --- The SESSION REQUIRED rendering in link.ts matches PIPELINE.md's own — a
+  // byte-identical contract between the cockpit and this app. ---
   {
     const linkRel = `${stateDir}/link.ts`;
     const linkFile = files.find((f) => relOf(f) === linkRel);
@@ -68,37 +56,24 @@ export default async function ({ fail, ok }: Reporter) {
         fail('desktop-state', `plugins/port/docs/PIPELINE.md's "The marker" section has no canonical fenced rendering to compare against`);
       } else {
         const canonical = `${pipelineMatch[1]} `;
-        if (linkMatch[1] !== canonical) {
-          fail(
-            'desktop-state',
-            `${linkRel}'s SESSION_REQUIRED_PREFIX is ${JSON.stringify(linkMatch[1])}, but PIPELINE.md's canonical rendering is ${JSON.stringify(canonical)}`,
-          );
-        } else {
-          ok();
-        }
+        expect(!(linkMatch[1] !== canonical), 'desktop-state', `${linkRel}'s SESSION_REQUIRED_PREFIX is ${JSON.stringify(linkMatch[1])}, but PIPELINE.md's canonical rendering is ${JSON.stringify(canonical)}`);
       }
     }
   }
 
-  // --- No `running`/`alive`/`isLive` identifier or string literal in production code ---
-  // guard(#79): a reconciled stall verdict being reported as liveness rather
-  // than a report derived from recency. The same rail desktop-sessions.ts
-  // pins for main/sessions/ (issue 78's Decision 4), extended to the module
-  // that consumes its `Activity` facts.
+  // --- No `running`/`alive`/`isLive` identifier or string literal in production code — a
+  // reconciled stall verdict must never be reported as liveness. ---
   {
-    const dirs = [join(root, stateDir), join(root, sharedStateDir)];
     const forbidden = ['running', 'alive', 'isLive'];
     let found = false;
-    for (const dir of dirs) {
-      for (const f of walk(dir).filter((p) => (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.test.ts'))) {
-        const rel = relOf(f);
-        const code = stripComments(readFileSync(f, 'utf8'));
-        for (const word of forbidden) {
-          const pattern = new RegExp(`\\b${word}\\b`);
-          if (pattern.test(code)) {
-            found = true;
-            fail('desktop-state', `${rel} contains '${word}' outside a comment — a stall is a report, never liveness (#79 Decision 2)`);
-          }
+    for (const f of [...walk(join(root, stateDir)).filter((p) => (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.test.ts')), join(root, stateTypesFile)]) {
+      const rel = relOf(f);
+      const code = stripComments(readFileSync(f, 'utf8'));
+      for (const word of forbidden) {
+        const pattern = new RegExp(`\\b${word}\\b`);
+        if (pattern.test(code)) {
+          found = true;
+          fail('desktop-state', `${rel} contains '${word}' outside a comment — a stall is a report, never liveness (#79 Decision 2)`);
         }
       }
     }

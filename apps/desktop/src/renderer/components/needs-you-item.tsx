@@ -1,0 +1,98 @@
+// The Needs you row: a status dot, lead copy, a repo tag, relative age,
+// and one inline action, with a caret to expand more detail in place.
+import type { ReactNode } from 'react'
+import { ChevronRight, X } from 'lucide-react'
+import { cn } from '@/renderer/lib/utils'
+import { Button } from '@/renderer/components/ui/button'
+import { IconButton } from '@/renderer/components/icon-button'
+import { PhaseDot } from '@/renderer/components/phase-dot'
+import { NEEDS_YOU_TONE } from '@/renderer/lib/phase-tone'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
+import { exactTime, relativeAge } from '@/renderer/backlog/group'
+
+interface NeedsYouItemProps {
+  readonly leadCopy: string
+  readonly repo: string | null
+  readonly at: string | null
+  readonly now: Date
+  readonly actionLabel: string
+  readonly actionDisabledReason: string | null
+  readonly actionPending: boolean
+  readonly onAction: () => void
+  readonly secondaryActionLabel?: string
+  readonly onSecondaryAction?: () => void
+  /** Adds a trailing icon-only Dismiss button. */
+  readonly onDismiss?: () => void
+  readonly expandable: boolean
+  readonly expanded: boolean
+  readonly onToggleExpand: () => void
+  readonly children?: ReactNode
+}
+
+export function NeedsYouItem({
+  leadCopy,
+  repo,
+  at,
+  now,
+  actionLabel,
+  actionDisabledReason,
+  actionPending,
+  onAction,
+  secondaryActionLabel,
+  onSecondaryAction,
+  onDismiss,
+  expandable,
+  expanded,
+  onToggleExpand,
+  children,
+}: NeedsYouItemProps) {
+  return (
+    <div data-slot="needs-you-item" className="flex flex-col border-b border-border">
+      <div className="flex h-9 items-center gap-2 px-4 text-body">
+        <PhaseDot tone={NEEDS_YOU_TONE} />
+        {expandable ? (
+          <button type="button" onClick={onToggleExpand} className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent" aria-label={expanded ? 'Collapse details' : 'Expand details'}>
+            <ChevronRight aria-hidden="true" className={cn('size-3.5 transition-transform', expanded && 'rotate-90')} />
+          </button>
+        ) : null}
+        <span className="min-w-0 flex-1 truncate text-foreground">{leadCopy}</span>
+        {repo !== null ? <span className="shrink-0 text-meta text-muted-foreground">{repo}</span> : null}
+        {at !== null ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="shrink-0 text-meta tabular-nums text-muted-foreground">{relativeAge(at, now)}</span>
+            </TooltipTrigger>
+            <TooltipContent>{exactTime(at)}</TooltipContent>
+          </Tooltip>
+        ) : null}
+        {actionDisabledReason !== null ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button variant="ghost" size="small" disabled className="shrink-0">
+                  {actionLabel}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{actionDisabledReason}</TooltipContent>
+          </Tooltip>
+        ) : (
+          <Button variant="ghost" size="small" onClick={onAction} disabled={actionPending} className="shrink-0">
+            {actionPending ? 'Working…' : actionLabel}
+          </Button>
+        )}
+        {secondaryActionLabel !== undefined && onSecondaryAction !== undefined ? (
+          <Button variant="outline" size="small" onClick={onSecondaryAction} disabled={actionPending} className="shrink-0">
+            {secondaryActionLabel}
+          </Button>
+        ) : null}
+        {onDismiss !== undefined ? (
+          <IconButton label="Dismiss" onClick={onDismiss}>
+            <X aria-hidden="true" />
+          </IconButton>
+        ) : null}
+      </div>
+      {expanded ? children : null}
+    </div>
+  )
+}

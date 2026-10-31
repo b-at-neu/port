@@ -1,49 +1,77 @@
-// #103: `hosting.json`'s only writer — recoverable app state, not an
-// operator-curated list like `registry.json`, so a missing or malformed file
-// resolves to an empty state rather than refusing to load (the opposite
-// direction `main/registry/store.ts` takes for a file the operator would
-// have to notice and fix by hand). `guard(#103)` in
-// `scripts/checks/desktop-hosting.ts` pins that no other file under
-// `main/hosting/` names `writeJsonFileAtomic` or `hosting.json` — a second
-// writer could persist a set that skipped `freeze()` on quit.
-import type { RepoId } from '../../shared/repos'
-import { ensureDirectory, pathOps, readJsonFile, writeJsonFileAtomic } from '../platform'
+// hosting.json's only writer: recoverable app state, so a missing or malformed file resolves to
+// an empty state rather than refusing to load. Pinned as the sole writer by desktop-hosting.ts.
+import { DEFAULT_SESSION_DEFAULTS, SESSION_MODELS, SESSION_PERMISSION_MODES } from '@/types/hosting'
+import type { SessionDefaults, SessionMarks, SessionModel, SessionPermissionMode } from '@/types/hosting'
+import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
+import { pathOps } from '@/main/platform/paths'
+import type { HostingPersistedState, HostingPersistence, PersistedOpenEntry } from '@/types/hosting'
 
 const HOSTING_FILE = 'hosting.json'
 const CURRENT_VERSION = 1
 
-/** Default `limit` for a fresh or unrecoverable state, and the operator's
- *  own ceiling when raising it from the rail. Declared here (not in
- *  `store.ts`) because this is the one file that has to fall back to
- *  `DEFAULT_SESSION_LIMIT` on a load failure — `store.ts` imports both
- *  rather than each module declaring its own copy. */
+/** Default `limit` for a fresh or unrecoverable state, and the operator's own ceiling when raising it. */
 export const DEFAULT_SESSION_LIMIT = 4
 export const SESSION_LIMIT_CEILING = 8
-
-export interface PersistedOpenEntry {
-  readonly repoId: RepoId
-  readonly claudeSessionId: string
-  readonly title: string | null
-  readonly startedAt: string
-}
-
-export interface HostingPersistedState {
-  readonly limit: number
-  readonly open: readonly PersistedOpenEntry[]
-}
 
 interface HostingFileShape {
   readonly version: number
   readonly limit: number
   readonly open: readonly unknown[]
+  readonly defaults?: unknown
+  readonly marks?: unknown
+}
+
+const MARKS_ID_MAX = 200
+const EMPTY_MARKS: SessionMarks = { pinned: [], archived: [] }
+
+function resolveMarkList(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  for (const entry of value) {
+    if (typeof entry === 'string' && entry !== '' && entry.length <= MARKS_ID_MAX) seen.add(entry)
+  }
+  return [...seen]
+}
+
+// Each field falls back to an empty list on its own, the same per-field fallback resolveDefaults uses —
+// a malformed 'archived' never drops a valid 'pinned', or vice versa.
+function resolveMarks(value: unknown): SessionMarks {
+  if (typeof value !== 'object' || value === null) return EMPTY_MARKS
+  const marks = value as Record<string, unknown>
+  return { pinned: resolveMarkList(marks.pinned), archived: resolveMarkList(marks.archived) }
+}
+
+// `model: null` is itself valid (Claude Code's own default); anything else
+// not in the allowlist falls back to DEFAULT_SESSION_DEFAULTS.model alone.
+function resolveModel(value: unknown): SessionModel | null {
+  if (value === null) return null
+  if (typeof value === 'string' && (SESSION_MODELS as readonly string[]).includes(value)) return value as SessionModel
+  return DEFAULT_SESSION_DEFAULTS.model
+}
+
+function resolvePermissionMode(value: unknown): SessionPermissionMode {
+  if (typeof value === 'string' && (SESSION_PERMISSION_MODES as readonly string[]).includes(value)) return value as SessionPermissionMode
+  return DEFAULT_SESSION_DEFAULTS.permissionMode
+}
+
+// Each field falls back to DEFAULT_SESSION_DEFAULTS on its own — a malformed
+// 'model' never drops a valid 'permissionMode' alongside it, or vice versa.
+function resolveDefaults(value: unknown): SessionDefaults {
+  if (typeof value !== 'object' || value === null) return DEFAULT_SESSION_DEFAULTS
+  const defaults = value as Record<string, unknown>
+  return { model: resolveModel(defaults.model), permissionMode: resolvePermissionMode(defaults.permissionMode) }
 }
 
 function isValidOpenEntry(value: unknown): value is PersistedOpenEntry {
   if (typeof value !== 'object' || value === null) return false
   const entry = value as Record<string, unknown>
+  const repoIdValid = entry.repoId === null || (typeof entry.repoId === 'string' && entry.repoId !== '')
+  const cwdValid = entry.cwd === undefined || (typeof entry.cwd === 'string' && entry.cwd !== '')
+  // A null repoId with no cwd could never be restored — dropped as invalid rather than kept dead.
+  if (entry.repoId === null && entry.cwd === undefined) return false
   return (
-    typeof entry.repoId === 'string' &&
-    entry.repoId !== '' &&
+    repoIdValid &&
+    cwdValid &&
     typeof entry.claudeSessionId === 'string' &&
     entry.claudeSessionId !== '' &&
     (entry.title === null || typeof entry.title === 'string') &&
@@ -57,31 +85,14 @@ function isValidLimit(value: unknown): value is number {
 }
 
 function emptyState(): HostingPersistedState {
-  return { limit: DEFAULT_SESSION_LIMIT, open: [] }
+  return { limit: DEFAULT_SESSION_LIMIT, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS }
 }
 
-export interface CreateHostingPersistenceParams {
+interface CreateHostingPersistenceParams {
   readonly dir: string
 }
 
-export interface HostingPersistence {
-  load(): Promise<HostingPersistedState>
-  /** Fire-and-forget — never awaited by a caller, and never blocks a start.
-   *  A state whose serialized JSON equals the last one actually written is
-   *  skipped; while a write is in flight, only the newest pending state
-   *  survives, written once that write settles. */
-  save(state: HostingPersistedState): void
-  /** Drops every later `save` — called before `closeAll()` touches a single
-   *  handle, so the `closing` phase that quitting causes can never overwrite
-   *  the very set this ticket persists. */
-  freeze(): void
-}
-
-/** Loading is recoverable by design: missing, unparseable, the wrong shape,
- *  or a newer `version` all resolve to `emptyState()`, logged once — this is
- *  overwritten on the next save rather than left to block anything. Invalid
- *  `open` entries and an out-of-range `limit` are dropped individually
- *  rather than failing the whole read. */
+/** Missing, unparseable, wrong-shaped, or newer-versioned all resolve to `emptyState()`, logged once. */
 export function createHostingPersistence(params: CreateHostingPersistenceParams): HostingPersistence {
   const filePath = pathOps.join(params.dir, HOSTING_FILE)
   let frozen = false
@@ -103,7 +114,9 @@ export function createHostingPersistence(params: CreateHostingPersistenceParams)
     }
     const limit = isValidLimit(value.limit) ? value.limit : DEFAULT_SESSION_LIMIT
     const open = Array.isArray(value.open) ? value.open.filter(isValidOpenEntry) : []
-    return { limit, open }
+    const defaults = resolveDefaults(value.defaults)
+    const marks = resolveMarks(value.marks)
+    return { limit, open, defaults, marks }
   }
 
   function startWrite(state: HostingPersistedState, json: string): void {
@@ -124,7 +137,7 @@ export function createHostingPersistence(params: CreateHostingPersistenceParams)
   }
 
   function enqueue(state: HostingPersistedState): void {
-    const json = JSON.stringify({ version: CURRENT_VERSION, limit: state.limit, open: state.open })
+    const json = JSON.stringify({ version: CURRENT_VERSION, limit: state.limit, open: state.open, defaults: state.defaults, marks: state.marks })
     if (json === lastWrittenJson) return
     if (writing !== null) {
       pending = state
@@ -146,9 +159,7 @@ export function createHostingPersistence(params: CreateHostingPersistenceParams)
   }
 }
 
-/** A disk-free fallback for `defaultHostedStoreDeps` (tests, and any caller
- *  that never overrides `persistence`) — `main/ipc.ts` always supplies the
- *  real `createHostingPersistence` for the running app. */
+/** A disk-free fallback for tests; `main/ipc.ts` always supplies the real persistence for the running app. */
 export function createInMemoryHostingPersistence(): HostingPersistence {
   let state: HostingPersistedState = emptyState()
   let frozen = false

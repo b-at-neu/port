@@ -1,34 +1,41 @@
-// #99: the per-session permission broker — this handle's own `canUseTool`.
-// Every call becomes a pending request on the handle's snapshot, settled by
-// an operator answer (`answer`) or by the SDK's own `AbortSignal`, never by
-// a timer of this broker's own: the wait is the SDK's, and the broker never
-// decides for the operator (no park deadline — see `canUseTool`'s own
-// doc comment on the SDK side).
-import type { PendingPermission, PermissionDecision, SessionPermissionAnswerResult } from '../../shared/hosting/types'
-import { narrowSessionGrant } from './grant'
-import type { CanUseTool, PermissionResult, PermissionUpdate } from './sdk'
+import type { StagePolicyDecision } from '@/types/hosting'
+
+// The per-session permission broker: every call becomes a pending request, settled by
+// an operator answer or by the SDK's own AbortSignal, never by a timer of its own.
+import type { QuestionAnswerResult, PlanAnswerResult, PlanDecision } from '@/utils/hosting/controls'
+import type { PendingPermission, PermissionDecision, SessionPermissionAnswerResult } from '@/types/hosting'
+import { narrowSessionGrant } from '@/main/hosting/grant'
+import { answersMatch, narrowInteraction, planApproveResult, planKeepResult, questionResult } from '@/main/hosting/interactions'
+import type { CanUseTool, PermissionResult, PermissionUpdate } from '@/main/hosting/sdk'
+
 
 export const DEFAULT_DENY_MESSAGE = 'The operator denied this tool call.'
 
-export interface CreatePermissionBrokerParams {
+interface CreatePermissionBrokerParams {
   readonly now: () => number
   readonly onChange: () => void
+  // Fired after a plan is approved into a mode, so the controls snapshot reflects it without a second SDK call.
+  readonly onPlanApproved?: (mode: 'default' | 'acceptEdits') => void
+  /** Set only for a stage session. Evaluated before the SDK's own suggestions: `deny` resolves immediately and creates no pending entry; `ask` creates the normal entry with `protectedPath` set, forcing `sessionGrant: null` so "allow for this session" is never offered on a protected edit. */
+  readonly policy?: (toolName: string, input: Readonly<Record<string, unknown>>) => StagePolicyDecision
+  /** Fired once per `policy`-denied call, never for a protected-path or interaction `ask` — `main/stage/launcher.ts`'s own seam into `StageDenial` bookkeeping. */
+  readonly onDeny?: (toolName: string, input: Readonly<Record<string, unknown>>) => void
 }
 
-export interface PermissionBroker {
-  /** Typed `Promise<PermissionResult>`, never `| null` — the SDK treats
-   *  `null` as "already answered out of band" and leaves the tool blocked
-   *  forever, so this narrower return makes that a compile error rather
-   *  than a runtime hang. */
+interface PermissionBroker {
+  /** Typed `Promise<PermissionResult>`, never `| null` — the SDK treats `null` as "already answered" and hangs. */
   readonly canUseTool: CanUseTool
   pending(): readonly PendingPermission[]
   answer(permissionId: string, decision: PermissionDecision, message: string | null): SessionPermissionAnswerResult
+  answerQuestion(permissionId: string, answers: Readonly<Record<string, string>>): QuestionAnswerResult
+  answerPlan(permissionId: string, decision: PlanDecision): PlanAnswerResult
   cancelAll(): void
 }
 
 interface Entry {
   readonly pending: PendingPermission
   readonly toolUseID: string
+  readonly input: Readonly<Record<string, unknown>>
   readonly grantUpdates: readonly PermissionUpdate[] | null
   readonly resolve: (result: PermissionResult) => void
 }
@@ -57,7 +64,15 @@ export function createPermissionBroker(params: CreatePermissionBrokerParams): Pe
         return
       }
 
+      const decision = params.policy?.(toolName, input) ?? null
+      if (decision?.kind === 'deny') {
+        params.onDeny?.(toolName, input)
+        resolve({ behavior: 'deny', message: decision.message, toolUseID: options.toolUseID })
+        return
+      }
+
       const grant = narrowSessionGrant(options.suggestions)
+      const protectedPath = decision?.kind === 'ask' ? decision.protectedPath : null
       const entry: Entry = {
         pending: {
           permissionId,
@@ -68,12 +83,15 @@ export function createPermissionBroker(params: CreatePermissionBrokerParams): Pe
           description: options.description ?? null,
           decisionReason: options.decisionReason ?? null,
           blockedPath: options.blockedPath ?? null,
+          protectedPath,
           agentId: options.agentID ?? null,
           requestedAt: new Date(params.now()).toISOString(),
-          sessionGrant: grant?.summary ?? null,
+          sessionGrant: protectedPath !== null ? null : (grant?.summary ?? null),
+          interaction: narrowInteraction(toolName, input),
         },
         toolUseID: options.toolUseID,
-        grantUpdates: grant?.updates ?? null,
+        input,
+        grantUpdates: protectedPath !== null ? null : (grant?.updates ?? null),
         resolve,
       }
       entries.set(permissionId, entry)
@@ -96,6 +114,8 @@ export function createPermissionBroker(params: CreatePermissionBrokerParams): Pe
       return { ok: true }
     }
 
+    if (entry.pending.interaction !== null) return { ok: false, kind: 'interaction-prompt' }
+
     if (decision === 'allow-session') {
       if (entry.grantUpdates === null) return { ok: false, kind: 'no-session-grant' }
       settle(permissionId, { behavior: 'allow', updatedInput: entry.pending.input, updatedPermissions: [...entry.grantUpdates], toolUseID: entry.toolUseID })
@@ -107,11 +127,35 @@ export function createPermissionBroker(params: CreatePermissionBrokerParams): Pe
     return { ok: true }
   }
 
+  function answerQuestion(permissionId: string, answers: Readonly<Record<string, string>>): QuestionAnswerResult {
+    const entry = entries.get(permissionId)
+    if (!entry) return { ok: false, kind: 'unknown-permission' }
+    const interaction = entry.pending.interaction
+    if (interaction === null || interaction.kind !== 'question') return { ok: false, kind: 'not-a-question' }
+    if (!answersMatch(interaction, answers)) return { ok: false, kind: 'answers-mismatch' }
+    settle(permissionId, questionResult(entry.input, answers, entry.toolUseID))
+    return { ok: true }
+  }
+
+  function answerPlan(permissionId: string, decision: PlanDecision): PlanAnswerResult {
+    const entry = entries.get(permissionId)
+    if (!entry) return { ok: false, kind: 'unknown-permission' }
+    const interaction = entry.pending.interaction
+    if (interaction === null || interaction.kind !== 'plan') return { ok: false, kind: 'not-a-plan' }
+    if (decision.kind === 'approve') {
+      settle(permissionId, planApproveResult(entry.input, decision.mode, entry.toolUseID))
+      params.onPlanApproved?.(decision.mode)
+    } else {
+      settle(permissionId, planKeepResult(decision.feedback, entry.toolUseID))
+    }
+    return { ok: true }
+  }
+
   function cancelAll(): void {
     for (const [permissionId, entry] of [...entries]) {
       settle(permissionId, { behavior: 'deny', message: DEFAULT_DENY_MESSAGE, toolUseID: entry.toolUseID })
     }
   }
 
-  return { canUseTool, pending, answer, cancelAll }
+  return { canUseTool, pending, answer, answerQuestion, answerPlan, cancelAll }
 }

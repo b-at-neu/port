@@ -1,22 +1,20 @@
-// #292: the observation pass itself, split out of `dispatcher.ts` to keep
-// that file under the 500-line limit (docs/ENGINEERING.md §7) — `dispatcher.ts`'s
-// own `considerRepo` is the only caller. In report order, skip an item this
-// process already wrote at or after the repository's current read (the read
-// has not caught up to that write yet), otherwise build and run the write. A
-// throw from the write itself becomes `outcome: 'failed'`, never a pass that
-// stops partway through the rest of the list.
-import type { ReadyEntry } from '../actions'
-import type { ApplyObservationParams, ApplyObservationResult } from '../actions'
-import type { ObservationRecord } from '../../shared/dispatch/types'
-import type { RefreshMemo } from '../tick'
-import type { RepositoryState } from '../../shared/state/types'
-import type { TickObservation } from '../../shared/tick/types'
-import type { WriteOutcome } from '../../shared/writes/types'
-import type { WriteObservation } from './observation'
+import type { RefreshMemo } from '@/types/tick'
+import type { WriteObservation } from '@/types/dispatch'
+
+// The observation pass, split out of dispatcher.ts to keep it under the file-size limit. A throw
+// from the write becomes `outcome: 'failed'`, never a pass that stops partway through.
+import type { ReadyEntry } from '@/types/actions'
+import type { ApplyObservationParams, ApplyObservationResult } from '@/types/actions'
+import type { ObservationRecord } from '@/types/dispatch'
+
+import type { RepositoryState } from '@/types/state'
+import type { TickObservation } from '@/types/tick'
+import type { WriteOutcome } from '@/types/writes'
+
 
 const OBSERVED_LIMIT = 20
 
-export interface ObservationPassDeps {
+interface ObservationPassDeps {
   readonly writeObservation: (params: ApplyObservationParams) => Promise<ApplyObservationResult>
   readonly refreshMemo: RefreshMemo
   readonly dirs: { readonly audit: string; readonly scratch: string }
@@ -24,16 +22,13 @@ export interface ObservationPassDeps {
   readonly onChange: () => void
 }
 
-/** The mutable slice of `RepoDispatcherState` this pass reads and writes —
- *  `dispatcher.ts` passes its own state object directly, since both already
- *  agree on this shape. */
-export interface ObservationPassState {
+/** The mutable slice of `RepoDispatcherState` this pass reads and writes. */
+interface ObservationPassState {
   observed: ObservationRecord[]
   observedWriteAt: Map<number, string>
 }
 
-/** `main/actions/observe.ts`'s own `WriteOutcome` → `ObservationRecord.outcome`
- *  mapping (plan's own **ObservationRecord** table). */
+/** `WriteOutcome` → `ObservationRecord.outcome` mapping. */
 function observationOutcomeOf(outcome: WriteOutcome): ObservationRecord['outcome'] {
   switch (outcome.kind) {
     case 'applied':
@@ -43,18 +38,14 @@ function observationOutcomeOf(outcome: WriteOutcome): ObservationRecord['outcome
     case 'precondition-failed':
     case 'item-unavailable':
       return 'moved'
-    case 'unclaimed-scope':
-    case 'claim-unreadable':
+    case 'terminal-owned':
+    case 'ownership-unreadable':
     case 'unresolvable-label':
       return 'refused'
     case 'verify-failed':
     case 'write-failed':
       return 'failed'
   }
-}
-
-function observationScopeOf(outcome: WriteOutcome): ObservationRecord['scope'] {
-  return outcome.kind === 'unclaimed-scope' || outcome.kind === 'claim-unreadable' ? outcome.scope : null
 }
 
 function pushObserved(state: ObservationPassState, record: ObservationRecord): void {
@@ -93,12 +84,11 @@ export async function runObservationPass(
         itemKind: observation.itemKind,
         at,
         outcome: observationOutcomeOf(result.labels),
-        scope: observationScopeOf(result.labels),
         comment: result.comment === null ? 'none' : result.comment.kind === 'applied' ? 'posted' : 'failed',
       })
     } catch {
       state.observedWriteAt.set(observation.number, at)
-      pushObserved(state, { kind: observation.kind, number: observation.number, itemKind: observation.itemKind, at, outcome: 'failed', scope: null, comment: 'none' })
+      pushObserved(state, { kind: observation.kind, number: observation.number, itemKind: observation.itemKind, at, outcome: 'failed', comment: 'none' })
     }
   }
   deps.onChange()

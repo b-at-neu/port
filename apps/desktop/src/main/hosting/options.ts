@@ -1,77 +1,37 @@
-// #98: pure mapping from `SessionStartMode` to `Options`, holding every
-// constant in one place. `sessionId` is deliberately never passed — the
-// `init` message stays the single source of the id (see shared/hosting/
-// types.ts's "Two identifiers, never one").
-import type { CanUseTool, Options } from './sdk'
-import type { PluginRequest, SessionStartMode } from '../../shared/hosting/types'
+// Pure mapping from SessionStartMode to Options. sessionId is deliberately never passed; init stays the single source.
+import type { CanUseTool, Options } from '@/main/hosting/sdk'
+import type { SessionDefaults, SessionStartMode } from '@/types/hosting'
+import type { PluginRequest } from '@/types/hosting-plugin'
 
-/** #101: explicit, never omitted — omitting it matches today's CLI default,
- *  but that is an SDK default this app does not own. `[]` would drop the
- *  repository's `permissions.deny`, its `enabledPlugins` (so no installed
- *  `port`), and `CLAUDE.md`; under `permissionMode: 'dontAsk'` elsewhere in
- *  this pipeline, a session with no allow rules can do nothing. */
+/** Explicit, never omitted — `[]` would drop the repository's deny rules, plugins, and `CLAUDE.md`. */
 export const SETTING_SOURCES: readonly ('user' | 'project' | 'local')[] = ['user', 'project', 'local']
 
-/** #265: the one real difference between an operator's ordinary hosted
- *  session and this app's own dispatcher session. `model`/`instructions`/
- *  `title` are the dispatcher's own (`dispatch/turn.ts`'s
- *  `DISPATCHER_MODEL`/`DISPATCHER_INSTRUCTIONS`, and `Port dispatcher ·
- *  <repo>`) — never re-derived here, this file only maps them onto
- *  `Options`. */
-export type SessionOptionsRole = { readonly kind: 'operator' } | { readonly kind: 'dispatcher'; readonly model: string; readonly instructions: string; readonly title: string }
-
-export interface BuildSessionOptionsParams {
+interface BuildSessionOptionsParams {
   readonly mode: SessionStartMode
-  /** The ready registry entry's own path — never a second-guessed cwd. */
   readonly cwd: string
-  /** #97's resolved executable — never left to the SDK's own bundled
-   *  fallback. */
+  /** Never left to the SDK's own bundled fallback. */
   readonly executablePath: string
-  /** #99: this handle's own permission broker's `canUseTool`. */
   readonly canUseTool: CanUseTool
-  /** #101: which plugin path this session asked for — the `repository`
-   *  source adds `plugins: [{ type: 'local', path }]`, so the bundled CLI
-   *  overrides the installed copy with the working tree; the `installed`
-   *  source passes no `plugins` at all, loading `port@port` from
-   *  `enabledPlugins` exactly as every other repository does today. Never
-   *  a `skills` option key here — a command runs as a typed slash command
-   *  in the live session, never through the Skill-tool filter (see
-   *  `capabilities.ts`'s own header). */
+  /** `repository` adds a local plugin entry overriding the installed copy; `installed` passes none. */
   readonly plugin: PluginRequest
-  /** #265: defaults to `{ kind: 'operator' }` — every existing caller is
-   *  unaffected. The dispatcher role adds `model`, a `systemPrompt` append,
-   *  `allowedTools: ['Agent', 'SendMessage']`, and `title`. **Never
-   *  `tools:`** — that restricts the built-in set for the whole session,
-   *  including subagents, and would strip `Bash`/`Write` from the stage
-   *  agents the dispatcher's own `Agent()` calls spawn. Everything else
-   *  (`permissionMode: 'default'`, `canUseTool`, `settingSources`,
-   *  `plugins`) is unchanged, and the stage agents' own `dontAsk`
-   *  frontmatter still overrides the parent session's `permissionMode`. */
-  readonly role?: SessionOptionsRole
+  /** `model` is set only when non-null, matching Claude Code's own default. Ignored entirely when `stage` is set. */
+  readonly defaults: SessionDefaults
+  /** Non-null only for a stage session: `agent`/`model` come from here and `permissionMode` is always `'default'` — `defaults` is never read. */
+  readonly stage: { readonly agentName: string; readonly model: string } | null
 }
 
-/** `includePartialMessages: true` now, not later — #219's "text appears as
- *  it arrives" is impossible without it. `permissionMode: 'default'` is set
- *  explicitly rather than omitted (#99) — the CLI flag outranks a
- *  `defaultMode` in the user's own settings, so leaving it out would let a
- *  `bypassPermissions` default silently skip the host prompt entirely.
- *  `permissionPromptToolName` is never set: the SDK throws when both it and
- *  `canUseTool` are present. `settingSources` is always the three sources
- *  above (#101). */
+/** `permissionMode` is always explicit, so a `bypassPermissions` default can't silently skip the host prompt. The stage branch never reads `defaults` and never adds `tools:`/`allowedTools`/`systemPrompt`/`bypassPermissions`. */
 export function buildSessionOptions(params: BuildSessionOptionsParams): Options {
-  const role = params.role ?? { kind: 'operator' as const }
   const base: Options = {
     cwd: params.cwd,
     pathToClaudeCodeExecutable: params.executablePath,
     persistSession: true,
     includePartialMessages: true,
-    permissionMode: 'default',
+    permissionMode: params.stage !== null ? 'default' : params.defaults.permissionMode,
     canUseTool: params.canUseTool,
     settingSources: [...SETTING_SOURCES],
     ...(params.plugin.source === 'repository' ? { plugins: [{ type: 'local' as const, path: params.plugin.path }] } : {}),
-    ...(role.kind === 'dispatcher'
-      ? { model: role.model, systemPrompt: { type: 'preset' as const, preset: 'claude_code' as const, append: role.instructions }, allowedTools: ['Agent', 'SendMessage'], title: role.title }
-      : {}),
+    ...(params.stage !== null ? { agent: params.stage.agentName, model: params.stage.model } : params.defaults.model !== null ? { model: params.defaults.model } : {}),
   }
 
   switch (params.mode.kind) {

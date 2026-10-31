@@ -1,53 +1,84 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
-import { IPC_CHANNELS, type IpcChannel, type IpcEvent, type IpcEventMap, type IpcMap } from '../shared/ipc'
-import type { WorktreesReport } from '../shared/reclaimer/types'
-import type { RepositoryEntry } from '../shared/repos'
-import { SOURCE_KINDS } from '../shared/board/types'
-import type { BoardSnapshot } from '../shared/board/types'
-import { PLAN_GATE_CHOICES } from '../shared/claim/types'
-import { OPERATOR_ACTIONS } from '../shared/actions/types'
-import type { ItemActionResult } from '../shared/actions/types'
-import type { RuntimeProbe } from '../shared/runtime/types'
-import { chooseDirectory } from './dialogs'
-import { claimApply, claimPreflight, defaultClaimDeps } from './claim'
-import type { ClaimDeps } from './claim'
-import { applyItemAction, gateAnswer, gateClaimRead, gateClaimSet, gatePreflight } from './actions'
-import type { ApplyItemActionParams, ReadyEntry } from './actions'
-import { createDispatchRuntime, createDrainStore, defaultHaltDispatchDeps, haltDispatch, resolveDispatchClaimSet, resolveDispatchControl, resolveDispatchRelay } from './dispatch'
-import { fetchItemsByNumber } from './github'
-import { readGateClaim } from './writes'
-import { resolveGateAnswer, resolveGateClaimRead, resolveGateClaimSet, resolveGatePreflight } from './channels/gate'
-import type { GateChannelDeps } from './channels/gate'
-import { copyRelayReply, MAX_REPLY_CHARS } from './relay'
-import { resolveSearchQuery, resolveSessionsScan, resolveTranscriptRead, resolveTranscriptTailClose, resolveTranscriptTailOpen, resolveTranscriptTailPoll } from './channels/sessions'
+import { join } from 'node:path'
+import { IPC_CHANNELS, type IpcChannel, type IpcEvent, type IpcEventMap, type IpcMap } from '@/types/ipc'
+import type { ReadWorktreeReportParams, WorktreesReport } from '@/types/reclaimer'
+import { SOURCE_KINDS, type BoardSnapshot } from '@/types/board'
+import { chooseDirectory } from '@/main/dialogs'
+import { defaultWorkspaceChannelDeps, resolveFoldersChoose, resolveFoldersList, resolveSessionChanges } from '@/main/channels/workspace'
+import { createRecentsStore } from '@/main/workspace/recents'
+import { createSessionWorktree, removeSessionWorktreeAt } from '@/main/workspace/worktree'
+import { releaseStageBranch } from '@/main/workspace/stage-worktree'
+import { createDefaultStageLauncher } from '@/main/stage/default'
+import type { StageLauncherHandle, StageRegistry } from '@/types/stage'
+import { defaultForkListSessions } from '@/main/hosting/fork'
+import { statPath } from '@/main/platform/files'
+import type { HostedStore, SessionKey } from '@/types/hosting'
+import { applyItemAction } from '@/main/actions/apply'
+import { applyItemDecision } from '@/main/actions/decide'
+import { gateAnswer, gatePreflight } from '@/main/actions/gate'
+import { resolveClaimApply, resolveClaimPreflight } from '@/main/channels/claim'
+import { resolveBacklogList } from '@/main/channels/backlog'
+import { resolveWorktreesReclaim } from '@/main/channels/worktrees'
+import { resolveGhStatus } from '@/main/channels/gh'
+import { createDispatchRuntime } from '@/main/dispatch/runtime'
+import { createRunStateStore } from '@/main/dispatch/store'
+import { defaultHaltDispatchDeps, haltDispatch } from '@/main/dispatch/halt'
+import { registeredRepoIds, resolveDispatchControl } from '@/main/dispatch/resolve'
+import type { Dispatcher } from '@/types/dispatch'
+import { fetchItemsByNumber } from '@/main/github/adapter'
+import { readOwnership, releaseOwnership, takeOwnership } from '@/main/dispatch/ownership'
+import { resolveGateAnswer, resolveGatePreflight } from '@/main/channels/gate'
+import type { GateChannelDeps, ItemDecisionDeps, StageChannelDeps } from '@/types/channels'
+import { resolveItemAction, resolveItemDecision } from '@/main/channels/items'
+import { resolveRuntimeProbe } from '@/main/channels/runtime'
+import { resolveSearchQuery, resolveSessionsScan, resolveTranscriptTailClose, resolveTranscriptTailOpen, resolveTranscriptTailPoll } from '@/main/channels/sessions'
 import {
   defaultHostingChannelDeps,
   resolveSessionAttach,
   resolveSessionCapacity,
   resolveSessionCapacitySet,
   resolveSessionClose,
+  resolveSessionDefaults,
+  resolveSessionDefaultsSet,
   resolveSessionDismiss,
+  resolveSessionFiles,
+  resolveSessionIndex,
   resolveSessionInterrupt,
   resolveSessionInvoke,
   resolveSessionList,
   resolveSessionPermissionAnswer,
+  resolveSessionControlsSet,
+  resolveSessionQuestionAnswer,
+  resolveSessionPlanAnswer,
+  resolveSessionArchiveSet,
+  resolveSessionMarks,
+  resolveSessionPinSet,
+  resolveSessionRename,
   resolveSessionRestore,
   resolveSessionRestoreDiscard,
   resolveSessionRestoreList,
   resolveSessionSend,
   resolveSessionStart,
-} from './channels/hosting'
-import { git } from './platform'
-import { readWorktreeReport } from './reclaimer'
-import type { ReadWorktreeReportParams } from './reclaimer'
-import { addRepository, listRepositories, removeRepository } from './registry'
-import type { RegistryDeps } from './registry'
-import { createPipelineWatcher } from './state'
-import type { PipelineWatcher } from './state'
-import { runtimePreflight, runtimeProbe } from './runtime'
-import { createHostedStore, createHostingPersistence, defaultHostedStoreDeps } from './hosting'
-import type { HostedStore } from './hosting'
+  resolveSessionTaskStop,
+} from '@/main/channels/hosting'
+import { defaultGitRunner, git } from '@/main/platform/git'
+import { readWorktreeReport } from '@/main/reclaimer/report'
+import { addRepository, listRepositories, removeRepository, requireReadyRepo } from '@/main/registry'
+import type { RegistryDeps } from '@/types/registry'
+import { createPipelineWatcher } from '@/main/state/watcher'
+import type { PipelineWatcher } from '@/types/state'
+import { runtimePreflight } from '@/main/runtime/preflight'
+import { createHostedStore, defaultHostedStoreDeps } from '@/main/hosting/store'
+import { createHostingPersistence } from '@/main/hosting/persist'
+import { createSessionIndex } from '@/main/hosting/session-index'
+import { createAppNotifier } from '@/main/hosting/notify'
+import { createStageRegistry } from '@/main/stage/registry'
+import { readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
+import { createStageSweeper, resolveStageAllow, resolveStageDismissDenial, resolveStageResume, resolveStageRestart } from '@/main/channels/stage'
+import { resolveForceDispatch } from '@/main/channels/held'
+import { resolveNotifyNeedsYou } from '@/main/channels/notify'
+import { createSessionMenuRefresher } from '@/main/session-menu'
 
 type AppInfo = IpcMap['app:info']['response']
 
@@ -70,14 +101,16 @@ function handle<C extends IpcChannel>(channel: C, handler: Handler<C>): void {
   })
 }
 
-/** The one place every main → renderer push goes through (#219) — a net
- *  line reduction over each caller repeating its own `for (const window of
- *  BrowserWindow.getAllWindows())` loop, and one seam if a future push ever
- *  needs anything beyond "every open, non-destroyed window". */
+// The one place every main → renderer push goes through.
 function broadcast<E extends IpcEvent>(event: E, payload: IpcEventMap[E]): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) window.webContents.send(event, payload)
   }
+}
+
+/** `main/index.ts`'s own menu click handler — the app menu has no other way to reach the renderer. */
+export function broadcastAppCommand(command: IpcEventMap['app:command']): void {
+  broadcast('app:command', command)
 }
 
 function getAppInfo(): AppInfo {
@@ -85,14 +118,11 @@ function getAppInfo(): AppInfo {
     app: app.getVersion(),
     electron: process.versions.electron,
     node: process.versions.node,
-    chromium: process.versions.chrome
+    chromium: process.versions.chrome,
+    commit: __PORT_BUILD_COMMIT__
   }
 }
 
-/** The two calls `'worktrees:report'` composes — injected so the
- *  id-validation/lookup/ready-check branching below is testable without
- *  Electron or a real registry, the same seam `RegistryDeps` gives the
- *  registry functions themselves. */
 export interface WorktreesReportDeps {
   readonly listRepositories: typeof listRepositories
   readonly readWorktreeReport: (params: ReadWorktreeReportParams) => Promise<WorktreesReport>
@@ -100,10 +130,7 @@ export interface WorktreesReportDeps {
 
 const defaultWorktreesReportDeps: WorktreesReportDeps = { listRepositories, readWorktreeReport }
 
-/** The renderer sends only the opaque id, never a path — resolved here
- *  through the same registry every other channel reads, so a repository
- *  that has moved, gone stale, or lost its 'ready' status is caught before
- *  anything is spawned. */
+// The renderer sends only the opaque id, never a path.
 export async function resolveWorktreesReport(
   registryDeps: RegistryDeps,
   request: IpcMap['worktrees:report']['request'],
@@ -112,11 +139,7 @@ export async function resolveWorktreesReport(
   if (typeof request?.id !== 'string' || request.id === '') {
     throw new Error("'worktrees:report' requires a non-empty 'id'")
   }
-  const list = await deps.listRepositories(registryDeps)
-  if (!list.ok) throw new Error(`'worktrees:report' could not list repositories: ${list.message}`)
-  const entry = list.repositories.find((repository) => repository.id === request.id)
-  if (!entry) throw new Error(`'worktrees:report' found no repository registered with id '${request.id}'`)
-  if (!('config' in entry)) throw new Error(`'worktrees:report' requires a 'ready' repository, got '${entry.problem.kind}'`)
+  const entry = await requireReadyRepo(registryDeps, "'worktrees:report'", request.id, deps.listRepositories)
   return deps.readWorktreeReport({
     repoRoot: entry.path,
     worktreesCommand: entry.config.commands.worktrees,
@@ -124,18 +147,11 @@ export async function resolveWorktreesReport(
   })
 }
 
-/** The two calls `'board:refresh'` composes — the same injectable seam
- *  `WorktreesReportDeps` gives `resolveWorktreesReport`, so the id/source
- *  validation below is testable without Electron or a real watcher. */
 export interface BoardRefreshDeps {
   readonly listRepositories: typeof listRepositories
   readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
 }
 
-/** `repoId`, when present, must name a currently registered repository —
- *  the same rail `resolveWorktreesReport` already applies — and `source`
- *  must be one of `SOURCE_KINDS`; anything else throws rather than silently
- *  forcing nothing. */
 export async function resolveBoardRefresh(
   registryDeps: RegistryDeps,
   request: IpcMap['board:refresh']['request'],
@@ -157,144 +173,25 @@ export async function resolveBoardRefresh(
   return deps.refresh(request)
 }
 
-/** `'claim:preflight'`'s validation: `repoId` must name a currently
- *  registered repository (the same rail `resolveWorktreesReport` already
- *  applies) and `number` a positive integer. */
-export async function resolveClaimPreflight(
-  registryDeps: RegistryDeps,
-  request: IpcMap['claim:preflight']['request'],
-  deps: ClaimDeps = defaultClaimDeps,
-): ReturnType<typeof claimPreflight> {
-  if (typeof request?.repoId !== 'string' || request.repoId === '') {
-    throw new Error("'claim:preflight' requires a non-empty 'repoId'")
-  }
-  if (!Number.isInteger(request.number) || request.number <= 0) {
-    throw new Error("'claim:preflight' requires 'number' to be a positive integer")
-  }
-  return claimPreflight({ registryDeps, repoId: request.repoId, number: request.number }, deps)
-}
-
-/** `'claim:apply'`'s validation — the same `repoId`/`number` rail
- *  `resolveClaimPreflight` applies, plus `planGate` restricted to
- *  `PLAN_GATE_CHOICES` and `confirmedAssignees` restricted to an array of
- *  strings: everything a human or the renderer's own state could get wrong
- *  is a thrown error here, never a value `claimApply` has to defend against
- *  (#72's rule). */
-export async function resolveClaimApply(
-  registryDeps: RegistryDeps,
-  request: IpcMap['claim:apply']['request'],
-  auditDir: string,
-  deps: ClaimDeps = defaultClaimDeps,
-): ReturnType<typeof claimApply> {
-  if (typeof request?.repoId !== 'string' || request.repoId === '') {
-    throw new Error("'claim:apply' requires a non-empty 'repoId'")
-  }
-  if (!Number.isInteger(request.number) || request.number <= 0) {
-    throw new Error("'claim:apply' requires 'number' to be a positive integer")
-  }
-  if (!(PLAN_GATE_CHOICES as readonly string[]).includes(request.planGate)) {
-    throw new Error(`'claim:apply' requires 'planGate' to be one of ${PLAN_GATE_CHOICES.join(', ')}`)
-  }
-  if (!Array.isArray(request.confirmedAssignees) || !request.confirmedAssignees.every((login) => typeof login === 'string')) {
-    throw new Error("'claim:apply' requires 'confirmedAssignees' to be an array of strings")
-  }
-  return claimApply(
-    { registryDeps, repoId: request.repoId, number: request.number, planGate: request.planGate, confirmedAssignees: request.confirmedAssignees, auditDir },
-    deps,
-  )
-}
-
-/** The two calls `'item:action'` composes — the same injectable seam every
- *  other channel's `*Deps` interface gives, so the validation and
- *  registry-lookup branching below is testable without Electron, a real
- *  registry, or a real watcher. `snapshot`/`refresh` are the live watcher's
- *  own methods — never a second poll built here. */
-export interface ItemActionDeps {
-  readonly listRepositories: typeof listRepositories
-  readonly applyItemAction: (params: ApplyItemActionParams) => Promise<ItemActionResult>
-  readonly snapshot: () => BoardSnapshot
-  readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
-}
-
-function isReadyEntry(entry: RepositoryEntry): entry is ReadyEntry {
-  return 'config' in entry
-}
-
-/** `'item:action'`'s validation: `action` restricted to `OPERATOR_ACTIONS`,
- *  `kind` to `'issue' | 'pull-request'`, `number` a positive integer,
- *  `expectedStage` a string or `null`, and `repoId` the same
- *  currently-registered-and-ready rail every other channel applies —
- *  everything a stale renderer could get wrong is a thrown error here,
- *  never a value `applyItemAction` has to defend against. `repository.issues`
- *  is read-your-writes consistent (`query.ts` Decision 2), so an `applied`
- *  outcome is followed by one forced refresh before the response returns —
- *  the row updates immediately rather than after up to 60s. */
-export async function resolveItemAction(registryDeps: RegistryDeps, request: IpcMap['item:action']['request'], auditDir: string, deps: ItemActionDeps): Promise<ItemActionResult> {
-  if (typeof request?.repoId !== 'string' || request.repoId === '') {
-    throw new Error("'item:action' requires a non-empty 'repoId'")
-  }
-  if (request.kind !== 'issue' && request.kind !== 'pull-request') {
-    throw new Error("'item:action' requires 'kind' to be 'issue' or 'pull-request'")
-  }
-  if (!Number.isInteger(request.number) || request.number <= 0) {
-    throw new Error("'item:action' requires 'number' to be a positive integer")
-  }
-  if (!(OPERATOR_ACTIONS as readonly string[]).includes(request.action)) {
-    throw new Error(`'item:action' requires 'action' to be one of ${OPERATOR_ACTIONS.join(', ')}`)
-  }
-  const expectedStage: unknown = request.expectedStage
-  if (expectedStage !== null && (typeof expectedStage !== 'string' || expectedStage === '')) {
-    throw new Error("'item:action' requires 'expectedStage' to be a non-empty string or null")
-  }
-
-  const list = await deps.listRepositories(registryDeps)
-  if (!list.ok) throw new Error(`'item:action' could not list repositories: ${list.message}`)
-  const found = list.repositories.find((repository) => repository.id === request.repoId)
-  if (!found) throw new Error(`'item:action' found no repository registered with id '${request.repoId}'`)
-  if (!isReadyEntry(found)) throw new Error(`'item:action' requires a 'ready' repository, got '${found.problem.kind}'`)
-
-  const result = await deps.applyItemAction({
-    request: { repoId: request.repoId, kind: request.kind, number: request.number, action: request.action, expectedStage: request.expectedStage },
-    snapshot: deps.snapshot(),
-    entry: found,
-    auditDir,
-  })
-
-  if (result.ok && result.outcome.kind === 'applied') {
-    // The write already landed and `result` already reflects it — a failure
-    // in this forced refresh (a transient GitHub read error) must never turn
-    // into a rejected promise that masks the write's own success, so it is
-    // logged and swallowed rather than left to propagate.
-    try {
-      await deps.refresh({ repoId: request.repoId, source: 'github' })
-    } catch (error) {
-      console.error(`'item:action' post-write refresh failed for '${request.repoId}':`, error)
-    }
-  }
-  return result
-}
-
-/** `'runtime:probe'`'s validation — `runtimeProbe` (`./runtime`) resolves the registry lookup itself, same as `resolveClaimPreflight`/`main/claim.ts`. */
-export async function resolveRuntimeProbe(registryDeps: RegistryDeps, request: IpcMap['runtime:probe']['request']): Promise<RuntimeProbe> {
-  if (typeof request?.repoId !== 'string' || request.repoId === '') throw new Error("'runtime:probe' requires a non-empty 'repoId'")
-  return runtimeProbe({ registryDeps, repoId: request.repoId })
-}
-
-export interface RegisteredIpc {
+interface RegisteredIpc {
   readonly watcher: PipelineWatcher
   readonly hostedStore: HostedStore
+  readonly dispatcher: Dispatcher
+  readonly shutdownDispatch: () => void
+  readonly stageRegistry: StageRegistry
 }
 
 export function registerIpc(): RegisteredIpc {
-  // The one place a real `git` invocation and the real userData directory
-  // reach the registry — every registry function itself takes these as
-  // injected dependencies, so its own tests need neither Electron nor a
-  // real repository.
+  // The one place a real `git` invocation and the real userData directory reach the registry.
   const registryDeps: RegistryDeps = {
     registryDir: app.getPath('userData'),
     git: (args, cwd) => git(args, { cwd }),
     chooseDirectory,
   }
+
+  // Created before `repos:add`/`repos:remove` so their handlers can forget a stale entry.
+  const runStates = createRunStateStore(app.getPath('userData'))
+  void runStates.load(() => registeredRepoIds(registryDeps))
 
   handle('app:info', (_event, request) => {
     if (request !== undefined) {
@@ -310,21 +207,30 @@ export function registerIpc(): RegisteredIpc {
     return listRepositories(registryDeps)
   })
 
-  handle('repos:add', (_event, request) => {
-    if (request !== undefined) {
-      throw new Error("'repos:add' takes no payload")
-    }
-    return addRepository(registryDeps)
+  // Forgetting a run-state entry never fails the registry call itself, only logs.
+  function forgetRunState(channel: string, repoId: Parameters<typeof runStates.forget>[0]): void {
+    void runStates.forget(repoId).then((f) => {
+      if (!f.ok) console.error(`'${channel}' could not forget the run-state entry for '${String(repoId)}':`, f.message)
+    })
+  }
+
+  handle('repos:add', async (_event, request) => {
+    if (request !== undefined) throw new Error("'repos:add' takes no payload")
+    const result = await addRepository(registryDeps)
+    if (result.ok && result.outcome === 'added') forgetRunState('repos:add', result.added)
+    return result
   })
 
-  handle('repos:remove', (_event, request) => {
-    if (typeof request?.id !== 'string' || request.id === '') {
-      throw new Error("'repos:remove' requires a non-empty 'id'")
-    }
-    return removeRepository(registryDeps, request.id)
+  handle('repos:remove', async (_event, request) => {
+    if (typeof request?.id !== 'string' || request.id === '') throw new Error("'repos:remove' requires a non-empty 'id'")
+    const result = await removeRepository(registryDeps, request.id)
+    if (result.ok) forgetRunState('repos:remove', request.id)
+    return result
   })
 
   handle('worktrees:report', (_event, request) => resolveWorktreesReport(registryDeps, request))
+
+  handle('worktrees:reclaim', (_event, request) => resolveWorktreesReclaim(registryDeps, request, app.getPath('userData')))
 
   handle('sessions:scan', (_event, request) => {
     if (request !== undefined) {
@@ -332,8 +238,6 @@ export function registerIpc(): RegisteredIpc {
     }
     return resolveSessionsScan(registryDeps)
   })
-
-  handle('transcript:read', (_event, request) => resolveTranscriptRead(request))
 
   handle('transcript:tail:open', (_event, request) => resolveTranscriptTailOpen(request))
 
@@ -343,57 +247,88 @@ export function registerIpc(): RegisteredIpc {
 
   handle('search:query', (_event, request) => resolveSearchQuery(registryDeps, request, app.getPath('userData')))
 
-  // The app-wide drain switch (#110) — one store for the process lifetime,
-  // read fresh by every `buildSnapshot()` so a drain applied mid-session is
-  // visible on the very next snapshot. `load()` resolves the on-disk state
-  // asynchronously; `current()` stays synchronous and starts `unread` so
-  // `registerIpc()` itself never blocks on it.
-  const drain = createDrainStore(app.getPath('userData'))
-  void drain.load()
+  // Shared by the workspace and hosting channels — `folders.json`'s one writer either way.
+  const recents = createRecentsStore({ dir: app.getPath('userData') })
 
-  // #98: one hosted-session store for the process lifetime, broadcasting
-  // over `session:event`/`session:status`. Created before the watcher
-  // (#265): the dispatcher sits between the two and needs this store first.
+  // One hosted-session store for the process lifetime, created before the watcher — the dispatcher
+  // sits between the two and needs this store first.
+  const notifier = createAppNotifier({ registryDeps, broadcast: (command) => broadcast('app:command', command) })
+
+  // Assigned right after createDispatchRuntime below — stageLauncher's onOutcome closes over it,
+  // so construction order between the launcher and the dispatcher that owns recordOutcome stays acyclic.
+  let dispatcherRef: Dispatcher | null = null
+
+  // stage-sessions.json's sole writer. Loaded once at boot — a `running` entry found then can only
+  // mean the process died before it marked itself otherwise, and promotes to `crash`.
+  const stageRegistry = createStageRegistry({ path: join(app.getPath('userData'), 'stage-sessions.json'), readJson: readJsonFile, writeJsonAtomic: writeJsonFileAtomic, now: () => new Date() })
+  void stageRegistry.load()
+
+  const sessionIndex = createSessionIndex({ path: join(app.getPath('userData'), 'session-index.json'), readJson: readJsonFile, writeJsonAtomic: writeJsonFileAtomic, now: () => new Date() })
+  void sessionIndex.load()
+
   const hostedStore = createHostedStore({
     ...defaultHostedStoreDeps,
-    onEvent: (envelope) => broadcast('session:event', envelope),
-    onStatus: (snapshot) => broadcast('session:status', snapshot),
+    onStatus: (snapshot) => {
+      broadcast('session:status', snapshot)
+      sessionIndex.observe(snapshot)
+      notifier.observe(snapshot)
+      stageLauncher.observe(snapshot)
+      sessionMenu.refresh()
+    },
     onEntries: (delta) => broadcast('session:entries', delta),
     persistence: createHostingPersistence({ dir: app.getPath('userData') }),
   })
-  const hostingChannelDeps = defaultHostingChannelDeps(hostedStore)
+  const sessionMenu = createSessionMenuRefresher({ store: hostedStore, platform: process.platform, isPackaged: app.isPackaged, send: broadcastAppCommand })
 
-  // #265: the ledger, streak memo, and dispatcher, bundled — see
-  // `main/dispatch/runtime.ts` for why `bindWatcher` exists.
-  const { watcherDeps, dispatcher, bindWatcher } = createDispatchRuntime({
+  const stageLauncher: StageLauncherHandle = createDefaultStageLauncher({
     store: hostedStore,
-    drain: drain.current,
-    readGateClaim,
+    registry: stageRegistry,
+    onOutcome: (repoId, sessionKey, outcome) => dispatcherRef?.recordOutcome(repoId, sessionKey, outcome),
+    onDenial: (repoId, denial) => dispatcherRef?.recordDenial(repoId, denial),
+  })
+  const hostingChannelDeps = defaultHostingChannelDeps(hostedStore, sessionIndex, {
+    git: (args, cwd) => git(args, { cwd }),
+    recents,
+    exists: async (path) => (await statPath(path)).ok,
+    readSessions: defaultForkListSessions,
+    createWorktree: createSessionWorktree,
+  })
+
+  const { watcherDeps, dispatcher, forceDispatch, autoPlanner, bindWatcher, shutdown } = createDispatchRuntime({
+    store: hostedStore,
+    launch: stageLauncher,
+    runState: (repoId) => runStates.current(repoId).state,
+    readOwnership,
+    takeOwnership,
     fetchItemsByNumber,
     listRepositories,
     registryDeps,
     dirs: { audit: app.getPath('userData'), scratch: app.getPath('temp') },
     now: () => new Date(),
+    interrupted: (repoId) => stageRegistry.list().filter((entry) => entry.repoId === repoId),
   })
+  dispatcherRef = dispatcher
 
-  // The board's own clock (#80) — one watcher for the process lifetime,
-  // broadcasting every snapshot over `board:update`. #265: `onSnapshot` also
-  // hands the snapshot to the dispatcher, never awaited — a dispatch pass
-  // must never block the broadcast the renderer is waiting on.
+  // One watcher for the process lifetime. `onTick` fires only on a fresh poll, never awaited —
+  // a pass must never block the broadcast the renderer is waiting on.
   const watcher = createPipelineWatcher({
     repositories: async () => {
       const list = await listRepositories(registryDeps)
       return list.ok ? list.repositories : []
     },
     git: (args, cwd) => git(args, { cwd }),
-    drain: drain.current,
+    runStates: (repoIds) => runStates.snapshot(repoIds),
     ...watcherDeps,
     onSnapshot: (snapshot) => {
       broadcast('board:update', snapshot)
+      void autoPlanner.consider(snapshot)
+    },
+    onTick: (snapshot) => {
       void dispatcher.consider(snapshot)
+      void stageSweeper.consider(snapshot, dispatcher.status())
     },
   })
-  bindWatcher(() => watcher.republish())
+  bindWatcher(watcher)
 
   handle('board:snapshot', (_event, request) => {
     if (request !== undefined) {
@@ -408,18 +343,53 @@ export function registerIpc(): RegisteredIpc {
 
   handle('claim:apply', (_event, request) => resolveClaimApply(registryDeps, request, app.getPath('userData')))
 
+  handle('backlog:list', (_event, request) => resolveBacklogList(registryDeps, request))
+
+  handle('gh:status', (_event, request) => resolveGhStatus(request))
+
+  handle('session:defaults', (_event, request) => resolveSessionDefaults(request, hostingChannelDeps))
+
+  handle('session:defaults:set', (_event, request) => resolveSessionDefaultsSet(request, hostingChannelDeps))
+
+  handle('session:rename', (_event, request) => resolveSessionRename(request, hostingChannelDeps))
+
+  handle('session:controls:set', (_event, request) => resolveSessionControlsSet(request, hostingChannelDeps))
+
+  handle('session:question:answer', (_event, request) => resolveSessionQuestionAnswer(request, hostingChannelDeps))
+
+  handle('session:plan:answer', (_event, request) => resolveSessionPlanAnswer(request, hostingChannelDeps))
+
+  handle('session:files', (_event, request) => resolveSessionFiles(request, hostingChannelDeps))
+
+  handle('session:marks', (_event, request) => resolveSessionMarks(request, hostingChannelDeps))
+
+  handle('session:pin:set', (_event, request) => sessionMenu.withRefresh(resolveSessionPinSet(request, hostingChannelDeps)))
+
+  handle('session:archive:set', (_event, request) => sessionMenu.withRefresh(resolveSessionArchiveSet(request, hostingChannelDeps)))
+
   handle('item:action', (_event, request) =>
     resolveItemAction(registryDeps, request, app.getPath('userData'), { listRepositories, applyItemAction, snapshot: watcher.snapshot, refresh: watcher.refresh }),
   )
 
-  // Operator control over dispatch (#110) — all branching in
-  // `resolveDispatchControl` itself. #265: `halt` also stops this app's own
-  // dispatched agents first; `stopFor` is a no-op for anything else.
+  handle('item:decide', (_event, request) =>
+    resolveItemDecision(registryDeps, request, app.getPath('userData'), app.getPath('temp'), {
+      listRepositories,
+      applyItemDecision,
+      sessions: () => hostedStore.list(),
+      snapshot: watcher.snapshot,
+      refresh: watcher.refresh,
+    } satisfies ItemDecisionDeps),
+  )
+
+  // run/drain/pause/take-over, scoped to one repository — all branching in `resolveDispatchControl`.
   handle('dispatch:control', (_event, request) =>
     resolveDispatchControl(registryDeps, request, {
       listRepositories,
-      drain,
-      haltDispatch: (params) => haltDispatch(params, { ...defaultHaltDispatchDeps, stopFor: (repoId, number) => dispatcher.stopFor(repoId, number) }),
+      runStates,
+      haltDispatch: (params) =>
+        haltDispatch(params, { ...defaultHaltDispatchDeps, stopFor: (repoId, number) => dispatcher.stopFor(repoId, number), standDown: (repoId) => dispatcher.standDown(repoId) }),
+      takeOwnership,
+      releaseOwnership,
       snapshot: watcher.snapshot,
       refresh: watcher.refresh,
       auditDir: app.getPath('userData'),
@@ -427,37 +397,19 @@ export function registerIpc(): RegisteredIpc {
     }),
   )
 
-  // #265: the dispatch claim take/release and the "Send to agent" relay —
-  // both delegate to the one dispatcher instance above.
-  handle('dispatch:claim:set', (_event, request) => resolveDispatchClaimSet(registryDeps, request, { listRepositories, dispatcher, refresh: watcher.refresh, now: () => new Date() }))
-
-  handle('dispatch:relay', (_event, request) => resolveDispatchRelay(registryDeps, request, { listRepositories, dispatcher, maxReplyChars: MAX_REPLY_CHARS }))
-
   handle('runtime:preflight', (_event, request) => {
     if (request !== undefined) throw new Error("'runtime:preflight' takes no payload")
     return runtimePreflight()
   })
 
-  handle('runtime:probe', (_event, request) => resolveRuntimeProbe(registryDeps, request))
+  handle('runtime:probe', (_event, request) => resolveRuntimeProbe(registryDeps, request, join(app.getPath('userData'), 'runtime-probe')))
 
-  // The plan gate's four channels (#92) — `gatePreflight`/`gateClaimRead`/
-  // `gateClaimSet`/`gateAnswer` are `main/actions/gate.ts`'s own exports,
-  // already bound to their own `defaultGateDeps`; `refresh` is the live
-  // watcher's method, never a second poll built here.
-  const gateChannelDeps: GateChannelDeps = { gatePreflight, gateClaimRead, gateClaimSet, gateAnswer, refresh: watcher.refresh }
+  // `refresh` is the live watcher's method, never a second poll built here.
+  const gateChannelDeps: GateChannelDeps = { gatePreflight, gateAnswer, refresh: watcher.refresh }
 
   handle('gate:preflight', (_event, request) => resolveGatePreflight(registryDeps, request, gateChannelDeps))
 
-  handle('gate:claim:read', (_event, request) => resolveGateClaimRead(registryDeps, request, gateChannelDeps))
-
-  handle('gate:claim:set', (_event, request) => resolveGateClaimSet(registryDeps, request, gateChannelDeps))
-
   handle('gate:answer', (_event, request) => resolveGateAnswer(registryDeps, request, app.getPath('userData'), app.getPath('temp'), gateChannelDeps))
-
-  // The relay loop's own copy button (#107) — one delegating line;
-  // `copyRelayReply` (`./relay`) does the validation and the one electron
-  // clipboard write.
-  handle('relay:copy', (_event, request) => copyRelayReply(request))
 
   handle('session:start', (_event, request) => resolveSessionStart(registryDeps, request, hostingChannelDeps))
 
@@ -471,11 +423,15 @@ export function registerIpc(): RegisteredIpc {
 
   handle('session:list', (_event, request) => resolveSessionList(request, hostingChannelDeps))
 
+  handle('session:index', (_event, request) => resolveSessionIndex(request, hostingChannelDeps))
+
   handle('session:permission:answer', (_event, request) => resolveSessionPermissionAnswer(request, hostingChannelDeps))
 
   handle('session:invoke', (_event, request) => resolveSessionInvoke(request, hostingChannelDeps))
 
-  handle('session:dismiss', (_event, request) => resolveSessionDismiss(request, hostingChannelDeps))
+  handle('session:dismiss', (_event, request) => sessionMenu.withRefresh(resolveSessionDismiss(request, hostingChannelDeps)))
+
+  handle('session:task:stop', (_event, request) => resolveSessionTaskStop(request, hostingChannelDeps))
 
   handle('session:capacity', (_event, request) => resolveSessionCapacity(request, hostingChannelDeps))
 
@@ -487,11 +443,51 @@ export function registerIpc(): RegisteredIpc {
 
   handle('session:restore:discard', (_event, request) => resolveSessionRestoreDiscard(request, hostingChannelDeps))
 
+  function workspaceOf(sessionKey: string) {
+    return Promise.resolve(hostedStore.snapshotOf(sessionKey as SessionKey)?.workspace ?? null)
+  }
+
+  const workspaceChannelDeps = defaultWorkspaceChannelDeps(app.getPath('userData'), workspaceOf, recents)
+
+  handle('folders:list', (_event, request) => resolveFoldersList(registryDeps, request, workspaceChannelDeps))
+
+  handle('folders:choose', (_event, request) => resolveFoldersChoose(registryDeps, request, workspaceChannelDeps))
+
+  handle('session:changes', (_event, request) => resolveSessionChanges(request, workspaceChannelDeps))
+
+  const stageChannelDeps: StageChannelDeps = {
+    listRepositories,
+    registry: stageRegistry,
+    dispatcher,
+    store: hostedStore,
+    launcher: stageLauncher,
+    removeWorktree: (path, force) => removeSessionWorktreeAt({ path, force, git: defaultGitRunner() }),
+    releaseBranch: (root, branch, baseSha) => releaseStageBranch({ root, git: defaultGitRunner(), branch, baseSha }),
+    applyItemAction,
+    snapshot: watcher.snapshot,
+    auditDir: app.getPath('userData'),
+    readJson: readJsonFile,
+    writeJsonAtomic: writeJsonFileAtomic,
+  }
+  const stageSweeper = createStageSweeper(registryDeps, stageChannelDeps, { fetchItemsByNumber, onChange: () => watcher.republish() })
+
+  handle('stage:allow', (_event, request) => resolveStageAllow(registryDeps, request, stageChannelDeps))
+
+  handle('stage:dismiss-denial', (_event, request) => resolveStageDismissDenial(request, stageChannelDeps))
+
+  handle('stage:resume', (_event, request) => resolveStageResume(registryDeps, request, stageChannelDeps))
+
+  handle('stage:restart', (_event, request) => resolveStageRestart(registryDeps, request, stageChannelDeps))
+
+  handle('notify:needs-you', (_event, request) => resolveNotifyNeedsYou(request, { show: (notification) => notifier.showNeedsYou(notification) }))
+
+  handle('held:force-dispatch', (_event, request) => resolveForceDispatch(request, { snapshot: watcher.snapshot, dispatcherStatus: () => dispatcher.status(), forceDispatch, republish: () => watcher.republish() }))
+
   for (const channel of IPC_CHANNELS) {
     if (!registered.has(channel)) {
       throw new Error(`IPC channel '${channel}' is declared but has no handler`)
     }
   }
 
-  return { watcher, hostedStore }
+  return { watcher, hostedStore, dispatcher, shutdownDispatch: shutdown, stageRegistry }
 }

@@ -1,26 +1,13 @@
-// Pure: the `port-overrides` parser and resolver — issue #246,
-// plugins/port/docs/PIPELINE.md → "CLAUDE.md overrides". No I/O and no `gh`
-// spawn: config.ts reads CLAUDE.md off disk and hands this module the text,
-// so the engine's read-only rail (scripts/checks/tick.ts) covers this file
-// unchanged.
-//
-// `commands.*` and `extraAllow` stay schema-only, no exception — the
-// permission surface the guard hook allowlists stage-agent Bash calls from.
-// Every other `.claude/port.config.json`-governed category is overridable
-// through one delimited block in a repository's own root `CLAUDE.md`, so a
-// contradicting local convention wins over the port default without being
-// negotiated away in prose (#121, #125).
+// Pure: the `port-overrides` parser and resolver. No I/O — config.ts reads CLAUDE.md and
+// hands this module the text. `commands.*`/`extraAllow` stay schema-only, no exception.
 
 export const BEGIN = '<!-- port-overrides:begin -->';
 export const END = '<!-- port-overrides:end -->';
 const FENCE_START = '```port-overrides';
 const FENCE_END = '```';
 
-/** The nine overridable path prefixes from PIPELINE.md → "CLAUDE.md
- *  overrides" → the category table. `checks.<name>` is synthetic — no
- *  `port.config.json` field backs it, since check dispositions were
- *  previously derived alone (the approval-gate carve-out); it is still the
- *  first consumer of this general mechanism. */
+/** The overridable path prefixes. `checks.<name>` is synthetic — no `port.config.json`
+ *  field backs it, but it is still a consumer of this general mechanism. */
 export const OVERRIDABLE = [
   'checks',
   'labels',
@@ -39,21 +26,39 @@ export const OVERRIDABLE = [
   'sessionRequiredPaths',
 ];
 
-/** Every other top-level `port.config.json` key, refused by default — a
- *  schema key added later and never classified here fails closed rather than
- *  silently becoming overridable. `commands` and `extraAllow` are the
- *  permission surface (`PERMISSION_SURFACE` below) and carry their own
- *  refusal reason; the rest are refused as simply not overridable. */
+/** Every other top-level `port.config.json` key, refused by default — a schema key added
+ *  later and never classified here fails closed rather than silently becoming overridable. */
 export const NEVER_OVERRIDABLE = ['commands', 'extraAllow', 'repo', 'tracker', 'docs', 'release', 'budget', '$schema'];
 
-/** The two paths free-form prose could otherwise use to expand a dispatched
- *  agent's shell authority — refused by name, no exception, ever. */
+/** The two paths free-form prose could otherwise use to expand a dispatched agent's shell authority. */
 export const PERMISSION_SURFACE = new Set(['commands', 'extraAllow']);
 
-/** Only these two accept `+=`, and only ever append — narrowing either would
- *  produce a dispatched agent that dies on a permission prompt against a
- *  harness boundary settings cannot grant back. */
+/** Only these two accept `+=`, and only ever append — narrowing either would strand a
+ *  dispatched agent on a permission prompt against a boundary settings cannot grant back. */
 const APPEND_ONLY = new Set(['sessionRequiredPaths', 'concurrency.sharedFiles']);
+
+/** The effective-config shape every `readPath`/`writePath` dotted path resolves against.
+ *  Generic over `C extends EffectiveConfigShape` so a caller can carry further fields through. */
+export interface EffectiveConfigShape {
+  integration: string;
+  production: string | null;
+  labels: Record<string, string>;
+  models: { plan: string; impl: string; review: string; revise: string };
+  modules: { approvalGate: boolean; release: boolean; scope: boolean };
+  reviewCycleCap: number;
+  concurrency: { sharedFiles: readonly string[]; overlapThreshold: number };
+  sessionRequiredPaths: readonly string[];
+}
+
+export type OverrideValue = string | number | boolean | null;
+
+export interface AppliedOverride {
+  readonly path: string;
+  readonly value: OverrideValue;
+  readonly reason: string;
+  readonly portDefault: OverrideValue | readonly string[] | undefined;
+  readonly source: 'CLAUDE.md';
+}
 
 export interface OverrideEntry {
   path: string;
@@ -68,22 +73,16 @@ export interface OverrideProblem {
   reason: string;
 }
 
-/** Splits `line` on the first ` = ` or ` += ` — never on whitespace alone,
- *  which is what lets `checks.<name>` carry a check name containing spaces
- *  without quoting. Returns `null` when neither operator appears. */
+/** Splits `line` on the first ` = ` or ` += `, never on whitespace alone, so `checks.<name>`
+ *  can carry a check name with spaces unquoted. `null` when neither operator appears. */
 function splitOperator(line: string): { path: string; op: '=' | '+='; rest: string } | null {
   const m = / (\+=|=) /.exec(line);
   if (!m) return null;
   return { path: line.slice(0, m.index).trim(), op: m[1] as '=' | '+=', rest: line.slice(m.index + m[0].length) };
 }
 
-/** Extracts the single ` ```port-overrides ` fence between the
- *  `<!-- port-overrides:begin/:end -->` markers and parses it into entries
- *  plus problems. **Absent block → `{ entries: [], problems: [] }`** — not a
- *  refusal, and nothing is reported. **At most one block per file** — a
- *  second is reported as a problem and only the first is read. A line that
- *  fails to parse is a problem, never a thrown error: a malformed block
- *  never aborts the caller. */
+/** Extracts the fenced block between the begin/end markers into entries plus problems.
+ *  Absent block → `{ entries: [], problems: [] }`, not a refusal. At most one block per file. */
 export function parseOverrides(text: string): { entries: OverrideEntry[]; problems: OverrideProblem[] } {
   const entries: OverrideEntry[] = [];
   const problems: OverrideProblem[] = [];
@@ -157,16 +156,9 @@ export function parseOverrides(text: string): { entries: OverrideEntry[]; proble
   return { entries, problems };
 }
 
-/** Reads `path` (the same dotted grammar `parseOverrides` produces) off the
- *  **effective config shape** `config.ts`'s `loadConfig` builds — flattened,
- *  never the raw `branches`-nested `port.config.json` shape. Returns
- *  `'blocking'` for `checks.<name>` — that category has no config field of
- *  its own (folded into `checkDispositions` by the caller instead), but
- *  `PIPELINE.md` → "CLAUDE.md overrides" names `blocking` as the implicit
- *  port default every unlisted check name carries, so that is the real
- *  `portDefault` an applied `checks.*` override replaced, never
- *  `undefined`. */
-function readPath(cfg: any, path: string): any {
+/** Reads `path` off the flattened effective config shape, never the raw nested
+ *  `port.config.json` shape. Returns `'blocking'` for `checks.<name>` — the implicit default every unlisted check name carries. */
+function readPath(cfg: EffectiveConfigShape, path: string): OverrideValue | readonly string[] | undefined {
   switch (path) {
     case 'branches.integration':
       return cfg.integration;
@@ -175,12 +167,16 @@ function readPath(cfg: any, path: string): any {
     case 'models.plan':
     case 'models.impl':
     case 'models.review':
-    case 'models.revise':
-      return cfg.models[path.slice('models.'.length)];
+    case 'models.revise': {
+      const key = path.slice('models.'.length) as keyof EffectiveConfigShape['models'];
+      return cfg.models[key];
+    }
     case 'modules.approvalGate':
     case 'modules.release':
-    case 'modules.scope':
-      return cfg.modules[path.slice('modules.'.length)];
+    case 'modules.scope': {
+      const key = path.slice('modules.'.length) as keyof EffectiveConfigShape['modules'];
+      return cfg.modules[key];
+    }
     case 'reviewCycleCap':
       return cfg.reviewCycleCap;
     case 'concurrency.overlapThreshold':
@@ -196,54 +192,50 @@ function readPath(cfg: any, path: string): any {
   }
 }
 
-/** The mirror of `readPath` — writes `value` into the same field, appending
- *  rather than assigning for the two `+=`-only paths. `checks.*` writes
- *  nothing here; the caller folds `applied` checks.* entries into
- *  `checkDispositions` itself, since there is no cfg field for it. */
-function writePath(cfg: any, path: string, value: any): void {
+/** The mirror of `readPath` — writes `value` into the same field, appending rather than
+ *  assigning for the two `+=`-only paths. */
+function writePath(cfg: EffectiveConfigShape, path: string, value: OverrideValue): void {
   switch (path) {
     case 'branches.integration':
-      cfg.integration = value;
+      if (typeof value === 'string') cfg.integration = value;
       return;
     case 'branches.production':
-      cfg.production = value;
+      if (typeof value === 'string' || value === null) cfg.production = value;
       return;
     case 'models.plan':
     case 'models.impl':
     case 'models.review':
     case 'models.revise':
-      cfg.models[path.slice('models.'.length)] = value;
+      if (typeof value === 'string') cfg.models[path.slice('models.'.length) as keyof EffectiveConfigShape['models']] = value;
       return;
     case 'modules.approvalGate':
     case 'modules.release':
     case 'modules.scope':
-      cfg.modules[path.slice('modules.'.length)] = value;
+      if (typeof value === 'boolean') cfg.modules[path.slice('modules.'.length) as keyof EffectiveConfigShape['modules']] = value;
       return;
     case 'reviewCycleCap':
-      cfg.reviewCycleCap = value;
+      if (typeof value === 'number') cfg.reviewCycleCap = value;
       return;
     case 'concurrency.overlapThreshold':
-      cfg.concurrency.overlapThreshold = value;
+      if (typeof value === 'number') cfg.concurrency.overlapThreshold = value;
       return;
     case 'concurrency.sharedFiles':
-      cfg.concurrency.sharedFiles = [...cfg.concurrency.sharedFiles, value];
+      if (typeof value === 'string') cfg.concurrency.sharedFiles = [...cfg.concurrency.sharedFiles, value];
       return;
     case 'sessionRequiredPaths':
-      cfg.sessionRequiredPaths = [...cfg.sessionRequiredPaths, value];
+      if (typeof value === 'string') cfg.sessionRequiredPaths = [...cfg.sessionRequiredPaths, value];
       return;
     default:
-      if (path.startsWith('labels.')) cfg.labels[path.slice('labels.'.length)] = value;
+      if (path.startsWith('labels.') && typeof value === 'string') cfg.labels[path.slice('labels.'.length)] = value;
   }
 }
 
-/** Classifies and type-checks one parsed entry against `path`'s category,
- *  returning either the coerced `value` to apply or a refusal `reason`.
- *  `labelKeys` is `config.ts`'s `LABEL_DEFAULTS` key set — the only category
- *  whose valid values depend on more than the entry itself. */
-function validate(entry: OverrideEntry, labelKeys: string[]): { value: any } | { reason: string } {
+/** Classifies and type-checks one parsed entry against `path`'s category, returning either
+ *  the coerced `value` or a refusal `reason`. `labelKeys` backs the one category whose valid values depend on more than the entry itself. */
+function validate(entry: OverrideEntry, labelKeys: readonly string[]): { value: OverrideValue } | { reason: string } {
   const { path, op, rawValue } = entry;
 
-  const top = path.split('.')[0];
+  const top = path.split('.')[0] ?? path;
   if (NEVER_OVERRIDABLE.includes(top) || NEVER_OVERRIDABLE.includes(path)) {
     return {
       reason: PERMISSION_SURFACE.has(top)
@@ -291,21 +283,16 @@ function validate(entry: OverrideEntry, labelKeys: string[]): { value: any } | {
   return { reason: `'${path}' is not a recognized overridable path` };
 }
 
-/** Folds `parsed` over `cfg` (the effective-config shape `loadConfig`
- *  already resolved from `.claude/port.config.json` alone) to produce the
- *  final effective config. **Fails closed on the entry, open on the run**: a
- *  refused entry leaves the port value standing for that one field and is
- *  reported; nothing else in the block is affected, and a wholly malformed
- *  block never aborts config loading. `cfg` is never mutated — a fresh
- *  object is returned. */
-export function applyOverrides(
-  cfg: any,
-  parsed: { entries: OverrideEntry[]; problems: OverrideProblem[] },
-  opts: { labelKeys: string[] },
-): { cfg: any; applied: any[]; refused: any[] } {
-  const out = structuredClone(cfg);
-  const applied: any[] = [];
-  const refused: any[] = parsed.problems.map((p) => ({ path: null, line: p.line, reason: p.reason }));
+/** Folds `parsed` over `cfg` to produce the final effective config. Fails closed on the
+ *  entry, open on the run: a refused entry leaves the port value standing, reported; a wholly malformed block never aborts loading. `cfg` is never mutated. */
+export function applyOverrides<C extends EffectiveConfigShape>(
+  cfg: C,
+  parsed: { entries: readonly OverrideEntry[]; problems: readonly OverrideProblem[] },
+  opts: { labelKeys: readonly string[] },
+): { cfg: C; applied: AppliedOverride[]; refused: { path: string | null; line: string; reason: string }[] } {
+  const out: C = structuredClone(cfg);
+  const applied: AppliedOverride[] = [];
+  const refused: { path: string | null; line: string; reason: string }[] = parsed.problems.map((p) => ({ path: null, line: p.line, reason: p.reason }));
 
   for (const entry of parsed.entries) {
     const result = validate(entry, opts.labelKeys);

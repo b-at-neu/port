@@ -1,0 +1,132 @@
+import type { ApplyItemActionParams } from '@/types/actions'
+
+// The board's item-level writes — `item:action` and `item:decide`. Every
+// stale-renderer mistake throws here, never a value `main/actions/` defends.
+import { OPERATOR_ACTIONS, OPERATOR_DECISIONS, UNBLOCK_ROUTES } from '@/types/actions'
+import type { ItemActionResult, ItemDecisionResult, OperatorDecision, UnblockRoute } from '@/types/actions'
+import { MAX_REVISE_NOTE_CHARS } from '@/types/actions'
+import type { BoardSnapshot } from '@/types/board'
+import type { IpcMap } from '@/types/ipc'
+import type { RegistryDeps } from '@/types/registry'
+import { isLiveStageSession } from '@/utils/stage/live'
+import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/registry'
+
+
+import type { ItemDecisionDeps } from '@/types/channels'
+
+export interface ItemActionDeps {
+  readonly listRepositories: typeof listRepositories
+  readonly applyItemAction: (params: ApplyItemActionParams) => Promise<ItemActionResult>
+  readonly snapshot: () => BoardSnapshot
+  readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
+}
+
+/** Validates the request, then forces one refresh after an applied outcome
+ *  so the row updates immediately rather than after the next poll. */
+export async function resolveItemAction(registryDeps: RegistryDeps, request: IpcMap['item:action']['request'], auditDir: string, deps: ItemActionDeps): Promise<ItemActionResult> {
+  const repoId = requireRepoId(request?.repoId, "'item:action'")
+  if (request.kind !== 'issue' && request.kind !== 'pull-request') {
+    throw new Error("'item:action' requires 'kind' to be 'issue' or 'pull-request'")
+  }
+  if (!Number.isInteger(request.number) || request.number <= 0) {
+    throw new Error("'item:action' requires 'number' to be a positive integer")
+  }
+  if (!(OPERATOR_ACTIONS as readonly string[]).includes(request.action)) {
+    throw new Error(`'item:action' requires 'action' to be one of ${OPERATOR_ACTIONS.join(', ')}`)
+  }
+  const expectedStage: unknown = request.expectedStage
+  if (expectedStage !== null && (typeof expectedStage !== 'string' || expectedStage === '')) {
+    throw new Error("'item:action' requires 'expectedStage' to be a non-empty string or null")
+  }
+
+  const found = await requireReadyRepo(registryDeps, "'item:action'", repoId, deps.listRepositories)
+
+  const result = await deps.applyItemAction({
+    request: { repoId, kind: request.kind, number: request.number, action: request.action, expectedStage: request.expectedStage },
+    snapshot: deps.snapshot(),
+    entry: found,
+    auditDir,
+  })
+
+  if (result.ok && result.outcome.kind === 'applied') {
+    // A refresh failure here is logged and swallowed, never left to mask
+    // the write's own already-successful result.
+    try {
+      await deps.refresh({ repoId, source: 'github' })
+    } catch (error) {
+      console.error(`'item:action' post-write refresh failed for '${repoId}':`, error)
+    }
+  }
+  return result
+}
+
+function isOperatorDecision(value: unknown): value is OperatorDecision {
+  return (OPERATOR_DECISIONS as readonly string[]).includes(value as string)
+}
+
+function isUnblockRoute(value: unknown): value is UnblockRoute {
+  return (UNBLOCK_ROUTES as readonly string[]).includes(value as string)
+}
+
+const MAX_REBASE_PICKS = 20
+
+function isPicksShape(value: unknown): boolean {
+  if (value === null) return true
+  if (!Array.isArray(value) || value.length > MAX_REBASE_PICKS) return false
+  return value.every((pick: unknown) => {
+    if (typeof pick !== 'object' || pick === null) return false
+    const { id, letter } = pick as { id?: unknown; letter?: unknown }
+    return typeof id === 'string' && /^D\d+$/.test(id) && typeof letter === 'string' && /^[A-Z]$/.test(letter)
+  })
+}
+
+// Validates the request and its route/note pair, then forces one refresh
+// on an applied label outcome, the same rule `resolveItemAction` follows.
+export async function resolveItemDecision(registryDeps: RegistryDeps, request: IpcMap['item:decide']['request'], auditDir: string, scratchDir: string, deps: ItemDecisionDeps): Promise<ItemDecisionResult> {
+  const repoId = requireRepoId(request?.repoId, "'item:decide'")
+  if (!Number.isInteger(request.number) || request.number <= 0) {
+    throw new Error("'item:decide' requires 'number' to be a positive integer")
+  }
+  if (!isOperatorDecision(request.decision)) {
+    throw new Error(`'item:decide' requires 'decision' to be one of ${OPERATOR_DECISIONS.join(', ')}`)
+  }
+  const expectedStage: unknown = request.expectedStage
+  if (expectedStage !== null && (typeof expectedStage !== 'string' || expectedStage === '')) {
+    throw new Error("'item:decide' requires 'expectedStage' to be a non-empty string or null")
+  }
+  if (typeof request.skipComment !== 'boolean') {
+    throw new Error("'item:decide' requires 'skipComment' to be a boolean")
+  }
+  if (request.decision === 'unblock') {
+    if (!isUnblockRoute(request.route)) throw new Error(`'item:decide' requires 'route' to be one of ${UNBLOCK_ROUTES.join(', ')} for 'unblock'`)
+    if (request.note !== null) throw new Error("'item:decide' requires 'note' to be null for 'unblock'")
+    if (!isPicksShape(request.picks)) throw new Error(`'item:decide' requires 'picks' to be null or at most ${String(MAX_REBASE_PICKS)} { id: 'D<n>', letter: 'A'-'Z' } entries for 'unblock'`)
+  } else {
+    if (request.picks !== null) throw new Error("'item:decide' requires 'picks' to be null for 'revise'")
+    if (request.route !== null) throw new Error("'item:decide' requires 'route' to be null for 'revise'")
+    if (typeof request.note !== 'string' || request.note.length > MAX_REVISE_NOTE_CHARS) {
+      throw new Error(`'item:decide' requires 'note' to be a string of at most ${String(MAX_REVISE_NOTE_CHARS)} characters for 'revise'`)
+    }
+  }
+
+  const found = await requireReadyRepo(registryDeps, "'item:decide'", repoId, deps.listRepositories)
+
+  const result = await deps.applyItemDecision({
+    request: { repoId, number: request.number, decision: request.decision, expectedStage: request.expectedStage, route: request.route, note: request.note, skipComment: request.skipComment, picks: request.picks },
+    snapshot: deps.snapshot(),
+    entry: found,
+    auditDir,
+    scratchDir,
+    liveStage: deps.sessions().some((s) => s.repoId === repoId && s.stage?.number === request.number && isLiveStageSession(s)),
+  })
+
+  const labelsApplied = result.ok && result.labels.kind === 'applied'
+  if (labelsApplied) {
+    try {
+      await deps.refresh({ repoId, source: 'github' })
+    } catch (error) {
+      console.error(`'item:decide' post-write refresh failed for '${repoId}':`, error)
+    }
+  }
+  return result
+}

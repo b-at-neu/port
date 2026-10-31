@@ -114,6 +114,8 @@ jobs:
         run: npm install -g @anthropic-ai/claude-code
       - name: Validate plugin
         run: claude plugin validate ./plugins/port --strict
+      - name: Validate dev marketplace
+        run: claude plugin validate ./plugins --strict
 
   # apps/desktop's typecheck/lint/test/build. Deliberately CI-only and out of
   # commands.checks — see CONTRIBUTING.md → "Working on the desktop app".

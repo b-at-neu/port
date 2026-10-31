@@ -1,23 +1,16 @@
-// appendAudit / readAuditLog over `<dir>/writes.jsonl` — one JSON object per
-// line, `\n`-terminated. `dir` is `app.getPath('userData')`, injected by the
-// composition root the same way `main/registry/store.ts`'s own directory
-// parameter is, so this file imports no Electron. Rotates at 8 MB by
-// renaming to `writes.prev.jsonl` before appending, so the reader can report
-// "older entries exist and are not shown" rather than presenting a rotated
-// file's remainder as the whole history. `appendTextFile` is called only
-// here under `apps/desktop/src/` — one appender, so no second path can write
-// an entry that skipped the chokepoint (`scripts/checks/desktop-writes.mjs`
-// pins this).
-import { appendTextFile, pathOps as defaultPathOps, readLinesFrom, renamePath, statPath } from '../platform'
-import type { FileFailureKind, PathOps } from '../platform'
-import type { AuditEntry, AuditRead, AuditReadFailureKind, ReadAuditLogParams } from '../../shared/writes/types'
+// Rotates at 8 MB by renaming to `writes.prev.jsonl`, so the reader can report "older entries
+// exist" rather than presenting a rotated file's remainder as the whole history.
+import { appendTextFile, readLinesFrom, renamePath, statPath } from '@/main/platform/files'
+import { pathOps as defaultPathOps } from '@/main/platform/paths'
+import type { FileFailureKind } from '@/types/platform'
+import type { PathOps } from '@/types/platform'
+import type { AuditEntry, AuditRead, AuditReadFailureKind, ReadAuditLogParams } from '@/types/writes'
+import { isLabelAuditEntry } from '@/types/writes'
 
 const LOG_FILE = 'writes.jsonl'
 const PREV_LOG_FILE = 'writes.prev.jsonl'
 const ROTATE_AT_BYTES = 8 * 1024 * 1024
-// Generous relative to the 8 MB rotation threshold — the read cap exists
-// only to stop a runaway file from OOM-ing the main process, the same
-// reasoning `files.ts`'s own `MAX_BYTES` documents for the denials log.
+// Generous relative to the 8 MB rotation threshold — exists only to stop a runaway file from OOM-ing the main process.
 const MAX_READ_BYTES = 32 * 1024 * 1024
 
 function logPath(dir: string, pathOps: PathOps): string {
@@ -28,11 +21,9 @@ function prevLogPath(dir: string, pathOps: PathOps): string {
   return pathOps.join(dir, PREV_LOG_FILE)
 }
 
-export type AppendAuditResult = { readonly ok: true } | { readonly ok: false; readonly message: string }
+type AppendAuditResult = { readonly ok: true } | { readonly ok: false; readonly message: string }
 
-/** Best-effort relative to the write it is recording: a failure here never
- *  changes the `WriteOutcome` `applyLabels`/`postComment` already computed,
- *  it only means that attempt's own audit line did not land. */
+// Best-effort relative to the write it is recording: a failure here never changes the `WriteOutcome`.
 export async function appendAudit(dir: string, entry: AuditEntry, pathOps: PathOps = defaultPathOps): Promise<AppendAuditResult> {
   const path = logPath(dir, pathOps)
 
@@ -47,23 +38,14 @@ export async function appendAudit(dir: string, entry: AuditEntry, pathOps: PathO
   return { ok: true }
 }
 
-/** Collapses a platform-layer failure kind this reader cannot otherwise
- *  produce (`not-a-file`, reading a directory; `unparseable`, which
- *  `readLinesFrom`'s streaming reader never returns) into `io` — a narrowing
- *  map, not a 1:1 pin, since `AuditReadFailureKind` is deliberately smaller
- *  than `FileFailureKind`. */
+// A narrowing map, not a 1:1 pin — `AuditReadFailureKind` is deliberately smaller than `FileFailureKind`.
 function toAuditReadFailureKind(kind: FileFailureKind): AuditReadFailureKind {
   if (kind === 'permission-denied' || kind === 'too-large') return kind
   return 'io'
 }
 
-/** Filters by `repo`/`number` and caps at `limit` (newest first is the
- *  reader's presentation choice, not this function's — entries are returned
- *  oldest-first, matching the file's own append order). A malformed line is
- *  counted, never silently dropped. The size cap is now an explicit
- *  pre-check against `statPath` rather than a streamed abort — `readLinesFrom`
- *  reads one bounded window rather than the whole file, so an oversized log
- *  must be caught before the read, not during it. */
+/** Entries are returned oldest-first, matching the file's own append order. A malformed line is
+ *  counted, never silently dropped. */
 export async function readAuditLog(
   dir: string,
   params: ReadAuditLogParams = {},
@@ -106,8 +88,11 @@ export async function readAuditLog(
     }
   }
 
+  // A number-scoped read excludes a reclaim entry, which carries no `number`.
   const filtered = entries.filter(
-    (entry) => (params.repo === undefined || entry.repo === params.repo) && (params.number === undefined || entry.number === params.number),
+    (entry) =>
+      (params.repo === undefined || entry.repo === params.repo) &&
+      (params.number === undefined || (isLabelAuditEntry(entry) && entry.number === params.number)),
   )
   const limited = params.limit !== undefined && filtered.length > params.limit ? filtered.slice(-params.limit) : filtered
 

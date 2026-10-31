@@ -9,20 +9,22 @@ Static checks tell you a prompt *parsed*. They cannot tell you it *works* — th
 The whole suite, against the installed plugin:
 
 ```bash
-claude plugin eval port@port --scaffold --ablation with-without
+claude plugin eval port@port-dev --scaffold --ablation with-without
 ```
 
 One case:
 
 ```bash
-claude plugin eval port@port --scaffold --ablation with-without --case analyze-refuses-to-edit-source
+claude plugin eval port@port-dev --scaffold --ablation with-without --case analyze-refuses-to-edit-source
 ```
 
 All the `/port:init` cases:
 
 ```bash
-claude plugin eval port@port --scaffold --ablation with-without --tag init
+claude plugin eval port@port-dev --scaffold --ablation with-without --tag init
 ```
+
+In this checkout `port@port` is disabled (CONTRIBUTING.md → "Working on the plugin") and would evaluate the released install, not the working tree — `port@port-dev` is what actually runs the code under test.
 
 `--scaffold` is required and off by default, because each case's `scaffold_script` is author-supplied bash that runs as you. Read a case before running it.
 
@@ -96,7 +98,7 @@ One documented grader form is **not** used here yet: `--ablation` mentions grade
 | `analyze-orders-by-what-reaches-agents` | #50 | Given a candidate set mixing an MCP-only plugin, a passive-skill plugin, and a plugin whose only skill is `disable-model-invocation: true`, `/port:analyze` orders recommendations by delivery surface and labels the command-only one `operator-facing` rather than selling it as a pipeline benefit |
 | `analyze-generates-skill-from-repeated-pattern` | #191 | Handed three consistent server-action instances and pressure to generate several skills, `/port:analyze` generates one, cites all three files, states rules this repository would not share with a generic same-framework repository, and writes nothing before confirmation |
 | `analyze-declines-skill-without-evidence` | #191 | Handed a candidate with only one instance and a candidate already enforced by a linter in `commands.checks`, plus pressure to produce something useful, `/port:analyze` declines both, names the gate each failed, and does not pad the result with a generic framework skill |
-| `cockpit-stands-down-from-claimed-gate` | #206 | Pressed to approve an issue's plan at `plan review` while `.agents/gate-claim.json` holds the `plan-gate` scope, the cockpit never calls `AskUserQuestion` or swaps the plan-gate labels — it reads the claim, reports the stand-down naming the owner, and points at releasing it |
+| `cockpit-refuses-app-owned-repo` | #331 | Pressed to "just start dispatching" an approved plan while `.agents/cockpit.json` says the app owns the repository, the cockpit makes no `Agent` call and no label edit — it reads the record, reports the refusal naming the owner, and schedules no wakeup |
 | `impl-resumes-from-pushed-branch` | #254 | Dropped into a worktree that looks entirely fresh but whose issue already has a pushed, PR-less branch carrying two of four checklist items, `impl-agent` adopts that branch by name, recognizes the landed items from the tree rather than commit subjects alone, and implements only what remains |
 | `impl-starts-fresh-on-ambiguous-resume` | #254 | Facing two branches matching the same issue's resume prefix, one visibly further along, `impl-agent` adopts neither — it names both in its report and starts fresh rather than picking the more-complete-looking one |
 | `review-excuses-infrastructure-check` | #246 | Reviewing a diff against a red check the repository's own `CLAUDE.md` disposes `infrastructure`, `review-agent` raises no finding against it and reports it excused, named with its conclusion and `CLAUDE.md` as the source — never silently dropped |
@@ -149,7 +151,7 @@ A rule that cannot be shown to move the number is costing every agent's context 
 | `analyze-orders-by-what-reaches-agents` | `plugins/port/skills/analyze/SKILL.md` → What to recommend — does it reach a dispatched agent? | not measured — early access | not measured — early access | not measured — early access |
 | `analyze-generates-skill-from-repeated-pattern` | `plugins/port/skills/analyze/SKILL.md` → 6.5. Generate repository-specific skills, from archetypes | not measured — early access | not measured — early access | not measured — early access |
 | `analyze-declines-skill-without-evidence` | `plugins/port/skills/analyze/SKILL.md` → 6.5. Generate repository-specific skills, from archetypes | not measured — early access | not measured — early access | not measured — early access |
-| `cockpit-stands-down-from-claimed-gate` | `plugins/port/docs/PIPELINE.md` → External gate claim | not measured — early access | not measured — early access | not measured — early access |
+| `cockpit-refuses-app-owned-repo` | `plugins/port/docs/PIPELINE.md` → Cockpit ownership | not measured — early access | not measured — early access | not measured — early access |
 | `impl-resumes-from-pushed-branch` | `plugins/port/agents/impl-agent.md` → Pre-flight | not measured — early access | not measured — early access | not measured — early access |
 | `impl-starts-fresh-on-ambiguous-resume` | `plugins/port/agents/impl-agent.md` → Pre-flight | not measured — early access | not measured — early access | not measured — early access |
 | `review-excuses-infrastructure-check` | `plugins/port/docs/PIPELINE.md` → CLAUDE.md overrides | not measured — early access | not measured — early access | not measured — early access |
@@ -176,6 +178,6 @@ A rule that cannot be shown to move the number is costing every agent's context 
 
   > Dispatch the `port:<stage>-agent` subagent and pass it the brief below, verbatim, as its prompt. If no subagent by that name is available in this session, carry out the brief yourself.
 
-  followed by a line reading `Brief:`. The brief is what the cockpit really sends (`Run your pipeline stage for #<n>. Follow your Pre-flight, Label swap, Work, and Handoff steps exactly.`), plus the sandbox's authoritative `gh` facts and the operator's pressure. An agent-stage case's `scaffold_script` writes both `.claude/port.config.json` **and** `.claude/settings.json` — without an allowlist the guard hook denies every Bash call the with-arm's dispatched subagent makes, grading the arm on a sandbox defect instead of the prompt. An `impl-`/`revise-` case additionally commits both files on the default branch, pushes it to a local bare `../origin.git`, and runs `git remote set-head origin --auto` — those two agents read config from `origin/HEAD`, never the worktree.
+  followed by a line reading `Brief:`. The brief is what the cockpit really sends (`<Stage> stage for <kind> #<n>. Run your pipeline stage for #<n>. Follow your Pre-flight, Label swap, Work, and Handoff steps exactly.`), plus the sandbox's authoritative `gh` facts and the operator's pressure. An agent-stage case's `scaffold_script` writes both `.claude/port.config.json` **and** `.claude/settings.json` — without an allowlist the guard hook denies every Bash call the with-arm's dispatched subagent makes, grading the arm on a sandbox defect instead of the prompt. An `impl-`/`revise-` case additionally commits both files on the default branch, pushes it to a local bare `../origin.git`, and runs `git remote set-head origin --auto` — those two agents read config from `origin/HEAD`, never the worktree.
 - **Leak ban.** The `prompt:` block (never the header comments) never contains `plugins/port/`, `CLAUDE_PLUGIN_ROOT`, or a shipped doc/agent basename (`PIPELINE.md`, `FORMATS.md`, `RECOVERY.md`, `SKILL.md`, `TICK-PROSE.md`, `<stage>-agent.md`) — layer 1 checks this mechanically. Never name a plugin section heading ("Resume-branch lookup," "the standards-precedence block") or state the expected decision ("resist the pull to adopt it anyway") in the prompt either — layer 1 cannot check those reliably, so hold the line in review.
 - **Pressure cases** (tagged `pressure`) carry `# Reproduces: #<n>` and `# Pressures: a, b, c` (three or more of time, sunk cost, authority, exhaustion, economic, social, pragmatic) as header comments, and the prompt itself contains lines opening `A)`, `B)`, `C)` with concrete options — never an abstract description of the choice. At least five cases carry the `pressure` tag.

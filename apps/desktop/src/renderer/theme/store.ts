@@ -1,0 +1,106 @@
+// The theme preference — System, Light, Dark (DESIGN §3 Settings row) — held
+// outside React so `main.ts`'s own `apply()` call can run before the first
+// paint, the same module-level-closure idiom `session/controller.ts` and
+// `permission/controller.ts` already establish. No `useEffect`: React reads
+// the live value through `useSyncExternalStore`, never a mount-time sync.
+import { useSyncExternalStore } from 'react'
+import type { ResolvedTheme, ThemePreference, ThemeStoreDeps } from '@/types/theme'
+
+const STORAGE_KEY = 'port.theme'
+
+interface ThemeStore {
+  // `this: void` on every method `useThemePreference` passes around unbound
+  // (`store.subscribe`, `store.getPreference`, `store.setPreference`) — none
+  // of them reads `this`, and the annotation is what lets eslint's
+  // `unbound-method` rule see that rather than assume the worst.
+  getPreference(this: void): ThemePreference
+  setPreference(this: void, preference: ThemePreference): void
+  getResolved(this: void): ResolvedTheme
+  /** Sets `root.dataset.theme` to the resolved theme. Called once by
+   *  `main.ts` before any paint, and again on every preference or OS change. */
+  apply(): void
+  subscribe(this: void, listener: () => void): () => void
+}
+
+function isPreference(value: string | null): value is ThemePreference {
+  return value === 'system' || value === 'light' || value === 'dark'
+}
+
+/** A value this app did not itself write — or did not recognize — reads as
+ *  `system`, so a bad value fails toward following the OS rather than
+ *  freezing the app in whichever theme it last resolved to. */
+function readStoredPreference(storage: ThemeStoreDeps['storage']): ThemePreference {
+  const raw = storage.getItem(STORAGE_KEY)
+  return isPreference(raw) ? raw : 'system'
+}
+
+function resolve(preference: ThemePreference, media: ThemeStoreDeps['media']): ResolvedTheme {
+  if (preference === 'system') return media.matches ? 'dark' : 'light'
+  return preference
+}
+
+export function createThemeStore({ storage, media, root }: ThemeStoreDeps): ThemeStore {
+  let preference = readStoredPreference(storage)
+  const listeners = new Set<() => void>()
+
+  function notify(): void {
+    for (const listener of listeners) listener()
+  }
+
+  function apply(): void {
+    root.dataset.theme = resolve(preference, media)
+  }
+
+  function setPreference(next: ThemePreference): void {
+    if (next === preference) return
+    preference = next
+    storage.setItem(STORAGE_KEY, next)
+    apply()
+    notify()
+  }
+
+  media.addEventListener('change', () => {
+    if (preference !== 'system') return
+    apply()
+    notify()
+  })
+
+  return {
+    getPreference: () => preference,
+    setPreference,
+    getResolved: () => resolve(preference, media),
+    apply,
+    subscribe(listener) {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+  }
+}
+
+let instance: ThemeStore | null = null
+
+/** The one app-wide store, created lazily against real `window` globals —
+ *  `store.test.ts` calls `createThemeStore` directly with fakes instead of
+ *  going through this singleton. */
+export function themeStore(): ThemeStore {
+  instance ??= createThemeStore({
+    storage: window.localStorage,
+    media: window.matchMedia('(prefers-color-scheme: dark)'),
+    root: document.documentElement,
+  })
+  return instance
+}
+
+export function useThemePreference(): readonly [ThemePreference, (preference: ThemePreference) => void] {
+  const store = themeStore()
+  const preference = useSyncExternalStore(store.subscribe, store.getPreference)
+  return [preference, store.setPreference]
+}
+
+/** The resolved light/dark value, reactive to both a preference change and
+ *  an OS change while the preference is `system` — `sonner.tsx`'s Toaster
+ *  reads this instead of `next-themes`, which this app does not use. */
+export function useResolvedTheme(): ResolvedTheme {
+  const store = themeStore()
+  return useSyncExternalStore(store.subscribe, store.getResolved)
+}

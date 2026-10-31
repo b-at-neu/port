@@ -129,6 +129,12 @@ What it deliberately never force-removes on its own: a **locked** worktree, a **
 
 This skill drives the same reclamation script interactively — review the classified table, then unlock, force-clear dirty candidates, and purge orphan directories, each with its own confirmation. The script falls back to a plain filesystem delete whenever `git worktree remove` itself fails partway (a long path or a file still held open, both common on Windows), so a populated dependency tree that used to defeat even a forced remove no longer needs a separate manual recipe.
 
+A separate problem accumulates in Claude Code's own plugin cache, not this repository: deleting or moving a project that installed port at `local`/`project` scope never removes that install record, so it keeps pinning its version directory under `cache/port/port/<version>/` forever — the documented 14-day sweep only fires on an orphan marker, and no marker is ever written for a record whose project is simply gone. This is per-machine, not per-repository, so one run covers every project the machine has ever installed port into:
+
+```
+/port:plugin-cache-clean
+```
+
 ## Releasing
 
 ```

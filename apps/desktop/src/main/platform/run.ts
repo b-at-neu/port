@@ -1,56 +1,29 @@
-// The only file under apps/desktop/src/ allowed to import `node:child_process`
-// — the `desktop-platform-layer` check in scripts/checks.mjs pins this
-// mechanically, so a POSIX shell-out elsewhere is a layer 1 failure, not a
-// review comment.
+// The only file under apps/desktop/src/ allowed to import `node:child_process`.
 import { execFile } from 'node:child_process'
 import { stat } from 'node:fs/promises'
-import { which as defaultWhich } from './which'
-import type { WhichEnv, WhichResult } from './which'
+import { which as defaultWhich } from '@/main/platform/which'
 
-/** The spawnable executables are a literal union, so an adapter reaching for
- *  a POSIX-only utility (`grep`, `find`, …) is a compile-time error rather
- *  than a Windows-only runtime failure. Extend this union as new commands
- *  need to be spawned. */
-export const KNOWN_COMMANDS = ['git', 'gh', 'node', 'claude'] as const
+import type { RunCommandOptions, CommandResult, KnownCommand, Spawner, RunExecutableOptions } from '@/types/platform'
 
-export type KnownCommand = (typeof KNOWN_COMMANDS)[number]
-
-/**
- * One error rule, everywhere: a condition a human could cause is a value; a
- * programmer mistake is a throw. Every member below is something an operator
- * or environment can legitimately produce.
- */
-export type CommandResult =
-  | { readonly ok: true; readonly stdout: string; readonly stderr: string }
-  | { readonly ok: false; readonly kind: 'not-found'; readonly command: string; readonly searched: readonly string[] }
-  | { readonly ok: false; readonly kind: 'cwd-missing'; readonly cwd: string }
-  | { readonly ok: false; readonly kind: 'nonzero'; readonly code: number; readonly stdout: string; readonly stderr: string }
-  | { readonly ok: false; readonly kind: 'signalled'; readonly signal: string; readonly stderr: string }
-  | { readonly ok: false; readonly kind: 'timeout'; readonly timeoutMs: number; readonly stderr: string }
-  | { readonly ok: false; readonly kind: 'output-too-large'; readonly maxBytes: number }
-  | { readonly ok: false; readonly kind: 'spawn-failed'; readonly message: string }
+/** A literal union, so an adapter reaching for a POSIX-only utility is a compile-time error. */
+export const KNOWN_COMMANDS = ['git', 'gh', 'node', 'claude'] as const satisfies readonly KnownCommand[]
 
 const DEFAULT_TIMEOUT_MS = 30_000
 const DEFAULT_MAX_BYTES = 32 * 1024 * 1024
 
-export interface SpawnOutcome {
-  readonly stdout: string
-  readonly stderr: string
+interface E2ERoute {
+  readonly fake: string
 }
 
-export interface SpawnParams {
-  readonly cwd: string | undefined
-  readonly timeout: number
-  readonly maxBuffer: number
-  readonly env: NodeJS.ProcessEnv
-}
+// Module-level, set once from `index.ts` before `registerIpc()` — never re-read from
+// `process.env` per call. `null` means E2E mode is off.
+let e2eRoute: E2ERoute | null = null
 
-/** The injectable seam `run.test.ts` uses for its classification table — no
- *  real process is spawned to exercise `not-found`/`nonzero`/`timeout`/etc.
- *  Rejects with a plain, duck-typed failure (never required to be an `Error`
- *  instance), so a fake spawner in a test needs no real `child_process`
- *  error shape. */
-export type Spawner = (absPath: string, args: readonly string[], params: SpawnParams) => Promise<SpawnOutcome>
+/** Called once, from `index.ts`, before `registerIpc()`. Every `runCommand` call after this
+ *  routes to the fake instead of resolving the real executable with `which`. */
+export function setE2ERoute(route: E2ERoute | null): void {
+  e2eRoute = route
+}
 
 interface SpawnFailureLike {
   readonly code?: unknown
@@ -95,15 +68,13 @@ function classifySpawnError(error: unknown, absPath: string, ctx: { timeoutMs: n
   const failure = asFailure(error)
   const stderr = typeof failure.stderr === 'string' ? failure.stderr : ''
 
-  // Order matches the documented mapping exactly: ETIMEDOUT/killed first (a
-  // numeric exit code can coexist with `killed` on some platforms and must
-  // not be misread as a normal nonzero exit).
+  // ETIMEDOUT/killed first — a numeric exit code can coexist with `killed` and must not be
+  // misread as a normal nonzero exit.
   if (failure.code === 'ETIMEDOUT' || failure.killed === true) {
     return { ok: false, kind: 'timeout', timeoutMs: ctx.timeoutMs, stderr }
   }
   if (failure.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
-    // No partial stdout carried — truncated output must never reach a JSON
-    // parse (ENGINEERING §4, "an absent signal is never read as a passing one").
+    // No partial stdout carried — truncated output must never reach a JSON parse.
     return { ok: false, kind: 'output-too-large', maxBytes: ctx.maxBytes }
   }
   if (failure.code === 'ENOENT') {
@@ -119,16 +90,7 @@ function classifySpawnError(error: unknown, absPath: string, ctx: { timeoutMs: n
   return { ok: false, kind: 'spawn-failed', message }
 }
 
-export interface RunExecutableOptions {
-  readonly cwd?: string
-  readonly timeoutMs?: number
-  readonly maxBytes?: number
-  readonly env?: NodeJS.ProcessEnv
-  readonly spawner?: Spawner
-}
-
-/** The internal primitive: spawns an already-resolved absolute path. Exported
- *  so tests can exercise the classification table without touching `which`. */
+/** Spawns an already-resolved absolute path; exported so tests can skip `which`. */
 export async function runExecutable(
   absPath: string,
   args: readonly string[],
@@ -151,12 +113,6 @@ export async function runExecutable(
   }
 }
 
-export interface RunCommandOptions extends RunExecutableOptions {
-  readonly whichEnv?: WhichEnv
-  readonly platform?: NodeJS.Platform
-  readonly resolve?: (options: { command: KnownCommand; env: WhichEnv; platform: NodeJS.Platform }) => Promise<WhichResult>
-}
-
 async function cwdExists(cwd: string): Promise<boolean> {
   try {
     await stat(cwd)
@@ -166,12 +122,17 @@ async function cwdExists(cwd: string): Promise<boolean> {
   }
 }
 
-/** Resolves a `KnownCommand` on `PATH` (see `which.ts`), pre-checks `cwd`,
- *  then delegates to `runExecutable`. This is the entry point every
- *  higher-level adapter actually calls. */
+// The entry point every higher-level adapter actually calls.
 export async function runCommand(command: KnownCommand, args: readonly string[], options: RunCommandOptions = {}): Promise<CommandResult> {
   if (options.cwd !== undefined && !(await cwdExists(options.cwd))) {
     return { ok: false, kind: 'cwd-missing', cwd: options.cwd }
+  }
+
+  // E2E mode: every known command routes to the fake through Electron's own binary run as Node,
+  // so `which` is never consulted and a host `gh`/`git` can never be reached by accident.
+  if (e2eRoute !== null) {
+    const env = { ...(options.env ?? process.env), ELECTRON_RUN_AS_NODE: '1' }
+    return runExecutable(process.execPath, [e2eRoute.fake, command, ...args], { ...options, env })
   }
 
   const envForResolution = options.whichEnv ?? options.env ?? process.env

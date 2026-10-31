@@ -1,65 +1,68 @@
-// #101: the per-session capability tracker — reads `supportedCommands()`/
-// `supportedAgents()` back rather than trusting a plugin flag worked
-// (ENGINEERING §7's "malformed component is silently absent" rule, applied
-// here to the read-back itself: a timeout or a rejection must never present
-// as an empty list, which would look identical to "the plugin loaded with
-// nothing to offer"). Pure decision logic lives in `verify.ts`; this file
-// is only the I/O and timing shell around it (ENGINEERING §1).
-import type { AgentSummary, CommandSummary, PluginRequest, SessionCapabilities } from '../../shared/hosting/types'
-import { sanitize } from '../sessions'
-import { checkComponents, checkPluginLoad, PLUGIN_NAME } from './verify'
-import type { InitPlugin } from './verify'
-import type { ExpectedComponents } from './plugin'
-import type { AgentInfo, HostedQuery, SlashCommand } from './sdk'
+import type { ExpectedComponents, InitPlugin, PluginRequest } from '@/types/hosting-plugin'
+import type { HostedQuery } from '@/main/hosting/sdk'
 
-/** These are control requests, answered before the first turn and costing
- *  no tokens — a stalled or unresponsive CLI must never park the strip
- *  forever, so the wait is bounded the same way `handle.ts`'s own
- *  close-grace wait is (`AbortSignal.timeout`, never a manually scheduled
- *  callback). */
+// A timeout or rejected read-back must never look like an empty capability list.
+import type { AgentSummary, CommandSummary, SessionCapabilities, SlashCommandSummary } from '@/types/hosting'
+import { isRecord } from '@/main/guards'
+import { sanitize } from '@/main/sessions/transcript-entries'
+import { checkComponents, checkPluginLoad, isBlockedCommand, PLUGIN_NAME } from '@/main/hosting/verify'
+
+
+import type { AgentInfo, SlashCommand } from '@/main/hosting/sdk'
+
+/** Control requests answered before the first turn, costing no tokens. */
 export const CAPABILITIES_TIMEOUT_MS = 30_000
 
 const QUALIFIER = `${PLUGIN_NAME}:`
 
-export interface CreateCapabilityTrackerParams {
+interface CreateCapabilityTrackerParams {
   readonly request: PluginRequest
   readonly readExpectedComponents: (pluginPath: string) => Promise<ExpectedComponents | null>
   readonly samePath: (a: string, b: string) => boolean
   readonly onChange: () => void
-  /** Test-only override of `CAPABILITIES_TIMEOUT_MS` — every real caller
-   *  leaves this at its default. */
+  /** A stage session hides and refuses every `port:` command, not just pipeline. */
+  readonly stage: boolean
+  /** Test-only override of `CAPABILITIES_TIMEOUT_MS`. */
   readonly timeoutMs?: number
 }
 
-export interface CapabilityTracker {
-  /** Fired once, right after `query()` — races `supportedCommands()`/
-   *  `supportedAgents()` against `CAPABILITIES_TIMEOUT_MS`. Neither a
-   *  timeout nor a rejected call is ever read as an empty list; both go to
-   *  `unavailable`, the message carried verbatim. */
+interface CapabilityTracker {
   start(query: HostedQuery): Promise<void>
-  /** Folds one raw SDK message into this tracker's state — a no-op for
-   *  anything but `system`/`init` and `system`/`commands_changed`. */
   observe(message: unknown): void
   current(): SessionCapabilities
-  /** Whether `name` (already namespace-stripped, e.g. `'pipeline'`) is in
-   *  this session's current `port:` command list — `handle.ts`'s `invoke`
-   *  own membership check, so a renderer can never run a command the
-   *  session did not itself report. */
   has(name: string): boolean
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
+  /** Whether this session refuses `name`, read against its latest reported command list. */
+  isBlocked(name: string): boolean
 }
 
 function isPortQualified(name: string): boolean {
   return name.startsWith(QUALIFIER) && name.length > QUALIFIER.length
 }
 
+function blockContext(raw: readonly SlashCommand[], stage: boolean): Parameters<typeof isBlockedCommand>[1] {
+  return {
+    stage,
+    portNames: raw.filter((command) => isPortQualified(command.name)).map((command) => command.name.slice(QUALIFIER.length)),
+    unqualifiedNames: raw.filter((command) => !isPortQualified(command.name)).map((command) => command.name),
+  }
+}
+
+/** Every `port:` command except pipeline, whatever the session kind — the component check reads this list. */
 function toCommandSummaries(raw: readonly SlashCommand[]): CommandSummary[] {
+  const context = blockContext(raw, false)
   return raw
-    .filter((command) => isPortQualified(command.name))
+    .filter((command) => isPortQualified(command.name) && !isBlockedCommand(command.name, context))
     .map((command) => ({ name: command.name.slice(QUALIFIER.length), description: sanitize(command.description), argumentHint: command.argumentHint }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** The composer's `/` autocomplete source — every reported command, namespace
+ *  intact, unlike `toCommandSummaries`'s own `port:`-qualified filter. */
+function toSlashCommandSummaries(raw: readonly SlashCommand[], stage: boolean): SlashCommandSummary[] {
+  const context = blockContext(raw, stage)
+  return raw
+    .filter((command) => !isBlockedCommand(command.name, context))
+    .map((command) => ({ name: command.name, description: sanitize(command.description), argumentHint: command.argumentHint }))
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
@@ -70,10 +73,6 @@ function toAgentSummaries(raw: readonly AgentInfo[]): AgentSummary[] {
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
-/** A runtime-native deadline, never a manually scheduled callback of this
- *  app's own — the same idiom `handle.ts`'s own `grace()` uses, here made
- *  to reject rather than resolve so `Promise.race` treats an unanswered
- *  control request as a failure, not a silent empty result. */
 function timeoutRejection(ms: number): Promise<never> {
   return new Promise((_resolve, reject) => {
     AbortSignal.timeout(ms).addEventListener('abort', () => reject(new Error(`Timed out after ${ms}ms waiting for this session's commands and agents`)), { once: true })
@@ -90,23 +89,34 @@ export function createCapabilityTracker(params: CreateCapabilityTrackerParams): 
   let state: SessionCapabilities = { kind: 'pending', request: params.request }
   let expected: ExpectedComponents | null = null
   let expectedRequested = false
-  /** Distinct from `expectedRequested`: this flips only once the read has
-   *  actually settled, so `checkComponents` can tell "no path yet" from "a
-   *  read is in flight or failed" — both leave `expected` at `null`. */
+  /** Settles only once the read actually finishes, distinct from `expectedRequested`. */
   let expectedSettled = false
-  let commands: CommandSummary[] = []
+  let rawCommands: readonly SlashCommand[] = []
+  let portCommands: CommandSummary[] = []
   let agents: AgentSummary[] = []
+  let slashCommands: SlashCommandSummary[] = []
   let initPlugins: readonly InitPlugin[] | null = null
+
+  /** The command strip and the invoke path; empty in a stage session, so neither can run a port command. */
+  function exposedCommands(): CommandSummary[] {
+    return params.stage ? [] : portCommands
+  }
+
+  function adoptCommands(raw: readonly SlashCommand[]): void {
+    rawCommands = raw
+    portCommands = toCommandSummaries(raw)
+    slashCommands = toSlashCommandSummaries(raw, params.stage)
+  }
 
   function recompute(): void {
     const plugin = checkPluginLoad({ request: params.request, initPlugins, samePath: params.samePath })
     const components = checkComponents({
       expected,
       expectedAttempted: expectedSettled,
-      commandNames: commands.map((command) => command.name),
+      commandNames: portCommands.map((command) => command.name),
       agentNames: agents.map((agent) => agent.name),
     })
-    state = { kind: 'ready', request: params.request, commands, agents, plugin, components }
+    state = { kind: 'ready', request: params.request, commands: exposedCommands(), agents, plugin, components, slashCommands }
   }
 
   async function ensureExpected(pluginPath: string): Promise<void> {
@@ -120,9 +130,9 @@ export function createCapabilityTracker(params: CreateCapabilityTrackerParams): 
     if (params.request.source === 'repository') await ensureExpected(params.request.path)
 
     try {
-      const [rawCommands, rawAgents] = await Promise.race([Promise.all([query.supportedCommands(), query.supportedAgents()]), timeoutRejection(params.timeoutMs ?? CAPABILITIES_TIMEOUT_MS)])
-      commands = toCommandSummaries(rawCommands)
-      agents = toAgentSummaries(rawAgents)
+      const [reportedCommands, reportedAgents] = await Promise.race([Promise.all([query.supportedCommands(), query.supportedAgents()]), timeoutRejection(params.timeoutMs ?? CAPABILITIES_TIMEOUT_MS)])
+      adoptCommands(reportedCommands)
+      agents = toAgentSummaries(reportedAgents)
       recompute()
     } catch (error) {
       state = { kind: 'unavailable', request: params.request, message: error instanceof Error ? error.message : String(error) }
@@ -150,9 +160,9 @@ export function createCapabilityTracker(params: CreateCapabilityTrackerParams): 
     }
 
     if (message['subtype'] === 'commands_changed') {
-      const rawCommands = message['commands']
-      if (!Array.isArray(rawCommands)) return
-      commands = toCommandSummaries(rawCommands as SlashCommand[])
+      const changedCommands = message['commands']
+      if (!Array.isArray(changedCommands)) return
+      adoptCommands(changedCommands as SlashCommand[])
       recompute()
       params.onChange()
     }
@@ -162,6 +172,7 @@ export function createCapabilityTracker(params: CreateCapabilityTrackerParams): 
     start,
     observe,
     current: () => state,
-    has: (name) => commands.some((command) => command.name === name),
+    has: (name) => exposedCommands().some((command) => command.name === name),
+    isBlocked: (name) => isBlockedCommand(name, blockContext(rawCommands, params.stage)),
   }
 }
