@@ -195,6 +195,12 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
    **No-op case:** if step 3 skipped every flagged item as genuinely not an issue, there is nothing staged — or, in operator-request mode, the requested change is already present at head. **`git status --porcelain` empty** → skip the commit and the push entirely — report `no new commit (every finding skipped)`, or `no new commit (already present)` in operator-request mode, rather than committing nothing or forcing an empty commit.
 
+   **Refreshing screenshots — normal and operator-request modes only (never check-fix or refresh), and only when this step pushed a code change and the pull request body's `## Screenshots` holds images.** It never gates the revision and is never a `BLOCKED:`:
+   - Rebuild the manifest from the images in that section: the alt text is the label, and the URL's basename is the file under `commands.screenshots.dir`. Write it to `.temp/screenshots-<pr>.json`.
+   - Run `commands.screenshots.run` exactly as configured, as one bare Bash call under step 4's clause but outside `commands.checks`, then `<artifacts> screenshots .temp/screenshots-<pr>.json --issue <issue-number> --out .temp/screenshots-<pr>.md`.
+   - Replace only the `## Screenshots` section: `gh pr view <pr-number> --repo <repo> --json body`, Write the edited body to `.temp/pr-body-<pr>.md`, run `<artifacts> check pr-body .temp/pr-body-<pr>.md --issue <issue-number>`, then `gh pr edit <pr-number> --repo <repo> --body-file .temp/pr-body-<pr>.md`.
+   - On any failure keep the old images and add one line under them: `Not refreshed after <sha7> — <reason>`. The revision note is unchanged either way. Skip entirely when `commands.screenshots` or `commands.artifacts` is null.
+
 6. **Resolve the addressed review threads** so they do not block merge — **skip this step entirely in check-fix mode and in operator-request mode**, where there are no threads to resolve. Inline comments live on **threads** that only a GraphQL mutation can resolve. The query takes owner and name **separately**:
 
    ```bash

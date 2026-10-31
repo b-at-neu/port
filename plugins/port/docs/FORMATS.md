@@ -90,7 +90,7 @@ The validator requires the exact heading, a 7-40 character hex SHA, and at least
 
 ### Pull request description (`impl-agent` writes it via `--body-file`)
 
-`Closes #N` · **## Summary** (what was built and the approach) · **## Changes** (notable files and areas) · **## Testing plan** — reproducible **manual** steps as a `- [ ]` checklist a human runs before merge, covering happy path, error and empty and edge cases, and any authorization roles, derived from the issue's testing section · **## Automated checks** (the `commands.checks` that were run) · **## Notes** (schema changes, risks, follow-ups).
+`Closes #N` · **## Summary** (what was built and the approach) · **## Changes** (notable files and areas) · **## Testing plan** — reproducible **manual** steps as a `- [ ]` checklist a human runs before merge, covering happy path, error and empty and edge cases, and any authorization roles, derived from the issue's testing section · **## Screenshots** — present exactly when the plan has `## UX states`, between `## Testing plan` and `## Automated checks`: labeled images in the shape `artifacts.mjs screenshots` writes (`**<label>**`, a blank line, `![<label>](<url>)`), or one `Not captured — <reason>` line; `No UI-visible change.` is legal when a UX-states plan's diff rendered nothing; images embedded in the description, never a list of flows to click through · **## Automated checks** (the `commands.checks` that were run) · **## Notes** (schema changes, risks, follow-ups).
 
 Any `- [ ] **operator-only**` step in the issue's `## Testing` carries into `## Testing plan` **verbatim** — the prefix is the only thing telling the human which box only they can tick.
 
