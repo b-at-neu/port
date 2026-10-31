@@ -6,7 +6,7 @@
 // outside its `include` list, and `router/routes.ts` belongs to the
 // renderer's web project, not this one. `scripts/checks/desktop-visual.ts`
 // pins the two key sets against each other, both directions.
-export const ROUTE_KEYS = ['board', 'repos', 'repo', 'settingsRepo', 'history', 'search', 'transcript', 'session', 'settings', 'backlog', 'needsYou', 'setup', 'about'] as const
+export const ROUTE_KEYS = ['board', 'repos', 'repo', 'settingsRepo', 'history', 'search', 'transcript', 'session', 'settings', 'backlog', 'audit', 'needsYou', 'setup', 'about'] as const
 
 // Resolved against `process.cwd()` at the point of use (`screens.spec.mts`),
 // never here — this stays the bare, pinned literal `scripts/checks/
@@ -57,6 +57,7 @@ export interface VariantTarget {
 // target's own click or ready selector.
 export const VARIANT_TARGETS: readonly VariantTarget[] = [
   { name: 'needs-you-empty', scenario: 'empty', target: { hash: '#/needs-you', container: '#app', ready: '[data-slot="needs-you-empty"]' } },
+  { name: 'audit-empty', scenario: 'empty', target: { hash: '#/audit', container: '#app', ready: '[data-slot="audit-empty"]' } },
   { name: 'session-permission', scenario: 'empty', target: { hash: '#/session?key=fixture-session-permission', container: '#app', ready: '[role="alertdialog"]' } },
 ]
 
@@ -143,6 +144,12 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
     ],
   },
   backlog: { hash: '#/backlog', container: '#app', ready: '[data-slot="backlog-row"]' },
+  audit: {
+    hash: '#/audit',
+    container: '#app',
+    ready: '[data-slot="audit-row"]',
+    variants: [{ name: 'filtered', hash: '#/audit?repo=fixture-acme-widgets&number=38', ready: '[data-slot="audit-row"]' }],
+  },
   needsYou: {
     hash: '#/needs-you',
     container: '#app',

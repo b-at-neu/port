@@ -1,12 +1,13 @@
 // Every route id `router.tsx` registers, plus the search-param parsers each
 // route needs — the one literal spelling both files read, so they never drift.
 import type { RepoId } from '@/utils/repos'
-import type { BoardItemRef, BoardSearch, HistorySearch, NeedsYouSearch, RepoSearch, SearchSearch, SessionSearch, SettingsSearch, SettingsSection, TranscriptSearch } from '@/types/router'
+import type { AuditSearch, BoardItemRef, BoardSearch, HistorySearch, NeedsYouSearch, RepoSearch, SearchSearch, SessionSearch, SettingsSearch, SettingsSection, TranscriptSearch } from '@/types/router'
 
 // `repos`, `repo` and `about` stay registered only as redirects into Settings.
 export const ROUTE_IDS = {
   board: '/board',
   backlog: '/backlog',
+  audit: '/audit',
   needsYou: '/needs-you',
   repos: '/repositories',
   repo: '/repositories/$repoId',
@@ -22,7 +23,7 @@ export const ROUTE_IDS = {
 
 /** Every route a launch or `shell/prefs.ts`'s `trackLastRoute` may restore
  *  onto — screens whose state survives a quit/relaunch. */
-export const RESTORABLE_ROUTES: readonly string[] = [ROUTE_IDS.board, ROUTE_IDS.repos, ROUTE_IDS.session, ROUTE_IDS.settings, ROUTE_IDS.backlog, ROUTE_IDS.needsYou, ROUTE_IDS.history]
+export const RESTORABLE_ROUTES: readonly string[] = [ROUTE_IDS.board, ROUTE_IDS.repos, ROUTE_IDS.session, ROUTE_IDS.settings, ROUTE_IDS.backlog, ROUTE_IDS.needsYou, ROUTE_IDS.history, ROUTE_IDS.audit]
 
 const BOARD_ITEM_RE = /^(.+):(\d+)$/
 
@@ -69,6 +70,13 @@ export function repoSearchFromRaw(search: Readonly<Record<string, unknown>>): Re
 export function historySearchFromRaw(search: Readonly<Record<string, unknown>>): HistorySearch {
   const { repo, archived } = search
   return { repo: typeof repo === 'string' && repo !== '' ? (repo as RepoId) : null, archived: archived === true }
+}
+
+/** `number` survives only as a positive safe integer next to a `repo`; anything else reads as no ticket filter. */
+export function auditSearchFromRaw(search: Readonly<Record<string, unknown>>): AuditSearch {
+  const { repo, number } = search
+  const repoId = typeof repo === 'string' && repo !== '' ? (repo as RepoId) : null
+  return { repo: repoId, number: repoId !== null && typeof number === 'number' && Number.isSafeInteger(number) && number > 0 ? number : null }
 }
 
 /** `focus` is a non-empty string, else `null`. */

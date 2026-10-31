@@ -151,7 +151,7 @@ The dark `brand` tile's `#4b5f8f` border measures 3.0 against `sidebar`, enough 
 
 **Sidebar, top to bottom:**
 1. **Mark and wordmark.**
-2. **Screens:** Needs you (red count), Board, Backlog.
+2. **Screens:** Needs you (red count), Board, Backlog, Audit log.
 3. **Pipelines:** one row per registered repo. Each row has:
    - a caret that collapses it, with the state remembered;
    - the repo name;
@@ -170,6 +170,7 @@ The dark `brand` tile's `#4b5f8f` border measures 3.0 against `sidebar`, enough 
 | Backlog | Open tickets not yet in a pipeline, with **Work on**: interactive plan review or auto-plan |
 | Session | Conversation and composer. **Changes** opens the session's diff in the detail pane |
 | History | Past sessions and transcripts, with search |
+| Audit log | Every write port made to GitHub, newest first, filterable by repo and ticket |
 | Settings | Full width, with six tabs of cards in a responsive grid, chosen by `?section=`: General (theme, notifications, keyboard shortcuts), Repositories (the repository list, and one page per repo with tabs Overview, Worktrees, Denials), Connections (Claude Code, `gh`, the GitHub rate limit, each repository's last read), Pipeline (session limit, new-session defaults, a read-only view of each repository's config), Usage & storage (spend by repository and period, disk use), About (version, runtime versions, setup checklist, notices). The old `/repositories` and `/about` routes redirect here |
 
 Scoping epics, releases and analytics are out of scope for the first release.

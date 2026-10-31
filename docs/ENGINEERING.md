@@ -180,6 +180,10 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - only GitHub writer; only `command.ts` names `--add-label`/`--remove-label`
 - never `merge`, `close`, `--delete-branch`, or `ready`
 
+**`apps/desktop/src/renderer/audit/`**
+- reads `audit:list` only; the screen is read-only and makes no write
+- `model.ts` is the one `AuditEntry` → row mapping
+
 **`apps/desktop/src/renderer/components/conversation-model.ts`/`conversation-list.tsx`**
 - the one `TranscriptEntry` → view-model mapping and the one pin-to-bottom, chunked-reveal list
 - shared by the on-disk transcript view and the live session view, never a second copy

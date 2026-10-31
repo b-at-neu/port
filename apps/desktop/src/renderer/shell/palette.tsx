@@ -78,6 +78,7 @@ export function CommandPalette() {
             </CommandItem>
           ))}
           <CommandItem onSelect={() => go(ROUTE_IDS.history)}>History…</CommandItem>
+          <CommandItem onSelect={() => go(ROUTE_IDS.audit)}>Audit log</CommandItem>
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="Pipelines">

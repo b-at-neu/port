@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { boardSearchFromRaw, historySearchFromRaw, needsYouSearchFromRaw, repoSearchFromRaw, searchSearchFromRaw, sessionSearchFromRaw, settingsSearchFromRaw, transcriptSearchFromRaw } from '@/renderer/router/routes'
+import { auditSearchFromRaw, boardSearchFromRaw, historySearchFromRaw, needsYouSearchFromRaw, repoSearchFromRaw, searchSearchFromRaw, sessionSearchFromRaw, settingsSearchFromRaw, transcriptSearchFromRaw } from '@/renderer/router/routes'
 
 describe('settingsSearchFromRaw', () => {
   it.each(['general', 'repositories', 'connections', 'pipeline', 'usage', 'about'])('keeps the %s section', (section) => {
@@ -90,6 +90,21 @@ describe('historySearchFromRaw', () => {
     expect(historySearchFromRaw({}).archived).toBe(false)
     expect(historySearchFromRaw({ archived: 'true' }).archived).toBe(false)
     expect(historySearchFromRaw({ archived: false }).archived).toBe(false)
+  })
+})
+
+describe('auditSearchFromRaw', () => {
+  it('keeps a repo with a positive integer number', () => {
+    expect(auditSearchFromRaw({ repo: 'repo-a', number: 38 })).toEqual({ repo: 'repo-a', number: 38 })
+  })
+
+  it('reads a number with no repo as no ticket filter', () => {
+    expect(auditSearchFromRaw({ number: 38 })).toEqual({ repo: null, number: null })
+    expect(auditSearchFromRaw({ repo: '', number: 38 })).toEqual({ repo: null, number: null })
+  })
+
+  it.each([-3, 0, 1.5, '38', null, Number.MAX_SAFE_INTEGER + 1])('reads number %j as no ticket filter', (number) => {
+    expect(auditSearchFromRaw({ repo: 'repo-a', number })).toEqual({ repo: 'repo-a', number: null })
   })
 })
 
