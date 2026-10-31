@@ -1,10 +1,4 @@
-# Attaches the desktop app's unsigned installers to a published GitHub release
-# (#584). It rebuilds at the release tag instead of reusing desktop-package.yml's
-# artifacts: those expire after 7 days and belong to a different run. This is the
-# only workflow with `contents: write`, because `gh release upload` needs it.
-# There is no push or pull_request trigger, so it never lands on a pull request's
-# SHA or becomes a required check. `workflow_dispatch` backfills a release that
-# predates this file.
+# Rebuilds at the release tag because desktop-package.yml's artifacts expire and belong to another run; the only workflow with contents: write.
 
 name: Attach installers to release
 
