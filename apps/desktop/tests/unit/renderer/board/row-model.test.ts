@@ -77,7 +77,7 @@ function row(overrides: {
 }
 
 function dispatchRecord(overrides: Partial<DispatchRecord> = {}): DispatchRecord {
-  return { agent: 'impl', number: 41, kind: 'issue', state: 'started', at: '2026-01-01T00:00:00.000Z', detail: null, outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null, ...overrides }
+  return { agent: 'impl', number: 41, kind: 'issue', trigger: 'planApproved', state: 'started', at: '2026-01-01T00:00:00.000Z', detail: null, outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null, ...overrides }
 }
 
 describe('operatorJoinedOf', () => {

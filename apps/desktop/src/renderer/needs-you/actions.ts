@@ -103,6 +103,8 @@ export function actionFor(item: NeedsYouItem, now: Date = new Date()): NeedsYouA
       return resumeAllAction(item, now)
     case 'half-labelled':
       return { label: 'Open on GitHub', kind: 'open', disabledReason: null }
+    case 'dispatch-failed':
+      return { label: 'Open ticket', kind: 'open', disabledReason: null }
   }
 }
 

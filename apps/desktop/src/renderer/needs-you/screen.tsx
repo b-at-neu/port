@@ -18,7 +18,7 @@ import { needsYouItems } from '@/renderer/board/needs-you'
 import type { NeedsYouItem as NeedsYouItemModel } from '@/types/board'
 import { registerListNavigator } from '@/renderer/shell/stores'
 import { useListSelection } from '@/renderer/shell/list-selection'
-import { REFRESH_FAILED_TOAST, UNDO_LABEL, dismissedToast, needsYouLeadCopy, refreshedToast, usageLimitEntryLine } from '@/renderer/needs-you/copy'
+import { LAUNCH_FAILED_HELP, LAUNCH_FAILED_NO_DETAIL, REFRESH_FAILED_TOAST, UNDO_LABEL, dismissedToast, needsYouLeadCopy, refreshedToast, usageLimitEntryLine } from '@/renderer/needs-you/copy'
 import { dismiss, dismissedKeys, undismiss, visibleItems } from '@/renderer/needs-you/dismissed'
 import { dismissKeyOf } from '@/renderer/needs-you/dismiss-key'
 import { groupNeedsYou } from '@/renderer/needs-you/groups'
@@ -38,6 +38,7 @@ function hasDetail(item: NeedsYouItemModel): boolean {
   if (item.kind === 'stage-denial') return true
   if (item.kind === 'stage-approval') return true
   if (item.kind === 'stage-blocked') return true
+  if (item.kind === 'dispatch-failed') return true
   return false
 }
 
@@ -78,6 +79,14 @@ function DetailBody({ item, onSent }: { readonly item: NeedsYouItemModel; readon
         <p className="font-mono">
           {item.denial.toolName}: {item.denial.inputSummary}
         </p>
+      </div>
+    )
+  }
+  if (item.kind === 'dispatch-failed') {
+    return (
+      <div className="border-t border-border px-4 py-2 text-meta text-muted-foreground">
+        <p className="whitespace-pre-wrap break-words font-mono">{item.record.detail ?? LAUNCH_FAILED_NO_DETAIL}</p>
+        <p>{LAUNCH_FAILED_HELP}</p>
       </div>
     )
   }

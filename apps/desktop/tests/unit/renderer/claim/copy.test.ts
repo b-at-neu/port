@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { advisoryLine, applyResponseToast, claimedToast, dispatchLine, preflightToast, refusalCopy, takeOverPrompt, unreachableToast, writeOutcomeCopy } from '@/renderer/claim/copy'
 import type { ClaimApplyResponse, ClaimVerdict } from '@/types/claim'
-import type { RepoDispatchStatus } from '@/types/dispatch'
+import type { DispatchRecord, RepoDispatchStatus } from '@/types/dispatch'
 import type { WriteOutcome } from '@/types/writes'
 import type { RepoId } from '@/utils/repos'
 
@@ -39,6 +39,13 @@ describe('dispatchLine', () => {
     ['active', { kind: 'active', recent: [] }],
   ] as const)('an app-run repository whose dispatcher is %s starts planning now', (_name, state) => {
     expect(dispatchLine(REPO, status({ state }))).toBe('Planning starts now.')
+  })
+
+  it('says planning may not start when the last launch failed, and only then', () => {
+    const record = (state: 'started' | 'failed', at: string): DispatchRecord => ({ agent: 'plan', number: 1, kind: 'issue', trigger: 'ready', state, at, detail: null, outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null })
+    const failedLast = [record('started', '2026-01-01T00:00:00Z'), record('failed', '2026-01-01T00:05:00Z')]
+    expect(dispatchLine(REPO, status({ state: { kind: 'active', recent: failedLast } }))).toBe('The last stage launch in acme/widgets failed, so planning may not start. Check Needs you.')
+    expect(dispatchLine(REPO, status({ state: { kind: 'active', recent: [...failedLast, record('started', '2026-01-01T00:10:00Z')] } }))).toBe('Planning starts now.')
   })
 
   it('names the busy slots at capacity', () => {
