@@ -2,7 +2,7 @@
 // budget. Pure: never imports events.ts/report.ts, never touches fs.
 import { partitionOwnership, issueSessionRequiredReason, prSessionRequiredReason } from './classify.ts';
 import { parseFilesBlock, gateCandidates } from './contention.ts';
-import { rollupVerdict } from './checks.ts';
+import { rollupVerdict, zeroDiffChecksOf } from './checks.ts';
 import { mergeabilityRoute, refreshDecision, capRefreshes, zeroDiffGate, cycleCapExceeded, cycleGrantCount, approvedReverify, refreshWins } from './gates.ts';
 import { toReviewNode, toCheckContexts, assigneeLoginsOf } from './wire.ts';
 import { refreshSweepWrite, zeroDiffWrite, cycleCapWrite, approvalWithdrawnWrite, strandedRestoreWrite } from './writes.ts';
@@ -99,7 +99,7 @@ export function planReadyForReview(cfg: any, actionable: any, refreshBranchNumbe
       acc.unknownStreakUpdates.push({ item: item.number, remove: true });
     }
 
-    const checks = { contexts: toCheckContexts(item.commits?.nodes?.[0]?.commit?.statusCheckRollup), dispositions: cfg.checkDispositions, now: clock };
+    const checks = zeroDiffChecksOf(toCheckContexts(item.commits?.nodes?.[0]?.commit?.statusCheckRollup), cfg.checkDispositions, clock);
     const zd = zeroDiffGate({ reviews: (item.reviews?.nodes ?? []).map(toReviewNode), comments: item.comments?.nodes, headRefOid: item.headRefOid, checks });
     if (zd.action === 'hold-checks') {
       acc.announce.push({ kind: 'zero-diff-check-hold', item: item.number, facts: zd.facts });

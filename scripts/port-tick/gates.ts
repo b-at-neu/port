@@ -1,7 +1,5 @@
 // Pure: mergeability routing, refresh-sweep bounds, zero-diff, cycle cap,
 // and approved re-verify. A leaf module — `wire.ts` adapts the raw shape.
-import { reduceRollup, isConcluded, isGreen, rollupVerdict } from './checks.ts';
-import type { CheckContext, Disposition } from './checks.ts';
 
 /** The two review-body fields either gate reads. */
 export interface ReviewNode {
@@ -34,14 +32,17 @@ export const ZERO_DIFF_CHECK_HOLD_MINUTES = 120;
 export function checkOnlyNames(body: string): string[] | null {
   const line = body.split('\n')[2]?.trimEnd();
   if (line === undefined || !CHECK_ONLY_LINE.test(line)) return null;
-  return [...line.slice(CHECK_ONLY_PREFIX.length).matchAll(/`([^`]+)`/g)].map((m) => m[1]);
+  return [...line.slice(CHECK_ONLY_PREFIX.length).matchAll(/`([^`]+)`/g)].flatMap((m) => (m[1] === undefined ? [] : [m[1]]));
 }
 
 export type ZeroDiffAction = 'dispatch' | 'dispatch-once' | 'recheck-dispatch' | 'hold-checks' | 'escalate';
 
+export type CheckStatus = 'green' | 'pending' | 'red';
+
+/** The rollup, already reduced: each check's status by name, and whether the whole rollup is clear of red and pending. */
 export interface ZeroDiffChecks {
-  readonly contexts: readonly CheckContext[] | null;
-  readonly dispositions: Readonly<Record<string, Disposition>>;
+  readonly statuses: ReadonlyMap<string, CheckStatus>;
+  readonly rollupClear: boolean;
   readonly now: string | null;
 }
 
@@ -79,20 +80,20 @@ export function zeroDiffGate({
   const reviewsOnHead = codeReviews.filter((r) => (r.commitOid ?? null) === headRefOid).length;
   if (named === null || checks === undefined || reviewsOnHead !== 1) return { action: 'escalate' };
 
-  const reduced = reduceRollup(checks.contexts ?? undefined);
-  const byName = new Map(reduced.map((c) => [c.name ?? c.context ?? '', c]));
-  const entries = named.map((n) => byName.get(n));
-  if (entries.some((e) => e === undefined)) return { action: 'escalate' };
-  const present = entries as CheckContext[];
+  const present: CheckStatus[] = [];
+  for (const n of named) {
+    const status = checks.statuses.get(n);
+    if (status === undefined) return { action: 'escalate' };
+    present.push(status);
+  }
 
   const cycle = codeReviewCount(reviews);
   const facts = { checks: named, sha: headRefOid, cycle };
 
-  if (present.every(isGreen)) {
-    const verdict = rollupVerdict(checks.contexts, checks.dispositions);
-    return verdict.red.length === 0 && !verdict.pending ? { action: 'recheck-dispatch', facts: { ...facts, state: 'pending' } } : { action: 'escalate' };
+  if (present.every((s) => s === 'green')) {
+    return checks.rollupClear ? { action: 'recheck-dispatch', facts: { ...facts, state: 'pending' } } : { action: 'escalate' };
   }
-  if (present.some((e) => !isConcluded(e))) return { action: 'hold-checks', facts: { ...facts, state: 'pending' } };
+  if (present.some((s) => s === 'pending')) return { action: 'hold-checks', facts: { ...facts, state: 'pending' } };
 
   const submitted = Date.parse(newest.submittedAt ?? '');
   const now = checks.now === null ? Number.NaN : Date.parse(checks.now);
