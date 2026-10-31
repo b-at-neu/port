@@ -92,12 +92,14 @@ export function createUsageLedger(params: CreateUsageLedgerParams): UsageLedger 
   let deferred = false
   let pending: string | null = null
   let lastWritten: string | null = null
+  let readFailed = false
 
   function flush(): void {
     if (loading) {
       deferred = true
       return
     }
+    if (readFailed) return
     const document = { version: CURRENT_VERSION, records: retained(records.values(), params.now()) }
     const json = JSON.stringify(document)
     if (json === lastWritten) return
@@ -120,7 +122,10 @@ export function createUsageLedger(params: CreateUsageLedgerParams): UsageLedger 
   async function readFile(): Promise<void> {
     const result = await params.readJson<LedgerFileShape>(params.path)
     if (!result.ok) {
-      if (result.kind !== 'not-found') console.error(`[hosting] could not read ${params.path}: ${result.message}`)
+      if (result.kind !== 'not-found') {
+        readFailed = true
+        console.error(`[hosting] could not read ${params.path}: ${result.message} — leaving it untouched this launch`)
+      }
       return
     }
     const value = result.value

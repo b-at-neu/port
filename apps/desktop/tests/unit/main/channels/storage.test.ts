@@ -1,21 +1,26 @@
 import { describe, expect, it, vi } from 'vitest'
 import { resolveStorageReport, resolveUsageSummary } from '@/main/channels/storage'
 import type { StorageReportDeps } from '@/main/channels/storage'
+import { pathOps } from '@/main/platform/paths'
 import type { DirectorySizeResult } from '@/types/platform'
 import type { RegistryDeps } from '@/types/registry'
 import type { UsageLedger } from '@/types/settings'
 import { readyEntry } from '../../../fixtures/board-state'
 
 const registryDeps = {} as RegistryDeps
+const CLAUDE_HOME = '/home/.claude'
+const REPO_PATH = '/src/widgets'
+const PLUGIN_CACHE = pathOps.join(CLAUDE_HOME, 'plugins', 'cache')
+const WORKTREES = pathOps.join(REPO_PATH, '.claude', 'worktrees')
 
 function depsWith(sizes: Readonly<Record<string, DirectorySizeResult>>): StorageReportDeps {
-  const ready = readyEntry({ id: 'repo-a' as never, path: '/src/widgets' }, { repo: 'acme/widgets' })
+  const ready = readyEntry({ id: 'repo-a' as never, path: REPO_PATH }, { repo: 'acme/widgets' })
   return {
     listRepositories: () => Promise.resolve({ ok: true, repositories: [ready] }),
     directorySize: (path) => Promise.resolve(sizes[path] ?? { ok: false, kind: 'io', message: `unexpected ${path}` }),
     userData: '/data',
     logs: '/data/logs',
-    claudeHome: () => '/home/.claude',
+    claudeHome: () => CLAUDE_HOME,
   }
 }
 
@@ -26,21 +31,21 @@ describe('resolveStorageReport', () => {
     const report = await resolveStorageReport(
       registryDeps,
       undefined,
-      depsWith({ '/data': OK(1), '/data/logs': OK(2), '/home/.claude/plugins/cache': OK(3), '/src/widgets/.claude/worktrees': OK(4, true) }),
+      depsWith({ '/data': OK(1), '/data/logs': OK(2), [PLUGIN_CACHE]: OK(3), [WORKTREES]: OK(4, true) }),
     )
     expect(report.appData).toEqual([
       { label: 'App data', path: '/data', size: { ok: true, bytes: 1, truncated: false } },
       { label: 'Logs', path: '/data/logs', size: { ok: true, bytes: 2, truncated: false } },
     ])
-    expect(report.pluginCache).toEqual({ label: 'Plugin cache', path: '/home/.claude/plugins/cache', size: { ok: true, bytes: 3, truncated: false } })
-    expect(report.worktrees).toEqual([{ repoId: 'repo-a', label: 'acme/widgets', path: '/src/widgets/.claude/worktrees', size: { ok: true, bytes: 4, truncated: true } }])
+    expect(report.pluginCache).toEqual({ label: 'Plugin cache', path: PLUGIN_CACHE, size: { ok: true, bytes: 3, truncated: false } })
+    expect(report.worktrees).toEqual([{ repoId: 'repo-a', label: 'acme/widgets', path: WORKTREES, size: { ok: true, bytes: 4, truncated: true } }])
   })
 
   it('keeps one failed read from blanking the others', async () => {
     const report = await resolveStorageReport(
       registryDeps,
       undefined,
-      depsWith({ '/data': { ok: false, kind: 'io', message: 'EIO' }, '/data/logs': OK(2), '/home/.claude/plugins/cache': OK(3), '/src/widgets/.claude/worktrees': OK(4) }),
+      depsWith({ '/data': { ok: false, kind: 'io', message: 'EIO' }, '/data/logs': OK(2), [PLUGIN_CACHE]: OK(3), [WORKTREES]: OK(4) }),
     )
     expect(report.appData[0]?.size).toEqual({ ok: false, message: 'EIO' })
     expect(report.appData[1]?.size).toMatchObject({ ok: true, bytes: 2 })
@@ -49,13 +54,13 @@ describe('resolveStorageReport', () => {
 
   it('reads a directory that does not exist as empty, not as a failure', async () => {
     const missing: DirectorySizeResult = { ok: false, kind: 'not-found', message: 'ENOENT' }
-    const report = await resolveStorageReport(registryDeps, undefined, depsWith({ '/data': OK(1), '/data/logs': OK(2), '/home/.claude/plugins/cache': missing, '/src/widgets/.claude/worktrees': missing }))
+    const report = await resolveStorageReport(registryDeps, undefined, depsWith({ '/data': OK(1), '/data/logs': OK(2), [PLUGIN_CACHE]: missing, [WORKTREES]: missing }))
     expect(report.pluginCache.size).toEqual({ ok: true, bytes: 0, truncated: false })
     expect(report.worktrees[0]?.size).toEqual({ ok: true, bytes: 0, truncated: false })
   })
 
   it('still reports app data when the registry cannot be listed', async () => {
-    const deps: StorageReportDeps = { ...depsWith({ '/data': OK(1), '/data/logs': OK(2), '/home/.claude/plugins/cache': OK(3) }), listRepositories: () => Promise.resolve({ ok: false, kind: 'registry-unreadable', message: 'x' }) }
+    const deps: StorageReportDeps = { ...depsWith({ '/data': OK(1), '/data/logs': OK(2), [PLUGIN_CACHE]: OK(3) }), listRepositories: () => Promise.resolve({ ok: false, kind: 'registry-unreadable', message: 'x' }) }
     const report = await resolveStorageReport(registryDeps, undefined, deps)
     expect(report.worktrees).toEqual([])
     expect(report.appData).toHaveLength(2)

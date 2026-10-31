@@ -41,7 +41,7 @@ export type DirectorySizeResult =
   | { readonly ok: true; readonly bytes: number; readonly entries: number; readonly truncated: boolean }
   | { readonly ok: false; readonly kind: 'not-found' | 'io'; readonly message: string }
 
-export type GitRunner =(args: readonly string[], cwd: string) => Promise<CommandResult>
+export type GitRunner = (args: readonly string[], cwd: string) => Promise<CommandResult>
 
 export type GitLinesResult = { readonly ok: true; readonly lines: readonly string[] } | Exclude<CommandResult, { ok: true }>
 

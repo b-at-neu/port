@@ -48,7 +48,9 @@ export function StatusPopover() {
           aria-label={`Connections: ${status.tooltip}. Show details.`}
           onPointerEnter={show}
           onPointerLeave={scheduleClose}
-          onFocus={show}
+          onFocus={(event) => {
+            if (event.currentTarget.matches(':focus-visible')) show()
+          }}
           onClick={(event) => {
             event.preventDefault()
             show()
@@ -63,6 +65,7 @@ export function StatusPopover() {
         side="top"
         className="w-80"
         onOpenAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => event.preventDefault()}
         onPointerEnter={cancelClose}
         onPointerLeave={scheduleClose}
       >

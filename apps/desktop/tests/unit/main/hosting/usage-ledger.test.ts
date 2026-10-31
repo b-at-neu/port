@@ -156,6 +156,24 @@ describe('createUsageLedger', () => {
     error.mockRestore()
   })
 
+  it('never writes over a file it could not read, but still summarizes this launch', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const writeJsonAtomic = vi.fn(() => Promise.resolve({ ok: true, value: undefined } as FileResult<void>))
+    const ledger = createUsageLedger({
+      path: '/data/usage-ledger.json',
+      readJson: <T>() => Promise.resolve({ ok: false, kind: 'io', message: 'EIO' } as FileResult<T>),
+      writeJsonAtomic,
+      now: () => NOW,
+      bootId: 'b',
+    })
+    await ledger.load()
+    ledger.observe(snapshot('hosted-1', REPO_A, 1, 100))
+    await tick()
+    expect(writeJsonAtomic).not.toHaveBeenCalled()
+    expect(ledger.summary().rows[0]?.today).toEqual({ costUsd: 1, totalTokens: 100, sessions: 1 })
+    error.mockRestore()
+  })
+
   it('drops malformed records one by one', async () => {
     const { ledger } = ledgerOver({ file: { version: 1, records: [record('ok', REPO_A, at(1), 1, 1), { id: 'bad' }, 7] }, writes: [] }, 'b')
     await ledger.load()
