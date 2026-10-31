@@ -278,7 +278,7 @@ describe('createDispatcher — launching', () => {
     expect(state?.kind).toBe('active')
     if (state?.kind !== 'active') return
     expect(state.recent).toEqual([
-      { agent: 'impl', number: 52, kind: 'issue', state: 'started', at: '2026-01-01T00:00:00.000Z', detail: null, outcome: null, sessionKey: 'hosted-1', claudeSessionId: null, operatorJoinedAt: null },
+      { agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', state: 'started', at: '2026-01-01T00:00:00.000Z', detail: null, outcome: null, sessionKey: 'hosted-1', claudeSessionId: null, operatorJoinedAt: null },
     ])
   })
 
@@ -355,7 +355,7 @@ describe('createDispatcher — launching', () => {
     expect(state?.kind).toBe('active')
     if (state?.kind !== 'active') return
     expect(state.recent).toEqual([
-      { agent: 'impl', number: 52, kind: 'issue', state: 'failed', at: '2026-01-01T00:00:00.000Z', detail: 'boom', outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null },
+      { agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', state: 'failed', at: '2026-01-01T00:00:00.000Z', detail: 'boom', outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null },
     ])
   })
 

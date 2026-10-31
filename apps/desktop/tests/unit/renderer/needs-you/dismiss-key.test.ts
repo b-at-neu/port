@@ -115,6 +115,16 @@ describe('dismissKeyOf — dispatch and tick kinds', () => {
   })
 })
 
+describe('dismissKeyOf — dispatch-failed', () => {
+  const failed = (detail: string | null, at: string) => asItem({ ...base(), kind: 'dispatch-failed', attempts: 1, record: { agent: 'plan', detail, at } })
+
+  it('stays the same across retries of one error, and changes with a different error', () => {
+    expect(dismissKeyOf(failed('boom', '2026-01-01T00:00:00Z'))).toBe(dismissKeyOf(failed('boom', '2026-01-01T00:05:00Z')))
+    expect(dismissKeyOf(failed('boom', '2026-01-01T00:00:00Z'))).not.toBe(dismissKeyOf(failed('other', '2026-01-01T00:00:00Z')))
+    expect(dismissKeyOf(failed(null, '2026-01-01T00:00:00Z'))).toBe('dispatch-failed:repo-a:554:plan|')
+  })
+})
+
 describe('dismissKeyOf — shape', () => {
   it('leads with the kind, repository and number', () => {
     const key = dismissKeyOf(asItem({ ...base(), kind: 'stage-denial', denial: { id: 'd1' } }))

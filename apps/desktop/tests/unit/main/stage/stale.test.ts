@@ -35,7 +35,7 @@ function entry(overrides: Partial<InterruptedStage> = {}): InterruptedStage {
 }
 
 function record(overrides: Partial<DispatchRecord> = {}): DispatchRecord {
-  return { agent: 'impl', number: 38, kind: 'issue', state: 'started', at: AFTER, detail: null, outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null, ...overrides }
+  return { agent: 'impl', number: 38, kind: 'issue', trigger: 'planApproved', state: 'started', at: AFTER, detail: null, outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null, ...overrides }
 }
 
 const inFlightItem = reconciledItem({ number: 38, kind: 'issue', matchedKeys: ['inProgress'] })

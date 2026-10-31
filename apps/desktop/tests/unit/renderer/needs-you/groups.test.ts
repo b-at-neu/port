@@ -18,6 +18,7 @@ const KINDS: readonly NeedsYouItem['kind'][] = [
   'stage-interrupted',
   'usage-limit',
   'half-labelled',
+  'dispatch-failed',
 ]
 
 function item(kind: NeedsYouItem['kind'], number: number): NeedsYouItem {
@@ -32,7 +33,7 @@ describe('groupNeedsYou', () => {
 
   it('names the groups the way the screen shows them', () => {
     const groups = groupNeedsYou(KINDS.map((kind, index) => item(kind, index)))
-    expect(groups.map((g) => g.name)).toEqual(['Plan reviews', 'Ready to merge', 'Escalated', 'Blocked', 'Over budget', 'Held', 'Stalled', 'Questions', 'Edit approvals', 'Denied commands', 'Interrupted', 'Usage limit', 'Label problems'])
+    expect(groups.map((g) => g.name)).toEqual(['Plan reviews', 'Ready to merge', 'Escalated', 'Blocked', 'Over budget', 'Held', 'Stalled', 'Questions', 'Edit approvals', 'Denied commands', 'Interrupted', 'Usage limit', 'Label problems', 'Launch failures'])
   })
 
   it('puts a live session’s blocker and a blocked label in one Blocked group', () => {

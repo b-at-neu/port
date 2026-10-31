@@ -8,6 +8,7 @@ function record(patch: Partial<DispatchRecord>): DispatchRecord {
     agent: 'impl',
     number: 52,
     kind: 'pull-request',
+    trigger: 'readyForReview',
     state: 'started',
     at: '2026-01-01T00:00:00.000Z',
     detail: null,

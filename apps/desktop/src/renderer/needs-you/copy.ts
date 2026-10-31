@@ -20,7 +20,12 @@ export const GROUP_NAMES: Readonly<Record<NeedsYouGroupKey, string>> = {
   stalled: 'Stalled',
   budget: 'Over budget',
   'half-labelled': 'Label problems',
+  'launch-failed': 'Launch failures',
 }
+
+export const LAUNCH_FAILED_HELP = 'port retries every few minutes. Fix the cause above and the next attempt picks it up.'
+
+export const LAUNCH_FAILED_NO_DETAIL = 'No error message was recorded.'
 
 function clockTime(at: string): string {
   return new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -162,6 +167,8 @@ export function needsYouLeadCopy(item: NeedsYouItem, now: Date = new Date()): st
       return usageLimitCopy(item, now)
     case 'half-labelled':
       return halfLabelledCopy(item, label)
+    case 'dispatch-failed':
+      return `${STAGE_PHASE_NAME[item.record.agent]} ${label} couldn't start${item.attempts > 1 ? ` · ${String(item.attempts)} attempts` : ''}`
   }
 }
 

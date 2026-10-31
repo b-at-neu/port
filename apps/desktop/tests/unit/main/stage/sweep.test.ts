@@ -103,7 +103,7 @@ describe('createInterruptedSweeper — stale entries', () => {
   it('removes an entry superseded by a newer dispatch record', async () => {
     const deps = setup()
     interrupt(deps.registry)
-    const launched: DispatchRecord = { agent: 'impl', number: 38, kind: 'issue', state: 'started', at: POLL_AT, detail: null, outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null }
+    const launched: DispatchRecord = { agent: 'impl', number: 38, kind: 'issue', trigger: 'planApproved', state: 'started', at: POLL_AT, detail: null, outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null }
     await deps.sweeper.consider(snapshotWith(inFlight), [status({ state: { kind: 'active', recent: [launched] } })])
     expect(deps.registry.list()).toEqual([])
   })
