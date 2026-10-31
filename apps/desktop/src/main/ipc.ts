@@ -2,7 +2,6 @@ import { app, BrowserWindow, ipcMain } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { join } from 'node:path'
 import { IPC_CHANNELS, type IpcChannel, type IpcEvent, type IpcEventMap, type IpcMap } from '@/types/ipc'
-import type { ReadWorktreeReportParams, WorktreesReport } from '@/types/reclaimer'
 import { SOURCE_KINDS, type BoardSnapshot } from '@/types/board'
 import { chooseDirectory } from '@/main/dialogs'
 import { defaultWorkspaceChannelDeps, resolveFoldersChoose, resolveFoldersList, resolveSessionChanges } from '@/main/channels/workspace'
@@ -19,7 +18,7 @@ import { applyItemDecision } from '@/main/actions/decide'
 import { gateAnswer, gatePreflight } from '@/main/actions/gate'
 import { resolveClaimApply, resolveClaimPreflight } from '@/main/channels/claim'
 import { resolveBacklogList } from '@/main/channels/backlog'
-import { resolveWorktreesReclaim } from '@/main/channels/worktrees'
+import { resolveWorktreesReclaim, resolveWorktreesReport } from '@/main/channels/worktrees'
 import { resolveGhStatus } from '@/main/channels/gh'
 import { createDispatchRuntime } from '@/main/dispatch/runtime'
 import { createRunStateStore } from '@/main/dispatch/store'
@@ -29,7 +28,7 @@ import type { Dispatcher } from '@/types/dispatch'
 import { fetchItemsByNumber } from '@/main/github/adapter'
 import { readOwnership, releaseOwnership, takeOwnership } from '@/main/dispatch/ownership'
 import { resolveGateAnswer, resolveGatePreflight } from '@/main/channels/gate'
-import type { GateChannelDeps, ItemDecisionDeps, StageChannelDeps } from '@/types/channels'
+import type { GateChannelDeps, ItemDecisionDeps, NotifyPrefsDeps, StageChannelDeps } from '@/types/channels'
 import { resolveItemAction, resolveItemDecision } from '@/main/channels/items'
 import { resolveRuntimeProbe } from '@/main/channels/runtime'
 import { resolveSearchQuery, resolveSessionsScan, resolveTranscriptTailClose, resolveTranscriptTailOpen, resolveTranscriptTailPoll } from '@/main/channels/sessions'
@@ -63,8 +62,7 @@ import {
   resolveSessionTaskStop,
 } from '@/main/channels/hosting'
 import { defaultGitRunner, git } from '@/main/platform/git'
-import { readWorktreeReport } from '@/main/reclaimer/report'
-import { addRepository, listRepositories, removeRepository, requireReadyRepo } from '@/main/registry'
+import { addRepository, listRepositories, removeRepository } from '@/main/registry'
 import type { RegistryDeps } from '@/types/registry'
 import { createPipelineWatcher } from '@/main/state/watcher'
 import type { PipelineWatcher } from '@/types/state'
@@ -77,7 +75,11 @@ import { createStageRegistry } from '@/main/stage/registry'
 import { readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
 import { createStageSweeper, resolveStageAllow, resolveStageDismissDenial, resolveStageResume, resolveStageRestart } from '@/main/channels/stage'
 import { resolveForceDispatch } from '@/main/channels/held'
-import { resolveNotifyNeedsYou } from '@/main/channels/notify'
+import { resolveNotifyNeedsYou, resolveNotifyPrefs, resolveNotifyPrefsSet } from '@/main/channels/notify'
+import { resolveStorageReport, resolveUsageSummary } from '@/main/channels/storage'
+import { createUsageLedger } from '@/main/hosting/usage-ledger'
+import { directorySize } from '@/main/platform/disk'
+import { defaultClaudeHome } from '@/main/sessions/locate'
 import { createSessionMenuRefresher } from '@/main/session-menu'
 
 type AppInfo = IpcMap['app:info']['response']
@@ -121,30 +123,6 @@ function getAppInfo(): AppInfo {
     chromium: process.versions.chrome,
     commit: __PORT_BUILD_COMMIT__
   }
-}
-
-export interface WorktreesReportDeps {
-  readonly listRepositories: typeof listRepositories
-  readonly readWorktreeReport: (params: ReadWorktreeReportParams) => Promise<WorktreesReport>
-}
-
-const defaultWorktreesReportDeps: WorktreesReportDeps = { listRepositories, readWorktreeReport }
-
-// The renderer sends only the opaque id, never a path.
-export async function resolveWorktreesReport(
-  registryDeps: RegistryDeps,
-  request: IpcMap['worktrees:report']['request'],
-  deps: WorktreesReportDeps = defaultWorktreesReportDeps,
-): Promise<WorktreesReport> {
-  if (typeof request?.id !== 'string' || request.id === '') {
-    throw new Error("'worktrees:report' requires a non-empty 'id'")
-  }
-  const entry = await requireReadyRepo(registryDeps, "'worktrees:report'", request.id, deps.listRepositories)
-  return deps.readWorktreeReport({
-    repoRoot: entry.path,
-    worktreesCommand: entry.config.commands.worktrees,
-    git: registryDeps.git,
-  })
 }
 
 export interface BoardRefreshDeps {
@@ -252,7 +230,7 @@ export function registerIpc(): RegisteredIpc {
 
   // One hosted-session store for the process lifetime, created before the watcher — the dispatcher
   // sits between the two and needs this store first.
-  const notifier = createAppNotifier({ registryDeps, broadcast: (command) => broadcast('app:command', command) })
+  const notifier = createAppNotifier({ registryDeps, broadcast: (command) => broadcast('app:command', command), prefs: () => hostedStore.notificationPrefs() })
 
   // Assigned right after createDispatchRuntime below — stageLauncher's onOutcome closes over it,
   // so construction order between the launcher and the dispatcher that owns recordOutcome stays acyclic.
@@ -266,11 +244,15 @@ export function registerIpc(): RegisteredIpc {
   const sessionIndex = createSessionIndex({ path: join(app.getPath('userData'), 'session-index.json'), readJson: readJsonFile, writeJsonAtomic: writeJsonFileAtomic, now: () => new Date() })
   void sessionIndex.load()
 
+  const usageLedger = createUsageLedger({ path: join(app.getPath('userData'), 'usage-ledger.json'), readJson: readJsonFile, writeJsonAtomic: writeJsonFileAtomic, now: () => new Date(), bootId: globalThis.crypto.randomUUID() })
+  void usageLedger.load()
+
   const hostedStore = createHostedStore({
     ...defaultHostedStoreDeps,
     onStatus: (snapshot) => {
       broadcast('session:status', snapshot)
       sessionIndex.observe(snapshot)
+      usageLedger.observe(snapshot)
       notifier.observe(snapshot)
       stageLauncher.observe(snapshot)
       sessionMenu.refresh()
@@ -480,6 +462,18 @@ export function registerIpc(): RegisteredIpc {
   handle('stage:restart', (_event, request) => resolveStageRestart(registryDeps, request, stageChannelDeps))
 
   handle('notify:needs-you', (_event, request) => resolveNotifyNeedsYou(request, { show: (notification) => notifier.showNeedsYou(notification) }))
+
+  const notifyPrefsDeps: NotifyPrefsDeps = { prefs: () => hostedStore.notificationPrefs(), setPrefs: (next) => hostedStore.setNotificationPrefs(next) }
+
+  handle('notify:prefs', (_event, request) => resolveNotifyPrefs(request, notifyPrefsDeps))
+
+  handle('notify:prefs:set', (_event, request) => resolveNotifyPrefsSet(request, notifyPrefsDeps))
+
+  handle('storage:report', (_event, request) =>
+    resolveStorageReport(registryDeps, request, { listRepositories, directorySize, userData: app.getPath('userData'), logs: app.getPath('logs'), claudeHome: defaultClaudeHome }),
+  )
+
+  handle('usage:summary', (_event, request) => resolveUsageSummary(request, usageLedger))
 
   handle('held:force-dispatch', (_event, request) => resolveForceDispatch(request, { snapshot: watcher.snapshot, dispatcherStatus: () => dispatcher.status(), forceDispatch, republish: () => watcher.republish() }))
 

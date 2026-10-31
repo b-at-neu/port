@@ -1,15 +1,38 @@
-import type { RunReclaimParams } from '@/types/reclaimer'
-
-// `'worktrees:reclaim'`'s composition: registry lookup, `runReclaim`, then
-// exactly one `appendAudit` call — aborts included.
+// The worktrees channels: `'worktrees:report'`'s read, and `'worktrees:reclaim'`'s composition —
+// registry lookup, `runReclaim`, then exactly one `appendAudit` call, aborts included.
 import type { IpcMap } from '@/types/ipc'
 import type { ReclaimAuditEntry } from '@/types/writes'
-import type { ReclaimedWorktree, WorktreesReclaimResult } from '@/types/reclaimer'
+import type { ReadWorktreeReportParams, ReclaimedWorktree, RunReclaimParams, WorktreesReclaimResult, WorktreesReport } from '@/types/reclaimer'
 import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/registry'
 import type { RegistryDeps } from '@/types/registry'
 import { runReclaim } from '@/main/reclaimer/reclaim'
+import { readWorktreeReport } from '@/main/reclaimer/report'
 
 import { appendAudit } from '@/main/writes/audit'
+
+export interface WorktreesReportDeps {
+  readonly listRepositories: typeof listRepositories
+  readonly readWorktreeReport: (params: ReadWorktreeReportParams) => Promise<WorktreesReport>
+}
+
+const defaultWorktreesReportDeps: WorktreesReportDeps = { listRepositories, readWorktreeReport }
+
+// The renderer sends only the opaque id, never a path.
+export async function resolveWorktreesReport(
+  registryDeps: RegistryDeps,
+  request: IpcMap['worktrees:report']['request'],
+  deps: WorktreesReportDeps = defaultWorktreesReportDeps,
+): Promise<WorktreesReport> {
+  if (typeof request?.id !== 'string' || request.id === '') {
+    throw new Error("'worktrees:report' requires a non-empty 'id'")
+  }
+  const entry = await requireReadyRepo(registryDeps, "'worktrees:report'", request.id, deps.listRepositories)
+  return deps.readWorktreeReport({
+    repoRoot: entry.path,
+    worktreesCommand: entry.config.commands.worktrees,
+    git: registryDeps.git,
+  })
+}
 
 export interface WorktreesReclaimDeps {
   readonly listRepositories: typeof listRepositories

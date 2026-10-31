@@ -1,8 +1,7 @@
-// Settings' Appearance section (#316) — the theme row, the one control
-// this ticket needs so Light/Dark/System can actually be switched. No
-// `useEffect`: `useThemePreference` reads the store through
-// `useSyncExternalStore`.
+// Settings' Appearance card — the theme row. No `useEffect`: `useThemePreference`
+// reads the store through `useSyncExternalStore`.
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/renderer/components/ui/select'
+import { SettingsCard } from '@/renderer/components/settings-card'
 import { useThemePreference } from '@/renderer/theme/store'
 import type { ThemePreference } from '@/types/theme'
 
@@ -16,8 +15,7 @@ export function ThemeSection() {
   const [preference, setPreference] = useThemePreference()
 
   return (
-    <section className="flex flex-col gap-3">
-      <h2 className="text-meta font-medium text-muted-foreground">Appearance</h2>
+    <SettingsCard title="Appearance">
       <div className="flex h-9 items-center justify-between">
         <span id="theme-select-label" className="text-body text-foreground">
           Theme
@@ -34,6 +32,6 @@ export function ThemeSection() {
         </Select>
       </div>
       <p className="text-small text-muted-foreground">System follows your operating system&rsquo;s light or dark setting.</p>
-    </section>
+    </SettingsCard>
   )
 }

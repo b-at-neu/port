@@ -64,8 +64,8 @@ export async function ghJson<T>(args: readonly string[], options?: GhOptions): P
  *  for HTTP-bearing API failures this command never produces. */
 export async function ghAuthStatus(options?: GhOptions): Promise<GhAuthStatusResult> {
   const result = await runCommand('gh', ['auth', 'status'], options)
-  if (result.ok) return { ok: true, authenticated: true }
-  if (result.kind === 'nonzero') return { ok: true, authenticated: false }
+  if (result.ok) return { ok: true, authenticated: true, output: `${result.stdout}\n${result.stderr}` }
+  if (result.kind === 'nonzero') return { ok: true, authenticated: false, output: `${result.stdout}\n${result.stderr}` }
   return result
 }
 

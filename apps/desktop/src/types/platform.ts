@@ -29,14 +29,19 @@ export type GhClassification = 'unauthenticated' | 'rate-limited' | 'forbidden' 
 /** An injectable `gh` invocation, so a test runs against a fake runner and needs no real `gh` binary. */
 export type GhRunner = (args: readonly string[], options?: GhOptions) => Promise<GhResult>
 
-export type GhAuthStatusResult = { readonly ok: true; readonly authenticated: boolean } | Exclude<GhResult, { ok: true } | { ok: false; kind: 'unauthenticated' }>
+/** `output` is stdout then stderr, since older gh releases print the status on stderr. */
+export type GhAuthStatusResult = { readonly ok: true; readonly authenticated: boolean; readonly output: string } | Exclude<GhResult, { ok: true } | { ok: false; kind: 'unauthenticated' }>
 
 export type GhResult =
   | { readonly ok: true; readonly stdout: string; readonly stderr: string }
   | Exclude<CommandResult, { ok: true } | { ok: false; kind: 'nonzero' }>
   | { readonly ok: false; readonly kind: GhClassification; readonly stdout: string; readonly stderr: string }
 
-export type GitRunner = (args: readonly string[], cwd: string) => Promise<CommandResult>
+export type DirectorySizeResult =
+  | { readonly ok: true; readonly bytes: number; readonly entries: number; readonly truncated: boolean }
+  | { readonly ok: false; readonly kind: 'not-found' | 'io'; readonly message: string }
+
+export type GitRunner =(args: readonly string[], cwd: string) => Promise<CommandResult>
 
 export type GitLinesResult = { readonly ok: true; readonly lines: readonly string[] } | Exclude<CommandResult, { ok: true }>
 

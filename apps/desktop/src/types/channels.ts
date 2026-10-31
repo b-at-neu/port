@@ -22,6 +22,7 @@ import type { Dispatcher, RepoDispatchStatus } from '@/types/dispatch'
 import type { ForceDispatch } from '@/types/tick'
 import type { IpcChannel, ReposListResponse } from '@/types/ipc'
 import type { AssertEqual } from '@/types/assert-type'
+import type { NotificationPrefs } from '@/types/settings'
 
 export interface GateChannelDeps {
   readonly gatePreflight: (params: GatePreflightParams) => Promise<GatePreflightResponse>
@@ -85,6 +86,12 @@ export interface NotifyChannelDeps {
   readonly show: (notification: IpcMap['notify:needs-you']['request']) => void
 }
 
+/** The seam `'notify:prefs'`/`'notify:prefs:set'` compose through — the hosted store's persisted preferences. */
+export interface NotifyPrefsDeps {
+  readonly prefs: () => Promise<NotificationPrefs>
+  readonly setPrefs: (next: NotificationPrefs) => Promise<NotificationPrefs>
+}
+
 // The read/write partition over IpcChannel — hand-maintained, never derived from IPC_CHANNELS.
 export const QUERY_CHANNELS = [
   'app:info',
@@ -107,6 +114,9 @@ export const QUERY_CHANNELS = [
   'folders:list',
   'session:changes',
   'session:marks',
+  'notify:prefs',
+  'storage:report',
+  'usage:summary',
 ] as const
 
 export type QueryChannel = (typeof QUERY_CHANNELS)[number]
@@ -152,6 +162,7 @@ export const MUTATION_CHANNELS = [
   'stage:restart',
   'held:force-dispatch',
   'notify:needs-you',
+  'notify:prefs:set',
 ] as const
 
 export type MutationChannel = (typeof MUTATION_CHANNELS)[number]

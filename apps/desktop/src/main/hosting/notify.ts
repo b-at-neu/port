@@ -4,6 +4,8 @@ import { BrowserWindow, Notification } from 'electron'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import type { IpcEventMap, IpcMap } from '@/types/ipc'
 import type { RegistryDeps } from '@/types/registry'
+import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'
+import type { NotificationPrefs } from '@/types/settings'
 import { listRepositories } from '@/main/registry'
 import { sessionDisplayLabel } from '@/utils/hosting/label'
 import { folderLabel, repoDisplayLabel } from '@/utils/workspace/label'
@@ -49,6 +51,16 @@ interface CreateNotifierParams {
   /** Resolved only when a notification is actually about to fire — a registry lookup is too
    *  slow to run on every snapshot, and most snapshots notify nothing. */
   readonly repoLabel: (snapshot: HostedSessionSnapshot) => Promise<string>
+  /** Read only when a notification is about to fire; a rejection reads as everything on. */
+  readonly prefs: () => Promise<NotificationPrefs>
+}
+
+async function readPrefs(prefs: () => Promise<NotificationPrefs>): Promise<NotificationPrefs> {
+  try {
+    return await prefs()
+  } catch {
+    return DEFAULT_NOTIFICATION_PREFS
+  }
 }
 
 interface SessionNotifier {
@@ -70,16 +82,19 @@ export function createNotifier(params: CreateNotifierParams): SessionNotifier {
       const wouldNotify = notificationFor(previous, snapshot, '') !== null
       if (!wouldNotify || params.isAppFocused()) return
 
-      void params.repoLabel(snapshot).then(
-        (label) => {
-          const notification = notificationFor(previous, snapshot, label)
-          if (notification !== null) params.show(notification, snapshot)
-        },
-        () => {
-          const notification = notificationFor(previous, snapshot, folderLabel(snapshot.workspace.folder))
-          if (notification !== null) params.show(notification, snapshot)
-        }
-      )
+      void readPrefs(params.prefs).then((prefs) => {
+        if (!prefs.sessions) return
+        return params.repoLabel(snapshot).then(
+          (label) => {
+            const notification = notificationFor(previous, snapshot, label)
+            if (notification !== null) params.show(notification, snapshot)
+          },
+          () => {
+            const notification = notificationFor(previous, snapshot, folderLabel(snapshot.workspace.folder))
+            if (notification !== null) params.show(notification, snapshot)
+          }
+        )
+      })
     },
   }
 }
@@ -99,10 +114,15 @@ interface AppNotifier extends SessionNotifier {
 
 /** The real notifier wired to Electron and the repo registry, kept out of `ipc.ts` for its size.
  *  A click focuses (and restores) the first window and asks it to open the session. */
-export function createAppNotifier(params: { readonly registryDeps: RegistryDeps; readonly broadcast: (command: IpcEventMap['app:command']) => void }): AppNotifier {
+export function createAppNotifier(params: {
+  readonly registryDeps: RegistryDeps
+  readonly broadcast: (command: IpcEventMap['app:command']) => void
+  readonly prefs: () => Promise<NotificationPrefs>
+}): AppNotifier {
   const isAppFocused = (): boolean => BrowserWindow.getFocusedWindow() !== null
   const sessionNotifier = createNotifier({
     isAppFocused,
+    prefs: params.prefs,
     repoLabel: async (snapshot) => {
       if (snapshot.repoId === null) return folderLabel(snapshot.workspace.folder)
       const list = await listRepositories(params.registryDeps)
@@ -124,12 +144,15 @@ export function createAppNotifier(params: { readonly registryDeps: RegistryDeps;
     observe: (snapshot) => sessionNotifier.observe(snapshot),
     showNeedsYou: ({ title, body, focus }) => {
       if (isAppFocused() || !Notification.isSupported()) return
-      const native = new Notification({ title, body })
-      native.on('click', () => {
-        focusFirstWindow()
-        params.broadcast({ kind: 'open-needs-you', focus })
+      void readPrefs(params.prefs).then((prefs) => {
+        if (!prefs.needsYou) return
+        const native = new Notification({ title, body })
+        native.on('click', () => {
+          focusFirstWindow()
+          params.broadcast({ kind: 'open-needs-you', focus })
+        })
+        native.show()
       })
-      native.show()
     },
   }
 }

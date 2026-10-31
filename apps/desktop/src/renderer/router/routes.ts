@@ -1,8 +1,10 @@
 // Every route id `router.tsx` registers, plus the search-param parsers each
 // route needs — the one literal spelling both files read, so they never drift.
 import type { RepoId } from '@/utils/repos'
-import type { BoardItemRef, BoardSearch, HistorySearch, NeedsYouSearch, RepoSearch, SearchSearch, SessionSearch, TranscriptSearch } from '@/types/router'
+import { SETTINGS_SECTIONS } from '@/types/router'
+import type { BoardItemRef, BoardSearch, HistorySearch, NeedsYouSearch, RepoSearch, SearchSearch, SessionSearch, SettingsSearch, TranscriptSearch } from '@/types/router'
 
+// `repos`, `repo` and `about` stay registered only as redirects into Settings.
 export const ROUTE_IDS = {
   board: '/board',
   backlog: '/backlog',
@@ -14,6 +16,7 @@ export const ROUTE_IDS = {
   transcript: '/transcript/$sessionId',
   session: '/session',
   settings: '/settings',
+  settingsRepo: '/settings/repositories/$repoId',
   setup: '/setup',
   about: '/about',
 } as const
@@ -46,6 +49,12 @@ export function boardSearchFromRaw(search: Readonly<Record<string, unknown>>): B
     group: group === 'repo' ? 'repo' : 'phase',
     repo: typeof repo === 'string' && repo !== '' ? (repo as RepoId) : null,
   }
+}
+
+/** An unknown or missing `section` reads as `'general'`. */
+export function settingsSearchFromRaw(search: Readonly<Record<string, unknown>>): SettingsSearch {
+  const { section } = search
+  return { section: (SETTINGS_SECTIONS as readonly unknown[]).includes(section) ? (section as SettingsSearch['section']) : 'general' }
 }
 
 export function repoSearchFromRaw(search: Readonly<Record<string, unknown>>): RepoSearch {

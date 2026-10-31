@@ -8,6 +8,8 @@ import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
+import { SettingsCard } from '@/renderer/components/settings-card'
+import { formatAgo } from '@/renderer/lib/relative-time'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { useIpcMutation, useIpcQuery } from '@/renderer/data/query'
 import { StatusPill } from '@/renderer/components/status-pill'
@@ -34,20 +36,18 @@ export function RuntimeSection() {
 
   if (preflightQuery.status === 'pending') {
     return (
-      <section className="flex flex-col gap-3">
-        <h2 className="text-meta font-medium text-muted-foreground">Claude Code</h2>
+      <SettingsCard title="Claude Code">
         <Skeleton className="h-5 w-24 rounded-full" />
         <Skeleton className="h-4 w-56" />
-      </section>
+      </SettingsCard>
     )
   }
 
   if (preflightQuery.status === 'error') {
     return (
-      <section className="flex flex-col gap-3">
-        <h2 className="text-meta font-medium text-muted-foreground">Claude Code</h2>
+      <SettingsCard title="Claude Code">
         <ErrorBanner message="Couldn't reach the main process to check Claude Code. Restart port to try again." />
-      </section>
+      </SettingsCard>
     )
   }
 
@@ -72,9 +72,10 @@ export function RuntimeSection() {
     await preflightQuery.refetch()
   }
 
+  const checkedAt = probe?.checkedAt ?? preflightQuery.data.checkedAt
+
   return (
-    <section className="flex flex-col gap-3">
-      <h2 className="text-meta font-medium text-muted-foreground">Claude Code</h2>
+    <SettingsCard title="Claude Code">
       <StatusPill status={model.pillStatus} label={model.pillLabel} />
       {model.versionLine !== null ? <p className="font-mono text-small text-muted-foreground">{model.versionLine}</p> : null}
       <div>
@@ -87,6 +88,7 @@ export function RuntimeSection() {
           {note}
         </p>
       ))}
+      <p className="text-small text-muted-foreground">Checked {formatAgo(Date.now() - Date.parse(checkedAt))}</p>
       {model.probeErrorMessage !== null ? <ErrorBanner message={model.probeErrorMessage} /> : null}
       {model.action !== null ? (
         model.action.disabledReason !== null ? (
@@ -113,6 +115,6 @@ export function RuntimeSection() {
           </Button>
         )
       ) : null}
-    </section>
+    </SettingsCard>
   )
 }
