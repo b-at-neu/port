@@ -82,9 +82,18 @@ export default async function ({ expect, fail, ok }: Reporter) {
     } else {
       const zeroDiffEnd = combinedText.indexOf('\n**File contention gate', zeroDiffStart);
       const zeroDiffSection = zeroDiffEnd === -1 ? combinedText.slice(zeroDiffStart) : combinedText.slice(zeroDiffStart, zeroDiffEnd);
-      for (const phrase of ['commit.oid', 'headRefOid', '## Gate cleared']) {
+      for (const phrase of ['commit.oid', 'headRefOid', '## Gate cleared', 'Blocked only by checks:', 'Override review']) {
         expect(zeroDiffSection.includes(phrase), 'zero-diff-review', `plugins/port/skills/pipeline/*.md's zero-diff review gate never names '${phrase}'`);
       }
+    }
+
+    const markerLine = 'Blocked only by checks:';
+    for (const rel of ['plugins/port/agents/review-agent.md', 'plugins/port/docs/FORMATS.md', 'plugins/port/docs/PIPELINE.md', 'plugins/port/bin/artifacts.mjs']) {
+      expect(readFileSync(join(root, rel), 'utf8').includes(markerLine), 'zero-diff-review', `${rel} never names the check-only marker '${markerLine}'`);
+    }
+    for (const rel of [skillRel, 'plugins/port/docs/RECOVERY.md', 'plugins/port/skills/pipeline/TICK-PROSE.md']) {
+      const text = readFileSync(join(root, rel), 'utf8');
+      expect(text.includes('Override review') && !text.includes('Back to review'), 'zero-diff-review', `${rel} must name the one-more-review option 'Override review', never 'Back to review'`);
     }
 
     expect(pipelineText.includes('unconditional'), 'cycle-cap', `${pipelineRel} never states the cycle cap is 'unconditional'`);
