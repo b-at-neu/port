@@ -129,7 +129,7 @@ function AuditRow({ row, readAt }: { readonly row: AuditRowView; readonly readAt
       <div className="flex h-9 items-center gap-3 px-4">
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="w-16 shrink-0 text-meta text-muted-foreground">{formatAgo(new Date(readAt).getTime() - new Date(row.at).getTime())}</span>
+            <span tabIndex={0} className="w-16 shrink-0 rounded-sm text-meta text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{formatAgo(new Date(readAt).getTime() - new Date(row.at).getTime())}</span>
           </TooltipTrigger>
           <TooltipContent>{row.at}</TooltipContent>
         </Tooltip>
