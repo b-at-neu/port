@@ -4,6 +4,7 @@ import type { QuestionAnswerResult, PlanDecision, PlanAnswerResult, SetControlsR
 // Renderer-safe contract for a hosted session. No import here may reach a Node builtin — only `main/hosting/` spawns a `claude` child or holds a `Query`. `message: unknown` on the event envelope is deliberate: narrowing it is the renderer's own job, never a second guess at the SDK's union here.
 import type { RepoId } from '@/utils/repos'
 import type { RuntimeDiagnosis } from '@/types/runtime'
+import type { NotificationPrefs } from '@/types/settings'
 import type { EntryPatch, TranscriptEntry } from '@/utils/sessions/transcript'
 import type { SessionWorkspace } from '@/types/workspace'
 import type { PendingInteraction, SessionControls, SessionModels } from '@/utils/hosting/controls'
@@ -405,6 +406,7 @@ export interface HostingPersistedState {
   readonly open: readonly PersistedOpenEntry[]
   readonly defaults: SessionDefaults
   readonly marks: SessionMarks
+  readonly notifications: NotificationPrefs
 }
 
 export interface PersistedOpenEntry {
@@ -464,6 +466,8 @@ export interface HostedStore {
   setLimit(limit: number): Promise<HostingCapacity>
   defaults(): Promise<SessionDefaults>
   setDefaults(next: SessionDefaults): Promise<SessionDefaults>
+  notificationPrefs(): Promise<NotificationPrefs>
+  setNotificationPrefs(next: NotificationPrefs): Promise<NotificationPrefs>
   /** Renames on disk first and only then applies it to the handle — a rejection leaves the title unchanged. */
   rename(sessionKey: SessionKey, title: string): Promise<SessionRenameResult>
   restorable(): Promise<readonly MintedRestorable[]>

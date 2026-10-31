@@ -4,6 +4,8 @@ import type { RepoRunState } from '@/types/dispatch'
 import { RUN_TARGET } from '@/types/dispatch'
 import type { TranscriptSource } from '@/utils/sessions/transcript'
 import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
+import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'
+import { fixtureStorageReport, fixtureUsageSummary } from '@/main/fixtures/settings'
 import { fixtureBoardSnapshot } from '@/main/fixtures/board'
 import { fixtureBacklog } from '@/main/fixtures/backlog'
 import { fixtureClaimPreflight, fixtureGatePreflight } from '@/main/fixtures/dialogs'
@@ -100,7 +102,7 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'session:restore': () => ({ ok: false, kind: 'unknown-restore' }),
     'session:restore:discard': () => ({ ok: true }),
 
-    'gh:status': () => ({ kind: 'signed-in', checkedAt: now.toISOString() }),
+    'gh:status': () => ({ kind: 'signed-in', checkedAt: now.toISOString(), account: 'octo-operator', scopes: ['repo', 'read:org', 'workflow'] }),
     'backlog:list': (request) => fixtureBacklog(now, request.repoId),
     'session:defaults': () => DEFAULT_SESSION_DEFAULTS,
     'session:defaults:set': (request) => request,
@@ -124,5 +126,9 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'stage:restart': () => ({ kind: 'unknown-stage' }),
     'held:force-dispatch': () => ({ kind: 'ok' }),
     'notify:needs-you': () => undefined,
+    'notify:prefs': () => DEFAULT_NOTIFICATION_PREFS,
+    'notify:prefs:set': (request) => request,
+    'storage:report': () => fixtureStorageReport(),
+    'usage:summary': () => fixtureUsageSummary(now),
   }
 }

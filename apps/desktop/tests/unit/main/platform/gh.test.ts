@@ -69,7 +69,7 @@ describe('ghJson', () => {
 })
 
 describe('ghAuthStatus — integration', () => {
-  it('reads only the exit code, distinguishing authenticated from unauthenticated', async (ctx) => {
+  it('reads the exit code to tell authenticated from unauthenticated, and carries the command output', async (ctx) => {
     // Bounded well under the test framework's own timeout so a hang classifies as `timeout` and skips cleanly.
     const result = await ghAuthStatus({ timeoutMs: 8_000 })
     if (!result.ok && (result.kind === 'not-found' || result.kind === 'timeout')) {
@@ -79,6 +79,7 @@ describe('ghAuthStatus — integration', () => {
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(typeof result.authenticated).toBe('boolean')
+      expect(typeof result.output).toBe('string')
     }
   }, 15_000)
 })

@@ -3,6 +3,7 @@ import { createHostedStore, DEFAULT_SESSION_LIMIT, ENDED_RETAIN_LIMIT } from '@/
 import { createInMemoryHostingPersistence } from '@/main/hosting/persist'
 import type { HostedQuery } from '@/main/hosting/handle'
 import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
+import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'
 import type { SessionWorkspace } from '@/types/workspace'
 import { REPO_ID, baseDeps, endedQuery, flush, idleQuery } from '../../../fixtures/hosting/store'
 
@@ -386,7 +387,7 @@ describe('createHostedStore', () => {
 
   it('restore() removes the entry on a successful start, but keeps it when at-capacity', async () => {
     const persistence = createInMemoryHostingPersistence()
-    persistence.save({ limit: 1, open: [{ repoId: REPO_ID, claudeSessionId: 'parent-1', title: 'Old title', startedAt: 't0' }], defaults: DEFAULT_SESSION_DEFAULTS, marks: { pinned: [], archived: [] } })
+    persistence.save({ limit: 1, open: [{ repoId: REPO_ID, claudeSessionId: 'parent-1', title: 'Old title', startedAt: 't0' }], defaults: DEFAULT_SESSION_DEFAULTS, marks: { pinned: [], archived: [] }, notifications: DEFAULT_NOTIFICATION_PREFS })
     const store = createHostedStore(baseDeps({ persistence }))
     await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
 
@@ -414,6 +415,7 @@ describe('createHostedStore', () => {
       ],
       defaults: DEFAULT_SESSION_DEFAULTS,
       marks: { pinned: [], archived: [] },
+      notifications: DEFAULT_NOTIFICATION_PREFS,
     })
     const store = createHostedStore(baseDeps({ persistence }))
     const entries = await store.restorable()
@@ -466,6 +468,15 @@ describe('createHostedStore', () => {
     await expect(store.setDefaults(next)).resolves.toEqual(next)
     await expect(store.defaults()).resolves.toEqual(next)
     expect(store.attach(started.snapshot.sessionKey)).toMatchObject({ ok: true })
+  })
+
+  it('notificationPrefs()/setNotificationPrefs() default to on, persist, and never touch the other persisted fields', async () => {
+    const persistence = createInMemoryHostingPersistence()
+    const store = createHostedStore(baseDeps({ persistence }))
+    await expect(store.notificationPrefs()).resolves.toEqual(DEFAULT_NOTIFICATION_PREFS)
+    await expect(store.setNotificationPrefs({ needsYou: false, sessions: true })).resolves.toEqual({ needsYou: false, sessions: true })
+    await expect(store.notificationPrefs()).resolves.toEqual({ needsYou: false, sessions: true })
+    await expect(persistence.load()).resolves.toMatchObject({ notifications: { needsYou: false, sessions: true }, defaults: DEFAULT_SESSION_DEFAULTS })
   })
 
   // `rename()` behaviour has its own file, store-rename.test.ts, to stay under the line limit.

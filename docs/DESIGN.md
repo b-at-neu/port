@@ -151,7 +151,7 @@ The dark `brand` tile's `#4b5f8f` border measures 3.0 against `sidebar`, enough 
 
 **Sidebar, top to bottom:**
 1. **Mark and wordmark.**
-2. **Screens:** Needs you (red count), Board, Backlog, Repositories.
+2. **Screens:** Needs you (red count), Board, Backlog.
 3. **Pipelines:** one row per registered repo. Each row has:
    - a caret that collapses it, with the state remembered;
    - the repo name;
@@ -159,7 +159,7 @@ The dark `brand` tile's `#4b5f8f` border measures 3.0 against `sidebar`, enough 
 
    The repo's live stage sessions are nested under it, labelled `#N <title>`. Each has a `PhaseDot` in its phase colour, so the colour alone says which phase it is in; it turns red and pulses while the session needs you. The row for the session on screen, a live stage session or a stage transcript, is drawn in `selection`. If its repo is collapsed, the repo row is drawn in `selection` instead. A collapsed repo with a session that needs you shows a red dot next to its name.
 4. **Your sessions:** a header with **New session** and **History** as icon buttons on its right, then your own live sessions. The open one is drawn in `selection`.
-5. **Footer:** Settings, plus one status dot for the `claude` CLI and `gh`, red when either is missing or signed out.
+5. **Footer:** a Settings button across the full footer width, plus one status dot for the `claude` CLI and `gh`, red when either is missing or signed out. The dot opens a popover on hover, focus and click: one line per connection with its state and age, a line per repository read, and a link to Settings → Connections. Leaving closes it after 150ms, and Esc closes it.
 
 **Screens in the first release:**
 
@@ -168,10 +168,9 @@ The dark `brand` tile's `#4b5f8f` border measures 3.0 against `sidebar`, enough 
 | Needs you | Everything waiting on the operator, newest first, each with its action inline: plan reviews, PRs ready to merge, questions from stage sessions, needs-human escalations, blocked items |
 | Board | Grouped list: **Waiting on you**, **In progress**, **Queued**. Toggle grouping by phase or by repo, plus a repo filter |
 | Backlog | Open tickets not yet in a pipeline, with **Work on**: interactive plan review or auto-plan |
-| Repositories | One page per repo, with tabs: Overview (health, label resolution, overrides in effect), Worktrees, Denials |
 | Session | Conversation and composer. **Changes** opens the session's diff in the detail pane |
 | History | Past sessions and transcripts, with search |
-| Settings | Theme, CLI and `gh` status, default model and permission mode |
+| Settings | Full width, with six tabs of cards in a responsive grid, chosen by `?section=`: General (theme, notifications, keyboard shortcuts), Repositories (the repository list, and one page per repo with tabs Overview, Worktrees, Denials), Connections (Claude Code, `gh`, the GitHub rate limit, each repository's last read), Pipeline (session limit, new-session defaults, a read-only view of each repository's config), Usage & storage (spend by repository and period, disk use), About (version, runtime versions, setup checklist, notices). The old `/repositories` and `/about` routes redirect here |
 
 Scoping epics, releases and analytics are out of scope for the first release.
 
@@ -211,7 +210,7 @@ Scoping epics, releases and analytics are out of scope for the first release.
 
 **shadcn primitives.** Use them as shipped and change them only through variants:
 - Button: `default` (primary), `secondary`, `outline`, `ghost`, `destructive`; sizes small and default.
-- DropdownMenu, ContextMenu, Command, Dialog, AlertDialog, Popover, Tooltip.
+- DropdownMenu, ContextMenu, Command, Dialog, AlertDialog, Popover (the sidebar's status dot), Tooltip.
 - Tabs, Input, Textarea, Select, Checkbox, ScrollArea, Separator, Skeleton, Collapsible, Sonner toasts.
 - Switch, only on the Settings screen.
 
@@ -228,6 +227,8 @@ Scoping epics, releases and analytics are out of scope for the first release.
 | `TicketRow`, `RepoPipelineRow`, `SessionRow`, `NeedsYouItem` | The list rows (§3) |
 | `ToolCallRow`, `DiffView`, `Markdown`, `CodeBlock`, `Composer`, `ContextMeter` | Session pieces. `ContextMeter` is a `Context` label, a 56×4px bar and a percentage, with token counts in its tooltip. `ToolCallRow` carries a per-tool one-line summary and default-open rule (edits with a diff, TodoWrite, a running subagent, a failed Bash); its body delegates to `ToolCallDetail`'s Bash/TodoWrite/Task/lookup views. A subagent's children nest recursively under its row, indented with a `border-l` rule; an orphaned child (its parent row evicted from the window) carries the label "Subagent · parent call not shown" |
 | `BackgroundTasksPanel` | A `border` card between the command strip and composer, hidden when empty. Header `Background tasks · N`; each 36px row shows a type icon, a truncating description with a tooltip, a mono type tag, and a `Stop` ghost button that opens a confirm dialog |
+| `SettingsCard` | The one card every Settings tab is built from: `border`, `card` fill, 16px padding, an `h2` title in `muted-foreground`, an optional description, and right-aligned actions in the header row. A card that needs width spans two or three columns |
+| `LimitStepper` | A `−`, a number and a `+`, shared by the session menu and Settings → Pipeline |
 | `DetailPane`, `EmptyState`, `ErrorBanner`, `IconButton` | Layout and states. `IconButton` is a 24px ghost icon button with a tooltip and an accessible name |
 
 **If a pattern appears twice, it becomes a shared component.** One-off styling inside a screen file is a finding.

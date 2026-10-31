@@ -1,7 +1,7 @@
 // The sidebar frame — expanded (248px) or a 48px collapsed rail.
 import { Link } from '@tanstack/react-router'
 import { useSidebarCollapsed, toggleSidebarCollapsed } from '@/renderer/shell/stores'
-import { FolderGit2, Inbox, LayoutList, ListTodo, PanelLeftClose, PanelLeftOpen, Settings } from 'lucide-react'
+import { Inbox, LayoutList, ListTodo, PanelLeftClose, PanelLeftOpen, Settings } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { cn } from '@/renderer/lib/utils'
 import { useNeedsYouItems } from '@/renderer/needs-you/use-items'
@@ -20,7 +20,6 @@ const RAIL_SCREENS = [
   { to: ROUTE_IDS.board, icon: Inbox, label: 'Needs you' },
   { to: ROUTE_IDS.board, icon: LayoutList, label: 'Board' },
   { to: ROUTE_IDS.backlog, icon: ListTodo, label: 'Backlog' },
-  { to: ROUTE_IDS.repos, icon: FolderGit2, label: 'Repositories' },
 ] as const
 
 function Rail({ onExpand, needsYouCount }: { readonly onExpand: () => void; readonly needsYouCount: number }) {

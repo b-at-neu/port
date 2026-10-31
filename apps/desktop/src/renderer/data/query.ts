@@ -35,6 +35,7 @@ export function ipcQueryOptions<C extends QueryChannel>(channel: C, request?: Ip
     queryFn: () => invoke(channel, request),
     ...(channel === 'board:snapshot' || channel === 'worktrees:report' ? { staleTime: Infinity } : {}),
     ...(channel === 'backlog:list' ? { staleTime: 60_000 } : {}),
+    ...(channel === 'storage:report' ? { staleTime: 5 * 60_000 } : {}),
   })
 }
 

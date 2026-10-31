@@ -27,6 +27,8 @@ export function storeStub(overrides: Partial<HostedStore> = {}): HostedStore {
     setLimit: unexpected('setLimit'),
     defaults: unexpected('defaults'),
     setDefaults: unexpected('setDefaults'),
+    notificationPrefs: unexpected('notificationPrefs'),
+    setNotificationPrefs: unexpected('setNotificationPrefs'),
     rename: unexpected('rename'),
     restorable: unexpected('restorable'),
     restore: unexpected('restore'),

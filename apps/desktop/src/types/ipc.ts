@@ -13,6 +13,7 @@ import type { ItemActionResult, ItemDecisionResult, OperatorAction, OperatorDeci
 import type { DispatchControlResult } from '@/types/dispatch'
 import type { RuntimePreflight, RuntimeProbe } from '@/types/runtime'
 import type { GhStatus } from '@/types/gh'
+import type { NotificationPrefs, StorageReport, UsageSummary } from '@/types/settings'
 import type { BacklogResponse } from '@/types/backlog'
 import type { StageAllowResult, StageResumeResult, StageRestartResult } from '@/types/stage'
 import type {
@@ -358,6 +359,26 @@ export interface IpcMap {
     request: { title: string; body: string; focus: string | null }
     response: void
   }
+  /** Settings → General's notification switches; defaults to both on. */
+  'notify:prefs': {
+    request: void
+    response: NotificationPrefs
+  }
+  /** Both fields must be booleans — anything else throws. Returns the saved preferences. */
+  'notify:prefs:set': {
+    request: NotificationPrefs
+    response: NotificationPrefs
+  }
+  /** Paths and sizes for Settings → Usage & storage. Paths come from main only; a failed size read is data, never a rejection. */
+  'storage:report': {
+    request: void
+    response: StorageReport
+  }
+  /** Spend and tokens of the sessions port hosted, per repository and period. */
+  'usage:summary': {
+    request: void
+    response: UsageSummary
+  }
 }
 
 /** `'held:force-dispatch'`'s own result. `not-held` covers both "never held" and "held for a
@@ -424,6 +445,10 @@ export const IPC_CHANNELS = [
   'stage:restart',
   'held:force-dispatch',
   'notify:needs-you',
+  'notify:prefs',
+  'notify:prefs:set',
+  'storage:report',
+  'usage:summary',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]

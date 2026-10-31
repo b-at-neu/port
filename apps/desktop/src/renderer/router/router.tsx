@@ -1,15 +1,13 @@
 // The app's one router — code-based, hash history (`loadFile` serves
 // `file://`, where path history cannot resolve).
 import { createHashHistory, createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router'
-import { ROUTE_IDS, boardSearchFromRaw, historySearchFromRaw, needsYouSearchFromRaw, repoSearchFromRaw, searchSearchFromRaw, sessionSearchFromRaw, transcriptSearchFromRaw } from '@/renderer/router/routes'
-import type { BoardSearch, HistorySearch, NeedsYouSearch, RepoSearch, SearchSearch, SessionSearch, TranscriptSearch } from '@/types/router'
+import { ROUTE_IDS, boardSearchFromRaw, historySearchFromRaw, needsYouSearchFromRaw, repoSearchFromRaw, searchSearchFromRaw, sessionSearchFromRaw, settingsSearchFromRaw, transcriptSearchFromRaw } from '@/renderer/router/routes'
+import type { BoardSearch, HistorySearch, NeedsYouSearch, RepoSearch, SearchSearch, SessionSearch, SettingsSearch, TranscriptSearch } from '@/types/router'
 import { SettingsScreen } from '@/renderer/settings/screen'
 import { BacklogScreen } from '@/renderer/backlog/screen'
 import { NeedsYouScreen } from '@/renderer/needs-you/screen'
 import { SetupScreen } from '@/renderer/setup/screen'
-import { AboutScreen } from '@/renderer/about/screen'
 import { BoardScreen } from '@/renderer/board/screen'
-import { RepositoriesScreen } from '@/renderer/repositories/screen'
 import { RepoScreen } from '@/renderer/repositories/repo-screen'
 import { SessionScreen } from '@/renderer/session/screen'
 import { HistoryScreen } from '@/renderer/history/screen'
@@ -33,10 +31,24 @@ const boardRoute = createRoute({
   component: BoardScreen,
   validateSearch: (search: Record<string, unknown>): BoardSearch => boardSearchFromRaw(search),
 })
-const reposRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.repos, component: RepositoriesScreen })
+const reposRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: ROUTE_IDS.repos,
+  beforeLoad: () => {
+    throw redirect({ to: ROUTE_IDS.settings, search: { section: 'repositories' } })
+  },
+})
 const repoRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: ROUTE_IDS.repo,
+  validateSearch: (search: Record<string, unknown>): RepoSearch => repoSearchFromRaw(search),
+  beforeLoad: ({ params, search }) => {
+    throw redirect({ to: ROUTE_IDS.settingsRepo, params, search })
+  },
+})
+const settingsRepoRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: ROUTE_IDS.settingsRepo,
   component: RepoScreen,
   validateSearch: (search: Record<string, unknown>): RepoSearch => repoSearchFromRaw(search),
 })
@@ -67,7 +79,12 @@ const sessionRoute = createRoute({
   component: SessionScreen,
   validateSearch: (search: Record<string, unknown>): SessionSearch => sessionSearchFromRaw(search),
 })
-const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.settings, component: SettingsScreen })
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: ROUTE_IDS.settings,
+  component: SettingsScreen,
+  validateSearch: (search: Record<string, unknown>): SettingsSearch => settingsSearchFromRaw(search),
+})
 const backlogRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.backlog, component: BacklogScreen })
 const needsYouRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -76,7 +93,13 @@ const needsYouRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): NeedsYouSearch => needsYouSearchFromRaw(search),
 })
 const setupRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.setup, component: SetupScreen })
-const aboutRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.about, component: AboutScreen })
+const aboutRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: ROUTE_IDS.about,
+  beforeLoad: () => {
+    throw redirect({ to: ROUTE_IDS.settings, search: { section: 'about' } })
+  },
+})
 
 // Any unknown path redirects to /board (ticket's own route table) — a
 // bare `*` route is TanStack Router's own catch-all.
@@ -93,6 +116,7 @@ const routeTree = rootRoute.addChildren([
   boardRoute,
   reposRoute,
   repoRoute,
+  settingsRepoRoute,
   historyRoute,
   searchRoute,
   transcriptRoute,

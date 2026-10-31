@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { boardSearchFromRaw, historySearchFromRaw, needsYouSearchFromRaw, repoSearchFromRaw, searchSearchFromRaw, sessionSearchFromRaw, transcriptSearchFromRaw } from '@/renderer/router/routes'
+import { boardSearchFromRaw, historySearchFromRaw, needsYouSearchFromRaw, repoSearchFromRaw, searchSearchFromRaw, sessionSearchFromRaw, settingsSearchFromRaw, transcriptSearchFromRaw } from '@/renderer/router/routes'
+
+describe('settingsSearchFromRaw', () => {
+  it.each(['general', 'repositories', 'connections', 'pipeline', 'usage', 'about'])('keeps the %s section', (section) => {
+    expect(settingsSearchFromRaw({ section })).toEqual({ section })
+  })
+
+  it.each([undefined, '', 'nope', 3, null])('reads %j as general', (section) => {
+    expect(settingsSearchFromRaw({ section })).toEqual({ section: 'general' })
+  })
+})
 
 describe('transcriptSearchFromRaw', () => {
   it('reads an invalid focusIndex as null', () => {

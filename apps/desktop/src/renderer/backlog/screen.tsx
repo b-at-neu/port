@@ -318,7 +318,7 @@ export function BacklogScreen() {
               <Skeleton className="h-5 w-full" />
             </div>
           ) : readyRepos.length === 0 ? (
-            <EmptyState icon={ListTodo} message="Register a repository to see its open tickets." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.repos }) }} className="px-4 py-6" />
+            <EmptyState icon={ListTodo} message="Register a repository to see its open tickets." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.settings, search: { section: 'repositories' } }) }} className="px-4 py-6" />
           ) : (
             groups.map((group) => (
               <div key={group.repoId}>

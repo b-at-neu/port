@@ -1,10 +1,12 @@
 // The session header's "…" menu — session limit stepper, the usage notice, and Dismiss once ended.
+import { useQueryClient } from '@tanstack/react-query'
 import { MoreHorizontal } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/renderer/components/ui/button'
+import { LimitStepper } from '@/renderer/components/limit-stepper'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/renderer/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
-import { useIpcMutation, useIpcQuery } from '@/renderer/data/query'
+import { ipcQueryOptions, useIpcMutation, useIpcQuery } from '@/renderer/data/query'
 import { capacityLine, usageNotice, usageSummary } from '@/renderer/session/rail-model'
 import {
   CAPACITY_SET_FAILED,
@@ -24,6 +26,7 @@ export function CapacityMenu({ usage, onDismiss, showDismiss }: { readonly usage
   const sessions = useIpcQuery('session:list')
   const capacity = useIpcQuery('session:capacity')
   const setCapacity = useIpcMutation('session:capacity:set')
+  const client = useQueryClient()
 
   const open = (sessions.data ?? []).filter((s) => s.phase !== 'ended').length
   const limit = capacity.data?.limit ?? 4
@@ -33,7 +36,8 @@ export function CapacityMenu({ usage, onDismiss, showDismiss }: { readonly usage
 
   async function setLimit(next: number): Promise<void> {
     try {
-      await setCapacity.mutateAsync({ limit: Math.max(1, Math.min(ceiling, next)) })
+      const saved = await setCapacity.mutateAsync({ limit: Math.max(1, Math.min(ceiling, next)) })
+      client.setQueryData(ipcQueryOptions('session:capacity').queryKey, saved)
     } catch {
       toast(CAPACITY_SET_FAILED)
     }
@@ -52,14 +56,8 @@ export function CapacityMenu({ usage, onDismiss, showDismiss }: { readonly usage
             <span className="text-small">Session limit</span>
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex items-center gap-1">
-                  <Button variant="outline" size="small" disabled={limit <= 1} onClick={() => void setLimit(limit - 1)}>
-                    −
-                  </Button>
-                  <span className="w-4 text-center text-small tabular-nums">{limit}</span>
-                  <Button variant="outline" size="small" disabled={limit >= ceiling} onClick={() => void setLimit(limit + 1)}>
-                    +
-                  </Button>
+                <div>
+                  <LimitStepper value={limit} min={1} max={ceiling} label="Session limit" onChange={(next) => void setLimit(next)} />
                 </div>
               </TooltipTrigger>
               <TooltipContent>{LIMIT_STEPPER_TITLE}</TooltipContent>

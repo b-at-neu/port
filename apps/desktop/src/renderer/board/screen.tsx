@@ -164,7 +164,7 @@ export function BoardScreen() {
                 {waitingSection !== undefined ? renderSection(waitingSection) : null}
                 <BoardBanners snapshot={snapshot} projection={projection} ungated={ungatedRows} selection={selection} />
                 {snapshot.state.repositories.length === 0 ? (
-                  <EmptyState icon={LayoutGrid} message="Add a repository to see its pipeline." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.repos }) }} className="px-4 py-6" />
+                  <EmptyState icon={LayoutGrid} message="Add a repository to see its pipeline." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.settings, search: { section: 'repositories' } }) }} className="px-4 py-6" />
                 ) : flatRows.length === 0 ? (
                   <EmptyState
                     icon={LayoutGrid}

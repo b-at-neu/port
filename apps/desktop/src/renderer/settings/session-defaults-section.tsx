@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/renderer/components/ui/select'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
+import { SettingsCard } from '@/renderer/components/settings-card'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { ipcQueryOptions, useIpcMutation, useIpcQuery } from '@/renderer/data/query'
 import { SESSION_MODELS, SESSION_PERMISSION_MODES } from '@/types/hosting'
@@ -36,20 +37,18 @@ export function SessionDefaultsSection() {
 
   if (query.status === 'pending') {
     return (
-      <section className="flex flex-col gap-3">
-        <h2 className="text-meta font-medium text-muted-foreground">New sessions</h2>
+      <SettingsCard title="New sessions">
         <Skeleton className="h-9 w-full" />
         <Skeleton className="h-9 w-full" />
-      </section>
+      </SettingsCard>
     )
   }
 
   if (query.status === 'error') {
     return (
-      <section className="flex flex-col gap-3">
-        <h2 className="text-meta font-medium text-muted-foreground">New sessions</h2>
+      <SettingsCard title="New sessions">
         <ErrorBanner message="Couldn't reach the main process to read session defaults. Restart port to try again." />
-      </section>
+      </SettingsCard>
     )
   }
 
@@ -66,8 +65,7 @@ export function SessionDefaultsSection() {
   }
 
   return (
-    <section className="flex flex-col gap-3">
-      <h2 className="text-meta font-medium text-muted-foreground">New sessions</h2>
+    <SettingsCard title="New sessions">
       <div className="flex h-9 items-center justify-between">
         <span id="session-model-label" className="text-body text-foreground">
           Model
@@ -113,6 +111,6 @@ export function SessionDefaultsSection() {
       </div>
       <p className="text-small text-muted-foreground">{MODE_HELPER[defaults.permissionMode]}</p>
       <p className="text-small text-muted-foreground">Applies to sessions you start or restore from now on. Open sessions and pipeline agents keep their own settings.</p>
-    </section>
+    </SettingsCard>
   )
 }
