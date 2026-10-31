@@ -9,10 +9,19 @@ function isPinned(session: HostedSessionSnapshot, marks: SessionMarks | undefine
   return session.claudeSessionId !== null && (marks?.pinned.includes(session.claudeSessionId) ?? false)
 }
 
+function isLiveUserSession(session: HostedSessionSnapshot): boolean {
+  return session.phase !== 'ended' && session.stage === null
+}
+
+/** The open user session for a Claude session id, or null — pipeline stage sessions never match. */
+export function liveUserSession(sessions: readonly HostedSessionSnapshot[], claudeSessionId: string): HostedSessionSnapshot | null {
+  return sessions.find((session) => isLiveUserSession(session) && session.claudeSessionId === claudeSessionId) ?? null
+}
+
 /** User sessions only, pinned ones first, each group keeping `sessions`' own order. Undefined
  *  `marks` (not loaded yet) leaves the plain list order unchanged. */
 export function orderSessions(sessions: readonly HostedSessionSnapshot[], marks: SessionMarks | undefined): readonly HostedSessionSnapshot[] {
-  const live = sessions.filter((session) => session.phase !== 'ended' && session.stage === null)
+  const live = sessions.filter(isLiveUserSession)
   if (marks === undefined) return live
   return [...live.filter((session) => isPinned(session, marks)), ...live.filter((session) => !isPinned(session, marks))]
 }

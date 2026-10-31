@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_JUMP_SESSIONS, orderSessions } from '@/utils/shell/session-order'
+import { liveUserSession, MAX_JUMP_SESSIONS, orderSessions } from '@/utils/shell/session-order'
 import type { HostedSessionSnapshot, SessionKey, SessionMarks } from '@/types/hosting'
 import type { SessionControls, SessionModels } from '@/utils/hosting/controls'
 import type { RepoId } from '@/utils/repos'
@@ -38,6 +38,24 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
 function marks(pinned: readonly string[]): SessionMarks {
   return { pinned, archived: [] }
 }
+
+describe('liveUserSession', () => {
+  it('matches an open user session by claude session id', () => {
+    const a = snapshot({ sessionKey: 'a' as SessionKey, claudeSessionId: 'claude-a' })
+    const b = snapshot({ sessionKey: 'b' as SessionKey, claudeSessionId: 'claude-b' })
+    expect(liveUserSession([a, b], 'claude-b')?.sessionKey).toBe('b')
+  })
+
+  it('skips ended and stage sessions', () => {
+    const ended = snapshot({ sessionKey: 'ended' as SessionKey, claudeSessionId: 'claude-x', phase: 'ended' })
+    const stage = snapshot({ sessionKey: 'stage' as SessionKey, claudeSessionId: 'claude-x', stage: { agent: 'impl', number: 1, kind: 'issue', trigger: 'planApproved' } })
+    expect(liveUserSession([ended, stage], 'claude-x')).toBeNull()
+  })
+
+  it('returns null when nothing matches', () => {
+    expect(liveUserSession([snapshot({ claudeSessionId: 'claude-a' })], 'claude-z')).toBeNull()
+  })
+})
 
 describe('orderSessions', () => {
   it('moves pinned sessions first, keeping each group\'s own order', () => {

@@ -10,10 +10,14 @@ export function menuItemLabel(kind: MarkKind, on: boolean): string {
 
 export const MENU_DISABLED_HINT = 'Available once the session has started'
 
-export function markSuccessToast(kind: MarkKind, on: boolean): string {
+export function markSuccessToast(kind: MarkKind, on: boolean, closed = false): string {
   if (kind === 'pinned') return on ? 'Pinned.' : 'Unpinned.'
-  return on ? "Archived. It's hidden from History." : 'Unarchived.'
+  if (!on) return 'Unarchived.'
+  return closed ? "Archived and closed. It's hidden from History." : "Archived. It's hidden from History."
 }
+
+export const ARCHIVE_CONFIRM_PROMPT = 'Archive while Claude is working? The current turn is abandoned.'
+export const ARCHIVE_CONFIRM_ACTION = 'Archive session'
 
 export function markFailureToast(kind: MarkKind, result: Extract<SessionMarkResult, { ok: false }> | 'unreachable'): string {
   const verb = kind === 'pinned' ? 'pin' : 'archive'
