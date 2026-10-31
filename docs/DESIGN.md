@@ -321,7 +321,7 @@ The markers `marker` and `autoPlan` are never shown as phases; `autoPlan` appear
 - [ ] Phase names come from the role map in §6, never a label string.
 - [ ] Copy is sentence case, verb-first buttons, no exclamation marks; messages that need the operator lead with the action.
 - [ ] Screenshots in light and dark: run `pnpm screenshots`, Read the screen's PNGs in `apps/desktop/out/screenshots/`, and embed the relevant captures under the pull request's `## Screenshots` (FORMATS.md). A new route gets a capture target in `apps/desktop/tests/visual/targets.mts`.
-  - Without a toolchain, download the CI copy: `gh run download <run-id> --repo <owner>/<name> --name screenshots --dir .temp/screenshots`.
+  - Without a toolchain, download the CI copy into the captures directory so the `artifacts.mjs screenshots` manifest can reference the PNGs: `gh run download <run-id> --repo <owner>/<name> --name screenshots --dir apps/desktop/out/screenshots`.
 
 ## 8. The mark
 
