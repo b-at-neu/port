@@ -1,8 +1,9 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { root, readJson, relOf } from '#lib/files.ts';
 import type { Reporter } from '#lib/report.ts';
+import { onTriggers } from './release.ts';
 
 // electron-builder.config.mjs and apps/desktop/scripts/ are the packaging boundary. These
 // assertions pin the installer build's own decisions mechanically.
@@ -137,7 +138,54 @@ export default async function ({ expect, fail, ok }: Reporter) {
       }
       // pin: desktop-package.yml has no push trigger ↔ docs/TESTING.md
       expect(!/^ {2}push:/m.test(text), 'desktop-packaging', `${relOf(workflowPath)} must not trigger on push — the release pull request's own run already covers the commit`);
+
+      // pin: the installer artifact name ↔ the version stamp, so two releases' downloads never collide by name
+      expect(text.includes('port-desktop-${{ runner.os }}-v${{ steps.version.outputs.version }}'), 'desktop-packaging', `${relOf(workflowPath)}'s installer artifact name must carry the manifest version`);
+      expect(!/name: port-desktop-\$\{\{ runner\.os \}\}\s*$/m.test(text), 'desktop-packaging', `${relOf(workflowPath)} still has an unversioned port-desktop-<OS> artifact name`);
       ok();
     }
+  }
+
+  // --- the release workflow attaches installers to the release, and is the only workflow allowed `contents: write`. ---
+  {
+    const releaseWorkflowPath = join(root, '.github/workflows/desktop-release.yml');
+    if (!existsSync(releaseWorkflowPath)) {
+      fail('desktop-packaging', `${relOf(releaseWorkflowPath)} does not exist`);
+    } else {
+      const text = readFileSync(releaseWorkflowPath, 'utf8');
+      const triggers = onTriggers(text);
+      expect(!(JSON.stringify(triggers) !== JSON.stringify(['release', 'workflow_dispatch'])), 'desktop-packaging', `${relOf(releaseWorkflowPath)} must trigger on exactly release and workflow_dispatch, got ${JSON.stringify(triggers)}`);
+      for (const needle of ['types: [published]', 'pnpm --filter @port/desktop dist', 'ubuntu-latest', 'macos-latest', 'windows-latest', 'gh release upload', '--clobber', 'contents: write']) {
+        expect(text.includes(needle), 'desktop-packaging', `${relOf(releaseWorkflowPath)} must include '${needle}'`);
+      }
+    }
+
+    for (const file of readdirSync(join(root, '.github/workflows')).filter((f) => f.endsWith('.yml') && f !== 'desktop-release.yml')) {
+      const text = readFileSync(join(root, '.github/workflows', file), 'utf8');
+      expect(!text.includes('contents: write'), 'desktop-packaging', `.github/workflows/${file} must not grant contents: write — only desktop-release.yml may`);
+    }
+    ok();
+  }
+
+  // pin: the manifest path both workflows read ↔ `.claude/port.config.json` release.versionFiles[0]
+  {
+    const manifestPath: string | undefined = readJson('.claude/port.config.json').release?.versionFiles?.[0];
+    if (!manifestPath) {
+      fail('desktop-packaging', '.claude/port.config.json has no release.versionFiles[0] to pin the workflows against');
+    } else {
+      for (const file of ['desktop-package.yml', 'desktop-release.yml']) {
+        const path = join(root, '.github/workflows', file);
+        if (existsSync(path)) {
+          expect(readFileSync(path, 'utf8').includes(manifestPath), 'desktop-packaging', `.github/workflows/${file} must read the version from ${manifestPath}`);
+        }
+      }
+    }
+  }
+
+  // --- both READMEs point at the latest release, not the pre-release "no release yet" wording. ---
+  for (const readme of ['README.md', 'apps/desktop/README.md']) {
+    const text = readFileSync(join(root, readme), 'utf8');
+    expect(text.includes('releases/latest'), 'desktop-packaging', `${readme} must link the latest release`);
+    expect(!text.includes('there is no release yet'), 'desktop-packaging', `${readme} still says there is no release yet`);
   }
 }
