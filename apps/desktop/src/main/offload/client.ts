@@ -5,6 +5,7 @@ import type { RefreshOutcome } from '@/types/state'
 
 interface OffloadWorker {
   postMessage(request: OffloadRequest): void
+  terminate(): Promise<unknown>
   on(event: 'message', listener: (response: OffloadResponse) => void): unknown
   on(event: 'error', listener: (error: Error) => void): unknown
   on(event: 'exit', listener: (code: number) => void): unknown
@@ -33,7 +34,7 @@ function spawnStateWorker(e2eFake: string | null): OffloadWorker {
 }
 
 /** Spawned lazily, so the worker's copy of `process.env` carries the login-shell PATH. A crash fails every pending request and the next call respawns it. */
-export function createWorkerEngine(options: WorkerEngineOptions = {}): StateEngine {
+export function createWorkerEngine(options: WorkerEngineOptions = {}): StateEngine & { readonly close: () => Promise<void> } {
   const spawn = options.spawn ?? (() => spawnStateWorker(options.e2eFake ?? null))
   const now = options.now ?? (() => new Date())
   const pending = new Map<number, Pending>()
@@ -87,7 +88,17 @@ export function createWorkerEngine(options: WorkerEngineOptions = {}): StateEngi
 
   const failedOutcome = (error: unknown): RefreshOutcome => ({ ok: false, at: now().toISOString(), error: reasonOf(error) })
 
+  /** Stops the worker so nothing it was reading or writing outlives the app. */
+  async function close(): Promise<void> {
+    const current = worker
+    if (current === null) return
+    stopped(current, 'closed')
+    crashed = false
+    await current.terminate()
+  }
+
   return {
+    close,
     refreshSessions: (params) => call('refreshSessions', params).catch(failedOutcome),
     refreshWorktrees: (params) => call('refreshWorktrees', params).catch(failedOutcome),
     refreshDenials: (params) => call('refreshDenials', params).catch(failedOutcome),

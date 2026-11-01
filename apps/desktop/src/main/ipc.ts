@@ -214,7 +214,7 @@ export function registerIpc(): RegisteredIpc {
 
   handle('worktrees:purge', (_event, request) => resolveWorktreesPurge(registryDeps, request, app.getPath('userData')))
 
-  const { engine, ...offload } = createOffload({ onRespawn: () => void watcher.refresh() })
+  const { engine, close: closeOffload, ...offload } = createOffload({ onRespawn: () => void watcher.refresh() })
 
   handle('sessions:scan', (_event, request) => {
     if (request !== undefined) throw new Error("'sessions:scan' takes no payload")
@@ -495,5 +495,5 @@ export function registerIpc(): RegisteredIpc {
     }
   }
 
-  return { watcher, hostedStore, dispatcher, shutdownDispatch: shutdown, stageRegistry }
+  return { watcher, hostedStore, dispatcher, shutdownDispatch: () => { shutdown(); void closeOffload() }, stageRegistry }
 }

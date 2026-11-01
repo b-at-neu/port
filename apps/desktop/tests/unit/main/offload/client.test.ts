@@ -7,10 +7,13 @@ type Listener = (value: never) => void
 function fakeWorker() {
   const listeners = new Map<string, Listener>()
   const sent: OffloadRequest[] = []
+  const terminated = { count: 0 }
   return {
     sent,
+    terminated,
     port: {
       postMessage: (request: OffloadRequest) => void sent.push(request),
+      terminate: () => Promise.resolve(void (terminated.count += 1)),
       on: (event: string, listener: Listener) => void listeners.set(event, listener),
     },
     reply: (response: OffloadResponse) => (listeners.get('message') as (r: OffloadResponse) => void)(response),
@@ -93,6 +96,16 @@ describe('createWorkerEngine', () => {
     workers[0]!.exit(1)
     workers[1]!.reply({ id: 2, ok: true, value: 'found' })
     expect(await pending).toBe('found')
+  })
+
+  it('close terminates the live worker and settles what was pending, and is a no-op with none', async () => {
+    const { engine, workers } = setup()
+    await engine.close()
+    expect(workers).toHaveLength(0)
+    const scan = engine.scanSessions({ repos: [] })
+    await engine.close()
+    expect(workers[0]!.terminated.count).toBe(1)
+    expect(await scan).toMatchObject({ ok: false, message: 'state worker stopped: closed' })
   })
 
   it('an error reply rejects the call, and a closed tail on a dead worker is a no-op', async () => {

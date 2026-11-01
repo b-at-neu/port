@@ -12,9 +12,9 @@ interface OffloadChannelDeps {
 }
 
 /** The one state worker for the process lifetime, spawned on first use, with the channel deps bound to it. */
-export function createOffload(options: { readonly onRespawn: () => void }): OffloadChannelDeps & { readonly engine: StateEngine } {
-  const engine = createWorkerEngine({ e2eFake: e2eFakePath(), onRespawn: options.onRespawn })
-  return { engine, ...offloadChannelDeps(engine) }
+export function createOffload(options: { readonly onRespawn: () => void }): OffloadChannelDeps & { readonly engine: StateEngine; readonly close: () => Promise<void> } {
+  const { close, ...engine } = createWorkerEngine({ e2eFake: e2eFakePath(), onRespawn: options.onRespawn })
+  return { engine, close, ...offloadChannelDeps(engine) }
 }
 
 function offloadChannelDeps(engine: StateEngine): OffloadChannelDeps {
