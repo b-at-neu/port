@@ -10,6 +10,11 @@ const HUE_TOLERANCE = 25;
 const REFRESH_SATURATION_CEILING = 0.15;
 const TEXT_CONTRAST = 4.5;
 const DOT_CONTRAST = 3.0;
+const HUE_SEPARATION = 30;
+const PILL_SATURATION = 0.6;
+const SURFACE_STEP = 4;
+const ACCENT_SATURATION = 0.25;
+const BRAND_BORDER_CONTRAST = 3.0;
 
 const bare = (hex: string): string => hex.replace(/^#/, '').toLowerCase();
 const channel = (hex: string, from: number): number => parseInt(bare(hex).slice(from, from + 2), 16) / 255;
@@ -22,6 +27,11 @@ function luminance(hex: string): number {
 function contrast(a: string, b: string): number {
   const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
   return (hi + 0.05) / (lo + 0.05);
+}
+
+function lstar(hex: string): number {
+  const y = luminance(hex);
+  return y < 0.008856 ? 903.3 * y : 116 * Math.cbrt(y) - 16;
 }
 
 function hsl(hex: string): { h: number; s: number; l: number } {
@@ -88,12 +98,14 @@ function designRows(design: string): DesignRow[] | null {
 }
 
 // One palette per pipeline phase, pinned across labels.json, theme.css and DESIGN §1 — a hue that drifts in one place breaks the "same colour everywhere" promise silently.
+// Also pins distinct phase hues, solid pills, stepped dark surfaces and a brand-hued accent.
 export default async function ({ expect, fail, ok }: Reporter) {
   // --- Self-test: the colour maths must give the textbook answers, or every rule below is noise ---
   {
     expect(Math.abs(contrast('ffffff', '000000') - 21) < 0.01, 'phase-palette', 'contrast(white, black) is not 21 — the WCAG formula is broken');
     expect(Math.abs(hsl('ff0000').h) < 0.5 && Math.abs(hsl('00ff00').h - 120) < 0.5 && Math.abs(hsl('0000ff').h - 240) < 0.5, 'phase-palette', 'hsl() does not give the pure red/green/blue hues');
     expect(hueGap(350, 10) === 20, 'phase-palette', 'hueGap does not wrap around 0°');
+    expect(Math.abs(lstar('ffffff') - 100) < 0.01 && Math.abs(lstar('000000')) < 0.01, 'phase-palette', 'lstar() does not map white to 100 and black to 0');
   }
 
   const labels: { key: string; color: string; role: string; palette: string | null }[] = readJson(LABELS_REL).labels;
@@ -208,7 +220,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!bad) ok();
   }
 
-  // --- (f) WCAG: pill text 4.5:1 on its pill, every dot 3:1 on the background, the sidebar, the selected row and its own pill, in both themes ---
+  // --- (f) WCAG: pill text 4.5:1 on its pill, every dot 3:1 on the background, the sidebar and the selected row, in both themes ---
   {
     let bad = false;
     for (const theme of ['light', 'dark'] as const) {
@@ -227,13 +239,108 @@ export default async function ({ expect, fail, ok }: Reporter) {
           bad = true;
           fail('phase-palette', `palette '${row.palette}' pill text ${text} on ${pill} is ${contrast(text, pill).toFixed(2)}:1 in the ${theme} theme, below ${TEXT_CONTRAST} — darken the text or lighten the pill`);
         }
-        for (const [against, name] of [[background, 'background'], [sidebar, 'sidebar'], [selection, 'selection'], [pill, 'its own pill']] as const) {
+        for (const [against, name] of [[background, 'background'], [sidebar, 'sidebar'], [selection, 'selection']] as const) {
           if (contrast(dot, against) < DOT_CONTRAST) {
             bad = true;
             fail('phase-palette', `palette '${row.palette}' dot ${dot} on ${name} (${against}) is ${contrast(dot, against).toFixed(2)}:1 in the ${theme} theme, below ${DOT_CONTRAST} — darken the light dot (and its anchor label) or lighten the dark one`);
           }
         }
       }
+    }
+    if (!bad) ok();
+  }
+
+  const coloured = rows.filter((r) => r.palette !== 'refresh');
+
+  // --- (g) no two phases share a hue: light dots and light pill fills stay HUE_SEPARATION° apart ---
+  {
+    let bad = false;
+    for (const token of ['dot', 'pill'] as const) {
+      const hues = coloured.map((r) => [r.palette, resolved(themes.light, `phase-${r.palette}-${token}`)] as const);
+      for (let i = 0; i < hues.length; i++) {
+        for (let j = i + 1; j < hues.length; j++) {
+          const [a, b] = [hues[i], hues[j]];
+          if (a[1] === null || b[1] === null) continue;
+          const gap = hueGap(hsl(a[1]).h, hsl(b[1]).h);
+          if (gap < HUE_SEPARATION) {
+            bad = true;
+            fail('phase-palette', `light --phase-${a[0]}-${token} (${a[1]}) and --phase-${b[0]}-${token} (${b[1]}) are ${Math.round(gap)}° apart, under ${HUE_SEPARATION}° — move one hue so the phases read as different colours`);
+          }
+        }
+      }
+    }
+    if (!bad) ok();
+  }
+
+  // --- (h) a phase pill is a solid fill: saturation at least PILL_SATURATION in both themes ---
+  {
+    let bad = false;
+    for (const theme of ['light', 'dark'] as const) {
+      for (const row of coloured) {
+        const pill = resolved(themes[theme], `phase-${row.palette}-pill`);
+        if (pill !== null && hsl(pill).s < PILL_SATURATION) {
+          bad = true;
+          fail('phase-palette', `--phase-${row.palette}-pill (${pill}) has saturation ${hsl(pill).s.toFixed(2)} in the ${theme} theme, under ${PILL_SATURATION} — a phase pill is a solid fill, not a pale tint`);
+        }
+      }
+    }
+    if (!bad) ok();
+  }
+
+  // --- (i) dark surfaces step up in lightness: sidebar < background < card < muted, accent above card, selection above background ---
+  {
+    let bad = false;
+    const dark = themes.dark;
+    const steps: [string, string][] = [['sidebar', 'background'], ['background', 'card'], ['card', 'muted'], ['card', 'accent'], ['background', 'selection']];
+    for (const [lower, higher] of steps) {
+      const [lo, hi] = [resolved(dark, lower), resolved(dark, higher)];
+      if (lo === null || hi === null) {
+        bad = true;
+        fail('phase-palette', `--${lower} or --${higher} does not resolve to a hex in the dark theme of ${THEME_REL}`);
+      } else if (lstar(hi) - lstar(lo) < SURFACE_STEP) {
+        bad = true;
+        fail('phase-palette', `dark --${higher} (${hi}, L* ${lstar(hi).toFixed(1)}) is under ${SURFACE_STEP} L* above --${lower} (${lo}, L* ${lstar(lo).toFixed(1)}) — lighten --${higher} so the two surfaces separate`);
+      }
+    }
+    if (!bad) ok();
+  }
+
+  // --- (j) accent, selection and primary stay on the brand hue, in both themes ---
+  {
+    let bad = false;
+    for (const theme of ['light', 'dark'] as const) {
+      const brand = resolved(themes[theme], 'brand');
+      for (const name of ['accent', 'selection', 'primary']) {
+        const value = resolved(themes[theme], name);
+        if (brand === null || value === null) {
+          bad = true;
+          fail('phase-palette', `--${name} or --brand does not resolve to a hex in the ${theme} theme of ${THEME_REL}`);
+        } else if (hueGap(hsl(value).h, hsl(brand).h) > HUE_TOLERANCE || hsl(value).s < ACCENT_SATURATION) {
+          bad = true;
+          fail('phase-palette', `${theme} --${name} (${value}) is ${Math.round(hueGap(hsl(value).h, hsl(brand).h))}° from --brand ${brand} at saturation ${hsl(value).s.toFixed(2)} — keep it within ${HUE_TOLERANCE}° and at least ${ACCENT_SATURATION} saturated so it reads as the brand`);
+        }
+      }
+    }
+    if (!bad) ok();
+  }
+
+  // --- (k) text on the brand-tinted surfaces reaches 4.5:1, and the dark brand tile border 3:1 on the sidebar ---
+  {
+    let bad = false;
+    const pairs: [string, string][] = [['foreground-secondary', 'accent'], ['primary-text', 'accent'], ['primary-text', 'selection'], ['primary-foreground', 'primary']];
+    for (const theme of ['light', 'dark'] as const) {
+      for (const [text, surface] of pairs) {
+        const [fg, bg] = [resolved(themes[theme], text), resolved(themes[theme], surface)];
+        if (fg === null || bg === null || contrast(fg, bg) < TEXT_CONTRAST) {
+          bad = true;
+          fail('phase-palette', `${theme} --${text} (${fg ?? 'unresolved'}) on --${surface} (${bg ?? 'unresolved'}) is ${fg !== null && bg !== null ? contrast(fg, bg).toFixed(2) : 'unmeasurable'}:1, below ${TEXT_CONTRAST} — adjust --${text}`);
+        }
+      }
+    }
+    const [border, sidebar] = [resolved(themes.dark, 'brand-border'), resolved(themes.dark, 'sidebar')];
+    if (border === null || sidebar === null || contrast(border, sidebar) < BRAND_BORDER_CONTRAST) {
+      bad = true;
+      fail('phase-palette', `dark --brand-border (${border ?? 'unresolved'}) on --sidebar (${sidebar ?? 'unresolved'}) is below ${BRAND_BORDER_CONTRAST}:1 — lighten --brand-border so the brand tile edge stays visible`);
     }
     if (!bad) ok();
   }
