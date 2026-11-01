@@ -3,7 +3,8 @@ import { Link } from '@tanstack/react-router'
 import { useSidebarCollapsed, toggleSidebarCollapsed } from '@/renderer/shell/stores'
 import { Inbox, LayoutList, ListTodo, PanelLeftClose, PanelLeftOpen, Settings } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
-import { cn } from '@/renderer/lib/utils'
+import { ScrollArea } from '@/renderer/components/ui/scroll-area'
+import { Separator } from '@/renderer/components/ui/separator'
 import { useNeedsYouItems } from '@/renderer/needs-you/use-items'
 import { IconButton } from '@/renderer/components/icon-button'
 import { PhaseDot } from '@/renderer/components/phase-dot'
@@ -78,11 +79,14 @@ export function Sidebar() {
           <PanelLeftClose />
         </IconButton>
       </div>
-      <div className={cn('flex flex-1 flex-col gap-3 overflow-y-auto py-2')}>
-        <SidebarScreens />
-        <SidebarPipelines />
-        <SidebarSessions />
-      </div>
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="flex flex-col gap-3 py-2">
+          <SidebarScreens />
+          <SidebarPipelines />
+          <SidebarSessions />
+        </div>
+      </ScrollArea>
+      <Separator />
       <SidebarFooter />
     </aside>
   )

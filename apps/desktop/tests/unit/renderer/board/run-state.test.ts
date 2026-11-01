@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { RepoRunState, RunStatesSnapshot } from '@/types/dispatch'
-import { runStateLineCopy, runStateResultNote } from '@/renderer/board/run-state'
+import { runStateLineCopy, runStateResultNote, undoCommandFor } from '@/renderer/board/run-state'
 
 const REPO_ID = 'repo-a' as RepoId
 
@@ -100,5 +100,20 @@ describe('runStateResultNote', () => {
     const note = runStateResultNote({ ok: false, command: 'take-over', repoId: REPO_ID, reason: 'unwritable', message: 'disk full', path: '/repo/.agents/cockpit.json' })
     expect(note).toContain('/repo/.agents/cockpit.json')
     expect(note).toContain('disk full')
+  })
+})
+
+describe('undoCommandFor', () => {
+  it.each([
+    ['dispatching', 'run', null],
+    ['draining', 'run', 'drain'],
+    ['paused', 'run', 'pause'],
+    [null, 'run', null],
+    ['dispatching', 'drain', 'run'],
+    ['draining', 'drain', null],
+    ['paused', 'drain', null],
+    [null, 'drain', null],
+  ] as const)('after %s then %s it returns %s', (prior, command, expected) => {
+    expect(undoCommandFor(prior, command)).toBe(expected)
   })
 })
