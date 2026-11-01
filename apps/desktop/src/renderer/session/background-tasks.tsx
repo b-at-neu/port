@@ -1,14 +1,14 @@
 // The background-task panel — sits between CommandStrip and Composer, rendered only when the snapshot carries at least one task.
 import { useState } from 'react'
 import { Bot, SquareTerminal, Wrench } from 'lucide-react'
-import { toast } from 'sonner'
 import { AlertDialog, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/renderer/components/ui/alert-dialog'
 import { Button } from '@/renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
-import type { BackgroundTask } from '@/types/hosting'
-import type { SessionKey } from '@/types/hosting'
+import type { BackgroundTask, SessionKey, SessionTaskStopResult } from '@/types/hosting'
+import type { ActionToast } from '@/types/toast'
+import { runInBackground } from '@/renderer/lib/background-action'
 import { stopTask } from '@/renderer/session/actions'
-import { TASK_KEEP_RUNNING, TASK_STOP_BUTTON, TASK_STOP_TITLE, TASK_STOP_UNKNOWN, TASK_STOP_UNKNOWN_SESSION, taskStopBody, taskStopFailed } from '@/renderer/session/copy'
+import { TASK_KEEP_RUNNING, TASK_STOP_BUTTON, TASK_STOP_PENDING, TASK_STOP_SUCCESS, TASK_STOP_TITLE, TASK_STOP_UNKNOWN, TASK_STOP_UNKNOWN_SESSION, taskStopBody, taskStopFailed } from '@/renderer/session/copy'
 
 function TaskIcon({ type, className }: { readonly type: string; readonly className: string }) {
   if (type === 'bash') return <SquareTerminal aria-hidden="true" className={className} />
@@ -16,19 +16,23 @@ function TaskIcon({ type, className }: { readonly type: string; readonly classNa
   return <Wrench aria-hidden="true" className={className} />
 }
 
+function toastFor(result: SessionTaskStopResult): ActionToast {
+  const plain = { description: null, action: null, cancel: null } as const
+  if (result.ok) return { ...plain, tone: 'success', title: TASK_STOP_SUCCESS }
+  if (result.kind === 'unknown-task') return { ...plain, tone: 'info', title: TASK_STOP_UNKNOWN }
+  if (result.kind === 'stop-failed') return { ...plain, tone: 'error', title: taskStopFailed(result.message) }
+  return { ...plain, tone: 'error', title: TASK_STOP_UNKNOWN_SESSION }
+}
+
 function TaskRow({ sessionKey, task }: { readonly sessionKey: SessionKey; readonly task: BackgroundTask }) {
   const [confirming, setConfirming] = useState(false)
   const [stopping, setStopping] = useState(false)
 
   async function handleStop(): Promise<void> {
-    setStopping(true)
-    const result = await stopTask(sessionKey, task.taskId)
-    setStopping(false)
     setConfirming(false)
-    if (result.ok) return
-    if (result.kind === 'unknown-task') toast(TASK_STOP_UNKNOWN)
-    else if (result.kind === 'unknown-session') toast(TASK_STOP_UNKNOWN_SESSION)
-    else if (result.kind === 'stop-failed') toast(taskStopFailed(result.message))
+    setStopping(true)
+    await runInBackground({ id: `task-stop:${sessionKey}:${task.taskId}`, pending: TASK_STOP_PENDING, run: () => stopTask(sessionKey, task.taskId), toToast: toastFor })
+    setStopping(false)
   }
 
   return (
@@ -54,8 +58,8 @@ function TaskRow({ sessionKey, task }: { readonly sessionKey: SessionKey; readon
             <Button variant="outline" onClick={() => setConfirming(false)}>
               {TASK_KEEP_RUNNING}
             </Button>
-            <Button variant="destructive" disabled={stopping} aria-busy={stopping} onClick={() => void handleStop()}>
-              {stopping ? '…' : TASK_STOP_BUTTON}
+            <Button variant="destructive" onClick={() => void handleStop()}>
+              {TASK_STOP_BUTTON}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

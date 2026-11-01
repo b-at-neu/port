@@ -37,7 +37,8 @@ import { QUESTION_SKIPPED_MESSAGE, COMPOSER_PLAN_PLACEHOLDER, COMPOSER_QUESTION_
 import { toast } from 'sonner'
 import { PromptInput } from '@/renderer/session/prompt-input'
 import { PIPELINE_SEND_BLOCKED, STAGE_COMMAND_BLOCKED } from '@/renderer/session/composer-copy'
-import { COMPOSER_HINT, composerCopy, CLOSE_CONFIRM_NO, CLOSE_CONFIRM_PROMPT, EMPTY_TITLE, interruptNote, originDividerLabel, RECONNECTING, SEND_FAILED_UNKNOWN_SESSION, SEND_FAILED_UNREACHABLE, windowNote } from '@/renderer/session/copy'
+import { runInBackground } from '@/renderer/lib/background-action'
+import { COMPOSER_HINT, composerCopy, CLOSE_CONFIRM_NO, CLOSE_CONFIRM_PROMPT, CLOSE_PENDING, CLOSE_SUCCESS, CLOSE_UNKNOWN_SESSION, EMPTY_TITLE, interruptNote, originDividerLabel, RECONNECTING, SEND_FAILED_UNKNOWN_SESSION, SEND_FAILED_UNREACHABLE, windowNote } from '@/renderer/session/copy'
 import { BackgroundTasksPanel } from '@/renderer/session/background-tasks'
 
 function repoLabelFor(repos: readonly RepositoryEntry[] | undefined, snapshot: HostedSessionSnapshot): string {
@@ -132,9 +133,18 @@ function SessionLive({ snapshot, repoLabel, paneOpen }: { readonly snapshot: Hos
     setInterruptNoteText(interruptNote(result))
   }
 
+  function closeSession(): void {
+    void runInBackground({
+      id: `session-close:${key}`,
+      pending: CLOSE_PENDING,
+      run: () => close(key),
+      toToast: (result) => (result.ok ? { tone: 'success', title: CLOSE_SUCCESS, description: null, action: null, cancel: null } : { tone: 'error', title: CLOSE_UNKNOWN_SESSION, description: null, action: null, cancel: null }),
+    })
+  }
+
   function handleCloseClick(): void {
     if (snapshot.phase === 'streaming' || snapshot.phase === 'interrupting') setCloseConfirming(true)
-    else void close(key)
+    else closeSession()
   }
 
   function toggleChanges(): void {
@@ -232,7 +242,7 @@ function SessionLive({ snapshot, repoLabel, paneOpen }: { readonly snapshot: Hos
               variant="destructive"
               onClick={() => {
                 setCloseConfirming(false)
-                void close(key)
+                closeSession()
               }}
             >
               Close session
