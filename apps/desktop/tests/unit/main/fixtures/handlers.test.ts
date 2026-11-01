@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { IPC_CHANNELS } from '@/types/ipc'
 import type { IpcChannel } from '@/types/ipc'
+import { FIXTURE_SCENARIOS } from '@/types/fixtures'
 import { needsYouItems } from '@/renderer/board/needs-you'
 import { projectBoard } from '@/renderer/board/project'
 import type { RepoId } from '@/utils/repos'
@@ -48,9 +49,10 @@ const SAMPLE_REQUESTS: Partial<Record<IpcChannel, unknown>> = {
   'session:archive:set': { sessionId: 'fixture-claude-1', archived: true },
 }
 
-describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', (scenario) => {
-  const now = new Date('2026-09-05T14:00:00.000Z')
-  const handlers = fixtureHandlers(now, scenario)
+const NOW = new Date('2026-09-05T14:00:00.000Z')
+
+describe.each(FIXTURE_SCENARIOS)('fixtureHandlers coverage (%s scenario)', (scenario) => {
+  const handlers = fixtureHandlers(NOW, scenario)
 
   it('has a handler for every IPC channel', () => {
     for (const channel of IPC_CHANNELS) {
@@ -64,6 +66,67 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
       expect(() => (handlers[channel] as (req: unknown) => unknown)(request)).not.toThrow()
     }
   })
+})
+
+describe('fixtureHandlers (unregistered scenario)', () => {
+  const handlers = fixtureHandlers(NOW, 'unregistered')
+
+  it('reports an empty registry, board, session scan and session list', () => {
+    expect(handlers['repos:list'](undefined)).toEqual({ ok: true, repositories: [] })
+    const board = handlers['board:snapshot'](undefined)
+    expect(board.state.repositories).toHaveLength(0)
+    expect(board.tick).toHaveLength(0)
+    expect(board.dispatch).toHaveLength(0)
+    const scan = handlers['sessions:scan'](undefined)
+    if (!scan.ok) throw new Error('fixture sessions:scan unexpectedly failed')
+    expect(scan.sessions).toHaveLength(0)
+    expect(handlers['session:list'](undefined)).toEqual([])
+  })
+})
+
+describe('fixtureHandlers (failing scenario)', () => {
+  const handlers = fixtureHandlers(NOW, 'failing')
+  const snapshot = handlers['board:snapshot'](undefined)
+
+  it('derives one github-unavailable, one not-ready and one ok repository, with no board rows', () => {
+    const repositories = snapshot.state.repositories
+    expect(repositories).toHaveLength(3)
+    expect(repositories.filter((r) => !r.ok && r.reason === 'github-unavailable')).toHaveLength(1)
+    expect(repositories.find((r) => !r.ok && r.reason === 'github-unavailable')).toMatchObject({ kind: 'network' })
+    expect(repositories.filter((r) => !r.ok && r.reason === 'not-ready')).toHaveLength(1)
+    expect(repositories.filter((r) => r.ok)).toHaveLength(1)
+    expect(projectBoard({ snapshot, groupBy: 'repo', now: NOW, sessions: [] }).rows).toHaveLength(0)
+  })
+
+  it('reports the run-state store as unreadable', () => {
+    expect(snapshot.runStates.store.kind).toBe('unreadable')
+  })
+
+  it('fails backlog:list with a rate limit for widgets and a network error elsewhere', () => {
+    expect(handlers['backlog:list']({ repoId: WIDGETS })).toMatchObject({ ok: false, kind: 'rate-limited' })
+    expect(handlers['backlog:list']({ repoId: 'fixture-acme-gadgets' as RepoId })).toMatchObject({ ok: false, kind: 'network' })
+  })
+
+  it('fails sessions:scan as projects-unreadable and still lists three repositories', () => {
+    expect(handlers['sessions:scan'](undefined)).toMatchObject({ ok: false, kind: 'projects-unreadable' })
+    const repos = handlers['repos:list'](undefined)
+    if (!repos.ok) throw new Error('fixture repos:list unexpectedly failed')
+    expect(repos.repositories).toHaveLength(3)
+  })
+})
+
+describe('fixtureHandlers (registry-error scenario)', () => {
+  const handlers = fixtureHandlers(NOW, 'registry-error')
+
+  it('fails repos:list as registry-malformed and leaves the board as populated', () => {
+    expect(handlers['repos:list'](undefined)).toMatchObject({ ok: false, kind: 'registry-malformed' })
+    expect(handlers['board:snapshot'](undefined)).toEqual(fixtureHandlers(NOW, 'populated')['board:snapshot'](undefined))
+  })
+})
+
+describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', (scenario) => {
+  const now = NOW
+  const handlers = fixtureHandlers(now, scenario)
 
   it('reports repos:list with two ready and one not-ready entry', () => {
     const result = handlers['repos:list'](undefined)

@@ -17,7 +17,8 @@ import { fileURLToPath } from 'node:url'
 // with no browser-download install step at all.
 import { _electron } from 'playwright-core'
 import type { ElectronApplication, Page } from 'playwright-core'
-import { FIXTURE_ENV } from '../../src/main/fixtures/mode'
+import { FIXTURE_ENV } from '../../src/types/fixtures'
+import type { FixtureScenario } from '../../src/types/fixtures'
 import { packagedExecutable, SMOKE_DIST_DIR } from '../smoke/binary.mjs'
 // `.mjs`, matching this `.mts` file's own emitted-ESM specifier rules — a
 // relative import from a `.mts` module must name the extension Node would
@@ -36,7 +37,7 @@ export interface FixtureApp {
 
 /** Fails fast with the actual remedy rather than a Playwright launch error
  *  an agent would have to decode. `scenario` defaults to `populated`. */
-export async function launchFixtureApp(scenario: 'populated' | 'empty' = 'populated'): Promise<FixtureApp> {
+export async function launchFixtureApp(scenario: FixtureScenario = 'populated'): Promise<FixtureApp> {
   const packaged = process.env['PORT_VISUAL_PACKAGED'] === '1'
 
   if (!packaged && !existsSync(MAIN_ENTRY)) {
@@ -94,6 +95,15 @@ export async function launchFixtureApp(scenario: 'populated' | 'empty' = 'popula
       await electronApp.close()
       await rm(userDataDir, { recursive: true, force: true })
     },
+  }
+}
+
+/** Waits for the launch redirect to settle, so a late redirect never lands after the first capture has set its own hash. */
+export async function waitForLanding(page: Page, hash: string): Promise<void> {
+  try {
+    await page.waitForFunction((expected: string) => location.hash.startsWith(expected), hash, { timeout: WAIT_TIMEOUT_MS })
+  } catch (error) {
+    throw new Error(`scenario launch never landed on ${hash} — the launch redirect changed; update SCENARIO_LANDING in tests/visual/targets.mts`, { cause: error })
   }
 }
 

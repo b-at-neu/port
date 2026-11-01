@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { test, expect } from '@playwright/test'
 import type { ConsoleMessage } from 'playwright-core'
 import { _electron } from 'playwright-core'
-import { FIXTURE_ENV } from '../../src/main/fixtures/mode.js'
+import { FIXTURE_ENV } from '../../src/types/fixtures.js'
 import { packagedExecutable } from './binary.mjs'
 
 test.describe.configure({ mode: 'serial' })

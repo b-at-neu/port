@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { FIXTURE_ENV, fixtureMode } from '@/main/fixtures/mode'
+import { fixtureMode } from '@/main/fixtures/mode'
+import { FIXTURE_ENV } from '@/types/fixtures'
 
 const isAbsolutePosix = (path: string): boolean => path.startsWith('/')
 
@@ -66,9 +67,13 @@ describe('fixtureMode', () => {
     })
   })
 
-  it('is invalid when the scenario is unrecognised', () => {
+  it.each(['unregistered', 'failing', 'registry-error'])('is on with the %s scenario when requested', (scenario) => {
+    expect(fixtureMode({ [FIXTURE_ENV.flag]: '1', [FIXTURE_ENV.userData]: '/tmp/fixtures', [FIXTURE_ENV.scenario]: scenario }, false, DEV, isAbsolutePosix)).toEqual({ kind: 'on', userData: '/tmp/fixtures', scenario })
+  })
+
+  it('is invalid when the scenario is unrecognised, naming every allowed value', () => {
     const result = fixtureMode({ [FIXTURE_ENV.flag]: '1', [FIXTURE_ENV.userData]: '/tmp/fixtures', [FIXTURE_ENV.scenario]: 'bogus' }, false, DEV, isAbsolutePosix)
-    expect(result.kind).toBe('invalid')
+    expect(result).toEqual({ kind: 'invalid', reason: 'PORT_FIXTURES_SCENARIO must be one of: populated, empty, unregistered, failing, registry-error' })
   })
 
   it('is on in a packaged build when the build honours the flag packaged', () => {
