@@ -15,6 +15,7 @@ import type { RuntimePreflight, RuntimeProbe } from '@/types/runtime'
 import type { GhStatus } from '@/types/gh'
 import type { NotificationPrefs, StorageReport, UsageSummary } from '@/types/settings'
 import type { BacklogResponse } from '@/types/backlog'
+import type { AuditRead } from '@/types/writes'
 import type { StageAllowResult, StageResumeResult, StageRestartResult } from '@/types/stage'
 import type {
   HostedSessionSnapshot,
@@ -264,6 +265,11 @@ export interface IpcMap {
     request: { repoId: RepoId }
     response: BacklogResponse
   }
+  /** The Audit screen's own read — `null` is explicit, never omitted; a `number` requires a `repoId`. */
+  'audit:list': {
+    request: { repoId: RepoId | null; number: number | null }
+    response: AuditRead
+  }
   /** The Settings screen's own read of an operator's persisted session defaults. */
   'session:defaults': {
     request: void
@@ -425,6 +431,7 @@ export const IPC_CHANNELS = [
   'session:restore:discard',
   'gh:status',
   'backlog:list',
+  'audit:list',
   'session:defaults',
   'session:defaults:set',
   'session:rename',

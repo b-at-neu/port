@@ -37,6 +37,12 @@ export interface HistorySearch {
   readonly archived?: boolean
 }
 
+/** The key is `number`, not `item`, because `BoardSearch.item` already owns `item` with another type across the route tree. `number` only means something alongside `repo`. */
+export interface AuditSearch {
+  readonly repo?: RepoId | null
+  readonly number?: number | null
+}
+
 export interface NeedsYouSearch {
   /** The selected row's `dismissKeyOf` key. */
   readonly focus?: string | null

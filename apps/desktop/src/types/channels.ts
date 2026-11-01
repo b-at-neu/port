@@ -117,6 +117,7 @@ export const QUERY_CHANNELS = [
   'gh:status',
   'session:defaults',
   'backlog:list',
+  'audit:list',
   'session:files',
   'folders:list',
   'session:changes',

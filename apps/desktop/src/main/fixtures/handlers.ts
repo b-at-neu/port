@@ -7,6 +7,7 @@ import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
 import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'
 import { fixtureStorageReport, fixtureUsageSummary } from '@/main/fixtures/settings'
 import { fixtureBoardSnapshot } from '@/main/fixtures/board'
+import { fixtureAuditRead } from '@/main/fixtures/audit'
 import { fixtureBacklog } from '@/main/fixtures/backlog'
 import { fixtureClaimPreflight, fixtureGatePreflight } from '@/main/fixtures/dialogs'
 import { fixtureFolders, fixtureSessionChanges } from '@/main/fixtures/folders'
@@ -104,6 +105,7 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
 
     'gh:status': () => ({ kind: 'signed-in', checkedAt: now.toISOString(), account: 'octo-operator', scopes: ['repo', 'read:org', 'workflow'] }),
     'backlog:list': (request) => fixtureBacklog(now, request.repoId),
+    'audit:list': (request) => fixtureAuditRead(now, scenario, request),
     'session:defaults': () => DEFAULT_SESSION_DEFAULTS,
     'session:defaults:set': (request) => request,
     'session:rename': () => ({ ok: false, kind: 'unknown-session' }),

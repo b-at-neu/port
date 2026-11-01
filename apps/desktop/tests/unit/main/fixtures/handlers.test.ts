@@ -39,6 +39,7 @@ const SAMPLE_REQUESTS: Partial<Record<IpcChannel, unknown>> = {
   'session:restore': { restoreId: 'r1' },
   'session:restore:discard': { restoreId: null },
   'backlog:list': { repoId: 'fixture-acme-widgets' },
+  'audit:list': { repoId: 'fixture-acme-widgets', number: 38 },
   'session:changes': { sessionKey: STREAMING_KEY },
   'session:pin:set': { sessionId: 'fixture-claude-1', pinned: true },
   'session:archive:set': { sessionId: 'fixture-claude-1', archived: true },

@@ -1,9 +1,10 @@
 // The app's one router — code-based, hash history (`loadFile` serves
 // `file://`, where path history cannot resolve).
 import { createHashHistory, createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router'
-import { ROUTE_IDS, boardSearchFromRaw, historySearchFromRaw, needsYouSearchFromRaw, repoSearchFromRaw, searchSearchFromRaw, sessionSearchFromRaw, settingsSearchFromRaw, transcriptSearchFromRaw } from '@/renderer/router/routes'
-import type { BoardSearch, HistorySearch, NeedsYouSearch, RepoSearch, SearchSearch, SessionSearch, SettingsSearch, TranscriptSearch } from '@/types/router'
+import { ROUTE_IDS, auditSearchFromRaw, boardSearchFromRaw, historySearchFromRaw, needsYouSearchFromRaw, repoSearchFromRaw, searchSearchFromRaw, sessionSearchFromRaw, settingsSearchFromRaw, transcriptSearchFromRaw } from '@/renderer/router/routes'
+import type { AuditSearch, BoardSearch, HistorySearch, NeedsYouSearch, RepoSearch, SearchSearch, SessionSearch, SettingsSearch, TranscriptSearch } from '@/types/router'
 import { SettingsScreen } from '@/renderer/settings/screen'
+import { AuditScreen } from '@/renderer/audit/screen'
 import { BacklogScreen } from '@/renderer/backlog/screen'
 import { NeedsYouScreen } from '@/renderer/needs-you/screen'
 import { SetupScreen } from '@/renderer/setup/screen'
@@ -86,6 +87,12 @@ const settingsRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): SettingsSearch => settingsSearchFromRaw(search),
 })
 const backlogRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.backlog, component: BacklogScreen })
+const auditRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: ROUTE_IDS.audit,
+  component: AuditScreen,
+  validateSearch: (search: Record<string, unknown>): AuditSearch => auditSearchFromRaw(search),
+})
 const needsYouRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: ROUTE_IDS.needsYou,
@@ -123,6 +130,7 @@ const routeTree = rootRoute.addChildren([
   sessionRoute,
   settingsRoute,
   backlogRoute,
+  auditRoute,
   needsYouRoute,
   setupRoute,
   aboutRoute,
