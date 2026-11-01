@@ -18,10 +18,20 @@ function parseScenario(raw: string | undefined): FixtureScenario | 'invalid' {
   return 'invalid'
 }
 
-/** `off` unless the flag is exactly `'1'`. `ignored` in a packaged build unless `allowPackaged` (the `--mode smoke` build flag) is set. `invalid` fails closed rather than guessing a directory or scenario. */
-export function fixtureMode(env: Readonly<Record<string, string | undefined>>, isPackaged: boolean, allowPackaged: boolean, isAbsolute: (path: string) => boolean): FixtureModeResult {
+interface FixtureBuild {
+  /** The build bundles fixture data. */
+  readonly compiled: boolean
+  /** A packaged app of this build still honours the flag (the `--mode smoke` copy). */
+  readonly packaged: boolean
+}
+
+/** `off` unless the flag is exactly `'1'`. `ignored` in a packaged build unless `build.packaged`. `invalid` fails closed — on a build with no fixtures, or rather than guessing a directory or scenario. */
+export function fixtureMode(env: Readonly<Record<string, string | undefined>>, isPackaged: boolean, build: FixtureBuild, isAbsolute: (path: string) => boolean): FixtureModeResult {
   if (env[FIXTURE_ENV.flag] !== '1') return { kind: 'off' }
-  if (isPackaged && !allowPackaged) return { kind: 'ignored' }
+  if (isPackaged && !build.packaged) return { kind: 'ignored' }
+  if (!build.compiled) {
+    return { kind: 'invalid', reason: `${FIXTURE_ENV.flag} is set but this build carries no fixtures — use \`pnpm dev\`, or build with \`--mode fixtures\`` }
+  }
 
   const userData = env[FIXTURE_ENV.userData]
   if (userData === undefined || userData === '' || !isAbsolute(userData)) {

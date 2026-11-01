@@ -3,7 +3,7 @@ import type { FixtureScenario } from '@/types/fixtures'
 import type { ReleaseEntry, ReleaseInfo, ReleaseStatus, ReleaseStatusResponse } from '@/types/release'
 import type { RepoId } from '@/utils/repos'
 import { buildCandidates } from '@/utils/release/version'
-import { WIDGETS_ID } from '@/main/fixtures/repos'
+import { WIDGETS_ID } from './repos'
 
 const ENTRIES: readonly ReleaseEntry[] = [
   { number: 169, title: 'Add dark mode to the email templates', labels: ['enhancement', 'design'], dependency: false },

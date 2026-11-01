@@ -1,4 +1,4 @@
-// Packaged-binary smoke test — launches the real electron-builder output, never the dev build, with fixtures deliberately off (a packaged build ignores `PORT_FIXTURES` by design, `src/main/fixtures/mode.ts`).
+// Packaged-binary smoke test — launches the real electron-builder output, never the dev build, with fixtures deliberately off (a packaged build ignores `PORT_FIXTURES` unless built `--mode smoke`, which alone bundles `tests/fixtures/app/`; `src/main/fixtures/mode.ts`).
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

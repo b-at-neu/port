@@ -5,7 +5,8 @@
     "rootDir": "../..",
     "types": ["node"],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "#app-fixtures": ["./tests/fixtures/app/index.ts"]
     }
   },
   "include": [
