@@ -2,6 +2,8 @@ import type { SearchQueryDeps, SessionsScanDeps, TranscriptTailDeps } from '@/ty
 import type { StateEngine } from '@/types/offload'
 import { listRepositories } from '@/main/registry'
 import { resolveSessionsScan } from '@/main/channels/sessions'
+import { createWorkerEngine } from '@/main/offload/client'
+import { e2eFakePath } from '@/main/platform/run'
 
 interface OffloadChannelDeps {
   readonly sessionsScan: SessionsScanDeps
@@ -9,8 +11,13 @@ interface OffloadChannelDeps {
   readonly tail: TranscriptTailDeps
 }
 
-/** The sessions, search and transcript-tail channels' real I/O, bound to the state worker. */
-export function offloadChannelDeps(engine: StateEngine): OffloadChannelDeps {
+/** The one state worker for the process lifetime, spawned on first use, with the channel deps bound to it. */
+export function createOffload(options: { readonly onRespawn: () => void }): OffloadChannelDeps & { readonly engine: StateEngine } {
+  const engine = createWorkerEngine({ e2eFake: e2eFakePath(), onRespawn: options.onRespawn })
+  return { engine, ...offloadChannelDeps(engine) }
+}
+
+function offloadChannelDeps(engine: StateEngine): OffloadChannelDeps {
   const sessionsScan: SessionsScanDeps = { listRepositories, readSessionState: ({ repos }) => engine.scanSessions({ repos }) }
   return {
     sessionsScan,

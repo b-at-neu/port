@@ -8,6 +8,7 @@ export default async function ({ expect }: Reporter) {
   const read = (path: string) => readFileSync(join(root, path), 'utf8');
   const watcher = read('apps/desktop/src/main/state/watcher.ts');
   const ipc = read('apps/desktop/src/main/ipc.ts');
+  const offloadDeps = read('apps/desktop/src/main/offload/deps.ts');
   const viteConfig = read('apps/desktop/electron.vite.config.mts');
 
   expect(
@@ -15,7 +16,8 @@ export default async function ({ expect }: Reporter) {
     'desktop-offload',
     'watcher.ts imports state/sources or projectFromCache — every source read and the projection go through the StateEngine',
   );
-  expect(ipc.includes('createWorkerEngine('), 'desktop-offload', 'ipc.ts never builds the worker engine — the watcher and channels would read on the main thread');
+  expect(ipc.includes('createOffload('), 'desktop-offload', 'ipc.ts never builds the worker engine through createOffload — the watcher and channels would read on the main thread');
+  expect(offloadDeps.includes('createWorkerEngine('), 'desktop-offload', 'offload/deps.ts createOffload never builds the worker engine — it would hand ipc.ts an engine that reads on the main thread');
   expect(
     viteConfig.includes('src/main/offload/worker.ts'),
     'desktop-offload',

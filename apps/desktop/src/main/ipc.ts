@@ -10,9 +10,7 @@ import { createSessionWorktree, removeSessionWorktreeAt } from '@/main/workspace
 import { releaseStageBranch } from '@/main/workspace/stage-worktree'
 import { createDefaultStageLauncher } from '@/main/stage/default'
 import type { StageLauncherHandle, StageRegistry } from '@/types/stage'
-import { createWorkerEngine } from '@/main/offload/client'
-import { offloadChannelDeps } from '@/main/offload/deps'
-import { e2eFakePath } from '@/main/platform/run'
+import { createOffload } from '@/main/offload/deps'
 import { statPath } from '@/main/platform/files'
 import type { HostedStore, SessionKey } from '@/types/hosting'
 import { applyItemAction } from '@/main/actions/apply'
@@ -216,14 +214,10 @@ export function registerIpc(): RegisteredIpc {
 
   handle('worktrees:purge', (_event, request) => resolveWorktreesPurge(registryDeps, request, app.getPath('userData')))
 
-  // One state worker for the process lifetime, spawned on first use.
-  const engine = createWorkerEngine({ e2eFake: e2eFakePath(), onRespawn: () => void watcher.refresh() })
-  const offload = offloadChannelDeps(engine)
+  const { engine, ...offload } = createOffload({ onRespawn: () => void watcher.refresh() })
 
   handle('sessions:scan', (_event, request) => {
-    if (request !== undefined) {
-      throw new Error("'sessions:scan' takes no payload")
-    }
+    if (request !== undefined) throw new Error("'sessions:scan' takes no payload")
     return resolveSessionsScan(registryDeps, offload.sessionsScan)
   })
 

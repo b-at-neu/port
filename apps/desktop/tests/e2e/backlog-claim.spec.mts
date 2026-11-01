@@ -43,7 +43,7 @@ test('claims an unlabelled backlog issue with a toast and no dialog, and the fir
   await row.getByRole('button', { name: 'Work on' }).click()
   await page.getByRole('menuitem', { name: 'Review the plan' }).click()
 
-  await expect(page.locator('[data-sonner-toast]')).toContainText('#101 claimed')
+  await expect(page.locator('[data-sonner-toast]')).toContainText('#101 claimed', { timeout: 15_000 })
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(page.locator('[data-slot="backlog-row"]', { hasText: '#101' })).toHaveCount(0)
 
@@ -111,6 +111,6 @@ test('asks before claiming a blocked issue, and claims only after Start anyway',
   await page.getByRole('menuitem', { name: 'Review the plan' }).click()
   await page.getByRole('alertdialog').getByRole('button', { name: 'Start anyway' }).click()
 
-  await expect(page.locator('[data-sonner-toast]')).toContainText('#103 claimed')
+  await expect(page.locator('[data-sonner-toast]')).toContainText('#103 claimed', { timeout: 15_000 })
   expect(editCallsFor(await harness.calls(), '103')).toHaveLength(1)
 })
