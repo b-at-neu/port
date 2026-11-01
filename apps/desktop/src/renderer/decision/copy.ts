@@ -67,21 +67,32 @@ function refusalNote(response: Extract<ItemDecisionResult, { readonly reason: 'r
   return null
 }
 
-interface DecisionResultCopy {
-  readonly line: string
-  readonly note: string | null
-  readonly offerLabelOnly: boolean
-}
-
-/** The Result step (the plan's own **UX states**) — exhaustive over
- *  `ItemDecisionResult`. `route` disambiguates `unblock`'s own two lines. */
-export function decisionResultCopy(params: {
+interface DecisionResultParams {
   readonly number: number
   readonly decision: OperatorDecision
   readonly route: UnblockRoute | null
   readonly picks: readonly RebasePick[] | null
   readonly response: ItemDecisionResult
-}): DecisionResultCopy {
+}
+
+interface DecisionResultLines {
+  readonly line: string
+  readonly note: string | null
+  readonly offerLabelOnly: boolean
+}
+
+interface DecisionResultCopy extends DecisionResultLines {
+  readonly tone: 'success' | 'error'
+}
+
+/** The result toast (the plan's own **UX states**): `applied` is a success, every other outcome an error. */
+export function decisionResultCopy(params: DecisionResultParams): DecisionResultCopy {
+  const applied = params.response.ok && params.response.labels.kind === 'applied'
+  return { ...decisionResultLines(params), tone: applied ? 'success' : 'error' }
+}
+
+/** Exhaustive over `ItemDecisionResult`. `route` disambiguates `unblock`'s own two lines. */
+function decisionResultLines(params: DecisionResultParams): DecisionResultLines {
   const { number, decision, route, picks, response } = params
   const n = route === 'implementation' ? `#${String(number)}` : `PR #${String(number)}`
 

@@ -66,17 +66,36 @@ export function feedbackHint(number: number): string {
   return `Posted as a comment on #${String(number)}, then the issue moves to \`plan changes requested\`. plan-agent reads your comment as the change request.`
 }
 
-interface ResultCopy {
+interface ResultLines {
   readonly line: string
   readonly note: string | null
   readonly actions: readonly ('retry-label' | 'show-state' | 'try-again' | 'dismiss')[]
+}
+
+interface ResultCopy extends ResultLines {
+  readonly tone: 'success' | 'error'
+}
+
+interface ResultParams {
+  readonly number: number
+  readonly decision: GateDecision
+  readonly response: GateAnswerResponse
+  readonly sessionRequired: boolean
+  readonly ownership: OwnershipSummary
+}
+
+/** The result toast: `applied` is a success, every other outcome an error. */
+export function resultCopy(params: ResultParams): ResultCopy {
+  const { response } = params
+  const applied = response.kind === 'answered' && response.labels.kind === 'applied'
+  return { ...resultLines(params), tone: applied ? 'success' : 'error' }
 }
 
 /** One line plus a note, exhaustive over `GateAnswerResponse` (the plan's
  *  own **Result step** table). `sessionRequired` only changes the `approve`/
  *  `applied` line's own wording — announce-instead-of-dispatch, rather than
  *  "a cockpit dispatches next". */
-export function resultCopy(params: { readonly number: number; readonly decision: GateDecision; readonly response: GateAnswerResponse; readonly sessionRequired: boolean; readonly ownership: OwnershipSummary }): ResultCopy {
+function resultLines(params: ResultParams): ResultLines {
   const { number, decision, response, sessionRequired, ownership } = params
   const n = String(number)
 
@@ -113,7 +132,7 @@ export function refusedVerdictCopy(number: number, verdict: Exclude<GateVerdict,
   }
 }
 
-function answeredCopy(n: string, decision: GateDecision, response: Extract<GateAnswerResponse, { kind: 'answered' }>, sessionRequired: boolean, ownership: OwnershipSummary): ResultCopy {
+function answeredCopy(n: string, decision: GateDecision, response: Extract<GateAnswerResponse, { kind: 'answered' }>, sessionRequired: boolean, ownership: OwnershipSummary): ResultLines {
   const { comment, labels } = response
 
   if (labels.kind === 'applied') {
@@ -164,7 +183,7 @@ function labelAbortDetail(labels: Extract<GateAnswerResponse, { kind: 'answered'
   }
 }
 
-function labelOnlyCopy(n: string, labels: Extract<GateAnswerResponse, { kind: 'answered' }>['labels']): ResultCopy {
+function labelOnlyCopy(n: string, labels: Extract<GateAnswerResponse, { kind: 'answered' }>['labels']): ResultLines {
   switch (labels.kind) {
     case 'precondition-failed': {
       const detail =

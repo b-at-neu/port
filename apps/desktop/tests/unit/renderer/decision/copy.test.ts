@@ -76,4 +76,11 @@ describe('decisionResultCopy — implementation route', () => {
     const copy = decisionResultCopy({ number: 548, decision: 'unblock', route: 'implementation', picks: null, response: { ok: false, reason: 'refused', refusal: 'agent-live' } })
     expect(copy.line).toBe('#548 can no longer be unblocked that way.')
   })
+
+  it('tones an applied swap as a success and every other outcome as an error', () => {
+    const params = { number: 548, decision: 'unblock' as const, route: 'review' as const, picks: null }
+    expect(decisionResultCopy({ ...params, response: applied }).tone).toBe('success')
+    expect(decisionResultCopy({ ...params, response: { ok: false, reason: 'repo-unavailable' } }).tone).toBe('error')
+    expect(decisionResultCopy({ ...params, response: { ok: true, comment: { kind: 'applied' } as never, labels: { kind: 'precondition-failed' } as never } }).tone).toBe('error')
+  })
 })
