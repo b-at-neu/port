@@ -164,6 +164,8 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `launcher.ts`'s `resume` (#554) is the only place an interrupted entry is restarted as a session: it is tracked like a launch, so its hand-back settles the same registry entry, and the entry flips back to `running` in place — never a second entry with the same id
 - `sweep.ts`'s `createInterruptedSweeper` (#554) is the registry's third remover, after a `completed` hand-back and Restart; `stale.ts` holds its pure decisions, and every one fails toward keeping the entry (a blind, partial or too-old read clears nothing)
 - the sweeper removes a worktree only without force, and auto-resumes a usage-limit entry only on an app-owned, running repository, through `main/channels/stage.ts`'s `resolveStageResume` so the capacity and root checks exist once; a failed auto-resume becomes an ordinary `error` entry, never a retry loop
+- `denials.ts`'s `createStageDenialStore` is `stage-denials.json`'s only writer; a missing or malformed file loads empty and a failed write keeps the in-memory state, so a denial shows this run rather than vanishing
+- "Allow from now on" never writes the operator's checkout: `allowlist.ts`'s `mergeRule` is pure over two JSON texts, and the result lands as a pull request into integration (`main/writes/allow.ts`)
 
 **`apps/desktop/src/main/tick/`**
 - `RepositoryState` → `TickReport`; computes, never writes
@@ -192,6 +194,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - never `merge`, `close`, `--delete-branch`, or `ready`
 - `release.ts` writes the bump commit through the Git Data API from oids the status read supplied, so the operator's checkout is never touched; the release tag exists only because `gh release create` made it
 - a release write has no ownership gate — it writes no pipeline label, and terminal ownership is about dispatch — and appends one `ReleaseAuditEntry` per attempt
+- `allow.ts` writes its commit through the Git Data API like `release.ts`, from the oid `main/github/allow.ts` read the two files at, and appends one `AllowAuditEntry` per attempt; a stale `allow/…` branch fails with its name rather than being deleted or force-updated
 
 **`apps/desktop/src/renderer/audit/`**
 - reads `audit:list` only; the screen is read-only and makes no write

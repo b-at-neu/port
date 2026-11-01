@@ -17,7 +17,7 @@ import type { RegistryDeps } from '@/types/registry'
 import type { SessionIndex } from '@/types/session-index'
 import type { ReadSessionStateParams, SessionScan, TranscriptTailStore } from '@/types/sessions'
 import type { RunSearchParams, SearchResult } from '@/types/search'
-import type { StageLauncherHandle, StageRegistry } from '@/types/stage'
+import type { StageAllowIo, StageLauncherHandle, StageRegistry } from '@/types/stage'
 import type { Dispatcher, RepoDispatchStatus } from '@/types/dispatch'
 import type { ForceDispatch } from '@/types/tick'
 import type { IpcChannel, ReposListResponse } from '@/types/ipc'
@@ -80,8 +80,8 @@ export interface StageChannelDeps {
   readonly applyItemAction: (params: ApplyItemActionParams) => Promise<ItemActionResult>
   readonly snapshot: () => BoardSnapshot
   readonly auditDir: string
-  readonly readJson: <T>(path: string) => Promise<FileResult<T>>
-  readonly writeJsonAtomic: (path: string, value: unknown) => Promise<FileResult<void>>
+  readonly scratchDir: string
+  readonly allow: StageAllowIo
 }
 
 /** The seam `'held:force-dispatch'` composes through. `dispatcherStatus` reads the same `RepoDispatchStatus.owner` the board already renders, never a second ownership read. */

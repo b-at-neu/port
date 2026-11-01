@@ -12,6 +12,7 @@ import { createDispatcher, DISPATCH_PROMPT, promptFor, REFRESH_PROMPT } from '@/
 import type { CreateDispatcherParams } from '@/types/dispatch'
 import type { OwnershipRead } from '@/types/dispatch'
 import type { HostedStore } from '@/types/hosting'
+import { memoryDenialStore } from '../../../fixtures/denials'
 import { DISPATCH_STORE_DEFAULTS, storeStub } from '../../../fixtures/store'
 
 const REPO_ID = 'repo-a' as RepoId
@@ -110,6 +111,7 @@ function fakeLauncher(launch: (request: StageLaunchRequest) => Promise<StageLaun
 function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispatcherParams {
   return {
     store: fakeStore(),
+    denials: memoryDenialStore(),
     launch: null,
     ledger: { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined, observeUnmatched: () => ({ class: 'no-record' }) },
     refreshMemo: { get: () => undefined, set: vi.fn(), clear: vi.fn() },

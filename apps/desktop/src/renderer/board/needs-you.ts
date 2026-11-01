@@ -78,8 +78,8 @@ function blockedText(line: string): string {
   return capped(line.slice(BLOCKED_PREFIX.length).trim())
 }
 
-/** A denial blocks only while its own session is still open and idle after it — an ended session's denial stays on Repositories → Denials alone. */
-function isBlockingDenial(denial: StageDenial, sessionByKey: ReadonlyMap<SessionKey, HostedSessionSnapshot>): boolean {
+/** A denial is live only while its own session is still open and idle after it; every other denial still shows, since Allow applies to future runs. */
+function isLiveDenial(denial: StageDenial, sessionByKey: ReadonlyMap<SessionKey, HostedSessionSnapshot>): boolean {
   if (denial.sessionKey === null) return false
   const session = sessionByKey.get(denial.sessionKey)
   if (session === undefined || session.phase !== 'ready' || session.lastResult === null) return false
@@ -205,7 +205,6 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
 
   for (const dispatch of snapshot.dispatch) {
     for (const denial of dispatch.denials) {
-      if (!isBlockingDenial(denial, sessionByKey)) continue
       const matched = rowByKey.get(rowKey(dispatch.repoId, denial.number)) ?? null
       items.push({
         kind: 'stage-denial',
@@ -218,6 +217,7 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
         at: denial.at,
         matchedRow: matched,
         denial,
+        live: isLiveDenial(denial, sessionByKey),
       })
     }
     if (dispatch.owner === 'app' && dispatch.state.kind === 'active') {

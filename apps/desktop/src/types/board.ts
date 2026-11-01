@@ -212,7 +212,8 @@ export type NeedsYouItem =
   | (NeedsYouItemBase & { readonly kind: 'stage-question'; readonly sessionKey: SessionKey; readonly permissionId: string; readonly questions: readonly AskQuestion[] })
   | (NeedsYouItemBase & { readonly kind: 'stage-approval'; readonly sessionKey: SessionKey; readonly permissionId: string; readonly agent: StageAgent; readonly toolName: string; readonly path: string })
   | (NeedsYouItemBase & { readonly kind: 'stage-questions' | 'stage-blocked'; readonly sessionKey: SessionKey; readonly text: string | null })
-  | (NeedsYouItemBase & { readonly kind: 'stage-denial'; readonly denial: StageDenial })
+  /** `live` is true while the denial's own session is still open and idle after it; otherwise the session has ended and Allow applies to future runs. */
+  | (NeedsYouItemBase & { readonly kind: 'stage-denial'; readonly denial: StageDenial; readonly live: boolean })
   | (NeedsYouItemBase & { readonly kind: 'stage-interrupted'; readonly interrupted: InterruptedStage })
   /** Every usage-limit interruption across all repositories, collapsed into one row — `resetsAt` is the latest known reset, `null` when none is. */
   | (NeedsYouItemBase & { readonly kind: 'usage-limit'; readonly entries: readonly InterruptedStage[]; readonly resetsAt: string | null; readonly repoNames: ReadonlyMap<RepoId, string> })

@@ -3,10 +3,13 @@ import type { ResolvedStageRoot, RecoverDeps } from '@/types/stage'
 // `stage:allow`, `stage:dismiss-denial`, `stage:resume`, `stage:restart` — the renderer's own
 // seam into `main/stage/`'s allow/resume/restart compositions. Nothing else may call these.
 import type { IpcMap } from '@/types/ipc'
-import type { StageAllowResult, StageDenial, StageResumeResult, StageRestartResult } from '@/types/stage'
+import type { StageAllowIo, StageAllowResult, StageDenial, StageResumeResult, StageRestartResult } from '@/types/stage'
 import type { RegistryDeps } from '@/types/registry'
 import { requireReadyRepo } from '@/main/registry'
-import { allowRule } from '@/main/stage/allowlist'
+import { readAllowBase } from '@/main/github/allow'
+import { mergeRule } from '@/main/stage/allowlist'
+import { validateRule } from '@/main/stage/rule'
+import { allowBranchName, proposeAllowRule } from '@/main/writes/allow'
 import { resumeStage, restartStage } from '@/main/stage/recover'
 import { createInterruptedSweeper } from '@/main/stage/sweep'
 
@@ -14,6 +17,8 @@ import { createInterruptedSweeper } from '@/main/stage/sweep'
 
 import type { RepoId } from '@/utils/repos'
 import type { StageChannelDeps } from '@/types/channels'
+
+export const defaultAllowIo: StageAllowIo = { read: readAllowBase, propose: proposeAllowRule }
 
 function findDenial(dispatcher: StageChannelDeps['dispatcher'], repoId: RepoId, denialId: string): StageDenial | null {
   const status = dispatcher.status().find((s) => s.repoId === repoId)
@@ -31,10 +36,33 @@ export async function resolveStageAllow(registryDeps: RegistryDeps, request: Ipc
   const denial = findDenial(deps.dispatcher, repoId, request.denialId)
   if (denial === null) return { kind: 'unknown-denial' }
 
+  const validated = validateRule(request.rule)
+  if (!validated.ok) return { kind: 'invalid-rule', reason: validated.reason }
+
   const found = await requireReadyRepo(registryDeps, "'stage:allow'", repoId, deps.listRepositories)
-  const result = await allowRule({ root: found.path, rule: request.rule, readJson: deps.readJson, writeJsonAtomic: deps.writeJsonAtomic })
-  if (result.kind === 'ok' || result.kind === 'already-allowed') deps.dispatcher.clearDenialsFor(repoId, denial.rule)
-  return result
+  const integration = found.config.branches.integration
+  const base = await deps.allow.read({ repo: { owner: found.config.owner, name: found.config.name }, integration, branch: allowBranchName(validated.rule) })
+  if (!base.ok) return { kind: 'failed', step: 'read', message: base.message }
+  if (base.openPr !== null) {
+    deps.dispatcher.clearDenialsFor(repoId, denial.rule)
+    return { kind: 'already-proposed', ...base.openPr }
+  }
+
+  const merged = mergeRule({ settingsText: base.settingsText, configText: base.configText, rule: validated.rule })
+  if (merged.kind === 'invalid-rule') return { kind: 'invalid-rule', reason: merged.reason }
+  if (merged.kind === 'unparseable') return { kind: 'failed', step: 'read', message: `${merged.file} isn't valid JSON on ${integration}` }
+  if (merged.kind === 'already-allowed') {
+    deps.dispatcher.clearDenialsFor(repoId, denial.rule)
+    return { kind: 'already-allowed', integration }
+  }
+
+  const proposed = await deps.allow.propose(
+    { repo: found.config.repo, repoId, auditDir: deps.auditDir, scratchDir: deps.scratchDir },
+    { head: base.head, files: merged.files, rule: merged.rule, denial, integration },
+  )
+  if (!proposed.ok) return { kind: 'failed', step: proposed.step, message: proposed.message }
+  deps.dispatcher.clearDenialsFor(repoId, denial.rule)
+  return { kind: 'proposed', number: proposed.number, url: proposed.url }
 }
 
 export function resolveStageDismissDenial(request: IpcMap['stage:dismiss-denial']['request'], deps: Pick<StageChannelDeps, 'dispatcher'>): void {

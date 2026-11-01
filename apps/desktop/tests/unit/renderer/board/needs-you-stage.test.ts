@@ -21,39 +21,41 @@ function snapshotOf(dispatch: readonly RepoDispatchStatus[], repositories: reado
   return { ...boardSnapshot(repositories), dispatch }
 }
 
-describe('stage-denial liveness', () => {
+describe('stage-denial rows', () => {
   const SESSION = 'hosted-300' as SessionKey
   const denial: StageDenial = { id: 'd1', repoId: REPO_A, agent: 'impl', number: 300, toolName: 'Bash', inputSummary: 'pnpm exec playwright test', rule: 'Bash(pnpm *)', at: '2026-01-01T00:30:00.000Z', sessionKey: SESSION }
   const stage = { agent: 'impl' as const, number: 300, kind: 'issue' as const, trigger: 'planApproved' as const }
   const snapshot = snapshotOf([dispatchStatus({ denials: [denial] })])
   const idleAfter = (at: string, phase: 'ready' | 'streaming' | 'ended' = 'ready') => stageSession({ key: SESSION, repoId: REPO_A, stage, phase, lastResult: { subtype: 'success', isError: false, text: 'stopped', at } })
 
-  it('shows while its own session is idle after the denial', () => {
+  const liveOf = (sessions: Parameters<typeof needsYouItems>[2], from: BoardSnapshot = snapshot) => needsYouItems(from, NOW, sessions).map((item) => (item.kind === 'stage-denial' ? item.live : null))
+
+  it('is live while its own session is idle after the denial', () => {
     const items = needsYouItems(snapshot, NOW, [idleAfter('2026-01-01T00:40:00.000Z')])
     expect(items).toHaveLength(1)
-    expect(items[0]).toMatchObject({ kind: 'stage-denial', number: 300 })
+    expect(items[0]).toMatchObject({ kind: 'stage-denial', number: 300, live: true })
   })
 
-  it('shows when the session went idle at the very instant of the denial', () => {
-    expect(needsYouItems(snapshot, NOW, [idleAfter(denial.at)])).toHaveLength(1)
+  it('is live when the session went idle at the very instant of the denial', () => {
+    expect(liveOf([idleAfter(denial.at)])).toEqual([true])
   })
 
-  it('is hidden once its session has ended', () => {
-    expect(needsYouItems(snapshot, NOW, [idleAfter('2026-01-01T00:40:00.000Z', 'ended')])).toEqual([])
+  it('still shows, not live, once its session has ended', () => {
+    expect(liveOf([idleAfter('2026-01-01T00:40:00.000Z', 'ended')])).toEqual([false])
   })
 
-  it('is hidden while the session is still working', () => {
-    expect(needsYouItems(snapshot, NOW, [idleAfter('2026-01-01T00:40:00.000Z', 'streaming')])).toEqual([])
+  it('still shows, not live, while the session is still working', () => {
+    expect(liveOf([idleAfter('2026-01-01T00:40:00.000Z', 'streaming')])).toEqual([false])
   })
 
-  it('is hidden when the session last went idle before the denial', () => {
-    expect(needsYouItems(snapshot, NOW, [idleAfter('2026-01-01T00:10:00.000Z')])).toEqual([])
+  it('still shows, not live, when the session last went idle before the denial', () => {
+    expect(liveOf([idleAfter('2026-01-01T00:10:00.000Z')])).toEqual([false])
   })
 
-  it('is hidden when no session carries its key, or the denial has none', () => {
-    expect(needsYouItems(snapshot, NOW, [])).toEqual([])
+  it('still shows, not live, when no session carries its key or the denial has none (a relaunch)', () => {
+    expect(liveOf([])).toEqual([false])
     const unkeyed = snapshotOf([dispatchStatus({ denials: [{ ...denial, sessionKey: null }] })])
-    expect(needsYouItems(unkeyed, NOW, [idleAfter('2026-01-01T00:40:00.000Z')])).toEqual([])
+    expect(liveOf([idleAfter('2026-01-01T00:40:00.000Z')], unkeyed)).toEqual([false])
   })
 })
 
