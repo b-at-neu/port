@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { FolderGit2 } from 'lucide-react'
-import { toast } from 'sonner'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/renderer/components/ui/alert-dialog'
 import { Button } from '@/renderer/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/renderer/components/ui/tabs'
@@ -12,6 +11,7 @@ import { EmptyState } from '@/renderer/components/empty-state'
 import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { ScreenHeader } from '@/renderer/components/screen-header'
 import { ipcQueryOptions, useIpcMutation, useIpcQuery } from '@/renderer/data/query'
+import { runInBackground } from '@/renderer/lib/background-action'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import type { DenialsGroup } from '@/types/router'
 import type { ReposListResponse } from '@/types/ipc'
@@ -61,16 +61,19 @@ export function RepoScreen() {
   }
 
   async function handleRemove(): Promise<void> {
-    try {
-      const result = await removeMutation.mutateAsync({ id: repoId as RepoId })
-      if (!result.ok) return
-      queryClient.setQueryData(ipcQueryOptions('repos:list').queryKey, (): ReposListResponse => ({ ok: true, repositories: result.repositories }))
-      setRemoveOpen(false)
-      toast(`Removed ${name}.`)
-      void navigate({ to: ROUTE_IDS.settings, search: { section: 'repositories' } })
-    } catch (error) {
-      console.error('Failed to remove a repository', error)
-    }
+    setRemoveOpen(false)
+    const result = await runInBackground({
+      id: `repo-remove:${repoId}`,
+      pending: `Removing ${name}…`,
+      run: () => removeMutation.mutateAsync({ id: repoId as RepoId }),
+      toToast: (outcome) =>
+        outcome.ok
+          ? { tone: 'success', title: `Removed ${name}.`, description: null, action: null, cancel: null }
+          : { tone: 'error', title: `Couldn't remove ${name}: ${outcome.message}`, description: null, action: null, cancel: null },
+    })
+    if (result === 'unreachable' || !result.ok) return
+    queryClient.setQueryData(ipcQueryOptions('repos:list').queryKey, (): ReposListResponse => ({ ok: true, repositories: result.repositories }))
+    void navigate({ to: ROUTE_IDS.settings, search: { section: 'repositories' } })
   }
 
   return (
@@ -109,14 +112,7 @@ export function RepoScreen() {
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={(event) => {
-                      event.preventDefault()
-                      void handleRemove()
-                    }}
-                  >
-                    Remove repository
-                  </AlertDialogAction>
+                  <AlertDialogAction onClick={() => void handleRemove()}>Remove repository</AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             ) : null}
