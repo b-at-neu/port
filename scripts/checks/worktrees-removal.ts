@@ -231,6 +231,71 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
+  // --- Path-scoped reclaim ----------------------------------------------------------
+  // guard: a forced reclaim reaching a worktree other than the one path it was scoped to.
+  {
+    const fixture = mkdtempSync(join(tmpdir(), 'port-worktrees-scope-'));
+    const emptyConfigPath = join(fixture, 'empty.gitconfig');
+    writeFileSync(emptyConfigPath, '');
+    const repo = join(fixture, 'repo');
+    mkdirSync(repo);
+
+    const env = () => {
+      const e = { ...process.env };
+      delete e.GIT_DIR;
+      delete e.GIT_WORK_TREE;
+      delete e.GIT_INDEX_FILE;
+      e.GIT_CONFIG_NOSYSTEM = '1';
+      e.GIT_CONFIG_GLOBAL = emptyConfigPath;
+      return e;
+    };
+    const runGit = (args: string[], cwd: string) => spawnSync('git', args, { cwd, env: env(), encoding: 'utf8' });
+    const must = (res: ReturnType<typeof runGit>, step: string) => {
+      if (res.status !== 0) throw new Error(`${step} failed: ${res.stderr || res.stdout}`);
+    };
+    const reclaim = (...args: string[]) => spawnSync(process.execPath, [scriptPath, 'reclaim', '--offline', '--json', ...args], { cwd: repo, env: env(), encoding: 'utf8' });
+
+    try {
+      must(runGit(['init', '-b', 'dev'], repo), 'git init');
+      writeFileSync(join(repo, 'README.md'), 'fixture');
+      must(runGit(['add', 'README.md'], repo), 'git add');
+      must(runGit(['-c', 'user.name=Port Fixture', '-c', 'user.email=fixture@example.com', 'commit', '-m', 'chore: fixture init'], repo), 'git commit');
+      mkdirSync(join(repo, '.claude'), { recursive: true });
+      writeFileSync(join(repo, '.claude', 'port.config.json'), JSON.stringify({ repo: 'example/fixture', branches: { integration: 'dev' } }));
+
+      const clean = join(repo, '.claude', 'worktrees', 'scope-clean');
+      const dirty = join(repo, '.claude', 'worktrees', 'scope-dirty');
+      const locked = join(repo, '.claude', 'worktrees', 'scope-locked');
+      for (const p of [clean, dirty, locked]) must(runGit(['worktree', 'add', '--detach', p, 'dev'], repo), 'git worktree add');
+      writeFileSync(join(dirty, 'unsaved.txt'), 'keep me');
+      must(runGit(['worktree', 'lock', locked], repo), 'git worktree lock');
+
+      const unknown = reclaim('--path', join(repo, '.claude', 'worktrees', 'nowhere'), '--force-dirty');
+      expect(unknown.status !== 0 && unknown.stderr.startsWith('FAIL  ') && existsSync(clean) && existsSync(join(dirty, 'unsaved.txt')), 'worktrees-removal-scope', `an unregistered --path: expected a nonzero FAIL exit and nothing removed, got exit ${unknown.status}: ${unknown.stderr}`);
+
+      const scoped = reclaim('--path', clean, '--force-dirty');
+      let parsed: any = null;
+      try {
+        parsed = JSON.parse(scoped.stdout);
+      } catch {
+        fail('worktrees-removal-scope', `reclaim --path produced unparseable output (exit ${scoped.status}): ${scoped.stdout || scoped.stderr}`);
+      }
+      if (parsed) {
+        const byName = (name: string) => (parsed.candidates ?? []).find((c: any) => String(c.path).endsWith(name));
+        expect(parsed.pathScope === true, 'worktrees-removal-scope', `expected the report to advertise pathScope, got ${JSON.stringify(parsed.pathScope)}`);
+        expect(byName('scope-clean')?.removed === true && !existsSync(clean), 'worktrees-removal-scope', 'expected the scoped worktree removed');
+        expect(byName('scope-dirty')?.removed === false && existsSync(join(dirty, 'unsaved.txt')), 'worktrees-removal-scope', '--path with --force-dirty reached a second, dirty worktree, or discarded its file');
+        expect(byName('scope-locked')?.removed === false && byName('scope-locked')?.otherwiseRemovable === true, 'worktrees-removal-scope', `expected the locked finished worktree kept and otherwiseRemovable, got ${JSON.stringify(byName('scope-locked'))}`);
+        expect(byName('scope-dirty')?.otherwiseRemovable === true, 'worktrees-removal-scope', 'expected the dirty finished worktree otherwiseRemovable');
+      }
+    } catch (e: any) {
+      fail('worktrees-removal-scope', `fixture setup or assertion threw: ${e.message}`);
+    } finally {
+      runGit(['worktree', 'unlock', join(repo, '.claude', 'worktrees', 'scope-locked')], repo);
+      rmSync(fixture, { recursive: true, force: true, maxRetries: 3 });
+    }
+  }
+
   // --- Skill guard: worktree-clean no longer reverts to POSIX/PowerShell-only deletion ----
   // guard: the manual escape hatch reverting to a platform-specific recipe instead of the script's cross-platform `purge` mode.
   {
