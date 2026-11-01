@@ -14,6 +14,7 @@ interface WorkerEngineOptions {
   readonly e2eFake?: string | null
   readonly spawn?: () => OffloadWorker
   readonly now?: () => Date
+  readonly onRespawn?: () => void
 }
 
 interface Pending {
@@ -38,10 +39,12 @@ export function createWorkerEngine(options: WorkerEngineOptions = {}): StateEngi
   const pending = new Map<number, Pending>()
   let worker: OffloadWorker | null = null
   let nextId = 0
+  let crashed = false
 
   function stopped(current: OffloadWorker, reason: string): void {
     if (worker !== current) return
     worker = null
+    crashed = true
     const error = new Error(`state worker stopped: ${reason}`)
     for (const request of pending.values()) request.reject(error)
     pending.clear()
@@ -60,6 +63,11 @@ export function createWorkerEngine(options: WorkerEngineOptions = {}): StateEngi
     created.on('error', (error) => stopped(created, error.message))
     created.on('exit', (code) => stopped(created, `exited with code ${String(code)}`))
     worker = created
+    if (crashed) {
+      crashed = false
+      // The new worker's cache is empty, so the caller must re-read every source rather than wait for each to fall due.
+      queueMicrotask(() => options.onRespawn?.())
+    }
     return created
   }
 

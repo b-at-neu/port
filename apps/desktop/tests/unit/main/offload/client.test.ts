@@ -62,6 +62,29 @@ describe('createWorkerEngine', () => {
     expect(workers).toHaveLength(2)
   })
 
+  it('asks its owner to re-read every source once after a crash, never on the first spawn', async () => {
+    const workers: ReturnType<typeof fakeWorker>[] = []
+    let respawns = 0
+    const engine = createWorkerEngine({
+      now,
+      onRespawn: () => void (respawns += 1),
+      spawn: () => {
+        const worker = fakeWorker()
+        workers.push(worker)
+        return worker.port
+      },
+    })
+    void engine.listSessions()
+    await Promise.resolve()
+    expect(respawns).toBe(0)
+    workers[0]!.crash('boom')
+    void engine.listSessions()
+    void engine.listSessions()
+    await Promise.resolve()
+    expect(workers).toHaveLength(2)
+    expect(respawns).toBe(1)
+  })
+
   it('an exit event after an error does not fail the respawned worker', async () => {
     const { engine, workers } = setup()
     void engine.listSessions()

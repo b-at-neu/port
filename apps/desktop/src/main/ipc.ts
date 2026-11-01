@@ -217,7 +217,7 @@ export function registerIpc(): RegisteredIpc {
   handle('worktrees:purge', (_event, request) => resolveWorktreesPurge(registryDeps, request, app.getPath('userData')))
 
   // One state worker for the process lifetime, spawned on first use.
-  const engine = createWorkerEngine({ e2eFake: e2eFakePath() })
+  const engine = createWorkerEngine({ e2eFake: e2eFakePath(), onRespawn: () => void watcher.refresh() })
   const offload = offloadChannelDeps(engine)
 
   handle('sessions:scan', (_event, request) => {
