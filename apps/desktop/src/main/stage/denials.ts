@@ -57,7 +57,10 @@ export function createStageDenialStore(params: CreateStageDenialStoreParams): St
     if (typeof value !== 'object' || value === null || !Array.isArray(value.entries)) return
     let loaded = new Map<RepoId, readonly StageDenial[]>()
     for (const entry of value.entries.filter(isStageDenial)) loaded = new Map(loaded).set(entry.repoId, withDenial(loaded.get(entry.repoId) ?? [], entry))
+    const recorded = [...byRepo.values()].flat()
+    for (const entry of recorded) loaded = new Map(loaded).set(entry.repoId, withDenial(loaded.get(entry.repoId) ?? [], entry))
     byRepo = loaded
+    if (recorded.length > 0) persist()
   }
 
   function list(repoId: RepoId): readonly StageDenial[] {

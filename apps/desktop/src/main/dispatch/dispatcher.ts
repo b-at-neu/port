@@ -153,7 +153,6 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     return stateFor(repoId).owner !== 'app'
   }
   function recordDenial(repoId: RepoId, denial: StageDenial): void {
-    stateFor(repoId)
     deps.denials.record(denial)
     deps.onChange()
   }

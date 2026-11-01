@@ -47,6 +47,14 @@ describe('createStageDenialStore', () => {
     expect(badEntry.store.list(REPO).map((d) => d.id)).toEqual(['ok'])
   })
 
+  it('keeps a denial recorded before the load settles and persists the merge', async () => {
+    const { store, writes } = storeOver({ ok: true, value: { version: 1, entries: [denial('a'), denial('b', 'Bash(x *)')] } })
+    store.record(denial('c', 'Bash(x *)'))
+    await store.load()
+    expect(store.list(REPO).map((d) => d.id)).toEqual(['a', 'c'])
+    expect(writes.at(-1)).toEqual({ version: 1, entries: [denial('a'), denial('c', 'Bash(x *)')] })
+  })
+
   it('dedupes by rule and persists every change', () => {
     const { store, writes } = storeOver({ ok: false })
     store.record(denial('a', 'Bash(x *)'))
