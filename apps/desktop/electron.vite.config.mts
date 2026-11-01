@@ -24,7 +24,15 @@ export default defineConfig(({ mode }) => ({
   main: {
     resolve: { alias },
     define: { __PORT_PACKAGED_FIXTURES__: JSON.stringify(mode === 'smoke'), __PORT_BUILD_COMMIT__: JSON.stringify(buildCommit()) },
-    plugins: [externalizeDepsPlugin()]
+    plugins: [externalizeDepsPlugin()],
+    build: {
+      rollupOptions: {
+        input: {
+          index: fileURLToPath(new URL('./src/main/index.ts', import.meta.url)),
+          'state-worker': fileURLToPath(new URL('./src/main/offload/worker.ts', import.meta.url))
+        }
+      }
+    }
   },
   preload: {
     resolve: { alias },
