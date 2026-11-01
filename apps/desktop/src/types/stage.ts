@@ -72,7 +72,7 @@ export type StageRestartResult =
   | { readonly kind: 'label-refused'; readonly reason: string }
   | { readonly kind: 'unknown-stage' }
 
-export type StageInstructionsResult = { readonly ok: true; readonly text: string } | { readonly ok: false; readonly message: string }
+export type StageInstructionsResult = { readonly ok: true; readonly text: string } | { readonly ok: false; readonly message: string; readonly kind?: 'missing-section' }
 
 /** Resolves to the full first message: the dispatch line, the stage context, and the installed plugin's instructions. */
 export type StageInstructionsLoader = (request: StageLaunchRequest, worktreePath: string) => Promise<StageInstructionsResult>

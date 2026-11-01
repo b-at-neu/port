@@ -13,7 +13,7 @@ interface PhasePillProps {
 export function PhasePill({ tone, label, className }: PhasePillProps) {
   return (
     <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-meta font-medium', PHASE_PILL_CLASS[tone.palette], className)}>
-      <PhaseDot tone={tone} />
+      <PhaseDot tone={tone} onPill />
       {label}
     </span>
   )

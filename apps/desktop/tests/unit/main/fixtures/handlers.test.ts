@@ -14,7 +14,8 @@ const WIDGETS = 'fixture-acme-widgets' as RepoId
 const SAMPLE_REQUESTS: Partial<Record<IpcChannel, unknown>> = {
   'repos:remove': { id: 'fixture-acme-widgets' },
   'worktrees:report': { id: 'fixture-acme-widgets' },
-  'worktrees:reclaim': { id: 'fixture-acme-widgets', issue: null },
+  'worktrees:reclaim': { id: 'fixture-acme-widgets', issue: null, force: null },
+  'worktrees:purge': { id: 'fixture-acme-widgets', path: '/home/you/src/widgets/.claude/worktrees/impl-29-stale' },
   'transcript:tail:open': { sessionId: 'fixture-session', agentId: null },
   'transcript:tail:poll': { tailId: 'fixture-tail' },
   'transcript:tail:close': { tailId: 'fixture-tail' },
@@ -39,6 +40,7 @@ const SAMPLE_REQUESTS: Partial<Record<IpcChannel, unknown>> = {
   'session:restore': { restoreId: 'r1' },
   'session:restore:discard': { restoreId: null },
   'backlog:list': { repoId: 'fixture-acme-widgets' },
+  'audit:list': { repoId: 'fixture-acme-widgets', number: 38 },
   'session:changes': { sessionKey: STREAMING_KEY },
   'session:pin:set': { sessionId: 'fixture-claude-1', pinned: true },
   'session:archive:set': { sessionId: 'fixture-claude-1', archived: true },
@@ -158,12 +160,34 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     expect(response.verdict.kind).toBe('claimable')
   })
 
-  it('reports worktrees:report with one each of active, done, dirty and locked, plus one orphan dir', () => {
+  it('reports worktrees:report with an active, a done, a dirty and two locked rows, plus one orphan dir', () => {
     const report = handlers['worktrees:report']({ id: WIDGETS })
     if (!report.ok) throw new Error('fixture worktrees:report unexpectedly failed')
     const states = report.worktrees.map((w) => w.state).sort()
-    expect(states).toEqual(['active', 'dirty', 'done', 'locked'])
+    expect(states).toEqual(['active', 'dirty', 'done', 'locked', 'locked'])
     expect(report.orphanDirs).toHaveLength(1)
+    expect(report.forcedActions).toBe('supported')
+  })
+
+  it('offers forced reclaim on the finished locked row and the dirty row, never on the active locked one', () => {
+    const report = handlers['worktrees:report']({ id: WIDGETS })
+    if (!report.ok) throw new Error('fixture worktrees:report unexpectedly failed')
+    const reclaimable = (name: string) => report.worktrees.find((w) => w.pathBasename === name)?.otherwiseReclaimable
+    expect(reclaimable('impl-51')).toBe(true)
+    expect(reclaimable('impl-50')).toBe(true)
+    expect(reclaimable('impl-52')).toBe(false)
+  })
+
+  it('reports a forced worktrees:reclaim for the confirmed path, and worktrees:purge as deleted', () => {
+    const force = { path: '/home/you/src/widgets/.claude/worktrees/impl-51', unlock: true, forceDirty: false }
+    const reclaim = handlers['worktrees:reclaim']({ id: WIDGETS, issue: null, force })
+    if (!reclaim.ok) throw new Error('fixture worktrees:reclaim unexpectedly failed')
+    expect(reclaim.results.map((r) => r.pathBasename)).toEqual(['impl-51'])
+    expect(reclaim.call).toContain('--unlock')
+    const purge = handlers['worktrees:purge']({ id: WIDGETS, path: '/home/you/src/widgets/.claude/worktrees/impl-29-stale' })
+    if (!purge.ok) throw new Error('fixture worktrees:purge unexpectedly failed')
+    expect(purge.outcome).toBe('deleted')
+    expect(purge.pathBasename).toBe('impl-29-stale')
   })
 
   it.runIf(scenario === 'populated')('reports session:list with nine snapshots covering streaming, ended, starting, a question, a plan, three stage sessions, and a resumed session', () => {

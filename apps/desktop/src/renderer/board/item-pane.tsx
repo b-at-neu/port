@@ -1,7 +1,7 @@
 // The Board's detail pane content, inside the shared `DetailPane` shell:
 // header, actions and decisions, `PhaseList` with its session links, held detail.
 import { useSyncExternalStore } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, ScrollText } from 'lucide-react'
 import { toast } from 'sonner'
 import { useNavigate } from '@tanstack/react-router'
 import { Button } from '@/renderer/components/ui/button'
@@ -22,7 +22,7 @@ import { ROUTE_IDS } from '@/renderer/router/routes'
 import { openDecision } from '@/renderer/decision/controller'
 import { openReviewDialog } from '@/renderer/gate/controller'
 import { itemActionState, runItemAction, subscribeItemActions } from '@/renderer/board/actions'
-import { actionButtonLabel, actionPendingLabel, actionResultCopy, decisionButtonLabel, openPrLinkLabel, openTicketLinkLabel, reviewPlanButtonLabel } from '@/renderer/board/copy'
+import { actionButtonLabel, actionPendingLabel, actionResultCopy, decisionButtonLabel, openPrLinkLabel, openTicketLinkLabel, reviewPlanButtonLabel, writeHistoryLinkLabel } from '@/renderer/board/copy'
 import { yourSessionsLabel } from '@/renderer/board/session-copy'
 import { actionNoteFor, agentSummaryOf, decisionNoteFor, phaseLabelFor, phaseToneFor, stageTargetsOf } from '@/renderer/board/row-model'
 import { itemDetailLines } from '@/renderer/board/tick'
@@ -194,6 +194,10 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
           ))}
         </div>
       ) : null}
+      <Button variant="ghost" size="small" className="self-start" onClick={() => void navigate({ to: ROUTE_IDS.audit, search: { repo: item.repoId, number: item.number } })}>
+        <ScrollText aria-hidden="true" className="size-3.5" />
+        {writeHistoryLinkLabel()}
+      </Button>
       {heldLines.length > 0 ? (
         <div className="flex flex-col gap-1 rounded-md bg-muted px-3 py-2 text-meta text-muted-foreground">
           {heldLines.map((line) => (

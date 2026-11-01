@@ -26,8 +26,8 @@ function repoName(entry: RepositoryEntry): string {
 }
 
 export function RepoScreen() {
-  const { repoId } = useParams({ from: ROUTE_IDS.repo })
-  const search = useSearch({ from: ROUTE_IDS.repo })
+  const { repoId } = useParams({ from: ROUTE_IDS.settingsRepo })
+  const search = useSearch({ from: ROUTE_IDS.settingsRepo })
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const reposQuery = useIpcQuery('repos:list')
@@ -39,9 +39,9 @@ export function RepoScreen() {
   if (entry === undefined) {
     if (reposQuery.isLoading) return null
     return (
-      <Screen header={<ScreenHeader>Repositories</ScreenHeader>}>
+      <Screen header={<ScreenHeader>Settings › Repositories</ScreenHeader>}>
         <ScreenBody variant="list">
-          <EmptyState icon={FolderGit2} message="That repository isn't registered." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.repos }) }} className="p-6" />
+          <EmptyState icon={FolderGit2} message="That repository isn't registered." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.settings, search: { section: 'repositories' } }) }} className="p-6" />
         </ScreenBody>
       </Screen>
     )
@@ -53,11 +53,11 @@ export function RepoScreen() {
   const denialsGroup = search.denialsGroup ?? 'command'
 
   function setTab(next: 'overview' | 'worktrees' | 'denials'): void {
-    void navigate({ to: ROUTE_IDS.repo, params: { repoId }, search: { tab: next, denialsGroup } })
+    void navigate({ to: ROUTE_IDS.settingsRepo, params: { repoId }, search: { tab: next, denialsGroup } })
   }
 
   function setDenialsGroup(next: DenialsGroup): void {
-    void navigate({ to: ROUTE_IDS.repo, params: { repoId }, search: { tab: 'denials', denialsGroup: next } })
+    void navigate({ to: ROUTE_IDS.settingsRepo, params: { repoId }, search: { tab: 'denials', denialsGroup: next } })
   }
 
   async function handleRemove(): Promise<void> {
@@ -67,7 +67,7 @@ export function RepoScreen() {
       queryClient.setQueryData(ipcQueryOptions('repos:list').queryKey, (): ReposListResponse => ({ ok: true, repositories: result.repositories }))
       setRemoveOpen(false)
       toast(`Removed ${name}.`)
-      void navigate({ to: ROUTE_IDS.repos })
+      void navigate({ to: ROUTE_IDS.settings, search: { section: 'repositories' } })
     } catch (error) {
       console.error('Failed to remove a repository', error)
     }
@@ -78,7 +78,11 @@ export function RepoScreen() {
       header={
         <ScreenHeader className="justify-between">
           <div className="flex items-center gap-1">
-            <button type="button" onClick={() => void navigate({ to: ROUTE_IDS.repos })} className="text-muted-foreground hover:underline">
+            <button type="button" onClick={() => void navigate({ to: ROUTE_IDS.settings, search: { section: 'general' } })} className="text-muted-foreground hover:underline">
+              Settings
+            </button>
+            <span className="text-muted-foreground">›</span>
+            <button type="button" onClick={() => void navigate({ to: ROUTE_IDS.settings, search: { section: 'repositories' } })} className="text-muted-foreground hover:underline">
               Repositories
             </button>
             <span className="text-muted-foreground">›</span>

@@ -14,13 +14,26 @@ import { StatusPill } from '@/renderer/components/status-pill'
 import type { PillStatus } from '@/types/components'
 import { ipcQueryOptions, useIpcQuery } from '@/renderer/data/query'
 import { invoke } from '@/renderer/data/invoke'
-import type { InspectedWorktree, WorktreesReport } from '@/types/reclaimer'
+import type { ForcedFlags, InspectedWorktree, WorktreesReport } from '@/types/reclaimer'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import { useListSelection } from '@/renderer/shell/list-selection'
+import { forcedReclaimFor } from '@/renderer/repositories/worktrees-model'
 import {
   failureCopy,
+  forcedActionLabel,
+  forcedConfirmLabel,
+  forcedDialogBody,
+  forcedDialogIsDestructive,
+  forcedDialogTitle,
+  forcedReclaimToast,
+  forcedUnsupportedNotice,
+  lockedInUseHint,
   needsAttentionCount,
   producerCopy,
+  purgeConfirmLabel,
+  purgeDialogBody,
+  purgeDialogTitle,
+  purgeResultToast,
   reclaimDialogBody,
   reclaimDialogConfirmLabel,
   reclaimDialogTitle,
@@ -28,6 +41,58 @@ import {
   reclaimNothingToReclaimTooltip,
   reclaimResultToast,
 } from '@/renderer/repositories/worktrees-copy'
+
+interface PendingForced {
+  readonly worktree: InspectedWorktree
+  readonly flags: ForcedFlags
+}
+
+function ConfirmDialog({
+  title,
+  body,
+  confirmLabel,
+  destructive,
+  running,
+  onConfirm,
+  onCancel,
+}: {
+  readonly title: string
+  readonly body: string
+  readonly confirmLabel: string
+  readonly destructive: boolean
+  readonly running: boolean
+  readonly onConfirm: () => void
+  readonly onCancel: () => void
+}) {
+  return (
+    <AlertDialog open onOpenChange={(open) => !open && onCancel()}>
+      <AlertDialogContent data-slot="alert-dialog-content">
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{body}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={running}>Cancel</AlertDialogCancel>
+          {destructive ? (
+            <AlertDialogAction
+              disabled={running}
+              onClick={(event) => {
+                event.preventDefault()
+                onConfirm()
+              }}
+            >
+              {confirmLabel}
+            </AlertDialogAction>
+          ) : (
+            <Button disabled={running} onClick={onConfirm}>
+              {confirmLabel}
+            </Button>
+          )}
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
 
 const PILL_STATUS: Readonly<Record<InspectedWorktree['state'], PillStatus>> = {
   active: 'working',
@@ -37,6 +102,10 @@ const PILL_STATUS: Readonly<Record<InspectedWorktree['state'], PillStatus>> = {
   dirty: 'attention',
   unresolved: 'attention',
   outside: 'idle',
+}
+
+function orphanName(dir: string): string {
+  return dir.split(/[\\/]/).filter((part) => part !== '').pop() ?? dir
 }
 
 function issueUrl(repo: string, issue: number): string {
@@ -76,10 +145,16 @@ function WorktreeDetailPane({
   worktree,
   onClose,
   onReclaim,
+  forced,
+  onForced,
+  lockedInUse,
 }: {
   readonly worktree: InspectedWorktree
   readonly onClose: () => void
   readonly onReclaim: (() => void) | null
+  readonly forced: ForcedFlags | null
+  readonly onForced: () => void
+  readonly lockedInUse: boolean
 }) {
   const producer = producerCopy(worktree.producer)
   return (
@@ -93,6 +168,12 @@ function WorktreeDetailPane({
           Reclaim worktree
         </Button>
       ) : null}
+      {forced !== null ? (
+        <Button variant="outline" size="small" onClick={onForced} className="self-start">
+          {forcedActionLabel(forced)}
+        </Button>
+      ) : null}
+      {lockedInUse ? <p className="text-small text-muted-foreground">{lockedInUseHint()}</p> : null}
     </DetailPane>
   )
 }
@@ -102,6 +183,8 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
   const repo = 'config' in entry ? entry.config.repo : ''
   const [confirmIssue, setConfirmIssue] = useState<number | 'all' | null>(null)
   const [reclaiming, setReclaiming] = useState(false)
+  const [pendingForced, setPendingForced] = useState<PendingForced | null>(null)
+  const [pendingPurge, setPendingPurge] = useState<string | null>(null)
   const snapshotQuery = useIpcQuery('board:snapshot')
   const worktreesLastSuccessAt = snapshotQuery.data?.health.find((h) => h.repoId === repoId)?.worktrees.lastSuccessAt ?? null
   const query = useQuery(ipcQueryOptions('worktrees:report', { id: repoId }, [worktreesLastSuccessAt]))
@@ -144,11 +227,12 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
   const reclaimableRows = report.worktrees.filter((w) => w.reclaimable)
   const reclaimableCount = reclaimableRows.length
   const selectedWorktree = report.worktrees.find((w) => w.path === selection.selectedKey) ?? null
+  const selectedForced = selectedWorktree === null ? null : forcedReclaimFor(selectedWorktree, report)
 
   async function runReclaim(issue: number | null): Promise<void> {
     setReclaiming(true)
     try {
-      const result = await invoke('worktrees:reclaim', { id: repoId, issue })
+      const result = await invoke('worktrees:reclaim', { id: repoId, issue, force: null })
       if (result.ok) toast(reclaimResultToast(result))
       else toast(reclaimFailureToast(result))
       await query.refetch()
@@ -159,6 +243,37 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
     setConfirmIssue(null)
     selection.clear()
   }
+
+  async function runForced(target: PendingForced): Promise<void> {
+    setReclaiming(true)
+    try {
+      const result = await invoke('worktrees:reclaim', { id: repoId, issue: null, force: { path: target.worktree.path, ...target.flags } })
+      if (result.ok) toast(forcedReclaimToast(target.worktree.pathBasename, result))
+      else toast(reclaimFailureToast(result))
+      await query.refetch()
+    } catch (error) {
+      console.error('Failed to reclaim worktree', error)
+    }
+    setReclaiming(false)
+    setPendingForced(null)
+    selection.clear()
+  }
+
+  async function runPurge(path: string): Promise<void> {
+    setReclaiming(true)
+    try {
+      const result = await invoke('worktrees:purge', { id: repoId, path })
+      if (result.ok) toast(purgeResultToast(result))
+      else toast(reclaimFailureToast(result))
+      await query.refetch()
+    } catch (error) {
+      console.error('Failed to delete directory', error)
+    }
+    setReclaiming(false)
+    setPendingPurge(null)
+  }
+
+  const forcedSupported = report.forcedActions === 'supported'
 
   const confirmTarget =
     confirmIssue === 'all'
@@ -179,6 +294,7 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
           {report.porcelainJoin === 'unavailable' ? (
             <p className="text-small text-attention-dot">Couldn&apos;t read this repository&apos;s worktree list directly, so a registered-but-missing directory isn&apos;t flagged.</p>
           ) : null}
+          {!forcedSupported ? <p className="text-small text-attention-dot">{forcedUnsupportedNotice()}</p> : null}
           <div className="flex items-center justify-between gap-2 text-small text-muted-foreground">
             <span>
               {report.registered} registered · {reclaimableCount} reclaimable · {needsAttentionCount(report.worktrees)} need attention
@@ -210,9 +326,14 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
           <div className="flex flex-col gap-1 px-4 py-3">
             <p className="text-small text-foreground">{report.orphanDirs.length} untracked directory(ies) sit beside a registered worktree. git worktree prune can&apos;t clear these.</p>
             {report.orphanDirs.map((dir) => (
-              <p key={dir} className="font-mono text-meta text-muted-foreground">
-                {dir}
-              </p>
+              <div key={dir} className="flex items-center gap-2">
+                <p className="truncate font-mono text-meta text-muted-foreground">{dir}</p>
+                {forcedSupported ? (
+                  <Button variant="ghost" size="small" onClick={() => setPendingPurge(dir)}>
+                    Delete
+                  </Button>
+                ) : null}
+              </div>
             ))}
           </div>
         ) : null}
@@ -222,6 +343,31 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
           worktree={selectedWorktree}
           onClose={() => selection.clear()}
           onReclaim={selectedWorktree.reclaimable && selectedWorktree.issue !== null ? () => setConfirmIssue(selectedWorktree.issue) : null}
+          forced={selectedForced}
+          onForced={() => selectedForced !== null && setPendingForced({ worktree: selectedWorktree, flags: selectedForced })}
+          lockedInUse={forcedSupported && selectedWorktree.state === 'locked' && !selectedWorktree.otherwiseReclaimable}
+        />
+      ) : null}
+      {pendingForced !== null ? (
+        <ConfirmDialog
+          title={forcedDialogTitle(pendingForced.worktree.pathBasename, pendingForced.flags, pendingForced.worktree.dirtyFiles)}
+          body={forcedDialogBody(pendingForced.worktree.pathBasename, pendingForced.flags, pendingForced.worktree.dirtyFiles)}
+          confirmLabel={forcedConfirmLabel(pendingForced.flags)}
+          destructive={forcedDialogIsDestructive(pendingForced.flags)}
+          running={reclaiming}
+          onConfirm={() => void runForced(pendingForced)}
+          onCancel={() => setPendingForced(null)}
+        />
+      ) : null}
+      {pendingPurge !== null ? (
+        <ConfirmDialog
+          title={purgeDialogTitle(orphanName(pendingPurge))}
+          body={purgeDialogBody()}
+          confirmLabel={purgeConfirmLabel()}
+          destructive
+          running={reclaiming}
+          onConfirm={() => void runPurge(pendingPurge)}
+          onCancel={() => setPendingPurge(null)}
         />
       ) : null}
       <AlertDialog open={confirmTarget !== null} onOpenChange={(open) => !open && setConfirmIssue(null)}>

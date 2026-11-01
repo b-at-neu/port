@@ -1,5 +1,5 @@
 // runReclaim: drives `bin/worktrees.mjs reclaim --json`, the write half of
-// report.ts's read. Never passes --unlock/--force-dirty/--offline, no retry.
+// report.ts's read. Passes --unlock/--force-dirty only path-scoped to one confirmed worktree; never --offline, no retry.
 import { node as defaultNode } from '@/main/platform/node'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
 import type { WorktreesReclaimResult } from '@/types/reclaimer'
@@ -46,7 +46,13 @@ export async function runReclaim(params: RunReclaimParams): Promise<WorktreesRec
   }
 
   const args = [...tokenized.args, 'reclaim', '--json']
-  if (params.issue !== null) args.push('--issue', String(params.issue))
+  if (params.force !== null) {
+    args.push('--path', params.force.path, '--max', '1')
+    if (params.force.unlock) args.push('--unlock')
+    if (params.force.forceDirty) args.push('--force-dirty')
+  } else if (params.issue !== null) {
+    args.push('--issue', String(params.issue))
+  }
 
   const result = await runNode(args, { cwd: params.repoRoot })
 

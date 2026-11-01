@@ -97,6 +97,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `notify.ts`'s `notificationFor` decides per manual session and stays silent for a stage session's finish, end, question and protected edit; `createNotifier` fires only when no port window is focused, and a focused transition still updates the baseline so refocusing then blurring never replays a stale one
 - `notify.ts`'s `showNeedsYou` is the one shower for Needs you notifications, behind the same focus rule; a click broadcasts `open-needs-you`
 - `marks.ts`'s pin/archive sets persist only through `persist.ts`; `store.ts` is their one composition point, never a second writer
+- `usage-ledger.ts`'s `createUsageLedger` is `usage-ledger.json`'s only writer, keyed by boot id (a `SessionKey` restarts every launch) with 31-day retention; a missing or malformed file loads empty, so a lost ledger shows no totals rather than a wrong one
 - `session-index.ts`'s `createSessionIndex` is `session-index.json`'s only writer, observing every hosted snapshot. It is history for the Board pane, never a restore set, so it takes no `freeze()`. A missing or malformed file loads empty
 
 **`apps/desktop/src/main/local/`**
@@ -110,12 +111,14 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 **`apps/desktop/src/main/platform/`**
 - only importer of `node:child_process` / `node:fs` under `apps/desktop/src/`
 - spawnables a literal union (`KNOWN_COMMANDS`); paths via `pathKey`/`contains`, never `startsWith`
+- `disk.ts`'s `directorySize` never follows a symlink and is bounded by `maxEntries`; a cut-short or partly unreadable walk reports `truncated`, never an undercount presented as exact
 - `shell-env.ts` resolves the login shell's PATH once at startup, merges only PATH into `process.env`, and never blocks startup past its timeout
 
 **`apps/desktop/src/main/reclaimer/`**
 - drives the shipped `worktrees.mjs` script; never re-implements its classification
 - calls no `git worktree` itself; only `node` is spawnable here
-- may run `reclaim` (never `--unlock`/`--force-dirty`); every attempt is audited via `main/writes/audit.ts`'s `appendAudit`, from `main/channels/worktrees.ts` — this directory itself never writes the audit log
+- may run `reclaim`, with `--unlock`/`--force-dirty` only path-scoped (`--path`) to one confirmed worktree, never with `--issue`; and `purge --orphan` for one confirmed path
+- every attempt is audited via `main/writes/audit.ts`'s `appendAudit`, from `main/channels/worktrees.ts` — this directory itself never writes the audit log
 
 **`apps/desktop/src/main/registry/effective.ts`**
 - resolves effective config: `CLAUDE.md` overrides folded over port-resolved values
@@ -139,7 +142,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 **`apps/desktop/src/main/stage/`** (#327)
 - implements `main/dispatch/launch.ts`'s `StageLauncher` seam: a session worktree, a hosted session started with the `agent:` option, the prompt sent, and the hand-back watched
 - `agents.ts`'s `STAGE_AGENT_NAMES` is the only place a bare `StageAgent` key becomes an `agent:` value; `agent:` applies the definition's tools and model only, not its body
-- the instructions travel in the first message: `instructions.ts` loads the agent body and the `PIPELINE.md` sections it is told to follow from the installed plugin (`installed_plugins.json`), never from the worktree and never as a second system prompt; `utils/stage/prompt.ts` composes and parses that message for the launcher and the transcript card
+- the instructions travel in the first message: `instructions.ts` loads the agent body and the `PIPELINE.md` sections it is told to follow from the installed plugin — a `directory`-source marketplace (`known_marketplaces.json`) resolves to its live folder, every other install to its `installed_plugins.json` `installPath` — never from the worktree and never as a second system prompt; `utils/stage/prompt.ts` composes and parses that message for the launcher and the transcript card
 - the `docs.*` and `commands.*` pointers in that message come from `.claude/port.config.json` at the default branch through `registry/harness.ts`'s `readAtDefaultRef`, never the stage worktree, whose checkout a pull request can edit
 - `default.ts`'s `createDefaultStageLauncher` binds every I/O seam of `createStageLauncher` to its production implementation, so `main/ipc.ts` passes only the store, the registry and the two dispatcher callbacks
 - a load failure fails the launch and removes the worktree — a stage is never dispatched without its instructions
@@ -177,6 +180,10 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 **`apps/desktop/src/main/writes/`**
 - only GitHub writer; only `command.ts` names `--add-label`/`--remove-label`
 - never `merge`, `close`, `--delete-branch`, or `ready`
+
+**`apps/desktop/src/renderer/audit/`**
+- reads `audit:list` only; the screen is read-only and makes no write
+- `model.ts` is the one `AuditEntry` → row mapping
 
 **`apps/desktop/src/renderer/components/conversation-model.ts`/`conversation-list.tsx`**
 - the one `TranscriptEntry` → view-model mapping and the one pin-to-bottom, chunked-reveal list
@@ -277,7 +284,7 @@ The users of this system are operators reading GitHub and a terminal, so "user-f
 
 Narrow but real, because the pipeline's whole visible state is a set of GitHub labels.
 
-**Label colour encodes the pipeline phase by hue and position by lightness.** One palette per phase (plan, implement, review, revise, refresh, needs-you, done), the same hue on GitHub, the Board pill and the sidebar dot. Within a phase a queued trigger is the lighter shade and the in-flight label the full colour, which is exactly the app's light-theme dot. Needs-you gates step two shades apart (`DC2626` → `991B1B`), so the pair still separates by lightness under red-green colour vision deficiency. `scripts/checks/phase-palette.ts` pins `labels.json`, `theme.css` and DESIGN §1 together and enforces the hue, lightness and contrast rules. Every colour is a well-formed six-digit uppercase hex and no two labels share one ("Label colours are well-formed and distinct").
+**Label colour encodes the pipeline phase by hue and position by lightness.** One palette per phase (plan, implement, review, revise, refresh, needs-you, done), the same hue on GitHub, the Board pill and the sidebar dot. Within a phase a queued trigger is the lighter shade and the in-flight label the full colour, which is exactly the app's light-theme dot. Needs-you gates step two shades apart (`DC2626` → `991B1B`), so the pair still separates by lightness under red-green colour vision deficiency. `scripts/checks/phase-palette.ts` pins `labels.json`, `theme.css` and DESIGN §1 together and enforces the hue, lightness and contrast rules, plus ≥30° between phase hues, solid pills and stepped dark surfaces. Every colour is a well-formed six-digit uppercase hex and no two labels share one ("Label colours are well-formed and distinct").
 
 **Severity is never colour-only.** Review findings carry both an emoji and the word: 🔴 Critical · 🟠 Medium · 🟡 Low · ⚪ Nit.
 

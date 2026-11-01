@@ -202,6 +202,10 @@ export function openTicketLinkLabel(): string {
   return 'Open ticket'
 }
 
+export function writeHistoryLinkLabel(): string {
+  return 'History of writes'
+}
+
 /** `Open PR #<n>` beside a ticket link, bare `Open PR` for a pull request that is the whole item. */
 export function openPrLinkLabel(number: number | null): string {
   return number === null ? openPrButtonLabel() : `${openPrButtonLabel()} #${String(number)}`

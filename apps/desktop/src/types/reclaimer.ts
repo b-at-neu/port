@@ -32,6 +32,8 @@ export interface InspectedWorktree {
   readonly lockReason: string | null
   readonly dirtyFiles: number
   readonly reclaimable: boolean
+  /** Finished work (`done`/`no-work`) that only a lock or uncommitted changes keep from `reclaimable`. Always `false` from a script that predates `forcedActions`. */
+  readonly otherwiseReclaimable: boolean
   readonly prunable: boolean | null
   readonly producer: WorktreeProducer | null
 }
@@ -61,6 +63,9 @@ export type GithubResolutionState = 'resolved' | 'unavailable'
 /** `'unavailable'` means the local `readWorktrees` itself failed — `prunable`/`producer` are `null` on every row, and the report is still `ok: true`. */
 export type PorcelainJoinState = 'joined' | 'unavailable'
 
+/** `'unsupported'` means the installed script predates `--path`, so no forced reclaim or orphan delete is offered. */
+export type ForcedActionsState = 'supported' | 'unsupported'
+
 export type WorktreesReport =
   | {
       readonly ok: true
@@ -72,6 +77,7 @@ export type WorktreesReport =
       readonly byState: Readonly<Partial<Record<WorktreeState, number>>>
       readonly githubResolution: GithubResolutionState
       readonly porcelainJoin: PorcelainJoinState
+      readonly forcedActions: ForcedActionsState
       readonly readAt: string
     }
   | ({ readonly ok: false; readonly readAt: string } & ReclaimerFailure)
@@ -100,6 +106,17 @@ export type WorktreesReclaimResult =
     }
   | ({ readonly ok: false; readonly readAt: string; readonly call: readonly string[] | null } & ReclaimerFailure)
 
+/** The flags a forced reclaim passes. At least one is always true. */
+export interface ForcedFlags {
+  readonly unlock: boolean
+  readonly forceDirty: boolean
+}
+
+/** One confirmed worktree and the flags the operator agreed to for it. */
+export interface ForcedReclaim extends ForcedFlags {
+  readonly path: string
+}
+
 export interface RunReclaimParams {
   readonly repoRoot: string
   /** `commands.worktrees` verbatim off the resolved config — `null` means
@@ -108,6 +125,35 @@ export interface RunReclaimParams {
   /** `null` reclaims every reclaimable candidate; a positive integer scopes
    *  the run to that ticket's own worktree (`--issue N`). */
   readonly issue: number | null
+  /** Non-null scopes the run to that one path (`--path`) and passes the confirmed flags; never combined with `issue`. */
+  readonly force: ForcedReclaim | null
+  readonly runNode?: NodeRunner
+  readonly now?: () => Date
+  readonly pathOps?: PathOps
+}
+
+export type PurgeOutcome = 'deleted' | 'refused' | 'failed'
+
+export type PurgeCause = 'file-in-use' | 'long-path' | 'unknown'
+
+/** `runPurge`'s own result. A refused or failed outcome is still `ok: true`, since the script ran and said so. */
+export type WorktreesPurgeResult =
+  | {
+      readonly ok: true
+      readonly outcome: PurgeOutcome
+      readonly pathBasename: string
+      readonly message: string | null
+      readonly cause: PurgeCause | null
+      readonly readAt: string
+      /** The exact argv `runNode` spawned. */
+      readonly call: readonly string[]
+    }
+  | ({ readonly ok: false; readonly readAt: string; readonly call: readonly string[] | null } & ReclaimerFailure)
+
+export interface RunPurgeParams {
+  readonly repoRoot: string
+  readonly worktreesCommand: string | null
+  readonly path: string
   readonly runNode?: NodeRunner
   readonly now?: () => Date
   readonly pathOps?: PathOps

@@ -1,0 +1,79 @@
+# Rebuilds at the release tag because desktop-package.yml's artifacts expire and belong to another run; the only workflow with contents: write.
+
+name: Attach installers to release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to attach installers to, e.g. v1.0.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  upload-release-installers:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      - name: Cache Electron download
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/electron-cache
+          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Cache electron-builder download
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/electron-builder-cache
+          key: electron-builder-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
+      - name: Check the tag matches the manifest version
+        shell: bash
+        run: |
+          version=$(node -p "require('./plugins/port/.claude-plugin/plugin.json').version")
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::tag $TAG does not match manifest version v$version"
+            exit 1
+          fi
+      - name: Build installers
+        run: pnpm --filter @port/desktop dist
+        env:
+          ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/electron-builder-cache
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Upload installers to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          shopt -s nullglob
+          files=(apps/desktop/dist/port-*.AppImage apps/desktop/dist/port-*.deb apps/desktop/dist/port-*.dmg apps/desktop/dist/port-*.exe)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "::error::no installers found in apps/desktop/dist"
+            exit 1
+          fi
+          gh release upload "$TAG" "${files[@]}" --clobber --repo "$GITHUB_REPOSITORY"

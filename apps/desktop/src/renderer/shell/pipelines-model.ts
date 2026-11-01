@@ -33,8 +33,8 @@ function sessionsFor(repoId: RepoId, index: TicketIndex, needsYouNumbers: Readon
     const transcript: PipelineSessionRow['transcript'] =
       liveAgent !== undefined ? { sessionId: liveAgent.sessionId, agentId: liveAgent.agentId } : liveSession !== undefined ? { sessionId: liveSession.sessionId, agentId: null } : null
 
-    const statusText = statusTextOf(tone, stageKey !== null ? (PHASE_NAMES[stageKey] ?? stageKey) : 'Unstaged')
-    rows.push({ key: `${repoId}-${ticket.ref.number}`, repoId, number: ticket.ref.number, label: ticketLabel(ticket.ref), tone, statusText, sessionKey: null, transcript })
+    const phaseName = stageKey !== null ? (PHASE_NAMES[stageKey] ?? stageKey) : 'Unstaged'
+    rows.push({ key: `${repoId}-${ticket.ref.number}`, repoId, number: ticket.ref.number, label: ticketLabel(ticket.ref), tone, statusText: statusTextOf(tone, phaseName), phaseName, sessionKey: null, transcript })
   }
   return rows
 }
@@ -47,7 +47,12 @@ function stageRowFor(repoId: RepoId, session: HostedSessionSnapshot, index: Tick
   const label = session.title ?? (ticket !== undefined ? ticketLabel(ticket.ref) : `#${String(stage.number)}`)
   const operatorNeeded = session.pendingPermissions.length > 0 || classifyHandbackText(session.lastResult?.text ?? '') !== null
   const tone = phaseTone({ stageKey: stage.trigger, active: true, waitingOnYou: false, operatorNeeded })
-  return { key: session.sessionKey, repoId, number: ticket?.ref.number ?? stage.number, label, tone, statusText: statusTextOf(tone, stageAgentPhaseName(stage.agent)), sessionKey: session.sessionKey, transcript: null }
+  const phaseName = stageAgentPhaseName(stage.agent)
+  return { key: session.sessionKey, repoId, number: ticket?.ref.number ?? stage.number, label, tone, statusText: statusTextOf(tone, phaseName), phaseName, sessionKey: session.sessionKey, transcript: null }
+}
+
+export function phaseLineOf(row: Pick<PipelineSessionRow, 'tone' | 'phaseName'>): string {
+  return row.tone.palette === 'needs-you' ? `${row.phaseName} · Needs you` : row.phaseName
 }
 
 /** Ownership gates the pill ahead of run state — `terminal`/`unreadable` each have their

@@ -1,12 +1,12 @@
-// The Screens section — Needs you (red count), Board, Backlog, Repositories.
+// The Screens section — Needs you (red count), Board, Backlog, Audit log.
 import { Link } from '@tanstack/react-router'
-import { FolderGit2, Inbox, LayoutList, ListTodo } from 'lucide-react'
+import { Inbox, LayoutList, ListTodo, ScrollText } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { useNeedsYouItems } from '@/renderer/needs-you/use-items'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 
 const ROW_CLASS =
-  'flex h-7 items-center gap-2 rounded-md px-2 text-body text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring [&.active]:bg-accent [&.active]:text-foreground'
+  'flex h-7 items-center gap-2 rounded-md px-2 text-body text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring [&.active]:bg-accent [&.active]:text-primary-text'
 
 export function SidebarScreens() {
   const count = useNeedsYouItems().length
@@ -35,9 +35,9 @@ export function SidebarScreens() {
         <ListTodo className="size-4 shrink-0" />
         Backlog
       </Link>
-      <Link to={ROUTE_IDS.repos} className={ROW_CLASS} activeProps={{ className: 'active' }}>
-        <FolderGit2 className="size-4 shrink-0" />
-        Repositories
+      <Link to={ROUTE_IDS.audit} className={ROW_CLASS} activeProps={{ className: 'active' }}>
+        <ScrollText className="size-4 shrink-0" />
+        Audit log
       </Link>
     </div>
   )

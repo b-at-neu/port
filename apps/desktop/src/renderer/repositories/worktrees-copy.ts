@@ -1,6 +1,6 @@
 // Every pure string the Repositories screen's own Worktrees tab renders.
 // No DOM here.
-import type { InspectedWorktree, ReclaimedWorktree, WorktreesReclaimResult, WorktreesReport } from '@/types/reclaimer'
+import type { ForcedFlags, InspectedWorktree, ReclaimedWorktree, WorktreesPurgeResult, WorktreesReclaimResult, WorktreesReport } from '@/types/reclaimer'
 
 /** One line per kind, naming what was refused — the plan's own **UX
  *  states** copy, verbatim where the plan gives an exact sentence. */
@@ -78,4 +78,75 @@ export function reclaimResultToast(result: Extract<WorktreesReclaimResult, { ok:
 
 export function reclaimFailureToast(result: Extract<WorktreesReclaimResult, { ok: false }>): string {
   return failureCopy(result)
+}
+
+// --- Forced reclaim ------------------------------------------------------
+
+function uncommittedFiles(dirtyFiles: number): string {
+  return dirtyFiles > 0 ? `${String(dirtyFiles)} uncommitted file${dirtyFiles === 1 ? '' : 's'}` : 'uncommitted files (port couldn’t count them)'
+}
+
+export function forcedActionLabel(flags: ForcedFlags): string {
+  if (!flags.unlock) return 'Discard changes and reclaim'
+  return flags.forceDirty ? 'Unlock and discard changes' : 'Unlock and reclaim'
+}
+
+export function forcedConfirmLabel(flags: ForcedFlags): string {
+  if (!flags.unlock) return 'Discard and reclaim'
+  return flags.forceDirty ? 'Unlock and discard' : 'Unlock and reclaim'
+}
+
+export function forcedDialogTitle(name: string, flags: ForcedFlags, dirtyFiles: number): string {
+  if (flags.unlock) return flags.forceDirty ? `Unlock ${name} and discard its changes?` : `Unlock and reclaim ${name}?`
+  return dirtyFiles > 0 ? `Discard ${uncommittedFiles(dirtyFiles)} in ${name}?` : `Discard uncommitted changes in ${name}?`
+}
+
+export function forcedDialogBody(name: string, flags: ForcedFlags, dirtyFiles: number): string {
+  if (!flags.unlock) return `Deletes ${name}’s directory, uncommitted changes included, and its merged branch. Those changes can’t be recovered.`
+  if (!flags.forceDirty) {
+    return `Removes the lock on ${name}, then deletes its directory and its merged branch. A lock usually means someone is still using it, so only continue if you know nothing is.`
+  }
+  return `Removes the lock, then deletes the directory with its ${uncommittedFiles(dirtyFiles)}. Those changes can’t be recovered.`
+}
+
+export function forcedDialogIsDestructive(flags: ForcedFlags): boolean {
+  return flags.forceDirty
+}
+
+export function lockedInUseHint(): string {
+  return 'Locked and still in use, so port won’t unlock it.'
+}
+
+export function forcedUnsupportedNotice(): string {
+  return 'This repository’s worktree script predates forced reclaim. Re-run /port:init to update it, or use /port:worktree-clean.'
+}
+
+/** One toast for a path-scoped reclaim: removed, removed nothing, or the target's own error. */
+export function forcedReclaimToast(name: string, result: Extract<WorktreesReclaimResult, { ok: true }>): string {
+  if (result.removed > 0) return `Reclaimed ${name}.`
+  const failed = result.results.find((r) => r.outcome === 'failed')
+  if (failed !== undefined) return `Couldn’t reclaim ${name}: ${failed.error ?? 'unknown reason'}.`
+  return `Nothing was reclaimed. ${name} changed since it was checked; its row shows why.`
+}
+
+// --- Orphan directory ----------------------------------------------------
+
+export function purgeDialogTitle(name: string): string {
+  return `Delete ${name}?`
+}
+
+export function purgeDialogBody(): string {
+  return 'Deletes this directory and everything in it. git doesn’t track it, so nothing else will clear it.'
+}
+
+export function purgeConfirmLabel(): string {
+  return 'Delete directory'
+}
+
+export function purgeResultToast(result: Extract<WorktreesPurgeResult, { ok: true }>): string {
+  const name = result.pathBasename
+  if (result.outcome === 'deleted') return `Deleted ${name}.`
+  if (result.outcome === 'refused') return `Didn’t delete ${name}. It’s no longer an untracked directory.`
+  if (result.cause === 'file-in-use') return `Couldn’t delete ${name}: a file under it is still open. Close whatever holds it, then try again.`
+  return `Couldn’t delete ${name}: ${result.message ?? 'unknown reason'}.`
 }

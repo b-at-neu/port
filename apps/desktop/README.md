@@ -9,11 +9,13 @@ An Electron + TypeScript cockpit for the port pipeline — see the root [README.
 
 ## Install
 
-Grab the installer for your OS from the **Package desktop app** workflow's artifacts (there is no release yet — see "Building installers" below). Every installer is unsigned, so the OS warns on first launch:
+Download the installer for your OS from the assets of the [latest release](https://github.com/b-at-neu/port/releases/latest) — `.dmg` (macOS), `.exe` (Windows), `.AppImage` or `.deb` (Linux). Every installer is unsigned, so the OS warns on first launch:
 
 - **macOS**: System Settings → Privacy & Security → **Open Anyway**, or `xattr -dr com.apple.quarantine /Applications/port.app`.
 - **Windows**: SmartScreen → **More info** → **Run anyway**.
 - **Linux**: `chmod +x` the AppImage. It needs `libfuse2`; on Ubuntu 24.04+, where AppArmor can block an unprivileged AppImage sandbox, prefer the `.deb` instead (see "Risks" in the ticket that added this, #335).
+
+Unreleased builds from `dev` are on the **Package desktop app** workflow's runs, as the `port-desktop-<OS>-v<version>` artifact, kept for 7 days.
 
 ## Building installers
 

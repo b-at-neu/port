@@ -10,11 +10,11 @@ const key = (value: string) => value as SessionKey
 const TONE: PhaseTone = { palette: 'unstaged', fill: 'active', pulse: false }
 
 function stageRow(rowKey: string, sessionKey: string): PipelineSessionRow {
-  return { key: rowKey, repoId: 'a' as RepoId, number: 1, label: '#1', tone: TONE, statusText: 'Implement', sessionKey: key(sessionKey), transcript: null }
+  return { key: rowKey, repoId: 'a' as RepoId, number: 1, label: '#1', tone: TONE, statusText: 'Implement', phaseName: 'Implement', sessionKey: key(sessionKey), transcript: null }
 }
 
 function detectedRow(rowKey: string, sessionId: string, agentId: string | null): PipelineSessionRow {
-  return { key: rowKey, repoId: 'a' as RepoId, number: 2, label: '#2', tone: TONE, statusText: 'Implement', sessionKey: null, transcript: { sessionId, agentId } }
+  return { key: rowKey, repoId: 'a' as RepoId, number: 2, label: '#2', tone: TONE, statusText: 'Implement', phaseName: 'Implement', sessionKey: null, transcript: { sessionId, agentId } }
 }
 
 function repo(repoId: string, sessions: readonly PipelineSessionRow[]): PipelineRow {

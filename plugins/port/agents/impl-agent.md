@@ -40,7 +40,7 @@ Everything repository-specific comes from it. Placeholders in this file are **no
 
 **Label names are configuration, not constants.** `<labels.inProgress>` means the string this repository calls that label — usually `in progress`, but a repository may rename any of them. Never type a label name you did not read from config or the standard vocabulary; a wrong label string silently does nothing, or worse, creates a new label.
 
-Also read from config: `commands.bootstrap`, `commands.checks`, `commands.artifacts` (production-time artifact validation; null means skip it), `docs.engineering`, `docs.design` (when the ticket touches an interface), `models.impl` (for the commit trailer), and `modules.approvalGate`.
+Also read from config: `commands.bootstrap`, `commands.checks`, `commands.artifacts` (production-time artifact validation; null means skip it), `commands.screenshots` (the repository's capture harness as `{ run, dir }`; null means no capture), `docs.engineering`, `docs.design` (when the ticket touches an interface), `models.impl` (for the commit trailer), and `modules.approvalGate`.
 
 **Then resolve the effective configuration.** Read `git show origin/HEAD:CLAUDE.md` the same way (missing is normal, not an error) and fold any `port-overrides` block over what you just read (`${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "CLAUDE.md overrides") — every value above is the *effective* one, never `.claude/port.config.json` alone. Report any refused override; never work around it.
 
@@ -213,6 +213,14 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
    **Never suppress a check to make it pass** — no inline disable comments, no widened ignore globs, no relaxed configuration. A check that cannot be satisfied honestly is a `BLOCKED:`.
 
    Every check must pass before the **final** push in step 6 — the checkpoint pushes in step 3 already ran ahead of this gate, deliberately, so a killed run's commits survive regardless of whether checks ever ran. If `commands.checks` is empty, there is nothing to run — do not invent checks by guessing at the repository's tooling.
+
+   **Screenshots — only when the plan has a `## UX states` section; any other plan omits `## Screenshots` entirely.** Capture never gates the pull request, and a failure here is never a `BLOCKED:`:
+   - `commands.screenshots` null → the section is the single line `Not captured — this repository configures no screenshot command (commands.screenshots).`
+   - `commands.artifacts` null → the same `Not captured` sentinel, naming that there is no publisher.
+   - Otherwise run `commands.screenshots.run` exactly as configured, as one bare Bash call under the same rules as the `commands.checks` clause above, but outside `commands.checks`. When no existing capture shows a state the plan designs, add one to the repository's harness following its documented convention, commit it, and run the command again.
+   - **Read** each candidate PNG under `commands.screenshots.dir` and choose the ones that show the plan's UX states — a light and a dark capture per state where the harness emits both, at most 12 images. Label each with the plan's state name plus the theme, e.g. `Session sidebar ••• menu with Pin — light`.
+   - Write `.temp/screenshots-N.json` (a JSON array of `{ "file": "<repo-relative png>", "label": "<label>" }`), then run `<artifacts> screenshots .temp/screenshots-N.json --issue N --out .temp/screenshots-N.md` and paste the block it writes under `## Screenshots`.
+   - A failed capture or publish → `Not captured — <one-line reason from the FAIL or exit>`, plus a `- [ ]` step in `## Testing plan` to capture by hand. Never retry with altered commands.
 
 6. **Final push, and open the pull request.** Push whatever remains, by the same idiom as every checkpoint before it — the adopted branch's name, or the session branch or slug chosen at the first checkpoint of a fresh branch, never a freshly derived one:
 

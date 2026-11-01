@@ -133,6 +133,13 @@ describe('needsYouLeadCopy', () => {
     expect(needsYouLeadCopy(item)).toBe('#52 says a pull request is open, but none is. Reopen it or move the issue back.')
   })
 
+  it('dispatch-failed names the phase and ticket, and counts attempts only past the first', () => {
+    const failed = (attempts: number) => ({ ...base({ number: 585 }), kind: 'dispatch-failed', attempts, record: { agent: 'plan', detail: 'boom' } }) as unknown as NeedsYouItem
+    expect(needsYouLeadCopy(failed(1))).toBe("Planning #585 couldn't start")
+    expect(needsYouLeadCopy(failed(4))).toBe("Planning #585 couldn't start · 4 attempts")
+    expect(GROUP_NAMES['launch-failed']).toBe('Launch failures')
+  })
+
   it('stage-approval names the phase, the ticket and the protected path', () => {
     const item = { ...base({ number: 466 }), kind: 'stage-approval', sessionKey: 'hosted-1', permissionId: 'p1', agent: 'impl', toolName: 'Edit', path: '.claude/settings.json' } as unknown as NeedsYouItem
     expect(needsYouLeadCopy(item)).toBe('Implementing #466 wants to edit .claude/settings.json')
@@ -183,7 +190,7 @@ describe('usage-limit copy', () => {
 
 describe('GROUP_NAMES', () => {
   it('names every group the way the screen shows it', () => {
-    expect(Object.values(GROUP_NAMES)).toEqual(['Plan reviews', 'Ready to merge', 'Escalated', 'Blocked', 'Questions', 'Edit approvals', 'Denied commands', 'Interrupted', 'Usage limit', 'Held', 'Stalled', 'Over budget', 'Label problems'])
+    expect(Object.values(GROUP_NAMES)).toEqual(['Plan reviews', 'Ready to merge', 'Escalated', 'Blocked', 'Questions', 'Edit approvals', 'Denied commands', 'Interrupted', 'Usage limit', 'Held', 'Stalled', 'Over budget', 'Label problems', 'Launch failures'])
   })
 })
 

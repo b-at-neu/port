@@ -2,6 +2,7 @@
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { ReclaimerFailureKind } from '@/types/reclaimer'
+import type { PillStatus } from '@/types/components'
 import type { GhRunner, GitRunner, PathOps } from '@/types/platform'
 import type { FetchItemsByNumberParams, ItemsByNumberFetch } from '@/types/github'
 
@@ -118,6 +119,8 @@ export interface ReclaimAuditEntry {
   readonly repoId: RepoId
   readonly action: 'worktree-reclaim'
   readonly issue: number | null
+  /** The confirmed flags of a path-scoped forced reclaim, or `null` for a plain one. */
+  readonly force: { readonly unlock: boolean; readonly forceDirty: boolean } | null
   readonly call: readonly string[] | null
   readonly removed: readonly string[]
   readonly failed: readonly string[]
@@ -125,12 +128,31 @@ export interface ReclaimAuditEntry {
   readonly failure: ReclaimerFailureKind | null
 }
 
-export type AuditEntry = LabelAuditEntry | ReclaimAuditEntry
-
-// `'worktree-reclaim'` is the one `action` value `LabelAuditEntry` never takes.
-export function isLabelAuditEntry(entry: AuditEntry): entry is LabelAuditEntry {
-  return entry.action !== 'worktree-reclaim'
+// The orphan-directory delete arm — `path` is the directory's basename, never a raw path.
+export interface PurgeAuditEntry {
+  readonly at: string
+  readonly repo: string
+  readonly repoId: RepoId
+  readonly action: 'worktree-purge'
+  readonly path: string
+  readonly call: readonly string[] | null
+  readonly result: 'deleted' | 'refused' | 'failed'
+  readonly failure: ReclaimerFailureKind | null
 }
+
+export type AuditEntry = LabelAuditEntry | ReclaimAuditEntry | PurgeAuditEntry
+
+// The two worktree actions are the only `action` values `LabelAuditEntry` never takes.
+export function isLabelAuditEntry(entry: AuditEntry): entry is LabelAuditEntry {
+  return entry.action !== 'worktree-reclaim' && entry.action !== 'worktree-purge'
+}
+
+export function isPurgeAuditEntry(entry: AuditEntry): entry is PurgeAuditEntry {
+  return entry.action === 'worktree-purge'
+}
+
+/** The most entries one `audit:list` read returns, newest kept. */
+export const AUDIT_LIST_LIMIT = 500
 
 export type AuditReadFailureKind = 'permission-denied' | 'too-large' | 'io'
 
@@ -144,6 +166,20 @@ export interface ReadAuditLogParams {
 export type AuditRead =
   | { readonly ok: true; readonly entries: readonly AuditEntry[]; readonly malformed: number; readonly previousPath: string | null; readonly readAt: string }
   | { readonly ok: false; readonly kind: AuditReadFailureKind; readonly message: string; readonly readAt: string }
+
+/** One Audit screen row — `model.ts` builds it from an `AuditEntry`, `screen.tsx` renders it. */
+export interface AuditRowView {
+  readonly key: string
+  readonly at: string
+  readonly repo: string
+  readonly repoId: RepoId
+  readonly target: { readonly kind: 'issue' | 'pull-request'; readonly number: number } | null
+  readonly actor: 'you' | 'port'
+  readonly action: string
+  readonly outcome: { readonly tone: PillStatus; readonly label: string }
+  readonly command: string | null
+  readonly detail: string | null
+}
 
 export interface PostCommentParams {
   readonly request: CommentRequest

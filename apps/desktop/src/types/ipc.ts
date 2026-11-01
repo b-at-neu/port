@@ -1,7 +1,7 @@
 import type { AssertEqual } from '@/types/assert-type'
 import type { SessionIndexEntry } from '@/types/session-index'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
-import type { WorktreesReclaimResult, WorktreesReport } from '@/types/reclaimer'
+import type { ForcedReclaim, WorktreesPurgeResult, WorktreesReclaimResult, WorktreesReport } from '@/types/reclaimer'
 import type { SessionScan } from '@/types/sessions'
 import type { TranscriptTailOpen, TranscriptTailPoll } from '@/utils/sessions/transcript'
 import type { SearchQuery, SearchResult } from '@/types/search'
@@ -13,7 +13,9 @@ import type { ItemActionResult, ItemDecisionResult, OperatorAction, OperatorDeci
 import type { DispatchControlResult } from '@/types/dispatch'
 import type { RuntimePreflight, RuntimeProbe } from '@/types/runtime'
 import type { GhStatus } from '@/types/gh'
+import type { NotificationPrefs, StorageReport, UsageSummary } from '@/types/settings'
 import type { BacklogResponse } from '@/types/backlog'
+import type { AuditRead } from '@/types/writes'
 import type { StageAllowResult, StageResumeResult, StageRestartResult } from '@/types/stage'
 import type {
   HostedSessionSnapshot,
@@ -93,11 +95,12 @@ export interface IpcMap {
     request: { id: RepoId }
     response: WorktreesReport
   }
-  // The Worktrees tab's own write — `issue: null` reclaims every candidate.
+  // The Worktrees tab's own write — `issue: null` reclaims every candidate; a non-null `force` reclaims one confirmed path.
   'worktrees:reclaim': {
-    request: { id: RepoId; issue: number | null }
+    request: { id: RepoId; issue: number | null; force: ForcedReclaim | null }
     response: WorktreesReclaimResult
   }
+  'worktrees:purge': { request: { id: RepoId; path: string }; response: WorktreesPurgeResult }
   'sessions:scan': {
     request: void
     response: SessionScan
@@ -263,6 +266,11 @@ export interface IpcMap {
     request: { repoId: RepoId }
     response: BacklogResponse
   }
+  /** The Audit screen's own read — `null` is explicit, never omitted; a `number` requires a `repoId`. */
+  'audit:list': {
+    request: { repoId: RepoId | null; number: number | null }
+    response: AuditRead
+  }
   /** The Settings screen's own read of an operator's persisted session defaults. */
   'session:defaults': {
     request: void
@@ -358,6 +366,26 @@ export interface IpcMap {
     request: { title: string; body: string; focus: string | null }
     response: void
   }
+  /** Settings → General's notification switches; defaults to both on. */
+  'notify:prefs': {
+    request: void
+    response: NotificationPrefs
+  }
+  /** Both fields must be booleans — anything else throws. Returns the saved preferences. */
+  'notify:prefs:set': {
+    request: NotificationPrefs
+    response: NotificationPrefs
+  }
+  /** Paths and sizes for Settings → Usage & storage. Paths come from main only; a failed size read is data, never a rejection. */
+  'storage:report': {
+    request: void
+    response: StorageReport
+  }
+  /** Spend and tokens of the sessions port hosted, per repository and period. */
+  'usage:summary': {
+    request: void
+    response: UsageSummary
+  }
 }
 
 /** `'held:force-dispatch'`'s own result. `not-held` covers both "never held" and "held for a
@@ -371,6 +399,7 @@ export const IPC_CHANNELS = [
   'repos:remove',
   'worktrees:report',
   'worktrees:reclaim',
+  'worktrees:purge',
   'sessions:scan',
   'transcript:tail:open',
   'transcript:tail:poll',
@@ -404,6 +433,7 @@ export const IPC_CHANNELS = [
   'session:restore:discard',
   'gh:status',
   'backlog:list',
+  'audit:list',
   'session:defaults',
   'session:defaults:set',
   'session:rename',
@@ -424,6 +454,10 @@ export const IPC_CHANNELS = [
   'stage:restart',
   'held:force-dispatch',
   'notify:needs-you',
+  'notify:prefs',
+  'notify:prefs:set',
+  'storage:report',
+  'usage:summary',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]

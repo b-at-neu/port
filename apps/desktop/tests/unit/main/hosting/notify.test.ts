@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createNotifier, notificationFor } from '@/main/hosting/notify'
 import type { HostedSessionSnapshot } from '@/types/hosting'
+import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'
+import type { NotificationPrefs } from '@/types/settings'
 import type { SessionControls, SessionModels } from '@/utils/hosting/controls'
 import type { RepoId } from '@/utils/repos'
 import type { SessionKey } from '@/types/hosting'
@@ -139,11 +141,12 @@ describe('createNotifier', () => {
   function resolvedLabel(label: string): () => Promise<string> {
     return () => Promise.resolve(label)
   }
+  const prefs = (): Promise<NotificationPrefs> => Promise.resolve(DEFAULT_NOTIFICATION_PREFS)
 
   it('fires only when the app is unfocused', async () => {
     const show = vi.fn<(notification: { title: string }, snapshot: HostedSessionSnapshot) => void>()
     const repoLabel = vi.fn(resolvedLabel('widgets'))
-    const notifier = createNotifier({ isAppFocused: () => true, show, repoLabel })
+    const notifier = createNotifier({ isAppFocused: () => true, show, repoLabel, prefs })
     notifier.observe(snapshot({ phase: 'streaming' }))
     notifier.observe(snapshot({ phase: 'ready' }))
     await vi.waitFor(() => expect(repoLabel).not.toHaveBeenCalled())
@@ -153,7 +156,7 @@ describe('createNotifier', () => {
   it('fires once when unfocused, and never replays after refocus', async () => {
     let focused = false
     const show = vi.fn<(notification: { title: string }, snapshot: HostedSessionSnapshot) => void>()
-    const notifier = createNotifier({ isAppFocused: () => focused, show, repoLabel: resolvedLabel('widgets') })
+    const notifier = createNotifier({ isAppFocused: () => focused, show, repoLabel: resolvedLabel('widgets'), prefs })
     notifier.observe(snapshot({ phase: 'streaming' }))
     notifier.observe(snapshot({ phase: 'ready' }))
     await vi.waitFor(() => expect(show).toHaveBeenCalledTimes(1))
@@ -167,7 +170,7 @@ describe('createNotifier', () => {
 
   it('drops an ended session from its baseline, so a stale previous never lingers', async () => {
     const show = vi.fn<(notification: { title: string }, snapshot: HostedSessionSnapshot) => void>()
-    const notifier = createNotifier({ isAppFocused: () => false, show, repoLabel: resolvedLabel('widgets') })
+    const notifier = createNotifier({ isAppFocused: () => false, show, repoLabel: resolvedLabel('widgets'), prefs })
     notifier.observe(snapshot({ phase: 'streaming' }))
     notifier.observe(snapshot({ phase: 'ended', end: { reason: 'completed', exitCode: 0, signal: null, message: null, diagnosis: null } }))
     await vi.waitFor(() => expect(show).toHaveBeenCalledTimes(1))
@@ -175,7 +178,7 @@ describe('createNotifier', () => {
 
   it('never calls the label lookup when nothing fires', () => {
     const repoLabel = vi.fn(resolvedLabel('widgets'))
-    const notifier = createNotifier({ isAppFocused: () => false, show: vi.fn(), repoLabel })
+    const notifier = createNotifier({ isAppFocused: () => false, show: vi.fn(), repoLabel, prefs })
     const only = snapshot({ phase: 'streaming' })
     notifier.observe(only)
     notifier.observe(only)
@@ -184,16 +187,49 @@ describe('createNotifier', () => {
 
   it('uses the resolved label in the shown title', async () => {
     const show = vi.fn<(notification: { title: string }, snapshot: HostedSessionSnapshot) => void>()
-    const notifier = createNotifier({ isAppFocused: () => false, show, repoLabel: resolvedLabel('widgets') })
+    const notifier = createNotifier({ isAppFocused: () => false, show, repoLabel: resolvedLabel('widgets'), prefs })
     notifier.observe(snapshot({ phase: 'streaming' }))
     notifier.observe(snapshot({ phase: 'ready' }))
     await vi.waitFor(() => expect(show).toHaveBeenCalledTimes(1))
     expect(show.mock.calls[0]?.[0].title).toContain('widgets')
   })
 
+  it('shows nothing, and never looks the label up, while session notifications are off', async () => {
+    const show = vi.fn<(notification: { title: string }, snapshot: HostedSessionSnapshot) => void>()
+    const repoLabel = vi.fn(resolvedLabel('widgets'))
+    const off = vi.fn(() => Promise.resolve({ needsYou: true, sessions: false }))
+    const notifier = createNotifier({ isAppFocused: () => false, show, repoLabel, prefs: off })
+    notifier.observe(snapshot({ phase: 'streaming' }))
+    notifier.observe(snapshot({ phase: 'ready' }))
+    await vi.waitFor(() => expect(off).toHaveBeenCalledTimes(1))
+    expect(repoLabel).not.toHaveBeenCalled()
+    expect(show).not.toHaveBeenCalled()
+  })
+
+  it('keeps updating the baseline while off, so turning it back on fires only for the next transition', async () => {
+    const show = vi.fn<(notification: { title: string }, snapshot: HostedSessionSnapshot) => void>()
+    let sessions = false
+    const notifier = createNotifier({ isAppFocused: () => false, show, repoLabel: resolvedLabel('widgets'), prefs: () => Promise.resolve({ needsYou: true, sessions }) })
+    notifier.observe(snapshot({ phase: 'streaming' }))
+    notifier.observe(snapshot({ phase: 'ready' }))
+    sessions = true
+    notifier.observe(snapshot({ phase: 'ready' }))
+    notifier.observe(snapshot({ phase: 'streaming' }))
+    notifier.observe(snapshot({ phase: 'ready' }))
+    await vi.waitFor(() => expect(show).toHaveBeenCalledTimes(1))
+  })
+
+  it('fires, failing toward on, when the preference read rejects', async () => {
+    const show = vi.fn<(notification: { title: string }, snapshot: HostedSessionSnapshot) => void>()
+    const notifier = createNotifier({ isAppFocused: () => false, show, repoLabel: resolvedLabel('widgets'), prefs: () => Promise.reject(new Error('unreadable')) })
+    notifier.observe(snapshot({ phase: 'streaming' }))
+    notifier.observe(snapshot({ phase: 'ready' }))
+    await vi.waitFor(() => expect(show).toHaveBeenCalledTimes(1))
+  })
+
   it('falls back to the folder basename, never null, when the lookup rejects', async () => {
     const show = vi.fn<(notification: { title: string }, snapshot: HostedSessionSnapshot) => void>()
-    const notifier = createNotifier({ isAppFocused: () => false, show, repoLabel: () => Promise.reject(new Error('lookup failed')) })
+    const notifier = createNotifier({ isAppFocused: () => false, show, repoLabel: () => Promise.reject(new Error('lookup failed')), prefs })
     notifier.observe(snapshot({ phase: 'streaming' }))
     notifier.observe(snapshot({ phase: 'ready' }))
     await vi.waitFor(() => expect(show).toHaveBeenCalledTimes(1))

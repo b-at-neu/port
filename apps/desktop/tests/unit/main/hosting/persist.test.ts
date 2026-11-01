@@ -5,6 +5,7 @@ import { createHostingPersistence, DEFAULT_SESSION_LIMIT } from '@/main/hosting/
 import type { HostingPersistedState } from '@/types/hosting'
 import type { RepoId } from '@/utils/repos'
 import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
+import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'
 import { makeTempDir } from '../../../fixtures/fs'
 import type { HostingPersistence } from '@/types/hosting'
 
@@ -35,49 +36,49 @@ describe('createHostingPersistence', () => {
   it('load() returns the default empty state when the file is absent', async () => {
     const dir = await makeTempDir()
     const persistence = createHostingPersistence({ dir })
-    await expect(persistence.load()).resolves.toEqual({ limit: DEFAULT_SESSION_LIMIT, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
+    await expect(persistence.load()).resolves.toEqual({ limit: DEFAULT_SESSION_LIMIT, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
   })
 
   it('load() returns the default empty state for garbage JSON', async () => {
     const dir = await makeTempDir()
     await writeFile(join(dir, 'hosting.json'), '{not json')
     const persistence = createHostingPersistence({ dir })
-    await expect(persistence.load()).resolves.toEqual({ limit: DEFAULT_SESSION_LIMIT, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
+    await expect(persistence.load()).resolves.toEqual({ limit: DEFAULT_SESSION_LIMIT, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
   })
 
   it('load() returns the default empty state for a newer version', async () => {
     const dir = await makeTempDir()
     await writeFile(join(dir, 'hosting.json'), JSON.stringify({ version: 2, limit: 4, open: [] }))
     const persistence = createHostingPersistence({ dir })
-    await expect(persistence.load()).resolves.toEqual({ limit: DEFAULT_SESSION_LIMIT, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
+    await expect(persistence.load()).resolves.toEqual({ limit: DEFAULT_SESSION_LIMIT, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
   })
 
   it('load() drops an out-of-range limit, falling back to the default', async () => {
     const dir = await makeTempDir()
     await writeFile(join(dir, 'hosting.json'), JSON.stringify({ version: 1, limit: 99, open: [] }))
     const persistence = createHostingPersistence({ dir })
-    await expect(persistence.load()).resolves.toEqual({ limit: DEFAULT_SESSION_LIMIT, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
+    await expect(persistence.load()).resolves.toEqual({ limit: DEFAULT_SESSION_LIMIT, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
   })
 
   it('load() drops invalid open entries one by one', async () => {
     const dir = await makeTempDir()
     await writeFile(join(dir, 'hosting.json'), JSON.stringify({ version: 1, limit: 4, open: [ENTRY, { repoId: '' }, 'nope'] }))
     const persistence = createHostingPersistence({ dir })
-    await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [ENTRY], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
+    await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [ENTRY], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
   })
 
   it('load() falls back to the default for an out-of-list model or permissionMode, each field on its own', async () => {
     const dir = await makeTempDir()
     await writeFile(join(dir, 'hosting.json'), JSON.stringify({ version: 1, limit: 4, open: [], defaults: { model: 'nope', permissionMode: 'acceptEdits' } }))
     const persistence = createHostingPersistence({ dir })
-    await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [], defaults: { model: null, permissionMode: 'acceptEdits' }, marks: EMPTY_MARKS })
+    await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [], defaults: { model: null, permissionMode: 'acceptEdits' }, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
   })
 
   it('load() accepts a null model and an allowlisted permissionMode', async () => {
     const dir = await makeTempDir()
     await writeFile(join(dir, 'hosting.json'), JSON.stringify({ version: 1, limit: 4, open: [], defaults: { model: 'opus', permissionMode: 'plan' } }))
     const persistence = createHostingPersistence({ dir })
-    await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [], defaults: { model: 'opus', permissionMode: 'plan' }, marks: EMPTY_MARKS })
+    await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [], defaults: { model: 'opus', permissionMode: 'plan' }, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
   })
 
   it('load() accepts a v1 entry without cwd, loading with cwd undefined', async () => {
@@ -94,7 +95,7 @@ describe('createHostingPersistence', () => {
     const entry = { repoId: null, claudeSessionId: 'session-2', title: null, startedAt: '2026-01-01T00:00:00.000Z', cwd: '/home/you/src/widgets' }
     await writeFile(join(dir, 'hosting.json'), JSON.stringify({ version: 1, limit: 4, open: [entry] }))
     const persistence = createHostingPersistence({ dir })
-    await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [entry], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
+    await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [entry], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
   })
 
   it('load() drops a null repoId with no cwd — it could never be restored', async () => {
@@ -102,34 +103,34 @@ describe('createHostingPersistence', () => {
     const entry = { repoId: null, claudeSessionId: 'session-2', title: null, startedAt: '2026-01-01T00:00:00.000Z' }
     await writeFile(join(dir, 'hosting.json'), JSON.stringify({ version: 1, limit: 4, open: [entry] }))
     const persistence = createHostingPersistence({ dir })
-    await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
+    await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
   })
 
   it('load() falls back to the full default when defaults itself is missing or malformed', async () => {
     const dir = await makeTempDir()
     await writeFile(join(dir, 'hosting.json'), JSON.stringify({ version: 1, limit: 4, open: [], defaults: 'nope' }))
     const persistence = createHostingPersistence({ dir })
-    await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
+    await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
   })
 
   it('save() then load() round-trips the state', async () => {
     const dir = await makeTempDir()
     const persistence = createHostingPersistence({ dir })
     await persistence.load()
-    persistence.save({ limit: 3, open: [ENTRY], defaults: { model: 'sonnet', permissionMode: 'acceptEdits' }, marks: EMPTY_MARKS })
+    persistence.save({ limit: 3, open: [ENTRY], defaults: { model: 'sonnet', permissionMode: 'acceptEdits' }, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
     await flush()
     const reloaded = createHostingPersistence({ dir })
-    await expect(reloaded.load()).resolves.toEqual({ limit: 3, open: [ENTRY], defaults: { model: 'sonnet', permissionMode: 'acceptEdits' }, marks: EMPTY_MARKS })
+    await expect(reloaded.load()).resolves.toEqual({ limit: 3, open: [ENTRY], defaults: { model: 'sonnet', permissionMode: 'acceptEdits' }, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
   })
 
   it('save() skips a write whose serialized JSON equals the last one written', async () => {
     const dir = await makeTempDir()
     const persistence = createHostingPersistence({ dir })
     await persistence.load()
-    persistence.save({ limit: 4, open: [ENTRY], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
+    persistence.save({ limit: 4, open: [ENTRY], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
     await flush()
     const before = await readFile(join(dir, 'hosting.json'), 'utf8')
-    persistence.save({ limit: 4, open: [ENTRY], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
+    persistence.save({ limit: 4, open: [ENTRY], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
     await flush()
     const after = await readFile(join(dir, 'hosting.json'), 'utf8')
     expect(after).toBe(before)
@@ -139,18 +140,18 @@ describe('createHostingPersistence', () => {
     const dir = await makeTempDir()
     const persistence = createHostingPersistence({ dir })
     await persistence.load()
-    persistence.save({ limit: 4, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
-    persistence.save({ limit: 4, open: [ENTRY], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
-    persistence.save({ limit: 2, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
+    persistence.save({ limit: 4, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
+    persistence.save({ limit: 4, open: [ENTRY], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
+    persistence.save({ limit: 2, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
     const reloaded = createHostingPersistence({ dir })
-    await waitForState(reloaded, { limit: 2, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
+    await waitForState(reloaded, { limit: 2, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
   })
 
   it('load() falls back to empty marks without dropping open/defaults, when marks is missing or malformed', async () => {
     const dir = await makeTempDir()
     await writeFile(join(dir, 'hosting.json'), JSON.stringify({ version: 1, limit: 4, open: [ENTRY], defaults: DEFAULT_SESSION_DEFAULTS, marks: 'nope' }))
     const persistence = createHostingPersistence({ dir })
-    await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [ENTRY], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
+    await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [ENTRY], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
   })
 
   it('load() de-duplicates and drops over-long or non-string marks entries', async () => {
@@ -162,17 +163,41 @@ describe('createHostingPersistence', () => {
     expect(state.marks).toEqual({ pinned: ['a'], archived: [] })
   })
 
+  it('load() defaults notifications to on when the value is missing or malformed', async () => {
+    const dir = await makeTempDir()
+    await writeFile(join(dir, 'hosting.json'), JSON.stringify({ version: 1, limit: 4, open: [], notifications: 'nope' }))
+    const persistence = createHostingPersistence({ dir })
+    expect((await persistence.load()).notifications).toEqual(DEFAULT_NOTIFICATION_PREFS)
+  })
+
+  it('load() falls back to on for one malformed flag without flipping the other', async () => {
+    const dir = await makeTempDir()
+    await writeFile(join(dir, 'hosting.json'), JSON.stringify({ version: 1, limit: 4, open: [], notifications: { needsYou: false, sessions: 'yes' } }))
+    const persistence = createHostingPersistence({ dir })
+    expect((await persistence.load()).notifications).toEqual({ needsYou: false, sessions: true })
+  })
+
+  it('save() then load() round-trips notification preferences', async () => {
+    const dir = await makeTempDir()
+    const persistence = createHostingPersistence({ dir })
+    await persistence.load()
+    persistence.save({ limit: 4, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: { needsYou: true, sessions: false } })
+    await flush()
+    const reloaded = createHostingPersistence({ dir })
+    expect((await reloaded.load()).notifications).toEqual({ needsYou: true, sessions: false })
+  })
+
   it('freeze() drops every later save', async () => {
     const dir = await makeTempDir()
     const persistence = createHostingPersistence({ dir })
     await persistence.load()
-    persistence.save({ limit: 4, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
+    persistence.save({ limit: 4, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
     await flush()
     persistence.freeze()
-    persistence.save({ limit: 4, open: [ENTRY], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
+    persistence.save({ limit: 4, open: [ENTRY], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
     await flush()
     const reloaded = createHostingPersistence({ dir })
-    await expect(reloaded.load()).resolves.toEqual({ limit: 4, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
+    await expect(reloaded.load()).resolves.toEqual({ limit: 4, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
   })
 
   it('a failed write is logged and resolves rather than throwing', async () => {
@@ -186,7 +211,7 @@ describe('createHostingPersistence', () => {
     await import('node:fs/promises').then((fs) => fs.mkdir(join(badDir, 'hosting.json'), { recursive: true }))
     const blocked = createHostingPersistence({ dir: badDir })
     await blocked.load()
-    expect(() => blocked.save({ limit: 4, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })).not.toThrow()
+    expect(() => blocked.save({ limit: 4, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })).not.toThrow()
     await flush()
     expect(errorSpy).toHaveBeenCalled()
     errorSpy.mockRestore()

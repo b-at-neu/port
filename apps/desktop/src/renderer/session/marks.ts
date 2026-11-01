@@ -3,8 +3,10 @@ import { toast } from 'sonner'
 import type { QueryClient } from '@tanstack/react-query'
 import { ipcQueryOptions, useIpcQuery } from '@/renderer/data/query'
 import { invoke } from '@/renderer/data/invoke'
-import type { SessionMarkResult, SessionMarks } from '@/types/hosting'
-import { markFailureToast, markSuccessToast, UNDO_LABEL } from '@/renderer/session/marks-copy'
+import type { SessionKey, SessionMarkResult, SessionMarks } from '@/types/hosting'
+import { close } from '@/renderer/session/actions'
+import { UNDO_LABEL } from '@/renderer/lib/copy'
+import { markFailureToast, markSuccessToast } from '@/renderer/session/marks-copy'
 
 export function useSessionMarks() {
   return useIpcQuery('session:marks')
@@ -16,7 +18,8 @@ async function invokeSet(kind: MarkKind, sessionId: string, on: boolean): Promis
   return kind === 'pinned' ? invoke('session:pin:set', { sessionId, pinned: on }) : invoke('session:archive:set', { sessionId, archived: on })
 }
 
-export async function setSessionMark(queryClient: QueryClient, kind: MarkKind, sessionId: string, on: boolean): Promise<void> {
+/** `closeKey` is the live session to end alongside an archive; it is ignored for any other mark. */
+export async function setSessionMark(queryClient: QueryClient, kind: MarkKind, sessionId: string, on: boolean, closeKey: SessionKey | null = null): Promise<void> {
   try {
     const result = await invokeSet(kind, sessionId, on)
     if (!result.ok) {
@@ -24,7 +27,9 @@ export async function setSessionMark(queryClient: QueryClient, kind: MarkKind, s
       return
     }
     queryClient.setQueryData<SessionMarks>(ipcQueryOptions('session:marks').queryKey, result.marks)
-    toast(markSuccessToast(kind, on), { action: { label: UNDO_LABEL, onClick: () => void setSessionMark(queryClient, kind, sessionId, !on) } })
+    const closing = kind === 'archived' && on && closeKey !== null
+    if (closing) await close(closeKey)
+    toast(markSuccessToast(kind, on, closing), { action: { label: UNDO_LABEL, onClick: () => void setSessionMark(queryClient, kind, sessionId, !on) } })
   } catch {
     toast(markFailureToast(kind, 'unreachable'))
   }

@@ -13,7 +13,7 @@ function preflight(overrides: Partial<RuntimePreflight> = {}): QueryState<Runtim
 }
 
 function gh(kind: GhStatus['kind'], message = 'boom'): QueryState<GhStatus> {
-  const data: GhStatus = kind === 'unknown' ? { kind, message, checkedAt: 'now' } : { kind, checkedAt: 'now' }
+  const data: GhStatus = kind === 'unknown' ? { kind, message, checkedAt: 'now' } : kind === 'signed-in' ? { kind, checkedAt: 'now', account: null, scopes: null } : { kind, checkedAt: 'now' }
   return { status: 'success', data }
 }
 

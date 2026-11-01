@@ -16,31 +16,31 @@ Components use roles, never values. Tailwind arbitrary colour values (`bg-[#…]
 
 | Role | Light | Dark | Used for |
 | --- | --- | --- | --- |
-| `background` | `#ffffff` | `#09090b` | Main area |
-| `sidebar` | `#fafafa` | `#111113` | Sidebar, group headers in lists |
-| `card` / `popover` | `#ffffff` | `#18181b` | Raised surfaces: composer, menus, dialogs |
-| `muted` | `#f4f4f5` | `#1c1c1f` | Your messages in a conversation, inline code, idle pills, segmented-control selection |
-| `accent` (hover/selected surface) | `#e4e4e7` | `#27272a` | Hovered and selected sidebar rows |
-| `border` | `#e4e4e7` | `#27272a` | Every divider and outline |
+| `background` | `#ffffff` | `#1a1d23` | Main area |
+| `sidebar` | `#fafafa` | `#121419` | Sidebar, group headers in lists |
+| `card` / `popover` | `#ffffff` | `#23262e` | Raised surfaces: composer, menus, dialogs |
+| `muted` | `#f4f4f5` | `#2b2f38` | Your messages in a conversation, inline code, idle pills, segmented-control selection |
+| `accent` (hover/focus surface) | `#dfe5f2` | `#283453` | Hover and focused surfaces: sidebar rows, menu, command and select items, ghost/outline/secondary button hover, the active screen. Brand-tinted, so interactive surfaces read navy |
+| `border` | `#e4e4e7` | `#393e4a` | Every divider and outline |
 | `foreground` | `#18181b` | `#fafafa` | Primary text |
 | `foreground-secondary` | `#3f3f46` | `#d4d4d8` | Sidebar items, secondary labels |
 | `muted-foreground` | `#71717a` | `#a1a1aa` | Metadata, ticket numbers, section labels, timestamps |
 | `faint` | `#a1a1aa` | `#71717a` | **Non-text only**: idle dots, disabled glyphs, decorative strokes, scroll bar thumbs |
-| `primary` | `#172554` | `#e2e8f5` | Primary button fill and the send button. Dark mode inverts it to a pale navy tint, because navy fill on a near-black background does not read as a button |
-| `primary-foreground` | `#ffffff` | `#172554` | Text and icons on `primary` |
+| `primary` | `#172554` | `#2f4a8a` | Primary button fill and the send button. The dark fill is a lighter navy with white text |
+| `primary-foreground` | `#ffffff` | `#ffffff` | Text and icons on `primary` |
 | `primary-text` | `#172554` | `#a5b8e3` | Links, row actions, `ContextMeter` fill |
 | `ring` | `#172554` | `#a5b8e3` | Focus ring, selection outline |
-| `selection` | `#f4f6fb` | `#121a2e` | The selected row in a list |
-| `brand` | `#172554` | `#172554`, with a 1px `#4b5f8f` border | The mark's tile (§8), never anything else |
+| `selection` | `#f4f6fb` | `#1d2640` | The selected row in a list |
+| `brand` | `#172554` | `#172554`, with a 1px `#52669a` border | The mark's tile (§8), never anything else |
 | `brand-foreground` | `#ffffff` | `#ffffff` | The mark's own strokes inside its `brand` tile (§8) — never inverts, since the tile's background does not either |
 | `overlay` | `rgb(0 0 0 / 50%)` | `rgb(0 0 0 / 50%)` | The Dialog/AlertDialog/CommandDialog scrim — dims what is behind it rather than reading as a surface of its own |
 | `syntax-keyword` | `#cf222e` | `#ff7b72` | Highlighted code: keywords, built-ins, selectors |
 | `syntax-string` | `#0a3069` | `#a5d6ff` | Highlighted code: strings, regexes, attributes |
-| `syntax-comment` | `#57606a` | `#8b949e` | Highlighted code: comments |
+| `syntax-comment` | `#57606a` | `#9aa3ad` | Highlighted code: comments |
 | `syntax-constant` | `#0550ae` | `#79c0ff` | Highlighted code: numbers, literals |
 | `syntax-function` | `#8250df` | `#d2a8ff` | Highlighted code: function/type names |
 
-**Navy is the brand; blue is a status.** Navy marks what you can act on and port's own identity. Blue appears only as the `working` status below. The two never stand in for each other.
+**Navy is the brand; blue is a status.** Navy marks what you can act on and port's own identity. Blue appears only as the `working` status below. The two never stand in for each other. `accent`, `selection` and `primary` are the brand in both themes, and anything not interactive (pending PhaseBar segments, meter tracks, tags) uses `border` or `muted`, never `accent`.
 
 ### Status roles
 
@@ -60,21 +60,24 @@ Status colour is separate from the accent and means the same thing on every scre
 
 Where a status colour says what is happening, a phase colour says which pipeline phase an item is in. One palette per phase is used on GitHub's labels, the Board's pills and `PhaseBar`, and the sidebar's session dots. Components use the `--phase-<palette>-*` roles, never a status role, for anything phase-shaped.
 
-| Phase | Palette | Label keys | Pill bg / text (light) | Pill bg / text (dark) | Dot (light / dark) |
+| Phase | Palette | Label keys | Pill fill / text (light) | Pill fill / text (dark) | Dot (light / dark) |
 | --- | --- | --- | --- | --- | --- |
-| Plan | `plan` | `ready`, `planChangesRequested`, `planning`, `planReview` | `#ede9fe` / `#5b21b6` | `#2e1065` / `#c4b5fd` | `#7c3aed` / `#8b5cf6` |
-| Implement | `implement` | `planApproved`, `inProgress` | `#dbeafe` / `#1d4ed8` | `#0f2a5c` / `#93c5fd` | `#2563eb` / `#3b82f6` |
-| Review | `review` | `readyForReview`, `reviewing` | `#ccfbf1` / `#115e59` | `#042f2e` / `#5eead4` | `#0d9488` / `#14b8a6` |
-| Revise | `revise` | `needsRevision`, `revising` | `#ffedd5` / `#9a3412` | `#431407` / `#fdba74` | `#ea580c` / `#f97316` |
-| Refresh | `refresh` | `refreshBranch`, `refreshing` | `#f4f4f5` / `#3f3f46` | `#1c1c1f` / `#d4d4d8` | `#71717a` / `#a1a1aa` |
-| Needs you | `needs-you` | `blocked`, `needsHuman` | `#fee2e2` / `#991b1b` | `#3b0d0d` / `#fca5a5` | `#dc2626` / `#ef4444` |
-| Done | `done` | `prOpened`, `approved` | `#dcfce7` / `#166534` | `#052e16` / `#86efac` | `#16a34a` / `#22c55e` |
+| Plan | `plan` | `ready`, `planChangesRequested`, `planning`, `planReview` | `#9333ea` / `#ffffff` | `#9333ea` / `#ffffff` | `#9333ea` / `#a855f7` |
+| Implement | `implement` | `planApproved`, `inProgress` | `#2563eb` / `#ffffff` | `#2563eb` / `#ffffff` | `#2563eb` / `#3b82f6` |
+| Review | `review` | `readyForReview`, `reviewing` | `#facc15` / `#422006` | `#facc15` / `#422006` | `#9c8a00` / `#facc15` |
+| Revise | `revise` | `needsRevision`, `revising` | `#d61f8a` / `#ffffff` | `#d61f8a` / `#ffffff` | `#d61f8a` / `#ec4899` |
+| Refresh | `refresh` | `refreshBranch`, `refreshing` | `#f4f4f5` / `#3f3f46` | `#2b2f38` / `#d4d4d8` | `#71717a` / `#a1a1aa` |
+| Needs you | `needs-you` | `blocked`, `needsHuman` | `#dc2626` / `#ffffff` | `#dc2626` / `#ffffff` | `#dc2626` / `#ef4444` |
+| Done | `done` | `prOpened`, `approved` | `#22c55e` / `#052e16` | `#22c55e` / `#052e16` | `#16a34a` / `#22c55e` |
 
 - **Queued is a ring, in flight is filled.** A queued trigger label draws its dot as a 1px ring and an in-flight one as a filled dot. The same split holds on GitHub: a trigger is a lighter shade than its in-flight label.
 - **GitHub's in-flight label is the light dot.** Each palette's in-flight label uses exactly its light-theme dot colour, and its triggers sit lighter. Gate and terminal labels sit deeper still. `refresh` is grey, and the markers `claude` and `auto plan` stay neutral off the palette.
 - **Waiting on you pulses.** A gate that needs the operator (`planReview`, `approved`) pulses in its own phase colour.
 - **`needs-you` overrides.** A gate label, a stalled or interrupted item, and a live stage session waiting on a permission prompt, a question or a `BLOCKED:` hand-back show the `needs-you` palette and pulse, whatever phase they are in. Once the operator answers, the dot goes back to its phase colour.
-- **Aliases.** `implement`, `needs-you` and `done` reuse the `working`, `danger` and `success` values, and `refresh` reuses `idle`. Only the dot of `refresh` is its own, because `faint` fails 3:1.
+- **Pills are solid.** A phase pill is a saturated fill with white or near-black text, the same in both themes; the dot inside it takes the text colour. Tinted pills are for status (`StatusPill`), not phases.
+- **Hues stay apart.** Plan purple, implement blue, review yellow, revise pink, needs-you red, done green: every phase sits ≥30° from every other, so nothing but `needs-you` reads as red and nothing but `done` as green.
+- **Review's light dot is a darker gold** (`#9c8a00`), because bright yellow can't reach 3:1 on white.
+- **Aliases.** Only the *dots* of `implement`, `needs-you` and `done` reuse `working`, `danger` and `success`. Their pills are their own. `refresh` reuses `idle` except for its dot, because `faint` fails 3:1.
 
 **Diffs:** added lines `#f0fdf4` / `#166534` (dark `#06240f` / `#86efac`); removed lines `#fef2f2` / `#991b1b` (dark `#2a0b0b` / `#fca5a5`).
 
@@ -84,33 +87,33 @@ WCAG ratios for the pairings the interface uses. The requirement itself is in `E
 
 | Pairing | Light | Dark |
 | --- | --- | --- |
-| `foreground` on `background` | 17.7 | 19.1 |
-| `foreground-secondary` on `background` | 10.4 | 13.5 |
-| `muted-foreground` on `background` / `sidebar` | 4.8 / 4.6 | 7.8 / 7.4 |
-| `muted-foreground` on `muted` / `accent` | **4.4 / 3.8: fails** | 6.6 / 5.8 |
-| `faint` on `background` | **2.6: fails** | **4.1: fails** |
-| `primary-foreground` on `primary` | 14.7 | 12.0 |
-| `primary-text` on `background` / `sidebar` | 14.7 / 14.0 | 10.0 / 9.5 |
-| `primary-text` on `selection` | 13.6 | 10.1 |
+| `foreground` on `background` | 17.7 | 16.2 |
+| `foreground-secondary` on `background` | 10.4 | 11.4 |
+| `foreground-secondary` on `accent` | 8.3 | 8.3 |
+| `muted-foreground` on `background` / `sidebar` | 4.8 / 4.6 | 6.6 / 7.2 |
+| `muted-foreground` on `muted` / `accent` | **4.4 / 3.8: fails** | 5.2 / 4.8 |
+| `faint` on `background` | **2.6: fails** | **3.5: fails** |
+| `primary-foreground` on `primary` | 14.7 | 8.5 |
+| `primary-text` on `background` / `sidebar` | 14.7 / 14.0 | 8.5 / 9.3 |
+| `primary-text` on `selection` | 13.6 | 7.5 |
+| `primary-text` on `accent` | 11.6 | 6.2 |
 | `working` pill text on its background | 5.5 | 7.7 |
 | Status pill text on its background | 6.4 – 6.8 | 8.9 – 10.6 |
-| Phase pill text on its pill | 5.5 – 9.5 | 7.7 – 11.5 |
-| Phase dot on `background` | 3.3 – 5.7 | 4.7 – 8.7 |
-| Phase dot on `sidebar` | 3.2 – 5.5 | 4.4 – 8.3 |
-| Phase dot on `selection` | 3.0 – 5.3 | 4.1 – 7.6 |
-| Phase dot on its own pill | 3.0 – 4.8 | 3.6 – 6.6 |
+| Phase pills and dots | Phase pill text ≥ 4.5 on its fill; dot ≥ 3.0 on `background`, `sidebar` and `selection`, both themes, enforced by `scripts/checks/phase-palette.ts` | |
 | Diff text on its background | 6.8 / 7.6 | 11.8 / 9.6 |
-| `syntax-keyword` on `muted` | 5.3 | 7.9 |
-| `syntax-string` on `muted` | 12.9 | 11.2 |
-| `syntax-comment` on `muted` | 4.6 | 6.6 |
-| `syntax-constant` on `muted` | 6.1 | 9.8 |
-| `syntax-function` on `muted` | 5.9 | 6.7 |
+| `syntax-keyword` on `muted` | 5.3 | 5.3 |
+| `syntax-string` on `muted` | 12.9 | 8.7 |
+| `syntax-comment` on `muted` | 4.6 | 5.2 |
+| `syntax-constant` on `muted` | 6.1 | 6.9 |
+| `syntax-function` on `muted` | 5.9 | 6.9 |
 
 Two rules follow from the failures:
 - **Text on `muted` or `accent` surfaces uses `foreground` or `foreground-secondary`,** never `muted-foreground`.
 - **`faint` is never used for text.**
 
-The dark `brand` tile's `#4b5f8f` border measures 3.0 against `sidebar`, enough to keep the mark from disappearing.
+The dark `brand` tile's `#52669a` border measures 3.3 against `sidebar`, enough to keep the mark from disappearing.
+
+Dark surface lightness (CIE L*): sidebar 6.3 · background 10.7 · card 15.2 · muted 19.4 · accent 22.1. Each step is at least 4, enforced by the same check.
 
 ### Spacing, size and shape
 
@@ -151,7 +154,7 @@ The dark `brand` tile's `#4b5f8f` border measures 3.0 against `sidebar`, enough 
 
 **Sidebar, top to bottom:**
 1. **Mark and wordmark.**
-2. **Screens:** Needs you (red count), Board, Backlog, Repositories.
+2. **Screens:** Needs you (red count), Board, Backlog, Audit log.
 3. **Pipelines:** one row per registered repo. Each row has:
    - a caret that collapses it, with the state remembered;
    - the repo name;
@@ -159,7 +162,7 @@ The dark `brand` tile's `#4b5f8f` border measures 3.0 against `sidebar`, enough 
 
    The repo's live stage sessions are nested under it, labelled `#N <title>`. Each has a `PhaseDot` in its phase colour, so the colour alone says which phase it is in; it turns red and pulses while the session needs you. The row for the session on screen, a live stage session or a stage transcript, is drawn in `selection`. If its repo is collapsed, the repo row is drawn in `selection` instead. A collapsed repo with a session that needs you shows a red dot next to its name.
 4. **Your sessions:** a header with **New session** and **History** as icon buttons on its right, then your own live sessions. The open one is drawn in `selection`.
-5. **Footer:** Settings, plus one status dot for the `claude` CLI and `gh`, red when either is missing or signed out.
+5. **Footer:** a Settings button across the full footer width, plus one status dot for the `claude` CLI and `gh`, red when either is missing or signed out. The dot opens a popover on hover, focus and click: one line per connection with its state and age, a line per repository read, and a link to Settings → Connections. Leaving closes it after 150ms, and Esc closes it.
 
 **Screens in the first release:**
 
@@ -168,10 +171,10 @@ The dark `brand` tile's `#4b5f8f` border measures 3.0 against `sidebar`, enough 
 | Needs you | Everything waiting on the operator, newest first, each with its action inline: plan reviews, PRs ready to merge, questions from stage sessions, needs-human escalations, blocked items |
 | Board | Grouped list: **Waiting on you**, **In progress**, **Queued**. Toggle grouping by phase or by repo, plus a repo filter |
 | Backlog | Open tickets not yet in a pipeline, with **Work on**: interactive plan review or auto-plan |
-| Repositories | One page per repo, with tabs: Overview (health, label resolution, overrides in effect), Worktrees, Denials |
 | Session | Conversation and composer. **Changes** opens the session's diff in the detail pane |
 | History | Past sessions and transcripts, with search |
-| Settings | Theme, CLI and `gh` status, default model and permission mode |
+| Audit log | Every write port made to GitHub, newest first, filterable by repo and ticket |
+| Settings | Full width, with six tabs of cards in a responsive grid, chosen by `?section=`: General (theme, notifications, keyboard shortcuts), Repositories (the repository list, and one page per repo with tabs Overview, Worktrees, Denials), Connections (Claude Code, `gh`, the GitHub rate limit, each repository's last read), Pipeline (session limit, new-session defaults, a read-only view of each repository's config), Usage & storage (spend by repository and period, disk use), About (version, runtime versions, setup checklist, notices). The old `/repositories` and `/about` routes redirect here |
 
 Scoping epics, releases and analytics are out of scope for the first release.
 
@@ -211,7 +214,7 @@ Scoping epics, releases and analytics are out of scope for the first release.
 
 **shadcn primitives.** Use them as shipped and change them only through variants:
 - Button: `default` (primary), `secondary`, `outline`, `ghost`, `destructive`; sizes small and default.
-- DropdownMenu, ContextMenu, Command, Dialog, AlertDialog, Popover, Tooltip.
+- DropdownMenu, ContextMenu, Command, Dialog, AlertDialog, Popover (the sidebar's status dot), Tooltip.
 - Tabs, Input, Textarea, Select, Checkbox, ScrollArea, Separator, Skeleton, Collapsible, Sonner toasts.
 - Switch, only on the Settings screen.
 
@@ -222,12 +225,14 @@ Scoping epics, releases and analytics are out of scope for the first release.
 | `Screen`, `ScreenBody` | The layout every screen is built from: a 44px `ScreenHeader`, then one body variant: `list` (edge to edge, rows inset themselves), `page` (16px padding), `form` (16px padding, 512px column), `conversation` (16px padding, centred 680px column). A screen never sets its own outer padding |
 | `StatusPill` | Dot, then label, using the status roles. With a menu it shows a chevron: the repo run state is `● Running ▾` with Run, Drain and Pause, each with a one-line hint (Drain "finish in-flight", Pause "stop now") |
 | `LabelChip` | A GitHub label as a full-radius pill: 11px/500, 1px `border` outline, max 8rem and truncating. Its fill is the label's own GitHub colour, which is repository data and not a design token, so this is the one place a hex reaches a component, applied through `style` from `renderer/lib/label-color.ts`. Text is black or white, whichever contrasts more with the fill. A missing or malformed colour falls back to `muted` with `foreground-secondary` text |
-| `PhasePill`, `PhaseDot` | A `StatusPill`'s anatomy painted from the phase palette (§1). `PhaseDot` is a ring while the stage is queued and filled while it is in flight, and pulses while the stage waits on you. Unstaged items use the `idle` role. The `needs-you` palette overrides the phase colour for anything that needs the operator |
-| `PhaseBar` | Six 10×4px segments with a 2px gap, for plan, plan review, implement, review, revision, merge. Finished segments use their own phase's pill colour, the current one the current stage's phase dot colour, or `needs-you` when it waits on you, complete `done`, the rest `accent`. Tooltip names the phase |
+| `PhasePill`, `PhaseDot` | A `StatusPill`'s anatomy as a solid fill from the phase palette (§1); its dot is drawn in the pill's text colour. `PhaseDot` is a ring while the stage is queued and filled while it is in flight, and pulses while the stage waits on you. Unstaged items use the `idle` role. The `needs-you` palette overrides the phase colour for anything that needs the operator |
+| `PhaseBar` | Six 10×4px segments with a 2px gap, for plan, plan review, implement, review, revision, merge. Finished segments use their phase's dot at 40%, the current one the current stage's full phase dot colour, or `needs-you` when it waits on you, complete `done`, the rest `border`. Tooltip names the phase |
 | `PhaseList` | Vertical version for the detail pane: an 8px dot per phase in the same colours as `PhaseBar`, with who and when ("Plan approved by you · 2h ago") and live cost and time on the current phase, and, under each phase, the sessions that ran it (agent or "Your session", when, state, cost), with a "Your sessions" group for ones no phase can claim |
 | `TicketRow`, `RepoPipelineRow`, `SessionRow`, `NeedsYouItem` | The list rows (§3) |
 | `ToolCallRow`, `DiffView`, `Markdown`, `CodeBlock`, `Composer`, `ContextMeter` | Session pieces. `ContextMeter` is a `Context` label, a 56×4px bar and a percentage, with token counts in its tooltip. `ToolCallRow` carries a per-tool one-line summary and default-open rule (edits with a diff, TodoWrite, a running subagent, a failed Bash); its body delegates to `ToolCallDetail`'s Bash/TodoWrite/Task/lookup views. A subagent's children nest recursively under its row, indented with a `border-l` rule; an orphaned child (its parent row evicted from the window) carries the label "Subagent · parent call not shown" |
 | `BackgroundTasksPanel` | A `border` card between the command strip and composer, hidden when empty. Header `Background tasks · N`; each 36px row shows a type icon, a truncating description with a tooltip, a mono type tag, and a `Stop` ghost button that opens a confirm dialog |
+| `SettingsCard` | The one card every Settings tab is built from: `border`, `card` fill, 16px padding, an `h2` title in `muted-foreground`, an optional description, and right-aligned actions in the header row. A card that needs width spans two or three columns |
+| `LimitStepper` | A `−`, a number and a `+`, shared by the session menu and Settings → Pipeline |
 | `DetailPane`, `EmptyState`, `ErrorBanner`, `IconButton` | Layout and states. `IconButton` is a 24px ghost icon button with a tooltip and an accessible name |
 
 **If a pattern appears twice, it becomes a shared component.** One-off styling inside a screen file is a finding.
@@ -319,13 +324,13 @@ The markers `marker` and `autoPlan` are never shown as phases; `autoPlan` appear
 - [ ] Reversible actions toast; consequential ones confirm with a named-action `AlertDialog`.
 - [ ] Phase names come from the role map in §6, never a label string.
 - [ ] Copy is sentence case, verb-first buttons, no exclamation marks; messages that need the operator lead with the action.
-- [ ] Screenshots in light and dark: run `pnpm screenshots`, Read the screen's PNGs in `apps/desktop/out/screenshots/`, and link the `screenshots` artifact of the pull request's Visual run in its testing plan. A new route gets a capture target in `apps/desktop/tests/visual/targets.mts`.
-  - Without a toolchain, download the CI copy: `gh run download <run-id> --repo <owner>/<name> --name screenshots --dir .temp/screenshots`.
+- [ ] Screenshots in light and dark: run `pnpm screenshots`, Read the screen's PNGs in `apps/desktop/out/screenshots/`, and embed the relevant captures under the pull request's `## Screenshots` (FORMATS.md). A new route gets a capture target in `apps/desktop/tests/visual/targets.mts`.
+  - Without a toolchain, download the CI copy into the captures directory so the `artifacts.mjs screenshots` manifest can reference the PNGs: `gh run download <run-id> --repo <owner>/<name> --name screenshots --dir apps/desktop/out/screenshots`.
 
 ## 8. The mark
 
 port's mark is a minimal outline sailboat. The sail is one closed shape, joined to the hull only by a short stretch of mast, so its foot floats above the deck.
 
-- **`docs/design/port-mark.svg`** is the canonical mark: a 24×24 view box, stroke-width 1.6, round caps and joins, drawn in `currentColor`. In the sidebar it sits in a 20px `brand` rounded square (5px radius), white, at 70% of the square. In dark mode the square gets its 1px `#4b5f8f` border.
+- **`docs/design/port-mark.svg`** is the canonical mark: a 24×24 view box, stroke-width 1.6, round caps and joins, drawn in `currentColor`. In the sidebar it sits in a 20px `brand` rounded square (5px radius), white, at 70% of the square. In dark mode the square gets its 1px `#52669a` border.
 - **`docs/design/port-app-icon.svg`** is the canonical app icon: a 1024px `brand` (`#172554`) square with a 230px corner radius, and the mark in white filling 70% of it. Platform icon files are generated from this file and never edited by hand.
 - **Don't** fill the mark in, thicken its line, recolour it outside white, `brand` and `currentColor`, add a wave or scenery to it, or set it next to any Anthropic mark.

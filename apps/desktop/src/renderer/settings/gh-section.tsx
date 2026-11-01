@@ -2,9 +2,11 @@
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
+import { SettingsCard } from '@/renderer/components/settings-card'
 import { useIpcQuery } from '@/renderer/data/query'
 import { StatusPill } from '@/renderer/components/status-pill'
 import { ErrorBanner } from '@/renderer/components/error-banner'
+import { formatAgo } from '@/renderer/lib/relative-time'
 import { ghStatusModel } from '@/renderer/settings/gh-model'
 
 export function GhSection() {
@@ -12,40 +14,39 @@ export function GhSection() {
 
   if (query.status === 'pending') {
     return (
-      <section className="flex flex-col gap-3">
-        <h2 className="text-meta font-medium text-muted-foreground">GitHub CLI</h2>
+      <SettingsCard title="GitHub CLI">
         <Skeleton className="h-5 w-24 rounded-full" />
         <Skeleton className="h-4 w-56" />
-      </section>
+      </SettingsCard>
     )
   }
 
   if (query.status === 'error') {
     return (
-      <section className="flex flex-col gap-3">
-        <h2 className="text-meta font-medium text-muted-foreground">GitHub CLI</h2>
+      <SettingsCard title="GitHub CLI">
         <ErrorBanner message="Couldn't reach the main process to check gh. Restart port to try again." />
-      </section>
+      </SettingsCard>
     )
   }
 
   const model = ghStatusModel(query.data)
 
   return (
-    <section className="flex flex-col gap-3">
-      <h2 className="text-meta font-medium text-muted-foreground">GitHub CLI</h2>
+    <SettingsCard title="GitHub CLI">
       <StatusPill status={model.pillStatus} label={model.pillLabel} />
       <p className="text-small text-foreground-secondary">{model.body}</p>
-      <Button disabled={query.isFetching} onClick={() => void query.refetch()}>
+      {model.scopesLine !== null ? <p className="font-mono text-small text-muted-foreground">{model.scopesLine}</p> : null}
+      <p className="text-small text-muted-foreground">Checked {formatAgo(new Date().getTime() - Date.parse(query.data.checkedAt))}</p>
+      <Button className="w-fit" disabled={query.isFetching} onClick={() => void query.refetch()}>
         {query.isFetching ? (
           <>
             <Loader2 aria-hidden="true" className="animate-spin" />
             Checking…
           </>
         ) : (
-          'Check again'
+          'Recheck'
         )}
       </Button>
-    </section>
+    </SettingsCard>
   )
 }

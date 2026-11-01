@@ -37,19 +37,23 @@ export const PHASE_RING_CLASS: Readonly<Record<PhasePalette, string>> = {
   unstaged: 'border border-idle-dot',
 }
 
+export const PHASE_DOT_ON_PILL_CLASS = 'bg-current'
+
+export const PHASE_RING_ON_PILL_CLASS = 'border border-current'
+
 const PHASE_SEGMENT_FINISHED_CLASS: Readonly<Record<PhasePalette, string>> = {
-  plan: 'bg-phase-plan-pill',
-  implement: 'bg-phase-implement-pill',
-  review: 'bg-phase-review-pill',
-  revise: 'bg-phase-revise-pill',
-  refresh: 'bg-phase-refresh-pill',
-  'needs-you': 'bg-phase-needs-you-pill',
-  done: 'bg-phase-done-pill',
+  plan: 'bg-phase-plan-dot/40',
+  implement: 'bg-phase-implement-dot/40',
+  review: 'bg-phase-review-dot/40',
+  revise: 'bg-phase-revise-dot/40',
+  refresh: 'bg-phase-refresh-dot/40',
+  'needs-you': 'bg-phase-needs-you-dot/40',
+  done: 'bg-phase-done-dot/40',
   unstaged: 'bg-idle-pill',
 }
 
-/** A decided phase takes its palette's pill shade, the current one its dot shade, a pending one the neutral `accent`. */
+/** A decided phase takes its palette's dot at 40%, the current one the full dot, a pending one the neutral `border`. */
 export function segmentClass(segment: PhaseSegment): string {
-  if (segment.palette === null) return 'bg-accent'
+  if (segment.palette === null) return 'bg-border'
   return segment.state === 'finished' || segment.state === 'complete' ? PHASE_SEGMENT_FINISHED_CLASS[segment.palette] : PHASE_DOT_CLASS[segment.palette]
 }

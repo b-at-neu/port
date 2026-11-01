@@ -6,7 +6,7 @@
 // outside its `include` list, and `router/routes.ts` belongs to the
 // renderer's web project, not this one. `scripts/checks/desktop-visual.ts`
 // pins the two key sets against each other, both directions.
-export const ROUTE_KEYS = ['board', 'repos', 'repo', 'history', 'search', 'transcript', 'session', 'settings', 'backlog', 'needsYou', 'setup', 'about'] as const
+export const ROUTE_KEYS = ['board', 'repos', 'repo', 'settingsRepo', 'history', 'search', 'transcript', 'session', 'settings', 'backlog', 'audit', 'needsYou', 'setup', 'about'] as const
 
 // Resolved against `process.cwd()` at the point of use (`screens.spec.mts`),
 // never here — this stays the bare, pinned literal `scripts/checks/
@@ -57,6 +57,7 @@ export interface VariantTarget {
 // target's own click or ready selector.
 export const VARIANT_TARGETS: readonly VariantTarget[] = [
   { name: 'needs-you-empty', scenario: 'empty', target: { hash: '#/needs-you', container: '#app', ready: '[data-slot="needs-you-empty"]' } },
+  { name: 'audit-empty', scenario: 'empty', target: { hash: '#/audit', container: '#app', ready: '[data-slot="audit-empty"]' } },
   { name: 'session-permission', scenario: 'empty', target: { hash: '#/session?key=fixture-session-permission', container: '#app', ready: '[role="alertdialog"]' } },
 ]
 
@@ -79,18 +80,20 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
     ],
   },
   repos: { hash: '#/repositories', container: '#app', ready: '[data-slot="repo-row"]' },
-  repo: {
-    hash: '#/repositories/fixture-acme-widgets',
+  // `repo` is a redirect into `settingsRepo`; this capture proves an old link still lands.
+  repo: { hash: '#/repositories/fixture-acme-widgets', container: '#app', ready: '[role="tablist"]' },
+  settingsRepo: {
+    hash: '#/settings/repositories/fixture-acme-widgets',
     container: '#app',
     ready: '[role="tablist"]',
     variants: [
-      { name: 'worktrees', hash: '#/repositories/fixture-acme-widgets?tab=worktrees', ready: '[data-slot="worktree-row"]' },
-      { name: 'worktrees-reclaim', hash: '#/repositories/fixture-acme-widgets?tab=worktrees', click: 'text=Reclaim 1', ready: '[data-slot="alert-dialog-content"]' },
-      { name: 'denials', hash: '#/repositories/fixture-acme-widgets?tab=denials', ready: '[data-slot="denial-shape-row"]' },
-      { name: 'denials-actor', hash: '#/repositories/fixture-acme-widgets?tab=denials&denialsGroup=actor', ready: '[data-slot="denial-actor-row"]' },
-      { name: 'denials-empty', hash: '#/repositories/fixture-acme-gadgets?tab=denials', ready: 'text=No denial log yet' },
-      { name: 'problem', hash: '#/repositories/fixture-acme-legacy-site', ready: '[role="alert"]' },
-      { name: 'mis-resolved', hash: '#/repositories/fixture-acme-gadgets', ready: '[data-slot="label-verdict"]' },
+      { name: 'worktrees', hash: '#/settings/repositories/fixture-acme-widgets?tab=worktrees', ready: '[data-slot="worktree-row"]' },
+      { name: 'worktrees-reclaim', hash: '#/settings/repositories/fixture-acme-widgets?tab=worktrees', click: 'text=Reclaim 1', ready: '[data-slot="alert-dialog-content"]' },
+      { name: 'denials', hash: '#/settings/repositories/fixture-acme-widgets?tab=denials', ready: '[data-slot="denial-shape-row"]' },
+      { name: 'denials-actor', hash: '#/settings/repositories/fixture-acme-widgets?tab=denials&denialsGroup=actor', ready: '[data-slot="denial-actor-row"]' },
+      { name: 'denials-empty', hash: '#/settings/repositories/fixture-acme-gadgets?tab=denials', ready: 'text=No denial log yet' },
+      { name: 'problem', hash: '#/settings/repositories/fixture-acme-legacy-site', ready: '[role="alert"]' },
+      { name: 'mis-resolved', hash: '#/settings/repositories/fixture-acme-gadgets', ready: '[data-slot="label-verdict"]' },
     ],
   },
   history: {
@@ -127,8 +130,26 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'sidebar-menu', click: 'aside [data-slot="session-row-menu"]', ready: '[role="menu"]' },
     ],
   },
-  settings: { hash: '#/settings', container: '#app', ready: '#app h2' },
+  settings: {
+    hash: '#/settings',
+    container: '#app',
+    ready: '[data-slot="settings-shortcuts"]',
+    variants: [
+      { name: 'repositories', hash: '#/settings?section=repositories', ready: '[data-slot="repo-row"]' },
+      { name: 'connections', hash: '#/settings?section=connections', ready: '[data-slot="connection-row"]' },
+      { name: 'pipeline', hash: '#/settings?section=pipeline', ready: '[data-slot="settings-repo-config"]' },
+      { name: 'usage', hash: '#/settings?section=usage', ready: '[data-slot="usage-row"]' },
+      { name: 'about', hash: '#/settings?section=about', ready: '[data-about-notice]' },
+      { name: 'status-popover', click: '[data-slot="status-dot"]', ready: '[data-slot="status-popover"]' },
+    ],
+  },
   backlog: { hash: '#/backlog', container: '#app', ready: '[data-slot="backlog-row"]' },
+  audit: {
+    hash: '#/audit',
+    container: '#app',
+    ready: '[data-slot="audit-row"]',
+    variants: [{ name: 'filtered', hash: '#/audit?repo=fixture-acme-widgets&number=38', ready: '[data-slot="audit-row"]' }],
+  },
   needsYou: {
     hash: '#/needs-you',
     container: '#app',

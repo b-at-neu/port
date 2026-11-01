@@ -1,17 +1,17 @@
 # Builds the desktop app's unsigned installers on all three OSes (#335's
 # own "done when") and smoke-tests the packaged binary, including a full
 # visual capture against a separate fixture-enabled smoke copy (#336). Runs
-# on pull requests targeting `main` (release pull requests), on push to
-# `dev`, plus `workflow_dispatch` — this must never become a *required*
-# check on `dev`: a pull request it skips would then wait on a check run
-# that was never scheduled, forever.
+# on pull requests targeting `main` (release pull requests) plus
+# `workflow_dispatch`. There is no push trigger: every push to `dev` comes
+# from a merged pull request, and the release pull request's own run already
+# covers that commit. This must never become a *required* check on
+# `dev`: a pull request it skips would then wait on a check run that was
+# never scheduled, forever.
 
 name: Package desktop app
 
 on:
   workflow_dispatch:
-  push:
-    branches: [dev]
   pull_request:
     branches: [main]
 
@@ -59,9 +59,13 @@ jobs:
         env:
           ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/electron-builder-cache
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Read manifest version
+        id: version
+        shell: bash
+        run: echo "version=$(node -p "require('./plugins/port/.claude-plugin/plugin.json').version")" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
-          name: port-desktop-${{ runner.os }}
+          name: port-desktop-${{ runner.os }}-v${{ steps.version.outputs.version }}
           path: |
             apps/desktop/dist/*.AppImage
             apps/desktop/dist/*.deb

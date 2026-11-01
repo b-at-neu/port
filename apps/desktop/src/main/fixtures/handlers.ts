@@ -4,7 +4,10 @@ import type { RepoRunState } from '@/types/dispatch'
 import { RUN_TARGET } from '@/types/dispatch'
 import type { TranscriptSource } from '@/utils/sessions/transcript'
 import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
+import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'
+import { fixtureStorageReport, fixtureUsageSummary } from '@/main/fixtures/settings'
 import { fixtureBoardSnapshot } from '@/main/fixtures/board'
+import { fixtureAuditRead } from '@/main/fixtures/audit'
 import { fixtureBacklog } from '@/main/fixtures/backlog'
 import { fixtureClaimPreflight, fixtureGatePreflight } from '@/main/fixtures/dialogs'
 import { fixtureFolders, fixtureSessionChanges } from '@/main/fixtures/folders'
@@ -13,7 +16,7 @@ import { fixtureAttachEntries } from '@/main/fixtures/entries'
 import { fixturePermissionSnapshots, fixtureSearchResult, fixtureSessionAttach, fixtureSessionsScan, fixtureSessionSnapshots, STREAMING_KEY } from '@/main/fixtures/sessions'
 import { fixtureSessionIndex } from '@/main/fixtures/session-index'
 import type { FixtureScenario } from '@/types/fixtures'
-import { fixtureWorktreesReclaim, fixtureWorktreesReport } from '@/main/fixtures/worktrees'
+import { fixtureWorktreesPurge, fixtureWorktreesReclaim, fixtureWorktreesReport } from '@/main/fixtures/worktrees'
 
 /** Exhaustive by construction: a new `IpcChannel` fails `pnpm typecheck` in
  *  `fixtureHandlers`'s own return literal until a fixture exists for it. */
@@ -56,7 +59,8 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
 
     // --- Click-only reads, valid and populated ------------------------------
     'worktrees:report': () => fixtureWorktreesReport(now),
-    'worktrees:reclaim': () => fixtureWorktreesReclaim(now),
+    'worktrees:reclaim': (request) => fixtureWorktreesReclaim(now, request.force),
+    'worktrees:purge': () => fixtureWorktreesPurge(now),
 
     'transcript:tail:open': (request) => ({ ok: true, tailId: 'fixture-tail', source: transcriptSourceFor(request.sessionId, request.agentId, now), entries: fixtureAttachEntries(now) }),
     'transcript:tail:poll': () => ({ ok: true, source: transcriptSourceFor('fixture-session', null, now), appended: [], patched: [], hasMore: false }),
@@ -100,8 +104,9 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'session:restore': () => ({ ok: false, kind: 'unknown-restore' }),
     'session:restore:discard': () => ({ ok: true }),
 
-    'gh:status': () => ({ kind: 'signed-in', checkedAt: now.toISOString() }),
+    'gh:status': () => ({ kind: 'signed-in', checkedAt: now.toISOString(), account: 'octo-operator', scopes: ['repo', 'read:org', 'workflow'] }),
     'backlog:list': (request) => fixtureBacklog(now, request.repoId),
+    'audit:list': (request) => fixtureAuditRead(now, scenario, request),
     'session:defaults': () => DEFAULT_SESSION_DEFAULTS,
     'session:defaults:set': (request) => request,
     'session:rename': () => ({ ok: false, kind: 'unknown-session' }),
@@ -124,5 +129,9 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'stage:restart': () => ({ kind: 'unknown-stage' }),
     'held:force-dispatch': () => ({ kind: 'ok' }),
     'notify:needs-you': () => undefined,
+    'notify:prefs': () => DEFAULT_NOTIFICATION_PREFS,
+    'notify:prefs:set': (request) => request,
+    'storage:report': () => fixtureStorageReport(),
+    'usage:summary': () => fixtureUsageSummary(now),
   }
 }

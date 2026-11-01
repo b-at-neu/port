@@ -20,7 +20,7 @@ gh api graphql --include -F query=@.temp/tick-query.graphql --jq '{data, errors,
 
 The query is one `repository(owner:"<owner>", name:"<name>")` selection with one alias per set this tick needs, plus top-level `viewer { login }` and `rateLimit { cost remaining }` for the cost budget. Every connection carries `totalCount` beside `nodes`, and every issue/pull-request node carries `assignees(first:5){ nodes { login } }` — ownership is partitioned client-side now (see "Ownership is now enforced client-side" below), so **no alias filters by assignee**, unlike the old per-label REST calls. Aliases, unfiltered by assignee, `states: OPEN` on every connection:
 
-- **6 trigger sets** — `ready`, `planChangesRequested`, `planApproved` (adds `body`), `readyForReview` (adds `mergeable`, `headRefOid`, `reviews(first:30){ nodes { body submittedAt commit { oid } } }` for the zero-diff gate below, and `comments(last:20){ nodes { body createdAt } }` for its `## Gate cleared` exception), `needsRevision` (adds `body`, `mergeable`, `reviews(first:30){ nodes { body } }` for the cycle cap, and `comments(last:20){ nodes { body createdAt } }` for its operator-granted cycles), `refreshBranch`. Read `rateLimit.cost` from the response after this widening rather than trusting the ~12-point figure below blindly — it is what the Cost budget paragraph already says to do, and the widened alias is exactly the kind of change that moves it.
+- **6 trigger sets** — `ready`, `planChangesRequested`, `planApproved` (adds `body`), `readyForReview` (adds `mergeable`, `headRefOid`, `reviews(first:30){ nodes { body submittedAt commit { oid } } }` for the zero-diff gate below, `comments(last:20){ nodes { body createdAt } }` for its `## Gate cleared` exception, and the head commit's `statusCheckRollup` for its check-only hold), `needsRevision` (adds `body`, `mergeable`, `reviews(first:30){ nodes { body } }` for the cycle cap, and `comments(last:20){ nodes { body createdAt } }` for its operator-granted cycles), `refreshBranch`. Read `rateLimit.cost` from the response after this widening rather than trusting the ~12-point figure below blindly — it is what the Cost budget paragraph already says to do, and the widened alias is exactly the kind of change that moves it.
 - **4 gate sets** — `planReview` (adds `body`), `blocked`, `approved` (adds `headRefOid`, `mergeable`, and the latest commit's `statusCheckRollup` — see below), `needsHuman`.
 - **5 in-flight sets** — `planning`, `inProgress` (adds `body`), `reviewing`, `revising` (adds `body`), `refreshing`.
 - **`prOpened`** (adds `body`) — the whole unmerged-branch set for the file contention gate's occupied set, in the same call.
@@ -102,6 +102,20 @@ Every pull request is named by ticket, per "## Numbering".
 1. From the alias's `reviews`, take the newest node whose `body` starts with the literal `## Code Review` — the same predicate the cycle counter uses, so an empty drive-by review is never counted. **None** → dispatch.
 2. Its `commit.oid` differs from `headRefOid` → **dispatch**. Real progress always moves the head.
 3. Equal, **and** the newest `## Gate cleared` comment (from the alias's `comments`) is newer than that review's `submittedAt` → **dispatch, once**. The operator authorized this re-review through `unblock #N`; the next review resets the comparison by construction.
+3b. **Check-only hold.** Applies only when the newest review's body line 3 matches `^Blocked only by checks: `[^`]+`(, `[^`]+`)*$` (the marker `review-agent` writes only when every blocking finding is a red check), exactly one `## Code Review` carries this `commit.oid`, and the alias's rollup is readable. Reduce the rollup to the latest entry per check name, then take the first match:
+   - **A named check is absent from the rollup** → step 4.
+   - **Every named check concluded green, and no blocking check in the rollup is red or pending** → **dispatch, once**, and announce:
+
+     > 🔁 #157's pull request: cycle 3 at `cb2dc1a` was blocked only by `test`, which has since passed on the same head. Dispatching one re-review instead of escalating.
+   - **A named check is unconcluded** → **do not dispatch**, no write, and announce:
+
+     > ⏳ #157's pull request: `test` is re-running on `cb2dc1a`, and it's the only thing cycle 3 blocked on. Review is on hold until it finishes.
+   - **A named check is red, and the clock is before the review's `submittedAt` plus 120 minutes** → **do not dispatch**, no write, and announce:
+
+     > ⏸️ #157's pull request: cycle 3 was blocked only by `test`, which is still red on `cb2dc1a`. If it's flaky, re-run it on GitHub and I'll re-review automatically once it passes. If it's still red at 14:32 I'll escalate to `needs human`.
+   - **Otherwise**, including an unreadable clock → step 4.
+
+   The hold keeps the item at `<labels.readyForReview>` because a `<labels.needsHuman>` removal is denied to the cockpit, so a flake that escalated could never clear itself. It re-reviews rather than promoting because only `review-agent` applies `<labels.approved>`. A held tick still counts as work that moves without a human, so the wakeup stays at the floor.
 4. Otherwise → **do not dispatch**. Write `.temp/zero-diff-<pr>.md` — a `## Pipeline Escalation` body (the same heading `revise-agent`'s rebase escalation uses, with no `### D<n>` blocks, so `unblock #N`'s plain-clear path applies):
 
    ```
@@ -112,7 +126,7 @@ Every pull request is named by ticket, per "## Numbering".
 
    then `gh pr comment <pr-number> --repo <repo> --body-file .temp/zero-diff-<pr>.md`, `gh pr edit <pr-number> --repo <repo> --remove-label "<labels.readyForReview>" --add-label "<labels.needsHuman>"`, and announce:
 
-   > ⛔ #157's pull request is at `ready for review`, but cycle 7 already reviewed `cb2dc1a` and the head hasn't moved — a new cycle would grade the same diff. Escalated to `needs human` and commented. If a check on that SHA has since changed, say `unblock #157` and choose **Back to review**; I'll dispatch one review against it.
+   > ⛔ #157's pull request is at `ready for review`, but cycle 7 already reviewed `cb2dc1a` and the head hasn't moved — a new cycle would grade the same diff. Escalated to `needs human` and commented. If a check on that SHA has since changed, say `unblock #157` and choose **Override review**; I'll dispatch one review against it.
 
 **File contention gate (each tick, step 4, before dispatching `impl-agent`).** A `<labels.planApproved>` item dispatches only when no single in-flight item's plan claims `concurrency.overlapThreshold` or more of the same non-shared files — counted per in-flight item, never pooled. Full background: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "File contention".
 

@@ -1,14 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import {
   failureCopy,
+  forcedActionLabel,
+  forcedConfirmLabel,
+  forcedDialogBody,
+  forcedDialogIsDestructive,
+  forcedDialogTitle,
+  forcedReclaimToast,
   needsAttentionCount,
   producerCopy,
+  purgeResultToast,
   reclaimDialogTitle,
   reclaimFailureToast,
   reclaimNothingToReclaimTooltip,
   reclaimResultToast,
 } from '@/renderer/repositories/worktrees-copy'
-import type { InspectedWorktree, ReclaimedWorktree, WorktreesReclaimResult, WorktreesReport } from '@/types/reclaimer'
+import type { InspectedWorktree, ReclaimedWorktree, WorktreesPurgeResult, WorktreesReclaimResult, WorktreesReport } from '@/types/reclaimer'
 
 function worktree(overrides: Partial<InspectedWorktree> = {}): InspectedWorktree {
   return {
@@ -24,6 +31,7 @@ function worktree(overrides: Partial<InspectedWorktree> = {}): InspectedWorktree
     lockReason: null,
     dirtyFiles: 0,
     reclaimable: false,
+    otherwiseReclaimable: false,
     prunable: null,
     producer: null,
     ...overrides,
@@ -122,5 +130,68 @@ describe('reclaimFailureToast / reclaimNothingToReclaimTooltip', () => {
 
   it('names why reclaim is disabled', () => {
     expect(reclaimNothingToReclaimTooltip().length).toBeGreaterThan(0)
+  })
+})
+
+describe('forced reclaim copy', () => {
+  const clean = { unlock: true, forceDirty: false }
+  const unlockAndDiscard = { unlock: true, forceDirty: true }
+  const discard = { unlock: false, forceDirty: true }
+
+  it('names the action by what it does', () => {
+    expect(forcedActionLabel(clean)).toBe('Unlock and reclaim')
+    expect(forcedActionLabel(unlockAndDiscard)).toBe('Unlock and discard changes')
+    expect(forcedActionLabel(discard)).toBe('Discard changes and reclaim')
+    expect(forcedConfirmLabel(clean)).toBe('Unlock and reclaim')
+    expect(forcedConfirmLabel(unlockAndDiscard)).toBe('Unlock and discard')
+    expect(forcedConfirmLabel(discard)).toBe('Discard and reclaim')
+  })
+
+  it('titles a dialog with the file count, or without one when it is unknown', () => {
+    expect(forcedDialogTitle('impl-51', clean, 0)).toBe('Unlock and reclaim impl-51?')
+    expect(forcedDialogTitle('impl-51', unlockAndDiscard, 3)).toBe('Unlock impl-51 and discard its changes?')
+    expect(forcedDialogTitle('impl-50', discard, 3)).toBe('Discard 3 uncommitted files in impl-50?')
+    expect(forcedDialogTitle('impl-50', discard, 1)).toBe('Discard 1 uncommitted file in impl-50?')
+    expect(forcedDialogTitle('impl-50', discard, -1)).toBe('Discard uncommitted changes in impl-50?')
+  })
+
+  it('warns that discarded changes cannot be recovered, and says so only when they are discarded', () => {
+    expect(forcedDialogBody('impl-51', unlockAndDiscard, 3)).toContain('3 uncommitted files')
+    expect(forcedDialogBody('impl-51', unlockAndDiscard, -1)).toContain('port couldn’t count them')
+    expect(forcedDialogBody('impl-50', discard, 3)).toContain('can’t be recovered')
+    expect(forcedDialogBody('impl-51', clean, 0)).not.toContain('can’t be recovered')
+  })
+
+  it('is destructive exactly when changes are discarded', () => {
+    expect(forcedDialogIsDestructive(clean)).toBe(false)
+    expect(forcedDialogIsDestructive(unlockAndDiscard)).toBe(true)
+    expect(forcedDialogIsDestructive(discard)).toBe(true)
+  })
+
+  it('toasts removed, nothing removed, and the target’s own failure', () => {
+    const base = { ok: true, readAt: 't', call: ['bin/worktrees.mjs'] } as const
+    expect(forcedReclaimToast('impl-51', { ...base, removed: 1, results: [reclaimed({ pathBasename: 'impl-51' })] })).toBe('Reclaimed impl-51.')
+    expect(forcedReclaimToast('impl-51', { ...base, removed: 0, results: [reclaimed({ outcome: 'kept' })] })).toBe(
+      'Nothing was reclaimed. impl-51 changed since it was checked; its row shows why.',
+    )
+    expect(forcedReclaimToast('impl-51', { ...base, removed: 0, results: [reclaimed({ outcome: 'failed', error: 'unlock failed' })] })).toBe('Couldn’t reclaim impl-51: unlock failed.')
+  })
+})
+
+describe('purgeResultToast', () => {
+  const base = { ok: true, pathBasename: 'impl-29-stale', readAt: 't', call: ['bin/worktrees.mjs'] } as const
+  const result = (overrides: Partial<Extract<WorktreesPurgeResult, { ok: true }>>): Extract<WorktreesPurgeResult, { ok: true }> => ({
+    ...base,
+    outcome: 'deleted',
+    message: null,
+    cause: null,
+    ...overrides,
+  })
+
+  it('names each outcome', () => {
+    expect(purgeResultToast(result({}))).toBe('Deleted impl-29-stale.')
+    expect(purgeResultToast(result({ outcome: 'refused', message: 'x' }))).toBe('Didn’t delete impl-29-stale. It’s no longer an untracked directory.')
+    expect(purgeResultToast(result({ outcome: 'failed', cause: 'file-in-use', message: 'EBUSY' }))).toContain('a file under it is still open')
+    expect(purgeResultToast(result({ outcome: 'failed', cause: 'unknown', message: 'EIO' }))).toBe('Couldn’t delete impl-29-stale: EIO.')
   })
 })

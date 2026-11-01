@@ -2,7 +2,7 @@
 // The pipeline's artifact contract, self-contained. `check <kind> <file>` validates offline;
 // `audit` is a gh-driven pass over pull requests — NEVER add this to commands.checks.
 import { execFileSync } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -32,6 +32,8 @@ export const LABELS = {
 // --- Format contracts --------------------------------------------------------
 export const BODY_HEADINGS = ['## Summary', '## Changes', '## Testing plan', '## Automated checks'];
 export const REVIEW_PREFIX = '## Code Review';
+const CHECK_ONLY_PREFIX = 'Blocked only by checks:';
+const CHECK_ONLY_LINE = /^Blocked only by checks: `[^`]+`(, `[^`]+`)*$/;
 // Third verdict: posted when the head commit's checks never concluded within the bounded wait.
 export const REVIEW_HEADING = /^## Code Review — Cycle (\d+) · (approved|needs revision|blocked — checks pending)$/;
 export const REVISION_HEADING = /^## Revision — Cycle (\d+)$/;
@@ -152,6 +154,23 @@ function checkPrBody(text, { issue } = {}) {
       "at least one '- [ ] ...' item under '## Testing plan'",
     );
   }
+  const shots = section(ls, SCREENSHOTS_HEADING);
+  return shots ? checkScreenshotsSection(shots) : ok();
+}
+
+const SCREENSHOTS_HEADING = '## Screenshots';
+const SCREENSHOT_SENTINEL = /^(?:No UI-visible change\.|Not captured — \S.*)$/;
+const SCREENSHOT_IMAGE = /!\[([^\]]*)\]\((https:\/\/[^)\s]+)\)/g;
+
+/** A sentinel line alone, or at least one image with a non-empty alt and nothing imageless. */
+function checkScreenshotsSection(body) {
+  const nonEmpty = body.map((l) => l.trim()).filter((l) => l !== '');
+  const expected = "one sentinel line ('No UI-visible change.' or 'Not captured — <reason>') or at least one '![label](https://…)' image";
+  if (nonEmpty.length === 0) return fail(`'${SCREENSHOTS_HEADING}' is empty`, expected);
+  if (nonEmpty.length === 1 && SCREENSHOT_SENTINEL.test(nonEmpty[0])) return ok();
+  const images = [...nonEmpty.join('\n').matchAll(SCREENSHOT_IMAGE)];
+  if (images.length === 0) return fail(`'${SCREENSHOTS_HEADING}' holds neither a sentinel line nor an image`, expected);
+  if (images.some((m) => m[1].trim() === '')) return fail(`'${SCREENSHOTS_HEADING}' has an image with an empty alt`, 'every image carries its flow or state as alt text');
   return ok();
 }
 
@@ -179,6 +198,15 @@ function checkReview(text, { cycle } = {}) {
   }
   if ((bodyLines[1] ?? '').trim() === '') {
     return fail('body line 2 must be a non-empty counts line', 'a non-empty counts line directly under the heading');
+  }
+  const marker = (bodyLines[2] ?? '').trim();
+  if (marker.startsWith(CHECK_ONLY_PREFIX)) {
+    if (!CHECK_ONLY_LINE.test(marker)) {
+      return fail(`body line 3 is a malformed check-only marker, got ${JSON.stringify(marker)}`, "'Blocked only by checks: `<name>`[, `<name>`…]'");
+    }
+    if (m[2] !== 'needs revision') {
+      return fail(`the check-only marker is only valid under 'needs revision', got '${m[2]}'`, "no 'Blocked only by checks:' line under any other verdict");
+    }
   }
   for (const c of payload.comments ?? []) {
     if (typeof c.path !== 'string' || c.path === '') {
@@ -447,7 +475,7 @@ function runAudit(argv) {
         if (count >= 3) {
           auditFail(at('review'), `${count} reviews share commit ${oid} — the zero-diff gate should stop at one authorized repeat`);
         } else if (count === 2) {
-          note(`#${n}: 2 reviews share commit ${oid} — the operator-authorized zero-diff re-review, not a failure`);
+          note(`#${n}: 2 reviews share commit ${oid} — the one authorized zero-diff re-review (operator override or check-only recheck), not a failure`);
         } else {
           auditOk();
         }
@@ -601,11 +629,135 @@ function runAudit(argv) {
   process.exit(1);
 }
 
+// --- screenshots <manifest.json> --issue N --out <file.md> --------------------
+export const SCREENSHOT_BRANCH = 'port-screenshots';
+const MAX_SCREENSHOTS = 12;
+const MAX_PUBLISH_ATTEMPTS = 3;
+
+/** Manifest shape errors as one detail string, or null. `exists` is injected so this stays pure. */
+export function manifestViolation(manifest, exists) {
+  if (!Array.isArray(manifest) || manifest.length < 1 || manifest.length > MAX_SCREENSHOTS) {
+    return `manifest must be a JSON array of 1-${MAX_SCREENSHOTS} entries`;
+  }
+  const seen = new Set();
+  for (const [i, entry] of manifest.entries()) {
+    const at = `entry ${i + 1}`;
+    if (typeof entry?.file !== 'string' || typeof entry?.label !== 'string') return `${at} needs string 'file' and 'label'`;
+    const file = entry.file.replace(/\\/g, '/');
+    if (!/\.png$/i.test(file)) return `${at}: '${entry.file}' is not a .png`;
+    if (file.startsWith('/') || /^[A-Za-z]:/.test(file) || file.split('/').includes('..')) {
+      return `${at}: '${entry.file}' must be a repo-relative path with no '..'`;
+    }
+    if (!exists(file)) return `${at}: '${entry.file}' does not exist`;
+    if (entry.label.trim() === '' || /[\]\n\r]/.test(entry.label)) return `${at}: label must be non-empty, with no ']' or newline`;
+    const base = file.split('/').pop();
+    if (seen.has(base)) return `${at}: basename '${base}' is used twice`;
+    seen.add(base);
+  }
+  return null;
+}
+
+/** A commit-pinned URL that renders for any viewer with repository access. */
+export function screenshotUrl(repo, sha, path) {
+  return `https://github.com/${repo}/blob/${sha}/${path.split('/').map(encodeURIComponent).join('/')}?raw=true`;
+}
+
+/** One block per entry in manifest order: bold label, blank line, image. */
+export function renderScreenshots(manifest, urls) {
+  return manifest.map((e, i) => `**${e.label}**\n\n![${e.label}](${urls[i]})\n`).join('\n');
+}
+
+function runScreenshots(argv) {
+  const usage = 'usage: node artifacts.mjs screenshots <manifest.json> --issue N --out <file.md>';
+  const manifestFile = argv[0];
+  if (!manifestFile) die(`screenshots needs a manifest. ${usage}`);
+  let issue;
+  let out;
+  for (let i = 1; i < argv.length; i++) {
+    if (argv[i] === '--issue') issue = argv[++i];
+    else if (argv[i] === '--out') out = argv[++i];
+    else die(`unrecognized argument '${argv[i]}'. ${usage}`);
+  }
+  if (!/^\d+$/.test(issue ?? '')) die(`--issue needs an issue number. ${usage}`);
+  if (!out) die(`--out needs a file. ${usage}`);
+
+  const root = findRoot(process.cwd());
+  if (!root) die('.claude/port.config.json was not found in this or any parent directory — this repository is not port-managed.');
+  const repo = JSON.parse(readFileSync(join(root, '.claude/port.config.json'), 'utf8')).repo;
+  if (!repo) die('.claude/port.config.json declares no `repo`.');
+
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(manifestFile, 'utf8'));
+  } catch (e) {
+    die(`could not read manifest ${manifestFile}: ${e.message}`);
+  }
+  const bad = manifestViolation(manifest, (rel) => existsSync(join(root, rel)));
+  if (bad) die(bad);
+
+  const run = (bin, args) => {
+    try {
+      return { ok: true, out: execFileSync(bin, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] }) };
+    } catch (e) {
+      if (e.code === 'ENOENT') die(`\`${bin}\` is not on PATH.`);
+      return { ok: false, err: String(e.stderr ?? '').trim().split('\n')[0] || `exited ${e.status}` };
+    }
+  };
+  const head7 = run('git', ['rev-parse', '--short=7', 'HEAD']);
+  if (!head7.ok) die(`git rev-parse HEAD — ${head7.err}`);
+
+  const scratch = join(root, '.temp');
+  mkdirSync(scratch, { recursive: true });
+  const bodyFile = join(scratch, `screenshots-request-${issue}.json`);
+  const api = (method, path, body) => {
+    const args = ['api', '-X', method, `repos/${repo}/${path}`];
+    if (body) {
+      writeFileSync(bodyFile, JSON.stringify(body));
+      args.push('--input', bodyFile);
+    }
+    const r = run('gh', args);
+    return r.ok ? { ok: true, json: JSON.parse(r.out) } : r;
+  };
+  const must = (r, what) => (r.ok ? r.json : die(`${what} — ${r.err}`));
+
+  const base = `issue-${issue}/${head7.out.trim()}`;
+  const paths = manifest.map((e) => `${base}/${e.file.replace(/\\/g, '/').split('/').pop()}`);
+  const blobs = manifest.map((e) => must(
+    api('POST', 'git/blobs', { content: readFileSync(join(root, e.file)).toString('base64'), encoding: 'base64' }),
+    `upload of ${e.file}`,
+  ).sha);
+
+  for (let attempt = 1; attempt <= MAX_PUBLISH_ATTEMPTS; attempt++) {
+    const ref = api('GET', `git/ref/heads/${SCREENSHOT_BRANCH}`);
+    if (!ref.ok && !/404|Not Found/i.test(ref.err)) die(`reading ${SCREENSHOT_BRANCH} — ${ref.err}`);
+    const tip = ref.ok ? ref.json.object.sha : null;
+    const tree = { tree: paths.map((path, i) => ({ path, mode: '100644', type: 'blob', sha: blobs[i] })) };
+    if (tip) tree.base_tree = must(api('GET', `git/commits/${tip}`), `reading commit ${tip}`).tree.sha;
+    const treeSha = must(api('POST', 'git/trees', tree), 'creating tree').sha;
+    const commitSha = must(api('POST', 'git/commits', {
+      message: `#${issue} screenshots for ${head7.out.trim()}`,
+      tree: treeSha,
+      parents: tip ? [tip] : [],
+    }), 'creating commit').sha;
+    const moved = tip
+      ? api('PATCH', `git/refs/heads/${SCREENSHOT_BRANCH}`, { sha: commitSha, force: false })
+      : api('POST', 'git/refs', { ref: `refs/heads/${SCREENSHOT_BRANCH}`, sha: commitSha });
+    if (moved.ok) {
+      writeFileSync(out, renderScreenshots(manifest, paths.map((p) => screenshotUrl(repo, commitSha, p))));
+      console.log(`ok    ${manifest.length} screenshot(s) published at ${commitSha.slice(0, 7)} on ${SCREENSHOT_BRANCH}`);
+      process.exit(0);
+    }
+    if (!/409|422/.test(moved.err)) die(`updating ${SCREENSHOT_BRANCH} — ${moved.err}`);
+  }
+  die(`${SCREENSHOT_BRANCH} kept moving under concurrent writers — gave up after ${MAX_PUBLISH_ATTEMPTS} attempts`);
+}
+
 function main() {
-  const usage = 'usage: node artifacts.mjs check <kind> <file> [--issue N] [--cycle N]\n       node artifacts.mjs audit [<pr>...] [--limit <n>]';
+  const usage = 'usage: node artifacts.mjs check <kind> <file> [--issue N] [--cycle N]\n       node artifacts.mjs audit [<pr>...] [--limit <n>]\n       node artifacts.mjs screenshots <manifest.json> --issue N --out <file.md>';
   const [mode, ...rest] = process.argv.slice(2);
   if (mode === 'check') return runCheck(rest);
   if (mode === 'audit') return runAudit(rest);
+  if (mode === 'screenshots') return runScreenshots(rest);
   die(`unrecognized mode ${JSON.stringify(mode)}. ${usage}`);
 }
 

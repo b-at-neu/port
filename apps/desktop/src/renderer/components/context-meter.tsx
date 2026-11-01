@@ -20,7 +20,7 @@ export function ContextMeter({ usage }: { readonly usage: SessionUsage | null })
           className="flex items-center gap-1.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <span className="text-meta text-muted-foreground">{CONTEXT_METER_LABEL}</span>
-          <span className="h-1 w-14 overflow-hidden rounded-full bg-accent">
+          <span className="h-1 w-14 overflow-hidden rounded-full bg-border">
             {percent !== null ? <span className="block h-full rounded-full bg-primary-text" style={{ width: `${String(percent)}%` }} /> : null}
           </span>
           <span className="text-meta text-muted-foreground tabular-nums">{percent !== null ? `${String(percent)}%` : '—'}</span>

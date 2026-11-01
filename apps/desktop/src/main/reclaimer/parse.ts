@@ -2,7 +2,7 @@
 // naming the field — never a partial list.
 import type { PathOps } from '@/types/platform'
 import type { CorrelationRung } from '@/types/local'
-import type { ReclaimedWorktree, WorktreeState } from '@/types/reclaimer'
+import type { ForcedActionsState, PurgeCause, PurgeOutcome, ReclaimedWorktree, WorktreeState } from '@/types/reclaimer'
 import { WORKTREE_STATES } from '@/types/reclaimer'
 import { isRecord } from '@/main/guards'
 
@@ -20,6 +20,7 @@ interface ParsedWorktree {
   readonly locked: boolean
   readonly lockReason: string | null
   readonly dirtyFiles: number
+  readonly otherwiseReclaimable: boolean
 }
 
 type ParsedReport =
@@ -27,6 +28,7 @@ type ParsedReport =
       readonly ok: true
       readonly mainRoot: string
       readonly integrationRef: string
+      readonly forcedActions: ForcedActionsState
       readonly worktrees: readonly ParsedWorktree[]
       readonly orphanDirs: readonly string[]
       readonly registered: number
@@ -42,7 +44,7 @@ function stringOrNull(value: unknown): value is string | null {
   return value === null || typeof value === 'string'
 }
 
-function parseCandidate(raw: unknown, index: number, pathOps: PathOps): ParsedWorktree | string {
+function parseCandidate(raw: unknown, index: number, pathOps: PathOps, pathScope: boolean): ParsedWorktree | string {
   if (!isRecord(raw)) return `candidates[${index}] is not an object`
 
   const path = raw.path
@@ -79,6 +81,10 @@ function parseCandidate(raw: unknown, index: number, pathOps: PathOps): ParsedWo
   const dirtyFiles = raw.dirtyFiles
   if (typeof dirtyFiles !== 'number') return `candidates[${index}].dirtyFiles is missing or not a number`
 
+  // A script that predates `pathScope` never emits it, and fails toward offering nothing.
+  const otherwiseRemovable = raw.otherwiseRemovable
+  if (pathScope && typeof otherwiseRemovable !== 'boolean') return `candidates[${index}].otherwiseRemovable is missing or not a boolean`
+
   return {
     path: pathOps.toNative(path),
     branch,
@@ -90,6 +96,7 @@ function parseCandidate(raw: unknown, index: number, pathOps: PathOps): ParsedWo
     locked,
     lockReason,
     dirtyFiles,
+    otherwiseReclaimable: pathScope && otherwiseRemovable === true,
   }
 }
 
@@ -112,9 +119,11 @@ export function parseReportPayload(stdout: string, pathOps: PathOps): ParsedRepo
   const rawCandidates = value.candidates
   if (!Array.isArray(rawCandidates)) return fail('candidates is missing or not an array')
 
+  const pathScope = value.pathScope === true
+
   const worktrees: ParsedWorktree[] = []
   for (const [index, raw] of rawCandidates.entries()) {
-    const parsed = parseCandidate(raw, index, pathOps)
+    const parsed = parseCandidate(raw, index, pathOps, pathScope)
     if (typeof parsed === 'string') return fail(parsed)
     worktrees.push(parsed)
   }
@@ -139,7 +148,16 @@ export function parseReportPayload(stdout: string, pathOps: PathOps): ParsedRepo
     byState[key as WorktreeState] = count
   }
 
-  return { ok: true, mainRoot: pathOps.toNative(mainRoot), integrationRef, worktrees, orphanDirs, registered, byState }
+  return {
+    ok: true,
+    mainRoot: pathOps.toNative(mainRoot),
+    integrationRef,
+    forcedActions: pathScope ? 'supported' : 'unsupported',
+    worktrees,
+    orphanDirs,
+    registered,
+    byState,
+  }
 }
 
 type ParsedReclaim =
@@ -195,4 +213,38 @@ export function parseReclaimPayload(stdout: string, pathOps: PathOps): ParsedRec
   }
 
   return { ok: true, removed: removedCount, results }
+}
+
+const CAUSES: ReadonlySet<string> = new Set<PurgeCause>(['file-in-use', 'long-path', 'unknown'])
+
+type ParsedPurge =
+  | { readonly ok: true; readonly outcome: PurgeOutcome; readonly message: string | null; readonly cause: PurgeCause | null }
+  | { readonly ok: false; readonly message: string }
+
+// Parses `purge --orphan <path> --json`'s stdout, which this app only ever requests for one path.
+export function parsePurgePayload(stdout: string): ParsedPurge {
+  let value: unknown
+  try {
+    value = JSON.parse(stdout)
+  } catch {
+    return { ok: false, message: "the script's stdout was not valid JSON" }
+  }
+  if (!isRecord(value)) return { ok: false, message: "the script's stdout was not a JSON object" }
+
+  const results = value.results
+  if (!Array.isArray(results) || results.length !== 1) return { ok: false, message: 'results is missing or not a one-entry array' }
+  const raw: unknown = results[0]
+  if (!isRecord(raw)) return { ok: false, message: 'results[0] is not an object' }
+
+  const { deleted, refused, error, cause } = raw
+  if (typeof deleted !== 'boolean') return { ok: false, message: 'results[0].deleted is missing or not a boolean' }
+  if (!stringOrNull(refused)) return { ok: false, message: 'results[0].refused is not a string or null' }
+  if (!stringOrNull(error)) return { ok: false, message: 'results[0].error is not a string or null' }
+  if (!(cause === null || (typeof cause === 'string' && CAUSES.has(cause)))) {
+    return { ok: false, message: `results[0].cause is ${JSON.stringify(cause)}, not a known cause or null` }
+  }
+
+  if (deleted) return { ok: true, outcome: 'deleted', message: null, cause: null }
+  if (refused !== null) return { ok: true, outcome: 'refused', message: refused, cause: null }
+  return { ok: true, outcome: 'failed', message: error ?? 'the script reported no error text', cause: cause as PurgeCause | null }
 }

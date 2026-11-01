@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { MAX_NOTIFICATION_TEXT, resolveNotifyNeedsYou } from '@/main/channels/notify'
+import { MAX_NOTIFICATION_TEXT, resolveNotifyNeedsYou, resolveNotifyPrefs, resolveNotifyPrefsSet } from '@/main/channels/notify'
 
 describe('resolveNotifyNeedsYou', () => {
   it('passes a valid request to the shower unchanged', () => {
@@ -35,5 +35,40 @@ describe('resolveNotifyNeedsYou', () => {
     const show = vi.fn()
     resolveNotifyNeedsYou({ title: 'x'.repeat(MAX_NOTIFICATION_TEXT), body: 'b', focus: null }, { show })
     expect(show).toHaveBeenCalledOnce()
+  })
+})
+
+describe('notify preferences channels', () => {
+  const stored = { needsYou: true, sessions: false }
+  const deps = () => ({ prefs: vi.fn(() => Promise.resolve(stored)), setPrefs: vi.fn((next: typeof stored) => Promise.resolve(next)) })
+
+  it('reads the stored preferences', async () => {
+    await expect(resolveNotifyPrefs(undefined, deps())).resolves.toEqual(stored)
+  })
+
+  it('rejects a payload on the read', () => {
+    expect(() => resolveNotifyPrefs({} as never, deps())).toThrow("'notify:prefs' takes no payload")
+  })
+
+  it('saves two booleans and returns what was stored', async () => {
+    const d = deps()
+    await expect(resolveNotifyPrefsSet({ needsYou: false, sessions: true }, d)).resolves.toEqual({ needsYou: false, sessions: true })
+    expect(d.setPrefs).toHaveBeenCalledWith({ needsYou: false, sessions: true })
+  })
+
+  it.each([
+    ['a missing request', undefined],
+    ['a non-boolean needsYou', { needsYou: 'yes', sessions: true }],
+    ['a missing sessions', { needsYou: true }],
+  ])('throws for %s and saves nothing', (_name, request) => {
+    const d = deps()
+    expect(() => resolveNotifyPrefsSet(request as never, d)).toThrow("'notify:prefs:set'")
+    expect(d.setPrefs).not.toHaveBeenCalled()
+  })
+
+  it('drops an extra field instead of persisting it', async () => {
+    const d = deps()
+    await resolveNotifyPrefsSet({ needsYou: true, sessions: true, extra: 1 } as never, d)
+    expect(d.setPrefs).toHaveBeenCalledWith({ needsYou: true, sessions: true })
   })
 })

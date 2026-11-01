@@ -2,6 +2,8 @@
 // an empty state rather than refusing to load. Pinned as the sole writer by desktop-hosting.ts.
 import { DEFAULT_SESSION_DEFAULTS, SESSION_MODELS, SESSION_PERMISSION_MODES } from '@/types/hosting'
 import type { SessionDefaults, SessionMarks, SessionModel, SessionPermissionMode } from '@/types/hosting'
+import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'
+import type { NotificationPrefs } from '@/types/settings'
 import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
 import { pathOps } from '@/main/platform/paths'
 import type { HostingPersistedState, HostingPersistence, PersistedOpenEntry } from '@/types/hosting'
@@ -19,6 +21,7 @@ interface HostingFileShape {
   readonly open: readonly unknown[]
   readonly defaults?: unknown
   readonly marks?: unknown
+  readonly notifications?: unknown
 }
 
 const MARKS_ID_MAX = 200
@@ -62,6 +65,16 @@ function resolveDefaults(value: unknown): SessionDefaults {
   return { model: resolveModel(defaults.model), permissionMode: resolvePermissionMode(defaults.permissionMode) }
 }
 
+// Each flag falls back to on by itself — a malformed 'sessions' never flips a valid 'needsYou'.
+function resolveNotifications(value: unknown): NotificationPrefs {
+  if (typeof value !== 'object' || value === null) return DEFAULT_NOTIFICATION_PREFS
+  const prefs = value as Record<string, unknown>
+  return {
+    needsYou: typeof prefs.needsYou === 'boolean' ? prefs.needsYou : DEFAULT_NOTIFICATION_PREFS.needsYou,
+    sessions: typeof prefs.sessions === 'boolean' ? prefs.sessions : DEFAULT_NOTIFICATION_PREFS.sessions,
+  }
+}
+
 function isValidOpenEntry(value: unknown): value is PersistedOpenEntry {
   if (typeof value !== 'object' || value === null) return false
   const entry = value as Record<string, unknown>
@@ -85,7 +98,7 @@ function isValidLimit(value: unknown): value is number {
 }
 
 function emptyState(): HostingPersistedState {
-  return { limit: DEFAULT_SESSION_LIMIT, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS }
+  return { limit: DEFAULT_SESSION_LIMIT, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS }
 }
 
 interface CreateHostingPersistenceParams {
@@ -116,7 +129,8 @@ export function createHostingPersistence(params: CreateHostingPersistenceParams)
     const open = Array.isArray(value.open) ? value.open.filter(isValidOpenEntry) : []
     const defaults = resolveDefaults(value.defaults)
     const marks = resolveMarks(value.marks)
-    return { limit, open, defaults, marks }
+    const notifications = resolveNotifications(value.notifications)
+    return { limit, open, defaults, marks, notifications }
   }
 
   function startWrite(state: HostingPersistedState, json: string): void {
@@ -137,7 +151,7 @@ export function createHostingPersistence(params: CreateHostingPersistenceParams)
   }
 
   function enqueue(state: HostingPersistedState): void {
-    const json = JSON.stringify({ version: CURRENT_VERSION, limit: state.limit, open: state.open, defaults: state.defaults, marks: state.marks })
+    const json = JSON.stringify({ version: CURRENT_VERSION, limit: state.limit, open: state.open, defaults: state.defaults, marks: state.marks, notifications: state.notifications })
     if (json === lastWrittenJson) return
     if (writing !== null) {
       pending = state

@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/renderer/components/ui/collapsible'
+import { Separator } from '@/renderer/components/ui/separator'
 import { ConversationEntry } from '@/renderer/components/conversation-entry'
 import { Markdown } from '@/renderer/components/markdown'
 import { groupEntries } from '@/renderer/components/conversation-model'
@@ -73,9 +74,9 @@ function HistorySection({ history, dividerLabel }: { readonly history: SessionHi
         <ConversationEntry key={node.entry.uuid} node={node} />
       ))}
       <div data-slot="history-divider" title={history.entries[history.entries.length - 1]?.timestamp ?? ''} className="flex items-center gap-2 text-meta text-muted-foreground">
-        <div className="h-px flex-1 bg-border" />
+        <Separator className="flex-1" />
         {dividerLabel}
-        <div className="h-px flex-1 bg-border" />
+        <Separator className="flex-1" />
       </div>
     </div>
   )

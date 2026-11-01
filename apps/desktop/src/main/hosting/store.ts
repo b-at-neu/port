@@ -14,6 +14,8 @@ import type { RepoId } from '@/utils/repos'
 import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SetControlsResult } from '@/utils/hosting/controls'
 import type { ComposerAttachment } from '@/utils/hosting/attachments'
 import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
+import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'
+import type { NotificationPrefs } from '@/types/settings'
 import type { HostedStore, StartSessionParams } from '@/types/hosting'
 import type {
   HostedSessionSnapshot,
@@ -126,6 +128,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
   let nextId = 1
   let limit = DEFAULT_SESSION_LIMIT
   let defaults: SessionDefaults = DEFAULT_SESSION_DEFAULTS
+  let notifications: NotificationPrefs = DEFAULT_NOTIFICATION_PREFS
   let restorable: readonly MintedRestorable[] = []
   const endedOrder: SessionKey[] = []
   const endedSeen = new Set<SessionKey>()
@@ -138,6 +141,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
         limit = state.limit
         restorable = mintRestorable(state.open)
         defaults = state.defaults
+        notifications = state.notifications
         marksTracker = createSessionMarks(state.marks)
       })
     }
@@ -158,7 +162,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
 
   function persistSave(): void {
     const live = persistedOpen(list())
-    deps.persistence.save({ ...nextPersisted({ limit, live, restorable }), defaults, marks: marksTracker.current() })
+    deps.persistence.save({ ...nextPersisted({ limit, live, restorable }), defaults, marks: marksTracker.current(), notifications })
   }
 
   function forgetHandle(sessionKey: SessionKey): void {
@@ -394,6 +398,18 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     return defaults
   }
 
+  async function getNotificationPrefs(): Promise<NotificationPrefs> {
+    await ensureLoaded()
+    return notifications
+  }
+
+  async function setNotificationPrefs(next: NotificationPrefs): Promise<NotificationPrefs> {
+    await ensureLoaded()
+    notifications = next
+    persistSave()
+    return notifications
+  }
+
   async function rename(sessionKey: SessionKey, title: string): Promise<SessionRenameResult> {
     const handle = handles.get(sessionKey)
     if (!handle) return { ok: false, kind: 'unknown-session' }
@@ -466,6 +482,8 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     setLimit,
     defaults: getDefaults,
     setDefaults,
+    notificationPrefs: getNotificationPrefs,
+    setNotificationPrefs,
     rename,
     restorable: restorableList,
     restore,

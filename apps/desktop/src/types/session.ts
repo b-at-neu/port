@@ -31,6 +31,12 @@ export interface QuestionState {
 
 export type QuestionsState = readonly QuestionState[]
 
+export interface SessionMarkItem {
+  readonly key: 'rename' | 'pin' | 'archive'
+  readonly label: string
+  readonly disabled: boolean
+}
+
 export interface UsageNotice {
   readonly status: Extract<SessionRateLimit['status'], 'warning' | 'rejected'>
   readonly window: SessionRateLimit['window']

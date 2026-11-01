@@ -107,7 +107,6 @@
     "apps/desktop/src/renderer/session/sequence.ts",
     "apps/desktop/src/renderer/settings/runtime-model.ts",
     "apps/desktop/src/renderer/settings/runtime-section.tsx",
-    "apps/desktop/src/renderer/settings/theme-section.tsx",
     "apps/desktop/src/renderer/theme/store.ts",
     "apps/desktop/tests/unit/renderer/board/dispatch.test.ts",
     "apps/desktop/tests/unit/renderer/board/run-state.test.ts",

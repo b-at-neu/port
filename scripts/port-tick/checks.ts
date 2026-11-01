@@ -1,5 +1,6 @@
 // Pure: the statusCheckRollup reduction contract. Reduces to the latest entry per check name,
 // then reads the verdict — never trusting `gh pr checks`'s exit code, never reading an empty rollup as green.
+import type { CheckStatus, ZeroDiffChecks } from './gates.ts';
 
 /** The union of a CheckRun's and a StatusContext's own fields this module reads — every
  *  field optional, since the two GraphQL types carry different subsets. */
@@ -52,6 +53,21 @@ export function isConcluded(entry: CheckContext): boolean {
 /** `(.conclusion // .state)` — whichever this entry carries. */
 export function conclusionOf(entry: CheckContext): string | null {
   return entry.conclusion ?? entry.state ?? null;
+}
+
+/** A concluded entry whose conclusion counts as passing. */
+export function isGreen(entry: CheckContext): boolean {
+  return isConcluded(entry) && GREEN.has(conclusionOf(entry) ?? '');
+}
+
+/** The reduced rollup `gates.ts`'s zero-diff gate reads — built here so that module stays a leaf. */
+export function zeroDiffChecksOf(contexts: readonly CheckContext[] | null, dispositions: Readonly<Record<string, Disposition>>, now: string | null): ZeroDiffChecks {
+  const statuses = new Map<string, CheckStatus>();
+  for (const c of reduceRollup(contexts ?? undefined)) {
+    statuses.set(nameOf(c) ?? '', isGreen(c) ? 'green' : isConcluded(c) ? 'red' : 'pending');
+  }
+  const verdict = rollupVerdict(contexts, dispositions);
+  return { statuses, rollupClear: verdict.red.length === 0 && !verdict.pending, now };
 }
 
 /** A single check's disposition: `blocking` (default — a red conclusion forms a finding and

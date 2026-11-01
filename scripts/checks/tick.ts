@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { root, readJson, walk, relOf, pipelineSkillText } from '#lib/files.ts';
 import type { Reporter } from '#lib/report.ts';
 import { toCheckContexts, toReviewNode } from '#port-tick/wire.ts';
+import { zeroDiffChecksOf } from '#port-tick/checks.ts';
 
 const TICK_DIR = 'scripts/port-tick';
 
@@ -299,8 +300,11 @@ function runCase(fn: string, impl: any, input: any): any {
       const result = impl(candidates, max);
       return { toRefreshNumbers: result.toRefresh.map((c: any) => c.number), deferredNumbers: result.deferred.map((c: any) => c.number) };
     }
-    case 'zeroDiffGate':
-      return impl({ reviews: (input.reviews ?? []).map(toReviewNode), comments: input.comments, headRefOid: input.headRefOid });
+    case 'zeroDiffGate': {
+      const raw = input.checks;
+      const checks = raw === undefined ? undefined : zeroDiffChecksOf(raw.contexts, raw.dispositions, raw.now);
+      return impl({ reviews: (input.reviews ?? []).map(toReviewNode), comments: input.comments, headRefOid: input.headRefOid, checks });
+    }
     case 'cycleCapExceeded': {
       const [reviews, cap, comments] = input;
       return impl((reviews ?? []).map(toReviewNode), cap, comments);

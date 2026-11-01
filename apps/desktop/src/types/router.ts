@@ -15,6 +15,14 @@ export interface BoardSearch {
   readonly repo?: RepoId | null
 }
 
+export const SETTINGS_SECTIONS = ['general', 'repositories', 'connections', 'pipeline', 'usage', 'about'] as const
+export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]
+
+/** The key is `section`, not `tab`, because `RepoSearch.tab` already owns `tab` with another type across the route tree. */
+export interface SettingsSearch {
+  readonly section?: SettingsSection
+}
+
 type RepoTab = 'overview' | 'worktrees' | 'denials'
 export type DenialsGroup = 'command' | 'actor'
 
@@ -27,6 +35,12 @@ export interface RepoSearch {
 export interface HistorySearch {
   readonly repo?: RepoId | null
   readonly archived?: boolean
+}
+
+/** The key is `number`, not `item`, because `BoardSearch.item` already owns `item` with another type across the route tree. `number` only means something alongside `repo`. */
+export interface AuditSearch {
+  readonly repo?: RepoId | null
+  readonly number?: number | null
 }
 
 export interface NeedsYouSearch {
