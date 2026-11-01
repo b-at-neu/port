@@ -65,9 +65,13 @@ function setup(registry = freshRegistry(), now: Date = AFTER_RESET) {
     void id
     return Promise.resolve({ kind: 'ok', sessionKey: 'hosted-1' })
   })
+  const pathExists = vi.fn((path: string): Promise<boolean> => {
+    void path
+    return Promise.resolve(true)
+  })
   const onChange = vi.fn()
-  const sweeper = createInterruptedSweeper({ registry, fetchItemsByNumber, removeWorktree, resume, onChange, now: () => now })
-  return { registry, sweeper, removeWorktree, fetchItemsByNumber, resume, onChange }
+  const sweeper = createInterruptedSweeper({ registry, fetchItemsByNumber, removeWorktree, pathExists, resume, onChange, now: () => now })
+  return { registry, sweeper, removeWorktree, pathExists, fetchItemsByNumber, resume, onChange }
 }
 
 describe('createInterruptedSweeper — stale entries', () => {
@@ -89,15 +93,56 @@ describe('createInterruptedSweeper — stale entries', () => {
     expect(deps.onChange).not.toHaveBeenCalled()
   })
 
-  it('removes the entry even when its worktree is dirty or cannot be removed', async () => {
-    for (const outcome of [{ outcome: 'dirty' }, { outcome: 'failed', message: 'locked' }] as const) {
+  it('keeps the entry as cleanup-failed when its worktree is dirty or cannot be removed', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    for (const [outcome, detail] of [
+      [{ outcome: 'dirty' }, 'it has uncommitted changes'],
+      [{ outcome: 'failed', message: ' locked \n' }, 'locked'],
+    ] as const) {
       const deps = setup()
       deps.removeWorktree.mockResolvedValue(outcome)
       interrupt(deps.registry)
       await deps.sweeper.consider(snapshotWith(moved), [status()])
       expect(deps.removeWorktree).toHaveBeenCalledWith('/wt/e1', false)
-      expect(deps.registry.list()).toEqual([])
+      expect(deps.registry.list()[0]).toMatchObject({ reason: 'cleanup-failed', detail, resetsAt: null, costUsd: 1.5 })
+      expect(deps.onChange).toHaveBeenCalledTimes(1)
     }
+    errors.mockRestore()
+  })
+
+  it('leaves a cleanup-failed entry unchanged and silent while its worktree still cannot be removed', async () => {
+    const clock = { now: INTERRUPTED_AT }
+    const registry = freshRegistry(() => clock.now)
+    interrupt(registry, {}, 'cleanup-failed')
+    const deps = setup(registry)
+    deps.removeWorktree.mockResolvedValue({ outcome: 'dirty' })
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    clock.now = AFTER_RESET
+    await deps.sweeper.consider(snapshotWith(moved), [status()])
+    expect(deps.removeWorktree).toHaveBeenCalledTimes(1)
+    expect(registry.list()[0]).toMatchObject({ reason: 'cleanup-failed', interruptedAt: INTERRUPTED_AT.toISOString() })
+    expect(deps.onChange).not.toHaveBeenCalled()
+    expect(errors).not.toHaveBeenCalled()
+    errors.mockRestore()
+  })
+
+  it('removes a cleanup-failed entry once its worktree can be removed', async () => {
+    const registry = freshRegistry()
+    interrupt(registry, {}, 'cleanup-failed')
+    const deps = setup(registry)
+    await deps.sweeper.consider(snapshotWith(moved), [status()])
+    expect(registry.list()).toEqual([])
+    expect(deps.onChange).toHaveBeenCalledTimes(1)
+  })
+
+  it('removes a cleanup-failed entry whose worktree folder is gone without asking git', async () => {
+    const registry = freshRegistry()
+    interrupt(registry, {}, 'cleanup-failed')
+    const deps = setup(registry)
+    deps.pathExists.mockResolvedValue(false)
+    await deps.sweeper.consider(snapshotWith(moved), [status()])
+    expect(deps.removeWorktree).not.toHaveBeenCalled()
+    expect(registry.list()).toEqual([])
   })
 
   it('removes an entry superseded by a newer dispatch record', async () => {

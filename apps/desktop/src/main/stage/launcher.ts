@@ -5,7 +5,7 @@ import type { StageRegistry } from '@/types/stage'
 import type { GitRunner } from '@/types/platform'
 import type { CreateStageWorktreeParams, CreateStageWorktreeResult, ReleaseBranchOutcome, RemoveSessionWorktreeOutcome } from '@/types/workspace'
 import type { StageLaunchRequest, StageLaunchResult } from '@/types/dispatch'
-import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '@/types/hosting'
+import type { HostedSessionSnapshot, SessionDismissResult, SessionKey, SessionStartResult } from '@/types/hosting'
 
 import type { StageOutcome } from '@/types/stage-session'
 import type { RepoId } from '@/utils/repos'
@@ -61,6 +61,18 @@ function startFailureMessage(result: Extract<SessionStartResult, { readonly ok: 
       return 'the target folder is not a git repository'
     case 'worktree-failed':
       return `git worktree add failed: ${result.message}`
+  }
+}
+
+function cleanupFailureDetail(result: Exclude<SessionDismissResult, { readonly ok: true }>): string {
+  switch (result.kind) {
+    case 'worktree-dirty':
+      return 'it has uncommitted changes'
+    case 'worktree-remove-failed':
+      return result.message.trim()
+    case 'unknown-session':
+    case 'still-open':
+      return `the session could not be dismissed (${result.kind})`
   }
 }
 
@@ -245,7 +257,8 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
         if (dismissResult.ok && held !== undefined && held.branch !== null) await params.releaseBranch(held.root, held.branch, held.baseSha)
         const worktree = dismissResult.ok ? 'removed' : dismissResult.kind === 'worktree-dirty' ? 'kept-dirty' : dismissResult.kind === 'worktree-remove-failed' ? 'remove-failed' : outcome.worktree
         tracked.delete(sessionKey)
-        params.registry.remove(registryId)
+        if (dismissResult.ok) params.registry.remove(registryId)
+        else params.registry.markInterrupted(registryId, 'cleanup-failed', cleanupFailureDetail(dismissResult), null, outcome.costUsd)
         params.onOutcome(repoId, sessionKey, { ...outcome, worktree })
         return
       }

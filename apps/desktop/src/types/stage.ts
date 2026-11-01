@@ -39,10 +39,10 @@ export interface StageDenialStore {
   list(repoId: RepoId): readonly StageDenial[]
 }
 
-export const INTERRUPTED_REASONS = ['quit', 'crash', 'usage-limit', 'error'] as const
+export const INTERRUPTED_REASONS = ['quit', 'crash', 'usage-limit', 'error', 'cleanup-failed'] as const
 export type InterruptedReason = (typeof INTERRUPTED_REASONS)[number]
 
-/** A stage session that ended without reaching a `completed`/`questions`/`blocked` hand-back — tracked in `stage-sessions.json` until it is resumed, restarted, or the operator clears its label by hand. */
+/** A stage session that ended without reaching a `completed`/`questions`/`blocked` hand-back — tracked in `stage-sessions.json` until it is resumed, restarted, or the operator clears its label by hand. Also kept, as `cleanup-failed`, when a `completed` session's worktree could not be removed. */
 export interface InterruptedStage {
   readonly id: string
   readonly repoId: RepoId

@@ -95,7 +95,19 @@ function interruptedCopy(item: Extract<NeedsYouItem, { readonly kind: 'stage-int
       return `${phase} ${label} hit the usage limit${i.resetsAt !== null ? `, resets ${new Date(i.resetsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}`
     case 'error':
       return `${phase} ${label} ended with an error${i.detail !== null ? ` (${i.detail})` : ''}`
+    case 'cleanup-failed':
+      return `${phase} ${label} finished, but its worktree is still there${i.detail !== null ? ` (${i.detail})` : ''}`
   }
+}
+
+export const CLEANUP_FAILED_HELP = 'port retries the removal every few minutes. If it has uncommitted changes, commit or discard them there first. This row clears once the worktree is gone.'
+
+export function copiedPathToast(item: Pick<NeedsYouItem, 'number' | 'ticket'>): string {
+  return `Copied the worktree path for ${labelOf(item)}.`
+}
+
+export function copyPathFailedToast(path: string): string {
+  return `Couldn't copy the path. It's ${path}.`
 }
 
 function halfLabelledCopy(item: Extract<NeedsYouItem, { readonly kind: 'half-labelled' }>, label: string): string {

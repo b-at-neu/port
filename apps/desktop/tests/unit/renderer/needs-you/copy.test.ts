@@ -5,11 +5,14 @@ import type { InterruptedStage } from '@/types/stage'
 import {
   APPROVAL_GONE_TOAST,
   APPROVAL_UNREACHABLE_TOAST,
+  CLEANUP_FAILED_HELP,
   GROUP_NAMES,
   PROTECTED_EDIT_DENY_MESSAGE,
   approvedEditToast,
   blockerSendError,
   blockerSentToast,
+  copiedPathToast,
+  copyPathFailedToast,
   deniedEditToast,
   dismissedToast,
   needsYouLeadCopy,
@@ -185,6 +188,30 @@ describe('usage-limit copy', () => {
 
   it('names the reset in the Resume all tooltip', () => {
     expect(resumeAllDisabledReason(RESET)).toBe(`The limit resets at ${clock}. port resumes these sessions then.`)
+  })
+})
+
+describe('cleanup-failed copy', () => {
+  function cleanupFailed(detail: string | null): NeedsYouItem {
+    const interrupted = { agent: 'revise', reason: 'cleanup-failed', detail, resetsAt: null, worktree: { path: '/wt/revise-593', branch: 'b', baseSha: 's' } } as unknown as InterruptedStage
+    return { ...base({ number: 593, ticket: { kind: 'pull-request', number: 593 } as never }), kind: 'stage-interrupted', interrupted } as unknown as NeedsYouItem
+  }
+
+  it('leads with the finished session and the failure detail', () => {
+    expect(needsYouLeadCopy(cleanupFailed('it has uncommitted changes'))).toBe('Revising PR#593 finished, but its worktree is still there (it has uncommitted changes)')
+  })
+
+  it('leaves out the parenthetical without a detail', () => {
+    expect(needsYouLeadCopy(cleanupFailed(null))).toBe('Revising PR#593 finished, but its worktree is still there')
+  })
+
+  it('states the retry in the help line', () => {
+    expect(CLEANUP_FAILED_HELP).toContain('retries the removal')
+  })
+
+  it('names the ticket on success and the path on a clipboard failure', () => {
+    expect(copiedPathToast(cleanupFailed(null))).toBe('Copied the worktree path for PR#593.')
+    expect(copyPathFailedToast('/wt/revise-593')).toBe("Couldn't copy the path. It's /wt/revise-593.")
   })
 })
 

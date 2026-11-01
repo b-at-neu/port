@@ -39,6 +39,47 @@ describe('actionFor — stage-blocked', () => {
   })
 })
 
+function stageInterrupted(reason: string): NeedsYouItem {
+  const interrupted = { id: 'e1', agent: 'revise', reason, claudeSessionId: 'c1', worktree: { path: '/wt/revise-593', branch: 'b', baseSha: 's' } }
+  return { kind: 'stage-interrupted', repoId: 'repo-a' as RepoId, repo: 'o/a', number: 593, title: 't', url: null, ticket: null, at: null, matchedRow: null, interrupted } as unknown as NeedsYouItem
+}
+
+describe('actionFor — stage-interrupted', () => {
+  it('offers only Copy path for a cleanup-failed entry', () => {
+    expect(actionFor(stageInterrupted('cleanup-failed'))).toEqual({ label: 'Copy path', kind: 'copy-path', disabledReason: null })
+  })
+
+  it('still offers Resume with Restart for a crash', () => {
+    expect(actionFor(stageInterrupted('crash'))).toMatchObject({ label: 'Resume', kind: 'resume', secondaryLabel: 'Restart' })
+  })
+})
+
+describe('runAction — cleanup-failed Copy path', () => {
+  const writeText = vi.fn()
+
+  beforeEach(() => {
+    writeText.mockReset()
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+  })
+
+  it('copies the worktree path and toasts', async () => {
+    writeText.mockResolvedValue(undefined)
+    const toasts: string[] = []
+    runAction(stageInterrupted('cleanup-failed'), { onToast: (m) => toasts.push(m) })
+    await vi.waitFor(() => expect(toasts).toEqual(['Copied the worktree path for #593.']))
+    expect(writeText).toHaveBeenCalledWith('/wt/revise-593')
+  })
+
+  it('toasts the path when the clipboard write is rejected', async () => {
+    writeText.mockRejectedValue(new Error('denied'))
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const toasts: string[] = []
+    runAction(stageInterrupted('cleanup-failed'), { onToast: (m) => toasts.push(m) })
+    await vi.waitFor(() => expect(toasts).toEqual(["Couldn't copy the path. It's /wt/revise-593."]))
+    errors.mockRestore()
+  })
+})
+
 describe('actionFor — usage-limit', () => {
   const RESET = '2026-01-01T14:05:00.000Z'
 
