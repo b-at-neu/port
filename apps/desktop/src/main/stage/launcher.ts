@@ -64,8 +64,7 @@ function startFailureMessage(result: Extract<SessionStartResult, { readonly ok: 
   }
 }
 
-/** Shared with the sweeper so a worktree that will not go away reads the same wherever it is reported. */
-export function cleanupFailureDetail(result: Exclude<SessionDismissResult, { readonly ok: true }>): string {
+function cleanupFailureDetail(result: Exclude<SessionDismissResult, { readonly ok: true }>): string {
   switch (result.kind) {
     case 'worktree-dirty':
       return 'it has uncommitted changes'
