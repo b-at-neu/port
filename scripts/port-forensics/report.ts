@@ -1,7 +1,7 @@
 // The `report` subcommand's whole implementation: argument validation, scanning, running
 // the six assertions, and rendering as text or `--json`. scripts/port-forensics.ts only calls this and prints.
 import { resolveClaudeHome, buildProjectIndex, readSession, listSessionIds } from './scan.ts';
-import { classifyTermination, notificationGaps, orphans, shellLoopHits, bashTimeouts, blockedAfterDenial, quotaClass, stageOf, itemNumberOf } from './classify.ts';
+import { classifyTermination, notificationGaps, orphans, shellLoopHits, bashTimeouts, blockedAfterDenial, finalHandbackText, quotaClass, stageOf, itemNumberOf } from './classify.ts';
 import { fetchInFlightItems } from './gh.ts';
 import { classifyRecord, pairToolResults } from '#lib/transcript.ts';
 import { loadConfig } from '#port-tick/config.ts';
@@ -33,16 +33,6 @@ function resultTextsOf(records: any[]): any[] {
   const { emitted, paired } = pairToolResults(records.flatMap((r) => classifyRecord(r)));
   void emitted;
   return paired.map((p: any) => p.text);
-}
-
-/** The last assistant-authored text or thinking entry — whether an agent that hit a denial
- *  opened its final turn with `BLOCKED:`. */
-function finalAssistantTextOf(records: any[]): string | null {
-  const events = records.flatMap((r) => classifyRecord(r));
-  for (let i = events.length - 1; i >= 0; i--) {
-    if (events[i].kind === 'assistant-text' || events[i].kind === 'thinking') return events[i].text;
-  }
-  return null;
 }
 
 function sessionMaxTimestampMs(session: any): number {
@@ -152,12 +142,12 @@ export function runReport(args: any = {}): any {
         description: agent.description,
         stage: stageOf(agent.agentType),
         resultTexts: resultTextsOf(agent.records),
-        finalAssistantText: finalAssistantTextOf(agent.records),
+        handbackText: finalHandbackText(agent.records),
       });
       if (denial) {
         findings.push({
           kind: 'denial-blocked',
-          message: `agent-${denial.agentId} (${denial.stage ?? 'unknown stage'}, ${JSON.stringify(denial.description ?? '')}) hit ${denial.denialCount} denial(s) and its final turn does not open 'BLOCKED:' — last turn: ${JSON.stringify(denial.finalExcerpt)}`,
+          message: `agent-${denial.agentId} (${denial.stage ?? 'unknown stage'}, ${JSON.stringify(denial.description ?? '')}) hit ${denial.denialCount} denial(s) and its hand-back carries no 'BLOCKED:' line — hand-back ends: ${JSON.stringify(denial.finalExcerpt)}`,
         });
       }
     }
