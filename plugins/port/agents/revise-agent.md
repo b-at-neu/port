@@ -177,6 +177,19 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
 3. **Apply fixes** per the review's findings — **skip this step entirely in check-fix mode and in operator-request mode**, where step 1 already named the one thing to fix (a check, or the operator's own request). Fix **every finding flagged at this cycle's bar** — the review uses an escalating bar, so an early cycle includes Low and Nit; fix them rather than deferring. All should be issues **introduced in this pull request**. Skip a flagged item only if it is genuinely not an issue, and explain the skip. **Preexisting** findings of any severity: do not fix, but note them as suggested follow-up tickets. No scope creep beyond the review.
 
+   **Check-only re-run.** When the addressed review's line 3 is a ``Blocked only by checks:`` marker, handle each named check, never one the review did not name:
+
+   ```bash
+   gh pr checks <pr-number> --repo <repo> --json name,bucket,link
+   ```
+
+   - `pending` → already re-running; leave it.
+   - `pass` → nothing to do.
+   - `fail` → read the log with `gh run view <run-id> --repo <repo> --log-failed`, taking `<run-id>` from the link's `/actions/runs/<run-id>/`. If the log ties the failure to this diff, fix it like any other finding. Otherwise re-run that job once: `gh run rerun --job <job-id> --repo <repo>`, with `<job-id>` from the link's `/job/<job-id>`.
+   - A link with no `/job/` segment (a status context or external CI) cannot be re-run: leave it.
+
+   A re-run or left-alone check counts as skipped. Append `` · reran `<name>` `` (or `` · cannot re-run `<name>` ``) after the sha in step 7's note.
+
 4. **Run the checks.** Work through `commands.checks` **in order**, each as its own Bash call — never prefixed with `cd`, never concatenated, never with an extra command appended: no `2>&1`, no pipe into `tail`/`head`/`grep` (#205 — the reporter prints one `ok` line or one `FAIL` line per failure, so there is nothing to truncate), and no expansion to an absolute path (the harness preamble's "use absolute file paths" is wrong for a `commands.*` invocation specifically — the allowlist entry is the repo-relative string, run it exactly as configured). For each entry: run its `run` command; if it fails and the entry has a `fix`, run `fix` and re-run; if it still fails, fix the underlying code.
 
    **Never suppress a check to make it pass** — no inline disable comments, no widened ignore globs, no relaxed configuration. A check that cannot be satisfied honestly is a `BLOCKED:`.
@@ -214,7 +227,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
    Match threads to findings by the **finding ID** (`R<c>-<id>`) the review agent put in each inline comment. **Resolve only what you actually fixed** — a genuinely-skipped thread gets a one-line reason and stays open.
 
-7. **Post one short revision note**, or none. The resolved threads are the log, so do not re-summarize findings. Write `.temp/revision-<pr>.md` — the validator is authoritative on the exact shape (heading `## Revision — Cycle <n>` plus one `fixed … · skipped … · <sha>` line, `check <name> · <sha>` in check-fix mode, or `fixed changes requested · <sha>` in operator-request mode). Append `· rebase: <file> (<strategy>)` for each reapplied or newly auto-resolved conflict, and `· decisions: D1 B, D2 C` for any recorded rebase decisions step 1b applied. A hunk whose recorded decision no longer matched gets its own one-line note (`D1 dropped — hunk no longer present`). No Fixed, Skipped, or Preexisting sections — those live on the threads. A preexisting issue worth tracking gets a one-line `follow-up:` note here, or a new issue. `<n>` is the cycle of the review you addressed, or — in check-fix mode and in operator-request mode alike — the count of prior reviews, unchanged (no new review happened).
+7. **Post one short revision note**, or none. The resolved threads are the log, so do not re-summarize findings. Write `.temp/revision-<pr>.md` — the validator is authoritative on the exact shape (heading `## Revision — Cycle <n>` plus one `fixed … · skipped … · <sha>` line, `check <name> · <sha>` in check-fix mode, or `fixed changes requested · <sha>` in operator-request mode). Append `· rebase: <file> (<strategy>)` for each reapplied or newly auto-resolved conflict, and `· decisions: D1 B, D2 C` for any recorded rebase decisions step 1b applied. A hunk whose recorded decision no longer matched gets its own one-line note (`D1 dropped — hunk no longer present`). No Fixed, Skipped, or Preexisting sections — those live on the threads. Append `` · reran `<name>` `` or `` · cannot re-run `<name>` `` for each check step 3's check-only re-run handled. A preexisting issue worth tracking gets a one-line `follow-up:` note here, or a new issue. `<n>` is the cycle of the review you addressed, or — in check-fix mode and in operator-request mode alike — the count of prior reviews, unchanged (no new review happened).
 
    **When `commands.artifacts` is set**, before `gh pr comment` run:
 
@@ -239,7 +252,7 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.revising>" --add-la
 
 If `<labels.revising>` is no longer present, apply the label-cas contract's step 3 instead of issuing the edit.
 
-The label swap above is unchanged **regardless of whether this cycle produced a new commit** — enforcement of "did this actually move anything" stays in one place, the cockpit's own zero-diff review gate, not duplicated here. But when the cycle ended with no new commit — a findings cycle where every flagged item was skipped as not-an-issue and nothing was pushed — say so plainly in the final report (e.g. "no new commit — head remains `<sha>`"), since the cockpit's zero-diff gate will decline to open a new review cycle against this head rather than dispatching one.
+The label swap above is unchanged **regardless of whether this cycle produced a new commit** — enforcement of "did this actually move anything" stays in one place, the cockpit's own zero-diff review gate, not duplicated here. But when the cycle ended with no new commit — a findings cycle where every flagged item was skipped as not-an-issue and nothing was pushed — say so plainly in the final report (e.g. "no new commit — head remains `<sha>`"), since the cockpit's zero-diff gate will decline to open a new review cycle against this head rather than dispatching one. When the cycle re-ran a check instead, say so: "re-ran `<name>` — the zero-diff gate holds this at ready for review until it concludes, then re-reviews once."
 
 ## Refresh mode
 

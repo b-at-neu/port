@@ -91,6 +91,11 @@ export default async function ({ expect, fail, ok }: Reporter) {
     for (const rel of ['plugins/port/agents/review-agent.md', 'plugins/port/docs/FORMATS.md', 'plugins/port/docs/PIPELINE.md', 'plugins/port/bin/artifacts.mjs']) {
       expect(readFileSync(join(root, rel), 'utf8').includes(markerLine), 'zero-diff-review', `${rel} never names the check-only marker '${markerLine}'`);
     }
+    const basisLine = 'Blocked by code findings.';
+    for (const rel of ['plugins/port/agents/review-agent.md', 'plugins/port/docs/FORMATS.md', 'plugins/port/bin/artifacts.mjs']) {
+      expect(readFileSync(join(root, rel), 'utf8').includes(basisLine), 'zero-diff-review', `${rel} never names the basis line '${basisLine}'`);
+    }
+    expect(readFileSync(join(root, 'plugins/port/agents/revise-agent.md'), 'utf8').includes('gh run rerun --job'), 'zero-diff-review', `plugins/port/agents/revise-agent.md never names 'gh run rerun --job'`);
     for (const rel of [skillRel, 'plugins/port/docs/RECOVERY.md', 'plugins/port/skills/pipeline/TICK-PROSE.md']) {
       const text = readFileSync(join(root, rel), 'utf8');
       expect(text.includes('Override review') && !text.includes('Back to review'), 'zero-diff-review', `${rel} must name the one-more-review option 'Override review', never 'Back to review'`);
