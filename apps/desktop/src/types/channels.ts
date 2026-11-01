@@ -15,7 +15,7 @@ type FileListingDeps = {
 type FileListingResult = { readonly ok: true; readonly files: readonly string[]; readonly truncated: boolean } | { readonly ok: false; readonly message: string }
 import type { RegistryDeps } from '@/types/registry'
 import type { SessionIndex } from '@/types/session-index'
-import type { SessionScan } from '@/types/sessions'
+import type { ReadSessionStateParams, SessionScan, TranscriptTailStore } from '@/types/sessions'
 import type { RunSearchParams, SearchResult } from '@/types/search'
 import type { StageLauncherHandle, StageRegistry } from '@/types/stage'
 import type { Dispatcher, RepoDispatchStatus } from '@/types/dispatch'
@@ -51,6 +51,17 @@ export interface ItemDecisionDeps {
   readonly sessions: () => readonly HostedSessionSnapshot[]
   readonly snapshot: () => BoardSnapshot
   readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
+}
+
+export interface TranscriptTailDeps {
+  readonly openTail: TranscriptTailStore['openTail']
+  readonly pollTail: TranscriptTailStore['pollTail']
+  readonly closeTail: TranscriptTailStore['closeTail']
+}
+
+export interface SessionsScanDeps {
+  readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
+  readonly readSessionState: (params: ReadSessionStateParams) => Promise<SessionScan>
 }
 
 export interface SearchQueryDeps {
@@ -125,6 +136,7 @@ export const QUERY_CHANNELS = [
   'notify:prefs',
   'storage:report',
   'usage:summary',
+  'release:status',
 ] as const
 
 export type QueryChannel = (typeof QUERY_CHANNELS)[number]
@@ -172,6 +184,7 @@ export const MUTATION_CHANNELS = [
   'held:force-dispatch',
   'notify:needs-you',
   'notify:prefs:set',
+  'release:run',
 ] as const
 
 export type MutationChannel = (typeof MUTATION_CHANNELS)[number]

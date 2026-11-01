@@ -388,3 +388,7 @@ export interface RunStateStore {
 }
 
 export type SetRunStateResult = { readonly ok: true } | { readonly ok: false; readonly reason: 'unwritable' | 'unreadable'; readonly message: string }
+
+/** `'held:force-dispatch'`'s own result. `not-held` covers both "never held" and "held for a
+ *  reason other than `contended`" — the renderer never needs to tell the two apart. */
+export type HeldForceDispatchResult = { readonly kind: 'ok' } | { readonly kind: 'not-held' } | { readonly kind: 'not-owned' }

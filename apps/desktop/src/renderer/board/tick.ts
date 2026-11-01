@@ -57,6 +57,18 @@ export function heldDetailCopy(held: TickHeld, owner: DispatchOwner = 'none'): s
     }
     case 'zero-diff':
       return `#${n} ${byApp ? 'escalating' : 'would escalate'} to needs human — the latest review already covers the current head.`
+    case 'check-hold': {
+      const e = held.escalation
+      // Defensive: `planTick` never emits `reason: 'check-hold'` without a populated `escalation` of the same kind.
+      if (e === null || e.kind !== 'check-hold') return `#${n} held — waiting on a check.`
+      const names = e.checks.map((name) => `\`${name}\``).join(', ')
+      if (e.state === 'pending') return `#${n} held — waiting for ${names} to finish its re-run. It's re-reviewed once it passes.`
+      const at = e.escalateAt === null ? null : new Date(e.escalateAt)
+      const many = e.checks.length > 1
+      const rerun = `Re-run ${many ? 'them' : 'it'} on GitHub`
+      const escalation = at === null || Number.isNaN(at.getTime()) ? '' : `; it escalates to needs human at ${at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} if ${many ? 'they stay' : 'it stays'} red`
+      return `#${n} held — ${names} ${many ? 'are' : 'is'} still red on the reviewed head. ${rerun}${escalation}.`
+    }
     case 'refresh-wins':
       return `#${n} held — a branch refresh claims it (refresh branch).`
     case 'conflicting':

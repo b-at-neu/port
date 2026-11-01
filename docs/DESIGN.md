@@ -64,7 +64,7 @@ Where a status colour says what is happening, a phase colour says which pipeline
 | --- | --- | --- | --- | --- | --- |
 | Plan | `plan` | `ready`, `planChangesRequested`, `planning`, `planReview` | `#9333ea` / `#ffffff` | `#9333ea` / `#ffffff` | `#9333ea` / `#a855f7` |
 | Implement | `implement` | `planApproved`, `inProgress` | `#2563eb` / `#ffffff` | `#2563eb` / `#ffffff` | `#2563eb` / `#3b82f6` |
-| Review | `review` | `readyForReview`, `reviewing` | `#facc15` / `#422006` | `#facc15` / `#422006` | `#9c8a00` / `#facc15` |
+| Review | `review` | `readyForReview`, `reviewing` | `#facc15` / `#422006` | `#facc15` / `#422006` | `#a68500` / `#facc15` |
 | Revise | `revise` | `needsRevision`, `revising` | `#d61f8a` / `#ffffff` | `#d61f8a` / `#ffffff` | `#d61f8a` / `#ec4899` |
 | Refresh | `refresh` | `refreshBranch`, `refreshing` | `#f4f4f5` / `#3f3f46` | `#2b2f38` / `#d4d4d8` | `#71717a` / `#a1a1aa` |
 | Needs you | `needs-you` | `blocked`, `needsHuman` | `#dc2626` / `#ffffff` | `#dc2626` / `#ffffff` | `#dc2626` / `#ef4444` |
@@ -76,7 +76,7 @@ Where a status colour says what is happening, a phase colour says which pipeline
 - **`needs-you` overrides.** A gate label, a stalled or interrupted item, and a live stage session waiting on a permission prompt, a question or a `BLOCKED:` hand-back show the `needs-you` palette and pulse, whatever phase they are in. Once the operator answers, the dot goes back to its phase colour.
 - **Pills are solid.** A phase pill is a saturated fill with white or near-black text, the same in both themes; the dot inside it takes the text colour. Tinted pills are for status (`StatusPill`), not phases.
 - **Hues stay apart.** Plan purple, implement blue, review yellow, revise pink, needs-you red, done green: every phase sits ≥30° from every other, so nothing but `needs-you` reads as red and nothing but `done` as green.
-- **Review's light dot is a darker gold** (`#9c8a00`), because bright yellow can't reach 3:1 on white.
+- **Review's light dot is the pill's yellow, darkened** (`#a68500`). Bright yellow measures under 2:1 on white, and a yellow dark enough for 3:1 can only be a deep gold, so the light-theme dot is deliberately darker than its pill. It keeps the pill's hue exactly, so it reads as the same yellow in shadow rather than a different colour. The dark theme's dot is the pill's own `#facc15`.
 - **Aliases.** Only the *dots* of `implement`, `needs-you` and `done` reuse `working`, `danger` and `success`. Their pills are their own. `refresh` reuses `idle` except for its dot, because `faint` fails 3:1.
 
 **Diffs:** added lines `#f0fdf4` / `#166534` (dark `#06240f` / `#86efac`); removed lines `#fef2f2` / `#991b1b` (dark `#2a0b0b` / `#fca5a5`).
@@ -154,7 +154,7 @@ Dark surface lightness (CIE L*): sidebar 6.3 · background 10.7 · card 15.2 · 
 
 **Sidebar, top to bottom:**
 1. **Mark and wordmark.**
-2. **Screens:** Needs you (red count), Board, Backlog, Audit log.
+2. **Screens:** Needs you (red count), Board, Backlog, Releases, Audit log.
 3. **Pipelines:** one row per registered repo. Each row has:
    - a caret that collapses it, with the state remembered;
    - the repo name;
@@ -171,14 +171,15 @@ Dark surface lightness (CIE L*): sidebar 6.3 · background 10.7 · card 15.2 · 
 | Needs you | Everything waiting on the operator, newest first, each with its action inline: plan reviews, PRs ready to merge, questions from stage sessions, needs-human escalations, blocked items |
 | Board | Grouped list: **Waiting on you**, **In progress**, **Queued**. Toggle grouping by phase or by repo, plus a repo filter |
 | Backlog | Open tickets not yet in a pipeline, with **Work on**: interactive plan review or auto-plan |
+| Releases | Per repo, the upcoming release (what merged since the last tag, the recommended version) with the one action its phase allows (**Cut release**, **Open PR**, **Publish**), then every previous release, whose notes open in the detail pane |
 | Session | Conversation and composer. **Changes** opens the session's diff in the detail pane |
 | History | Past sessions and transcripts, with search |
 | Audit log | Every write port made to GitHub, newest first, filterable by repo and ticket |
 | Settings | Full width, with six tabs of cards in a responsive grid, chosen by `?section=`: General (theme, notifications, keyboard shortcuts), Repositories (the repository list, and one page per repo with tabs Overview, Worktrees, Denials), Connections (Claude Code, `gh`, the GitHub rate limit, each repository's last read), Pipeline (session limit, new-session defaults, a read-only view of each repository's config), Usage & storage (spend by repository and period, disk use), About (version, runtime versions, setup checklist, notices). The old `/repositories` and `/about` routes redirect here |
 
-Scoping epics, releases and analytics are out of scope for the first release.
+Scoping epics and analytics are out of scope for the first release.
 
-**Detail pane rule.** Selecting an item in a list (a ticket, worktree or denial) opens it in the right-hand pane instead of navigating away. Esc closes it. Full-page navigation is only for screens and sessions.
+**Detail pane rule.** Selecting an item in a list (a ticket, worktree, denial or release) opens it in the right-hand pane instead of navigating away. Esc closes it. Full-page navigation is only for screens and sessions.
 
 **Board row anatomy, left to right:**
 - ticket number (`muted-foreground`, tabular);

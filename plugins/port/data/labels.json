@@ -48,7 +48,7 @@
 
     { "key": "planning",             "name": "planning",               "module": "core", "color": "9333EA", "previousColors": ["D4A72C", "FFF8C5", "7C3AED"],"role": "in-flight", "palette": "plan",       "description": "In flight: a plan is being researched" },
     { "key": "inProgress",           "name": "in progress",            "module": "core", "color": "2563EB", "previousColors": ["D4A72C", "FAE17D"],   "role": "in-flight", "palette": "implement",  "description": "In flight: implementation underway" },
-    { "key": "reviewing",            "name": "reviewing",              "module": "core", "color": "9C8A00", "previousColors": ["D4A72C", "EAC54F", "0D9488"],"role": "in-flight", "palette": "review",     "description": "In flight: review underway" },
+    { "key": "reviewing",            "name": "reviewing",              "module": "core", "color": "A68500", "previousColors": ["D4A72C", "EAC54F", "0D9488", "9C8A00"],"role": "in-flight", "palette": "review",     "description": "In flight: review underway" },
     { "key": "revising",             "name": "revising",               "module": "core", "color": "D61F8A", "previousColors": ["D4A72C", "EA580C"],"role": "in-flight", "palette": "revise",     "description": "In flight: fixes underway" },
     { "key": "refreshing",           "name": "refreshing",             "module": "core", "color": "71717A", "previousColors": ["D4A72C", "BF8700"],   "role": "in-flight", "palette": "refresh",    "description": "In flight: branch refresh underway" },
 

@@ -33,6 +33,7 @@ export const LABELS = {
 export const BODY_HEADINGS = ['## Summary', '## Changes', '## Testing plan', '## Automated checks'];
 export const REVIEW_PREFIX = '## Code Review';
 const CHECK_ONLY_PREFIX = 'Blocked only by checks:';
+const CODE_FINDINGS_LINE = 'Blocked by code findings.';
 const CHECK_ONLY_LINE = /^Blocked only by checks: `[^`]+`(, `[^`]+`)*$/;
 // Third verdict: posted when the head commit's checks never concluded within the bounded wait.
 export const REVIEW_HEADING = /^## Code Review — Cycle (\d+) · (approved|needs revision|blocked — checks pending)$/;
@@ -174,7 +175,7 @@ function checkScreenshotsSection(body) {
   return ok();
 }
 
-function checkReview(text, { cycle } = {}) {
+function checkReview(text, { cycle, strict } = {}) {
   let payload;
   try {
     payload = JSON.parse(text);
@@ -200,13 +201,26 @@ function checkReview(text, { cycle } = {}) {
     return fail('body line 2 must be a non-empty counts line', 'a non-empty counts line directly under the heading');
   }
   const marker = (bodyLines[2] ?? '').trim();
+  const needsRevision = m[2] === 'needs revision';
   if (marker.startsWith(CHECK_ONLY_PREFIX)) {
     if (!CHECK_ONLY_LINE.test(marker)) {
       return fail(`body line 3 is a malformed check-only marker, got ${JSON.stringify(marker)}`, "'Blocked only by checks: `<name>`[, `<name>`…]'");
     }
-    if (m[2] !== 'needs revision') {
+    if (!needsRevision) {
       return fail(`the check-only marker is only valid under 'needs revision', got '${m[2]}'`, "no 'Blocked only by checks:' line under any other verdict");
     }
+    if (strict && !/Critical/.test(bodyLines[1])) {
+      return fail('the check-only marker needs a Critical in the counts line, since a red blocking check is always Critical', 'a counts line naming at least one Critical');
+    }
+  } else if (marker === CODE_FINDINGS_LINE) {
+    if (!needsRevision) {
+      return fail(`'${CODE_FINDINGS_LINE}' is only valid under 'needs revision', got '${m[2]}'`, `no '${CODE_FINDINGS_LINE}' line under any other verdict`);
+    }
+  } else if (strict && needsRevision) {
+    return fail(
+      `body line 3 must state the basis of 'needs revision', got ${JSON.stringify(marker)}`,
+      `line 3 directly under the counts line: 'Blocked only by checks: \`<name>\`[, \`<name>\`…]' or '${CODE_FINDINGS_LINE}'`,
+    );
   }
   for (const c of payload.comments ?? []) {
     if (typeof c.path !== 'string' || c.path === '') {
@@ -306,7 +320,7 @@ function runCheck(argv) {
   if (!kind || !CHECKS[kind]) die(`check does not recognize kind '${kind}'. ${usage}`);
   if (!file) die(`check needs a file. ${usage}`);
 
-  const opts = {};
+  const opts = { strict: true };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--issue') opts.issue = argv[++i];

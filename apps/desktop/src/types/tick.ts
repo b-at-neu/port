@@ -17,7 +17,7 @@ export interface EndedStage {
   readonly at: string
 }
 
-/** Why a trigger-stage item is held rather than actionable — first hit wins: `unowned` before `other-operator` before `session-required` before `contended`. `cycle-cap`/`zero-diff` are checked per-item after that ladder; this app computes the decision and the report, never the write. */
+/** Why a trigger-stage item is held rather than actionable — first hit wins: `unowned` before `other-operator` before `session-required` before `contended`. `cycle-cap`/`zero-diff`/`check-hold` are checked per-item after that ladder; this app computes the decision and the report, never the write. */
 export type TickHeldReason =
   | 'unowned'
   | 'other-operator'
@@ -25,12 +25,16 @@ export type TickHeldReason =
   | 'contended'
   | 'cycle-cap'
   | 'zero-diff'
+  | 'check-hold'
   | 'refresh-wins'
   | 'conflicting'
   | 'mergeability-unknown'
 
-/** `TickHeld.escalation`'s own shape — `null` for every reason except `cycle-cap`/`zero-diff`, which carry the count and cap without re-deriving either from raw review data. */
-export type TickEscalation = { readonly kind: 'cycle-cap'; readonly count: number; readonly cap: number } | { readonly kind: 'zero-diff' }
+/** `TickHeld.escalation`'s own shape — `null` for every reason except `cycle-cap`/`zero-diff`/`check-hold`, which carry the count and cap, or the held checks and their deadline, without re-deriving either from raw review data. */
+export type TickEscalation =
+  | { readonly kind: 'cycle-cap'; readonly count: number; readonly cap: number }
+  | { readonly kind: 'zero-diff' }
+  | { readonly kind: 'check-hold'; readonly checks: readonly string[]; readonly state: 'pending' | 'red'; readonly escalateAt: string | null }
 
 /** The file-contention gate's own held detail — populated only for `reason: 'contended'`, `null` for the other reasons. */
 export interface TickContention {
@@ -57,7 +61,7 @@ export interface TickHeld {
   readonly trigger: LabelKey
   readonly reason: TickHeldReason
   readonly contention: TickContention | null
-  /** Populated only for `reason: 'cycle-cap'` / `'zero-diff'`, `null` for every other reason. */
+  /** Populated only for `reason: 'cycle-cap'` / `'zero-diff'` / `'check-hold'`, `null` for every other reason. */
   readonly escalation: TickEscalation | null
 }
 

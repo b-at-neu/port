@@ -187,7 +187,7 @@ interface DetailsResult {
 /** Any detail alias that errors or comes back null fails the whole read: a missing review list would
  *  read as zero cycles, and a revise dispatch could go past the cap. */
 async function readDetails(runner: GhRunner, repo: GitHubRepoRef, items: readonly PipelineItem[], rateLimit: RateLimitInfo): Promise<DetailsResult | Failure> {
-  const refs = items.map((item) => ({ kind: item.kind, number: item.number, rollup: item.kind === 'pull-request' && item.matchedKeys.includes('approved') }))
+  const refs = items.map((item) => ({ kind: item.kind, number: item.number, rollup: item.kind === 'pull-request' && (item.matchedKeys.includes('approved') || item.matchedKeys.includes('readyForReview')) }))
   const details: ItemDetail[] = []
   let total = rateLimit
 

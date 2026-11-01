@@ -61,6 +61,7 @@ describe('CONFIG_DEFAULTS', () => {
       commands: { worktrees: null, budget: null },
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
       sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
+      release: { versionSource: 'tags', versionFiles: [], versionCommand: null, postPublishHook: null },
     })
   })
 })

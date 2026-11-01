@@ -1,5 +1,6 @@
 import type { DispatchLedger, UnknownStreaks, RefreshMemo, ForceDispatch } from '@/types/tick'
-import type { SourceCache, RefreshOutcome } from '@/types/state'
+import type { PipelineState, RefreshOutcome } from '@/types/state'
+import type { StateEngine } from '@/types/offload'
 
 // The only clock in main — one timer, rescheduled to the earliest `nextDueAt`. `schedule.ts` decides *when*; this file is the only place under `src/main/` allowed to name `setTimeout`.
 import type { GhRunner } from '@/types/platform'
@@ -18,9 +19,9 @@ import type { EndedStage } from '@/types/tick'
 import { buildDesktopTickEvent, recordTick as defaultRecordTick } from '@/main/trajectory/log'
 import type { DesktopTickEvent } from '@/types/trajectory'
 import type { RecordTickDeps } from '@/types/trajectory'
-import { isReady, projectFromCache } from '@/main/state/read'
+import { isReady } from '@/main/state/read'
 import { afterFailure, afterSuccess, budgetedIntervalMs, deferredUntil, dueSources, nextDueAt } from '@/main/state/schedule'
-import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/state/sources'
+import { createInProcessEngine } from '@/main/offload/engine'
 
 import type { PipelineWatcher, RefreshRequest, TimerFactory, TimerHandle } from '@/types/state'
 
@@ -38,6 +39,8 @@ interface CreatePipelineWatcherParams {
   readonly onSnapshot: (snapshot: BoardSnapshot) => void
   /** Fired after `buildSnapshot()` on the timer path and in `refresh()` — never in `republish()`, so a dispatch pass never re-triggers itself off its own state change. */
   readonly onTick?: (snapshot: BoardSnapshot) => void
+  /** Owns the source cache and every CPU-bound read. Defaults to an in-process engine built from `gh`/`git`/`sessionReader`/`claudeHome`, which the worker-backed one replaces in production. */
+  readonly engine?: StateEngine
   readonly gh?: GhRunner
   readonly git?: GitRunner
   readonly sessionReader?: Parameters<typeof readSessionState>[0]['reader']
@@ -83,7 +86,9 @@ function isForced(request: RefreshRequest | undefined, kind: SourceKind, repoId?
 export function createPipelineWatcher(params: CreatePipelineWatcherParams): PipelineWatcher {
   const now = params.now ?? (() => new Date())
   const setTimer = params.setTimer ?? defaultSetTimer
-  const cache: SourceCache = createSourceCache()
+  const engine = params.engine ?? createInProcessEngine({ gh: params.gh, git: params.git, sessionReader: params.sessionReader, claudeHome: params.claudeHome, now })
+  const githubCost = new Map<RepoId, number>()
+  let projections: Promise<unknown> = Promise.resolve()
   const health = new Map<RepoId, RepositoryHealth>()
   let sessionsHealth: SourceHealth = initialHealth('sessions')
   const inFlight = new Set<string>()
@@ -143,9 +148,27 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     return new Date(Math.min(...candidates))
   }
 
-  function buildSnapshot(): BoardSnapshot {
+  /** Serialized, so two overlapping refreshes never apply `planTick`'s ledger writes out of order. A failed projection keeps the last good board and resolves `null`, so the next tick is still scheduled. */
+  function buildSnapshot(): Promise<BoardSnapshot | null> {
+    const built = projections.then(composeSnapshot)
+    projections = built.catch(() => undefined)
+    return built
+  }
+
+  async function composeSnapshot(): Promise<BoardSnapshot | null> {
+    const entries = repositories
+    let state: PipelineState
+    try {
+      state = await engine.project({ repositories: entries })
+    } catch (error) {
+      console.error('[watcher] projection failed', error)
+      return null
+    }
+    return assembleSnapshot(state)
+  }
+
+  function assembleSnapshot(state: PipelineState): BoardSnapshot {
     const readyEntries = repositories.filter(isReady)
-    const state = projectFromCache(cache, repositories, now)
     const healthList = readyEntries.map((entry) => {
       const h = ensureHealth(entry.id)
       return { ...h, sessions: sessionsHealth }
@@ -207,8 +230,8 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
   /** The latest successful poll cost of every ready repository — the entry just written included. */
   function githubCosts(): readonly number[] {
     return repositories.filter(isReady).flatMap((entry) => {
-      const read = cache.github.get(entry.id)
-      return read?.ok ? [read.rateLimit.cost] : []
+      const cost = githubCost.get(entry.id)
+      return cost === undefined ? [] : [cost]
     })
   }
 
@@ -241,15 +264,11 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
   async function readRepoSource(entry: Extract<RepositoryEntry, { status: 'ready' }>, kind: 'github' | 'worktrees' | 'denials'): Promise<void> {
     let outcome: RefreshOutcome
     if (kind === 'worktrees') {
-      outcome = await refreshWorktrees(cache, { repoId: entry.id, repoRoot: entry.path, git: params.git, now })
+      outcome = await engine.refreshWorktrees({ repoId: entry.id, repoRoot: entry.path })
     } else if (kind === 'denials') {
-      outcome = await refreshDenials(cache, { repoId: entry.id, repoRoot: entry.path, git: params.git, now })
+      outcome = await engine.refreshDenials({ repoId: entry.id, repoRoot: entry.path })
     } else {
-      const worktrees = cache.worktrees.get(entry.id)
-      const worktreeEntries = worktrees?.ok ? worktrees.entries : []
-      const sessions = cache.sessions
-      const agents = sessions?.ok ? sessions.agents.filter((a) => a.repoId === entry.id) : []
-      outcome = await refreshGithub(cache, { repoId: entry.id, repo: repoRefOf(entry), vocabulary: entry.config.vocabulary, worktreeEntries, agents, gh: params.gh, now })
+      outcome = await engine.refreshGithub({ repoId: entry.id, repo: repoRefOf(entry), vocabulary: entry.config.vocabulary })
     }
     const current = ensureHealth(entry.id)
     const previous = current[kind]
@@ -257,6 +276,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     if (outcome.ok) {
       updated = afterSuccess(previous, kind, now())
       if (kind === 'github') {
+        if (outcome.rateLimit) githubCost.set(entry.id, outcome.rateLimit.cost)
         if (outcome.rateLimit) updated = { ...updated, intervalMs: budgetedIntervalMs({ costs: githubCosts(), rateLimit: outcome.rateLimit, now: now() }) }
         // A known reset instant always beats a doubled guess, even on a success whose own window reports low headroom.
         const defer = deferredUntil(outcome.rateLimit ?? null, null)
@@ -273,12 +293,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     if (inFlight.has(key)) return
     inFlight.add(key)
     try {
-      const outcome = await refreshSessions(cache, {
-        repos: readyEntries.map((entry) => ({ id: entry.id, root: entry.path })),
-        reader: params.sessionReader,
-        claudeHome: params.claudeHome,
-        now,
-      })
+      const outcome = await engine.refreshSessions({ repos: readyEntries.map((entry) => ({ id: entry.id, root: entry.path })) })
       sessionsHealth = outcome.ok ? afterSuccess(sessionsHealth, 'sessions', now()) : afterFailure(sessionsHealth, 'sessions', now(), outcome.error ?? 'unknown error')
     } finally {
       inFlight.delete(key)
@@ -327,12 +342,15 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     if (timer !== null) timer.clear()
     const delay = Math.max(0, earliestDueAt().getTime() - now().getTime())
     timer = setTimer(() => {
-      void tick().then(() => {
-        const snap = buildSnapshot()
-        params.onSnapshot(snap)
-        params.onTick?.(snap)
-        scheduleNext()
-      })
+      void tick()
+        .then(buildSnapshot)
+        .then((snap) => {
+          if (snap !== null) {
+            params.onSnapshot(snap)
+            params.onTick?.(snap)
+          }
+          scheduleNext()
+        })
     }, delay)
   }
 
@@ -342,11 +360,13 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     async refresh(request?: RefreshRequest): Promise<BoardSnapshot> {
       if (stopped) return latest
       await tick(request)
-      const snap = buildSnapshot()
-      params.onSnapshot(snap)
-      params.onTick?.(snap)
+      const snap = await buildSnapshot()
+      if (snap !== null) {
+        params.onSnapshot(snap)
+        params.onTick?.(snap)
+      }
       scheduleNext()
-      return snap
+      return snap ?? latest
     },
     snapshot(): BoardSnapshot {
       return latest

@@ -10,7 +10,8 @@ import type { ClaimApplyResponse, ClaimPreflightResponse, PlanGateChoice } from 
 import type { GateAnswerResponse, GateDecision, GatePreflightResponse } from '@/types/gate'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { ItemActionResult, ItemDecisionResult, OperatorAction, OperatorDecision, RebasePick, UnblockRoute } from '@/types/actions'
-import type { DispatchControlResult } from '@/types/dispatch'
+import type { DispatchControlResult, HeldForceDispatchResult } from '@/types/dispatch'
+import type { ReleaseRunRequest, ReleaseRunResult, ReleaseStatusResponse } from '@/types/release'
 import type { RuntimePreflight, RuntimeProbe } from '@/types/runtime'
 import type { GhStatus } from '@/types/gh'
 import type { NotificationPrefs, StorageReport, UsageSummary } from '@/types/settings'
@@ -386,11 +387,10 @@ export interface IpcMap {
     request: void
     response: UsageSummary
   }
+  /** The Releases screen's own read and its one write — main re-derives the phase from GitHub before every step. */
+  'release:status': { request: { repoId: RepoId }; response: ReleaseStatusResponse }
+  'release:run': { request: ReleaseRunRequest; response: ReleaseRunResult }
 }
-
-/** `'held:force-dispatch'`'s own result. `not-held` covers both "never held" and "held for a
- *  reason other than `contended`" — the renderer never needs to tell the two apart. */
-export type HeldForceDispatchResult = { readonly kind: 'ok' } | { readonly kind: 'not-held' } | { readonly kind: 'not-owned' }
 
 export const IPC_CHANNELS = [
   'app:info',
@@ -458,6 +458,8 @@ export const IPC_CHANNELS = [
   'notify:prefs:set',
   'storage:report',
   'usage:summary',
+  'release:status',
+  'release:run',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]

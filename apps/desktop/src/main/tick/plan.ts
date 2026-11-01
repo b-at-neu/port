@@ -11,6 +11,7 @@ import type { EndedStage, TickActionable, TickBlind, TickClaim, TickHeld, TickHe
 import type { ClaimedItem, OccupiedEntry } from '../../../../../scripts/port-tick/contention'
 import { gateCandidates } from '../../../../../scripts/port-tick/contention'
 import type { Disposition } from '../../../../../scripts/port-tick/checks'
+import { zeroDiffChecksOf } from '../../../../../scripts/port-tick/checks'
 import { cycleCapExceeded, cycleGrantCount, mergeabilityRoute, refreshWins, zeroDiffGate } from '../../../../../scripts/port-tick/gates'
 
 import { RETRY_TRIGGER } from '../../../../../scripts/port-tick/liveness'
@@ -66,7 +67,7 @@ function heldReasonOf(
   unowned: ReadonlySet<number>,
   others: ReadonlySet<number>,
   holdSessionRequired: boolean,
-): Exclude<TickHeld['reason'], 'contended' | 'cycle-cap' | 'zero-diff'> | null {
+): Exclude<TickHeld['reason'], 'contended' | 'cycle-cap' | 'zero-diff' | 'check-hold'> | null {
   if (unowned.has(item.number)) return 'unowned'
   if (others.has(item.number)) return 'other-operator'
   if (holdSessionRequired && item.sessionRequired) return 'session-required'
@@ -128,6 +129,8 @@ function actionableAndHeld(
   unknownStreaks: UnknownStreaks,
   holdSessionRequired: boolean,
   forceDispatch: ForceDispatch | undefined,
+  checkDispositions: Readonly<Record<string, Disposition>>,
+  now: Date,
 ): { readonly actionable: readonly TickActionable[]; readonly held: readonly TickHeld[] } {
   const held: TickHeld[] = []
   const refreshBranchNumbers = numbersCarrying(items, 'refreshBranch')
@@ -204,12 +207,19 @@ function actionableAndHeld(
       continue
     }
     // The zero-diff gate: the one-time re-review permission is inherent in the label state itself.
-    if (
-      agent === 'review' &&
-      zeroDiffGate({ reviews: item.reviews ?? undefined, comments: item.comments ?? undefined, headRefOid: item.headRefOid ?? '' }).action === 'escalate'
-    ) {
-      held.push({ number: item.number, kind: item.kind, trigger, reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } })
-      continue
+    if (agent === 'review') {
+      // A null rollup was never selected, so the gate gets no check input and escalates.
+      const checks = item.checkRollup === null ? undefined : zeroDiffChecksOf(item.checkRollup, checkDispositions, now.toISOString())
+      const gate = zeroDiffGate({ reviews: item.reviews ?? undefined, comments: item.comments ?? undefined, headRefOid: item.headRefOid ?? '', checks })
+      if (gate.action === 'escalate') {
+        held.push({ number: item.number, kind: item.kind, trigger, reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } })
+        continue
+      }
+      if (gate.action === 'hold-checks' && gate.facts !== undefined) {
+        const escalation = { kind: 'check-hold', checks: gate.facts.checks, state: gate.facts.state, escalateAt: gate.facts.escalateAt ?? null } as const
+        held.push({ number: item.number, kind: item.kind, trigger, reason: 'check-hold', contention: null, escalation })
+        continue
+      }
     }
 
     const cycle = cycleOf(item, agent === 'revise' ? reviewCycleCap + cycleGrantCount(item.comments ?? undefined) : reviewCycleCap)
@@ -336,7 +346,7 @@ export function planTick(params: PlanTickParams): TickReport {
     }
   }
 
-  const { actionable, held } = actionableAndHeld(repository.items, repository.viewer, repository.concurrency, reviewCycleCap, repository.repoId, unknownStreaks, holdSessionRequired, params.forceDispatch)
+  const { actionable, held } = actionableAndHeld(repository.items, repository.viewer, repository.concurrency, reviewCycleCap, repository.repoId, unknownStreaks, holdSessionRequired, params.forceDispatch, checkDispositions, now())
   const claims = claimsOf(repository.items, repository.repoId, ledger, startedTasks, readAt, holdSessionRequired, stageLiveness)
 
   const liveNumbers = new Set(startedTasks.map((description) => Number(description.split('#')[1])).filter((n) => !Number.isNaN(n)))

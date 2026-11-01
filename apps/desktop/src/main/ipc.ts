@@ -10,7 +10,7 @@ import { createSessionWorktree, removeSessionWorktreeAt } from '@/main/workspace
 import { releaseStageBranch } from '@/main/workspace/stage-worktree'
 import { createDefaultStageLauncher } from '@/main/stage/default'
 import type { StageLauncherHandle, StageRegistry } from '@/types/stage'
-import { defaultForkListSessions } from '@/main/hosting/fork'
+import { createOffload } from '@/main/offload/deps'
 import { statPath } from '@/main/platform/files'
 import type { HostedStore, SessionKey } from '@/types/hosting'
 import { applyItemAction } from '@/main/actions/apply'
@@ -19,6 +19,7 @@ import { gateAnswer, gatePreflight } from '@/main/actions/gate'
 import { resolveClaimApply, resolveClaimPreflight } from '@/main/channels/claim'
 import { resolveAuditList } from '@/main/channels/audit'
 import { resolveBacklogList } from '@/main/channels/backlog'
+import { resolveReleaseRun, resolveReleaseStatus } from '@/main/channels/release'
 import { resolveWorktreesPurge, resolveWorktreesReclaim, resolveWorktreesReport } from '@/main/channels/worktrees'
 import { resolveGhStatus } from '@/main/channels/gh'
 import { createDispatchRuntime } from '@/main/dispatch/runtime'
@@ -213,20 +214,20 @@ export function registerIpc(): RegisteredIpc {
 
   handle('worktrees:purge', (_event, request) => resolveWorktreesPurge(registryDeps, request, app.getPath('userData')))
 
+  const { engine, close: closeOffload, ...offload } = createOffload({ onRespawn: () => void watcher.refresh() })
+
   handle('sessions:scan', (_event, request) => {
-    if (request !== undefined) {
-      throw new Error("'sessions:scan' takes no payload")
-    }
-    return resolveSessionsScan(registryDeps)
+    if (request !== undefined) throw new Error("'sessions:scan' takes no payload")
+    return resolveSessionsScan(registryDeps, offload.sessionsScan)
   })
 
-  handle('transcript:tail:open', (_event, request) => resolveTranscriptTailOpen(request))
+  handle('transcript:tail:open', (_event, request) => resolveTranscriptTailOpen(request, offload.tail))
 
-  handle('transcript:tail:poll', (_event, request) => resolveTranscriptTailPoll(request))
+  handle('transcript:tail:poll', (_event, request) => resolveTranscriptTailPoll(request, offload.tail))
 
-  handle('transcript:tail:close', (_event, request) => resolveTranscriptTailClose(request))
+  handle('transcript:tail:close', (_event, request) => resolveTranscriptTailClose(request, offload.tail))
 
-  handle('search:query', (_event, request) => resolveSearchQuery(registryDeps, request, app.getPath('userData')))
+  handle('search:query', (_event, request) => resolveSearchQuery(registryDeps, request, app.getPath('userData'), offload.search))
 
   // Shared by the workspace and hosting channels — `folders.json`'s one writer either way.
   const recents = createRecentsStore({ dir: app.getPath('userData') })
@@ -252,6 +253,7 @@ export function registerIpc(): RegisteredIpc {
 
   const hostedStore = createHostedStore({
     ...defaultHostedStoreDeps,
+    listSessionsForFork: () => engine.listSessions(),
     onStatus: (snapshot) => {
       broadcast('session:status', snapshot)
       sessionIndex.observe(snapshot)
@@ -275,7 +277,7 @@ export function registerIpc(): RegisteredIpc {
     git: (args, cwd) => git(args, { cwd }),
     recents,
     exists: async (path) => (await statPath(path)).ok,
-    readSessions: defaultForkListSessions,
+    readSessions: () => engine.listSessions(),
     createWorktree: createSessionWorktree,
   })
 
@@ -297,6 +299,7 @@ export function registerIpc(): RegisteredIpc {
   // One watcher for the process lifetime. `onTick` fires only on a fresh poll, never awaited —
   // a pass must never block the broadcast the renderer is waiting on.
   const watcher = createPipelineWatcher({
+    engine,
     repositories: async () => {
       const list = await listRepositories(registryDeps)
       return list.ok ? list.repositories : []
@@ -329,6 +332,10 @@ export function registerIpc(): RegisteredIpc {
   handle('claim:apply', (_event, request) => resolveClaimApply(registryDeps, request, app.getPath('userData')))
 
   handle('backlog:list', (_event, request) => resolveBacklogList(registryDeps, request))
+
+  handle('release:status', (_event, request) => resolveReleaseStatus(registryDeps, request))
+
+  handle('release:run', (_event, request) => resolveReleaseRun(registryDeps, request, app.getPath('userData'), app.getPath('temp')))
 
   handle('audit:list', (_event, request) => resolveAuditList(registryDeps, request, app.getPath('userData')))
 
@@ -488,5 +495,5 @@ export function registerIpc(): RegisteredIpc {
     }
   }
 
-  return { watcher, hostedStore, dispatcher, shutdownDispatch: shutdown, stageRegistry }
+  return { watcher, hostedStore, dispatcher, shutdownDispatch: () => { shutdown(); void closeOffload() }, stageRegistry }
 }

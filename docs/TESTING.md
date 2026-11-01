@@ -108,7 +108,7 @@ node scripts/port-forensics.ts report --json
 | Every dispatched agent (`toolUseResult.status === 'async_launched'`) produced a `task_status` attachment | **Not computable**, never a fabricated failure count, when the session carries zero `task_status` records — an era that predates the attachment type |
 | No in-flight-labelled item lacks a correlated agent showing a terminal turn | Reports only — the engine has no write path at all |
 | No `gh`/`git` call inside a `for`/`while`/`until` loop, and no Bash call hit the tool timeout | Complements the `PreToolUse` guard hook: the hook prevents, this detects what the hook missed |
-| Every stage agent that hit a guard-hook denial (a tool-result opening `port: `) opens its **final** assistant turn with the literal `BLOCKED:` | Checked at the start of the turn, never as a substring — the literal string appears thousands of times in prompts and prose and would pass vacuously otherwise |
+| Every stage agent that hit a guard-hook denial (a tool-result opening `port: `) hands back a final message that the app's own hand-back rule classifies as blocked — a line opening `BLOCKED:` outside a fence | Matched at a line start, outside fences, in the handed-back text only (never thinking, never earlier turns) — the literal string appears thousands of times in prompts and prose and would pass vacuously as a substring; the rule is pinned to `utils/stage/handback-text.ts` |
 | Quota exhaustion is grouped by `resetsAt`, not reported as N independent crashes | — |
 
 **Exit codes**: `0` clean · `1` at least one finding, or a malformed `--session`/`--since` · `2` the session tree could not be read at all — never `0` findings, which an operator reads as clean.
