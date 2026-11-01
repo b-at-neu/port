@@ -1,8 +1,7 @@
-import { FIXTURE_SCENARIOS } from '@/types/fixtures'
+import { FIXTURE_ENV, FIXTURE_SCENARIOS } from '@/types/fixtures'
 import type { FixtureScenario } from '@/types/fixtures'
 
 // Pure, so `mode.test.ts` covers every branch with no Electron and no filesystem — `process.env`, `isPackaged`, and `isAbsolute` are injected, not imported.
-export const FIXTURE_ENV = { flag: 'PORT_FIXTURES', userData: 'PORT_FIXTURES_USER_DATA', scenario: 'PORT_FIXTURES_SCENARIO' } as const
 
 type FixtureModeResult =
   | { readonly kind: 'off' }

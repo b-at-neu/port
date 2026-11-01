@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url'
 // with no browser-download install step at all.
 import { _electron } from 'playwright-core'
 import type { ElectronApplication, Page } from 'playwright-core'
-import { FIXTURE_ENV } from '../../src/main/fixtures/mode'
+import { FIXTURE_ENV } from '../../src/types/fixtures'
 import type { FixtureScenario } from '../../src/types/fixtures'
 import { packagedExecutable, SMOKE_DIST_DIR } from '../smoke/binary.mjs'
 // `.mjs`, matching this `.mts` file's own emitted-ESM specifier rules — a

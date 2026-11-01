@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { FIXTURE_ENV, fixtureMode } from '@/main/fixtures/mode'
+import { fixtureMode } from '@/main/fixtures/mode'
+import { FIXTURE_ENV } from '@/types/fixtures'
 
 const isAbsolutePosix = (path: string): boolean => path.startsWith('/')
 
