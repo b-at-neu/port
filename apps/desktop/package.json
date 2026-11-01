@@ -1,6 +1,6 @@
 {
   "name": "@port/desktop",
-  "version": "1.1.1-dev",
+  "version": "1.2.0",
   "private": true,
   "description": "Desktop cockpit for the port pipeline. Runs your own installed Claude Code under your own account.",
   "main": "out/main/index.js",
