@@ -5,6 +5,7 @@ import type { ReclaimerFailureKind } from '@/types/reclaimer'
 import type { PillStatus } from '@/types/components'
 import type { GhRunner, GitRunner, PathOps } from '@/types/platform'
 import type { FetchItemsByNumberParams, ItemsByNumberFetch } from '@/types/github'
+import type { ReleaseAuditEntry } from '@/types/release'
 
 export type AssigneeExpectation = { readonly kind: 'any' } | { readonly kind: 'unassigned' } | { readonly kind: 'exactly'; readonly logins: readonly string[] }
 
@@ -140,15 +141,21 @@ export interface PurgeAuditEntry {
   readonly failure: ReclaimerFailureKind | null
 }
 
-export type AuditEntry = LabelAuditEntry | ReclaimAuditEntry | PurgeAuditEntry
+export type AuditEntry = LabelAuditEntry | ReclaimAuditEntry | PurgeAuditEntry | ReleaseAuditEntry
 
-// The two worktree actions are the only `action` values `LabelAuditEntry` never takes.
+const RELEASE_ACTIONS: readonly string[] = ['release-bump', 'release-pr', 'release-publish', 'release-hook']
+
+// The worktree and release actions are the only `action` values `LabelAuditEntry` never takes.
 export function isLabelAuditEntry(entry: AuditEntry): entry is LabelAuditEntry {
-  return entry.action !== 'worktree-reclaim' && entry.action !== 'worktree-purge'
+  return entry.action !== 'worktree-reclaim' && entry.action !== 'worktree-purge' && !RELEASE_ACTIONS.includes(entry.action)
 }
 
 export function isPurgeAuditEntry(entry: AuditEntry): entry is PurgeAuditEntry {
   return entry.action === 'worktree-purge'
+}
+
+export function isReleaseAuditEntry(entry: AuditEntry): entry is ReleaseAuditEntry {
+  return RELEASE_ACTIONS.includes(entry.action)
 }
 
 /** The most entries one `audit:list` read returns, newest kept. */

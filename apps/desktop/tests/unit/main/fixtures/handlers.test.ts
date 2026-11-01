@@ -40,6 +40,8 @@ const SAMPLE_REQUESTS: Partial<Record<IpcChannel, unknown>> = {
   'session:restore': { restoreId: 'r1' },
   'session:restore:discard': { restoreId: null },
   'backlog:list': { repoId: 'fixture-acme-widgets' },
+  'release:status': { repoId: 'fixture-acme-widgets' },
+  'release:run': { repoId: 'fixture-acme-widgets', step: 'open', version: '0.3.0' },
   'audit:list': { repoId: 'fixture-acme-widgets', number: 38 },
   'session:changes': { sessionKey: STREAMING_KEY },
   'session:pin:set': { sessionId: 'fixture-claude-1', pinned: true },
@@ -274,5 +276,16 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     const result = handlers['session:changes']({ sessionKey: 'hosted-999' as typeof STREAMING_KEY })
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.kind).toBe('unknown-session')
+  })
+
+  it('reports release:status with an upcoming release and three published ones for acme/widgets only in the populated scenario', () => {
+    const result = handlers['release:status']({ repoId: WIDGETS })
+    if (!result.ok) throw new Error('fixture release:status unexpectedly failed')
+    expect(result.status.releases).toHaveLength(scenario === 'populated' ? 3 : 0)
+    expect(result.status.phase.kind).toBe(scenario === 'populated' ? 'idle' : 'nothing-to-release')
+  })
+
+  it('refuses release:run as unsupported, never a side effect', () => {
+    expect(handlers['release:run']({ repoId: WIDGETS, step: 'open', version: '0.3.0' })).toMatchObject({ kind: 'refused', reason: 'unsupported' })
   })
 })

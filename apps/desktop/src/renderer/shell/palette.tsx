@@ -45,6 +45,7 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem onSelect={() => go(ROUTE_IDS.board)}>Board</CommandItem>
           <CommandItem onSelect={() => go(ROUTE_IDS.backlog)}>Backlog</CommandItem>
+          <CommandItem onSelect={() => go(ROUTE_IDS.releases)}>Releases</CommandItem>
           <CommandItem
             onSelect={() => {
               void navigate({ to: ROUTE_IDS.settings, search: { section: 'repositories' } })

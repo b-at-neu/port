@@ -1,7 +1,7 @@
 // `held:force-dispatch` — the Needs-you "Dispatch anyway" write. Re-reads the watcher's latest
 // snapshot and this repository's own dispatch status, never trusting what the renderer already saw.
 import type { IpcMap } from '@/types/ipc'
-import type { HeldForceDispatchResult } from '@/types/ipc'
+import type { HeldForceDispatchResult } from '@/types/dispatch'
 import type { HeldChannelDeps } from '@/types/channels'
 
 export function resolveForceDispatch(request: IpcMap['held:force-dispatch']['request'], deps: HeldChannelDeps): HeldForceDispatchResult {

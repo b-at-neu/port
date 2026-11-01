@@ -135,6 +135,13 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - markers anchored at line start, outside code — a quote never misclassifies as pending
 - the one Electron clipboard write; the operator still pastes the reply themselves
 
+**`apps/desktop/src/main/release/`**
+- the Releases screen's own main-process pieces; `config.ts` reads the `release` block at the default ref, never the checked-out file, and fails the read rather than guess
+- `state.ts`'s `resolvePhase` is the one phase derivation, re-run from GitHub on every read and before every `release:run` write, so a half-finished release resumes from wherever it stopped
+- `hook.ts` runs `release.postPublishHook` once through `platform/node`, only when it parses as a plain `node` command, and never retries it — a hook failure is reported beside a publish that already happened
+- fails toward showing less: an unavailable state alias fails the whole status and offers no action, while a failed ticket lookup only costs titles
+- no Claude session, no timer — the 60s watch while a PR waits is the renderer's own `refetchInterval`
+
 **`apps/desktop/src/main/runtime/`**
 - the SDK runtime adapter's composition root: locate → version → credentials → classify
 - `main/ipc.ts` calls only `runtimePreflight`/`runtimeProbe`, never resolves the registry itself
@@ -180,6 +187,8 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 **`apps/desktop/src/main/writes/`**
 - only GitHub writer; only `command.ts` names `--add-label`/`--remove-label`
 - never `merge`, `close`, `--delete-branch`, or `ready`
+- `release.ts` writes the bump commit through the Git Data API from oids the status read supplied, so the operator's checkout is never touched; the release tag exists only because `gh release create` made it
+- a release write has no ownership gate — it writes no pipeline label, and terminal ownership is about dispatch — and appends one `ReleaseAuditEntry` per attempt
 
 **`apps/desktop/src/renderer/audit/`**
 - reads `audit:list` only; the screen is read-only and makes no write

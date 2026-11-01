@@ -125,6 +125,7 @@ export const QUERY_CHANNELS = [
   'notify:prefs',
   'storage:report',
   'usage:summary',
+  'release:status',
 ] as const
 
 export type QueryChannel = (typeof QUERY_CHANNELS)[number]
@@ -172,6 +173,7 @@ export const MUTATION_CHANNELS = [
   'held:force-dispatch',
   'notify:needs-you',
   'notify:prefs:set',
+  'release:run',
 ] as const
 
 export type MutationChannel = (typeof MUTATION_CHANNELS)[number]

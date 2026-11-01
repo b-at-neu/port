@@ -34,6 +34,7 @@ interface ConfigDefaults {
   readonly concurrency: { readonly sharedFiles: readonly string[]; readonly overlapThreshold: number }
   /** The port's own seed for a `sessionRequiredPaths +=` override — nothing else in the app consumes the resolved list. */
   readonly sessionRequiredPaths: readonly string[]
+  readonly release: { readonly versionSource: string; readonly versionFiles: readonly string[]; readonly versionCommand: string | null; readonly postPublishHook: string | null }
 }
 
 /** Every default read off the schema import above, never a typed-out literal, so a renamed default is a compile error here. */
@@ -63,4 +64,10 @@ export const CONFIG_DEFAULTS: ConfigDefaults = {
     overlapThreshold: schema.properties.concurrency.properties.overlapThreshold.default,
   },
   sessionRequiredPaths: schema.properties.sessionRequiredPaths.default,
+  release: {
+    versionSource: schema.properties.release.properties.versionSource.default,
+    versionFiles: schema.properties.release.properties.versionFiles.default,
+    versionCommand: schema.properties.release.properties.versionCommand.default,
+    postPublishHook: schema.properties.release.properties.postPublishHook.default,
+  },
 }
