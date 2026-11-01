@@ -64,7 +64,7 @@ Where a status colour says what is happening, a phase colour says which pipeline
 | --- | --- | --- | --- | --- | --- |
 | Plan | `plan` | `ready`, `planChangesRequested`, `planning`, `planReview` | `#9333ea` / `#ffffff` | `#9333ea` / `#ffffff` | `#9333ea` / `#a855f7` |
 | Implement | `implement` | `planApproved`, `inProgress` | `#2563eb` / `#ffffff` | `#2563eb` / `#ffffff` | `#2563eb` / `#3b82f6` |
-| Review | `review` | `readyForReview`, `reviewing` | `#facc15` / `#422006` | `#facc15` / `#422006` | `#9c8a00` / `#facc15` |
+| Review | `review` | `readyForReview`, `reviewing` | `#facc15` / `#422006` | `#facc15` / `#422006` | `#a68500` / `#facc15` |
 | Revise | `revise` | `needsRevision`, `revising` | `#d61f8a` / `#ffffff` | `#d61f8a` / `#ffffff` | `#d61f8a` / `#ec4899` |
 | Refresh | `refresh` | `refreshBranch`, `refreshing` | `#f4f4f5` / `#3f3f46` | `#2b2f38` / `#d4d4d8` | `#71717a` / `#a1a1aa` |
 | Needs you | `needs-you` | `blocked`, `needsHuman` | `#dc2626` / `#ffffff` | `#dc2626` / `#ffffff` | `#dc2626` / `#ef4444` |
@@ -76,7 +76,7 @@ Where a status colour says what is happening, a phase colour says which pipeline
 - **`needs-you` overrides.** A gate label, a stalled or interrupted item, and a live stage session waiting on a permission prompt, a question or a `BLOCKED:` hand-back show the `needs-you` palette and pulse, whatever phase they are in. Once the operator answers, the dot goes back to its phase colour.
 - **Pills are solid.** A phase pill is a saturated fill with white or near-black text, the same in both themes; the dot inside it takes the text colour. Tinted pills are for status (`StatusPill`), not phases.
 - **Hues stay apart.** Plan purple, implement blue, review yellow, revise pink, needs-you red, done green: every phase sits ≥30° from every other, so nothing but `needs-you` reads as red and nothing but `done` as green.
-- **Review's light dot is a darker gold** (`#9c8a00`), because bright yellow can't reach 3:1 on white.
+- **Review's light dot is the pill's yellow, darkened** (`#a68500`). Bright yellow measures under 2:1 on white, and a yellow dark enough for 3:1 can only be a deep gold, so the light-theme dot is deliberately darker than its pill. It keeps the pill's hue exactly, so it reads as the same yellow in shadow rather than a different colour. The dark theme's dot is the pill's own `#facc15`.
 - **Aliases.** Only the *dots* of `implement`, `needs-you` and `done` reuse `working`, `danger` and `success`. Their pills are their own. `refresh` reuses `idle` except for its dot, because `faint` fails 3:1.
 
 **Diffs:** added lines `#f0fdf4` / `#166534` (dark `#06240f` / `#86efac`); removed lines `#fef2f2` / `#991b1b` (dark `#2a0b0b` / `#fca5a5`).
