@@ -8,6 +8,7 @@ import { labelName, resolveVocabulary, verifyVocabulary } from '@/utils/labels/v
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { PipelineFetch, PipelineItem, QueriedLabel, ResolvedItem } from '@/types/github'
+import { memoryDenialStore } from '../../../fixtures/denials'
 import { DEFAULT_POLL_POLICY } from '@/types/board'
 import type { BoardSnapshot } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
@@ -316,6 +317,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
 
     const dispatcher = createDispatcher({
       store,
+      denials: memoryDenialStore(),
       ledger,
       launch: stageLauncher,
       runState: () => 'dispatching',

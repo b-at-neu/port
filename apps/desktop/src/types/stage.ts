@@ -2,6 +2,10 @@ import type { StageLaunchRequest, StageLauncher, StageLaunchResult } from '@/typ
 import type { HostedSessionSnapshot, HostedStore, SessionKey } from '@/types/hosting'
 import type { ReleaseBranchOutcome, RemoveSessionWorktreeOutcome } from '@/types/workspace'
 import type { ItemActionResult } from '@/types/actions'
+import type { GhRunner } from '@/types/platform'
+import type { GitHubRepoRef } from '@/types/github'
+import type { BranchHead } from '@/types/release'
+import type { AllowWriteContext, AllowWriteResult } from '@/types/writes'
 
 // Renderer-safe types for stage-session "needs you" attention: a denied tool call waiting on an
 // allowlist decision, and a stage session interrupted before it reached a hand-back.
@@ -10,7 +14,7 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { StageAgent } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
 
-/** A single off-allowlist tool call a stage session's policy denied. Deduped per repository by `rule`, bounded to 20, and dropped on relaunch — a repeated denial simply re-raises the item. */
+/** A single off-allowlist tool call a stage session's policy denied. Persisted in `stage-denials.json`, deduped per repository by `rule` and bounded to 20 — a repeated denial simply re-raises the item. */
 export interface StageDenial {
   readonly id: string
   readonly repoId: RepoId
@@ -21,8 +25,18 @@ export interface StageDenial {
   readonly inputSummary: string
   readonly rule: string
   readonly at: string
-  /** The session that raised it — `null` when the launcher could not name one, which never shows in Needs you. */
+  /** The session that raised it — `null` when the launcher could not name one, which shows in Needs you as a non-live row. */
   readonly sessionKey: SessionKey | null
+}
+
+export interface StageDenialStore {
+  /** Loads `stage-denials.json`; a missing or malformed file, or an entry failing the guard, loads as empty. */
+  load(): Promise<void>
+  /** Dedupes by rule within the repository and bounds it to 20. */
+  record(denial: StageDenial): void
+  dismiss(repoId: RepoId, id: string): void
+  clearRule(repoId: RepoId, rule: string): void
+  list(repoId: RepoId): readonly StageDenial[]
 }
 
 export const INTERRUPTED_REASONS = ['quit', 'crash', 'usage-limit', 'error'] as const
@@ -52,11 +66,37 @@ export interface InterruptedStage {
 }
 
 export type StageAllowResult =
-  | { readonly kind: 'ok' }
-  | { readonly kind: 'already-allowed' }
+  | { readonly kind: 'proposed'; readonly number: number; readonly url: string }
+  | { readonly kind: 'already-proposed'; readonly number: number; readonly url: string }
+  | { readonly kind: 'already-allowed'; readonly integration: string }
   | { readonly kind: 'invalid-rule'; readonly reason: string }
-  | { readonly kind: 'write-failed'; readonly file: string; readonly message: string }
+  | { readonly kind: 'failed'; readonly step: 'read' | 'commit' | 'pr'; readonly message: string }
   | { readonly kind: 'unknown-denial' }
+
+export type AllowBaseRead =
+  | { readonly ok: true; readonly head: BranchHead; readonly settingsText: string | null; readonly configText: string; readonly openPr: { readonly number: number; readonly url: string } | null }
+  | { readonly ok: false; readonly message: string }
+
+export interface ReadAllowBaseParams {
+  readonly repo: GitHubRepoRef
+  readonly integration: string
+  readonly branch: string
+  readonly gh?: GhRunner
+}
+
+export interface ProposeAllowParams {
+  readonly head: BranchHead
+  readonly files: readonly { readonly path: string; readonly content: string }[]
+  readonly rule: string
+  readonly denial: StageDenial
+  readonly integration: string
+}
+
+/** The two GitHub seams "Allow from now on" composes through, injected at the composition root. */
+export interface StageAllowIo {
+  readonly read: (params: ReadAllowBaseParams) => Promise<AllowBaseRead>
+  readonly propose: (ctx: AllowWriteContext, params: ProposeAllowParams) => Promise<AllowWriteResult>
+}
 
 export type StageResumeResult =
   | { readonly kind: 'ok'; readonly sessionKey: string }

@@ -38,18 +38,27 @@ function closeAllowDialog(): void {
   setState({ open: false })
 }
 
-function resultToast(rule: string, result: StageAllowResult): string {
+function showResult(rule: string, result: StageAllowResult): void {
+  const openPr = (url: string) => ({ label: 'Open PR', onClick: () => void window.open(url, '_blank') })
   switch (result.kind) {
-    case 'ok':
-      return `Allowed ${rule}. Commit .claude/settings.json and .claude/port.config.json to keep it.`
+    case 'proposed':
+      toast(`Opened PR#${String(result.number)} to allow ${rule}. Merge it to apply.`, { action: openPr(result.url) })
+      return
+    case 'already-proposed':
+      toast(`PR#${String(result.number)} already proposes ${rule}. Merge it to apply.`, { action: openPr(result.url) })
+      return
     case 'already-allowed':
-      return `${rule} is already allowed.`
+      toast(`${rule} is already allowed on ${result.integration}.`)
+      return
     case 'invalid-rule':
-      return `Couldn't allow ${rule}: ${result.reason}.`
-    case 'write-failed':
-      return `Couldn't allow ${rule}: ${result.file} ${result.message}.`
+      toast(`Couldn't allow ${rule}: ${result.reason}.`)
+      return
+    case 'failed':
+      toast(`Couldn't open the allow PR (${result.step}): ${result.message}`)
+      return
     case 'unknown-denial':
-      return "That denial isn't tracked any more."
+      toast("That denial isn't tracked any more.")
+      return
   }
 }
 
@@ -66,7 +75,7 @@ export function AllowDialog() {
     setState({ ...current, submitting: true })
     try {
       const result = await invoke('stage:allow', { repoId: current.repoId, denialId: current.denial.id, rule: displayRule })
-      toast(resultToast(displayRule, result))
+      showResult(displayRule, result)
       void queryClient.invalidateQueries({ queryKey: ipcQueryOptions('board:snapshot').queryKey })
     } catch (error) {
       console.error('Failed to reach the main process while allowing a rule', error)
@@ -104,8 +113,7 @@ export function AllowDialog() {
           <DialogTitle>Allow this from now on?</DialogTitle>
         </DialogHeader>
         <p className="text-small text-muted-foreground">
-          Adds this rule to .claude/settings.json and extraAllow in .claude/port.config.json, in {String(current.repoId)}&apos;s main checkout. Every stage session in this repo will be allowed to run
-          it.
+          Opens a PR into the integration branch that adds this rule to .claude/settings.json and extraAllow in .claude/port.config.json. Stage sessions get it once the PR merges.
         </p>
         <Input value={displayRule} onChange={(event) => setRule(event.target.value)} />
         <DialogFooter>
@@ -116,7 +124,7 @@ export function AllowDialog() {
             Dismiss
           </Button>
           <Button onClick={() => void submit()} disabled={current.submitting}>
-            Allow from now on
+            {current.submitting ? 'Opening…' : 'Open allow PR'}
           </Button>
         </DialogFooter>
       </DialogContent>

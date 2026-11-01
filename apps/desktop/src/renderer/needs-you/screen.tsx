@@ -19,7 +19,7 @@ import type { NeedsYouItem as NeedsYouItemModel } from '@/types/board'
 import { registerListNavigator } from '@/renderer/shell/stores'
 import { useListSelection } from '@/renderer/shell/list-selection'
 import { UNDO_LABEL } from '@/renderer/lib/copy'
-import { LAUNCH_FAILED_HELP, LAUNCH_FAILED_NO_DETAIL, REFRESH_FAILED_TOAST, dismissedToast, needsYouLeadCopy, refreshedToast, usageLimitEntryLine } from '@/renderer/needs-you/copy'
+import { ENDED_DENIAL_LINE, LAUNCH_FAILED_HELP, LAUNCH_FAILED_NO_DETAIL, REFRESH_FAILED_TOAST, dismissedToast, needsYouLeadCopy, refreshedToast, usageLimitEntryLine } from '@/renderer/needs-you/copy'
 import { dismiss, dismissedKeys, undismiss, visibleItems } from '@/renderer/needs-you/dismissed'
 import { dismissKeyOf } from '@/renderer/needs-you/dismiss-key'
 import { groupNeedsYou } from '@/renderer/needs-you/groups'
@@ -80,6 +80,7 @@ function DetailBody({ item, onSent }: { readonly item: NeedsYouItemModel; readon
         <p className="font-mono">
           {item.denial.toolName}: {item.denial.inputSummary}
         </p>
+        {item.live ? null : <p>{ENDED_DENIAL_LINE}</p>}
       </div>
     )
   }

@@ -141,13 +141,41 @@ export interface PurgeAuditEntry {
   readonly failure: ReclaimerFailureKind | null
 }
 
-export type AuditEntry = LabelAuditEntry | ReclaimAuditEntry | PurgeAuditEntry | ReleaseAuditEntry
+// The "Allow from now on" arm — one line per attempt; `call` is the last argv that ran.
+export interface AllowAuditEntry {
+  readonly at: string
+  readonly repo: string
+  readonly repoId: RepoId
+  readonly action: 'allow-propose'
+  readonly rule: string
+  readonly call: readonly string[] | null
+  readonly result: 'applied' | 'failed'
+  readonly failure: string | null
+}
+
+export interface AllowWriteContext {
+  readonly repo: string
+  readonly repoId: RepoId
+  readonly auditDir: string
+  readonly scratchDir: string
+  readonly gh?: GhRunner
+  readonly now?: () => Date
+  readonly pathOps?: PathOps
+}
+
+export type AllowWriteResult = { readonly ok: true; readonly number: number; readonly url: string } | { readonly ok: false; readonly step: 'commit' | 'pr'; readonly message: string }
+
+export type AuditEntry = LabelAuditEntry | ReclaimAuditEntry | PurgeAuditEntry | ReleaseAuditEntry | AllowAuditEntry
 
 const RELEASE_ACTIONS: readonly string[] = ['release-bump', 'release-pr', 'release-publish', 'release-hook']
 
-// The worktree and release actions are the only `action` values `LabelAuditEntry` never takes.
+// The worktree, release and allow actions are the only `action` values `LabelAuditEntry` never takes.
 export function isLabelAuditEntry(entry: AuditEntry): entry is LabelAuditEntry {
-  return entry.action !== 'worktree-reclaim' && entry.action !== 'worktree-purge' && !RELEASE_ACTIONS.includes(entry.action)
+  return entry.action !== 'worktree-reclaim' && entry.action !== 'worktree-purge' && entry.action !== 'allow-propose' && !RELEASE_ACTIONS.includes(entry.action)
+}
+
+export function isAllowAuditEntry(entry: AuditEntry): entry is AllowAuditEntry {
+  return entry.action === 'allow-propose'
 }
 
 export function isPurgeAuditEntry(entry: AuditEntry): entry is PurgeAuditEntry {

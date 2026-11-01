@@ -188,6 +188,8 @@ export function deniedEditToast(path: string): string {
   return `Denied the edit to ${path}.`
 }
 
+export const ENDED_DENIAL_LINE = 'The session has ended. Allowing it applies to future runs.'
+
 export const REFRESH_FAILED_TOAST = "Couldn't reach the main process. Nothing was refreshed."
 
 export function blockerSentToast(number: number | null): string {

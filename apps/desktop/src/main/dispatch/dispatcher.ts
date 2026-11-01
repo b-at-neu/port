@@ -22,7 +22,6 @@ import { runObservationPass } from '@/main/dispatch/observe-pass'
 import { commentFailureMessage, selectDispatches, survived } from '@/main/dispatch/select'
 import { budgetLiveSets, budgetRoute, escalationBody, sumCostUsd } from '@/main/dispatch/budget'
 import type { StageDenial } from '@/types/stage'
-import { withDenial, withoutDenialId, withoutDenialRule } from '@/main/dispatch/attention'
 
 import { boundRecords, endedStagesOf, freeSlots, refreshRecords } from '@/main/dispatch/launch'
 
@@ -59,7 +58,6 @@ interface RepoDispatcherState {
   budget: BudgetStatus | null
   observed: ObservationRecord[]
   observedWriteAt: Map<number, string>
-  denials: StageDenial[]
 }
 
 function emptyRepoState(): RepoDispatcherState {
@@ -75,7 +73,6 @@ function emptyRepoState(): RepoDispatcherState {
     budget: null,
     observed: [],
     observedWriteAt: new Map(),
-    denials: [],
   }
 }
 
@@ -156,17 +153,16 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     return stateFor(repoId).owner !== 'app'
   }
   function recordDenial(repoId: RepoId, denial: StageDenial): void {
-    stateFor(repoId).denials = [...withDenial(stateFor(repoId).denials, denial)]
+    stateFor(repoId)
+    deps.denials.record(denial)
     deps.onChange()
   }
   function dismissDenial(repoId: RepoId, id: string): void {
-    const state = repoStates.get(repoId)
-    if (state !== undefined) state.denials = [...withoutDenialId(state.denials, id)]
+    deps.denials.dismiss(repoId, id)
     deps.onChange()
   }
   function clearDenialsFor(repoId: RepoId, rule: string): void {
-    const state = repoStates.get(repoId)
-    if (state !== undefined) state.denials = [...withoutDenialRule(state.denials, rule)]
+    deps.denials.clearRule(repoId, rule)
     deps.onChange()
   }
 
@@ -422,7 +418,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       unreadableMessage: s.unreadableMessage,
       budget: s.budget,
       observed: s.observed,
-      denials: s.denials,
+      denials: deps.denials.list(repoId),
       interrupted: deps.interrupted?.(repoId) ?? [],
     }))
   }
