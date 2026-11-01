@@ -23,7 +23,7 @@ import type {
 } from '@/types/state'
 import type { LabelEventNode } from '@/types/github'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
-import { attachAgents, attachSessions, attachWorkSessions, attachWorktrees, collectOrphanNumbers } from '@/main/state/attach'
+import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers, indexWorkSessions, workSessionsFor } from '@/main/state/attach'
 import { closingReference, IMPLEMENTATION_PLAN_HEADING, sessionRequiredAt } from '@/main/state/link'
 import { stageOf } from '@/main/state/stage'
 import { codeReviewCount } from '../../../../../scripts/port-tick/gates'
@@ -121,6 +121,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
   const labelsByName = new Map(vocabulary.labels.map((label) => [label.name, label.key]))
   const worktreeEntries = worktrees.ok ? worktrees.entries : []
   const orphanNumbers = collectOrphanNumbers(pipelineFetch.items, worktreeEntries, repoSessions.agents)
+  const workSessionIndex = indexWorkSessions(repoSessions.sessions, worktreeEntries)
 
   // The closing-keyword join, both directions: a pull request's body names the issue it closes, and the issue's `linked` is the first pull request naming it back.
   const prLinks = new Map<number, number>()
@@ -146,7 +147,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     const agents = attachAgents(attachTarget, repoSessions.agents)
     const sessions = attachSessions(attachTarget, repoSessions.sessions)
     const worktreeAttachments = attachWorktrees(attachTarget, worktreeEntries)
-    const workSessions = attachWorkSessions(item, repoSessions.sessions, worktreeEntries, worktreeAttachments)
+    const workSessions = workSessionsFor(workSessionIndex, item)
 
     const { status, statusEvidence } = statusOf(stageResult.stage, repoSessions.available, agents, sessions)
     const waitingOn: WaitingOn | null =

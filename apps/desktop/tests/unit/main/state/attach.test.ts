@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentRecord, SessionRecord } from '@/types/sessions'
 import type { WorktreeEntry } from '@/types/local'
-import { attachAgents, attachSessions, attachWorkSessions, attachWorktrees, collectOrphanNumbers } from '@/main/state/attach'
+import type { PathOps } from '@/types/platform'
+import { createPathOps } from '@/main/platform/paths'
+import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers, indexWorkSessions, workSessionsFor } from '@/main/state/attach'
 
 function agent(overrides: Partial<AgentRecord> = {}): AgentRecord {
   return {
@@ -139,39 +141,70 @@ describe('attachWorkSessions', () => {
   }
   const main = worktreeEntry({ path: '/repo', isMain: true, branch: 'dev', correlation: null, unresolved: 'no-rung-matched' })
   const mine = worktreeEntry({ path: '/repo/.claude/worktrees/x', branch: '79-ticket' })
-  const attached = attachWorktrees({ number: 79, linked: null }, [mine])
   const issue = { number: 79, kind: 'issue' as const }
+  const matchesOf = (sessions: SessionRecord[], worktrees: WorktreeEntry[], item: { number: number; kind: 'issue' | 'pull-request' } = issue) =>
+    workSessionsFor(indexWorkSessions(sessions, worktrees), item)
 
   it('matches a session whose cwd sits inside the ticket’s worktree', () => {
-    const result = attachWorkSessions(issue, [work({ cwd: '/repo/.claude/worktrees/x/src' })], [main, mine], attached)
+    const result = matchesOf([work({ cwd: '/repo/.claude/worktrees/x/src' })], [main, mine])
     expect(result.map((s) => s.match)).toEqual(['worktree'])
   })
 
   it('uses the most specific worktree, so a nested worktree never matches the main checkout’s ticket', () => {
-    const mainTicket = attachWorktrees({ number: 5, linked: null }, [worktreeEntry({ path: '/repo', isMain: true, correlation: { number: 5, rung: 'branch-name' } })])
-    const result = attachWorkSessions({ number: 5, kind: 'issue' }, [work({ cwd: '/repo/.claude/worktrees/x' })], [main, mine], mainTicket)
+    const mainTicket = worktreeEntry({ path: '/repo', isMain: true, correlation: { number: 5, rung: 'branch-name' } })
+    const result = matchesOf([work({ cwd: '/repo/.claude/worktrees/x' })], [mainTicket, mine], { number: 5, kind: 'issue' })
     expect(result).toEqual([])
   })
 
   it('matches by git branch when the cwd is elsewhere', () => {
-    const result = attachWorkSessions(issue, [work({ cwd: '/elsewhere', gitBranch: '79-ticket' })], [main, mine], attached)
+    const result = matchesOf([work({ cwd: '/elsewhere', gitBranch: '79-ticket' })], [main, mine])
     expect(result.map((s) => s.match)).toEqual(['branch'])
   })
 
   it('matches a ticket-label title for an issue and a pull request, never a longer number', () => {
     const titled = (customTitle: string) => work({ customTitle })
-    expect(attachWorkSessions({ number: 47, kind: 'issue' }, [titled('#47 x'), titled('#47'), titled('#470 x'), titled('PR#47 x')], [], []).map((s) => s.title)).toEqual(['#47 x', '#47'])
-    expect(attachWorkSessions({ number: 47, kind: 'pull-request' }, [titled('PR#47 x'), titled('#47 x')], [], []).map((s) => s.title)).toEqual(['PR#47 x'])
+    expect(matchesOf([titled('#47 x'), titled('#47'), titled('#470 x'), titled('PR#47 x')], [], { number: 47, kind: 'issue' }).map((s) => s.title)).toEqual(['#47 x', '#47'])
+    expect(matchesOf([titled('PR#47 x'), titled('#47 x')], [], { number: 47, kind: 'pull-request' }).map((s) => s.title)).toEqual(['PR#47 x'])
   })
 
   it('skips cockpit sessions', () => {
-    const result = attachWorkSessions(issue, [work({ role: 'cockpit', cwd: '/repo/.claude/worktrees/x' })], [main, mine], attached)
+    const result = matchesOf([work({ role: 'cockpit', cwd: '/repo/.claude/worktrees/x' })], [main, mine])
     expect(result).toEqual([])
   })
 
   it('never matches a branch by name pattern', () => {
-    const result = attachWorkSessions(issue, [work({ cwd: '/elsewhere', gitBranch: '79-other-slug' })], [main, mine], attached)
+    const result = matchesOf([work({ cwd: '/elsewhere', gitBranch: '79-other-slug' })], [main, mine])
     expect(result).toEqual([])
+  })
+
+  it('a relative cwd or worktree path never owns a session', () => {
+    const relative = worktreeEntry({ path: 'relative/x' })
+    expect(matchesOf([work({ cwd: 'relative/x' })], [relative])).toEqual([])
+    expect(matchesOf([work({ cwd: '/repo/.claude/worktrees/x' })], [relative])).toEqual([])
+  })
+
+  it('stays within a path-op budget at scale', () => {
+    const calls = { pathKey: 0, dirname: 0 }
+    const base = createPathOps('posix', { home: '/home/u' })
+    const counting: PathOps = {
+      ...base,
+      pathKey: (p) => {
+        calls.pathKey += 1
+        return base.pathKey(p)
+      },
+      dirname: (p) => {
+        calls.dirname += 1
+        return base.dirname(p)
+      },
+    }
+    const worktrees = Array.from({ length: 60 }, (_, i) => worktreeEntry({ path: `/repo/.claude/worktrees/w${String(i)}`, branch: `${String(i + 1)}-t`, correlation: { number: i + 1, rung: 'branch-name' } }))
+    const sessions = Array.from({ length: 200 }, (_, i) => work({ sessionId: `s${String(i)}`, cwd: `/repo/.claude/worktrees/w${String(i % 60)}/src/deep` }))
+    const index = indexWorkSessions(sessions, worktrees, counting)
+    let matched = 0
+    for (let n = 1; n <= 500; n += 1) matched += workSessionsFor(index, { number: n, kind: 'issue' }).length
+    expect(matched).toBe(200)
+    const depth = 8
+    expect(calls.pathKey + calls.dirname).toBeLessThanOrEqual(worktrees.length + sessions.length * (depth + 2) * 2)
   })
 })
 

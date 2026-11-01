@@ -104,6 +104,3 @@ export function createTailStore(deps: TranscriptTailStoreDeps = defaultDeps): Tr
     },
   }
 }
-
-/** The one instance `main/ipc.ts`'s three tail channels bind to. */
-export const tailStore: TranscriptTailStore = createTailStore()

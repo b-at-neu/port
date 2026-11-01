@@ -108,6 +108,11 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `menuTemplate` is pure — `platform`/`isPackaged` are passed in rather than read from `process`/`app`, so it is testable without Electron running
 - every command item carries `registerAccelerator: false`; `shell/keyboard.ts`'s module-level listener stays the one place a key press actually fires
 
+**`apps/desktop/src/main/offload/`**
+- the state worker owns the source cache and every CPU-bound read; `planTick` and its shared ledgers stay on main
+- `worker.ts` is wiring only; a new op goes into `OFFLOAD_OPS` and `dispatch.ts`
+- a worker crash fails closed into each op's existing failure value, never an empty result; a failed projection keeps the last good board and still schedules the next tick
+
 **`apps/desktop/src/main/platform/`**
 - only importer of `node:child_process` / `node:fs` under `apps/desktop/src/`
 - spawnables a literal union (`KNOWN_COMMANDS`); paths via `pathKey`/`contains`, never `startsWith`

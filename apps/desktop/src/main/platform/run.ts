@@ -25,6 +25,11 @@ export function setE2ERoute(route: E2ERoute | null): void {
   e2eRoute = route
 }
 
+/** The fake the state worker must be given, since this module's state does not cross the thread boundary. */
+export function e2eFakePath(): string | null {
+  return e2eRoute?.fake ?? null
+}
+
 interface SpawnFailureLike {
   readonly code?: unknown
   readonly signal?: unknown
