@@ -1,8 +1,6 @@
 import { FIXTURE_ENV, FIXTURE_SCENARIOS } from '@/types/fixtures'
 import type { FixtureScenario } from '@/types/fixtures'
 
-// Pure, so `mode.test.ts` covers every branch with no Electron and no filesystem — `process.env`, `isPackaged`, and `isAbsolute` are injected, not imported.
-
 type FixtureModeResult =
   | { readonly kind: 'off' }
   | { readonly kind: 'ignored' }
@@ -23,7 +21,7 @@ interface FixtureBuild {
   readonly packaged: boolean
 }
 
-/** `off` unless the flag is exactly `'1'`. `ignored` in a packaged build unless `build.packaged`. `invalid` fails closed — on a build with no fixtures, or rather than guessing a directory or scenario. */
+/** Pure — `env`, `isPackaged`, and `isAbsolute` are injected, so `mode.test.ts` needs no Electron or filesystem. `off` unless the flag is exactly `'1'`. `ignored` in a packaged build unless `build.packaged`. `invalid` fails closed — on a build with no fixtures, or rather than guessing a directory or scenario. */
 export function fixtureMode(env: Readonly<Record<string, string | undefined>>, isPackaged: boolean, build: FixtureBuild, isAbsolute: (path: string) => boolean): FixtureModeResult {
   if (env[FIXTURE_ENV.flag] !== '1') return { kind: 'off' }
   if (isPackaged && !build.packaged) return { kind: 'ignored' }
