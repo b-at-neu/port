@@ -1,3 +1,4 @@
+import { FIXTURE_SCENARIOS } from '@/types/fixtures'
 import type { FixtureScenario } from '@/types/fixtures'
 
 // Pure, so `mode.test.ts` covers every branch with no Electron and no filesystem — `process.env`, `isPackaged`, and `isAbsolute` are injected, not imported.
@@ -9,13 +10,11 @@ type FixtureModeResult =
   | { readonly kind: 'invalid'; readonly reason: string }
   | { readonly kind: 'on'; readonly userData: string; readonly scenario: FixtureScenario }
 
-// Absent → `populated`; `empty` → `empty`; anything else fails closed, the
+// Absent → `populated`; any `FIXTURE_SCENARIOS` member → itself; anything else fails closed, the
 // same way an unknown `userData` does.
 function parseScenario(raw: string | undefined): FixtureScenario | 'invalid' {
   if (raw === undefined) return 'populated'
-  if (raw === 'empty') return 'empty'
-  if (raw === 'populated') return 'populated'
-  return 'invalid'
+  return FIXTURE_SCENARIOS.find((scenario) => scenario === raw) ?? 'invalid'
 }
 
 interface FixtureBuild {
@@ -40,7 +39,7 @@ export function fixtureMode(env: Readonly<Record<string, string | undefined>>, i
 
   const scenario = parseScenario(env[FIXTURE_ENV.scenario])
   if (scenario === 'invalid') {
-    return { kind: 'invalid', reason: `${FIXTURE_ENV.scenario} must be 'populated' or 'empty'` }
+    return { kind: 'invalid', reason: `${FIXTURE_ENV.scenario} must be one of: ${FIXTURE_SCENARIOS.join(', ')}` }
   }
   return { kind: 'on', userData, scenario }
 }

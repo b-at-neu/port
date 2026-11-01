@@ -23,7 +23,7 @@ function offsetMinutes(now: Date, minutes: number): string {
   return new Date(now.getTime() + minutes * 60_000).toISOString()
 }
 
-function widgetsEntry() {
+export function widgetsEntry() {
   const entry = FIXTURE_REPOSITORIES.find((repository) => repository.id === WIDGETS_ID)
   if (entry === undefined || !('config' in entry)) throw new Error('fixtures: acme/widgets is missing its resolved config')
   return entry
@@ -41,7 +41,7 @@ function gadgetsEntry() {
   return entry
 }
 
-function repositoryHealth(repoId: RepoId, now: Date): RepositoryHealth {
+export function repositoryHealth(repoId: RepoId, now: Date): RepositoryHealth {
   const at = now.toISOString()
   const source = (kind: SourceKind) => ({ lastSuccessAt: at, lastAttemptAt: at, consecutiveFailures: 0, lastError: null, intervalMs: SOURCE_BASE_INTERVAL_MS[kind], deferredUntil: null })
   return { repoId, github: source('github'), sessions: source('sessions'), worktrees: source('worktrees'), denials: source('denials') }
@@ -344,14 +344,14 @@ function widgetsDenialsRead(now: Date, path: string): DenialsRead {
   }
 }
 
-function notReadyRepositoryState(): RepositoryState {
+export function notReadyRepositoryState(): RepositoryState {
   const entry = legacySiteEntry()
   return { ok: false, repoId: entry.id, displayName: entry.displayName, reason: 'not-ready', problem: entry.problem }
 }
 
 // acme/gadgets: a third, ready repository with no items, whose own GitHub
 // read carries no vocabulary label at all, so its Overview renders mis-resolved.
-function gadgetsRepositoryState(now: Date): RepositoryState {
+export function gadgetsRepositoryState(now: Date): RepositoryState {
   const entry = gadgetsEntry()
   const vocabulary = entry.config.vocabulary
 

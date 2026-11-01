@@ -9,9 +9,9 @@ import { test } from '@playwright/test'
 import type { ConsoleMessage } from 'playwright-core'
 // `.mjs`, matching `app.mts`'s and `targets.mts`'s own emitted-ESM specifier
 // rules — see `app.mts`'s own note on this.
-import { launchFixtureApp, settle, setTheme } from './app.mjs'
+import { launchFixtureApp, settle, setTheme, waitForLanding } from './app.mjs'
 import type { FixtureApp } from './app.mjs'
-import { SCREENSHOT_DIR, SCREENSHOT_TARGETS, THEMES, VARIANT_TARGETS } from './targets.mjs'
+import { SCENARIO_LANDING, SCREENSHOT_DIR, SCREENSHOT_TARGETS, THEMES, VARIANT_TARGETS } from './targets.mjs'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -93,6 +93,8 @@ for (const scenario of VARIANT_SCENARIOS) {
 
     test.beforeAll(async () => {
       variantFixture = await launchFixtureApp(scenario)
+      const landing = SCENARIO_LANDING[scenario]
+      if (landing !== null) await waitForLanding(variantFixture.page, landing)
       variantFixture.page.on('pageerror', (error: Error) => variantPageErrors.push(error.message))
       variantFixture.page.on('console', (message: ConsoleMessage) => {
         if (message.type() === 'error') variantPageErrors.push(message.text())
