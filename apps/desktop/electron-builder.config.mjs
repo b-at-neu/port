@@ -90,11 +90,9 @@ export default {
     syncDesktopName: true,
   },
   mac: {
-    target: 'dmg',
+    target: [{ target: 'dmg', arch: ['x64', 'arm64'] }],
     icon: 'build/icon.png',
-    // Ad-hoc signing so the arm64 build launches at all — an unsigned arm64
-    // binary is otherwise killed at launch. No notarization; unsigned,
-    // unreleased builds only (apps/desktop/README.md covers the warning).
+    // Ad-hoc signed only: Apple Silicon kills an unsigned binary at launch; no notarization.
     identity: '-',
     hardenedRuntime: false,
     notarize: false,

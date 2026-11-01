@@ -126,6 +126,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
       expect(text.includes('sdkPlatformPackages('), 'desktop-packaging', `${relOf(configPath)} must call sdkPlatformPackages( to derive its exclusions`);
       expect(!/\basarUnpack\b/.test(text), 'desktop-packaging', `${relOf(configPath)} must not set asarUnpack — there are no native production dependencies`);
       expect(/extraResources:\s*\[\s*\{\s*from:\s*['"]NOTICE\.txt['"]/.test(text), 'desktop-packaging', `${relOf(configPath)} must copy NOTICE.txt through extraResources`);
+      expect(/target:\s*\[\s*\{\s*target:\s*['"]dmg['"],\s*arch:\s*\[\s*['"]x64['"],\s*['"]arm64['"]\s*\]/.test(text), 'desktop-packaging', `${relOf(configPath)}'s mac target must build dmg for both x64 and arm64`);
 
       // --- productName/appId/executableName name 'port', never 'Claude' — the installed app must never present itself as a Claude product. ---
       const productNameMatch = /productName:\s*['"]([^'"]+)['"]/.exec(text);
