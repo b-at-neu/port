@@ -12,12 +12,11 @@ const CUSTOM = 'custom'
 
 interface CutDialogProps {
   readonly status: ReleaseStatus
-  readonly pending: boolean
   readonly onCancel: () => void
   readonly onConfirm: (version: string) => void
 }
 
-function CutForm({ status, pending, onCancel, onConfirm }: CutDialogProps) {
+function CutForm({ status, onCancel, onConfirm }: CutDialogProps) {
   const [choice, setChoice] = useState(status.candidates[0]?.version ?? CUSTOM)
   const [custom, setCustom] = useState('')
 
@@ -52,10 +51,17 @@ function CutForm({ status, pending, onCancel, onConfirm }: CutDialogProps) {
         </div>
       ) : null}
       <DialogFooter>
-        <Button variant="outline" onClick={onCancel} disabled={pending}>
+        <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button disabled={pending || version === null} onClick={() => version !== null && onConfirm(version)}>
+        <Button
+          disabled={version === null}
+          onClick={() => {
+            if (version === null) return
+            onCancel()
+            onConfirm(version)
+          }}
+        >
           {OPEN_RELEASE_PR}
         </Button>
       </DialogFooter>
