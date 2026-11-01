@@ -1,7 +1,7 @@
 import type { AssertEqual } from '@/types/assert-type'
 import type { SessionIndexEntry } from '@/types/session-index'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
-import type { WorktreesReclaimResult, WorktreesReport } from '@/types/reclaimer'
+import type { ForcedReclaim, WorktreesPurgeResult, WorktreesReclaimResult, WorktreesReport } from '@/types/reclaimer'
 import type { SessionScan } from '@/types/sessions'
 import type { TranscriptTailOpen, TranscriptTailPoll } from '@/utils/sessions/transcript'
 import type { SearchQuery, SearchResult } from '@/types/search'
@@ -95,11 +95,12 @@ export interface IpcMap {
     request: { id: RepoId }
     response: WorktreesReport
   }
-  // The Worktrees tab's own write — `issue: null` reclaims every candidate.
+  // The Worktrees tab's own write — `issue: null` reclaims every candidate; a non-null `force` reclaims one confirmed path.
   'worktrees:reclaim': {
-    request: { id: RepoId; issue: number | null }
+    request: { id: RepoId; issue: number | null; force: ForcedReclaim | null }
     response: WorktreesReclaimResult
   }
+  'worktrees:purge': { request: { id: RepoId; path: string }; response: WorktreesPurgeResult }
   'sessions:scan': {
     request: void
     response: SessionScan
@@ -398,6 +399,7 @@ export const IPC_CHANNELS = [
   'repos:remove',
   'worktrees:report',
   'worktrees:reclaim',
+  'worktrees:purge',
   'sessions:scan',
   'transcript:tail:open',
   'transcript:tail:poll',

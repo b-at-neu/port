@@ -119,6 +119,8 @@ export interface ReclaimAuditEntry {
   readonly repoId: RepoId
   readonly action: 'worktree-reclaim'
   readonly issue: number | null
+  /** The confirmed flags of a path-scoped forced reclaim, or `null` for a plain one. */
+  readonly force: { readonly unlock: boolean; readonly forceDirty: boolean } | null
   readonly call: readonly string[] | null
   readonly removed: readonly string[]
   readonly failed: readonly string[]
@@ -126,11 +128,27 @@ export interface ReclaimAuditEntry {
   readonly failure: ReclaimerFailureKind | null
 }
 
-export type AuditEntry = LabelAuditEntry | ReclaimAuditEntry
+// The orphan-directory delete arm — `path` is the directory's basename, never a raw path.
+export interface PurgeAuditEntry {
+  readonly at: string
+  readonly repo: string
+  readonly repoId: RepoId
+  readonly action: 'worktree-purge'
+  readonly path: string
+  readonly call: readonly string[] | null
+  readonly result: 'deleted' | 'refused' | 'failed'
+  readonly failure: ReclaimerFailureKind | null
+}
 
-// `'worktree-reclaim'` is the one `action` value `LabelAuditEntry` never takes.
+export type AuditEntry = LabelAuditEntry | ReclaimAuditEntry | PurgeAuditEntry
+
+// The two worktree actions are the only `action` values `LabelAuditEntry` never takes.
 export function isLabelAuditEntry(entry: AuditEntry): entry is LabelAuditEntry {
-  return entry.action !== 'worktree-reclaim'
+  return entry.action !== 'worktree-reclaim' && entry.action !== 'worktree-purge'
+}
+
+export function isPurgeAuditEntry(entry: AuditEntry): entry is PurgeAuditEntry {
+  return entry.action === 'worktree-purge'
 }
 
 /** The most entries one `audit:list` read returns, newest kept. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createPathOps } from '@/main/platform/paths'
-import { parseReclaimPayload, parseReportPayload } from '@/main/reclaimer/parse'
+import { parsePurgePayload, parseReclaimPayload, parseReportPayload } from '@/main/reclaimer/parse'
 
 const posixPathOps = createPathOps('posix', { home: '/home/op' })
 const win32PathOps = createPathOps('win32', { home: 'C:\\Users\\op' })
@@ -79,6 +79,39 @@ describe('parseReportPayload', () => {
       locked: false,
       lockReason: null,
       dirtyFiles: 0,
+      otherwiseReclaimable: false,
+    })
+    expect(result.forcedActions).toBe('unsupported')
+  })
+
+  describe('pathScope', () => {
+    function scoped(otherwiseRemovable: unknown): RawPayload & { pathScope: boolean } {
+      const payload = { ...basePayload(), pathScope: true }
+      ;(firstCandidate(payload) as RawCandidate & { otherwiseRemovable?: unknown }).otherwiseRemovable = otherwiseRemovable
+      return payload
+    }
+
+    it('reads otherwiseRemovable and reports forced actions as supported', () => {
+      const result = parseReportPayload(JSON.stringify(scoped(true)), posixPathOps)
+      if (!result.ok) throw new Error(result.message)
+      expect(result.forcedActions).toBe('supported')
+      expect(result.worktrees[0]?.otherwiseReclaimable).toBe(true)
+    })
+
+    it('fails the whole payload when a scoped candidate omits otherwiseRemovable', () => {
+      const result = parseReportPayload(JSON.stringify(scoped(undefined)), posixPathOps)
+      expect(result.ok).toBe(false)
+      if (result.ok) return
+      expect(result.message).toContain('candidates[0].otherwiseRemovable')
+    })
+
+    it('ignores otherwiseRemovable from a script that never advertised pathScope', () => {
+      const payload = basePayload()
+      ;(firstCandidate(payload) as RawCandidate & { otherwiseRemovable?: unknown }).otherwiseRemovable = true
+      const result = parseReportPayload(JSON.stringify(payload), posixPathOps)
+      if (!result.ok) throw new Error(result.message)
+      expect(result.forcedActions).toBe('unsupported')
+      expect(result.worktrees[0]?.otherwiseReclaimable).toBe(false)
     })
   })
 
@@ -209,5 +242,29 @@ describe('parseReclaimPayload', () => {
   it('fails on unparseable JSON, the same as parseReportPayload', () => {
     const result = parseReclaimPayload('not json at all', posixPathOps)
     expect(result.ok).toBe(false)
+  })
+})
+
+describe('parsePurgePayload', () => {
+  const entry = (overrides: Record<string, unknown> = {}) => JSON.stringify({ mainRoot: '/repo', results: [{ path: '/repo/x', deleted: false, refused: null, error: null, cause: null, ...overrides }] })
+
+  it('reads deleted, refused and failed outcomes', () => {
+    expect(parsePurgePayload(entry({ deleted: true }))).toEqual({ ok: true, outcome: 'deleted', message: null, cause: null })
+    expect(parsePurgePayload(entry({ refused: 'not an orphan directory' }))).toEqual({ ok: true, outcome: 'refused', message: 'not an orphan directory', cause: null })
+    expect(parsePurgePayload(entry({ error: 'EBUSY', cause: 'file-in-use' }))).toEqual({ ok: true, outcome: 'failed', message: 'EBUSY', cause: 'file-in-use' })
+  })
+
+  it.each([
+    ['not JSON', 'nope', 'not valid JSON'],
+    ['no results', JSON.stringify({ mainRoot: '/repo' }), 'results'],
+    ['two results', JSON.stringify({ results: [{}, {}] }), 'results'],
+    ['a non-boolean deleted', entry({ deleted: 'yes' }), 'results[0].deleted'],
+    ['an unknown cause', entry({ error: 'x', cause: 'cosmic-ray' }), 'results[0].cause'],
+    ['a non-string error', entry({ error: 3 }), 'results[0].error'],
+  ])('fails the payload on %s', (_label, stdout, needle) => {
+    const result = parsePurgePayload(stdout)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.message).toContain(needle)
   })
 })

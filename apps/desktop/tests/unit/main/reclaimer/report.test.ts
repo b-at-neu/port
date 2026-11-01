@@ -91,6 +91,24 @@ describe('readWorktreeReport', () => {
     expect(result.worktrees[0]?.reclaimable).toBe(false)
   })
 
+  it('carries forcedActions and otherwiseReclaimable from a path-scoped script onto the report', async () => {
+    const runNode: NodeRunner = () =>
+      Promise.resolve(ok(payload({ pathScope: true }, { state: 'locked', locked: true, otherwiseRemovable: true, reason: 'locked' })))
+    const result = await readWorktreeReport({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', runNode, pathOps: posixPathOps })
+    if (!result.ok) throw new Error(result.message)
+    expect(result.forcedActions).toBe('supported')
+    expect(result.worktrees[0]?.otherwiseReclaimable).toBe(true)
+    expect(result.worktrees[0]?.reclaimable).toBe(false)
+  })
+
+  it('reports forcedActions unsupported, and nothing otherwise reclaimable, from an older script', async () => {
+    const runNode: NodeRunner = () => Promise.resolve(ok(payload({}, { state: 'locked', locked: true, reason: 'locked' })))
+    const result = await readWorktreeReport({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', runNode, pathOps: posixPathOps })
+    if (!result.ok) throw new Error(result.message)
+    expect(result.forcedActions).toBe('unsupported')
+    expect(result.worktrees[0]?.otherwiseReclaimable).toBe(false)
+  })
+
   it('the sentinel triggers exactly one offline retry, appending --offline', async () => {
     const calls: (readonly string[])[] = []
     const runNode: NodeRunner = (args) => {

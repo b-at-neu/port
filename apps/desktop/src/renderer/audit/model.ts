@@ -1,6 +1,6 @@
 // The one `AuditEntry` → row mapping — pure, no DOM.
-import type { AuditEntry, AuditRowView, LabelAuditEntry, ReclaimAuditEntry } from '@/types/writes'
-import { isLabelAuditEntry } from '@/types/writes'
+import type { AuditEntry, AuditRowView, LabelAuditEntry, PurgeAuditEntry, ReclaimAuditEntry } from '@/types/writes'
+import { isLabelAuditEntry, isPurgeAuditEntry } from '@/types/writes'
 
 type Outcome = AuditRowView['outcome']
 
@@ -16,6 +16,17 @@ function reclaimOutcome(result: ReclaimAuditEntry['result']): Outcome {
       return { tone: 'success', label: 'Applied' }
     case 'partial':
       return { tone: 'attention', label: 'Partial' }
+    case 'failed':
+      return { tone: 'danger', label: 'Failed' }
+  }
+}
+
+function purgeOutcome(result: PurgeAuditEntry['result']): Outcome {
+  switch (result) {
+    case 'deleted':
+      return { tone: 'success', label: 'Applied' }
+    case 'refused':
+      return { tone: 'attention', label: 'Refused' }
     case 'failed':
       return { tone: 'danger', label: 'Failed' }
   }
@@ -41,7 +52,8 @@ function labelOutcome(result: LabelAuditEntry['result']): Outcome {
 }
 
 export function outcomeOf(entry: AuditEntry): Outcome {
-  return isLabelAuditEntry(entry) ? labelOutcome(entry.result) : reclaimOutcome(entry.result)
+  if (isLabelAuditEntry(entry)) return labelOutcome(entry.result)
+  return isPurgeAuditEntry(entry) ? purgeOutcome(entry.result) : reclaimOutcome(entry.result)
 }
 
 function quoted(arg: string): string {
@@ -79,6 +91,7 @@ function resultDetail(result: LabelAuditEntry['result']): string | null {
 }
 
 export function detailOf(entry: AuditEntry): string | null {
+  if (isPurgeAuditEntry(entry)) return entry.failure === null ? `Directory ${entry.path}.` : `Directory ${entry.path}. ${entry.failure}`
   if (!isLabelAuditEntry(entry)) {
     const counts = `Removed ${String(entry.removed.length)}, failed ${String(entry.failed.length)}.`
     return entry.result === 'applied' ? null : entry.failure === null ? counts : `${counts} ${entry.failure}`

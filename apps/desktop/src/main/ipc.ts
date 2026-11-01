@@ -19,7 +19,7 @@ import { gateAnswer, gatePreflight } from '@/main/actions/gate'
 import { resolveClaimApply, resolveClaimPreflight } from '@/main/channels/claim'
 import { resolveAuditList } from '@/main/channels/audit'
 import { resolveBacklogList } from '@/main/channels/backlog'
-import { resolveWorktreesReclaim, resolveWorktreesReport } from '@/main/channels/worktrees'
+import { resolveWorktreesPurge, resolveWorktreesReclaim, resolveWorktreesReport } from '@/main/channels/worktrees'
 import { resolveGhStatus } from '@/main/channels/gh'
 import { createDispatchRuntime } from '@/main/dispatch/runtime'
 import { createRunStateStore } from '@/main/dispatch/store'
@@ -210,6 +210,8 @@ export function registerIpc(): RegisteredIpc {
   handle('worktrees:report', (_event, request) => resolveWorktreesReport(registryDeps, request))
 
   handle('worktrees:reclaim', (_event, request) => resolveWorktreesReclaim(registryDeps, request, app.getPath('userData')))
+
+  handle('worktrees:purge', (_event, request) => resolveWorktreesPurge(registryDeps, request, app.getPath('userData')))
 
   handle('sessions:scan', (_event, request) => {
     if (request !== undefined) {
