@@ -3,7 +3,7 @@ import { createStageLauncher } from '@/main/stage/launcher'
 import type { StageLaunchRequest } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '@/types/hosting'
 
-import { WIDGETS_ID, FIXTURE_REPOSITORIES } from '@/main/fixtures/repos'
+import { WIDGETS_ID, FIXTURE_REPOSITORIES } from '../../../fixtures/app/repos'
 import type { ReadyEntry } from '@/types/actions'
 import type { StartSessionParams } from '@/types/hosting'
 import type { InterruptedStage, StageInstructionsLoader, StageResumeRequest } from '@/types/stage'

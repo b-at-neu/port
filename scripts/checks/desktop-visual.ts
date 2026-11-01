@@ -6,13 +6,13 @@ import type { Reporter } from '#lib/report.ts';
 
 // The visual harness's own rails — each block opens with the failure it catches.
 
-const FIXTURES_DIR = 'apps/desktop/src/main/fixtures';
+const FIXTURES_DIR = 'apps/desktop/tests/fixtures/app';
 
-// Every allowed import specifier a production file under main/fixtures/ may use — anything else would let fixture mode reach `gh` or `claude`.
+// Every allowed import specifier a production file under tests/fixtures/app/ may use — anything else would let fixture mode reach `gh` or `claude`.
 const ALLOWED_FIXTURE_IMPORTS: readonly RegExp[] = [
   /^electron$/,
   /^node:path$/,
-  /^@\/main\/fixtures\//,
+  /^\.\/[\w-]+$/,
   /^@\/types\//,
   /^@\/utils\//,
   /^@\/main\/registry\/schema$/,
@@ -24,7 +24,7 @@ const ALLOWED_FIXTURE_IMPORTS: readonly RegExp[] = [
 const IMPORT_RE = /^\s*import\s+(?:type\s+)?[\s\S]*?\bfrom\s+['"]([^'"]+)['"]/gm;
 
 export default async function ({ expect, fail, note, ok }: Reporter) {
-  // --- main/fixtures/ imports stay inside the allowlist, keeping fixture mode unable to
+  // --- tests/fixtures/app/ imports stay inside the allowlist, keeping fixture mode unable to
   // reach `gh` or `claude`. ---
   {
     const files = walk(join(root, FIXTURES_DIR)).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
@@ -39,12 +39,35 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
           if (specifier === undefined) continue;
           if (!ALLOWED_FIXTURE_IMPORTS.some((re) => re.test(specifier))) {
             violated = true;
-            fail('desktop-visual', `${relOf(f)} imports '${specifier}', outside main/fixtures/'s own allowlist — fixture mode must never reach gh or claude`);
+            fail('desktop-visual', `${relOf(f)} imports '${specifier}', outside tests/fixtures/app/'s own allowlist — fixture mode must never reach gh or claude`);
           }
         }
       }
       if (!violated) ok();
     }
+  }
+
+  // --- src/ reaches tests/fixtures/app/ only through main/index.ts's '#app-fixtures' alias — any other import
+  // of tests/ would put fixture data in a release build, which resolves that alias to a stub. ---
+  {
+    const srcFiles = walk(join(root, 'apps/desktop/src')).filter((f) => /\.tsx?$/.test(f));
+    let violated = false;
+    for (const f of srcFiles) {
+      const text = readFileSync(f, 'utf8');
+      for (const match of text.matchAll(IMPORT_RE)) {
+        const specifier = match[1];
+        if (specifier !== undefined && specifier.includes('tests/')) {
+          violated = true;
+          fail('desktop-visual', `${relOf(f)} imports '${specifier}' — src/ must never import from tests/; only main/index.ts's '#app-fixtures' alias may reach the fixtures`);
+        }
+      }
+    }
+    const indexText = readFileSync(join(root, 'apps/desktop/src/main/index.ts'), 'utf8');
+    if (!/import\s*\{\s*registerFixtureIpc\s*\}\s*from\s*'#app-fixtures'/.test(indexText)) {
+      violated = true;
+      fail('desktop-visual', "apps/desktop/src/main/index.ts must import registerFixtureIpc from '#app-fixtures'");
+    }
+    if (!violated) ok();
   }
 
   // --- main/index.ts passes app.isPackaged to fixtureMode( — without this, a packaged

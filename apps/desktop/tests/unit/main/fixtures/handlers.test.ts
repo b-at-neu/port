@@ -4,8 +4,8 @@ import type { IpcChannel } from '@/types/ipc'
 import { needsYouItems } from '@/renderer/board/needs-you'
 import { projectBoard } from '@/renderer/board/project'
 import type { RepoId } from '@/utils/repos'
-import { fixtureHandlers } from '@/main/fixtures/handlers'
-import { RESUMED_KEY, STREAMING_KEY } from '@/main/fixtures/sessions'
+import { fixtureHandlers } from '../../../fixtures/app/handlers'
+import { RESUMED_KEY, STREAMING_KEY } from '../../../fixtures/app/sessions'
 
 const WIDGETS = 'fixture-acme-widgets' as RepoId
 

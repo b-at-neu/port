@@ -3,17 +3,19 @@
 // the rest of its resources/ directory (the unpacked sibling and any
 // extraResources), and fails the build the moment any of them bundles an
 // excluded SDK platform binary or is missing the positive control that
-// proves the listing actually saw the packaged app.
+// proves the listing actually saw the packaged app. Every release asar's
+// main-process JS is also scanned for fixture data.
 //
 // Direction: fails closed (docs/ENGINEERING.md §4, "An absent signal is
 // never read as a passing one") — a listing that cannot be read, or that
 // finds zero app.asar files, is a failure, never a pass.
 import { existsSync, readdirSync } from 'node:fs'
 import { basename, dirname, join, relative, sep } from 'node:path'
-import { listPackage } from '@electron/asar'
-import { auditEntries, readSdkManifest, sdkPlatformPackages } from './bundle-audit.mjs'
+import { extractFile, listPackage } from '@electron/asar'
+import { auditEntries, fixtureLeaks, readSdkManifest, sdkPlatformPackages } from './bundle-audit.mjs'
 
 const distDir = join(import.meta.dirname, '../dist')
+const SMOKE_DIR = 'smoke'
 
 function walk(dir) {
   if (!existsSync(dir)) return []
@@ -44,6 +46,7 @@ if (forbidden.length === 0) {
 }
 
 let failed = false
+let scannedForFixtures = 0
 
 for (const asarPath of asarFiles) {
   const resourcesDir = dirname(asarPath)
@@ -67,8 +70,24 @@ for (const asarPath of asarFiles) {
     failed = true
     for (const entry of missing) console.error(`bundle audit: FAIL — ${asarPath} listing is missing required path: ${entry}`)
   }
+
+  // The `dist:smoke` copy legitimately carries fixtures, so only release asars are scanned.
+  if (relative(distDir, asarPath).split(sep)[0] === SMOKE_DIR) continue
+
+  const mainScripts = archiveEntries.filter((entry) => entry.startsWith('/out/main/') && entry.endsWith('.js'))
+  if (mainScripts.length === 0) {
+    failed = true
+    console.error(`bundle audit: FAIL — ${asarPath} listing has no main-process JS to scan for fixture data`)
+    continue
+  }
+  const files = mainScripts.map((entry) => ({ path: entry, text: extractFile(asarPath, entry.slice(1)).toString('utf8') }))
+  for (const leak of fixtureLeaks(files)) {
+    failed = true
+    console.error(`bundle audit: FAIL — ${asarPath} carries fixture data in ${leak}`)
+  }
+  scannedForFixtures += 1
 }
 
 if (failed) process.exit(1)
 
-console.log(`bundle audit: ${asarFiles.length} app.asar checked, ${forbidden.length} SDK platform packages excluded`)
+console.log(`bundle audit: ${asarFiles.length} app.asar checked, ${forbidden.length} SDK platform packages excluded, ${scannedForFixtures} scanned for fixture data`)

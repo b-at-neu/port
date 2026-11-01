@@ -25,6 +25,14 @@ export function sdkPlatformPackages(manifest) {
   return Object.keys(manifest.optionalDependencies ?? {})
 }
 
+/** The `WIDGETS_ID` literal in `tests/fixtures/app/repos.ts` — present in every bundle that carries fixture data. */
+export const FIXTURE_SENTINEL = 'fixture-acme-widgets'
+
+/** The paths whose text contains fixture data. */
+export function fixtureLeaks(files) {
+  return files.filter((file) => file.text.includes(FIXTURE_SENTINEL)).map((file) => file.path)
+}
+
 /** The required positive control: paths that must be present for the
  *  listing to have actually seen the packaged app, rather than an empty or
  *  truncated one passing vacuously. */

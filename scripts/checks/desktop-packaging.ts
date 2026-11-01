@@ -84,6 +84,38 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
+  // --- fixture-modes.mjs and bundle-audit.mjs's fixture rules: only development/fixtures/smoke compile fixtures,
+  // the audit's sentinel still names a real fixture literal, and `dist` builds in the default (fixture-free) mode. ---
+  {
+    const modesPath = join(appDir, 'scripts/fixture-modes.mjs');
+    const bundleAuditPath = join(appDir, 'scripts/bundle-audit.mjs');
+    const reposPath = join(appDir, 'tests/fixtures/app/repos.ts');
+    if (!existsSync(modesPath) || !existsSync(bundleAuditPath) || !existsSync(reposPath)) {
+      fail('desktop-packaging', `${relOf(modesPath)}, ${relOf(bundleAuditPath)} and ${relOf(reposPath)} must all exist`);
+    } else {
+      const modes = await import(pathToFileURL(modesPath).href);
+      const audit = await import(pathToFileURL(bundleAuditPath).href);
+      const cases: [string, boolean, boolean][] = [
+        ['production', false, false],
+        ['unknown-mode', false, false],
+        ['development', true, false],
+        ['fixtures', true, false],
+        ['smoke', true, true],
+      ];
+      for (const [mode, compiled, packaged] of cases) {
+        const got = modes.fixtureBuild(mode);
+        expect(got.compiled === compiled && got.packaged === packaged, 'desktop-packaging', `fixtureBuild('${mode}') returned ${JSON.stringify(got)}, expected compiled=${compiled} packaged=${packaged}`);
+      }
+
+      expect(audit.fixtureLeaks([{ path: '/out/main/index.js', text: `x ${audit.FIXTURE_SENTINEL} y` }]).length === 1, 'desktop-packaging', 'fixtureLeaks did not flag a text containing the fixture sentinel');
+      expect(audit.fixtureLeaks([{ path: '/out/main/index.js', text: 'const real = 1' }]).length === 0, 'desktop-packaging', 'fixtureLeaks flagged a text without the fixture sentinel');
+      expect(readFileSync(reposPath, 'utf8').includes(audit.FIXTURE_SENTINEL), 'desktop-packaging', `${relOf(reposPath)} no longer contains the fixture sentinel '${audit.FIXTURE_SENTINEL}' — the bundle audit would pass vacuously`);
+
+      const dist: string = readJson('apps/desktop/package.json').scripts?.dist ?? '';
+      expect(!/electron-vite build[^&]*--mode/.test(dist), 'desktop-packaging', `'dist' script must build in the default mode so no fixtures are compiled, got: ${dist}`);
+    }
+  }
+
   // --- electron-builder.config.mjs derives exclusions and excludes no asarUnpack: a
   // hand-typed exclusion list would defeat the derive-from-the-manifest contract. ---
   {

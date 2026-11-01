@@ -3,7 +3,7 @@ import type { IpcMap } from '@/types/ipc'
 import type { FixtureScenario } from '@/types/fixtures'
 import type { AuditEntry, AuditRead, LabelAuditEntry } from '@/types/writes'
 import { isLabelAuditEntry } from '@/types/writes'
-import { WIDGETS_ID } from '@/main/fixtures/repos'
+import { WIDGETS_ID } from './repos'
 
 const REPO = 'acme/widgets'
 

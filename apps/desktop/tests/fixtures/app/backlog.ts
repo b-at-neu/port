@@ -2,7 +2,7 @@
 import type { BacklogResponse } from '@/types/backlog'
 import type { BlockerRead } from '@/types/github'
 import type { RepoId } from '@/utils/repos'
-import { WIDGETS_ID } from '@/main/fixtures/repos'
+import { WIDGETS_ID } from './repos'
 
 const VIEWER = 'octo-dev'
 
