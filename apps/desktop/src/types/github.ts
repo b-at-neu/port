@@ -77,7 +77,7 @@ export interface PipelineItem {
   readonly mergeable: Mergeable
   readonly reviews: readonly ReviewNode[] | null
   readonly comments: readonly PullRequestCommentNode[] | null
-  /** The `approved` alias's own `statusCheckRollup` selection — `null` means this alias did not select it; `[]` means it was selected but GitHub returned no rollup at all. */
+  /** The `approved` and `readyForReview` aliases' own `statusCheckRollup` selection — `null` means this alias did not select it; `[]` means it was selected but GitHub returned no rollup at all. */
   readonly checkRollup: readonly CheckContext[] | null
 }
 

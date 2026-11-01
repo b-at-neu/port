@@ -146,7 +146,7 @@ export interface ReconciledItem {
   readonly comments: readonly PullRequestCommentNode[] | null
   /** `codeReviewCount(reviews)`, precomputed here so the renderer never re-derives it from raw review bodies — `null` for an issue. */
   readonly reviewCycleCount: number | null
-  /** Copied straight off `PipelineItem`, pull-request only — `null` for an issue. Feeds `scripts/port-tick/checks.ts`'s `rollupVerdict` for the approval-withdrawal observation. */
+  /** Copied straight off `PipelineItem`, pull-request only — `null` for an issue. Feeds `scripts/port-tick/checks.ts`'s `rollupVerdict` for the approval-withdrawal observation, and `zeroDiffChecksOf` for the zero-diff gate on `readyForReview`. */
   readonly checkRollup: readonly CheckContext[] | null
   /** Whether this issue's body carries `link.ts`'s own `IMPLEMENTATION_PLAN_HEADING`, trimmed-line exact — `null` for a pull request, never a second copy of the heading. Feeds `main/tick/repair.ts`'s `plan-missing`/`plan-missing-approved` shapes. */
   readonly planPresent: boolean | null

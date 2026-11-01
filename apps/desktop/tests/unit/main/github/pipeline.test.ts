@@ -222,7 +222,7 @@ describe('fetchPipelineItems — details', () => {
   const reviewPull = node(3, ['ready for review'], { mergedAt: null })
   const sweep = (): GhResult => ok(sweepBody({ issues: connection([issue]), pullRequests: connection([approvedPull, reviewPull]) }))
 
-  it('merges each detail onto its item, with the rollup only on a pull request at the approved stage', async () => {
+  it('merges each detail onto its item, with the rollup only on a pull request at the approved or ready-for-review stage', async () => {
     const rollup = { commits: { nodes: [{ commit: { statusCheckRollup: { state: 'FAILURE', contexts: { nodes: [{ __typename: 'CheckRun', name: 'build', conclusion: 'FAILURE', status: 'COMPLETED' }] } } } }] } }
     const { runner, documents } = scripted({
       sweep,
@@ -232,7 +232,7 @@ describe('fetchPipelineItems — details', () => {
             repository: {
               d0: { timelineItems: { nodes: [{ createdAt: '2026-01-01T00:00:00Z', actor: { login: 'op' }, label: { name: 'ready' } }] } },
               d1: { timelineItems: { nodes: [] }, reviews: { nodes: [{ body: '## Code Review — Cycle 1', submittedAt: '2026-01-01T00:00:00Z', commit: { oid: 'sha' } }] }, comments: { nodes: [] }, ...rollup },
-              d2: { timelineItems: { nodes: [] }, reviews: { nodes: [] }, comments: { nodes: [] } },
+              d2: { timelineItems: { nodes: [] }, reviews: { nodes: [] }, comments: { nodes: [] }, ...rollup },
             },
             rateLimit: RATE_LIMIT_REPLY,
           },
@@ -246,10 +246,10 @@ describe('fetchPipelineItems — details', () => {
     expect(second?.reviews).toHaveLength(1)
     expect(second?.checkRollup?.map((check) => check.name)).toEqual(['build'])
     expect(third?.reviews).toEqual([])
-    expect(third?.checkRollup).toBeNull()
+    expect(third?.checkRollup?.map((check) => check.name)).toEqual(['build'])
     expect(first?.checkRollup).toBeNull()
     expect(documents[1]).toContain('d1: pullRequest(number: 2) {')
-    expect((documents[1] ?? '').split('...CheckRollupFields')).toHaveLength(2)
+    expect((documents[1] ?? '').split('...CheckRollupFields')).toHaveLength(3)
   })
 
   it('sums the cost of every round trip and keeps the last reply\'s budget', async () => {

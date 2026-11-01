@@ -137,6 +137,19 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(!run(review('blocked — checks pending', marker)).ok, 'artifacts-review-marker', 'review accepts the check-only marker under blocked — checks pending');
     expect(!run(review('needs revision', 'Blocked only by checks: test')).ok, 'artifacts-review-marker', 'review accepts a marker whose names are not backtick-quoted');
     expect(!run(review('needs revision', 'Blocked only by checks:')).ok, 'artifacts-review-marker', 'review accepts a marker naming no check');
+
+    const strict = { strict: true };
+    const codeLine = 'Blocked by code findings.';
+    expect(!run(review('needs revision', null), strict).ok, 'artifacts-review-marker', 'strict review accepts a needs revision body with no basis line');
+    expect(!run(review('needs revision', ''), strict).ok, 'artifacts-review-marker', 'strict review accepts a blank line 3');
+    expect(run(review('needs revision', codeLine), strict).ok, 'artifacts-review-marker', 'strict review rejects the code-findings line');
+    expect(run(review('needs revision', marker), strict).ok, 'artifacts-review-marker', 'strict review rejects a valid marker');
+    expect(!run(review('approved', codeLine)).ok, 'artifacts-review-marker', 'review accepts the code-findings line under approved');
+    expect(run(review('approved', null), strict).ok, 'artifacts-review-marker', 'strict review rejects an approved body with no basis line');
+    const noCritical = JSON.stringify({ event: 'COMMENT', body: `## Code Review — Cycle 2 · needs revision\n2 Medium\n${marker}`, comments: [] });
+    expect(!run(noCritical, strict).ok, 'artifacts-review-marker', 'strict review accepts a marker with no Critical in the counts line');
+    expect(run(noCritical).ok, 'artifacts-review-marker', 'non-strict review rejects a marker with no Critical in the counts line');
+    expect(CHECKS.revision.run('## Revision — Cycle 2\nfixed 0 · skipped 1 · abc1234 · reran `run-e2e (macos-latest)`').ok, 'artifacts-review-marker', 'revision rejects a reran suffix');
   }
 
   // --- Screenshots: the pr-body section rules and the publisher's pure helpers accept a good case and reject each bad one. ---
