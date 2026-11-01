@@ -1,9 +1,9 @@
 import { toast } from 'sonner'
 import type { ActionToast } from '@/types/toast'
 
-export const FRESH ={ action: undefined, cancel: undefined, duration: undefined } as const
+export const FRESH = { action: undefined, cancel: undefined, duration: undefined } as const
 
-export const UNREACHABLE: ActionToast ={ tone: 'error', title: "Couldn't reach the main process. Restart port to try again.", description: null, action: null, cancel: null }
+export const UNREACHABLE: ActionToast = { tone: 'error', title: "Couldn't reach the main process. Restart port to try again.", description: null, action: null, cancel: null }
 
 export function showActionToast(id: string, result: ActionToast): void {
   const options = {

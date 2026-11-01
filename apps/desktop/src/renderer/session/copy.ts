@@ -160,7 +160,7 @@ export function archiveRemoveFailedToast(message: string): string {
 }
 
 export const ARCHIVE_UNAVAILABLE = "That session can't be dismissed right now."
-export const ARCHIVE_PENDING ='Dismissing the session…'
+export const ARCHIVE_PENDING = 'Dismissing the session…'
 export const ARCHIVING_PENDING = 'Archiving the session…'
 
 export function archiveSuccessToast(choice: 'keep' | 'remove' | 'force'): string {
@@ -183,7 +183,7 @@ export const TASK_KEEP_RUNNING = 'Keep running'
 export const TASK_STOP_BUTTON = 'Stop task'
 export const TASK_STOP_PENDING = 'Stopping the task…'
 export const TASK_STOP_SUCCESS = 'Stopped the task.'
-export const TASK_STOP_UNKNOWN ='That task already finished.'
+export const TASK_STOP_UNKNOWN = 'That task already finished.'
 export function taskStopFailed(message: string): string {
   return `Couldn't stop the task: ${message}`
 }

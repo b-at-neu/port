@@ -37,10 +37,16 @@ export async function setSessionMark(queryClient: QueryClient, kind: MarkKind, s
       return
     }
     queryClient.setQueryData<SessionMarks>(ipcQueryOptions('session:marks').queryKey, result.marks)
-    if (closing) await close(closeKey).catch((error: unknown) => console.error('Failed to close a session after archiving it', error))
+    const closed = closing && (await close(closeKey).then(
+      (closeResult) => closeResult.ok,
+      (error: unknown) => {
+        console.error('Failed to close a session after archiving it', error)
+        return false
+      },
+    ))
     showActionToast(id, {
-      tone: 'success',
-      title: markSuccessToast(kind, on, closing),
+      tone: closing && !closed ? 'info' : 'success',
+      title: markSuccessToast(kind, on, closed),
       description: null,
       action: { label: UNDO_LABEL, onClick: () => void setSessionMark(queryClient, kind, sessionId, !on) },
       cancel: null,
