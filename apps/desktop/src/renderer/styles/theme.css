@@ -13,7 +13,7 @@
   --card: #ffffff;
   --popover: #ffffff;
   --muted: #f4f4f5;
-  --accent: #e4e4e7;
+  --accent: #dfe5f2;
   --border: #e4e4e7;
 
   /* Text */
@@ -51,27 +51,27 @@
   --idle-pill-foreground: var(--foreground-secondary);
   --idle-dot: var(--faint);
 
-  /* Phase palette: one set per pipeline phase */
-  --phase-plan-pill: #ede9fe;
-  --phase-plan-pill-foreground: #5b21b6;
-  --phase-plan-dot: #7c3aed;
-  --phase-implement-pill: var(--working-pill);
-  --phase-implement-pill-foreground: var(--working-pill-foreground);
+  /* Phase palette: one set per pipeline phase; pills are solid fills, the same in both themes */
+  --phase-plan-pill: #9333ea;
+  --phase-plan-pill-foreground: #ffffff;
+  --phase-plan-dot: #9333ea;
+  --phase-implement-pill: #2563eb;
+  --phase-implement-pill-foreground: #ffffff;
   --phase-implement-dot: var(--working-dot);
-  --phase-review-pill: #ccfbf1;
-  --phase-review-pill-foreground: #115e59;
-  --phase-review-dot: #0d9488;
-  --phase-revise-pill: #ffedd5;
-  --phase-revise-pill-foreground: #9a3412;
-  --phase-revise-dot: #ea580c;
+  --phase-review-pill: #facc15;
+  --phase-review-pill-foreground: #422006;
+  --phase-review-dot: #9c8a00;
+  --phase-revise-pill: #d61f8a;
+  --phase-revise-pill-foreground: #ffffff;
+  --phase-revise-dot: #d61f8a;
   --phase-refresh-pill: var(--idle-pill);
   --phase-refresh-pill-foreground: var(--idle-pill-foreground);
   --phase-refresh-dot: #71717a;
-  --phase-needs-you-pill: var(--danger-pill);
-  --phase-needs-you-pill-foreground: var(--danger-pill-foreground);
+  --phase-needs-you-pill: #dc2626;
+  --phase-needs-you-pill-foreground: #ffffff;
   --phase-needs-you-dot: var(--danger-dot);
-  --phase-done-pill: var(--success-pill);
-  --phase-done-pill-foreground: var(--success-pill-foreground);
+  --phase-done-pill: #22c55e;
+  --phase-done-pill-foreground: #052e16;
   --phase-done-dot: var(--success-dot);
 
   /* Diffs */
@@ -105,28 +105,27 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --background: #09090b;
-  --sidebar: #111113;
-  --card: #18181b;
-  --popover: #18181b;
-  --muted: #1c1c1f;
-  --accent: #27272a;
-  --border: #27272a;
+  --background: #1a1d23;
+  --sidebar: #121419;
+  --card: #23262e;
+  --popover: #23262e;
+  --muted: #2b2f38;
+  --accent: #283453;
+  --border: #393e4a;
 
   --foreground: #fafafa;
   --foreground-secondary: #d4d4d8;
   --muted-foreground: #a1a1aa;
   --faint: #71717a;
 
-  /* Dark mode inverts `primary` to a pale navy tint (DESIGN §1): navy fill on
-   * a near-black background does not read as a button. */
-  --primary: #e2e8f5;
-  --primary-foreground: #172554;
+  /* Dark `primary` is a lighter navy than `brand`, so it reads as a button on the lifted background. */
+  --primary: #2f4a8a;
+  --primary-foreground: #ffffff;
   --primary-text: #a5b8e3;
   --ring: #a5b8e3;
-  --selection: #121a2e;
+  --selection: #1d2640;
   --brand: #172554;
-  --brand-border: #4b5f8f;
+  --brand-border: #52669a;
   --brand-foreground: #ffffff;
 
   --working-pill: #0f2a5c;
@@ -145,26 +144,26 @@
   --idle-pill-foreground: var(--foreground-secondary);
   --idle-dot: var(--faint);
 
-  --phase-plan-pill: #2e1065;
-  --phase-plan-pill-foreground: #c4b5fd;
-  --phase-plan-dot: #8b5cf6;
-  --phase-implement-pill: var(--working-pill);
-  --phase-implement-pill-foreground: var(--working-pill-foreground);
+  --phase-plan-pill: #9333ea;
+  --phase-plan-pill-foreground: #ffffff;
+  --phase-plan-dot: #a855f7;
+  --phase-implement-pill: #2563eb;
+  --phase-implement-pill-foreground: #ffffff;
   --phase-implement-dot: var(--working-dot);
-  --phase-review-pill: #042f2e;
-  --phase-review-pill-foreground: #5eead4;
-  --phase-review-dot: #14b8a6;
-  --phase-revise-pill: #431407;
-  --phase-revise-pill-foreground: #fdba74;
-  --phase-revise-dot: #f97316;
+  --phase-review-pill: #facc15;
+  --phase-review-pill-foreground: #422006;
+  --phase-review-dot: #facc15;
+  --phase-revise-pill: #d61f8a;
+  --phase-revise-pill-foreground: #ffffff;
+  --phase-revise-dot: #ec4899;
   --phase-refresh-pill: var(--idle-pill);
   --phase-refresh-pill-foreground: var(--idle-pill-foreground);
   --phase-refresh-dot: #a1a1aa;
-  --phase-needs-you-pill: var(--danger-pill);
-  --phase-needs-you-pill-foreground: var(--danger-pill-foreground);
+  --phase-needs-you-pill: #dc2626;
+  --phase-needs-you-pill-foreground: #ffffff;
   --phase-needs-you-dot: var(--danger-dot);
-  --phase-done-pill: var(--success-pill);
-  --phase-done-pill-foreground: var(--success-pill-foreground);
+  --phase-done-pill: #22c55e;
+  --phase-done-pill-foreground: #052e16;
   --phase-done-dot: var(--success-dot);
 
   --diff-added: #06240f;
@@ -174,7 +173,7 @@
 
   --syntax-keyword: #ff7b72;
   --syntax-string: #a5d6ff;
-  --syntax-comment: #8b949e;
+  --syntax-comment: #9aa3ad;
   --syntax-constant: #79c0ff;
   --syntax-function: #d2a8ff;
 

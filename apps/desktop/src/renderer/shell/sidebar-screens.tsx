@@ -6,7 +6,7 @@ import { useNeedsYouItems } from '@/renderer/needs-you/use-items'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 
 const ROW_CLASS =
-  'flex h-7 items-center gap-2 rounded-md px-2 text-body text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring [&.active]:bg-accent [&.active]:text-foreground'
+  'flex h-7 items-center gap-2 rounded-md px-2 text-body text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring [&.active]:bg-accent [&.active]:text-primary-text'
 
 export function SidebarScreens() {
   const count = useNeedsYouItems().length

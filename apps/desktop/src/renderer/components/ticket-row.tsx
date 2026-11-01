@@ -73,13 +73,13 @@ export function TicketRow({ row, rowProps, operatorJoined = false }: TicketRowPr
       {prSuffix !== null ? <span className="shrink-0 tabular-nums text-muted-foreground">{prSuffix}</span> : null}
       <span className="flex-1" />
       {ref.kind === 'unlinked-pr' ? (
-        <span title={noTicketTagTitle()} className="shrink-0 rounded-full bg-accent px-1.5 py-0.5 text-meta text-foreground-secondary">
+        <span title={noTicketTagTitle()} className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-meta text-foreground-secondary">
           {noTicketTagLabel()}
         </span>
       ) : null}
       <span className="shrink-0 text-meta text-muted-foreground">{item.repo}</span>
       {item.autoPlan ? (
-        <span title={autoPlanTagTitle()} className="shrink-0 rounded-full bg-accent px-1.5 py-0.5 text-meta text-foreground-secondary">
+        <span title={autoPlanTagTitle()} className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-meta text-foreground-secondary">
           {autoPlanTagLabel()}
         </span>
       ) : null}
