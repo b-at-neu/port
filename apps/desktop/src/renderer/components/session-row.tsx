@@ -1,5 +1,5 @@
 // The one session row (DESIGN §4's `SessionRow`) — Your sessions, History and a pipeline's nested stage sessions all render through it.
-import type { ReactNode } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import { cn } from '@/renderer/lib/utils'
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '@/renderer/components/ui/context-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
@@ -65,40 +65,52 @@ function OpenButton({ props, pinned }: { readonly props: SessionRowProps; readon
   )
 }
 
-function RowFrame({ props, pinned, menu }: { readonly props: SessionRowProps; readonly pinned: boolean; readonly menu: ReactNode }) {
+interface RowFrameProps {
+  readonly props: SessionRowProps
+  readonly pinned: boolean
+  readonly menu: ReactNode
+  readonly contextTrigger: (line: ReactElement) => ReactElement
+}
+
+function RowFrame({ props, pinned, menu, contextTrigger }: RowFrameProps) {
   const { density, selected, trailing, children } = props
   const button = <OpenButton props={props} pinned={pinned} />
-  if (density === 'nested') return <div data-slot="session-row">{button}</div>
+  if (density === 'nested') return <div data-slot="session-row">{contextTrigger(<div className="contents">{button}</div>)}</div>
   if (density === 'sidebar') {
-    return (
+    return contextTrigger(
       <div data-slot="session-row" className={cn('group/row flex h-7 w-full items-center gap-1 rounded-md pr-1 text-body text-foreground-secondary', selected === true && SELECTED_ROW_CLASS)}>
         {button}
         <div className="shrink-0 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 group-has-[[data-state=open]]/row:opacity-100">{menu}</div>
-      </div>
+      </div>,
     )
   }
   return (
     <div className="flex flex-col" data-slot="session-row">
-      <div className="flex h-9 items-center gap-2 px-4">
-        {button}
-        {trailing}
-        {menu}
-      </div>
+      {contextTrigger(
+        <div className="flex h-9 items-center gap-2 px-4">
+          {button}
+          {trailing}
+          {menu}
+        </div>,
+      )}
       {children}
     </div>
   )
 }
+
+const NO_CONTEXT_TRIGGER = (line: ReactElement) => line
 
 function MarkedSessionRow({ props, marks }: { readonly props: SessionRowProps; readonly marks: RowMarks }) {
   const model = useSessionMarkMenu(marks)
   return (
     <>
       <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <div className="contents">
-            <RowFrame props={props} pinned={model.pinned} menu={<SessionMarkMenu items={model.items} select={model.select} />} />
-          </div>
-        </ContextMenuTrigger>
+        <RowFrame
+          props={props}
+          pinned={model.pinned}
+          menu={<SessionMarkMenu items={model.items} select={model.select} />}
+          contextTrigger={(line) => <ContextMenuTrigger asChild>{line}</ContextMenuTrigger>}
+        />
         <ContextMenuContent>
           <SessionMarkContextItems items={model.items} select={model.select} />
         </ContextMenuContent>
@@ -109,6 +121,6 @@ function MarkedSessionRow({ props, marks }: { readonly props: SessionRowProps; r
 }
 
 export function SessionRow(props: SessionRowProps) {
-  if (props.marks === null) return <RowFrame props={props} pinned={false} menu={null} />
+  if (props.marks === null) return <RowFrame props={props} pinned={false} menu={null} contextTrigger={NO_CONTEXT_TRIGGER} />
   return <MarkedSessionRow props={props} marks={props.marks} />
 }
