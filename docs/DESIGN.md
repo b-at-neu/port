@@ -252,7 +252,9 @@ Scoping epics and analytics are out of scope for the first release.
 **Actions:**
 - **Reversible actions apply immediately with a toast:** run, drain, retry. The toast offers Undo where possible.
 - **Actions with consequences open an `AlertDialog`:** stopping a session, pausing a pipeline (it stops its running agents), clearing needs-human, sending an approved PR back, removing a worktree. The dialog states the consequence, and its confirm button names the action ("Stop session", never "OK").
-- **A running action shows its pending state on its own button.** A failure produces a toast with the reason. Nothing retries on its own, and nothing offers to overwrite a conflicting write.
+- **A dialog asks one question.** Its buttons are the answers, with a top-right X as cancel. Choosing an answer closes the dialog, shows a loading toast, then a success or error toast. The result never renders inside the dialog.
+- **Three dialogs are exceptions.** The plan gate is a review surface, so its reading steps stay in the dialog and only the write moves to a toast. The permission queue answers in place and has no X, because dismissing already means Deny. New session is a form whose errors are fixed in place.
+- **An action started outside a dialog shows its pending state on its own button.** A failure produces a toast with the reason. Nothing retries on its own, and nothing offers to overwrite a conflicting write.
 
 ## 5. Motion and feedback
 
@@ -322,7 +324,7 @@ The markers `marker` and `autoPlan` are never shown as phases; `autoPlan` appear
 - [ ] shadcn primitives first, then the shared port components in §4. A pattern used twice becomes a shared component.
 - [ ] lucide icons only: 16px in the interface, 14px inline in text, one stroke width.
 - [ ] Every data region has loading, empty, error and stale states (§4).
-- [ ] Reversible actions toast; consequential ones confirm with a named-action `AlertDialog`.
+- [ ] Reversible actions toast; consequential ones confirm with a named-action `AlertDialog`. A dialog answer closes it and reports through a loading, then a result toast (§4).
 - [ ] Phase names come from the role map in §6, never a label string.
 - [ ] Copy is sentence case, verb-first buttons, no exclamation marks; messages that need the operator lead with the action.
 - [ ] Screenshots in light and dark: run `pnpm screenshots`, Read the screen's PNGs in `apps/desktop/out/screenshots/`, and embed the relevant captures under the pull request's `## Screenshots` (FORMATS.md). A new route gets a capture target in `apps/desktop/tests/visual/targets.mts`.
