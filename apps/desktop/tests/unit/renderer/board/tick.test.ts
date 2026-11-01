@@ -94,6 +94,34 @@ describe('heldDetailCopy', () => {
     expect(heldDetailCopy(zeroDiff, 'none')).toBe('#157 would escalate to needs human — the latest review already covers the current head.')
   })
 
+  it('names the re-running check for a pending check-hold', () => {
+    const held: TickHeld = {
+      number: 594,
+      kind: 'pull-request',
+      trigger: 'readyForReview',
+      reason: 'check-hold',
+      contention: null,
+      escalation: { kind: 'check-hold', checks: ['run-e2e (macos-latest)'], state: 'pending', escalateAt: null },
+    }
+    expect(heldDetailCopy(held)).toBe("#594 held — waiting for `run-e2e (macos-latest)` to finish its re-run. It's re-reviewed once it passes.")
+  })
+
+  it('names the deadline for a red check-hold, and drops the clause without one', () => {
+    const escalateAt = '2026-01-01T16:20:00.000Z'
+    const time = new Date(escalateAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    const red: TickHeld = {
+      number: 594,
+      kind: 'pull-request',
+      trigger: 'readyForReview',
+      reason: 'check-hold',
+      contention: null,
+      escalation: { kind: 'check-hold', checks: ['a', 'b'], state: 'red', escalateAt },
+    }
+    expect(heldDetailCopy(red)).toBe(`#594 held — \`a\`, \`b\` is still red on the reviewed head. Re-run it on GitHub; it escalates to needs human at ${time} if it stays red.`)
+    const open: TickHeld = { ...red, escalation: { kind: 'check-hold', checks: ['a'], state: 'red', escalateAt: null } }
+    expect(heldDetailCopy(open)).toBe('#594 held — `a` is still red on the reviewed head. Re-run it on GitHub.')
+  })
+
   it('#292: a conflicting hold reads as this app actively refreshing it, instead of naming the cockpit\'s sweep', () => {
     const held: TickHeld = { number: 88, kind: 'pull-request', trigger: 'readyForReview', reason: 'conflicting', contention: null, escalation: null }
     expect(heldDetailCopy(held, 'app')).toBe('#88 conflicts — this app is refreshing it (rebase + force-push).')

@@ -80,7 +80,7 @@ export function buildPipelineQuery(vocabulary: LabelVocabulary, page: SweepPage)
   ].join('\n')
 }
 
-/** `rollup` is true only for a pull request at the approved stage. */
+/** `rollup` is true only for a pull request at the approved or ready-for-review stage. */
 export interface ItemDetailRef {
   readonly kind: PipelineItemKind
   readonly number: number
