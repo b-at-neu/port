@@ -154,7 +154,7 @@ Dark surface lightness (CIE L*): sidebar 6.3 · background 10.7 · card 15.2 · 
 
 **Sidebar, top to bottom:**
 1. **Mark and wordmark.**
-2. **Screens:** Needs you (red count), Board, Backlog, Audit log.
+2. **Screens:** Needs you (red count), Board, Backlog, Releases, Audit log.
 3. **Pipelines:** one row per registered repo. Each row has:
    - a caret that collapses it, with the state remembered;
    - the repo name;
@@ -171,14 +171,15 @@ Dark surface lightness (CIE L*): sidebar 6.3 · background 10.7 · card 15.2 · 
 | Needs you | Everything waiting on the operator, newest first, each with its action inline: plan reviews, PRs ready to merge, questions from stage sessions, needs-human escalations, blocked items |
 | Board | Grouped list: **Waiting on you**, **In progress**, **Queued**. Toggle grouping by phase or by repo, plus a repo filter |
 | Backlog | Open tickets not yet in a pipeline, with **Work on**: interactive plan review or auto-plan |
+| Releases | Per repo, the upcoming release (what merged since the last tag, the recommended version) with the one action its phase allows (**Cut release**, **Open PR**, **Publish**), then every previous release, whose notes open in the detail pane |
 | Session | Conversation and composer. **Changes** opens the session's diff in the detail pane |
 | History | Past sessions and transcripts, with search |
 | Audit log | Every write port made to GitHub, newest first, filterable by repo and ticket |
 | Settings | Full width, with six tabs of cards in a responsive grid, chosen by `?section=`: General (theme, notifications, keyboard shortcuts), Repositories (the repository list, and one page per repo with tabs Overview, Worktrees, Denials), Connections (Claude Code, `gh`, the GitHub rate limit, each repository's last read), Pipeline (session limit, new-session defaults, a read-only view of each repository's config), Usage & storage (spend by repository and period, disk use), About (version, runtime versions, setup checklist, notices). The old `/repositories` and `/about` routes redirect here |
 
-Scoping epics, releases and analytics are out of scope for the first release.
+Scoping epics and analytics are out of scope for the first release.
 
-**Detail pane rule.** Selecting an item in a list (a ticket, worktree or denial) opens it in the right-hand pane instead of navigating away. Esc closes it. Full-page navigation is only for screens and sessions.
+**Detail pane rule.** Selecting an item in a list (a ticket, worktree, denial or release) opens it in the right-hand pane instead of navigating away. Esc closes it. Full-page navigation is only for screens and sessions.
 
 **Board row anatomy, left to right:**
 - ticket number (`muted-foreground`, tabular);

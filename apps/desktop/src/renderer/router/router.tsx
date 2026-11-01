@@ -6,6 +6,7 @@ import type { AuditSearch, BoardSearch, HistorySearch, NeedsYouSearch, RepoSearc
 import { SettingsScreen } from '@/renderer/settings/screen'
 import { AuditScreen } from '@/renderer/audit/screen'
 import { BacklogScreen } from '@/renderer/backlog/screen'
+import { ReleasesScreen } from '@/renderer/releases/screen'
 import { NeedsYouScreen } from '@/renderer/needs-you/screen'
 import { SetupScreen } from '@/renderer/setup/screen'
 import { BoardScreen } from '@/renderer/board/screen'
@@ -87,6 +88,7 @@ const settingsRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): SettingsSearch => settingsSearchFromRaw(search),
 })
 const backlogRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.backlog, component: BacklogScreen })
+const releasesRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.releases, component: ReleasesScreen })
 const auditRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: ROUTE_IDS.audit,
@@ -130,6 +132,7 @@ const routeTree = rootRoute.addChildren([
   sessionRoute,
   settingsRoute,
   backlogRoute,
+  releasesRoute,
   auditRoute,
   needsYouRoute,
   setupRoute,

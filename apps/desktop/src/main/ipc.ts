@@ -19,6 +19,7 @@ import { gateAnswer, gatePreflight } from '@/main/actions/gate'
 import { resolveClaimApply, resolveClaimPreflight } from '@/main/channels/claim'
 import { resolveAuditList } from '@/main/channels/audit'
 import { resolveBacklogList } from '@/main/channels/backlog'
+import { resolveReleaseRun, resolveReleaseStatus } from '@/main/channels/release'
 import { resolveWorktreesPurge, resolveWorktreesReclaim, resolveWorktreesReport } from '@/main/channels/worktrees'
 import { resolveGhStatus } from '@/main/channels/gh'
 import { createDispatchRuntime } from '@/main/dispatch/runtime'
@@ -329,6 +330,10 @@ export function registerIpc(): RegisteredIpc {
   handle('claim:apply', (_event, request) => resolveClaimApply(registryDeps, request, app.getPath('userData')))
 
   handle('backlog:list', (_event, request) => resolveBacklogList(registryDeps, request))
+
+  handle('release:status', (_event, request) => resolveReleaseStatus(registryDeps, request))
+
+  handle('release:run', (_event, request) => resolveReleaseRun(registryDeps, request, app.getPath('userData'), app.getPath('temp')))
 
   handle('audit:list', (_event, request) => resolveAuditList(registryDeps, request, app.getPath('userData')))
 

@@ -7,6 +7,7 @@ import type { AuditSearch, BoardItemRef, BoardSearch, HistorySearch, NeedsYouSea
 export const ROUTE_IDS = {
   board: '/board',
   backlog: '/backlog',
+  releases: '/releases',
   audit: '/audit',
   needsYou: '/needs-you',
   repos: '/repositories',
@@ -23,7 +24,7 @@ export const ROUTE_IDS = {
 
 /** Every route a launch or `shell/prefs.ts`'s `trackLastRoute` may restore
  *  onto — screens whose state survives a quit/relaunch. */
-export const RESTORABLE_ROUTES: readonly string[] = [ROUTE_IDS.board, ROUTE_IDS.repos, ROUTE_IDS.session, ROUTE_IDS.settings, ROUTE_IDS.backlog, ROUTE_IDS.needsYou, ROUTE_IDS.history, ROUTE_IDS.audit]
+export const RESTORABLE_ROUTES: readonly string[] = [ROUTE_IDS.board, ROUTE_IDS.repos, ROUTE_IDS.session, ROUTE_IDS.settings, ROUTE_IDS.backlog, ROUTE_IDS.releases, ROUTE_IDS.needsYou, ROUTE_IDS.history, ROUTE_IDS.audit]
 
 const BOARD_ITEM_RE = /^(.+):(\d+)$/
 

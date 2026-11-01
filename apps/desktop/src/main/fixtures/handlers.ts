@@ -9,6 +9,7 @@ import { fixtureStorageReport, fixtureUsageSummary } from '@/main/fixtures/setti
 import { fixtureBoardSnapshot } from '@/main/fixtures/board'
 import { fixtureAuditRead } from '@/main/fixtures/audit'
 import { fixtureBacklog } from '@/main/fixtures/backlog'
+import { fixtureReleaseStatus } from '@/main/fixtures/releases'
 import { fixtureClaimPreflight, fixtureGatePreflight } from '@/main/fixtures/dialogs'
 import { fixtureFolders, fixtureSessionChanges } from '@/main/fixtures/folders'
 import { FIXTURE_REPOSITORIES } from '@/main/fixtures/repos'
@@ -133,5 +134,7 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'notify:prefs:set': (request) => request,
     'storage:report': () => fixtureStorageReport(),
     'usage:summary': () => fixtureUsageSummary(now),
+    'release:status': (request) => fixtureReleaseStatus(now, scenario, request.repoId),
+    'release:run': () => ({ kind: 'refused', reason: 'unsupported', message: 'Fixture mode: releases are not cut.' }),
   }
 }

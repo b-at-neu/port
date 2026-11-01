@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
 import type { TickHeld } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
-import type { HeldForceDispatchResult } from '@/types/ipc'
+import type { HeldForceDispatchResult } from '@/types/dispatch'
 import { invoke } from '@/renderer/data/invoke'
 import { ipcQueryOptions } from '@/renderer/data/query'
 
