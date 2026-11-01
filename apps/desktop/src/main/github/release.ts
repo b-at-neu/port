@@ -19,7 +19,7 @@ import { classifyFailure, parseEnvelope, stdoutOf } from '@/main/github/envelope
 import { STATE_ALIASES, buildStateQuery, buildTicketsQuery, stateVariables } from '@/main/github/release-query'
 import { entriesFromCommits, ticketNumbersOf } from '@/utils/release/changelog'
 import type { ChangelogCommit, ResolvedTicket } from '@/utils/release/changelog'
-import { BUMP_BRANCH_PREFIX } from '@/utils/release/format'
+import { BUMP_BRANCH_DIR, versionOfBumpBranch } from '@/utils/release/format'
 import { resolvePhase } from '@/main/release/state'
 import { buildCandidates, normalizeVersion, parseVersion, stripPrerelease } from '@/utils/release/version'
 
@@ -83,7 +83,7 @@ function bumpOf(node: Obj): BumpBranchInput {
   const pr = nodesOf(node.associatedPullRequests)[0]
   const number = pr?.number
   const url = str(pr?.url)
-  return { name: `${BUMP_BRANCH_PREFIX}${str(node.name) ?? ''}`, pr: typeof number === 'number' && url !== null ? { number, url } : null }
+  return { name: `${BUMP_BRANCH_DIR}${str(node.name) ?? ''}`, pr: typeof number === 'number' && url !== null ? { number, url } : null }
 }
 
 // `null` for a missing blob, a non-JSON file or one without a string `version`.
@@ -281,7 +281,7 @@ export async function fetchReleaseStatus(params: FetchReleaseStatusParams): Prom
   const integrationHead = headOf(repository.integrationHead)
   const input: PhaseInput = {
     ...base,
-    bumpBranches: nodesOf(repository.bumpRefs).map(bumpOf),
+    bumpBranches: nodesOf(repository.bumpRefs).map(bumpOf).filter((branch) => versionOfBumpBranch(branch.name) !== null),
     openReleasePr: prOf(nodesOf(repository.openReleasePr)[0]),
     lastClosedReleasePr: closedPrOf(nodesOf(repository.closedReleasePr)[0]),
     publishedTags,

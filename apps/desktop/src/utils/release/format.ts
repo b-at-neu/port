@@ -47,4 +47,5 @@ export function versionOfBumpBranch(branch: string): string | null {
   return BUMP_BRANCH_PATTERN.exec(branch)?.[1] ?? null
 }
 
-export const BUMP_BRANCH_PREFIX = RELEASE_LITERALS.bumpBranch.replace(VERSION_SLOT, '')
+/** The directory of the bump branches, ending in `/` as GitHub's `refPrefix` requires. */
+export const BUMP_BRANCH_DIR = RELEASE_LITERALS.bumpBranch.slice(0, RELEASE_LITERALS.bumpBranch.lastIndexOf('/') + 1)
