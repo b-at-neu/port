@@ -64,8 +64,10 @@ export function heldDetailCopy(held: TickHeld, owner: DispatchOwner = 'none'): s
       const names = e.checks.map((name) => `\`${name}\``).join(', ')
       if (e.state === 'pending') return `#${n} held — waiting for ${names} to finish its re-run. It's re-reviewed once it passes.`
       const at = e.escalateAt === null ? null : new Date(e.escalateAt)
-      const clause = at === null || Number.isNaN(at.getTime()) ? '' : ` it escalates to needs human at ${at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} if it stays red.`
-      return `#${n} held — ${names} is still red on the reviewed head. Re-run it on GitHub;${clause}`.replace(/;$/, '.')
+      const many = e.checks.length > 1
+      const rerun = `Re-run ${many ? 'them' : 'it'} on GitHub`
+      const escalation = at === null || Number.isNaN(at.getTime()) ? '' : `; it escalates to needs human at ${at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} if ${many ? 'they stay' : 'it stays'} red`
+      return `#${n} held — ${names} ${many ? 'are' : 'is'} still red on the reviewed head. ${rerun}${escalation}.`
     }
     case 'refresh-wins':
       return `#${n} held — a branch refresh claims it (refresh branch).`

@@ -34,7 +34,7 @@ export const BODY_HEADINGS = ['## Summary', '## Changes', '## Testing plan', '##
 export const REVIEW_PREFIX = '## Code Review';
 const CHECK_ONLY_PREFIX = 'Blocked only by checks:';
 const CODE_FINDINGS_LINE = 'Blocked by code findings.';
-const CHECK_ONLY_LINE =/^Blocked only by checks: `[^`]+`(, `[^`]+`)*$/;
+const CHECK_ONLY_LINE = /^Blocked only by checks: `[^`]+`(, `[^`]+`)*$/;
 // Third verdict: posted when the head commit's checks never concluded within the bounded wait.
 export const REVIEW_HEADING = /^## Code Review — Cycle (\d+) · (approved|needs revision|blocked — checks pending)$/;
 export const REVISION_HEADING = /^## Revision — Cycle (\d+)$/;
