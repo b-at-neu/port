@@ -295,6 +295,24 @@ describe('createStageLauncher.observe', () => {
     expect(deps.dismiss).toHaveBeenCalledWith('hosted-1', 'remove')
     expect(deps.onOutcome).toHaveBeenCalledWith(WIDGETS_ID, 'hosted-1', expect.objectContaining({ kind: 'completed', worktree: 'removed' }))
     expect(deps.releaseBranch).toHaveBeenCalledWith(ENTRY.path, '52-add-a-dark-mode-icon', 'abc')
+    expect(deps.registryMock.remove).toHaveBeenCalledWith('id-1')
+    expect(deps.registryMock.markInterrupted).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [{ ok: false, kind: 'worktree-dirty' }, 'it has uncommitted changes'],
+    [{ ok: false, kind: 'worktree-remove-failed', message: ' locked \n' }, 'locked'],
+    [{ ok: false, kind: 'unknown-session' }, 'the session could not be dismissed (unknown-session)'],
+  ])('on completed with a failed dismiss %j, keeps the entry as cleanup-failed', async (dismissed, detail) => {
+    const deps = fakeDeps()
+    deps.dismiss.mockResolvedValue(dismissed)
+    const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
+    await launcher.launch(request())
+    launcher.observe(baseSnapshot({ lastResult: { subtype: 'success', isError: false, text: 'all done', at: 't1' } }))
+    await vi.waitFor(() => expect(deps.onOutcome).toHaveBeenCalled())
+    expect(deps.registryMock.markInterrupted).toHaveBeenCalledWith('id-1', 'cleanup-failed', detail, null, null)
+    expect(deps.registryMock.remove).not.toHaveBeenCalled()
+    expect(deps.releaseBranch).not.toHaveBeenCalled()
   })
 
   it('on a dirty dismiss, reports kept-dirty rather than removed', async () => {

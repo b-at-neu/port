@@ -19,7 +19,7 @@ import type { NeedsYouItem as NeedsYouItemModel } from '@/types/board'
 import { registerListNavigator } from '@/renderer/shell/stores'
 import { useListSelection } from '@/renderer/shell/list-selection'
 import { UNDO_LABEL } from '@/renderer/lib/copy'
-import { ENDED_DENIAL_LINE, LAUNCH_FAILED_HELP, LAUNCH_FAILED_NO_DETAIL, REFRESH_FAILED_TOAST, dismissedToast, needsYouLeadCopy, refreshedToast, usageLimitEntryLine } from '@/renderer/needs-you/copy'
+import { CLEANUP_FAILED_HELP, ENDED_DENIAL_LINE, LAUNCH_FAILED_HELP, LAUNCH_FAILED_NO_DETAIL, REFRESH_FAILED_TOAST, dismissedToast, needsYouLeadCopy, refreshedToast, usageLimitEntryLine } from '@/renderer/needs-you/copy'
 import { dismiss, dismissedKeys, undismiss, visibleItems } from '@/renderer/needs-you/dismissed'
 import { dismissKeyOf } from '@/renderer/needs-you/dismiss-key'
 import { groupNeedsYou } from '@/renderer/needs-you/groups'
@@ -40,6 +40,7 @@ function hasDetail(item: NeedsYouItemModel): boolean {
   if (item.kind === 'stage-approval') return true
   if (item.kind === 'stage-blocked') return true
   if (item.kind === 'dispatch-failed') return true
+  if (item.kind === 'stage-interrupted') return item.interrupted.reason === 'cleanup-failed'
   return false
 }
 
@@ -89,6 +90,14 @@ function DetailBody({ item, onSent }: { readonly item: NeedsYouItemModel; readon
       <div className="border-t border-border px-4 py-2 text-meta text-muted-foreground">
         <p className="whitespace-pre-wrap break-words font-mono">{item.record.detail ?? LAUNCH_FAILED_NO_DETAIL}</p>
         <p>{LAUNCH_FAILED_HELP}</p>
+      </div>
+    )
+  }
+  if (item.kind === 'stage-interrupted') {
+    return (
+      <div className="border-t border-border px-4 py-2 text-meta text-muted-foreground">
+        <p className="whitespace-pre-wrap break-words font-mono">{item.interrupted.worktree.path}</p>
+        <p>{CLEANUP_FAILED_HELP}</p>
       </div>
     )
   }

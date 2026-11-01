@@ -12,6 +12,7 @@ import { validateRule } from '@/main/stage/rule'
 import { allowBranchName, proposeAllowRule } from '@/main/writes/allow'
 import { resumeStage, restartStage } from '@/main/stage/recover'
 import { createInterruptedSweeper } from '@/main/stage/sweep'
+import { pathExists } from '@/main/platform/files'
 
 
 
@@ -116,6 +117,7 @@ export function createStageSweeper(registryDeps: RegistryDeps, deps: StageChanne
   return createInterruptedSweeper({
     registry: deps.registry,
     removeWorktree: deps.removeWorktree,
+    pathExists,
     resume: (id) => resolveStageResume(registryDeps, { id }, deps),
     now: () => new Date(),
     ...hooks,

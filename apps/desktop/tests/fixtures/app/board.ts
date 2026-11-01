@@ -467,7 +467,7 @@ export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'pop
   }
 }
 
-/** Three sessions stopped by the same usage limit, plus one crash — Needs you shows the collapsed line beside an ordinary Interrupted row. */
+/** Three sessions stopped by the same usage limit, plus one crash and one finished session whose worktree would not go — Needs you shows the collapsed line beside two ordinary Interrupted rows. */
 function interruptedStages(now: Date): readonly InterruptedStage[] {
   const resetsAt = offsetMinutes(now, 95)
   const stopped = (id: string, number: number, agent: InterruptedStage['agent'], reason: InterruptedStage['reason'], minutesAgo: number): InterruptedStage => ({
@@ -484,9 +484,15 @@ function interruptedStages(now: Date): readonly InterruptedStage[] {
     startedAt: offsetMinutes(now, -minutesAgo - 20),
     interruptedAt: offsetMinutes(now, -minutesAgo),
     reason,
-    detail: null,
+    detail: reason === 'cleanup-failed' ? 'it has uncommitted changes' : null,
     resetsAt: reason === 'usage-limit' ? resetsAt : null,
     costUsd: 1.1,
   })
-  return [stopped('limit-38', 38, 'impl', 'usage-limit', 12), stopped('limit-36', 36, 'impl', 'usage-limit', 11), stopped('limit-52', 52, 'plan', 'usage-limit', 10), stopped('crash-35', 35, 'revise', 'crash', 25)]
+  return [
+    stopped('limit-38', 38, 'impl', 'usage-limit', 12),
+    stopped('limit-36', 36, 'impl', 'usage-limit', 11),
+    stopped('limit-52', 52, 'plan', 'usage-limit', 10),
+    stopped('crash-35', 35, 'revise', 'crash', 25),
+    stopped('cleanup-41', 41, 'revise', 'cleanup-failed', 18),
+  ]
 }

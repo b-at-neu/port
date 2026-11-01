@@ -8,6 +8,8 @@ import {
   APPROVAL_UNREACHABLE_TOAST,
   PROTECTED_EDIT_DENY_MESSAGE,
   approvedEditToast,
+  copiedPathToast,
+  copyPathFailedToast,
   deniedEditToast,
   resumeAllDisabledReason,
   resumeAllToast,
@@ -21,7 +23,7 @@ import { router } from '@/renderer/router/router'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { invoke } from '@/renderer/data/invoke'
 
-type NeedsYouActionKind = 'review-plan' | 'open' | 'unblock' | 'retry' | 'refresh' | 'answer' | 'approve' | 'allow' | 'resume' | 'resume-all' | 'restart' | 'force'
+type NeedsYouActionKind = 'review-plan' | 'open' | 'unblock' | 'retry' | 'refresh' | 'answer' | 'approve' | 'allow' | 'resume' | 'resume-all' | 'restart' | 'force' | 'copy-path'
 
 interface NeedsYouAction {
   readonly label: string
@@ -98,6 +100,7 @@ export function actionFor(item: NeedsYouItem, now: Date = new Date()): NeedsYouA
     case 'stage-denial':
       return { label: 'Allow from now on', kind: 'allow', disabledReason: null }
     case 'stage-interrupted':
+      if (item.interrupted.reason === 'cleanup-failed') return { label: 'Copy path', kind: 'copy-path', disabledReason: null }
       return { label: 'Resume', kind: 'resume', disabledReason: item.interrupted.claudeSessionId === null ? "This session ended before Claude started it, so there's nothing to resume." : null, secondaryLabel: 'Restart' }
     case 'usage-limit':
       return resumeAllAction(item, now)
@@ -154,6 +157,9 @@ export function runAction(item: NeedsYouItem, deps: RunActionDeps): void {
     case 'restart':
       if (item.kind === 'stage-interrupted') openRestartDialog(item.interrupted)
       return
+    case 'copy-path':
+      if (item.kind === 'stage-interrupted') void copyWorktreePath(item, deps)
+      return
     case 'force':
       if (item.kind === 'held' && item.repoId !== null && item.number !== null) openForceDispatchDialog({ repoId: item.repoId, number: item.number, held: item.held })
       return
@@ -180,6 +186,17 @@ async function answerProtectedEdit(item: Extract<NeedsYouItem, { readonly kind: 
   } catch (error) {
     console.error('Failed to reach the main process while answering a protected edit', error)
     deps.onToast(APPROVAL_UNREACHABLE_TOAST)
+  }
+}
+
+async function copyWorktreePath(item: Extract<NeedsYouItem, { readonly kind: 'stage-interrupted' }>, deps: RunActionDeps): Promise<void> {
+  const path = item.interrupted.worktree.path
+  try {
+    await navigator.clipboard.writeText(path)
+    deps.onToast(copiedPathToast(item))
+  } catch (error) {
+    console.error('Failed to copy the worktree path', error)
+    deps.onToast(copyPathFailedToast(path))
   }
 }
 
