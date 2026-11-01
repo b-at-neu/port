@@ -78,21 +78,15 @@ describe('freshnessIndicator', () => {
     expect(result?.tone).toBe('muted')
   })
 
-  it('shows the age and a countdown while healthy', () => {
-    const snapshot = withWakeup(snapshotOf([health({ github: githubRead(40_000) })]), 80_000)
-    const result = freshnessIndicator(snapshot, NOW)
-    expect(result?.label).toBe('Checked GitHub 40s ago · next check in 1:20')
+  it('shows the age while healthy', () => {
+    const result = freshnessIndicator(snapshotOf([health({ github: githubRead(40_000) })]), NOW)
+    expect(result?.label).toBe('Checked GitHub 40s ago')
     expect(result?.tone).toBe('muted')
   })
 
-  it('says no check is scheduled when there is no wakeup', () => {
-    const result = freshnessIndicator(snapshotOf([health({ github: githubRead(40_000) })]), NOW)
-    expect(result?.label).toBe('Checked GitHub 40s ago · no check scheduled')
-  })
-
-  it('says the next check is now once the wakeup is due', () => {
-    const snapshot = withWakeup(snapshotOf([health({ github: githubRead(40_000) })]), -1)
-    expect(freshnessIndicator(snapshot, NOW)?.label).toBe('Checked GitHub 40s ago · next check now')
+  it('never shows a next-check countdown, even with a wakeup scheduled', () => {
+    const snapshot = withWakeup(snapshotOf([health({ github: githubRead(40_000) })]), 80_000)
+    expect(freshnessIndicator(snapshot, NOW)?.label).toBe('Checked GitHub 40s ago')
   })
 
   it('names the rate-limit reset instead of failing, even though a limited read counts as a failure', () => {
@@ -117,16 +111,16 @@ describe('freshnessIndicator', () => {
   })
 
   it('turns attention once the last read is older than twice the interval', () => {
-    const snapshot = withWakeup(snapshotOf([health({ github: githubRead(SOURCE_BASE_INTERVAL_MS.github * 3) })]), 40_000)
+    const snapshot = snapshotOf([health({ github: githubRead(SOURCE_BASE_INTERVAL_MS.github * 3) })])
     const result = freshnessIndicator(snapshot, NOW)
-    expect(result?.label).toBe('Checked GitHub 3m ago · next check in 0:40')
+    expect(result?.label).toBe('Checked GitHub 3m ago')
     expect(result?.tone).toBe('attention')
   })
 
   it('appends the failing sources and turns attention while GitHub is fresh', () => {
     const snapshot = snapshotOf([health({ github: githubRead(40_000), sessions: { ...initialHealth('sessions'), consecutiveFailures: 2 } })])
     const result = freshnessIndicator(snapshot, NOW)
-    expect(result?.label).toBe('Checked GitHub 40s ago · no check scheduled · Sessions failing')
+    expect(result?.label).toBe('Checked GitHub 40s ago · Sessions failing')
     expect(result?.tone).toBe('attention')
   })
 
