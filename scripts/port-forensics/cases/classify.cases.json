@@ -1,5 +1,5 @@
 {
-  "$comment": "Decision cases for every pure function in scripts/port-forensics/classify.ts (#123), run by scripts/checks/forensics.ts — the six assertions, the two reimplemented shell-syntax predicates, and item correlation. Includes a case for each stated fail direction: an 'unknown' termination, a 'not-computable' notification result, and the shell-loop/timeout/denial positive and negative shapes.",
+  "$comment": "Decision cases for every pure function in scripts/port-forensics/classify.ts (#123), run by scripts/checks/forensics.ts — the six assertions, the two reimplemented shell-syntax predicates, the hand-back extractor and classification rule, and item correlation. Includes a case for each stated fail direction: an 'unknown' termination, a 'not-computable' notification result, and the shell-loop/timeout/denial positive and negative shapes.",
   "cases": [
     {
       "name": "classifyTermination reads a quota (rate_limit) record",
@@ -114,26 +114,122 @@
     {
       "name": "blockedAfterDenial is null when the agent hit no denial at all",
       "function": "blockedAfterDenial",
-      "input": [{ "agentId": "a1", "description": "impl-agent #66", "resultTexts": ["ok"], "finalAssistantText": "done" }],
+      "input": [{ "agentId": "a1", "description": "impl-agent #66", "resultTexts": ["ok"], "handbackText": "done" }],
       "expected": null
     },
     {
-      "name": "blockedAfterDenial is null when a denied agent's final turn opens with BLOCKED:",
+      "name": "blockedAfterDenial is null when a denied agent's hand-back opens with BLOCKED:",
       "function": "blockedAfterDenial",
-      "input": [{ "agentId": "a1", "description": "impl-agent #66", "resultTexts": ["port: denied"], "finalAssistantText": "BLOCKED: needed X" }],
+      "input": [{ "agentId": "a1", "description": "impl-agent #66", "resultTexts": ["port: denied"], "handbackText": "BLOCKED: needed X" }],
       "expected": null
     },
     {
-      "name": "blockedAfterDenial reports a denied agent whose final turn never opens with BLOCKED:",
+      "name": "blockedAfterDenial is null when BLOCKED: opens a later paragraph",
       "function": "blockedAfterDenial",
-      "input": [{ "agentId": "a1", "description": "impl-agent #66", "stage": "impl-agent", "resultTexts": ["port: denied"], "finalAssistantText": "I could not proceed." }],
+      "input": [{ "agentId": "a1", "description": "impl-agent #66", "resultTexts": ["port: denied"], "handbackText": "I hit a denial on X.\n\nBLOCKED: needed X" }],
+      "expected": null
+    },
+    {
+      "name": "blockedAfterDenial reports a denied agent whose hand-back never carries BLOCKED:",
+      "function": "blockedAfterDenial",
+      "input": [{ "agentId": "a1", "description": "impl-agent #66", "stage": "impl-agent", "resultTexts": ["port: denied"], "handbackText": "I could not proceed." }],
       "expected": { "agentId": "a1", "description": "impl-agent #66", "stage": "impl-agent", "denialCount": 1, "finalExcerpt": "I could not proceed." }
     },
     {
-      "name": "blockedAfterDenial requires BLOCKED: to open the turn, not merely appear in it",
+      "name": "blockedAfterDenial reports a denied agent with no hand-back text at all",
       "function": "blockedAfterDenial",
-      "input": [{ "agentId": "a1", "description": "impl-agent #66", "resultTexts": ["port: denied"], "finalAssistantText": "I stopped. See BLOCKED: elsewhere." }],
+      "input": [{ "agentId": "a1", "description": "impl-agent #66", "resultTexts": ["port: denied"], "handbackText": null }],
+      "expected": { "agentId": "a1", "description": "impl-agent #66", "stage": null, "denialCount": 1, "finalExcerpt": "" }
+    },
+    {
+      "name": "blockedAfterDenial requires BLOCKED: to open a line, not merely appear in one",
+      "function": "blockedAfterDenial",
+      "input": [{ "agentId": "a1", "description": "impl-agent #66", "resultTexts": ["port: denied"], "handbackText": "I stopped. See BLOCKED: elsewhere." }],
       "expected": { "agentId": "a1", "description": "impl-agent #66", "stage": null, "denialCount": 1, "finalExcerpt": "I stopped. See BLOCKED: elsewhere." }
+    },
+    {
+      "name": "blockedAfterDenial reports a BLOCKED: line only inside a closed fence",
+      "function": "blockedAfterDenial",
+      "input": [{ "agentId": "a1", "description": "impl-agent #66", "resultTexts": ["port: denied"], "handbackText": "```\nBLOCKED: quoted\n```\nDone." }],
+      "expected": { "agentId": "a1", "description": "impl-agent #66", "stage": null, "denialCount": 1, "finalExcerpt": "```\nBLOCKED: quoted\n```\nDone." }
+    },
+    {
+      "name": "blockedAfterDenial reports a BLOCKED: line after an unclosed fence",
+      "function": "blockedAfterDenial",
+      "input": [{ "agentId": "a1", "description": "impl-agent #66", "resultTexts": ["port: denied"], "handbackText": "```\noutput\nBLOCKED: swallowed" }],
+      "expected": { "agentId": "a1", "description": "impl-agent #66", "stage": null, "denialCount": 1, "finalExcerpt": "```\noutput\nBLOCKED: swallowed" }
+    },
+    {
+      "name": "blockedAfterDenial reports a questions hand-back even with an earlier BLOCKED: line",
+      "function": "blockedAfterDenial",
+      "input": [{ "agentId": "a1", "description": "impl-agent #66", "resultTexts": ["port: denied"], "handbackText": "BLOCKED: needed X\n\nQUESTIONS FOR HUMAN: which one?" }],
+      "expected": { "agentId": "a1", "description": "impl-agent #66", "stage": null, "denialCount": 1, "finalExcerpt": "QUESTIONS FOR HUMAN: which one?" }
+    },
+    {
+      "name": "blockedAfterDenial reports an indented BLOCKED: line, as the app does not accept it",
+      "function": "blockedAfterDenial",
+      "input": [{ "agentId": "a1", "description": "impl-agent #66", "resultTexts": ["port: denied"], "handbackText": "  BLOCKED: needed X" }],
+      "expected": { "agentId": "a1", "description": "impl-agent #66", "stage": null, "denialCount": 1, "finalExcerpt": "BLOCKED: needed X" }
+    },
+    {
+      "name": "handbackKindOf reads a blocked line outside a fence",
+      "function": "handbackKindOf",
+      "input": "notes\nBLOCKED: needed X",
+      "expected": "blocked"
+    },
+    {
+      "name": "handbackKindOf lets a questions last paragraph win over a blocked line",
+      "function": "handbackKindOf",
+      "input": "BLOCKED: needed X\n\nQUESTIONS FOR HUMAN: which one?",
+      "expected": "questions"
+    },
+    {
+      "name": "handbackKindOf is null for plain text",
+      "function": "handbackKindOf",
+      "input": "all done",
+      "expected": null
+    },
+    {
+      "name": "finalHandbackText joins two text blocks of the final message",
+      "function": "finalHandbackText",
+      "input": [
+        [
+          { "uuid": "u1", "timestamp": "t1", "message": { "role": "assistant", "content": [{ "type": "text", "text": "first" }, { "type": "text", "text": "BLOCKED: second" }] } }
+        ]
+      ],
+      "expected": "first\n\nBLOCKED: second"
+    },
+    {
+      "name": "finalHandbackText excludes a thinking block of the final message",
+      "function": "finalHandbackText",
+      "input": [
+        [
+          { "uuid": "u1", "timestamp": "t1", "message": { "role": "assistant", "content": [{ "type": "thinking", "thinking": "BLOCKED: private" }, { "type": "text", "text": "done" }] } }
+        ]
+      ],
+      "expected": "done"
+    },
+    {
+      "name": "finalHandbackText returns only the text after the last tool call",
+      "function": "finalHandbackText",
+      "input": [
+        [
+          { "uuid": "u1", "timestamp": "t1", "message": { "role": "assistant", "content": [{ "type": "text", "text": "BLOCKED: early" }, { "type": "tool_use", "id": "t1", "name": "Bash", "input": { "command": "echo hi" } }] } },
+          { "uuid": "u2", "timestamp": "t2", "message": { "role": "user", "content": [{ "type": "tool_result", "tool_use_id": "t1", "content": "hi" }] } },
+          { "uuid": "u3", "timestamp": "t3", "message": { "role": "assistant", "content": [{ "type": "text", "text": "closing" }] } }
+        ]
+      ],
+      "expected": "closing"
+    },
+    {
+      "name": "finalHandbackText is null when the transcript ends on a tool call",
+      "function": "finalHandbackText",
+      "input": [
+        [
+          { "uuid": "u1", "timestamp": "t1", "message": { "role": "assistant", "content": [{ "type": "text", "text": "BLOCKED: early" }, { "type": "tool_use", "id": "t1", "name": "Bash", "input": { "command": "echo hi" } }] } }
+        ]
+      ],
+      "expected": null
     },
     {
       "name": "quotaClass groups agents sharing the same resetsAt into one class",

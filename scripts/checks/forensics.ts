@@ -54,7 +54,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
 
     const classifyTable = readJson(`${FORENSICS_DIR}/cases/classify.cases.json`);
     const spreadEverything = Object.fromEntries(
-      ['classifyTermination', 'notificationGaps', 'orphans', 'shellLoopHits', 'bashTimeouts', 'blockedAfterDenial', 'quotaClass', 'usesShellLoop', 'targetsGhOrGit', 'stageOf', 'itemNumberOf'].map((f) => [f, true]),
+      ['classifyTermination', 'notificationGaps', 'orphans', 'shellLoopHits', 'bashTimeouts', 'blockedAfterDenial', 'finalHandbackText', 'quotaClass', 'usesShellLoop', 'targetsGhOrGit', 'stageOf', 'itemNumberOf'].map((f) => [f, true]),
     );
     runCases(classifyTable, classify, spreadEverything, expect, fail, `${FORENSICS_DIR}/cases/classify.cases.json`);
 
@@ -103,6 +103,27 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       expect(loopMatch, 'forensics-shell-rules', `usesShellLoop disagrees between classify.ts and command-rules.mjs for ${JSON.stringify(cmd)}`);
       expect(targetMatch, 'forensics-shell-rules', `targetsGhOrGit disagrees between classify.ts and command-rules.mjs for ${JSON.stringify(cmd)}`);
     }
+  }
+
+  {
+    const original = await importEngine('apps/desktop/src/utils/stage/handback-text.ts');
+    const battery = [
+      'BLOCKED: needed X',
+      'notes\nBLOCKED: needed X',
+      '```\nBLOCKED: quoted\n```\ndone',
+      '```\nBLOCKED: swallowed',
+      'BLOCKED: needed X\n\nQUESTIONS FOR HUMAN: which one?',
+      'see BLOCKED: here',
+      '  BLOCKED: needed X',
+      '',
+      'notes\r\nBLOCKED: needed X\r\n',
+    ];
+    for (const text of battery) {
+      const want = original.classifyHandbackText(text)?.kind ?? null;
+      expect(classify.handbackKindOf(text) === want, 'forensics-handback-rules', `handbackKindOf disagrees between classify.ts and handback-text.ts for ${JSON.stringify(text)}`);
+    }
+    expect(classify.BLOCKED_PREFIX === original.BLOCKED_PREFIX, 'forensics-handback-rules', "BLOCKED_PREFIX differs between classify.ts and handback-text.ts");
+    expect(classify.QUESTIONS_PREFIX === original.QUESTIONS_PREFIX, 'forensics-handback-rules', "QUESTIONS_PREFIX differs between classify.ts and handback-text.ts");
   }
 
   // --- (3) STAGE_AGENTS pinned against plugins/port/agents/'s real basenames and apps/

@@ -78,6 +78,31 @@ export function targetsGhOrGit(command: string): boolean {
   return atCommandPosition(stripped, 'gh') || atCommandPosition(stripped, 'git');
 }
 
+export const QUESTIONS_PREFIX = 'QUESTIONS FOR HUMAN:';
+export const BLOCKED_PREFIX = 'BLOCKED:';
+
+export function lastParagraph(text: string): string {
+  const paragraphs = text.split(/\n\s*\n/).map((p) => p.trim());
+  return paragraphs.findLast((p) => p !== '') ?? '';
+}
+
+function blockedLineOutsideFence(text: string): boolean {
+  let inFence = false;
+  for (const line of text.split('\n')) {
+    if (/^```/.test(line.trim())) {
+      inFence = !inFence;
+    } else if (!inFence && line.startsWith(BLOCKED_PREFIX)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function handbackKindOf(text: string): 'questions' | 'blocked' | null {
+  if (lastParagraph(text).startsWith(QUESTIONS_PREFIX)) return 'questions';
+  return blockedLineOutsideFence(text) ? 'blocked' : null;
+}
+
 // --- (1) Termination class --------------------------------------------------
 
 function isQuotaRecord(raw: any): boolean {
@@ -220,20 +245,30 @@ export function bashTimeouts(sources: any[]): any[] {
 
 // --- (6) Blocked-after-denial -------------------------------------------------
 
-/** A denial is a tool-result whose text opens with `port: `. Every stage agent that hit at
- *  least one denial must open its final assistant turn with the literal `BLOCKED:`. */
+/** A denial is a tool-result whose text opens with `port: `; the agent's handed-back text must then classify as blocked. */
 export function blockedAfterDenial(agent: any): any {
   const denialCount = agent.resultTexts.filter((t: unknown) => typeof t === 'string' && t.startsWith('port: ')).length;
   if (denialCount === 0) return null;
-  const final = (agent.finalAssistantText ?? '').trimStart();
-  if (final.startsWith('BLOCKED:')) return null;
+  if (handbackKindOf(agent.handbackText ?? '') === 'blocked') return null;
   return {
     agentId: agent.agentId,
     description: agent.description ?? null,
     stage: agent.stage ?? null,
     denialCount,
-    finalExcerpt: excerpt(agent.finalAssistantText ?? '').text,
+    finalExcerpt: excerpt(lastParagraph(agent.handbackText ?? '')).text,
   };
+}
+
+/** The final assistant message's text blocks, joined — thinking is never handed back, and text before the last tool call is not part of the message. */
+export function finalHandbackText(records: any[]): string | null {
+  const { emitted } = pairToolResults(records.flatMap((r) => classifyRecord(r)));
+  const texts: string[] = [];
+  for (let i = emitted.length - 1; i >= 0; i--) {
+    const entry = emitted[i];
+    if (entry.kind === 'tool-call' || entry.kind === 'user-text') break;
+    if (entry.kind === 'assistant-text') texts.unshift(entry.text);
+  }
+  return texts.length === 0 ? null : texts.join('\n\n');
 }
 
 // --- Quota classing ----------------------------------------------------------
