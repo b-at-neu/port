@@ -110,6 +110,7 @@ export async function readWorktreeReport(params: ReadWorktreeReportParams): Prom
     ok: true,
     mainRoot: parsed.mainRoot,
     integrationRef: parsed.integrationRef,
+    forcedActions: parsed.forcedActions,
     worktrees,
     orphanDirs: parsed.orphanDirs,
     registered: parsed.registered,

@@ -6,7 +6,7 @@ import { readFileSync, existsSync, readdirSync, statSync, rmSync, realpathSync }
 import { join, dirname, basename, relative, resolve, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const USAGE = "usage: node worktrees.mjs <report|reclaim> [--issue N] [--max K] [--protect <path>]... [--offline] [--json] [--unlock] [--force-dirty]\n       node worktrees.mjs purge --orphan <path>... [--json]";
+const USAGE = "usage: node worktrees.mjs <report|reclaim> [--issue N] [--path <p>] [--max K] [--protect <path>]... [--offline] [--json] [--unlock] [--force-dirty]\n       node worktrees.mjs purge --orphan <path>... [--json]";
 
 /** One clear line, no stack trace. */
 const die = (msg) => {
@@ -96,7 +96,7 @@ export function classifyCandidate({ isOutside, isProtected, locked, dirty, itemS
 
   if (locked) return { state: 'locked', removable: false, otherwiseRemovable };
   if (otherwiseRemovable && dirty) return { state: 'dirty', removable: false, otherwiseRemovable: true };
-  return { state: base, removable: otherwiseRemovable };
+  return { state: base, removable: otherwiseRemovable, otherwiseRemovable };
 }
 
 /** Strips the Windows extended-length path prefix (`\\?\`, or its UNC form) that a realpath
@@ -334,10 +334,11 @@ function findOrphanDirs(mainRoot, candidates) {
 
 // --- CLI ----------------------------------------------------------------------
 function parseArgs(argv) {
-  const opts = { issue: null, max: 5, protect: [], offline: false, json: false, unlock: false, forceDirty: false };
+  const opts = { issue: null, path: null, max: 5, protect: [], offline: false, json: false, unlock: false, forceDirty: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--issue') opts.issue = Number(argv[++i]);
+    else if (a === '--path') opts.path = argv[++i];
     else if (a === '--max') opts.max = Number(argv[++i]);
     else if (a === '--protect') opts.protect.push(argv[++i]);
     else if (a === '--offline') opts.offline = true;
@@ -453,6 +454,11 @@ function main() {
     return { ...r, isOutside };
   });
 
+  const pathScopeKey = opts.path == null ? null : pathKey(opts.path);
+  if (pathScopeKey != null && !candidates.some((c) => pathKey(c.path) === pathScopeKey)) {
+    die(`--path '${opts.path}' is not a registered worktree in this run's report; nothing was touched.`);
+  }
+
   // Correlate every candidate not fenced out.
   for (const c of candidates) {
     if (c.isOutside) {
@@ -516,7 +522,10 @@ function main() {
     });
     c.state = classified.state;
     c.otherwiseRemovable = classified.otherwiseRemovable ?? false;
-    c.removable = classified.removable && (opts.issue == null || c.correlation?.number === opts.issue);
+    c.removable =
+      classified.removable &&
+      (opts.issue == null || c.correlation?.number === opts.issue) &&
+      (pathScopeKey == null || pathKey(c.path) === pathScopeKey);
     c.reason = describeReason(c);
   }
 
@@ -623,12 +632,14 @@ function report({ mode, mainRoot, integrationRef, candidates, orphanDirs, opts, 
     console.log(JSON.stringify({
       mainRoot,
       integrationRef,
+      pathScope: true,
       advisories,
       candidates: visible.map((c) => ({
         path: c.path,
         branch: c.branch,
         head: c.head,
         state: c.state,
+        otherwiseRemovable: c.otherwiseRemovable,
         reason: c.reason,
         rung: c.correlation?.rung ?? null,
         issue: c.correlation?.number ?? null,

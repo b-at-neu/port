@@ -138,6 +138,7 @@ export const MUTATION_CHANNELS = [
   'transcript:tail:close',
   'board:refresh',
   'worktrees:reclaim',
+  'worktrees:purge',
   'claim:apply',
   'item:action',
   'item:decide',

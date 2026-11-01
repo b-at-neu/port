@@ -38,6 +38,7 @@ function cannedEntries(now: Date): readonly AuditEntry[] {
       repo: REPO,
       action: 'worktree-reclaim',
       issue: null,
+      force: null,
       call: ['node', 'plugins/port/bin/worktrees.mjs', 'reclaim'],
       removed: ['impl-30'],
       failed: ['impl-33'],

@@ -16,7 +16,7 @@ import { fixtureAttachEntries } from '@/main/fixtures/entries'
 import { fixturePermissionSnapshots, fixtureSearchResult, fixtureSessionAttach, fixtureSessionsScan, fixtureSessionSnapshots, STREAMING_KEY } from '@/main/fixtures/sessions'
 import { fixtureSessionIndex } from '@/main/fixtures/session-index'
 import type { FixtureScenario } from '@/types/fixtures'
-import { fixtureWorktreesReclaim, fixtureWorktreesReport } from '@/main/fixtures/worktrees'
+import { fixtureWorktreesPurge, fixtureWorktreesReclaim, fixtureWorktreesReport } from '@/main/fixtures/worktrees'
 
 /** Exhaustive by construction: a new `IpcChannel` fails `pnpm typecheck` in
  *  `fixtureHandlers`'s own return literal until a fixture exists for it. */
@@ -59,7 +59,8 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
 
     // --- Click-only reads, valid and populated ------------------------------
     'worktrees:report': () => fixtureWorktreesReport(now),
-    'worktrees:reclaim': () => fixtureWorktreesReclaim(now),
+    'worktrees:reclaim': (request) => fixtureWorktreesReclaim(now, request.force),
+    'worktrees:purge': () => fixtureWorktreesPurge(now),
 
     'transcript:tail:open': (request) => ({ ok: true, tailId: 'fixture-tail', source: transcriptSourceFor(request.sessionId, request.agentId, now), entries: fixtureAttachEntries(now) }),
     'transcript:tail:poll': () => ({ ok: true, source: transcriptSourceFor('fixture-session', null, now), appended: [], patched: [], hasMore: false }),

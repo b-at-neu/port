@@ -24,7 +24,7 @@ function labelEntry(overrides: Partial<LabelAuditEntry> = {}): LabelAuditEntry {
 }
 
 function reclaimEntry(overrides: Partial<ReclaimAuditEntry> = {}): ReclaimAuditEntry {
-  return { at: '2026-01-01T00:00:00.000Z', repo: 'acme/widgets', repoId: REPO_ID, action: 'worktree-reclaim', issue: null, call: null, removed: [], failed: [], result: 'applied', failure: null, ...overrides }
+  return { at: '2026-01-01T00:00:00.000Z', repo: 'acme/widgets', repoId: REPO_ID, action: 'worktree-reclaim', issue: null, force: null, call: null, removed: [], failed: [], result: 'applied', failure: null, ...overrides }
 }
 
 describe('auditRows', () => {

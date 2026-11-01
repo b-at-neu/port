@@ -50,7 +50,7 @@ describe('runReclaim', () => {
       called = true
       return Promise.resolve(ok(''))
     }
-    const result = await runReclaim({ repoRoot: '/repo', worktreesCommand: null, issue: null, runNode, pathOps: posixPathOps })
+    const result = await runReclaim({ repoRoot: '/repo', worktreesCommand: null, issue: null, force: null, runNode, pathOps: posixPathOps })
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.kind).toBe('not-configured')
@@ -63,7 +63,7 @@ describe('runReclaim', () => {
       seenArgs = args
       return Promise.resolve(ok(payload()))
     }
-    const result = await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node plugins/port/bin/worktrees.mjs', issue: null, runNode, pathOps: posixPathOps })
+    const result = await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node plugins/port/bin/worktrees.mjs', issue: null, force: null, runNode, pathOps: posixPathOps })
     expect(seenArgs).toEqual(['plugins/port/bin/worktrees.mjs', 'reclaim', '--json'])
     expect(result.ok).toBe(true)
     if (!result.ok) return
@@ -77,7 +77,7 @@ describe('runReclaim', () => {
       seenArgs = args
       return Promise.resolve(ok(payload()))
     }
-    await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', issue: 36, runNode, pathOps: posixPathOps })
+    await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', issue: 36, force: null, runNode, pathOps: posixPathOps })
     expect(seenArgs).toEqual(['w.mjs', 'reclaim', '--json', '--issue', '36'])
   })
 
@@ -90,7 +90,7 @@ describe('runReclaim', () => {
           2,
         ),
       )
-    const result = await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', issue: null, runNode, pathOps: posixPathOps })
+    const result = await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', issue: null, force: null, runNode, pathOps: posixPathOps })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.removed).toBe(0)
@@ -100,7 +100,7 @@ describe('runReclaim', () => {
 
   it('a FAIL stderr with no parseable stdout becomes script-failed', async () => {
     const runNode: NodeRunner = () => Promise.resolve(nonzero('', `${SCRIPT_FAIL_PREFIX}not a git repository`))
-    const result = await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', issue: null, runNode, pathOps: posixPathOps })
+    const result = await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', issue: null, force: null, runNode, pathOps: posixPathOps })
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.kind).toBe('script-failed')
@@ -109,7 +109,7 @@ describe('runReclaim', () => {
 
   it('maps a timeout straight through', async () => {
     const runNode: NodeRunner = () => Promise.resolve({ ok: false, kind: 'timeout', timeoutMs: 60_000, stderr: '' })
-    const result = await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', issue: null, runNode, pathOps: posixPathOps })
+    const result = await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', issue: null, force: null, runNode, pathOps: posixPathOps })
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.kind).toBe('timeout')
@@ -121,7 +121,7 @@ describe('runReclaim', () => {
       called = true
       return Promise.resolve(ok(''))
     }
-    const result = await runReclaim({ repoRoot: '/repo', worktreesCommand: 'pnpm run wt', issue: null, runNode, pathOps: posixPathOps })
+    const result = await runReclaim({ repoRoot: '/repo', worktreesCommand: 'pnpm run wt', issue: null, force: null, runNode, pathOps: posixPathOps })
     expect(called).toBe(false)
     expect(result.ok).toBe(false)
     if (result.ok) return
@@ -130,21 +130,38 @@ describe('runReclaim', () => {
 
   it('a malformed --json payload on a clean exit is report-unparseable', async () => {
     const runNode: NodeRunner = () => Promise.resolve(ok('not json'))
-    const result = await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', issue: null, runNode, pathOps: posixPathOps })
+    const result = await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', issue: null, force: null, runNode, pathOps: posixPathOps })
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.kind).toBe('report-unparseable')
   })
 
-  it('never passes --unlock, --force-dirty or --offline', async () => {
+  it('never passes --unlock, --force-dirty, --path or --offline without a forced reclaim', async () => {
     let seenArgs: readonly string[] = []
     const runNode: NodeRunner = (args) => {
       seenArgs = args
       return Promise.resolve(ok(payload()))
     }
-    await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', issue: 1, runNode, pathOps: posixPathOps })
+    await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', issue: 1, force: null, runNode, pathOps: posixPathOps })
     expect(seenArgs).not.toContain('--unlock')
     expect(seenArgs).not.toContain('--force-dirty')
+    expect(seenArgs).not.toContain('--path')
     expect(seenArgs).not.toContain('--offline')
+  })
+
+  it.each([
+    ['unlock only', { unlock: true, forceDirty: false }, ['--unlock']],
+    ['discard only', { unlock: false, forceDirty: true }, ['--force-dirty']],
+    ['both', { unlock: true, forceDirty: true }, ['--unlock', '--force-dirty']],
+  ])('a forced reclaim (%s) is scoped to one path and never carries --issue', async (_label, flags, expectedFlags) => {
+    let seenArgs: readonly string[] = []
+    const runNode: NodeRunner = (args) => {
+      seenArgs = args
+      return Promise.resolve(ok(payload()))
+    }
+    const force = { path: '/repo/.claude/worktrees/impl-51', ...flags }
+    await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', issue: null, force, runNode, pathOps: posixPathOps })
+    expect(seenArgs).toEqual(['w.mjs', 'reclaim', '--json', '--path', force.path, '--max', '1', ...expectedFlags])
+    expect(seenArgs).not.toContain('--issue')
   })
 })
