@@ -1,19 +1,12 @@
 // The release writer: the bump commit through the Git Data API (the operator's checkout is never touched), the two pull requests and the release itself. One audit entry per attempt; no ownership gate, since a release writes no pipeline label.
 import { randomUUID } from 'node:crypto'
+import { describe } from '@/main/github/release'
 import { gh as defaultGh } from '@/main/platform/gh'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
 import { removeFile, writeTextFile } from '@/main/platform/files'
 import { appendAudit } from '@/main/writes/audit'
-import type { GhResult } from '@/types/platform'
 import type { BranchHead, ReleaseAuditAction, ReleaseAuditEntry, ReleaseWriteContext, ReleaseWriteResult, VersionFileWrite } from '@/types/release'
 import { bumpBranchName, bumpSubject, releasePrTitle, releaseTag } from '@/utils/release/format'
-
-function describe(result: Exclude<GhResult, { ok: true }>): string {
-  if ('stderr' in result && result.stderr.trim() !== '') return result.stderr.trim()
-  if (result.kind === 'not-found') return "gh isn't on PATH"
-  if (result.kind === 'spawn-failed') return result.message
-  return result.kind
-}
 
 async function record(ctx: ReleaseWriteContext, action: ReleaseAuditAction, call: readonly string[] | null, outcome: ReleaseWriteResult): Promise<ReleaseWriteResult> {
   const entry: ReleaseAuditEntry = {

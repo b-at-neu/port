@@ -46,7 +46,7 @@ function failure(message: string, readAt: string): ReleaseRead {
   return { ok: false, message, readAt }
 }
 
-function describe(result: Exclude<GhResult, { ok: true }>): string {
+export function describe(result: Exclude<GhResult, { ok: true }>): string {
   if ('stderr' in result && result.stderr.trim() !== '') return result.stderr.trim()
   if (result.kind === 'not-found') return "gh isn't on PATH"
   if (result.kind === 'spawn-failed') return result.message
