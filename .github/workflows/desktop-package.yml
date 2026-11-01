@@ -59,9 +59,13 @@ jobs:
         env:
           ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/electron-builder-cache
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Read manifest version
+        id: version
+        shell: bash
+        run: echo "version=$(node -p "require('./plugins/port/.claude-plugin/plugin.json').version")" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
-          name: port-desktop-${{ runner.os }}
+          name: port-desktop-${{ runner.os }}-v${{ steps.version.outputs.version }}
           path: |
             apps/desktop/dist/*.AppImage
             apps/desktop/dist/*.deb
