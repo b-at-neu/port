@@ -117,7 +117,7 @@ describe('heldDetailCopy', () => {
       contention: null,
       escalation: { kind: 'check-hold', checks: ['a', 'b'], state: 'red', escalateAt },
     }
-    expect(heldDetailCopy(red)).toBe(`#594 held — \`a\`, \`b\` is still red on the reviewed head. Re-run it on GitHub; it escalates to needs human at ${time} if it stays red.`)
+    expect(heldDetailCopy(red)).toBe(`#594 held — \`a\`, \`b\` are still red on the reviewed head. Re-run them on GitHub; it escalates to needs human at ${time} if they stay red.`)
     const open: TickHeld = { ...red, escalation: { kind: 'check-hold', checks: ['a'], state: 'red', escalateAt: null } }
     expect(heldDetailCopy(open)).toBe('#594 held — `a` is still red on the reviewed head. Re-run it on GitHub.')
   })
