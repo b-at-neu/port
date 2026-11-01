@@ -74,7 +74,7 @@ Where a status colour says what is happening, a phase colour says which pipeline
 
 - **Queued is a ring, in flight is filled.** A queued trigger label draws its dot as a 1px ring and an in-flight one as a filled dot. The same split holds on GitHub: a trigger is a lighter shade than its in-flight label.
 - **GitHub's in-flight label is the light dot.** Each palette's in-flight label uses exactly its light-theme dot colour, and its triggers sit lighter. Gate and terminal labels sit deeper still. `refresh` is grey, and the markers `claude` and `auto plan` stay neutral off the palette.
-- **Waiting on you pulses.** A gate that needs the operator (`planReview`, `approved`) pulses in its own phase colour.
+- **Waiting on you pulses.** A gate that needs the operator (`planReview`, `approved`) pulses in its own phase colour. In the sidebar, a running pipeline session's dot pulses in its phase colour.
 - **`needs-you` overrides.** A gate label, a stalled or interrupted item, and a live stage session waiting on a permission prompt, a question or a `BLOCKED:` hand-back show the `needs-you` palette and pulse, whatever phase they are in. Once the operator answers, the dot goes back to its phase colour.
 - **Pills are solid.** A phase pill is a saturated fill with white or near-black text, the same in both themes; the dot inside it takes the text colour. Tinted pills are for status (`StatusPill`), not phases.
 - **Hues stay apart.** Plan purple, implement blue, review yellow, revise pink, needs-you red, done green: every phase sits ≥30° from every other, so nothing but `needs-you` reads as red and nothing but `done` as green.
@@ -126,7 +126,7 @@ Dark surface lightness (CIE L*): sidebar 6.3 · background 10.7 · card 15.2 · 
 | Screen header height | 44px | The bar at the top of each screen |
 | List row height | 36px | Board, Backlog, Needs you |
 | Group header height | 32px | "Waiting on you", "In progress", … |
-| Sidebar row height | 28px (sessions under a repo: 26px) | Sidebar |
+| Sidebar row height | 28px | Sidebar |
 | Sidebar width | 248px, collapsible | — |
 | Detail pane width | 290px | Right-hand pane |
 | Conversation column | max 680px, centred | Session view |
@@ -148,7 +148,7 @@ Dark surface lightness (CIE L*): sidebar 6.3 · background 10.7 · card 15.2 · 
 - Nothing below 12px.
 - Counts, costs, durations and ticket numbers use tabular figures (`font-variant-numeric: tabular-nums`).
 - Section labels are sentence case at 12px/500, not uppercase.
-- Sidebar: screen, repo and session rows at 14px; sessions nested under a repo and the footer at 13px.
+- Sidebar: screen, repo and session rows at 14px; the footer at 13px.
 
 ## 3. Layout
 
@@ -156,13 +156,13 @@ Dark surface lightness (CIE L*): sidebar 6.3 · background 10.7 · card 15.2 · 
 
 **Sidebar, top to bottom:**
 1. **Mark and wordmark.**
-2. **Screens:** Needs you (red count), Board, Backlog, Releases, Audit log.
+2. **Screens:** Board, Needs you (red count), Backlog, Releases, Audit log.
 3. **Pipelines:** one row per registered repo. Each row has:
    - a caret that collapses it, with the state remembered;
    - the repo name;
    - its run-state `StatusPill` menu (§4).
 
-   The repo's live stage sessions are nested under it, labelled `#N <title>`. Each has a `PhaseDot` in its phase colour, so the colour alone says which phase it is in; it turns red and pulses while the session needs you. The row for the session on screen, a live stage session or a stage transcript, is drawn in `selection`. If its repo is collapsed, the repo row is drawn in `selection` instead. A collapsed repo with a session that needs you shows a red dot next to its name.
+   The repo's stage sessions that are actively running and not waiting on you are nested under it, labelled `#N <title>`. Each has a `PhaseDot` in its phase colour, so the colour alone says which phase it is in; it pulses while the session runs. A session that needs you, sits idle or has reached a gate or "Ready to merge" leaves the list. The row for the session on screen, a live stage session or a stage transcript, is drawn in `selection`. If its repo is collapsed, the repo row is drawn in `selection` instead. A collapsed repo with a session that needs you shows a red dot next to its name, only when more than one repo is registered.
 4. **Your sessions:** a header with **New session** and **History** as icon buttons on its right, then your own live sessions. The open one is drawn in `selection`.
 5. **Footer:** a Settings button across the full footer width, plus one status dot for the `claude` CLI and `gh`, red when either is missing or signed out. The dot opens a popover on hover, focus and click: one line per connection with its state and age, a line per repository read, and a link to Settings → Connections. Leaving closes it after 150ms, and Esc closes it.
 
@@ -228,7 +228,7 @@ Scoping epics and analytics are out of scope for the first release.
 | `Screen`, `ScreenBody` | The layout every screen is built from: a 44px `ScreenHeader`, then one body variant: `list` (edge to edge, rows inset themselves), `page` (16px padding), `form` (16px padding, 512px column), `conversation` (16px padding, centred 680px column). A screen never sets its own outer padding |
 | `StatusPill` | Dot, then label, using the status roles. With a menu it shows a chevron: the repo run state is `● Running ▾` with Run, Drain and Pause, each with a one-line hint (Drain "finish in-flight", Pause "stop now") |
 | `LabelChip` | A GitHub label as a full-radius pill: 11px/500, 1px `border` outline, max 8rem and truncating. Its fill is the label's own GitHub colour, which is repository data and not a design token, so this is the one place a hex reaches a component, applied through `style` from `renderer/lib/label-color.ts`. Text is black or white, whichever contrasts more with the fill. A missing or malformed colour falls back to `muted` with `foreground-secondary` text |
-| `PhasePill`, `PhaseDot` | A `StatusPill`'s anatomy as a solid fill from the phase palette (§1); its dot is drawn in the pill's text colour. `PhaseDot` is a ring while the stage is queued and filled while it is in flight, and pulses while the stage waits on you. Unstaged items use the `idle` role. The `needs-you` palette overrides the phase colour for anything that needs the operator |
+| `PhasePill`, `PhaseDot` | A `StatusPill`'s anatomy as a solid fill from the phase palette (§1); its dot is drawn in the pill's text colour. `PhaseDot` is a ring while the stage is queued and filled while it is in flight, and pulses while the stage waits on you, or, for a running pipeline session in the sidebar, in its phase colour. Unstaged items use the `idle` role. The `needs-you` palette overrides the phase colour for anything that needs the operator |
 | `PhaseBar` | Five 10×4px segments with a 2px gap, for plan (including plan review), implement, review, revision, merge. Finished segments use `segment-past`, the current one the current stage's full phase dot colour, or `needs-you` when it waits on you, not-yet-reached ones `segment-future`; a merged item is every segment `done`. Tooltip names the phase |
 | `PhaseList` | Vertical version for the detail pane: an 8px dot per phase in the same colours as `PhaseBar`, with who and when ("Plan approved by you · 2h ago") and live cost and time on the current phase, and, under each phase, the sessions that ran it (agent or "Your session", when, state, cost), with a "Your sessions" group for ones no phase can claim |
 | `TicketRow`, `RepoPipelineRow`, `SessionRow`, `NeedsYouItem` | The list rows (§3) |
@@ -261,7 +261,7 @@ Scoping epics and analytics are out of scope for the first release.
 ## 5. Motion and feedback
 
 - Popovers, menus, the detail pane and dialogs enter and leave with a 150ms ease-out fade and a 4px slide.
-- The only continuous animation is a soft 2s pulse on the dot of something that needs you: red for anything that needs the operator, or the phase's own colour for a gate such as plan review. Amber never pulses.
+- The only continuous animation is a soft 2s pulse on the dot of something that needs you: red for anything that needs the operator, or the phase's own colour for a gate such as plan review or a running pipeline session in the sidebar. Amber never pulses.
 - Streaming text appears as it arrives, with no typing effect.
 - Under the OS reduce-motion setting, every transition is instant and the pulse stops.
 

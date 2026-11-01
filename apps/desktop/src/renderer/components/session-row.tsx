@@ -41,7 +41,7 @@ function OpenButton({ props, pinned }: { readonly props: SessionRowProps; readon
       className={cn(
         OPEN_BUTTON_CLASS,
         density === 'sidebar' && 'flex-1 gap-2 px-2 py-1',
-        density === 'nested' && 'h-6.5 w-full gap-1.5 py-0 pr-2 pl-8 text-small text-foreground-secondary',
+        density === 'nested' && 'h-7 w-full gap-2 py-0 pr-2 pl-8 text-body text-foreground-secondary',
         density === 'list' && 'flex-1 gap-2',
         density === 'nested' && selected === true && SELECTED_ROW_CLASS,
       )}

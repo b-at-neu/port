@@ -176,7 +176,7 @@ describe('pipelinesModel', () => {
       stageSession({ key: 'other', repoId: REPO_ID, stage: { ...stage, number: 46 } }),
     ]
     const [row] = pipelinesModel([notReadyEntry()], undefined, NOW, sessions)
-    expect(row).toMatchObject({ ready: false, sessions: [{ key: 'live', number: 44, label: '#44', sessionKey: 'live', tone: { palette: 'plan', fill: 'active', pulse: false }, statusText: 'Planning' }] })
+    expect(row).toMatchObject({ ready: false, sessions: [{ key: 'live', number: 44, label: '#44', sessionKey: 'live', tone: { palette: 'plan', fill: 'active', pulse: true }, statusText: 'Planning' }] })
   })
 
   it('reads a ready repository as paused with no snapshot yet', () => {
@@ -190,21 +190,27 @@ describe('pipelinesModel', () => {
     const snapshot = snapshotOf([readyRepoState({ items: [live, dormant] })])
     const row = assertReady(pipelinesModel([readyEntry()], snapshot)[0])
     expect(row.sessions).toEqual([
-      { key: `${REPO_ID}-42`, repoId: REPO_ID, number: 42, label: '#42 a ticket', tone: { palette: 'implement', fill: 'active', pulse: false }, statusText: 'Implementing', phaseName: 'Implementing', sessionKey: null, transcript: { sessionId: 'sess-1', agentId: 'a1' } },
+      { key: `${REPO_ID}-42`, repoId: REPO_ID, number: 42, label: '#42 a ticket', tone: { palette: 'implement', fill: 'active', pulse: true }, statusText: 'Implementing', phaseName: 'Implementing', sessionKey: null, transcript: { sessionId: 'sess-1', agentId: 'a1' } },
     ])
   })
 
-  it('an idle detected session on a queued trigger shows a ring in its phase colour', () => {
+  it('lists no row for an item whose agent is only idle', () => {
     const queued = item({ stage: 'trigger', stages: [{ key: 'planApproved', name: 'plan approved', role: 'trigger' }], agents: [agent({ activity: 'idle' })] })
     const row = assertReady(pipelinesModel([readyEntry()], snapshotOf([readyRepoState({ items: [queued] })]))[0])
-    expect(row.sessions[0]).toMatchObject({ tone: { palette: 'implement', fill: 'queued', pulse: false }, statusText: 'Plan approved' })
+    expect(row.sessions).toEqual([])
   })
 
-  it('pulses a session in its phase colour when its item needs the operator', () => {
+  it('lists no row for a terminal item, even with an active agent', () => {
+    const approved = item({ stage: 'terminal', stages: [{ key: 'approved', name: 'approved', role: 'terminal' }], agents: [agent()] })
+    const row = assertReady(pipelinesModel([readyEntry()], snapshotOf([readyRepoState({ items: [approved] })]))[0])
+    expect(row.sessions).toEqual([])
+  })
+
+  it('lists no row for a gate item that needs the operator, but still lights the repo dot', () => {
     const waiting = item({ stage: 'gate', stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }], waitingOn: 'cockpit', agents: [agent()] })
     const snapshot = snapshotOf([readyRepoState({ items: [waiting] })])
     const row = assertReady(pipelinesModel([readyEntry()], snapshot)[0])
-    expect(row.sessions[0]).toMatchObject({ tone: { palette: 'plan', fill: 'active', pulse: true }, statusText: 'Plan review' })
+    expect(row.sessions).toEqual([])
     expect(row.needsYou).toBe(true)
   })
 
@@ -214,41 +220,37 @@ describe('pipelinesModel', () => {
     expect(assertReady(pipelinesModelOf([readyEntry()], snapshot, [])[0]).needsYou).toBe(false)
   })
 
-  it('shows a needs-you gate in red with the Needs you status text', () => {
-    const blocked = item({ stage: 'gate', stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }], waitingOn: 'cockpit', agents: [agent()] })
-    const row = assertReady(pipelinesModel([readyEntry()], snapshotOf([readyRepoState({ items: [blocked] })]))[0])
-    expect(row.sessions[0]).toMatchObject({ tone: { palette: 'needs-you', fill: 'active', pulse: true }, statusText: 'Needs you' })
-  })
-
-  it('turns a stage session red while it waits on a permission prompt, and back once it is answered', () => {
+  it('drops a stage session while it waits on a permission prompt, and lists it again once answered', () => {
     const stage = { agent: 'impl', number: 42, kind: 'issue', trigger: 'planApproved' } as const
     const waiting = { ...stageSession({ key: 'hosted-impl', repoId: REPO_ID, stage }), pendingPermissions: [pendingPermission()] }
     const answered = stageSession({ key: 'hosted-impl', repoId: REPO_ID, stage })
-    const snapshot = snapshotOf([readyRepoState({ items: [item()] })])
-    expect(assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [waiting])[0]).sessions[0]).toMatchObject({ tone: { palette: 'needs-you', fill: 'active', pulse: true }, statusText: 'Needs you', phaseName: 'Implementing' })
-    expect(assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [answered])[0]).sessions[0]).toMatchObject({ tone: { palette: 'implement', fill: 'active', pulse: false }, statusText: 'Implementing' })
+    const snapshot = snapshotOf([readyRepoState({ items: [item({ agents: [agent()] })] })])
+    expect(assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [waiting])[0]).sessions).toEqual([])
+    expect(assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [answered])[0]).sessions[0]).toMatchObject({ tone: { palette: 'implement', fill: 'active', pulse: true }, statusText: 'Implementing' })
+  })
+
+  it('drops an idle hosted stage session without resurrecting the item row for its number', () => {
+    const stage = { agent: 'impl', number: 42, kind: 'issue', trigger: 'planApproved' } as const
+    const idle = stageSession({ key: 'hosted-impl', repoId: REPO_ID, stage, phase: 'ready' })
+    const snapshot = snapshotOf([readyRepoState({ items: [item({ agents: [agent()] })] })])
+    expect(assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [idle])[0]).sessions).toEqual([])
   })
 
   it('reads the phase line as the phase, with Needs you appended while waiting on the operator', () => {
-    const stage = { agent: 'impl', number: 42, kind: 'issue', trigger: 'planApproved' } as const
-    const waiting = { ...stageSession({ key: 'hosted-impl', repoId: REPO_ID, stage }), pendingPermissions: [pendingPermission()] }
-    const plain = stageSession({ key: 'hosted-impl', repoId: REPO_ID, stage })
-    const snapshot = snapshotOf([readyRepoState({ items: [item()] })])
-    const waitingRow = assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [waiting])[0]).sessions[0]
-    const plainRow = assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [plain])[0]).sessions[0]
-    if (waitingRow === undefined || plainRow === undefined) throw new Error('expected a session row')
-    expect(phaseLineOf(waitingRow)).toBe('Implementing · Needs you')
-    expect(phaseLineOf(plainRow)).toBe('Implementing')
+    const running = { palette: 'implement', fill: 'active', pulse: true } as const
+    const waiting = { palette: 'needs-you', fill: 'active', pulse: true } as const
+    expect(phaseLineOf({ tone: waiting, phaseName: 'Implementing' })).toBe('Implementing · Needs you')
+    expect(phaseLineOf({ tone: running, phaseName: 'Implementing' })).toBe('Implementing')
   })
 
   it.each([
     ['questions', 'Done thinking.\n\nQUESTIONS FOR HUMAN:\n1. Which layout?'],
     ['blocked', 'BLOCKED: gh pr create — denied'],
-  ])('turns a stage session red on a %s hand-back', (_kind, text) => {
+  ])('drops a stage session on a %s hand-back', (_kind, text) => {
     const stage = { agent: 'impl', number: 42, kind: 'issue', trigger: 'planApproved' } as const
     const session = stageSession({ key: 'hosted-impl', repoId: REPO_ID, stage, lastResult: { subtype: 'success', isError: false, text, at: NOW.toISOString() } })
     const row = assertReady(pipelinesModel([readyEntry()], snapshotOf([readyRepoState({ items: [item()] })]), NOW, [session])[0])
-    expect(row.sessions[0]).toMatchObject({ tone: { palette: 'needs-you', pulse: true }, statusText: 'Needs you' })
+    expect(row.sessions).toEqual([])
   })
 
   it('keeps the phase colour on an ordinary completed hand-back', () => {
@@ -305,7 +307,7 @@ describe('pipelinesModel', () => {
     const snapshot = snapshotOf([readyRepoState({ items: linked })])
     const revise = { ...stageSession({ key: 'hosted-revise', repoId: REPO_ID, stage: { agent: 'revise', number: 47, kind: 'pull-request', trigger: 'needsRevision' } }), title: '#46 the ticket' }
     const row = assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [revise])[0])
-    expect(row.sessions).toEqual([{ key: 'hosted-revise', repoId: REPO_ID, number: 46, label: '#46 the ticket', tone: { palette: 'revise', fill: 'active', pulse: false }, statusText: 'Revising', phaseName: 'Revising', sessionKey: 'hosted-revise', transcript: null }])
+    expect(row.sessions).toEqual([{ key: 'hosted-revise', repoId: REPO_ID, number: 46, label: '#46 the ticket', tone: { palette: 'revise', fill: 'active', pulse: true }, statusText: 'Revising', phaseName: 'Revising', sessionKey: 'hosted-revise', transcript: null }])
   })
 
   it('shows a ticket with a linked pull request as one item row, never a second for the pull request', () => {

@@ -16,7 +16,7 @@ import { ROUTE_IDS } from '@/renderer/router/routes'
 
 function PipelineRows({ rows, selection, collapsedRepos, onToggle }: { readonly rows: readonly PipelineRow[]; readonly selection: SidebarSelection; readonly collapsedRepos: ReadonlySet<string>; readonly onToggle: (repoId: string) => void }) {
   const selectedKey = selectedPipelineRowKey(rows, selection)
-  return rows.map((row) => <RepoPipelineRow key={row.repoId} row={row} collapsed={row.ready && collapsedRepos.has(row.repoId)} selectedKey={selectedKey} onToggle={() => onToggle(row.repoId)} />)
+  return rows.map((row) => <RepoPipelineRow key={row.repoId} row={row} collapsed={row.ready && collapsedRepos.has(row.repoId)} needsYouDot={rows.length > 1} selectedKey={selectedKey} onToggle={() => onToggle(row.repoId)} />)
 }
 
 export function SidebarPipelines() {
