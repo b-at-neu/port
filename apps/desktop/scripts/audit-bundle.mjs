@@ -12,7 +12,7 @@
 import { existsSync, readdirSync } from 'node:fs'
 import { basename, dirname, join, relative, sep } from 'node:path'
 import { extractFile, listPackage } from '@electron/asar'
-import { auditEntries, fixtureLeaks, readSdkManifest, sdkPlatformPackages } from './bundle-audit.mjs'
+import { asarArchivePath, auditEntries, fixtureLeaks, readSdkManifest, sdkPlatformPackages } from './bundle-audit.mjs'
 
 const distDir = join(import.meta.dirname, '../dist')
 const SMOKE_DIR = 'smoke'
@@ -80,7 +80,7 @@ for (const asarPath of asarFiles) {
     console.error(`bundle audit: FAIL — ${asarPath} listing has no main-process JS to scan for fixture data`)
     continue
   }
-  const files = mainScripts.map((entry) => ({ path: entry, text: extractFile(asarPath, entry.slice(1)).toString('utf8') }))
+  const files = mainScripts.map((entry) => ({ path: entry, text: extractFile(asarPath, asarArchivePath(entry, sep)).toString('utf8') }))
   for (const leak of fixtureLeaks(files)) {
     failed = true
     console.error(`bundle audit: FAIL — ${asarPath} carries fixture data in ${leak}`)
