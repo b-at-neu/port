@@ -111,6 +111,17 @@ export default async function ({ expect, fail, ok }: Reporter) {
       expect(audit.fixtureLeaks([{ path: '/out/main/index.js', text: 'const real = 1' }]).length === 0, 'desktop-packaging', 'fixtureLeaks flagged a text without the fixture sentinel');
       expect(readFileSync(reposPath, 'utf8').includes(audit.FIXTURE_SENTINEL), 'desktop-packaging', `${relOf(reposPath)} no longer contains the fixture sentinel '${audit.FIXTURE_SENTINEL}' — the bundle audit would pass vacuously`);
 
+      for (const [entry, separator, expected] of [
+        ['/out/main/chunks/engine.js', '\\', 'out\\main\\chunks\\engine.js'],
+        ['/out/main/index.js', '/', 'out/main/index.js'],
+      ]) {
+        const got = audit.asarArchivePath(entry, separator);
+        expect(got === expected, 'desktop-packaging', `asarArchivePath(${JSON.stringify(entry)}, ${JSON.stringify(separator)}) returned ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`);
+      }
+
+      const auditBundleText = readFileSync(join(appDir, 'scripts/audit-bundle.mjs'), 'utf8');
+      expect(auditBundleText.includes('asarArchivePath(entry, sep)') && !auditBundleText.includes('extractFile(asarPath, entry.slice(1))'), 'desktop-packaging', 'audit-bundle.mjs must pass extractFile the native-separator path from asarArchivePath(entry, sep), not entry.slice(1)');
+
       const dist: string = readJson('apps/desktop/package.json').scripts?.dist ?? '';
       expect(!/electron-vite build[^&]*--mode/.test(dist), 'desktop-packaging', `'dist' script must build in the default mode so no fixtures are compiled, got: ${dist}`);
     }

@@ -33,6 +33,11 @@ export function fixtureLeaks(files) {
   return files.filter((file) => file.text.includes(FIXTURE_SENTINEL)).map((file) => file.path)
 }
 
+/** The unrooted, `separator`-joined path `extractFile` needs, because `@electron/asar` splits it on `path.sep`. */
+export function asarArchivePath(entry, separator) {
+  return entry.replace(/^\//, '').split('/').join(separator)
+}
+
 /** The required positive control: paths that must be present for the
  *  listing to have actually seen the packaged app, rather than an empty or
  *  truncated one passing vacuously. */
