@@ -13,13 +13,26 @@ describe('phaseDetailsFor', () => {
     const details = phaseDetailsFor({
       history: [entry('ready', 'octo-dev', 180), entry('planning', 'port-bot', 170)],
       kind: 'issue',
-      stageKey: 'planReview',
+      stageKey: 'planApproved',
       merged: false,
       viewer: 'octo-dev',
       now: NOW,
       currentCostUsd: null,
     })
     expect(details.plan?.line).toBe('Planning started by @port-bot · 2h ago')
+  })
+
+  it('groups the plan-review gate with planning, showing the latest entry of the group', () => {
+    const details = phaseDetailsFor({
+      history: [entry('planning', 'port-bot', 170), entry('planReview', 'port-bot', 120)],
+      kind: 'issue',
+      stageKey: 'inProgress',
+      merged: false,
+      viewer: 'octo-dev',
+      now: NOW,
+      currentCostUsd: null,
+    })
+    expect(details.plan?.line).toBe('Plan ready for review by @port-bot · 2h ago')
   })
 
   it('resolves the viewer to "you"', () => {

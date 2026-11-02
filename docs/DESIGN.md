@@ -26,6 +26,8 @@ Components use roles, never values. Tailwind arbitrary colour values (`bg-[#…]
 | `foreground-secondary` | `#3f3f46` | `#d4d4d8` | Sidebar items, secondary labels |
 | `muted-foreground` | `#71717a` | `#a1a1aa` | Metadata, ticket numbers, section labels, timestamps |
 | `faint` | `#a1a1aa` | `#71717a` | **Non-text only**: idle dots, disabled glyphs, decorative strokes, scroll bar thumbs |
+| `segment-past` | `#a1a1aa` | `#d4d4d8` | Finished `PhaseBar` segments and `PhaseList` dots |
+| `segment-future` | `#e4e4e7` | `#2b2f38` | Not-yet-reached `PhaseBar` segments and `PhaseList` dots |
 | `primary` | `#172554` | `#2f4a8a` | Primary button fill and the send button. The dark fill is a lighter navy with white text |
 | `primary-foreground` | `#ffffff` | `#ffffff` | Text and icons on `primary` |
 | `primary-text` | `#172554` | `#a5b8e3` | Links, row actions, `ContextMeter` fill |
@@ -40,7 +42,7 @@ Components use roles, never values. Tailwind arbitrary colour values (`bg-[#…]
 | `syntax-constant` | `#0550ae` | `#79c0ff` | Highlighted code: numbers, literals |
 | `syntax-function` | `#8250df` | `#d2a8ff` | Highlighted code: function/type names |
 
-**Navy is the brand; blue is a status.** Navy marks what you can act on and port's own identity. Blue appears only as the `working` status below. The two never stand in for each other. `accent`, `selection` and `primary` are the brand in both themes, and anything not interactive (pending PhaseBar segments, meter tracks, tags) uses `border` or `muted`, never `accent`.
+**Navy is the brand; blue is a status.** Navy marks what you can act on and port's own identity. Blue appears only as the `working` status below. The two never stand in for each other. `accent`, `selection` and `primary` are the brand in both themes, and anything not interactive (`segment-future` PhaseBar segments, meter tracks, tags) uses `border` or `muted`, never `accent`.
 
 ### Status roles
 
@@ -227,7 +229,7 @@ Scoping epics and analytics are out of scope for the first release.
 | `StatusPill` | Dot, then label, using the status roles. With a menu it shows a chevron: the repo run state is `● Running ▾` with Run, Drain and Pause, each with a one-line hint (Drain "finish in-flight", Pause "stop now") |
 | `LabelChip` | A GitHub label as a full-radius pill: 11px/500, 1px `border` outline, max 8rem and truncating. Its fill is the label's own GitHub colour, which is repository data and not a design token, so this is the one place a hex reaches a component, applied through `style` from `renderer/lib/label-color.ts`. Text is black or white, whichever contrasts more with the fill. A missing or malformed colour falls back to `muted` with `foreground-secondary` text |
 | `PhasePill`, `PhaseDot` | A `StatusPill`'s anatomy as a solid fill from the phase palette (§1); its dot is drawn in the pill's text colour. `PhaseDot` is a ring while the stage is queued and filled while it is in flight, and pulses while the stage waits on you. Unstaged items use the `idle` role. The `needs-you` palette overrides the phase colour for anything that needs the operator |
-| `PhaseBar` | Six 10×4px segments with a 2px gap, for plan, plan review, implement, review, revision, merge. Finished segments use their phase's dot at 40%, the current one the current stage's full phase dot colour, or `needs-you` when it waits on you, complete `done`, the rest `border`. Tooltip names the phase |
+| `PhaseBar` | Five 10×4px segments with a 2px gap, for plan (including plan review), implement, review, revision, merge. Finished segments use `segment-past`, the current one the current stage's full phase dot colour, or `needs-you` when it waits on you, not-yet-reached ones `segment-future`; a merged item is every segment `done`. Tooltip names the phase |
 | `PhaseList` | Vertical version for the detail pane: an 8px dot per phase in the same colours as `PhaseBar`, with who and when ("Plan approved by you · 2h ago") and live cost and time on the current phase, and, under each phase, the sessions that ran it (agent or "Your session", when, state, cost), with a "Your sessions" group for ones no phase can claim |
 | `TicketRow`, `RepoPipelineRow`, `SessionRow`, `NeedsYouItem` | The list rows (§3) |
 | `ToolCallRow`, `DiffView`, `Markdown`, `CodeBlock`, `Composer`, `ContextMeter` | Session pieces. `ContextMeter` is a `Context` label, a 56×4px bar and a percentage, with token counts in its tooltip. `ToolCallRow` carries a per-tool one-line summary and default-open rule (edits with a diff, TodoWrite, a running subagent, a failed Bash); its body delegates to `ToolCallDetail`'s Bash/TodoWrite/Task/lookup views. A subagent's children nest recursively under its row, indented with a `border-l` rule; an orphaned child (its parent row evicted from the window) carries the label "Subagent · parent call not shown" |

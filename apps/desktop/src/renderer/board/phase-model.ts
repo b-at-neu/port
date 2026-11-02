@@ -6,7 +6,6 @@ import { paletteOf, type LabelPalette } from '@/utils/labels/defaults'
 
 const SEGMENT_PALETTE: Readonly<Record<PhaseKey, LabelPalette>> = {
   plan: 'plan',
-  planReview: 'plan',
   implement: 'implement',
   review: 'review',
   revision: 'revise',
@@ -19,7 +18,7 @@ const STAGE_PHASE: Readonly<Partial<Record<LabelKey, PhaseKey>>> = {
   ready: 'plan',
   planning: 'plan',
   planChangesRequested: 'plan',
-  planReview: 'planReview',
+  planReview: 'plan',
   planApproved: 'implement',
   inProgress: 'implement',
   readyForReview: 'review',

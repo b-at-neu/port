@@ -227,13 +227,13 @@ export type NeedsYouBaseline = Readonly<Record<string, readonly string[]>>
 /** The groups Needs you renders — `stage-question`/`stage-questions` share `questions`, `stage-approval` is `approvals`, and `stage-blocked` joins `blocked`. */
 export type NeedsYouGroupKey = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'blocked' | 'questions' | 'approvals' | 'denied' | 'interrupted' | 'usage-limit' | 'held' | 'stalled' | 'budget' | 'half-labelled' | 'launch-failed'
 
-export const PHASE_KEYS = ['plan', 'planReview', 'implement', 'review', 'revision', 'merge'] as const
+export const PHASE_KEYS = ['plan', 'implement', 'review', 'revision', 'merge'] as const
 
 export type PhaseKey = (typeof PHASE_KEYS)[number]
 
 export type PhaseSegmentState = 'finished' | 'current-working' | 'current-attention' | 'complete' | 'pending'
 
-/** One of the six phases as `PhaseBar`/`PhaseList` paint it; `palette` is `null` for a pending phase, which has no colour yet. */
+/** One of the five phases as `PhaseBar`/`PhaseList` paint it; `palette` is `null` for a pending phase, which has no colour yet. */
 export interface PhaseSegment {
   readonly phase: PhaseKey
   readonly state: PhaseSegmentState

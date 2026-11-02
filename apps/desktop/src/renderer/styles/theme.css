@@ -50,6 +50,8 @@
   --idle-pill: var(--muted);
   --idle-pill-foreground: var(--foreground-secondary);
   --idle-dot: var(--faint);
+  --segment-past: var(--faint);
+  --segment-future: var(--border);
 
   /* Phase palette: one set per pipeline phase; pills are solid fills, the same in both themes */
   --phase-plan-pill: #9333ea;
@@ -143,6 +145,8 @@
   --idle-pill: var(--muted);
   --idle-pill-foreground: var(--foreground-secondary);
   --idle-dot: var(--faint);
+  --segment-past: var(--foreground-secondary);
+  --segment-future: var(--muted);
 
   --phase-plan-pill: #9333ea;
   --phase-plan-pill-foreground: #ffffff;
@@ -233,6 +237,8 @@
   --color-idle-pill: var(--idle-pill);
   --color-idle-pill-foreground: var(--idle-pill-foreground);
   --color-idle-dot: var(--idle-dot);
+  --color-segment-past: var(--segment-past);
+  --color-segment-future: var(--segment-future);
 
   --color-phase-plan-pill: var(--phase-plan-pill);
   --color-phase-plan-pill-foreground: var(--phase-plan-pill-foreground);
