@@ -10,6 +10,8 @@ const ITEM_LABEL_PAGE_SIZE = 20
 const SWEEP_LABEL_PAGE_SIZE = 100
 const BLOCKER_PAGE_SIZE = 20
 const LABEL_EVENT_PAGE_SIZE = 20
+const DETAIL_BLOCKER_PAGE_SIZE = 10
+const BLOCKER_COMMENT_PAGE_SIZE = 10
 
 /** A valid GraphQL StringValue for every escape `JSON.stringify` emits. */
 export function graphqlStringLiteral(value: string): string {
@@ -21,6 +23,8 @@ export function graphqlStringLiteral(value: string): string {
 const LABEL_EVENTS_FIELD = `timelineItems(last: ${LABEL_EVENT_PAGE_SIZE}, itemTypes: [LABELED_EVENT]) { nodes { ... on LabeledEvent { createdAt actor { login } label { name } } } }`
 
 const ISSUE_SWEEP_FIELDS = `number title url body state updatedAt assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } } labels(first: ${SWEEP_LABEL_PAGE_SIZE}) { totalCount nodes { name } }`
+
+const BLOCKER_COMMENTS_FIELD = `comments(last: ${BLOCKER_COMMENT_PAGE_SIZE}) { nodes { body createdAt url } }`
 
 // mergeable is the mergeability precondition mergeabilityRoute reads.
 const PULL_REQUEST_SWEEP_FIELDS = `${ISSUE_SWEEP_FIELDS} mergedAt headRefOid mergeable`
@@ -85,6 +89,8 @@ export interface ItemDetailRef {
   readonly kind: PipelineItemKind
   readonly number: number
   readonly rollup: boolean
+  /** True only for an issue at the blocked stage — its newest comments carry the blocker's reason. */
+  readonly blockerComments: boolean
 }
 
 interface ItemDetailAlias extends ItemDetailRef {
@@ -105,7 +111,8 @@ export function buildItemDetailsQuery(refs: readonly ItemDetailRef[]): ItemDetai
   refs.forEach((ref, idx) => {
     const alias = `d${idx}`
     if (ref.kind === 'issue') {
-      fields.push(`  ${alias}: issue(number: ${ref.number}) { ${LABEL_EVENTS_FIELD} }`)
+      const comments = ref.blockerComments ? ` ${BLOCKER_COMMENTS_FIELD}` : ''
+      fields.push(`  ${alias}: issue(number: ${ref.number}) { ${LABEL_EVENTS_FIELD} ${blockedByField(DETAIL_BLOCKER_PAGE_SIZE)}${comments} }`)
     } else {
       const rollup = ref.rollup ? ' ...CheckRollupFields' : ''
       fields.push(`  ${alias}: pullRequest(number: ${ref.number}) { ${PULL_REQUEST_DETAIL_FIELDS}${rollup} }`)

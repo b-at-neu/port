@@ -9,8 +9,6 @@ import {
   GROUP_NAMES,
   PROTECTED_EDIT_DENY_MESSAGE,
   approvedEditToast,
-  blockerSendError,
-  blockerSentToast,
   copiedPathToast,
   copyPathFailedToast,
   deniedEditToast,
@@ -50,11 +48,6 @@ describe('needsYouLeadCopy', () => {
   it('needs-human with no reason', () => {
     const item = { ...base({ number: 33 }), kind: 'needs-human', matchedRow: null, row: {} as never } as unknown as NeedsYouItem
     expect(needsYouLeadCopy(item)).toBe('Unblock #33: escalated without a reason')
-  })
-
-  it('blocked', () => {
-    const item = { ...base({ number: 30 }), kind: 'blocked', row: {} as never } as NeedsYouItem
-    expect(needsYouLeadCopy(item)).toBe('Unblock #30: an agent marked it blocked')
   })
 
   it('budget — escalated', () => {
@@ -147,11 +140,6 @@ describe('needsYouLeadCopy', () => {
     const item = { ...base({ number: 466 }), kind: 'stage-approval', sessionKey: 'hosted-1', permissionId: 'p1', agent: 'impl', toolName: 'Edit', path: '.claude/settings.json' } as unknown as NeedsYouItem
     expect(needsYouLeadCopy(item)).toBe('Implementing #466 wants to edit .claude/settings.json')
   })
-
-  it('stage-blocked leads with the blocker text, without its BLOCKED: prefix', () => {
-    const item = { ...base({ number: 51 }), kind: 'stage-blocked', sessionKey: 'hosted-1', text: 'The ledger export has no currency column.' } as unknown as NeedsYouItem
-    expect(needsYouLeadCopy(item)).toBe('#51 is blocked: The ledger export has no currency column.')
-  })
 })
 
 describe('usage-limit copy', () => {
@@ -217,7 +205,7 @@ describe('cleanup-failed copy', () => {
 
 describe('GROUP_NAMES', () => {
   it('names every group the way the screen shows it', () => {
-    expect(Object.values(GROUP_NAMES)).toEqual(['Plan reviews', 'Ready to merge', 'Escalated', 'Blocked', 'Questions', 'Edit approvals', 'Denied commands', 'Interrupted', 'Usage limit', 'Held', 'Stalled', 'Over budget', 'Label problems', 'Launch failures'])
+    expect(Object.values(GROUP_NAMES)).toEqual(['Plan reviews', 'Ready to merge', 'Escalated', 'Questions', 'Edit approvals', 'Denied commands', 'Interrupted', 'Usage limit', 'Held', 'Stalled', 'Over budget', 'Label problems', 'Launch failures'])
   })
 })
 
@@ -236,20 +224,6 @@ describe('dismiss and resume-all toasts', () => {
     expect(resumeAllToast(1, 1, null, null)).toBe('Resumed 1 session.')
     expect(resumeAllToast(1, 3, 4, null)).toBe('Resumed 1 of 3. All 4 session slots are busy.')
     expect(resumeAllToast(1, 3, null, { number: 38, reason: 'runtime problem' })).toBe("Couldn't resume #38: runtime problem.")
-  })
-})
-
-describe('blocker answer copy', () => {
-  it('names the agent in the sent toast', () => {
-    expect(blockerSentToast(51)).toBe('Sent your answer to #51\'s agent. It clears "Blocked" itself and carries on.')
-  })
-
-  it.each([
-    ['unknown-session', 'That session has ended. Unblock #51 from its row once the board catches up.'],
-    ['unreachable', "Couldn't reach the main process. Nothing was sent."],
-    ['blocked-command', "That text is a command the session can't run here. Reword your answer."],
-  ] as const)('explains %s', (error, copy) => {
-    expect(blockerSendError(error, 51)).toBe(copy)
   })
 })
 

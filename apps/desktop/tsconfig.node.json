@@ -15,6 +15,7 @@
     "src/preload/**/*",
     "src/renderer/local/inspect.ts",
     "src/renderer/local/shape.ts",
+    "src/renderer/board/blocked-on.ts",
     "src/renderer/board/dispatch-failures.ts",
     "src/renderer/board/needs-you.ts",
     "src/renderer/board/project.ts",

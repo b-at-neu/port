@@ -54,6 +54,8 @@ function item(overrides: Partial<PipelineItem> = {}): PipelineItem {
     reviews: null,
     comments: null,
     checkRollup: null,
+    blockers: null,
+    blockerComments: null,
     ...overrides,
   }
 }
@@ -392,6 +394,15 @@ describe('reconcileRepository — headRefOid/reviews/comments/reviewCycleCount (
     expect(state.items[0]?.reviews).toBeNull()
     expect(state.items[0]?.comments).toBeNull()
     expect(state.items[0]?.reviewCycleCount).toBeNull()
+  })
+})
+
+describe('reconcileRepository — blockers/blockerComments', () => {
+  it('copies both through verbatim, an unreadable read included', () => {
+    const blockerComments = [{ body: 'why', createdAt: '2026-01-01T00:00:00Z', url: 'https://x/c' }]
+    const state = reconcile([item({ matchedKeys: ['blocked'], blockers: { ok: false, reason: 'boom' }, blockerComments })])
+    if (!state.ok) throw new Error('unreachable')
+    expect(state.items[0]).toMatchObject({ blockers: { ok: false, reason: 'boom' }, blockerComments })
   })
 })
 

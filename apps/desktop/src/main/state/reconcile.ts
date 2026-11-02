@@ -205,6 +205,8 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
       reviewCycleCount,
       checkRollup: item.checkRollup,
       planPresent,
+      blockers: item.blockers,
+      blockerComments: item.blockerComments,
     }
   })
 

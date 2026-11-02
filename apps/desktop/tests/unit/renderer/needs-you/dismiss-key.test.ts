@@ -18,7 +18,7 @@ function asItem(value: object): NeedsYouItem {
 }
 
 describe('dismissKeyOf — row kinds', () => {
-  it.each(['plan-review', 'ready-to-merge', 'needs-human', 'blocked'] as const)('%s: the same label event keeps its key, a new one earns a new key', (kind) => {
+  it.each(['plan-review', 'ready-to-merge', 'needs-human'] as const)('%s: the same label event keeps its key, a new one earns a new key', (kind) => {
     const stageKey = kind === 'plan-review' ? 'planReview' : kind
     const first = rowWith(stageKey, [{ key: stageKey, at: '2026-01-01T00:00:00Z' }])
     const second = rowWith(stageKey, [{ key: stageKey, at: '2026-01-01T00:00:00Z' }, { key: stageKey, at: '2026-01-02T00:00:00Z' }])
@@ -77,8 +77,8 @@ describe('dismissKeyOf — stage kinds', () => {
     expect(dismissKeyOf(approval('p1'))).not.toBe(dismissKeyOf(approval('p2')))
   })
 
-  it.each(['stage-questions', 'stage-blocked'] as const)('%s: keyed by the session and when it handed back', (kind) => {
-    const handback = (at: string) => asItem({ ...base({ at }), kind, sessionKey: 'hosted-1', text: null })
+  it('stage-questions: keyed by the session and when it handed back', () => {
+    const handback = (at: string) => asItem({ ...base({ at }), kind: 'stage-questions', sessionKey: 'hosted-1', text: null })
     expect(dismissKeyOf(handback('t1'))).toBe(dismissKeyOf(handback('t1')))
     expect(dismissKeyOf(handback('t1'))).not.toBe(dismissKeyOf(handback('t2')))
   })

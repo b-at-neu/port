@@ -47,6 +47,8 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     reviewCycleCount: null,
     checkRollup: null,
     planPresent: null,
+    blockers: null,
+    blockerComments: null,
     ...overrides,
   }
 }
@@ -311,6 +313,20 @@ describe('projectBoard — live stage sessions', () => {
 
   it('defaults to no sessions', () => {
     expect(project([item()], undefined).rows[0]?.liveStage).toBeNull()
+  })
+
+  it('stamps blockedOn on a blocked row, and leaves every other row null', () => {
+    const blocked = item({ number: 1, status: 'gated', stage: 'gate', stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }] })
+    const queued = item({ number: 2 })
+    const rows = project([blocked, queued], []).rows
+    expect(rows.find((r) => r.item.number === 1)?.blockedOn).toEqual({ dependencies: null, session: null, comment: null })
+    expect(rows.find((r) => r.item.number === 2)?.blockedOn).toBeNull()
+  })
+
+  it('stamps blockedOn from a live BLOCKED: session on a row whose label has not moved', () => {
+    const session = planSession({ phase: 'ready', lastResult: { subtype: 'success', isError: false, text: 'BLOCKED: needs a decision', at: '2026-01-01T00:30:00.000Z' } })
+    const [row] = project([item()], [session]).rows
+    expect(row?.blockedOn?.session).toEqual({ text: 'needs a decision', sessionKey: 'hosted-1' })
   })
 
   it('refuses unblock with agent-live for a blocked issue that has a live session', () => {

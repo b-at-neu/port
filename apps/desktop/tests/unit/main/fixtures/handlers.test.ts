@@ -264,12 +264,16 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     expect(snapshots.filter((s) => s.stage !== null).map((s) => s.stage?.number).sort()).toEqual([38, 44, 51])
   })
 
-  it.runIf(scenario === 'populated')('shows exactly one #51 row in Needs you, carrying the blocker text and its live session', () => {
+  it.runIf(scenario === 'populated')('keeps every blocked ticket off Needs you and shows #51, #55 and #56 on the Board with what they are held on', () => {
     const snapshot = handlers['board:snapshot'](undefined)
-    const items = needsYouItems(snapshot, now, handlers['session:list'](undefined)).filter((i) => i.number === 51)
-    expect(items).toHaveLength(1)
-    expect(items[0]).toMatchObject({ kind: 'stage-blocked', sessionKey: 'fixture-stage-impl-51' })
-    expect(items[0]?.kind === 'stage-blocked' ? items[0].text : null).toMatch(/^The Q3 ledger export has no currency column\./)
+    const sessions = handlers['session:list'](undefined)
+    expect(needsYouItems(snapshot, now, sessions).filter((i) => [51, 55, 56].includes(i.number ?? 0))).toEqual([])
+    const rows = projectBoard({ snapshot, groupBy: 'repo', now, sessions }).rows
+    const held = (number: number) => rows.find((r) => r.item.number === number)?.blockedOn
+    expect(held(51)?.session).toMatchObject({ sessionKey: 'fixture-stage-impl-51' })
+    expect(held(51)?.session?.text).toMatch(/^The Q3 ledger export has no currency column\./)
+    expect(held(55)?.dependencies).toMatchObject({ ok: true, open: [{ number: 49 }, { number: 48 }] })
+    expect(held(56)?.comment?.text).toBe("The retention period isn't in the plan. Decide 30 or 90 days.")
   })
 
   it.runIf(scenario === 'populated')('dispatches #44 on the Board: in flight, with a live plan stage, before its label moves', () => {

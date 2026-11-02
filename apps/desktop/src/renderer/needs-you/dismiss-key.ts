@@ -13,7 +13,6 @@ function eventOf(item: NeedsYouItem): string {
     case 'plan-review':
     case 'ready-to-merge':
     case 'needs-human':
-    case 'blocked':
       return newestStageAt(item.row, item.row.stageLabel?.key)
     case 'stage-interrupted':
       return `${item.interrupted.id}@${item.interrupted.interruptedAt}`
@@ -25,7 +24,6 @@ function eventOf(item: NeedsYouItem): string {
     case 'stage-approval':
       return item.permissionId
     case 'stage-questions':
-    case 'stage-blocked':
       return `${item.sessionKey}@${item.at ?? ''}`
     case 'held':
       return `${item.held.reason}|${item.matchedRow?.item.headRefOid ?? ''}|${String(item.held.contention?.blocker ?? '')}`

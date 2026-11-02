@@ -101,6 +101,8 @@ function pipelineItemsFor(vocabulary: LabelVocabulary, labels: LabelMap, prs: Pr
     reviews: null,
     comments: null,
     checkRollup: null,
+    blockers: { ok: true, open: [], shown: 0, total: 0 },
+    blockerComments: null,
   }))
   const prItems: PipelineItem[] = [...prs.entries()].map(([number, pr]) => ({
     repo: 'o/scratch',
@@ -121,6 +123,8 @@ function pipelineItemsFor(vocabulary: LabelVocabulary, labels: LabelMap, prs: Pr
     reviews: [],
     comments: [],
     checkRollup: [],
+    blockers: null,
+    blockerComments: null,
   }))
   return [...issues, ...prItems]
 }
