@@ -1,6 +1,7 @@
 // Nodes → PipelineItem. matchedKeys is bucketed here, client-side, against the resolved vocabulary.
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
-import type { CheckContext, ItemDetail, ItemState, LabelEventNode, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, ReviewNode } from '@/types/github'
+import type { CheckContext, IssueCommentNode, ItemDetail, ItemState, LabelEventNode, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, ReviewNode } from '@/types/github'
+import { toBlockerRead } from '@/main/github/blockers'
 
 interface ConnectionLike {
   readonly totalCount?: unknown
@@ -27,6 +28,7 @@ interface RawNode {
   readonly comments?: unknown
   readonly commits?: unknown
   readonly timelineItems?: unknown
+  readonly blockedBy?: unknown
 }
 
 function isRawNode(value: unknown): value is RawNode {
@@ -128,6 +130,20 @@ function commentNodesOf(value: unknown): readonly PullRequestCommentNode[] {
   return out
 }
 
+/** A node missing `body`, `createdAt` or `url` is dropped, never defaulted. */
+function issueCommentsOf(value: unknown): readonly IssueCommentNode[] {
+  const nodes = asConnection(value)?.nodes
+  if (!Array.isArray(nodes)) return []
+  const out: IssueCommentNode[] = []
+  for (const node of nodes) {
+    if (typeof node !== 'object' || node === null) continue
+    const raw = node as Record<string, unknown>
+    if (typeof raw.body !== 'string' || typeof raw.createdAt !== 'string' || typeof raw.url !== 'string') continue
+    out.push({ body: raw.body, createdAt: raw.createdAt, url: raw.url })
+  }
+  return out
+}
+
 /** `LabeledEvent` nodes, raw label name unresolved — a node missing `createdAt`/`label.name` is
  *  dropped; a ghost/deleted `actor` reads as `null`, never dropped. Absent `timelineItems` → `[]`. */
 function labelEventsOf(value: unknown): readonly LabelEventNode[] {
@@ -181,6 +197,8 @@ function nodeToItem(node: RawNode, kind: PipelineItemKind, repo: string, vocabul
     reviews: isPullRequest ? [] : null,
     comments: isPullRequest ? [] : null,
     checkRollup: null,
+    blockers: null,
+    blockerComments: null,
   }
 }
 
@@ -199,17 +217,21 @@ export function mapPipelineItems(nodes: readonly unknown[], kind: PipelineItemKi
 /** Overlays the detail read onto the swept items. An item with no detail keeps its placeholders —
  *  `fetchPipelineItems` fails the whole read before that can reach a caller. */
 export function applyItemDetails(items: readonly PipelineItem[], details: readonly ItemDetail[]): readonly PipelineItem[] {
-  const byKey = new Map(details.map((detail) => [`${detail.kind}:${detail.number}`, detail.node]))
+  const byKey = new Map(details.map((detail) => [`${detail.kind}:${detail.number}`, detail]))
   return items.map((item) => {
-    const node = byKey.get(`${item.kind}:${item.number}`)
-    if (!isRawNode(node)) return item
+    const detail = byKey.get(`${item.kind}:${item.number}`)
+    const node = detail?.node
+    if (detail === undefined || !isRawNode(node)) return item
     const isPullRequest = item.kind === 'pull-request'
+    const commentsRead = !isPullRequest && 'comments' in node && !detail.erroredFields.includes('comments')
     return {
       ...item,
       labelEvents: labelEventsOf(node.timelineItems),
       reviews: isPullRequest ? reviewNodesOf(node.reviews) : null,
       comments: isPullRequest ? commentNodesOf(node.comments) : null,
       checkRollup: isPullRequest ? checkRollupOf(node) : null,
+      blockers: isPullRequest ? null : toBlockerRead(node.blockedBy, detail.erroredFields.includes('blockedBy')),
+      blockerComments: commentsRead ? issueCommentsOf(node.comments) : null,
     }
   })
 }

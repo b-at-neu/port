@@ -184,10 +184,18 @@ interface DetailsResult {
   readonly rateLimit: RateLimitInfo
 }
 
-/** Any detail alias that errors or comes back null fails the whole read: a missing review list would
+// Only an issue alias's own blockedBy/comments error is per-field: it costs a tag, never the board.
+const PER_FIELD_ERRORS: ReadonlySet<unknown> = new Set(['blockedBy', 'comments'])
+
+/** Any other detail alias that errors or comes back null fails the whole read: a missing review list would
  *  read as zero cycles, and a revise dispatch could go past the cap. */
 async function readDetails(runner: GhRunner, repo: GitHubRepoRef, items: readonly PipelineItem[], rateLimit: RateLimitInfo): Promise<DetailsResult | Failure> {
-  const refs = items.map((item) => ({ kind: item.kind, number: item.number, rollup: item.kind === 'pull-request' && (item.matchedKeys.includes('approved') || item.matchedKeys.includes('readyForReview')) }))
+  const refs = items.map((item) => ({
+    kind: item.kind,
+    number: item.number,
+    rollup: item.kind === 'pull-request' && (item.matchedKeys.includes('approved') || item.matchedKeys.includes('readyForReview')),
+    blockerComments: item.kind === 'issue' && item.matchedKeys.includes('blocked'),
+  }))
   const details: ItemDetail[] = []
   let total = rateLimit
 
@@ -196,13 +204,16 @@ async function readDetails(runner: GhRunner, repo: GitHubRepoRef, items: readonl
     const reply = await graphql(runner, repo, document)
     if (!reply.ok) return reply
     total = addRateLimit(total, reply.data.rateLimit)
-    const errored = new Set((reply.errors ?? []).map((error) => error.path?.[1]))
+    const errors = reply.errors ?? []
     for (const alias of aliases) {
       const node = reply.repository[alias.alias]
-      if (errored.has(alias.alias) || asRecord(node) === undefined) {
+      const own = errors.filter((error) => error.path?.[1] === alias.alias)
+      const perField = alias.kind === 'issue' ? own.filter((error) => PER_FIELD_ERRORS.has(error.path?.[2])) : []
+      if (own.length > perField.length || asRecord(node) === undefined) {
         return { ok: false, kind: 'no-data', message: `the detail read for ${alias.kind} #${alias.number} came back empty` }
       }
-      details.push({ kind: alias.kind, number: alias.number, node })
+      const erroredFields = perField.map((error) => String(error.path?.[2]))
+      details.push({ kind: alias.kind, number: alias.number, node, erroredFields })
     }
   }
 

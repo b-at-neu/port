@@ -10,7 +10,6 @@ export const GROUP_NAMES: Readonly<Record<NeedsYouGroupKey, string>> = {
   'plan-review': 'Plan reviews',
   'ready-to-merge': 'Ready to merge',
   'needs-human': 'Escalated',
-  blocked: 'Blocked',
   questions: 'Questions',
   approvals: 'Edit approvals',
   denied: 'Denied commands',
@@ -135,8 +134,6 @@ export function needsYouLeadCopy(item: NeedsYouItem, now: Date = new Date()): st
       return `${label} is ready to merge`
     case 'needs-human':
       return `Unblock ${label}: ${unblockReason(item) ?? 'escalated without a reason'}`
-    case 'blocked':
-      return `Unblock ${label}: an agent marked it blocked`
     case 'budget':
       switch (item.note.kind) {
         case 'escalation-failed':
@@ -167,8 +164,6 @@ export function needsYouLeadCopy(item: NeedsYouItem, now: Date = new Date()): st
       return `${STAGE_PHASE_NAME[item.agent]} ${label} wants to edit ${item.path}`
     case 'stage-questions':
       return `${label} has questions for you — open its session to answer`
-    case 'stage-blocked':
-      return `${label} is blocked: ${item.text ?? 'see its session'}`
     case 'stage-denial':
       return `${STAGE_PHASE_NAME[item.denial.agent]} ${label} was denied ${item.denial.rule}`
     case 'stage-interrupted':
@@ -204,12 +199,3 @@ export const ENDED_DENIAL_LINE = 'The session has ended. Allowing it applies to 
 
 export const REFRESH_FAILED_TOAST = "Couldn't reach the main process. Nothing was refreshed."
 
-export function blockerSentToast(number: number | null): string {
-  return `Sent your answer to ${number !== null ? `#${String(number)}'s` : 'the'} agent. It clears "Blocked" itself and carries on.`
-}
-
-export function blockerSendError(error: 'unknown-session' | 'blocked-command' | 'unreachable', number: number | null): string {
-  if (error === 'unreachable') return "Couldn't reach the main process. Nothing was sent."
-  if (error === 'blocked-command') return "That text is a command the session can't run here. Reword your answer."
-  return `That session has ended. Unblock ${number !== null ? `#${String(number)}` : 'the item'} from its row once the board catches up.`
-}

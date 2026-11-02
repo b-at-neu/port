@@ -42,6 +42,8 @@ export function reconciledItem(overrides: Partial<ReconciledItem> = {}): Reconci
     reviewCycleCount: null,
     checkRollup: null,
     planPresent: null,
+    blockers: null,
+    blockerComments: null,
     ...overrides,
   }
 }
