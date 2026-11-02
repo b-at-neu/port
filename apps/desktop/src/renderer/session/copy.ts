@@ -159,7 +159,17 @@ export function archiveRemoveFailedToast(message: string): string {
   return `Couldn't remove the worktree: ${message}`
 }
 
-export const ARCHIVE_UNREACHABLE_TOAST = "Couldn't reach the main process."
+export const ARCHIVE_UNAVAILABLE = "That session can't be dismissed right now."
+export const ARCHIVE_PENDING = 'Dismissing the session…'
+export const ARCHIVING_PENDING = 'Archiving the session…'
+
+export function archiveSuccessToast(choice: 'keep' | 'remove' | 'force'): string {
+  return choice === 'keep' ? 'Session dismissed. Its worktree is kept.' : 'Session dismissed and its worktree removed.'
+}
+
+export const CLOSE_PENDING = 'Closing the session…'
+export const CLOSE_SUCCESS = 'Session closed.'
+export const CLOSE_UNKNOWN_SESSION = "That session isn't running any more."
 
 export function folderMissingToast(path: string | null): string {
   return path !== null ? `This session's folder is gone: ${path}` : "Port couldn't find this session's folder."
@@ -171,6 +181,8 @@ export function taskStopBody(description: string): string {
 }
 export const TASK_KEEP_RUNNING = 'Keep running'
 export const TASK_STOP_BUTTON = 'Stop task'
+export const TASK_STOP_PENDING = 'Stopping the task…'
+export const TASK_STOP_SUCCESS = 'Stopped the task.'
 export const TASK_STOP_UNKNOWN = 'That task already finished.'
 export function taskStopFailed(message: string): string {
   return `Couldn't stop the task: ${message}`

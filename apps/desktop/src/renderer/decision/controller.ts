@@ -1,8 +1,11 @@
 // The decision dialog's state machine — a `useSyncExternalStore` store, the
 // same shape `gate/controller.ts` already establishes.
 import { invoke } from '@/renderer/data/invoke'
+import { runInBackground } from '@/renderer/lib/background-action'
+import { decisionResultCopy } from '@/renderer/decision/copy'
 import { pickList, picksProblem, reviseNoteProblem } from '@/utils/actions/decide'
-import type { OperatorDecision, RebasePick, ReviseContext, UnblockContext, UnblockRoute } from '@/types/actions'
+import type { ItemDecisionResult, OperatorDecision, RebasePick, ReviseContext, UnblockContext, UnblockRoute } from '@/types/actions'
+import type { ActionToast } from '@/types/toast'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { DecisionState } from '@/types/decision'
@@ -45,7 +48,7 @@ export function openDecision(params: {
   }
 }
 
-async function runDecision(params: {
+interface DecisionRun {
   readonly repoId: RepoId
   readonly number: number
   readonly expectedStage: LabelKey | null
@@ -54,18 +57,30 @@ async function runDecision(params: {
   readonly note: string | null
   readonly skipComment: boolean
   readonly picks: readonly RebasePick[] | null
-}): Promise<void> {
-  const { repoId, number, expectedStage, decision, route, note, skipComment, picks } = params
-  setState({ step: 'applying', repoId, number, decision })
-  try {
-    const response = await invoke('item:decide', { repoId, number, decision, expectedStage, route, note, skipComment, picks })
-    if (getState().step !== 'applying') return
-    setState({ step: 'result', repoId, number, decision, route, response, expectedStage, note, picks })
-    if (response.ok && response.labels.kind === 'applied') void invoke('board:refresh', { repoId, source: 'github' })
-  } catch (error) {
-    console.error('Failed to reach the main process while applying a decision', error)
-    setState({ step: 'result', repoId, number, decision, route, response: { ok: false, reason: 'repo-unavailable' }, expectedStage, note, picks })
-  }
+}
+
+function pendingLine(decision: OperatorDecision, route: UnblockRoute | null, number: number): string {
+  if (decision === 'revise') return `Sending PR #${String(number)} back…`
+  return `Unblocking ${route === 'implementation' ? '#' : 'PR #'}${String(number)}…`
+}
+
+function toastFor(run: DecisionRun, response: ItemDecisionResult): ActionToast {
+  const { number, decision, route, picks } = run
+  const copy = decisionResultCopy({ number, decision, route, picks, response })
+  const swapLabelsOnly = { label: 'Swap labels only', onClick: () => void runDecision({ ...run, skipComment: true }) }
+  return { tone: copy.tone, title: copy.line, description: copy.note, action: copy.offerLabelOnly ? swapLabelsOnly : null, cancel: null }
+}
+
+async function runDecision(run: DecisionRun): Promise<void> {
+  const { repoId, number, expectedStage, decision, route, note, skipComment, picks } = run
+  const response = await runInBackground({
+    id: `decision:${repoId}:${String(number)}`,
+    pending: pendingLine(decision, route, number),
+    run: () => invoke('item:decide', { repoId, number, decision, expectedStage, route, note, skipComment, picks }),
+    toToast: (result) => toastFor(run, result),
+    unreachable: toastFor(run, { ok: false, reason: 'repo-unavailable' }),
+  })
+  if (response !== 'unreachable' && response.ok && response.labels.kind === 'applied') void invoke('board:refresh', { repoId, source: 'github' })
 }
 
 export function setPick(id: string, letter: string): void {
@@ -79,7 +94,9 @@ export function submitUnblock(route: UnblockRoute): void {
   const chosen = state.picks
   const picks = decisions.length === 0 ? null : pickList(decisions, chosen)
   if (picks !== null && picksProblem(decisions, picks) !== null) return
-  void runDecision({ repoId: state.repoId, number: state.number, expectedStage: state.expectedStage, decision: 'unblock', route, note: null, skipComment: false, picks })
+  const { repoId, number, expectedStage } = state
+  closeDecisionDialog()
+  void runDecision({ repoId, number, expectedStage, decision: 'unblock', route, note: null, skipComment: false, picks })
 }
 
 export function setReviseText(text: string): void {
@@ -90,13 +107,9 @@ export function setReviseText(text: string): void {
 export function submitRevise(): void {
   if (state.step !== 'confirm-revise') return
   if (reviseNoteProblem(state.text, state.context.headRefOid) !== null) return
-  void runDecision({ repoId: state.repoId, number: state.number, expectedStage: state.expectedStage, decision: 'revise', route: null, note: state.text, skipComment: false, picks: null })
-}
-
-/** Suppresses the comment — a landed comment followed by an aborted label swap retries the swap alone. */
-export function retryLabelOnly(): void {
-  if (state.step !== 'result') return
-  void runDecision({ repoId: state.repoId, number: state.number, expectedStage: state.expectedStage, decision: state.decision, route: state.route, note: state.note, skipComment: true, picks: state.picks })
+  const { repoId, number, expectedStage, text } = state
+  closeDecisionDialog()
+  void runDecision({ repoId, number, expectedStage, decision: 'revise', route: null, note: text, skipComment: false, picks: null })
 }
 
 export function closeDecisionDialog(): void {

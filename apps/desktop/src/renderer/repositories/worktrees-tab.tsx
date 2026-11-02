@@ -2,7 +2,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
-import { toast } from 'sonner'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/renderer/components/ui/alert-dialog'
 import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
@@ -14,6 +13,8 @@ import { StatusPill } from '@/renderer/components/status-pill'
 import type { PillStatus } from '@/types/components'
 import { ipcQueryOptions, useIpcQuery } from '@/renderer/data/query'
 import { invoke } from '@/renderer/data/invoke'
+import { runInBackground } from '@/renderer/lib/background-action'
+import type { ActionToast } from '@/types/toast'
 import type { ForcedFlags, InspectedWorktree, WorktreesReport } from '@/types/reclaimer'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import { useListSelection } from '@/renderer/shell/list-selection'
@@ -47,12 +48,15 @@ interface PendingForced {
   readonly flags: ForcedFlags
 }
 
+function outcomeToast(tone: 'success' | 'error', title: string): ActionToast {
+  return { tone, title, description: null, action: null, cancel: null }
+}
+
 function ConfirmDialog({
   title,
   body,
   confirmLabel,
   destructive,
-  running,
   onConfirm,
   onCancel,
 }: {
@@ -60,7 +64,6 @@ function ConfirmDialog({
   readonly body: string
   readonly confirmLabel: string
   readonly destructive: boolean
-  readonly running: boolean
   readonly onConfirm: () => void
   readonly onCancel: () => void
 }) {
@@ -72,22 +75,8 @@ function ConfirmDialog({
           <AlertDialogDescription>{body}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={running}>Cancel</AlertDialogCancel>
-          {destructive ? (
-            <AlertDialogAction
-              disabled={running}
-              onClick={(event) => {
-                event.preventDefault()
-                onConfirm()
-              }}
-            >
-              {confirmLabel}
-            </AlertDialogAction>
-          ) : (
-            <Button disabled={running} onClick={onConfirm}>
-              {confirmLabel}
-            </Button>
-          )}
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          {destructive ? <AlertDialogAction onClick={onConfirm}>{confirmLabel}</AlertDialogAction> : <Button onClick={onConfirm}>{confirmLabel}</Button>}
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -182,7 +171,6 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
   const commandsWorktrees = 'config' in entry ? entry.config.commands.worktrees : null
   const repo = 'config' in entry ? entry.config.repo : ''
   const [confirmIssue, setConfirmIssue] = useState<number | 'all' | null>(null)
-  const [reclaiming, setReclaiming] = useState(false)
   const [pendingForced, setPendingForced] = useState<PendingForced | null>(null)
   const [pendingPurge, setPendingPurge] = useState<string | null>(null)
   const snapshotQuery = useIpcQuery('board:snapshot')
@@ -224,53 +212,47 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
     )
   }
 
-  const reclaimableRows = report.worktrees.filter((w) => w.reclaimable)
+  const worktrees = report.worktrees
+  const reclaimableRows = worktrees.filter((w) => w.reclaimable)
   const reclaimableCount = reclaimableRows.length
   const selectedWorktree = report.worktrees.find((w) => w.path === selection.selectedKey) ?? null
   const selectedForced = selectedWorktree === null ? null : forcedReclaimFor(selectedWorktree, report)
 
   async function runReclaim(issue: number | null): Promise<void> {
-    setReclaiming(true)
-    try {
-      const result = await invoke('worktrees:reclaim', { id: repoId, issue, force: null })
-      if (result.ok) toast(reclaimResultToast(result))
-      else toast(reclaimFailureToast(result))
-      await query.refetch()
-    } catch (error) {
-      console.error('Failed to reclaim worktrees', error)
-    }
-    setReclaiming(false)
     setConfirmIssue(null)
+    const name = issue === null ? null : (worktrees.find((w) => w.issue === issue)?.pathBasename ?? null)
+    await runInBackground({
+      id: `worktrees:${repoId}:reclaim:${issue === null ? 'all' : String(issue)}`,
+      pending: name === null ? 'Reclaiming worktrees…' : `Reclaiming ${name}…`,
+      run: () => invoke('worktrees:reclaim', { id: repoId, issue, force: null }),
+      toToast: (result) => (result.ok ? outcomeToast('success', reclaimResultToast(result)) : outcomeToast('error', reclaimFailureToast(result))),
+    })
+    await query.refetch()
     selection.clear()
   }
 
   async function runForced(target: PendingForced): Promise<void> {
-    setReclaiming(true)
-    try {
-      const result = await invoke('worktrees:reclaim', { id: repoId, issue: null, force: { path: target.worktree.path, ...target.flags } })
-      if (result.ok) toast(forcedReclaimToast(target.worktree.pathBasename, result))
-      else toast(reclaimFailureToast(result))
-      await query.refetch()
-    } catch (error) {
-      console.error('Failed to reclaim worktree', error)
-    }
-    setReclaiming(false)
     setPendingForced(null)
+    const { worktree, flags } = target
+    await runInBackground({
+      id: `worktrees:${repoId}:forced:${worktree.path}`,
+      pending: `Reclaiming ${worktree.pathBasename}…`,
+      run: () => invoke('worktrees:reclaim', { id: repoId, issue: null, force: { path: worktree.path, ...flags } }),
+      toToast: (result) => (result.ok ? outcomeToast('success', forcedReclaimToast(worktree.pathBasename, result)) : outcomeToast('error', reclaimFailureToast(result))),
+    })
+    await query.refetch()
     selection.clear()
   }
 
   async function runPurge(path: string): Promise<void> {
-    setReclaiming(true)
-    try {
-      const result = await invoke('worktrees:purge', { id: repoId, path })
-      if (result.ok) toast(purgeResultToast(result))
-      else toast(reclaimFailureToast(result))
-      await query.refetch()
-    } catch (error) {
-      console.error('Failed to delete directory', error)
-    }
-    setReclaiming(false)
     setPendingPurge(null)
+    await runInBackground({
+      id: `worktrees:${repoId}:purge:${path}`,
+      pending: `Deleting ${orphanName(path)}…`,
+      run: () => invoke('worktrees:purge', { id: repoId, path }),
+      toToast: (result) => (result.ok ? outcomeToast('success', purgeResultToast(result)) : outcomeToast('error', reclaimFailureToast(result))),
+    })
+    await query.refetch()
   }
 
   const forcedSupported = report.forcedActions === 'supported'
@@ -354,7 +336,6 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
           body={forcedDialogBody(pendingForced.worktree.pathBasename, pendingForced.flags, pendingForced.worktree.dirtyFiles)}
           confirmLabel={forcedConfirmLabel(pendingForced.flags)}
           destructive={forcedDialogIsDestructive(pendingForced.flags)}
-          running={reclaiming}
           onConfirm={() => void runForced(pendingForced)}
           onCancel={() => setPendingForced(null)}
         />
@@ -365,7 +346,6 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
           body={purgeDialogBody()}
           confirmLabel={purgeConfirmLabel()}
           destructive
-          running={reclaiming}
           onConfirm={() => void runPurge(pendingPurge)}
           onCancel={() => setPendingPurge(null)}
         />
@@ -378,14 +358,8 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
               <AlertDialogDescription>{reclaimDialogBody()}</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel disabled={reclaiming}>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                disabled={reclaiming}
-                onClick={(event) => {
-                  event.preventDefault()
-                  void runReclaim(confirmIssue === 'all' ? null : (confirmIssue ?? null))
-                }}
-              >
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={() => void runReclaim(confirmIssue === 'all' ? null : (confirmIssue ?? null))}>
                 {reclaimDialogConfirmLabel()}
               </AlertDialogAction>
             </AlertDialogFooter>

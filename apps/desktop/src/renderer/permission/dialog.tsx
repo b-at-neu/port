@@ -61,7 +61,7 @@ export function PermissionDialog() {
 
   return (
     <AlertDialog open onOpenChange={(open) => !open && deny()}>
-      <AlertDialogContent key={permission.permissionId}>
+      <AlertDialogContent key={permission.permissionId} showCloseButton={false}>
         <AlertDialogHeader>
           {otherSession ? <p className="text-small text-attention-pill-foreground">{OTHER_SESSION_LINE}</p> : null}
           {permission.protectedPath !== null ? <p className="text-small font-medium">{protectedPathLine(permission.protectedPath)}</p> : null}

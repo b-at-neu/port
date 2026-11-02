@@ -79,15 +79,5 @@ export type GateState =
   | { readonly step: 'loading'; readonly repoId: RepoId; readonly number: number }
   | { readonly step: 'reviewing'; readonly repoId: RepoId; readonly preflight: GatePreflight; readonly verdict: AnswerableVerdict; readonly ownership: OwnershipSummary }
   | { readonly step: 'feedback'; readonly repoId: RepoId; readonly preflight: GatePreflight; readonly verdict: AnswerableVerdict; readonly ownership: OwnershipSummary; readonly text: string }
-  | { readonly step: 'answering'; readonly repoId: RepoId; readonly number: number }
   | { readonly step: 'refused'; readonly repoId: RepoId; readonly number: number; readonly verdict: RefusalVerdict }
   | { readonly step: 'preflight-failed'; readonly repoId: RepoId; readonly number: number; readonly message: string }
-  | {
-      readonly step: 'result'
-      readonly repoId: RepoId
-      readonly preflight: GatePreflight
-      readonly decision: GateDecision
-      readonly feedback: string | null
-      readonly response: GateAnswerResponse
-      readonly ownership: OwnershipSummary
-    }

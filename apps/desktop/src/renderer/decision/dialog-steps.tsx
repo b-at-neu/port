@@ -5,8 +5,8 @@ import { DialogFooter, DialogHeader, DialogTitle } from '@/renderer/components/u
 import { Textarea } from '@/renderer/components/ui/textarea'
 import type { RebaseDecision } from '@/types/actions'
 import type { DecisionState } from '@/types/decision'
-import { closeDecisionDialog, retryLabelOnly, setPick, setReviseText, submitRevise, submitUnblock } from '@/renderer/decision/controller'
-import { decisionResultCopy, dialogTitle, picksHint, rebaseLegend, rebaseOptionLabel, reviseConsequence, reviseNoteHint, unblockCapNote, unblockConsequence, unblockReasonLine } from '@/renderer/decision/copy'
+import { closeDecisionDialog, setPick, setReviseText, submitRevise, submitUnblock } from '@/renderer/decision/controller'
+import { dialogTitle, picksHint, rebaseLegend, rebaseOptionLabel, reviseConsequence, reviseNoteHint, unblockCapNote, unblockConsequence, unblockReasonLine } from '@/renderer/decision/copy'
 
 function RebaseDecisionFields({ decisions, picks }: { readonly decisions: readonly RebaseDecision[]; readonly picks: Readonly<Record<string, string>> }) {
   if (decisions.length === 0) return null
@@ -95,36 +95,6 @@ export function ConfirmReviseStep({ state }: { readonly state: Extract<DecisionS
         <Button onClick={submitRevise} disabled={problem !== null}>
           Send back to revision
         </Button>
-      </DialogFooter>
-    </>
-  )
-}
-
-export function ApplyingStep({ decision }: { readonly decision: 'unblock' | 'revise' }) {
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>{decision === 'unblock' ? 'Unblocking…' : 'Sending back…'}</DialogTitle>
-      </DialogHeader>
-    </>
-  )
-}
-
-export function ResultStep({ state }: { readonly state: Extract<DecisionState, { readonly step: 'result' }> }) {
-  const copy = decisionResultCopy({ number: state.number, decision: state.decision, route: state.route, picks: state.picks, response: state.response })
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>{copy.line}</DialogTitle>
-      </DialogHeader>
-      {copy.note !== null ? <p className="text-small text-muted-foreground">{copy.note}</p> : null}
-      <DialogFooter>
-        {copy.offerLabelOnly ? (
-          <Button variant="outline" onClick={retryLabelOnly}>
-            Swap labels only
-          </Button>
-        ) : null}
-        <Button onClick={closeDecisionDialog}>Dismiss</Button>
       </DialogFooter>
     </>
   )

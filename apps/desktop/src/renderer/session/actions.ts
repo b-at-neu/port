@@ -6,7 +6,7 @@ import { ROUTE_IDS } from '@/renderer/router/routes'
 import { ipcQueryOptions } from '@/renderer/data/query'
 import { invoke } from '@/renderer/data/invoke'
 import type { RepoId } from '@/utils/repos'
-import type { HostedSessionSnapshot, SessionDismissResult, SessionKey, SessionMarks, SessionStartResult, SessionTaskStopResult, WorktreeChoice } from '@/types/hosting'
+import type { HostedSessionSnapshot, SessionCloseResult, SessionDismissResult, SessionKey, SessionMarks, SessionStartResult, SessionTaskStopResult, WorktreeChoice } from '@/types/hosting'
 import { orderSessions } from '@/utils/shell/session-order'
 import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SessionEffort, SetControlsResult } from '@/utils/hosting/controls'
 import type { ComposerAttachment } from '@/utils/hosting/attachments'
@@ -121,12 +121,8 @@ export async function stop(key: SessionKey): Promise<number | null | 'unreachabl
   }
 }
 
-export async function close(key: SessionKey): Promise<void> {
-  try {
-    await invoke('session:close', { sessionKey: key })
-  } catch (error) {
-    console.error('Failed to reach the main process closing a session', error)
-  }
+export async function close(key: SessionKey): Promise<SessionCloseResult> {
+  return invoke('session:close', { sessionKey: key })
 }
 
 // Dismisses with the given worktree choice; clears local state only on `ok`.

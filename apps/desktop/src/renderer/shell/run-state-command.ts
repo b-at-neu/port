@@ -1,14 +1,24 @@
 // Run/Drain/Pause for one repository, as a React mutation with toasts.
-import { toast } from 'sonner'
 import type { RepoId } from '@/utils/repos'
 import type { DispatchControlResult, RunState } from '@/types/dispatch'
+import type { ActionToast, ToastButton } from '@/types/toast'
 import { UNDO_LABEL } from '@/renderer/lib/copy'
+import { runInBackground } from '@/renderer/lib/background-action'
 import { useIpcMutation, ipcQueryOptions } from '@/renderer/data/query'
 import { useQueryClient } from '@tanstack/react-query'
 import type { BoardSnapshot } from '@/types/board'
 import { haltHeadingCopy, haltItemLine } from '@/renderer/board/halt-copy'
 import { runStateResultNote, pauseReportNote, pauseAbortedCopy, undoCommandFor } from '@/renderer/board/run-state'
 import { setPauseRequest, setTakeOverRequest } from '@/renderer/shell/stores'
+
+type DispatchCommand = DispatchControlResult['command']
+
+const PENDING: Record<DispatchCommand, (repoName: string) => string> = {
+  run: (repoName) => `Starting ${repoName}…`,
+  drain: (repoName) => `Draining ${repoName}…`,
+  pause: (repoName) => `Pausing ${repoName}…`,
+  'take-over': (repoName) => `Taking over ${repoName}…`,
+}
 
 function applyRunState(client: ReturnType<typeof useQueryClient>, repoId: RepoId, result: Extract<DispatchControlResult, { readonly command: 'run' | 'drain' | 'pause' | 'take-over' }>): void {
   if (!result.ok) return
@@ -33,9 +43,9 @@ export function useRunStateCommand() {
     return snapshot?.tick.find((entry) => entry.repoId === repoId)?.claims.length ?? 0
   }
 
-  function undoActionFor(prior: RunState | null, command: 'run' | 'drain', repoId: RepoId, repoName: string): { label: string; onClick: () => void } | undefined {
+  function undoActionFor(prior: RunState | null, command: 'run' | 'drain', repoId: RepoId, repoName: string): ToastButton | null {
     const undo = undoCommandFor(prior, command)
-    if (undo === null) return undefined
+    if (undo === null) return null
     const onClick = undo === 'pause' ? () => requestPause(repoId, repoName, inFlightOf(repoId)) : () => void send(undo, repoId, repoName, false)
     return { label: UNDO_LABEL, onClick }
   }
@@ -48,40 +58,33 @@ export function useRunStateCommand() {
     setPauseRequest({ repoId, name: repoName, inFlight })
   }
 
-  async function send(command: 'run' | 'drain' | 'pause', repoId: RepoId, repoName: string, undoable = true): Promise<void> {
-    const prior = priorState(repoId)
-    try {
-      const result = await mutation.mutateAsync({ command, repoId })
-      if (result.command === 'run') {
-        if (!result.ok) {
-          toast.error(runStateResultNote(result) ?? `Couldn't run ${repoName}.`)
-          return
-        }
-        applyRunState(client, repoId, result)
-        toast.success(`${repoName} is running`, { action: undoable ? undoActionFor(prior, 'run', repoId, repoName) : undefined })
-      } else if (result.command === 'drain') {
-        if (!result.ok) {
-          toast.error(runStateResultNote(result) ?? `Couldn't drain ${repoName}.`)
-          return
-        }
-        applyRunState(client, repoId, result)
-        const note = runStateResultNote(result)
-        if (note !== null) toast.error(note)
-        else toast('Work in progress finishes; nothing new starts.', { description: `${repoName} is draining`, action: undoable ? undoActionFor(prior, 'drain', repoId, repoName) : undefined })
-      } else if (result.command === 'pause') {
-        applyRunState(client, repoId, result)
-        if (result.report.kind === 'aborted') {
-          toast.error(pauseAbortedCopy(result.report))
-        } else {
-          const heading = haltHeadingCopy(result.report, 'Paused')
-          const lines = result.report.items.map((item) => haltItemLine(item, new Date()))
-          toast(heading, { description: [pauseReportNote(result.report, repoName), ...lines].join(' — ') })
-        }
-      }
-    } catch (error) {
-      console.error(`Failed to reach the main process for dispatch ${command}`, error)
-      toast.error("Couldn't reach the main process. Restart port to try again.")
+  function toastFor(result: DispatchControlResult, prior: RunState | null, repoName: string, undoable: boolean): ActionToast {
+    const plain = { description: null, action: null, cancel: null } as const
+    if (!result.ok) return { ...plain, tone: 'error', title: runStateResultNote(result) ?? `Couldn't ${result.command === 'take-over' ? 'take over' : result.command} ${repoName}.` }
+    if (result.command === 'run') return { ...plain, tone: 'success', title: `${repoName} is running`, action: undoable ? undoActionFor(prior, 'run', result.repoId, repoName) : null }
+    if (result.command === 'take-over') return { ...plain, tone: 'success', title: `${repoName} is running here` }
+    if (result.command === 'drain') {
+      const note = runStateResultNote(result)
+      if (note !== null) return { ...plain, tone: 'error', title: note }
+      return { ...plain, tone: 'info', title: 'Work in progress finishes; nothing new starts.', description: `${repoName} is draining`, action: undoable ? undoActionFor(prior, 'drain', result.repoId, repoName) : null }
     }
+    if (result.report.kind === 'aborted') return { ...plain, tone: 'error', title: pauseAbortedCopy(result.report) }
+    const lines = result.report.items.map((item) => haltItemLine(item, new Date()))
+    return { ...plain, tone: 'success', title: haltHeadingCopy(result.report, 'Paused'), description: [pauseReportNote(result.report, repoName), ...lines].join(' — ') }
+  }
+
+  async function send(command: DispatchCommand, repoId: RepoId, repoName: string, undoable = true): Promise<void> {
+    const prior = priorState(repoId)
+    await runInBackground({
+      id: `run-state:${repoId}`,
+      pending: PENDING[command](repoName),
+      run: async () => {
+        const result = await mutation.mutateAsync({ command, repoId })
+        applyRunState(client, repoId, result)
+        return result
+      },
+      toToast: (result) => toastFor(result, prior, repoName, undoable),
+    })
   }
 
   return {
@@ -104,19 +107,7 @@ export function useRunStateCommand() {
     },
     async confirmTakeOver(repoId: RepoId, repoName: string): Promise<void> {
       setTakeOverRequest(null)
-      try {
-        const result = await mutation.mutateAsync({ command: 'take-over', repoId })
-        if (result.command !== 'take-over') return
-        if (!result.ok) {
-          toast.error(runStateResultNote(result) ?? `Couldn't take over ${repoName}.`)
-          return
-        }
-        applyRunState(client, repoId, result)
-        toast.success(`${repoName} is running here`)
-      } catch (error) {
-        console.error('Failed to reach the main process for dispatch take-over', error)
-        toast.error("Couldn't reach the main process. Restart port to try again.")
-      }
+      await send('take-over', repoId, repoName)
     },
     pending: mutation.isPending,
   }

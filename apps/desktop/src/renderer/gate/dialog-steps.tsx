@@ -4,8 +4,8 @@ import { DialogFooter, DialogHeader, DialogTitle } from '@/renderer/components/u
 import { Textarea } from '@/renderer/components/ui/textarea'
 import { Markdown } from '@/renderer/components/markdown'
 import type { GateState } from '@/types/gate'
-import { backToReview, closeGateDialog, openFeedback, retryLabelOnly, retryPreflight, setFeedbackText, submitApprove, submitFeedback, tryCommentAgain } from '@/renderer/gate/controller'
-import { assigneeNoteCopy, autoPlanNoteCopy, feedbackHint, gateDisabledReason, noPlanNoteCopy, primaryApproveLabel, refusedVerdictCopy, resultCopy, sessionRequiredCopy } from '@/renderer/gate/copy'
+import { backToReview, closeGateDialog, openFeedback, retryPreflight, setFeedbackText, submitApprove, submitFeedback } from '@/renderer/gate/controller'
+import { assigneeNoteCopy, autoPlanNoteCopy, feedbackHint, gateDisabledReason, noPlanNoteCopy, primaryApproveLabel, refusedVerdictCopy, sessionRequiredCopy } from '@/renderer/gate/copy'
 
 function Aside({ line, note }: { readonly line: string; readonly note: string | null }) {
   return (
@@ -122,36 +122,6 @@ export function ErrorStep({ line, note }: { readonly line: string; readonly note
       </DialogHeader>
       <p className="text-small text-muted-foreground">{note}</p>
       <DialogFooter>
-        <Button onClick={closeGateDialog}>Dismiss</Button>
-      </DialogFooter>
-    </>
-  )
-}
-
-export function ResultStep({ state }: { readonly state: Extract<GateState, { readonly step: 'result' }> }) {
-  const copy = resultCopy({ number: state.preflight.number, decision: state.decision, response: state.response, sessionRequired: state.preflight.sessionRequired, ownership: state.ownership })
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>{copy.line}</DialogTitle>
-      </DialogHeader>
-      {copy.note !== null && copy.note !== '' ? <p className="text-small text-muted-foreground">{copy.note}</p> : null}
-      <DialogFooter>
-        {copy.actions.includes('retry-label') ? (
-          <Button variant="outline" onClick={retryLabelOnly}>
-            Retry the label change
-          </Button>
-        ) : null}
-        {copy.actions.includes('show-state') ? (
-          <Button variant="outline" onClick={retryPreflight}>
-            Show me the current state
-          </Button>
-        ) : null}
-        {copy.actions.includes('try-again') ? (
-          <Button variant="outline" onClick={tryCommentAgain}>
-            Try again
-          </Button>
-        ) : null}
         <Button onClick={closeGateDialog}>Dismiss</Button>
       </DialogFooter>
     </>

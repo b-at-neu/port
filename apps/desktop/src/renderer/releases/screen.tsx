@@ -4,7 +4,6 @@ import type { ReactNode } from 'react'
 import { useQueries, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { ExternalLink, Loader2, RefreshCw, Tag } from 'lucide-react'
-import { toast } from 'sonner'
 import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
@@ -16,11 +15,13 @@ import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { ScreenHeader } from '@/renderer/components/screen-header'
 import { StatusPill } from '@/renderer/components/status-pill'
 import { invoke } from '@/renderer/data/invoke'
+import { runInBackground } from '@/renderer/lib/background-action'
 import { ipcQueryOptions, useIpcQuery } from '@/renderer/data/query'
 import { exactTime, relativeAge } from '@/renderer/backlog/group'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { useListSelection } from '@/renderer/shell/list-selection'
-import type { HookOutcome, ReleaseEntry, ReleaseGroupView, ReleaseInfo, ReleaseRunRequest, ReleaseStatus } from '@/types/release'
+import type { HookOutcome, ReleaseEntry, ReleaseGroupView, ReleaseInfo, ReleaseRunRequest, ReleaseRunResult, ReleaseStatus } from '@/types/release'
+import type { ActionToast } from '@/types/toast'
 import { isReadyRepo } from '@/utils/repos'
 import type { RepoId } from '@/utils/repos'
 import { CutDialog } from '@/renderer/releases/cut-dialog'
@@ -34,6 +35,7 @@ import {
   NO_RELEASES,
   NO_REPOSITORIES,
   OPENED_TOAST,
+  OPENING_PENDING,
   OPEN_BUMP_PR,
   OPEN_ON_GITHUB,
   OPEN_PR,
@@ -51,6 +53,7 @@ import {
   mutedLine,
   nothingToReleaseCopy,
   publishedToast,
+  publishingPending,
   runProblemCopy,
   upcomingLabel,
   waitingMergeCopy,
@@ -67,6 +70,13 @@ interface HookNotice {
 
 function releaseKey(repoId: RepoId, tag: string): string {
   return `${repoId}:${tag}`
+}
+
+function releaseToast(version: string, result: ReleaseRunResult): ActionToast {
+  const plain = { description: null, action: null, cancel: null } as const
+  if (result.kind === 'opened') return { ...plain, tone: 'success', title: OPENED_TOAST }
+  if (result.kind === 'published') return { ...plain, tone: 'success', title: publishedToast(version), action: { label: 'Open release', onClick: () => window.open(result.url, '_blank', 'noreferrer') } }
+  return { ...plain, tone: 'error', title: runProblemCopy(result) }
 }
 
 function ChangeRow({ entry }: { readonly entry: ReleaseEntry }) {
@@ -253,23 +263,19 @@ export function ReleasesScreen() {
 
   async function run(repoId: RepoId, command: string | null, request: Omit<ReleaseRunRequest, 'repoId'>): Promise<void> {
     setRepoPending(repoId, true)
-    try {
-      const result = await invoke('release:run', { repoId, ...request } as ReleaseRunRequest)
-      if (result.kind === 'opened') toast(OPENED_TOAST)
-      else if (result.kind === 'published') {
-        toast(publishedToast(request.version), { action: { label: 'Open release', onClick: () => window.open(result.url, '_blank', 'noreferrer') } })
-        if (result.hook.kind === 'failed' || result.hook.kind === 'unrunnable') {
-          const notice: HookNotice = { version: request.version, command, outcome: result.hook }
-          setNotices((previous) => new Map(previous).set(repoId, notice))
-        }
-      } else toast(runProblemCopy(result))
-      await queryClient.invalidateQueries({ queryKey: ['release:status'] })
-    } catch (error) {
-      console.error('Failed to reach the main process while running a release step', error)
-      toast("Couldn't reach the main process to run that release step.")
+    const result = await runInBackground({
+      id: `release:${repoId}`,
+      pending: request.step === 'open' ? OPENING_PENDING : publishingPending(request.version),
+      run: () => invoke('release:run', { repoId, ...request } as ReleaseRunRequest),
+      toToast: (outcome) => releaseToast(request.version, outcome),
+      unreachable: { tone: 'error', title: "Couldn't reach the main process to run that release step.", description: null, action: null, cancel: null },
+    })
+    if (result !== 'unreachable' && result.kind === 'published' && (result.hook.kind === 'failed' || result.hook.kind === 'unrunnable')) {
+      const notice: HookNotice = { version: request.version, command, outcome: result.hook }
+      setNotices((previous) => new Map(previous).set(repoId, notice))
     }
+    await queryClient.invalidateQueries({ queryKey: ['release:status'] })
     setRepoPending(repoId, false)
-    setCutting(null)
   }
 
   function refreshAll(): void {
@@ -346,7 +352,7 @@ export function ReleasesScreen() {
         {selectedRelease !== null ? <ReleasePane release={selectedRelease} onClose={() => selection.clear()} /> : null}
       </div>
       {cuttingGroup?.kind === 'loaded' ? (
-        <CutDialog open status={cuttingGroup.status} pending={pending.has(cuttingGroup.repoId)} onCancel={() => setCutting(null)} onConfirm={(version) => void run(cuttingGroup.repoId, cuttingGroup.status.postPublishHook, { step: 'open', version })} />
+        <CutDialog open status={cuttingGroup.status} onCancel={() => setCutting(null)} onConfirm={(version) => void run(cuttingGroup.repoId, cuttingGroup.status.postPublishHook, { step: 'open', version })} />
       ) : null}
     </Screen>
   )
