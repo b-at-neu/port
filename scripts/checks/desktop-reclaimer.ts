@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { root, walk, relOf, readJson } from '#lib/files.ts';
@@ -27,7 +27,7 @@ export default async function ({ fail, ok }: Reporter) {
         violated = true;
         fail('desktop-reclaimer', `${relOf(f)} enumerates worktrees itself — the list comes from main/local/'s readWorktrees, never a second caller`);
       }
-      if (!f.endsWith('/remove.ts') && /worktree (remove|prune)|'worktree'/.test(text)) {
+      if (basename(f) !== 'remove.ts' &&/worktree (remove|prune)|'worktree'/.test(text)) {
         violated = true;
         fail('desktop-reclaimer', `${relOf(f)} calls git worktree directly — only remove.ts removes, unlocks or prunes`);
       }
