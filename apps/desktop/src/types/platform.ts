@@ -17,6 +17,15 @@ export interface DirEntry {
   readonly kind: DirEntryKind
 }
 
+export interface StatInfo {
+  readonly kind: 'file' | 'directory' | 'other'
+  readonly size: number
+  readonly modifiedAt: string
+}
+
+/** `code` is the errno string (`EBUSY`), kept so a caller can tell a held file from a long path. */
+export type RemoveDirectoryResult = { readonly ok: true } | { readonly ok: false; readonly code: string | null; readonly message: string }
+
 export type FileResult<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly kind: FileFailureKind; readonly message: string }
 
 /** ENOENT is a value, never an exception — callers must distinguish "no config" from "unreadable". */

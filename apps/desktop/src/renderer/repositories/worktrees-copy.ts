@@ -1,35 +1,32 @@
 // Every pure string the Repositories screen's own Worktrees tab renders.
 // No DOM here.
-import type { ForcedFlags, InspectedWorktree, ReclaimedWorktree, WorktreesPurgeResult, WorktreesReclaimResult, WorktreesReport } from '@/types/reclaimer'
+import type { ForcedFlags, InspectedWorktree, ReclaimedWorktree, ReclaimerFailure, WorktreesPurgeResult, WorktreesReclaimResult } from '@/types/reclaimer'
 
-/** One line per kind, naming what was refused — the plan's own **UX
- *  states** copy, verbatim where the plan gives an exact sentence. */
-export function failureCopy(failure: Extract<WorktreesReport, { ok: false }>): string {
+/** One line per kind, naming what was refused. */
+export function failureCopy(failure: ReclaimerFailure): string {
   switch (failure.kind) {
-    case 'not-configured':
-      return 'No commands.worktrees in this repository’s config, so worktree hygiene is unavailable. Run /port:init in it to install the reclamation script.'
-    case 'unsupported-runner':
-      return `commands.worktrees starts with ${failure.token}, which Port won’t run — only a node prefix is supported.`
-    case 'unparseable-command':
-      return 'commands.worktrees could not be parsed as a plain command — it may contain a shell metacharacter or an unbalanced quote. Nothing was run.'
+    case 'not-a-repository':
+      return 'This repository’s folder isn’t a git repository any more, so its worktrees can’t be read.'
+    case 'no-integration-ref':
+      return `Neither origin/${failure.integration} nor a local ${failure.integration} branch exists, so finished worktrees can’t be identified. Fetch the repository, then inspect again.`
+    case 'github-unavailable':
+      return 'GitHub couldn’t be reached, so nothing was reclaimed. A finished worktree can’t be told from an active one without it.'
+    case 'path-not-registered':
+      return 'That worktree isn’t registered any more, so nothing was touched.'
     case 'not-found':
-      return "Node.js wasn't found. Set PORT_NODE_PATH if it's installed somewhere unusual."
+      return 'Git wasn’t found. Make sure it’s installed and on your PATH.'
     case 'cwd-missing':
       return "This repository's working directory couldn't be found on disk."
-    case 'script-failed':
-      return `The reclamation script reported: ${failure.message}.`
-    case 'report-unparseable':
-      return "The script's output wasn't the expected JSON."
-    case 'timeout':
-      return 'Timed out after 60s.'
-    case 'signalled':
-      return 'The reclamation script was killed before it finished.'
-    case 'output-too-large':
-      return "The reclamation script's output was too large to read."
     case 'nonzero':
-      return `The reclamation script exited with an error: ${failure.message}`
+      return `git failed: ${failure.message}`
+    case 'timeout':
+      return 'git timed out.'
+    case 'signalled':
+      return 'git was stopped before it finished.'
+    case 'output-too-large':
+      return 'git’s output was too large to read.'
     case 'spawn-failed':
-      return `Couldn't run Node.js: ${failure.message}`
+      return `Couldn’t run git: ${failure.message}`
   }
 }
 
@@ -115,10 +112,6 @@ export function forcedDialogIsDestructive(flags: ForcedFlags): boolean {
 
 export function lockedInUseHint(): string {
   return 'Locked and still in use, so port won’t unlock it.'
-}
-
-export function forcedUnsupportedNotice(): string {
-  return 'This repository’s worktree script predates forced reclaim. Re-run /port:init to update it, or use /port:worktree-clean.'
 }
 
 /** One toast for a path-scoped reclaim: removed, removed nothing, or the target's own error. */

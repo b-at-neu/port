@@ -288,6 +288,13 @@ export type GatePreflightFetch =
   | { readonly ok: true; readonly item: GatePreflightItem | null; readonly viewer: string; readonly fetchedAt: string }
   | { readonly ok: false; readonly kind: PipelineFailureKind; readonly message: string; readonly fetchedAt: string }
 
+export type ItemStateName = 'OPEN' | 'CLOSED' | 'MERGED'
+
+/** A `null` state is an alias that errored, was not found, or carried no state — never read as done. */
+export type ItemStatesRead =
+  | { readonly ok: true; readonly states: ReadonlyMap<number, ItemStateName | null> }
+  | { readonly ok: false; readonly kind: PipelineFailureKind; readonly message: string }
+
 export interface FetchItemsByNumberParams {
   readonly repo: GitHubRepoRef
   readonly numbers: readonly number[]

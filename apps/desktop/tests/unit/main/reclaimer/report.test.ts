@@ -1,260 +1,149 @@
 import { describe, expect, it } from 'vitest'
-import { createPathOps } from '@/main/platform/paths'
-import type { CommandResult } from '@/types/platform'
-import type { GitRunner as WorktreesGitRunner } from '@/types/platform'
-import { GH_RESOLUTION_FAILED_SENTINEL, readWorktreeReport, SCRIPT_FAIL_PREFIX } from '@/main/reclaimer/report'
-import type { NodeRunner } from '@/main/reclaimer/report'
+import { createFakeGh, createFakeRepo, MAIN, WORKTREES } from '../../../fixtures/reclaimer-harness'
+import type { FakeGhOptions, FakeRepoOptions } from '../../../fixtures/reclaimer-harness'
+import { readWorktreeReport } from '@/main/reclaimer/report'
+import type { WorktreesReport } from '@/types/reclaimer'
 
-const posixPathOps = createPathOps('posix', { home: '/home/op' })
-const win32PathOps = createPathOps('win32', { home: 'C:\\Users\\op' })
+const MERGED = `${WORKTREES}/impl-36`
+const OPEN = `${WORKTREES}/impl-41`
 
-function ok(stdout: string): CommandResult {
-  return { ok: true, stdout, stderr: '' }
+async function report(repoOptions: FakeRepoOptions, ghOptions: FakeGhOptions = {}) {
+  const repo = createFakeRepo(repoOptions)
+  const gh = createFakeGh(ghOptions)
+  const result = await readWorktreeReport({ repoRoot: MAIN, repo: 'acme/widgets', integration: 'dev', gh: gh.gh, ...repo.seams })
+  return { result, repo, gh }
 }
 
-function nonzero(stderr: string, code = 1): CommandResult {
-  return { ok: false, kind: 'nonzero', code, stdout: '', stderr }
-}
-
-function payload(overrides: Record<string, unknown> = {}, candidateOverrides: Record<string, unknown> = {}): string {
-  return JSON.stringify({
-    mainRoot: '/repo',
-    integrationRef: 'origin/dev',
-    candidates: [
-      {
-        path: '/repo/.claude/worktrees/impl-42',
-        branch: '42-feature',
-        head: 'deadbeef',
-        state: 'done',
-        reason: '#42 merged (branch-name)',
-        rung: 'branch-name',
-        issue: 42,
-        locked: false,
-        lockReason: null,
-        dirtyFiles: 0,
-        removed: false,
-        branchDeleted: null,
-        error: null,
-        ...candidateOverrides,
-      },
-    ],
-    orphanDirs: [],
-    summary: { registered: 1, removed: 0, kept: 1, byState: { done: 1 } },
-    ...overrides,
-  })
+function ok(result: WorktreesReport): Extract<WorktreesReport, { ok: true }> {
+  if (!result.ok) throw new Error(`expected ok, got ${result.kind}`)
+  return result
 }
 
 describe('readWorktreeReport', () => {
-  it('reports not-configured without spawning anything when commands.worktrees is null', async () => {
-    let called = false
-    const runNode: NodeRunner = () => {
-      called = true
-      return Promise.resolve(ok(''))
-    }
-    const result = await readWorktreeReport({ repoRoot: '/repo', worktreesCommand: null, runNode, pathOps: posixPathOps })
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.kind).toBe('not-configured')
-    expect(typeof result.message).toBe('string')
-    expect(typeof result.readAt).toBe('string')
-    expect(called).toBe(false)
-  })
-
-  it('returns a clean online report, appending report --json', async () => {
-    let seenArgs: readonly string[] = []
-    const runNode: NodeRunner = (args) => {
-      seenArgs = args
-      return Promise.resolve(ok(payload()))
-    }
-    const result = await readWorktreeReport({
-      repoRoot: '/repo',
-      worktreesCommand: 'node plugins/port/bin/worktrees.mjs',
-      runNode,
-      pathOps: posixPathOps,
-    })
-    expect(seenArgs).toEqual(['plugins/port/bin/worktrees.mjs', 'report', '--json'])
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.githubResolution).toBe('resolved')
-    expect(result.porcelainJoin).toBe('unavailable') // no git runner injected
-    expect(result.worktrees).toHaveLength(1)
-    expect(result.worktrees[0]?.reclaimable).toBe(true)
-  })
-
-  it('an active worktree is never reclaimable', async () => {
-    const runNode: NodeRunner = () =>
-      Promise.resolve(ok(payload({ summary: { registered: 1, removed: 0, kept: 1, byState: { active: 1 } } }, { state: 'active', reason: '#42 open' })))
-    const result = await readWorktreeReport({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', runNode, pathOps: posixPathOps })
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.worktrees[0]?.state).toBe('active')
-    expect(result.worktrees[0]?.reclaimable).toBe(false)
-  })
-
-  it('carries forcedActions and otherwiseReclaimable from a path-scoped script onto the report', async () => {
-    const runNode: NodeRunner = () =>
-      Promise.resolve(ok(payload({ pathScope: true }, { state: 'locked', locked: true, otherwiseRemovable: true, reason: 'locked' })))
-    const result = await readWorktreeReport({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', runNode, pathOps: posixPathOps })
-    if (!result.ok) throw new Error(result.message)
-    expect(result.forcedActions).toBe('supported')
-    expect(result.worktrees[0]?.otherwiseReclaimable).toBe(true)
-    expect(result.worktrees[0]?.reclaimable).toBe(false)
-  })
-
-  it('reports forcedActions unsupported, and nothing otherwise reclaimable, from an older script', async () => {
-    const runNode: NodeRunner = () => Promise.resolve(ok(payload({}, { state: 'locked', locked: true, reason: 'locked' })))
-    const result = await readWorktreeReport({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', runNode, pathOps: posixPathOps })
-    if (!result.ok) throw new Error(result.message)
-    expect(result.forcedActions).toBe('unsupported')
-    expect(result.worktrees[0]?.otherwiseReclaimable).toBe(false)
-  })
-
-  it('the sentinel triggers exactly one offline retry, appending --offline', async () => {
-    const calls: (readonly string[])[] = []
-    const runNode: NodeRunner = (args) => {
-      calls.push(args)
-      if (calls.length === 1) return Promise.resolve(nonzero(`${SCRIPT_FAIL_PREFIX}${GH_RESOLUTION_FAILED_SENTINEL}: no network`))
-      return Promise.resolve(ok(payload()))
-    }
-    const result = await readWorktreeReport({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', runNode, pathOps: posixPathOps })
-    expect(calls).toEqual([
-      ['w.mjs', 'report', '--json'],
-      ['w.mjs', 'report', '--json', '--offline'],
+  it('classifies a merged, an open, a no-work and an unresolved worktree', async () => {
+    const { result, gh } = await report(
+      {
+        worktrees: [
+          { path: MERGED, branch: '36-paginate' },
+          { path: OPEN, branch: '41-csv' },
+          { path: `${WORKTREES}/scratch`, branch: 'scratch', ancestor: true },
+          { path: `${WORKTREES}/stray`, branch: 'stray', ancestor: false },
+        ],
+      },
+      { states: { 36: 'MERGED', 41: 'OPEN' } },
+    )
+    const value = ok(result)
+    expect(value.worktrees.map((w) => [w.pathBasename, w.state, w.reclaimable])).toEqual([
+      ['impl-36', 'done', true],
+      ['impl-41', 'active', false],
+      ['scratch', 'no-work', true],
+      ['stray', 'unresolved', false],
     ])
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.githubResolution).toBe('unavailable')
+    expect(value).toMatchObject({ mainRoot: MAIN, integrationRef: 'origin/dev', registered: 4, githubResolution: 'resolved', porcelainJoin: 'joined' })
+    expect(value.byState).toEqual({ done: 1, active: 1, 'no-work': 1, unresolved: 1 })
+    expect(value.worktrees[0]).toMatchObject({ issue: 36, rung: 'branch-name', reason: '#36 merged (branch-name)', producer: 'operator', prunable: false })
+    expect(gh.calls).toHaveLength(1)
+    expect(gh.calls[0]?.join(' ')).toContain('n36: issueOrPullRequest(number: 36)')
+    expect(gh.calls[0]?.join(' ')).toContain('n41: issueOrPullRequest(number: 41)')
   })
 
-  it('a second failure after the retry is reported, never retried again', async () => {
-    let calls = 0
-    const runNode: NodeRunner = () => {
-      calls++
-      return Promise.resolve(nonzero(`${SCRIPT_FAIL_PREFIX}${GH_RESOLUTION_FAILED_SENTINEL}: still down`))
-    }
-    const result = await readWorktreeReport({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', runNode, pathOps: posixPathOps })
-    expect(calls).toBe(2)
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.kind).toBe('script-failed')
+  it('makes no GitHub call when no worktree correlates to an item', async () => {
+    const { result, gh } = await report({ worktrees: [{ path: `${WORKTREES}/scratch`, branch: 'scratch', ancestor: true }] })
+    expect(ok(result).githubResolution).toBe('resolved')
+    expect(gh.calls).toEqual([])
   })
 
-  it('a FAIL stderr becomes script-failed, carrying the line verbatim', async () => {
-    const runNode: NodeRunner = () => Promise.resolve(nonzero(`${SCRIPT_FAIL_PREFIX}not a git repository`))
-    const result = await readWorktreeReport({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', runNode, pathOps: posixPathOps })
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.kind).toBe('script-failed')
-    expect(result.message).toBe(`${SCRIPT_FAIL_PREFIX}not a git repository`)
+  it('reports a correlated worktree as unresolved, never done, when GitHub cannot be read', async () => {
+    const { result } = await report(
+      { worktrees: [{ path: MERGED, branch: '36-paginate', ancestor: true }] },
+      { failure: { ok: false, kind: 'network', stdout: '', stderr: 'no route to host' } },
+    )
+    const value = ok(result)
+    expect(value.githubResolution).toBe('unavailable')
+    expect(value.worktrees[0]).toMatchObject({ state: 'unresolved', reclaimable: false, reason: '#36 could not be resolved' })
   })
 
-  it('maps a timeout straight through', async () => {
-    const runNode: NodeRunner = () => Promise.resolve({ ok: false, kind: 'timeout', timeoutMs: 60_000, stderr: '' })
-    const result = await readWorktreeReport({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', runNode, pathOps: posixPathOps })
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.kind).toBe('timeout')
+  it('treats an alias GitHub errored on as unknown, not done', async () => {
+    const { result } = await report({ worktrees: [{ path: MERGED, branch: '36-paginate' }] }, { states: { 36: 'MERGED' }, erroredAliases: [36] })
+    expect(ok(result).worktrees[0]?.state).toBe('unresolved')
   })
 
-  it('maps not-found straight through', async () => {
-    const runNode: NodeRunner = () => Promise.resolve({ ok: false, kind: 'not-found', command: 'node', searched: ['/usr/bin/node'] })
-    const result = await readWorktreeReport({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', runNode, pathOps: posixPathOps })
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.kind).toBe('not-found')
+  it('offers an unlock on a finished locked worktree but not on a live one', async () => {
+    const { result } = await report(
+      {
+        worktrees: [
+          { path: MERGED, branch: '36-paginate', locked: true, lockReason: 'review attached' },
+          { path: OPEN, branch: '41-csv', locked: true },
+        ],
+      },
+      { states: { 36: 'MERGED', 41: 'OPEN' } },
+    )
+    const [finished, live] = ok(result).worktrees
+    expect(finished).toMatchObject({ state: 'locked', otherwiseReclaimable: true, reclaimable: false, lockReason: 'review attached' })
+    expect(finished?.reason).toContain('reclaimable once unlocked')
+    expect(live).toMatchObject({ state: 'locked', otherwiseReclaimable: false, reason: 'locked' })
   })
 
-  it('an unsupported runner is reported without spawning', async () => {
-    let called = false
-    const runNode: NodeRunner = () => {
-      called = true
-      return Promise.resolve(ok(''))
-    }
-    const result = await readWorktreeReport({ repoRoot: '/repo', worktreesCommand: 'pnpm run wt', runNode, pathOps: posixPathOps })
-    expect(called).toBe(false)
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.kind).toBe('unsupported-runner')
-    if (result.kind !== 'unsupported-runner') return
-    expect(result.token).toBe('pnpm')
+  it('counts uncommitted files, and counts an unreadable status as dirty', async () => {
+    const { result } = await report(
+      {
+        worktrees: [
+          { path: MERGED, branch: '36-paginate', status: [' M a.ts', '?? b.ts'] },
+          { path: `${WORKTREES}/impl-37`, branch: '37-other', status: 'fails' },
+        ],
+      },
+      { states: { 36: 'MERGED', 37: 'CLOSED' } },
+    )
+    const [counted, failed] = ok(result).worktrees
+    expect(counted).toMatchObject({ state: 'dirty', dirtyFiles: 2, otherwiseReclaimable: true, reclaimable: false })
+    expect(failed).toMatchObject({ state: 'dirty', dirtyFiles: -1 })
+    expect(failed?.reason).toBe('#37 otherwise reclaimable, but an unknown number of uncommitted file(s)')
   })
 
-  it('an unparseable command is reported without spawning', async () => {
-    let called = false
-    const runNode: NodeRunner = () => {
-      called = true
-      return Promise.resolve(ok(''))
-    }
-    const result = await readWorktreeReport({ repoRoot: '/repo', worktreesCommand: 'node "a b.mjs" && rm -rf /', runNode, pathOps: posixPathOps })
-    expect(called).toBe(false)
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.kind).toBe('unparseable-command')
+  it('never checks the status of a worktree that could not be reclaimed anyway', async () => {
+    const { repo } = await report({ worktrees: [{ path: OPEN, branch: '41-csv' }] }, { states: { 41: 'OPEN' } })
+    expect(repo.calls.some((call) => call[0] === 'status')).toBe(false)
   })
 
-  it('a malformed --json payload is reported as report-unparseable', async () => {
-    const runNode: NodeRunner = () => Promise.resolve(ok('not json'))
-    const result = await readWorktreeReport({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', runNode, pathOps: posixPathOps })
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.kind).toBe('report-unparseable')
+  it('fences off a worktree outside the main one and never correlates it', async () => {
+    const { result, gh } = await report({ worktrees: [{ path: '/elsewhere/impl-9', branch: '9-x' }] })
+    expect(ok(result).worktrees[0]).toMatchObject({ state: 'outside', issue: null, reclaimable: false, otherwiseReclaimable: false })
+    expect(gh.calls).toEqual([])
   })
 
-  it('a failing readWorktrees join reports porcelainJoin: unavailable, report still ok: true', async () => {
-    const runNode: NodeRunner = () => Promise.resolve(ok(payload()))
-    const failingGit: WorktreesGitRunner = () => Promise.resolve({ ok: false, kind: 'nonzero', code: 1, stdout: '', stderr: 'boom' })
-    const result = await readWorktreeReport({
-      repoRoot: '/repo',
-      worktreesCommand: 'node w.mjs',
-      runNode,
-      git: failingGit,
-      pathOps: posixPathOps,
-    })
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.porcelainJoin).toBe('unavailable')
-    expect(result.worktrees[0]?.prunable).toBeNull()
-    expect(result.worktrees[0]?.producer).toBeNull()
+  it('treats a failed ancestry check as not an ancestor', async () => {
+    const { result } = await report({ worktrees: [{ path: `${WORKTREES}/scratch`, branch: 'scratch' }] })
+    expect(ok(result).worktrees[0]?.state).toBe('unresolved')
   })
 
-  it('the join attaches prunable across a case-differing Windows path', async () => {
-    const runNode: NodeRunner = () =>
-      Promise.resolve(
-        ok(
-          payload(
-            { mainRoot: 'c:/repo', integrationRef: 'origin/dev' },
-            { path: 'c:/repo/.claude/worktrees/impl-42' },
-          ),
-        ),
-      )
-    const porcelain = [
-      'worktree C:/repo',
-      'HEAD deadbeefmain',
-      'branch refs/heads/dev',
-      '',
-      'worktree C:/repo/.claude/worktrees/impl-42',
-      'HEAD deadbeef42',
-      'branch refs/heads/42-feature',
-      'prunable gone',
-      '',
-    ].join('\n')
-    const git: WorktreesGitRunner = (args) => {
-      if (args[0] === 'worktree') return Promise.resolve({ ok: true, stdout: porcelain, stderr: '' })
-      if (args[0] === 'config') return Promise.resolve({ ok: false, kind: 'nonzero', code: 1, stdout: '', stderr: '' })
-      if (args[0] === 'log') return Promise.resolve({ ok: true, stdout: 'deadbeefmain subject\ndeadbeef42 #42 do things', stderr: '' })
-      return Promise.resolve({ ok: false, kind: 'nonzero', code: 1, stdout: '', stderr: '' })
-    }
-    const result = await readWorktreeReport({
-      repoRoot: 'C:\\repo',
-      worktreesCommand: 'node w.mjs',
-      runNode,
-      git,
-      pathOps: win32PathOps,
-    })
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.porcelainJoin).toBe('joined')
-    expect(result.worktrees[0]?.prunable).toBe(true)
-    expect(result.worktrees[0]?.producer).toBe('operator')
+  it('falls back to a local integration branch when there is no remote-tracking ref', async () => {
+    const { result } = await report({ worktrees: [], remoteRef: false, localRef: true })
+    expect(ok(result).integrationRef).toBe('dev')
+  })
+
+  it('fails the whole read when neither integration ref exists', async () => {
+    const { result } = await report({ worktrees: [], remoteRef: false, localRef: false })
+    expect(result).toMatchObject({ ok: false, kind: 'no-integration-ref', integration: 'dev' })
+  })
+
+  it('reports an orphan directory beside the worktrees', async () => {
+    const { result } = await report({ worktrees: [{ path: MERGED, branch: '36-paginate' }], orphanDirs: [`${WORKTREES}/stale`] }, { states: { 36: 'MERGED' } })
+    expect(ok(result).orphanDirs).toEqual([`${WORKTREES}/stale`])
+  })
+
+  it('passes every git call through core.longpaths', async () => {
+    const { repo } = await report({ worktrees: [{ path: MERGED, branch: '36-paginate' }] }, { states: { 36: 'MERGED' } })
+    expect(repo.rawCalls.length).toBeGreaterThan(0)
+    expect(repo.rawCalls.every((call) => call[0] === '-c' && call[1] === 'core.longpaths=true')).toBe(true)
+  })
+
+  it('maps a failed worktree list straight through', async () => {
+    const repo = createFakeRepo()
+    const failing = { ...repo.seams, git: () => Promise.resolve({ ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'fatal: not a git repository' } as const) }
+    const result = await readWorktreeReport({ repoRoot: MAIN, repo: 'acme/widgets', integration: 'dev', ...failing })
+    expect(result).toMatchObject({ ok: false, kind: 'not-a-repository', message: 'fatal: not a git repository' })
+
+    const missing = await readWorktreeReport({ repoRoot: MAIN, repo: 'acme/widgets', integration: 'dev', ...repo.seams, git: () => Promise.resolve({ ok: false, kind: 'timeout', timeoutMs: 5, stderr: '' }) })
+    expect(missing).toMatchObject({ ok: false, kind: 'timeout' })
   })
 })

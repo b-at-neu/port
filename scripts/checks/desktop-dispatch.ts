@@ -186,13 +186,13 @@ export default async function ({ expect, fail, ok }: Reporter) {
     } else expect(sentinelMatch[1].startsWith(diePrefix), 'desktop-dispatch', `${budgetFile}'s OUTDATED_SCRIPT_SENTINEL ('${sentinelMatch[1]}') does not match bin/budget.mjs's own unrecognized-argument wording ('${diePrefix}…')`);
   }
 
-  // pin: `main/reclaimer/report.ts`'s `SCRIPT_FAIL_PREFIX` ↔ `bin/budget.mjs`'s own `die()`
+  // pin: `main/reclaimer/command.ts`'s `SCRIPT_FAIL_PREFIX` ↔ `bin/budget.mjs`'s own `die()`
   {
     const scriptText = readFileSync(budgetScriptPath, 'utf8');
     const gateText = readFileSync(join(root, budgetGateFile), 'utf8');
-    const prefixMatch = /SCRIPT_FAIL_PREFIX\s*=\s*'([^']+)'/.exec(readFileSync(join(root, 'apps/desktop/src/main/reclaimer/report.ts'), 'utf8'));
+    const prefixMatch = /SCRIPT_FAIL_PREFIX\s*=\s*'([^']+)'/.exec(readFileSync(join(root, 'apps/desktop/src/main/reclaimer/command.ts'), 'utf8'));
     if (!prefixMatch) {
-      fail('desktop-dispatch', `apps/desktop/src/main/reclaimer/report.ts has no 'SCRIPT_FAIL_PREFIX = ...' assignment`);
+      fail('desktop-dispatch', `apps/desktop/src/main/reclaimer/command.ts has no 'SCRIPT_FAIL_PREFIX = ...' assignment`);
     } else if (!scriptText.includes(prefixMatch[1])) {
       fail('desktop-dispatch', `bin/budget.mjs never emits '${prefixMatch[1]}' — SCRIPT_FAIL_PREFIX would never match a real failure`);
     } else expect(gateText.includes('SCRIPT_FAIL_PREFIX'), 'desktop-dispatch', `${budgetGateFile} never imports SCRIPT_FAIL_PREFIX — it must reuse the reclaimer's own constant, never a retyped literal`);

@@ -1,11 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { pathToFileURL } from 'node:url';
-import { root, walk, relOf } from '#lib/files.ts';
+import { root, walk, relOf, readJson } from '#lib/files.ts';
 import type { Reporter } from '#lib/report.ts';
 
-// apps/desktop/src/main/reclaimer/ drives the shipped bin/worktrees.mjs through
-// commands.worktrees and never re-implements its classification or calls `git worktree` itself.
+// apps/desktop/src/main/reclaimer/ ports bin/worktrees.mjs's classification in-process, pinned
+// against it by a shared case table, and spawns nothing.
 export default async function ({ fail, ok }: Reporter) {
   const dir = 'apps/desktop/src/main/reclaimer';
   const files = walk(join(root, dir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
@@ -17,38 +18,52 @@ export default async function ({ fail, ok }: Reporter) {
   }
   ok();
 
-  // --- (2) No file here re-implements worktree enumeration/removal — never a third `git
-  // worktree` caller beside the shipped script's classification and main/local/'s join. ---
+  // --- (2) Worktree enumeration stays in main/local/, and only remove.ts removes, unlocks or prunes. ---
   {
     let violated = false;
     for (const f of files) {
       const text = readFileSync(f, 'utf8');
-      if (/worktree list|--porcelain|worktree remove/.test(text)) {
+      if (/worktree list --porcelain|'list'/.test(text)) {
         violated = true;
-        fail(
-          'desktop-reclaimer',
-          `${relOf(f)} references worktree enumeration/removal directly — the classification comes from the shipped script, and the enumeration for the join comes from main/local/, never a third caller`,
-        );
+        fail('desktop-reclaimer', `${relOf(f)} enumerates worktrees itself — the list comes from main/local/'s readWorktrees, never a second caller`);
+      }
+      if (!f.endsWith('/remove.ts') && /worktree (remove|prune)|'worktree'/.test(text)) {
+        violated = true;
+        fail('desktop-reclaimer', `${relOf(f)} calls git worktree directly — only remove.ts removes, unlocks or prunes`);
       }
     }
     if (!violated) ok();
   }
 
+  // --- (3) The subprocess path stays gone. ---
+  {
+    let violated = false;
+    for (const f of files) {
+      const text = readFileSync(f, 'utf8');
+      if (/@\/main\/platform\/node|worktrees\.mjs/.test(text)) {
+        violated = true;
+        fail('desktop-reclaimer', `${relOf(f)} reaches for the node runner or names worktrees.mjs — the reclaimer is in-process and spawns nothing`);
+      }
+    }
+    if (!violated) ok();
+  }
+
+  const templatePath = join(root, 'plugins/port/bin/worktrees.mjs');
+  const templateText = readFileSync(templatePath, 'utf8');
+  const typesPath = join(root, 'apps/desktop/src/types/reclaimer.ts');
+  const typesText = readFileSync(typesPath, 'utf8');
+  const statesMatch = /WORKTREE_STATES\s*=\s*\[([^\]]*)\]\s*as const/.exec(typesText);
+  const reclaimableMatch = /RECLAIMABLE_STATES\s*=\s*\[([^\]]*)\]\s*as const/.exec(typesText);
+  const script = await import(pathToFileURL(templatePath).href);
+
   // pin: `bin/worktrees.mjs`'s state vocabulary (`describeReason`'s cases, and which states `classifyCandidate` returns `removable: true` for) ↔ `types/reclaimer.ts`'s `WORKTREE_STATES`/`RECLAIMABLE_STATES`
   {
-    const typesPath = join(root, 'apps/desktop/src/types/reclaimer.ts');
-    const typesText = readFileSync(typesPath, 'utf8');
-
-    const statesMatch = /WORKTREE_STATES\s*=\s*\[([^\]]*)\]\s*as const/.exec(typesText);
-    const reclaimableMatch = /RECLAIMABLE_STATES\s*=\s*\[([^\]]*)\]\s*as const/.exec(typesText);
     if (!statesMatch || !reclaimableMatch) {
       fail('desktop-reclaimer', `${relOf(typesPath)} has no 'WORKTREE_STATES = [...] as const' or 'RECLAIMABLE_STATES = [...] as const' array`);
     } else {
       const appStates = [...statesMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
       const appReclaimable = [...reclaimableMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
 
-      const templatePath = join(root, 'plugins/port/bin/worktrees.mjs');
-      const templateText = readFileSync(templatePath, 'utf8');
       const reasonFnMatch = /function describeReason\(c\) \{([\s\S]*?)\n\}/.exec(templateText);
       if (!reasonFnMatch) {
         fail('desktop-reclaimer', `${relOf(templatePath)} has no 'function describeReason(c) {...}' to read case labels from`);
@@ -68,11 +83,10 @@ export default async function ({ fail, ok }: Reporter) {
         }
       }
 
-      const { classifyCandidate } = await import(pathToFileURL(templatePath).href);
       const removableStates = new Set<string>();
       for (const itemState of ['OPEN', 'CLOSED', 'MERGED', null]) {
         for (const isAncestor of [true, false, null]) {
-          const result = classifyCandidate({ isOutside: false, isProtected: false, locked: false, dirty: false, itemState, isAncestor });
+          const result = script.classifyCandidate({ isOutside: false, isProtected: false, locked: false, dirty: false, itemState, isAncestor });
           if (result.removable) removableStates.add(result.state);
         }
       }
@@ -91,24 +105,43 @@ export default async function ({ fail, ok }: Reporter) {
     ok();
   }
 
-  // pin: `bin/worktrees.mjs`'s two diagnostic literals (`die()`'s `FAIL` prefix, `gh issueOrPullRequest resolution failed`) ↔ `main/reclaimer/report.ts`'s pinned copies
+  // pin: `bin/worktrees.mjs`'s four pure decisions ↔ `main/reclaimer/classify.ts`, through the case table both run
   {
-    const templatePath = join(root, 'plugins/port/bin/worktrees.mjs');
-    const templateText = readFileSync(templatePath, 'utf8');
-    const reportPath = join(root, 'apps/desktop/src/main/reclaimer/report.ts');
-    const reportText = readFileSync(reportPath, 'utf8');
+    const casesRel = 'apps/desktop/tests/unit/main/reclaimer/classify.cases.json';
+    const cases = readJson(casesRel);
+    // The script omits `otherwiseRemovable` for an outside or protected candidate; the port always carries it.
+    const runners: Record<string, (input: any) => unknown> = {
+      classifyCandidate: (input) => ({ otherwiseRemovable: false, ...script.classifyCandidate(input) }),
+      fallbackDecision: (input) => script.fallbackDecision(input),
+      orphanVerdict: (input) => script.orphanVerdict(input),
+      classifyRemovalFailure: (input) => script.classifyRemovalFailure(input),
+    };
 
-    if (!templateText.includes('FAIL  ')) {
-      fail('desktop-reclaimer', `${relOf(templatePath)} no longer carries the 'FAIL  ' prefix die() emits`);
+    for (const [fn, run] of Object.entries(runners)) {
+      const rows: any[] = Array.isArray(cases[fn]) ? cases[fn] : [];
+      if (rows.length === 0) {
+        fail('desktop-reclaimer', `${casesRel} has no '${fn}' cases — the table must cover every function the port shares with the script`);
+        continue;
+      }
+      for (const row of rows) {
+        const actual = run(row.input);
+        if (!isDeepStrictEqual(actual, row.expect)) {
+          fail('desktop-reclaimer', `bin/worktrees.mjs's ${fn}() disagrees with '${row.name}': expected ${JSON.stringify(row.expect)}, got ${JSON.stringify(actual)}`);
+        }
+      }
     }
-    if (!templateText.includes('gh issueOrPullRequest resolution failed')) {
-      fail('desktop-reclaimer', `${relOf(templatePath)} no longer carries the 'gh issueOrPullRequest resolution failed' sentence`);
-    }
-    if (!reportText.includes('FAIL  ')) {
-      fail('desktop-reclaimer', `${relOf(reportPath)} no longer carries a pinned copy of the script's 'FAIL  ' prefix`);
-    }
-    if (!reportText.includes('gh issueOrPullRequest resolution failed')) {
-      fail('desktop-reclaimer', `${relOf(reportPath)} no longer carries a pinned copy of the 'gh issueOrPullRequest resolution failed' sentence`);
+
+    const expected = (fn: string): Set<string> => new Set((cases[fn] ?? []).map((r: any) => (typeof r.expect === 'object' && r.expect !== null ? (r.expect.state ?? r.expect.action) : r.expect)));
+    const appStates = statesMatch ? [...statesMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]) : [];
+    const coverage: [string, Set<string>, string[]][] = [
+      ['classifyCandidate', expected('classifyCandidate'), appStates],
+      ['fallbackDecision', expected('fallbackDecision'), ['done', 'fallback', 'abort']],
+      ['classifyRemovalFailure', expected('classifyRemovalFailure'), ['file-in-use', 'long-path', 'unknown']],
+    ];
+    for (const [fn, seen, required] of coverage) {
+      for (const value of required) {
+        if (!seen.has(value)) fail('desktop-reclaimer', `${casesRel} has no '${fn}' case expecting '${value}' — the table must cover every outcome`);
+      }
     }
     ok();
   }

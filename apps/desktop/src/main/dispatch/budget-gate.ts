@@ -3,8 +3,7 @@
 import { node as defaultNode } from '@/main/platform/node'
 import type { CommandResult } from '@/types/platform'
 import type { NodeRunner } from '@/types/platform'
-import { parseNodeCommand } from '@/main/reclaimer/command'
-import { SCRIPT_FAIL_PREFIX } from '@/main/reclaimer/report'
+import { parseNodeCommand, SCRIPT_FAIL_PREFIX } from '@/main/reclaimer/command'
 import type { ReadyEntry } from '@/types/actions'
 import { dispatchArgs, OUTDATED_SCRIPT_SENTINEL, parseSweepLine, parseVerdict, resetArgs, sweepArgs } from '@/main/dispatch/budget'
 

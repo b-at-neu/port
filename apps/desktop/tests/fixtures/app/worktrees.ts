@@ -98,7 +98,6 @@ export function fixtureWorktreesReport(now: Date): WorktreesReport {
     byState: { active: 1, done: 1, dirty: 1, locked: 2 },
     githubResolution: 'resolved',
     porcelainJoin: 'joined',
-    forcedActions: 'supported',
     readAt: now.toISOString(),
   }
 }
@@ -113,7 +112,7 @@ export function fixtureWorktreesReclaim(now: Date, force: ForcedReclaim | null):
     removed: 1,
     results: [{ path, pathBasename: path.slice(path.lastIndexOf('/') + 1), issue, outcome: 'removed', error: null, branchDeleted: true }],
     readAt: now.toISOString(),
-    call: ['plugins/port/bin/worktrees.mjs', 'reclaim', '--json', ...args],
+    call: ['reclaim', ...args],
   }
 }
 
@@ -126,6 +125,6 @@ export function fixtureWorktreesPurge(now: Date): WorktreesPurgeResult {
     message: null,
     cause: null,
     readAt: now.toISOString(),
-    call: ['plugins/port/bin/worktrees.mjs', 'purge', '--orphan', ORPHAN_PATH, '--json'],
+    call: ['purge', '--orphan', ORPHAN_PATH],
   }
 }

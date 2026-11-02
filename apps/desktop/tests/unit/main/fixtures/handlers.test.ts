@@ -231,7 +231,6 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     const states = report.worktrees.map((w) => w.state).sort()
     expect(states).toEqual(['active', 'dirty', 'done', 'locked', 'locked'])
     expect(report.orphanDirs).toHaveLength(1)
-    expect(report.forcedActions).toBe('supported')
   })
 
   it('offers forced reclaim on the finished locked row and the dirty row, never on the active locked one', () => {

@@ -1,0 +1,46 @@
+{
+  "classifyCandidate": [
+    { "name": "outside is fenced off whatever else is true", "input": { "isOutside": true, "isProtected": false, "locked": true, "dirty": true, "itemState": "MERGED", "isAncestor": true }, "expect": { "state": "outside", "removable": false, "otherwiseRemovable": false } },
+    { "name": "outside beats protected", "input": { "isOutside": true, "isProtected": true, "locked": false, "dirty": false, "itemState": null, "isAncestor": null }, "expect": { "state": "outside", "removable": false, "otherwiseRemovable": false } },
+    { "name": "protected is active even when its item is merged", "input": { "isOutside": false, "isProtected": true, "locked": false, "dirty": false, "itemState": "MERGED", "isAncestor": null }, "expect": { "state": "active", "removable": false, "otherwiseRemovable": false } },
+    { "name": "an open item is active", "input": { "isOutside": false, "isProtected": false, "locked": false, "dirty": false, "itemState": "OPEN", "isAncestor": null }, "expect": { "state": "active", "removable": false, "otherwiseRemovable": false } },
+    { "name": "an open item stays active even when HEAD is an ancestor", "input": { "isOutside": false, "isProtected": false, "locked": false, "dirty": false, "itemState": "OPEN", "isAncestor": true }, "expect": { "state": "active", "removable": false, "otherwiseRemovable": false } },
+    { "name": "a merged item is done and removable", "input": { "isOutside": false, "isProtected": false, "locked": false, "dirty": false, "itemState": "MERGED", "isAncestor": null }, "expect": { "state": "done", "removable": true, "otherwiseRemovable": true } },
+    { "name": "a closed item is done and removable", "input": { "isOutside": false, "isProtected": false, "locked": false, "dirty": false, "itemState": "CLOSED", "isAncestor": false }, "expect": { "state": "done", "removable": true, "otherwiseRemovable": true } },
+    { "name": "no item and an ancestor HEAD is no-work", "input": { "isOutside": false, "isProtected": false, "locked": false, "dirty": false, "itemState": null, "isAncestor": true }, "expect": { "state": "no-work", "removable": true, "otherwiseRemovable": true } },
+    { "name": "no item and a non-ancestor HEAD is unresolved", "input": { "isOutside": false, "isProtected": false, "locked": false, "dirty": false, "itemState": null, "isAncestor": false }, "expect": { "state": "unresolved", "removable": false, "otherwiseRemovable": false } },
+    { "name": "no item and an unknown ancestry is unresolved", "input": { "isOutside": false, "isProtected": false, "locked": false, "dirty": false, "itemState": null, "isAncestor": null }, "expect": { "state": "unresolved", "removable": false, "otherwiseRemovable": false } },
+    { "name": "a locked finished worktree is locked but otherwise removable", "input": { "isOutside": false, "isProtected": false, "locked": true, "dirty": false, "itemState": "MERGED", "isAncestor": null }, "expect": { "state": "locked", "removable": false, "otherwiseRemovable": true } },
+    { "name": "a locked live worktree is locked and not otherwise removable", "input": { "isOutside": false, "isProtected": false, "locked": true, "dirty": false, "itemState": "OPEN", "isAncestor": null }, "expect": { "state": "locked", "removable": false, "otherwiseRemovable": false } },
+    { "name": "a locked unresolved worktree is locked and not otherwise removable", "input": { "isOutside": false, "isProtected": false, "locked": true, "dirty": false, "itemState": null, "isAncestor": null }, "expect": { "state": "locked", "removable": false, "otherwiseRemovable": false } },
+    { "name": "locked beats dirty", "input": { "isOutside": false, "isProtected": false, "locked": true, "dirty": true, "itemState": "MERGED", "isAncestor": null }, "expect": { "state": "locked", "removable": false, "otherwiseRemovable": true } },
+    { "name": "a dirty finished worktree is dirty but otherwise removable", "input": { "isOutside": false, "isProtected": false, "locked": false, "dirty": true, "itemState": "MERGED", "isAncestor": null }, "expect": { "state": "dirty", "removable": false, "otherwiseRemovable": true } },
+    { "name": "a dirty no-work worktree is dirty but otherwise removable", "input": { "isOutside": false, "isProtected": false, "locked": false, "dirty": true, "itemState": null, "isAncestor": true }, "expect": { "state": "dirty", "removable": false, "otherwiseRemovable": true } },
+    { "name": "a dirty live worktree stays active", "input": { "isOutside": false, "isProtected": false, "locked": false, "dirty": true, "itemState": "OPEN", "isAncestor": null }, "expect": { "state": "active", "removable": false, "otherwiseRemovable": false } },
+    { "name": "a dirty unresolved worktree stays unresolved", "input": { "isOutside": false, "isProtected": false, "locked": false, "dirty": true, "itemState": null, "isAncestor": false }, "expect": { "state": "unresolved", "removable": false, "otherwiseRemovable": false } }
+  ],
+  "fallbackDecision": [
+    { "name": "a directory git removed is done", "input": { "dirExists": false, "stillRegistered": false, "headNow": null, "headClassified": "aaa" }, "expect": { "action": "done" } },
+    { "name": "a vanished directory is done even while still registered", "input": { "dirExists": false, "stillRegistered": true, "headNow": "bbb", "headClassified": "aaa" }, "expect": { "action": "done" } },
+    { "name": "a deregistered directory still on disk falls back", "input": { "dirExists": true, "stillRegistered": false, "headNow": null, "headClassified": "aaa" }, "expect": { "action": "fallback" } },
+    { "name": "a registered directory with an unmoved HEAD falls back", "input": { "dirExists": true, "stillRegistered": true, "headNow": "aaa", "headClassified": "aaa" }, "expect": { "action": "fallback" } },
+    { "name": "a registered directory whose HEAD moved aborts", "input": { "dirExists": true, "stillRegistered": true, "headNow": "bbb", "headClassified": "aaa" }, "expect": { "action": "abort", "reason": "changed during removal" } },
+    { "name": "a registered directory that lost its HEAD aborts", "input": { "dirExists": true, "stillRegistered": true, "headNow": null, "headClassified": "aaa" }, "expect": { "action": "abort", "reason": "changed during removal" } }
+  ],
+  "orphanVerdict": [
+    { "name": "a .git directory is a live repository", "input": { "gitEntry": "dir", "gitdirTargetExists": false }, "expect": "skip" },
+    { "name": "an unreadable .git entry is skipped", "input": { "gitEntry": "unreadable", "gitdirTargetExists": false }, "expect": "skip" },
+    { "name": "a .git file whose target exists is a live worktree", "input": { "gitEntry": "file", "gitdirTargetExists": true }, "expect": "skip" },
+    { "name": "a .git file whose target is gone is an orphan", "input": { "gitEntry": "file", "gitdirTargetExists": false }, "expect": "orphan" },
+    { "name": "a directory with no .git entry is an orphan", "input": { "gitEntry": "none", "gitdirTargetExists": false }, "expect": "orphan" }
+  ],
+  "classifyRemovalFailure": [
+    { "name": "EBUSY is a file in use", "input": "EBUSY", "expect": "file-in-use" },
+    { "name": "EPERM is a file in use", "input": "EPERM", "expect": "file-in-use" },
+    { "name": "EACCES is a file in use", "input": "EACCES", "expect": "file-in-use" },
+    { "name": "ENOTEMPTY is a file in use", "input": "ENOTEMPTY", "expect": "file-in-use" },
+    { "name": "ENAMETOOLONG is a long path", "input": "ENAMETOOLONG", "expect": "long-path" },
+    { "name": "any other code is unknown", "input": "EIO", "expect": "unknown" },
+    { "name": "a missing code is unknown", "input": null, "expect": "unknown" }
+  ]
+}
