@@ -249,7 +249,7 @@ Scoping epics and analytics are out of scope for the first release.
 - **Loading:** `Skeleton` rows shaped like the real content. A spinner appears only inside a button whose action is running.
 - **Empty:** `EmptyState`, which is an icon, one sentence, and the single useful action.
 - **Error:** an `ErrorBanner` inside the affected region, saying what failed and how to fix it. A read failure never opens a dialog.
-- **Stale:** when a source stops refreshing, the screen header shows "Updated 3m ago" in `attention`. The Board header always shows its GitHub timing ("Checked GitHub 40s ago · next check in 1:20") and turns `attention` when a read fails or goes stale.
+- **Stale:** when a source stops refreshing, the screen header shows "Updated 3m ago" in `attention`. The Board header always shows its GitHub timing ("Checked GitHub 40s ago") and turns `attention` when a read fails or goes stale.
 
 **Actions:**
 - **Reversible actions apply immediately with a toast:** run, drain, retry. The toast offers Undo where possible.
