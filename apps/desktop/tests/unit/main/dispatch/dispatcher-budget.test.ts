@@ -118,6 +118,9 @@ function fakeBudget(overrides: Partial<BudgetGate> = {}): BudgetGate {
     check: () => {
       throw new Error('budget.check should not be invoked in this case')
     },
+    report: () => {
+      throw new Error('budget.report should not be invoked in this case')
+    },
     ...overrides,
   }
 }
@@ -181,10 +184,10 @@ describe('createDispatcher — budget bookkeeping', () => {
   })
 
   it('a reset failure reports budget-unavailable and dispatches nothing this pass', async () => {
-    const budget = fakeBudget({ reset: () => Promise.resolve({ ok: false, kind: 'unavailable', message: "commands.budget can't run (could not be parsed as a plain command prefix)." }) })
+    const budget = fakeBudget({ reset: () => Promise.resolve({ ok: false, kind: 'unavailable', message: "the budget ceiling can't be read (not on the default branch)." }) })
     const dispatcher = createDispatcher(baseDeps({ budget }))
     await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })]))
-    expect(dispatcher.status()[0]?.state).toEqual({ kind: 'budget-unavailable', message: "commands.budget can't run (could not be parsed as a plain command prefix)." })
+    expect(dispatcher.status()[0]?.state).toEqual({ kind: 'budget-unavailable', message: "the budget ceiling can't be read (not on the default branch)." })
   })
 
   it('sweeps even after ownership moves away from this app, while a session is still live', async () => {
