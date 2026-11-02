@@ -3,6 +3,7 @@ import { mkdir, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInProcessEngine } from '@/main/offload/engine'
+import type { RepoId } from '@/utils/repos'
 import { fakeGit } from '../../../fixtures/watcher-harness'
 
 const now = () => new Date('2026-01-01T00:00:00.000Z')
@@ -33,5 +34,10 @@ describe('createInProcessEngine', () => {
     const engine = createInProcessEngine({ sessionReader: () => Promise.resolve({ ok: true, sessions: [] }) })
     expect(await engine.tailPoll({ tailId: 'tail-1' })).toMatchObject({ ok: false, kind: 'unknown-tail' })
     await expect(engine.tailClose({ tailId: 'tail-1' })).resolves.toBeUndefined()
+  })
+
+  it('forgets a repo it never cached anything for without failing', async () => {
+    const engine = createInProcessEngine()
+    await expect(engine.forgetRepo({ repoId: 'repo-1' as RepoId })).resolves.toBeUndefined()
   })
 })

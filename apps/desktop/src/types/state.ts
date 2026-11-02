@@ -1,5 +1,5 @@
 import type { AgentRecord, SessionRecord } from '@/types/sessions'
-import type { PipelineFetch, ItemsByNumberFetch } from '@/types/github'
+import type { EtagCache, PipelineFetch, ItemsByNumberFetch } from '@/types/github'
 import type { WorktreesRead } from '@/types/local'
 import type { BoardSnapshot, SourceKind } from '@/types/board'
 
@@ -253,6 +253,7 @@ export interface SourceCache {
   readonly itemStates: Map<RepoId, ItemsByNumberFetch | null>
   readonly worktrees: Map<RepoId, WorktreesRead>
   readonly denials: Map<RepoId, DenialsRead>
+  readonly etags: EtagCache
   /** One machine-wide scan, never per repository. */
   sessions: SessionScan | null
 }

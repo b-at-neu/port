@@ -117,4 +117,12 @@ describe('createWorkerEngine', () => {
     workers[0]!.exit(1)
     await expect(close).resolves.toBeUndefined()
   })
+
+  it('proxies forgetRepo, and a rejection resolves to undefined', async () => {
+    const { engine, workers } = setup()
+    const forget = engine.forgetRepo({ repoId: 'r' as never })
+    expect(workers[0]!.sent).toEqual([{ id: 1, op: 'forgetRepo', params: { repoId: 'r' } }])
+    workers[0]!.reply({ id: 1, ok: false, message: 'gone' })
+    await expect(forget).resolves.toBeUndefined()
+  })
 })

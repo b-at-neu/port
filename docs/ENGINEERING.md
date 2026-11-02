@@ -75,6 +75,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 
 **`apps/desktop/src/main/github/`**
 - reads go through `platform/github-http`'s injectable `GitHubTransport`, never through `gh`; `request.ts` builds the GraphQL and REST requests, and `envelope.ts` classifies a reply from its status code and body
+- conditional REST reads go through `conditional.ts`'s `conditionalGet`; its per-repo ETag cache is keyed by path and `Accept`, and is forgotten when a repo is added or removed — GraphQL is never conditional
 - the pipeline read's detail alias fails the whole read on any error, because a missing review list would read as zero cycles; the one carve-out is an issue alias's own `blockedBy` or `comments` field, which goes into that detail's `erroredFields` and never reaches a pull request alias
 - an errored `blockedBy` becomes `{ ok: false }` and errored comments become `null`, so the Board shows "unknown" or "its reason is on the ticket", never "no blockers"
 - `item-states.ts`'s `readItemStates` reads many items' states in one aliased round trip; an alias named in `errors[].path`, or absent, is `null`, never done
@@ -120,7 +121,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 **`apps/desktop/src/main/platform/`**
 - only importer of `node:child_process` / `node:fs` under `apps/desktop/src/`
 - spawnables a literal union (`KNOWN_COMMANDS`); paths via `pathKey`/`contains`, never `startsWith`
-- `github-http.ts` is the only `fetch` caller under `apps/desktop/src/main/`; its token comes only from `gh auth token` and is held in process memory, re-read once on a `401`, and a failed read is never cached
+- `github-http.ts` is the only `fetch` caller under `apps/desktop/src/main/`; its token comes only from `gh auth token` and is held in process memory, re-read once on a `401`, and a failed read is never cached; `githubConditional` shares that token, and a `304` is a `notModified` success only when a validator was sent
 - `disk.ts`'s `directorySize` never follows a symlink and is bounded by `maxEntries`; a cut-short or partly unreadable walk reports `truncated`, never an undercount presented as exact
 - `files.ts`'s `removeDirectory` retries a held file and returns the errno code instead of throwing, so a caller can tell a held file from a long path
 - `shell-env.ts` resolves the login shell's PATH once at startup, merges only PATH into `process.env`, and never blocks startup past its timeout

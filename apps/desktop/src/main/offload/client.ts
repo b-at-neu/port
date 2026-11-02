@@ -110,5 +110,7 @@ export function createWorkerEngine(options: WorkerEngineOptions = {}): StateEngi
     tailOpen: (params) => call('tailOpen', params),
     tailPoll: (params) => call('tailPoll', params),
     tailClose: (params) => call('tailClose', params).catch(() => undefined),
+    // A crashed or respawned worker starts with an empty cache anyway.
+    forgetRepo: (params) => call('forgetRepo', params).catch(() => undefined),
   }
 }

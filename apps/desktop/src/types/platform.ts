@@ -63,6 +63,22 @@ export type GitHubHttpResult =
 /** Injectable, so a test runs against a fake and needs no network or token. */
 export type GitHubTransport = (request: GitHubRequest) => Promise<GitHubHttpResult>
 
+export interface ConditionalRequest {
+  readonly method: 'GET'
+  readonly path: string
+  readonly accept?: string
+  /** Sent verbatim as `If-None-Match`; absent → an unconditional GET. */
+  readonly ifNoneMatch?: string
+}
+
+/** A 304 is a success here — `notModified` is the discriminant, and only a request that sent a validator can produce one. */
+export type ConditionalHttpResult =
+  | { readonly ok: true; readonly notModified: false; readonly status: number; readonly headers: Readonly<Record<string, string>>; readonly body: string }
+  | { readonly ok: true; readonly notModified: true; readonly status: 304; readonly headers: Readonly<Record<string, string>> }
+  | Exclude<GitHubHttpResult, { ok: true }>
+
+export type ConditionalTransport = (request: ConditionalRequest) => Promise<ConditionalHttpResult>
+
 export type DirectorySizeResult =
   | { readonly ok: true; readonly bytes: number; readonly entries: number; readonly truncated: boolean }
   | { readonly ok: false; readonly kind: 'not-found' | 'io'; readonly message: string }
