@@ -35,7 +35,7 @@ interface OverviewHealth {
   readonly overrides: readonly AppliedOverride[]
 }
 
-/** Keeps `plugins/port/data/labels.json`'s own declaration order, the same
+/** Keeps `utils/labels/labels.json`'s own declaration order, the same
  *  order `types/actions.ts`'s `MODULE_LABELS` iterates. */
 const MODULE_FLAG_NAMES: readonly ModuleFlagName[] = ['approvalGate', 'release', 'scope']
 
