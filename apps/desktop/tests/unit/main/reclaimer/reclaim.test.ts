@@ -66,7 +66,7 @@ describe('runReclaim — every reclaimable worktree', () => {
   })
 
   it('removes nothing when GitHub cannot be read', async () => {
-    const { result, repo } = await reclaim({ worktrees: [finished(36)] }, { failure: { ok: false, kind: 'network', stdout: '', stderr: 'offline' } })
+    const { result, repo } = await reclaim({ worktrees: [finished(36)] }, { failure: { ok: false, kind: 'network', status: null, body: '', message: 'offline' } })
     expect(result).toMatchObject({ ok: false, kind: 'github-unavailable', call: ['reclaim'] })
     expect(removals(repo.calls)).toEqual([])
     expect(repo.calls.some((c) => c[1] === 'prune')).toBe(false)

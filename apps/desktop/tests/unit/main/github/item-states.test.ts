@@ -62,7 +62,7 @@ describe('readItemStates', () => {
   })
 
   it('fails on a transport error, and on a reply with no data', async () => {
-    const network = fakeTransport({ ok: false, kind: 'network', message: 'offline' })
+    const network = fakeTransport({ ok: false, kind: 'network', status: null, body: '', message: 'offline' })
     expect(await readItemStates({ repo, numbers: [1], github: network })).toEqual({ ok: false, kind: 'network', message: 'offline' })
     expect(await readItemStates({ repo, numbers: [1], github: respond({ errors: [{ message: 'boom' }] }) })).toMatchObject({ ok: false, kind: 'no-data' })
     expect(await readItemStates({ repo, numbers: [1], github: fakeTransport(httpOk('not json')) })).toMatchObject({ ok: false, kind: 'unparseable' })
