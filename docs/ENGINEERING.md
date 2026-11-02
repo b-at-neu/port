@@ -73,6 +73,10 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `auto-plan.ts`'s `createAutoPlanner` (#313, #331) is a snapshot consumer gated on this app owning the repository and on the per-repository run state the same way `dispatchableFrom` is; kept out of `dispatcher.ts`, since the two serve different callers
 - the planner records refused swaps (a non-applied outcome or a throw) and republishes on a change; they fail toward Waiting on you, since a wrongly shown row costs a glance and a wrongly hidden one stalls silently
 
+**`apps/desktop/src/main/github/`**
+- the pipeline read's detail alias fails the whole read on any error, because a missing review list would read as zero cycles; the one carve-out is an issue alias's own `blockedBy` or `comments` field, which goes into that detail's `erroredFields` and never reaches a pull request alias
+- an errored `blockedBy` becomes `{ ok: false }` and errored comments become `null`, so the Board shows "unknown" or "its reason is on the ticket", never "no blockers"
+
 **`apps/desktop/src/main/hosting/`**
 - owns a hosted session's full lifecycle (#98); the renderer only sends intents (nine `session:*` channels) and receives events, never drives the child directly. #326 removes the dispatcher role: no `SessionOptionsRole`, no per-session task tracker, no `allowedTools`
 - `store.ts`'s `start()` refuses `folder-busy` so two sessions never share one working tree; `dismiss` removes a worktree only on the operator's explicit `remove`/`force`
@@ -200,6 +204,12 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - reads `audit:list` only; the screen is read-only and makes no write
 - `model.ts` is the one `AuditEntry` → row mapping
 
+**`apps/desktop/src/renderer/board/`**
+- `blocked-on.ts`'s `blockedOnOf` is the one "held on" derivation; the row tag, the Blocked section and the item pane read `row.blockedOn`, never a second one
+- a ticket is blocked when its stage label is `blocked` or a live stage session's last hand-back is `BLOCKED:`; open `blockedBy` links alone never make it blocked
+- the comment source is the newest comment at or before the latest `blocked` label event, and no such event means no comment, so it fails toward the fallback copy rather than an unrelated comment
+- `blocker-answer.tsx` sends into the live session through `session/actions.ts`'s `send` and never writes a label; the agent clears its own block
+
 **`apps/desktop/src/renderer/components/conversation-model.ts`/`conversation-list.tsx`**
 - the one `TranscriptEntry` → view-model mapping and the one pin-to-bottom, chunked-reveal list
 - shared by the on-disk transcript view and the live session view, never a second copy
@@ -225,7 +235,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - the Needs you screen (#315): its own copy (`copy.ts`), action resolution and dispatch (`actions.ts`), and the relay compose form (`relay-form.tsx`), ported out of `board/relay.ts`'s former banner
 - `screen.tsx` reads `board:snapshot` through `renderer/board/needs-you.ts`'s `needsYouItems`, never a second derivation; writes go through the existing `item:action`/`item:decide` channels, or `session:permission:answer` for a `stage-approval` row, no new IPC
 - `components/needs-you-item.tsx` is the shared row (DESIGN §4's `NeedsYouItem`); a screen never builds its own version
-- a live stage session's `BLOCKED:` hand-back and the blocked label on the same item are one row (`stage-blocked`); its answer card (`blocker-answer.tsx`) sends into that session through `session/actions.ts`'s `send`, never a label write — the agent clears its own block
+- blocked items are not Needs you's: a `blocked` label and a live session's `BLOCKED:` hand-back both go to the Board's Blocked section, and `waitsOnYou` is false for them
 - dismissals (#554) live only in the renderer's `localStorage` (`dismissed.ts`), keyed per event by `dismiss-key.ts` so the same event stays dismissed and a new event on the same ticket shows; a malformed stored value reads as empty, which fails toward showing everything
 - `notify-model.ts` is the only "new item" diff, over `visibleNeedsYouItems`'s items and keyed by `dismissKeyOf`, never a second derivation; `notify.ts` persists its baseline in `localStorage` and a malformed value seeds silently
 - `dismissed.ts`'s `visibleNeedsYouItems` is the one visible-items composition: `use-items.ts`'s `useNeedsYouItems` (the screen, the sidebar count, the palette and the per-repository dots) and `notify.ts`'s notifier both call it, so a dismissed or auto-cleared item can never disagree between them

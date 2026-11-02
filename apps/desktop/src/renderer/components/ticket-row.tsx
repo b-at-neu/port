@@ -10,6 +10,7 @@ import { openReviewDialog } from '@/renderer/gate/controller'
 import { openDecision } from '@/renderer/decision/controller'
 import { PhaseBar } from '@/renderer/components/phase-bar'
 import { PhasePill } from '@/renderer/components/phase-pill'
+import { BlockedOnTag } from '@/renderer/components/blocked-on-tag'
 import type { useListSelection } from '@/renderer/shell/list-selection'
 
 interface TicketRowProps {
@@ -85,6 +86,7 @@ export function TicketRow({ row, rowProps, operatorJoined = false }: TicketRowPr
       ) : null}
       <PhaseBar stageKey={row.stageLabel?.key ?? null} kind={item.kind} merged={item.mergedAt !== null} className="shrink-0" />
       <PhasePill tone={phaseToneFor(row)} label={phaseLabelFor(row)} className="shrink-0" />
+      {row.blockedOn !== null ? <BlockedOnTag blockedOn={row.blockedOn} /> : null}
       {isDispatchedRow(row) ? (
         <span title={dispatchedTagTitle()} aria-label={dispatchedTagTitle()} className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-meta text-foreground-secondary">
           {dispatchedTagLabel()}

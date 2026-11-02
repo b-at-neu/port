@@ -22,20 +22,10 @@ function usageLimit(resetsAt: string | null, ids: readonly string[] = ['a', 'b',
   return { kind: 'usage-limit', repoId: null, repo: null, number: null, title: null, url: null, ticket: null, at: null, matchedRow: null, entries, resetsAt, repoNames: new Map() } as unknown as NeedsYouItem
 }
 
-function stageBlocked(): NeedsYouItem {
-  return { kind: 'stage-blocked', repoId: 'repo-a' as RepoId, repo: 'o/a', number: 51, title: 't', url: null, ticket: null, at: null, matchedRow: null, sessionKey: 'hosted-51' as SessionKey, text: 'BLOCKED: x' }
-}
-
 describe('actionFor — dispatch-failed', () => {
   it('opens the ticket', () => {
     const item = { kind: 'dispatch-failed', repoId: 'repo-a' as RepoId, repo: 'o/a', number: 52, title: 't', url: 'https://github.com/o/a/issues/52', ticket: null, at: null, matchedRow: null, attempts: 2, record: {} } as unknown as NeedsYouItem
     expect(actionFor(item)).toEqual({ label: 'Open ticket', kind: 'open', disabledReason: null })
-  })
-})
-
-describe('actionFor — stage-blocked', () => {
-  it('answers inline, with Open session as its secondary', () => {
-    expect(actionFor(stageBlocked())).toEqual({ label: 'Unblock', kind: 'answer', disabledReason: null, secondaryLabel: 'Open session' })
   })
 })
 
@@ -190,14 +180,5 @@ describe('stage-approval answers', () => {
     const toasts: string[] = []
     runAction(stageApproval(), { onToast: (m) => toasts.push(m) })
     await vi.waitFor(() => expect(toasts).toEqual(["Couldn't reach the main process. Nothing was answered."]))
-  })
-})
-
-describe('runSecondaryAction — stage-blocked', () => {
-  beforeEach(() => navigate.mockClear())
-
-  it('opens the live session', () => {
-    runSecondaryAction(stageBlocked(), { onToast: () => undefined })
-    expect(navigate).toHaveBeenCalledWith({ to: '/session', search: { key: 'hosted-51' } })
   })
 })

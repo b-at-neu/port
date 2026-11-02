@@ -24,7 +24,6 @@ import { dismiss, dismissedKeys, undismiss, visibleItems } from '@/renderer/need
 import { dismissKeyOf } from '@/renderer/needs-you/dismiss-key'
 import { groupNeedsYou } from '@/renderer/needs-you/groups'
 import { useNeedsYouItems } from '@/renderer/needs-you/use-items'
-import { BlockerAnswer } from '@/renderer/needs-you/blocker-answer'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import { actionFor, runAction, runSecondaryAction } from '@/renderer/needs-you/actions'
 import { toast } from 'sonner'
@@ -38,13 +37,12 @@ function hasDetail(item: NeedsYouItemModel): boolean {
   if (item.kind === 'stage-question') return true
   if (item.kind === 'stage-denial') return true
   if (item.kind === 'stage-approval') return true
-  if (item.kind === 'stage-blocked') return true
   if (item.kind === 'dispatch-failed') return true
   if (item.kind === 'stage-interrupted') return item.interrupted.reason === 'cleanup-failed'
   return false
 }
 
-function DetailBody({ item, onSent }: { readonly item: NeedsYouItemModel; readonly onSent: () => void }) {
+function DetailBody({ item }: { readonly item: NeedsYouItemModel }) {
   if (item.kind === 'held' && item.held.contention !== null) {
     return (
       <div className="border-t border-border px-4 py-2 text-meta text-muted-foreground">
@@ -114,14 +112,6 @@ function DetailBody({ item, onSent }: { readonly item: NeedsYouItemModel; readon
           Open session
         </Button>
       </div>
-    )
-  }
-  if (item.kind === 'stage-blocked') {
-    return (
-      <>
-        {item.text !== null ? <div className="border-t border-border px-4 py-2 font-mono text-meta text-muted-foreground">{item.text}</div> : null}
-        <BlockerAnswer sessionKey={item.sessionKey} number={item.number} onSent={onSent} />
-      </>
     )
   }
   return null
@@ -343,7 +333,7 @@ function Row({
         expanded={expanded}
         onToggleExpand={onToggle}
       >
-        <DetailBody item={item} onSent={onToggle} />
+        <DetailBody item={item} />
       </NeedsYouItem>
     </div>
   )

@@ -10,6 +10,7 @@ import type { ReconciledItem, RepositoryFreshness, RepositoryState, StageLabel }
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/types/board'
 import type { BoardGroup, BoardItemRow, BoardProjection, BoardRepositorySummary, BoardSnapshot, DisplayStatus, GroupBy, LiveStage, RepositoryHealth, SourceHealth, SourceKind } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
+import { blockedOnOf } from '@/renderer/board/blocked-on'
 
 /** The eventual-consistency suppression; `item.status` is never rewritten. Fails toward under-reporting — renders `in-flight` rather than a possibly-phantom `stalled`. */
 export function displayStatus(item: { readonly status: string }, repoHealth: RepositoryHealth | undefined, freshness: RepositoryFreshness, now: Date): DisplayStatus {
@@ -145,7 +146,10 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
       if (members.some((member) => interruptedKeys.has(`${repo.repoId}:${String(member.number)}`))) ds = { status: 'interrupted', staleGithub: false, githubAgeMs: null }
       else if (found?.working === true && item.status === 'waiting') ds = { status: 'in-flight', staleGithub: false, githubAgeMs: null }
       else ds = displayStatus(item, health, repo.freshness, now)
-      rows.push({ item, ticket, displayStatus: ds, liveStage, stageLabel: stageLabelOf(item), actions, decisions, viewer: repo.viewer, autoApproving: autoApprovingKeys.has(`${repo.repoId}:${String(item.number)}`) })
+      const stageLabel = stageLabelOf(item)
+      const autoApproving = autoApprovingKeys.has(`${repo.repoId}:${String(item.number)}`)
+      const blockedOn = blockedOnOf({ ticket, stageKey: stageLabel?.key, sessions, repoId: repo.repoId })
+      rows.push({ item, ticket, displayStatus: ds, liveStage, stageLabel, actions, decisions, viewer: repo.viewer, autoApproving, blockedOn })
     }
   }
   rows.sort((a, b) => compareRows(a, b, displayNameOf))

@@ -47,7 +47,7 @@ const ALIAS_PATTERN = /d(\d+): (issue|pullRequest)\(number: (\d+)\)/g
 function emptyDetails(document: string, rateLimit: unknown = RATE_LIMIT_REPLY): GhResult {
   const repository: Record<string, unknown> = {}
   for (const match of document.matchAll(ALIAS_PATTERN)) {
-    repository[`d${match[1]}`] = match[2] === 'issue' ? { timelineItems: { nodes: [] } } : { timelineItems: { nodes: [] }, reviews: { nodes: [] }, comments: { nodes: [] } }
+    repository[`d${match[1]}`] = match[2] === 'issue' ? { timelineItems: { nodes: [] }, blockedBy: { totalCount: 0, nodes: [] } } : { timelineItems: { nodes: [] }, reviews: { nodes: [] }, comments: { nodes: [] } }
   }
   return ok({ data: { repository, rateLimit } })
 }
@@ -297,6 +297,85 @@ describe('fetchPipelineItems — details', () => {
     if (result.ok) return
     expect(result.kind).toBe('no-data')
     expect(result.message).toContain('#2')
+  })
+
+  it('an issue alias blockedBy error is that issue\'s unreadable blockers, and the read still succeeds', async () => {
+    const { runner } = scripted({
+      sweep,
+      details: () =>
+        partial({
+          data: { repository: { d0: { timelineItems: { nodes: [] }, blockedBy: null }, d1: { timelineItems: { nodes: [] }, reviews: { nodes: [] }, comments: { nodes: [] } }, d2: { timelineItems: { nodes: [] }, reviews: { nodes: [] }, comments: { nodes: [] } } }, rateLimit: RATE_LIMIT_REPLY },
+          errors: [{ type: 'SOME_ERROR', path: ['repository', 'd0', 'blockedBy'], message: 'boom' }],
+        }),
+    })
+    const result = await fetchWith(runner)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.items[0]?.blockers?.ok).toBe(false)
+    expect(result.items[1]?.blockers).toBeNull()
+  })
+
+  it('asks for comments only on a blocked issue, and maps them', async () => {
+    const blocked = node(1, ['blocked'])
+    const comment = { body: 'why', createdAt: '2026-01-01T00:00:00Z', url: 'https://x/c' }
+    const { runner, documents } = scripted({
+      sweep: () => ok(sweepBody({ issues: connection([blocked, node(4, ['ready'])]), pullRequests: connection([]) })),
+      details: () =>
+        ok({
+          data: { repository: { d0: { timelineItems: { nodes: [] }, blockedBy: { totalCount: 0, nodes: [] }, comments: { nodes: [comment] } }, d1: { timelineItems: { nodes: [] }, blockedBy: { totalCount: 0, nodes: [] } } }, rateLimit: RATE_LIMIT_REPLY },
+        }),
+    })
+    const result = await fetchWith(runner)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const detailDocument = documents.find((document) => document.includes('d0:')) ?? ''
+    expect(detailDocument.split('\n').find((line) => line.includes('d0:'))).toContain('comments(last: 10)')
+    expect(detailDocument.split('\n').find((line) => line.includes('d1:'))).not.toContain('comments')
+    expect(result.items[0]?.blockerComments).toEqual([comment])
+    expect(result.items[1]?.blockerComments).toBeNull()
+  })
+
+  it('an issue alias comments error leaves its blocker comments unread, and the read still succeeds', async () => {
+    const { runner } = scripted({
+      sweep: () => ok(sweepBody({ issues: connection([node(1, ['blocked'])]), pullRequests: connection([]) })),
+      details: () =>
+        partial({
+          data: { repository: { d0: { timelineItems: { nodes: [] }, blockedBy: { totalCount: 0, nodes: [] }, comments: null } }, rateLimit: RATE_LIMIT_REPLY },
+          errors: [{ type: 'SOME_ERROR', path: ['repository', 'd0', 'comments'], message: 'boom' }],
+        }),
+    })
+    const result = await fetchWith(runner)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.items[0]?.blockerComments).toBeNull()
+  })
+
+  it('a pull request alias comments error still fails the whole read', async () => {
+    const { runner } = scripted({
+      sweep,
+      details: () =>
+        partial({
+          data: { repository: { d0: { timelineItems: { nodes: [] }, blockedBy: { totalCount: 0, nodes: [] } }, d1: { timelineItems: { nodes: [] }, reviews: { nodes: [] }, comments: null }, d2: { timelineItems: { nodes: [] }, reviews: { nodes: [] }, comments: { nodes: [] } } }, rateLimit: RATE_LIMIT_REPLY },
+          errors: [{ type: 'SOME_ERROR', path: ['repository', 'd1', 'comments'], message: 'boom' }],
+        }),
+    })
+    const result = await fetchWith(runner)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.message).toContain('#2')
+  })
+
+  it('an issue alias error on any other field still fails the whole read', async () => {
+    const { runner } = scripted({
+      sweep,
+      details: () =>
+        partial({
+          data: { repository: { d0: { timelineItems: null }, d1: { timelineItems: { nodes: [] }, reviews: { nodes: [] }, comments: { nodes: [] } }, d2: { timelineItems: { nodes: [] }, reviews: { nodes: [] }, comments: { nodes: [] } } }, rateLimit: RATE_LIMIT_REPLY },
+          errors: [{ type: 'SOME_ERROR', path: ['repository', 'd0', 'timelineItems'], message: 'boom' }],
+        }),
+    })
+    const result = await fetchWith(runner)
+    expect(result.ok).toBe(false)
   })
 
   it('a detail alias that comes back null, with no error entry, fails the whole read too', async () => {

@@ -103,7 +103,7 @@ describe('applyItemDetails', () => {
         ],
       },
     }
-    const items = applyItemDetails(mapIssues([issueNode()]), [{ kind: 'issue', number: 1, node }])
+    const items = applyItemDetails(mapIssues([issueNode()]), [{ kind: 'issue', number: 1, node, erroredFields: [] }])
     expect(items[0]?.labelEvents).toEqual([
       { label: 'ready', actor: 'octo-dev', at: '2026-01-01T00:00:00Z' },
       { label: 'in progress', actor: null, at: '2026-01-02T00:00:00Z' },
@@ -111,8 +111,33 @@ describe('applyItemDetails', () => {
   })
 
   it('an absent timelineItems connection maps to an empty labelEvents array', () => {
-    const items = applyItemDetails(mapIssues([issueNode()]), [{ kind: 'issue', number: 1, node: {} }])
+    const items = applyItemDetails(mapIssues([issueNode()]), [{ kind: 'issue', number: 1, node: {}, erroredFields: [] }])
     expect(items[0]?.labelEvents).toEqual([])
+  })
+
+  it('an issue detail maps its open blockers, and drops a closed one', () => {
+    const node = { blockedBy: { totalCount: 2, nodes: [{ number: 4, title: 'open one', url: 'u4', state: 'OPEN' }, { number: 5, title: 'done', url: 'u5', state: 'CLOSED' }] } }
+    const items = applyItemDetails(mapIssues([issueNode()]), [{ kind: 'issue', number: 1, node, erroredFields: [] }])
+    expect(items[0]?.blockers).toEqual({ ok: true, open: [{ number: 4, title: 'open one', url: 'u4', state: 'OPEN' }], shown: 2, total: 2 })
+  })
+
+  it('an errored blockedBy field maps to an unreadable read, never an empty one', () => {
+    const items = applyItemDetails(mapIssues([issueNode()]), [{ kind: 'issue', number: 1, node: { blockedBy: null }, erroredFields: ['blockedBy'] }])
+    expect(items[0]?.blockers?.ok).toBe(false)
+  })
+
+  it('maps blocker comments when selected, drops a malformed node, and reads null when unselected or errored', () => {
+    const comments = { nodes: [{ body: 'why', createdAt: '2026-01-01T00:00:00Z', url: 'https://x/c1' }, { body: 'no url', createdAt: '2026-01-02T00:00:00Z' }] }
+    const selected = applyItemDetails(mapIssues([issueNode()]), [{ kind: 'issue', number: 1, node: { comments }, erroredFields: [] }])
+    expect(selected[0]?.blockerComments).toEqual([{ body: 'why', createdAt: '2026-01-01T00:00:00Z', url: 'https://x/c1' }])
+    expect(applyItemDetails(mapIssues([issueNode()]), [{ kind: 'issue', number: 1, node: {}, erroredFields: [] }])[0]?.blockerComments).toBeNull()
+    expect(applyItemDetails(mapIssues([issueNode()]), [{ kind: 'issue', number: 1, node: { comments: null }, erroredFields: ['comments'] }])[0]?.blockerComments).toBeNull()
+  })
+
+  it('a pull request carries neither blockers nor blocker comments', () => {
+    const items = applyItemDetails(mapPulls([pullNode()]), [{ kind: 'pull-request', number: 5, node: {}, erroredFields: [] }])
+    expect(items[0]?.blockers).toBeNull()
+    expect(items[0]?.blockerComments).toBeNull()
   })
 
   it('a pull request detail carries reviews and comments, flattening the review commit', () => {
@@ -120,15 +145,15 @@ describe('applyItemDetails', () => {
       reviews: { totalCount: 1, nodes: [{ body: '## Code Review — Cycle 1', submittedAt: '2026-01-01T00:00:00Z', commit: { oid: 'sha123' } }] },
       comments: { totalCount: 1, nodes: [{ body: '## Gate cleared', createdAt: '2026-01-02T00:00:00Z' }] },
     }
-    const items = applyItemDetails(mapPulls([pullNode()]), [{ kind: 'pull-request', number: 5, node }])
+    const items = applyItemDetails(mapPulls([pullNode()]), [{ kind: 'pull-request', number: 5, node, erroredFields: [] }])
     expect(items[0]?.reviews).toEqual([{ body: '## Code Review — Cycle 1', submittedAt: '2026-01-01T00:00:00Z', commitOid: 'sha123' }])
     expect(items[0]?.comments).toEqual([{ body: '## Gate cleared', createdAt: '2026-01-02T00:00:00Z' }])
   })
 
   it('checkRollup is null unless the detail selected commits, and [] when selected but empty', () => {
     const swept = mapPulls([pullNode()])
-    expect(applyItemDetails(swept, [{ kind: 'pull-request', number: 5, node: {} }])[0]?.checkRollup).toBeNull()
-    expect(applyItemDetails(swept, [{ kind: 'pull-request', number: 5, node: { commits: { nodes: [] } } }])[0]?.checkRollup).toEqual([])
+    expect(applyItemDetails(swept, [{ kind: 'pull-request', number: 5, node: {}, erroredFields: [] }])[0]?.checkRollup).toBeNull()
+    expect(applyItemDetails(swept, [{ kind: 'pull-request', number: 5, node: { commits: { nodes: [] } }, erroredFields: [] }])[0]?.checkRollup).toEqual([])
   })
 
   it('reads a check run and a status context off the rollup', () => {
@@ -151,7 +176,7 @@ describe('applyItemDetails', () => {
         ],
       },
     }
-    const checks = applyItemDetails(mapPulls([pullNode()]), [{ kind: 'pull-request', number: 5, node }])[0]?.checkRollup
+    const checks = applyItemDetails(mapPulls([pullNode()]), [{ kind: 'pull-request', number: 5, node, erroredFields: [] }])[0]?.checkRollup
     expect(checks?.map((check) => [check.name, check.url])).toEqual([
       ['build', 'https://x/run'],
       ['ci/legacy', 'https://x/status'],
@@ -160,7 +185,7 @@ describe('applyItemDetails', () => {
 
   it('keys by kind and number, so an issue and a pull request sharing no number never cross', () => {
     const items = applyItemDetails([...mapIssues([issueNode({ number: 3 })]), ...mapPulls([pullNode({ number: 4 })])], [
-      { kind: 'pull-request', number: 4, node: { comments: { nodes: [{ body: 'b', createdAt: 't' }] } } },
+      { kind: 'pull-request', number: 4, node: { comments: { nodes: [{ body: 'b', createdAt: 't' }] } }, erroredFields: [] },
     ])
     expect(items[0]?.comments).toBeNull()
     expect(items[1]?.comments).toEqual([{ body: 'b', createdAt: 't' }])

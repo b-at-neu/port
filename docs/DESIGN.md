@@ -76,6 +76,7 @@ Where a status colour says what is happening, a phase colour says which pipeline
 - **GitHub's in-flight label is the light dot.** Each palette's in-flight label uses exactly its light-theme dot colour, and its triggers sit lighter. Gate and terminal labels sit deeper still. `refresh` is grey, and the markers `claude` and `auto plan` stay neutral off the palette.
 - **Waiting on you pulses.** A gate that needs the operator (`planReview`, `approved`) pulses in its own phase colour. In the sidebar, a running pipeline session's dot pulses in its phase colour.
 - **`needs-you` overrides.** A gate label, a stalled or interrupted item, and a live stage session waiting on a permission prompt, a question or a `BLOCKED:` hand-back show the `needs-you` palette and pulse, whatever phase they are in. Once the operator answers, the dot goes back to its phase colour.
+- **Blocked is held, not waiting.** A `blocked` ticket keeps the `needs-you` palette but does not pulse on the Board, because it sits in the Blocked section rather than Waiting on you. Only the sidebar dot of a live session with a `BLOCKED:` hand-back still pulses, since that marks the session, not the ticket's place in a queue.
 - **Pills are solid.** A phase pill is a saturated fill with white or near-black text, the same in both themes; the dot inside it takes the text colour. Tinted pills are for status (`StatusPill`), not phases.
 - **Hues stay apart.** Plan purple, implement blue, review yellow, revise pink, needs-you red, done green: every phase sits ≥30° from every other, so nothing but `needs-you` reads as red and nothing but `done` as green.
 - **Review's light dot is the pill's yellow, darkened** (`#a68500`). Bright yellow measures under 2:1 on white, and a yellow dark enough for 3:1 can only be a deep gold, so the light-theme dot is deliberately darker than its pill. It keeps the pill's hue exactly, so it reads as the same yellow in shadow rather than a different colour. The dark theme's dot is the pill's own `#facc15`.
@@ -170,8 +171,8 @@ Dark surface lightness (CIE L*): sidebar 6.3 · background 10.7 · card 15.2 · 
 
 | Screen | Content |
 | --- | --- |
-| Needs you | Everything waiting on the operator, newest first, each with its action inline: plan reviews, PRs ready to merge, questions from stage sessions, needs-human escalations, blocked items |
-| Board | Grouped list: **Waiting on you**, **In progress**, **Queued**. Toggle grouping by phase or by repo, plus a repo filter |
+| Needs you | Everything waiting on the operator, newest first, each with its action inline: plan reviews, PRs ready to merge, questions from stage sessions, needs-human escalations. Blocked tickets are not here: they are held, and the Board shows what they wait on |
+| Board | Grouped list: **Waiting on you**, **In progress**, **Blocked**, **Queued**. Toggle grouping by phase or by repo, plus a repo filter |
 | Backlog | Open tickets not yet in a pipeline, with **Work on**: interactive plan review or auto-plan |
 | Releases | Per repo, the upcoming release (what merged since the last tag, the recommended version) with the one action its phase allows (**Cut release**, **Open PR**, **Publish**), then every previous release, whose notes open in the detail pane |
 | Session | Conversation and composer. **Changes** opens the session's diff in the detail pane |
@@ -189,6 +190,7 @@ Scoping epics and analytics are out of scope for the first release.
 - repo tag;
 - `PhaseBar`;
 - phase pill;
+- blocked-on tag, on a blocked ticket only: the open dependency it waits on, else the agent's or the ticket's reason, else "Reason on ticket";
 - the one next action as a link ("Review plan", "Open PR", "Refresh").
 
 **Conversation:** document flow, not chat bubbles.

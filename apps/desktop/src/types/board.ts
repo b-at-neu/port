@@ -10,7 +10,7 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { LabelPalette } from '@/utils/labels/defaults'
 import type { StageDenial, InterruptedStage } from '@/types/stage'
 import type { Ticket, TicketRef } from '@/types/ticket'
-import type { PipelineItemKind } from '@/types/github'
+import type { BlockerRead, ClaimBlocker, PipelineItemKind } from '@/types/github'
 
 /** The four sources the watcher polls independently; `itemStates` is a dependent re-check fired internally, never independently schedulable. */
 export const SOURCE_KINDS = ['github', 'sessions', 'worktrees', 'denials'] as const
@@ -146,7 +146,24 @@ export interface BoardItemRow {
   readonly viewer: string | null
   /** The auto-plan swap will approve this ticket's plan on its own, so it is not waiting on the operator. */
   readonly autoApproving: boolean
+  /** What a blocked ticket is held on, `null` when it is not blocked. */
+  readonly blockedOn: BlockedOn | null
 }
+
+/** Every source for what a blocked ticket is held on; the row tag shows the most specific, the pane shows all. */
+export interface BlockedOn {
+  readonly dependencies: BlockerRead | null
+  readonly session: { readonly text: string; readonly sessionKey: SessionKey } | null
+  readonly comment: { readonly text: string; readonly url: string } | null
+}
+
+/** The one thing a blocked row's tag names, resolved from a `BlockedOn` by `blockedOnTag`. */
+export type BlockedOnTag =
+  | { readonly kind: 'dependency'; readonly open: readonly ClaimBlocker[]; readonly shown: number; readonly total: number }
+  | { readonly kind: 'session'; readonly text: string }
+  | { readonly kind: 'comment'; readonly text: string }
+  | { readonly kind: 'unreadable'; readonly reason: string }
+  | { readonly kind: 'fallback' }
 
 export interface BoardGroup {
   /** The label `key` (grouped by stage) or the `RepoId` (grouped by repo), never a display name, so two repositories renaming a label still group together. */
@@ -204,14 +221,13 @@ export type NeedsYouItem =
   | (NeedsYouItemBase & { readonly kind: 'plan-review'; readonly row: BoardItemRow })
   | (NeedsYouItemBase & { readonly kind: 'ready-to-merge'; readonly row: BoardItemRow })
   | (NeedsYouItemBase & { readonly kind: 'needs-human'; readonly row: BoardItemRow })
-  | (NeedsYouItemBase & { readonly kind: 'blocked'; readonly row: BoardItemRow })
   | (NeedsYouItemBase & { readonly kind: 'budget'; readonly note: BudgetNote })
   /** `owner` is this held item's own repository's `RepoDispatchStatus.owner` — `null` only when the repository reported none (never rendered: `heldAction` reads it only for a `contended` hold, which never arises on an unready repository). */
   | (NeedsYouItemBase & { readonly kind: 'held'; readonly held: TickHeld; readonly owner: DispatchOwner | null })
   | (NeedsYouItemBase & { readonly kind: 'stalled'; readonly claim: TickClaim })
   | (NeedsYouItemBase & { readonly kind: 'stage-question'; readonly sessionKey: SessionKey; readonly permissionId: string; readonly questions: readonly AskQuestion[] })
   | (NeedsYouItemBase & { readonly kind: 'stage-approval'; readonly sessionKey: SessionKey; readonly permissionId: string; readonly agent: StageAgent; readonly toolName: string; readonly path: string })
-  | (NeedsYouItemBase & { readonly kind: 'stage-questions' | 'stage-blocked'; readonly sessionKey: SessionKey; readonly text: string | null })
+  | (NeedsYouItemBase & { readonly kind: 'stage-questions'; readonly sessionKey: SessionKey; readonly text: string | null })
   /** `live` is true while the denial's own session is still open and idle after it; otherwise the session has ended and Allow applies to future runs. */
   | (NeedsYouItemBase & { readonly kind: 'stage-denial'; readonly denial: StageDenial; readonly live: boolean })
   | (NeedsYouItemBase & { readonly kind: 'stage-interrupted'; readonly interrupted: InterruptedStage })
@@ -224,8 +240,8 @@ export type NeedsYouItem =
 /** The Needs you item keys last seen, by repository — `''` for an item with no repository. */
 export type NeedsYouBaseline = Readonly<Record<string, readonly string[]>>
 
-/** The groups Needs you renders — `stage-question`/`stage-questions` share `questions`, `stage-approval` is `approvals`, and `stage-blocked` joins `blocked`. */
-export type NeedsYouGroupKey = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'blocked' | 'questions' | 'approvals' | 'denied' | 'interrupted' | 'usage-limit' | 'held' | 'stalled' | 'budget' | 'half-labelled' | 'launch-failed'
+/** The groups Needs you renders — `stage-question`/`stage-questions` share `questions`, and `stage-approval` is `approvals`. */
+export type NeedsYouGroupKey = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'questions' | 'approvals' | 'denied' | 'interrupted' | 'usage-limit' | 'held' | 'stalled' | 'budget' | 'half-labelled' | 'launch-failed'
 
 export const PHASE_KEYS = ['plan', 'implement', 'review', 'revision', 'merge'] as const
 

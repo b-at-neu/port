@@ -6,14 +6,12 @@ const KINDS: readonly NeedsYouItem['kind'][] = [
   'plan-review',
   'ready-to-merge',
   'needs-human',
-  'blocked',
   'budget',
   'held',
   'stalled',
   'stage-question',
   'stage-questions',
   'stage-approval',
-  'stage-blocked',
   'stage-denial',
   'stage-interrupted',
   'usage-limit',
@@ -33,14 +31,7 @@ describe('groupNeedsYou', () => {
 
   it('names the groups the way the screen shows them', () => {
     const groups = groupNeedsYou(KINDS.map((kind, index) => item(kind, index)))
-    expect(groups.map((g) => g.name)).toEqual(['Plan reviews', 'Ready to merge', 'Escalated', 'Blocked', 'Over budget', 'Held', 'Stalled', 'Questions', 'Edit approvals', 'Denied commands', 'Interrupted', 'Usage limit', 'Label problems', 'Launch failures'])
-  })
-
-  it('puts a live session’s blocker and a blocked label in one Blocked group', () => {
-    const groups = groupNeedsYou([item('blocked', 1), item('stage-blocked', 2)])
-    expect(groups).toHaveLength(1)
-    expect(groups[0]).toMatchObject({ key: 'blocked', name: 'Blocked' })
-    expect(groups[0]?.items.map((i) => i.number)).toEqual([1, 2])
+    expect(groups.map((g) => g.name)).toEqual(['Plan reviews', 'Ready to merge', 'Escalated', 'Over budget', 'Held', 'Stalled', 'Questions', 'Edit approvals', 'Denied commands', 'Interrupted', 'Usage limit', 'Label problems', 'Launch failures'])
   })
 
   it('shares one Questions group between a live question and a questions hand-back', () => {

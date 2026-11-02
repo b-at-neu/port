@@ -31,6 +31,18 @@ export function blockedLineOutsideFence(text: string): string | null {
   return null
 }
 
+const HANDBACK_TEXT_CAP = 120
+
+/** Truncates hand-back text for a one-line display. */
+export function capHandbackText(text: string): string {
+  return text.length > HANDBACK_TEXT_CAP ? `${text.slice(0, HANDBACK_TEXT_CAP)}…` : text
+}
+
+/** A `BLOCKED:` line's reason: the prefix stripped, trimmed and capped. */
+export function blockedReasonOf(line: string): string {
+  return capHandbackText(line.slice(BLOCKED_PREFIX.length).trim())
+}
+
 /** Questions (last paragraph starts with the prefix) checked first, then a blocked line outside a fence, else `null`. */
 export function classifyHandbackText(text: string): HandbackText {
   if (lastParagraph(text).startsWith(QUESTIONS_PREFIX)) return { kind: 'questions' }

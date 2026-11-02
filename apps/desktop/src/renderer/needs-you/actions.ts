@@ -49,7 +49,7 @@ function disabledReasonCopy(reason: DecisionRefusal): string {
   }
 }
 
-function unblockAction(item: Extract<NeedsYouItem, { readonly kind: 'needs-human' | 'blocked' }>): NeedsYouAction {
+function unblockAction(item: Extract<NeedsYouItem, { readonly kind: 'needs-human' }>): NeedsYouAction {
   const decision = item.matchedRow?.decisions.unblock
   if (decision === undefined) return { label: 'Unblock', kind: 'unblock', disabledReason: "Can't read this item's current state." }
   return { label: 'Unblock', kind: 'unblock', disabledReason: decision.available ? null : disabledReasonCopy(decision.reason) }
@@ -81,7 +81,6 @@ export function actionFor(item: NeedsYouItem, now: Date = new Date()): NeedsYouA
     case 'ready-to-merge':
       return { label: 'Open PR', kind: 'open', disabledReason: null }
     case 'needs-human':
-    case 'blocked':
       return unblockAction(item)
     case 'budget':
       return { label: 'Open ticket', kind: 'open', disabledReason: null }
@@ -93,8 +92,6 @@ export function actionFor(item: NeedsYouItem, now: Date = new Date()): NeedsYouA
       return { label: 'Answer', kind: 'answer', disabledReason: null }
     case 'stage-questions':
       return { label: 'Open session', kind: 'open', disabledReason: null }
-    case 'stage-blocked':
-      return { label: 'Unblock', kind: 'answer', disabledReason: null, secondaryLabel: 'Open session' }
     case 'stage-approval':
       return { label: 'Approve edit', kind: 'approve', disabledReason: null, secondaryLabel: 'Deny' }
     case 'stage-denial':
@@ -133,7 +130,7 @@ export function runAction(item: NeedsYouItem, deps: RunActionDeps): void {
       return
     }
     case 'open':
-      if (item.kind === 'stage-questions' || item.kind === 'stage-blocked') {
+      if (item.kind === 'stage-questions') {
         void router.navigate({ to: ROUTE_IDS.session, search: { key: item.sessionKey } })
         return
       }
@@ -174,7 +171,6 @@ export function runAction(item: NeedsYouItem, deps: RunActionDeps): void {
 export function runSecondaryAction(item: NeedsYouItem, deps: RunActionDeps): void {
   const action = actionFor(item)
   if (action.kind === 'resume' && item.kind === 'stage-interrupted') openRestartDialog(item.interrupted)
-  if (action.kind === 'answer' && item.kind === 'stage-blocked') void router.navigate({ to: ROUTE_IDS.session, search: { key: item.sessionKey } })
   if (action.kind === 'approve' && item.kind === 'stage-approval') void answerProtectedEdit(item, 'deny', deps)
 }
 

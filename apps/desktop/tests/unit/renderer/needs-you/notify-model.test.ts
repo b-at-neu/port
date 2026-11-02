@@ -110,7 +110,7 @@ describe('needsYouNotification', () => {
 
   it('keeps title and body within the 200 characters main accepts', () => {
     const ticket = { kind: 'issue', number: 552, title: 'x'.repeat(500), url: 'u', pullRequest: null }
-    const item = { ...denial('d1'), kind: 'stage-blocked', ticket, sessionKey: 's', text: 'y'.repeat(500), at: 't' } as unknown as NeedsYouItem
+    const item = { ...denial('d1'), kind: 'stage-question', ticket, sessionKey: 's', permissionId: 'p', questions: [{ header: 'y'.repeat(500) }], at: 't' } as unknown as NeedsYouItem
     const notification = needsYouNotification([item], names)
     expect(notification?.title.length).toBe(200)
     expect(notification?.body.length).toBe(200)

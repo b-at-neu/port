@@ -9,17 +9,16 @@ import type { TickHeld } from '@/types/tick'
 import { failingDispatches } from '@/renderer/board/dispatch-failures'
 import { projectBoard } from '@/renderer/board/project'
 import type { BoardItemRow, BoardSnapshot, NeedsYouItem } from '@/types/board'
-import { BLOCKED_PREFIX, classifyHandbackText } from '@/utils/stage/handback-text'
+import { capHandbackText, classifyHandbackText } from '@/utils/stage/handback-text'
 
-/** The four label-keyed kinds, each carrying the row they came from. */
-type RowNeedsYouKind = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'blocked'
+/** The three label-keyed kinds, each carrying the row they came from. */
+type RowNeedsYouKind = 'plan-review' | 'ready-to-merge' | 'needs-human'
 
 // Every other stage key carries no "needs you" kind at all.
 const ROW_KIND: Readonly<Partial<Record<string, RowNeedsYouKind>>> = {
   planReview: 'plan-review',
   approved: 'ready-to-merge',
   needsHuman: 'needs-human',
-  blocked: 'blocked',
 }
 
 // The row-level "needs you" kind for a stage label key, undefined otherwise.
@@ -63,19 +62,9 @@ function compareItems(a: NeedsYouItem, b: NeedsYouItem, displayNameOf: ReadonlyM
   return compareByRepoThenNumber(a, b, displayNameOf)
 }
 
-const STAGE_HANDBACK_TEXT_CAP = 120
-
-function capped(text: string): string {
-  return text.length > STAGE_HANDBACK_TEXT_CAP ? `${text.slice(0, STAGE_HANDBACK_TEXT_CAP)}…` : text
-}
-
 function stageHandbackText(result: HostedSessionSnapshot['lastResult']): string | null {
   if (result?.text === null || result?.text === undefined) return null
-  return capped(result.text)
-}
-
-function blockedText(line: string): string {
-  return capped(line.slice(BLOCKED_PREFIX.length).trim())
+  return capHandbackText(result.text)
 }
 
 /** A denial is live only while its own session is still open and idle after it; every other denial still shows, since Allow applies to future runs. */
@@ -173,20 +162,15 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
     }
   }
 
-  // A blocked label on the same item is the same fact as its live session's hand-back, so only one row renders.
-  const stageBlockedKeys = new Set<string>()
   for (const session of sessions) {
     if (session.stage === null || session.repoId === null || session.phase === 'ended') continue
     if (session.lastResult === null || session.lastResult.isError) continue
     const handback = classifyHandbackText(session.lastResult.text ?? '')
-    const outcomeKind = handback?.kind === 'blocked' ? 'stage-blocked' : handback?.kind === 'questions' ? 'stage-questions' : null
-    if (outcomeKind === null) continue
-    const ticketKey = rowKey(session.repoId, ticketNumberOf(session.repoId, session.stage.number))
-    if (stageQuestionNumbers.has(ticketKey)) continue
-    if (outcomeKind === 'stage-blocked') stageBlockedKeys.add(ticketKey)
+    if (handback?.kind !== 'questions') continue
+    if (stageQuestionNumbers.has(rowKey(session.repoId, ticketNumberOf(session.repoId, session.stage.number)))) continue
     const matched = rowByKey.get(rowKey(session.repoId, session.stage.number)) ?? null
     items.push({
-      kind: outcomeKind,
+      kind: 'stage-questions',
       repoId: session.repoId,
       repo: matched?.item.repo ?? null,
       number: session.stage.number,
@@ -196,7 +180,7 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
       at: session.lastResult?.at ?? null,
       matchedRow: matched,
       sessionKey: session.sessionKey,
-      text: handback?.kind === 'blocked' ? blockedText(handback.line) : stageHandbackText(session.lastResult),
+      text: stageHandbackText(session.lastResult),
     })
   }
 
@@ -266,7 +250,6 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
   for (const row of rows) {
     const kind = needsYouReasonOf(row.stageLabel?.key)
     if (kind === undefined || !waitsOnYou(row)) continue
-    if (kind === 'blocked' && stageBlockedKeys.has(rowKey(row.item.repoId, row.ticket.ref.number))) continue
     const viewer = viewerByRepo.get(row.item.repoId) ?? null
     if (viewer !== null && !row.item.assignees.includes(viewer)) continue
     items.push({ kind, repoId: row.item.repoId, repo: row.item.repo, number: row.item.number, title: row.item.title, url: row.item.url, ticket: row.ticket.ref, at: row.item.updatedAt, matchedRow: row, row })
