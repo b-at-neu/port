@@ -1,5 +1,5 @@
-// The registry's third remover, after a `completed` hand-back and Restart: once per tick it drops
-// interrupted entries whose ticket has moved on, then resumes usage-limit entries past their reset.
+// The registry's third remover, after a `completed` hand-back and Restart: once per tick it clears
+// interrupted entries whose ticket has moved on — only once their worktree is gone — then resumes usage-limit entries past their reset.
 import type { BoardSnapshot } from '@/types/board'
 import type { RepoDispatchStatus } from '@/types/dispatch'
 import type { FetchItemsByNumberParams, GitHubRepoRef, ItemsByNumberFetch } from '@/types/github'
@@ -11,6 +11,7 @@ interface CreateInterruptedSweeperParams {
   readonly registry: Pick<StageRegistry, 'list' | 'remove' | 'markInterrupted'>
   readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
   readonly removeWorktree: (path: string, force: boolean) => Promise<RemoveSessionWorktreeOutcome>
+  readonly pathExists: (path: string) => Promise<boolean>
   readonly resume: (id: string) => Promise<StageResumeResult>
   /** Called once per pass that removed or changed anything, so the board republishes. */
   readonly onChange: () => void
@@ -45,11 +46,16 @@ export function createInterruptedSweeper(params: CreateInterruptedSweeperParams)
   // The entry may have been resumed while this pass awaited GitHub; a running session's worktree must never go.
   async function clearEntry(entry: InterruptedStage): Promise<boolean> {
     if (!params.registry.list().some((e) => e.id === entry.id)) return false
-    const removed = await params.removeWorktree(entry.worktree.path, false)
-    if (removed.outcome === 'dirty') console.error(`[stage] kept ${entry.worktree.path}: it has uncommitted changes`)
-    if (removed.outcome === 'failed') console.error(`[stage] could not remove ${entry.worktree.path}: ${removed.message}`)
+    const removed = (await params.pathExists(entry.worktree.path)) ? await params.removeWorktree(entry.worktree.path, false) : null
     if (!params.registry.list().some((e) => e.id === entry.id)) return false
-    params.registry.remove(entry.id)
+    if (removed === null || removed.outcome === 'removed') {
+      params.registry.remove(entry.id)
+      return true
+    }
+    if (entry.reason === 'cleanup-failed') return false
+    const detail = removed.outcome === 'dirty' ? 'it has uncommitted changes' : removed.message.trim()
+    console.error(`[stage] could not remove ${entry.worktree.path}: ${detail}`)
+    params.registry.markInterrupted(entry.id, 'cleanup-failed', detail, null, entry.costUsd)
     return true
   }
 

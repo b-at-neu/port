@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import { OPERATOR_ACTIONS, OPERATOR_DECISIONS } from '@/types/actions'
 import type { ActionAvailability, DecisionAvailability, OperatorAction, OperatorDecision } from '@/types/actions'
-import type { BoardItemRow } from '@/types/board'
+import type { BlockedOn, BoardItemRow } from '@/types/board'
 import type { SessionKey } from '@/types/hosting'
 import type { ReconciledItem, StageLabel } from '@/types/state'
 import type { Ticket } from '@/types/ticket'
@@ -19,6 +19,7 @@ function row(overrides: {
   readonly stageKey?: StageLabel['key'] | null
   readonly status?: ReconciledItem['status']
   readonly autoApproving?: boolean
+  readonly blockedOn?: BlockedOn
 }): BoardItemRow {
   const repoId = (overrides.repoId ?? 'repo-a') as RepoId
   const stageLabel: StageLabel | null = overrides.stageKey != null ? { key: overrides.stageKey, name: overrides.stageKey, role: 'trigger' } : null
@@ -57,6 +58,8 @@ function row(overrides: {
     reviewCycleCount: null,
     checkRollup: null,
     planPresent: null,
+    blockers: null,
+    blockerComments: null,
   } as unknown as ReconciledItem
   return {
     item,
@@ -68,8 +71,11 @@ function row(overrides: {
     decisions: NO_DECISIONS,
     viewer: null,
     autoApproving: overrides.autoApproving ?? false,
+    blockedOn: overrides.blockedOn ?? null,
   }
 }
+
+const HELD: BlockedOn = { dependencies: null, session: null, comment: null }
 
 describe('boardSections', () => {
   it('puts a planReview row in Waiting on you, an in-flight row in In progress, the rest in Queued', () => {
@@ -100,6 +106,30 @@ describe('boardSections', () => {
     }
     const sections = boardSections([dispatched], { group: 'repo', repo: null })
     expect(sections.map((s) => s.key)).toEqual(['in-progress'])
+  })
+
+  it('puts a blocked row in Blocked, between In progress and Queued, and out of Waiting on you', () => {
+    const rows = [
+      row({ number: 1, stageKey: 'blocked', blockedOn: HELD }),
+      row({ number: 2, stageKey: 'ready', status: 'waiting' }),
+      row({ number: 3, stageKey: 'inProgress', status: 'in-flight' }),
+    ]
+    const sections = boardSections(rows, { group: 'repo', repo: null })
+    expect(sections.map((s) => [s.key, s.name, s.count])).toEqual([
+      ['in-progress', 'In progress', 1],
+      ['blocked', 'Blocked', 1],
+      ['queued', 'Queued', 1],
+    ])
+  })
+
+  it('puts an in-flight row with a live BLOCKED: session in Blocked, whatever its stage label says', () => {
+    const sections = boardSections([row({ number: 1, stageKey: 'inProgress', status: 'in-flight', blockedOn: HELD })], { group: 'repo', repo: null })
+    expect(sections.map((s) => s.key)).toEqual(['blocked'])
+  })
+
+  it('keeps an escalated row in Waiting on you even when a BLOCKED: session is live on it', () => {
+    const sections = boardSections([row({ number: 1, stageKey: 'needsHuman', blockedOn: HELD })], { group: 'repo', repo: null })
+    expect(sections.map((s) => s.key)).toEqual(['waiting-on-you'])
   })
 
   it('omits an empty section entirely', () => {

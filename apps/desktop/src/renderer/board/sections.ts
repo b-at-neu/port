@@ -1,4 +1,4 @@
-// The Board's three-section split — Waiting on you, In progress, Queued —
+// The Board's four-section split — Waiting on you, In progress, Blocked, Queued —
 // each optionally broken into phase or repo sub-groups.
 import { waitsOnYou } from '@/renderer/board/needs-you'
 import type { BoardGroupBy, BoardItemRow } from '@/types/board'
@@ -12,7 +12,7 @@ interface BoardSubGroup {
   readonly rows: readonly BoardItemRow[]
 }
 
-type BoardSectionKey = 'waiting-on-you' | 'in-progress' | 'queued'
+type BoardSectionKey = 'waiting-on-you' | 'in-progress' | 'blocked' | 'queued'
 
 interface BoardSection {
   readonly key: BoardSectionKey
@@ -30,11 +30,13 @@ interface BoardSectionsParams {
 const SECTION_NAMES: Readonly<Record<BoardSectionKey, string>> = {
   'waiting-on-you': 'Waiting on you',
   'in-progress': 'In progress',
+  blocked: 'Blocked',
   queued: 'Queued',
 }
 
 function sectionOf(row: BoardItemRow): BoardSectionKey {
   if (waitsOnYou(row)) return 'waiting-on-you'
+  if (row.blockedOn !== null) return 'blocked'
   if (row.autoApproving) return 'in-progress'
   if (row.displayStatus.status === 'in-flight' || row.displayStatus.status === 'stalled') return 'in-progress'
   return 'queued'
@@ -95,13 +97,14 @@ export function boardSections(rows: readonly BoardItemRow[], params: BoardSectio
   const bySection = new Map<BoardSectionKey, BoardItemRow[]>([
     ['waiting-on-you', []],
     ['in-progress', []],
+    ['blocked', []],
     ['queued', []],
   ])
   for (const row of filtered) {
     bySection.get(sectionOf(row))?.push(row)
   }
 
-  const order: readonly BoardSectionKey[] = ['waiting-on-you', 'in-progress', 'queued']
+  const order: readonly BoardSectionKey[] = ['waiting-on-you', 'in-progress', 'blocked', 'queued']
   return order
     .map((key): BoardSection => {
       const sectionRows = bySection.get(key) ?? []

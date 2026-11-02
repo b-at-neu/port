@@ -17,6 +17,7 @@ import { createDispatcher } from '@/main/dispatch/dispatcher'
 import type { CreateDispatcherParams } from '@/types/dispatch'
 import type { BudgetCheckResult, BudgetGate, BudgetResetResult, BudgetSweepResult } from '@/types/dispatch'
 import type { OwnershipRead } from '@/types/dispatch'
+import { memoryDenialStore } from '../../../fixtures/denials'
 import { DISPATCH_STORE_DEFAULTS, storeStub } from '../../../fixtures/store'
 
 const REPO_ID = 'repo-a' as RepoId
@@ -128,6 +129,7 @@ function fakeLauncher(result: StageLaunchResult = { ok: true, sessionKey: 'hoste
 function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispatcherParams {
   return {
     store: fakeStore(),
+    denials: memoryDenialStore(),
     launch: null,
     ledger: { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined, observeUnmatched: () => ({ class: 'no-record' }) },
     refreshMemo: { get: () => undefined, set: vi.fn(), clear: vi.fn() },

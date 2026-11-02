@@ -8,6 +8,7 @@ import type { TickActionable, TickReport } from '@/types/tick'
 import type { ReadyEntry } from '@/types/actions'
 import type { CreateDispatcherParams, OwnershipRead, StageLaunchRequest } from '@/types/dispatch'
 import { createDispatcher } from '@/main/dispatch/dispatcher'
+import { memoryDenialStore } from '../../../fixtures/denials'
 import { DISPATCH_STORE_DEFAULTS, storeStub } from '../../../fixtures/store'
 
 const REPO_ID = 'repo-a' as RepoId
@@ -75,6 +76,7 @@ function harness(overrides: Partial<CreateDispatcherParams> = {}) {
   let releaseFirstOwnership: () => void = () => undefined
   const deps: CreateDispatcherParams = {
     store: storeStub({ ...DISPATCH_STORE_DEFAULTS, snapshotOf: () => ({ phase: 'ready', claudeSessionId: null, operatorJoinedAt: null }) as unknown as HostedSessionSnapshot }),
+    denials: memoryDenialStore(),
     launch: {
       launch: (request: StageLaunchRequest) => {
         launched.push(request.number)

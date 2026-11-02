@@ -117,6 +117,23 @@ describe('fetchReleaseStatus', () => {
     expect(calls.filter((call) => call[1] !== 'graphql')).toHaveLength(0)
   })
 
+  it('rebuilds a prefix-relative bump ref into its full branch name and sends the prefix', async () => {
+    const calls: string[][] = []
+    const result = await fetchStatus({ calls, state: { bumpRefs: { nodes: [{ name: 'v0.3.0', associatedPullRequests: { nodes: [{ number: 611, url: 'u' }] } }] } } })
+    expect(result.ok && result.status.phase).toMatchObject({ kind: 'waiting-bump', version: '0.3.0', bumpPr: { number: 611, url: 'u' } })
+    expect(calls.some((call) => call.includes('bumpRefPrefix=refs/heads/bump/'))).toBe(true)
+  })
+
+  it('ignores a bump ref that is not a version branch', async () => {
+    const result = await fetchStatus({ state: { bumpRefs: { nodes: [{ name: 'v0.3.0', associatedPullRequests: { nodes: [] } }, { name: 'cleanup', associatedPullRequests: { nodes: [] } }] } } })
+    expect(result.ok && result.status.phase.kind).toBe('waiting-bump')
+  })
+
+  it('is a conflict when two version bump branches exist', async () => {
+    const result = await fetchStatus({ state: { bumpRefs: { nodes: [{ name: 'v0.3.0', associatedPullRequests: { nodes: [] } }, { name: 'v0.4.0', associatedPullRequests: { nodes: [] } }] } } })
+    expect(result.ok && result.status.phase).toEqual({ kind: 'conflict', branches: ['bump/v0.3.0', 'bump/v0.4.0'] })
+  })
+
   it('gathers from production for the release notes when ready to publish, and drops draft releases', async () => {
     const calls: string[][] = []
     const state = {
@@ -153,6 +170,16 @@ describe('release query builders', () => {
     expect(query).toContain('$integrationFile: String!')
     expect(query).not.toContain('package.json')
     expect(stateVariables({ integration: 'dev', production: 'main', versionFile: 'package.json' })).toMatchObject({ integrationFile: 'dev:package.json', productionFile: 'main:package.json', integrationRef: 'refs/heads/dev' })
+  })
+
+  it('sends the bump ref prefix as a variable ending in a slash', () => {
+    const query = buildStateQuery(true)
+    expect(query).toContain('refPrefix: $bumpRefPrefix')
+    expect(query).toContain('$bumpRefPrefix: String!')
+    expect(query).not.toContain('refs/heads/bump')
+    const prefix = stateVariables({ integration: 'dev', production: 'main', versionFile: null }).bumpRefPrefix
+    expect(prefix).toBe('refs/heads/bump/')
+    expect(prefix?.endsWith('/')).toBe(true)
   })
 
   it('drops the file aliases for tags', () => {

@@ -1,74 +1,59 @@
-// "Allow from now on" writes: the one place a stage denial's proposed rule is appended to both
-// `.claude/settings.json` and `.claude/port.config.json`, in the repository's main checkout.
-import { join } from 'node:path'
-import type { StageAllowResult } from '@/types/stage'
+// "Allow from now on": the pure merge of a stage denial's proposed rule into the texts of
+// `.claude/settings.json` and `.claude/port.config.json`. No I/O — the caller reads and writes.
 import { validateRule } from '@/main/stage/rule'
-import type { FileResult } from '@/types/platform'
 
-interface SettingsShape {
-  readonly permissions?: { readonly allow?: readonly unknown[]; readonly [k: string]: unknown }
-  readonly [k: string]: unknown
-}
+export const SETTINGS_PATH = '.claude/settings.json'
+export const CONFIG_PATH = '.claude/port.config.json'
 
-interface ConfigShape {
-  readonly extraAllow?: readonly unknown[]
-  readonly [k: string]: unknown
-}
-
-interface AllowRuleParams {
-  readonly root: string
+interface MergeRuleParams {
+  /** `null` when the file doesn't exist at the ref — treated as an empty allowlist. */
+  readonly settingsText: string | null
+  readonly configText: string
   readonly rule: string
-  readonly readJson: <T>(path: string) => Promise<FileResult<T>>
-  readonly writeJsonAtomic: (path: string, value: unknown) => Promise<FileResult<void>>
 }
 
-function allowListOf(shape: SettingsShape): readonly string[] {
-  const allow = shape.permissions?.allow
-  return Array.isArray(allow) ? allow.filter((v): v is string => typeof v === 'string') : []
-}
+export type MergeRuleResult =
+  | { readonly kind: 'already-allowed' }
+  | { readonly kind: 'invalid-rule'; readonly reason: string }
+  | { readonly kind: 'unparseable'; readonly file: string }
+  | { readonly kind: 'files'; readonly rule: string; readonly files: readonly { readonly path: string; readonly content: string }[] }
 
-function extraAllowOf(shape: ConfigShape): readonly string[] {
-  return Array.isArray(shape.extraAllow) ? shape.extraAllow.filter((v): v is string => typeof v === 'string') : []
-}
+type Obj = Readonly<Record<string, unknown>>
 
-/** `allowRule({ root, rule, readJson, writeJsonAtomic })` — validates `rule` main-side (the renderer's edit is never trusted), then appends it to whichever of the two files lacks it, preserving every other key and the existing order. Settings is written first, then config. A config write failure after a settings success returns `write-failed` naming `port.config.json`, leaving settings written. */
-export async function allowRule(params: AllowRuleParams): Promise<StageAllowResult> {
-  const settingsPath = join(params.root, '.claude', 'settings.json')
-  const configPath = join(params.root, '.claude', 'port.config.json')
-
-  const settingsRead = await params.readJson<SettingsShape>(settingsPath)
-  const settings: SettingsShape = settingsRead.ok ? settingsRead.value : settingsRead.kind === 'not-found' ? { permissions: { allow: [] } } : (null as unknown as SettingsShape)
-  if (settings === null) return { kind: 'write-failed', file: 'settings.json', message: !settingsRead.ok ? settingsRead.message : 'unreadable' }
-
-  const configRead = await params.readJson<ConfigShape>(configPath)
-  if (!configRead.ok) return { kind: 'write-failed', file: 'port.config.json', message: configRead.message }
-  const config = configRead.value
-
-  const currentAllow = allowListOf(settings)
-  const currentExtra = extraAllowOf(config)
-
-  const validated = validateRule(params.rule, [...currentAllow, ...currentExtra])
-  if (!validated.ok) {
-    if (validated.reason === 'already-allowed') return { kind: 'already-allowed' }
-    return { kind: 'invalid-rule', reason: validated.reason }
+function parseObject(text: string): Obj | null {
+  try {
+    const value: unknown = JSON.parse(text)
+    return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Obj) : null
+  } catch {
+    return null
   }
+}
+
+function strings(value: unknown): readonly string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []
+}
+
+function serialized(value: unknown): string {
+  return `${JSON.stringify(value, null, 2)}\n`
+}
+
+/** Validates `rule` (the renderer's edit is never trusted), then returns only the files that lack it, keeping every other key and the existing order. A missing `port.config.json` is `unparseable`, since the repository isn't port-managed at that ref. */
+export function mergeRule(params: MergeRuleParams): MergeRuleResult {
+  const settings = params.settingsText === null ? { permissions: { allow: [] } } : parseObject(params.settingsText)
+  if (settings === null) return { kind: 'unparseable', file: SETTINGS_PATH }
+  const config = parseObject(params.configText)
+  if (config === null) return { kind: 'unparseable', file: CONFIG_PATH }
+
+  const permissions = typeof settings.permissions === 'object' && settings.permissions !== null && !Array.isArray(settings.permissions) ? (settings.permissions as Obj) : {}
+  const currentAllow = strings(permissions.allow)
+  const currentExtra = strings(config.extraAllow)
+
+  const validated = validateRule(params.rule)
+  if (!validated.ok) return { kind: 'invalid-rule', reason: validated.reason }
   const rule = validated.rule
 
-  const inSettings = currentAllow.includes(rule)
-  const inConfig = currentExtra.includes(rule)
-  if (inSettings && inConfig) return { kind: 'already-allowed' }
-
-  if (!inSettings) {
-    const nextSettings: SettingsShape = { ...settings, permissions: { ...settings.permissions, allow: [...currentAllow, rule] } }
-    const write = await params.writeJsonAtomic(settingsPath, nextSettings)
-    if (!write.ok) return { kind: 'write-failed', file: 'settings.json', message: write.message }
-  }
-
-  if (!inConfig) {
-    const nextConfig: ConfigShape = { ...config, extraAllow: [...currentExtra, rule] }
-    const write = await params.writeJsonAtomic(configPath, nextConfig)
-    if (!write.ok) return { kind: 'write-failed', file: 'port.config.json', message: write.message }
-  }
-
-  return { kind: 'ok' }
+  const files: { path: string; content: string }[] = []
+  if (!currentAllow.includes(rule)) files.push({ path: SETTINGS_PATH, content: serialized({ ...settings, permissions: { ...permissions, allow: [...currentAllow, rule] } }) })
+  if (!currentExtra.includes(rule)) files.push({ path: CONFIG_PATH, content: serialized({ ...config, extraAllow: [...currentExtra, rule] }) })
+  return files.length === 0 ? { kind: 'already-allowed' } : { kind: 'files', rule, files }
 }

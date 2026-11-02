@@ -93,6 +93,13 @@ describe('resultCopy', () => {
     const copy = resultCopy({ number: 148, decision: 'approve', response, sessionRequired: false, ownership: ABSENT })
     expect(copy.line).toBe('#148 approved.')
     expect(copy.note).toContain('dispatches implementation')
+    expect(copy.tone).toBe('success')
+  })
+
+  it('tones every outcome other than an applied swap as an error', () => {
+    const base = { number: 148, decision: 'approve' as const, sessionRequired: false, ownership: ABSENT }
+    expect(resultCopy({ ...base, response: { kind: 'preflight-failed', message: 'offline' } }).tone).toBe('error')
+    expect(resultCopy({ ...base, response: { kind: 'answered', comment: null, labels: { kind: 'no-op' } } }).tone).toBe('error')
   })
 
   it('approve + applied, session-required announces instead of dispatching', () => {

@@ -22,10 +22,6 @@ function usageLimit(resetsAt: string | null, ids: readonly string[] = ['a', 'b',
   return { kind: 'usage-limit', repoId: null, repo: null, number: null, title: null, url: null, ticket: null, at: null, matchedRow: null, entries, resetsAt, repoNames: new Map() } as unknown as NeedsYouItem
 }
 
-function stageBlocked(): NeedsYouItem {
-  return { kind: 'stage-blocked', repoId: 'repo-a' as RepoId, repo: 'o/a', number: 51, title: 't', url: null, ticket: null, at: null, matchedRow: null, sessionKey: 'hosted-51' as SessionKey, text: 'BLOCKED: x' }
-}
-
 describe('actionFor — dispatch-failed', () => {
   it('opens the ticket', () => {
     const item = { kind: 'dispatch-failed', repoId: 'repo-a' as RepoId, repo: 'o/a', number: 52, title: 't', url: 'https://github.com/o/a/issues/52', ticket: null, at: null, matchedRow: null, attempts: 2, record: {} } as unknown as NeedsYouItem
@@ -33,9 +29,44 @@ describe('actionFor — dispatch-failed', () => {
   })
 })
 
-describe('actionFor — stage-blocked', () => {
-  it('answers inline, with Open session as its secondary', () => {
-    expect(actionFor(stageBlocked())).toEqual({ label: 'Unblock', kind: 'answer', disabledReason: null, secondaryLabel: 'Open session' })
+function stageInterrupted(reason: string): NeedsYouItem {
+  const interrupted = { id: 'e1', agent: 'revise', reason, claudeSessionId: 'c1', worktree: { path: '/wt/revise-593', branch: 'b', baseSha: 's' } }
+  return { kind: 'stage-interrupted', repoId: 'repo-a' as RepoId, repo: 'o/a', number: 593, title: 't', url: null, ticket: null, at: null, matchedRow: null, interrupted } as unknown as NeedsYouItem
+}
+
+describe('actionFor — stage-interrupted', () => {
+  it('offers only Copy path for a cleanup-failed entry', () => {
+    expect(actionFor(stageInterrupted('cleanup-failed'))).toEqual({ label: 'Copy path', kind: 'copy-path', disabledReason: null })
+  })
+
+  it('still offers Resume with Restart for a crash', () => {
+    expect(actionFor(stageInterrupted('crash'))).toMatchObject({ label: 'Resume', kind: 'resume', secondaryLabel: 'Restart' })
+  })
+})
+
+describe('runAction — cleanup-failed Copy path', () => {
+  const writeText = vi.fn()
+
+  beforeEach(() => {
+    writeText.mockReset()
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+  })
+
+  it('copies the worktree path and toasts', async () => {
+    writeText.mockResolvedValue(undefined)
+    const toasts: string[] = []
+    runAction(stageInterrupted('cleanup-failed'), { onToast: (m) => toasts.push(m) })
+    await vi.waitFor(() => expect(toasts).toEqual(['Copied the worktree path for #593.']))
+    expect(writeText).toHaveBeenCalledWith('/wt/revise-593')
+  })
+
+  it('toasts the path when the clipboard write is rejected', async () => {
+    writeText.mockRejectedValue(new Error('denied'))
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const toasts: string[] = []
+    runAction(stageInterrupted('cleanup-failed'), { onToast: (m) => toasts.push(m) })
+    await vi.waitFor(() => expect(toasts).toEqual(["Couldn't copy the path. It's /wt/revise-593."]))
+    errors.mockRestore()
   })
 })
 
@@ -149,14 +180,5 @@ describe('stage-approval answers', () => {
     const toasts: string[] = []
     runAction(stageApproval(), { onToast: (m) => toasts.push(m) })
     await vi.waitFor(() => expect(toasts).toEqual(["Couldn't reach the main process. Nothing was answered."]))
-  })
-})
-
-describe('runSecondaryAction — stage-blocked', () => {
-  beforeEach(() => navigate.mockClear())
-
-  it('opens the live session', () => {
-    runSecondaryAction(stageBlocked(), { onToast: () => undefined })
-    expect(navigate).toHaveBeenCalledWith({ to: '/session', search: { key: 'hosted-51' } })
   })
 })

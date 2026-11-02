@@ -75,6 +75,12 @@ export function publishDialogBody(version: string, production: string, oid: stri
   return hook === null ? tagged : `${tagged} Then it runs ${hook}.`
 }
 
+export const OPENING_PENDING = 'Opening the release PR…'
+
+export function publishingPending(version: string): string {
+  return `Publishing v${version}…`
+}
+
 export function publishedToast(version: string): string {
   return `Published v${version}.`
 }

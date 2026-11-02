@@ -1,11 +1,11 @@
-// Packaged-binary smoke test — launches the real electron-builder output, never the dev build, with fixtures deliberately off (a packaged build ignores `PORT_FIXTURES` by design, `src/main/fixtures/mode.ts`).
+// Packaged-binary smoke test — launches the real electron-builder output, never the dev build, with fixtures deliberately off (a packaged build ignores `PORT_FIXTURES` unless built `--mode smoke`, which alone bundles `tests/fixtures/app/`; `src/main/fixtures/mode.ts`).
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, expect } from '@playwright/test'
 import type { ConsoleMessage } from 'playwright-core'
 import { _electron } from 'playwright-core'
-import { FIXTURE_ENV } from '../../src/main/fixtures/mode.js'
+import { FIXTURE_ENV } from '../../src/types/fixtures.js'
 import { packagedExecutable } from './binary.mjs'
 
 test.describe.configure({ mode: 'serial' })

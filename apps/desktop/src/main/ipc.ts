@@ -75,7 +75,7 @@ import { createSessionIndex } from '@/main/hosting/session-index'
 import { createAppNotifier } from '@/main/hosting/notify'
 import { createStageRegistry } from '@/main/stage/registry'
 import { readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
-import { createStageSweeper, resolveStageAllow, resolveStageDismissDenial, resolveStageResume, resolveStageRestart } from '@/main/channels/stage'
+import { createStageSweeper, defaultAllowIo, resolveStageAllow, resolveStageDismissDenial, resolveStageResume, resolveStageRestart } from '@/main/channels/stage'
 import { resolveForceDispatch } from '@/main/channels/held'
 import { resolveNotifyNeedsYou, resolveNotifyPrefs, resolveNotifyPrefsSet } from '@/main/channels/notify'
 import { resolveStorageReport, resolveUsageSummary } from '@/main/channels/storage'
@@ -460,8 +460,8 @@ export function registerIpc(): RegisteredIpc {
     applyItemAction,
     snapshot: watcher.snapshot,
     auditDir: app.getPath('userData'),
-    readJson: readJsonFile,
-    writeJsonAtomic: writeJsonFileAtomic,
+    scratchDir: app.getPath('temp'),
+    allow: defaultAllowIo,
   }
   const stageSweeper = createStageSweeper(registryDeps, stageChannelDeps, { fetchItemsByNumber, onChange: () => watcher.republish() })
 

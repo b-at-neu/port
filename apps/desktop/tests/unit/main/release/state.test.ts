@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PhaseInput } from '@/types/release'
-import { bumpBranchName, bumpSubject, releasePrTitle, versionOfBumpBranch, versionOfReleaseTitle } from '@/utils/release/format'
+import { BUMP_BRANCH_DIR, bumpBranchName, bumpSubject, releasePrTitle, versionOfBumpBranch, versionOfReleaseTitle } from '@/utils/release/format'
 import { resolvePhase } from '@/main/release/state'
 
 const BASE: PhaseInput = {
@@ -97,6 +97,7 @@ describe('format literals', () => {
     expect(versionOfReleaseTitle('Release 0.3.0')).toBeNull()
     expect(bumpBranchName('0.3.0')).toBe('bump/v0.3.0')
     expect(versionOfBumpBranch('bump/v0.3.0')).toBe('0.3.0')
+    expect(BUMP_BRANCH_DIR).toBe('bump/')
     expect(bumpSubject('0.3.0')).toBe('bump version to v0.3.0')
   })
 })

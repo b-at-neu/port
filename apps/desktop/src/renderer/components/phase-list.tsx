@@ -1,4 +1,4 @@
-// The Board detail pane's PhaseList — six phases, each an 8px dot in the
+// The Board detail pane's PhaseList — five phases, each an 8px dot in the
 // same states PhaseBar uses; only the current phase carries an extra line.
 import { cn } from '@/renderer/lib/utils'
 import type { LabelKey } from '@/utils/labels/vocabulary'
@@ -14,7 +14,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/u
 // current one — read through PHASE_NAMES, never a second copy table.
 const GROUP_LABEL_KEY: Readonly<Record<PhaseKey, LabelKey>> = {
   plan: 'planning',
-  planReview: 'planReview',
   implement: 'inProgress',
   review: 'reviewing',
   revision: 'revising',

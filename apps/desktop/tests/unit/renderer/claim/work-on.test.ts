@@ -183,9 +183,17 @@ describe('workOn', () => {
     await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1))
 
     const calls = [toast.info, toast.loading, toast.success].flatMap((fn) => vi.mocked(fn).mock.calls)
-    expect(calls).toHaveLength(3)
+    expect(calls).toHaveLength(4)
     for (const [, options] of calls) expect(options).toMatchObject({ id: ID })
     expect(vi.mocked(toast.success).mock.calls[0]?.[1]).toMatchObject({ action: undefined, cancel: undefined, duration: undefined })
-    expect(vi.mocked(toast.loading).mock.calls[0]?.[1]).toMatchObject({ action: undefined, cancel: undefined, duration: undefined, description: undefined })
+    expect(vi.mocked(toast.loading).mock.calls[1]?.[1]).toMatchObject({ action: undefined, cancel: undefined, duration: undefined, description: undefined })
+  })
+
+  it('shows a loading toast for the preflight before anything resolves', async () => {
+    route({ preflight: preflight('unassigned', []), apply: APPLIED, refresh: SNAPSHOT })
+    await workOn(params())
+
+    expect(vi.mocked(toast.loading).mock.calls[0]?.[0]).toBe('Claiming #101…')
+    expect(vi.mocked(toast.loading).mock.calls[0]?.[1]).toMatchObject({ id: ID })
   })
 })

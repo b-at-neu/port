@@ -1,3 +1,5 @@
+import type { FixtureScenario } from '../../src/types/fixtures'
+
 // The visual harness's route → capture table (#317) — exhaustive by type
 // over its own `ROUTE_KEYS`, so a route added to the router fails `pnpm
 // typecheck` here until it is classified. `ROUTE_KEYS` is a hand-maintained
@@ -47,8 +49,19 @@ export interface Target {
 // `SCREENSHOT_TARGETS`'s own populated-scenario set.
 export interface VariantTarget {
   readonly name: string
-  readonly scenario: 'empty'
+  readonly scenario: NonDefaultScenario
   readonly target: Target
+}
+
+type NonDefaultScenario = Exclude<FixtureScenario, 'populated'>
+
+// The hash each scenario's launch redirect settles on, or null when it never redirects. Exhaustive, so a new
+// scenario fails typecheck until it is classified.
+export const SCENARIO_LANDING: Readonly<Record<NonDefaultScenario, string | null>> = {
+  empty: null,
+  unregistered: '#/setup',
+  failing: null,
+  'registry-error': '#/setup',
 }
 
 // The permission dialog is app-wide — its one fixture session is served only
@@ -60,6 +73,14 @@ export const VARIANT_TARGETS: readonly VariantTarget[] = [
   { name: 'releases-empty', scenario: 'empty', target: { hash: '#/releases', container: '#app', ready: '[data-slot="releases-empty"]' } },
   { name: 'audit-empty', scenario: 'empty', target: { hash: '#/audit', container: '#app', ready: '[data-slot="audit-empty"]' } },
   { name: 'session-permission', scenario: 'empty', target: { hash: '#/session?key=fixture-session-permission', container: '#app', ready: '[role="alertdialog"]' } },
+  { name: 'board-unregistered', scenario: 'unregistered', target: { hash: '#/board', container: '#app', ready: 'text=Add a repository to see its pipeline.' } },
+  { name: 'backlog-unregistered', scenario: 'unregistered', target: { hash: '#/backlog', container: '#app', ready: 'text=Register a repository to see its open tickets.' } },
+  { name: 'repos-unregistered', scenario: 'unregistered', target: { hash: '#/settings?section=repositories', container: '#app', ready: 'text=Add a port-managed repository to see its pipeline.' } },
+  { name: 'history-empty', scenario: 'unregistered', target: { hash: '#/history', container: '#app', ready: '[data-slot="history-empty"]' } },
+  { name: 'board-error', scenario: 'failing', target: { hash: '#/board', container: '#app', ready: "text=Couldn't reach GitHub" } },
+  { name: 'backlog-error', scenario: 'failing', target: { hash: '#/backlog', container: '#app', ready: "text=GitHub's rate limit is used up." } },
+  { name: 'history-error', scenario: 'failing', target: { hash: '#/history', container: '#app', ready: "text=Couldn't read your Claude projects directory" } },
+  { name: 'repos-error', scenario: 'registry-error', target: { hash: '#/settings?section=repositories', container: '#app', ready: "text=isn't valid JSON" } },
 ]
 
 const FIXTURE_SESSION_ID = 'fixture-session-streaming'
@@ -78,6 +99,7 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'detail', hash: '#/board?item=fixture-acme-widgets:38', ready: '[role="complementary"]' },
       { name: 'detail-sessions', hash: '#/board?item=fixture-acme-widgets:46', ready: '[role="complementary"]' },
       { name: 'gate-review', click: 'text=Review plan', ready: '[data-slot="dialog-content"]' },
+      { name: 'repo-empty', hash: '#/board?repo=fixture-acme-gadgets', ready: "text=Nothing in this repository's pipeline." },
     ],
   },
   repos: { hash: '#/repositories', container: '#app', ready: '[data-slot="repo-row"]' },

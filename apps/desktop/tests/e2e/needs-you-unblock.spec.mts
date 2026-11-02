@@ -32,9 +32,8 @@ test('unblocks a needs-human PR, removing the label and posting Gate cleared, in
   await expect(page.getByRole('dialog')).toContainText('#202')
   await page.getByRole('button', { name: 'Send to review' }).click()
 
-  await expect(page.getByRole('dialog')).toContainText('unblocked', { timeout: 15_000 })
-  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click()
   await expect(page.getByRole('dialog')).toBeHidden()
+  await expect(page.locator('[data-sonner-toast]')).toContainText('unblocked', { timeout: 15_000 })
   await expect(page.locator('[data-slot="needs-you-empty"]')).toBeVisible()
 
   const calls = await harness.calls()

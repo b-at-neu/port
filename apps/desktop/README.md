@@ -9,7 +9,7 @@ An Electron + TypeScript cockpit for the port pipeline — see the root [README.
 
 ## Install
 
-Download the installer for your OS from the assets of the [latest release](https://github.com/b-at-neu/port/releases/latest) — `.dmg` (macOS), `.exe` (Windows), `.AppImage` or `.deb` (Linux). Every installer is unsigned, so the OS warns on first launch:
+Download the installer for your OS from the assets of the [latest release](https://github.com/b-at-neu/port/releases/latest) — `-arm64.dmg` (Apple Silicon Mac) or `-x64.dmg` (Intel Mac), `.exe` (Windows), `.AppImage` or `.deb` (Linux). Every installer is unsigned, so the OS warns on first launch:
 
 - **macOS**: System Settings → Privacy & Security → **Open Anyway**, or `xattr -dr com.apple.quarantine /Applications/port.app`.
 - **Windows**: SmartScreen → **More info** → **Run anyway**.

@@ -1,5 +1,6 @@
 import type { ComponentProps } from 'react'
 import * as AlertDialogPrimitive from '@radix-ui/react-alert-dialog'
+import { XIcon } from 'lucide-react'
 import { cn } from '@/renderer/lib/utils'
 import { Button } from '@/renderer/components/ui/button'
 
@@ -29,7 +30,7 @@ export function AlertDialogOverlay({ className, ...props }: ComponentProps<typeo
   )
 }
 
-export function AlertDialogContent({ className, ...props }: ComponentProps<typeof AlertDialogPrimitive.Content>) {
+export function AlertDialogContent({ className, children, showCloseButton = true, ...props }: ComponentProps<typeof AlertDialogPrimitive.Content> & { showCloseButton?: boolean }) {
   return (
     <AlertDialogPortal>
       <AlertDialogOverlay />
@@ -43,7 +44,18 @@ export function AlertDialogContent({ className, ...props }: ComponentProps<typeo
           className,
         )}
         {...props}
-      />
+      >
+        {children}
+        {showCloseButton && (
+          <AlertDialogPrimitive.Cancel
+            data-slot="alert-dialog-close"
+            className="absolute top-4 right-4 rounded-xs text-foreground opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 outline-none disabled:pointer-events-none [&_svg]:size-4"
+          >
+            <XIcon />
+            <span className="sr-only">Close</span>
+          </AlertDialogPrimitive.Cancel>
+        )}
+      </AlertDialogPrimitive.Content>
     </AlertDialogPortal>
   )
 }

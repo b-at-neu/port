@@ -1,6 +1,7 @@
 // Work on's claim: preflight, then write at once, reporting every outcome as one toast per row.
 import { toast } from 'sonner'
 import { invoke } from '@/renderer/data/invoke'
+import { FRESH, showActionToast } from '@/renderer/lib/background-action'
 import { applyResponseToast, claimedToast, preflightToast, takeOverPrompt, unreachableToast } from '@/renderer/claim/copy'
 import type { ClaimApplyResponse, ClaimPreflightResponse, ClaimToast, ClaimVerdict, PlanGateChoice } from '@/types/claim'
 import type { RepoDispatchStatus } from '@/types/dispatch'
@@ -21,17 +22,12 @@ interface ApplyParams extends WorkOnParams {
   readonly takeOver: boolean
 }
 
-// A toast reusing an id merges over the previous one, so a stale take-over prompt's buttons and lifetime are cleared explicitly.
-const FRESH = { action: undefined, cancel: undefined, duration: undefined } as const
-
 function toastId(repoId: RepoId, number: number): string {
   return `work-on:${repoId}:${String(number)}`
 }
 
 function show(id: string, result: ClaimToast): void {
-  const options = { ...FRESH, id, description: result.description ?? undefined }
-  if (result.tone === 'success') toast.success(result.title, options)
-  else toast.error(result.title, options)
+  showActionToast(id, { ...result, action: null, cancel: null })
 }
 
 async function dispatchStatusOf(repoId: RepoId): Promise<RepoDispatchStatus | undefined> {
@@ -69,6 +65,7 @@ async function apply(params: ApplyParams): Promise<void> {
 export async function workOn(params: WorkOnParams): Promise<void> {
   const { repoId, repo, number } = params
   const id = toastId(repoId, number)
+  toast.loading(`Claiming #${String(number)}…`, { ...FRESH, id, description: undefined })
   let response: ClaimPreflightResponse
   try {
     response = await invoke('claim:preflight', { repoId, number })

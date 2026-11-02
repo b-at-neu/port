@@ -1,4 +1,4 @@
-// The Screens section — Needs you (red count), Board, Backlog, Releases, Audit log.
+// The Screens section — Board, Needs you (red count), Backlog, Releases, Audit log.
 import { Link } from '@tanstack/react-router'
 import { Inbox, LayoutList, ListTodo, ScrollText, Tag } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
@@ -13,6 +13,10 @@ export function SidebarScreens() {
 
   return (
     <div className="flex flex-col gap-0.5 py-1">
+      <Link to={ROUTE_IDS.board} className={ROW_CLASS} activeProps={{ className: 'active' }}>
+        <LayoutList className="size-4 shrink-0" />
+        Board
+      </Link>
       <Link to={ROUTE_IDS.needsYou} className={ROW_CLASS} activeProps={{ className: 'active' }}>
         <Inbox className="size-4 shrink-0" />
         <span className="flex-1 truncate">Needs you</span>
@@ -26,10 +30,6 @@ export function SidebarScreens() {
             </TooltipContent>
           </Tooltip>
         ) : null}
-      </Link>
-      <Link to={ROUTE_IDS.board} className={ROW_CLASS} activeProps={{ className: 'active' }}>
-        <LayoutList className="size-4 shrink-0" />
-        Board
       </Link>
       <Link to={ROUTE_IDS.backlog} className={ROW_CLASS} activeProps={{ className: 'active' }}>
         <ListTodo className="size-4 shrink-0" />

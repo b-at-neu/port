@@ -26,7 +26,7 @@ import type { StageAgent, TickObservationKind } from '@/types/tick'
 import type { WriteOutcome } from '@/types/writes'
 import type { StageOutcome } from '@/types/stage-session'
 import type { SessionKey } from '@/types/hosting'
-import type { InterruptedStage, StageDenial } from '@/types/stage'
+import type { InterruptedStage, StageDenial, StageDenialStore } from '@/types/stage'
 import type { StageWorktreeTarget } from '@/types/workspace'
 
 /** `dispatch.json`'s own per-repository run state — `dispatching`, `draining` (scoped to one repository), or `paused` (the hard stop: the transition into it also stops every in-flight agent). */
@@ -170,7 +170,7 @@ export interface RepoDispatchStatus {
   readonly budget: BudgetStatus | null
   /** The machine-observation writes this app has made for this repository, newest last — `[]` while `owner !== 'app'`, or before the first observation pass runs. */
   readonly observed: readonly ObservationRecord[]
-  /** Off-allowlist tool calls a stage session's policy denied, deduped by proposed rule and bounded to 20 — in-memory only, dropped on relaunch. */
+  /** Off-allowlist tool calls a stage session's policy denied, deduped by proposed rule and bounded to 20 — survive a relaunch through `stage-denials.json`. */
   readonly denials: readonly StageDenial[]
   /** Stage sessions that ended without reaching a hand-back — survive a relaunch through `stage-sessions.json`, cleared once the item no longer carries the in-flight label. */
   readonly interrupted: readonly InterruptedStage[]
@@ -245,6 +245,7 @@ export interface Dispatcher {
 
 export interface CreateDispatcherParams {
   readonly store: HostedStore
+  readonly denials: StageDenialStore
   readonly ledger: DispatchLedger
   /** `null` is the honest state until a real launcher exists; a candidate sits visibly at `no-launcher`. */
   readonly launch: StageLauncher | null

@@ -10,7 +10,6 @@ export const GROUP_NAMES: Readonly<Record<NeedsYouGroupKey, string>> = {
   'plan-review': 'Plan reviews',
   'ready-to-merge': 'Ready to merge',
   'needs-human': 'Escalated',
-  blocked: 'Blocked',
   questions: 'Questions',
   approvals: 'Edit approvals',
   denied: 'Denied commands',
@@ -95,7 +94,19 @@ function interruptedCopy(item: Extract<NeedsYouItem, { readonly kind: 'stage-int
       return `${phase} ${label} hit the usage limit${i.resetsAt !== null ? `, resets ${new Date(i.resetsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}`
     case 'error':
       return `${phase} ${label} ended with an error${i.detail !== null ? ` (${i.detail})` : ''}`
+    case 'cleanup-failed':
+      return `${phase} ${label} finished, but its worktree is still there${i.detail !== null ? ` (${i.detail})` : ''}`
   }
+}
+
+export const CLEANUP_FAILED_HELP = 'port retries the removal every few minutes. If it has uncommitted changes, commit or discard them there first. This row clears once the worktree is gone.'
+
+export function copiedPathToast(item: Pick<NeedsYouItem, 'number' | 'ticket'>): string {
+  return `Copied the worktree path for ${labelOf(item)}.`
+}
+
+export function copyPathFailedToast(path: string): string {
+  return `Couldn't copy the path. It's ${path}.`
 }
 
 function halfLabelledCopy(item: Extract<NeedsYouItem, { readonly kind: 'half-labelled' }>, label: string): string {
@@ -123,8 +134,6 @@ export function needsYouLeadCopy(item: NeedsYouItem, now: Date = new Date()): st
       return `${label} is ready to merge`
     case 'needs-human':
       return `Unblock ${label}: ${unblockReason(item) ?? 'escalated without a reason'}`
-    case 'blocked':
-      return `Unblock ${label}: an agent marked it blocked`
     case 'budget':
       switch (item.note.kind) {
         case 'escalation-failed':
@@ -155,8 +164,6 @@ export function needsYouLeadCopy(item: NeedsYouItem, now: Date = new Date()): st
       return `${STAGE_PHASE_NAME[item.agent]} ${label} wants to edit ${item.path}`
     case 'stage-questions':
       return `${label} has questions for you — open its session to answer`
-    case 'stage-blocked':
-      return `${label} is blocked: ${item.text ?? 'see its session'}`
     case 'stage-denial':
       return `${STAGE_PHASE_NAME[item.denial.agent]} ${label} was denied ${item.denial.rule}`
     case 'stage-interrupted':
@@ -188,14 +195,7 @@ export function deniedEditToast(path: string): string {
   return `Denied the edit to ${path}.`
 }
 
+export const ENDED_DENIAL_LINE = 'The session has ended. Allowing it applies to future runs.'
+
 export const REFRESH_FAILED_TOAST = "Couldn't reach the main process. Nothing was refreshed."
 
-export function blockerSentToast(number: number | null): string {
-  return `Sent your answer to ${number !== null ? `#${String(number)}'s` : 'the'} agent. It clears "Blocked" itself and carries on.`
-}
-
-export function blockerSendError(error: 'unknown-session' | 'blocked-command' | 'unreachable', number: number | null): string {
-  if (error === 'unreachable') return "Couldn't reach the main process. Nothing was sent."
-  if (error === 'blocked-command') return "That text is a command the session can't run here. Reword your answer."
-  return `That session has ended. Unblock ${number !== null ? `#${String(number)}` : 'the item'} from its row once the board catches up.`
-}

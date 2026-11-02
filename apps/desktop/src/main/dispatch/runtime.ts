@@ -13,6 +13,9 @@ import { autoApprovePlan } from '@/main/actions/gate'
 import { escalateToHuman } from '@/main/actions/escalate'
 import { createBudgetGate } from '@/main/dispatch/budget-gate'
 import { createDispatcher } from '@/main/dispatch/dispatcher'
+import { readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
+import { createStageDenialStore } from '@/main/stage/denials'
+import { join } from 'node:path'
 
 import { createAutoPlanner } from '@/main/dispatch/auto-plan'
 
@@ -46,7 +49,9 @@ interface DispatchRuntime {
   readonly shutdown: () => void
 }
 
-export function createDispatchRuntime(deps: Omit<CreateDispatcherParams, 'ledger' | 'onChange' | 'budget' | 'escalate' | 'writeObservation' | 'refreshMemo' | 'forceDispatch' | 'requestRead'>): DispatchRuntime {
+export function createDispatchRuntime(deps: Omit<CreateDispatcherParams, 'ledger' | 'onChange' | 'budget' | 'escalate' | 'writeObservation' | 'refreshMemo' | 'forceDispatch' | 'requestRead' | 'denials'>): DispatchRuntime {
+  const denials = createStageDenialStore({ path: join(deps.dirs.audit, 'stage-denials.json'), readJson: readJsonFile, writeJsonAtomic: writeJsonFileAtomic })
+  void denials.load()
   const ledger = createDispatchLedger()
   const unknownStreaks = createUnknownStreaks()
   const refreshMemo = createRefreshMemo()
@@ -54,7 +59,7 @@ export function createDispatchRuntime(deps: Omit<CreateDispatcherParams, 'ledger
   let bound: Pick<PipelineWatcher, 'republish' | 'refresh'> | null = null
   // A failed read is retried by the scheduled poll, so it is never surfaced here.
   const requestRead = (repoId: RepoId): void => void bound?.refresh({ repoId, source: 'github' }).catch(() => undefined)
-  const dispatcher = createDispatcher({ ...deps, ledger, refreshMemo, forceDispatch, requestRead, budget: createBudgetGate(), escalate: escalateToHuman, writeObservation: applyObservation, onChange: () => bound?.republish() })
+  const dispatcher = createDispatcher({ ...deps, denials, ledger, refreshMemo, forceDispatch, requestRead, budget: createBudgetGate(), escalate: escalateToHuman, writeObservation: applyObservation, onChange: () => bound?.republish() })
   const autoPlannerDeps: AutoPlannerDeps = {
     listRepositories: deps.listRepositories,
     registryDeps: deps.registryDeps,

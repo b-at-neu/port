@@ -18,8 +18,8 @@ import { setSidebarCollapsed } from '@/renderer/shell/prefs'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 
 const RAIL_SCREENS = [
-  { to: ROUTE_IDS.board, icon: Inbox, label: 'Needs you' },
   { to: ROUTE_IDS.board, icon: LayoutList, label: 'Board' },
+  { to: ROUTE_IDS.board, icon: Inbox, label: 'Needs you' },
   { to: ROUTE_IDS.backlog, icon: ListTodo, label: 'Backlog' },
 ] as const
 

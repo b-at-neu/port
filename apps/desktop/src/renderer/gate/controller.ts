@@ -6,8 +6,11 @@
 // only entry point — the header's former repo-picker-then-claim-step is
 // gone along with the claim itself.
 import { invoke } from '@/renderer/data/invoke'
+import { runInBackground } from '@/renderer/lib/background-action'
+import { resultCopy } from '@/renderer/gate/copy'
 import type { RepoId } from '@/utils/repos'
-import type { GateDecision, GatePreflight, GateState } from '@/types/gate'
+import type { GateAnswerResponse, GateDecision, GatePreflight, GateState } from '@/types/gate'
+import type { ActionToast } from '@/types/toast'
 import type { OwnershipSummary } from '@/types/writes'
 
 let state: GateState = { step: 'closed' }
@@ -63,14 +66,12 @@ async function loadPreflight(repoId: RepoId, number: number): Promise<void> {
   }
 }
 
-/** Re-fetches in place — the retry affordance both a `precondition-failed`
- *  label outcome and a `refused` verdict offer ("Show me the current
- *  state"). */
+/** Re-fetches in place — the retry affordance a `refused` verdict offers ("Show me the current state"). */
 export function retryPreflight(): void {
-  const target = state.step === 'result' ? { repoId: state.repoId, number: state.preflight.number } : state.step === 'refused' ? { repoId: state.repoId, number: state.number } : null
-  if (target === null) return
-  setState({ step: 'loading', repoId: target.repoId, number: target.number })
-  void loadPreflight(target.repoId, target.number)
+  if (state.step !== 'refused') return
+  const { repoId, number } = state
+  setState({ step: 'loading', repoId, number })
+  void loadPreflight(repoId, number)
 }
 
 export function openFeedback(): void {
@@ -88,41 +89,51 @@ export function setFeedbackText(text: string): void {
   setState({ ...state, text })
 }
 
-async function runAnswer(repoId: RepoId, preflight: GatePreflight, ownership: OwnershipSummary, decision: GateDecision, feedback: string | null, skipComment: boolean): Promise<void> {
-  setState({ step: 'answering', repoId, number: preflight.number })
-  try {
-    const response = await invoke('gate:answer', { repoId, number: preflight.number, decision, feedback, skipComment })
-    if (getState().step !== 'answering') return
-    setState({ step: 'result', repoId, preflight, decision, feedback, response, ownership })
-    if (response.kind === 'answered' && response.labels.kind === 'applied') {
-      void invoke('board:refresh', { repoId, source: 'github' })
-    }
-  } catch (error) {
-    console.error('Failed to reach the main process while answering the plan gate', error)
-    setState({ step: 'preflight-failed', repoId, number: preflight.number, message: 'Failed to reach the main process.' })
-  }
+interface GateAnswerRun {
+  readonly repoId: RepoId
+  readonly preflight: GatePreflight
+  readonly ownership: OwnershipSummary
+  readonly decision: GateDecision
+  readonly feedback: string | null
+  readonly skipComment: boolean
+}
+
+function toastFor(run: GateAnswerRun, response: GateAnswerResponse): ActionToast {
+  const { repoId, preflight, ownership, decision, feedback } = run
+  const copy = resultCopy({ number: preflight.number, decision, response, sessionRequired: preflight.sessionRequired, ownership })
+  // A landed comment followed by an aborted label swap retries the swap alone, so the retry suppresses the comment.
+  const retryLabel = { label: 'Retry the label change', onClick: () => void runAnswer({ ...run, feedback: null, skipComment: true }) }
+  const tryAgain = { label: 'Try again', onClick: () => void runAnswer({ ...run, feedback, skipComment: false }) }
+  const showState = { label: 'Show current state', onClick: () => openReviewDialog(repoId, preflight.number) }
+  const action = copy.actions.includes('retry-label') ? retryLabel : copy.actions.includes('try-again') ? tryAgain : null
+  const cancel = copy.actions.includes('show-state') ? showState : null
+  return { tone: copy.tone, title: copy.line, description: copy.note === null || copy.note === '' ? null : copy.note, action, cancel }
+}
+
+async function runAnswer(run: GateAnswerRun): Promise<void> {
+  const { repoId, preflight, decision, feedback, skipComment } = run
+  const number = preflight.number
+  const response = await runInBackground({
+    id: `gate:${repoId}:${String(number)}`,
+    pending: decision === 'approve' ? `Approving #${String(number)}…` : `Requesting changes on #${String(number)}…`,
+    run: () => invoke('gate:answer', { repoId, number, decision, feedback, skipComment }),
+    toToast: (result) => toastFor(run, result),
+  })
+  if (response !== 'unreachable' && response.kind === 'answered' && response.labels.kind === 'applied') void invoke('board:refresh', { repoId, source: 'github' })
 }
 
 export function submitApprove(): void {
   if (state.step !== 'reviewing') return
-  void runAnswer(state.repoId, state.preflight, state.ownership, 'approve', null, false)
+  const { repoId, preflight, ownership } = state
+  closeGateDialog()
+  void runAnswer({ repoId, preflight, ownership, decision: 'approve', feedback: null, skipComment: false })
 }
 
 export function submitFeedback(): void {
   if (state.step !== 'feedback' || state.text.trim() === '') return
-  void runAnswer(state.repoId, state.preflight, state.ownership, 'request-changes', state.text, false)
-}
-
-/** The one retry affordance that suppresses the comment — a landed comment
- *  followed by an aborted label swap retries the swap alone. */
-export function retryLabelOnly(): void {
-  if (state.step !== 'result') return
-  void runAnswer(state.repoId, state.preflight, state.ownership, state.decision, null, true)
-}
-
-export function tryCommentAgain(): void {
-  if (state.step !== 'result') return
-  void runAnswer(state.repoId, state.preflight, state.ownership, state.decision, state.feedback, false)
+  const { repoId, preflight, ownership, text } = state
+  closeGateDialog()
+  void runAnswer({ repoId, preflight, ownership, decision: 'request-changes', feedback: text, skipComment: false })
 }
 
 export function closeGateDialog(): void {

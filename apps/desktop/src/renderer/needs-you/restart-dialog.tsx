@@ -1,10 +1,11 @@
 // Restart's own confirmation — DESIGN §4: it has consequences (removes the kept worktree).
 import { useSyncExternalStore } from 'react'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/renderer/components/ui/alert-dialog'
-import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
 import type { InterruptedStage, StageRestartResult } from '@/types/stage'
+import type { ActionToast } from '@/types/toast'
 import { invoke } from '@/renderer/data/invoke'
+import { runInBackground } from '@/renderer/lib/background-action'
 import { ipcQueryOptions } from '@/renderer/data/query'
 
 let current: InterruptedStage | null = null
@@ -30,18 +31,19 @@ function close(): void {
   notify()
 }
 
-function resultToast(number: number, result: StageRestartResult): string {
+function resultToast(number: number, result: StageRestartResult): ActionToast {
+  const plain = { description: null, action: null, cancel: null } as const
   switch (result.kind) {
     case 'ok':
-      return `Restarted #${String(number)}.`
+      return { ...plain, tone: 'success', title: `Restarted #${String(number)}.` }
     case 'worktree-dirty':
-      return `#${String(number)}'s worktree has uncommitted changes. Resume it, or clean it up in Repositories → Worktrees.`
+      return { ...plain, tone: 'error', title: `#${String(number)}'s worktree has uncommitted changes. Resume it, or clean it up in Repositories → Worktrees.` }
     case 'worktree-remove-failed':
-      return `Couldn't remove #${String(number)}'s worktree: ${result.message}.`
+      return { ...plain, tone: 'error', title: `Couldn't remove #${String(number)}'s worktree: ${result.message}.` }
     case 'label-refused':
-      return `Couldn't put #${String(number)} back in the queue: ${result.reason}.`
+      return { ...plain, tone: 'error', title: `Couldn't put #${String(number)} back in the queue: ${result.reason}.` }
     case 'unknown-stage':
-      return `#${String(number)} is no longer tracked as interrupted.`
+      return { ...plain, tone: 'info', title: `#${String(number)} is no longer tracked as interrupted.` }
   }
 }
 
@@ -52,17 +54,15 @@ export function RestartDialog() {
 
   async function confirm(): Promise<void> {
     if (interrupted === null) return
-    const number = interrupted.number
-    try {
-      const result = await invoke('stage:restart', { id: interrupted.id })
-      toast(resultToast(number, result))
-      void queryClient.invalidateQueries({ queryKey: ipcQueryOptions('board:snapshot').queryKey })
-    } catch (error) {
-      console.error('Failed to reach the main process while restarting a stage session', error)
-      toast(`Couldn't reach the main process to restart #${String(number)}.`)
-    } finally {
-      close()
-    }
+    const { id, number } = interrupted
+    close()
+    await runInBackground({
+      id: `restart:${id}`,
+      pending: `Restarting #${String(number)}…`,
+      run: () => invoke('stage:restart', { id }),
+      toToast: (result) => resultToast(number, result),
+    })
+    void queryClient.invalidateQueries({ queryKey: ipcQueryOptions('board:snapshot').queryKey })
   }
 
   return (

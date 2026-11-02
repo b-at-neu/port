@@ -23,6 +23,7 @@ import { openDecision } from '@/renderer/decision/controller'
 import { openReviewDialog } from '@/renderer/gate/controller'
 import { itemActionState, runItemAction, subscribeItemActions } from '@/renderer/board/actions'
 import { actionButtonLabel, actionPendingLabel, actionResultCopy, decisionButtonLabel, openPrLinkLabel, openTicketLinkLabel, reviewPlanButtonLabel, writeHistoryLinkLabel } from '@/renderer/board/copy'
+import { BlockedOnDetail } from '@/renderer/board/blocked-on-detail'
 import { yourSessionsLabel } from '@/renderer/board/session-copy'
 import { actionNoteFor, agentSummaryOf, decisionNoteFor, phaseLabelFor, phaseToneFor, stageTargetsOf } from '@/renderer/board/row-model'
 import { itemDetailLines } from '@/renderer/board/tick'
@@ -174,6 +175,7 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
         {note !== null ? <p className="text-small text-muted-foreground">{note}</p> : null}
         {decisionNote !== null ? <p className="text-small text-muted-foreground">{decisionNote}</p> : null}
       </div>
+      {row.blockedOn !== null ? <BlockedOnDetail blockedOn={row.blockedOn} number={ticket.ref.number} /> : null}
       <PhaseList
         stageKey={row.stageLabel?.key ?? null}
         kind={item.kind}

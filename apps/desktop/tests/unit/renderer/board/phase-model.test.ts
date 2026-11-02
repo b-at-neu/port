@@ -17,7 +17,7 @@ describe('phaseSegmentsFor', () => {
     ['ready', 'plan'],
     ['planning', 'plan'],
     ['planChangesRequested', 'plan'],
-    ['planReview', 'planReview'],
+    ['planReview', 'plan'],
     ['planApproved', 'implement'],
     ['inProgress', 'implement'],
     ['readyForReview', 'review'],
@@ -43,7 +43,6 @@ describe('phaseSegmentsFor', () => {
     const states = statesOf('needsHuman', 'issue')
     expect(states[phaseOf('implement')]).toBe('current-attention')
     expect(states[phaseOf('plan')]).toBe('finished')
-    expect(states[phaseOf('planReview')]).toBe('finished')
     expect(states[phaseOf('review')]).toBe('pending')
   })
 
@@ -79,16 +78,16 @@ describe('phaseSegmentsFor palettes', () => {
   }
 
   it('finished segments take their own phase palette, the current one the stage palette, the rest none', () => {
-    expect(palettesOf('inProgress')).toEqual(['plan', 'plan', 'implement', null, null, null])
-    expect(palettesOf('revising', 'pull-request')).toEqual(['plan', 'plan', 'implement', 'review', 'revise', null])
+    expect(palettesOf('inProgress')).toEqual(['plan', 'implement', null, null, null])
+    expect(palettesOf('revising', 'pull-request')).toEqual(['plan', 'implement', 'review', 'revise', null])
   })
 
-  it('the plan-review gate is the plan palette', () => {
-    expect(palettesOf('planReview')).toEqual(['plan', 'plan', null, null, null, null])
+  it('the plan-review gate is the single plan segment', () => {
+    expect(palettesOf('planReview')).toEqual(['plan', null, null, null, null])
   })
 
   it('a refresh stage paints the last segment grey after every earlier phase', () => {
-    expect(palettesOf('refreshing', 'pull-request')).toEqual(['plan', 'plan', 'implement', 'review', 'revise', 'refresh'])
+    expect(palettesOf('refreshing', 'pull-request')).toEqual(['plan', 'implement', 'review', 'revise', 'refresh'])
   })
 
   it('a ready-to-merge pull request ends in the done palette', () => {
@@ -96,7 +95,7 @@ describe('phaseSegmentsFor palettes', () => {
   })
 
   it('needs-you replaces the current segment palette only', () => {
-    expect(palettesOf('needsHuman', 'issue')).toEqual(['plan', 'plan', 'needs-you', null, null, null])
+    expect(palettesOf('needsHuman', 'issue')).toEqual(['plan', 'needs-you', null, null, null])
   })
 
   it('a merged pull request is every segment done', () => {

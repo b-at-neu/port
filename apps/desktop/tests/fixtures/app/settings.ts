@@ -1,6 +1,6 @@
 // Canned Settings reads for the visual harness: Usage & storage's two channels. Pure, never I/O.
 import type { StorageReport, UsageSummary } from '@/types/settings'
-import { GADGETS_ID, WIDGETS_ID } from '@/main/fixtures/repos'
+import { GADGETS_ID, WIDGETS_ID } from './repos'
 
 const GB = 1024 ** 3
 const MB = 1024 ** 2

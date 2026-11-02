@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { classifyHandbackText } from '@/utils/stage/handback-text'
+import { blockedReasonOf, capHandbackText, classifyHandbackText } from '@/utils/stage/handback-text'
+
+describe('capHandbackText', () => {
+  it('keeps text up to 120 characters and truncates beyond with an ellipsis', () => {
+    expect(capHandbackText('x'.repeat(120))).toBe('x'.repeat(120))
+    expect(capHandbackText('x'.repeat(121))).toBe(`${'x'.repeat(120)}…`)
+  })
+})
+
+describe('blockedReasonOf', () => {
+  it('strips the prefix, trims and caps', () => {
+    expect(blockedReasonOf('BLOCKED:   needs a decision  ')).toBe('needs a decision')
+    expect(blockedReasonOf(`BLOCKED: ${'y'.repeat(200)}`)).toBe(`${'y'.repeat(120)}…`)
+  })
+})
 
 describe('classifyHandbackText', () => {
   it('classifies blocked when a preamble precedes the BLOCKED: line', () => {

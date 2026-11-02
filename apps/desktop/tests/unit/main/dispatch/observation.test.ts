@@ -51,6 +51,8 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     reviewCycleCount: null,
     checkRollup: null,
     planPresent: false,
+    blockers: null,
+    blockerComments: null,
     ...overrides,
   }
 }

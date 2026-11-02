@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react'
 import { Dialog, DialogContent } from '@/renderer/components/ui/dialog'
 import { closeGateDialog, getState, subscribe } from '@/renderer/gate/controller'
-import { ErrorStep, FeedbackStep, LoadingStep, RefusedStep, ResultStep, ReviewingStep } from '@/renderer/gate/dialog-steps'
+import { ErrorStep, FeedbackStep, LoadingStep, RefusedStep, ReviewingStep } from '@/renderer/gate/dialog-steps'
 
 function DialogBody() {
   const state = useSyncExternalStore(subscribe, getState)
@@ -16,14 +16,10 @@ function DialogBody() {
       return <ReviewingStep state={state} />
     case 'feedback':
       return <FeedbackStep state={state} />
-    case 'answering':
-      return <LoadingStep hint={`Answering #${String(state.number)}…`} />
     case 'refused':
       return <RefusedStep number={state.number} verdict={state.verdict} />
     case 'preflight-failed':
       return <ErrorStep line="Couldn't reach GitHub." note={state.message} />
-    case 'result':
-      return <ResultStep state={state} />
   }
 }
 

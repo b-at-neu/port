@@ -1,3 +1,5 @@
+import { BUMP_BRANCH_DIR } from '@/utils/release/format'
+
 // Pure GraphQL builders for the Releases reads — every branch and path travels as a variable, never spliced into the document.
 const RELEASES_PAGE = 20
 const BUMP_REFS_PAGE = 10
@@ -16,14 +18,14 @@ export function buildStateQuery(withFiles: boolean): string {
         '    productionFile: object(expression: $productionFile) { ... on Blob { text } }',
       ]
     : []
-  const variables = ['$owner: String!', '$name: String!', '$production: String!', '$integration: String!', '$integrationRef: String!', '$productionRef: String!', ...(withFiles ? ['$integrationFile: String!', '$productionFile: String!'] : [])]
+  const variables = ['$owner: String!', '$name: String!', '$production: String!', '$integration: String!', '$integrationRef: String!', '$productionRef: String!', '$bumpRefPrefix: String!', ...(withFiles ? ['$integrationFile: String!', '$productionFile: String!'] : [])]
   return [
     `query(${variables.join(', ')}) {`,
     '  repository(owner: $owner, name: $name) {',
     `    releases(first: ${String(RELEASES_PAGE)}, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { tagName name url publishedAt isDraft isPrerelease isLatest description } }`,
     `    openReleasePr: pullRequests(states: OPEN, baseRefName: $production, headRefName: $integration, first: 1, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { ${PR_FIELDS} } }`,
     `    closedReleasePr: pullRequests(states: [CLOSED, MERGED], baseRefName: $production, headRefName: $integration, first: 1, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { ${PR_FIELDS} } }`,
-    `    bumpRefs: refs(refPrefix: "refs/heads/bump/v", first: ${String(BUMP_REFS_PAGE)}) { nodes { name associatedPullRequests(states: OPEN, first: 1) { nodes { number url } } } }`,
+    `    bumpRefs: refs(refPrefix: $bumpRefPrefix, first: ${String(BUMP_REFS_PAGE)}) { nodes { name associatedPullRequests(states: OPEN, first: 1) { nodes { number url } } } }`,
     ...files,
     '    integrationHead: ref(qualifiedName: $integrationRef) { target { oid ... on Commit { tree { oid } } } }',
     '    productionHead: ref(qualifiedName: $productionRef) { target { oid } }',
@@ -40,6 +42,7 @@ export function stateVariables(params: { readonly integration: string; readonly 
     integration: params.integration,
     integrationRef: `refs/heads/${params.integration}`,
     productionRef: `refs/heads/${params.production}`,
+    bumpRefPrefix: `refs/heads/${BUMP_BRANCH_DIR}`,
     ...(params.versionFile === null ? {} : { integrationFile: `${params.integration}:${params.versionFile}`, productionFile: `${params.production}:${params.versionFile}` }),
   }
 }

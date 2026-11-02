@@ -99,15 +99,6 @@ export function rateLimitCopy(freshness: RepositoryFreshness | null, remaining: 
   return `${remaining.toLocaleString()} API points left, resets ${label}`
 }
 
-function nextCheckCopy(nextWakeupAt: string | null, now: Date): string {
-  const dueAt = nextWakeupAt !== null ? Date.parse(nextWakeupAt) : Number.NaN
-  if (Number.isNaN(dueAt)) return 'no check scheduled'
-  const remainingMs = dueAt - now.getTime()
-  if (remainingMs <= 0) return 'next check now'
-  const totalSeconds = Math.ceil(remainingMs / 1000)
-  return `next check in ${String(Math.floor(totalSeconds / 60))}:${String(totalSeconds % 60).padStart(2, '0')}`
-}
-
 /** The earliest rate-limit deferral still in the future across every repository, `null` when none. */
 function earliestDeferral(snapshot: BoardSnapshot, now: Date): string | null {
   const pending = snapshot.health.flatMap((h) => (isDeferred(h.github, now) && h.github.deferredUntil !== null ? [h.github.deferredUntil] : []))
@@ -135,7 +126,7 @@ function githubClause(snapshot: BoardSnapshot, github: SourceHealth, now: Date):
 
   if (lastSuccessAt === null) return { text: 'Checking GitHub…', tone: 'muted' }
   const stale = now.getTime() - Date.parse(lastSuccessAt) > github.intervalMs * 2
-  return { text: `Checked GitHub ${ageCopy(lastSuccessAt, now)} · ${nextCheckCopy(snapshot.nextWakeupAt, now)}`, tone: stale ? 'attention' : 'muted' }
+  return { text: `Checked GitHub ${ageCopy(lastSuccessAt, now)}`, tone: stale ? 'attention' : 'muted' }
 }
 
 /** The Board header's always-on timing label — `null` only when there is no repository health to read. */

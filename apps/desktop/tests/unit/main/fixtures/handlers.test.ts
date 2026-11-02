@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { IPC_CHANNELS } from '@/types/ipc'
 import type { IpcChannel } from '@/types/ipc'
+import { FIXTURE_SCENARIOS } from '@/types/fixtures'
 import { needsYouItems } from '@/renderer/board/needs-you'
 import { projectBoard } from '@/renderer/board/project'
 import type { RepoId } from '@/utils/repos'
-import { fixtureHandlers } from '@/main/fixtures/handlers'
-import { RESUMED_KEY, STREAMING_KEY } from '@/main/fixtures/sessions'
+import { fixtureHandlers } from '../../../fixtures/app/handlers'
+import { RESUMED_KEY, STREAMING_KEY } from '../../../fixtures/app/sessions'
 
 const WIDGETS = 'fixture-acme-widgets' as RepoId
 
@@ -48,9 +49,10 @@ const SAMPLE_REQUESTS: Partial<Record<IpcChannel, unknown>> = {
   'session:archive:set': { sessionId: 'fixture-claude-1', archived: true },
 }
 
-describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', (scenario) => {
-  const now = new Date('2026-09-05T14:00:00.000Z')
-  const handlers = fixtureHandlers(now, scenario)
+const NOW = new Date('2026-09-05T14:00:00.000Z')
+
+describe.each(FIXTURE_SCENARIOS)('fixtureHandlers coverage (%s scenario)', (scenario) => {
+  const handlers = fixtureHandlers(NOW, scenario)
 
   it('has a handler for every IPC channel', () => {
     for (const channel of IPC_CHANNELS) {
@@ -64,6 +66,67 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
       expect(() => (handlers[channel] as (req: unknown) => unknown)(request)).not.toThrow()
     }
   })
+})
+
+describe('fixtureHandlers (unregistered scenario)', () => {
+  const handlers = fixtureHandlers(NOW, 'unregistered')
+
+  it('reports an empty registry, board, session scan and session list', () => {
+    expect(handlers['repos:list'](undefined)).toEqual({ ok: true, repositories: [] })
+    const board = handlers['board:snapshot'](undefined)
+    expect(board.state.repositories).toHaveLength(0)
+    expect(board.tick).toHaveLength(0)
+    expect(board.dispatch).toHaveLength(0)
+    const scan = handlers['sessions:scan'](undefined)
+    if (!scan.ok) throw new Error('fixture sessions:scan unexpectedly failed')
+    expect(scan.sessions).toHaveLength(0)
+    expect(handlers['session:list'](undefined)).toEqual([])
+  })
+})
+
+describe('fixtureHandlers (failing scenario)', () => {
+  const handlers = fixtureHandlers(NOW, 'failing')
+  const snapshot = handlers['board:snapshot'](undefined)
+
+  it('derives one github-unavailable, one not-ready and one ok repository, with no board rows', () => {
+    const repositories = snapshot.state.repositories
+    expect(repositories).toHaveLength(3)
+    expect(repositories.filter((r) => !r.ok && r.reason === 'github-unavailable')).toHaveLength(1)
+    expect(repositories.find((r) => !r.ok && r.reason === 'github-unavailable')).toMatchObject({ kind: 'network' })
+    expect(repositories.filter((r) => !r.ok && r.reason === 'not-ready')).toHaveLength(1)
+    expect(repositories.filter((r) => r.ok)).toHaveLength(1)
+    expect(projectBoard({ snapshot, groupBy: 'repo', now: NOW, sessions: [] }).rows).toHaveLength(0)
+  })
+
+  it('reports the run-state store as unreadable', () => {
+    expect(snapshot.runStates.store.kind).toBe('unreadable')
+  })
+
+  it('fails backlog:list with a rate limit for widgets and a network error elsewhere', () => {
+    expect(handlers['backlog:list']({ repoId: WIDGETS })).toMatchObject({ ok: false, kind: 'rate-limited' })
+    expect(handlers['backlog:list']({ repoId: 'fixture-acme-gadgets' as RepoId })).toMatchObject({ ok: false, kind: 'network' })
+  })
+
+  it('fails sessions:scan as projects-unreadable and still lists three repositories', () => {
+    expect(handlers['sessions:scan'](undefined)).toMatchObject({ ok: false, kind: 'projects-unreadable' })
+    const repos = handlers['repos:list'](undefined)
+    if (!repos.ok) throw new Error('fixture repos:list unexpectedly failed')
+    expect(repos.repositories).toHaveLength(3)
+  })
+})
+
+describe('fixtureHandlers (registry-error scenario)', () => {
+  const handlers = fixtureHandlers(NOW, 'registry-error')
+
+  it('fails repos:list as registry-malformed and leaves the board as populated', () => {
+    expect(handlers['repos:list'](undefined)).toMatchObject({ ok: false, kind: 'registry-malformed' })
+    expect(handlers['board:snapshot'](undefined)).toEqual(fixtureHandlers(NOW, 'populated')['board:snapshot'](undefined))
+  })
+})
+
+describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', (scenario) => {
+  const now = NOW
+  const handlers = fixtureHandlers(now, scenario)
 
   it('reports repos:list with two ready and one not-ready entry', () => {
     const result = handlers['repos:list'](undefined)
@@ -201,12 +264,16 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     expect(snapshots.filter((s) => s.stage !== null).map((s) => s.stage?.number).sort()).toEqual([38, 44, 51])
   })
 
-  it.runIf(scenario === 'populated')('shows exactly one #51 row in Needs you, carrying the blocker text and its live session', () => {
+  it.runIf(scenario === 'populated')('keeps every blocked ticket off Needs you and shows #51, #55 and #56 on the Board with what they are held on', () => {
     const snapshot = handlers['board:snapshot'](undefined)
-    const items = needsYouItems(snapshot, now, handlers['session:list'](undefined)).filter((i) => i.number === 51)
-    expect(items).toHaveLength(1)
-    expect(items[0]).toMatchObject({ kind: 'stage-blocked', sessionKey: 'fixture-stage-impl-51' })
-    expect(items[0]?.kind === 'stage-blocked' ? items[0].text : null).toMatch(/^The Q3 ledger export has no currency column\./)
+    const sessions = handlers['session:list'](undefined)
+    expect(needsYouItems(snapshot, now, sessions).filter((i) => [51, 55, 56].includes(i.number ?? 0))).toEqual([])
+    const rows = projectBoard({ snapshot, groupBy: 'repo', now, sessions }).rows
+    const held = (number: number) => rows.find((r) => r.item.number === number)?.blockedOn
+    expect(held(51)?.session).toMatchObject({ sessionKey: 'fixture-stage-impl-51' })
+    expect(held(51)?.session?.text).toMatch(/^The Q3 ledger export has no currency column\./)
+    expect(held(55)?.dependencies).toMatchObject({ ok: true, open: [{ number: 49 }, { number: 48 }] })
+    expect(held(56)?.comment?.text).toBe("The retention period isn't in the plan. Decide 30 or 90 days.")
   })
 
   it.runIf(scenario === 'populated')('dispatches #44 on the Board: in flight, with a live plan stage, before its label moves', () => {

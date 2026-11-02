@@ -16,7 +16,7 @@
     { "path": "apps/desktop/src/utils/", "citations": 0, "longBlocks": 0 },
     { "path": "apps/desktop/src/preload/", "citations": 0, "longBlocks": 0 },
     { "path": "apps/desktop/tests/unit/renderer/", "citations": 4, "longBlocks": 4 },
-    { "path": "apps/desktop/", "citations": 11, "longBlocks": 35 },
+    { "path": "apps/desktop/", "citations": 11, "longBlocks": 34 },
     { "path": "plugins/port/", "citations": 51, "longBlocks": 105 },
     { "path": "scripts/checks/", "citations": 525, "longBlocks": 512 },
     { "path": "scripts/", "citations": 65, "longBlocks": 197 }

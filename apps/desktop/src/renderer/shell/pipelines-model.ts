@@ -19,17 +19,30 @@ function statusTextOf(tone: PhaseTone, phaseName: string): string {
   return tone.palette === 'needs-you' ? 'Needs you' : phaseName
 }
 
+/** Every sidebar row is actively running, so its dot pulses in its phase colour. */
+function runningTone(tone: PhaseTone): PhaseTone {
+  return { ...tone, pulse: true }
+}
+
+function operatorNeeded(session: HostedSessionSnapshot): boolean {
+  return session.pendingPermissions.length > 0 || classifyHandbackText(session.lastResult?.text ?? '') !== null
+}
+
+function isRunning(session: HostedSessionSnapshot): boolean {
+  return (session.phase === 'starting' || session.phase === 'streaming') && !operatorNeeded(session)
+}
+
 function sessionsFor(repoId: RepoId, index: TicketIndex, needsYouNumbers: ReadonlySet<number>): PipelineSessionRow[] {
   const rows: PipelineSessionRow[] = []
   for (const ticket of index.tickets) {
     const item = ticket.primary
-    const liveAgent = item.agents.find((a) => a.activity !== 'dormant')
-    const liveSession = item.sessions.find((s) => s.activity !== 'dormant')
+    if (item.stage === 'gate' || item.stage === 'terminal' || needsYouNumbers.has(ticket.ref.number)) continue
+    const liveAgent = item.agents.find((a) => a.activity === 'active')
+    const liveSession = item.sessions.find((s) => s.activity === 'active')
     if (liveAgent === undefined && liveSession === undefined) continue
 
-    const activity = liveAgent?.activity ?? liveSession?.activity ?? 'dormant'
     const stageKey = stageKeyOf(item.stages, item.stage)
-    const tone = phaseTone({ stageKey, active: activity === 'active', waitingOnYou: needsYouNumbers.has(ticket.ref.number), operatorNeeded: false })
+    const tone = runningTone(phaseTone({ stageKey, active: true, waitingOnYou: false, operatorNeeded: false }))
     const transcript: PipelineSessionRow['transcript'] =
       liveAgent !== undefined ? { sessionId: liveAgent.sessionId, agentId: liveAgent.agentId } : liveSession !== undefined ? { sessionId: liveSession.sessionId, agentId: null } : null
 
@@ -45,8 +58,7 @@ function stageRowFor(repoId: RepoId, session: HostedSessionSnapshot, index: Tick
   if (stage === null) throw new Error('stageRowFor called with a non-stage snapshot')
   const ticket = index.byNumber.get(stage.number)
   const label = session.title ?? (ticket !== undefined ? ticketLabel(ticket.ref) : `#${String(stage.number)}`)
-  const operatorNeeded = session.pendingPermissions.length > 0 || classifyHandbackText(session.lastResult?.text ?? '') !== null
-  const tone = phaseTone({ stageKey: stage.trigger, active: true, waitingOnYou: false, operatorNeeded })
+  const tone = runningTone(phaseTone({ stageKey: stage.trigger, active: true, waitingOnYou: false, operatorNeeded: operatorNeeded(session) }))
   const phaseName = stageAgentPhaseName(stage.agent)
   return { key: session.sessionKey, repoId, number: ticket?.ref.number ?? stage.number, label, tone, statusText: statusTextOf(tone, phaseName), phaseName, sessionKey: session.sessionKey, transcript: null }
 }
@@ -71,8 +83,7 @@ function pillFor(snapshot: BoardSnapshot | undefined, repoId: RepoId, owner: Dis
   return { status: 'idle', label: 'Paused' }
 }
 
-/** A not-`ready` repository gets a bare row with no menu; before the first read a ready row falls back to paused.
- *  `needsYou` is the visible list, never re-derived here, so a dismissed item lights no dot. */
+/** Lists only running sessions that do not need the operator, and their dots pulse. A not-`ready` repository gets a bare row with no menu; before the first read a ready row falls back to paused. */
 export function pipelinesModel(
   repos: readonly RepositoryEntry[],
   snapshot: BoardSnapshot | undefined,
@@ -91,7 +102,8 @@ export function pipelinesModel(
   return repos.map((entry): PipelineRow => {
     const repoState = snapshot?.state.repositories.find((r) => r.repoId === entry.id)
     const index = ticketIndex(repoState !== undefined && repoState.ok ? repoState.items : [])
-    const stageRows = sessions.filter((s) => s.phase !== 'ended' && s.stage !== null && s.repoId === entry.id).map((s) => stageRowFor(entry.id, s, index))
+    const stageSessions = sessions.filter((s) => s.phase !== 'ended' && s.stage !== null && s.repoId === entry.id)
+    const stageRows = stageSessions.filter(isRunning).map((s) => stageRowFor(entry.id, s, index))
     if (!('config' in entry)) return { ready: false, repoId: entry.id, name: entry.displayName, sessions: stageRows }
 
     const tick = snapshot?.tick.find((t) => t.repoId === entry.id)
@@ -100,7 +112,7 @@ export function pipelinesModel(
     const owner: DispatchOwner = dispatchStatus?.owner ?? 'none'
 
     const itemRows = sessionsFor(entry.id, index, numbers)
-    const stageNumbers = new Set(stageRows.map((r) => r.number))
+    const stageNumbers = new Set(stageSessions.map((s) => s.stage?.number))
 
     return {
       ready: true,

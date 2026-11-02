@@ -1,4 +1,4 @@
-// DESIGN §4 PhaseBar — six segments, one Tooltip/aria-label for the bar.
+// DESIGN §4 PhaseBar — five segments, one Tooltip/aria-label for the bar.
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { cn } from '@/renderer/lib/utils'
 import type { LabelKey } from '@/utils/labels/vocabulary'

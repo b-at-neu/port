@@ -5,19 +5,22 @@ import { RUN_TARGET } from '@/types/dispatch'
 import type { TranscriptSource } from '@/utils/sessions/transcript'
 import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
 import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'
-import { fixtureStorageReport, fixtureUsageSummary } from '@/main/fixtures/settings'
-import { fixtureBoardSnapshot } from '@/main/fixtures/board'
-import { fixtureAuditRead } from '@/main/fixtures/audit'
-import { fixtureBacklog } from '@/main/fixtures/backlog'
-import { fixtureReleaseStatus } from '@/main/fixtures/releases'
-import { fixtureClaimPreflight, fixtureGatePreflight } from '@/main/fixtures/dialogs'
-import { fixtureFolders, fixtureSessionChanges } from '@/main/fixtures/folders'
-import { FIXTURE_REPOSITORIES } from '@/main/fixtures/repos'
-import { fixtureAttachEntries } from '@/main/fixtures/entries'
-import { fixturePermissionSnapshots, fixtureSearchResult, fixtureSessionAttach, fixtureSessionsScan, fixtureSessionSnapshots, STREAMING_KEY } from '@/main/fixtures/sessions'
-import { fixtureSessionIndex } from '@/main/fixtures/session-index'
+import { fixtureStorageReport, fixtureUsageSummary } from './settings'
+import { fixtureBoardSnapshot } from './board'
+import { fixtureAuditRead } from './audit'
+import { fixtureBacklog } from './backlog'
+import { fixtureReleaseStatus } from './releases'
+import { fixtureClaimPreflight, fixtureGatePreflight } from './dialogs'
+import { fixtureFolders, fixtureSessionChanges } from './folders'
+import { FIXTURE_REPOSITORIES } from './repos'
+import { fixtureAttachEntries } from './entries'
+import { fixturePermissionSnapshots, fixtureSearchResult, fixtureSessionAttach, fixtureSessionsScan, fixtureSessionSnapshots, STREAMING_KEY } from './sessions'
+import { fixtureSessionIndex } from './session-index'
 import type { FixtureScenario } from '@/types/fixtures'
-import { fixtureWorktreesPurge, fixtureWorktreesReclaim, fixtureWorktreesReport } from '@/main/fixtures/worktrees'
+import type { BoardSnapshot } from '@/types/board'
+import { FIXTURE_REGISTRY_ERROR, fixtureFailingBacklog, fixtureFailingBoard, fixtureFailingSessionScan } from './failing'
+import { fixtureEmptySessionScan, fixtureUnregisteredBoard } from './unregistered'
+import { fixtureWorktreesPurge, fixtureWorktreesReclaim, fixtureWorktreesReport } from './worktrees'
 
 /** Exhaustive by construction: a new `IpcChannel` fails `pnpm typecheck` in
  *  `fixtureHandlers`'s own return literal until a fixture exists for it. */
@@ -25,6 +28,12 @@ type FixtureHandlers = { readonly [C in IpcChannel]: (request: IpcMap[C]['reques
 
 // Pins the live sidebar session and a History row; archives a second History row, per the Implementation checklist.
 const FIXTURE_MARKS = { pinned: ['fixture-claude-1', 'fixture-history-2'], archived: ['fixture-history-3'] }
+
+function boardFor(now: Date, scenario: FixtureScenario): BoardSnapshot {
+  if (scenario === 'unregistered') return fixtureUnregisteredBoard(now)
+  if (scenario === 'failing') return fixtureFailingBoard(now)
+  return fixtureBoardSnapshot(now, scenario)
+}
 
 function transcriptSourceFor(sessionId: string, agentId: string | null, now: Date): TranscriptSource {
   return { sessionId, agentId, path: '', sizeBytes: 0, modifiedAt: now.toISOString(), recordCount: 0, malformedLines: 0 }
@@ -35,10 +44,14 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     // --- Screen reads, populated -------------------------------------------
     'app:info': () => ({ app: '0.1.0', electron: '38.2.1', node: '22.14.0', chromium: '140.0.0.0', commit: null }),
 
-    'repos:list': () => ({ ok: true, repositories: FIXTURE_REPOSITORIES }),
+    'repos:list': () => {
+      if (scenario === 'unregistered') return { ok: true, repositories: [] }
+      if (scenario === 'registry-error') return FIXTURE_REGISTRY_ERROR
+      return { ok: true, repositories: FIXTURE_REPOSITORIES }
+    },
 
-    'board:snapshot': () => fixtureBoardSnapshot(now, scenario),
-    'board:refresh': () => fixtureBoardSnapshot(now, scenario),
+    'board:snapshot': () => boardFor(now, scenario),
+    'board:refresh': () => boardFor(now, scenario),
 
     'runtime:preflight': () => ({
       checkedAt: now.toISOString(),
@@ -50,10 +63,17 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
       detail: null,
     }),
 
-    'sessions:scan': () => fixtureSessionsScan(now),
+    'sessions:scan': () => {
+      if (scenario === 'unregistered') return fixtureEmptySessionScan(now)
+      if (scenario === 'failing') return fixtureFailingSessionScan(now)
+      return fixtureSessionsScan(now)
+    },
 
-    'session:list': () => (scenario === 'empty' ? fixturePermissionSnapshots(now) : fixtureSessionSnapshots(now)),
-    'session:index': () => (scenario === 'empty' ? [] : fixtureSessionIndex(now)),
+    'session:list': () => {
+      if (scenario === 'unregistered') return []
+      return scenario === 'empty' ? fixturePermissionSnapshots(now) : fixtureSessionSnapshots(now)
+    },
+    'session:index': () => (scenario === 'empty' || scenario === 'unregistered' ? [] : fixtureSessionIndex(now)),
     'session:capacity': () => ({ limit: 4, ceiling: 8 }),
     'session:capacity:set': () => ({ limit: 4, ceiling: 8 }),
     'session:restore:list': () => ({ entries: [] }),
@@ -106,7 +126,7 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'session:restore:discard': () => ({ ok: true }),
 
     'gh:status': () => ({ kind: 'signed-in', checkedAt: now.toISOString(), account: 'octo-operator', scopes: ['repo', 'read:org', 'workflow'] }),
-    'backlog:list': (request) => fixtureBacklog(now, request.repoId),
+    'backlog:list': (request) => (scenario === 'failing' ? fixtureFailingBacklog(now, request.repoId) : fixtureBacklog(now, request.repoId)),
     'audit:list': (request) => fixtureAuditRead(now, scenario, request),
     'session:defaults': () => DEFAULT_SESSION_DEFAULTS,
     'session:defaults:set': (request) => request,

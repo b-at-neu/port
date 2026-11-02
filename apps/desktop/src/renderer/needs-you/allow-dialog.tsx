@@ -4,14 +4,15 @@ import { useState, useSyncExternalStore } from 'react'
 import { Button } from '@/renderer/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/renderer/components/ui/dialog'
 import { Input } from '@/renderer/components/ui/input'
-import { toast } from 'sonner'
 import type { RepoId } from '@/utils/repos'
 import type { StageDenial, StageAllowResult } from '@/types/stage'
+import type { ActionToast } from '@/types/toast'
 import { invoke } from '@/renderer/data/invoke'
+import { runInBackground } from '@/renderer/lib/background-action'
 import { useQueryClient } from '@tanstack/react-query'
 import { ipcQueryOptions } from '@/renderer/data/query'
 
-type AllowDialogState = { readonly open: false } | { readonly open: true; readonly repoId: RepoId; readonly denial: StageDenial; readonly rule: string; readonly submitting: boolean }
+type AllowDialogState = { readonly open: false } | { readonly open: true; readonly repoId: RepoId; readonly denial: StageDenial; readonly rule: string }
 
 let state: AllowDialogState = { open: false }
 const listeners = new Set<() => void>()
@@ -31,25 +32,29 @@ function getState(): AllowDialogState {
 }
 
 export function openAllowDialog(repoId: RepoId, denial: StageDenial): void {
-  setState({ open: true, repoId, denial, rule: denial.rule, submitting: false })
+  setState({ open: true, repoId, denial, rule: denial.rule })
 }
 
 function closeAllowDialog(): void {
   setState({ open: false })
 }
 
-function resultToast(rule: string, result: StageAllowResult): string {
+function resultToast(rule: string, result: StageAllowResult): ActionToast {
+  const openPr = (url: string) => ({ label: 'Open PR', onClick: () => void window.open(url, '_blank') })
+  const plain = { description: null, action: null, cancel: null } as const
   switch (result.kind) {
-    case 'ok':
-      return `Allowed ${rule}. Commit .claude/settings.json and .claude/port.config.json to keep it.`
+    case 'proposed':
+      return { ...plain, tone: 'success', title: `Opened PR#${String(result.number)} to allow ${rule}. Merge it to apply.`, action: openPr(result.url) }
+    case 'already-proposed':
+      return { ...plain, tone: 'info', title: `PR#${String(result.number)} already proposes ${rule}. Merge it to apply.`, action: openPr(result.url) }
     case 'already-allowed':
-      return `${rule} is already allowed.`
+      return { ...plain, tone: 'info', title: `${rule} is already allowed on ${result.integration}.` }
     case 'invalid-rule':
-      return `Couldn't allow ${rule}: ${result.reason}.`
-    case 'write-failed':
-      return `Couldn't allow ${rule}: ${result.file} ${result.message}.`
+      return { ...plain, tone: 'error', title: `Couldn't allow ${rule}: ${result.reason}.` }
+    case 'failed':
+      return { ...plain, tone: 'error', title: `Couldn't open the allow PR (${result.step}): ${result.message}` }
     case 'unknown-denial':
-      return "That denial isn't tracked any more."
+      return { ...plain, tone: 'info', title: "That denial isn't tracked any more." }
   }
 }
 
@@ -63,30 +68,29 @@ export function AllowDialog() {
 
   async function submit(): Promise<void> {
     if (!current.open) return
-    setState({ ...current, submitting: true })
-    try {
-      const result = await invoke('stage:allow', { repoId: current.repoId, denialId: current.denial.id, rule: displayRule })
-      toast(resultToast(displayRule, result))
-      void queryClient.invalidateQueries({ queryKey: ipcQueryOptions('board:snapshot').queryKey })
-    } catch (error) {
-      console.error('Failed to reach the main process while allowing a rule', error)
-      toast(`Couldn't reach the main process to allow ${displayRule}.`)
-    } finally {
-      closeAllowDialog()
-      setRule('')
-    }
+    const { repoId, denial } = current
+    closeAllowDialog()
+    setRule('')
+    await runInBackground({
+      id: `allow:${repoId}:${denial.id}`,
+      pending: 'Opening the allow PR…',
+      run: () => invoke('stage:allow', { repoId, denialId: denial.id, rule: displayRule }),
+      toToast: (result) => resultToast(displayRule, result),
+    })
+    void queryClient.invalidateQueries({ queryKey: ipcQueryOptions('board:snapshot').queryKey })
   }
 
   async function dismiss(): Promise<void> {
     if (!current.open) return
-    try {
-      await invoke('stage:dismiss-denial', { repoId: current.repoId, denialId: current.denial.id })
-    } catch (error) {
-      console.error('Failed to reach the main process while dismissing a denial', error)
-    } finally {
-      closeAllowDialog()
-      setRule('')
-    }
+    const { repoId, denial } = current
+    closeAllowDialog()
+    setRule('')
+    await runInBackground({
+      id: `allow-dismiss:${repoId}:${denial.id}`,
+      pending: 'Dismissing the denial…',
+      run: () => invoke('stage:dismiss-denial', { repoId, denialId: denial.id }),
+      toToast: () => ({ tone: 'success', title: 'Dismissed the denial.', description: null, action: null, cancel: null }),
+    })
   }
 
   return (
@@ -104,8 +108,7 @@ export function AllowDialog() {
           <DialogTitle>Allow this from now on?</DialogTitle>
         </DialogHeader>
         <p className="text-small text-muted-foreground">
-          Adds this rule to .claude/settings.json and extraAllow in .claude/port.config.json, in {String(current.repoId)}&apos;s main checkout. Every stage session in this repo will be allowed to run
-          it.
+          Opens a PR into the integration branch that adds this rule to .claude/settings.json and extraAllow in .claude/port.config.json. Stage sessions get it once the PR merges.
         </p>
         <Input value={displayRule} onChange={(event) => setRule(event.target.value)} />
         <DialogFooter>
@@ -115,9 +118,7 @@ export function AllowDialog() {
           <Button variant="ghost" onClick={() => void dismiss()}>
             Dismiss
           </Button>
-          <Button onClick={() => void submit()} disabled={current.submitting}>
-            Allow from now on
-          </Button>
+          <Button onClick={() => void submit()}>Open allow PR</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

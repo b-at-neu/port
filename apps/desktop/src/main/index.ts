@@ -2,7 +2,7 @@ import { app, BrowserWindow, Menu } from 'electron'
 import { isAbsolute, join } from 'node:path'
 import { devDockIconPath, windowIconPath } from '@/main/icon'
 import { registerIpc, broadcastAppCommand } from '@/main/ipc'
-import { registerFixtureIpc } from '@/main/fixtures'
+import { registerFixtureIpc } from '#app-fixtures'
 import { fixtureMode } from '@/main/fixtures/mode'
 import { e2eMode } from '@/main/e2e/mode'
 import { setE2ERoute } from '@/main/platform/run'
@@ -52,7 +52,7 @@ app.setPath('userData', defaultUserDataPath)
 
 // An `on` result relocates `userData` before the single-instance lock is ever requested, so a
 // fixture run never contends for the operator's own lock or touches their real profile.
-const fixture = fixtureMode(process.env, app.isPackaged, __PORT_PACKAGED_FIXTURES__, isAbsolute)
+const fixture = fixtureMode(process.env, app.isPackaged, { compiled: __PORT_FIXTURES__, packaged: __PORT_PACKAGED_FIXTURES__ }, isAbsolute)
 const e2e = e2eMode(process.env, app.isPackaged, isAbsolute)
 
 if (fixture.kind === 'invalid') {

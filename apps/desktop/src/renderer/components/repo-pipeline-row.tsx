@@ -89,7 +89,7 @@ function SessionLinks({ sessions, selectedKey }: { readonly sessions: readonly P
   )
 }
 
-export function RepoPipelineRow({ row, collapsed, selectedKey, onToggle }: { readonly row: PipelineRow; readonly collapsed: boolean; readonly selectedKey: string | null; readonly onToggle: () => void }) {
+export function RepoPipelineRow({ row, collapsed, needsYouDot, selectedKey, onToggle }: { readonly row: PipelineRow; readonly collapsed: boolean; readonly needsYouDot: boolean; readonly selectedKey: string | null; readonly onToggle: () => void }) {
   if (!row.ready) {
     return (
       <div>
@@ -117,7 +117,7 @@ export function RepoPipelineRow({ row, collapsed, selectedKey, onToggle }: { rea
         <span className="flex-1 truncate" title={row.name}>
           {row.name}
         </span>
-        {collapsed && row.needsYou ? <PhaseDot tone={NEEDS_YOU_TONE} /> : null}
+        {collapsed && needsYouDot && row.needsYou ? <PhaseDot tone={NEEDS_YOU_TONE} /> : null}
         <RunStateMenu row={row} />
       </div>
       {!collapsed ? <SessionLinks sessions={row.sessions} selectedKey={selectedKey} /> : null}

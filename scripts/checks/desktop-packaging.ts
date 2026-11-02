@@ -84,6 +84,49 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
+  // --- fixture-modes.mjs and bundle-audit.mjs's fixture rules: only development/fixtures/smoke compile fixtures,
+  // the audit's sentinel still names a real fixture literal, and `dist` builds in the default (fixture-free) mode. ---
+  {
+    const modesPath = join(appDir, 'scripts/fixture-modes.mjs');
+    const bundleAuditPath = join(appDir, 'scripts/bundle-audit.mjs');
+    const reposPath = join(appDir, 'tests/fixtures/app/repos.ts');
+    if (!existsSync(modesPath) || !existsSync(bundleAuditPath) || !existsSync(reposPath)) {
+      fail('desktop-packaging', `${relOf(modesPath)}, ${relOf(bundleAuditPath)} and ${relOf(reposPath)} must all exist`);
+    } else {
+      const modes = await import(pathToFileURL(modesPath).href);
+      const audit = await import(pathToFileURL(bundleAuditPath).href);
+      const cases: [string, boolean, boolean][] = [
+        ['production', false, false],
+        ['unknown-mode', false, false],
+        ['development', true, false],
+        ['fixtures', true, false],
+        ['smoke', true, true],
+      ];
+      for (const [mode, compiled, packaged] of cases) {
+        const got = modes.fixtureBuild(mode);
+        expect(got.compiled === compiled && got.packaged === packaged, 'desktop-packaging', `fixtureBuild('${mode}') returned ${JSON.stringify(got)}, expected compiled=${compiled} packaged=${packaged}`);
+      }
+
+      expect(audit.fixtureLeaks([{ path: '/out/main/index.js', text: `x ${audit.FIXTURE_SENTINEL} y` }]).length === 1, 'desktop-packaging', 'fixtureLeaks did not flag a text containing the fixture sentinel');
+      expect(audit.fixtureLeaks([{ path: '/out/main/index.js', text: 'const real = 1' }]).length === 0, 'desktop-packaging', 'fixtureLeaks flagged a text without the fixture sentinel');
+      expect(readFileSync(reposPath, 'utf8').includes(audit.FIXTURE_SENTINEL), 'desktop-packaging', `${relOf(reposPath)} no longer contains the fixture sentinel '${audit.FIXTURE_SENTINEL}' — the bundle audit would pass vacuously`);
+
+      for (const [entry, separator, expected] of [
+        ['/out/main/chunks/engine.js', '\\', 'out\\main\\chunks\\engine.js'],
+        ['/out/main/index.js', '/', 'out/main/index.js'],
+      ]) {
+        const got = audit.asarArchivePath(entry, separator);
+        expect(got === expected, 'desktop-packaging', `asarArchivePath(${JSON.stringify(entry)}, ${JSON.stringify(separator)}) returned ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`);
+      }
+
+      const auditBundleText = readFileSync(join(appDir, 'scripts/audit-bundle.mjs'), 'utf8');
+      expect(auditBundleText.includes('asarArchivePath(entry, sep)') && !auditBundleText.includes('extractFile(asarPath, entry.slice(1))'), 'desktop-packaging', 'audit-bundle.mjs must pass extractFile the native-separator path from asarArchivePath(entry, sep), not entry.slice(1)');
+
+      const dist: string = readJson('apps/desktop/package.json').scripts?.dist ?? '';
+      expect(!/electron-vite build[^&]*--mode/.test(dist), 'desktop-packaging', `'dist' script must build in the default mode so no fixtures are compiled, got: ${dist}`);
+    }
+  }
+
   // --- electron-builder.config.mjs derives exclusions and excludes no asarUnpack: a
   // hand-typed exclusion list would defeat the derive-from-the-manifest contract. ---
   {
@@ -94,6 +137,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
       expect(text.includes('sdkPlatformPackages('), 'desktop-packaging', `${relOf(configPath)} must call sdkPlatformPackages( to derive its exclusions`);
       expect(!/\basarUnpack\b/.test(text), 'desktop-packaging', `${relOf(configPath)} must not set asarUnpack — there are no native production dependencies`);
       expect(/extraResources:\s*\[\s*\{\s*from:\s*['"]NOTICE\.txt['"]/.test(text), 'desktop-packaging', `${relOf(configPath)} must copy NOTICE.txt through extraResources`);
+      expect(/target:\s*\[\s*\{\s*target:\s*['"]dmg['"],\s*arch:\s*\[\s*['"]x64['"],\s*['"]arm64['"]\s*\]/.test(text), 'desktop-packaging', `${relOf(configPath)}'s mac target must build dmg for both x64 and arm64`);
 
       // --- productName/appId/executableName name 'port', never 'Claude' — the installed app must never present itself as a Claude product. ---
       const productNameMatch = /productName:\s*['"]([^'"]+)['"]/.exec(text);

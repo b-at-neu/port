@@ -2,12 +2,13 @@
 // same files at once).
 import { useSyncExternalStore } from 'react'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/renderer/components/ui/alert-dialog'
-import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
 import type { TickHeld } from '@/types/tick'
+import type { ActionToast } from '@/types/toast'
 import type { RepoId } from '@/utils/repos'
 import type { HeldForceDispatchResult } from '@/types/dispatch'
 import { invoke } from '@/renderer/data/invoke'
+import { runInBackground } from '@/renderer/lib/background-action'
 import { ipcQueryOptions } from '@/renderer/data/query'
 
 interface ForceDispatchTarget {
@@ -39,14 +40,15 @@ function close(): void {
   notify()
 }
 
-function resultToast(number: number, result: HeldForceDispatchResult): string {
+function resultToast(number: number, result: HeldForceDispatchResult): ActionToast {
+  const plain = { description: null, action: null, cancel: null } as const
   switch (result.kind) {
     case 'ok':
-      return `#${String(number)} will dispatch on the next tick.`
+      return { ...plain, tone: 'success', title: `#${String(number)} will dispatch on the next tick.` }
     case 'not-held':
-      return `#${String(number)} isn't held anymore. Nothing to force.`
+      return { ...plain, tone: 'info', title: `#${String(number)} isn't held anymore. Nothing to force.` }
     case 'not-owned':
-      return `This app doesn't run that repository, so it can't dispatch #${String(number)}.`
+      return { ...plain, tone: 'error', title: `This app doesn't run that repository, so it can't dispatch #${String(number)}.` }
   }
 }
 
@@ -59,16 +61,14 @@ export function ForceDispatchDialog() {
   async function confirm(): Promise<void> {
     if (target === null) return
     const { repoId, number } = target
-    try {
-      const result = await invoke('held:force-dispatch', { repoId, number })
-      toast(resultToast(number, result))
-      void queryClient.invalidateQueries({ queryKey: ipcQueryOptions('board:snapshot').queryKey })
-    } catch (error) {
-      console.error('Failed to reach the main process while forcing a dispatch', error)
-      toast(`Couldn't reach the main process to dispatch #${String(number)}.`)
-    } finally {
-      close()
-    }
+    close()
+    await runInBackground({
+      id: `force-dispatch:${repoId}:${String(number)}`,
+      pending: `Dispatching #${String(number)}…`,
+      run: () => invoke('held:force-dispatch', { repoId, number }),
+      toToast: (result) => resultToast(number, result),
+    })
+    void queryClient.invalidateQueries({ queryKey: ipcQueryOptions('board:snapshot').queryKey })
   }
 
   return (

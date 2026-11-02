@@ -26,6 +26,8 @@ Components use roles, never values. Tailwind arbitrary colour values (`bg-[#…]
 | `foreground-secondary` | `#3f3f46` | `#d4d4d8` | Sidebar items, secondary labels |
 | `muted-foreground` | `#71717a` | `#a1a1aa` | Metadata, ticket numbers, section labels, timestamps |
 | `faint` | `#a1a1aa` | `#71717a` | **Non-text only**: idle dots, disabled glyphs, decorative strokes, scroll bar thumbs |
+| `segment-past` | `#a1a1aa` | `#d4d4d8` | Finished `PhaseBar` segments and `PhaseList` dots |
+| `segment-future` | `#e4e4e7` | `#2b2f38` | Not-yet-reached `PhaseBar` segments and `PhaseList` dots |
 | `primary` | `#172554` | `#2f4a8a` | Primary button fill and the send button. The dark fill is a lighter navy with white text |
 | `primary-foreground` | `#ffffff` | `#ffffff` | Text and icons on `primary` |
 | `primary-text` | `#172554` | `#a5b8e3` | Links, row actions, `ContextMeter` fill |
@@ -40,7 +42,7 @@ Components use roles, never values. Tailwind arbitrary colour values (`bg-[#…]
 | `syntax-constant` | `#0550ae` | `#79c0ff` | Highlighted code: numbers, literals |
 | `syntax-function` | `#8250df` | `#d2a8ff` | Highlighted code: function/type names |
 
-**Navy is the brand; blue is a status.** Navy marks what you can act on and port's own identity. Blue appears only as the `working` status below. The two never stand in for each other. `accent`, `selection` and `primary` are the brand in both themes, and anything not interactive (pending PhaseBar segments, meter tracks, tags) uses `border` or `muted`, never `accent`.
+**Navy is the brand; blue is a status.** Navy marks what you can act on and port's own identity. Blue appears only as the `working` status below. The two never stand in for each other. `accent`, `selection` and `primary` are the brand in both themes, and anything not interactive (`segment-future` PhaseBar segments, meter tracks, tags) uses `border` or `muted`, never `accent`.
 
 ### Status roles
 
@@ -72,8 +74,9 @@ Where a status colour says what is happening, a phase colour says which pipeline
 
 - **Queued is a ring, in flight is filled.** A queued trigger label draws its dot as a 1px ring and an in-flight one as a filled dot. The same split holds on GitHub: a trigger is a lighter shade than its in-flight label.
 - **GitHub's in-flight label is the light dot.** Each palette's in-flight label uses exactly its light-theme dot colour, and its triggers sit lighter. Gate and terminal labels sit deeper still. `refresh` is grey, and the markers `claude` and `auto plan` stay neutral off the palette.
-- **Waiting on you pulses.** A gate that needs the operator (`planReview`, `approved`) pulses in its own phase colour.
+- **Waiting on you pulses.** A gate that needs the operator (`planReview`, `approved`) pulses in its own phase colour. In the sidebar, a running pipeline session's dot pulses in its phase colour.
 - **`needs-you` overrides.** A gate label, a stalled or interrupted item, and a live stage session waiting on a permission prompt, a question or a `BLOCKED:` hand-back show the `needs-you` palette and pulse, whatever phase they are in. Once the operator answers, the dot goes back to its phase colour.
+- **Blocked is held, not waiting.** A `blocked` ticket keeps the `needs-you` palette but does not pulse on the Board, because it sits in the Blocked section rather than Waiting on you. Only the sidebar dot of a live session with a `BLOCKED:` hand-back still pulses, since that marks the session, not the ticket's place in a queue.
 - **Pills are solid.** A phase pill is a saturated fill with white or near-black text, the same in both themes; the dot inside it takes the text colour. Tinted pills are for status (`StatusPill`), not phases.
 - **Hues stay apart.** Plan purple, implement blue, review yellow, revise pink, needs-you red, done green: every phase sits ≥30° from every other, so nothing but `needs-you` reads as red and nothing but `done` as green.
 - **Review's light dot is the pill's yellow, darkened** (`#a68500`). Bright yellow measures under 2:1 on white, and a yellow dark enough for 3:1 can only be a deep gold, so the light-theme dot is deliberately darker than its pill. It keeps the pill's hue exactly, so it reads as the same yellow in shadow rather than a different colour. The dark theme's dot is the pill's own `#facc15`.
@@ -124,7 +127,7 @@ Dark surface lightness (CIE L*): sidebar 6.3 · background 10.7 · card 15.2 · 
 | Screen header height | 44px | The bar at the top of each screen |
 | List row height | 36px | Board, Backlog, Needs you |
 | Group header height | 32px | "Waiting on you", "In progress", … |
-| Sidebar row height | 28px (sessions under a repo: 26px) | Sidebar |
+| Sidebar row height | 28px | Sidebar |
 | Sidebar width | 248px, collapsible | — |
 | Detail pane width | 290px | Right-hand pane |
 | Conversation column | max 680px, centred | Session view |
@@ -146,7 +149,7 @@ Dark surface lightness (CIE L*): sidebar 6.3 · background 10.7 · card 15.2 · 
 - Nothing below 12px.
 - Counts, costs, durations and ticket numbers use tabular figures (`font-variant-numeric: tabular-nums`).
 - Section labels are sentence case at 12px/500, not uppercase.
-- Sidebar: screen, repo and session rows at 14px; sessions nested under a repo and the footer at 13px.
+- Sidebar: screen, repo and session rows at 14px; the footer at 13px.
 
 ## 3. Layout
 
@@ -154,13 +157,13 @@ Dark surface lightness (CIE L*): sidebar 6.3 · background 10.7 · card 15.2 · 
 
 **Sidebar, top to bottom:**
 1. **Mark and wordmark.**
-2. **Screens:** Needs you (red count), Board, Backlog, Releases, Audit log.
+2. **Screens:** Board, Needs you (red count), Backlog, Releases, Audit log.
 3. **Pipelines:** one row per registered repo. Each row has:
    - a caret that collapses it, with the state remembered;
    - the repo name;
    - its run-state `StatusPill` menu (§4).
 
-   The repo's live stage sessions are nested under it, labelled `#N <title>`. Each has a `PhaseDot` in its phase colour, so the colour alone says which phase it is in; it turns red and pulses while the session needs you. The row for the session on screen, a live stage session or a stage transcript, is drawn in `selection`. If its repo is collapsed, the repo row is drawn in `selection` instead. A collapsed repo with a session that needs you shows a red dot next to its name.
+   The repo's stage sessions that are actively running and not waiting on you are nested under it, labelled `#N <title>`. Each has a `PhaseDot` in its phase colour, so the colour alone says which phase it is in; it pulses while the session runs. A session that needs you, sits idle or has reached a gate or "Ready to merge" leaves the list. The row for the session on screen, a live stage session or a stage transcript, is drawn in `selection`. If its repo is collapsed, the repo row is drawn in `selection` instead. A collapsed repo with a session that needs you shows a red dot next to its name, only when more than one repo is registered.
 4. **Your sessions:** a header with **New session** and **History** as icon buttons on its right, then your own live sessions. The open one is drawn in `selection`.
 5. **Footer:** a Settings button across the full footer width, plus one status dot for the `claude` CLI and `gh`, red when either is missing or signed out. The dot opens a popover on hover, focus and click: one line per connection with its state and age, a line per repository read, and a link to Settings → Connections. Leaving closes it after 150ms, and Esc closes it.
 
@@ -168,8 +171,8 @@ Dark surface lightness (CIE L*): sidebar 6.3 · background 10.7 · card 15.2 · 
 
 | Screen | Content |
 | --- | --- |
-| Needs you | Everything waiting on the operator, newest first, each with its action inline: plan reviews, PRs ready to merge, questions from stage sessions, needs-human escalations, blocked items |
-| Board | Grouped list: **Waiting on you**, **In progress**, **Queued**. Toggle grouping by phase or by repo, plus a repo filter |
+| Needs you | Everything waiting on the operator, newest first, each with its action inline: plan reviews, PRs ready to merge, questions from stage sessions, needs-human escalations. Blocked tickets are not here: they are held, and the Board shows what they wait on |
+| Board | Grouped list: **Waiting on you**, **In progress**, **Blocked**, **Queued**. Toggle grouping by phase or by repo, plus a repo filter |
 | Backlog | Open tickets not yet in a pipeline, with **Work on**: interactive plan review or auto-plan |
 | Releases | Per repo, the upcoming release (what merged since the last tag, the recommended version) with the one action its phase allows (**Cut release**, **Open PR**, **Publish**), then every previous release, whose notes open in the detail pane |
 | Session | Conversation and composer. **Changes** opens the session's diff in the detail pane |
@@ -187,6 +190,7 @@ Scoping epics and analytics are out of scope for the first release.
 - repo tag;
 - `PhaseBar`;
 - phase pill;
+- blocked-on tag, on a blocked ticket only: the open dependency it waits on, else the agent's or the ticket's reason, else "Reason on ticket";
 - the one next action as a link ("Review plan", "Open PR", "Refresh").
 
 **Conversation:** document flow, not chat bubbles.
@@ -226,8 +230,8 @@ Scoping epics and analytics are out of scope for the first release.
 | `Screen`, `ScreenBody` | The layout every screen is built from: a 44px `ScreenHeader`, then one body variant: `list` (edge to edge, rows inset themselves), `page` (16px padding), `form` (16px padding, 512px column), `conversation` (16px padding, centred 680px column). A screen never sets its own outer padding |
 | `StatusPill` | Dot, then label, using the status roles. With a menu it shows a chevron: the repo run state is `● Running ▾` with Run, Drain and Pause, each with a one-line hint (Drain "finish in-flight", Pause "stop now") |
 | `LabelChip` | A GitHub label as a full-radius pill: 11px/500, 1px `border` outline, max 8rem and truncating. Its fill is the label's own GitHub colour, which is repository data and not a design token, so this is the one place a hex reaches a component, applied through `style` from `renderer/lib/label-color.ts`. Text is black or white, whichever contrasts more with the fill. A missing or malformed colour falls back to `muted` with `foreground-secondary` text |
-| `PhasePill`, `PhaseDot` | A `StatusPill`'s anatomy as a solid fill from the phase palette (§1); its dot is drawn in the pill's text colour. `PhaseDot` is a ring while the stage is queued and filled while it is in flight, and pulses while the stage waits on you. Unstaged items use the `idle` role. The `needs-you` palette overrides the phase colour for anything that needs the operator |
-| `PhaseBar` | Six 10×4px segments with a 2px gap, for plan, plan review, implement, review, revision, merge. Finished segments use their phase's dot at 40%, the current one the current stage's full phase dot colour, or `needs-you` when it waits on you, complete `done`, the rest `border`. Tooltip names the phase |
+| `PhasePill`, `PhaseDot` | A `StatusPill`'s anatomy as a solid fill from the phase palette (§1); its dot is drawn in the pill's text colour. `PhaseDot` is a ring while the stage is queued and filled while it is in flight, and pulses while the stage waits on you, or, for a running pipeline session in the sidebar, in its phase colour. Unstaged items use the `idle` role. The `needs-you` palette overrides the phase colour for anything that needs the operator |
+| `PhaseBar` | Five 10×4px segments with a 2px gap, for plan (including plan review), implement, review, revision, merge. Finished segments use `segment-past`, the current one the current stage's full phase dot colour, or `needs-you` when it waits on you, not-yet-reached ones `segment-future`; a merged item is every segment `done`. Tooltip names the phase |
 | `PhaseList` | Vertical version for the detail pane: an 8px dot per phase in the same colours as `PhaseBar`, with who and when ("Plan approved by you · 2h ago") and live cost and time on the current phase, and, under each phase, the sessions that ran it (agent or "Your session", when, state, cost), with a "Your sessions" group for ones no phase can claim |
 | `TicketRow`, `RepoPipelineRow`, `SessionRow`, `NeedsYouItem` | The list rows (§3) |
 | `ToolCallRow`, `DiffView`, `Markdown`, `CodeBlock`, `Composer`, `ContextMeter` | Session pieces. `ContextMeter` is a `Context` label, a 56×4px bar and a percentage, with token counts in its tooltip. `ToolCallRow` carries a per-tool one-line summary and default-open rule (edits with a diff, TodoWrite, a running subagent, a failed Bash); its body delegates to `ToolCallDetail`'s Bash/TodoWrite/Task/lookup views. A subagent's children nest recursively under its row, indented with a `border-l` rule; an orphaned child (its parent row evicted from the window) carries the label "Subagent · parent call not shown" |
@@ -247,17 +251,19 @@ Scoping epics and analytics are out of scope for the first release.
 - **Loading:** `Skeleton` rows shaped like the real content. A spinner appears only inside a button whose action is running.
 - **Empty:** `EmptyState`, which is an icon, one sentence, and the single useful action.
 - **Error:** an `ErrorBanner` inside the affected region, saying what failed and how to fix it. A read failure never opens a dialog.
-- **Stale:** when a source stops refreshing, the screen header shows "Updated 3m ago" in `attention`. The Board header always shows its GitHub timing ("Checked GitHub 40s ago · next check in 1:20") and turns `attention` when a read fails or goes stale.
+- **Stale:** when a source stops refreshing, the screen header shows "Updated 3m ago" in `attention`. The Board header always shows its GitHub timing ("Checked GitHub 40s ago") and turns `attention` when a read fails or goes stale.
 
 **Actions:**
 - **Reversible actions apply immediately with a toast:** run, drain, retry. The toast offers Undo where possible.
 - **Actions with consequences open an `AlertDialog`:** stopping a session, pausing a pipeline (it stops its running agents), clearing needs-human, sending an approved PR back, removing a worktree. The dialog states the consequence, and its confirm button names the action ("Stop session", never "OK").
-- **A running action shows its pending state on its own button.** A failure produces a toast with the reason. Nothing retries on its own, and nothing offers to overwrite a conflicting write.
+- **A dialog asks one question.** Its buttons are the answers, with a top-right X as cancel. Choosing an answer closes the dialog, shows a loading toast, then a success or error toast. The result never renders inside the dialog.
+- **Three dialogs are exceptions.** The plan gate is a review surface, so its reading steps stay in the dialog and only the write moves to a toast. The permission queue answers in place and has no X, because dismissing already means Deny. New session is a form whose errors are fixed in place.
+- **An action started outside a dialog shows its pending state on its own button.** A failure produces a toast with the reason. Nothing retries on its own, and nothing offers to overwrite a conflicting write.
 
 ## 5. Motion and feedback
 
 - Popovers, menus, the detail pane and dialogs enter and leave with a 150ms ease-out fade and a 4px slide.
-- The only continuous animation is a soft 2s pulse on the dot of something that needs you: red for anything that needs the operator, or the phase's own colour for a gate such as plan review. Amber never pulses.
+- The only continuous animation is a soft 2s pulse on the dot of something that needs you: red for anything that needs the operator, or the phase's own colour for a gate such as plan review or a running pipeline session in the sidebar. Amber never pulses.
 - Streaming text appears as it arrives, with no typing effect.
 - Under the OS reduce-motion setting, every transition is instant and the pulse stops.
 
@@ -322,7 +328,7 @@ The markers `marker` and `autoPlan` are never shown as phases; `autoPlan` appear
 - [ ] shadcn primitives first, then the shared port components in §4. A pattern used twice becomes a shared component.
 - [ ] lucide icons only: 16px in the interface, 14px inline in text, one stroke width.
 - [ ] Every data region has loading, empty, error and stale states (§4).
-- [ ] Reversible actions toast; consequential ones confirm with a named-action `AlertDialog`.
+- [ ] Reversible actions toast; consequential ones confirm with a named-action `AlertDialog`. A dialog answer closes it and reports through a loading, then a result toast (§4).
 - [ ] Phase names come from the role map in §6, never a label string.
 - [ ] Copy is sentence case, verb-first buttons, no exclamation marks; messages that need the operator lead with the action.
 - [ ] Screenshots in light and dark: run `pnpm screenshots`, Read the screen's PNGs in `apps/desktop/out/screenshots/`, and embed the relevant captures under the pull request's `## Screenshots` (FORMATS.md). A new route gets a capture target in `apps/desktop/tests/visual/targets.mts`.

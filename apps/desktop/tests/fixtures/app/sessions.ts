@@ -5,8 +5,8 @@ import type { HostedSessionSnapshot, SessionAttachResult, SessionHistory, Sessio
 import type { SessionWorkspace } from '@/types/workspace'
 import type { SearchResult } from '@/types/search'
 import type { AgentRecord, SessionRecord, SessionScan } from '@/types/sessions'
-import { WIDGETS_ID } from '@/main/fixtures/repos'
-import { fixtureAttachEntries, fixtureHistoryEntries } from '@/main/fixtures/entries'
+import { WIDGETS_ID } from './repos'
+import { fixtureAttachEntries, fixtureHistoryEntries } from './entries'
 
 /** Matches the board fixture's `fixture-stage-impl-38` dispatch record, so that item's current-phase line shows live elapsed time and cost. */
 export const STAGE_IMPL_38_KEY = 'fixture-stage-impl-38' as SessionKey

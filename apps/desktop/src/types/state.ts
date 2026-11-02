@@ -6,7 +6,7 @@ import type { BoardSnapshot, SourceKind } from '@/types/board'
 // Renderer-safe reconciled shapes for the unified state model. No import here may reach a Node builtin — only `main/state/` joins the four adapters. A condition a human or the environment could cause is a value, never a throw.
 import type { LabelKey, VocabularyReport } from '@/utils/labels/vocabulary'
 import type { LabelRole } from '@/utils/labels/defaults'
-import type { CheckContext, Mergeable, PipelineFailureKind, PipelineItemKind, PullRequestCommentNode, RateLimitInfo, ReviewNode, TruncatedSet, UnavailableAlias } from '@/types/github'
+import type { BlockerRead, CheckContext, IssueCommentNode, Mergeable, PipelineFailureKind, PipelineItemKind, PullRequestCommentNode, RateLimitInfo, ReviewNode, TruncatedSet, UnavailableAlias } from '@/types/github'
 import type { RepoDiagnostic, RepoId, RepoProblem } from '@/utils/repos'
 import type { DenialsRead, UnresolvedReason } from '@/types/local'
 import type { PortStageAgent, SessionScan } from '@/types/sessions'
@@ -150,6 +150,10 @@ export interface ReconciledItem {
   readonly checkRollup: readonly CheckContext[] | null
   /** Whether this issue's body carries `link.ts`'s own `IMPLEMENTATION_PLAN_HEADING`, trimmed-line exact — `null` for a pull request, never a second copy of the heading. Feeds `main/tick/repair.ts`'s `plan-missing`/`plan-missing-approved` shapes. */
   readonly planPresent: boolean | null
+  /** Copied straight off `PipelineItem` — the Board's "held on" dependency read, `null` for a pull request. */
+  readonly blockers: BlockerRead | null
+  /** Copied straight off `PipelineItem` — the newest comments of a blocked issue, `null` when not read. */
+  readonly blockerComments: readonly IssueCommentNode[] | null
 }
 
 /** `{ at }` when the source answered, `{ unavailable: <reason> }` when it did not — never a stale-looking timestamp standing in for "did not run". */

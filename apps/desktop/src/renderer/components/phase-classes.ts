@@ -41,19 +41,17 @@ export const PHASE_DOT_ON_PILL_CLASS = 'bg-current'
 
 export const PHASE_RING_ON_PILL_CLASS = 'border border-current'
 
-const PHASE_SEGMENT_FINISHED_CLASS: Readonly<Record<PhasePalette, string>> = {
-  plan: 'bg-phase-plan-dot/40',
-  implement: 'bg-phase-implement-dot/40',
-  review: 'bg-phase-review-dot/40',
-  revise: 'bg-phase-revise-dot/40',
-  refresh: 'bg-phase-refresh-dot/40',
-  'needs-you': 'bg-phase-needs-you-dot/40',
-  done: 'bg-phase-done-dot/40',
-  unstaged: 'bg-idle-pill',
-}
-
-/** A decided phase takes its palette's dot at 40%, the current one the full dot, a pending one the neutral `border`. */
+/** Past is one neutral, future a dimmer one, a merged item the full `done` dot, and the current phase its own palette's dot. */
 export function segmentClass(segment: PhaseSegment): string {
-  if (segment.palette === null) return 'bg-border'
-  return segment.state === 'finished' || segment.state === 'complete' ? PHASE_SEGMENT_FINISHED_CLASS[segment.palette] : PHASE_DOT_CLASS[segment.palette]
+  switch (segment.state) {
+    case 'pending':
+      return 'bg-segment-future'
+    case 'finished':
+      return 'bg-segment-past'
+    case 'complete':
+      return PHASE_DOT_CLASS.done
+    case 'current-working':
+    case 'current-attention':
+      return segment.palette === null ? 'bg-segment-future' : PHASE_DOT_CLASS[segment.palette]
+  }
 }

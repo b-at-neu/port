@@ -7,8 +7,6 @@ const GROUP_OF: Readonly<Record<NeedsYouItem['kind'], NeedsYouGroupKey>> = {
   'plan-review': 'plan-review',
   'ready-to-merge': 'ready-to-merge',
   'needs-human': 'needs-human',
-  blocked: 'blocked',
-  'stage-blocked': 'blocked',
   'stage-question': 'questions',
   'stage-questions': 'questions',
   'stage-approval': 'approvals',

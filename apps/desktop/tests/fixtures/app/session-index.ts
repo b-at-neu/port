@@ -1,7 +1,7 @@
 // Fixture mode's canned session:index. Offsets line up with the stage histories seeded in `./board`.
 import type { SessionIndexEntry } from '@/types/session-index'
 import type { StageTag } from '@/types/stage-session'
-import { WIDGETS_ID } from '@/main/fixtures/repos'
+import { WIDGETS_ID } from './repos'
 
 const WORKTREES = '/home/you/src/widgets/.claude/worktrees'
 

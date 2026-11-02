@@ -32,6 +32,13 @@ export interface PullRequestCommentNode {
   readonly createdAt: string
 }
 
+/** One issue `comments` node, selected only for a blocked issue — the ticket's own blocker comment. */
+export interface IssueCommentNode {
+  readonly body: string
+  readonly createdAt: string
+  readonly url: string
+}
+
 /** One `timelineItems` `LabeledEvent` node — the raw label name, unresolved; `reconcile.ts` is the one place it becomes a `LabelKey`. */
 export interface LabelEventNode {
   readonly label: string
@@ -79,6 +86,10 @@ export interface PipelineItem {
   readonly comments: readonly PullRequestCommentNode[] | null
   /** The `approved` and `readyForReview` aliases' own `statusCheckRollup` selection — `null` means this alias did not select it; `[]` means it was selected but GitHub returned no rollup at all. */
   readonly checkRollup: readonly CheckContext[] | null
+  /** Open `blockedBy` links, `null` for a pull request. An unreadable connection is `{ ok: false }`, never an empty list. */
+  readonly blockers: BlockerRead | null
+  /** The newest issue comments, selected only for a `blocked` issue — `null` when not selected, unreadable, or a pull request. */
+  readonly blockerComments: readonly IssueCommentNode[] | null
 }
 
 /** One entry per enabled label, reported beside the results so an empty `items` is attributable rather than ambiguous with a wrong query. */
@@ -104,6 +115,8 @@ export interface ItemDetail {
   readonly kind: PipelineItemKind
   readonly number: number
   readonly node: unknown
+  /** Issue fields (`blockedBy`, `comments`) GitHub reported an error for — read as unavailable, never as empty. */
+  readonly erroredFields: readonly string[]
 }
 
 /** One entry per sweep connection named in a partial response's `errors[].path`. Never read as empty — excluded from any "nothing at this stage" claim. */

@@ -1,66 +1,40 @@
 import { describe, expect, it } from 'vitest'
-import { join } from 'node:path'
-import { allowRule } from '@/main/stage/allowlist'
-import type { FileResult } from '@/types/platform'
+import { CONFIG_PATH, SETTINGS_PATH, mergeRule } from '@/main/stage/allowlist'
 
-function fakeFs(initial: Record<string, unknown>) {
-  const files = new Map<string, unknown>(Object.entries(initial))
-  function readJson<T>(path: string): Promise<FileResult<T>> {
-    if (!files.has(path)) return Promise.resolve({ ok: false, kind: 'not-found', message: 'missing' })
-    const value = files.get(path)
-    if (value === 'UNPARSEABLE') return Promise.resolve({ ok: false, kind: 'unparseable', message: 'bad json' })
-    return Promise.resolve({ ok: true, value: value as T })
-  }
-  function writeJsonAtomic(path: string, value: unknown): Promise<FileResult<void>> {
-    files.set(path, value)
-    return Promise.resolve({ ok: true, value: undefined })
-  }
-  return { files, readJson, writeJsonAtomic }
-}
+const settings = (allow: string[], extra: Record<string, unknown> = {}) => JSON.stringify({ ...extra, permissions: { deny: ['x'], allow } })
+const config = (extraAllow: string[]) => JSON.stringify({ repo: 'o/r', extraAllow })
 
-const settingsPath = join('/repo', '.claude', 'settings.json')
-const configPath = join('/repo', '.claude', 'port.config.json')
-
-describe('allowRule', () => {
-  it('appends the rule to both files', async () => {
-    const fs = fakeFs({ [settingsPath]: { permissions: { allow: [] } }, [configPath]: { extraAllow: [] } })
-    const result = await allowRule({ root: '/repo', rule: 'Bash(git status *)', readJson: fs.readJson, writeJsonAtomic: fs.writeJsonAtomic })
-    expect(result).toEqual({ kind: 'ok' })
-    expect(fs.files.get(settingsPath)).toEqual({ permissions: { allow: ['Bash(git status *)'] } })
-    expect(fs.files.get(configPath)).toEqual({ extraAllow: ['Bash(git status *)'] })
+describe('mergeRule', () => {
+  it('returns both files with the rule appended, keeping every other key and the order', () => {
+    const result = mergeRule({ settingsText: settings(['Bash(a *)'], { env: { A: '1' } }), configText: config(['Bash(b *)']), rule: 'Bash(git status *)' })
+    expect(result.kind).toBe('files')
+    if (result.kind !== 'files') return
+    expect(result.files.map((f) => f.path)).toEqual([SETTINGS_PATH, CONFIG_PATH])
+    expect(JSON.parse(result.files[0]?.content ?? '')).toEqual({ env: { A: '1' }, permissions: { deny: ['x'], allow: ['Bash(a *)', 'Bash(git status *)'] } })
+    expect(JSON.parse(result.files[1]?.content ?? '')).toEqual({ repo: 'o/r', extraAllow: ['Bash(b *)', 'Bash(git status *)'] })
+    expect(result.files[0]?.content.endsWith('}\n')).toBe(true)
   })
 
-  it('reports already-allowed when the rule is already in both files', async () => {
-    const fs = fakeFs({ [settingsPath]: { permissions: { allow: ['Bash(git status *)'] } }, [configPath]: { extraAllow: ['Bash(git status *)'] } })
-    const result = await allowRule({ root: '/repo', rule: 'Bash(git status *)', readJson: fs.readJson, writeJsonAtomic: fs.writeJsonAtomic })
-    expect(result).toEqual({ kind: 'already-allowed' })
+  it('lists only the file that lacks the rule', () => {
+    const result = mergeRule({ settingsText: settings(['Bash(pnpm *)']), configText: config([]), rule: 'Bash(pnpm *)' })
+    expect(result.kind === 'files' && result.files.map((f) => f.path)).toEqual([CONFIG_PATH])
   })
 
-  it('creates a missing settings.json', async () => {
-    const fs = fakeFs({ [configPath]: { extraAllow: [] } })
-    const result = await allowRule({ root: '/repo', rule: 'Bash(pnpm *)', readJson: fs.readJson, writeJsonAtomic: fs.writeJsonAtomic })
-    expect(result).toEqual({ kind: 'ok' })
-    expect(fs.files.get(settingsPath)).toEqual({ permissions: { allow: ['Bash(pnpm *)'] } })
+  it('reports already-allowed when both files hold the rule', () => {
+    expect(mergeRule({ settingsText: settings(['Bash(pnpm *)']), configText: config(['Bash(pnpm *)']), rule: 'Bash(pnpm *)' })).toEqual({ kind: 'already-allowed' })
   })
 
-  it('writes nothing when settings.json is unparseable', async () => {
-    const fs = fakeFs({ [settingsPath]: 'UNPARSEABLE', [configPath]: { extraAllow: [] } })
-    const result = await allowRule({ root: '/repo', rule: 'Bash(pnpm *)', readJson: fs.readJson, writeJsonAtomic: fs.writeJsonAtomic })
-    expect(result.kind).toBe('write-failed')
-    expect(fs.files.get(configPath)).toEqual({ extraAllow: [] })
+  it('treats a missing settings.json as an empty allowlist', () => {
+    const result = mergeRule({ settingsText: null, configText: config([]), rule: 'Bash(pnpm *)' })
+    expect(result.kind === 'files' && JSON.parse(result.files[0]?.content ?? '')).toEqual({ permissions: { allow: ['Bash(pnpm *)'] } })
   })
 
-  it('reports write-failed naming port.config.json after settings succeeds', async () => {
-    const fs = fakeFs({ [settingsPath]: { permissions: { allow: [] } }, [configPath]: 'UNPARSEABLE' })
-    const result = await allowRule({ root: '/repo', rule: 'Bash(pnpm *)', readJson: fs.readJson, writeJsonAtomic: fs.writeJsonAtomic })
-    expect(result.kind).toBe('write-failed')
-    if (result.kind === 'write-failed') expect(result.file).toBe('port.config.json')
+  it('names the unparseable file', () => {
+    expect(mergeRule({ settingsText: '{', configText: config([]), rule: 'Bash(pnpm *)' })).toEqual({ kind: 'unparseable', file: SETTINGS_PATH })
+    expect(mergeRule({ settingsText: null, configText: '[]', rule: 'Bash(pnpm *)' })).toEqual({ kind: 'unparseable', file: CONFIG_PATH })
   })
 
-  it('refuses an unrestricted rule without writing', async () => {
-    const fs = fakeFs({ [settingsPath]: { permissions: { allow: [] } }, [configPath]: { extraAllow: [] } })
-    const result = await allowRule({ root: '/repo', rule: 'Bash', readJson: fs.readJson, writeJsonAtomic: fs.writeJsonAtomic })
-    expect(result).toEqual({ kind: 'invalid-rule', reason: 'unrestricted' })
-    expect(fs.files.get(settingsPath)).toEqual({ permissions: { allow: [] } })
+  it('refuses an unrestricted rule', () => {
+    expect(mergeRule({ settingsText: settings([]), configText: config([]), rule: 'Bash' })).toEqual({ kind: 'invalid-rule', reason: 'unrestricted' })
   })
 })

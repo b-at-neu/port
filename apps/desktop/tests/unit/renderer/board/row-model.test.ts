@@ -62,6 +62,8 @@ function row(overrides: {
     reviewCycleCount: null,
     checkRollup: null,
     planPresent: null,
+    blockers: null,
+    blockerComments: null,
   } as unknown as ReconciledItem
   return {
     item,
@@ -73,6 +75,7 @@ function row(overrides: {
     decisions: { ...NO_DECISIONS, ...overrides.decisions },
     viewer: null,
     autoApproving: overrides.autoApproving ?? false,
+    blockedOn: null,
   }
 }
 
@@ -224,8 +227,12 @@ describe('phaseToneFor', () => {
     expect(phaseToneFor(row({ stageKey: 'approved', kind: 'pull-request' }))).toEqual({ palette: 'done', fill: 'active', pulse: true })
   })
 
-  it.each(['blocked', 'needsHuman'])('%s is red and pulsing', (stageKey) => {
-    expect(phaseToneFor(row({ stageKey }))).toEqual({ palette: 'needs-you', fill: 'active', pulse: true })
+  it('needsHuman is red and pulsing', () => {
+    expect(phaseToneFor(row({ stageKey: 'needsHuman' }))).toEqual({ palette: 'needs-you', fill: 'active', pulse: true })
+  })
+
+  it('blocked keeps the red palette but does not pulse, since it is held rather than waiting on you', () => {
+    expect(phaseToneFor(row({ stageKey: 'blocked' }))).toEqual({ palette: 'needs-you', fill: 'active', pulse: false })
   })
 
   it('an in-flight stage is filled in its phase colour', () => {

@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react'
 import { Dialog, DialogContent } from '@/renderer/components/ui/dialog'
 import { closeDecisionDialog, getState, subscribe } from '@/renderer/decision/controller'
-import { ApplyingStep, ConfirmReviseStep, ConfirmUnblockStep, ResultStep } from '@/renderer/decision/dialog-steps'
+import { ConfirmReviseStep, ConfirmUnblockStep } from '@/renderer/decision/dialog-steps'
 
 function DialogBody() {
   const state = useSyncExternalStore(subscribe, getState)
@@ -14,10 +14,6 @@ function DialogBody() {
       return <ConfirmUnblockStep state={state} />
     case 'confirm-revise':
       return <ConfirmReviseStep state={state} />
-    case 'applying':
-      return <ApplyingStep decision={state.decision} />
-    case 'result':
-      return <ResultStep state={state} />
   }
 }
 
