@@ -1,167 +1,171 @@
 import { describe, expect, it } from 'vitest'
-import { createPathOps } from '@/main/platform/paths'
-import type { CommandResult } from '@/types/platform'
-import type { NodeRunner } from '@/types/platform'
-import { SCRIPT_FAIL_PREFIX } from '@/main/reclaimer/report'
+import { createFakeGh, createFakeRepo, MAIN, WORKTREES } from '../../../fixtures/reclaimer-harness'
+import type { FakeGhOptions, FakeRepoOptions, FakeWorktree } from '../../../fixtures/reclaimer-harness'
 import { runReclaim } from '@/main/reclaimer/reclaim'
+import type { ForcedReclaim, WorktreesReclaimResult } from '@/types/reclaimer'
 
-const posixPathOps = createPathOps('posix', { home: '/home/op' })
+const path = (n: number): string => `${WORKTREES}/impl-${String(n)}`
+const finished = (n: number, overrides: Partial<FakeWorktree> = {}): FakeWorktree => ({ path: path(n), branch: `${String(n)}-ticket`, ...overrides })
 
-function ok(stdout: string): CommandResult {
-  return { ok: true, stdout, stderr: '' }
+async function reclaim(repoOptions: FakeRepoOptions, ghOptions: FakeGhOptions, scope: { issue?: number | null; force?: ForcedReclaim | null } = {}) {
+  const repo = createFakeRepo(repoOptions)
+  const gh = createFakeGh(ghOptions)
+  const result = await runReclaim({ repoRoot: MAIN, repo: 'acme/widgets', integration: 'dev', gh: gh.gh, ...repo.seams, issue: scope.issue ?? null, force: scope.force ?? null })
+  return { result, repo }
 }
 
-function nonzero(stdout: string, stderr: string, code = 1): CommandResult {
-  return { ok: false, kind: 'nonzero', code, stdout, stderr }
+function ok(result: WorktreesReclaimResult): Extract<WorktreesReclaimResult, { ok: true }> {
+  if (!result.ok) throw new Error(`expected ok, got ${result.kind}`)
+  return result
 }
 
-function payload(overrides: Record<string, unknown> = {}, candidateOverrides: Record<string, unknown> = {}): string {
-  return JSON.stringify({
-    mainRoot: '/repo',
-    integrationRef: 'origin/dev',
-    candidates: [
-      {
-        path: '/repo/.claude/worktrees/impl-36',
-        branch: '36-feature',
-        head: 'deadbeef',
-        state: 'done',
-        reason: '#36 merged (branch-name)',
-        rung: 'branch-name',
-        issue: 36,
-        locked: false,
-        lockReason: null,
-        dirtyFiles: 0,
-        removed: true,
-        branchDeleted: true,
-        error: null,
-        ...candidateOverrides,
-      },
-    ],
-    orphanDirs: [],
-    summary: { registered: 1, removed: 1, kept: 0, byState: { done: 1 } },
-    ...overrides,
-  })
-}
+const removals = (calls: readonly string[][]): string[] => calls.filter((c) => c[0] === 'worktree' && c[1] === 'remove').map((c) => c[3] ?? '')
 
-describe('runReclaim', () => {
-  it('reports not-configured without spawning anything when commands.worktrees is null', async () => {
-    let called = false
-    const runNode: NodeRunner = () => {
-      called = true
-      return Promise.resolve(ok(''))
-    }
-    const result = await runReclaim({ repoRoot: '/repo', worktreesCommand: null, issue: null, force: null, runNode, pathOps: posixPathOps })
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.kind).toBe('not-configured')
-    expect(called).toBe(false)
+describe('runReclaim — every reclaimable worktree', () => {
+  it('removes a merged worktree, deletes its merged branch and prunes once', async () => {
+    const { result, repo } = await reclaim({ worktrees: [finished(36), finished(41)] }, { states: { 36: 'MERGED', 41: 'OPEN' } })
+    const value = ok(result)
+    expect(value).toMatchObject({ removed: 1, call: ['reclaim'] })
+    expect(value.results.map((r) => [r.pathBasename, r.outcome, r.error, r.branchDeleted, r.issue])).toEqual([
+      ['impl-36', 'removed', null, true, 36],
+      ['impl-41', 'kept', null, null, 41],
+    ])
+    expect(removals(repo.calls)).toEqual([path(36)])
+    expect(repo.branchesDeleted).toEqual(['36-ticket'])
+    expect(repo.calls.filter((c) => c[0] === 'worktree' && c[1] === 'prune')).toHaveLength(1)
+    expect(repo.nodes.has(path(36))).toBe(false)
   })
 
-  it('a full success removes the candidate, appending reclaim --json', async () => {
-    let seenArgs: readonly string[] = []
-    const runNode: NodeRunner = (args) => {
-      seenArgs = args
-      return Promise.resolve(ok(payload()))
-    }
-    const result = await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node plugins/port/bin/worktrees.mjs', issue: null, force: null, runNode, pathOps: posixPathOps })
-    expect(seenArgs).toEqual(['plugins/port/bin/worktrees.mjs', 'reclaim', '--json'])
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.removed).toBe(1)
-    expect(result.results[0]?.outcome).toBe('removed')
+  it('keeps an unmerged branch and says so', async () => {
+    const { result } = await reclaim({ worktrees: [finished(36)], unmergedBranches: ['36-ticket'] }, { states: { 36: 'MERGED' } })
+    expect(ok(result).results[0]).toMatchObject({ outcome: 'removed', branchDeleted: false })
   })
 
-  it('adds --issue N when issue is not null', async () => {
-    let seenArgs: readonly string[] = []
-    const runNode: NodeRunner = (args) => {
-      seenArgs = args
-      return Promise.resolve(ok(payload()))
-    }
-    await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', issue: 36, force: null, runNode, pathOps: posixPathOps })
-    expect(seenArgs).toEqual(['w.mjs', 'reclaim', '--json', '--issue', '36'])
+  it('never deletes a detached worktree’s branch', async () => {
+    const { result, repo } = await reclaim({ worktrees: [{ path: path(36), branch: null, subject: '#36 done' }] }, { states: { 36: 'CLOSED' } })
+    expect(ok(result).results[0]).toMatchObject({ outcome: 'removed', branchDeleted: null })
+    expect(repo.branchesDeleted).toEqual([])
   })
 
-  it('a nonzero exit whose stdout still parses is a partial success', async () => {
-    const runNode: NodeRunner = () =>
-      Promise.resolve(
-        nonzero(
-          payload({}, { removed: false, branchDeleted: null, error: 'a review session is still attached' }),
-          `${SCRIPT_FAIL_PREFIX}some candidates could not be removed`,
-          2,
-        ),
-      )
-    const result = await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', issue: null, force: null, runNode, pathOps: posixPathOps })
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.removed).toBe(0)
-    expect(result.results[0]?.outcome).toBe('failed')
-    expect(result.results[0]?.error).toBe('a review session is still attached')
+  it('removes at most five, oldest first', async () => {
+    const worktrees = [1, 2, 3, 4, 5, 6].map((n) => finished(n, { modifiedAt: `2026-01-0${String(7 - n)}T00:00:00.000Z` }))
+    const states = Object.fromEntries([1, 2, 3, 4, 5, 6].map((n) => [n, 'MERGED' as const]))
+    const { result, repo } = await reclaim({ worktrees }, { states })
+    expect(removals(repo.calls)).toEqual([path(6), path(5), path(4), path(3), path(2)])
+    expect(ok(result).removed).toBe(5)
+    expect(ok(result).results.find((r) => r.issue === 1)?.outcome).toBe('kept')
   })
 
-  it('a FAIL stderr with no parseable stdout becomes script-failed', async () => {
-    const runNode: NodeRunner = () => Promise.resolve(nonzero('', `${SCRIPT_FAIL_PREFIX}not a git repository`))
-    const result = await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', issue: null, force: null, runNode, pathOps: posixPathOps })
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.kind).toBe('script-failed')
-    expect(result.message).toBe(`${SCRIPT_FAIL_PREFIX}not a git repository`)
+  it('keeps a locked or dirty worktree, since neither flag is set', async () => {
+    const { result, repo } = await reclaim(
+      { worktrees: [finished(36, { locked: true }), finished(37, { status: [' M a.ts'] })] },
+      { states: { 36: 'MERGED', 37: 'MERGED' } },
+    )
+    expect(ok(result).removed).toBe(0)
+    expect(removals(repo.calls)).toEqual([])
   })
 
-  it('maps a timeout straight through', async () => {
-    const runNode: NodeRunner = () => Promise.resolve({ ok: false, kind: 'timeout', timeoutMs: 60_000, stderr: '' })
-    const result = await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', issue: null, force: null, runNode, pathOps: posixPathOps })
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.kind).toBe('timeout')
+  it('removes nothing when GitHub cannot be read', async () => {
+    const { result, repo } = await reclaim({ worktrees: [finished(36)] }, { failure: { ok: false, kind: 'network', stdout: '', stderr: 'offline' } })
+    expect(result).toMatchObject({ ok: false, kind: 'github-unavailable', call: ['reclaim'] })
+    expect(removals(repo.calls)).toEqual([])
+    expect(repo.calls.some((c) => c[1] === 'prune')).toBe(false)
   })
 
-  it('an unsupported runner is reported without spawning', async () => {
-    let called = false
-    const runNode: NodeRunner = () => {
-      called = true
-      return Promise.resolve(ok(''))
-    }
-    const result = await runReclaim({ repoRoot: '/repo', worktreesCommand: 'pnpm run wt', issue: null, force: null, runNode, pathOps: posixPathOps })
-    expect(called).toBe(false)
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.kind).toBe('unsupported-runner')
+  it('fails with the git kind when the repository cannot be read', async () => {
+    const repo = createFakeRepo()
+    const result = await runReclaim({
+      repoRoot: MAIN,
+      repo: 'acme/widgets',
+      integration: 'dev',
+      ...repo.seams,
+      git: () => Promise.resolve({ ok: false, kind: 'cwd-missing', cwd: MAIN }),
+      issue: null,
+      force: null,
+    })
+    expect(result).toMatchObject({ ok: false, kind: 'cwd-missing', call: ['reclaim'] })
   })
 
-  it('a malformed --json payload on a clean exit is report-unparseable', async () => {
-    const runNode: NodeRunner = () => Promise.resolve(ok('not json'))
-    const result = await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', issue: null, force: null, runNode, pathOps: posixPathOps })
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.kind).toBe('report-unparseable')
+})
+
+describe('runReclaim — one issue', () => {
+  it('scopes the run to that ticket’s own worktree', async () => {
+    const { result, repo } = await reclaim({ worktrees: [finished(36), finished(37)] }, { states: { 36: 'MERGED', 37: 'MERGED' } }, { issue: 37 })
+    expect(removals(repo.calls)).toEqual([path(37)])
+    expect(ok(result).call).toEqual(['reclaim', '--issue', '37'])
+  })
+})
+
+describe('runReclaim — one forced path', () => {
+  const unlock: ForcedReclaim = { path: path(36), unlock: true, forceDirty: false }
+
+  it('refuses a path that is not registered and touches nothing', async () => {
+    const { result, repo } = await reclaim({ worktrees: [finished(36)] }, { states: { 36: 'MERGED' } }, { force: { path: path(99), unlock: true, forceDirty: false } })
+    expect(result).toMatchObject({ ok: false, kind: 'path-not-registered', call: null })
+    expect(removals(repo.calls)).toEqual([])
+    expect(repo.calls.some((c) => c[1] === 'prune')).toBe(false)
   })
 
-  it('never passes --unlock, --force-dirty, --path or --offline without a forced reclaim', async () => {
-    let seenArgs: readonly string[] = []
-    const runNode: NodeRunner = (args) => {
-      seenArgs = args
-      return Promise.resolve(ok(payload()))
-    }
-    await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', issue: 1, force: null, runNode, pathOps: posixPathOps })
-    expect(seenArgs).not.toContain('--unlock')
-    expect(seenArgs).not.toContain('--force-dirty')
-    expect(seenArgs).not.toContain('--path')
-    expect(seenArgs).not.toContain('--offline')
+  it('unlocks a finished locked worktree, then removes only it', async () => {
+    const { result, repo } = await reclaim({ worktrees: [finished(36, { locked: true }), finished(37)] }, { states: { 36: 'MERGED', 37: 'MERGED' } }, { force: unlock })
+    expect(ok(result)).toMatchObject({ removed: 1, call: ['reclaim', '--path', path(36), '--max', '1', '--unlock'] })
+    expect(repo.calls.filter((c) => c[1] === 'unlock')).toEqual([['worktree', 'unlock', path(36)]])
+    expect(removals(repo.calls)).toEqual([path(36)])
+    expect(ok(result).results.find((r) => r.issue === 37)?.outcome).toBe('kept')
   })
 
-  it.each([
-    ['unlock only', { unlock: true, forceDirty: false }, ['--unlock']],
-    ['discard only', { unlock: false, forceDirty: true }, ['--force-dirty']],
-    ['both', { unlock: true, forceDirty: true }, ['--unlock', '--force-dirty']],
-  ])('a forced reclaim (%s) is scoped to one path and never carries --issue', async (_label, flags, expectedFlags) => {
-    let seenArgs: readonly string[] = []
-    const runNode: NodeRunner = (args) => {
-      seenArgs = args
-      return Promise.resolve(ok(payload()))
-    }
-    const force = { path: '/repo/.claude/worktrees/impl-51', ...flags }
-    await runReclaim({ repoRoot: '/repo', worktreesCommand: 'node w.mjs', issue: null, force, runNode, pathOps: posixPathOps })
-    expect(seenArgs).toEqual(['w.mjs', 'reclaim', '--json', '--path', force.path, '--max', '1', ...expectedFlags])
-    expect(seenArgs).not.toContain('--issue')
+  it('reports an unlock that failed and removes nothing', async () => {
+    const { result, repo } = await reclaim({ worktrees: [finished(36, { locked: true })], unlockFails: [path(36)] }, { states: { 36: 'MERGED' } }, { force: unlock })
+    expect(ok(result).removed).toBe(0)
+    expect(ok(result).results[0]).toMatchObject({ outcome: 'failed', error: 'unlock failed: fatal: not locked' })
+    expect(removals(repo.calls)).toEqual([])
+  })
+
+  it('never unlocks a locked worktree whose item is still open', async () => {
+    const { result, repo } = await reclaim({ worktrees: [finished(36, { locked: true })] }, { states: { 36: 'OPEN' } }, { force: unlock })
+    expect(ok(result).removed).toBe(0)
+    expect(repo.calls.some((c) => c[1] === 'unlock')).toBe(false)
+  })
+
+  it('discards a dirty worktree only when told to', async () => {
+    const dirty = { worktrees: [finished(36, { status: [' M a.ts'] })] }
+    const plain = await reclaim(dirty, { states: { 36: 'MERGED' } }, { force: { path: path(36), unlock: false, forceDirty: false } })
+    expect(ok(plain.result).removed).toBe(0)
+
+    const forced = await reclaim(dirty, { states: { 36: 'MERGED' } }, { force: { path: path(36), unlock: false, forceDirty: true } })
+    expect(ok(forced.result)).toMatchObject({ removed: 1, call: ['reclaim', '--path', path(36), '--max', '1', '--force-dirty'] })
+  })
+})
+
+describe('runReclaim — the removal itself', () => {
+  it('falls back to the filesystem when git leaves the directory behind', async () => {
+    const { result, repo } = await reclaim({ worktrees: [finished(36)], removeLeavesDir: [path(36)] }, { states: { 36: 'MERGED' } })
+    expect(ok(result).removed).toBe(1)
+    expect(repo.nodes.has(path(36))).toBe(false)
+  })
+
+  it('falls back to the filesystem when git refuses and HEAD has not moved', async () => {
+    const { result, repo } = await reclaim({ worktrees: [finished(36)], removeFails: [path(36)] }, { states: { 36: 'MERGED' } })
+    expect(ok(result).removed).toBe(1)
+    expect(repo.nodes.has(path(36))).toBe(false)
+  })
+
+  it('reports a file still in use as a failure, keeping the branch', async () => {
+    const { result, repo } = await reclaim({ worktrees: [finished(36)], removeLeavesDir: [path(36)], fsRemoveFails: { [path(36)]: 'EBUSY' } }, { states: { 36: 'MERGED' } })
+    expect(ok(result).removed).toBe(0)
+    expect(ok(result).results[0]).toMatchObject({ outcome: 'failed', branchDeleted: null })
+    expect(ok(result).results[0]?.error).toContain('EBUSY')
+    expect(repo.branchesDeleted).toEqual([])
+  })
+
+  it('keeps the directory when the worktree list cannot be re-read after removal', async () => {
+    const { result, repo } = await reclaim({ worktrees: [finished(36)], removeLeavesDir: [path(36)], listBreaksAfterRemove: true }, { states: { 36: 'MERGED' } })
+    expect(ok(result).results[0]).toMatchObject({ outcome: 'failed', error: "couldn't re-read the worktree list after removal; not deleted." })
+    expect(repo.nodes.has(path(36))).toBe(true)
+  })
+
+  it('treats a vanished directory as removed even when the re-read fails', async () => {
+    const { result } = await reclaim({ worktrees: [finished(36)], listBreaksAfterRemove: true }, { states: { 36: 'MERGED' } })
+    expect(ok(result).removed).toBe(1)
   })
 })

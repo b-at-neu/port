@@ -32,7 +32,7 @@ const READY_ENTRY = {
     modules: { approvalGate: true, release: true, scope: true },
     reviewCycleCap: 3,
     vocabulary: resolveVocabulary({}),
-    commands: { worktrees: 'node scripts/worktrees.mjs', budget: null },
+    commands: { worktrees: null, budget: null },
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
     sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
     checkDispositions: {},
@@ -88,7 +88,7 @@ describe('resolveWorktreesReclaim', () => {
     const deps = depsWith({
       listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
       runReclaim: () =>
-        Promise.resolve({ ok: true, removed: 1, results: [reclaimed()], readAt: 't', call: ['bin/worktrees.mjs'] } satisfies WorktreesReclaimResult),
+        Promise.resolve({ ok: true, removed: 1, results: [reclaimed()], readAt: 't', call: ['reclaim'] } satisfies WorktreesReclaimResult),
       appendAudit: (_dir, entry) => {
         auditedEntry = entry as ReclaimAuditEntry
         return Promise.resolve({ ok: true })
@@ -102,7 +102,7 @@ describe('resolveWorktreesReclaim', () => {
       failed: [],
       result: 'applied',
       failure: null,
-      call: ['bin/worktrees.mjs'],
+      call: ['reclaim'],
     })
   })
 
@@ -116,7 +116,7 @@ describe('resolveWorktreesReclaim', () => {
           removed: 0,
           results: [reclaimed({ outcome: 'failed', error: 'locked', branchDeleted: null })],
           readAt: 't',
-          call: ['bin/worktrees.mjs'],
+          call: ['reclaim'],
         } satisfies WorktreesReclaimResult),
       appendAudit: (_dir, entry) => {
         auditedEntry = entry as ReclaimAuditEntry
@@ -135,10 +135,10 @@ describe('resolveWorktreesReclaim', () => {
       runReclaim: () =>
         Promise.resolve({
           ok: false,
-          kind: 'script-failed',
+          kind: 'github-unavailable',
           message: 'boom',
           readAt: 't',
-          call: ['bin/worktrees.mjs'],
+          call: ['reclaim'],
         } satisfies WorktreesReclaimResult),
       appendAudit: (_dir, entry) => {
         auditedEntry = entry as ReclaimAuditEntry
@@ -147,18 +147,18 @@ describe('resolveWorktreesReclaim', () => {
     })
     const result = await resolveWorktreesReclaim(registryDeps, { id: REPO_ID, issue: null, force: null }, '/audit', deps)
     expect(result.ok).toBe(false)
-    expect(auditedEntry).toMatchObject({ result: 'failed', failure: 'script-failed', call: ['bin/worktrees.mjs'] })
+    expect(auditedEntry).toMatchObject({ result: 'failed', failure: 'github-unavailable', call: ['reclaim'] })
   })
 
   it('an audit append failure never changes the already-computed result', async () => {
     const deps = depsWith({
       listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
       runReclaim: () =>
-        Promise.resolve({ ok: true, removed: 1, results: [reclaimed()], readAt: 't', call: ['bin/worktrees.mjs'] } satisfies WorktreesReclaimResult),
+        Promise.resolve({ ok: true, removed: 1, results: [reclaimed()], readAt: 't', call: ['reclaim'] } satisfies WorktreesReclaimResult),
       appendAudit: () => Promise.resolve({ ok: false, message: 'disk on fire' }),
     })
     const result = await resolveWorktreesReclaim(registryDeps, { id: REPO_ID, issue: null, force: null }, '/audit', deps)
-    expect(result).toEqual({ ok: true, removed: 1, results: [reclaimed()], readAt: 't', call: ['bin/worktrees.mjs'] })
+    expect(result).toEqual({ ok: true, removed: 1, results: [reclaimed()], readAt: 't', call: ['reclaim'] })
   })
 
   describe('force', () => {
@@ -169,7 +169,7 @@ describe('resolveWorktreesReclaim', () => {
         listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
         runReclaim: (params) => {
           seen.params = params
-          return Promise.resolve({ ok: true, removed: 1, results: [reclaimed()], readAt: 't', call: ['bin/worktrees.mjs'] } satisfies WorktreesReclaimResult)
+          return Promise.resolve({ ok: true, removed: 1, results: [reclaimed()], readAt: 't', call: ['reclaim'] } satisfies WorktreesReclaimResult)
         },
         appendAudit: (_dir, entry) => {
           seen.audited = entry as ReclaimAuditEntry
@@ -201,6 +201,7 @@ describe('resolveWorktreesReclaim', () => {
     it('passes the confirmed force to the run and audits its flags', async () => {
       const seen: { params?: RunReclaimParams; audited?: ReclaimAuditEntry } = {}
       await resolveWorktreesReclaim(registryDeps, { id: REPO_ID, issue: null, force: FORCE }, '/audit', forcedDeps(seen))
+      expect(seen.params).toMatchObject({ repoRoot: '/repo', repo: 'acme/widgets', integration: 'dev', git: registryDeps.git })
       expect(seen.params?.force).toEqual(FORCE)
       expect(seen.audited).toMatchObject({ force: { unlock: true, forceDirty: false } })
     })
@@ -230,7 +231,7 @@ describe('resolveWorktreesPurge', () => {
     }
   }
 
-  const deleted: WorktreesPurgeResult = { ok: true, outcome: 'deleted', pathBasename: 'impl-29-stale', message: null, cause: null, readAt: 't', call: ['bin/worktrees.mjs'] }
+  const deleted: WorktreesPurgeResult = { ok: true, outcome: 'deleted', pathBasename: 'impl-29-stale', message: null, cause: null, readAt: 't', call: ['purge', '--orphan', PATH] }
 
   it.each([
     ['an empty path', '', "requires 'path' to be a non-empty string"],
@@ -255,7 +256,7 @@ describe('resolveWorktreesPurge', () => {
     expect(result).toEqual(deleted)
     expect(seen.params).toMatchObject({ repoRoot: '/repo', path: PATH })
     expect(seen.audited).toHaveLength(1)
-    expect(seen.audited[0]).toMatchObject({ action: 'worktree-purge', path: 'impl-29-stale', result: 'deleted', failure: null, call: ['bin/worktrees.mjs'] })
+    expect(seen.audited[0]).toMatchObject({ action: 'worktree-purge', path: 'impl-29-stale', result: 'deleted', failure: null, call: ['purge', '--orphan', PATH] })
   })
 
   it('audits a refused outcome as refused and a channel failure as failed with its kind', async () => {
@@ -268,7 +269,7 @@ describe('resolveWorktreesPurge', () => {
       registryDeps,
       { id: REPO_ID, path: PATH },
       '/audit',
-      purgeDeps(failedSeen, { ok: false, kind: 'timeout', message: 'slow', readAt: 't', call: ['bin/worktrees.mjs'] }),
+      purgeDeps(failedSeen, { ok: false, kind: 'timeout', message: 'slow', readAt: 't', call: ['purge', '--orphan', PATH] }),
     )
     expect(failedSeen.audited[0]).toMatchObject({ result: 'failed', failure: 'timeout' })
   })

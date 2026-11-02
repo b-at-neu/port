@@ -1,78 +1,76 @@
-// runReclaim: drives `bin/worktrees.mjs reclaim --json`, the write half of
-// report.ts's read. Passes --unlock/--force-dirty only path-scoped to one confirmed worktree; never --offline, no retry.
-import { node as defaultNode } from '@/main/platform/node'
-import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import type { WorktreesReclaimResult } from '@/types/reclaimer'
-import { parseNodeCommand } from '@/main/reclaimer/command'
-import { describeCommandFailure } from '@/main/reclaimer/command-failure'
-import { SCRIPT_FAIL_PREFIX } from '@/main/reclaimer/report'
-import { parseReclaimPayload } from '@/main/reclaimer/parse'
-import type { RunReclaimParams } from '@/types/reclaimer'
+// runReclaim: the write half of report.ts's read. `--unlock`/`--force-dirty` apply only path-scoped to one confirmed worktree, never with an issue.
+import type { InspectedCandidate, ReclaimedWorktree, RunReclaimParams, WorktreesReclaimResult } from '@/types/reclaimer'
+import { inspectWorktrees, resolveSeams } from '@/main/reclaimer/inspect'
+import { deleteMergedBranch, pruneWorktrees, removeWorktree, unlockWorktree } from '@/main/reclaimer/remove'
 
-function firstFailLine(stderr: string): string {
-  const line = stderr.split(/\r?\n/).find((l) => l.startsWith(SCRIPT_FAIL_PREFIX))
-  return (line ?? stderr.trim()).slice(0, 2000)
+const RECLAIM_MAX = 5
+
+type Outcome = Pick<ReclaimedWorktree, 'outcome' | 'error' | 'branchDeleted'>
+
+const KEPT: Outcome = { outcome: 'kept', error: null, branchDeleted: null }
+
+function callOf(params: RunReclaimParams): readonly string[] {
+  if (params.force !== null) {
+    return ['reclaim', '--path', params.force.path, '--max', '1', ...(params.force.unlock ? ['--unlock'] : []), ...(params.force.forceDirty ? ['--force-dirty'] : [])]
+  }
+  return params.issue !== null ? ['reclaim', '--issue', String(params.issue)] : ['reclaim']
 }
 
 export async function runReclaim(params: RunReclaimParams): Promise<WorktreesReclaimResult> {
-  const now = params.now ?? (() => new Date())
-  const pathOps = params.pathOps ?? defaultPathOps
-  const runNode = params.runNode ?? defaultNode
-  const readAt = now().toISOString()
+  const seams = resolveSeams(params)
+  const readAt = seams.now().toISOString()
+  const call = callOf(params)
 
-  if (params.worktreesCommand === null) {
-    return { ok: false, kind: 'not-configured', message: 'commands.worktrees is null — worktree hygiene is unavailable.', readAt, call: null }
+  const inspection = await inspectWorktrees({ ...params, unlock: params.force?.unlock ?? false, forceDirty: params.force?.forceDirty ?? false })
+  if (!inspection.ok) return { ...inspection, readAt, call }
+
+  const scopeKey = params.force === null ? null : seams.pathOps.pathKey(params.force.path)
+  if (scopeKey !== null && !inspection.candidates.some((c) => seams.pathOps.pathKey(c.entry.path) === scopeKey)) {
+    return { ok: false, kind: 'path-not-registered', message: `${params.force?.path ?? ''} is not a registered worktree; nothing was touched.`, readAt, call: null }
   }
+  // Without GitHub a finished worktree can't be told from an active one, so nothing is removed.
+  if (inspection.githubError !== null) return { ok: false, kind: 'github-unavailable', message: inspection.githubError, readAt, call }
 
-  const tokenized = parseNodeCommand(params.worktreesCommand)
-  if (!tokenized.ok) {
-    if (tokenized.kind === 'unsupported-runner') {
-      return {
-        ok: false,
-        kind: 'unsupported-runner',
-        token: tokenized.token,
-        message: `commands.worktrees starts with '${tokenized.token}', which Port won't run — only a node prefix is supported.`,
-        readAt,
-        call: null,
+  const inScope = (c: InspectedCandidate): boolean =>
+    c.removable && (params.issue === null || c.correlation?.number === params.issue) && (scopeKey === null || seams.pathOps.pathKey(c.entry.path) === scopeKey)
+  const max = params.force === null ? RECLAIM_MAX : 1
+
+  const mtimes = new Map<string, number>()
+  for (const c of inspection.candidates.filter(inScope)) {
+    const stat = await seams.fs.statPath(c.entry.path)
+    mtimes.set(c.entry.path, stat.ok ? Date.parse(stat.value.modifiedAt) : 0)
+  }
+  const queue = inspection.candidates.filter(inScope).sort((a, b) => (mtimes.get(a.entry.path) ?? 0) - (mtimes.get(b.entry.path) ?? 0))
+
+  const outcomes = new Map<string, Outcome>()
+  let removed = 0
+  for (const c of queue) {
+    if (removed >= max) break
+    const { path, head, branch, locked } = c.entry
+
+    if (locked && params.force?.unlock === true) {
+      const unlocked = await unlockWorktree(seams, inspection.mainPath, path)
+      if (!unlocked.ok) {
+        outcomes.set(path, { outcome: 'failed', error: unlocked.message, branchDeleted: null })
+        continue
       }
     }
-    return {
-      ok: false,
-      kind: 'unparseable-command',
-      message: 'commands.worktrees could not be parsed as a plain command prefix.',
-      readAt,
-      call: null,
+    const result = await removeWorktree(seams, inspection.mainPath, { path, head })
+    if (!result.removed) {
+      outcomes.set(path, { outcome: 'failed', error: result.error, branchDeleted: null })
+      continue
     }
+    removed++
+    const branchDeleted = branch === null ? null : await deleteMergedBranch(seams, inspection.mainPath, branch)
+    outcomes.set(path, { outcome: 'removed', error: null, branchDeleted })
   }
+  await pruneWorktrees(seams, inspection.mainPath)
 
-  const args = [...tokenized.args, 'reclaim', '--json']
-  if (params.force !== null) {
-    args.push('--path', params.force.path, '--max', '1')
-    if (params.force.unlock) args.push('--unlock')
-    if (params.force.forceDirty) args.push('--force-dirty')
-  } else if (params.issue !== null) {
-    args.push('--issue', String(params.issue))
-  }
-
-  const result = await runNode(args, { cwd: params.repoRoot })
-
-  // A nonzero exit whose stdout still parses counts as a partial success.
-  if (!result.ok) {
-    if (result.kind === 'nonzero' && result.stdout.trim() !== '') {
-      const parsed = parseReclaimPayload(result.stdout, pathOps)
-      if (parsed.ok) return { ok: true, removed: parsed.removed, results: parsed.results, readAt, call: args }
-    }
-    if (result.kind === 'nonzero' && result.stderr.includes(SCRIPT_FAIL_PREFIX)) {
-      return { ok: false, kind: 'script-failed', message: firstFailLine(result.stderr), readAt, call: args }
-    }
-    const { kind, message } = describeCommandFailure(result)
-    return { ok: false, kind, message, readAt, call: args }
-  }
-
-  const parsed = parseReclaimPayload(result.stdout, pathOps)
-  if (!parsed.ok) {
-    return { ok: false, kind: 'report-unparseable', message: parsed.message, readAt, call: args }
-  }
-
-  return { ok: true, removed: parsed.removed, results: parsed.results, readAt, call: args }
+  const results: ReclaimedWorktree[] = inspection.candidates.map((c) => ({
+    path: c.entry.path,
+    pathBasename: seams.pathOps.basename(c.entry.path),
+    issue: c.correlation?.number ?? null,
+    ...(outcomes.get(c.entry.path) ?? KEPT),
+  }))
+  return { ok: true, removed, results, readAt, call }
 }

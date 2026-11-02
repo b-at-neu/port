@@ -21,7 +21,7 @@ const registryDeps: RegistryDeps = {
 
 const READY_ENTRY = readyEntry(
   { id: REPO_ID, displayName: 'widgets' },
-  { repo: 'acme/widgets', owner: 'acme', name: 'widgets', reviewCycleCap: 3, vocabulary: {} as never, commands: { worktrees: 'node scripts/worktrees.mjs', budget: null } },
+  { repo: 'acme/widgets', owner: 'acme', name: 'widgets', reviewCycleCap: 3, vocabulary: {} as never, commands: { worktrees: null, budget: null } },
 )
 
 const NOT_READY_ENTRY = {
@@ -78,7 +78,7 @@ describe('resolveWorktreesReport', () => {
     )
   })
 
-  it('reads the report for a ready repository, passing its resolved path and command through', async () => {
+  it('reads the report for a ready repository, passing its resolved path, repo and integration branch through', async () => {
     const report: WorktreesReport = { ok: false, kind: 'timeout', message: 'node timed out after 60000ms', readAt: '2026-01-01T00:00:00.000Z' }
     let received: unknown
     const deps = depsWith({
@@ -92,7 +92,8 @@ describe('resolveWorktreesReport', () => {
     expect(result).toBe(report)
     expect(received).toEqual({
       repoRoot: '/repo',
-      worktreesCommand: 'node scripts/worktrees.mjs',
+      repo: 'acme/widgets',
+      integration: 'dev',
       git: registryDeps.git,
     })
   })

@@ -77,6 +77,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - reads go through `platform/github-http`'s injectable `GitHubTransport`, never through `gh`; `request.ts` builds the GraphQL and REST requests, and `envelope.ts` classifies a reply from its status code and body
 - the pipeline read's detail alias fails the whole read on any error, because a missing review list would read as zero cycles; the one carve-out is an issue alias's own `blockedBy` or `comments` field, which goes into that detail's `erroredFields` and never reaches a pull request alias
 - an errored `blockedBy` becomes `{ ok: false }` and errored comments become `null`, so the Board shows "unknown" or "its reason is on the ticket", never "no blockers"
+- `item-states.ts`'s `readItemStates` reads many items' states in one aliased round trip; an alias named in `errors[].path`, or absent, is `null`, never done
 
 **`apps/desktop/src/main/hosting/`**
 - owns a hosted session's full lifecycle (#98); the renderer only sends intents (nine `session:*` channels) and receives events, never drives the child directly. #326 removes the dispatcher role: no `SessionOptionsRole`, no per-session task tracker, no `allowedTools`
@@ -121,12 +122,14 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - spawnables a literal union (`KNOWN_COMMANDS`); paths via `pathKey`/`contains`, never `startsWith`
 - `github-http.ts` is the only `fetch` caller under `apps/desktop/src/main/`; its token comes only from `gh auth token` and is held in process memory, re-read once on a `401`, and a failed read is never cached
 - `disk.ts`'s `directorySize` never follows a symlink and is bounded by `maxEntries`; a cut-short or partly unreadable walk reports `truncated`, never an undercount presented as exact
+- `files.ts`'s `removeDirectory` retries a held file and returns the errno code instead of throwing, so a caller can tell a held file from a long path
 - `shell-env.ts` resolves the login shell's PATH once at startup, merges only PATH into `process.env`, and never blocks startup past its timeout
 
 **`apps/desktop/src/main/reclaimer/`**
-- drives the shipped `worktrees.mjs` script; never re-implements its classification
-- calls no `git worktree` itself; only `node` is spawnable here
-- may run `reclaim`, with `--unlock`/`--force-dirty` only path-scoped (`--path`) to one confirmed worktree, never with `--issue`; and `purge --orphan` for one confirmed path
+- an in-process port of `bin/worktrees.mjs`'s classification, pinned by `classify.cases.json`, which `desktop-reclaimer` runs against the script and `classify.test.ts` runs against `classify.ts`; it spawns nothing
+- enumerates worktrees only through `main/local/`'s `readWorktrees`; `remove.ts` is the one caller of `git worktree remove`, `unlock` and `prune`
+- item states come from `main/github/item-states.ts`; a state it cannot read is never `done`, and a reclaim with GitHub unreadable removes nothing
+- may reclaim, with `unlock`/`forceDirty` only path-scoped to one confirmed worktree, never with an issue; and purge one confirmed orphan path
 - every attempt is audited via `main/writes/audit.ts`'s `appendAudit`, from `main/channels/worktrees.ts` — this directory itself never writes the audit log
 
 **`apps/desktop/src/main/registry/effective.ts`**

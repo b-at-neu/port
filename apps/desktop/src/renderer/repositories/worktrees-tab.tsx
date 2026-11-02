@@ -27,7 +27,6 @@ import {
   forcedDialogIsDestructive,
   forcedDialogTitle,
   forcedReclaimToast,
-  forcedUnsupportedNotice,
   lockedInUseHint,
   needsAttentionCount,
   producerCopy,
@@ -168,7 +167,6 @@ function WorktreeDetailPane({
 }
 
 export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; readonly entry: RepositoryEntry }) {
-  const commandsWorktrees = 'config' in entry ? entry.config.commands.worktrees : null
   const repo = 'config' in entry ? entry.config.repo : ''
   const [confirmIssue, setConfirmIssue] = useState<number | 'all' | null>(null)
   const [pendingForced, setPendingForced] = useState<PendingForced | null>(null)
@@ -178,16 +176,6 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
   const query = useQuery(ipcQueryOptions('worktrees:report', { id: repoId }, [worktreesLastSuccessAt]))
   const worktreePaths = query.data?.ok === true ? query.data.worktrees.map((w) => w.path) : []
   const selection = useListSelection(worktreePaths)
-
-  if (commandsWorktrees === null) {
-    return (
-      <EmptyState
-        icon={RefreshCw}
-        message="No commands.worktrees in this repository's config, so worktree hygiene is unavailable. Run /port:init in it to install the reclamation script."
-        className="p-6"
-      />
-    )
-  }
 
   if (query.isLoading) {
     return (
@@ -216,7 +204,7 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
   const reclaimableRows = worktrees.filter((w) => w.reclaimable)
   const reclaimableCount = reclaimableRows.length
   const selectedWorktree = report.worktrees.find((w) => w.path === selection.selectedKey) ?? null
-  const selectedForced = selectedWorktree === null ? null : forcedReclaimFor(selectedWorktree, report)
+  const selectedForced = selectedWorktree === null ? null : forcedReclaimFor(selectedWorktree)
 
   async function runReclaim(issue: number | null): Promise<void> {
     setConfirmIssue(null)
@@ -255,8 +243,6 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
     await query.refetch()
   }
 
-  const forcedSupported = report.forcedActions === 'supported'
-
   const confirmTarget =
     confirmIssue === 'all'
       ? { count: reclaimableCount, singleName: null }
@@ -276,7 +262,6 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
           {report.porcelainJoin === 'unavailable' ? (
             <p className="text-small text-attention-dot">Couldn&apos;t read this repository&apos;s worktree list directly, so a registered-but-missing directory isn&apos;t flagged.</p>
           ) : null}
-          {!forcedSupported ? <p className="text-small text-attention-dot">{forcedUnsupportedNotice()}</p> : null}
           <div className="flex items-center justify-between gap-2 text-small text-muted-foreground">
             <span>
               {report.registered} registered · {reclaimableCount} reclaimable · {needsAttentionCount(report.worktrees)} need attention
@@ -310,11 +295,9 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
             {report.orphanDirs.map((dir) => (
               <div key={dir} className="flex items-center gap-2">
                 <p className="truncate font-mono text-meta text-muted-foreground">{dir}</p>
-                {forcedSupported ? (
-                  <Button variant="ghost" size="small" onClick={() => setPendingPurge(dir)}>
-                    Delete
-                  </Button>
-                ) : null}
+                <Button variant="ghost" size="small" onClick={() => setPendingPurge(dir)}>
+                  Delete
+                </Button>
               </div>
             ))}
           </div>
@@ -327,7 +310,7 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
           onReclaim={selectedWorktree.reclaimable && selectedWorktree.issue !== null ? () => setConfirmIssue(selectedWorktree.issue) : null}
           forced={selectedForced}
           onForced={() => selectedForced !== null && setPendingForced({ worktree: selectedWorktree, flags: selectedForced })}
-          lockedInUse={forcedSupported && selectedWorktree.state === 'locked' && !selectedWorktree.otherwiseReclaimable}
+          lockedInUse={selectedWorktree.state === 'locked' && !selectedWorktree.otherwiseReclaimable}
         />
       ) : null}
       {pendingForced !== null ? (
