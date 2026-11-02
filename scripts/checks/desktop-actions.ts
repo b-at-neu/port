@@ -46,7 +46,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   // --- No non-test file under utils/actions/ or main/actions/ retypes a hand-typed label
   // name instead of resolving through the vocabulary. Checked only where key !== name. ---
   {
-    const mismatched = readJson('plugins/port/data/labels.json')
+    const mismatched = readJson('apps/desktop/src/utils/labels/labels.json')
       .labels.filter((l: any) => l.key !== l.name)
       .map((l: any) => l.name);
     let found = false;

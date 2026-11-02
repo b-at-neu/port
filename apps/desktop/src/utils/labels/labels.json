@@ -1,0 +1,62 @@
+{
+  "$comment": [
+    "Label vocabulary /port:init creates in a managed repository.",
+    "",
+    "Each entry names the module that owns it, mirroring port.config.json's modules keys",
+    "plus the `core` sentinel for a label that is always created. No module currently gates",
+    "a label — every entry below is `core` — but the field stays as a designed extension",
+    "point for a future optional label, not dead weight.",
+    "",
+    "`key` is the port.config.json `labels` key. `name` is the default string, which a",
+    "repository may override there. Agents read the configured name, never these defaults",
+    "directly.",
+    "",
+    "`role` is one of marker / trigger / in-flight / gate / terminal, copied from",
+    "pipeline/SKILL.md's own 'Role' column. It is the machine-readable authority the",
+    "rendered workflows' blocking-label list is derived from, pinned in both directions —",
+    "not merely documentation.",
+    "",
+    "`palette` is the pipeline phase a label belongs to — plan, implement, review, revise,",
+    "refresh, needs-you or done — or null for a marker. One palette is one hue, shared by",
+    "the label here, the desktop app's Board pill and its sidebar dot. Within a palette a",
+    "trigger is a lighter shade than its in-flight label, and a gate or terminal label sits",
+    "deeper still, so position within the phase reads from lightness alone.",
+    "",
+    "The in-flight label of each palette is its anchor: its colour is exactly the app's",
+    "light-theme dot for that palette (`theme.css`), so GitHub and the app share one hex.",
+    "needs-you gates sit two steps apart (DC2626 -> 991B1B) so they still separate by",
+    "lightness under red-green colour vision deficiency.",
+    "",
+    "`claude` and `auto plan` are markers: neutral, off the palette, because they mark",
+    "ownership rather than a phase. `claude` keeps Claude coral (`D97757`).",
+    "",
+    "`previousColors` lists every colour port has shipped for the key before the current",
+    "one, so /port:init can tell a label port coloured from one the repository coloured",
+    "itself, and recolour only the former."
+  ],
+
+  "labels": [
+    { "key": "marker",               "name": "claude",                 "module": "core", "color": "D97757", "previousColors": [],                     "role": "marker",    "palette": null,         "description": "The port pipeline owns this item" },
+    { "key": "autoPlan",             "name": "auto plan",              "module": "core", "color": "57606A", "previousColors": [],                     "role": "marker",    "palette": null,         "description": "Plan gate skipped: the plan is auto-approved" },
+
+    { "key": "ready",                "name": "ready",                  "module": "core", "color": "D8B4FE", "previousColors": ["1F6FEB", "218BFF", "C4B5FD"],  "role": "trigger",   "palette": "plan",       "description": "Trigger: plan this issue" },
+    { "key": "planChangesRequested", "name": "plan changes requested", "module": "core", "color": "C084FC", "previousColors": ["1F6FEB", "0969DA", "A78BFA"],"role": "trigger",   "palette": "plan",       "description": "Trigger: revise the plan from human feedback" },
+    { "key": "planApproved",         "name": "plan approved",          "module": "core", "color": "93C5FD", "previousColors": ["1F6FEB", "0550AE"],   "role": "trigger",   "palette": "implement",  "description": "Trigger: implement the approved plan" },
+    { "key": "readyForReview",       "name": "ready for review",       "module": "core", "color": "FACC15", "previousColors": ["1F6FEB", "033D8B", "5EEAD4"],"role": "trigger",   "palette": "review",     "description": "Trigger: review this pull request" },
+    { "key": "needsRevision",        "name": "needs revision",         "module": "core", "color": "F9A8D4", "previousColors": ["1F6FEB", "0A3069", "FDBA74"],"role": "trigger",   "palette": "revise",     "description": "Trigger: apply the review findings" },
+    { "key": "refreshBranch",        "name": "refresh branch",         "module": "core", "color": "D4D4D8", "previousColors": ["1F6FEB", "002155"],   "role": "trigger",   "palette": "refresh",    "description": "Trigger: rebase and force-push, no code changes" },
+
+    { "key": "planning",             "name": "planning",               "module": "core", "color": "9333EA", "previousColors": ["D4A72C", "FFF8C5", "7C3AED"],"role": "in-flight", "palette": "plan",       "description": "In flight: a plan is being researched" },
+    { "key": "inProgress",           "name": "in progress",            "module": "core", "color": "2563EB", "previousColors": ["D4A72C", "FAE17D"],   "role": "in-flight", "palette": "implement",  "description": "In flight: implementation underway" },
+    { "key": "reviewing",            "name": "reviewing",              "module": "core", "color": "A68500", "previousColors": ["D4A72C", "EAC54F", "0D9488", "9C8A00"],"role": "in-flight", "palette": "review",     "description": "In flight: review underway" },
+    { "key": "revising",             "name": "revising",               "module": "core", "color": "D61F8A", "previousColors": ["D4A72C", "EA580C"],"role": "in-flight", "palette": "revise",     "description": "In flight: fixes underway" },
+    { "key": "refreshing",           "name": "refreshing",             "module": "core", "color": "71717A", "previousColors": ["D4A72C", "BF8700"],   "role": "in-flight", "palette": "refresh",    "description": "In flight: branch refresh underway" },
+
+    { "key": "planReview",           "name": "plan review",            "module": "core", "color": "6B21A8", "previousColors": ["D1242F", "CF222E", "5B21B6"],"role": "gate",      "palette": "plan",       "description": "Gate: plan written, awaiting human approval" },
+    { "key": "blocked",              "name": "blocked",                "module": "core", "color": "DC2626", "previousColors": ["D1242F", "82071E"],   "role": "gate",      "palette": "needs-you",  "description": "Gate: needs a human decision, details in a comment" },
+    { "key": "needsHuman",           "name": "needs human",            "module": "core", "color": "991B1B", "previousColors": ["D1242F", "4C0014"],   "role": "gate",      "palette": "needs-you",  "description": "Gate: the pipeline stopped and needs a person" },
+
+    { "key": "prOpened",             "name": "pr opened",              "module": "core", "color": "16A34A", "previousColors": ["1A7F37"],             "role": "terminal",  "palette": "done",       "description": "Terminal on the issue: state now lives on the pull request" },
+    { "key": "approved",             "name": "approved",               "module": "core", "color": "166534", "previousColors": ["1A7F37", "044F1E"],   "role": "terminal",  "palette": "done",       "description": "Terminal: findings are at or under the bar, a human merges" }
+  ]
+}

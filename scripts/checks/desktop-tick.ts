@@ -46,12 +46,12 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!violated) ok();
   }
 
-  // pin: `main/tick/routing.ts`'s `AGENT_FOR_TRIGGER` keys ↔ `data/labels.json`'s `role: "trigger"` keys, both directions
+  // pin: `main/tick/routing.ts`'s `AGENT_FOR_TRIGGER` keys ↔ `utils/labels/labels.json`'s `role: "trigger"` keys, both directions
   {
     const routingFile = `${mainDir}/routing.ts`;
     const routingText = readFileSync(join(root, routingFile), 'utf8');
     const routingMatch = /const AGENT_FOR_TRIGGER[^{]*\{([^}]*)\}/.exec(routingText);
-    const labelsJson = readJson('plugins/port/data/labels.json');
+    const labelsJson = readJson('apps/desktop/src/utils/labels/labels.json');
     const triggerKeys = new Set<string>(labelsJson.labels.filter((l: any) => l.role === 'trigger').map((l: any) => l.key));
 
     if (!routingMatch) {
@@ -109,7 +109,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // pin: `main/tick/plan.ts`'s occupied-set stage keys (`inProgress` → `in-flight`, `prOpened` → `terminal`) ↔ `data/labels.json`'s own roles
+  // pin: `main/tick/plan.ts`'s occupied-set stage keys (`inProgress` → `in-flight`, `prOpened` → `terminal`) ↔ `utils/labels/labels.json`'s own roles
   {
     const planFile = `${mainDir}/plan.ts`;
     const planText = readFileSync(join(root, planFile), 'utf8');
@@ -118,7 +118,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
       fail('desktop-tick', `${planFile} has no 'occupiedSetOf' function to check`);
     } else {
       const keys = new Set([...fnMatch[1].matchAll(/'(\w+)'/g)].map((m) => m[1]));
-      const labelsJson = readJson('plugins/port/data/labels.json');
+      const labelsJson = readJson('apps/desktop/src/utils/labels/labels.json');
       const roleByKey = new Map(labelsJson.labels.map((l: any) => [l.key, l.role]));
       const expected = { inProgress: 'in-flight', prOpened: 'terminal' };
       let violated = false;
