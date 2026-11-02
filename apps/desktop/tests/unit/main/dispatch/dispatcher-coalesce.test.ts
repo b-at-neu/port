@@ -118,6 +118,9 @@ function harness(overrides: Partial<CreateDispatcherParams> = {}) {
       check: () => {
         throw new Error('budget.check should not be invoked')
       },
+      report: () => {
+        throw new Error('budget.report should not be invoked')
+      },
     },
     escalate: () => {
       throw new Error('escalate should not be invoked')

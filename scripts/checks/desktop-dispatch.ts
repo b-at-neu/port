@@ -14,6 +14,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   const dispatcherFile = `${mainDispatchDir}/dispatcher.ts`;
   const budgetFile = `${mainDispatchDir}/budget.ts`;
   const budgetGateFile = `${mainDispatchDir}/budget-gate.ts`;
+  const budgetLedgerFile = `${mainDispatchDir}/budget-ledger.ts`;
   const budgetScriptPath = join(root, 'plugins/port/bin/budget.mjs');
   const dispatchableFile = 'apps/desktop/src/main/tick/dispatchable.ts';
   const trajectoryFile = 'apps/desktop/src/main/trajectory/log.ts';
@@ -169,33 +170,52 @@ export default async function ({ expect, fail, ok }: Reporter) {
       expect(!(onlyInApp.length > 0 || onlyInScript.length > 0), 'desktop-dispatch', `${budgetFile}'s BUDGET_VERDICTS (${[...appVerdicts].join(', ')}) and bin/budget.mjs's verdicts (${[...scriptVerdicts].join(', ')}) disagree`);
     }
 
-    // pin: `main/dispatch/budget.ts`'s `BUDGET_SESSION` ↔ `bin/budget.mjs`'s `sessionLogName` accepting it
+    // pin: `BUDGET_SESSION` is a session name the desktop's own `sessionLogName` accepts
     const sessionMatch = /BUDGET_SESSION\s*=\s*'([^']+)'/.exec(budgetText);
+    const ledgerMod = await import(pathToFileURL(join(root, budgetLedgerFile)).href);
     if (!sessionMatch) {
       fail('desktop-dispatch', `${budgetFile} has no 'BUDGET_SESSION = ...' assignment`);
-    } else expect(!(mod.sessionLogName(sessionMatch[1]) === null), 'desktop-dispatch', `${budgetFile}'s BUDGET_SESSION ('${sessionMatch[1]}') is rejected by bin/budget.mjs's own sessionLogName — the gate would die on every call`);
+    } else expect(!(ledgerMod.sessionLogName(sessionMatch[1]) === null), 'desktop-dispatch', `${budgetFile}'s BUDGET_SESSION ('${sessionMatch[1]}') is rejected by ${budgetLedgerFile}'s own sessionLogName — the gate would fail on every call`);
 
-    // pin: `main/dispatch/budget.ts`'s `OUTDATED_SCRIPT_SENTINEL` ↔ `bin/budget.mjs`'s unrecognized-argument `die()` template
-    const sentinelMatch = /OUTDATED_SCRIPT_SENTINEL\s*=\s*"([^"]+)"/.exec(budgetText);
-    const scriptText = readFileSync(budgetScriptPath, 'utf8');
-    const diePrefix = "unrecognized argument '";
-    if (!sentinelMatch) {
-      fail('desktop-dispatch', `${budgetFile} has no 'OUTDATED_SCRIPT_SENTINEL = "..."' assignment`);
-    } else if (!scriptText.includes(`die(\`${diePrefix}`)) {
-      fail('desktop-dispatch', `bin/budget.mjs no longer defines the unrecognized-argument die() template this sentinel pins against`);
-    } else expect(sentinelMatch[1].startsWith(diePrefix), 'desktop-dispatch', `${budgetFile}'s OUTDATED_SCRIPT_SENTINEL ('${sentinelMatch[1]}') does not match bin/budget.mjs's own unrecognized-argument wording ('${diePrefix}…')`);
-  }
+    // pin: renderer parity — the desktop's ledger module and bin/budget.mjs, over fixed fixtures, must agree byte for byte
+    const ceilings = [null, 7200];
+    const row = (seconds: number) => ({ stage: 'impl', model: 'sonnet', startedAt: '2026-09-05T14:00:00.000Z', seconds, outcome: 'completed' });
+    const rowSets = [[], [row(120)], [row(120), row(5), row(3600)]];
+    const sessionRows = [
+      { issue: 52, dispatchNumber: 213, stage: 'review', model: 'opus', startedAt: '2026-09-05T14:00:00.000Z', state: 'closed', seconds: 30, outcome: 'completed' },
+      { issue: 7, dispatchNumber: 7, stage: 'plan', model: 'opus', startedAt: '2026-09-05T15:00:00.000Z', state: 'open', seconds: 0, outcome: 'lost' },
+    ];
+    const cases: { name: string; input: unknown; app: unknown; script: unknown }[] = [];
+    for (const rows of rowSets) {
+      for (const ceiling of ceilings) {
+        const input = { rows: rows.length, ceiling };
+        const app = ledgerMod.renderLedger(rows, ceiling);
+        const script = mod.renderLedger(rows, ceiling);
+        cases.push({ name: 'renderLedger', input, app, script });
+        cases.push({ name: 'parseLedger (app output read by the script)', input, app: ledgerMod.parseLedger(script), script: mod.parseLedger(app) });
+      }
+    }
+    for (const seconds of [0, 59, 3599, 3600, 7322]) cases.push({ name: 'formatDuration', input: seconds, app: ledgerMod.formatDuration(seconds), script: mod.formatDuration(seconds) });
+    for (const tickets of [[], [{ issue: 52, secondsUsed: 60, ceilingSeconds: 120 }, { issue: 7, secondsUsed: 60, ceilingSeconds: null }]]) {
+      const totals = { dispatches: 2, seconds: 125 };
+      cases.push({ name: 'renderTickClause', input: tickets.length, app: ledgerMod.renderTickClause(totals, tickets), script: mod.renderTickClause(totals, tickets) });
+    }
+    cases.push({ name: 'renderSessionLog', input: 'two rows', app: ledgerMod.renderSessionLog(sessionRows), script: mod.renderSessionLog(sessionRows) });
+    cases.push({ name: 'parseSessionLog (app output read by the script)', input: 'two rows', app: ledgerMod.parseSessionLog(mod.renderSessionLog(sessionRows)), script: mod.parseSessionLog(ledgerMod.renderSessionLog(sessionRows)) });
+    for (const session of [undefined, 'desktop', 'Bad Name']) cases.push({ name: 'sessionLogName', input: session, app: ledgerMod.sessionLogName(session), script: mod.sessionLogName(session) });
+    for (const cfg of [{}, { budget: { wallClockMinutes: 120 } }, { budget: { wallClockMinutes: '120' } }, { budget: { wallClockMinutes: 0 } }]) {
+      cases.push({ name: 'ceilingSecondsFrom', input: cfg, app: ledgerMod.ceilingSecondsFrom(cfg), script: mod.ceilingSecondsFrom(cfg) });
+    }
+    const differing = cases.find((c) => JSON.stringify(c.app) !== JSON.stringify(c.script));
+    expect(differing === undefined, 'desktop-dispatch', `${budgetLedgerFile} and bin/budget.mjs disagree on ${differing?.name} for ${JSON.stringify(differing?.input)}: ${JSON.stringify(differing?.app)} vs ${JSON.stringify(differing?.script)}`);
 
-  // pin: `main/reclaimer/command.ts`'s `SCRIPT_FAIL_PREFIX` ↔ `bin/budget.mjs`'s own `die()`
-  {
-    const scriptText = readFileSync(budgetScriptPath, 'utf8');
+    // pin: the ledger module has no value import, since the parity load above runs it under Node with no alias resolver
+    const ledgerText = readFileSync(join(root, budgetLedgerFile), 'utf8');
+    expect(!/^import\s+(?!type\b)/m.test(ledgerText), 'desktop-dispatch', `${budgetLedgerFile} has a non-type import — the parity check loads it directly under Node, where an @/ alias does not resolve`);
+
+    // pin: the gate never spawns a script, so no copied budget.mjs can go stale
     const gateText = readFileSync(join(root, budgetGateFile), 'utf8');
-    const prefixMatch = /SCRIPT_FAIL_PREFIX\s*=\s*'([^']+)'/.exec(readFileSync(join(root, 'apps/desktop/src/main/reclaimer/command.ts'), 'utf8'));
-    if (!prefixMatch) {
-      fail('desktop-dispatch', `apps/desktop/src/main/reclaimer/command.ts has no 'SCRIPT_FAIL_PREFIX = ...' assignment`);
-    } else if (!scriptText.includes(prefixMatch[1])) {
-      fail('desktop-dispatch', `bin/budget.mjs never emits '${prefixMatch[1]}' — SCRIPT_FAIL_PREFIX would never match a real failure`);
-    } else expect(gateText.includes('SCRIPT_FAIL_PREFIX'), 'desktop-dispatch', `${budgetGateFile} never imports SCRIPT_FAIL_PREFIX — it must reuse the reclaimer's own constant, never a retyped literal`);
+    expect(!/main\/platform\/node|parseNodeCommand/.test(gateText), 'desktop-dispatch', `${budgetGateFile} imports main/platform/node or parseNodeCommand — the budget gate runs in-process and never spawns commands.budget`);
   }
 
   // --- ledger.record( is called under main/ only from dispatch/dispatcher.ts, only after a
