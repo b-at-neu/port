@@ -143,7 +143,7 @@ const POPULATED_ITEM_SEEDS: readonly ItemSeed[] = [
   { kind: 'pull-request', number: 37, title: 'Normalize currency rounding', stageKey: 'needsHuman', comments: [{ body: CURRENCY_ESCALATION, offsetMinutes: -8 }] },
   { kind: 'issue', number: 50, title: 'Rotate the webhook signing secret', stageKey: 'needsHuman' },
   { kind: 'issue', number: 51, title: 'Backfill order totals for Q3', stageKey: 'blocked' },
-  // Blocked on two open dependency tickets, so the Board's tag reads "Waiting on #49 +1".
+  // Blocked on two open dependency tickets, so the Board's tag reads "Waiting on" the first plus a count.
   { kind: 'issue', number: 55, title: 'Split invoices by tax region', stageKey: 'blocked', blockers: TAX_REGION_BLOCKERS },
   // Blocked with no session, so the reason comes from the ticket's own comment, written just before the label.
   {
