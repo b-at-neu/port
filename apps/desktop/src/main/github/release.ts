@@ -1,6 +1,6 @@
 // fetchReleaseStatus: the state read, the commit gather and ticket resolution behind the Releases screen. Reads fail toward showing less with a note, except where a partial read would enable a write.
-import { gh as defaultGh } from '@/main/platform/gh'
-import type { GhResult, GhRunner } from '@/types/platform'
+import { githubHttp } from '@/main/platform/github-http'
+import type { GhResult, GitHubTransport } from '@/types/platform'
 import type { GitHubRepoRef } from '@/types/github'
 import type {
   BranchHead,
@@ -15,7 +15,8 @@ import type {
   ReleaseStatus,
   ReleasePrInput,
 } from '@/types/release'
-import { classifyFailure, parseEnvelope, stdoutOf } from '@/main/github/envelope'
+import { bodyOf, classifyFailure, describeHttp, parseEnvelope } from '@/main/github/envelope'
+import { RAW_ACCEPT, repoGraphqlRequest, restRequest } from '@/main/github/request'
 import { STATE_ALIASES, buildStateQuery, buildTicketsQuery, stateVariables } from '@/main/github/release-query'
 import { entriesFromCommits, ticketNumbersOf } from '@/utils/release/changelog'
 import type { ChangelogCommit, ResolvedTicket } from '@/utils/release/changelog'
@@ -131,31 +132,31 @@ function parseBody(stdout: string): unknown {
 }
 
 // Newest first, matching the commits endpoint; the oldest-first compare list is reversed by its caller.
-async function readLog(runner: GhRunner, repo: GitHubRepoRef, head: string): Promise<CommitRead> {
-  const result = await runner(['api', `repos/${repo.owner}/${repo.name}/commits?sha=${head}&per_page=${String(COMMIT_PAGE)}`])
-  if (!result.ok) return { ok: false, message: describe(result) }
-  const commits = commitsFrom(parseBody(result.stdout))
+async function readLog(github: GitHubTransport, repo: GitHubRepoRef, head: string): Promise<CommitRead> {
+  const result = await github(restRequest(`repos/${repo.owner}/${repo.name}/commits?sha=${head}&per_page=${String(COMMIT_PAGE)}`))
+  if (!result.ok) return { ok: false, message: describeHttp(result) }
+  const commits = commitsFrom(parseBody(result.body))
   if (commits === null) return { ok: false, message: "GitHub's commit list wasn't JSON" }
   return { ok: true, commits, note: commits.length >= COMMIT_PAGE ? `Showing the latest ${String(COMMIT_PAGE)} commits.` : null }
 }
 
-async function readCompare(runner: GhRunner, repo: GitHubRepoRef, base: string, head: string): Promise<CommitRead> {
-  const result = await runner(['api', `repos/${repo.owner}/${repo.name}/compare/${base}...${head}?per_page=${String(COMMIT_PAGE)}`])
-  if (!result.ok) return { ok: false, message: describe(result) }
-  const body = obj(parseBody(result.stdout))
+async function readCompare(github: GitHubTransport, repo: GitHubRepoRef, base: string, head: string): Promise<CommitRead> {
+  const result = await github(restRequest(`repos/${repo.owner}/${repo.name}/compare/${base}...${head}?per_page=${String(COMMIT_PAGE)}`))
+  if (!result.ok) return { ok: false, message: describeHttp(result) }
+  const body = obj(parseBody(result.body))
   const commits = commitsFrom(body?.commits)
   if (body === null || commits === null) return { ok: false, message: "GitHub's comparison wasn't JSON" }
-  if (body.status === 'diverged') return readLog(runner, repo, head)
+  if (body.status === 'diverged') return readLog(github, repo, head)
   const total = typeof body.total_commits === 'number' ? body.total_commits : commits.length
   const note = total > commits.length ? `Showing the first ${String(commits.length)} commits since ${base}.` : null
   return { ok: true, commits: [...commits].reverse(), note }
 }
 
-async function resolveTickets(runner: GhRunner, repo: GitHubRepoRef, numbers: readonly number[]): Promise<{ readonly tickets: ReadonlyMap<number, ResolvedTicket>; readonly note: string | null }> {
+async function resolveTickets(github: GitHubTransport, repo: GitHubRepoRef, numbers: readonly number[]): Promise<{ readonly tickets: ReadonlyMap<number, ResolvedTicket>; readonly note: string | null }> {
   if (numbers.length === 0) return { tickets: new Map(), note: null }
-  const result = await runner(['api', 'graphql', '-f', `query=${buildTicketsQuery(numbers)}`, '-f', `owner=${repo.owner}`, '-f', `name=${repo.name}`])
-  const stdout = stdoutOf(result)
-  const parsed = stdout === undefined ? undefined : parseEnvelope(stdout)
+  const result = await github(repoGraphqlRequest(buildTicketsQuery(numbers), repo))
+  const text = bodyOf(result)
+  const parsed = text === undefined ? undefined : parseEnvelope(text)
   const verdict = classifyFailure(result, parsed)
   const repository = parsed?.ok === true ? obj(parsed.value.data?.repository) : null
   if (verdict.kind !== 'ok' || repository === null) return { tickets: new Map(), note: "Ticket titles and labels couldn't be read, so changes show their commit subjects." }
@@ -174,7 +175,7 @@ async function resolveTickets(runner: GhRunner, repo: GitHubRepoRef, numbers: re
 }
 
 interface GatherParams {
-  readonly runner: GhRunner
+  readonly github: GitHubTransport
   readonly repo: GitHubRepoRef
   readonly integration: string
   readonly production: string
@@ -183,17 +184,17 @@ interface GatherParams {
 }
 
 async function gather(params: GatherParams): Promise<{ readonly ok: true; readonly gathered: Gathered } | { readonly ok: false; readonly message: string }> {
-  const { runner, repo, previousTag } = params
+  const { github, repo, previousTag } = params
   const head = params.publishing ? params.production : params.integration
   let read: CommitRead
-  if (previousTag !== null) read = await readCompare(runner, repo, previousTag, head)
-  else if (params.publishing) read = await readLog(runner, repo, head)
-  else read = await readCompare(runner, repo, params.production, params.integration)
+  if (previousTag !== null) read = await readCompare(github, repo, previousTag, head)
+  else if (params.publishing) read = await readLog(github, repo, head)
+  else read = await readCompare(github, repo, params.production, params.integration)
   if (!read.ok) return { ok: false, message: `Couldn't read the changes: ${read.message}` }
 
   const all = [...new Set(read.commits.filter((commit) => commit.parents <= 1).flatMap((commit) => ticketNumbersOf(commit.subject)))]
   const numbers = all.slice(0, TICKET_CAP)
-  const { tickets, note: ticketNote } = await resolveTickets(runner, repo, numbers)
+  const { tickets, note: ticketNote } = await resolveTickets(github, repo, numbers)
   const capNote = all.length > TICKET_CAP ? `Resolved the newest ${String(TICKET_CAP)} of ${String(all.length)} tickets.` : null
   const note = [read.note, capNote, ticketNote].filter((part): part is string => part !== null).join(' ')
   return { ok: true, gathered: { entries: entriesFromCommits(read.commits, tickets), note: note === '' ? null : note } }
@@ -205,7 +206,7 @@ export interface FetchReleaseStatusParams {
   readonly production: string | null
   readonly moduleEnabled: boolean
   readonly config: ReleaseConfig
-  readonly gh?: GhRunner
+  readonly github?: GitHubTransport
   readonly now?: () => Date
 }
 
@@ -230,7 +231,7 @@ function guardStatus(params: FetchReleaseStatusParams, phase: ReleasePhase, read
 }
 
 export async function fetchReleaseStatus(params: FetchReleaseStatusParams): Promise<ReleaseRead> {
-  const runner = params.gh ?? defaultGh
+  const github = params.github ?? githubHttp
   const readAt = (params.now ?? (() => new Date()))().toISOString()
   const { config, repo, integration, production } = params
 
@@ -255,12 +256,9 @@ export async function fetchReleaseStatus(params: FetchReleaseStatusParams): Prom
   }
 
   const versionFile = config.versionSource === 'package' ? (config.versionFiles[0] ?? null) : null
-  const args = ['api', 'graphql', '-f', `query=${buildStateQuery(versionFile !== null)}`, '-f', `owner=${repo.owner}`, '-f', `name=${repo.name}`]
-  for (const [key, value] of Object.entries(stateVariables({ integration, production, versionFile }))) args.push('-f', `${key}=${value}`)
-
-  const result = await runner(args)
-  const stdout = stdoutOf(result)
-  const parsed = stdout === undefined ? undefined : parseEnvelope(stdout)
+  const result = await github(repoGraphqlRequest(buildStateQuery(versionFile !== null), repo, stateVariables({ integration, production, versionFile })))
+  const text = bodyOf(result)
+  const parsed = text === undefined ? undefined : parseEnvelope(text)
   const verdict = classifyFailure(result, parsed)
   if (verdict.kind !== 'ok') return failure(verdict.message, readAt)
   const body = parsed?.ok === true ? parsed.value : null
@@ -293,7 +291,7 @@ export async function fetchReleaseStatus(params: FetchReleaseStatusParams): Prom
   const previousTag = releases[0]?.tagName ?? null
   let gathered: Gathered = { entries: [], note: null }
   if (GATHERING.has(phase.kind)) {
-    const read = await gather({ runner, repo, integration, production, previousTag, publishing: phase.kind === 'ready-to-publish' })
+    const read = await gather({ github, repo, integration, production, previousTag, publishing: phase.kind === 'ready-to-publish' })
     if (!read.ok) return failure(read.message, readAt)
     gathered = read.gathered
   }
@@ -322,8 +320,8 @@ export async function fetchReleaseStatus(params: FetchReleaseStatusParams): Prom
 }
 
 /** One version file's text at a commit, read raw — never from the operator's checkout. */
-export async function readFileAtRef(params: { readonly repo: GitHubRepoRef; readonly path: string; readonly ref: string; readonly gh?: GhRunner }): Promise<{ readonly ok: true; readonly text: string } | { readonly ok: false; readonly message: string }> {
-  const runner = params.gh ?? defaultGh
-  const result = await runner(['api', `repos/${params.repo.owner}/${params.repo.name}/contents/${params.path}?ref=${params.ref}`, '-H', 'Accept: application/vnd.github.raw'])
-  return result.ok ? { ok: true, text: result.stdout } : { ok: false, message: describe(result) }
+export async function readFileAtRef(params: { readonly repo: GitHubRepoRef; readonly path: string; readonly ref: string; readonly github?: GitHubTransport }): Promise<{ readonly ok: true; readonly text: string } | { readonly ok: false; readonly message: string }> {
+  const github = params.github ?? githubHttp
+  const result = await github(restRequest(`repos/${params.repo.owner}/${params.repo.name}/contents/${params.path}?ref=${params.ref}`, RAW_ACCEPT))
+  return result.ok ? { ok: true, text: result.body } : { ok: false, message: describeHttp(result) }
 }

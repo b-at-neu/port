@@ -1,4 +1,4 @@
-import type { GhRunner } from '@/types/platform'
+import type { GitHubTransport } from '@/types/platform'
 
 // Renderer-safe result and item shapes for the GitHub adapter. No import here may reach a Node builtin — only `main/github/` spawns `gh`.
 import type { LabelKey, LabelSource, VocabularyReport } from '@/utils/labels/vocabulary'
@@ -291,7 +291,7 @@ export type GatePreflightFetch =
 export interface FetchItemsByNumberParams {
   readonly repo: GitHubRepoRef
   readonly numbers: readonly number[]
-  readonly gh?: GhRunner
+  readonly github?: GitHubTransport
   readonly now?: () => Date
 }
 

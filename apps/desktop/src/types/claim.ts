@@ -3,7 +3,7 @@ import type { ApplyLabelsParams } from '@/types/writes'
 // Renderer-safe contract for Work on's claim (the "work on #N" flow). No import here may reach a Node builtin — only `main/claim.ts` resolves a repository, spawns `gh`, or writes a label.
 import type { BlockerRead, ClaimPreflightFetch, GitHubRepoRef, PipelineItemKind } from '@/types/github'
 import type { WriteOutcome } from '@/types/writes'
-import type { GhRunner } from '@/types/platform'
+import type { GitHubTransport } from '@/types/platform'
 import type { RegistryDeps } from '@/types/registry'
 import type { ReposListResponse } from '@/types/ipc'
 
@@ -60,6 +60,6 @@ export interface ClaimToast {
 
 export interface ClaimDeps {
   readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
-  readonly fetchClaimPreflight: (params: { readonly repo: GitHubRepoRef; readonly number: number; readonly gh?: GhRunner; readonly now?: () => Date }) => Promise<ClaimPreflightFetch>
+  readonly fetchClaimPreflight: (params: { readonly repo: GitHubRepoRef; readonly number: number; readonly github?: GitHubTransport; readonly now?: () => Date }) => Promise<ClaimPreflightFetch>
   readonly applyClaimLabels: (params: ApplyLabelsParams) => Promise<WriteOutcome>
 }
