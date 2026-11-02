@@ -32,7 +32,7 @@ The script reports full schema validation as **skipped**, because a draft 2020-1
 
 ## Desktop E2E flows
 
-`apps/desktop/tests/e2e/` (#442) runs the **real, built** desktop app — fixtures off, real `registerIpc()` — with every `gh`/`git`/`node`/`claude` call routed to one fake CLI (`tests/e2e/fake/cli.mjs`) instead of the host's own binaries. It drives the app with Playwright's Electron support, asserting both the recorded calls and the resulting screen: clicks, dialogs, and IPC round-trips that no unit test or the visual harness's screenshot-only capture ever exercises.
+`apps/desktop/tests/e2e/` (#442) runs the **real, built** desktop app — fixtures off, real `registerIpc()` — with every `gh`/`git`/`node`/`claude` call routed to one fake CLI (`tests/e2e/fake/cli.mjs`) instead of the host's own binaries. GitHub reads, which go over HTTP rather than through `gh`, reach the same fake as `gh e2e-http <request JSON>` and come back as `{ status, headers, body }`, so no network is ever touched. It drives the app with Playwright's Electron support, asserting both the recorded calls and the resulting screen: clicks, dialogs, and IPC round-trips that no unit test or the visual harness's screenshot-only capture ever exercises.
 
 This is CI-only (`.github/workflows/e2e.yml`, a three-OS matrix) and never named in `commands.checks` — it builds and launches Electron, which an agent's own check run must never do. Run it locally with `pnpm e2e` (`pnpm --filter @port/desktop e2e`, which builds first).
 

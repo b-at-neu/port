@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { classifyFailure, collectUnavailable, parseEnvelope } from '@/main/github/envelope'
+import { bodyOf, classifyFailure, collectUnavailable, describeHttp, parseEnvelope } from '@/main/github/envelope'
 import type { AliasInfo, SweepAlias } from '@/types/github'
-import type { GhResult } from '@/types/platform'
+import type { GitHubHttpResult } from '@/types/platform'
+import { httpFail, httpOk } from '../../../fixtures/github-http'
 
-// Captured live: a nonexistent aliased issue(number: 999999) beside three intact aliases, gh api
-// graphql exiting 1 while data stays fully usable.
+// Captured live: a nonexistent aliased issue(number: 999999) beside three intact aliases, GitHub
+// answering 200 with `errors` while data stays fully usable.
 const PARTIAL_ERROR_FIXTURE =
   '{"data":{"repository":{"i0":{"totalCount":0,"nodes":[]},"s0":null,"s1":{"number":76},"repoLabels":{"totalCount":27,"nodes":[{"name":"accessibility"},{"name":"bug"}]}},"rateLimit":{"cost":1,"remaining":4942,"resetAt":"2026-09-05T14:47:43Z"}},"errors":[{"type":"NOT_FOUND","path":["repository","s0"],"locations":[{"line":1,"column":165}],"message":"Could not resolve to an Issue with the number of 999999."}]}'
 
@@ -12,8 +13,8 @@ const PARTIAL_ERROR_FIXTURE =
 const REPO_NOT_FOUND_FIXTURE =
   '{"data":{"repository":null},"errors":[{"type":"NOT_FOUND","path":["repository"],"locations":[{"line":1,"column":3}],"message":"Could not resolve to a Repository with the name \'b-at-neu/zzz-nonexistent-abcxyz\'."}]}'
 
-const okGh = (stdout: string): GhResult => ({ ok: true, stdout, stderr: '' })
-const unknownGh = (stdout: string, stderr = ''): GhResult => ({ ok: false, kind: 'unknown', stdout, stderr })
+const okGh = (body: string): GitHubHttpResult => httpOk(body)
+const unknownGh = (body: string): GitHubHttpResult => httpFail('unknown', 422, body)
 
 describe('parseEnvelope', () => {
   it('parses the partial-error fixture', () => {
@@ -37,8 +38,23 @@ describe('classifyFailure', () => {
   })
 
   it('a classified exit other than unknown is authoritative, no envelope needed', () => {
-    const verdict = classifyFailure({ ok: false, kind: 'unauthenticated', stdout: '', stderr: 'gh: (HTTP 401)' }, undefined)
-    expect(verdict).toEqual({ kind: 'unauthenticated', message: 'gh: (HTTP 401)' })
+    const verdict = classifyFailure(httpFail('unauthenticated', 401, '', 'GitHub: Bad credentials (HTTP 401)'), undefined)
+    expect(verdict).toEqual({ kind: 'unauthenticated', message: 'GitHub: Bad credentials (HTTP 401)' })
+  })
+
+  it('an unknown status such as a 422 falls through to the envelope, and a usable body stays ok', () => {
+    const body = '{"data":{"repository":{"i0":{"totalCount":0,"nodes":[]}}}}'
+    expect(classifyFailure(unknownGh(body), parseEnvelope(body))).toEqual({ kind: 'ok' })
+  })
+
+  it('an unknown status with an unparseable body carries its own message', () => {
+    const verdict = classifyFailure(httpFail('unknown', 400, 'nope', 'GitHub: HTTP 400'), parseEnvelope('nope'))
+    expect(verdict).toEqual({ kind: 'unknown', message: 'GitHub: HTTP 400' })
+  })
+
+  it('a timeout and an oversized body use GitHub-worded messages', () => {
+    expect(classifyFailure({ ok: false, kind: 'timeout', timeoutMs: 30_000, stderr: '' }, undefined)).toEqual({ kind: 'timeout', message: "GitHub didn't reply within 30000ms" })
+    expect(classifyFailure({ ok: false, kind: 'output-too-large', maxBytes: 1024 }, undefined)).toEqual({ kind: 'output-too-large', message: "GitHub's reply exceeded 1024 bytes" })
   })
 
   it('non-JSON stdout on an exit-0 call is unparseable', () => {
@@ -88,9 +104,10 @@ describe('classifyFailure', () => {
       [{ ok: false, kind: 'timeout', timeoutMs: 30_000, stderr: '' }, undefined],
       [{ ok: false, kind: 'output-too-large', maxBytes: 1024 }, undefined],
       [{ ok: false, kind: 'spawn-failed', message: 'ENOMEM' }, undefined],
-      [{ ok: false, kind: 'forbidden', stdout: '', stderr: '(HTTP 403)' }, undefined],
-      [{ ok: false, kind: 'http-not-found', stdout: '', stderr: '(HTTP 404)' }, undefined],
-      [{ ok: false, kind: 'network', stdout: '', stderr: 'ENOTFOUND' }, undefined],
+      [httpFail('forbidden', 403), undefined],
+      [httpFail('http-not-found', 404), undefined],
+      [httpFail('network', 502), undefined],
+      [{ ok: false, kind: 'network', status: null, body: '', message: 'GitHub is unreachable: ENOTFOUND' }, undefined],
     ]
     for (const [ghResult, envelope] of cases) {
       const verdict = classifyFailure(ghResult, envelope)
@@ -99,7 +116,22 @@ describe('classifyFailure', () => {
   })
 })
 
-type FailureCase = readonly [GhResult, ReturnType<typeof parseEnvelope> | undefined]
+type FailureCase = readonly [GitHubHttpResult, ReturnType<typeof parseEnvelope> | undefined]
+
+describe('bodyOf / describeHttp', () => {
+  it('bodyOf keeps the body of a success and of a classified failure, and has none for a transport failure', () => {
+    expect(bodyOf(httpOk('{}'))).toBe('{}')
+    expect(bodyOf(httpFail('unknown', 422, 'text'))).toBe('text')
+    expect(bodyOf({ ok: false, kind: 'timeout', timeoutMs: 1, stderr: '' })).toBeUndefined()
+  })
+
+  it('describeHttp prefers the failure message and names a missing gh', () => {
+    expect(describeHttp(httpFail('forbidden', 403, '', 'GitHub: Resource not accessible (HTTP 403)'))).toBe('GitHub: Resource not accessible (HTTP 403)')
+    expect(describeHttp({ ok: false, kind: 'not-found', command: 'gh', searched: [] })).toBe("gh isn't on PATH")
+    expect(describeHttp({ ok: false, kind: 'spawn-failed', message: 'ENOMEM' })).toBe('ENOMEM')
+    expect(describeHttp({ ok: false, kind: 'signalled', signal: 'SIGKILL', stderr: '' })).toBe('signalled')
+  })
+})
 
 describe('collectUnavailable', () => {
   const aliasIndex = new Map<SweepAlias, AliasInfo>([

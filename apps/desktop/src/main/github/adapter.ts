@@ -1,9 +1,9 @@
 import type { EnvelopeFailureKind, GraphQLErrorEntry } from '@/types/github'
 
 // The public logic behind fetchItemStates and the other point reads: building the document, calling
-// the injected gh, then composing envelope.ts and map.ts. The pipeline sweep lives in pipeline.ts.
-import type { GhResult, GhRunner } from '@/types/platform'
-import { gh as defaultGh } from '@/main/platform/gh'
+// the injected transport, then composing envelope.ts and map.ts. The pipeline sweep lives in pipeline.ts.
+import type { GitHubHttpResult, GitHubTransport } from '@/types/platform'
+import { githubHttp } from '@/main/platform/github-http'
 import type { FetchItemsByNumberParams } from '@/types/github'
 
 import type { AssertEqual } from '@/types/assert-type'
@@ -19,16 +19,17 @@ import type {
   GitHubRepoRef,
   ResolvedItem,
 } from '@/types/github'
-import { classifyFailure, parseEnvelope, stdoutOf } from '@/main/github/envelope'
+import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { toBlockerRead } from '@/main/github/blockers'
 
 import { applyItemStates, fieldListOf } from '@/main/github/map'
 import { buildClaimPreflightQuery, buildItemStatesQuery, buildItemsByNumberQuery } from '@/main/github/query'
+import { repoGraphqlRequest } from '@/main/github/request'
 
 /** Fails to compile if a failure kind is added to the platform layer or `envelope.ts` without the
  *  hand-maintained, renderer-safe `PipelineFailureKind` growing to match. */
-type GhResultFailureKind = Exclude<GhResult, { ok: true }>['kind']
-export const _kindsCoverGhResult: AssertEqual<PipelineFailureKind, GhResultFailureKind | EnvelopeFailureKind> = true
+type GitHubHttpFailureKind = Exclude<GitHubHttpResult, { ok: true }>['kind']
+export const _kindsCoverGitHubHttp: AssertEqual<PipelineFailureKind, GitHubHttpFailureKind | EnvelopeFailureKind> = true
 
 /** Every `errors[].path` entry beside `"repository"`, as the set of unusable alias names. */
 function unavailableAliasNames(errors: readonly GraphQLErrorEntry[] | undefined): ReadonlySet<string> {
@@ -43,7 +44,7 @@ function unavailableAliasNames(errors: readonly GraphQLErrorEntry[] | undefined)
 interface FetchItemStatesParams {
   readonly repo: GitHubRepoRef
   readonly items: readonly ItemRef[]
-  readonly gh?: GhRunner
+  readonly github?: GitHubTransport
   readonly now?: () => Date
 }
 
@@ -57,13 +58,13 @@ export async function fetchItemStates(params: FetchItemStatesParams): Promise<It
     return { ok: true, states: [], unavailable: [], fetchedAt }
   }
 
-  const runner = params.gh ?? defaultGh
+  const github = params.github ?? githubHttp
   const { document, aliases } = buildItemStatesQuery(params.items)
-  const ghResult = await runner(['api', 'graphql', '-f', `query=${document}`, '-f', `owner=${params.repo.owner}`, '-f', `name=${params.repo.name}`])
+  const result = await github(repoGraphqlRequest(document, params.repo))
 
-  const stdout = stdoutOf(ghResult)
-  const parsed = stdout !== undefined ? parseEnvelope(stdout) : undefined
-  const verdict = classifyFailure(ghResult, parsed)
+  const text = bodyOf(result)
+  const parsed = text !== undefined ? parseEnvelope(text) : undefined
+  const verdict = classifyFailure(result, parsed)
 
   if (verdict.kind !== 'ok') {
     return { ok: false, kind: verdict.kind, message: verdict.message, fetchedAt }
@@ -120,13 +121,13 @@ export async function fetchItemsByNumber(params: FetchItemsByNumberParams): Prom
     return { ok: true, resolved: [], unavailable: [], fetchedAt }
   }
 
-  const runner = params.gh ?? defaultGh
+  const github = params.github ?? githubHttp
   const { document, aliases } = buildItemsByNumberQuery(params.numbers)
-  const ghResult = await runner(['api', 'graphql', '-f', `query=${document}`, '-f', `owner=${params.repo.owner}`, '-f', `name=${params.repo.name}`])
+  const result = await github(repoGraphqlRequest(document, params.repo))
 
-  const stdout = stdoutOf(ghResult)
-  const parsed = stdout !== undefined ? parseEnvelope(stdout) : undefined
-  const verdict = classifyFailure(ghResult, parsed)
+  const text = bodyOf(result)
+  const parsed = text !== undefined ? parseEnvelope(text) : undefined
+  const verdict = classifyFailure(result, parsed)
 
   if (verdict.kind !== 'ok') {
     return { ok: false, kind: verdict.kind, message: verdict.message, fetchedAt }
@@ -175,23 +176,23 @@ export async function fetchItemsByNumber(params: FetchItemsByNumberParams): Prom
 interface FetchClaimPreflightParams {
   readonly repo: GitHubRepoRef
   readonly number: number
-  readonly gh?: GhRunner
+  readonly github?: GitHubTransport
   readonly now?: () => Date
 }
 
 /** The claim dialog's one round trip: one item's identity, labels, assignees, open blockers, and
  *  the signed-in login. `item: null` covers "does not exist" or "alias errored", neither a failure. */
 export async function fetchClaimPreflight(params: FetchClaimPreflightParams): Promise<ClaimPreflightFetch> {
-  const runner = params.gh ?? defaultGh
+  const github = params.github ?? githubHttp
   const now = params.now ?? (() => new Date())
   const fetchedAt = now().toISOString()
 
   const { document } = buildClaimPreflightQuery(params.number)
-  const ghResult = await runner(['api', 'graphql', '-f', `query=${document}`, '-f', `owner=${params.repo.owner}`, '-f', `name=${params.repo.name}`])
+  const result = await github(repoGraphqlRequest(document, params.repo))
 
-  const stdout = stdoutOf(ghResult)
-  const parsed = stdout !== undefined ? parseEnvelope(stdout) : undefined
-  const verdict = classifyFailure(ghResult, parsed)
+  const text = bodyOf(result)
+  const parsed = text !== undefined ? parseEnvelope(text) : undefined
+  const verdict = classifyFailure(result, parsed)
 
   if (verdict.kind !== 'ok') {
     return { ok: false, kind: verdict.kind, message: verdict.message, fetchedAt }

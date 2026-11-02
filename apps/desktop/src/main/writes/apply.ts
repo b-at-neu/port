@@ -112,7 +112,7 @@ export async function applyLabels(params: ApplyLabelsParams): Promise<WriteOutco
   }
 
   // --- The authoritative read, never a cached list ----------------------
-  const verify = await doFetchItemsByNumber({ repo: splitRepo(request.repo), numbers: [request.number], gh })
+  const verify = await doFetchItemsByNumber({ repo: splitRepo(request.repo), numbers: [request.number] })
   const ctxAfterOwnership: AuditContext = { request, ownership: ownership.kind, precondition, observed: null, call: null }
 
   if (!verify.ok) {
@@ -153,7 +153,7 @@ export async function applyLabels(params: ApplyLabelsParams): Promise<WriteOutco
   const ctxWithCall: AuditContext = { ...ctxWithObserved, call: command.argv }
 
   if (!result.ok) {
-    const reread = await doFetchItemsByNumber({ repo: splitRepo(request.repo), numbers: [request.number], gh })
+    const reread = await doFetchItemsByNumber({ repo: splitRepo(request.repo), numbers: [request.number] })
     const rereadItem = reread.ok ? reread.resolved.find((item) => item.number === request.number) : undefined
     const rereadObserved: ObservedItem | null = rereadItem ? { labels: rereadItem.labels, assignees: rereadItem.assignees, readAt: reread.fetchedAt } : null
     const outcome: WriteOutcome = { kind: 'write-failed', classification: result.kind, stderr: describeGhFailure(result), reread: rereadObserved }

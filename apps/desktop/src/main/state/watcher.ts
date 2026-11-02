@@ -3,7 +3,7 @@ import type { PipelineState, RefreshOutcome } from '@/types/state'
 import type { StateEngine } from '@/types/offload'
 
 // The only clock in main — one timer, rescheduled to the earliest `nextDueAt`. `schedule.ts` decides *when*; this file is the only place under `src/main/` allowed to name `setTimeout`.
-import type { GhRunner } from '@/types/platform'
+import type { GitHubTransport } from '@/types/platform'
 import type { GitRunner } from '@/types/platform'
 import { readSessionState } from '@/main/sessions/adapter'
 import type { RepoId } from '@/utils/repos'
@@ -39,9 +39,9 @@ interface CreatePipelineWatcherParams {
   readonly onSnapshot: (snapshot: BoardSnapshot) => void
   /** Fired after `buildSnapshot()` on the timer path and in `refresh()` — never in `republish()`, so a dispatch pass never re-triggers itself off its own state change. */
   readonly onTick?: (snapshot: BoardSnapshot) => void
-  /** Owns the source cache and every CPU-bound read. Defaults to an in-process engine built from `gh`/`git`/`sessionReader`/`claudeHome`, which the worker-backed one replaces in production. */
+  /** Owns the source cache and every CPU-bound read. Defaults to an in-process engine built from `github`/`git`/`sessionReader`/`claudeHome`, which the worker-backed one replaces in production. */
   readonly engine?: StateEngine
-  readonly gh?: GhRunner
+  readonly github?: GitHubTransport
   readonly git?: GitRunner
   readonly sessionReader?: Parameters<typeof readSessionState>[0]['reader']
   readonly claudeHome?: string
@@ -86,7 +86,7 @@ function isForced(request: RefreshRequest | undefined, kind: SourceKind, repoId?
 export function createPipelineWatcher(params: CreatePipelineWatcherParams): PipelineWatcher {
   const now = params.now ?? (() => new Date())
   const setTimer = params.setTimer ?? defaultSetTimer
-  const engine = params.engine ?? createInProcessEngine({ gh: params.gh, git: params.git, sessionReader: params.sessionReader, claudeHome: params.claudeHome, now })
+  const engine = params.engine ?? createInProcessEngine({ github: params.github, git: params.git, sessionReader: params.sessionReader, claudeHome: params.claudeHome, now })
   const githubCost = new Map<RepoId, number>()
   let projections: Promise<unknown> = Promise.resolve()
   const health = new Map<RepoId, RepositoryHealth>()

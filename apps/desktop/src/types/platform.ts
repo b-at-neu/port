@@ -37,6 +37,23 @@ export type GhResult =
   | Exclude<CommandResult, { ok: true } | { ok: false; kind: 'nonzero' }>
   | { readonly ok: false; readonly kind: GhClassification; readonly stdout: string; readonly stderr: string }
 
+export interface GitHubRequest {
+  readonly method: 'GET' | 'POST'
+  /** `graphql` or `repos/…`, joined onto the API base. */
+  readonly path: string
+  readonly accept?: string
+  /** JSON text, POST only. */
+  readonly body?: string
+}
+
+export type GitHubHttpResult =
+  | { readonly ok: true; readonly status: number; readonly headers: Readonly<Record<string, string>>; readonly body: string }
+  | Exclude<CommandResult, { ok: true } | { ok: false; kind: 'nonzero' }>
+  | { readonly ok: false; readonly kind: GhClassification; readonly status: number | null; readonly body: string; readonly message: string }
+
+/** Injectable, so a test runs against a fake and needs no network or token. */
+export type GitHubTransport = (request: GitHubRequest) => Promise<GitHubHttpResult>
+
 export type DirectorySizeResult =
   | { readonly ok: true; readonly bytes: number; readonly entries: number; readonly truncated: boolean }
   | { readonly ok: false; readonly kind: 'not-found' | 'io'; readonly message: string }

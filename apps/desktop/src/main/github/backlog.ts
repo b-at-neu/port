@@ -1,12 +1,13 @@
 // fetchBacklog: every open issue, dropping anything carrying a vocabulary label.
-import { gh as defaultGh } from '@/main/platform/gh'
-import type { GhResult, GhRunner } from '@/types/platform'
+import { githubHttp } from '@/main/platform/github-http'
+import type { GitHubTransport } from '@/types/platform'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { BacklogItem, BacklogLabel, BacklogResponse } from '@/types/backlog'
-import { classifyFailure, parseEnvelope } from '@/main/github/envelope'
+import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
 import { toBlockerRead } from '@/main/github/blockers'
 import { blockedByField } from '@/main/github/query'
+import { repoGraphqlRequest } from '@/main/github/request'
 import type { GitHubRepoRef } from '@/types/github'
 import { isHexColor } from '@/utils/hex-color'
 
@@ -15,10 +16,6 @@ const PAGE_SIZE = 100
 const ASSIGNEE_PAGE_SIZE = 10
 const ITEM_LABEL_PAGE_SIZE = 20
 const BLOCKER_PAGE_SIZE = 10
-
-function stdoutOf(result: GhResult): string | undefined {
-  return 'stdout' in result ? result.stdout : undefined
-}
 
 function labelsOf(value: unknown): readonly BacklogLabel[] {
   const nodes = (value as { nodes?: unknown } | null | undefined)?.nodes
@@ -64,22 +61,22 @@ function buildBacklogQuery(): string {
 interface FetchBacklogParams {
   readonly repo: GitHubRepoRef
   readonly vocabulary: LabelVocabulary
-  readonly gh?: GhRunner
+  readonly github?: GitHubTransport
   readonly now?: () => Date
 }
 
 // `scanned`/`total` diverging means the page was truncated; a viewer-query error is never itself a failure.
 export async function fetchBacklog(params: FetchBacklogParams): Promise<BacklogResponse> {
-  const runner = params.gh ?? defaultGh
+  const github = params.github ?? githubHttp
   const now = params.now ?? (() => new Date())
   const fetchedAt = now().toISOString()
 
   const document = buildBacklogQuery()
-  const ghResult = await runner(['api', 'graphql', '-f', `query=${document}`, '-f', `owner=${params.repo.owner}`, '-f', `name=${params.repo.name}`])
+  const result = await github(repoGraphqlRequest(document, params.repo))
 
-  const stdout = stdoutOf(ghResult)
-  const parsed = stdout !== undefined ? parseEnvelope(stdout) : undefined
-  const verdict = classifyFailure(ghResult, parsed)
+  const text = bodyOf(result)
+  const parsed = text !== undefined ? parseEnvelope(text) : undefined
+  const verdict = classifyFailure(result, parsed)
 
   if (verdict.kind !== 'ok') {
     return { ok: false, kind: verdict.kind, message: verdict.message, fetchedAt }

@@ -1,4 +1,4 @@
-import type { GhRunner, GitRunner } from '@/types/platform'
+import type { GitHubTransport, GitRunner } from '@/types/platform'
 import type { StateEngine } from '@/types/offload'
 import type { SessionReader } from '@/types/sessions'
 import { readSessionState } from '@/main/sessions/adapter'
@@ -9,7 +9,7 @@ import { projectFromCache } from '@/main/state/read'
 import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/state/sources'
 
 interface InProcessEngineParams {
-  readonly gh?: GhRunner
+  readonly github?: GitHubTransport
   readonly git?: GitRunner
   readonly sessionReader?: SessionReader
   readonly claudeHome?: string
@@ -31,7 +31,7 @@ export function createInProcessEngine(params: InProcessEngineParams = {}): State
       const worktrees = cache.worktrees.get(repoId)
       const worktreeEntries = worktrees?.ok ? worktrees.entries : []
       const agents = cache.sessions?.ok ? cache.sessions.agents.filter((agent) => agent.repoId === repoId) : []
-      return refreshGithub(cache, { repoId, repo, vocabulary, worktreeEntries, agents, gh: params.gh, now })
+      return refreshGithub(cache, { repoId, repo, vocabulary, worktreeEntries, agents, github: params.github, now })
     },
     project: ({ repositories }) => Promise.resolve(projectFromCache(cache, repositories, now)),
     scanSessions: ({ repos }) => readSessionState({ repos, reader: params.sessionReader, claudeHome: params.claudeHome, now }),
