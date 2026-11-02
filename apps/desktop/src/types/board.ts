@@ -25,6 +25,9 @@ export const SOURCE_BASE_INTERVAL_MS: Readonly<Record<SourceKind, number>> = {
   denials: 15_000,
 }
 
+/** How long after an in-flight label is added an unclaimed item stays in flight, absorbing scan lag and GitHub/local clock skew. */
+export const CLAIM_SCAN_GRACE_MS = SOURCE_BASE_INTERVAL_MS.sessions
+
 /** Backoff doubles from a source's base interval up to this ceiling. */
 export const BACKOFF_CEILING_MS = 15 * 60 * 1000
 

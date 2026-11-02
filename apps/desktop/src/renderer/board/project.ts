@@ -144,7 +144,7 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
       const decisions = decisionsFor({ item, viewer: repo.viewer, reviewCycleCap: repo.reviewCycleCap, liveStage: liveStage !== null })
       let ds: DisplayStatus
       if (members.some((member) => interruptedKeys.has(`${repo.repoId}:${String(member.number)}`))) ds = { status: 'interrupted', staleGithub: false, githubAgeMs: null }
-      else if (found?.working === true && item.status === 'waiting') ds = { status: 'in-flight', staleGithub: false, githubAgeMs: null }
+      else if (found !== undefined && (item.status === 'stalled' || (found.working && item.status === 'waiting'))) ds ={ status: 'in-flight', staleGithub: false, githubAgeMs: null }
       else ds = displayStatus(item, health, repo.freshness, now)
       const stageLabel = stageLabelOf(item)
       const autoApproving = autoApprovingKeys.has(`${repo.repoId}:${String(item.number)}`)
