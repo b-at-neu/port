@@ -168,6 +168,10 @@ describe('phaseLabelFor', () => {
     expect(phaseLabelFor({ ...base, displayStatus: { status: 'interrupted', staleGithub: false, githubAgeMs: null } })).toBe('Interrupted')
   })
 
+  it('names a stalled row Stalled, not its stage', () => {
+    expect(phaseLabelFor(row({ stageKey: 'planning', status: 'stalled' }))).toBe('Stalled')
+  })
+
   it('names an auto-approving plan gate Plan auto-approving', () => {
     expect(phaseLabelFor(row({ stageKey: 'planReview', autoApproving: true }))).toBe('Plan auto-approving')
   })

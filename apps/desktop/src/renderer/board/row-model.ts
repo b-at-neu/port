@@ -13,7 +13,7 @@ import type { PhaseTone } from '@/types/components'
 import { phaseTone } from '@/renderer/lib/phase-tone'
 import type { ItemActionState, StageLinkTarget } from '@/types/board'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
-import { actionRefusalNote, actionResultCopy, autoApprovingPhaseLabel, decisionButtonLabel, decisionRefusalNote, openPrButtonLabel, reviewPlanButtonLabel, stageAgentPhaseName } from '@/renderer/board/copy'
+import { actionRefusalNote, actionResultCopy, autoApprovingPhaseLabel, decisionButtonLabel, decisionRefusalNote, openPrButtonLabel, reviewPlanButtonLabel, stageAgentPhaseName, statusWord } from '@/renderer/board/copy'
 
 /** The current winning stage's own `LabelKey`, or `null` when `stage` resolves to nothing — the one place an item's `stages`/`stage` pair becomes a single phase key. */
 export function stageKeyOf(stages: readonly StageLabel[], stage: LabelRole | null): LabelKey | null {
@@ -38,7 +38,8 @@ export function isDispatchedRow(row: BoardItemRow): boolean {
 }
 
 export function phaseLabelFor(row: BoardItemRow): string {
-  if (row.displayStatus.status === 'interrupted') return 'Interrupted'
+  const status = row.displayStatus.status
+  if (status === 'interrupted' || status === 'stalled') return statusWord(status)
   if (row.autoApproving) return autoApprovingPhaseLabel()
   if (row.liveStage !== null && isDispatchedRow(row)) return stageAgentPhaseName(row.liveStage.agent)
   return row.stageLabel !== null ? (PHASE_NAMES[row.stageLabel.key] ?? row.stageLabel.key) : 'Unstaged'

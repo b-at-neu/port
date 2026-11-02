@@ -37,8 +37,8 @@ export interface StageResult {
 /** From `stage.role` plus the attachment ladder. `stalled` is a report, never a proof — a session scan that could not run is absence of evidence and never produces this verdict. */
 export type ItemStatus = 'waiting' | 'in-flight' | 'stalled' | 'gated' | 'terminal' | 'unstaged' | 'interrupted'
 
-/** Why `status` reads the way it does — distinguishes "nothing claims this" from "the transcript hasn't moved" from "the app couldn't even check". */
-export type StatusEvidence = 'sessions-unavailable' | 'agent-active' | 'session-active' | 'all-dormant' | 'no-claimant'
+/** Why `status` reads the way it does — distinguishes "nothing claims this" from "the transcript hasn't moved" from "the app couldn't even check". `awaiting-scan` means claimed on GitHub, and no session scan has run since then that could have seen the claimant. */
+export type StatusEvidence = 'sessions-unavailable' | 'agent-active' | 'session-active' | 'all-dormant' | 'no-claimant' | 'awaiting-scan'
 
 /** Accompanies `status: 'waiting'`, first hit wins: `nobody` is unassigned; `operator-session` means the `SESSION REQUIRED` marker holds; `cockpit` is the ordinary case. */
 export type WaitingOn = 'cockpit' | 'operator-session' | 'nobody'
