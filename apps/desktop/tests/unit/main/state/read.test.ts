@@ -4,12 +4,12 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { pathOps } from '@/main/platform/paths'
 import type { CommandResult } from '@/types/platform'
-import type { GhResult } from '@/types/platform'
 import type { RepositoryEntry } from '@/utils/repos'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import { readPipelineState } from '@/main/state/read'
 import { makeTempDir } from '../../../fixtures/fs'
-import { EMPTY_PIPELINE_STDOUT } from '../../../fixtures/pipeline-reply'
+import { graphqlBodyOf, httpFail, httpOk } from '../../../fixtures/github-http'
+import { EMPTY_PIPELINE_BODY } from '../../../fixtures/pipeline-reply'
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -89,7 +89,7 @@ describe('readPipelineState', () => {
     let readerCalls = 0
     const result = await readPipelineState({
       repositories: [readyEntry('repo-a', repoARoot, 'o/a'), readyEntry('repo-b', repoBRoot, 'o/b')],
-      gh: () => Promise.resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' } satisfies GhResult),
+      github: () => Promise.resolve(httpOk(EMPTY_PIPELINE_BODY)),
       git: fakeGit(),
       claudeHome,
       sessionReader: () => {
@@ -122,7 +122,7 @@ describe('readPipelineState', () => {
     }
     const result = await readPipelineState({
       repositories: [notReady],
-      gh: () => Promise.resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' } satisfies GhResult),
+      github: () => Promise.resolve(httpOk(EMPTY_PIPELINE_BODY)),
       git: fakeGit(),
       sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
     })
@@ -138,10 +138,10 @@ describe('readPipelineState', () => {
     const repoBRoot = await makeTempDir('port-state-repo-b-')
     const result = await readPipelineState({
       repositories: [readyEntry('repo-a', repoARoot, 'owner-a/repo'), readyEntry('repo-b', repoBRoot, 'owner-b/repo')],
-      gh: (args) => {
-        const isRepoA = args.some((a) => a === 'owner=owner-a')
-        if (isRepoA) return Promise.resolve({ ok: false, kind: 'unauthenticated', stdout: '', stderr: 'gh: (HTTP 401)' } satisfies GhResult)
-        return Promise.resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' } satisfies GhResult)
+      github: (request) => {
+        const isRepoA = graphqlBodyOf(request).variables.owner === 'owner-a'
+        if (isRepoA) return Promise.resolve(httpFail('unauthenticated', 401))
+        return Promise.resolve(httpOk(EMPTY_PIPELINE_BODY))
       },
       git: fakeGit(),
       sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
@@ -157,10 +157,10 @@ describe('readPipelineState', () => {
     let sawItemsByNumberCall = false
     await readPipelineState({
       repositories: [readyEntry('repo-a', repoRoot, 'o/a')],
-      gh: (args) => {
-        const document = args.find((a) => a.startsWith('query=')) ?? ''
+      github: (request) => {
+        const document = graphqlBodyOf(request).query
         if (document.includes('issueOrPullRequest')) sawItemsByNumberCall = true
-        return Promise.resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' } satisfies GhResult)
+        return Promise.resolve(httpOk(EMPTY_PIPELINE_BODY))
       },
       git: fakeGit(),
       sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),

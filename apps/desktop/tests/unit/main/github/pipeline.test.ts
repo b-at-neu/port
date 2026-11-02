@@ -2,25 +2,21 @@ import { describe, expect, it } from 'vitest'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import { ghAuthStatus, ghJson } from '@/main/platform/gh'
-import type { GhResult, GhRunner } from '@/types/platform'
+import type { GitHubHttpResult, GitHubTransport } from '@/types/platform'
 import { fetchPipelineItems } from '@/main/github/pipeline'
 import { RATE_LIMIT_REPLY, connection } from '../../../fixtures/pipeline-reply'
+import { httpFail, httpOk, queryOf } from '../../../fixtures/github-http'
 
 const REPO = { owner: 'o', name: 'r' }
 const VOCABULARY = resolveVocabulary({})
 const REPO_LABELS_OK = { totalCount: VOCABULARY.labels.length, nodes: VOCABULARY.labels.map((label) => ({ name: label.name })) }
 
-function documentOf(args: readonly string[]): string {
-  return args.find((arg) => arg.startsWith('query=')) ?? ''
+function ok(body: unknown): GitHubHttpResult {
+  return httpOk(JSON.stringify(body))
 }
 
-function ok(body: unknown): GhResult {
-  return { ok: true, stdout: JSON.stringify(body), stderr: '' }
-}
-
-function partial(body: unknown): GhResult {
-  return { ok: false, kind: 'unknown', stdout: JSON.stringify(body), stderr: 'gh: some errors' }
-}
+// A partial GraphQL reply is a 200 whose body carries `errors` beside usable data.
+const partial = ok
 
 function node(number: number, labels: readonly string[], extra: Record<string, unknown> = {}): Record<string, unknown> {
   return { number, title: `item ${number}`, url: `https://github.com/o/r/issues/${number}`, body: '', state: 'OPEN', assignees: { nodes: [] }, labels: { nodes: labels.map((name) => ({ name })) }, ...extra }
@@ -44,7 +40,7 @@ function sweepBody(body: SweepBody): Record<string, unknown> {
 const ALIAS_PATTERN = /d(\d+): (issue|pullRequest)\(number: (\d+)\)/g
 
 /** One empty detail node per alias the document asks for. */
-function emptyDetails(document: string, rateLimit: unknown = RATE_LIMIT_REPLY): GhResult {
+function emptyDetails(document: string, rateLimit: unknown = RATE_LIMIT_REPLY): GitHubHttpResult {
   const repository: Record<string, unknown> = {}
   for (const match of document.matchAll(ALIAS_PATTERN)) {
     repository[`d${match[1]}`] = match[2] === 'issue' ? { timelineItems: { nodes: [] }, blockedBy: { totalCount: 0, nodes: [] } } : { timelineItems: { nodes: [] }, reviews: { nodes: [] }, comments: { nodes: [] } }
@@ -53,15 +49,15 @@ function emptyDetails(document: string, rateLimit: unknown = RATE_LIMIT_REPLY): 
 }
 
 interface Script {
-  readonly sweep: (document: string, call: number) => GhResult
-  readonly details?: (document: string) => GhResult
+  readonly sweep: (document: string, call: number) => GitHubHttpResult
+  readonly details?: (document: string) => GitHubHttpResult
 }
 
-function scripted(script: Script): { readonly runner: GhRunner; readonly documents: string[] } {
+function scripted(script: Script): { readonly runner: GitHubTransport; readonly documents: string[] } {
   const documents: string[] = []
   let sweeps = 0
-  const runner: GhRunner = (args) => {
-    const document = documentOf(args)
+  const runner: GitHubTransport = (request) => {
+    const document = queryOf(request)
     documents.push(document)
     if (document.includes('d0:')) return Promise.resolve((script.details ?? ((detailDocument) => emptyDetails(detailDocument)))(document))
     return Promise.resolve(script.sweep(document, sweeps++))
@@ -69,8 +65,8 @@ function scripted(script: Script): { readonly runner: GhRunner; readonly documen
   return { runner, documents }
 }
 
-function fetchWith(runner: GhRunner, vocabulary: LabelVocabulary = VOCABULARY): ReturnType<typeof fetchPipelineItems> {
-  return fetchPipelineItems({ repo: REPO, vocabulary, gh: runner })
+function fetchWith(runner: GitHubTransport, vocabulary: LabelVocabulary = VOCABULARY): ReturnType<typeof fetchPipelineItems> {
+  return fetchPipelineItems({ repo: REPO, vocabulary, github: runner })
 }
 
 describe('fetchPipelineItems', () => {
@@ -154,7 +150,7 @@ describe('fetchPipelineItems', () => {
       sweep: (_document, call) =>
         call === 0
           ? ok(sweepBody({ issues: connection([node(1, ['ready'])], { hasNextPage: true, endCursor: 'cursor-1' }, 2), pullRequests: connection([]) }))
-          : { ok: false, kind: 'network', stdout: '', stderr: 'dial tcp: no such host' },
+          : httpFail('network', 502),
     })
     const result = await fetchWith(runner)
     expect(result.ok).toBe(false)
@@ -183,11 +179,11 @@ describe('fetchPipelineItems', () => {
   })
 
   it.each([
-    ['unauthenticated', { ok: false, kind: 'unauthenticated', stdout: '', stderr: 'gh: (HTTP 401)' } satisfies GhResult],
-    ['rate-limited', { ok: false, kind: 'rate-limited', stdout: '', stderr: 'gh: (HTTP 403) rate limit' } satisfies GhResult],
-    ['network', { ok: false, kind: 'network', stdout: '', stderr: 'dial tcp: no such host' } satisfies GhResult],
-  ])('%s returns ok: false with no items field, not an empty list', async (_label, ghResult) => {
-    const result = await fetchWith(() => Promise.resolve(ghResult))
+    ['unauthenticated', httpFail('unauthenticated', 401)],
+    ['rate-limited', httpFail('rate-limited', 403, 'API rate limit exceeded')],
+    ['network', httpFail('network', 503)],
+  ])('%s returns ok: false with no items field, not an empty list', async (_label, failure) => {
+    const result = await fetchWith(() => Promise.resolve(failure))
     expect(result.ok).toBe(false)
     expect('items' in result).toBe(false)
   })
@@ -220,7 +216,7 @@ describe('fetchPipelineItems — details', () => {
   const issue = node(1, ['ready'])
   const approvedPull = node(2, ['approved'], { mergedAt: null })
   const reviewPull = node(3, ['ready for review'], { mergedAt: null })
-  const sweep = (): GhResult => ok(sweepBody({ issues: connection([issue]), pullRequests: connection([approvedPull, reviewPull]) }))
+  const sweep = (): GitHubHttpResult => ok(sweepBody({ issues: connection([issue]), pullRequests: connection([approvedPull, reviewPull]) }))
 
   it('merges each detail onto its item, with the rollup only on a pull request at the approved or ready-for-review stage', async () => {
     const rollup = { commits: { nodes: [{ commit: { statusCheckRollup: { state: 'FAILURE', contexts: { nodes: [{ __typename: 'CheckRun', name: 'build', conclusion: 'FAILURE', status: 'COMPLETED' }] } } } }] } }
@@ -276,7 +272,7 @@ describe('fetchPipelineItems — details', () => {
   })
 
   it('a failed detail call fails the whole read, keeping the caller on its last good one', async () => {
-    const { runner } = scripted({ sweep, details: () => ({ ok: false, kind: 'network', stdout: '', stderr: 'dial tcp: no such host' }) })
+    const { runner } = scripted({ sweep, details: () => httpFail('network', 502) })
     const result = await fetchWith(runner)
     expect(result.ok).toBe(false)
     if (result.ok) return

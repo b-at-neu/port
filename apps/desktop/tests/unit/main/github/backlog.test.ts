@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { GhResult } from '@/types/platform'
+import type { GitHubHttpResult } from '@/types/platform'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import { fetchBacklog } from '@/main/github/backlog'
-import type { GhRunner } from '@/types/platform'
-
-function fakeRunner(result: GhResult): GhRunner {
-  return () => Promise.resolve(result)
-}
+import { fakeTransport, httpFail, httpOk } from '../../../fixtures/github-http'
 
 const VOCABULARY = resolveVocabulary({})
 const READY_LABEL = VOCABULARY.labels.find((label) => label.key === 'ready')?.name ?? 'ready'
@@ -18,7 +14,7 @@ function issueNode(number: number, extra: Record<string, unknown>): Record<strin
 
 async function fetchNodes(nodes: readonly Record<string, unknown>[], errors?: readonly unknown[]) {
   const stdout = JSON.stringify({ data: { repository: { issues: { totalCount: nodes.length, nodes } }, viewer: { login: 'octo-dev' } }, ...(errors === undefined ? {} : { errors }) })
-  const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, gh: fakeRunner({ ok: true, stdout, stderr: '' }) })
+  const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, github: fakeTransport(httpOk(stdout)) })
   if (!result.ok) throw new Error('expected an ok read')
   return result
 }
@@ -39,7 +35,7 @@ describe('fetchBacklog', () => {
         viewer: { login: 'octo-dev' },
       },
     })
-    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, gh: fakeRunner({ ok: true, stdout, stderr: '' }) })
+    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, github: fakeTransport(httpOk(stdout)) })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.items).toEqual([{ number: 47, title: 'Add dark mode', url: 'u47', updatedAt: '2026-01-01T00:00:00Z', assignees: [], labels: [], subIssueCount: 0, blockers: { ok: true, open: [], shown: 0, total: 0 } }])
@@ -72,7 +68,7 @@ describe('fetchBacklog', () => {
         viewer: { login: 'octo-dev' },
       },
     })
-    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, gh: fakeRunner({ ok: true, stdout, stderr: '' }) })
+    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, github: fakeTransport(httpOk(stdout)) })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.items[0]?.labels).toEqual([
@@ -132,7 +128,7 @@ describe('fetchBacklog', () => {
         viewer: { login: 'octo-dev' },
       },
     })
-    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, gh: fakeRunner({ ok: true, stdout, stderr: '' }) })
+    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, github: fakeTransport(httpOk(stdout)) })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.scanned).toBe(1)
@@ -144,21 +140,21 @@ describe('fetchBacklog', () => {
       data: { repository: { issues: { totalCount: 0, nodes: [] } }, viewer: null },
       errors: [{ path: ['viewer'], message: 'boom' }],
     })
-    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, gh: fakeRunner({ ok: true, stdout, stderr: '' }) })
+    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, github: fakeTransport(httpOk(stdout)) })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.viewer).toBeNull()
   })
 
-  it.each([
-    ['unauthenticated', { ok: false as const, kind: 'unauthenticated' as const, stdout: '', stderr: 'gh: 401' }],
-    ['rate-limited', { ok: false as const, kind: 'rate-limited' as const, stdout: '', stderr: 'rate limited' }],
-    ['network', { ok: false as const, kind: 'network' as const, stdout: '', stderr: 'net down' }],
-    ['not-found', { ok: false as const, kind: 'not-found' as const, searched: [] }],
-    ['forbidden', { ok: false as const, kind: 'forbidden' as const, stdout: '', stderr: 'forbidden' }],
-    ['http-not-found', { ok: false as const, kind: 'http-not-found' as const, stdout: '', stderr: '404' }],
-  ])('maps a %s gh failure through the shared envelope classifier', async (kind, ghResult) => {
-    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, gh: fakeRunner(ghResult as GhResult) })
+  it.each<[string, GitHubHttpResult]>([
+    ['unauthenticated', httpFail('unauthenticated', 401)],
+    ['rate-limited', httpFail('rate-limited', 429)],
+    ['network', httpFail('network', 502)],
+    ['not-found', { ok: false, kind: 'not-found', command: 'gh', searched: [] }],
+    ['forbidden', httpFail('forbidden', 403)],
+    ['http-not-found', httpFail('http-not-found', 404)],
+  ])('maps a %s failure through the shared envelope classifier', async (kind, failure) => {
+    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, github: fakeTransport(failure) })
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.kind).toBe(kind)
@@ -166,14 +162,14 @@ describe('fetchBacklog', () => {
 
   it('maps a repository the envelope reports as absent to repo-not-found', async () => {
     const stdout = JSON.stringify({ data: { repository: null } })
-    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, gh: fakeRunner({ ok: true, stdout, stderr: '' }) })
+    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, github: fakeTransport(httpOk(stdout)) })
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.kind).toBe('repo-not-found')
   })
 
   it('maps any other unclassified failure to unknown', async () => {
-    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, gh: fakeRunner({ ok: true, stdout: 'not json', stderr: '' }) })
+    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, github: fakeTransport(httpOk('not json')) })
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.kind).toBe('unparseable')

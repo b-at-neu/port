@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import type { GhResult, GhRunner } from '@/types/platform'
+import type { GitHubHttpResult, GitHubRequest, GitHubTransport } from '@/types/platform'
 import type { ReleaseConfig } from '@/types/release'
 import { fetchReleaseStatus } from '@/main/github/release'
 import { buildStateQuery, buildTicketsQuery, stateVariables } from '@/main/github/release-query'
+import { graphqlBodyOf, httpFail, httpOk } from '../../../fixtures/github-http'
 
 const CONFIG: ReleaseConfig = { versionSource: 'package', versionFiles: ['package.json'], versionCommand: null, postPublishHook: null }
 const REPO = { owner: 'acme', name: 'widgets' }
 const NOW = () => new Date('2026-09-05T14:00:00.000Z')
 
-function ok(stdout: string): GhResult {
-  return { ok: true, stdout, stderr: '' }
+function ok(body: string): GitHubHttpResult {
+  return httpOk(body)
 }
 
 // GitHub's own commit shape: the subject is the first line of the message, parents say merge or not.
@@ -23,7 +24,7 @@ interface Scenario {
   readonly compare?: unknown
   readonly log?: unknown
   readonly tickets?: Record<string, unknown>
-  readonly calls?: string[][]
+  readonly calls?: GitHubRequest[]
 }
 
 const STATE = {
@@ -37,26 +38,26 @@ const STATE = {
   productionHead: { target: { oid: 'prod-oid' } },
 }
 
-function runner(scenario: Scenario): GhRunner {
-  return (args) => {
-    scenario.calls?.push([...args])
-    if (args[1] === 'graphql') {
-      const query = args.find((arg) => arg.startsWith('query=')) ?? ''
+function runner(scenario: Scenario): GitHubTransport {
+  return (request) => {
+    scenario.calls?.push(request)
+    if (request.path === 'graphql') {
+      const query = graphqlBodyOf(request).query
       if (query.includes('issueOrPullRequest')) return Promise.resolve(ok(JSON.stringify({ data: { repository: scenario.tickets ?? {} } })))
       return Promise.resolve(ok(JSON.stringify({ data: { repository: { ...STATE, ...scenario.state }, viewer: { login: 'octo-operator' } }, ...(scenario.errors === undefined ? {} : { errors: scenario.errors }) })))
     }
-    if (args[1]?.includes('/commits?sha=')) return Promise.resolve(ok(JSON.stringify(scenario.log ?? [])))
+    if (request.path.includes('/commits?sha=')) return Promise.resolve(ok(JSON.stringify(scenario.log ?? [])))
     return Promise.resolve(ok(JSON.stringify(scenario.compare ?? { status: 'ahead', total_commits: 2, commits: [] })))
   }
 }
 
 function fetchStatus(scenario: Scenario, overrides: Partial<Parameters<typeof fetchReleaseStatus>[0]> = {}) {
-  return fetchReleaseStatus({ repo: REPO, integration: 'dev', production: 'main', moduleEnabled: true, config: CONFIG, gh: runner(scenario), now: NOW, ...overrides })
+  return fetchReleaseStatus({ repo: REPO, integration: 'dev', production: 'main', moduleEnabled: true, config: CONFIG, github: runner(scenario), now: NOW, ...overrides })
 }
 
 describe('fetchReleaseStatus', () => {
   it('gathers the changes since the latest tag, oldest-first compare reversed, and recommends a minor', async () => {
-    const calls: string[][] = []
+    const calls: GitHubRequest[] = []
     const result = await fetchStatus({
       calls,
       compare: {
@@ -76,7 +77,7 @@ describe('fetchReleaseStatus', () => {
     expect(result.status.candidates[0]).toMatchObject({ version: '0.3.0', kind: 'minor', recommended: true })
     expect(result.status.productionHead).toBe('prod-oid')
     expect(result.integrationHead).toEqual({ oid: 'int-oid', tree: 'int-tree' })
-    expect(calls.some((call) => call[1] === 'repos/acme/widgets/compare/v0.2.0...dev?per_page=100')).toBe(true)
+    expect(calls.some((call) => call.method === 'GET' && call.path === 'repos/acme/widgets/compare/v0.2.0...dev?per_page=100')).toBe(true)
     expect(result.status.releases).toHaveLength(1)
   })
 
@@ -91,10 +92,10 @@ describe('fetchReleaseStatus', () => {
   })
 
   it('falls back to the commit list for a diverged compare', async () => {
-    const calls: string[][] = []
+    const calls: GitHubRequest[] = []
     const result = await fetchStatus({ calls, compare: { status: 'diverged', total_commits: 1, commits: [] }, log: [commit('#7 newest'), commit('#6 older')] })
     expect(result.ok && result.status.entries.map((e) => e.number)).toEqual([7, 6])
-    expect(calls.some((call) => call[1]?.includes('/commits?sha=dev'))).toBe(true)
+    expect(calls.some((call) => call.path.includes('/commits?sha=dev'))).toBe(true)
   })
 
   it('resolves the signed-in login, and a failed viewer read only drops it', async () => {
@@ -111,17 +112,17 @@ describe('fetchReleaseStatus', () => {
   })
 
   it('reads a version from the bump branch and gathers nothing while waiting on a merge', async () => {
-    const calls: string[][] = []
+    const calls: GitHubRequest[] = []
     const result = await fetchStatus({ calls, state: { openReleasePr: { nodes: [{ number: 612, url: 'pr', title: 'Release v0.3.0', state: 'OPEN', merged: false }] } } })
     expect(result.ok && result.status.phase).toMatchObject({ kind: 'waiting-merge', version: '0.3.0' })
-    expect(calls.filter((call) => call[1] !== 'graphql')).toHaveLength(0)
+    expect(calls.filter((call) => call.path !== 'graphql')).toHaveLength(0)
   })
 
   it('rebuilds a prefix-relative bump ref into its full branch name and sends the prefix', async () => {
-    const calls: string[][] = []
+    const calls: GitHubRequest[] = []
     const result = await fetchStatus({ calls, state: { bumpRefs: { nodes: [{ name: 'v0.3.0', associatedPullRequests: { nodes: [{ number: 611, url: 'u' }] } }] } } })
     expect(result.ok && result.status.phase).toMatchObject({ kind: 'waiting-bump', version: '0.3.0', bumpPr: { number: 611, url: 'u' } })
-    expect(calls.some((call) => call.includes('bumpRefPrefix=refs/heads/bump/'))).toBe(true)
+    expect(calls.some((call) => call.path === 'graphql' && graphqlBodyOf(call).variables.bumpRefPrefix === 'refs/heads/bump/')).toBe(true)
   })
 
   it('ignores a bump ref that is not a version branch', async () => {
@@ -135,19 +136,19 @@ describe('fetchReleaseStatus', () => {
   })
 
   it('gathers from production for the release notes when ready to publish, and drops draft releases', async () => {
-    const calls: string[][] = []
+    const calls: GitHubRequest[] = []
     const state = {
       closedReleasePr: { nodes: [{ number: 612, url: 'pr', title: 'Release v0.3.0', state: 'MERGED', merged: true }] },
       releases: { nodes: [...STATE.releases.nodes, { tagName: 'v0.4.0', name: 'v0.4.0', url: 'u', publishedAt: null, isDraft: true, isPrerelease: false, isLatest: false, description: '' }] },
     }
     const result = await fetchStatus({ calls, state })
     expect(result.ok && result.status.phase).toEqual({ kind: 'ready-to-publish', version: '0.3.0' })
-    expect(calls.some((call) => call[1] === 'repos/acme/widgets/compare/v0.2.0...main?per_page=100')).toBe(true)
+    expect(calls.some((call) => call.path === 'repos/acme/widgets/compare/v0.2.0...main?per_page=100')).toBe(true)
     expect(result.ok && result.status.releases.map((r) => r.tagName)).toEqual(['v0.2.0'])
   })
 
   it('returns a guard phase without reading GitHub', async () => {
-    const calls: string[][] = []
+    const calls: GitHubRequest[] = []
     const result = await fetchStatus({ calls }, { production: null })
     expect(result.ok && result.status.phase.kind).toBe('single-branch')
     expect(calls).toHaveLength(0)
@@ -159,8 +160,8 @@ describe('fetchReleaseStatus', () => {
   })
 
   it('reports a GitHub failure as data', async () => {
-    const result = await fetchReleaseStatus({ repo: REPO, integration: 'dev', production: 'main', moduleEnabled: true, config: CONFIG, now: NOW, gh: () => Promise.resolve({ ok: false, kind: 'unauthenticated', stdout: '', stderr: 'gh is signed out' }) })
-    expect(result).toEqual({ ok: false, message: 'gh is signed out', readAt: '2026-09-05T14:00:00.000Z' })
+    const result = await fetchReleaseStatus({ repo: REPO, integration: 'dev', production: 'main', moduleEnabled: true, config: CONFIG, now: NOW, github: () => Promise.resolve(httpFail('unauthenticated', 401, '', 'GitHub: Bad credentials (HTTP 401)')) })
+    expect(result).toEqual({ ok: false, message: 'GitHub: Bad credentials (HTTP 401)', readAt: '2026-09-05T14:00:00.000Z' })
   })
 })
 

@@ -1,11 +1,12 @@
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepositoryEntry } from '@/utils/repos'
-import type { CommandResult, GhResult } from '@/types/platform'
+import type { CommandResult, GitHubTransport } from '@/types/platform'
 import type { TimerFactory, TimerHandle } from '@/types/state'
+import { queryOf } from './github-http'
 import { RATE_LIMIT_REPLY, connection } from './pipeline-reply'
 
 /** One ready issue: the sweep reply names it, and the detail read (`d0`) answers with an empty timeline. */
-export function readyItemGh(signedInLogin: string, assignees: readonly string[], rateLimit: unknown = RATE_LIMIT_REPLY, labels: readonly string[] = ['ready']): (args: readonly string[]) => Promise<GhResult> {
+export function readyItemTransport(signedInLogin: string, assignees: readonly string[], rateLimit: unknown = RATE_LIMIT_REPLY, labels: readonly string[] = ['ready']): GitHubTransport {
   const issue = {
     number: 42,
     title: 'a ticket',
@@ -17,9 +18,9 @@ export function readyItemGh(signedInLogin: string, assignees: readonly string[],
   }
   const sweep = { repository: { issues: connection([issue]), pullRequests: connection([]), repoLabels: { totalCount: 0, nodes: [] } }, rateLimit, viewer: { login: signedInLogin } }
   const detail = { repository: { d0: { timelineItems: { nodes: [] } } }, rateLimit }
-  return (args) => {
-    const document = args.find((arg) => arg.startsWith('query=')) ?? ''
-    return Promise.resolve({ ok: true, stdout: JSON.stringify({ data: document.includes('d0:') ? detail : sweep }), stderr: '' })
+  return (request) => {
+    const document = queryOf(request)
+    return Promise.resolve({ ok: true, status: 200, headers: {}, body: JSON.stringify({ data: document.includes('d0:') ? detail : sweep }) })
   }
 }
 
