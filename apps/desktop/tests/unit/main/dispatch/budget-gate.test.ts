@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { pathOps } from '@/main/platform/paths'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { CommandResult, FileResult, GhResult, GhRunner, GitHubHttpResult, GitHubRequest, GitHubTransport, GitRunner } from '@/types/platform'
@@ -8,7 +9,7 @@ import { renderLedger } from '@/main/dispatch/budget-ledger'
 import type { LedgerRow } from '@/types/budget'
 
 const NOW = new Date('2026-09-05T14:02:00.000Z')
-const LOG_PATH = '/repo/.temp/budget-session-desktop.tsv'
+const LOG_PATH = pathOps.join('/repo', '.temp', 'budget-session-desktop.tsv')
 const CANDIDATE = { kind: 'issue' as const, number: 52, agent: 'impl' as const }
 const OPEN_ROW = '52\timpl\tsonnet\t2026-09-05T14:00:00.000Z\topen\t0\t\t52\n'
 const LEDGER_ROW: LedgerRow = { stage: 'plan', model: 'opus', startedAt: '2026-09-05T13:00:00.000Z', seconds: 600, outcome: 'completed' }

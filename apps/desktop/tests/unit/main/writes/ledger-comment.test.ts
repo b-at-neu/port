@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { pathOps } from '@/main/platform/paths'
 import { createLedgerWriter } from '@/main/writes/ledger-comment'
 import type { FileResult, GhResult, GhRunner } from '@/types/platform'
 
 const okFile = (): Promise<FileResult<void>> => Promise.resolve({ ok: true, value: undefined })
-const PATH = '/scratch/budget-ledger-52-uuid.md'
+const PATH = pathOps.join('/scratch', 'budget-ledger-52-uuid.md')
 
 function writer(result: GhResult, writeResult: Promise<FileResult<void>> = okFile()) {
   const calls: (readonly string[])[] = []
