@@ -18,7 +18,10 @@ function harness(replies: readonly (() => Promise<Response>)[], tokens: readonly
   const sent: Sent[] = []
   let tokenReads = 0
   let call = 0
+  let clock = 0
   const transport = createGitHubTransport({
+    now: () => clock,
+    tokenTtlMs: 30_000,
     fetch: (url, init) => {
       sent.push({ url, method: init.method, headers: init.headers, body: init.body })
       const reply = replies[call++] ?? replies[replies.length - 1]
@@ -34,7 +37,14 @@ function harness(replies: readonly (() => Promise<Response>)[], tokens: readonly
     timeoutMs: 30_000,
     maxBytes: options.maxBytes ?? 1024,
   })
-  return { transport, sent, tokenReads: () => tokenReads }
+  return {
+    transport,
+    sent,
+    tokenReads: () => tokenReads,
+    advance: (ms: number) => {
+      clock += ms
+    },
+  }
 }
 
 const reply = (status: number, body = '{}', headers: Record<string, string> = {}) => () => Promise.resolve(new Response(body, { status, headers }))
@@ -95,6 +105,19 @@ describe('createGitHubTransport', () => {
     await transport(GRAPHQL)
     await transport(REST)
     expect(tokenReads()).toBe(1)
+  })
+
+  it('re-reads the token once the TTL passes, so a gh auth logout shows as signed out', async () => {
+    const signedOut: TokenRead = { ok: false, kind: 'unauthenticated', status: null, body: '', message: "gh isn't signed in to github.com" }
+    const { transport, sent, tokenReads, advance } = harness([reply(200)], [{ ok: true, token: 't1' }, signedOut])
+    expect((await transport(GRAPHQL)).ok).toBe(true)
+    advance(29_999)
+    expect((await transport(GRAPHQL)).ok).toBe(true)
+    expect(tokenReads()).toBe(1)
+    advance(1)
+    expect(await transport(GRAPHQL)).toMatchObject({ ok: false, kind: 'unauthenticated', status: null })
+    expect(tokenReads()).toBe(2)
+    expect(sent).toHaveLength(2)
   })
 
   it('re-reads the token on a 401 and retries exactly once', async () => {

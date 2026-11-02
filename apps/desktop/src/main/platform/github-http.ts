@@ -1,4 +1,4 @@
-// The only `fetch` caller under apps/desktop/src/main/. The token comes only from `gh auth token` and lives in process memory.
+// The only `fetch` caller under apps/desktop/src/main/. The token comes only from `gh auth token` and lives in process memory for a short TTL, so a `gh auth logout` is noticed.
 import { e2eFakePath, runCommand } from '@/main/platform/run'
 
 import type { CommandResult, GhClassification, GitHubHttpResult, GitHubRequest, GitHubTransport } from '@/types/platform'
@@ -7,6 +7,7 @@ const API_BASE = 'https://api.github.com'
 const TIMEOUT_MS = 30_000
 const MAX_BYTES = 32 * 1024 * 1024
 const TOKEN_TIMEOUT_MS = 8_000
+const TOKEN_TTL_MS = 30_000
 
 type HttpFailure = Exclude<GitHubHttpResult, { ok: true }>
 
@@ -21,6 +22,8 @@ type FetchLike = (url: string, init: { method: string; headers: Record<string, s
 interface TransportOptions {
   readonly fetch: FetchLike
   readonly readToken: () => Promise<TokenRead>
+  readonly now: () => number
+  readonly tokenTtlMs: number
   readonly apiBase: string
   readonly timeoutMs: number
   readonly maxBytes: number
@@ -77,11 +80,13 @@ async function readGhToken(): Promise<TokenRead> {
 
 export function createGitHubTransport(options: TransportOptions): GitHubTransport {
   let cached: Promise<TokenRead> | null = null
+  let readAt = 0
 
   function token(refresh: boolean): Promise<TokenRead> {
-    if (refresh || cached === null) {
+    if (refresh || cached === null || options.now() - readAt >= options.tokenTtlMs) {
       const pending = options.readToken()
       cached = pending
+      readAt = options.now()
       void pending.then((read) => {
         if (!read.ok && cached === pending) cached = null
       })
@@ -143,7 +148,7 @@ function fromFake(result: CommandResult): GitHubHttpResult {
   }
 }
 
-const real = createGitHubTransport({ fetch, readToken: readGhToken, apiBase: API_BASE, timeoutMs: TIMEOUT_MS, maxBytes: MAX_BYTES })
+const real = createGitHubTransport({ fetch, readToken: readGhToken, now: Date.now, tokenTtlMs: TOKEN_TTL_MS, apiBase: API_BASE, timeoutMs: TIMEOUT_MS, maxBytes: MAX_BYTES })
 
 /** Under E2E the request goes to the fake instead, so no host `gh` and no network are ever reached. */
 export const githubHttp: GitHubTransport = async (request) => {
