@@ -29,6 +29,8 @@ function run(engine: StateEngine, op: OffloadOp, params: unknown): Promise<unkno
       return engine.tailPoll(params as OffloadParams['tailPoll'])
     case 'tailClose':
       return engine.tailClose(params as OffloadParams['tailClose'])
+    case 'forgetRepo':
+      return engine.forgetRepo(params as OffloadParams['forgetRepo'])
   }
 }
 

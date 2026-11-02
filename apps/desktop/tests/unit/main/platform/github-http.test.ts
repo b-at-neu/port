@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { classifyHttpStatus, createGitHubTransport } from '@/main/platform/github-http'
-import type { GitHubHttpResult, GitHubRequest } from '@/types/platform'
+import { classifyHttpStatus, createGitHubClient, createGitHubTransport } from '@/main/platform/github-http'
+import type { ConditionalRequest, GitHubHttpResult, GitHubRequest } from '@/types/platform'
 
 type TokenRead = { readonly ok: true; readonly token: string } | Exclude<GitHubHttpResult, { ok: true }>
 
@@ -19,7 +19,7 @@ function harness(replies: readonly (() => Promise<Response>)[], tokens: readonly
   let tokenReads = 0
   let call = 0
   let clock = 0
-  const transport = createGitHubTransport({
+  const client = createGitHubClient({
     now: () => clock,
     tokenTtlMs: 30_000,
     fetch: (url, init) => {
@@ -38,7 +38,8 @@ function harness(replies: readonly (() => Promise<Response>)[], tokens: readonly
     maxBytes: options.maxBytes ?? 1024,
   })
   return {
-    transport,
+    transport: client.request,
+    conditional: client.conditional,
     sent,
     tokenReads: () => tokenReads,
     advance: (ms: number) => {
@@ -47,7 +48,7 @@ function harness(replies: readonly (() => Promise<Response>)[], tokens: readonly
   }
 }
 
-const reply = (status: number, body = '{}', headers: Record<string, string> = {}) => () => Promise.resolve(new Response(body, { status, headers }))
+const reply = (status: number, body = '{}', headers: Record<string, string> = {}) => () => Promise.resolve(new Response(status === 304 ? null : body, { status, headers }))
 
 describe('classifyHttpStatus', () => {
   it.each([
@@ -67,6 +68,57 @@ describe('classifyHttpStatus', () => {
     [304, {}, '', 'unknown'],
   ])('%i with %j is %s', (status, headers, body, expected) => {
     expect(classifyHttpStatus(status, headers, body)).toBe(expected)
+  })
+})
+
+const CONDITIONAL: ConditionalRequest = { method: 'GET', path: 'repos/o/r/branches/dev', ifNoneMatch: 'W/"abc"' }
+
+describe('createGitHubClient conditional', () => {
+  it('sends ifNoneMatch verbatim as If-None-Match, and nothing without it', async () => {
+    const { conditional, sent } = harness([reply(200)])
+    await conditional(CONDITIONAL)
+    await conditional({ method: 'GET', path: 'repos/o/r/branches/dev' })
+    expect(sent[0]?.headers['If-None-Match']).toBe('W/"abc"')
+    expect(sent[1]?.headers).not.toHaveProperty('If-None-Match')
+  })
+
+  it('a 304 after a sent validator is notModified, with its headers', async () => {
+    const { conditional } = harness([reply(304, '', { ETag: 'W/"abc"' })])
+    expect(await conditional(CONDITIONAL)).toEqual({ ok: true, notModified: true, status: 304, headers: { etag: 'W/"abc"' } })
+  })
+
+  it('a 200 is notModified false with the body', async () => {
+    const { conditional } = harness([reply(200, '{"a":1}', { ETag: '"new"' })])
+    expect(await conditional(CONDITIONAL)).toEqual({ ok: true, notModified: false, status: 200, headers: { etag: '"new"', 'content-type': 'text/plain;charset=UTF-8' }, body: '{"a":1}' })
+  })
+
+  it('a 304 without a validator is unknown, as on the plain path', async () => {
+    const { conditional } = harness([reply(304)])
+    expect(await conditional({ method: 'GET', path: 'repos/o/r/branches/dev' })).toMatchObject({ ok: false, kind: 'unknown', status: 304 })
+  })
+
+  it('a 304 from the plain request is still unknown', async () => {
+    const { transport } = harness([reply(304)])
+    expect(await transport(REST)).toMatchObject({ ok: false, kind: 'unknown', status: 304 })
+  })
+
+  it('a 401 re-reads the token and retries once', async () => {
+    const { conditional, sent, tokenReads } = harness([reply(401, '{"message":"Bad credentials"}'), reply(304)], [{ ok: true, token: 'old' }, { ok: true, token: 'new' }])
+    expect(await conditional(CONDITIONAL)).toMatchObject({ ok: true, notModified: true })
+    expect(tokenReads()).toBe(2)
+    expect(sent.map((request) => request.headers.Authorization)).toEqual(['Bearer old', 'Bearer new'])
+  })
+
+  it('request and conditional share one token read', async () => {
+    const { transport, conditional, tokenReads } = harness([reply(200)])
+    await transport(REST)
+    await conditional(CONDITIONAL)
+    expect(tokenReads()).toBe(1)
+  })
+
+  it('a failure status is classified like any other read', async () => {
+    const { conditional } = harness([reply(404, '{"message":"Not Found"}')])
+    expect(await conditional(CONDITIONAL)).toMatchObject({ ok: false, kind: 'http-not-found', status: 404 })
   })
 })
 

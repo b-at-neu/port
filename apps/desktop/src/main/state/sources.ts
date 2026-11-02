@@ -1,5 +1,6 @@
 // One refresh primitive per source, each keeping the previous good value in place on a failed attempt. `watcher.ts` decides *when* to call these; no file here names a timer.
 import { fetchItemsByNumber } from '@/main/github/adapter'
+import { createEtagCache } from '@/main/github/conditional'
 import { fetchPipelineItems } from '@/main/github/pipeline'
 import type { GitHubTransport } from '@/types/platform'
 import { collectOrphanNumbers } from '@/main/state/attach'
@@ -14,7 +15,7 @@ import type { AgentRecord } from '@/types/sessions'
 import type { RefreshOutcome, SourceCache } from '@/types/state'
 
 export function createSourceCache(): SourceCache {
-  return { github: new Map(), itemStates: new Map(), worktrees: new Map(), denials: new Map(), sessions: null }
+  return { github: new Map(), itemStates: new Map(), worktrees: new Map(), denials: new Map(), etags: createEtagCache(), sessions: null }
 }
 
 function projectOk<T extends { readonly ok: boolean }>(previous: T | null, attempt: T): T {

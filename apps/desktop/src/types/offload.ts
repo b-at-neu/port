@@ -11,6 +11,10 @@ interface RepoRoot {
   readonly repoRoot: string
 }
 
+interface RepoIdParams {
+  readonly repoId: RepoId
+}
+
 interface ReposParams {
   readonly repos: readonly LocalRepoRef[]
 }
@@ -36,6 +40,7 @@ export interface StateEngine {
   tailOpen(params: OpenTailParams): Promise<TranscriptTailOpen>
   tailPoll(params: PollTailParams): Promise<TranscriptTailPoll>
   tailClose(params: CloseTailParams): Promise<void>
+  forgetRepo(params: RepoIdParams): Promise<void>
 }
 
 export const OFFLOAD_OPS = [
@@ -50,6 +55,7 @@ export const OFFLOAD_OPS = [
   'tailOpen',
   'tailPoll',
   'tailClose',
+  'forgetRepo',
 ] as const satisfies readonly (keyof StateEngine)[]
 
 export type OffloadOp = (typeof OFFLOAD_OPS)[number]
