@@ -1,5 +1,5 @@
 // Renderer-safe shapes for the worktree inspector: the in-process classification and the local read's `prunable`/`producer` join. No import here may reach a Node builtin.
-import type { DirEntry, FileResult, GhRunner, GitRunner, PathOps, RemoveDirectoryResult, StatInfo } from '@/types/platform'
+import type { DirEntry, FileResult, GitHubTransport, GitRunner, PathOps, RemoveDirectoryResult, StatInfo } from '@/types/platform'
 import type { CorrelationRung, WorktreeCorrelation, WorktreeEntry, WorktreeProducer } from '@/types/local'
 import type { ItemStateName } from '@/types/github'
 
@@ -191,7 +191,7 @@ export interface ReadWorktreeReportParams extends ReclaimerSeams {
   readonly repo: string
   /** The effective integration branch, not the checked-out config's. */
   readonly integration: string
-  readonly gh?: GhRunner
+  readonly github?: GitHubTransport
 }
 
 export interface RunReclaimParams extends ReadWorktreeReportParams {

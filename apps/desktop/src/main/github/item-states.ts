@@ -1,13 +1,14 @@
 // readItemStates — the state of many issues or pull requests in one aliased round trip.
-import { gh as defaultGh } from '@/main/platform/gh'
+import { githubHttp } from '@/main/platform/github-http'
 import type { GitHubRepoRef, ItemStateName, ItemStatesRead } from '@/types/github'
-import type { GhRunner } from '@/types/platform'
-import { classifyFailure, parseEnvelope, stdoutOf } from '@/main/github/envelope'
+import type { GitHubTransport } from '@/types/platform'
+import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
+import { repoGraphqlRequest } from '@/main/github/request'
 
 interface ReadItemStatesParams {
   readonly repo: GitHubRepoRef
   readonly numbers: readonly number[]
-  readonly gh?: GhRunner
+  readonly github?: GitHubTransport
 }
 
 function stateOf(node: unknown): ItemStateName | null {
@@ -24,10 +25,10 @@ export async function readItemStates(params: ReadItemStatesParams): Promise<Item
   const aliases = params.numbers.map((n) => `n${String(n)}: issueOrPullRequest(number: ${String(n)}) { __typename ... on Issue { state } ... on PullRequest { state } }`)
   const document = ['query($owner: String!, $name: String!) {', '  repository(owner: $owner, name: $name) {', `    ${aliases.join(' ')}`, '  }', '}'].join('\n')
 
-  const runner = params.gh ?? defaultGh
-  const result = await runner(['api', 'graphql', '-f', `query=${document}`, '-f', `owner=${params.repo.owner}`, '-f', `name=${params.repo.name}`])
-  const stdout = stdoutOf(result)
-  const parsed = stdout !== undefined ? parseEnvelope(stdout) : undefined
+  const github = params.github ?? githubHttp
+  const result = await github(repoGraphqlRequest(document, params.repo))
+  const text = bodyOf(result)
+  const parsed = text !== undefined ? parseEnvelope(text) : undefined
   const verdict = classifyFailure(result, parsed)
   if (verdict.kind !== 'ok') return { ok: false, kind: verdict.kind, message: verdict.message }
   if (parsed === undefined || !parsed.ok) return { ok: false, kind: 'unparseable', message: "GitHub's reply wasn't JSON" }

@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { createFakeGh, createFakeRepo, MAIN, WORKTREES } from '../../../fixtures/reclaimer-harness'
-import type { FakeGhOptions, FakeRepoOptions, FakeWorktree } from '../../../fixtures/reclaimer-harness'
+import { createFakeGithub, createFakeRepo, MAIN, WORKTREES } from '../../../fixtures/reclaimer-harness'
+import type { FakeGithubOptions, FakeRepoOptions, FakeWorktree } from '../../../fixtures/reclaimer-harness'
 import { runReclaim } from '@/main/reclaimer/reclaim'
 import type { ForcedReclaim, WorktreesReclaimResult } from '@/types/reclaimer'
 
 const path = (n: number): string => `${WORKTREES}/impl-${String(n)}`
 const finished = (n: number, overrides: Partial<FakeWorktree> = {}): FakeWorktree => ({ path: path(n), branch: `${String(n)}-ticket`, ...overrides })
 
-async function reclaim(repoOptions: FakeRepoOptions, ghOptions: FakeGhOptions, scope: { issue?: number | null; force?: ForcedReclaim | null } = {}) {
+async function reclaim(repoOptions: FakeRepoOptions, ghOptions: FakeGithubOptions, scope: { issue?: number | null; force?: ForcedReclaim | null } = {}) {
   const repo = createFakeRepo(repoOptions)
-  const gh = createFakeGh(ghOptions)
-  const result = await runReclaim({ repoRoot: MAIN, repo: 'acme/widgets', integration: 'dev', gh: gh.gh, ...repo.seams, issue: scope.issue ?? null, force: scope.force ?? null })
+  const gh = createFakeGithub(ghOptions)
+  const result = await runReclaim({ repoRoot: MAIN, repo: 'acme/widgets', integration: 'dev', github: gh.github, ...repo.seams, issue: scope.issue ?? null, force: scope.force ?? null })
   return { result, repo }
 }
 
