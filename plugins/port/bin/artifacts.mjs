@@ -41,6 +41,7 @@ export const REVISION_HEADING = /^## Revision — Cycle (\d+)$/;
 export const APPROVAL_WITHDRAWN_HEADING = '## Approval withdrawn';
 export const REBASE_REQUIRED_HEADING = '## Rebase required';
 export const CHANGES_REQUESTED_HEADING = '## Changes requested';
+export const INTEGRATION_RED_HEADING = '## Integration red';
 export const SHA_RE = /\b[0-9a-f]{7,40}\b/;
 // `fixed <ids> · skipped <ids> · <sha>`, either segment dropped when empty, or the
 // check-fix-mode form `check <name> · <sha>` with neither segment at all.
@@ -301,6 +302,24 @@ function checkChangesRequested(text) {
   return ok();
 }
 
+/** `## Integration red` — review-agent's no-verdict hold. Heading on line 1, a `Head `<sha>`` line
+ *  on line 2, then at least one ``- `<check>` — <conclusion> on `<sha>` · <url>`` line. */
+function checkIntegrationRed(text) {
+  const ls = lines(text);
+  const first = (ls[0] ?? '').trim();
+  if (first !== INTEGRATION_RED_HEADING) {
+    return fail(`line 1 must be exactly '${INTEGRATION_RED_HEADING}', got ${JSON.stringify(first)}`, `'${INTEGRATION_RED_HEADING}'`);
+  }
+  const second = (ls[1] ?? '').trim();
+  if (!/^Head `[0-9a-f]{7,40}` ·/.test(second)) {
+    return fail(`line 2 must open 'Head \`<sha>\` ·' with a 7-40 character hex SHA, got ${JSON.stringify(second)}`, "'Head `<head-sha>` · `<integration>` is already red on these checks, …'");
+  }
+  if (!ls.slice(2).some((l) => /^- `[^`]+` — .*`[0-9a-f]{7,40}`/.test(l.trim()))) {
+    return fail('no red check line follows', "at least one '- `<check>` — <conclusion> on `<integration-sha>` · <run url>' line");
+  }
+  return ok();
+}
+
 // One registry for both modes — kind -> { run, heading }; `null` marks the two kinds
 // `audit` matches by shape, not heading.
 export const CHECKS = {
@@ -311,6 +330,7 @@ export const CHECKS = {
   withdrawn: { run: checkShaAnnotated(APPROVAL_WITHDRAWN_HEADING, 'check'), heading: APPROVAL_WITHDRAWN_HEADING },
   'rebase-required': { run: checkShaAnnotated(REBASE_REQUIRED_HEADING, 'base branch'), heading: REBASE_REQUIRED_HEADING },
   'changes-requested': { run: checkChangesRequested, heading: CHANGES_REQUESTED_HEADING },
+  'integration-red': { run: checkIntegrationRed, heading: INTEGRATION_RED_HEADING },
 };
 
 function runCheck(argv) {
