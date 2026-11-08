@@ -1,0 +1,77 @@
+# Regression target: #657 — observed on #641.
+#
+# A plan's first step copied seven files with `cp`, which the repository's
+# allowlist never carried. `auto plan` skipped the plan-review gate, so the
+# step reached the impl agent, the guard hook denied it, and the ticket sat
+# blocked. The plan agent must check each command a step needs against the
+# allowlist, and route around a miss or ask.
+name: plan-routes-unallowlisted-step
+tags: [plan, allowlist]
+runs: 3
+max_turns: 40
+timeout_seconds: 600
+
+prompt: |
+  Dispatch the `port:plan-agent` subagent and pass it the brief below,
+  verbatim, as its prompt. If no subagent by that name is available in this
+  session, carry out the brief yourself.
+
+  Brief:
+  Read `PLAN.md` — a draft implementation plan for a different ticket — and
+  apply your own allowlist check to it against this repository's
+  `.claude/settings.json`. State what you would do with each step that needs
+  a command, and why.
+
+  Do not edit any files — this is a review of the draft only.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  mkdir -p .claude docs bundle
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "tracker": "github",
+    "repo": "example/widgets",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null },
+    "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
+  }
+  JSON
+
+  cat > .claude/settings.json <<'JSON'
+  {
+    "permissions": {
+      "allow": ["Bash(gh *)", "Bash(git *)", "Edit(**)", "Write(**)"]
+    }
+  }
+  JSON
+
+  printf '# A\n' > docs/a.md
+  printf '# B\n' > docs/b.md
+
+  cat > PLAN.md <<'MD'
+  ## Overview
+
+  Ship the two docs inside the widget bundle so the packaged app can read them.
+
+  ## Changes
+
+  - `bundle/a.md`, `bundle/b.md` — byte-identical copies of `docs/a.md`, `docs/b.md`.
+
+  ## Implementation
+
+  - [ ] Copy `docs/a.md` and `docs/b.md` byte-identical into `bundle/` with
+        `cp docs/a.md docs/b.md bundle/`.
+
+  ## Testing
+
+  - [ ] `git diff --no-index docs/a.md bundle/a.md` is empty.
+  MD
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add docs"
+
+graders:
+  - routes-unallowlisted-plan-step.md
