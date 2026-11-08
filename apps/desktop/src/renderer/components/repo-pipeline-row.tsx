@@ -42,10 +42,10 @@ function RunStateMenu({ row }: { readonly row: Extract<PipelineRow, { readonly r
           label: 'Drain',
           hint: 'finish in-flight',
           current: row.pill.label === 'Draining',
-          disabledReason: row.pill.label === 'Draining' ? 'Already draining' : row.pill.label === 'Paused' ? 'Already paused' : ownershipReason,
+          disabledReason: row.pill.label === 'Draining' ? 'Already draining' : row.pill.label === 'Stopped' ? 'Already stopped' : ownershipReason,
           onSelect: () => runState.drain(row.repoId, row.name),
         },
-        { key: 'pause', label: 'Pause', hint: 'stop now', current: row.pill.label === 'Paused', disabledReason: row.pill.label === 'Paused' ? 'Already paused' : null, onSelect: () => runState.requestPause(row.repoId, row.name, row.inFlight) },
+        { key: 'stop', label: 'Stop', hint: 'stop now', current: row.pill.label === 'Stopped', disabledReason: row.pill.label === 'Stopped' ? 'Already stopped' : null, onSelect: () => runState.requestPause(row.repoId, row.name, row.inFlight) },
         ...(row.owner === 'terminal'
           ? [{ key: 'take-over', label: 'Take over…', hint: 'the terminal has stopped', current: false, disabledReason: null, onSelect: () => runState.requestTakeOver(row.repoId, row.name) }]
           : []),

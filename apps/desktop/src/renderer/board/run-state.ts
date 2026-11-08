@@ -11,17 +11,17 @@ function timeOf(iso: string): string {
 }
 
 /** The row's own store-aware line — "Running since 14:02", "Draining
- *  since…", "Paused since…", the new-repo variant with no `since` at all, or
+ *  since…", "Stopped since…", the new-repo variant with no `since` at all, or
  *  the two store-level overrides (`unread`/`unreadable`) that apply
  *  regardless of this repository's own persisted state. */
 export function runStateLineCopy(repoRunState: RepoRunState, store: RunStatesSnapshot['store']): string {
-  if (store.kind === 'unread') return 'Paused — reading the saved pipeline state…'
-  if (store.kind === 'unreadable') return `Paused — dispatch.json can't be read (${store.message}). Fix or delete it, then run it again.`
+  if (store.kind === 'unread') return 'Stopped — reading the saved pipeline state…'
+  if (store.kind === 'unreadable') return `Stopped — dispatch.json can't be read (${store.message}). Fix or delete it, then run it again.`
 
   const { state, since } = repoRunState
   if (state === 'dispatching') return since !== null ? `Running since ${timeOf(since)}` : 'Running'
   if (state === 'draining') return since !== null ? `Draining since ${timeOf(since)} — work in progress finishes, nothing new starts` : 'Draining — work in progress finishes, nothing new starts'
-  return since !== null ? `Paused since ${timeOf(since)} — nothing dispatches` : 'Paused — press Run to start dispatching'
+  return since !== null ? `Stopped since ${timeOf(since)} — nothing dispatches` : 'Stopped — press Run to start dispatching'
 }
 
 /** `run`/`drain`/`take-over`'s own failure reasons (#331): `terminal-owned`
@@ -29,8 +29,8 @@ export function runStateLineCopy(repoRunState: RepoRunState, store: RunStatesSna
  *  before the run-state write itself, so neither ever reaches the
  *  `dispatch.json`-specific copy below. */
 function ownershipRefusalNote(reason: 'terminal-owned' | 'ownership-unreadable', since: string | undefined, message: string | undefined): string {
-  if (reason === 'terminal-owned') return `Stays paused: your terminal cockpit has owned this repository since ${since}. Take over there, or use Take over here.`
-  return `Stays paused: its ownership record can't be read (${message}). Fix or delete it, then run it again.`
+  if (reason === 'terminal-owned') return `Stays stopped: your terminal cockpit has owned this repository since ${since}. Take over there, or use Take over here.`
+  return `Stays stopped: its ownership record can't be read (${message}). Fix or delete it, then run it again.`
 }
 
 /** The one line rendered near the row once a run/drain/take-over command's
@@ -42,13 +42,13 @@ export function runStateResultNote(result: DispatchControlResult): string | null
   if (result.command === 'run') {
     if (result.ok) return null
     if (result.reason === 'terminal-owned' || result.reason === 'ownership-unreadable') return ownershipRefusalNote(result.reason, result.since, result.message)
-    if (result.reason === 'unwritable') return `Couldn't run: ${result.path} couldn't be written (${result.message}). It's still paused.`
-    return `Stays paused: dispatch.json can't be read (${result.message}). Fix or delete it, then run it again.`
+    if (result.reason === 'unwritable') return `Couldn't run: ${result.path} couldn't be written (${result.message}). It's still stopped.`
+    return `Stays stopped: dispatch.json can't be read (${result.message}). Fix or delete it, then run it again.`
   }
   if (result.command === 'drain') {
     if (!result.ok) {
       if (result.reason === 'terminal-owned' || result.reason === 'ownership-unreadable') return ownershipRefusalNote(result.reason, result.since, result.message)
-      return `Stays paused: dispatch.json can't be read (${result.message}). Fix or delete it, then run it again.`
+      return `Stays stopped: dispatch.json can't be read (${result.message}). Fix or delete it, then run it again.`
     }
     return result.persisted ? null : "Draining, but it wasn't saved to disk, so it won't survive a restart."
   }
@@ -78,5 +78,5 @@ export function pauseReportNote(report: Extract<HaltReport, { readonly kind: 'co
 }
 
 export function pauseAbortedCopy(report: Extract<HaltReport, { readonly kind: 'aborted' }>): string {
-  return `Nothing was paused — ${report.path} couldn't be written (${report.message}). Labels were left alone.`
+  return `Nothing was stopped — ${report.path} couldn't be written (${report.message}). Labels were left alone.`
 }

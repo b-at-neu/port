@@ -11,7 +11,7 @@ function labelNameOf(key: LabelKey): string {
 /** `null` unless the run-state store can't be read — the transient `unread` state needs no banner. The full path stays reachable in the sentence itself. */
 export function storeBannerCopy(store: RunStatesSnapshot['store']): string | null {
   if (store.kind !== 'unreadable') return null
-  return `Every pipeline is paused — dispatch.json can't be read (${store.message}). Fix or delete ${store.path}, then run each repository again.`
+  return `Every pipeline is stopped — dispatch.json can't be read (${store.message}). Fix or delete ${store.path}, then run each repository again.`
 }
 
 /** Truncates a contended path list to the first three, naming the remainder
