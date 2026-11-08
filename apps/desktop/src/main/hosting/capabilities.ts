@@ -20,7 +20,7 @@ interface CreateCapabilityTrackerParams {
   readonly readExpectedComponents: (pluginPath: string) => Promise<ExpectedComponents | null>
   readonly samePath: (a: string, b: string) => boolean
   readonly onChange: () => void
-  /** A stage session hides and refuses every `port:` command, not just pipeline, and never checks the plugin's components. */
+  /** A stage session hides and refuses every `port:` command and never checks the plugin's components. */
   readonly stage: boolean
   /** Test-only override of `CAPABILITIES_TIMEOUT_MS`. */
   readonly timeoutMs?: number
