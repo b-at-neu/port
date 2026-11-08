@@ -115,6 +115,14 @@ describe('loadStageInstructions against the bundled stage prompts', () => {
       expect(text.split(`<!-- ${marker}:begin -->`).length - 1).toBeLessThanOrEqual(1)
     }
   })
+
+  it('has the review agent read both review facts from the stage context and derive neither itself', async () => {
+    const result = await loadStageInstructions({ pluginRoot: REAL_ROOT, agent: 'review', ops: pathOps, readTextFile })
+    const text = result.ok ? result.text : ''
+    expect(text).toContain('review.cycle')
+    expect(text).toContain('review.selfAuthored')
+    expect(text).not.toContain('gh api user')
+  })
 })
 
 describe('readStageConfigPointers', () => {
@@ -145,7 +153,7 @@ function launchRequest(overrides: Partial<StageLaunchRequest> = {}): StageLaunch
     config: { ...ENTRY.config, overrides: [{ path: 'reviewCycleCap', value: 3, reason: 'small team', portDefault: 5, source: 'CLAUDE.md' }] },
     diagnostics: [{ kind: 'override-refused', path: 'commands.checks', line: 'commands.checks = x', reason: 'permission surface' }],
   }
-  return { entry, agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', model: 'sonnet', prompt: 'Implementation stage for issue #52. Run your pipeline stage for #52. Follow your Pre-flight, Label swap, Work, and Handoff steps exactly.', title: '#52 x', target: { kind: 'issue', title: 'x' }, ...overrides }
+  return { entry, agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', model: 'sonnet', prompt: 'Implementation stage for issue #52. Run your pipeline stage for #52. Follow your Pre-flight, Label swap, Work, and Handoff steps exactly.', title: '#52 x', target: { kind: 'issue', title: 'x' }, review: null, ...overrides }
 }
 
 describe('buildStageContext', () => {
@@ -165,6 +173,19 @@ describe('buildStageContext', () => {
     expect(context).toContainEqual(['docs.design', 'null'])
     expect(context).toContainEqual(['override', 'reviewCycleCap = 3 (small team)'])
     expect(context).toContainEqual(['override-refused', 'commands.checks: permission surface'])
+  })
+
+  it('emits the review facts directly after reviewCycleCap for a review request', () => {
+    const context = buildStageContext(launchRequest({ agent: 'review', kind: 'pull-request', trigger: 'readyForReview', review: { cycle: 2, selfAuthored: true } }), '/bundle/stage-prompts', pointers)
+    const keys = context.map(([key]) => key)
+    expect(keys.slice(keys.indexOf('reviewCycleCap'), keys.indexOf('reviewCycleCap') + 3)).toEqual(['reviewCycleCap', 'review.cycle', 'review.selfAuthored'])
+    expect(context).toContainEqual(['review.cycle', '2'])
+    expect(context).toContainEqual(['review.selfAuthored', 'true'])
+  })
+
+  it('emits no review facts for a stage that carries none', () => {
+    const keys = buildStageContext(launchRequest(), '/bundle/stage-prompts', pointers).map(([key]) => key)
+    expect(keys.some((key) => key.startsWith('review.'))).toBe(false)
   })
 })
 

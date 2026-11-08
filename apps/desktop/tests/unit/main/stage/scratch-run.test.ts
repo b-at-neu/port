@@ -261,7 +261,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
           unavailable.push(number)
           continue
         }
-        resolved.push({ number, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: `issue ${String(number)}`, url: `https://example.test/issues/${String(number)}`, labels: namesOf(VOCABULARY, set), assignees: [VIEWER], headRefName: null })
+        resolved.push({ number, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: `issue ${String(number)}`, url: `https://example.test/issues/${String(number)}`, labels: namesOf(VOCABULARY, set), assignees: [VIEWER], headRefName: null, author: null })
       }
       return Promise.resolve({ ok: true, resolved, unavailable, fetchedAt: NOW_ISO })
     }

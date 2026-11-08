@@ -57,6 +57,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       integrationRedNames: modules['gates.ts'].integrationRedNames,
       integrationRedGate: modules['gates.ts'].integrationRedGate,
       cycleCapExceeded: modules['gates.ts'].cycleCapExceeded,
+      reviewDispatchFacts: modules['gates.ts'].reviewDispatchFacts,
       approvedReverify: modules['gates.ts'].approvedReverify,
       refreshWins: modules['gates.ts'].refreshWins,
       classifyUnmatched: modules['liveness.ts'].classifyUnmatched,
@@ -321,6 +322,8 @@ function runCase(fn: string, impl: any, input: any): any {
       const [reviews, cap, comments] = input;
       return impl((reviews ?? []).map(toReviewNode), cap, comments);
     }
+    case 'reviewDispatchFacts':
+      return impl(input);
     case 'approvedReverify':
       return impl(input);
     case 'refreshWins':

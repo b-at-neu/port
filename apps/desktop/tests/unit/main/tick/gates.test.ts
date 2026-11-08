@@ -1,7 +1,7 @@
 // Runs zeroDiffGate/cycleCapExceeded/etc over the tick engine's own shared case table; these are
 // the engine's own functions. The table's review shape nests commit.oid, so toReviewNode adapts it.
 import { describe, expect, it } from 'vitest'
-import { approvedReverify, capRefreshes, codeReviewCount, cycleCapExceeded, mergeabilityRoute, refreshDecision, refreshWins, zeroDiffGate } from '../../../../../../scripts/port-tick/gates'
+import { approvedReverify, capRefreshes, codeReviewCount, cycleCapExceeded, mergeabilityRoute, refreshDecision, refreshWins, reviewDispatchFacts, zeroDiffGate } from '../../../../../../scripts/port-tick/gates'
 import type { ReviewNode } from '../../../../../../scripts/port-tick/gates'
 import { zeroDiffChecksOf } from '../../../../../../scripts/port-tick/checks'
 import type { CheckContext, Disposition } from '../../../../../../scripts/port-tick/checks'
@@ -71,9 +71,17 @@ interface ApprovedReverifyCase {
   readonly expected: { readonly action: string }
 }
 
+interface ReviewDispatchFactsCase {
+  readonly function: 'reviewDispatchFacts'
+  readonly name: string
+  readonly input: { readonly priorReviews: number; readonly author: string | null; readonly viewer: string }
+  readonly expected: { readonly cycle: number; readonly selfAuthored: boolean }
+}
+
 type Case =
   | ZeroDiffCase
   | CycleCapCase
+  | ReviewDispatchFactsCase
   | MergeabilityRouteCase
   | RefreshWinsCase
   | RefreshDecisionCase
@@ -81,13 +89,14 @@ type Case =
   | ApprovedReverifyCase
   | { readonly function: string; readonly name: string }
 
-const PORTED_FUNCTIONS = new Set(['zeroDiffGate', 'cycleCapExceeded', 'mergeabilityRoute', 'refreshWins', 'refreshDecision', 'capRefreshes', 'approvedReverify'])
+const PORTED_FUNCTIONS = new Set(['zeroDiffGate', 'cycleCapExceeded', 'reviewDispatchFacts', 'mergeabilityRoute', 'refreshWins', 'refreshDecision', 'capRefreshes', 'approvedReverify'])
 const table = (cases.cases as readonly Case[]).filter(
-  (c): c is ZeroDiffCase | CycleCapCase | MergeabilityRouteCase | RefreshWinsCase | RefreshDecisionCase | CapRefreshesCase | ApprovedReverifyCase => PORTED_FUNCTIONS.has(c.function),
+  (c): c is ZeroDiffCase | CycleCapCase | ReviewDispatchFactsCase | MergeabilityRouteCase | RefreshWinsCase | RefreshDecisionCase | CapRefreshesCase | ApprovedReverifyCase =>
+    PORTED_FUNCTIONS.has(c.function),
 )
 
 describe('gates — shared case table', () => {
-  it('the table covers all seven ported functions', () => {
+  it('the table covers all eight ported functions', () => {
     for (const fn of PORTED_FUNCTIONS) expect(table.some((c) => c.function === fn)).toBe(true)
   })
 
@@ -102,6 +111,10 @@ describe('gates — shared case table', () => {
       if (row.function === 'cycleCapExceeded') {
         const [reviews, cap, comments] = row.input
         expect(cycleCapExceeded(reviews.map(toReviewNode), cap, comments)).toBe(row.expected)
+        return
+      }
+      if (row.function === 'reviewDispatchFacts') {
+        expect(reviewDispatchFacts(row.input)).toEqual(row.expected)
         return
       }
       if (row.function === 'mergeabilityRoute') {

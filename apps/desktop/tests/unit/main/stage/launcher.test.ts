@@ -13,7 +13,7 @@ import type { InterruptedStage, StageInstructionsLoader, StageResumeRequest } fr
 const ENTRY = FIXTURE_REPOSITORIES.find((r) => r.id === WIDGETS_ID) as ReadyEntry
 
 function request(overrides: Partial<StageLaunchRequest> = {}): StageLaunchRequest {
-  return { entry: ENTRY, agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', model: 'sonnet', prompt: 'Run your pipeline stage for #52.', title: '#52 Add a dark-mode icon for the tray', target: { kind: 'issue', title: 'Add a dark-mode icon for the tray' }, ...overrides }
+  return { entry: ENTRY, agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', model: 'sonnet', prompt: 'Run your pipeline stage for #52.', title: '#52 Add a dark-mode icon for the tray', target: { kind: 'issue', title: 'Add a dark-mode icon for the tray' }, review: null, ...overrides }
 }
 
 function baseSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSessionSnapshot {

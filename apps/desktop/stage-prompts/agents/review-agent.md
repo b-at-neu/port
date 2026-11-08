@@ -96,6 +96,10 @@ Confirm the pull request is labeled `<labels.readyForReview>`. If not, stop, rep
 
 **Label invariant.** `<labels.readyForReview>` present **alongside another stage label** (`<labels.reviewing>`, `<labels.revising>`, etc. — markers never count, and the sanctioned `<labels.refreshBranch>`/`<labels.refreshing>` pair is only ever sanctioned beside `<labels.approved>`, never beside `<labels.readyForReview>` itself) is a state the label protocol says is impossible. Stop, report the item, `<labels.readyForReview>`, and the co-present label found, and change nothing.
 
+**Review facts come from the stage context.** `review.cycle` is this review's cycle number. `review.selfAuthored` is `true` when the pull request is yours. The app worked both out before dispatch, so use them as given and never work either out yourself.
+
+If either line is missing, stop, change nothing, and report which line is missing.
+
 ## Label swap (first action after pre-flight)
 
 ```bash
@@ -111,14 +115,12 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
    ```bash
    gh pr diff <pr-number> --repo <repo>
    gh pr checks <pr-number> --repo <repo> --json name,bucket,link
-   gh pr view <pr-number> --repo <repo> --json body,title,headRefName,headRefOid,author,baseRefName,mergeable
+   gh pr view <pr-number> --repo <repo> --json body,title,headRefName,headRefOid,baseRefName,mergeable
    gh issue view <issue-number> --repo <repo>
-   gh api user --jq .login
-   gh pr view <pr-number> --repo <repo> --json reviews --jq '[.reviews[] | select(.body|startswith("## Code Review"))] | length'
    gh pr view <pr-number> --repo <repo> --json comments --jq '[.comments[] | select(.body|startswith("## Changes requested"))] | sort_by(.createdAt) | last'
    ```
 
-   In order: the diff; check status; `headRefOid` for line permalinks, `author` for the self-review test, `baseRefName` and `mergeable` for the conflict exit below; the original plan; your own login; the prior review count, so **this cycle is that count plus one**; and the newest `## Changes requested` comment, if any — the cockpit's `revise #N` route off an approved pull request (#288). **It amends the plan**: the change it names is in scope by definition, never a scope-creep finding, whether or not `revise-agent` has acted on it yet.
+   In order: the diff; check status; `headRefOid` for line permalinks, `baseRefName` and `mergeable` for the conflict exit below; the original plan; and the newest `## Changes requested` comment, if any — the cockpit's `revise #N` route off an approved pull request (#288). **It amends the plan**: the change it names is in scope by definition, never a scope-creep finding, whether or not `revise-agent` has acted on it yet.
 
    `gh pr checks` exposes status in the **`bucket`** field (pass/fail/pending). There is **no** `status` or `conclusion` field on `gh pr checks` — a detail worth remembering rather than rediscovering. **This early read is for diagnosis only** — it is what any Critical-finding log lookup works from. It is never the verdict's evidence: step 3 re-reads the rollup right before posting, because a check can conclude, or a red one turn green, in the time spent reviewing the diff.
 
@@ -176,9 +178,9 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
 4. **Post a real GitHub pull request review** — findings inline, a one-line body. Format: `${CLAUDE_PLUGIN_ROOT}/docs/FORMATS.md` → "Reviews and revisions".
 
-   **Pick the event** by self-authorship, since GitHub forbids `REQUEST_CHANGES` and `APPROVE` on your own pull request:
-   - your login **equals** the pull request's `author.login` (the common case, same account) → **`event: "COMMENT"`**
-   - otherwise → `REQUEST_CHANGES` if any Critical or Medium, else `APPROVE`
+   **Pick the event** from `review.selfAuthored`, since GitHub forbids `REQUEST_CHANGES` and `APPROVE` on your own pull request:
+   - `true` (the common case, same account) → **`event: "COMMENT"`**
+   - `false` → `REQUEST_CHANGES` if any Critical or Medium, else `APPROVE`
 
    The pipeline **label** is the real control signal regardless of the event.
 
@@ -213,7 +215,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
    }
    ```
 
-   Keep the literal `## Code Review` — the cockpit counts it to derive the cycle. `<n>` is the prior review count plus one; the title verdict matches the Handoff below (`approved`, `needs revision`, or step 3's `blocked — checks pending`). Severities 🔴 Critical · 🟠 Medium · 🟡 Low · ⚪ Nit.
+   Keep the literal `## Code Review` — the cockpit counts it to derive the cycle. `<n>` is `review.cycle`; the title verdict matches the Handoff below (`approved`, `needs revision`, or step 3's `blocked — checks pending`). Severities 🔴 Critical · 🟠 Medium · 🟡 Low · ⚪ Nit.
 
    **When `commands.artifacts` is set**, before submitting run:
 
