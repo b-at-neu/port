@@ -5,8 +5,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/renderer/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/renderer/components/ui/select'
 import type { ReleaseStatus } from '@/types/release'
-import { normalizeVersion } from '@/utils/release/version'
-import { CUSTOM_VERSION_ERROR, CUSTOM_VERSION_LABEL, CUT_RELEASE, OPEN_RELEASE_PR, cutDialogBody, versionOptionLabel } from '@/renderer/releases/copy'
+import { bumpOptions, normalizeVersion } from '@/utils/release/version'
+import { CUSTOM_VERSION_ERROR, CUSTOM_VERSION_LABEL, CUT_RELEASE, OPEN_RELEASE_PR, VERSION_PLACEHOLDER, cutDialogBody, versionOptionLabel } from '@/renderer/releases/copy'
 
 const CUSTOM = 'custom'
 
@@ -17,12 +17,13 @@ interface CutDialogProps {
 }
 
 function CutForm({ status, onCancel, onConfirm }: CutDialogProps) {
-  const [choice, setChoice] = useState(status.candidates[0]?.version ?? CUSTOM)
+  const [choice, setChoice] = useState('')
   const [custom, setCustom] = useState('')
 
-  const candidate = status.candidates.find((entry) => entry.version === choice)
+  const options = bumpOptions(status.currentVersion ?? '0.0.0')
+  const picked = options.find((option) => option.version === choice)
   const customVersion = normalizeVersion(custom)
-  const version = choice === CUSTOM ? customVersion : (candidate?.version ?? null)
+  const version = choice === CUSTOM ? customVersion : (picked?.version ?? null)
 
   return (
     <>
@@ -32,18 +33,17 @@ function CutForm({ status, onCancel, onConfirm }: CutDialogProps) {
       </DialogHeader>
       <Select value={choice} onValueChange={setChoice}>
         <SelectTrigger aria-label="Version" className="w-full" data-slot="release-version">
-          <SelectValue />
+          <SelectValue placeholder={VERSION_PLACEHOLDER} />
         </SelectTrigger>
         <SelectContent>
-          {status.candidates.map((entry) => (
-            <SelectItem key={entry.version} value={entry.version}>
-              {versionOptionLabel(entry)}
+          {options.map((option) => (
+            <SelectItem key={option.version} value={option.version}>
+              {versionOptionLabel(option)}
             </SelectItem>
           ))}
           <SelectItem value={CUSTOM}>{CUSTOM_VERSION_LABEL}</SelectItem>
         </SelectContent>
       </Select>
-      {candidate !== undefined ? <p className="text-small text-muted-foreground">{candidate.reason}</p> : null}
       {choice === CUSTOM ? (
         <div className="flex flex-col gap-1">
           <Input aria-label="Custom version" value={custom} onChange={(event) => setCustom(event.target.value)} placeholder="1.5.0-beta.1" />

@@ -10,18 +10,18 @@ export interface PullLink {
 
 export type VersionKind = 'major' | 'minor' | 'patch'
 
-export interface VersionCandidate {
+export interface VersionOption {
   readonly kind: VersionKind
   readonly version: string
-  readonly recommended: boolean
-  readonly reason: string
-  readonly tickets: readonly number[]
 }
 
+/** A pull request merged into the integration branch; `dependency` only shapes the release body and notes draft, never the list. */
 export interface ReleaseEntry {
-  readonly number: number | null
+  readonly number: number
   readonly title: string
-  readonly labels: readonly string[]
+  readonly url: string
+  readonly labels: readonly BacklogLabel[]
+  readonly mergedAt: string
   readonly dependency: boolean
 }
 
@@ -134,7 +134,7 @@ export interface ReleaseStatus {
   readonly production: string | null
   readonly integration: string
   readonly currentVersion: string | null
-  readonly candidates: readonly VersionCandidate[]
+  readonly sinceTag: string | null
   readonly entries: readonly ReleaseEntry[]
   readonly truncatedNote: string | null
   readonly releases: readonly ReleaseInfo[]

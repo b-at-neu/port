@@ -3,19 +3,27 @@ import type { FixtureScenario } from '@/types/fixtures'
 import type { BacklogLabel } from '@/types/backlog'
 import type { ReleaseEntry, ReleaseInfo, ReleaseIssue, ReleaseIssuesRequest, ReleaseIssuesResponse, ReleaseStatus, ReleaseStatusResponse } from '@/types/release'
 import type { RepoId } from '@/utils/repos'
-import { buildCandidates } from '@/utils/release/version'
 import { WIDGETS_ID } from './repos'
-
-const ENTRIES: readonly ReleaseEntry[] = [
-  { number: 169, title: 'Add dark mode to the email templates', labels: ['enhancement', 'design'], dependency: false },
-  { number: 164, title: 'Retry failed webhook deliveries', labels: ['enhancement'], dependency: false },
-  { number: 161, title: 'Fix the stale cache after a settings change', labels: ['bug'], dependency: false },
-  { number: 158, title: 'Document the webhook retry policy', labels: ['documentation'], dependency: false },
-  { number: 153, title: 'Bump vite to 7.1', labels: ['dependencies'], dependency: true },
-]
 
 const BUG: BacklogLabel = { name: 'bug', color: 'd73a4a' }
 const ENHANCEMENT: BacklogLabel = { name: 'enhancement', color: 'a2eeef' }
+const DESIGN: BacklogLabel = { name: 'design', color: 'd4c5f9' }
+const DOCUMENTATION: BacklogLabel = { name: 'documentation', color: '0075ca' }
+const DEPENDENCIES: BacklogLabel = { name: 'dependencies', color: '0366d6' }
+
+function entry(now: Date, number: number, title: string, labels: readonly BacklogLabel[], days: number, dependency = false): ReleaseEntry {
+  return { number, title, url: `https://github.com/acme/widgets/pull/${String(number)}`, labels, mergedAt: daysAgo(now, days), dependency }
+}
+
+function entriesOf(now: Date): readonly ReleaseEntry[] {
+  return [
+    entry(now, 169, 'Add dark mode to the email templates', [ENHANCEMENT, DESIGN], 2),
+    entry(now, 164, 'Retry failed webhook deliveries', [ENHANCEMENT], 3),
+    entry(now, 161, 'Fix the stale cache after a settings change', [BUG], 4),
+    entry(now, 158, 'Document the webhook retry policy', [DOCUMENTATION], 6),
+    entry(now, 153, 'Bump vite to 7.1', [DEPENDENCIES], 7, true),
+  ]
+}
 
 function issue(number: number, title: string, labels: readonly BacklogLabel[] = []): ReleaseIssue {
   return { number, title, url: `https://github.com/acme/widgets/issues/${String(number)}`, labels }
@@ -70,7 +78,7 @@ export function fixtureReleaseStatus(now: Date, scenario: FixtureScenario, repoI
   const populated = scenario === 'populated' && repoId === WIDGETS_ID
   const base = { versionSource: 'package' as const, production: 'main', integration: 'dev', postPublishHook: 'node scripts/dev-window.ts', readAt: now.toISOString(), productionHead: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0' }
   const status: ReleaseStatus = populated
-    ? { ...base, phase: { kind: 'idle' }, currentVersion: '0.2.0', candidates: buildCandidates('0.2.0', ENTRIES), entries: ENTRIES, truncatedNote: null, releases: releasesOf(now) }
-    : { ...base, phase: { kind: 'nothing-to-release' }, currentVersion: null, candidates: [], entries: [], truncatedNote: null, releases: [] }
+    ? { ...base, phase: { kind: 'idle' }, currentVersion: '0.2.0', sinceTag: 'v0.2.0', entries: entriesOf(now), truncatedNote: null, releases: releasesOf(now) }
+    : { ...base, phase: { kind: 'nothing-to-release' }, currentVersion: null, sinceTag: null, entries: [], truncatedNote: null, releases: [] }
   return { ok: true, status }
 }

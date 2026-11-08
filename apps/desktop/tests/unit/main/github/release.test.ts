@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { GitHubHttpResult, GitHubRequest, GitHubTransport } from '@/types/platform'
 import type { ReleaseConfig } from '@/types/release'
 import { fetchReleaseStatus } from '@/main/github/release'
-import { buildStateQuery, buildTicketsQuery, stateVariables } from '@/main/github/release-query'
+import { buildStateQuery, stateVariables } from '@/main/github/release-query'
 import { graphqlBodyOf, httpFail, httpOk } from '../../../fixtures/github-http'
 
 const CONFIG: ReleaseConfig = { versionSource: 'package', versionFiles: ['package.json'], versionCommand: null, postPublishHook: null }
@@ -13,42 +13,44 @@ function ok(body: string): GitHubHttpResult {
   return httpOk(body)
 }
 
-// GitHub's own commit shape: the subject is the first line of the message, parents say merge or not.
-function commit(message: string, parents = 1): unknown {
-  return { commit: { message }, parents: Array.from({ length: parents }, () => ({ sha: 'p' })) }
+// A merged-PR node as GitHub returns it; `updatedAt` is never before `mergedAt`.
+function pr(number: number, mergedAt: string, title = `#${String(number)} change ${String(number)}`): unknown {
+  return { number, title, url: `u/${String(number)}`, mergedAt, updatedAt: mergedAt, author: { __typename: 'User' }, labels: { nodes: [{ name: 'bug', color: 'd73a4a' }] } }
 }
 
 interface Scenario {
   readonly state?: Record<string, unknown>
   readonly errors?: readonly { path: readonly (string | number)[]; message: string }[]
-  readonly compare?: unknown
-  readonly log?: unknown
-  readonly tickets?: Record<string, unknown>
+  readonly prs?: readonly unknown[]
+  readonly prsFail?: boolean
   readonly calls?: GitHubRequest[]
 }
 
 const STATE = {
-  releases: { nodes: [{ tagName: 'v0.2.0', name: 'v0.2.0', url: 'u', publishedAt: '2026-08-01T00:00:00Z', isDraft: false, isPrerelease: false, isLatest: true, description: 'notes' }] },
+  releases: { nodes: [{ tagName: 'v0.2.0', name: 'v0.2.0', url: 'u', publishedAt: '2026-08-01T00:00:00Z', isDraft: false, isPrerelease: false, isLatest: true, description: 'notes', tagCommit: { committedDate: '2026-07-30T00:00:00Z' } }] },
   openReleasePr: { nodes: [] },
   closedReleasePr: { nodes: [] },
   bumpRefs: { nodes: [] },
   integrationFile: { text: JSON.stringify({ version: '0.2.1-dev' }) },
   productionFile: { text: JSON.stringify({ version: '0.2.0' }) },
   integrationHead: { target: { oid: 'int-oid', tree: { oid: 'int-tree' } } },
-  productionHead: { target: { oid: 'prod-oid' } },
+  productionHead: { target: { oid: 'prod-oid', committedDate: '2026-08-20T00:00:00Z' } },
 }
 
 function runner(scenario: Scenario): GitHubTransport {
   return (request) => {
     scenario.calls?.push(request)
-    if (request.path === 'graphql') {
-      const query = graphqlBodyOf(request).query
-      if (query.includes('issueOrPullRequest')) return Promise.resolve(ok(JSON.stringify({ data: { repository: scenario.tickets ?? {} } })))
-      return Promise.resolve(ok(JSON.stringify({ data: { repository: { ...STATE, ...scenario.state }, viewer: { login: 'octo-operator' } }, ...(scenario.errors === undefined ? {} : { errors: scenario.errors }) })))
+    const query = graphqlBodyOf(request).query
+    if (query.includes('$base: String!')) {
+      if (scenario.prsFail === true) return Promise.resolve(httpFail('network', 502, '', 'GitHub: HTTP 502'))
+      return Promise.resolve(ok(JSON.stringify({ data: { repository: { pullRequests: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: scenario.prs ?? [] } } } })))
     }
-    if (request.path.includes('/commits?sha=')) return Promise.resolve(ok(JSON.stringify(scenario.log ?? [])))
-    return Promise.resolve(ok(JSON.stringify(scenario.compare ?? { status: 'ahead', total_commits: 2, commits: [] })))
+    return Promise.resolve(ok(JSON.stringify({ data: { repository: { ...STATE, ...scenario.state }, viewer: { login: 'octo-operator' } }, ...(scenario.errors === undefined ? {} : { errors: scenario.errors }) })))
   }
+}
+
+function prCalls(calls: readonly GitHubRequest[]): readonly GitHubRequest[] {
+  return calls.filter((call) => graphqlBodyOf(call).query.includes('$base: String!'))
 }
 
 function fetchStatus(scenario: Scenario, overrides: Partial<Parameters<typeof fetchReleaseStatus>[0]> = {}) {
@@ -56,46 +58,50 @@ function fetchStatus(scenario: Scenario, overrides: Partial<Parameters<typeof fe
 }
 
 describe('fetchReleaseStatus', () => {
-  it('gathers the changes since the latest tag, oldest-first compare reversed, and recommends a minor', async () => {
+  it('lists the PRs merged after the latest release tag commit, newest first, with its tag as sinceTag', async () => {
     const calls: GitHubRequest[] = []
-    const result = await fetchStatus({
-      calls,
-      compare: {
-        status: 'ahead',
-        total_commits: 3,
-        commits: [commit('#10 fix the cache'), commit('#12 add dark mode\n\nbody text'), commit('Merge pull request #13 from a/b', 2)],
-      },
-      tickets: { t12: { title: 'Add dark mode', labels: { nodes: [{ name: 'enhancement' }] }, author: { __typename: 'User', login: 'a' } }, t10: { title: 'Fix the cache', labels: { nodes: [] }, author: { __typename: 'Bot', login: 'dependabot' } } },
-    })
+    const result = await fetchStatus({ calls, prs: [pr(10, '2026-08-03T00:00:00Z'), pr(12, '2026-08-05T00:00:00Z'), pr(9, '2026-07-31T00:00:00Z')] })
     if (!result.ok) throw new Error(result.message)
     expect(result.status.phase).toEqual({ kind: 'idle' })
-    expect(result.status.entries.map((e) => [e.number, e.title, e.dependency])).toEqual([
-      [12, 'Add dark mode', false],
-      [10, 'Fix the cache', true],
+    expect(result.status.entries.map((e) => [e.number, e.title])).toEqual([
+      [12, 'change 12'],
+      [10, 'change 10'],
+      [9, 'change 9'],
     ])
+    expect(result.status.sinceTag).toBe('v0.2.0')
     expect(result.status.currentVersion).toBe('0.2.0')
-    expect(result.status.candidates[0]).toMatchObject({ version: '0.3.0', kind: 'minor', recommended: true })
     expect(result.status.productionHead).toBe('prod-oid')
     expect(result.integrationHead).toEqual({ oid: 'int-oid', tree: 'int-tree' })
-    expect(calls.some((call) => call.method === 'GET' && call.path === 'repos/acme/widgets/compare/v0.2.0...dev?per_page=100')).toBe(true)
+    expect(prCalls(calls).map((call) => graphqlBodyOf(call).variables.base)).toEqual(['dev'])
     expect(result.status.releases).toHaveLength(1)
   })
 
-  it('is nothing-to-release when the gather is empty', async () => {
-    const result = await fetchStatus({ compare: { status: 'ahead', total_commits: 0, commits: [] } })
+  it('counts from the tag commit, so a PR merged between it and the publish stays in', async () => {
+    const result = await fetchStatus({ prs: [pr(11, '2026-07-31T12:00:00Z'), pr(8, '2026-07-29T00:00:00Z')] })
+    expect(result.ok && result.status.entries.map((e) => e.number)).toEqual([11])
+  })
+
+  it('falls back to publishedAt when the release has no tag commit', async () => {
+    const release = { ...STATE.releases.nodes[0], tagCommit: null }
+    const result = await fetchStatus({ state: { releases: { nodes: [release] } }, prs: [pr(11, '2026-07-31T12:00:00Z'), pr(12, '2026-08-02T00:00:00Z')] })
+    expect(result.ok && result.status.entries.map((e) => e.number)).toEqual([12])
+  })
+
+  it('lists every merged PR when there is no release, with no sinceTag', async () => {
+    const result = await fetchStatus({ state: { releases: { nodes: [] } }, prs: [pr(1, '2020-01-01T00:00:00Z')] })
+    if (!result.ok) throw new Error(result.message)
+    expect(result.status.entries.map((e) => e.number)).toEqual([1])
+    expect(result.status.sinceTag).toBeNull()
+  })
+
+  it('is nothing-to-release when no PR merged since the tag', async () => {
+    const result = await fetchStatus({ prs: [] })
     expect(result.ok && result.status.phase.kind).toBe('nothing-to-release')
   })
 
-  it('notes a truncated compare rather than silently dropping commits', async () => {
-    const result = await fetchStatus({ compare: { status: 'ahead', total_commits: 250, commits: [commit('#1 a')] } })
-    expect(result.ok && result.status.truncatedNote).toBe('Showing the first 1 commits since v0.2.0.')
-  })
-
-  it('falls back to the commit list for a diverged compare', async () => {
-    const calls: GitHubRequest[] = []
-    const result = await fetchStatus({ calls, compare: { status: 'diverged', total_commits: 1, commits: [] }, log: [commit('#7 newest'), commit('#6 older')] })
-    expect(result.ok && result.status.entries.map((e) => e.number)).toEqual([7, 6])
-    expect(calls.some((call) => call.path.includes('/commits?sha=dev'))).toBe(true)
+  it('fails the whole status when the first PR page cannot be read', async () => {
+    const result = await fetchStatus({ prsFail: true })
+    expect(result).toMatchObject({ ok: false, message: "Couldn't read the merged PRs: GitHub: HTTP 502" })
   })
 
   it('resolves the signed-in login, and a failed viewer read only drops it', async () => {
@@ -111,11 +117,11 @@ describe('fetchReleaseStatus', () => {
     if (!result.ok) expect(result.message).toContain('bumpRefs')
   })
 
-  it('reads a version from the bump branch and gathers nothing while waiting on a merge', async () => {
+  it('reads a version from the bump branch and reads no PRs while waiting on a merge', async () => {
     const calls: GitHubRequest[] = []
     const result = await fetchStatus({ calls, state: { openReleasePr: { nodes: [{ number: 612, url: 'pr', title: 'Release v0.3.0', state: 'OPEN', merged: false }] } } })
     expect(result.ok && result.status.phase).toMatchObject({ kind: 'waiting-merge', version: '0.3.0' })
-    expect(calls.filter((call) => call.path !== 'graphql')).toHaveLength(0)
+    expect(prCalls(calls)).toHaveLength(0)
   })
 
   it('rebuilds a prefix-relative bump ref into its full branch name and sends the prefix', async () => {
@@ -135,16 +141,21 @@ describe('fetchReleaseStatus', () => {
     expect(result.ok && result.status.phase).toEqual({ kind: 'conflict', branches: ['bump/v0.3.0', 'bump/v0.4.0'] })
   })
 
-  it('gathers from production for the release notes when ready to publish, and drops draft releases', async () => {
+  it('bounds the release notes at the production head when ready to publish, and drops draft releases', async () => {
     const calls: GitHubRequest[] = []
     const state = {
       closedReleasePr: { nodes: [{ number: 612, url: 'pr', title: 'Release v0.3.0', state: 'MERGED', merged: true }] },
       releases: { nodes: [...STATE.releases.nodes, { tagName: 'v0.4.0', name: 'v0.4.0', url: 'u', publishedAt: null, isDraft: true, isPrerelease: false, isLatest: false, description: '' }] },
     }
-    const result = await fetchStatus({ calls, state })
+    const result = await fetchStatus({ calls, state, prs: [pr(30, '2026-08-25T00:00:00Z'), pr(20, '2026-08-19T00:00:00Z')] })
     expect(result.ok && result.status.phase).toEqual({ kind: 'ready-to-publish', version: '0.3.0' })
-    expect(calls.some((call) => call.path === 'repos/acme/widgets/compare/v0.2.0...main?per_page=100')).toBe(true)
+    expect(result.ok && result.status.entries.map((e) => e.number)).toEqual([20])
     expect(result.ok && result.status.releases.map((r) => r.tagName)).toEqual(['v0.2.0'])
+  })
+
+  it('leaves the window open above while idle, so a later merge is listed', async () => {
+    const result = await fetchStatus({ prs: [pr(30, '2026-08-25T00:00:00Z')] })
+    expect(result.ok && result.status.entries.map((e) => e.number)).toEqual([30])
   })
 
   it('gives each release the next one as its previous tag, and shows only twenty of the twenty-one read', async () => {
@@ -210,10 +221,9 @@ describe('release query builders', () => {
     expect(stateVariables({ integration: 'dev', production: 'main', versionFile: null })).not.toHaveProperty('integrationFile')
   })
 
-  it('builds one alias per ticket number', () => {
-    const query = buildTicketsQuery([12, 10])
-    expect(query).toContain('t12: issueOrPullRequest(number: 12)')
-    expect(query).toContain('t10: issueOrPullRequest(number: 10)')
-    expect(query).toContain('author { __typename login }')
+  it('reads the tag commit date and the production head date for the PR window', () => {
+    const query = buildStateQuery(true)
+    expect(query).toContain('tagCommit { committedDate }')
+    expect(query).toContain('productionHead: ref(qualifiedName: $productionRef) { target { oid ... on Commit { committedDate } } }')
   })
 })

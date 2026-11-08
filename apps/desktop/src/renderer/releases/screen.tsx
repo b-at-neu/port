@@ -10,7 +10,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/u
 import { EmptyState } from '@/renderer/components/empty-state'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { IconButton } from '@/renderer/components/icon-button'
-import { LabelChip } from '@/renderer/components/label-chip'
 import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { ScreenHeader } from '@/renderer/components/screen-header'
 import { StatusPill } from '@/renderer/components/status-pill'
@@ -20,17 +19,16 @@ import { ipcQueryOptions, useIpcQuery } from '@/renderer/data/query'
 import { exactTime, relativeAge } from '@/renderer/backlog/group'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { useListSelection } from '@/renderer/shell/list-selection'
-import type { HookOutcome, ReleaseEntry, ReleaseGroupView, ReleaseInfo, ReleaseRunRequest, ReleaseRunResult, ReleaseStatus } from '@/types/release'
+import type { HookOutcome, ReleaseGroupView, ReleaseInfo, ReleaseRunRequest, ReleaseRunResult, ReleaseStatus } from '@/types/release'
 import type { ActionToast } from '@/types/toast'
 import { isReadyRepo } from '@/utils/repos'
 import type { RepoId } from '@/utils/repos'
 import { CutDialog } from '@/renderer/releases/cut-dialog'
+import { MergedPrs } from '@/renderer/releases/merged-prs'
 import { PublishCard } from '@/renderer/releases/publish-card'
 import { ReleasePane } from '@/renderer/releases/release-pane'
 import { buildReleaseGroup, refetchIntervalFor, staleSinceAt } from '@/renderer/releases/model'
 import {
-  DEPENDENCIES_LABEL,
-  CUT_RELEASE,
   LATEST_TAG,
   NO_RELEASES,
   NO_REPOSITORIES,
@@ -51,15 +49,13 @@ import {
   currentVersionCopy,
   hookFailureCopy,
   mutedLine,
-  nothingToReleaseCopy,
+  noMergedPrsCopy,
   publishedToast,
   publishingPending,
   runProblemCopy,
-  upcomingLabel,
   waitingMergeCopy,
 } from '@/renderer/releases/copy'
 
-const MAX_CHIPS = 3
 const LINK_CLASS = 'text-primary-text hover:underline'
 
 interface HookNotice {
@@ -79,20 +75,6 @@ function releaseToast(version: string, result: ReleaseRunResult): ActionToast {
   return { ...plain, tone: 'error', title: runProblemCopy(result) }
 }
 
-function ChangeRow({ entry }: { readonly entry: ReleaseEntry }) {
-  return (
-    <div data-slot="change-row" className="flex h-9 items-center gap-2 px-4 text-body">
-      <span className="w-12 shrink-0 font-mono tabular-nums text-muted-foreground">{entry.number === null ? '' : `#${String(entry.number)}`}</span>
-      <span className="min-w-24 flex-1 truncate text-foreground">{entry.title}</span>
-      <div className="flex min-w-0 max-w-48 gap-1">
-        {entry.labels.slice(0, MAX_CHIPS).map((name) => (
-          <LabelChip key={name} label={{ name, color: null }} />
-        ))}
-      </div>
-    </div>
-  )
-}
-
 function PrLink({ href, label }: { readonly href: string; readonly label: string }) {
   return (
     <a href={href} target="_blank" rel="noreferrer" className={LINK_CLASS}>
@@ -103,6 +85,7 @@ function PrLink({ href, label }: { readonly href: string; readonly label: string
 
 interface UpcomingProps {
   readonly status: ReleaseStatus
+  readonly now: Date
   readonly pending: boolean
   readonly onCut: () => void
   readonly onRun: (request: Omit<Extract<ReleaseRunRequest, { step: 'open' }>, 'repoId'> | Omit<Extract<ReleaseRunRequest, { step: 'publish' }>, 'repoId'>) => void
@@ -127,7 +110,7 @@ function Waiting({ copy, children }: { readonly copy: string; readonly children?
   )
 }
 
-function Upcoming({ status, pending, onCut, onRun }: UpcomingProps) {
+function Upcoming({ status, now, pending, onCut, onRun }: UpcomingProps) {
   const phase = status.phase
   switch (phase.kind) {
     case 'off':
@@ -136,29 +119,10 @@ function Upcoming({ status, pending, onCut, onRun }: UpcomingProps) {
     case 'needs-terminal':
       return <p className="px-4 py-2 text-small text-muted-foreground">{mutedLine(phase.kind)}</p>
     case 'nothing-to-release':
-      return <EmptyState icon={Tag} message={nothingToReleaseCopy(status.integration, status.currentVersion)} className="px-4" />
-    case 'idle': {
-      const changes = status.entries.filter((entry) => !entry.dependency)
-      const dependencies = status.entries.filter((entry) => entry.dependency)
-      return (
-        <div data-slot="release-upcoming">
-          <div className="flex h-8 items-center justify-between px-4 text-small font-medium text-foreground-secondary">
-            <span>{upcomingLabel(status.candidates)}</span>
-            <Button size="small" disabled={pending} onClick={onCut}>
-              {CUT_RELEASE}
-            </Button>
-          </div>
-          {status.truncatedNote !== null ? <p className="px-4 py-1 text-meta text-muted-foreground">{status.truncatedNote}</p> : null}
-          {changes.map((entry, index) => (
-            <ChangeRow key={`${String(entry.number)}-${String(index)}`} entry={entry} />
-          ))}
-          {dependencies.length > 0 ? <p className="px-4 pt-2 text-meta font-medium text-muted-foreground">{DEPENDENCIES_LABEL}</p> : null}
-          {dependencies.map((entry, index) => (
-            <ChangeRow key={`${String(entry.number)}-${String(index)}`} entry={entry} />
-          ))}
-        </div>
-      )
-    }
+      return <EmptyState icon={Tag} message={noMergedPrsCopy(status.integration, status.sinceTag)} className="px-4" />
+    case 'idle':
+      return <MergedPrs status={status} pending={pending} onCut={onCut} now={now} />
+
     case 'bumped':
       return (
         <div className="flex items-center gap-3 px-4 py-2 text-body">
@@ -334,6 +298,7 @@ export function ReleasesScreen() {
                     <HookBanner notice={notices.get(group.repoId)} />
                     <Upcoming
                       status={group.status}
+                      now={now}
                       pending={pending.has(group.repoId)}
                       onCut={() => setCutting(group.repoId)}
                       onRun={(request) => void run(group.repoId, group.status.postPublishHook, request)}

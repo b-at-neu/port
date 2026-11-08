@@ -1,4 +1,4 @@
-// fetchReleaseStatus: the state read, the commit gather and ticket resolution behind the Releases screen. Reads fail toward showing less with a note, except where a partial read would enable a write.
+// fetchReleaseStatus: the state read and the merged-PR read behind the Releases screen. Reads fail toward showing less with a note, except where a partial read would enable a write.
 import { githubHttp } from '@/main/platform/github-http'
 import type { GhResult, GitHubTransport } from '@/types/platform'
 import type { GitHubRepoRef } from '@/types/github'
@@ -17,15 +17,12 @@ import type {
 } from '@/types/release'
 import { bodyOf, classifyFailure, describeHttp, parseEnvelope } from '@/main/github/envelope'
 import { RAW_ACCEPT, repoGraphqlRequest, restRequest } from '@/main/github/request'
-import { RELEASES_PAGE, STATE_ALIASES, buildStateQuery, buildTicketsQuery, stateVariables } from '@/main/github/release-query'
-import { entriesFromCommits, ticketNumbersOf } from '@/utils/release/changelog'
-import type { ChangelogCommit, ResolvedTicket } from '@/utils/release/changelog'
+import { RELEASES_PAGE, STATE_ALIASES, buildStateQuery, stateVariables } from '@/main/github/release-query'
+import { readMergedPrs } from '@/main/github/release-prs'
 import { BUMP_BRANCH_DIR, versionOfBumpBranch } from '@/utils/release/format'
 import { resolvePhase } from '@/main/release/state'
-import { buildCandidates, normalizeVersion, parseVersion, stripPrerelease } from '@/utils/release/version'
+import { normalizeVersion, parseVersion, stripPrerelease } from '@/utils/release/version'
 
-const COMMIT_PAGE = 100
-const TICKET_CAP = 100
 const SAFE_REF = /^[A-Za-z0-9._/-]+$/
 
 export type Obj = Readonly<Record<string, unknown>>
@@ -105,99 +102,12 @@ function headOf(ref: unknown): BranchHead | null {
   return oid === null ? null : { oid, tree: tree ?? '' }
 }
 
-interface Gathered {
-  readonly entries: readonly ReleaseEntry[]
-  readonly note: string | null
-}
-
-type CommitRead = { readonly ok: true; readonly commits: readonly ChangelogCommit[]; readonly note: string | null } | { readonly ok: false; readonly message: string }
-
-// A commit's subject is the first line of its message; its parent count tells a merge from a squash.
-function commitsFrom(list: unknown): readonly ChangelogCommit[] | null {
-  if (!Array.isArray(list)) return null
-  return list.flatMap((item) => {
-    const commit = obj(item)
-    const message = str(obj(commit?.commit)?.message)
-    if (commit === null || message === null) return []
-    return [{ subject: message.split('\n')[0] ?? '', parents: Array.isArray(commit.parents) ? commit.parents.length : 1 }]
-  })
-}
-
 export function parseBody(stdout: string): unknown {
   try {
     return JSON.parse(stdout)
   } catch {
     return null
   }
-}
-
-// Newest first, matching the commits endpoint; the oldest-first compare list is reversed by its caller.
-async function readLog(github: GitHubTransport, repo: GitHubRepoRef, head: string): Promise<CommitRead> {
-  const result = await github(restRequest(`repos/${repo.owner}/${repo.name}/commits?sha=${head}&per_page=${String(COMMIT_PAGE)}`))
-  if (!result.ok) return { ok: false, message: describeHttp(result) }
-  const commits = commitsFrom(parseBody(result.body))
-  if (commits === null) return { ok: false, message: "GitHub's commit list wasn't JSON" }
-  return { ok: true, commits, note: commits.length >= COMMIT_PAGE ? `Showing the latest ${String(COMMIT_PAGE)} commits.` : null }
-}
-
-async function readCompare(github: GitHubTransport, repo: GitHubRepoRef, base: string, head: string): Promise<CommitRead> {
-  const result = await github(restRequest(`repos/${repo.owner}/${repo.name}/compare/${base}...${head}?per_page=${String(COMMIT_PAGE)}`))
-  if (!result.ok) return { ok: false, message: describeHttp(result) }
-  const body = obj(parseBody(result.body))
-  const commits = commitsFrom(body?.commits)
-  if (body === null || commits === null) return { ok: false, message: "GitHub's comparison wasn't JSON" }
-  if (body.status === 'diverged') return readLog(github, repo, head)
-  const total = typeof body.total_commits === 'number' ? body.total_commits : commits.length
-  const note = total > commits.length ? `Showing the first ${String(commits.length)} commits since ${base}.` : null
-  return { ok: true, commits: [...commits].reverse(), note }
-}
-
-async function resolveTickets(github: GitHubTransport, repo: GitHubRepoRef, numbers: readonly number[]): Promise<{ readonly tickets: ReadonlyMap<number, ResolvedTicket>; readonly note: string | null }> {
-  if (numbers.length === 0) return { tickets: new Map(), note: null }
-  const result = await github(repoGraphqlRequest(buildTicketsQuery(numbers), repo))
-  const text = bodyOf(result)
-  const parsed = text === undefined ? undefined : parseEnvelope(text)
-  const verdict = classifyFailure(result, parsed)
-  const repository = parsed?.ok === true ? obj(parsed.value.data?.repository) : null
-  if (verdict.kind !== 'ok' || repository === null) return { tickets: new Map(), note: "Ticket titles and labels couldn't be read, so changes show their commit subjects." }
-  const tickets = new Map<number, ResolvedTicket>()
-  for (const number of numbers) {
-    const node = obj(repository[`t${String(number)}`])
-    const title = str(node?.title)
-    if (node === null || title === null) continue
-    tickets.set(number, {
-      title,
-      labels: nodesOf(node.labels).flatMap((label) => str(label.name) ?? []),
-      bot: str(obj(node.author)?.__typename) === 'Bot',
-    })
-  }
-  return { tickets, note: null }
-}
-
-interface GatherParams {
-  readonly github: GitHubTransport
-  readonly repo: GitHubRepoRef
-  readonly integration: string
-  readonly production: string
-  readonly previousTag: string | null
-  readonly publishing: boolean
-}
-
-async function gather(params: GatherParams): Promise<{ readonly ok: true; readonly gathered: Gathered } | { readonly ok: false; readonly message: string }> {
-  const { github, repo, previousTag } = params
-  const head = params.publishing ? params.production : params.integration
-  let read: CommitRead
-  if (previousTag !== null) read = await readCompare(github, repo, previousTag, head)
-  else if (params.publishing) read = await readLog(github, repo, head)
-  else read = await readCompare(github, repo, params.production, params.integration)
-  if (!read.ok) return { ok: false, message: `Couldn't read the changes: ${read.message}` }
-
-  const all = [...new Set(read.commits.filter((commit) => commit.parents <= 1).flatMap((commit) => ticketNumbersOf(commit.subject)))]
-  const numbers = all.slice(0, TICKET_CAP)
-  const { tickets, note: ticketNote } = await resolveTickets(github, repo, numbers)
-  const capNote = all.length > TICKET_CAP ? `Resolved the newest ${String(TICKET_CAP)} of ${String(all.length)} tickets.` : null
-  const note = [read.note, capNote, ticketNote].filter((part): part is string => part !== null).join(' ')
-  return { ok: true, gathered: { entries: entriesFromCommits(read.commits, tickets), note: note === '' ? null : note } }
 }
 
 export interface FetchReleaseStatusParams {
@@ -219,7 +129,7 @@ function guardStatus(params: FetchReleaseStatusParams, phase: ReleasePhase, read
     production: params.production,
     integration: params.integration,
     currentVersion: null,
-    candidates: [],
+    sinceTag: null,
     entries: [],
     truncatedNote: null,
     releases: [],
@@ -274,7 +184,11 @@ export async function fetchReleaseStatus(params: FetchReleaseStatusParams): Prom
   }
 
   // The page carries one release beyond the last one shown, only so that one has a known predecessor.
-  const fetched = nodesOf(repository.releases).flatMap((node) => releaseOf(node) ?? [])
+  const tagged = nodesOf(repository.releases).flatMap((node) => {
+    const release = releaseOf(node)
+    return release === null ? [] : [{ release, taggedAt: str(obj(node.tagCommit)?.committedDate) }]
+  })
+  const fetched = tagged.map((entry) => entry.release)
   const allReleases: readonly ReleaseInfo[] = fetched.map((release, index) => ({ ...release, previousTag: fetched[index + 1]?.tagName ?? null }))
   const releases = allReleases.slice(0, RELEASES_PAGE)
   const publishedTags = new Set(allReleases.map((release) => release.tagName))
@@ -290,14 +204,18 @@ export async function fetchReleaseStatus(params: FetchReleaseStatusParams): Prom
   }
 
   const phase = resolvePhase(input)
-  const previousTag = releases[0]?.tagName ?? null
-  let gathered: Gathered = { entries: [], note: null }
+  const sinceTag = releases[0]?.tagName ?? null
+  let entries: readonly ReleaseEntry[] = []
+  let note: string | null = null
   if (GATHERING.has(phase.kind)) {
-    const read = await gather({ github, repo, integration, production, previousTag, publishing: phase.kind === 'ready-to-publish' })
+    const since = tagged[0] === undefined ? null : (tagged[0].taggedAt ?? tagged[0].release.publishedAt)
+    const until = phase.kind === 'ready-to-publish' ? str(obj(obj(repository.productionHead)?.target)?.committedDate) : null
+    const read = await readMergedPrs({ github, repo, base: integration, since, until })
     if (!read.ok) return failure(read.message, readAt)
-    gathered = read.gathered
+    entries = read.entries
+    note = read.note
   }
-  const resolved = phase.kind === 'idle' && gathered.entries.length === 0 ? resolvePhase({ ...input, gatherEmpty: true }) : phase
+  const resolved = phase.kind === 'idle' && entries.length === 0 ? resolvePhase({ ...input, gatherEmpty: true }) : phase
 
   const latestTag = releases.map((release) => normalizeVersion(release.tagName)).find((version) => version !== null) ?? null
   const fallback = input.integrationVersion === null ? null : stripPrerelease(input.integrationVersion)
@@ -309,9 +227,9 @@ export async function fetchReleaseStatus(params: FetchReleaseStatusParams): Prom
     production,
     integration,
     currentVersion,
-    candidates: resolved.kind === 'idle' ? buildCandidates(currentVersion ?? '0.0.0', gathered.entries) : [],
-    entries: gathered.entries,
-    truncatedNote: gathered.note,
+    sinceTag,
+    entries,
+    truncatedNote: note,
     releases,
     productionHead: headOf(repository.productionHead)?.oid ?? null,
     postPublishHook: config.postPublishHook,
