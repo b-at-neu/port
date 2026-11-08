@@ -84,6 +84,12 @@ describe('heldDetailCopy', () => {
     expect(heldDetailCopy(held)).toBe('#157 would escalate to needs human — the latest review already covers the current head.')
   })
 
+  it('names the two-reviews rule for a sha-cap hold', () => {
+    const held: TickHeld = { number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff', reason: 'sha-cap' } }
+    expect(heldDetailCopy(held)).toBe('#157 would escalate to needs human — this head has had its two reviews, so only a new head gets another.')
+    expect(heldDetailCopy(held, 'app')).toBe('#157 escalating to needs human — this head has had its two reviews, so only a new head gets another.')
+  })
+
   it('#292: owner "app" reads cycle-cap and zero-diff in the present tense, since this app is the one escalating', () => {
     const capped: TickHeld = { number: 204, kind: 'pull-request', trigger: 'needsRevision', reason: 'cycle-cap', contention: null, escalation: { kind: 'cycle-cap', count: 5, cap: 5 } }
     expect(heldDetailCopy(capped, 'app')).toBe('#204 escalating to needs human — cycle 5 reached the cap of 5.')
