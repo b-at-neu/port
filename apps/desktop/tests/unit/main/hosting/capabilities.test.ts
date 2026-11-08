@@ -200,8 +200,11 @@ describe('createCapabilityTracker', () => {
   describe('in a stage session', () => {
     const RELEASE_COMMAND = { name: 'port:release', description: 'Release', argumentHint: '' }
 
-    function stageTracker() {
-      return createCapabilityTracker({ request: REPOSITORY, readExpectedComponents: () => Promise.resolve({ skills: ['scope', 'release'], agents: [] }), samePath, onChange: vi.fn(), stage: true })
+    const readExpectedComponents = vi.fn(() => Promise.resolve({ skills: ['scope', 'release'], agents: [] }))
+
+    function stageTracker(request: PluginRequest = REPOSITORY) {
+      readExpectedComponents.mockClear()
+      return createCapabilityTracker({ request, readExpectedComponents, samePath, onChange: vi.fn(), stage: true })
     }
 
     it('exposes no commands, no port: autocomplete entries, and refuses has()', async () => {
@@ -215,13 +218,22 @@ describe('createCapabilityTracker', () => {
       expect(tracker.has('scope')).toBe(false)
     })
 
-    it('still reports the plugin components complete', async () => {
+    it("never reads the plugin's expected components", async () => {
       const tracker = stageTracker()
       await tracker.start(fakeQuery([SCOPE_COMMAND, RELEASE_COMMAND], []))
-      const state = tracker.current()
+      expect(readExpectedComponents).not.toHaveBeenCalled()
+
+      const installed = stageTracker(INSTALLED)
+      await installed.start(fakeQuery([SCOPE_COMMAND], []))
+      installed.observe({ type: 'system', subtype: 'init', plugins: [{ name: 'port', path: '/home/op/.claude/plugins/cache/port', version: '0.3.1' }] })
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(readExpectedComponents).not.toHaveBeenCalled()
+
+      const state = installed.current()
       expect(state.kind).toBe('ready')
       if (state.kind !== 'ready') return
-      expect(state.components).toEqual({ kind: 'complete' })
+      expect(state.components).toEqual({ kind: 'unchecked', reason: 'no-plugin-path' })
     })
 
     it('holds all of it after commands_changed', async () => {
@@ -233,7 +245,7 @@ describe('createCapabilityTracker', () => {
       if (state.kind !== 'ready') return
       expect(state.commands).toEqual([])
       expect(state.slashCommands.map((c) => c.name)).toEqual(['other:cmd'])
-      expect(state.components).toEqual({ kind: 'complete' })
+      expect(state.components.kind).toBe('unchecked')
       expect(tracker.has('scope')).toBe(false)
     })
 
