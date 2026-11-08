@@ -26,6 +26,20 @@ export default async function ({ expect, fail, ok }: Reporter) {
     ok();
   }
 
+  // --- The per-SHA review cap is one number: the tick's dispatch gate and the audit must agree,
+  // guard: the audit failing by construction on a head the gate itself allowed. ---
+  {
+    const gates: any = await import(pathToFileURL(join(root, 'scripts/port-tick/gates.ts')).href);
+    const mod: any = await import(pathToFileURL(join(root, 'plugins/port/bin/artifacts.mjs')).href);
+    expect(gates.MAX_REVIEWS_PER_SHA === mod.MAX_REVIEWS_PER_SHA, 'artifacts-sha-cap', `gates.ts's MAX_REVIEWS_PER_SHA is ${gates.MAX_REVIEWS_PER_SHA}, artifacts.mjs's is ${mod.MAX_REVIEWS_PER_SHA} — the gate would allow a review the audit fails`);
+
+    const cap = mod.MAX_REVIEWS_PER_SHA;
+    const within = mod.shaReviewViolations(['a', 'a', 'b']);
+    expect(within.failures.length === 0 && within.repeats.length === 1, 'artifacts-sha-cap', `shaReviewViolations rejects a head at ${cap} reviews: ${JSON.stringify(within)}`);
+    const over = mod.shaReviewViolations(['060fdd01', '060fdd01', '060fdd01', '060fdd01']);
+    expect(over.failures.length === 1 && over.failures[0].count === 4, 'artifacts-sha-cap', `shaReviewViolations misses four reviews on one head: ${JSON.stringify(over)}`);
+  }
+
   // --- Artifact registry claims every heading constant, both directions: a `*_HEADING`
   // export with no matching CHECKS entry is unreachable from `check`; two entries sharing one heading means one artifact carries two kind names. ---
   {

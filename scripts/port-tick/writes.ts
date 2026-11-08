@@ -62,12 +62,32 @@ export function strandedRestoreWrite({
   };
 }
 
-/** The newest review already covers the current head with no `## Gate cleared` since. */
-export function zeroDiffWrite({ repo, labels, number }: { repo: string; labels: Record<string, string>; number: number }): any {
+/** The newest review already covers the current head with no `## Gate cleared` since, or the head
+ *  already carries `MAX_REVIEWS_PER_SHA` reviews (`reason: 'sha-cap'`, naming `sha` and `reviewsOnHead`). */
+export function zeroDiffWrite({
+  repo,
+  labels,
+  number,
+  reason,
+  sha,
+  reviewsOnHead,
+}: {
+  repo: string;
+  labels: Record<string, string>;
+  number: number;
+  reason?: 'sha-cap';
+  sha?: string;
+  reviewsOnHead?: number;
+}): any {
   return {
     command: labelEdit({ removeKey: 'readyForReview', addKey: 'needsHuman', number, repo, labels }),
-    why: 'zero-diff review gate',
+    why: reason === 'sha-cap' ? `per-SHA review cap (${reviewsOnHead} reviews on ${sha})` : 'zero-diff review gate',
   };
+}
+
+/** One failed-job rerun of a workflow run, issued before a review is dispatched. */
+export function checkRerunWrite({ repo, runId, check }: { repo: string; runId: string; check: string }): any {
+  return { command: `gh run rerun ${runId} --failed --repo ${repo}`, why: `pre-review rerun: ${check}` };
 }
 
 /** An `## Integration red` hold outlived its window with a named check still red or unreadable. */
@@ -91,6 +111,14 @@ export function approvalWithdrawnWrite({ repo, labels, number }: { repo: string;
   return {
     command: labelEdit({ removeKey: 'approved', addKey: 'needsRevision', number, repo, labels }),
     why: 'approval withdrawn: red check',
+  };
+}
+
+/** A history-derived check went red on an `<labels.approved>` pull request; no revision can clear it. */
+export function approvalEscalateWrite({ repo, labels, number }: { repo: string; labels: Record<string, string>; number: number }): any {
+  return {
+    command: labelEdit({ removeKey: 'approved', addKey: 'needsHuman', number, repo, labels }),
+    why: 'approval withdrawn: history-derived check',
   };
 }
 

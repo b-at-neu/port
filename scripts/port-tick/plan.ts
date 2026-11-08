@@ -2,11 +2,12 @@
 // budget. Pure: never imports events.ts/report.ts, never touches fs.
 import { partitionOwnership, issueSessionRequiredReason, prSessionRequiredReason } from './classify.ts';
 import { parseFilesBlock, gateCandidates } from './contention.ts';
-import { rollupVerdict, zeroDiffChecksOf } from './checks.ts';
+import { rollupVerdict, zeroDiffChecksOf, historyDerivedChecks, preReviewRerun } from './checks.ts';
+import type { RerunRecord } from './checks.ts';
 import { mergeabilityRoute, refreshDecision, capRefreshes, zeroDiffGate, integrationRedGate, cycleCapExceeded, cycleGrantCount, approvedReverify, refreshWins } from './gates.ts';
-import type { IntegrationStatus } from './gates.ts';
+import type { IntegrationStatus, ShaCapFacts } from './gates.ts';
 import { toReviewNode, toCheckContexts, assigneeLoginsOf } from './wire.ts';
-import { refreshSweepWrite, zeroDiffWrite, integrationRedEscalationWrite, cycleCapWrite, approvalWithdrawnWrite, strandedRestoreWrite } from './writes.ts';
+import { refreshSweepWrite, zeroDiffWrite, checkRerunWrite, integrationRedEscalationWrite, cycleCapWrite, approvalWithdrawnWrite, approvalEscalateWrite, strandedRestoreWrite } from './writes.ts';
 import { strandedPullRequests, lastKnownTrigger } from './reconcile.ts';
 
 // port-tick.ts passes the same accumulator through the whole step sequence.
@@ -20,10 +21,11 @@ export interface PlanAccumulator {
   readonly refreshedUpdates: any[];
   readonly unknownStreakUpdates: any[];
   readonly strandedUpdates: any[];
+  readonly rerunUpdates: any[];
 }
 
 export function freshAccumulator(): PlanAccumulator {
-  return { dispatch: [], gates: [], held: [], announce: [], writes: [], refreshCandidates: [], refreshedUpdates: [], unknownStreakUpdates: [], strandedUpdates: [] };
+  return { dispatch: [], gates: [], held: [], announce: [], writes: [], refreshCandidates: [], refreshedUpdates: [], unknownStreakUpdates: [], strandedUpdates: [], rerunUpdates: [] };
 }
 
 // Ownership partition, every trigger/gate/in-flight alias.
@@ -75,7 +77,7 @@ export function planTriggers(cfg: any, actionable: any, partitions: Record<strin
 
 // Mergeability routing, the zero-diff gate, then dispatch — vetoed first by
 // refreshWins; a CONFLICTING read goes to acc.refreshCandidates instead.
-export function planReadyForReview(cfg: any, actionable: any, refreshBranchNumbers: number[], refreshingNumbers: number[], unknownStreakState: Record<string, number>, clock: string | null, integrationChecks: ReadonlyMap<string, IntegrationStatus> | undefined, acc: PlanAccumulator): void {
+export function planReadyForReview(cfg: any, actionable: any, refreshBranchNumbers: number[], refreshingNumbers: number[], unknownStreakState: Record<string, number>, rerunState: Record<string, RerunRecord>, clock: string | null, integrationChecks: ReadonlyMap<string, IntegrationStatus> | undefined, acc: PlanAccumulator): void {
   for (const item of actionable.readyForReview.mine) {
     const veto = refreshWins({ number: item.number, refreshBranch: refreshBranchNumbers, refreshing: refreshingNumbers });
     if (veto.action === 'veto') {
@@ -115,8 +117,24 @@ export function planReadyForReview(cfg: any, actionable: any, refreshBranchNumbe
       continue;
     }
 
-    const checks = zeroDiffChecksOf(toCheckContexts(item.commits?.nodes?.[0]?.commit?.statusCheckRollup), cfg.checkDispositions, clock);
+    const contexts = toCheckContexts(item.commits?.nodes?.[0]?.commit?.statusCheckRollup);
+    const checks = zeroDiffChecksOf(contexts, cfg.checkDispositions, clock);
     const zd = zeroDiffGate({ reviews: (item.reviews?.nodes ?? []).map(toReviewNode), comments: item.comments?.nodes, headRefOid: item.headRefOid, checks });
+    if (zd.action === 'dispatch' || zd.action === 'dispatch-once') {
+      const record: RerunRecord | undefined = rerunState[item.number];
+      if (record !== undefined && record.sha !== item.headRefOid) acc.rerunUpdates.push({ item: item.number, remove: true });
+      const rerun = preReviewRerun({ contexts, dispositions: cfg.checkDispositions, headRefOid: item.headRefOid, reran: record, now: clock });
+      if (rerun.action === 'rerun') {
+        for (const run of rerun.runs) acc.writes.push(checkRerunWrite({ repo: cfg.repo, runId: run.runId, check: run.check }));
+        acc.rerunUpdates.push({ item: item.number, sha: item.headRefOid, checks: rerun.checks, at: clock === null || Number.isNaN(Date.parse(clock)) ? null : new Date(clock).toISOString() });
+        acc.announce.push({ kind: 'check-rerun', item: item.number, facts: { sha: item.headRefOid, checks: rerun.checks } });
+        continue;
+      }
+      if (rerun.action === 'hold') {
+        acc.announce.push({ kind: 'check-rerun-hold', item: item.number, facts: { sha: item.headRefOid, checks: rerun.checks } });
+        continue;
+      }
+    }
     if (zd.action === 'hold-checks') {
       acc.announce.push({ kind: 'zero-diff-check-hold', item: item.number, facts: zd.facts });
       continue;
@@ -127,8 +145,9 @@ export function planReadyForReview(cfg: any, actionable: any, refreshBranchNumbe
       continue;
     }
     if (zd.action === 'escalate') {
-      acc.writes.push(zeroDiffWrite({ repo: cfg.repo, labels: cfg.labels, number: item.number }));
-      acc.announce.push({ kind: 'zero-diff', item: item.number, facts: {} });
+      const capped = zd.reason === 'sha-cap' ? (zd.facts as ShaCapFacts) : null;
+      acc.writes.push(zeroDiffWrite({ repo: cfg.repo, labels: cfg.labels, number: item.number, ...(capped === null ? {} : { reason: 'sha-cap' as const, ...capped }) }));
+      acc.announce.push({ kind: 'zero-diff', item: item.number, facts: capped === null ? { reason: 'zero-diff' } : { reason: 'sha-cap', ...capped } });
       continue;
     }
     acc.dispatch.push({ stage: 'review-agent', item: item.number, kind: 'review', model: cfg.models.review, reason: 'ready for review' });
@@ -171,8 +190,11 @@ export function planApproved(cfg: any, actionable: any, refreshBranchNumbers: nu
 
     const rollup = item.commits?.nodes?.[0]?.commit?.statusCheckRollup;
     const verdict = rollupVerdict(toCheckContexts(rollup), dispositions);
-    const result = approvedReverify({ verdict, mergeable: item.mergeable });
-    if (result.action === 'withdraw') {
+    const result = approvedReverify({ verdict, mergeable: item.mergeable, historyDerived: historyDerivedChecks(dispositions) });
+    if (result.action === 'escalate') {
+      acc.writes.push(approvalEscalateWrite({ repo: cfg.repo, labels: cfg.labels, number: item.number }));
+      acc.announce.push({ kind: 'approval-escalated', item: item.number, facts: { red: result.red } });
+    } else if (result.action === 'withdraw') {
       acc.writes.push(approvalWithdrawnWrite({ repo: cfg.repo, labels: cfg.labels, number: item.number }));
       acc.announce.push({ kind: 'approval-withdrawn', item: item.number, facts: { red: result.red } });
     } else if (result.action === 'refresh-in-place') {

@@ -53,6 +53,7 @@ export function freshTickState(repo: string): any {
     refreshed: {},
     unknownStreak: {},
     strandedSeen: {},
+    reran: {},
     // An older state file lacks these; every read is `?? []`, so the first tick after
     // upgrading reports everything once rather than crashing on a missing field.
     contradictionsReported: [],
