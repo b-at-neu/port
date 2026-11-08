@@ -267,7 +267,6 @@ export function registerIpc(): RegisteredIpc {
     persistence: createHostingPersistence({ dir: app.getPath('userData') }),
   })
   const sessionMenu = createSessionMenuRefresher({ store: hostedStore, platform: process.platform, isPackaged: app.isPackaged, send: broadcastAppCommand })
-
   const stageLauncher: StageLauncherHandle = createDefaultStageLauncher({
     store: hostedStore,
     registry: stageRegistry,

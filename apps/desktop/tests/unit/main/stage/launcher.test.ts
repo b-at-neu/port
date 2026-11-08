@@ -67,7 +67,7 @@ function fakeDeps(overrides: Partial<{ start: SessionStartResult }> = {}) {
       agent: { name: 'impl-agent', definition: { description: 'impl', prompt: 'body' } },
     }),
   )
-  const readTextFile = vi.fn((path: string) => Promise.resolve<FileResult<string>>(path === '/bundle/agents/impl-agent.md' ? { ok: true, value: '---\nname: impl-agent\ndescription: impl\ndisallowedTools: Agent\n---\nbody\n' } : { ok: false, kind: 'not-found', message: `ENOENT ${path}` }))
+  const readTextFile = vi.fn((path: string) => Promise.resolve<FileResult<string>>(path === pathOps.join('/bundle', 'agents', 'impl-agent.md') ? { ok: true, value: '---\nname: impl-agent\ndescription: impl\ndisallowedTools: Agent\n---\nbody\n' } : { ok: false, kind: 'not-found', message: `ENOENT ${path}` }))
   return { store, removeWorktree, createWorktree, releaseBranch, sweepBranches, onOutcome, close, dismiss, send, start, registry, registryMock, onDenial, newId, loadInstructions, bundleRoot: '/bundle', ops: pathOps, readTextFile }
 }
 
@@ -248,7 +248,7 @@ describe('createStageLauncher.resume', () => {
     deps.readTextFile.mockResolvedValue({ ok: false, kind: 'not-found', message: 'ENOENT' })
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     const result = await launcher.resume(resumeRequest())
-    expect(result).toEqual({ ok: false, kind: 'failed', message: "couldn't read /bundle/agents/impl-agent.md: ENOENT" })
+    expect(result).toEqual({ ok: false, kind: 'failed', message: `couldn't read ${pathOps.join('/bundle', 'agents', 'impl-agent.md')}: ENOENT` })
     expect(deps.start).not.toHaveBeenCalled()
     expect(deps.registryMock.markRunning).not.toHaveBeenCalled()
   })
