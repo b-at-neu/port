@@ -3,9 +3,10 @@
 import { partitionOwnership, issueSessionRequiredReason, prSessionRequiredReason } from './classify.ts';
 import { parseFilesBlock, gateCandidates } from './contention.ts';
 import { rollupVerdict, zeroDiffChecksOf } from './checks.ts';
-import { mergeabilityRoute, refreshDecision, capRefreshes, zeroDiffGate, cycleCapExceeded, cycleGrantCount, approvedReverify, refreshWins } from './gates.ts';
+import { mergeabilityRoute, refreshDecision, capRefreshes, zeroDiffGate, integrationRedGate, cycleCapExceeded, cycleGrantCount, approvedReverify, refreshWins } from './gates.ts';
+import type { IntegrationStatus } from './gates.ts';
 import { toReviewNode, toCheckContexts, assigneeLoginsOf } from './wire.ts';
-import { refreshSweepWrite, zeroDiffWrite, cycleCapWrite, approvalWithdrawnWrite, strandedRestoreWrite } from './writes.ts';
+import { refreshSweepWrite, zeroDiffWrite, integrationRedEscalationWrite, cycleCapWrite, approvalWithdrawnWrite, strandedRestoreWrite } from './writes.ts';
 import { strandedPullRequests, lastKnownTrigger } from './reconcile.ts';
 
 // port-tick.ts passes the same accumulator through the whole step sequence.
@@ -74,7 +75,7 @@ export function planTriggers(cfg: any, actionable: any, partitions: Record<strin
 
 // Mergeability routing, the zero-diff gate, then dispatch — vetoed first by
 // refreshWins; a CONFLICTING read goes to acc.refreshCandidates instead.
-export function planReadyForReview(cfg: any, actionable: any, refreshBranchNumbers: number[], refreshingNumbers: number[], unknownStreakState: Record<string, number>, clock: string | null, acc: PlanAccumulator): void {
+export function planReadyForReview(cfg: any, actionable: any, refreshBranchNumbers: number[], refreshingNumbers: number[], unknownStreakState: Record<string, number>, clock: string | null, integrationChecks: ReadonlyMap<string, IntegrationStatus> | undefined, acc: PlanAccumulator): void {
   for (const item of actionable.readyForReview.mine) {
     const veto = refreshWins({ number: item.number, refreshBranch: refreshBranchNumbers, refreshing: refreshingNumbers });
     if (veto.action === 'veto') {
@@ -97,6 +98,21 @@ export function planReadyForReview(cfg: any, actionable: any, refreshBranchNumbe
       acc.unknownStreakUpdates.push({ item: item.number, remove: true });
     } else if (unknownStreakState[item.number] != null) {
       acc.unknownStreakUpdates.push({ item: item.number, remove: true });
+    }
+
+    const irg = integrationRedGate({ comments: item.comments?.nodes, headRefOid: item.headRefOid, integration: integrationChecks, now: clock });
+    if (irg.action === 'hold') {
+      acc.announce.push({ kind: 'integration-red-hold', item: item.number, facts: irg.facts });
+      continue;
+    }
+    if (irg.action === 'refresh') {
+      acc.refreshCandidates.push({ number: item.number, headRefOid: item.headRefOid, sourceLabelKey: 'readyForReview', reason: 'integration-green' });
+      continue;
+    }
+    if (irg.action === 'escalate') {
+      acc.writes.push(integrationRedEscalationWrite({ repo: cfg.repo, labels: cfg.labels, number: item.number }));
+      acc.announce.push({ kind: 'integration-red-escalated', item: item.number, facts: irg.facts });
+      continue;
     }
 
     const checks = zeroDiffChecksOf(toCheckContexts(item.commits?.nodes?.[0]?.commit?.statusCheckRollup), cfg.checkDispositions, clock);
@@ -183,7 +199,11 @@ export function planRefreshSweep(cfg: any, refreshedState: Record<string, any>, 
       continue;
     }
     acc.dispatch.push({ stage: 'revise-agent', item: c.number, kind: 'refresh', model: cfg.models.revise, reason: 'refresh sweep' });
-    acc.announce.push({ kind: 'rebase-required', item: c.number, facts: { headRefOid: c.headRefOid, base: cfg.integration, approvalStands: c.sourceLabelKey === 'approved' } });
+    if (c.reason === 'integration-green') {
+      acc.announce.push({ kind: 'integration-green-refresh', item: c.number, facts: { headRefOid: c.headRefOid, base: cfg.integration } });
+    } else {
+      acc.announce.push({ kind: 'rebase-required', item: c.number, facts: { headRefOid: c.headRefOid, base: cfg.integration, approvalStands: c.sourceLabelKey === 'approved' } });
+    }
     acc.refreshedUpdates.push({ item: c.number, sha: c.headRefOid, count: decision.count });
   }
 }

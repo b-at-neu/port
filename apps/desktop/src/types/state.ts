@@ -6,7 +6,7 @@ import type { BoardSnapshot, SourceKind } from '@/types/board'
 // Renderer-safe reconciled shapes for the unified state model. No import here may reach a Node builtin — only `main/state/` joins the four adapters. A condition a human or the environment could cause is a value, never a throw.
 import type { LabelKey, VocabularyReport } from '@/utils/labels/vocabulary'
 import type { LabelRole } from '@/utils/labels/defaults'
-import type { BlockerRead, CheckContext, IssueCommentNode, Mergeable, PipelineFailureKind, PipelineItemKind, PullRequestCommentNode, RateLimitInfo, ReviewNode, TruncatedSet, UnavailableAlias } from '@/types/github'
+import type { BlockerRead, CheckContext, IntegrationChecks, IssueCommentNode, Mergeable, PipelineFailureKind, PipelineItemKind, PullRequestCommentNode, RateLimitInfo, ReviewNode, TruncatedSet, UnavailableAlias } from '@/types/github'
 import type { RepoDiagnostic, RepoId, RepoProblem } from '@/utils/repos'
 import type { DenialsRead, UnresolvedReason } from '@/types/local'
 import type { PortStageAgent, SessionScan } from '@/types/sessions'
@@ -194,6 +194,8 @@ export type RepositoryState =
       readonly worktreeTotals: WorktreeTotals | null
       /** The signed-in account's own login, carried straight off `PipelineFetch.viewer` — `null`, never a guess, when unresolvable. */
       readonly viewer: string | null
+      /** The integration branch's check statuses off `PipelineFetch.integrationChecks` — `null` when its history was unreadable, which the integration-red gate holds on rather than refreshing. */
+      readonly integrationChecks: IntegrationChecks | null
       /** `entry.config.modules.approvalGate`, copied onto every item read so the ungated selection and `actionsFor` never need a second config read. */
       readonly approvalGate: boolean
       /** Every module-gated label key this repository currently has turned off, so `planTick` never needs a second config read to report a gated stage as absent. */

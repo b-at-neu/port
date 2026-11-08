@@ -3,6 +3,10 @@ import type { GitHubHttpResult, GitHubTransport } from '@/types/platform'
 // Renderer-safe result and item shapes for the GitHub adapter. No import here may reach a Node builtin — only `main/github/` spawns `gh`.
 import type { LabelKey, LabelSource, VocabularyReport } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
+import type { IntegrationStatus } from '../../../../scripts/port-tick/gates'
+
+/** The integration branch's latest concluded status by check name, a plain record so it survives the offload worker's structured clone and any JSON hop. */
+export type IntegrationChecks = Readonly<Record<string, IntegrationStatus>>
 
 /** A remote GitHub locator — `github/adapter.ts`'s original `RepoRef` shape. */
 export interface GitHubRepoRef {
@@ -199,6 +203,8 @@ export type PipelineFetch =
       readonly rateLimit: RateLimitInfo
       /** The signed-in account's own login — `null`, never a guess, when absent or dropped. Unlike `fetchClaimPreflight`, an unresolvable viewer never fails this whole fetch. */
       readonly viewer: string | null
+      /** The integration branch's latest concluded status per check name — `null`, never an empty record, when its history could not be read. */
+      readonly integrationChecks: IntegrationChecks | null
       readonly fetchedAt: string
     }
   | {

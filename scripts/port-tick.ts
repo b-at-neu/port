@@ -9,6 +9,8 @@ import { pathToFileURL } from 'node:url';
 import { loadConfig } from './port-tick/config.ts';
 import { buildQuery } from './port-tick/query.ts';
 import { runGraphql } from './port-tick/gh.ts';
+import { integrationChecksOf } from './port-tick/checks.ts';
+import { toIntegrationHistory } from './port-tick/wire.ts';
 import { classifyEnvelope, truncatedAliases } from './port-tick/envelope.ts';
 import { labelsByItem, contradictions, actionablePartitions, reconcileTick, ungatedPullRequests, reportOrphans, ticketsByPullRequest } from './port-tick/reconcile.ts';
 import { classifyUnmatched, descriptionOf, RETRY_TRIGGER, isUsageLimitMessage, buildLivenessExpected } from './port-tick/liveness.ts';
@@ -58,6 +60,7 @@ function cmdPlan(root: string, cfg: any): void {
     owner: cfg.owner,
     name: cfg.name,
     labels: cfg.labels,
+    integration: cfg.integration,
     announcedApproved: tickState.announcedApproved ?? [],
   });
   const res = runGraphql(query);
@@ -105,7 +108,8 @@ function cmdPlan(root: string, cfg: any): void {
 
   const acc = freshAccumulator();
   planTriggers(cfg, actionable, partitions, acc);
-  planReadyForReview(cfg, actionable, refreshBranchNumbers, refreshingNumbers, unknownStreakState, clock, acc);
+  const integrationChecks = integrationChecksOf(toIntegrationHistory(repository.integrationHistory));
+  planReadyForReview(cfg, actionable, refreshBranchNumbers, refreshingNumbers, unknownStreakState, clock, integrationChecks, acc);
   planNeedsRevision(cfg, actionable, refreshBranchNumbers, refreshingNumbers, acc);
   planApproved(cfg, actionable, refreshBranchNumbers, refreshingNumbers, acc);
   planRefreshSweep(cfg, refreshedState, acc);
@@ -143,7 +147,7 @@ function cmdPlan(root: string, cfg: any): void {
   const denialsDelta = summarizeDelta(denialAll.slice(tickState.denialsConsumed ?? 0));
 
   const tickId = `${clock ?? Date.now()}`;
-  const willMoveWithoutHuman = dispatch.length > 0 || announce.some((a: any) => a.kind === 'zero-diff-check-hold') || partitions.planning.mine.length + partitions.inProgress.mine.length + partitions.reviewing.mine.length + partitions.revising.mine.length + partitions.refreshing.mine.length > 0;
+  const willMoveWithoutHuman = dispatch.length > 0 || announce.some((a: any) => a.kind === 'zero-diff-check-hold' || a.kind === 'integration-red-hold') || partitions.planning.mine.length + partitions.inProgress.mine.length + partitions.reviewing.mine.length + partitions.revising.mine.length + partitions.refreshing.mine.length > 0;
   const wakeup = willMoveWithoutHuman ? 270 : nextDelay(tickState.cadenceStep ?? 0, { willMoveWithoutHuman: false, observedChange: false }).delay;
 
   const plan = {
@@ -274,7 +278,7 @@ function cmdCommit(root: string, cfg: any, args: any): void {
 function cmdResolve(root: string, cfg: any, args: any): void {
   const item = args.item;
   const decision = args.decision;
-  if (!item || !decision) return die('resolve requires --item <n> --decision <approve|changes|back-to-revision|back-to-review>');
+  if (!item || !decision) return die('resolve requires --item <n> --decision <approve|changes|back-to-revision|back-to-review|refresh>');
 
   const write = gateResolveWrite({ repo: cfg.repo, labels: cfg.labels, item, decision, branch: args.branch });
   if (!write) return die(`unrecognized --decision '${decision}', or an invalid --branch`);

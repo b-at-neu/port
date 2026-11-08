@@ -122,6 +122,41 @@ describe('heldDetailCopy', () => {
     expect(heldDetailCopy(open)).toBe('#594 held — `a` is still red on the reviewed head. Re-run it on GitHub.')
   })
 
+  it('names the red integration check and its deadline for an integration-red hold, and says so when it cannot read the branch', () => {
+    const escalateAt = '2026-01-02T00:00:00.000Z'
+    const when = new Date(escalateAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+    const held: TickHeld = {
+      number: 642,
+      kind: 'pull-request',
+      trigger: 'readyForReview',
+      reason: 'integration-red',
+      contention: null,
+      escalation: { kind: 'integration-red', checks: ['test'], state: 'red', escalateAt, expired: false },
+    }
+    expect(heldDetailCopy(held)).toBe(`#642 held — the integration branch is red on \`test\`, so review would only repeat it. It's refreshed once the integration branch is green; it escalates to needs human at ${when} if it stays red.`)
+    const unreadable: TickHeld = { ...held, escalation: { kind: 'integration-red', checks: ['test'], state: 'unreadable', escalateAt: null, expired: false } }
+    expect(heldDetailCopy(unreadable)).toBe("#642 held — the integration branch's checks couldn't be read, so review would only repeat it. It's refreshed once the integration branch is green.")
+  })
+
+  it('reads an expired integration-red hold as an escalation, present tense only when this app owns dispatch', () => {
+    const held: TickHeld = {
+      number: 642,
+      kind: 'pull-request',
+      trigger: 'readyForReview',
+      reason: 'integration-red',
+      contention: null,
+      escalation: { kind: 'integration-red', checks: ['test', 'lint'], state: 'red', escalateAt: null, expired: true },
+    }
+    expect(heldDetailCopy(held, 'app')).toBe('#642 escalating to needs human — the integration branch stayed red on `test`, `lint` past the hold window.')
+    expect(heldDetailCopy(held, 'none')).toBe('#642 would escalate to needs human — the integration branch stayed red on `test`, `lint` past the hold window.')
+  })
+
+  it('reads an integration-green hold as the refresh that resumes review', () => {
+    const held: TickHeld = { number: 642, kind: 'pull-request', trigger: 'readyForReview', reason: 'integration-green', contention: null, escalation: null }
+    expect(heldDetailCopy(held, 'app')).toBe('#642 held — the integration branch is green again, so this app is refreshing it (rebase + force-push) to resume review.')
+    expect(heldDetailCopy(held, 'none')).toBe("#642 held — the integration branch is green again. The cockpit's refresh sweep rebases it; this app doesn't.")
+  })
+
   it('#292: a conflicting hold reads as this app actively refreshing it, instead of naming the cockpit\'s sweep', () => {
     const held: TickHeld = { number: 88, kind: 'pull-request', trigger: 'readyForReview', reason: 'conflicting', contention: null, escalation: null }
     expect(heldDetailCopy(held, 'app')).toBe('#88 conflicts — this app is refreshing it (rebase + force-push).')
@@ -206,7 +241,8 @@ describe('observationDetailCopy', () => {
     expect(observationDetailCopy({ kind: 'liveness-reset', number: 1, itemKind: 'issue', inFlight: 'inProgress', retryKey: 'ready', evidence: 'ledger' })).toBeNull()
     expect(observationDetailCopy({ kind: 'cycle-cap', number: 2, itemKind: 'pull-request', count: 5, cap: 5 })).toBeNull()
     expect(observationDetailCopy({ kind: 'zero-diff', number: 3, itemKind: 'pull-request', count: 1, headRefOid: 'abc' })).toBeNull()
-    expect(observationDetailCopy({ kind: 'refresh', number: 4, itemKind: 'pull-request', sourceLabel: 'readyForReview', headRefOid: 'abc', count: 1 })).toBeNull()
+    expect(observationDetailCopy({ kind: 'integration-red', number: 7, itemKind: 'pull-request', checks: ['test'], headRefOid: 'abc' })).toBeNull()
+    expect(observationDetailCopy({ kind: 'refresh', number: 4, itemKind: 'pull-request', sourceLabel: 'readyForReview', headRefOid: 'abc', count: 1, cause: 'conflict' })).toBeNull()
     expect(observationDetailCopy({ kind: 'refresh-stuck', number: 5, itemKind: 'pull-request', sourceLabel: 'readyForReview', reason: 'same-sha', sha: 'abc', count: 2 })).toBeNull()
     expect(observationDetailCopy({ kind: 'withdraw-approval', number: 6, itemKind: 'pull-request', red: [], headRefOid: 'abc' })).toBeNull()
   })

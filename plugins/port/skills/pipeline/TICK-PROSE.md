@@ -25,6 +25,7 @@ The query is one `repository(owner:"<owner>", name:"<name>")` selection with one
 - **5 in-flight sets** — `planning`, `inProgress` (adds `body`), `reviewing`, `revising` (adds `body`), `refreshing`.
 - **`prOpened`** (adds `body`) — the whole unmerged-branch set for the file contention gate's occupied set, in the same call.
 - **Unconditional** — `allOpenPRs: pullRequests(states: OPEN, first: 100){ totalCount nodes { number title headRefName baseRefName body labels(first:20){nodes{name}} assignees(first:5){nodes{login}} } }` — the duplicate-pull-request sweep's source as well as the ungated sweep's; only the latter's filter and report stay under `approvalGate`.
+- **`integrationHistory`** — `ref(qualifiedName: "refs/heads/<integration>") { target { ... on Commit { history(first: 5) { nodes { oid statusCheckRollup { contexts(first: 50) { nodes { … } } } } } } } }`, the same context selection as the rollups above. It is what the integration-red hold below compares a named check against; an errored or absent alias is **unreadable**, never an empty read.
 - **One `pullRequest(number: N)` alias per number in `.temp/tick-state.md`'s `Announced approved`** (`state`, `mergedAt`, `closed`, `headRefOid`, `mergeable`, `statusCheckRollup`) — the approved re-verify and merged-pull-request reconciliation, folded into the same call rather than a per-item `gh pr view` afterward.
 - **`pluginRepo`, when Startup preflight step 4 resolved a staleness comparison target** — the same `ref(qualifiedName: "<target-ref>") { compare(headRef: "<installed-sha>") { behindBy } }` alias, recomputed every tick since the installed sha is fixed for the session but the target ref moves; see "Plugin staleness" under Housekeeping. Omitted for the rest of the session when step 4 found no computable target.
 
@@ -102,6 +103,26 @@ Every pull request is named by ticket, per "## Numbering".
 1. From the alias's `reviews`, take the newest node whose `body` starts with the literal `## Code Review` — the same predicate the cycle counter uses, so an empty drive-by review is never counted. **None** → dispatch.
 2. Its `commit.oid` differs from `headRefOid` → **dispatch**. Real progress always moves the head.
 3. Equal, **and** the newest `## Gate cleared` comment (from the alias's `comments`) is newer than that review's `submittedAt` → **dispatch, once**. The operator authorized this re-review through `unblock #N`; the next review resets the comparison by construction.
+2b. **Integration-red hold.** Evaluated before steps 1–3, since a first review can be held too. Applies when the newest `## Integration red` comment (from the alias's `comments`) names a head SHA the current `headRefOid` starts with, and no `## Gate cleared` is newer than it — a push, including a refresh, ends the hold by changing the head. Parse its `- `<check>` — ` lines for the named checks, then reduce `integrationHistory` to each check's latest **concluded** status by name, newest commit first, and take the first match:
+   - **Every named check is green on `<integration>`** → **do not dispatch review**. Treat the pull request as a Refresh sweep candidate with source `<labels.readyForReview>`, subject to the same-SHA guard and the per-tick cap, but post no `## Rebase required` comment — the refresh is not a conflict. Announce:
+
+     > 🔄 #157's pull request: `dev` is green again on `test`, which held it. Refreshing it onto `dev` so review resumes on a head that includes the fix.
+   - **The clock is at or past the comment's `createdAt` plus 24 hours, or either is unreadable** → **do not dispatch**. Write `.temp/integration-red-escalation-<pr>.md` — a `## Pipeline Escalation` body with no `### D<n>` blocks, naming the checks (each backtick-quoted, comma-separated) and the head SHA:
+
+     ```
+     ## Pipeline Escalation
+     `<integration>` stayed red on <checks> for 24 hours, so review of `<head-sha>` never resumed.
+     The failure is not from this diff. Fix `<integration>`, then refresh the branch.
+     ```
+
+     then `gh pr comment <pr-number> --repo <repo> --body-file .temp/integration-red-escalation-<pr>.md`, `gh pr edit <pr-number> --repo <repo> --remove-label "<labels.readyForReview>" --add-label "<labels.needsHuman>"`, and announce:
+
+     > ⛔ #157's pull request has been held 24 hours on `dev` being red at `test`. Escalated to `needs human` and commented. Say `unblock #157` and choose **Refresh and re-review** once `dev` is fixed, or **Override review** to grade it anyway.
+   - **Otherwise** — a named check still red or absent, or `integrationHistory` unreadable → **do not dispatch**, no write, and announce:
+
+     > ⏸️ #157's pull request: `dev` is red on `test`, so review is on hold. It refreshes automatically once `dev` is green; at 14:32 tomorrow I'll escalate to `needs human`.
+
+   The hold keeps the item at `<labels.readyForReview>` for the same reason 3b does: a `<labels.needsHuman>` removal is denied to the cockpit, so a hold that escalated early could never clear itself. It fails toward holding on an unreadable `integrationHistory`, since dispatching would only repeat review's own exit. A held tick counts as work that moves without a human, so the wakeup stays at the floor.
 3b. **Check-only hold.** Applies only when the newest review's body line 3 matches `^Blocked only by checks: `[^`]+`(, `[^`]+`)*$` (the marker `review-agent` writes only when every blocking finding is a red check), exactly one `## Code Review` carries this `commit.oid`, and the alias's rollup is readable. Reduce the rollup to the latest entry per check name, then take the first match:
    - **A named check is absent from the rollup** → step 4.
    - **Every named check concluded green, and no blocking check in the rollup is red or pending** → **dispatch, once**, and announce:

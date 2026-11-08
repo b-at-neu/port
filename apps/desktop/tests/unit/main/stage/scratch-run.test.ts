@@ -141,6 +141,7 @@ function buildPipelineFetch(vocabulary: LabelVocabulary, labels: LabelMap, prs: 
     truncated: [],
     rateLimit: { cost: 1, remaining: 4999, resetAt: NOW_ISO, limit: 5000 },
     viewer: VIEWER,
+    integrationChecks: {},
     fetchedAt: NOW_ISO,
   }
 }

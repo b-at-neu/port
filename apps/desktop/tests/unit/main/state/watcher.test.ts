@@ -3,10 +3,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { RepositoryEntry } from '@/utils/repos'
-import type { GitHubHttpResult } from '@/types/platform'
+import type { GitHubHttpResult, GitHubRequest } from '@/types/platform'
 import type { BoardSnapshot } from '@/types/board'
 import { createPipelineWatcher } from '@/main/state/watcher'
-import { httpOk } from '../../../fixtures/github-http'
+import { httpOk, queryOf } from '../../../fixtures/github-http'
 import { EMPTY_PIPELINE_BODY, RATE_LIMIT_REPLY, connection } from '../../../fixtures/pipeline-reply'
 import { fakeGit, makeFakeTimer, readyEntry, readyItemTransport } from '../../../fixtures/watcher-harness'
 
@@ -38,8 +38,8 @@ describe('createPipelineWatcher — cadence', () => {
       now,
       setTimer: timer.factory,
       git: fakeGit(gitCounts),
-      github: () => {
-        ghCalls += 1
+      github: (request) => {
+        if (!queryOf(request).includes('integrationHistory:')) ghCalls += 1
         return Promise.resolve(httpOk(EMPTY_PIPELINE_BODY))
       },
       sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
@@ -81,8 +81,8 @@ describe('createPipelineWatcher — budgeted interval', () => {
       return snap.health[0]?.github.intervalMs
     }
 
-    // Two round trips per poll (sweep, then detail) each report the cost, so a poll costs twice it.
-    expect(await intervalFor(73)).toBe(210_240)
+    // Three round trips per poll (sweep, detail, then the integration history) each report the cost, so a poll costs three times it.
+    expect(await intervalFor(73)).toBe(315_360)
     expect(await intervalFor(1)).toBe(60_000)
   })
 })
@@ -94,7 +94,8 @@ async function watcherWithHungReads(now: () => Date, timer: ReturnType<typeof ma
   const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
   const hung: (() => void)[] = []
   let ghCalls = 0
-  const github = (): Promise<GitHubHttpResult> => {
+  const github = (request: GitHubRequest): Promise<GitHubHttpResult> => {
+    if (queryOf(request).includes('integrationHistory:')) return Promise.resolve(httpOk(EMPTY_PIPELINE_BODY))
     ghCalls += 1
     if (ghCalls === 1) return Promise.resolve(httpOk(EMPTY_PIPELINE_BODY))
     return new Promise((resolve) => {
@@ -175,10 +176,11 @@ describe('createPipelineWatcher — rate-limit deferral', () => {
 
     const first = await watcher.refresh()
     expect(first.health[0]?.github.deferredUntil).toBe('2026-01-01T01:00:00Z')
-    expect(ghCalls).toBe(1)
+    // The sweep, then the integration history.
+    expect(ghCalls).toBe(2)
 
     await watcher.refresh({ repoId: 'repo-a' as RepositoryEntry['id'], source: 'github' })
-    expect(ghCalls).toBe(1)
+    expect(ghCalls).toBe(2)
   })
 })
 

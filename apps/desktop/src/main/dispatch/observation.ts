@@ -57,10 +57,17 @@ export function observationWrite(observation: WriteObservation, item: Reconciled
       const comment = `${PIPELINE_ESCALATION}\nCycle ${String(observation.count)} already reviewed \`${observation.headRefOid}\` and the head has not moved, so no new review cycle was opened.\nWhatever is blocking this pull request is not visible to review or revision.`
       return { add, remove: ['readyForReview'], expect: precondition(item, vocabulary, add), action: 'observe-zero-diff', comment }
     }
+    case 'integration-red': {
+      const add: readonly LabelKey[] = ['needsHuman']
+      const names = observation.checks.map((name) => `\`${name}\``).join(', ')
+      const comment = `${PIPELINE_ESCALATION}\n\`${integration}\` stayed red on ${names} for 24 hours, so review of \`${observation.headRefOid}\` never resumed.\nThe failure is not from this diff. Fix \`${integration}\`, then refresh the branch.`
+      return { add, remove: ['readyForReview'], expect: precondition(item, vocabulary, add), action: 'observe-integration-red', comment }
+    }
     case 'refresh': {
       const add: readonly LabelKey[] = ['refreshBranch']
       const remove: readonly LabelKey[] = observation.sourceLabel === 'readyForReview' ? ['readyForReview'] : []
-      return { add, remove, expect: precondition(item, vocabulary, add), action: 'observe-refresh', comment: rebaseRequiredComment(observation.headRefOid, integration) }
+      const comment = observation.cause === 'integration-green' ? null : rebaseRequiredComment(observation.headRefOid, integration)
+      return { add, remove, expect: precondition(item, vocabulary, add), action: 'observe-refresh', comment }
     }
     case 'refresh-stuck': {
       const add: readonly LabelKey[] = ['needsHuman']

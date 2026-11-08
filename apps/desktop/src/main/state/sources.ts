@@ -26,6 +26,8 @@ interface RefreshGithubParams {
   readonly repoId: RepoId
   readonly repo: { readonly owner: string; readonly name: string }
   readonly vocabulary: LabelVocabulary
+  /** `branches.integration`, whose recent check history the integration-red gate compares against. */
+  readonly integration: string
   /** Read from whatever the worktree/session sources most recently returned — never re-fetched here; this primitive composes, it does not read a second source. */
   readonly worktreeEntries: readonly WorktreeEntry[]
   readonly agents: readonly AgentRecord[]
@@ -36,7 +38,7 @@ interface RefreshGithubParams {
 /** Fires the conditional `fetchItemsByNumber` re-check itself whenever the fresh sweep leaves orphan numbers, so `itemStates` stays dependent on a GitHub refresh. */
 export async function refreshGithub(cache: SourceCache, params: RefreshGithubParams): Promise<RefreshOutcome> {
   const now = params.now ?? (() => new Date())
-  const fetch = await fetchPipelineItems({ repo: params.repo, vocabulary: params.vocabulary, github: params.github, now })
+  const fetch = await fetchPipelineItems({ repo: params.repo, vocabulary: params.vocabulary, integration: params.integration, github: params.github, now })
   const previous = cache.github.get(params.repoId) ?? null
   cache.github.set(params.repoId, projectOk(previous, fetch))
 

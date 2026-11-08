@@ -75,7 +75,7 @@ export async function readPipelineState(params: ReadPipelineStateParams): Promis
     const sessions = cache.sessions
     const agents = sessions?.ok ? sessions.agents.filter((a) => a.repoId === entry.id) : []
     const repo = splitRepo(entry.config.repo)
-    await refreshGithub(cache, { repoId: entry.id, repo, vocabulary: entry.config.vocabulary, worktreeEntries, agents, github: params.github, now })
+    await refreshGithub(cache, { repoId: entry.id, repo, vocabulary: entry.config.vocabulary, integration: entry.config.branches.integration, worktreeEntries, agents, github: params.github, now })
   }
 
   return projectFromCache(cache, params.repositories, now)

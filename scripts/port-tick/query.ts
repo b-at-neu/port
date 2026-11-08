@@ -8,6 +8,13 @@ const PR_BASE_FIELDS = 'number title body assignees(first: 5) { nodes { login } 
 
 const ROLLUP = `commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 50) { nodes { __typename ... on CheckRun { name conclusion status startedAt completedAt detailsUrl } ... on StatusContext { context state createdAt targetUrl } } } } } } }`;
 
+const INTEGRATION_CONTEXTS = `contexts(first: 50) { nodes { __typename ... on CheckRun { name conclusion status startedAt completedAt detailsUrl checkSuite { workflowRun { workflow { name } } } } ... on StatusContext { context state createdAt targetUrl } } }`;
+
+/** The integration branch's last five commits with their rollups, for the integration-red comparison. */
+function integrationHistory(integration: string): string {
+  return `integrationHistory: ref(qualifiedName: "refs/heads/${escape(integration)}") { target { ... on Commit { history(first: 5) { nodes { oid statusCheckRollup { ${INTEGRATION_CONTEXTS} } } } } } }`;
+}
+
 function issueSet(alias: string, labelName: string, extraFields = ''): string {
   return `${alias}: issues(first: 100, states: OPEN, filterBy: { labels: ["${escape(labelName)}"] }) { totalCount nodes { ${ISSUE_FIELDS} ${extraFields} } }`;
 }
@@ -22,11 +29,13 @@ export function buildQuery({
   owner,
   name,
   labels,
+  integration,
   announcedApproved = [],
 }: {
   owner: string;
   name: string;
   labels: any;
+  integration: string;
   announcedApproved?: number[];
 }): string {
   const parts: string[] = [];
@@ -65,6 +74,8 @@ export function buildQuery({
   parts.push(
     'allOpenPRs: pullRequests(states: OPEN, first: 100) { totalCount nodes { number title headRefName baseRefName body labels(first: 20) { nodes { name } } assignees(first: 5) { nodes { login } } timelineItems(last: 30, itemTypes: [LABELED_EVENT, UNLABELED_EVENT]) { nodes { __typename ... on LabeledEvent { label { name } } ... on UnlabeledEvent { label { name } } } } } }',
   );
+
+  parts.push(integrationHistory(integration));
 
   // --- Approved re-verify / merged-PR reconciliation -----------------------
   for (const n of announcedApproved) {

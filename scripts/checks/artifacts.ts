@@ -109,6 +109,22 @@ export default async function ({ expect, fail, ok }: Reporter) {
       else expect(!run(noSha).ok, 'artifacts-patterns', 'changes-requested accepts a body with no SHA');
     }
 
+    // The integration-red hold has a head line and per-check lines rather than a single backticked fact,
+    // so it is exercised on its own: one good body and four bad ones.
+    {
+      const good = '## Integration red\nHead `abc1234` · `dev` is already red on these checks, so the failure isn\'t from this diff:\n- `test` — FAILURE on `def5678` · https://example.com/run/1\nAlso red here: `lint`';
+      const noCheckLine = '## Integration red\nHead `abc1234` · `dev` is already red on these checks, so the failure isn\'t from this diff:\nAlso red here: `lint`';
+      const noHead = '## Integration red\n`dev` is already red on these checks:\n- `test` — FAILURE on `def5678` · https://example.com/run/1';
+      const shortHead = '## Integration red\nHead `abc12` · `dev` is already red on these checks:\n- `test` — FAILURE on `def5678` · https://example.com/run/1';
+      const renamedHeading = '## Integration failing\nHead `abc1234` · `dev` is already red on these checks:\n- `test` — FAILURE on `def5678` · https://example.com/run/1';
+      const run = CHECKS['integration-red'].run;
+      if (!run(good).ok) fail('artifacts-patterns', 'integration-red rejects its own good example');
+      else if (run(noCheckLine).ok) fail('artifacts-patterns', 'integration-red accepts a body with no red check line');
+      else if (run(noHead).ok) fail('artifacts-patterns', 'integration-red accepts a body with no Head line');
+      else if (run(shortHead).ok) fail('artifacts-patterns', 'integration-red accepts a head SHA under 7 characters');
+      else expect(!run(renamedHeading).ok, 'artifacts-patterns', 'integration-red accepts a renamed heading');
+    }
+
     // pin: `CHANGES_REQUESTED_HEADING` ↔ its literal rendering in
     // revise-agent.md, review-agent.md, SKILL.md, and FORMATS.md.
     {

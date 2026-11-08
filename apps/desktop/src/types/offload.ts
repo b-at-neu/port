@@ -23,6 +23,7 @@ interface GithubParams {
   readonly repoId: RepoId
   readonly repo: { readonly owner: string; readonly name: string }
   readonly vocabulary: LabelVocabulary
+  readonly integration: string
 }
 
 type SearchParams = Pick<RunSearchParams, 'scan' | 'indexDir' | 'query' | 'scope'>

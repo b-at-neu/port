@@ -2,7 +2,7 @@ import type { DispatchLedger, UnknownStreaks, RefreshMemo, ForceDispatch } from 
 
 // planTick — one RepositoryState to one TickReport. Pure: no gh, no timer, no write. This app
 // computes the decision and the report; it never writes the escalation itself.
-import type { PipelineItemKind } from '@/types/github'
+import type { IntegrationChecks, PipelineItemKind } from '@/types/github'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/types/board'
@@ -12,7 +12,7 @@ import type { ClaimedItem, OccupiedEntry } from '../../../../../scripts/port-tic
 import { gateCandidates } from '../../../../../scripts/port-tick/contention'
 import type { Disposition } from '../../../../../scripts/port-tick/checks'
 import { zeroDiffChecksOf } from '../../../../../scripts/port-tick/checks'
-import { cycleCapExceeded, cycleGrantCount, mergeabilityRoute, refreshWins, zeroDiffGate } from '../../../../../scripts/port-tick/gates'
+import { cycleCapExceeded, cycleGrantCount, integrationRedGate, mergeabilityRoute, refreshWins, zeroDiffGate } from '../../../../../scripts/port-tick/gates'
 
 import { RETRY_TRIGGER } from '../../../../../scripts/port-tick/liveness'
 import { observationsOf } from '@/main/tick/observe'
@@ -67,7 +67,7 @@ function heldReasonOf(
   unowned: ReadonlySet<number>,
   others: ReadonlySet<number>,
   holdSessionRequired: boolean,
-): Exclude<TickHeld['reason'], 'contended' | 'cycle-cap' | 'zero-diff' | 'check-hold'> | null {
+): Exclude<TickHeld['reason'], 'contended' | 'cycle-cap' | 'zero-diff' | 'check-hold' | 'integration-red' | 'integration-green'> | null {
   if (unowned.has(item.number)) return 'unowned'
   if (others.has(item.number)) return 'other-operator'
   if (holdSessionRequired && item.sessionRequired) return 'session-required'
@@ -107,6 +107,21 @@ function mergeabilityHeld(item: ReconciledItem, repoId: RepoId, unknownStreaks: 
   return null
 }
 
+/** The integration-red gate's held entry, or `null` to proceed. `refresh` is held as `integration-green` so `observe.ts` hands it to the refresh path; an unreadable `integrationChecks` holds rather than refreshes. */
+function integrationRedHeld(item: ReconciledItem, trigger: LabelKey, integrationChecks: IntegrationChecks | null, now: Date): TickHeld | null {
+  const gate = integrationRedGate({
+    comments: item.comments ?? undefined,
+    headRefOid: item.headRefOid ?? '',
+    integration: integrationChecks === null ? null : new Map(Object.entries(integrationChecks)),
+    now: now.toISOString(),
+  })
+  if (gate.action === 'none' || gate.facts === undefined) return null
+  const base = { number: item.number, kind: item.kind, trigger, contention: null }
+  if (gate.action === 'refresh') return { ...base, reason: 'integration-green', escalation: null }
+  const { checks, state, escalateAt } = gate.facts
+  return { ...base, reason: 'integration-red', escalation: { kind: 'integration-red', checks, state, escalateAt: escalateAt ?? null, expired: gate.action === 'escalate' } }
+}
+
 function occupiedSetOf(items: readonly ReconciledItem[]): readonly OccupiedEntry[] {
   const occupied: OccupiedEntry[] = []
   for (const item of items) {
@@ -131,6 +146,7 @@ function actionableAndHeld(
   forceDispatch: ForceDispatch | undefined,
   checkDispositions: Readonly<Record<string, Disposition>>,
   now: Date,
+  integrationChecks: IntegrationChecks | null,
 ): { readonly actionable: readonly TickActionable[]; readonly held: readonly TickHeld[] } {
   const held: TickHeld[] = []
   const refreshBranchNumbers = numbersCarrying(items, 'refreshBranch')
@@ -205,6 +221,14 @@ function actionableAndHeld(
         escalation: { kind: 'cycle-cap', count: item.reviewCycleCount ?? 0, cap: reviewCycleCap + cycleGrantCount(item.comments ?? undefined) },
       })
       continue
+    }
+    // The integration-red hold runs before the zero-diff gate: a first review can be held too.
+    if (agent === 'review') {
+      const redHeld = integrationRedHeld(item, trigger, integrationChecks, now)
+      if (redHeld !== null) {
+        held.push(redHeld)
+        continue
+      }
     }
     // The zero-diff gate: the one-time re-review permission is inherent in the label state itself.
     if (agent === 'review') {
@@ -346,7 +370,7 @@ export function planTick(params: PlanTickParams): TickReport {
     }
   }
 
-  const { actionable, held } = actionableAndHeld(repository.items, repository.viewer, repository.concurrency, reviewCycleCap, repository.repoId, unknownStreaks, holdSessionRequired, params.forceDispatch, checkDispositions, now())
+  const { actionable, held } = actionableAndHeld(repository.items, repository.viewer, repository.concurrency, reviewCycleCap, repository.repoId, unknownStreaks, holdSessionRequired, params.forceDispatch, checkDispositions, now(), repository.integrationChecks)
   const claims = claimsOf(repository.items, repository.repoId, ledger, startedTasks, readAt, holdSessionRequired, stageLiveness)
 
   const liveNumbers = new Set(startedTasks.map((description) => Number(description.split('#')[1])).filter((n) => !Number.isNaN(n)))

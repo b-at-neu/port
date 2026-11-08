@@ -69,19 +69,14 @@ function readyRepo(overrides: Partial<Extract<RepositoryState, { ok: true }>> = 
     unavailable: [],
     truncated: [],
     rateLimit: { cost: 1, remaining: 4999, resetAt: '2026-01-01T02:00:00Z', limit: 5000 },
-    freshness: {
-      github: { at: NOW.toISOString() },
-      itemStates: { unavailable: 'no re-check needed' },
-      sessions: { at: NOW.toISOString() },
-      worktrees: { at: NOW.toISOString() },
-      denials: { at: NOW.toISOString() },
-    },
+    freshness: { github: { at: NOW.toISOString() }, itemStates: { unavailable: 'no re-check needed' }, sessions: { at: NOW.toISOString() }, worktrees: { at: NOW.toISOString() }, denials: { at: NOW.toISOString() } },
     worktreeTotals: { registered: 0, attached: 0, uncorrelated: 0 },
     viewer: 'op',
     approvalGate: true,
     disabled: [],
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
     reviewCycleCap: 5,
+    integrationChecks: {},
     ...overrides,
   }
 }

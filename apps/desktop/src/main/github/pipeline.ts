@@ -8,6 +8,7 @@ import type {
   AliasInfo,
   GitHubRepoRef,
   GraphQLErrorEntry,
+  IntegrationChecks,
   ItemDetail,
   PipelineFailureKind,
   PipelineFetch,
@@ -21,8 +22,8 @@ import type {
   UnavailableAlias,
 } from '@/types/github'
 import { bodyOf, classifyFailure, collectUnavailable, parseEnvelope } from '@/main/github/envelope'
-import { applyItemDetails, mapPipelineItems } from '@/main/github/map'
-import { FIRST_SWEEP_PAGE, buildItemDetailsQuery, buildPipelineQuery } from '@/main/github/query'
+import { applyItemDetails, mapPipelineItems, toIntegrationChecks } from '@/main/github/map'
+import { FIRST_SWEEP_PAGE, buildIntegrationChecksQuery, buildItemDetailsQuery, buildPipelineQuery } from '@/main/github/query'
 import { repoGraphqlRequest } from '@/main/github/request'
 
 const MAX_SWEEP_PAGES = 10
@@ -221,9 +222,24 @@ async function readDetails(github: GitHubTransport, repo: GitHubRepoRef, items: 
   return { details, rateLimit: total }
 }
 
+interface IntegrationResult {
+  readonly checks: IntegrationChecks | null
+  readonly rateLimit: RateLimitInfo
+}
+
+/** A failed read, an errored alias or a missing branch is `null` (unreadable), never an empty record, and never fails the board. */
+async function readIntegrationChecks(github: GitHubTransport, repo: GitHubRepoRef, integration: string, rateLimit: RateLimitInfo): Promise<IntegrationResult> {
+  const reply = await graphql(github, repo, buildIntegrationChecksQuery(integration))
+  if (!reply.ok) return { checks: null, rateLimit }
+  const total = addRateLimit(rateLimit, reply.data.rateLimit)
+  const errored = (reply.errors ?? []).some((error) => error.path?.[1] === 'integrationHistory')
+  return { checks: errored ? null : toIntegrationChecks(reply.repository.integrationHistory), rateLimit: total }
+}
+
 interface FetchPipelineItemsParams {
   readonly repo: GitHubRepoRef
   readonly vocabulary: LabelVocabulary
+  readonly integration: string
   readonly github?: GitHubTransport
   readonly now?: () => Date
 }
@@ -246,6 +262,7 @@ export async function fetchPipelineItems(params: FetchPipelineItemsParams): Prom
   const light = SWEEP_ALIASES.flatMap((alias) => mapPipelineItems(swept.state.nodes[alias], surfaceOf(alias), params.vocabulary, repo))
   const detailed = await readDetails(github, params.repo, light, swept.rateLimit)
   if ('ok' in detailed) return { ...detailed, fetchedAt }
+  const integration = await readIntegrationChecks(github, params.repo, params.integration, detailed.rateLimit)
 
   return {
     ok: true,
@@ -255,8 +272,9 @@ export async function fetchPipelineItems(params: FetchPipelineItemsParams): Prom
     vocabulary: verifyVocabulary(params.vocabulary, swept.repoLabels),
     unavailable: [...swept.state.unavailable.values()],
     truncated: swept.truncated,
-    rateLimit: detailed.rateLimit,
+    rateLimit: integration.rateLimit,
     viewer: swept.viewer,
+    integrationChecks: integration.checks,
     fetchedAt,
   }
 }

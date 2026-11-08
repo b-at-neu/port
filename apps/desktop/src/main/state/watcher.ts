@@ -268,7 +268,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     } else if (kind === 'denials') {
       outcome = await engine.refreshDenials({ repoId: entry.id, repoRoot: entry.path })
     } else {
-      outcome = await engine.refreshGithub({ repoId: entry.id, repo: repoRefOf(entry), vocabulary: entry.config.vocabulary })
+      outcome = await engine.refreshGithub({ repoId: entry.id, repo: repoRefOf(entry), vocabulary: entry.config.vocabulary, integration: entry.config.branches.integration })
     }
     const current = ensureHealth(entry.id)
     const previous = current[kind]
