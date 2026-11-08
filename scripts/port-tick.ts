@@ -101,6 +101,7 @@ function cmdPlan(root: string, cfg: any): void {
   // readyForReview ∪ approved reading CONFLICTING; applied to tickState by `commit`, since `plan` never persists.
   const refreshedState: Record<string, any> = tickState.refreshed ?? {};
   const unknownStreakState: Record<string, any> = tickState.unknownStreak ?? {};
+  const rerunState: Record<string, any> = tickState.reran ?? {};
 
   // Refresh wins: a pull request already claimed by or mid-refresh is never dispatched to review or revision this tick.
   const refreshBranchNumbers = (repository.refreshBranch?.nodes ?? []).map((n: any) => n.number);
@@ -109,7 +110,7 @@ function cmdPlan(root: string, cfg: any): void {
   const acc = freshAccumulator();
   planTriggers(cfg, actionable, partitions, acc);
   const integrationChecks = integrationChecksOf(toIntegrationHistory(repository.integrationHistory));
-  planReadyForReview(cfg, actionable, refreshBranchNumbers, refreshingNumbers, unknownStreakState, clock, integrationChecks, acc);
+  planReadyForReview(cfg, actionable, refreshBranchNumbers, refreshingNumbers, unknownStreakState, rerunState, clock, integrationChecks, acc);
   planNeedsRevision(cfg, actionable, refreshBranchNumbers, refreshingNumbers, acc);
   planApproved(cfg, actionable, refreshBranchNumbers, refreshingNumbers, acc);
   planRefreshSweep(cfg, refreshedState, acc);
@@ -125,7 +126,7 @@ function cmdPlan(root: string, cfg: any): void {
 
   planHumanGates(actionable, acc);
 
-  const { dispatch, gates, held, announce, writes, refreshedUpdates, unknownStreakUpdates, strandedUpdates } = acc;
+  const { dispatch, gates, held, announce, writes, refreshedUpdates, unknownStreakUpdates, strandedUpdates, rerunUpdates } = acc;
 
   // Duplicate-pull-request sweep + reconcile reporting, change-only against `.temp/tick-state.json`'s remembered sets.
   const { reconcile, persist: reconcilePersist } = reconcileTick({
@@ -147,7 +148,7 @@ function cmdPlan(root: string, cfg: any): void {
   const denialsDelta = summarizeDelta(denialAll.slice(tickState.denialsConsumed ?? 0));
 
   const tickId = `${clock ?? Date.now()}`;
-  const willMoveWithoutHuman = dispatch.length > 0 || announce.some((a: any) => a.kind === 'zero-diff-check-hold' || a.kind === 'integration-red-hold') || partitions.planning.mine.length + partitions.inProgress.mine.length + partitions.reviewing.mine.length + partitions.revising.mine.length + partitions.refreshing.mine.length > 0;
+  const willMoveWithoutHuman = dispatch.length > 0 || announce.some((a: any) => a.kind === 'zero-diff-check-hold' || a.kind === 'integration-red-hold' || a.kind === 'check-rerun' || a.kind === 'check-rerun-hold') || partitions.planning.mine.length + partitions.inProgress.mine.length + partitions.reviewing.mine.length + partitions.revising.mine.length + partitions.refreshing.mine.length > 0;
   const wakeup = willMoveWithoutHuman ? 270 : nextDelay(tickState.cadenceStep ?? 0, { willMoveWithoutHuman: false, observedChange: false }).delay;
 
   const plan = {
@@ -169,6 +170,7 @@ function cmdPlan(root: string, cfg: any): void {
     refreshedUpdates,
     unknownStreakUpdates,
     strandedUpdates,
+    rerunUpdates,
     wakeup,
     rateLimit: res.body.data.rateLimit ?? null,
     denials: denialsDelta,
@@ -254,6 +256,17 @@ function cmdCommit(root: string, cfg: any, args: any): void {
   for (const u of cache.strandedUpdates ?? []) {
     if (u.remove) delete tickState.strandedSeen[u.item];
     else tickState.strandedSeen[u.item] = true;
+  }
+
+  tickState.reran = tickState.reran ?? {};
+  for (const u of cache.rerunUpdates ?? []) {
+    if (u.remove) {
+      delete tickState.reran[u.item];
+      continue;
+    }
+    const prior = tickState.reran[u.item];
+    const at = u.at ?? new Date().toISOString(); // a plan with no readable clock records the commit's own
+    tickState.reran[u.item] = { sha: u.sha, checks: { ...(prior?.sha === u.sha ? prior.checks : {}), ...Object.fromEntries(u.checks.map((c: string) => [c, at])) } };
   }
 
   const willMoveWithoutHuman = (cache.dispatch ?? []).length > 0 || liveDescriptions.length > 0;

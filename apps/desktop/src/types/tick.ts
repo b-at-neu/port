@@ -35,7 +35,7 @@ export type TickHeldReason =
 /** `TickHeld.escalation`'s own shape — `null` for every reason except `cycle-cap`/`zero-diff`/`check-hold`/`integration-red`, which carry the count and cap, or the held checks and their deadline, without re-deriving either from raw review data. */
 export type TickEscalation =
   | { readonly kind: 'cycle-cap'; readonly count: number; readonly cap: number }
-  | { readonly kind: 'zero-diff' }
+  | { readonly kind: 'zero-diff'; readonly reason: 'zero-diff' | 'sha-cap' }
   | { readonly kind: 'check-hold'; readonly checks: readonly string[]; readonly state: 'pending' | 'red'; readonly escalateAt: string | null }
   /** `expired` is the hold window running out, which is what `observe.ts` escalates; until then it is a plain hold with `escalateAt` as its deadline. */
   | { readonly kind: 'integration-red'; readonly checks: readonly string[]; readonly state: 'red' | 'unreadable'; readonly escalateAt: string | null; readonly expired: boolean }
@@ -106,7 +106,7 @@ export type TickObservation =
       readonly evidence: 'ledger' | 'stage-error'
     })
   | (TickObservationBase & { readonly kind: 'cycle-cap'; readonly count: number; readonly cap: number })
-  | (TickObservationBase & { readonly kind: 'zero-diff'; readonly count: number; readonly headRefOid: string })
+  | (TickObservationBase & { readonly kind: 'zero-diff'; readonly reason: 'zero-diff' | 'sha-cap'; readonly count: number; readonly headRefOid: string })
   | (TickObservationBase & { readonly kind: 'integration-red'; readonly checks: readonly string[]; readonly headRefOid: string })
   | (TickObservationBase & {
       readonly kind: 'refresh'
@@ -126,6 +126,8 @@ export type TickObservation =
   | (TickObservationBase & { readonly kind: 'refresh-deferred' })
   | (TickObservationBase & {
       readonly kind: 'withdraw-approval'
+      /** `'human'` is a red check that grades the pull request's own review history, which no revision can clear. */
+      readonly route: 'revise' | 'human'
       readonly red: readonly { readonly name: string | null; readonly conclusion: string | null; readonly url: string | null }[]
       readonly headRefOid: string
     })

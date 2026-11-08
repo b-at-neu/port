@@ -97,6 +97,87 @@
       "name": "an absent history is unreadable, never an empty read",
       "input": null,
       "expected": null
+    },
+    { "function": "actionsJobOf", "name": "an Actions job URL names its run and job", "input": "https://github.com/o/r/actions/runs/111/job/222", "expected": { "runId": "111", "jobId": "222" } },
+    { "function": "actionsJobOf", "name": "an external CI URL is not rerunnable", "input": "https://ci.example.test/builds/9", "expected": null },
+    { "function": "actionsJobOf", "name": "an absent URL is not rerunnable", "input": null, "expected": null },
+    {
+      "function": "preReviewRerun",
+      "name": "the first red Actions check gets a rerun",
+      "input": { "contexts": [{ "__typename": "CheckRun", "name": "test", "status": "COMPLETED", "conclusion": "FAILURE", "startedAt": "2026-01-01T00:00:00Z", "detailsUrl": "https://github.com/o/r/actions/runs/111/job/222" }], "dispositions": {}, "headRefOid": "sha1", "now": "2026-01-01T01:00:00Z" },
+      "expected": { "action": "rerun", "checks": ["test"], "runs": [{ "check": "test", "runId": "111" }] }
+    },
+    {
+      "function": "preReviewRerun",
+      "name": "two red jobs of one run share one rerun command",
+      "input": { "contexts": [{ "__typename": "CheckRun", "name": "test", "status": "COMPLETED", "conclusion": "FAILURE", "startedAt": "2026-01-01T00:00:00Z", "detailsUrl": "https://github.com/o/r/actions/runs/111/job/222" }, { "__typename": "CheckRun", "name": "lint", "status": "COMPLETED", "conclusion": "FAILURE", "startedAt": "2026-01-01T00:00:00Z", "detailsUrl": "https://github.com/o/r/actions/runs/111/job/223" }], "dispositions": {}, "headRefOid": "sha1", "now": "2026-01-01T01:00:00Z" },
+      "expected": { "action": "rerun", "checks": ["test", "lint"], "runs": [{ "check": "test", "runId": "111" }] }
+    },
+    {
+      "function": "preReviewRerun",
+      "name": "rerun recorded, the old entry still shown inside the window — hold",
+      "input": { "contexts": [{ "__typename": "CheckRun", "name": "test", "status": "COMPLETED", "conclusion": "FAILURE", "startedAt": "2026-01-01T00:00:00Z", "detailsUrl": "https://github.com/o/r/actions/runs/111/job/222" }], "dispositions": {}, "headRefOid": "sha1", "reran": { "sha": "sha1", "checks": { "test": "2026-01-01T01:00:00.000Z" } }, "now": "2026-01-01T01:05:00Z" },
+      "expected": { "action": "hold", "checks": ["test"] }
+    },
+    {
+      "function": "preReviewRerun",
+      "name": "rerun recorded, the old entry past the window — proceed",
+      "input": { "contexts": [{ "__typename": "CheckRun", "name": "test", "status": "COMPLETED", "conclusion": "FAILURE", "startedAt": "2026-01-01T00:00:00Z", "detailsUrl": "https://github.com/o/r/actions/runs/111/job/222" }], "dispositions": {}, "headRefOid": "sha1", "reran": { "sha": "sha1", "checks": { "test": "2026-01-01T01:00:00.000Z" } }, "now": "2026-01-01T01:10:00Z" },
+      "expected": { "action": "proceed" }
+    },
+    {
+      "function": "preReviewRerun",
+      "name": "rerun recorded, no clock — never holds on visibility",
+      "input": { "contexts": [{ "__typename": "CheckRun", "name": "test", "status": "COMPLETED", "conclusion": "FAILURE", "startedAt": "2026-01-01T00:00:00Z", "detailsUrl": "https://github.com/o/r/actions/runs/111/job/222" }], "dispositions": {}, "headRefOid": "sha1", "reran": { "sha": "sha1", "checks": { "test": "2026-01-01T01:00:00.000Z" } }, "now": null },
+      "expected": { "action": "proceed" }
+    },
+    {
+      "function": "preReviewRerun",
+      "name": "rerun recorded and now pending — hold",
+      "input": { "contexts": [{ "__typename": "CheckRun", "name": "test", "status": "IN_PROGRESS", "conclusion": null, "startedAt": "2026-01-01T01:01:00Z", "detailsUrl": "https://github.com/o/r/actions/runs/111/job/222" }], "dispositions": {}, "headRefOid": "sha1", "reran": { "sha": "sha1", "checks": { "test": "2026-01-01T01:00:00.000Z" } }, "now": "2026-01-01T03:00:00Z" },
+      "expected": { "action": "hold", "checks": ["test"] }
+    },
+    {
+      "function": "preReviewRerun",
+      "name": "rerun concluded red — proceed, never a second rerun",
+      "input": { "contexts": [{ "__typename": "CheckRun", "name": "test", "status": "COMPLETED", "conclusion": "FAILURE", "startedAt": "2026-01-01T01:01:00Z", "detailsUrl": "https://github.com/o/r/actions/runs/111/job/222" }], "dispositions": {}, "headRefOid": "sha1", "reran": { "sha": "sha1", "checks": { "test": "2026-01-01T01:00:00.000Z" } }, "now": "2026-01-01T01:05:00Z" },
+      "expected": { "action": "proceed" }
+    },
+    {
+      "function": "preReviewRerun",
+      "name": "a rerun recorded on a different head does not count — rerun again",
+      "input": { "contexts": [{ "__typename": "CheckRun", "name": "test", "status": "COMPLETED", "conclusion": "FAILURE", "startedAt": "2026-01-01T00:00:00Z", "detailsUrl": "https://github.com/o/r/actions/runs/111/job/222" }], "dispositions": {}, "headRefOid": "sha2", "reran": { "sha": "sha1", "checks": { "test": "2026-01-01T00:30:00.000Z" } }, "now": "2026-01-01T01:00:00Z" },
+      "expected": { "action": "rerun", "checks": ["test"], "runs": [{ "check": "test", "runId": "111" }] }
+    },
+    {
+      "function": "preReviewRerun",
+      "name": "a red StatusContext cannot be rerun — proceed",
+      "input": { "contexts": [{ "__typename": "StatusContext", "context": "ci/legacy", "state": "FAILURE", "createdAt": "2026-01-01T00:00:00Z", "targetUrl": "https://github.com/o/r/actions/runs/111/job/222" }], "dispositions": {}, "headRefOid": "sha1", "now": "2026-01-01T01:00:00Z" },
+      "expected": { "action": "proceed" }
+    },
+    {
+      "function": "preReviewRerun",
+      "name": "a red history-derived check is never rerun — proceed",
+      "input": { "contexts": [{ "__typename": "CheckRun", "name": "audit-artifacts", "status": "COMPLETED", "conclusion": "FAILURE", "startedAt": "2026-01-01T00:00:00Z", "detailsUrl": "https://github.com/o/r/actions/runs/111/job/222" }], "dispositions": { "audit-artifacts": { "disposition": "blocking", "source": "artifacts-audit" } }, "headRefOid": "sha1", "now": "2026-01-01T01:00:00Z" },
+      "expected": { "action": "proceed" }
+    },
+    {
+      "function": "preReviewRerun",
+      "name": "a red infrastructure check is never rerun — proceed",
+      "input": { "contexts": [{ "__typename": "CheckRun", "name": "approval-check", "status": "COMPLETED", "conclusion": "FAILURE", "startedAt": "2026-01-01T00:00:00Z", "detailsUrl": "https://github.com/o/r/actions/runs/111/job/222" }], "dispositions": { "approval-check": { "disposition": "infrastructure", "source": "approval-gate" } }, "headRefOid": "sha1", "now": "2026-01-01T01:00:00Z" },
+      "expected": { "action": "proceed" }
+    },
+    {
+      "function": "preReviewRerun",
+      "name": "all green — proceed",
+      "input": { "contexts": [{ "__typename": "CheckRun", "name": "test", "status": "COMPLETED", "conclusion": "SUCCESS", "startedAt": "2026-01-01T00:00:00Z", "detailsUrl": "https://github.com/o/r/actions/runs/111/job/222" }], "dispositions": {}, "headRefOid": "sha1", "now": "2026-01-01T01:00:00Z" },
+      "expected": { "action": "proceed" }
+    },
+    {
+      "function": "historyDerivedChecks",
+      "name": "only blocking artifacts-audit entries are history-derived",
+      "input": { "audit-artifacts": { "disposition": "blocking", "source": "artifacts-audit" }, "approval-check": { "disposition": "infrastructure", "source": "approval-gate" }, "audit-x": { "disposition": "infrastructure", "source": "artifacts-audit" } },
+      "expected": ["audit-artifacts"]
     }
   ]
 }

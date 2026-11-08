@@ -177,7 +177,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
 3. **Apply fixes** per the review's findings — **skip this step entirely in check-fix mode and in operator-request mode**, where step 1 already named the one thing to fix (a check, or the operator's own request). Fix **every finding flagged at this cycle's bar** — the review uses an escalating bar, so an early cycle includes Low and Nit; fix them rather than deferring. All should be issues **introduced in this pull request**. Skip a flagged item only if it is genuinely not an issue, and explain the skip. **Preexisting** findings of any severity: do not fix, but note them as suggested follow-up tickets. No scope creep beyond the review.
 
-   **Check-only re-run.** When the addressed review's line 3 is a ``Blocked only by checks:`` marker, handle each named check, never one the review did not name:
+   **Check-only re-run.** The cockpit already reruns each red Actions job once before dispatching review, so this path mainly handles a check it could not rerun. When the addressed review's line 3 is a ``Blocked only by checks:`` marker, handle each named check, never one the review did not name:
 
    ```bash
    gh pr checks <pr-number> --repo <repo> --json name,bucket,link

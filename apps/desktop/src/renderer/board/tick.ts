@@ -55,8 +55,11 @@ export function heldDetailCopy(held: TickHeld, owner: DispatchOwner = 'none'): s
       if (e === null || e.kind !== 'cycle-cap') return `#${n} ${verb} to needs human — the review cycle cap was reached.`
       return `#${n} ${verb} to needs human — cycle ${String(e.count)} reached the cap of ${String(e.cap)}.`
     }
-    case 'zero-diff':
-      return `#${n} ${byApp ? 'escalating' : 'would escalate'} to needs human — the latest review already covers the current head.`
+    case 'zero-diff': {
+      const verb = byApp ? 'escalating' : 'would escalate'
+      if (held.escalation?.kind === 'zero-diff' && held.escalation.reason === 'sha-cap') return `#${n} ${verb} to needs human — this head has had its two reviews, so only a new head gets another.`
+      return `#${n} ${verb} to needs human — the latest review already covers the current head.`
+    }
     case 'check-hold': {
       const e = held.escalation
       // Defensive: `planTick` never emits `reason: 'check-hold'` without a populated `escalation` of the same kind.

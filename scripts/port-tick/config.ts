@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { message } from '#lib/errors.ts';
 import { parseOverrides, applyOverrides } from './overrides.ts';
+import type { Disposition } from './checks.ts';
 
 // Defaults and roles mirror plugins/port/data/labels.json exactly; scripts/checks/tick.ts pins both directions.
 export const LABEL_DEFAULTS = {
@@ -150,8 +151,11 @@ export function loadConfig(repoRoot: string): any {
   // The approval-gate carve-out folds in first, resolved against the effective
   // modules.approvalGate so an override to that flag can turn the carve-out off too.
   const excusedCheckName = resolveExcusedCheckName(repoRoot, effective.modules);
-  const checkDispositions: Record<string, { disposition: 'blocking' | 'infrastructure'; source: 'approval-gate' | 'CLAUDE.md' }> = {};
+  const checkDispositions: Record<string, Disposition> = {};
   if (excusedCheckName) checkDispositions[excusedCheckName] = { disposition: 'infrastructure', source: 'approval-gate' };
+  // The history-derived check folds in before CLAUDE.md entries, so `checks.<name> = infrastructure` still wins.
+  const historyCheckName = jobKeyOf(repoRoot, 'artifacts.yml');
+  if (historyCheckName) checkDispositions[historyCheckName] = { disposition: 'blocking', source: 'artifacts-audit' };
   for (const a of applied) {
     // `validate` already restricted this value to 'blocking' or 'infrastructure'.
     if (a.path.startsWith('checks.') && (a.value === 'blocking' || a.value === 'infrastructure')) {
@@ -165,8 +169,12 @@ export function loadConfig(repoRoot: string): any {
 /** The single job key under `jobs:` in `.github/workflows/approval-check.yml`, derived from
  *  the file rather than typed as a literal. `null` means no carve-out — every red check blocks. */
 export function resolveExcusedCheckName(repoRoot: string, modules: any): string | null {
-  if (!modules.approvalGate) return null;
-  const path = join(repoRoot, '.github', 'workflows', 'approval-check.yml');
+  return modules.approvalGate ? jobKeyOf(repoRoot, 'approval-check.yml') : null;
+}
+
+/** The first job key under `jobs:` in a workflow file, or null when the file or the key is absent. */
+export function jobKeyOf(repoRoot: string, workflowFile: string): string | null {
+  const path = join(repoRoot, '.github', 'workflows', workflowFile);
   let text: string;
   try {
     text = readFileSync(path, 'utf8');

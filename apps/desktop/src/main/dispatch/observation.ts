@@ -33,9 +33,10 @@ function rebaseRequiredComment(headRefOid: string, integration: string): string 
   return `## Rebase required\nConflicts with \`${integration}\` at \`${headRefOid}\` — GitHub can't build a merge ref, so no checks ran on this diff.`
 }
 
-function approvalWithdrawnComment(red: Extract<TickObservation, { readonly kind: 'withdraw-approval' }>['red'], headRefOid: string): string {
+function approvalWithdrawnComment(red: Extract<TickObservation, { readonly kind: 'withdraw-approval' }>['red'], headRefOid: string, needsHuman: string | null): string {
   const lines = red.map((r) => `\`${r.name ?? 'unknown'}\` went **${r.conclusion ?? 'UNKNOWN'}** on \`${headRefOid}\` after approval.${r.url !== null ? ` ${r.url}` : ''}`)
-  return `## Approval withdrawn\n${lines.join('\n')}`
+  const escalation = needsHuman === null ? [] : [`This check grades the pull request's own review history, so no revision can change it — moved to \`${needsHuman}\` instead of revision. A new head is the way past it.`]
+  return `## Approval withdrawn\n${[...lines, ...escalation].join('\n')}`
 }
 
 /** The write chokepoint's own request shape for one observation. `integration` is
@@ -54,7 +55,10 @@ export function observationWrite(observation: WriteObservation, item: Reconciled
     }
     case 'zero-diff': {
       const add: readonly LabelKey[] = ['needsHuman']
-      const comment = `${PIPELINE_ESCALATION}\nCycle ${String(observation.count)} already reviewed \`${observation.headRefOid}\` and the head has not moved, so no new review cycle was opened.\nWhatever is blocking this pull request is not visible to review or revision.`
+      const comment =
+        observation.reason === 'sha-cap'
+          ? `${PIPELINE_ESCALATION}\nCycle ${String(observation.count)} was the second review of \`${observation.headRefOid}\`, the most one head gets. A new head is the way past it.`
+          : `${PIPELINE_ESCALATION}\nCycle ${String(observation.count)} already reviewed \`${observation.headRefOid}\` and the head has not moved, so no new review cycle was opened.\nWhatever is blocking this pull request is not visible to review or revision.`
       return { add, remove: ['readyForReview'], expect: precondition(item, vocabulary, add), action: 'observe-zero-diff', comment }
     }
     case 'integration-red': {
@@ -79,8 +83,13 @@ export function observationWrite(observation: WriteObservation, item: Reconciled
       return { add, remove: [observation.sourceLabel], expect: precondition(item, vocabulary, add), action: 'observe-refresh-stuck', comment }
     }
     case 'withdraw-approval': {
+      if (observation.route === 'human') {
+        const humanAdd: readonly LabelKey[] = ['needsHuman']
+        const needsHumanName = vocabulary.labels.find((l) => l.key === 'needsHuman')?.name ?? 'needsHuman'
+        return { add: humanAdd, remove: ['approved'], expect: precondition(item, vocabulary, humanAdd), action: 'observe-withdraw-approval', comment: approvalWithdrawnComment(observation.red, observation.headRefOid, needsHumanName) }
+      }
       const add: readonly LabelKey[] = ['needsRevision']
-      return { add, remove: ['approved'], expect: precondition(item, vocabulary, add), action: 'observe-withdraw-approval', comment: approvalWithdrawnComment(observation.red, observation.headRefOid) }
+      return { add, remove: ['approved'], expect: precondition(item, vocabulary, add), action: 'observe-withdraw-approval', comment: approvalWithdrawnComment(observation.red, observation.headRefOid, null) }
     }
     case 'plan-missing': {
       const add: readonly LabelKey[] = ['ready']

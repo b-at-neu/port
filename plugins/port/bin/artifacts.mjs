@@ -32,6 +32,21 @@ export const LABELS = {
 // --- Format contracts --------------------------------------------------------
 export const BODY_HEADINGS = ['## Summary', '## Changes', '## Testing plan', '## Automated checks'];
 export const REVIEW_PREFIX = '## Code Review';
+// The original review plus one repeat; the tick's dispatch gate pins the same number.
+export const MAX_REVIEWS_PER_SHA = 2;
+
+/** Counts reviews per commit oid: `failures` are heads past the cap, `repeats` heads at 2..cap. */
+export function shaReviewViolations(oids) {
+  const byOid = new Map();
+  for (const oid of oids) byOid.set(oid, (byOid.get(oid) ?? 0) + 1);
+  const failures = [];
+  const repeats = [];
+  for (const [oid, count] of byOid) {
+    if (count > MAX_REVIEWS_PER_SHA) failures.push({ oid, count });
+    else if (count > 1) repeats.push({ oid, count });
+  }
+  return { failures, repeats };
+}
 const CHECK_ONLY_PREFIX = 'Blocked only by checks:';
 const CODE_FINDINGS_LINE = 'Blocked by code findings.';
 const CHECK_ONLY_LINE = /^Blocked only by checks: `[^`]+`(, `[^`]+`)*$/;
@@ -500,20 +515,13 @@ function runAudit(argv) {
       else auditOk();
     }
 
-    // --- Zero-diff review bounce --- A `## Gate cleared` exception authorizes one repeat
-    // review on the same commit.oid; three or more means the gate was bypassed.
+    // --- Zero-diff review bounce --- the override and the check-only recheck share one repeat
+    // on a commit.oid; a head past MAX_REVIEWS_PER_SHA means the gate was bypassed.
     {
-      const byOid = new Map();
-      for (const oid of reviewOids) byOid.set(oid, (byOid.get(oid) ?? 0) + 1);
-      for (const [oid, count] of byOid) {
-        if (count >= 3) {
-          auditFail(at('review'), `${count} reviews share commit ${oid} — the zero-diff gate should stop at one authorized repeat`);
-        } else if (count === 2) {
-          note(`#${n}: 2 reviews share commit ${oid} — the one authorized zero-diff re-review (operator override or check-only recheck), not a failure`);
-        } else {
-          auditOk();
-        }
-      }
+      const { failures, repeats } = shaReviewViolations(reviewOids);
+      for (const { oid, count } of failures) auditFail(at('review'), `${count} reviews share commit ${oid} — the review gate caps a head at ${MAX_REVIEWS_PER_SHA}`);
+      for (const { oid, count } of repeats) note(`#${n}: ${count} reviews share commit ${oid} — the one authorized zero-diff re-review (operator override or check-only recheck), not a failure`);
+      if (failures.length === 0) auditOk();
     }
 
     // --- Revision comments ---

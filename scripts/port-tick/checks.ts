@@ -15,6 +15,7 @@ export interface CheckContext {
   readonly completedAt?: string | null;
   readonly createdAt?: string | null;
   readonly url?: string | null;
+  readonly detailsUrl?: string | null;
 }
 
 const GREEN = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);
@@ -42,6 +43,15 @@ export function reduceRollup(contexts: readonly CheckContext[] | undefined): rea
     if (prior === undefined || (t ?? '') > (timeOf(prior) ?? '')) latest.set(name, c);
   }
   return [...latest.values()];
+}
+
+const ACTIONS_JOB_URL = /\/actions\/runs\/(\d+)\/job\/(\d+)/;
+
+/** The run and job a GitHub Actions check run's details URL names, or null for a
+ *  StatusContext or any external CI, which `gh run rerun` cannot reach. */
+export function actionsJobOf(url: string | null | undefined): { readonly runId: string; readonly jobId: string } | null {
+  const m = ACTIONS_JOB_URL.exec(url ?? '');
+  return m === null ? null : { runId: m[1] ?? '', jobId: m[2] ?? '' };
 }
 
 /** Concluded is `status == 'COMPLETED'` for a CheckRun, or `state != 'PENDING'` for a StatusContext. */
@@ -94,7 +104,76 @@ export function integrationChecksOf(history: readonly IntegrationCommit[] | null
  *  blocks) or `infrastructure` (reported, no finding, never blocks). `source` names where it came from. */
 export interface Disposition {
   readonly disposition: 'blocking' | 'infrastructure';
-  readonly source: 'approval-gate' | 'CLAUDE.md';
+  readonly source: 'approval-gate' | 'CLAUDE.md' | 'artifacts-audit';
+}
+
+/** The blocking checks that grade the pull request's own review history, which no revision can change. */
+export function historyDerivedChecks(dispositions: Readonly<Record<string, Disposition>>): string[] {
+  return Object.entries(dispositions)
+    .filter(([, d]) => d.source === 'artifacts-audit' && d.disposition === 'blocking')
+    .map(([name]) => name);
+}
+
+/** Minutes a requested rerun may stay invisible in the rollup before review is dispatched anyway. */
+export const CHECK_RERUN_VISIBLE_MINUTES = 10;
+
+/** Per pull request: the head a rerun was issued on, and when each check's rerun was requested. */
+export interface RerunRecord {
+  readonly sha: string;
+  readonly checks: Readonly<Record<string, string>>;
+}
+
+export type PreReviewRerun =
+  | { readonly action: 'rerun'; readonly checks: readonly string[]; readonly runs: readonly { readonly check: string; readonly runId: string }[] }
+  | { readonly action: 'hold'; readonly checks: readonly string[] }
+  | { readonly action: 'proceed' };
+
+/** A red blocking Actions check not yet rerun on this head gets one rerun, and review is held until it concludes.
+ *  A new head resets the budget; a rerun that never shows ends the hold after `CHECK_RERUN_VISIBLE_MINUTES`. */
+export function preReviewRerun({
+  contexts,
+  dispositions,
+  headRefOid,
+  reran,
+  now,
+}: {
+  readonly contexts: readonly CheckContext[] | null | undefined;
+  readonly dispositions: Readonly<Record<string, Disposition>>;
+  readonly headRefOid: string;
+  readonly reran: RerunRecord | undefined;
+  readonly now: string | null;
+}): PreReviewRerun {
+  const excluded = new Set(historyDerivedChecks(dispositions));
+  const recorded = reran?.sha === headRefOid ? reran.checks : {};
+  const nowMs = now === null ? Number.NaN : Date.parse(now);
+  const candidates: { check: string; runId: string }[] = [];
+  const held: string[] = [];
+
+  for (const c of reduceRollup(contexts ?? undefined)) {
+    const name = nameOf(c);
+    if (name === null || excluded.has(name) || dispositions[name]?.disposition === 'infrastructure') continue;
+    const at = recorded[name];
+    if (at === undefined) {
+      const job = isConcluded(c) && !GREEN.has(conclusionOf(c) ?? '') ? actionsJobOf(c.detailsUrl ?? c.url) : null;
+      if (job !== null) candidates.push({ check: name, runId: job.runId });
+      continue;
+    }
+    if (!isConcluded(c)) {
+      held.push(name);
+      continue;
+    }
+    const requested = Date.parse(at);
+    const started = Date.parse(timeOf(c) ?? '');
+    const invisible = started < requested && !Number.isNaN(nowMs) && nowMs < requested + CHECK_RERUN_VISIBLE_MINUTES * 60_000;
+    if (invisible) held.push(name);
+  }
+
+  if (candidates.length > 0) {
+    const seen = new Set<string>();
+    const runs = candidates.filter((x) => !seen.has(x.runId) && seen.add(x.runId));
+    return { action: 'rerun', checks: candidates.map((x) => x.check), runs };
+  }
+  return held.length > 0 ? { action: 'hold', checks: held } : { action: 'proceed' };
 }
 
 export interface RollupVerdict {
