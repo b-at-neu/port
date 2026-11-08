@@ -50,6 +50,20 @@ describe('needsYouLeadCopy', () => {
     expect(needsYouLeadCopy(item)).toBe('Unblock #33: escalated without a reason')
   })
 
+  it.each([
+    ['a session reason', { session: { text: 'the agent reason' }, comment: { text: 'the comment reason' } }, 'Unblock #51: the agent reason'],
+    ['a comment reason', { session: null, comment: { text: 'the comment reason' } }, 'Unblock #51: the comment reason'],
+    ['no reason', { session: null, comment: null }, 'Unblock #51: its reason is on the ticket'],
+  ])('blocked with %s', (_name, blockedOn, expected) => {
+    const item = { ...base({ number: 51 }), kind: 'blocked', row: { blockedOn } } as unknown as NeedsYouItem
+    expect(needsYouLeadCopy(item)).toBe(expected)
+  })
+
+  it('blocked without a blockedOn read', () => {
+    const item = { ...base({ number: 51 }), kind: 'blocked', row: { blockedOn: null } } as unknown as NeedsYouItem
+    expect(needsYouLeadCopy(item)).toBe('Unblock #51: its reason is on the ticket')
+  })
+
   it('budget — escalated', () => {
     const item = { ...base({ number: 45 }), kind: 'budget', note: { kind: 'escalated', number: 45, needsHumanLabel: 'needs human', commentFailedMessage: null } } as unknown as NeedsYouItem
     expect(needsYouLeadCopy(item)).toBe('#45 went over budget and needs you')
@@ -205,7 +219,7 @@ describe('cleanup-failed copy', () => {
 
 describe('GROUP_NAMES', () => {
   it('names every group the way the screen shows it', () => {
-    expect(Object.values(GROUP_NAMES)).toEqual(['Plan reviews', 'Ready to merge', 'Escalated', 'Questions', 'Edit approvals', 'Denied commands', 'Interrupted', 'Usage limit', 'Held', 'Stalled', 'Over budget', 'Label problems', 'Launch failures'])
+    expect(Object.values(GROUP_NAMES)).toEqual(['Plan reviews', 'Ready to merge', 'Escalated', 'Blocked', 'Questions', 'Edit approvals', 'Denied commands', 'Interrupted', 'Usage limit', 'Held', 'Stalled', 'Over budget', 'Label problems', 'Launch failures'])
   })
 })
 

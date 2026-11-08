@@ -18,8 +18,8 @@ function asItem(value: object): NeedsYouItem {
 }
 
 describe('dismissKeyOf — row kinds', () => {
-  it.each(['plan-review', 'ready-to-merge', 'needs-human'] as const)('%s: the same label event keeps its key, a new one earns a new key', (kind) => {
-    const stageKey = kind === 'plan-review' ? 'planReview' : kind
+  it.each(['plan-review', 'ready-to-merge', 'needs-human', 'blocked'] as const)('%s: the same label event keeps its key, a new one earns a new key', (kind) => {
+    const stageKey = kind === 'plan-review' ? 'planReview' : kind === 'needs-human' ? 'needsHuman' : kind === 'ready-to-merge' ? 'approved' : kind
     const first = rowWith(stageKey, [{ key: stageKey, at: '2026-01-01T00:00:00Z' }])
     const second = rowWith(stageKey, [{ key: stageKey, at: '2026-01-01T00:00:00Z' }, { key: stageKey, at: '2026-01-02T00:00:00Z' }])
     const again = rowWith(stageKey, [{ key: stageKey, at: '2026-01-01T00:00:00Z' }])

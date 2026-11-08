@@ -29,6 +29,19 @@ describe('actionFor — dispatch-failed', () => {
   })
 })
 
+describe('actionFor — blocked', () => {
+  const blocked = (unblock: object | undefined): NeedsYouItem =>
+    ({ kind: 'blocked', repoId: 'repo-a' as RepoId, repo: 'o/a', number: 56, title: 't', url: null, ticket: null, at: null, matchedRow: { decisions: { unblock } }, row: {} }) as unknown as NeedsYouItem
+
+  it('offers Unblock enabled when the decision is available', () => {
+    expect(actionFor(blocked({ available: true, context: {} }))).toEqual({ label: 'Unblock', kind: 'unblock', disabledReason: null })
+  })
+
+  it('disables Unblock while the agent is still live', () => {
+    expect(actionFor(blocked({ available: false, reason: 'agent-live' }))).toMatchObject({ label: 'Unblock', disabledReason: "This item's agent is still waiting in its session. Answer it there and it clears the block itself." })
+  })
+})
+
 function stageInterrupted(reason: string): NeedsYouItem {
   const interrupted = { id: 'e1', agent: 'revise', reason, claudeSessionId: 'c1', worktree: { path: '/wt/revise-593', branch: 'b', baseSha: 's' } }
   return { kind: 'stage-interrupted', repoId: 'repo-a' as RepoId, repo: 'o/a', number: 593, title: 't', url: null, ticket: null, at: null, matchedRow: null, interrupted } as unknown as NeedsYouItem

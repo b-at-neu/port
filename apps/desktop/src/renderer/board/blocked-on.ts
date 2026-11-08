@@ -30,12 +30,18 @@ function sessionReasonOf(members: readonly ReconciledItem[], sessions: readonly 
   return newest === null ? null : { text: newest.text, sessionKey: newest.sessionKey }
 }
 
-function firstTextLine(body: string): string | null {
-  for (const line of body.split('\n')) {
-    const trimmed = line.trim()
-    if (trimmed !== '' && !trimmed.startsWith('#')) return capHandbackText(trimmed)
-  }
-  return null
+const DECISION_LABEL = /^\**Decision needed\b:?\**\s*/i
+
+/** The decision line when the comment has one, else its first non-heading line, capped. */
+function reasonLineOf(body: string): string | null {
+  const lines = body
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('#'))
+  const decision = lines.find((line) => DECISION_LABEL.test(line))
+  if (decision === undefined) return lines[0] === undefined ? null : capHandbackText(lines[0])
+  const stripped = decision.replace(DECISION_LABEL, '')
+  return capHandbackText(stripped === '' ? decision : stripped)
 }
 
 /** The newest issue comment at or before the latest `blocked` label event — no event means no comment, never an unrelated one. */
@@ -49,7 +55,7 @@ function commentReasonOf(issue: ReconciledItem | null): BlockedOn['comment'] {
     if (picked === null || at > picked.at) picked = { node, at }
   }
   if (picked === null) return null
-  const text = firstTextLine(picked.node.body)
+  const text = reasonLineOf(picked.node.body)
   return text === null ? null : { text, url: picked.node.url }
 }
 

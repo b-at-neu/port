@@ -13,6 +13,7 @@ function eventOf(item: NeedsYouItem): string {
     case 'plan-review':
     case 'ready-to-merge':
     case 'needs-human':
+    case 'blocked':
       return newestStageAt(item.row, item.row.stageLabel?.key)
     case 'stage-interrupted':
       return `${item.interrupted.id}@${item.interrupted.interruptedAt}`
