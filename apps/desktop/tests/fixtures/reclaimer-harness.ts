@@ -1,8 +1,9 @@
 // An in-memory repository for the reclaimer tests: a fake `git`, `gh` and filesystem that stay consistent with each other.
 import { posix } from 'node:path'
 import { createPathOps } from '@/main/platform/paths'
-import type { CommandResult, GhResult, GhRunner, GitRunner } from '@/types/platform'
+import type { CommandResult, GitHubHttpResult, GitHubRequest, GitHubTransport, GitRunner } from '@/types/platform'
 import type { ReclaimerFs, ReclaimerSeams } from '@/types/reclaimer'
+import { queryOf, recordingTransport } from './github-http'
 
 export const MAIN = '/repo'
 export const WORKTREES = '/repo/.claude/worktrees'
@@ -156,32 +157,29 @@ export function createFakeRepo(options: FakeRepoOptions = {}): FakeRepo {
   return { seams, calls, rawCalls, branchesDeleted, nodes }
 }
 
-export interface FakeGhOptions {
+export interface FakeGithubOptions {
   readonly states?: Readonly<Record<number, 'OPEN' | 'CLOSED' | 'MERGED' | null>>
   /** Aliases the response reports under `errors[].path`. */
   readonly erroredAliases?: readonly number[]
-  readonly failure?: GhResult
+  readonly failure?: GitHubHttpResult
 }
 
-export interface FakeGh {
-  readonly gh: GhRunner
-  readonly calls: string[][]
+export interface FakeGithub {
+  readonly github: GitHubTransport
+  readonly requests: GitHubRequest[]
 }
 
-export function createFakeGh(options: FakeGhOptions = {}): FakeGh {
-  const calls: string[][] = []
-  const gh: GhRunner = (args) => {
-    calls.push([...args])
-    if (options.failure !== undefined) return Promise.resolve(options.failure)
-    const query = args.find((arg) => arg.startsWith('query=')) ?? ''
+export function createFakeGithub(options: FakeGithubOptions = {}): FakeGithub {
+  const { transport, requests } = recordingTransport((request) => {
+    if (options.failure !== undefined) return options.failure
     const repository: Record<string, unknown> = {}
-    for (const match of query.matchAll(/n(\d+): issueOrPullRequest/g)) {
+    for (const match of queryOf(request).matchAll(/n(\d+): issueOrPullRequest/g)) {
       const number = Number(match[1])
       const state = options.states?.[number]
       repository[`n${String(number)}`] = state === undefined || state === null ? null : { __typename: 'Issue', state }
     }
     const errors = (options.erroredAliases ?? []).map((n) => ({ type: 'NOT_FOUND', path: ['repository', `n${String(n)}`], message: 'not found' }))
-    return Promise.resolve({ ok: true, stdout: JSON.stringify({ data: { repository }, ...(errors.length > 0 ? { errors } : {}) }), stderr: '' })
-  }
-  return { gh, calls }
+    return JSON.stringify({ data: { repository }, ...(errors.length > 0 ? { errors } : {}) })
+  })
+  return { github: transport, requests }
 }

@@ -340,6 +340,9 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
         check: () => {
           throw new Error('budget.check should not be invoked when commands.budget is null')
         },
+        report: () => {
+          throw new Error('budget.report should not be invoked')
+        },
       },
       escalate: () => {
         throw new Error('escalate should not be invoked when commands.budget is null')

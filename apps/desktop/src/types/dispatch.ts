@@ -123,7 +123,7 @@ export interface DispatchRecord {
 export type DispatcherState =
   | { readonly kind: 'idle' }
   | { readonly kind: 'active'; readonly recent: readonly DispatchRecord[] }
-  /** `commands.budget` is set, but the shipped script can't be run. Nothing dispatches while this holds — the gate that can't run must fail closed. */
+  /** `commands.budget` is set, but the budget gate can't run (its ceiling or session log is unreadable). Nothing dispatches while this holds — the gate that can't run must fail closed. */
   | { readonly kind: 'budget-unavailable'; readonly message: string }
   | { readonly kind: 'no-launcher' }
   | { readonly kind: 'at-capacity'; readonly limit: number; readonly waiting: number }
@@ -201,7 +201,11 @@ export interface BudgetGate {
   readonly reset: (entry: ReadyEntry) => Promise<BudgetResetResult>
   readonly sweep: (entry: ReadyEntry, sets: { readonly live: readonly string[]; readonly completed: readonly string[] }) => Promise<BudgetSweepResult>
   readonly check: (entry: ReadyEntry, candidate: Pick<TickActionable, 'kind' | 'number' | 'agent'>, model: string) => Promise<BudgetCheckResult>
+  /** The ticket's rendered cost ledger and its verdict. No caller yet. */
+  readonly report: (entry: ReadyEntry, issue: number) => Promise<BudgetReportResult>
 }
+
+export type BudgetReportResult = { readonly ok: true; readonly markdown: string; readonly verdict: Exclude<BudgetVerdict, 'hold'> } | BudgetGateFailure
 
 /** Never a `BudgetGateFailure` — a sweep failure must never block dispatch, only report it. */
 export interface BudgetSweepResult {

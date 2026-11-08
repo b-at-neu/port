@@ -119,7 +119,7 @@ export async function inspectWorktrees(params: InspectParams): Promise<Inspectio
 
   const numbers = [...new Set(linked.flatMap(({ entry, isOutside }) => (isOutside || entry.correlation === null ? [] : [entry.correlation.number])))]
   const [owner = '', name = ''] = params.repo.split('/')
-  const stateRead = await readItemStates({ repo: { owner, name }, numbers, gh: params.gh })
+  const stateRead = await readItemStates({ repo: { owner, name }, numbers, github: params.github })
   const states: ReadonlyMap<number, ItemStateName | null> = stateRead.ok ? stateRead.states : new Map()
   const githubError = stateRead.ok ? null : stateRead.message
 

@@ -58,7 +58,7 @@ export interface ResolvedRepoConfig {
   }
   readonly reviewCycleCap: number
   readonly vocabulary: LabelVocabulary
-  /** `worktrees` is the full `commands.worktrees` prefix, `null` meaning the repository has not installed the reclamation script. `budget` is the same shape, `null` meaning nothing measures or bounds ticket cost. */
+  /** `worktrees` is the full `commands.worktrees` prefix, `null` meaning the repository has not installed the reclamation script. `budget` is an on/off switch for this app, which reads it as such and never runs it: `null` means nothing measures or bounds ticket cost. */
   readonly commands: { readonly worktrees: string | null; readonly budget: string | null }
   /** The file-contention gate's own tuning — `sharedFiles` never contributes to a hold, `overlapThreshold` is how many non-shared paths an in-flight item must share with a candidate before it holds. */
   readonly concurrency: { readonly sharedFiles: readonly string[]; readonly overlapThreshold: number }
