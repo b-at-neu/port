@@ -17,7 +17,7 @@ const ASSIGNEE_PAGE_SIZE = 10
 const ITEM_LABEL_PAGE_SIZE = 20
 const BLOCKER_PAGE_SIZE = 10
 
-function labelsOf(value: unknown): readonly BacklogLabel[] {
+export function labelsOf(value: unknown): readonly BacklogLabel[] {
   const nodes = (value as { nodes?: unknown } | null | undefined)?.nodes
   if (!Array.isArray(nodes)) return []
   const out: BacklogLabel[] = []

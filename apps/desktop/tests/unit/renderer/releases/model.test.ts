@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ReleaseQueryLike, ReleaseStatus } from '@/types/release'
 import type { RepoId } from '@/utils/repos'
-import { buildReleaseGroup, refetchIntervalFor, staleSinceAt } from '@/renderer/releases/model'
+import { buildReleaseGroup, refetchIntervalFor, staleSinceAt, visibleIssues } from '@/renderer/releases/model'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 
@@ -41,6 +41,24 @@ describe('refetchIntervalFor', () => {
   it('never polls a failed or missing read', () => {
     expect(refetchIntervalFor({ state: { data: undefined } })).toBe(false)
     expect(refetchIntervalFor({ state: { data: { ok: false, message: 'x', readAt: 't' } } })).toBe(false)
+  })
+})
+
+describe('visibleIssues', () => {
+  const issues = (count: number) => Array.from({ length: count }, (_, index) => index)
+
+  it('shows every row and hides none up to the cap', () => {
+    expect(visibleIssues(issues(0), false)).toEqual({ shown: [], hidden: 0 })
+    expect(visibleIssues(issues(10), false)).toEqual({ shown: issues(10), hidden: 0 })
+  })
+
+  it('shows the first ten and counts the rest when collapsed', () => {
+    expect(visibleIssues(issues(11), false)).toEqual({ shown: issues(10), hidden: 1 })
+    expect(visibleIssues(issues(12), false)).toEqual({ shown: issues(10), hidden: 2 })
+  })
+
+  it('shows every row once expanded', () => {
+    expect(visibleIssues(issues(12), true)).toEqual({ shown: issues(12), hidden: 0 })
   })
 })
 

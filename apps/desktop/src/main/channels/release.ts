@@ -1,9 +1,10 @@
-// `'release:status'` and `'release:run'`'s composition. Every run reads the phase again here and trusts nothing the renderer says beyond the version and the notes.
+// `'release:status'`, `'release:issues'` and `'release:run'`'s composition. Every run reads the phase again here and trusts nothing the renderer says beyond the version and the notes.
 import type { GitRunner } from '@/types/platform'
 import type { IpcMap } from '@/types/ipc'
 import type { RegistryDeps } from '@/types/registry'
-import type { HookOutcome, ReleaseConfig, ReleaseConfigRead, ReleaseRead, ReleaseRunResult, ReleaseStatus, ReleaseStatusResponse, ReleaseWriteContext, ReleaseWriteResult, VersionFileWrite } from '@/types/release'
+import type { HookOutcome, ReleaseConfig, ReleaseConfigRead, ReleaseIssuesResponse, ReleaseRead, ReleaseRunResult, ReleaseStatus, ReleaseStatusResponse, ReleaseWriteContext, ReleaseWriteResult, VersionFileWrite } from '@/types/release'
 import { fetchReleaseStatus, readFileAtRef } from '@/main/github/release'
+import { fetchReleaseIssues } from '@/main/github/release-issues'
 import { readAtDefaultRef } from '@/main/registry/harness'
 import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/registry'
 import { readReleaseConfig } from '@/main/release/config'
@@ -20,6 +21,7 @@ export interface ReleaseChannelDeps {
   readonly listRepositories: typeof listRepositories
   readonly readConfig: (git: GitRunner, root: string) => Promise<ReleaseConfigRead>
   readonly fetchStatus: typeof fetchReleaseStatus
+  readonly fetchIssues: typeof fetchReleaseIssues
   readonly readFile: typeof readFileAtRef
   readonly createBumpBranch: typeof createBumpBranch
   readonly openBumpPr: typeof openBumpPr
@@ -34,6 +36,7 @@ export const defaultReleaseChannelDeps: ReleaseChannelDeps = {
   listRepositories,
   readConfig: (git, root) => readReleaseConfig((path) => readAtDefaultRef(git, root, path)),
   fetchStatus: fetchReleaseStatus,
+  fetchIssues: fetchReleaseIssues,
   readFile: readFileAtRef,
   createBumpBranch,
   openBumpPr,
@@ -65,6 +68,18 @@ export async function resolveReleaseStatus(registryDeps: RegistryDeps, request: 
   const entry = await requireReadyRepo(registryDeps, "'release:status'", repoId, deps.listRepositories)
   const { read } = await readState(registryDeps, entry, deps)
   return read.ok ? { ok: true, status: read.status } : read
+}
+
+const TAG_PATTERN = /^[A-Za-z0-9._+/-]{1,255}$/
+
+export async function resolveReleaseIssues(registryDeps: RegistryDeps, request: IpcMap['release:issues']['request'], deps: ReleaseChannelDeps = defaultReleaseChannelDeps): Promise<ReleaseIssuesResponse> {
+  const repoId = requireRepoId(request?.repoId, "'release:issues'")
+  if (typeof request.tag !== 'string' || !TAG_PATTERN.test(request.tag)) throw new Error("'release:issues' requires a 'tag' of 1 to 255 tag characters")
+  if (request.previousTag !== null && (typeof request.previousTag !== 'string' || !TAG_PATTERN.test(request.previousTag))) {
+    throw new Error("'release:issues' requires 'previousTag' to be null or 1 to 255 tag characters")
+  }
+  const entry = await requireReadyRepo(registryDeps, "'release:issues'", repoId, deps.listRepositories)
+  return deps.fetchIssues({ repo: { owner: entry.config.owner, name: entry.config.name }, tag: request.tag, previousTag: request.previousTag })
 }
 
 function refused(reason: Extract<ReleaseRunResult, { kind: 'refused' }>['reason'], message: string): ReleaseRunResult {

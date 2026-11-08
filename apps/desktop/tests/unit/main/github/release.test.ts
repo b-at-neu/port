@@ -147,6 +147,24 @@ describe('fetchReleaseStatus', () => {
     expect(result.ok && result.status.releases.map((r) => r.tagName)).toEqual(['v0.2.0'])
   })
 
+  it('gives each release the next one as its previous tag, and shows only twenty of the twenty-one read', async () => {
+    const nodes = Array.from({ length: 21 }, (_, index) => ({ tagName: `v0.${String(21 - index)}.0`, name: 'n', url: 'u', publishedAt: null, isDraft: false, isPrerelease: false, isLatest: index === 0, description: '' }))
+    const result = await fetchStatus({ state: { releases: { nodes } } })
+    if (!result.ok) throw new Error(result.message)
+    expect(result.status.releases).toHaveLength(20)
+    expect(result.status.releases[0]).toMatchObject({ tagName: 'v0.21.0', previousTag: 'v0.20.0' })
+    expect(result.status.releases[19]).toMatchObject({ tagName: 'v0.2.0', previousTag: 'v0.1.0' })
+  })
+
+  it('leaves the oldest release without a previous tag and skips a draft between two releases', async () => {
+    const release = (tagName: string, isDraft: boolean) => ({ tagName, name: tagName, url: 'u', publishedAt: null, isDraft, isPrerelease: false, isLatest: false, description: '' })
+    const result = await fetchStatus({ state: { releases: { nodes: [release('v0.3.0', false), release('v0.2.5', true), release('v0.2.0', false)] } } })
+    expect(result.ok && result.status.releases.map((r) => [r.tagName, r.previousTag])).toEqual([
+      ['v0.3.0', 'v0.2.0'],
+      ['v0.2.0', null],
+    ])
+  })
+
   it('returns a guard phase without reading GitHub', async () => {
     const calls: GitHubRequest[] = []
     const result = await fetchStatus({ calls }, { production: null })
@@ -166,6 +184,10 @@ describe('fetchReleaseStatus', () => {
 })
 
 describe('release query builders', () => {
+  it('requests one release beyond the page shown', () => {
+    expect(buildStateQuery(true)).toContain('releases(first: 21,')
+  })
+
   it('never splices a branch or path into the document', () => {
     const query = buildStateQuery(true)
     expect(query).toContain('$integrationFile: String!')

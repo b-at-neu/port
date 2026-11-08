@@ -20,6 +20,21 @@ export const NOTES_EMPTY = 'No notes were written for this release.'
 export const LATEST_TAG = 'Latest'
 export const PRERELEASE_TAG = 'Prerelease'
 export const OPENED_TOAST = 'Opened the release pull request.'
+export const ISSUES_LABEL = 'Tickets included'
+export const ISSUES_EMPTY = 'No PRs in this release closed a ticket.'
+export const TRY_AGAIN = 'Try again'
+
+export function issuesHeading(count: number | null): string {
+  return count === null ? ISSUES_LABEL : `${ISSUES_LABEL} · ${String(count)}`
+}
+
+export function showMoreIssues(hidden: number): string {
+  return `Show ${String(hidden)} more`
+}
+
+export function issuesFailureCopy(message: string): string {
+  return `Couldn't read this release's tickets: ${message}`
+}
 
 export function readFailureCopy(repo: string, message: string): string {
   return `Couldn't read releases for ${repo}: ${message}`

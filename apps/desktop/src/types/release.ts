@@ -1,4 +1,5 @@
 // Renderer-safe contract for the Releases screen: the status read, the phase it resolves to, and the two `release:run` steps.
+import type { BacklogLabel } from '@/types/backlog'
 import type { GhRunner, PathOps } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
 
@@ -32,7 +33,26 @@ export interface ReleaseInfo {
   readonly isPrerelease: boolean
   readonly isLatest: boolean
   readonly description: string
+  readonly previousTag: string | null
 }
+
+/** A ticket a pull request merged in a release closed. */
+export interface ReleaseIssue {
+  readonly number: number
+  readonly title: string
+  readonly url: string
+  readonly labels: readonly BacklogLabel[]
+}
+
+export interface ReleaseIssuesRequest {
+  readonly repoId: RepoId
+  readonly tag: string
+  readonly previousTag: string | null
+}
+
+export type ReleaseIssuesResponse =
+  | { readonly ok: true; readonly issues: readonly ReleaseIssue[]; readonly note: string | null }
+  | { readonly ok: false; readonly message: string }
 
 export type ReleaseVersionSource = 'tags' | 'package'
 
