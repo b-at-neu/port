@@ -167,10 +167,17 @@ export async function fetchItemsByNumber(params: FetchItemsByNumberParams): Prom
       labels: fieldListOf(raw.labels, 'name'),
       assignees: fieldListOf(raw.assignees, 'login'),
       headRefName: kind === 'pull-request' && typeof raw.headRefName === 'string' ? raw.headRefName : null,
+      author: kind === 'pull-request' ? authorLoginOf(raw.author) : null,
     })
   }
 
   return { ok: true, resolved, unavailable, fetchedAt }
+}
+
+function authorLoginOf(author: unknown): string | null {
+  if (typeof author !== 'object' || author === null) return null
+  const login = (author as Record<string, unknown>).login
+  return typeof login === 'string' ? login : null
 }
 
 interface FetchClaimPreflightParams {

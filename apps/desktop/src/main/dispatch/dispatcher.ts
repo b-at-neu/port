@@ -30,6 +30,8 @@ import type { PipelineItemKind, ResolvedItem } from '@/types/github'
 import type { StageWorktreeTarget } from '@/types/workspace'
 import type { EndedStage, TickActionable } from '@/types/tick'
 import type { StageOutcome } from '@/types/stage-session'
+import { reviewDispatchFacts } from '../../../../../scripts/port-tick/gates'
+import type { ReviewDispatchFacts } from '../../../../../scripts/port-tick/gates'
 import type { Dispatcher, CreateDispatcherParams } from '@/types/dispatch'
 
 const RECENT_LIMIT = 20
@@ -331,6 +333,15 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
           waiting += 1
           continue
         }
+        let review: ReviewDispatchFacts | null = null
+        if (candidate.agent === 'review') {
+          if (candidate.cycle === null) {
+            const message = `Couldn't count the earlier reviews on pull request #${candidate.number}, so the review wasn't started.`
+            pushRecord(entry.id, newStageRecord(candidate, 'failed', deps.now().toISOString(), null, message))
+            continue
+          }
+          review = reviewDispatchFacts({ priorReviews: candidate.cycle.count, author: resolvedByNumber.get(candidate.number)?.author ?? null, viewer })
+        }
         try {
           const result = await launch.launch({
             entry,
@@ -342,6 +353,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
             prompt: promptFor(candidate),
             title: ticketLabelFor(index, candidate.number, candidate.kind),
             target: targetOf(candidate.kind, resolvedByNumber.get(candidate.number)),
+            review,
           })
           const at = deps.now().toISOString()
           if (result.ok) {

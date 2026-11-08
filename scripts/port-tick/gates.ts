@@ -185,6 +185,16 @@ export function cycleCapExceeded(reviews: readonly ReviewNode[] | undefined, cap
   return codeReviewCount(reviews) >= cap + cycleGrantCount(comments);
 }
 
+export interface ReviewDispatchFacts {
+  readonly cycle: number;
+  readonly selfAuthored: boolean;
+}
+
+/** An unknown author reads as self-authored, because `COMMENT` is the one review event GitHub accepts either way. */
+export function reviewDispatchFacts({ priorReviews, author, viewer }: { readonly priorReviews: number; readonly author: string | null; readonly viewer: string }): ReviewDispatchFacts {
+  return { cycle: priorReviews + 1, selfAuthored: author === null || author.toLowerCase() === viewer.toLowerCase() };
+}
+
 export type MergeabilityAction = 'dispatch' | 'refresh' | 'hold';
 
 /** `UNKNOWN` holds review dispatch one tick, dispatches on the second consecutive occurrence.

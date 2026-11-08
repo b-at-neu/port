@@ -136,6 +136,7 @@ export function buildStageContext(request: StageLaunchRequest, pluginRoot: strin
   }
   for (const [key, enabled] of Object.entries(config.modules)) context.push([`modules.${key}`, String(enabled)])
   context.push(['sessionRequiredPaths', JSON.stringify(config.sessionRequiredPaths)], ['reviewCycleCap', String(config.reviewCycleCap)])
+  if (request.review !== null) context.push(['review.cycle', String(request.review.cycle)], ['review.selfAuthored', String(request.review.selfAuthored)])
   context.push(['docs.engineering', pointers.docs.engineering ?? 'null'], ['docs.design', pointers.docs.design ?? 'null'])
   for (const [key, value] of Object.entries(pointers.commands)) context.push([`commands.${key}`, value])
   for (const applied of config.overrides) context.push(['override', oneLine(`${applied.path} = ${JSON.stringify(applied.value)} (${applied.reason})`)])

@@ -70,6 +70,7 @@ describe('fetchItemsByNumber', () => {
             mergedAt: '2026-01-01T00:00:00Z',
             closedAt: '2026-01-01T00:00:00Z',
             headRefName: '195-the-branch',
+            author: { login: 'octocat' },
             assignees: { nodes: [] },
             labels: { nodes: [{ name: 'claude' }, { name: 'approved' }] },
           },
@@ -84,7 +85,7 @@ describe('fetchItemsByNumber', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.resolved).toEqual([
-      { number: 79, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 'issue', url: 'u1', labels: ['ready'], assignees: ['alice'], headRefName: null },
+      { number: 79, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 'issue', url: 'u1', labels: ['ready'], assignees: ['alice'], headRefName: null, author: null },
       {
         number: 196,
         kind: 'pull-request',
@@ -96,6 +97,7 @@ describe('fetchItemsByNumber', () => {
         labels: ['claude', 'approved'],
         assignees: [],
         headRefName: '195-the-branch',
+        author: 'octocat',
       },
     ])
     expect(result.unavailable).toEqual([])
@@ -109,6 +111,21 @@ describe('fetchItemsByNumber', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.resolved.map((r) => r.headRefName)).toEqual([null, null])
+  })
+
+  it('maps a missing author to null, and never reads one off an issue', async () => {
+    const stdout = JSON.stringify({
+      data: {
+        repository: {
+          n0: { __typename: 'PullRequest', number: 1, title: 't', url: 'u', state: 'OPEN', author: null },
+          n1: { __typename: 'Issue', number: 2, title: 't', url: 'u', state: 'OPEN', author: { login: 'stray' } },
+        },
+      },
+    })
+    const result = await fetchItemsByNumber({ repo: { owner: 'o', name: 'r' }, numbers: [1, 2], github: fakeTransport(httpOk(stdout)) })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.resolved.map((r) => r.author)).toEqual([null, null])
   })
 
   it('a merged pull request carries mergedAt', async () => {

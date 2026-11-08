@@ -227,6 +227,8 @@ export interface ResolvedItem {
   readonly assignees: readonly string[]
   /** A pull request's head branch; `null` for an issue. */
   readonly headRefName: string | null
+  /** A pull request's author login; `null` for an issue or a deleted account. */
+  readonly author: string | null
 }
 
 /** `fetchItemsByNumber`'s result — a number resolving to neither an issue nor a pull request lands in `unavailable`, never inferred as any particular state. */
