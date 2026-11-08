@@ -312,5 +312,15 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     expect(pipelineText.includes('the repository itself declares'), 'allowlist-skill-delivery', `${pipelineRel} no longer states the Skill grant's bound ("...the repository itself declares")`);
   }
 
-  note('allowlist: commands.* coverage, normalization cases, repoRelative cases, phrase pins (#205), the deny-only bound (#212), and the Skill delivery path (#50)');
+  // --- Check H — the plan agent's allowlist check: `auto plan` skips the plan-review gate, so the paragraph must keep saying why it asks. ---
+  {
+    const planRel = 'plugins/port/agents/plan-agent.md';
+    const planText = readFileSync(join(root, planRel), 'utf8');
+    const start = planText.indexOf('**Allowlist check.**');
+    const paragraph = start === -1 ? '' : planText.slice(start).split('\n\n')[0] ?? '';
+    expect(start !== -1, 'allowlist-plan-check', `${planRel} no longer has the "**Allowlist check.**" paragraph (#657)`);
+    expect(!(start !== -1 && !paragraph.includes('auto plan')), 'allowlist-plan-check', `${planRel}'s Allowlist check paragraph no longer says why it asks (\`auto plan\` skips the plan-review gate)`);
+  }
+
+  note('allowlist: commands.* coverage, normalization cases, repoRelative cases, phrase pins (#205), the deny-only bound (#212), the Skill delivery path (#50), and the plan agent\'s allowlist check (#657)');
 }

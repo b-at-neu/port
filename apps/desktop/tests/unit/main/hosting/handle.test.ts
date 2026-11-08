@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createHostedHandle, REPLAY_LIMIT } from '@/main/hosting/handle'
+import { GUARD_ALLOWLIST_MISS_MARKER } from '@/main/hosting/guard-marker'
 import type { SessionEntriesDelta, SessionEventEnvelope } from '@/types/hosting'
 import { SESSION_KEY, baseParams, fakeQuery, flush } from '../../../fixtures/hosting/handle'
 
@@ -213,6 +214,20 @@ describe('createHostedHandle', () => {
       const handle = createHostedHandle(baseParams({ stage: STAGE }), () => fake.query)
       await flush()
       expect(handle.invoke('scope', '')).toEqual({ ok: false, kind: 'unknown-command', name: 'scope' })
+    })
+
+    const DENIED_CALL = { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: 'cp a b' } }] } }
+    const DENIED_RESULT = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_1', is_error: true, content: `${GUARD_ALLOWLIST_MISS_MARKER}, so it is denied for dispatched agents.` }] } }
+
+    it('a guard-denied Bash result reaches onDeny exactly once', async () => {
+      const fake = fakeQuery({ commands: COMMANDS })
+      const onDeny = vi.fn()
+      createHostedHandle(baseParams({ stage: { ...STAGE, onDeny } }), () => fake.query)
+      fake.push(DENIED_CALL)
+      fake.push(DENIED_RESULT)
+      await flush()
+      expect(onDeny).toHaveBeenCalledTimes(1)
+      expect(onDeny).toHaveBeenCalledWith('Bash', { command: 'cp a b' })
     })
   })
 

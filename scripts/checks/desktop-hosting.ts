@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { root, readJson, walk, relOf, unitTestPath } from '#lib/files.ts';
 import type { Reporter } from '#lib/report.ts';
-import { globToRegExp as hookGlobToRegExp } from '#plugins/port/hooks/lib/guard-rules.mjs';
+import { decide as hookDecide, globToRegExp as hookGlobToRegExp } from '#plugins/port/hooks/lib/guard-rules.mjs';
 
 // apps/desktop/src/main/hosting/ owns the full lifecycle of a hosted session in the main
 // process. These assertions pin its plan's decisions mechanically.
@@ -378,6 +378,33 @@ export default async function ({ expect, fail, ok }: Reporter) {
           }
         }
         if (allAgree) ok();
+      }
+    }
+  }
+
+  // --- guard-marker.ts's marker is in the guard's allowlist-miss reason and in none of its other denial reasons. ---
+  {
+    const markerFile = allFiles.find((f) => relOf(f) === `${hostingDir}/guard-marker.ts`);
+    if (!markerFile) {
+      fail('desktop-hosting', `${hostingDir}/guard-marker.ts does not exist`);
+    } else {
+      const module = (await import(pathToFileURL(markerFile).href)) as { readonly GUARD_ALLOWLIST_MISS_MARKER?: string };
+      const marker = module.GUARD_ALLOWLIST_MISS_MARKER;
+      if (typeof marker !== 'string') {
+        fail('desktop-hosting', `${hostingDir}/guard-marker.ts does not export 'GUARD_ALLOWLIST_MISS_MARKER'`);
+      } else {
+        const subagent = { agent_type: 'port:impl-agent', cwd: `${root}/.claude/worktrees/impl-1` };
+        const base = { matchers: [], sessionRequiredPaths: ['.claude/**'], root, needsHumanLabel: null, operatorMessages: null, isCockpitSession: false, ownership: null, cockpitFilePath: null, repo: null, approvedLabel: null };
+        const reasonOf = (tool_name: string, tool_input: Record<string, unknown>): string => {
+          const decision = hookDecide({ ...base, payload: { ...subagent, tool_name, tool_input } }) as { readonly reason?: string };
+          return decision.reason ?? '';
+        };
+        const miss = reasonOf('Bash', { command: 'cp a b' });
+        const loop = reasonOf('Bash', { command: 'for n in 1 2; do gh issue view $n; done' });
+        const protectedWrite = reasonOf('Write', { file_path: join(root, '.claude/settings.json') });
+        expect(miss.includes(marker), 'desktop-hosting', `guard-rules.mjs's allowlist-miss reason no longer contains hook-denials.ts's marker "${marker}"`);
+        expect(!loop.includes(marker) && loop.length > 0, 'desktop-hosting', "guard-rules.mjs's shell-loop reason must be non-empty and must not contain the allowlist-miss marker");
+        expect(!protectedWrite.includes(marker) && protectedWrite.length > 0, 'desktop-hosting', "guard-rules.mjs's sessionRequiredPaths reason must be non-empty and must not contain the allowlist-miss marker");
       }
     }
   }

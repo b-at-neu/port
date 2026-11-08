@@ -29,6 +29,7 @@ import { createControlsTracker } from '@/main/hosting/controls'
 
 import { createPermissionBroker } from '@/main/hosting/permissions'
 import { stagePolicy } from '@/main/hosting/stage-policy'
+import { createHookDenialTracker } from '@/main/hosting/hook-denials'
 import { createSessionProjector } from '@/main/hosting/project'
 
 import { createCapabilityTracker } from '@/main/hosting/capabilities'
@@ -140,6 +141,8 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     stage: params.stage !== null,
   })
   const tasks = createTaskTracker()
+  // The guard hook denies an off-allowlist Bash call before `canUseTool`, so only the result in the stream shows it.
+  const hookDenials = params.stage?.onDeny !== undefined ? createHookDenialTracker() : null
 
   function emitEntries(delta: ProjectedDelta | null): void {
     if (delta === null) return
@@ -211,6 +214,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     capabilities.observe(message)
     controls.observe(message)
     if (tasks.observe(message)) emitStatus()
+    for (const denied of hookDenials?.observe(message) ?? []) params.stage?.onDeny?.(denied.toolName, denied.input)
     const observedAt = new Date(params.now()).toISOString()
     const reading = readRateLimit(message, observedAt)
     if (reading !== null) {
