@@ -118,6 +118,19 @@ describe('createWorkerEngine', () => {
     await expect(close).resolves.toBeUndefined()
   })
 
+  it('proxies precheckGithub, and a rejection resolves to a failure value', async () => {
+    const { engine, workers } = setup()
+    const params = { repoId: 'r' as never, repo: { owner: 'o', name: 'n' } }
+    const ok = engine.precheckGithub(params)
+    expect(workers[0]!.sent).toEqual([{ id: 1, op: 'precheckGithub', params }])
+    workers[0]!.reply({ id: 1, ok: true, value: { ok: true, at: now().toISOString(), changed: true } })
+    expect(await ok).toEqual({ ok: true, at: now().toISOString(), changed: true })
+
+    const failed = engine.precheckGithub(params)
+    workers[0]!.reply({ id: 2, ok: false, message: 'gone' })
+    expect(await failed).toEqual({ ok: false, at: now().toISOString(), error: 'gone' })
+  })
+
   it('proxies forgetRepo, and a rejection resolves to undefined', async () => {
     const { engine, workers } = setup()
     const forget = engine.forgetRepo({ repoId: 'r' as never })

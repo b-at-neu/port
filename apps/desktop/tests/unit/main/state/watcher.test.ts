@@ -8,7 +8,7 @@ import type { BoardSnapshot } from '@/types/board'
 import { createPipelineWatcher } from '@/main/state/watcher'
 import { httpOk, queryOf } from '../../../fixtures/github-http'
 import { EMPTY_PIPELINE_BODY, RATE_LIMIT_REPLY, connection } from '../../../fixtures/pipeline-reply'
-import { fakeGit, makeFakeTimer, readyEntry, readyItemTransport } from '../../../fixtures/watcher-harness'
+import { fakeGit, makeFakeTimer, readyEntry, readyItemTransport, scriptedConditional } from '../../../fixtures/watcher-harness'
 
 function makeSnapshotWaiter(): { readonly onSnapshot: (snapshot: BoardSnapshot) => void; readonly next: () => Promise<BoardSnapshot> } {
   let resolvers: ((snapshot: BoardSnapshot) => void)[] = []
@@ -42,6 +42,7 @@ describe('createPipelineWatcher — cadence', () => {
         if (!queryOf(request).includes('integrationHistory:')) ghCalls += 1
         return Promise.resolve(httpOk(EMPTY_PIPELINE_BODY))
       },
+      conditional: scriptedConditional().transport,
       sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
     })
 
@@ -199,6 +200,7 @@ describe('createPipelineWatcher — refresh() bypasses backoff', () => {
       setTimer: timer.factory,
       git: fakeGit(gitCounts),
       github: () => Promise.resolve(httpOk(EMPTY_PIPELINE_BODY)),
+      conditional: scriptedConditional().transport,
       sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
     })
 

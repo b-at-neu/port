@@ -68,6 +68,16 @@ describe('budgetedIntervalMs', () => {
     expect(budgetedIntervalMs({ costs: [0], rateLimit: window, now: NOW })).toBe(SOURCE_BASE_INTERVAL_MS.github)
   })
 
+  it('floorMs lowers the floor for a cheap repository', () => {
+    expect(budgetedIntervalMs({ costs: [5], rateLimit: window, now: NOW, floorMs: 10_000 })).toBe(10_000)
+    expect(budgetedIntervalMs({ costs: [], rateLimit: window, now: NOW, floorMs: 10_000 })).toBe(10_000)
+  })
+
+  it('high cost still stretches the gap past floorMs', () => {
+    expect(budgetedIntervalMs({ costs: [146], rateLimit: window, now: NOW, floorMs: 10_000 })).toBe(210_240)
+    expect(budgetedIntervalMs({ costs: [5], rateLimit: { ...window, remaining: 300 }, now: NOW, floorMs: 10_000 })).toBe(150_000)
+  })
+
   it('a reset already past adds no headroom term', () => {
     expect(budgetedIntervalMs({ costs: [5], rateLimit: { ...window, remaining: 300, resetAt: '2026-01-01T00:00:00.000Z' }, now: NOW })).toBe(SOURCE_BASE_INTERVAL_MS.github)
   })

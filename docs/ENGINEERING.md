@@ -77,6 +77,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 **`apps/desktop/src/main/github/`**
 - reads go through `platform/github-http`'s injectable `GitHubTransport`, never through `gh`; `request.ts` builds the GraphQL and REST requests, and `envelope.ts` classifies a reply from its status code and body
 - conditional REST reads go through `conditional.ts`'s `conditionalGet`; its per-repo ETag cache is keyed by path and `Accept`, and is forgotten when a repo is added or removed — GraphQL is never conditional
+- `precheck.ts` reads the issues list's ETag (`per_page=1`, sorted by `updated`) as the fast change signal and never parses the body; the first response only primes the cache
 - the pipeline read's detail alias fails the whole read on any error, because a missing review list would read as zero cycles; the one carve-out is an issue alias's own `blockedBy` or `comments` field, which goes into that detail's `erroredFields` and never reaches a pull request alias
 - an errored `blockedBy` becomes `{ ok: false }` and errored comments become `null`, so the Board shows "unknown" or "its reason is on the ticket", never "no blockers"
 - `item-states.ts`'s `readItemStates` reads many items' states in one aliased round trip; an alias named in `errors[].path`, or absent, is `null`, never done
@@ -118,6 +119,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 **`apps/desktop/src/main/offload/`**
 - the state worker owns the source cache and every CPU-bound read; `planTick` and its shared ledgers stay on main
 - `worker.ts` is wiring only; a new op goes into `OFFLOAD_OPS` and `dispatch.ts`
+- `precheckGithub` runs in the worker because the ETag cache lives there; a changed ETag schedules a budget-gated GitHub sweep through the watcher's one clock, and a pre-check failure never touches GitHub health
 - a worker crash fails closed into each op's existing failure value, never an empty result; a failed projection keeps the last good board and still schedules the next tick
 
 **`apps/desktop/src/main/platform/`**

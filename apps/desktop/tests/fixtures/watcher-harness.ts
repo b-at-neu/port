@@ -1,6 +1,6 @@
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepositoryEntry } from '@/utils/repos'
-import type { CommandResult, GitHubTransport } from '@/types/platform'
+import type { CommandResult, ConditionalTransport, GitHubTransport } from '@/types/platform'
 import type { TimerFactory, TimerHandle } from '@/types/state'
 import { queryOf } from './github-http'
 import { RATE_LIMIT_REPLY, connection } from './pipeline-reply'
@@ -21,6 +21,36 @@ export function readyItemTransport(signedInLogin: string, assignees: readonly st
   return (request) => {
     const document = queryOf(request)
     return Promise.resolve({ ok: true, status: 200, headers: {}, body: JSON.stringify({ data: document.includes('d0:') ? detail : sweep }) })
+  }
+}
+
+interface ScriptedConditional {
+  readonly transport: ConditionalTransport
+  readonly bump: () => void
+  readonly fail: (on: boolean) => void
+  readonly calls: () => number
+}
+
+/** A fake issues-list endpoint: `bump()` moves the ETag, a matching `If-None-Match` answers 304, and `fail(true)` answers 500. */
+export function scriptedConditional(): ScriptedConditional {
+  let version = 1
+  let failing = false
+  let calls = 0
+  return {
+    transport: (request) => {
+      calls += 1
+      if (failing) return Promise.resolve({ ok: false, kind: 'unknown', status: 500, body: '', message: 'GitHub returned HTTP 500' })
+      const etag = `"v${String(version)}"`
+      if (request.ifNoneMatch === etag) return Promise.resolve({ ok: true, notModified: true, status: 304, headers: { etag } })
+      return Promise.resolve({ ok: true, notModified: false, status: 200, headers: { etag }, body: '[]' })
+    },
+    bump: () => {
+      version += 1
+    },
+    fail: (on) => {
+      failing = on
+    },
+    calls: () => calls,
   }
 }
 
