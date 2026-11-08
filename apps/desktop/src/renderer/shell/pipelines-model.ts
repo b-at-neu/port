@@ -56,7 +56,7 @@ function ticketNumberOf(stage: NonNullable<HostedSessionSnapshot['stage']>, inde
   return index.byNumber.get(stage.number)?.ref.number ?? stage.number
 }
 
-/** A live stage session's own row.A permission prompt or a `QUESTIONS FOR HUMAN:`/`BLOCKED:` hand-back means the operator is needed, whatever phase it is in. `repoId` is passed in rather than read off `session` — this is only ever called once `session.repoId` has already been narrowed to match it. */
+/** A live stage session's own row. A permission prompt or a `QUESTIONS FOR HUMAN:`/`BLOCKED:` hand-back means the operator is needed, whatever phase it is in. `repoId` is passed in rather than read off `session` — this is only ever called once `session.repoId` has already been narrowed to match it. */
 function stageRowFor(repoId: RepoId, session: HostedSessionSnapshot, index: TicketIndex): PipelineSessionRow {
   const stage = session.stage
   if (stage === null) throw new Error('stageRowFor called with a non-stage snapshot')
