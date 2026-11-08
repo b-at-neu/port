@@ -279,7 +279,7 @@ Rule: **every stage agent's first action is swapping its trigger label for its i
 | `autoPlan` | `auto plan` | Cockpit (at opt-in) | marker | Plan gate skipped: `plan review` auto-approved |
 | `inProgress` | `in progress` | `impl-agent` | in-flight | Implementation underway |
 | `prOpened` | `pr opened` | `impl-agent` | terminal | Pull request open; remaining state tracked there |
-| `blocked` | `blocked` | `impl-agent` | gate | Needs a human decision; details in an issue comment |
+| `blocked` | `blocked` | `impl-agent` | gate | Needs a human decision; details in an issue comment that opens with the decision. The desktop app lists it in Needs You |
 
 ### Pull request labels
 

@@ -216,6 +216,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `blocked-on.ts`'s `blockedOnOf` is the one "held on" derivation; the row tag, the Blocked section and the item pane read `row.blockedOn`, never a second one
 - a ticket is blocked when its stage label is `blocked` or a live stage session's last hand-back is `BLOCKED:`; open `blockedBy` links alone never make it blocked
 - the comment source is the newest comment at or before the latest `blocked` label event, and no such event means no comment, so it fails toward the fallback copy rather than an unrelated comment
+- the comment's reason is its `Decision needed` line when there is one, else its first non-heading line
 - `blocker-answer.tsx` sends into the live session through `session/actions.ts`'s `send` and never writes a label; the agent clears its own block
 
 **`apps/desktop/src/renderer/components/conversation-model.ts`/`conversation-list.tsx`**
@@ -243,7 +244,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - the Needs you screen (#315): its own copy (`copy.ts`), action resolution and dispatch (`actions.ts`), and the relay compose form (`relay-form.tsx`), ported out of `board/relay.ts`'s former banner
 - `screen.tsx` reads `board:snapshot` through `renderer/board/needs-you.ts`'s `needsYouItems`, never a second derivation; writes go through the existing `item:action`/`item:decide` channels, or `session:permission:answer` for a `stage-approval` row, no new IPC
 - `components/needs-you-item.tsx` is the shared row (DESIGN §4's `NeedsYouItem`); a screen never builds its own version
-- blocked items are not Needs you's: a `blocked` label and a live session's `BLOCKED:` hand-back both go to the Board's Blocked section, and `waitsOnYou` is false for them
+- a `blocked` label is a Needs you `blocked` row with the Unblock decision, and also sits in the Board's Blocked section; `waitsOnYou` stays false for it, so the Board neither pulses nor moves it; a live `BLOCKED:` hand-back on a non-`blocked` stage still produces no Needs you row
 - dismissals (#554) live only in the renderer's `localStorage` (`dismissed.ts`), keyed per event by `dismiss-key.ts` so the same event stays dismissed and a new event on the same ticket shows; a malformed stored value reads as empty, which fails toward showing everything
 - `notify-model.ts` is the only "new item" diff, over `visibleNeedsYouItems`'s items and keyed by `dismissKeyOf`, never a second derivation; `notify.ts` persists its baseline in `localStorage` and a malformed value seeds silently
 - `dismissed.ts`'s `visibleNeedsYouItems` is the one visible-items composition: `use-items.ts`'s `useNeedsYouItems` (the screen, the sidebar count, the palette and the per-repository dots) and `notify.ts`'s notifier both call it, so a dismissed or auto-cleared item can never disagree between them

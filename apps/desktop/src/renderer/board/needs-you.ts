@@ -12,13 +12,14 @@ import type { BoardItemRow, BoardSnapshot, NeedsYouItem } from '@/types/board'
 import { capHandbackText, classifyHandbackText } from '@/utils/stage/handback-text'
 
 /** The three label-keyed kinds, each carrying the row they came from. */
-type RowNeedsYouKind = 'plan-review' | 'ready-to-merge' | 'needs-human'
+type RowNeedsYouKind = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'blocked'
 
 // Every other stage key carries no "needs you" kind at all.
 const ROW_KIND: Readonly<Partial<Record<string, RowNeedsYouKind>>> = {
   planReview: 'plan-review',
   approved: 'ready-to-merge',
   needsHuman: 'needs-human',
+  blocked: 'blocked',
 }
 
 // The row-level "needs you" kind for a stage label key, undefined otherwise.
@@ -28,6 +29,8 @@ export function needsYouReasonOf(stageKey: string | undefined): RowNeedsYouKind 
 
 /** A row is the operator's only when its stage is a gate and no auto-approval is about to clear it. */
 export function waitsOnYou(row: BoardItemRow): boolean {
+  // A blocked row is held on the Board yet still listed in Needs you.
+  if (row.stageLabel?.key === 'blocked') return false
   return needsYouReasonOf(row.stageLabel?.key) !== undefined && !row.autoApproving
 }
 
@@ -249,7 +252,7 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
 
   for (const row of rows) {
     const kind = needsYouReasonOf(row.stageLabel?.key)
-    if (kind === undefined || !waitsOnYou(row)) continue
+    if (kind === undefined || row.autoApproving) continue
     const viewer = viewerByRepo.get(row.item.repoId) ?? null
     if (viewer !== null && !row.item.assignees.includes(viewer)) continue
     items.push({ kind, repoId: row.item.repoId, repo: row.item.repo, number: row.item.number, title: row.item.title, url: row.item.url, ticket: row.ticket.ref, at: row.item.updatedAt, matchedRow: row, row })

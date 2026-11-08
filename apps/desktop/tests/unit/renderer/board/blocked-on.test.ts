@@ -109,6 +109,23 @@ describe('blockedOnOf', () => {
       expect(pick([comment('2026-01-01T00:00:00Z', `${'y'.repeat(200)}`)])?.text).toBe(`${'y'.repeat(120)}…`)
     })
 
+    it('shows the stripped decision of a decision-first comment', () => {
+      expect(pick([comment('2026-01-01T00:00:00Z', '## Blocker\n\n**Decision needed:** keep 30 or 90 days?\n\nContext.')])?.text).toBe('keep 30 or 90 days?')
+    })
+
+    it('finds the decision line below a legacy status sentence', () => {
+      const body = '## Blocker\n\nImplementation is complete and pushed but I stopped.\n\n**Decision needed:** migrate the file now or later?\n\nMore.'
+      expect(pick([comment('2026-01-01T00:00:00Z', body)])?.text).toBe('migrate the file now or later?')
+    })
+
+    it('keeps a decision line whole when nothing follows its label', () => {
+      expect(pick([comment('2026-01-01T00:00:00Z', 'Decision needed, either:\n- a\n- b')])?.text).toBe('Decision needed, either:')
+    })
+
+    it('caps a long decision line', () => {
+      expect(pick([comment('2026-01-01T00:00:00Z', `**Decision needed:** ${'z'.repeat(200)}`)])?.text).toBe(`${'z'.repeat(120)}…`)
+    })
+
     it('is none for a heading-only comment, and when comments were not read', () => {
       expect(pick([comment('2026-01-01T00:00:00Z', '## Blocker\n### Detail')])).toBeNull()
       expect(pick(null)).toBeNull()

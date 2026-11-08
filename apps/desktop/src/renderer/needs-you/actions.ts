@@ -49,7 +49,7 @@ function disabledReasonCopy(reason: DecisionRefusal): string {
   }
 }
 
-function unblockAction(item: Extract<NeedsYouItem, { readonly kind: 'needs-human' }>): NeedsYouAction {
+function unblockAction(item: Extract<NeedsYouItem, { readonly kind: 'needs-human' | 'blocked' }>): NeedsYouAction {
   const decision = item.matchedRow?.decisions.unblock
   if (decision === undefined) return { label: 'Unblock', kind: 'unblock', disabledReason: "Can't read this item's current state." }
   return { label: 'Unblock', kind: 'unblock', disabledReason: decision.available ? null : disabledReasonCopy(decision.reason) }
@@ -81,6 +81,7 @@ export function actionFor(item: NeedsYouItem, now: Date = new Date()): NeedsYouA
     case 'ready-to-merge':
       return { label: 'Open PR', kind: 'open', disabledReason: null }
     case 'needs-human':
+    case 'blocked':
       return unblockAction(item)
     case 'budget':
       return { label: 'Open ticket', kind: 'open', disabledReason: null }

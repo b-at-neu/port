@@ -224,6 +224,7 @@ export type NeedsYouItem =
   | (NeedsYouItemBase & { readonly kind: 'plan-review'; readonly row: BoardItemRow })
   | (NeedsYouItemBase & { readonly kind: 'ready-to-merge'; readonly row: BoardItemRow })
   | (NeedsYouItemBase & { readonly kind: 'needs-human'; readonly row: BoardItemRow })
+  | (NeedsYouItemBase & { readonly kind: 'blocked'; readonly row: BoardItemRow })
   | (NeedsYouItemBase & { readonly kind: 'budget'; readonly note: BudgetNote })
   /** `owner` is this held item's own repository's `RepoDispatchStatus.owner` — `null` only when the repository reported none (never rendered: `heldAction` reads it only for a `contended` hold, which never arises on an unready repository). */
   | (NeedsYouItemBase & { readonly kind: 'held'; readonly held: TickHeld; readonly owner: DispatchOwner | null })
@@ -244,7 +245,7 @@ export type NeedsYouItem =
 export type NeedsYouBaseline = Readonly<Record<string, readonly string[]>>
 
 /** The groups Needs you renders — `stage-question`/`stage-questions` share `questions`, and `stage-approval` is `approvals`. */
-export type NeedsYouGroupKey = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'questions' | 'approvals' | 'denied' | 'interrupted' | 'usage-limit' | 'held' | 'stalled' | 'budget' | 'half-labelled' | 'launch-failed'
+export type NeedsYouGroupKey = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'blocked' | 'questions' | 'approvals' | 'denied' | 'interrupted' | 'usage-limit' | 'held' | 'stalled' | 'budget' | 'half-labelled' | 'launch-failed'
 
 export const PHASE_KEYS = ['plan', 'implement', 'review', 'revision', 'merge'] as const
 
