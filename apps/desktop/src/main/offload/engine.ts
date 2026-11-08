@@ -43,5 +43,9 @@ export function createInProcessEngine(params: InProcessEngineParams = {}): State
       tails.closeTail(request)
       return Promise.resolve()
     },
+    forgetRepo: ({ repoId }) => {
+      cache.etags.forget(repoId)
+      return Promise.resolve()
+    },
   }
 }

@@ -173,6 +173,8 @@ export function registerIpc(): RegisteredIpc {
   const runStates = createRunStateStore(app.getPath('userData'))
   void runStates.load(() => registeredRepoIds(registryDeps))
 
+  const { engine, close: closeOffload, ...offload } = createOffload({ onRespawn: () => void watcher.refresh() })
+
   handle('app:info', (_event, request) => {
     if (request !== undefined) {
       throw new Error("'app:info' takes no payload")
@@ -187,8 +189,9 @@ export function registerIpc(): RegisteredIpc {
     return listRepositories(registryDeps)
   })
 
-  // Forgetting a run-state entry never fails the registry call itself, only logs.
-  function forgetRunState(channel: string, repoId: Parameters<typeof runStates.forget>[0]): void {
+  // Forgetting a repo's run-state entry and cached ETags never fails the registry call itself, only logs. A re-added checkout gets the same id, so add forgets too.
+  function forgetRepoState(channel: string, repoId: Parameters<typeof runStates.forget>[0]): void {
+    void engine.forgetRepo({ repoId })
     void runStates.forget(repoId).then((f) => {
       if (!f.ok) console.error(`'${channel}' could not forget the run-state entry for '${String(repoId)}':`, f.message)
     })
@@ -197,14 +200,14 @@ export function registerIpc(): RegisteredIpc {
   handle('repos:add', async (_event, request) => {
     if (request !== undefined) throw new Error("'repos:add' takes no payload")
     const result = await addRepository(registryDeps)
-    if (result.ok && result.outcome === 'added') forgetRunState('repos:add', result.added)
+    if (result.ok && result.outcome === 'added') forgetRepoState('repos:add', result.added)
     return result
   })
 
   handle('repos:remove', async (_event, request) => {
     if (typeof request?.id !== 'string' || request.id === '') throw new Error("'repos:remove' requires a non-empty 'id'")
     const result = await removeRepository(registryDeps, request.id)
-    if (result.ok) forgetRunState('repos:remove', request.id)
+    if (result.ok) forgetRepoState('repos:remove', request.id)
     return result
   })
 
@@ -213,8 +216,6 @@ export function registerIpc(): RegisteredIpc {
   handle('worktrees:reclaim', (_event, request) => resolveWorktreesReclaim(registryDeps, request, app.getPath('userData')))
 
   handle('worktrees:purge', (_event, request) => resolveWorktreesPurge(registryDeps, request, app.getPath('userData')))
-
-  const { engine, close: closeOffload, ...offload } = createOffload({ onRespawn: () => void watcher.refresh() })
 
   handle('sessions:scan', (_event, request) => {
     if (request !== undefined) throw new Error("'sessions:scan' takes no payload")

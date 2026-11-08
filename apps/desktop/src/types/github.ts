@@ -1,4 +1,4 @@
-import type { GitHubTransport } from '@/types/platform'
+import type { GitHubHttpResult, GitHubTransport } from '@/types/platform'
 
 // Renderer-safe result and item shapes for the GitHub adapter. No import here may reach a Node builtin — only `main/github/` spawns `gh`.
 import type { LabelKey, LabelSource, VocabularyReport } from '@/utils/labels/vocabulary'
@@ -16,6 +16,18 @@ export interface LocalRepoRef {
   readonly root: string
 }
 
+/** Per-repo ETags keyed by request shape. `forget` bumps the repo's generation, so a `store` from a request that began before it is dropped. */
+export interface EtagCache {
+  lookup(repoId: RepoId, key: string): { readonly etag: string | null; readonly generation: number }
+  /** `etag: null` deletes. Ignored when `forget(repoId)` ran after the matching `lookup`. */
+  store(repoId: RepoId, key: string, etag: string | null, generation: number): void
+  forget(repoId: RepoId): void
+}
+
+export type ConditionalGetResult =
+  | { readonly ok: true; readonly outcome: 'modified'; readonly status: number; readonly headers: Readonly<Record<string, string>>; readonly body: string; readonly etag: string | null }
+  | { readonly ok: true; readonly outcome: 'not-modified'; readonly headers: Readonly<Record<string, string>>; readonly etag: string }
+  | Exclude<GitHubHttpResult, { ok: true }>
 
 export type PipelineItemKind = 'issue' | 'pull-request'
 

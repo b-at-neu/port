@@ -38,6 +38,13 @@ function failGit(): (args: readonly string[], cwd: string) => Promise<CommandRes
 const REPO = { owner: 'o', name: 'r' }
 const VOCAB = { labels: [], disabled: [], problems: [] }
 
+describe('createSourceCache', () => {
+  it('carries an empty etag cache', () => {
+    const cache = createSourceCache()
+    expect(cache.etags.lookup(REPO_1, 'GET repos/o/r')).toEqual({ etag: null, generation: 0 })
+  })
+})
+
 describe('refreshGithub — Decision 4', () => {
   it('a failing attempt keeps the previous good fetch in the cache', async () => {
     const cache = createSourceCache()
