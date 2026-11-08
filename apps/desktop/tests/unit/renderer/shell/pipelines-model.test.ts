@@ -313,6 +313,29 @@ describe('pipelinesModel', () => {
     expect(row.sessions).toEqual([{ key: 'hosted-revise', repoId: REPO_ID, number: 46, label: '#46 the ticket', tone: { palette: 'revise', fill: 'active', pulse: true }, statusText: 'Revising', phaseName: 'Revising', sessionKey: 'hosted-revise', transcript: null }])
   })
 
+  it('keeps a review session on a pull request as one row for its ticket', () => {
+    const linked = [
+      item({ number: 637, title: 'the ticket', linked: 670 }),
+      item({ number: 670, kind: 'pull-request', title: 'the pull request', linked: 637, stage: 'in-flight', stages: [{ key: 'reviewing', name: 'reviewing', role: 'in-flight' }], agents: [agent({ activity: 'active' })] }),
+    ]
+    const snapshot = snapshotOf([readyRepoState({ items: linked })])
+    const review = stageSession({ key: 'hosted-review', repoId: REPO_ID, stage: { agent: 'review', number: 670, kind: 'pull-request', trigger: 'readyForReview' } })
+    expect(assertReady(pipelinesModel([readyEntry()], snapshot)[0]).sessions).toHaveLength(1)
+    const row = assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [review])[0])
+    expect(row.sessions).toHaveLength(1)
+    expect(row.sessions[0]).toMatchObject({ number: 637, sessionKey: 'hosted-review' })
+  })
+
+  it('drops an idle review session on a pull request without resurrecting its ticket row', () => {
+    const linked = [
+      item({ number: 637, title: 'the ticket', linked: 670 }),
+      item({ number: 670, kind: 'pull-request', title: 'the pull request', linked: 637, stage: 'in-flight', stages: [{ key: 'reviewing', name: 'reviewing', role: 'in-flight' }], agents: [agent({ activity: 'active' })] }),
+    ]
+    const snapshot = snapshotOf([readyRepoState({ items: linked })])
+    const idle = stageSession({ key: 'hosted-review', repoId: REPO_ID, phase: 'ready', stage: { agent: 'review', number: 670, kind: 'pull-request', trigger: 'readyForReview' } })
+    expect(assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [idle])[0]).sessions).toEqual([])
+  })
+
   it('shows a ticket with a linked pull request as one item row, never a second for the pull request', () => {
     const linked = [item({ number: 46, title: 'the ticket', linked: 47 }), item({ number: 47, kind: 'pull-request', title: 'the pull request', linked: 46, agents: [agent({ activity: 'active' })] })]
     const row = assertReady(pipelinesModel([readyEntry()], snapshotOf([readyRepoState({ items: linked })]))[0])

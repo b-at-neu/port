@@ -52,6 +52,10 @@ function sessionsFor(repoId: RepoId, index: TicketIndex, needsYouNumbers: Readon
   return rows
 }
 
+function ticketNumberOf(stage: NonNullable<HostedSessionSnapshot['stage']>, index: TicketIndex): number {
+  return index.byNumber.get(stage.number)?.ref.number ?? stage.number
+}
+
 /** A live stage session's own row. A permission prompt or a `QUESTIONS FOR HUMAN:`/`BLOCKED:` hand-back means the operator is needed, whatever phase it is in. `repoId` is passed in rather than read off `session` — this is only ever called once `session.repoId` has already been narrowed to match it. */
 function stageRowFor(repoId: RepoId, session: HostedSessionSnapshot, index: TicketIndex): PipelineSessionRow {
   const stage = session.stage
@@ -60,7 +64,7 @@ function stageRowFor(repoId: RepoId, session: HostedSessionSnapshot, index: Tick
   const label = session.title ?? (ticket !== undefined ? ticketLabel(ticket.ref) : `#${String(stage.number)}`)
   const tone = runningTone(phaseTone({ stageKey: stage.trigger, active: true, waitingOnYou: false, operatorNeeded: operatorNeeded(session) }))
   const phaseName = stageAgentPhaseName(stage.agent)
-  return { key: session.sessionKey, repoId, number: ticket?.ref.number ?? stage.number, label, tone, statusText: statusTextOf(tone, phaseName), phaseName, sessionKey: session.sessionKey, transcript: null }
+  return { key: session.sessionKey, repoId, number: ticketNumberOf(stage, index), label, tone, statusText: statusTextOf(tone, phaseName), phaseName, sessionKey: session.sessionKey, transcript: null }
 }
 
 export function phaseLineOf(row: Pick<PipelineSessionRow, 'tone' | 'phaseName'>): string {
@@ -112,7 +116,7 @@ export function pipelinesModel(
     const owner: DispatchOwner = dispatchStatus?.owner ?? 'none'
 
     const itemRows = sessionsFor(entry.id, index, numbers)
-    const stageNumbers = new Set(stageSessions.map((s) => s.stage?.number))
+    const stageNumbers = new Set(stageSessions.flatMap((s) => (s.stage !== null ? [ticketNumberOf(s.stage, index)] : [])))
 
     return {
       ready: true,
