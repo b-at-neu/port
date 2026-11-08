@@ -5,6 +5,9 @@ import { assertNoDisallowedCalls, launchE2EApp } from './harness/app.mjs'
 import type { E2EApp } from './harness/app.mjs'
 import { sandboxState } from './fake/state.mjs'
 
+// Every dispatch control ends in a forced refresh through the spawned fakes, which a slow runner can stretch past the 5s default.
+const CONTROL_SETTLE_MS = 30_000
+
 let harness: E2EApp
 
 interface DispatchFileShape {
@@ -46,23 +49,23 @@ test('runs, pauses, and drains a pipeline, with Drain disabled while nothing is 
   await pill.click()
   await page.getByRole('menuitem', { name: 'Run' }).click()
   const runningPill = page.getByRole('button', { name: /^Running$/ }).first()
-  await expect(runningPill).toBeVisible()
+  await expect(runningPill).toBeVisible({ timeout: CONTROL_SETTLE_MS })
   expect(await dispatchState(dispatchPath)).toBe('dispatching')
 
   await runningPill.click()
   await page.getByRole('menuitem', { name: 'Pause' }).click()
   const pausedPill = page.getByRole('button', { name: /^Paused$/ }).first()
-  await expect(pausedPill).toBeVisible()
+  await expect(pausedPill).toBeVisible({ timeout: CONTROL_SETTLE_MS })
   expect(await dispatchState(dispatchPath)).toBe('paused')
 
   await pausedPill.click()
   await page.getByRole('menuitem', { name: 'Run' }).click()
-  await expect(runningPill).toBeVisible()
+  await expect(runningPill).toBeVisible({ timeout: CONTROL_SETTLE_MS })
 
   await runningPill.click()
   await page.getByRole('menuitem', { name: 'Drain' }).click()
   const drainingPill = page.getByRole('button', { name: /^Draining$/ }).first()
-  await expect(drainingPill).toBeVisible()
+  await expect(drainingPill).toBeVisible({ timeout: CONTROL_SETTLE_MS })
   expect(await dispatchState(dispatchPath)).toBe('draining')
 
   const calls = await harness.calls()

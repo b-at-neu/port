@@ -4,7 +4,9 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { BoardSnapshot } from '@/types/board'
 import type { GitHubTransport } from '@/types/platform'
+import { budgetedIntervalMs } from '@/main/state/schedule'
 import { createPipelineWatcher } from '@/main/state/watcher'
+import { GITHUB_PRECHECK_INTERVAL_MS } from '@/types/board'
 import { RATE_LIMIT_REPLY } from '../../../fixtures/pipeline-reply'
 import { fakeGit, makeFakeTimer, readyEntry, readyItemTransport, scriptedConditional } from '../../../fixtures/watcher-harness'
 
@@ -16,6 +18,7 @@ interface Rig {
   readonly sweeps: () => number
   readonly setLabels: (labels: readonly string[]) => void
   readonly elapsed: () => number
+  readonly sweepRequests: number
 }
 
 async function rig(rateLimit: unknown = RATE_LIMIT_REPLY): Promise<Rig> {
@@ -41,8 +44,10 @@ async function rig(rateLimit: unknown = RATE_LIMIT_REPLY): Promise<Rig> {
     sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
   })
   await watcher.refresh()
+  const sweepRequests = sweeps
   sweeps = 0
   return {
+    sweepRequests,
     step: (ms) => {
       const next = new Promise<BoardSnapshot>((resolve) => {
         resolveNext = resolve
@@ -79,13 +84,16 @@ describe('createPipelineWatcher — issues-list pre-check', () => {
   })
 
   it('holds a triggered sweep until the budgeted gap has passed, then runs it once', async () => {
-    // Two round trips per sweep, so a sweep costs 20 points and the gap is about 29s.
-    const r = await rig({ ...RATE_LIMIT_REPLY, cost: 10, resetAt: '2026-01-01T01:00:00Z' })
+    const rateLimit = { ...RATE_LIMIT_REPLY, cost: 10, resetAt: '2026-01-01T01:00:00Z' }
+    const r = await rig(rateLimit)
+    const gap = budgetedIntervalMs({ costs: [rateLimit.cost * r.sweepRequests], rateLimit, now: new Date(T0), floorMs: GITHUB_PRECHECK_INTERVAL_MS })
 
     await r.step(10_000)
     r.conditional.bump()
-    await r.step(10_000)
-    expect(r.sweeps()).toBe(0)
+    while (r.elapsed() + 10_000 < gap) {
+      await r.step(10_000)
+      expect(r.sweeps()).toBe(0)
+    }
 
     await r.step(10_000)
     expect(r.sweeps()).toBeGreaterThan(0)
