@@ -30,7 +30,8 @@ function sessionReasonOf(members: readonly ReconciledItem[], sessions: readonly 
   return newest === null ? null : { text: newest.text, sessionKey: newest.sessionKey }
 }
 
-const DECISION_LABEL = /^\**Decision needed\b:?\**\s*/i
+const DECISION_LABEL = /^\**Decision needed\b/i
+const DECISION_PREFIX = /^\**Decision needed:\**\s*|^\**Decision needed\**:\s*/i
 
 /** The decision line when the comment has one, else its first non-heading line, capped. */
 function reasonLineOf(body: string): string | null {
@@ -40,7 +41,7 @@ function reasonLineOf(body: string): string | null {
     .filter((line) => line !== '' && !line.startsWith('#'))
   const decision = lines.find((line) => DECISION_LABEL.test(line))
   if (decision === undefined) return lines[0] === undefined ? null : capHandbackText(lines[0])
-  const stripped = decision.replace(DECISION_LABEL, '')
+  const stripped = decision.replace(DECISION_PREFIX, '')
   return capHandbackText(stripped === '' ? decision : stripped)
 }
 
