@@ -250,7 +250,7 @@ export function ReleasesScreen() {
 
   const releaseKeys = groups.flatMap((group) => (group.kind === 'loaded' ? group.status.releases.map((release) => releaseKey(group.repoId, release.tagName)) : []))
   const selection = useListSelection(releaseKeys)
-  const selectedRelease = groups.flatMap((group) => (group.kind === 'loaded' ? group.status.releases.filter((release) => releaseKey(group.repoId, release.tagName) === selection.selectedKey) : []))[0] ?? null
+  const selected = groups.flatMap((group) => (group.kind === 'loaded' ? group.status.releases.filter((release) => releaseKey(group.repoId, release.tagName) === selection.selectedKey).map((release) => ({ release, repoId: group.repoId })) : []))[0] ?? null
 
   function setRepoPending(repoId: RepoId, value: boolean): void {
     setPending((previous) => {
@@ -349,7 +349,7 @@ export function ReleasesScreen() {
             ))
           )}
         </ScreenBody>
-        {selectedRelease !== null ? <ReleasePane release={selectedRelease} onClose={() => selection.clear()} /> : null}
+        {selected !== null ? <ReleasePane release={selected.release} repoId={selected.repoId} now={now} onClose={() => selection.clear()} /> : null}
       </div>
       {cuttingGroup?.kind === 'loaded' ? (
         <CutDialog open status={cuttingGroup.status} onCancel={() => setCutting(null)} onConfirm={(version) => void run(cuttingGroup.repoId, cuttingGroup.status.postPublishHook, { step: 'open', version })} />

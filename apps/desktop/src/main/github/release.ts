@@ -17,7 +17,7 @@ import type {
 } from '@/types/release'
 import { bodyOf, classifyFailure, describeHttp, parseEnvelope } from '@/main/github/envelope'
 import { RAW_ACCEPT, repoGraphqlRequest, restRequest } from '@/main/github/request'
-import { STATE_ALIASES, buildStateQuery, buildTicketsQuery, stateVariables } from '@/main/github/release-query'
+import { RELEASES_PAGE, STATE_ALIASES, buildStateQuery, buildTicketsQuery, stateVariables } from '@/main/github/release-query'
 import { entriesFromCommits, ticketNumbersOf } from '@/utils/release/changelog'
 import type { ChangelogCommit, ResolvedTicket } from '@/utils/release/changelog'
 import { BUMP_BRANCH_DIR, versionOfBumpBranch } from '@/utils/release/format'
@@ -28,17 +28,17 @@ const COMMIT_PAGE = 100
 const TICKET_CAP = 100
 const SAFE_REF = /^[A-Za-z0-9._/-]+$/
 
-type Obj = Readonly<Record<string, unknown>>
+export type Obj = Readonly<Record<string, unknown>>
 
-function obj(value: unknown): Obj | null {
+export function obj(value: unknown): Obj | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Obj) : null
 }
 
-function str(value: unknown): string | null {
+export function str(value: unknown): string | null {
   return typeof value === 'string' ? value : null
 }
 
-function nodesOf(value: unknown): readonly Obj[] {
+export function nodesOf(value: unknown): readonly Obj[] {
   const nodes = obj(value)?.nodes
   return Array.isArray(nodes) ? nodes.flatMap((node) => (obj(node) === null ? [] : [node as Obj])) : []
 }
@@ -66,7 +66,7 @@ function closedPrOf(node: Obj | undefined): ClosedReleasePrInput | null {
   return pr === null || node === undefined ? null : { ...pr, merged: node.merged === true }
 }
 
-function releaseOf(node: Obj): ReleaseInfo | null {
+function releaseOf(node: Obj): Omit<ReleaseInfo, 'previousTag'> | null {
   const tagName = str(node.tagName)
   if (tagName === null || node.isDraft === true) return null
   return {
@@ -123,7 +123,7 @@ function commitsFrom(list: unknown): readonly ChangelogCommit[] | null {
   })
 }
 
-function parseBody(stdout: string): unknown {
+export function parseBody(stdout: string): unknown {
   try {
     return JSON.parse(stdout)
   } catch {
@@ -273,9 +273,11 @@ export async function fetchReleaseStatus(params: FetchReleaseStatusParams): Prom
     return failure(`GitHub couldn't read ${unavailable.length > 0 ? unavailable.join(', ') : 'part of the release state'}, so no release action is offered.`, readAt)
   }
 
-  const allReleases = nodesOf(repository.releases)
-  const releases = allReleases.flatMap((node) => releaseOf(node) ?? [])
-  const publishedTags = new Set(releases.map((release) => release.tagName))
+  // The page carries one release beyond the last one shown, only so that one has a known predecessor.
+  const fetched = nodesOf(repository.releases).flatMap((node) => releaseOf(node) ?? [])
+  const allReleases: readonly ReleaseInfo[] = fetched.map((release, index) => ({ ...release, previousTag: fetched[index + 1]?.tagName ?? null }))
+  const releases = allReleases.slice(0, RELEASES_PAGE)
+  const publishedTags = new Set(allReleases.map((release) => release.tagName))
   const integrationHead = headOf(repository.integrationHead)
   const input: PhaseInput = {
     ...base,

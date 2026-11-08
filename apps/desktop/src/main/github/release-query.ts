@@ -1,7 +1,7 @@
 import { BUMP_BRANCH_DIR } from '@/utils/release/format'
 
 // Pure GraphQL builders for the Releases reads — every branch and path travels as a variable, never spliced into the document.
-const RELEASES_PAGE = 20
+export const RELEASES_PAGE = 20
 const BUMP_REFS_PAGE = 10
 const TICKET_LABEL_PAGE = 20
 
@@ -22,7 +22,7 @@ export function buildStateQuery(withFiles: boolean): string {
   return [
     `query(${variables.join(', ')}) {`,
     '  repository(owner: $owner, name: $name) {',
-    `    releases(first: ${String(RELEASES_PAGE)}, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { tagName name url publishedAt isDraft isPrerelease isLatest description } }`,
+    `    releases(first: ${String(RELEASES_PAGE + 1)}, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { tagName name url publishedAt isDraft isPrerelease isLatest description } }`,
     `    openReleasePr: pullRequests(states: OPEN, baseRefName: $production, headRefName: $integration, first: 1, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { ${PR_FIELDS} } }`,
     `    closedReleasePr: pullRequests(states: [CLOSED, MERGED], baseRefName: $production, headRefName: $integration, first: 1, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { ${PR_FIELDS} } }`,
     `    bumpRefs: refs(refPrefix: $bumpRefPrefix, first: ${String(BUMP_REFS_PAGE)}) { nodes { name associatedPullRequests(states: OPEN, first: 1) { nodes { number url } } } }`,
@@ -45,6 +45,14 @@ export function stateVariables(params: { readonly integration: string; readonly 
     bumpRefPrefix: `refs/heads/${BUMP_BRANCH_DIR}`,
     ...(params.versionFile === null ? {} : { integrationFile: `${params.integration}:${params.versionFile}`, productionFile: `${params.production}:${params.versionFile}` }),
   }
+}
+
+/** One aliased commit lookup per sha, each declared as a `GitObjectID!` variable `$c0…$cN`; a sha is never spliced into the document. */
+export function buildIncludedIssuesQuery(count: number): string {
+  const indexes = Array.from({ length: count }, (_, index) => index)
+  const issue = `number title url repository { nameWithOwner } labels(first: ${String(TICKET_LABEL_PAGE)}) { nodes { name color } }`
+  const aliases = indexes.map((n) => `    c${String(n)}: object(oid: $c${String(n)}) { ... on Commit { associatedPullRequests(first: 3) { nodes { merged closingIssuesReferences(first: 10) { nodes { ${issue} } } } } } }`)
+  return [`query($owner: String!, $name: String!${indexes.map((n) => `, $c${String(n)}: GitObjectID!`).join('')}) {`, '  repository(owner: $owner, name: $name) {', ...aliases, '  }', '}'].join('\n')
 }
 
 /** Resolves ticket numbers through `issueOrPullRequest`; the numbers are integers the caller extracted, so inlining them is safe. */

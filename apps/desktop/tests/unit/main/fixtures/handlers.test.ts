@@ -43,6 +43,7 @@ const SAMPLE_REQUESTS: Partial<Record<IpcChannel, unknown>> = {
   'backlog:list': { repoId: 'fixture-acme-widgets' },
   'release:status': { repoId: 'fixture-acme-widgets' },
   'release:run': { repoId: 'fixture-acme-widgets', step: 'open', version: '0.3.0' },
+  'release:issues': { repoId: 'fixture-acme-widgets', tag: 'v0.2.0', previousTag: 'v0.1.1' },
   'audit:list': { repoId: 'fixture-acme-widgets', number: 38 },
   'session:changes': { sessionKey: STREAMING_KEY },
   'session:pin:set': { sessionId: 'fixture-claude-1', pinned: true },
@@ -350,6 +351,15 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     if (!result.ok) throw new Error('fixture release:status unexpectedly failed')
     expect(result.status.releases).toHaveLength(scenario === 'populated' ? 3 : 0)
     expect(result.status.phase.kind).toBe(scenario === 'populated' ? 'idle' : 'nothing-to-release')
+  })
+
+  it('serves twelve tickets for v0.2.0, none for v0.1.1 and three for v0.1.0 in the populated scenario only', () => {
+    const issuesOf = (tag: string, previousTag: string | null) => {
+      const result = handlers['release:issues']({ repoId: WIDGETS, tag, previousTag })
+      if (!result.ok) throw new Error('fixture release:issues unexpectedly failed')
+      return result.issues.length
+    }
+    expect([issuesOf('v0.2.0', 'v0.1.1'), issuesOf('v0.1.1', 'v0.1.0'), issuesOf('v0.1.0', null)]).toEqual(scenario === 'populated' ? [12, 0, 3] : [0, 0, 0])
   })
 
   it('refuses release:run as unsupported, never a side effect', () => {

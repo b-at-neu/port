@@ -19,7 +19,7 @@ import { gateAnswer, gatePreflight } from '@/main/actions/gate'
 import { resolveClaimApply, resolveClaimPreflight } from '@/main/channels/claim'
 import { resolveAuditList } from '@/main/channels/audit'
 import { resolveBacklogList } from '@/main/channels/backlog'
-import { resolveReleaseRun, resolveReleaseStatus } from '@/main/channels/release'
+import { resolveReleaseIssues, resolveReleaseRun, resolveReleaseStatus } from '@/main/channels/release'
 import { resolveWorktreesPurge, resolveWorktreesReclaim, resolveWorktreesReport } from '@/main/channels/worktrees'
 import { resolveGhStatus } from '@/main/channels/gh'
 import { createDispatchRuntime } from '@/main/dispatch/runtime'
@@ -86,10 +86,7 @@ import { createSessionMenuRefresher } from '@/main/session-menu'
 
 type AppInfo = IpcMap['app:info']['response']
 
-type Handler<C extends IpcChannel> = (
-  event: IpcMainInvokeEvent,
-  request: IpcMap[C]['request']
-) => IpcMap[C]['response'] | Promise<IpcMap[C]['response']>
+type Handler<C extends IpcChannel> = (event: IpcMainInvokeEvent, request: IpcMap[C]['request']) => IpcMap[C]['response'] | Promise<IpcMap[C]['response']>
 
 const registered = new Set<IpcChannel>()
 
@@ -335,6 +332,8 @@ export function registerIpc(): RegisteredIpc {
   handle('backlog:list', (_event, request) => resolveBacklogList(registryDeps, request))
 
   handle('release:status', (_event, request) => resolveReleaseStatus(registryDeps, request))
+
+  handle('release:issues', (_event, request) => resolveReleaseIssues(registryDeps, request))
 
   handle('release:run', (_event, request) => resolveReleaseRun(registryDeps, request, app.getPath('userData'), app.getPath('temp')))
 
