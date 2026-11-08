@@ -15,6 +15,7 @@ import type { HostedSessionSnapshot } from '@/types/hosting'
 import type { Options } from '@/main/hosting/sdk'
 import { createHostedStore } from '@/main/hosting/store'
 import { createInMemoryHostingPersistence } from '@/main/hosting/persist'
+import { pathOps } from '@/main/platform/paths'
 import { createStageLauncher } from '@/main/stage/launcher'
 
 import { createStageRegistry } from '@/main/stage/registry'
@@ -200,7 +201,7 @@ function createFakeSdk(seen: Options[], labels: LabelMap, prs: PrMap): HostedSdk
   return {
     query: ({ prompt, options }) => {
       if (options === undefined) throw new Error('scratch-run fake: query called with no options')
-      if (options.agent !== 'port:plan-agent' && options.agent !== 'port:impl-agent') {
+      if (options.agent !== 'plan-agent' && options.agent !== 'impl-agent') {
         throw new Error(`scratch-run fake: unexpected agent ${String(options.agent)}`)
       }
       if (typeof prompt === 'string') throw new Error('scratch-run fake: expected a streaming prompt, got a string')
@@ -208,7 +209,7 @@ function createFakeSdk(seen: Options[], labels: LabelMap, prs: PrMap): HostedSdk
       const fake = fakeQuery()
       void (async () => {
         await prompt[Symbol.asyncIterator]().next() // the first user turn — store.send() really went through the handle
-        if (options.agent === 'port:plan-agent') {
+        if (options.agent === 'plan-agent') {
           moveLabel(labels, 7, 'ready', 'planning')
           moveLabel(labels, 7, 'planning', 'planReview')
           fake.push({ type: 'system', subtype: 'init', session_id: 'sdk-plan' })
@@ -311,7 +312,10 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       registry: stageRegistry,
       onDenial: (repoId, denial: StageDenial) => dispatcherRef?.recordDenial(repoId, denial),
       newId: () => `id-${String(Math.random())}`,
-      loadInstructions: (launchRequest) => Promise.resolve({ ok: true, text: launchRequest.prompt }),
+      loadInstructions: (launchRequest) => Promise.resolve({ ok: true, text: launchRequest.prompt, agent: { name: `${launchRequest.agent}-agent`, definition: { description: launchRequest.agent, prompt: 'body' } } }),
+      bundleRoot: '/bundle',
+      ops: pathOps,
+      readTextFile: () => Promise.resolve({ ok: false, kind: 'not-found', message: 'unused' }),
     })
 
     const ledger = createDispatchLedger()
@@ -431,8 +435,8 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
     expect(seen).toHaveLength(beforeFinal)
 
     expect(seen).toHaveLength(2)
-    expect(seen[0]).toMatchObject({ agent: 'port:plan-agent', model: 'opus', permissionMode: 'default' })
-    expect(seen[1]).toMatchObject({ agent: 'port:impl-agent', model: 'sonnet', permissionMode: 'default' })
+    expect(seen[0]).toMatchObject({ agent: 'plan-agent', model: 'opus', permissionMode: 'default' })
+    expect(seen[1]).toMatchObject({ agent: 'impl-agent', model: 'sonnet', permissionMode: 'default' })
 
     expect(listedSnapshots.every((s) => s.stage !== null)).toBe(true)
 

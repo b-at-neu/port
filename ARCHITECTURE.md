@@ -24,6 +24,7 @@
 | `docs/` | Contributor-facing reference (`TESTING.md`, `USAGE.md`, `COORDINATION.md`), and `DESIGN.md`, the desktop app's design standards, with the canonical logo sources under `docs/design/` | Contributors, and stage agents doing interface work (via `docs.design`) | no |
 | `.github/workflows/` | CI workflow definitions | GitHub Actions | no |
 | `apps/desktop/` | The Electron + TypeScript desktop app | Contributors building the UI track | no |
+| `apps/desktop/stage-prompts/` | The desktop app's own copy of the four stage agent prompts and their three docs, packaged into the app's resources | The desktop app's stage sessions | no |
 | `.claude/` | This repository's own settings and port config, self-hosting the pipeline it ships | The cockpit and dispatched agents, in this checkout only | no |
 
 ## Placements that cannot move

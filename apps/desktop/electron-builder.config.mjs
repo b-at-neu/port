@@ -76,6 +76,8 @@ export default {
     // A packaged Linux window reads its own icon from here at runtime — electron-builder's
     // derived .desktop/exe icons never set the X11/Wayland window icon.
     { from: 'build/icon.png', to: 'icon.png' },
+    // A stage session's `claude` process reads these from disk, so they can't live inside the asar.
+    { from: 'stage-prompts', to: 'stage-prompts' },
   ],
   linux: {
     target: ['AppImage', 'deb'],

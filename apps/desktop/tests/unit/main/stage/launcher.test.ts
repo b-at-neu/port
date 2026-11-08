@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
+import { pathOps } from '@/main/platform/paths'
 import { createStageLauncher } from '@/main/stage/launcher'
+import type { FileResult } from '@/types/platform'
 import type { StageLaunchRequest } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '@/types/hosting'
 
@@ -58,8 +60,15 @@ function fakeDeps(overrides: Partial<{ start: SessionStartResult }> = {}) {
   const onDenial = vi.fn()
   let nextId = 0
   const newId = vi.fn(() => `id-${String((nextId += 1))}`)
-  const loadInstructions = vi.fn<StageInstructionsLoader>().mockImplementation((req) => Promise.resolve({ ok: true, text: `${req.prompt}\n\n<port-stage-context>\nrepo: widgets\n</port-stage-context>\n\n<port-stage-instructions source="/plugin">\nbody\n</port-stage-instructions>` }))
-  return { store, removeWorktree, createWorktree, releaseBranch, sweepBranches, onOutcome, close, dismiss, send, start, registry, registryMock, onDenial, newId, loadInstructions }
+  const loadInstructions = vi.fn<StageInstructionsLoader>().mockImplementation((req) =>
+    Promise.resolve({
+      ok: true,
+      text: `${req.prompt}\n\n<port-stage-context>\nrepo: widgets\n</port-stage-context>\n\n<port-stage-instructions source="/bundle">\nbody\n</port-stage-instructions>`,
+      agent: { name: 'impl-agent', definition: { description: 'impl', prompt: 'body' } },
+    }),
+  )
+  const readTextFile = vi.fn((path: string) => Promise.resolve<FileResult<string>>(path === pathOps.join('/bundle', 'agents', 'impl-agent.md') ? { ok: true, value: '---\nname: impl-agent\ndescription: impl\ndisallowedTools: Agent\n---\nbody\n' } : { ok: false, kind: 'not-found', message: `ENOENT ${path}` }))
+  return { store, removeWorktree, createWorktree, releaseBranch, sweepBranches, onOutcome, close, dismiss, send, start, registry, registryMock, onDenial, newId, loadInstructions, bundleRoot: '/bundle', ops: pathOps, readTextFile }
 }
 
 describe('createStageLauncher.launch', () => {
@@ -72,7 +81,7 @@ describe('createStageLauncher.launch', () => {
       expect.objectContaining({
         repoId: WIDGETS_ID,
         mode: { kind: 'fresh' },
-        stage: expect.objectContaining({ agentName: 'port:impl-agent', model: 'sonnet' }) as unknown as StartSessionParams['stage'],
+        stage: expect.objectContaining({ agent: { name: 'impl-agent', definition: { description: 'impl', prompt: 'body' } }, instructionsRoot: '/bundle', model: 'sonnet' }) as unknown as StartSessionParams['stage'],
       }),
     )
     expect(deps.send).toHaveBeenCalledWith('hosted-1', expect.stringContaining('Run your pipeline stage for #52.'))
@@ -91,10 +100,10 @@ describe('createStageLauncher.launch', () => {
 
   it('sends nothing, removes the worktree and fails when the instructions cannot be loaded', async () => {
     const deps = fakeDeps()
-    deps.loadInstructions.mockResolvedValue({ ok: false, message: 'no port@port install record in /home/u/.claude/plugins/installed_plugins.json' })
+    deps.loadInstructions.mockResolvedValue({ ok: false, message: "couldn't read /bundle/agents/impl-agent.md: ENOENT" })
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     const result = await launcher.launch(request())
-    expect(result).toEqual({ ok: false, kind: 'failed', message: "Couldn't load the stage instructions from the installed port plugin: no port@port install record in /home/u/.claude/plugins/installed_plugins.json" })
+    expect(result).toEqual({ ok: false, kind: 'failed', message: "Couldn't load the stage instructions from the app's bundled stage prompts: couldn't read /bundle/agents/impl-agent.md: ENOENT" })
     expect(deps.start).not.toHaveBeenCalled()
     expect(deps.send).not.toHaveBeenCalled()
     expect(deps.registryMock.recordRunning).not.toHaveBeenCalled()
@@ -225,12 +234,23 @@ describe('createStageLauncher.resume', () => {
     const params = deps.start.mock.calls[0]?.[0]
     expect(params?.mode).toEqual({ kind: 'resume', sessionId: 'sdk-1' })
     expect(params?.workspace.folder).toBe('/repo/.claude/worktrees/session-abc123')
-    expect(params?.stage?.agentName).toBe('port:impl-agent')
+    expect(params?.stage?.agent).toEqual({ name: 'impl-agent', definition: { description: 'impl', prompt: 'body', disallowedTools: ['Agent'] } })
+    expect(params?.stage?.instructionsRoot).toBe('/bundle')
     expect(deps.createWorktree).not.toHaveBeenCalled()
     expect(deps.loadInstructions).not.toHaveBeenCalled()
     expect(deps.send).toHaveBeenCalledWith('hosted-1', 'You were interrupted.')
     expect(deps.registryMock.markRunning).toHaveBeenCalledWith('reg-1')
     expect(deps.registryMock.recordRunning).not.toHaveBeenCalled()
+  })
+
+  it('fails the resume, naming the file, before starting when the bundled agent file is missing', async () => {
+    const deps = fakeDeps()
+    deps.readTextFile.mockResolvedValue({ ok: false, kind: 'not-found', message: 'ENOENT' })
+    const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
+    const result = await launcher.resume(resumeRequest())
+    expect(result).toEqual({ ok: false, kind: 'failed', message: `couldn't read ${pathOps.join('/bundle', 'agents', 'impl-agent.md')}: ENOENT` })
+    expect(deps.start).not.toHaveBeenCalled()
+    expect(deps.registryMock.markRunning).not.toHaveBeenCalled()
   })
 
   it('settles the same entry when the resumed session hands back', async () => {

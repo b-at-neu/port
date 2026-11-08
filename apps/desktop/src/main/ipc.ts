@@ -267,12 +267,12 @@ export function registerIpc(): RegisteredIpc {
     persistence: createHostingPersistence({ dir: app.getPath('userData') }),
   })
   const sessionMenu = createSessionMenuRefresher({ store: hostedStore, platform: process.platform, isPackaged: app.isPackaged, send: broadcastAppCommand })
-
   const stageLauncher: StageLauncherHandle = createDefaultStageLauncher({
     store: hostedStore,
     registry: stageRegistry,
     onOutcome: (repoId, sessionKey, outcome) => dispatcherRef?.recordOutcome(repoId, sessionKey, outcome),
     onDenial: (repoId, denial) => dispatcherRef?.recordDenial(repoId, denial),
+    bundle: { isPackaged: app.isPackaged, mainDir: __dirname, resourcesPath: process.resourcesPath },
   })
   const hostingChannelDeps = defaultHostingChannelDeps(hostedStore, sessionIndex, {
     git: (args, cwd) => git(args, { cwd }),
