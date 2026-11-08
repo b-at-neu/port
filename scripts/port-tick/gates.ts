@@ -1,4 +1,4 @@
-// Pure: mergeability routing, refresh-sweep bounds, zero-diff, cycle cap,
+// Pure: mergeability routing, refresh-sweep bounds, zero-diff, integration-red hold, cycle cap,
 // and approved re-verify. A leaf module — `wire.ts` adapts the raw shape.
 
 /** The two review-body fields either gate reads. */
@@ -101,6 +101,72 @@ export function zeroDiffGate({
   const deadline = submitted + ZERO_DIFF_CHECK_HOLD_MINUTES * 60_000;
   if (now >= deadline) return { action: 'escalate' };
   return { action: 'hold-checks', facts: { ...facts, state: 'red', escalateAt: new Date(deadline).toISOString() } };
+}
+
+const INTEGRATION_RED_PREFIX = '## Integration red';
+const INTEGRATION_RED_HEAD = /^Head `([0-9a-f]{7,40})` ·/;
+const INTEGRATION_RED_CHECK = /^- `([^`]+)` — /;
+
+/** Hours an `## Integration red` hold waits for the integration branch to turn green before it escalates. */
+export const INTEGRATION_RED_HOLD_HOURS = 24;
+
+export type IntegrationStatus = 'green' | 'red';
+
+/** The head SHA and the check names an `## Integration red` comment names, or null when it is not one or is malformed. */
+export function integrationRedNames(body: string): { readonly head: string; readonly checks: readonly string[] } | null {
+  if (!body.startsWith(INTEGRATION_RED_PREFIX)) return null;
+  const lines = body.split('\n');
+  if (lines[0]?.trimEnd() !== INTEGRATION_RED_PREFIX) return null;
+  const head = INTEGRATION_RED_HEAD.exec(lines[1] ?? '')?.[1];
+  if (head === undefined) return null;
+  const checks = lines.slice(2).flatMap((l) => {
+    const name = INTEGRATION_RED_CHECK.exec(l)?.[1];
+    return name === undefined ? [] : [name];
+  });
+  return checks.length === 0 ? null : { head, checks };
+}
+
+export type IntegrationRedAction = 'none' | 'hold' | 'refresh' | 'escalate';
+
+export interface IntegrationRedFacts {
+  readonly checks: readonly string[];
+  readonly sha: string;
+  readonly state: 'red' | 'unreadable';
+  readonly escalateAt?: string;
+}
+
+/** A head carrying its own `## Integration red` is held until every named check is green on the integration
+ *  branch, then refreshed; an unreadable integration read holds, and the window bounds any hold. */
+export function integrationRedGate({
+  comments,
+  headRefOid,
+  integration,
+  now,
+}: {
+  readonly comments: readonly CommentNode[] | undefined;
+  readonly headRefOid: string;
+  readonly integration: ReadonlyMap<string, IntegrationStatus> | null | undefined;
+  readonly now: string | null;
+}): { readonly action: IntegrationRedAction; readonly facts?: IntegrationRedFacts } {
+  const marked = (comments ?? []).flatMap((c) => {
+    const named = integrationRedNames(c.body);
+    return named === null ? [] : [{ named, createdAt: c.createdAt }];
+  });
+  if (marked.length === 0) return { action: 'none' };
+
+  const newest = marked.reduce((a, b) => (a.createdAt > b.createdAt ? a : b));
+  if (!headRefOid.startsWith(newest.named.head)) return { action: 'none' };
+  if ((comments ?? []).some((c) => c.body.startsWith(GATE_CLEARED_PREFIX) && c.createdAt > newest.createdAt)) return { action: 'none' };
+
+  const facts = { checks: newest.named.checks, sha: headRefOid, state: integration == null ? ('unreadable' as const) : ('red' as const) };
+  if (integration != null && newest.named.checks.every((n) => integration.get(n) === 'green')) return { action: 'refresh', facts };
+
+  const created = Date.parse(newest.createdAt);
+  const current = now === null ? Number.NaN : Date.parse(now);
+  if (Number.isNaN(created) || Number.isNaN(current)) return { action: 'escalate', facts };
+  const deadline = created + INTEGRATION_RED_HOLD_HOURS * 3_600_000;
+  if (current >= deadline) return { action: 'escalate', facts };
+  return { action: 'hold', facts: { ...facts, escalateAt: new Date(deadline).toISOString() } };
 }
 
 const CYCLE_GRANT_LINE = '### Cycle grant';

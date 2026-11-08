@@ -67,6 +67,36 @@
         { "deploy": { "disposition": "infrastructure", "source": "CLAUDE.md" } }
       ],
       "expected": { "pending": false, "red": [], "green": ["build"], "excused": [], "unmatched": ["deploy"] }
+    },
+    {
+      "function": "integrationChecksOf",
+      "name": "the newest commit's concluded entry decides each check",
+      "input": [
+        { "statusCheckRollup": { "contexts": { "nodes": [{ "__typename": "CheckRun", "name": "test", "status": "COMPLETED", "conclusion": "FAILURE", "startedAt": "2026-01-02T00:00:00Z" }] } } },
+        { "statusCheckRollup": { "contexts": { "nodes": [{ "__typename": "CheckRun", "name": "test", "status": "COMPLETED", "conclusion": "SUCCESS", "startedAt": "2026-01-01T00:00:00Z" }, { "__typename": "CheckRun", "name": "lint", "status": "COMPLETED", "conclusion": "SUCCESS", "startedAt": "2026-01-01T00:00:00Z" }] } } }
+      ],
+      "expected": { "test": "red", "lint": "green" }
+    },
+    {
+      "function": "integrationChecksOf",
+      "name": "a pending newest entry defers to the latest concluded one",
+      "input": [
+        { "statusCheckRollup": { "contexts": { "nodes": [{ "__typename": "CheckRun", "name": "test", "status": "IN_PROGRESS", "conclusion": null, "startedAt": "2026-01-02T00:00:00Z" }] } } },
+        { "statusCheckRollup": { "contexts": { "nodes": [{ "__typename": "CheckRun", "name": "test", "status": "COMPLETED", "conclusion": "FAILURE", "startedAt": "2026-01-01T00:00:00Z" }] } } }
+      ],
+      "expected": { "test": "red" }
+    },
+    {
+      "function": "integrationChecksOf",
+      "name": "a commit with no rollup contributes nothing",
+      "input": [{ "statusCheckRollup": null }, { "statusCheckRollup": { "contexts": { "nodes": [{ "__typename": "StatusContext", "context": "ci/legacy", "state": "SUCCESS", "createdAt": "2026-01-01T00:00:00Z" }] } } }],
+      "expected": { "ci/legacy": "green" }
+    },
+    {
+      "function": "integrationChecksOf",
+      "name": "an absent history is unreadable, never an empty read",
+      "input": null,
+      "expected": null
     }
   ]
 }

@@ -54,6 +54,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       refreshDecision: modules['gates.ts'].refreshDecision,
       capRefreshes: modules['gates.ts'].capRefreshes,
       zeroDiffGate: modules['gates.ts'].zeroDiffGate,
+      integrationRedNames: modules['gates.ts'].integrationRedNames,
+      integrationRedGate: modules['gates.ts'].integrationRedGate,
       cycleCapExceeded: modules['gates.ts'].cycleCapExceeded,
       approvedReverify: modules['gates.ts'].approvedReverify,
       refreshWins: modules['gates.ts'].refreshWins,
@@ -61,6 +63,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       nextDelay: modules['pacing.ts'].nextDelay,
       refreshSweepWrite: modules['writes.ts'].refreshSweepWrite,
       zeroDiffWrite: modules['writes.ts'].zeroDiffWrite,
+      integrationRedEscalationWrite: modules['writes.ts'].integrationRedEscalationWrite,
       cycleCapWrite: modules['writes.ts'].cycleCapWrite,
       approvalWithdrawnWrite: modules['writes.ts'].approvalWithdrawnWrite,
       livenessResetWrite: modules['writes.ts'].livenessResetWrite,
@@ -92,6 +95,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       isConcluded: modules['checks.ts'].isConcluded,
       conclusionOf: modules['checks.ts'].conclusionOf,
       rollupVerdict: modules['checks.ts'].rollupVerdict,
+      integrationChecksOf: modules['checks.ts'].integrationChecksOf,
     };
 
     for (const [file] of Object.entries(families)) {
@@ -305,6 +309,14 @@ function runCase(fn: string, impl: any, input: any): any {
       const checks = raw === undefined ? undefined : zeroDiffChecksOf(raw.contexts, raw.dispositions, raw.now);
       return impl({ reviews: (input.reviews ?? []).map(toReviewNode), comments: input.comments, headRefOid: input.headRefOid, checks });
     }
+    case 'integrationRedNames':
+      return impl(input);
+    case 'integrationRedGate':
+      return impl({ ...input, integration: input.integration === null ? null : new Map(Object.entries(input.integration)) });
+    case 'integrationChecksOf': {
+      const statuses = impl(input);
+      return statuses === undefined ? null : Object.fromEntries(statuses);
+    }
     case 'cycleCapExceeded': {
       const [reviews, cap, comments] = input;
       return impl((reviews ?? []).map(toReviewNode), cap, comments);
@@ -319,6 +331,7 @@ function runCase(fn: string, impl: any, input: any): any {
       return impl(...input);
     case 'refreshSweepWrite':
     case 'zeroDiffWrite':
+    case 'integrationRedEscalationWrite':
     case 'cycleCapWrite':
     case 'approvalWithdrawnWrite':
     case 'livenessResetWrite':

@@ -1,6 +1,6 @@
 // Pure: the statusCheckRollup reduction contract. Reduces to the latest entry per check name,
 // then reads the verdict — never trusting `gh pr checks`'s exit code, never reading an empty rollup as green.
-import type { CheckStatus, ZeroDiffChecks } from './gates.ts';
+import type { CheckStatus, IntegrationStatus, ZeroDiffChecks } from './gates.ts';
 
 /** The union of a CheckRun's and a StatusContext's own fields this module reads — every
  *  field optional, since the two GraphQL types carry different subsets. */
@@ -68,6 +68,26 @@ export function zeroDiffChecksOf(contexts: readonly CheckContext[] | null, dispo
   }
   const verdict = rollupVerdict(contexts, dispositions);
   return { statuses, rollupClear: verdict.red.length === 0 && !verdict.pending, now };
+}
+
+/** One integration-branch commit as the history alias returns it. */
+export interface IntegrationCommit {
+  readonly statusCheckRollup?: { readonly contexts?: { readonly nodes?: readonly CheckContext[] | null } | null } | null;
+}
+
+/** Each check name's latest concluded status across the integration history, newest commit first;
+ *  `undefined` when the history is absent or errored, so an unreadable read is never an empty one. */
+export function integrationChecksOf(history: readonly IntegrationCommit[] | null | undefined): ReadonlyMap<string, IntegrationStatus> | undefined {
+  if (history == null) return undefined;
+  const statuses = new Map<string, IntegrationStatus>();
+  for (const commit of history) {
+    for (const c of reduceRollup(commit.statusCheckRollup?.contexts?.nodes ?? undefined)) {
+      const name = nameOf(c);
+      if (name === null || statuses.has(name) || !isConcluded(c)) continue;
+      statuses.set(name, isGreen(c) ? 'green' : 'red');
+    }
+  }
+  return statuses;
 }
 
 /** A single check's disposition: `blocking` (default — a red conclusion forms a finding and

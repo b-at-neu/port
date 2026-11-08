@@ -70,6 +70,14 @@ export function zeroDiffWrite({ repo, labels, number }: { repo: string; labels: 
   };
 }
 
+/** An `## Integration red` hold outlived its window with a named check still red or unreadable. */
+export function integrationRedEscalationWrite({ repo, labels, number }: { repo: string; labels: Record<string, string>; number: number }): any {
+  return {
+    command: labelEdit({ removeKey: 'readyForReview', addKey: 'needsHuman', number, repo, labels }),
+    why: 'integration red past hold window',
+  };
+}
+
 /** Unconditional — fires at or over `reviewCycleCap` whatever the latest review said. */
 export function cycleCapWrite({ repo, labels, number }: { repo: string; labels: Record<string, string>; number: number }): any {
   return {
@@ -110,7 +118,7 @@ export function livenessResetWrite({
 // A `gh pr edit` branch selector: leading digits, a dash, then the rest of the branch name.
 const BRANCH_SELECTOR_RE = /^\d+-[\w./-]+$/;
 
-/** The four `resolve --decision` answers a human gate accepts. Returns `null` for an
+/** The five `resolve --decision` answers a human gate accepts. Returns `null` for an
  *  unrecognized decision, or an invalid `branch`, or one paired with a plan-review decision. */
 export function gateResolveWrite({
   repo,
@@ -142,6 +150,9 @@ export function gateResolveWrite({
   }
   if (decision === 'back-to-review') {
     return { command: labelEdit({ removeKey: 'needsHuman', addKey: 'readyForReview', number: item, selector, repo, labels }), why: 'gate cleared: back to review' };
+  }
+  if (decision === 'refresh') {
+    return { command: labelEdit({ removeKey: 'needsHuman', addKey: 'refreshBranch', number: item, selector, repo, labels }), why: 'gate cleared: refresh and re-review' };
   }
   return null;
 }
