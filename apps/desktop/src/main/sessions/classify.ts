@@ -5,7 +5,7 @@ import { ACTIVE_WITHIN_MS, IDLE_WITHIN_MS } from '@/types/sessions'
 import type { Activity, PortStageAgent, RoleEvidence, SessionRole } from '@/types/sessions'
 import type { LocalRepoRef } from '@/types/github'
 
-/** The one place this union is declared; pinned against `plugins/port/agents/`'s real basenames. */
+/** The one place this union is declared; pinned against the basenames in both `plugins/port/agents/` (terminal cockpit subagents) and `apps/desktop/stage-prompts/agents/` (the desktop's own stage sessions). */
 export const PORT_STAGE_AGENTS: readonly PortStageAgent[] = ['plan-agent', 'impl-agent', 'review-agent', 'revise-agent']
 
 interface Attribution {

@@ -266,7 +266,7 @@ function SessionLive({ snapshot, repoLabel, paneOpen }: { readonly snapshot: Hos
         {snapshot.phase === 'ended' && snapshot.end !== null ? (
           <EndPanel end={snapshot.end} onNewSession={() => openNewSessionDialog({ kind: 'path', path: snapshot.workspace.root ?? snapshot.workspace.folder })} />
         ) : null}
-        {snapshot.repoId !== null ? <CommandStrip snapshot={snapshot} /> : null}
+        {snapshot.repoId !== null && snapshot.stage === null ? <CommandStrip snapshot={snapshot} /> : null}
         <BackgroundTasksPanel sessionKey={key} tasks={snapshot.backgroundTasks} />
         {interaction !== null && interaction.kind === 'question' ? (
           <QuestionCard questions={interaction.questions} sending={questionSending} error={questionError} onSend={(answers) => void handleQuestionSend(answers)} onSkip={() => void handleQuestionSkip()} />

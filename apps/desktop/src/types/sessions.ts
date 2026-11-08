@@ -4,7 +4,7 @@ import type { TranscriptTailOpen, TranscriptTailPoll, EntryPatch, TranscriptEntr
 import type { RepoId } from '@/utils/repos'
 import type { LocalRepoRef } from '@/types/github'
 
-/** The four port pipeline stage agents, pinned against the real basenames under `plugins/port/agents/`, both directions. */
+/** The four port pipeline stage agents, pinned against the real basenames under `plugins/port/agents/` and `apps/desktop/stage-prompts/agents/`, both directions. */
 export type PortStageAgent = 'plan-agent' | 'impl-agent' | 'review-agent' | 'revise-agent'
 
 export type SessionRole = 'cockpit' | 'implement' | 'other'
