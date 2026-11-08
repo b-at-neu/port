@@ -77,6 +77,7 @@ export function RepositoriesTab() {
   }
 
   return (
+    <div className="contents" {...selection.surfaceProps()}>
     <SettingsCard
       title="Repositories"
       className={WIDE_CARD}
@@ -106,5 +107,6 @@ export function RepositoriesTab() {
         <div>{repositories.map((entry) => <RepoRow key={entry.id} entry={entry} rowProps={selection.rowProps(entry.id)} onOpen={() => openRepo(entry.id)} />)}</div>
       )}
     </SettingsCard>
+    </div>
   )
 }

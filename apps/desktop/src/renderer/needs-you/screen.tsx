@@ -213,6 +213,7 @@ export function NeedsYouScreen() {
 
   return (
     <Screen
+      onMouseDown={selection.surfaceProps().onMouseDown}
       header={
         <ScreenHeader className="justify-between">
           <span>Needs you</span>
@@ -333,7 +334,9 @@ function Row({
         expanded={expanded}
         onToggleExpand={onToggle}
       >
-        <DetailBody item={item} />
+        <div data-keeps-selection>
+          <DetailBody item={item} />
+        </div>
       </NeedsYouItem>
     </div>
   )

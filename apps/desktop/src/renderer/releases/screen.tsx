@@ -288,6 +288,7 @@ export function ReleasesScreen() {
 
   return (
     <Screen
+      onMouseDown={selection.surfaceProps().onMouseDown}
       header={
         <ScreenHeader className="justify-between">
           <span>{RELEASES_TITLE}</span>

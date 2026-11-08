@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clearsOnPress, nextKey, prevKey, reconcile } from '@/renderer/shell/list-selection'
+import { clearsOnPress, clearsOnSurfacePress, nextKey, prevKey, reconcile } from '@/renderer/shell/list-selection'
 
 const KEYS = ['a', 'b', 'c']
 
@@ -48,21 +48,42 @@ describe('prevKey', () => {
 })
 
 describe('clearsOnPress', () => {
-  it('clears on a primary press of the selected row in a toggle list', () => {
-    expect(clearsOnPress(true, 'b', 'b', 0)).toBe(true)
+  it('clears on a primary press of the selected row', () => {
+    expect(clearsOnPress('b', 'b', 0, false)).toBe(true)
   })
 
   it('ignores a secondary or middle press on the selected row', () => {
-    expect(clearsOnPress(true, 'b', 'b', 2)).toBe(false)
-    expect(clearsOnPress(true, 'b', 'b', 1)).toBe(false)
+    expect(clearsOnPress('b', 'b', 2, false)).toBe(false)
+    expect(clearsOnPress('b', 'b', 1, false)).toBe(false)
   })
 
   it('selects as before when the row is not the selected one', () => {
-    expect(clearsOnPress(true, 'a', 'b', 0)).toBe(false)
+    expect(clearsOnPress('a', 'b', 0, false)).toBe(false)
   })
 
-  it('never clears in a list without toggle', () => {
-    expect(clearsOnPress(false, 'b', 'b', 0)).toBe(false)
+  it('keeps the selection when the press lands on a control inside the row', () => {
+    expect(clearsOnPress('b', 'b', 0, true)).toBe(false)
+  })
+})
+
+describe('clearsOnSurfacePress', () => {
+  it('clears on a primary press of blank space while a row is selected', () => {
+    expect(clearsOnSurfacePress('blank', 0, 'a')).toBe(true)
+  })
+
+  it('keeps the selection for every other zone', () => {
+    expect(clearsOnSurfacePress('row', 0, 'a')).toBe(false)
+    expect(clearsOnSurfacePress('keep', 0, 'a')).toBe(false)
+    expect(clearsOnSurfacePress('outside', 0, 'a')).toBe(false)
+  })
+
+  it('ignores a secondary or middle press', () => {
+    expect(clearsOnSurfacePress('blank', 2, 'a')).toBe(false)
+    expect(clearsOnSurfacePress('blank', 1, 'a')).toBe(false)
+  })
+
+  it('does nothing when no row is selected', () => {
+    expect(clearsOnSurfacePress('blank', 0, null)).toBe(false)
   })
 })
 
