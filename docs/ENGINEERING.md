@@ -154,7 +154,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - the Releases screen's own main-process pieces; `config.ts` reads the `release` block at the default ref, never the checked-out file, and fails the read rather than guess
 - `state.ts`'s `resolvePhase` is the one phase derivation, re-run from GitHub on every read and before every `release:run` write, so a half-finished release resumes from wherever it stopped
 - `hook.ts` runs `release.postPublishHook` once through `platform/node`, only when it parses as a plain `node` command, and never retries it — a hook failure is reported beside a publish that already happened
-- fails toward showing less: an unavailable state alias fails the whole status and offers no action, while a failed ticket lookup only costs titles
+- fails toward showing less: an unavailable state alias fails the whole status and offers no action, while a failed later page of the merged-PR read only costs older PRs, with a note
 - no Claude session, no timer — the 60s watch while a PR waits is the renderer's own `refetchInterval`
 
 **`apps/desktop/src/main/runtime/`**

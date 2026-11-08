@@ -42,7 +42,7 @@ const READY_ENTRY = {
 }
 
 function status(phase: ReleasePhase, overrides: Partial<ReleaseStatus> = {}): ReleaseStatus {
-  return { phase, versionSource: 'package', production: 'main', integration: 'dev', currentVersion: '0.2.0', candidates: [], entries: [{ number: 12, title: 'Add dark mode', labels: [], dependency: false }], truncatedNote: null, releases: [], productionHead: 'prod-oid', postPublishHook: 'node scripts/dev-window.ts', readAt: 't', ...overrides }
+  return { phase, versionSource: 'package', production: 'main', integration: 'dev', currentVersion: '0.2.0', sinceTag: 'v0.2.0', entries: [{ number: 12, title: 'Add dark mode', url: 'https://github.com/acme/widgets/pull/12', labels: [], mergedAt: '2026-08-02T00:00:00Z', dependency: false }], truncatedNote: null, releases: [], productionHead: 'prod-oid', postPublishHook: 'node scripts/dev-window.ts', readAt: 't', ...overrides }
 }
 
 interface Calls {

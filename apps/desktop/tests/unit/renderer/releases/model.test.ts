@@ -6,7 +6,7 @@ import { buildReleaseGroup, refetchIntervalFor, staleSinceAt, visibleIssues } fr
 const REPO_ID = 'repo-1' as unknown as RepoId
 
 const STATUS = (kind: ReleaseStatus['phase']['kind']): ReleaseStatus =>
-  ({ phase: kind === 'waiting-merge' ? { kind, version: '0.3.0', releasePr: { number: 1, url: 'u' } } : { kind }, versionSource: 'tags', production: 'main', integration: 'dev', currentVersion: null, candidates: [], entries: [], truncatedNote: null, releases: [], productionHead: null, postPublishHook: null, readAt: 't' }) as ReleaseStatus
+  ({ phase: kind === 'waiting-merge' ? { kind, version: '0.3.0', releasePr: { number: 1, url: 'u' } } : { kind }, versionSource: 'tags', production: 'main', integration: 'dev', currentVersion: null, sinceTag: null, entries: [], truncatedNote: null, releases: [], productionHead: null, postPublishHook: null, readAt: 't' }) as ReleaseStatus
 
 function query(overrides: Partial<ReleaseQueryLike>): ReleaseQueryLike {
   return { status: 'success', data: undefined, isError: false, errorMessage: null, dataUpdatedAt: 0, ...overrides }
