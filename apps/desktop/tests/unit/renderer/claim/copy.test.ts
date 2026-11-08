@@ -65,7 +65,7 @@ describe('dispatchLine', () => {
   })
 
   it('reports a paused repository before reading the dispatcher state', () => {
-    expect(dispatchLine(REPO, status({ runState: 'paused', state: { kind: 'at-capacity', limit: 3, waiting: 1 } }))).toBe('acme/widgets is paused. Run it to start planning.')
+    expect(dispatchLine(REPO, status({ runState: 'paused', state: { kind: 'at-capacity', limit: 3, waiting: 1 } }))).toBe('acme/widgets is stopped. Run it to start planning.')
   })
 
   it('reads the owner before the run state', () => {

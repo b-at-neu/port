@@ -9,6 +9,7 @@ import { selectSession } from '@/renderer/session/actions'
 import { useThemePreference } from '@/renderer/theme/store'
 import { usePaletteState, closePalette, openNewSessionDialog, setPaletteOpen, toggleSidebarCollapsed } from '@/renderer/shell/stores'
 import { useRunStateCommand } from '@/renderer/shell/run-state-command'
+import { displayRunState } from '@/renderer/shell/pipelines-model'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { setSidebarCollapsed } from '@/renderer/shell/prefs'
 
@@ -84,7 +85,7 @@ export function CommandPalette() {
         <CommandSeparator />
         <CommandGroup heading="Pipelines">
           {readyRepos.map((repo) => {
-            const runStateNow = snapshot.data?.runStates.repositories.find((r) => r.repoId === repo.id)?.state ?? 'paused'
+            const runStateNow = displayRunState(snapshot.data, repo.id, sessions.data ?? [])
             return (
               <div key={repo.id}>
                 {runStateNow !== 'dispatching' ? (
@@ -97,7 +98,7 @@ export function CommandPalette() {
                     Run {repo.config.repo}
                   </CommandItem>
                 ) : null}
-                {runStateNow !== 'draining' ? (
+                {runStateNow === 'dispatching' ? (
                   <CommandItem
                     onSelect={() => {
                       runState.drain(repo.id, repo.config.repo)
@@ -107,7 +108,7 @@ export function CommandPalette() {
                     Drain {repo.config.repo}
                   </CommandItem>
                 ) : null}
-                {runStateNow !== 'paused' ? (
+                {runStateNow !== 'stopped' ? (
                   <CommandItem
                     onSelect={() => {
                       const inFlight = snapshot.data?.tick.find((t) => t.repoId === repo.id)?.claims.length ?? 0
@@ -115,7 +116,7 @@ export function CommandPalette() {
                       closePalette()
                     }}
                   >
-                    Pause {repo.config.repo}
+                    Stop {repo.config.repo}
                   </CommandItem>
                 ) : null}
               </div>

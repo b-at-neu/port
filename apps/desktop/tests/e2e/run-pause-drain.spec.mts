@@ -1,4 +1,4 @@
-// Flow 3: Run, pause, and drain a pipeline from the status-pill menu.
+// Flow 3: Run, stop, and drain a pipeline from the status-pill menu.
 import { readFile } from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
 import { assertNoDisallowedCalls, launchE2EApp } from './harness/app.mjs'
@@ -35,12 +35,12 @@ test.afterEach(async ({}) => {
   await harness.close()
 })
 
-test('runs, pauses, and drains a pipeline, with Drain disabled while nothing is in flight', async () => {
+test('runs, stops, and drains a pipeline, with Drain disabled while nothing is in flight', async () => {
   const { app, page } = harness
   const userDataPath = await app.evaluate(({ app: electronApp }: typeof import('electron')) => electronApp.getPath('userData'))
   const dispatchPath = `${userDataPath}/dispatch.json`
 
-  const pill = page.getByRole('button', { name: /^Paused$/ }).first()
+  const pill = page.getByRole('button', { name: /^Stopped$/ }).first()
   await pill.click()
   await expect(page.getByRole('menuitem', { name: 'Drain' })).toHaveAttribute('aria-disabled', 'true')
   await expect(page.getByRole('menuitem', { name: 'Run' })).not.toHaveAttribute('aria-disabled', 'true')
@@ -53,20 +53,26 @@ test('runs, pauses, and drains a pipeline, with Drain disabled while nothing is 
   expect(await dispatchState(dispatchPath)).toBe('dispatching')
 
   await runningPill.click()
-  await page.getByRole('menuitem', { name: 'Pause' }).click()
-  const pausedPill = page.getByRole('button', { name: /^Paused$/ }).first()
-  await expect(pausedPill).toBeVisible({ timeout: CONTROL_SETTLE_MS })
+  await page.getByRole('menuitem', { name: 'Stop' }).click()
+  const stoppedPill = page.getByRole('button', { name: /^Stopped$/ }).first()
+  await expect(stoppedPill).toBeVisible({ timeout: CONTROL_SETTLE_MS })
   expect(await dispatchState(dispatchPath)).toBe('paused')
 
-  await pausedPill.click()
+  await stoppedPill.click()
   await page.getByRole('menuitem', { name: 'Run' }).click()
   await expect(runningPill).toBeVisible({ timeout: CONTROL_SETTLE_MS })
 
   await runningPill.click()
   await page.getByRole('menuitem', { name: 'Drain' }).click()
-  const drainingPill = page.getByRole('button', { name: /^Draining$/ }).first()
-  await expect(drainingPill).toBeVisible({ timeout: CONTROL_SETTLE_MS })
+  const drainedPill = page.getByRole('button', { name: /^Stopped$/ }).first()
+  await expect(drainedPill).toBeVisible({ timeout: CONTROL_SETTLE_MS })
   expect(await dispatchState(dispatchPath)).toBe('draining')
+
+  await drainedPill.click()
+  await expect(page.getByRole('menuitem', { name: 'Drain' })).toHaveAttribute('aria-disabled', 'true')
+  await expect(page.getByRole('menuitem', { name: 'Stop' })).toHaveAttribute('aria-disabled', 'true')
+  await expect(page.getByRole('menuitem', { name: 'Run' })).not.toHaveAttribute('aria-disabled', 'true')
+  await page.keyboard.press('Escape')
 
   const calls = await harness.calls()
   expect(calls.some((call) => call.command === 'claude' && JSON.stringify(call.args) !== JSON.stringify(['--version']))).toBe(false)

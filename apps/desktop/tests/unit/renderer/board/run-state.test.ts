@@ -27,16 +27,16 @@ describe('runStateLineCopy', () => {
 
   it('names the since instant for a paused repository', () => {
     const line = runStateLineCopy(runState({ state: 'paused', since: '2026-01-01T14:02:00.000Z' }), LOADED)
-    expect(line).toContain('Paused since')
+    expect(line).toContain('Stopped since')
     expect(line).toContain('nothing dispatches')
   })
 
   it('reads the new-repository variant when since is null', () => {
-    expect(runStateLineCopy(runState({ state: 'paused', since: null }), LOADED)).toBe('Paused — press Run to start dispatching')
+    expect(runStateLineCopy(runState({ state: 'paused', since: null }), LOADED)).toBe('Stopped — press Run to start dispatching')
   })
 
   it('reads as reading the saved state before load() resolves, regardless of this repository\'s own state', () => {
-    expect(runStateLineCopy(runState({ state: 'dispatching', since: '2026-01-01T00:00:00Z' }), { kind: 'unread' })).toBe('Paused — reading the saved pipeline state…')
+    expect(runStateLineCopy(runState({ state: 'dispatching', since: '2026-01-01T00:00:00Z' }), { kind: 'unread' })).toBe('Stopped — reading the saved pipeline state…')
   })
 
   it('names the message when the store cannot be read, regardless of this repository\'s own state', () => {
@@ -54,12 +54,12 @@ describe('runStateResultNote', () => {
     const note = runStateResultNote({ ok: false, command: 'run', repoId: REPO_ID, reason: 'unwritable', message: 'disk full', path: '/userData/dispatch.json' })
     expect(note).toContain('/userData/dispatch.json')
     expect(note).toContain('disk full')
-    expect(note).toContain("It's still paused")
+    expect(note).toContain("It's still stopped")
   })
 
   it('names the message for a run or drain refused as unreadable', () => {
     const note = runStateResultNote({ ok: false, command: 'run', repoId: REPO_ID, reason: 'unreadable', message: "can't read", path: '/userData/dispatch.json' })
-    expect(note).toContain('Stays paused')
+    expect(note).toContain('Stays stopped')
     expect(note).toContain("can't read")
   })
 

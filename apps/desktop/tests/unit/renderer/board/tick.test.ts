@@ -23,7 +23,7 @@ describe('storeBannerCopy', () => {
 
   it('names the reason and the full path when the file cannot be read', () => {
     expect(storeBannerCopy({ kind: 'unreadable', message: 'boom', path: '/userData/dispatch.json' })).toBe(
-      "Every pipeline is paused — dispatch.json can't be read (boom). Fix or delete /userData/dispatch.json, then run each repository again.",
+      "Every pipeline is stopped — dispatch.json can't be read (boom). Fix or delete /userData/dispatch.json, then run each repository again.",
     )
   })
 })
