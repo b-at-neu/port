@@ -182,7 +182,7 @@ Dark surface lightness (CIE L*): sidebar 6.3 · background 10.7 · card 15.2 · 
 
 Scoping epics and analytics are out of scope for the first release.
 
-**Detail pane rule.** Selecting an item in a list (a ticket, worktree, denial or release) opens it in the right-hand pane instead of navigating away. Esc closes it. Full-page navigation is only for screens and sessions.
+**Detail pane rule.** Selecting an item in a list (a ticket, worktree, denial or release) opens it in the right-hand pane instead of navigating away. Esc closes it. Clicking the selected row again, or empty space on the page, deselects it and closes the pane; clicks on a control, inside the pane, or in a menu or dialog do not. Full-page navigation is only for screens and sessions.
 
 **Board row anatomy, left to right:**
 - ticket number (`muted-foreground`, tabular);

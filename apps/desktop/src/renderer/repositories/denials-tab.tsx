@@ -168,7 +168,7 @@ function DenialsInspector({
   const selectedActorGroup = selectedActor !== null ? (inspection.byActor.find((a) => a.key === selectedActor) ?? null) : null
 
   return (
-    <div className="flex flex-1 overflow-hidden">
+    <div className="flex min-h-full flex-1 overflow-hidden" {...(group === 'command' ? shapeSelection : actorSelection).surfaceProps()}>
       <div className="flex-1 overflow-y-auto">
         <div className="flex flex-col gap-2 px-4 py-3">
           <div className="flex items-center justify-between gap-2 text-small text-muted-foreground">

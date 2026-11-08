@@ -251,7 +251,7 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
         : null
 
   return (
-    <div className="flex flex-1 overflow-hidden">
+    <div className="flex min-h-full flex-1 overflow-hidden" {...selection.surfaceProps()}>
       <div className="flex-1 overflow-y-auto">
         <div className="flex flex-col gap-2 px-4 py-3">
           {report.githubResolution === 'unavailable' ? (
