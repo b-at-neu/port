@@ -82,7 +82,7 @@ interface UseListSelectionOptions {
 }
 
 interface SurfaceProps {
-  onMouseDown(event: MouseEvent<HTMLElement>): void
+  onMouseDown: (event: MouseEvent<HTMLElement>) => void
 }
 
 interface ListSelection {
