@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyHttpStatus, createGitHubClient, createGitHubTransport } from '@/main/platform/github-http'
+import { classifyHttpStatus, createGitHubClient } from '@/main/platform/github-http'
 import type { ConditionalRequest, GitHubHttpResult, GitHubRequest } from '@/types/platform'
 
 type TokenRead = { readonly ok: true; readonly token: string } | Exclude<GitHubHttpResult, { ok: true }>

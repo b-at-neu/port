@@ -29,7 +29,7 @@ export type ConditionalGetResult =
   | { readonly ok: true; readonly outcome: 'not-modified'; readonly headers: Readonly<Record<string, string>>; readonly etag: string }
   | Exclude<GitHubHttpResult, { ok: true }>
 
-export type PipelineItemKind ='issue' | 'pull-request'
+export type PipelineItemKind = 'issue' | 'pull-request'
 
 /** One `reviews` connection node — `commitOid` is flattened at read time so nothing under `main/tick/` ever reaches into a nested GraphQL shape. */
 export interface ReviewNode {
