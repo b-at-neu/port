@@ -320,6 +320,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     const fences: { readonly name: string; readonly fence: string | null }[] = [
       { name: `"Approval withdrawn" (FORMATS.md)`, fence: fenceTextOf(docsText, '### Approval withdrawn') },
       { name: `"Rebase required" (FORMATS.md)`, fence: fenceTextOf(docsText, '### Rebase required') },
+      { name: `"Approval withdrawn" escalation variant (FORMATS.md)`, fence: fenceTextOf(docsText, 'Approval withdrawn — escalation variant') },
+      { name: 'the per-SHA cap escalation (TICK-PROSE.md)', fence: fenceTextOf(skillText, 'Per-SHA cap.') },
       { name: 'the zero-diff escalation (TICK-PROSE.md)', fence: fenceTextOf(skillText, 'zero-diff-<pr>.md') },
       { name: 'the integration-red escalation (TICK-PROSE.md)', fence: fenceTextOf(skillText, 'integration-red-escalation-<pr>.md') },
     ];

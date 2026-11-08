@@ -103,6 +103,14 @@ Every pull request is named by ticket, per "## Numbering".
 1. From the alias's `reviews`, take the newest node whose `body` starts with the literal `## Code Review` — the same predicate the cycle counter uses, so an empty drive-by review is never counted. **None** → dispatch.
 2. Its `commit.oid` differs from `headRefOid` → **dispatch**. Real progress always moves the head.
 3. Equal, **and** the newest `## Gate cleared` comment (from the alias's `comments`) is newer than that review's `submittedAt` → **dispatch, once**. The operator authorized this re-review through `unblock #N`; the next review resets the comparison by construction.
+2a. **Per-SHA cap.** Equal at step 2, count the `## Code Review` nodes whose `commit.oid` equals `headRefOid`. At or above `MAX_REVIEWS_PER_SHA` (2: the original review plus one repeat, the same number `artifacts.mjs audit` fails above) → **do not dispatch**, whatever a `## Gate cleared` or a check-only marker says: the operator override and the check-only recheck share that one repeat, and a review count on a head cannot go down. The way past it is a new head. Write `.temp/sha-cap-<pr>.md`:
+
+   ```
+   ## Pipeline Escalation
+   Cycle <n> was the second review of `<sha>`, the most one head gets. A new head is the way past it.
+   ```
+
+   then comment it, swap `<labels.readyForReview>` for `<labels.needsHuman>` as step 4 does, and announce that #<n>'s pull request hit the per-SHA review cap and that **Back to revision** is the only way forward.
 2b. **Integration-red hold.** Evaluated before steps 1–3, since a first review can be held too. Applies when the newest `## Integration red` comment (from the alias's `comments`) names a head SHA the current `headRefOid` starts with, and no `## Gate cleared` is newer than it — a push, including a refresh, ends the hold by changing the head. Parse its `- `<check>` — ` lines for the named checks, then reduce `integrationHistory` to each check's latest **concluded** status by name, newest commit first, and take the first match:
    - **Every named check is green on `<integration>`** → **do not dispatch review**. Treat the pull request as a Refresh sweep candidate with source `<labels.readyForReview>`, subject to the same-SHA guard and the per-tick cap, but post no `## Rebase required` comment — the refresh is not a conflict. Announce:
 
@@ -137,6 +145,7 @@ Every pull request is named by ticket, per "## Numbering".
    - **Otherwise**, including an unreadable clock → step 4.
 
    The hold keeps the item at `<labels.readyForReview>` because a `<labels.needsHuman>` removal is denied to the cockpit, so a flake that escalated could never clear itself. It re-reviews rather than promoting because only `review-agent` applies `<labels.approved>`. A held tick still counts as work that moves without a human, so the wakeup stays at the floor.
+3c. **Pre-review rerun.** Before any dispatch from steps 1, 3 or 3b, reduce the rollup to the latest entry per check name and consider each `blocking` check except the history-derived one (the job in `.github/workflows/artifacts.yml`). Its `.temp/tick-state.md` `Reran:` entry (`#<pr>@<sha>: <check>@<time>`, one per rerun) counts only when its sha equals `headRefOid`. **A check red on its first attempt, with no entry, whose link is a GitHub Actions job (`/actions/runs/<run>/job/<job>`)** → **do not dispatch**: run `gh run rerun <run-id> --failed --repo <repo>` once per run, record `#<pr>@<sha>: <check>@<clock>` in `Reran:`, and announce that #<n>'s `<check>` failed on its first attempt and was rerun, with review held until it concludes. **A check with an entry that is unconcluded, or whose newest entry started before the recorded time inside 10 minutes of it** → **do not dispatch**, no write, announce the hold. Anything else, including a red StatusContext, a rerun that stayed invisible past 10 minutes, or a rerun that concluded red → dispatch as the step decided. No LLM step and no review cycle is consumed; a lost `Reran:` costs at most one extra rerun per check. `revise-agent`'s check-only re-run stays as the fallback for a check this step cannot rerun.
 4. Otherwise → **do not dispatch**. Write `.temp/zero-diff-<pr>.md` — a `## Pipeline Escalation` body (the same heading `revise-agent`'s rebase escalation uses, with no `### D<n>` blocks, so `unblock #N`'s plain-clear path applies):
 
    ```

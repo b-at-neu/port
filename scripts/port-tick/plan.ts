@@ -5,7 +5,7 @@ import { parseFilesBlock, gateCandidates } from './contention.ts';
 import { rollupVerdict, zeroDiffChecksOf, historyDerivedChecks, preReviewRerun } from './checks.ts';
 import type { RerunRecord } from './checks.ts';
 import { mergeabilityRoute, refreshDecision, capRefreshes, zeroDiffGate, integrationRedGate, cycleCapExceeded, cycleGrantCount, approvedReverify, refreshWins } from './gates.ts';
-import type { IntegrationStatus, ShaCapFacts } from './gates.ts';
+import type { IntegrationStatus } from './gates.ts';
 import { toReviewNode, toCheckContexts, assigneeLoginsOf } from './wire.ts';
 import { refreshSweepWrite, zeroDiffWrite, checkRerunWrite, integrationRedEscalationWrite, cycleCapWrite, approvalWithdrawnWrite, approvalEscalateWrite, strandedRestoreWrite } from './writes.ts';
 import { strandedPullRequests, lastKnownTrigger } from './reconcile.ts';
@@ -145,7 +145,7 @@ export function planReadyForReview(cfg: any, actionable: any, refreshBranchNumbe
       continue;
     }
     if (zd.action === 'escalate') {
-      const capped = zd.reason === 'sha-cap' ? (zd.facts as ShaCapFacts) : null;
+      const capped = zd.reason === 'sha-cap' ? zd.facts : null;
       acc.writes.push(zeroDiffWrite({ repo: cfg.repo, labels: cfg.labels, number: item.number, ...(capped === null ? {} : { reason: 'sha-cap' as const, ...capped }) }));
       acc.announce.push({ kind: 'zero-diff', item: item.number, facts: capped === null ? { reason: 'zero-diff' } : { reason: 'sha-cap', ...capped } });
       continue;

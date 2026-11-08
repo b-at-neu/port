@@ -8,7 +8,7 @@ import type { ReconciledItem } from '@/types/state'
 import type { TickClaim, TickHeld, TickObservation } from '@/types/tick'
 import { approvedReverify, capRefreshes, refreshDecision } from '../../../../../scripts/port-tick/gates'
 
-import { rollupVerdict } from '../../../../../scripts/port-tick/checks'
+import { historyDerivedChecks, rollupVerdict } from '../../../../../scripts/port-tick/checks'
 import type { Disposition } from '../../../../../scripts/port-tick/checks'
 import { REFRESH_PAIR } from '@/main/tick/routing'
 
@@ -73,7 +73,8 @@ function escalationObservations(held: readonly TickHeld[], itemByNumber: Readonl
       const cap = h.escalation?.kind === 'cycle-cap' ? h.escalation.cap : 0
       out.push({ kind: 'cycle-cap', number: h.number, itemKind: h.kind, count, cap })
     } else if (item.headRefOid !== null) {
-      out.push({ kind: 'zero-diff', number: h.number, itemKind: h.kind, count: item.reviewCycleCount ?? 0, headRefOid: item.headRefOid })
+      const reason = h.escalation?.kind === 'zero-diff' ? h.escalation.reason : 'zero-diff'
+      out.push({ kind: 'zero-diff', number: h.number, itemKind: h.kind, reason, count: item.reviewCycleCount ?? 0, headRefOid: item.headRefOid })
     }
   }
   return out
@@ -148,11 +149,11 @@ function withdrawApprovalObservations(items: readonly ReconciledItem[], viewer: 
     if (carries(item, 'refreshBranch') || carries(item, 'refreshing')) continue
     if (item.headRefOid === null) continue
     const verdict = rollupVerdict(item.checkRollup, dispositions)
-    const reverify = approvedReverify({ verdict, mergeable: item.mergeable })
-    if (reverify.action !== 'withdraw') continue
+    const reverify = approvedReverify({ verdict, mergeable: item.mergeable, historyDerived: historyDerivedChecks(dispositions) })
+    if (reverify.action !== 'withdraw' && reverify.action !== 'escalate') continue
     // Enriches each red check with its own url, looked up from the item's own rollup by name.
     const red = reverify.red.map((r) => ({ ...r, url: (item.checkRollup ?? []).find((c) => c.name === r.name)?.url ?? null }))
-    out.push({ kind: 'withdraw-approval', number: item.number, itemKind: item.kind, red, headRefOid: item.headRefOid })
+    out.push({ kind: 'withdraw-approval', number: item.number, itemKind: item.kind, route: reverify.action === 'escalate' ? 'human' : 'revise', red, headRefOid: item.headRefOid })
   }
   return out
 }

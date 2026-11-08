@@ -14,6 +14,7 @@ export interface CheckContext {
   readonly startedAt?: string | null;
   readonly completedAt?: string | null;
   readonly createdAt?: string | null;
+  readonly url?: string | null;
   readonly detailsUrl?: string | null;
 }
 
@@ -153,7 +154,7 @@ export function preReviewRerun({
     if (name === null || excluded.has(name) || dispositions[name]?.disposition === 'infrastructure') continue;
     const at = recorded[name];
     if (at === undefined) {
-      const job = isConcluded(c) && !GREEN.has(conclusionOf(c) ?? '') ? actionsJobOf(c.detailsUrl) : null;
+      const job = isConcluded(c) && !GREEN.has(conclusionOf(c) ?? '') ? actionsJobOf(c.detailsUrl ?? c.url) : null;
       if (job !== null) candidates.push({ check: name, runId: job.runId });
       continue;
     }

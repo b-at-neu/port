@@ -78,6 +78,48 @@ describe('observationWrite — plan-missing', () => {
   })
 })
 
+describe('observationWrite — withdraw-approval route', () => {
+  const vocabulary = customVocabulary({ needsHuman: 'needs human' })
+  const approved = item({ kind: 'pull-request', stage: 'terminal', stages: [{ key: 'approved', name: 'approved', role: 'terminal' }], matchedKeys: ['approved'] })
+  const red = [{ name: 'audit', conclusion: 'FAILURE', url: null }]
+
+  it('a revise route swaps approved for needsRevision with the plain comment', () => {
+    const observation: TickObservation = { kind: 'withdraw-approval', route: 'revise', number: 52, itemKind: 'pull-request', red, headRefOid: 'abc1234' }
+    const plan = observationWrite(observation, approved, vocabulary, 'dev')
+    expect(plan.add).toEqual(['needsRevision'])
+    expect(plan.remove).toEqual(['approved'])
+    expect(plan.comment).not.toContain('instead of revision')
+  })
+
+  it('a human route swaps approved for needsHuman and names the label in the comment', () => {
+    const observation: TickObservation = { kind: 'withdraw-approval', route: 'human', number: 52, itemKind: 'pull-request', red, headRefOid: 'abc1234' }
+    const plan = observationWrite(observation, approved, vocabulary, 'dev')
+    expect(plan.add).toEqual(['needsHuman'])
+    expect(plan.remove).toEqual(['approved'])
+    expect(plan.comment).toMatch(/^## Approval withdrawn\n/)
+    expect(plan.comment).toContain('moved to `needs human` instead of revision. A new head is the way past it.')
+  })
+})
+
+describe('observationWrite — zero-diff reason', () => {
+  const vocabulary = customVocabulary({})
+  const pr = item({ kind: 'pull-request', stage: 'trigger', stages: [{ key: 'readyForReview', name: 'readyForReview', role: 'trigger' }], matchedKeys: ['readyForReview'] })
+
+  it('a sha-cap escalation names the head and that a new head is the way past it', () => {
+    const observation: TickObservation = { kind: 'zero-diff', reason: 'sha-cap', number: 52, itemKind: 'pull-request', count: 3, headRefOid: 'abc1234' }
+    const plan = observationWrite(observation, pr, vocabulary, 'dev')
+    expect(plan.add).toEqual(['needsHuman'])
+    expect(plan.remove).toEqual(['readyForReview'])
+    expect(plan.comment).toContain('Cycle 3 was the second review of `abc1234`, the most one head gets. A new head is the way past it.')
+  })
+
+  it('a plain zero-diff escalation keeps its own comment', () => {
+    const observation: TickObservation = { kind: 'zero-diff', reason: 'zero-diff', number: 52, itemKind: 'pull-request', count: 3, headRefOid: 'abc1234' }
+    const plan = observationWrite(observation, pr, vocabulary, 'dev')
+    expect(plan.comment).toContain('the head has not moved')
+  })
+})
+
 describe('observationWrite — liveness-reset evidence', () => {
   const vocabulary = customVocabulary({})
   const base = item({ stage: 'in-flight', stages: [{ key: 'inProgress', name: 'inProgress', role: 'in-flight' }], matchedKeys: ['inProgress'] })

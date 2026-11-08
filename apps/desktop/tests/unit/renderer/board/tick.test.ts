@@ -80,7 +80,7 @@ describe('heldDetailCopy', () => {
   })
 
   it('names the zero-diff fact for a zero-diff hold (#108)', () => {
-    const held: TickHeld = { number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } }
+    const held: TickHeld = { number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff', reason: 'zero-diff' } }
     expect(heldDetailCopy(held)).toBe('#157 would escalate to needs human — the latest review already covers the current head.')
   })
 
@@ -89,7 +89,7 @@ describe('heldDetailCopy', () => {
     expect(heldDetailCopy(capped, 'app')).toBe('#204 escalating to needs human — cycle 5 reached the cap of 5.')
     expect(heldDetailCopy(capped, 'none')).toBe('#204 would escalate to needs human — cycle 5 reached the cap of 5.')
 
-    const zeroDiff: TickHeld = { number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } }
+    const zeroDiff: TickHeld = { number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff', reason: 'zero-diff' } }
     expect(heldDetailCopy(zeroDiff, 'app')).toBe('#157 escalating to needs human — the latest review already covers the current head.')
     expect(heldDetailCopy(zeroDiff, 'none')).toBe('#157 would escalate to needs human — the latest review already covers the current head.')
   })
@@ -240,10 +240,10 @@ describe('observationDetailCopy', () => {
   it('every write-bearing kind has no detail line of its own here — it already has one from held/stalled above', () => {
     expect(observationDetailCopy({ kind: 'liveness-reset', number: 1, itemKind: 'issue', inFlight: 'inProgress', retryKey: 'ready', evidence: 'ledger' })).toBeNull()
     expect(observationDetailCopy({ kind: 'cycle-cap', number: 2, itemKind: 'pull-request', count: 5, cap: 5 })).toBeNull()
-    expect(observationDetailCopy({ kind: 'zero-diff', number: 3, itemKind: 'pull-request', count: 1, headRefOid: 'abc' })).toBeNull()
+    expect(observationDetailCopy({ kind: 'zero-diff', reason: 'zero-diff', number: 3, itemKind: 'pull-request', count: 1, headRefOid: 'abc' })).toBeNull()
     expect(observationDetailCopy({ kind: 'integration-red', number: 7, itemKind: 'pull-request', checks: ['test'], headRefOid: 'abc' })).toBeNull()
     expect(observationDetailCopy({ kind: 'refresh', number: 4, itemKind: 'pull-request', sourceLabel: 'readyForReview', headRefOid: 'abc', count: 1, cause: 'conflict' })).toBeNull()
     expect(observationDetailCopy({ kind: 'refresh-stuck', number: 5, itemKind: 'pull-request', sourceLabel: 'readyForReview', reason: 'same-sha', sha: 'abc', count: 2 })).toBeNull()
-    expect(observationDetailCopy({ kind: 'withdraw-approval', number: 6, itemKind: 'pull-request', red: [], headRefOid: 'abc' })).toBeNull()
+    expect(observationDetailCopy({ kind: 'withdraw-approval', route: 'revise', number: 6, itemKind: 'pull-request', red: [], headRefOid: 'abc' })).toBeNull()
   })
 })

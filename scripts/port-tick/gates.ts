@@ -62,6 +62,10 @@ export interface ShaCapFacts {
   readonly reviewsOnHead: number;
 }
 
+export type ZeroDiffResult =
+  | { readonly action: ZeroDiffAction; readonly reason?: undefined; readonly facts?: ZeroDiffFacts }
+  | { readonly action: 'escalate'; readonly reason: 'sha-cap'; readonly facts: ShaCapFacts };
+
 /** A reviewed head gets no second cycle unless it moved or a newer `## Gate cleared` authorised one, and never past
  *  `MAX_REVIEWS_PER_SHA`; a check-only block holds then re-reviews once, and a missing `checks` or clock escalates. */
 export function zeroDiffGate({
@@ -74,7 +78,7 @@ export function zeroDiffGate({
   readonly comments: readonly CommentNode[] | undefined;
   readonly headRefOid: string;
   readonly checks?: ZeroDiffChecks;
-}): { readonly action: ZeroDiffAction; readonly reason?: 'sha-cap'; readonly facts?: ZeroDiffFacts | ShaCapFacts } {
+}): ZeroDiffResult {
   const codeReviews = (reviews ?? []).filter((r) => r.body.startsWith(CODE_REVIEW_PREFIX));
   if (codeReviews.length === 0) return { action: 'dispatch' };
 

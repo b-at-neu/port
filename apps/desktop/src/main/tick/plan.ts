@@ -236,7 +236,7 @@ function actionableAndHeld(
       const checks = item.checkRollup === null ? undefined : zeroDiffChecksOf(item.checkRollup, checkDispositions, now.toISOString())
       const gate = zeroDiffGate({ reviews: item.reviews ?? undefined, comments: item.comments ?? undefined, headRefOid: item.headRefOid ?? '', checks })
       if (gate.action === 'escalate') {
-        held.push({ number: item.number, kind: item.kind, trigger, reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } })
+        held.push({ number: item.number, kind: item.kind, trigger, reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff', reason: gate.reason ?? 'zero-diff' } })
         continue
       }
       if (gate.action === 'hold-checks' && gate.facts !== undefined) {

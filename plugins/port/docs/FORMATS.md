@@ -51,6 +51,12 @@ Posted the same tick the cockpit routes an approved pull request back to `<label
 
 Names the check, its conclusion, its link, and the head SHA the conclusion belongs to — the four facts that authorise the removal, so the record stands on its own without the cockpit's own reasoning attached.
 
+**Approval withdrawn — escalation variant.** When the red check is the history-derived `audit-artifacts`, the cockpit routes to `<labels.needsHuman>` instead and appends one line after the per-check lines (the validator accepts extra lines):
+
+```
+This check grades the pull request's own review history, so no revision can change it — moved to `<labels.needsHuman>` instead of revision. A new head is the way past it.
+```
+
 ### Rebase required (cockpit and `review-agent` write it via `--body-file`)
 
 Posted whenever `mergeable` reads `CONFLICTING` — at the cockpit's dispatch gate, at its approved re-verify, or at `review-agent`'s own exit — the moment a pull request is labelled `<labels.refreshBranch>` for this reason. Two lines, no restated context:
