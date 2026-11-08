@@ -8,7 +8,7 @@ import { baseParams, fakeQuery, flush } from '../../../fixtures/hosting/handle'
 
 type CanUseTool = (toolName: string, input: Record<string, unknown>, options: unknown) => Promise<unknown>
 
-const STAGE = { tag: { agent: 'impl', number: 466, kind: 'issue', trigger: 'planApproved' } as const, agentName: 'port:impl-agent', model: 'sonnet', sessionRequiredPaths: ['.claude/**'], editAllow: [] }
+const STAGE = { tag: { agent: 'impl', number: 466, kind: 'issue', trigger: 'planApproved' } as const, agent: { name: 'impl-agent', definition: { description: 'impl', prompt: 'body' } }, instructionsRoot: '/bundle', model: 'sonnet', sessionRequiredPaths: ['.claude/**'], editAllow: [] }
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 const CWD = resolve('/repo')
 

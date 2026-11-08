@@ -100,7 +100,7 @@ describe('createHostedStore', () => {
       return idleQuery()
     }
     const store = createHostedStore(baseDeps({ resolvePluginRequest, readStageEditAllow, getSdk: () => Promise.resolve({ query, renameSession: vi.fn(() => Promise.resolve(undefined)) }) }))
-    const stage = { tag: { agent: 'impl', number: 550, kind: 'issue', trigger: 'planApproved' }, agentName: 'port:impl-agent', model: 'sonnet', sessionRequiredPaths: [] } as const
+    const stage = { tag: { agent: 'impl', number: 550, kind: 'issue', trigger: 'planApproved' }, agent: { name: 'impl-agent', definition: { description: 'impl', prompt: 'body' } }, instructionsRoot: '/bundle', model: 'sonnet', sessionRequiredPaths: [] } as const
     const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE, stage })
     if (!started.ok) throw new Error('unreachable')
     expect(resolvePluginRequest).not.toHaveBeenCalled()
@@ -238,7 +238,7 @@ describe('createHostedStore', () => {
   })
 
   describe('a titled start renames on disk once init reports the id', () => {
-    const STAGE = { tag: { agent: 'review', number: 47, kind: 'pull-request', trigger: 'readyForReview' }, agentName: 'port:review-agent', model: 'sonnet', sessionRequiredPaths: [] } as const
+    const STAGE = { tag: { agent: 'review', number: 47, kind: 'pull-request', trigger: 'readyForReview' }, agent: { name: 'review-agent', definition: { description: 'review', prompt: 'body' } }, instructionsRoot: '/bundle', model: 'sonnet', sessionRequiredPaths: [] } as const
 
     async function startThenInit(params: { readonly stage?: typeof STAGE; readonly initialTitle?: string }, renameSession: () => Promise<undefined>) {
       const box: { deliver: ((message: unknown) => void) | null } = { deliver: null }

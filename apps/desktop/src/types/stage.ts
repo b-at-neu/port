@@ -112,10 +112,33 @@ export type StageRestartResult =
   | { readonly kind: 'label-refused'; readonly reason: string }
   | { readonly kind: 'unknown-stage' }
 
-export type StageInstructionsResult = { readonly ok: true; readonly text: string } | { readonly ok: false; readonly message: string; readonly kind?: 'missing-section' }
+export type StageInstructionsResult = { readonly ok: true; readonly text: string } | { readonly ok: false; readonly message: string }
 
-/** Resolves to the full first message: the dispatch line, the stage context, and the installed plugin's instructions. */
-export type StageInstructionsLoader = (request: StageLaunchRequest, worktreePath: string) => Promise<StageInstructionsResult>
+/** The bundled agent file's `description`, body and tool lists — structurally the SDK's `AgentDefinition` minus `model`, which the stage's own config supplies. */
+export interface StageAgentDefinition {
+  readonly description: string
+  readonly prompt: string
+  readonly tools?: string[]
+  readonly disallowedTools?: string[]
+}
+
+export interface StageBundleRootInput {
+  readonly isPackaged: boolean
+  /** `__dirname` of the running main bundle — `out/main` in both dev and packaged builds. */
+  readonly mainDir: string
+  readonly resourcesPath: string
+}
+
+/** The inline agent a stage session runs as. */
+export interface StageAgentLaunch {
+  readonly name: string
+  readonly definition: StageAgentDefinition
+}
+
+type StageLoadedInstructions = { readonly ok: true; readonly text: string; readonly agent: StageAgentLaunch } | { readonly ok: false; readonly message: string }
+
+/** Resolves to the full first message — the dispatch line, the stage context, and the bundled instructions — and the inline agent definition. */
+export type StageInstructionsLoader = (request: StageLaunchRequest, worktreePath: string) => Promise<StageLoadedInstructions>
 
 export interface StageResumeRequest {
   readonly entry: InterruptedStage

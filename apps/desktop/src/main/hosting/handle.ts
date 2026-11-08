@@ -1,4 +1,5 @@
 import type { ProjectedDelta, ContentBlock } from '@/types/hosting'
+import type { StageAgentLaunch } from '@/types/stage'
 import type { ExpectedComponents, UsageReading, PluginRequest } from '@/types/hosting-plugin'
 
 // One hosted session: builds options, opens the query, runs the pump loop. The ring
@@ -80,7 +81,7 @@ interface CreateHostedHandleParams {
   /** Read before spawn and kept frozen on the handle for its whole life. */
   readonly history: SessionHistory
   /** Non-null only for a stage session: carried on the snapshot, drives `buildSessionOptions`'s stage branch, and builds the `stagePolicy` the permission broker consults first. */
-  readonly stage: { readonly tag: StageTag; readonly agentName: string; readonly model: string; readonly sessionRequiredPaths: readonly string[]; readonly editAllow: readonly string[]; readonly onDeny?: (toolName: string, input: Readonly<Record<string, unknown>>) => void } | null
+  readonly stage: { readonly tag: StageTag; readonly agent: StageAgentLaunch; readonly instructionsRoot: string; readonly model: string; readonly sessionRequiredPaths: readonly string[]; readonly editAllow: readonly string[]; readonly onDeny?: (toolName: string, input: Readonly<Record<string, unknown>>) => void } | null
 }
 
 interface HostedSendResult {
@@ -129,7 +130,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     canUseTool: broker.canUseTool,
     plugin: params.plugin,
     defaults: params.defaults,
-    stage: params.stage !== null ? { agentName: params.stage.agentName, model: params.stage.model } : null,
+    stage: params.stage !== null ? { agent: params.stage.agent, instructionsRoot: params.stage.instructionsRoot, model: params.stage.model } : null,
   })
   const startedAt = new Date(params.now()).toISOString()
   const projector = createSessionProjector({ cwd: params.cwd })

@@ -16,8 +16,9 @@ export default async function ({ expect }: Reporter) {
 
   const paragraphs = new Map<string, string | null>();
   for (const stage of STAGES) {
-    const rel = `plugins/port/agents/${stage}-agent.md`;
-    paragraphs.set(rel, paragraphOf(readFileSync(join(root, rel), 'utf8')));
+    for (const rel of [`plugins/port/agents/${stage}-agent.md`, `apps/desktop/stage-prompts/agents/${stage}-agent.md`]) {
+      paragraphs.set(rel, paragraphOf(readFileSync(join(root, rel), 'utf8')));
+    }
   }
 
   const canonical = paragraphs.get('plugins/port/agents/impl-agent.md') ?? null;

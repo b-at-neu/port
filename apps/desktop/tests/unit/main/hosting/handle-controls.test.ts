@@ -53,7 +53,7 @@ describe('setControls / answerQuestion / answerPlan', () => {
 })
 
 describe('a stage session pins the default permission mode at runtime', () => {
-  const STAGE = { tag: { agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved' } as const, agentName: 'port:impl-agent', model: 'sonnet', sessionRequiredPaths: [], editAllow: [] }
+  const STAGE = { tag: { agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved' } as const, agent: { name: 'impl-agent', definition: { description: 'impl', prompt: 'body' } }, instructionsRoot: '/bundle', model: 'sonnet', sessionRequiredPaths: [], editAllow: [] }
 
   it('calls setPermissionMode("default") once at start', () => {
     const fake = fakeQuery()

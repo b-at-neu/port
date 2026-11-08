@@ -273,6 +273,7 @@ export function registerIpc(): RegisteredIpc {
     registry: stageRegistry,
     onOutcome: (repoId, sessionKey, outcome) => dispatcherRef?.recordOutcome(repoId, sessionKey, outcome),
     onDenial: (repoId, denial) => dispatcherRef?.recordDenial(repoId, denial),
+    bundle: { isPackaged: app.isPackaged, mainDir: __dirname, resourcesPath: process.resourcesPath },
   })
   const hostingChannelDeps = defaultHostingChannelDeps(hostedStore, sessionIndex, {
     git: (args, cwd) => git(args, { cwd }),
