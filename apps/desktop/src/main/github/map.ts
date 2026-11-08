@@ -1,6 +1,7 @@
 // Nodes → PipelineItem. matchedKeys is bucketed here, client-side, against the resolved vocabulary.
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
-import type { CheckContext, IssueCommentNode, ItemDetail, ItemState, LabelEventNode, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, ReviewNode } from '@/types/github'
+import { integrationChecksOf } from '../../../../../scripts/port-tick/checks'
+import type { CheckContext, IntegrationChecks, IssueCommentNode, ItemDetail, ItemState, LabelEventNode, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, ReviewNode } from '@/types/github'
 import { toBlockerRead } from '@/main/github/blockers'
 
 interface ConnectionLike {
@@ -91,6 +92,11 @@ function checkRollupOf(node: RawNode): readonly CheckContext[] | null {
   const firstCommit = commitNodes[0]
   const commit = typeof firstCommit === 'object' && firstCommit !== null ? (firstCommit as Record<string, unknown>).commit : undefined
   const rollup = typeof commit === 'object' && commit !== null ? (commit as Record<string, unknown>).statusCheckRollup : undefined
+  return contextsOf(rollup)
+}
+
+/** One `statusCheckRollup`'s flattened contexts; `[]` when it carries none. */
+function contextsOf(rollup: unknown): readonly CheckContext[] {
   const rollupObj = typeof rollup === 'object' && rollup !== null ? (rollup as Record<string, unknown>) : undefined
   const contexts = asConnection(rollupObj?.contexts)
   const contextNodes = contexts?.nodes
@@ -113,6 +119,19 @@ function checkRollupOf(node: RawNode): readonly CheckContext[] | null {
     })
   }
   return out
+}
+
+/** The `integrationHistory` ref alias, reduced to each check's latest concluded status newest commit first. `null` when the ref is absent or has no history, so an unreadable read is never an empty one. */
+export function toIntegrationChecks(ref: unknown): IntegrationChecks | null {
+  const target = typeof ref === 'object' && ref !== null ? (ref as Record<string, unknown>).target : undefined
+  const history = typeof target === 'object' && target !== null ? asConnection((target as Record<string, unknown>).history) : undefined
+  if (!Array.isArray(history?.nodes)) return null
+  const commits = (history.nodes as readonly unknown[]).map((node) => {
+    const rollup = typeof node === 'object' && node !== null ? (node as Record<string, unknown>).statusCheckRollup : undefined
+    return { statusCheckRollup: { contexts: { nodes: contextsOf(rollup) } } }
+  })
+  const statuses = integrationChecksOf(commits)
+  return statuses === undefined ? null : Object.fromEntries(statuses)
 }
 
 /** The `## Gate cleared` carve-out's own evidence, the same shape `reviewNodesOf` establishes. */

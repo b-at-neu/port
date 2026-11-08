@@ -76,6 +76,7 @@ export function repositoryState(
     },
     worktreeTotals: { registered: 0, attached: 0, uncorrelated: 0 },
     viewer: 'op',
+    integrationChecks: {},
     approvalGate: true,
     disabled: [],
     concurrency: { sharedFiles: [], overlapThreshold: 2 },

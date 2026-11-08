@@ -107,11 +107,11 @@ Every pull request is named by ticket, per "## Numbering".
    - **Every named check is green on `<integration>`** → **do not dispatch review**. Treat the pull request as a Refresh sweep candidate with source `<labels.readyForReview>`, subject to the same-SHA guard and the per-tick cap, but post no `## Rebase required` comment — the refresh is not a conflict. Announce:
 
      > 🔄 #157's pull request: `dev` is green again on `test`, which held it. Refreshing it onto `dev` so review resumes on a head that includes the fix.
-   - **The clock is at or past the comment's `createdAt` plus 24 hours, or either is unreadable** → **do not dispatch**. Write `.temp/integration-red-escalation-<pr>.md` — a `## Pipeline Escalation` body with no `### D<n>` blocks, naming the checks, the `<integration>` SHA they were red on, and the elapsed window:
+   - **The clock is at or past the comment's `createdAt` plus 24 hours, or either is unreadable** → **do not dispatch**. Write `.temp/integration-red-escalation-<pr>.md` — a `## Pipeline Escalation` body with no `### D<n>` blocks, naming the checks (each backtick-quoted, comma-separated) and the head SHA:
 
      ```
      ## Pipeline Escalation
-     `<integration>` has stayed red on `<check>` at `<integration-sha>` for <hours> hours, so review of `<head-sha>` never resumed.
+     `<integration>` stayed red on <checks> for 24 hours, so review of `<head-sha>` never resumed.
      The failure is not from this diff. Fix `<integration>`, then refresh the branch.
      ```
 

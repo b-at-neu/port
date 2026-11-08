@@ -48,15 +48,15 @@ describe('createSourceCache', () => {
 describe('refreshGithub — Decision 4', () => {
   it('a failing attempt keeps the previous good fetch in the cache', async () => {
     const cache = createSourceCache()
-    await refreshGithub(cache, { repoId: REPO_1, repo: REPO, vocabulary: VOCAB, worktreeEntries: [], agents: [], github: () => Promise.resolve(okGh()) })
-    const outcome = await refreshGithub(cache, { repoId: REPO_1, repo: REPO, vocabulary: VOCAB, worktreeEntries: [], agents: [], github: () => Promise.resolve(failGh()) })
+    await refreshGithub(cache, { repoId: REPO_1, repo: REPO, vocabulary: VOCAB, integration: 'dev', worktreeEntries: [], agents: [], github: () => Promise.resolve(okGh()) })
+    const outcome = await refreshGithub(cache, { repoId: REPO_1, repo: REPO, vocabulary: VOCAB, integration: 'dev', worktreeEntries: [], agents: [], github: () => Promise.resolve(failGh()) })
     expect(outcome.ok).toBe(false)
     expect(cache.github.get(REPO_1)?.ok).toBe(true)
   })
 
   it('a never-succeeded source projects its own failure, never an empty read', async () => {
     const cache = createSourceCache()
-    await refreshGithub(cache, { repoId: REPO_1, repo: REPO, vocabulary: VOCAB, worktreeEntries: [], agents: [], github: () => Promise.resolve(failGh()) })
+    await refreshGithub(cache, { repoId: REPO_1, repo: REPO, vocabulary: VOCAB, integration: 'dev', worktreeEntries: [], agents: [], github: () => Promise.resolve(failGh()) })
     expect(cache.github.get(REPO_1)?.ok).toBe(false)
   })
 
@@ -67,6 +67,7 @@ describe('refreshGithub — Decision 4', () => {
       repoId: REPO_1,
       repo: REPO,
       vocabulary: VOCAB,
+      integration: 'dev',
       worktreeEntries: [],
       agents: [],
       github: (request) => {

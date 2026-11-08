@@ -135,6 +135,15 @@ export function buildItemDetailsQuery(refs: readonly ItemDetailRef[]): ItemDetai
   return { document, aliases }
 }
 
+const INTEGRATION_HISTORY_SIZE = 5
+
+/** The integration branch's recent commits with their rollups — the same selection `scripts/port-tick/query.ts` reads, for the integration-red gate. */
+export function buildIntegrationChecksQuery(integration: string): string {
+  const contexts = `contexts(first: 50) { nodes { __typename ... on CheckRun { name conclusion status startedAt completedAt detailsUrl } ... on StatusContext { context state createdAt targetUrl } } }`
+  const ref = `ref(qualifiedName: ${graphqlStringLiteral(`refs/heads/${integration}`)}) { target { ... on Commit { history(first: ${INTEGRATION_HISTORY_SIZE}) { nodes { oid statusCheckRollup { ${contexts} } } } } } }`
+  return ['query($owner: String!, $name: String!) {', '  repository(owner: $owner, name: $name) {', `    integrationHistory: ${ref}`, '  }', '  rateLimit { cost remaining resetAt limit }', '}'].join('\n')
+}
+
 interface ItemsByNumberAlias {
   readonly alias: string
   readonly number: number

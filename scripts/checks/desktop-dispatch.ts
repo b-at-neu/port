@@ -291,7 +291,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     } else expect(!(writeIdx < ownerGateIdx), 'desktop-dispatch', `${dispatcherFile} references deps.writeObservation before its own owner !== 'app' stand-down — the observation pass must run only once this app owns dispatch`);
   }
 
-  // pin: `main/dispatch/observation.ts`'s comment templates ↔ `FORMATS.md`'s "Approval withdrawn"/"Rebase required" fences and `TICK-PROSE.md`'s zero-diff escalation fence
+  // pin: `main/dispatch/observation.ts`'s comment templates ↔ `FORMATS.md`'s "Approval withdrawn"/"Rebase required" fences and `TICK-PROSE.md`'s zero-diff and integration-red escalation fences
   {
     const observationFile = `${mainDispatchDir}/observation.ts`;
     const observationText = readFileSync(join(root, observationFile), 'utf8');
@@ -321,6 +321,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
       { name: `"Approval withdrawn" (FORMATS.md)`, fence: fenceTextOf(docsText, '### Approval withdrawn') },
       { name: `"Rebase required" (FORMATS.md)`, fence: fenceTextOf(docsText, '### Rebase required') },
       { name: 'the zero-diff escalation (TICK-PROSE.md)', fence: fenceTextOf(skillText, 'zero-diff-<pr>.md') },
+      { name: 'the integration-red escalation (TICK-PROSE.md)', fence: fenceTextOf(skillText, 'integration-red-escalation-<pr>.md') },
     ];
 
     let violated = false;

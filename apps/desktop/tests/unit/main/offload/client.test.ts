@@ -53,7 +53,7 @@ describe('createWorkerEngine', () => {
 
   it('a crash settles every pending request into its failure shape, and the next call respawns', async () => {
     const { engine, workers } = setup()
-    const refresh = engine.refreshGithub({ repoId: 'r' as never, repo: { owner: 'o', name: 'n' }, vocabulary: {} as never })
+    const refresh = engine.refreshGithub({ repoId: 'r' as never, repo: { owner: 'o', name: 'n' }, vocabulary: {} as never, integration: 'dev' })
     const scan = engine.scanSessions({ repos: [] })
     const projection = engine.project({ repositories: [] })
     workers[0]!.crash('out of memory')

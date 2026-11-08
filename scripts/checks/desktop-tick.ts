@@ -229,9 +229,19 @@ export default async function ({ expect, fail, ok }: Reporter) {
         engine: () => writesModule.zeroDiffWrite({ repo: 'o/r', labels: identityLabels, number: 1 }),
       },
       {
+        name: 'integration-red',
+        app: () => observationModule.observationWrite({ kind: 'integration-red', number: 1, itemKind: 'pull-request', checks: ['test'], headRefOid: 'abc' }, baseItem, identityVocabulary, 'dev'),
+        engine: () => writesModule.integrationRedEscalationWrite({ repo: 'o/r', labels: identityLabels, number: 1 }),
+      },
+      {
         name: 'refresh',
-        app: () => observationModule.observationWrite({ kind: 'refresh', number: 1, itemKind: 'pull-request', sourceLabel: 'readyForReview', headRefOid: 'abc', count: 1 }, baseItem, identityVocabulary, 'dev'),
+        app: () => observationModule.observationWrite({ kind: 'refresh', number: 1, itemKind: 'pull-request', sourceLabel: 'readyForReview', headRefOid: 'abc', count: 1, cause: 'conflict' }, baseItem, identityVocabulary, 'dev'),
         engine: () => writesModule.refreshSweepWrite({ repo: 'o/r', labels: identityLabels, candidate: { number: 1, sourceLabelKey: 'readyForReview' }, decision: { action: 'refresh' } }),
+      },
+      {
+        name: 'refresh (integration-green)',
+        app: () => observationModule.observationWrite({ kind: 'refresh', number: 1, itemKind: 'pull-request', sourceLabel: 'readyForReview', headRefOid: 'abc', count: 1, cause: 'integration-green' }, baseItem, identityVocabulary, 'dev'),
+        engine: () => writesModule.refreshSweepWrite({ repo: 'o/r', labels: identityLabels, candidate: { number: 1, sourceLabelKey: 'readyForReview', reason: 'integration-green' }, decision: { action: 'refresh' } }),
       },
       {
         name: 'refresh-stuck',

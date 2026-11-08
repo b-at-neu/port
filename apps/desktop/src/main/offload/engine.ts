@@ -27,11 +27,11 @@ export function createInProcessEngine(params: InProcessEngineParams = {}): State
     refreshSessions: ({ repos }) => refreshSessions(cache, { repos, reader: params.sessionReader, claudeHome: params.claudeHome, now }),
     refreshWorktrees: ({ repoId, repoRoot }) => refreshWorktrees(cache, { repoId, repoRoot, git: params.git, now }),
     refreshDenials: ({ repoId, repoRoot }) => refreshDenials(cache, { repoId, repoRoot, git: params.git, now }),
-    refreshGithub: ({ repoId, repo, vocabulary }) => {
+    refreshGithub: ({ repoId, repo, vocabulary, integration }) => {
       const worktrees = cache.worktrees.get(repoId)
       const worktreeEntries = worktrees?.ok ? worktrees.entries : []
       const agents = cache.sessions?.ok ? cache.sessions.agents.filter((agent) => agent.repoId === repoId) : []
-      return refreshGithub(cache, { repoId, repo, vocabulary, worktreeEntries, agents, github: params.github, now })
+      return refreshGithub(cache, { repoId, repo, vocabulary, integration, worktreeEntries, agents, github: params.github, now })
     },
     project: ({ repositories }) => Promise.resolve(projectFromCache(cache, repositories, now)),
     scanSessions: ({ repos }) => readSessionState({ repos, reader: params.sessionReader, claudeHome: params.claudeHome, now }),

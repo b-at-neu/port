@@ -25,7 +25,7 @@ function contendedPathList(paths: readonly string[]): string {
 
 /** `owner` defaults to `'none'` — every pre-#292 caller (and test) reads
  *  exactly as before. While this app itself owns dispatch, the held reasons
- *  it actually writes (#292: cycle-cap, zero-diff, conflicting) read in the
+ *  it actually writes (cycle-cap, zero-diff, integration-red, conflicting) read in the
  *  present tense rather than "would …" — plan's own **UX states**, "Tick
  *  strip hover". */
 export function heldDetailCopy(held: TickHeld, owner: DispatchOwner = 'none'): string {
@@ -69,6 +69,21 @@ export function heldDetailCopy(held: TickHeld, owner: DispatchOwner = 'none'): s
       const escalation = at === null || Number.isNaN(at.getTime()) ? '' : `; it escalates to needs human at ${at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} if ${many ? 'they stay' : 'it stays'} red`
       return `#${n} held — ${names} ${many ? 'are' : 'is'} still red on the reviewed head. ${rerun}${escalation}.`
     }
+    case 'integration-red': {
+      const e = held.escalation
+      // Defensive: `planTick` never emits `reason: 'integration-red'` without a populated `escalation` of the same kind.
+      if (e === null || e.kind !== 'integration-red') return `#${n} held — the integration branch is red.`
+      const names = e.checks.map((name) => `\`${name}\``).join(', ')
+      if (e.expired) return `#${n} ${byApp ? 'escalating' : 'would escalate'} to needs human — the integration branch stayed red on ${names} past the hold window.`
+      const at = e.escalateAt === null ? null : new Date(e.escalateAt)
+      const escalation = at === null || Number.isNaN(at.getTime()) ? '' : `; it escalates to needs human at ${at.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })} if it stays red`
+      const reason = e.state === 'unreadable' ? "the integration branch's checks couldn't be read" : `the integration branch is red on ${names}`
+      return `#${n} held — ${reason}, so review would only repeat it. It's refreshed once the integration branch is green${escalation}.`
+    }
+    case 'integration-green':
+      return byApp
+        ? `#${n} held — the integration branch is green again, so this app is refreshing it (rebase + force-push) to resume review.`
+        : `#${n} held — the integration branch is green again. The cockpit's refresh sweep rebases it; this app doesn't.`
     case 'refresh-wins':
       return `#${n} held — a branch refresh claims it (refresh branch).`
     case 'conflicting':
@@ -144,6 +159,7 @@ export function observationDetailCopy(observation: TickObservation): string | nu
     case 'liveness-reset':
     case 'cycle-cap':
     case 'zero-diff':
+    case 'integration-red':
     case 'refresh':
     case 'refresh-stuck':
     case 'withdraw-approval':

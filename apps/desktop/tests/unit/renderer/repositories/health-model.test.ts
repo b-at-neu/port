@@ -56,6 +56,7 @@ function readyState(vocabulary: LabelVocabulary, verdict: ReturnType<typeof veri
     },
     worktreeTotals: null,
     viewer: 'octo-dev',
+    integrationChecks: {},
     approvalGate: true,
     disabled: [],
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
