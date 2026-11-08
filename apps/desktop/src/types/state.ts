@@ -249,6 +249,11 @@ export interface RefreshOutcome {
   readonly failureKind?: PipelineFailureKind | null
 }
 
+/** `changed` is false for a 304 and for the first, cache-priming 200. */
+export type GithubPrecheckOutcome =
+  | { readonly ok: true; readonly at: string; readonly changed: boolean }
+  | { readonly ok: false; readonly at: string; readonly error: string }
+
 export interface SourceCache {
   readonly github: Map<RepoId, PipelineFetch>
   /** Keyed with the fetch it belongs to, never independently schedulable — `SOURCE_KINDS` deliberately excludes `itemStates`. */

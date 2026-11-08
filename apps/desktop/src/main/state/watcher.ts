@@ -3,12 +3,13 @@ import type { PipelineState, RefreshOutcome } from '@/types/state'
 import type { StateEngine } from '@/types/offload'
 
 // The only clock in main — one timer, rescheduled to the earliest `nextDueAt`. `schedule.ts` decides *when*; this file is the only place under `src/main/` allowed to name `setTimeout`.
-import type { GitHubTransport } from '@/types/platform'
+import type { ConditionalTransport, GitHubTransport } from '@/types/platform'
 import type { GitRunner } from '@/types/platform'
+import type { RateLimitInfo } from '@/types/github'
 import { readSessionState } from '@/main/sessions/adapter'
 import type { RepoId } from '@/utils/repos'
 import type { RepositoryEntry } from '@/utils/repos'
-import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth, isDeferred } from '@/types/board'
+import { DEFAULT_POLL_POLICY, GITHUB_PRECHECK_INTERVAL_MS, SOURCE_KINDS, initialHealth, isDeferred } from '@/types/board'
 import type { BoardSnapshot, RepositoryHealth, SourceHealth, SourceKind } from '@/types/board'
 import type { RepoDispatchStatus, RunStatesSnapshot } from '@/types/dispatch'
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
@@ -22,6 +23,7 @@ import type { RecordTickDeps } from '@/types/trajectory'
 import { isReady } from '@/main/state/read'
 import { afterFailure, afterSuccess, budgetedIntervalMs, deferredUntil, dueSources, nextDueAt } from '@/main/state/schedule'
 import { createInProcessEngine } from '@/main/offload/engine'
+import { createGithubPrecheck } from '@/main/state/precheck'
 
 import type { PipelineWatcher, RefreshRequest, TimerFactory, TimerHandle } from '@/types/state'
 
@@ -42,6 +44,8 @@ interface CreatePipelineWatcherParams {
   /** Owns the source cache and every CPU-bound read. Defaults to an in-process engine built from `github`/`git`/`sessionReader`/`claudeHome`, which the worker-backed one replaces in production. */
   readonly engine?: StateEngine
   readonly github?: GitHubTransport
+  /** Used by the default engine's issues-list pre-check; tests inject one so a clock past 10s never reaches the network. */
+  readonly conditional?: ConditionalTransport
   readonly git?: GitRunner
   readonly sessionReader?: Parameters<typeof readSessionState>[0]['reader']
   readonly claudeHome?: string
@@ -86,8 +90,10 @@ function isForced(request: RefreshRequest | undefined, kind: SourceKind, repoId?
 export function createPipelineWatcher(params: CreatePipelineWatcherParams): PipelineWatcher {
   const now = params.now ?? (() => new Date())
   const setTimer = params.setTimer ?? defaultSetTimer
-  const engine = params.engine ?? createInProcessEngine({ github: params.github, git: params.git, sessionReader: params.sessionReader, claudeHome: params.claudeHome, now })
+  const engine = params.engine ?? createInProcessEngine({ github: params.github, conditional: params.conditional, git: params.git, sessionReader: params.sessionReader, claudeHome: params.claudeHome, now })
+  const precheck = createGithubPrecheck({ engine, now })
   const githubCost = new Map<RepoId, number>()
+  const githubRateLimit = new Map<RepoId, RateLimitInfo>()
   let projections: Promise<unknown> = Promise.resolve()
   const health = new Map<RepoId, RepositoryHealth>()
   let sessionsHealth: SourceHealth = initialHealth('sessions')
@@ -144,6 +150,8 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     for (const entry of readyEntries) {
       const h = ensureHealth(entry.id)
       candidates.push(nextDueAt(h.github, now()).getTime(), nextDueAt(h.worktrees, now()).getTime(), nextDueAt(h.denials, now()).getTime())
+      const precheckAt = precheck.nextDueAt(entry.id, h.github, sweepGapMs(entry.id))
+      if (precheckAt !== null) candidates.push(precheckAt.getTime())
     }
     return new Date(Math.min(...candidates))
   }
@@ -235,6 +243,13 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     })
   }
 
+  /** The least time between sweeps a pre-check may trigger: the same budget math as the regular interval, minus its 60s floor. */
+  function sweepGapMs(repoId: RepoId): number {
+    const rateLimit = githubRateLimit.get(repoId)
+    if (rateLimit === undefined) return GITHUB_PRECHECK_INTERVAL_MS
+    return budgetedIntervalMs({ costs: githubCosts(), rateLimit, now: now(), floorMs: GITHUB_PRECHECK_INTERVAL_MS })
+  }
+
   function track(key: string, read: Promise<void>): Promise<void> {
     const tracked = read.finally(() => {
       if (active.get(key) === tracked) active.delete(key)
@@ -268,7 +283,9 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     } else if (kind === 'denials') {
       outcome = await engine.refreshDenials({ repoId: entry.id, repoRoot: entry.path })
     } else {
+      const startedAt = now().toISOString()
       outcome = await engine.refreshGithub({ repoId: entry.id, repo: repoRefOf(entry), vocabulary: entry.config.vocabulary, integration: entry.config.branches.integration })
+      precheck.settled(entry.id, startedAt, outcome.ok)
     }
     const current = ensureHealth(entry.id)
     const previous = current[kind]
@@ -277,6 +294,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       updated = afterSuccess(previous, kind, now())
       if (kind === 'github') {
         if (outcome.rateLimit) githubCost.set(entry.id, outcome.rateLimit.cost)
+        if (outcome.rateLimit) githubRateLimit.set(entry.id, outcome.rateLimit)
         if (outcome.rateLimit) updated = { ...updated, intervalMs: budgetedIntervalMs({ costs: githubCosts(), rateLimit: outcome.rateLimit, now: now() }) }
         // A known reset instant always beats a doubled guess, even on a success whose own window reports low headroom.
         const defer = deferredUntil(outcome.rateLimit ?? null, null)
@@ -329,6 +347,10 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
         if (kind === 'sessions' || !isForced(request, kind, entry.id)) continue
         if (kind === 'github' && isDeferred(entryHealth.github, now())) continue
         toRun.add(kind)
+      }
+      if (!toRun.has('github')) {
+        await precheck.run({ repoId: entry.id, repo: repoRefOf(entry) }, entryHealth.github)
+        if (precheck.wantsSweep(entry.id, ensureHealth(entry.id).github, sweepGapMs(entry.id))) toRun.add('github')
       }
       const ordered = [...toRun].filter((kind) => kind !== 'sessions').sort((a, b) => (a === 'github' ? 1 : b === 'github' ? -1 : 0))
       for (const kind of ordered) {

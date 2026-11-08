@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // The E2E harness's fake gh/git/node/claude. Plain Node, no deps.
+import { createHash } from 'node:crypto'
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
 
 const [, , command, ...args] = process.argv
@@ -246,9 +247,18 @@ function answerGraphQL(document) {
   return JSON.stringify({ data })
 }
 
+// The issues-list pre-check: the ETag hashes the whole scripted state, so any scripted change moves it.
+function answerIssuesList(request) {
+  const etag = `"${createHash('sha1').update(JSON.stringify(loadState())).digest('hex')}"`
+  const notModified = request.ifNoneMatch === etag
+  process.stdout.write(JSON.stringify({ status: notModified ? 304 : 200, headers: { etag }, body: notModified ? '' : '[]' }))
+  return process.exit(0)
+}
+
 // `gh e2e-http <request JSON>`: the app's HTTP transport sends its read here instead of the network.
 function handleHttp() {
   const request = JSON.parse(args[1] ?? '{}')
+  if (request.method === 'GET' && /^repos\/[^/]+\/[^/]+\/issues\?/.test(request.path)) return answerIssuesList(request)
   if (request.method !== 'POST' || request.path !== 'graphql') return unscripted()
   const body = answerGraphQL(JSON.parse(request.body).query)
   process.stdout.write(JSON.stringify({ status: 200, headers: {}, body }))

@@ -2,7 +2,7 @@ import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { LocalRepoRef } from '@/types/github'
 import type { ListSessionsResult, OpenTailParams, PollTailParams, CloseTailParams, SessionScan } from '@/types/sessions'
-import type { PipelineState, RefreshOutcome } from '@/types/state'
+import type { GithubPrecheckOutcome, PipelineState, RefreshOutcome } from '@/types/state'
 import type { RunSearchParams, SearchResult } from '@/types/search'
 import type { TranscriptTailOpen, TranscriptTailPoll } from '@/utils/sessions/transcript'
 
@@ -34,6 +34,7 @@ export interface StateEngine {
   refreshWorktrees(params: RepoRoot): Promise<RefreshOutcome>
   refreshDenials(params: RepoRoot): Promise<RefreshOutcome>
   refreshGithub(params: GithubParams): Promise<RefreshOutcome>
+  precheckGithub(params: Pick<GithubParams, 'repoId' | 'repo'>): Promise<GithubPrecheckOutcome>
   project(params: { readonly repositories: readonly RepositoryEntry[] }): Promise<PipelineState>
   scanSessions(params: ReposParams): Promise<SessionScan>
   listSessions(): Promise<ListSessionsResult>
@@ -49,6 +50,7 @@ export const OFFLOAD_OPS = [
   'refreshWorktrees',
   'refreshDenials',
   'refreshGithub',
+  'precheckGithub',
   'project',
   'scanSessions',
   'listSessions',
