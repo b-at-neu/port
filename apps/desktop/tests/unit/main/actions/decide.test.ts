@@ -140,7 +140,8 @@ describe('applyItemDecision — refusals', () => {
 
 describe('applyItemDecision — comment then swap', () => {
   it('aborts comment-failed and never calls applyLabels', async () => {
-    const snapshot = snapshotOf([repoState([item()])])
+    const comments = [{ body: '## Pipeline Escalation\n5 review cycles reached the cap of 5 without merging.', createdAt: '2026-01-01T00:00:00Z' }]
+    const snapshot = snapshotOf([repoState([item({ comments })])])
     let labelCalls = 0
     const deps = depsWith({
       postComment: () => Promise.resolve({ kind: 'write-failed', classification: 'unknown', stderr: 'boom', reread: null }),
@@ -178,7 +179,7 @@ describe('applyItemDecision — comment then swap', () => {
     expect(commentCalls).toBe(0)
   })
 
-  it('posts the comment then swaps the labels on an ordinary unblock', async () => {
+  it('posts no comment and only swaps the labels on a plain unblock', async () => {
     const snapshot = snapshotOf([repoState([item()])])
     const calls: string[] = []
     const deps = depsWith({
@@ -196,8 +197,8 @@ describe('applyItemDecision — comment then swap', () => {
       { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch', liveStage: false },
       deps,
     )
-    expect(result).toEqual({ ok: true, comment: { kind: 'applied', argv: [] }, labels: { kind: 'applied', argv: [] } })
-    expect(calls).toEqual(['comment', 'labels'])
+    expect(result).toEqual({ ok: true, comment: null, labels: { kind: 'applied', argv: [] } })
+    expect(calls).toEqual(['labels'])
   })
 
   it('posts a Cycle grant block when clearing a cycle-cap escalation back to revision', async () => {
@@ -408,7 +409,8 @@ describe('applyItemDecision — real writers', () => {
     const fetchItemsByNumber: ApplyItemDecisionDeps['fetchItemsByNumber'] = () =>
       Promise.resolve({ ok: true, resolved: [resolvedItem()], unavailable: [], fetchedAt: NOW().toISOString() })
 
-    const snapshot = snapshotOf([repoState([item()])])
+    const comments = [{ body: '## Pipeline Escalation\n5 review cycles reached the cap of 5 without merging.', createdAt: '2026-01-01T00:00:00Z' }]
+    const snapshot = snapshotOf([repoState([item({ comments })])])
     const result = await applyItemDecision(
       {
         request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null },

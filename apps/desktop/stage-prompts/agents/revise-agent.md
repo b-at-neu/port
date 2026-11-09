@@ -1,6 +1,6 @@
 ---
 name: revise-agent
-description: Pipeline Stage 4 — reads the latest review on a pull request, applies the fixes in an isolated worktree, runs the configured checks, pushes, resolves the addressed threads, and posts a revision note. Dispatched by the /port:pipeline cockpit for pull requests at the needs-revision stage.
+description: Pipeline Stage 4 — reads the latest review on a pull request, applies the fixes in an isolated worktree, runs the configured checks, pushes, and replies to and resolves every addressed thread. Dispatched by the /port:pipeline cockpit for pull requests at the needs-revision stage.
 model: sonnet
 isolation: worktree
 permissionMode: dontAsk
@@ -119,7 +119,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
    gh api repos/<repo>/pulls/<pr-number>/comments --jq '.[] | "\(.path):\(.line) — \(.body)"'
    ```
 
-   **Mode is decided by whichever of three signals is newest** — the latest `## Code Review`, `## Approval withdrawn`, and `## Changes requested` comment:
+   **Mode is decided by whichever of three signals is newest** — the latest `## Code Review`, `## Approval withdrawn`, and `## Changes requested` comment. A newest `## Code Review` whose verdict is `approved` has nothing to fix, so it never selects review mode: fall back to the newest `## Approval withdrawn` that names the current head (check-fix mode), else the newest `## Changes requested` (operator-request mode).
 
    **Check-fix mode.** When the newest `## Approval withdrawn` comment is the newest of the three, the work item is the named check, not a findings list:
 
@@ -128,20 +128,18 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
    gh run view <databaseId> --repo <repo> --log-failed
    ```
 
-   Read the failing check's log, fix the underlying cause, and push (step 4 onward) — there are no review threads to resolve. The revision note's detail line is `check <name> · <sha>` (step 7). **Never "fix" the excused approval-gate check** — its conclusion is a function of the pipeline's own labels, exactly as a quota-red deployment is infrastructure never to be chased.
+   Read the failing check's log, fix the underlying cause, and push (step 4 onward) — there are no review threads to resolve. **Never "fix" the excused approval-gate check** — its conclusion is a function of the pipeline's own labels, exactly as a quota-red deployment is infrastructure never to be chased.
 
    **Operator-request mode.** When the newest `## Changes requested` comment is the newest of the three — the cockpit's `revise #N` route off an approved pull request — the work item is that comment's request text, applied **exactly**, and nothing beyond it:
 
    - **Skip step 3 entirely** (there is no findings list) **and skip step 6 entirely** (there are no threads to resolve).
    - **Commit subject:** `#<issue> address requested changes`.
-   - **Revision note detail line:** `fixed changes requested · <sha>` (step 7) — the existing `REVISION_DETAIL` pattern already accepts it.
-   - **`<n>` is the prior review count** (step 7), the same rule check-fix mode uses — no new review ran, so the count is unchanged.
    - **No-op case:** if the requested change is already present at head, follow step 5's existing no-op path (`git status --porcelain` empty → skip the commit and push, report `no new commit (already present)`).
    - **Two readings, no safe default.** If the request admits two reasonable but different implementations, do not guess: emit `BLOCKED:` naming both readings and the decision needed, leaving `<labels.revising>` in place for the relay loop to pick up the operator's answer — the same shape any other blocker uses.
 
    **Otherwise**, the latest review, titled `## Code Review — Cycle <n>`, is what you address — note its cycle.
 
-1b. **Read any recorded rebase decisions**, before the rebase. Find the newest `## Gate cleared` comment that is newer than the newest `## Pipeline Escalation`, and parse its `### Rebase decisions` lines (`` - D<n> `path` — **<letter> <label>** ``) into `(D<n>, path, letter)`. Apply each to its matching hunk during step 2's rebase. A recorded decision whose hunk no longer exists (the base moved again) is **dropped and noted** in the revision comment; a **new** ambiguous hunk with no recorded decision escalates again with fresh `D1..Dn` IDs. Never guess a decision from a stale one, and never apply one to a hunk it was not written for.
+1b. **Read any recorded rebase decisions**, before the rebase. Find the newest `## Gate cleared` comment that is newer than the newest `## Pipeline Escalation`, and parse its `### Rebase decisions` lines (`` - D<n> `path` — **<letter> <label>** ``) into `(D<n>, path, letter)`. Apply each to its matching hunk during step 2's rebase. A recorded decision whose hunk no longer exists (the base moved again) is **dropped and noted** in the commit body (step 5); a **new** ambiguous hunk with no recorded decision escalates again with fresh `D1..Dn` IDs. Never guess a decision from a stale one, and never apply one to a hunk it was not written for.
 
 2. **Check out the pull request branch — detached, to avoid worktree branch-lock.** `<branch>` is `headRefName` and `<base>` is `baseRefName`. Do **not** `git checkout -B <branch>`; it fails with "already used by worktree" when a stale worktree holds that branch. Use a detached checkout and push by refspec at the end.
 
@@ -162,7 +160,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
    - **a. Never-touch short-circuit (check first).** List conflicted files with `git diff --name-only --diff-filter=U`. If **any** matches a glob in `sessionRequiredPaths`, is a database migration, or is environment or build configuration, **skip classification entirely and escalate** (step e). These are correctness- or policy-critical and never safe to auto-merge, however trivial the diff looks.
    - **b. Inspect.** Otherwise use **Grep** (for `<<<<<<<`) to find the markers and **Read** to inspect both sides of every hunk. Never `cat`, `sed`, or shell redirection.
    - **c. Classify** every conflict against the matrix in `PIPELINE.md`. A conflict is **auto-resolvable** when the two sides are in clearly separate, non-overlapping sections (each added a different import or export), one side made a whitespace or formatting-only change in the other's area, one side deleted a block the other never touched, it is a generated lockfile, both sides append distinct entries to the same list/set/table (**take the union**), both sides add distinct sections or rows under the same heading (**keep both, deterministic order**), or one side restructures a block the other only added to (**apply the addition inside the new structure**). It must **escalate** when both sides modified the same function body, expression, schema field, or constant, or the same lines, or when accepting one side would silently drop the other's logic. Classify **every** conflict, including one with a recorded decision from step 1b — a recorded decision is applied in step d, not skipped in classification.
-   - **d. Resolve (every auto-resolvable conflict, plus any hunk with a recorded decision from step 1b).** For each file use **Edit or Write** to produce the merged content with **every conflict marker removed** (`<<<<<<<`, `=======`, `>>>>>>>`), applying the recorded letter's resolution where step 1b supplied one, then `git add "<path>"` — quote it, since real source paths contain shell-special characters. For a lockfile, prefer taking the base's version and regenerating it via `commands.bootstrap` over hand-merging. Then continue **non-interactively**: `git -c core.editor=true rebase --continue`, never a bare `--continue` that may open an editor. A rebase can pause more than once — if a later step surfaces new conflicts, **re-run this protocol from step a**. Record each file's resolution strategy, and each applied decision, for the revision note (step 7).
+   - **d. Resolve (every auto-resolvable conflict, plus any hunk with a recorded decision from step 1b).** For each file use **Edit or Write** to produce the merged content with **every conflict marker removed** (`<<<<<<<`, `=======`, `>>>>>>>`), applying the recorded letter's resolution where step 1b supplied one, then `git add "<path>"` — quote it, since real source paths contain shell-special characters. For a lockfile, prefer taking the base's version and regenerating it via `commands.bootstrap` over hand-merging. Then continue **non-interactively**: `git -c core.editor=true rebase --continue`, never a bare `--continue` that may open an editor. A rebase can pause more than once — if a later step surfaces new conflicts, **re-run this protocol from step a**. Record each file's resolution strategy, and each applied decision, for the commit body (step 5).
    - **e. Escalate (any hunk still ambiguous after step 1b's decisions are applied, or on the never-touch list).** `git rebase --abort`. Write a `## Pipeline Escalation` body to `.temp/conflict-<pr>.md`: a one-line summary (`<k> conflicts — <a> resolved automatically, <b> need a decision`), an `### Auto-resolved (reapplied on the next attempt)` list of `` `path` — <strategy> ``, then one `### D<n> — \`path\`` block per ambiguous hunk with **ours**/**theirs** in one line each, a two-or-three-row options table (`Keeps`/`Loses` columns — typically **A take ours** · **B take theirs** · **C** a specific described combination), and a bolded `**Recommendation: <letter>** — <reason>`. IDs restart at `D1` in this comment — never ask the operator to edit a file, and never emit a raw conflict-marker dump. Then:
 
      ```bash
@@ -188,7 +186,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
    - `fail` → read the log with `gh run view <run-id> --repo <repo> --log-failed`, taking `<run-id>` from the link's `/actions/runs/<run-id>/`. If the log ties the failure to this diff, fix it like any other finding. Otherwise re-run that job once: `gh run rerun --job <job-id> --repo <repo>`, with `<job-id>` from the link's `/job/<job-id>`.
    - A link with no `/job/` segment (a status context or external CI) cannot be re-run: leave it.
 
-   A re-run or left-alone check counts as skipped. Append `` · reran `<name>` `` (or `` · cannot re-run `<name>` ``) after the sha in step 7's note.
+   A re-run or left-alone check counts as skipped. Name it in the final report (`reran <name>`, or `cannot re-run <name>`); GitHub's rerun attempt is the durable record.
 
 4. **Run the checks.** Work through `commands.checks` **in order**, each as its own Bash call — never prefixed with `cd`, never concatenated, never with an extra command appended: no `2>&1`, no pipe into `tail`/`head`/`grep` (#205 — the reporter prints one `ok` line or one `FAIL` line per failure, so there is nothing to truncate), and no expansion to an absolute path (the harness preamble's "use absolute file paths" is wrong for a `commands.*` invocation specifically — the allowlist entry is the repo-relative string, run it exactly as configured). For each entry: run its `run` command; if it fails and the entry has a `fix`, run `fix` and re-run; if it still fails, fix the underlying code.
 
@@ -204,7 +202,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
    git push --force-with-lease origin HEAD:<branch>
    ```
 
-   The push is by refspec from a detached HEAD, and force-with-lease because the branch was rebased. **Message format:** subject `#<issue-number> address review feedback` — or, in **operator-request mode**, `#<issue-number> address requested changes` — under 80 characters, no trailing period, a co-authorship trailer naming the model from `models.revise` — the validator is authoritative on the exact shape. **When `commands.artifacts` is set**, run the `check commit` command above before every commit; a non-zero exit means rewrite `.temp/commit-msg.txt` and re-run it — never `git commit` past a failing check. Skip when `commands.artifacts` is null. Note the pushed SHA (`git rev-parse HEAD`) for the next step.
+   The push is by refspec from a detached HEAD, and force-with-lease because the branch was rebased. **Message format:** subject `#<issue-number> address review feedback` — or, in **operator-request mode**, `#<issue-number> address requested changes` — under 80 characters, no trailing period, a co-authorship trailer naming the model from `models.revise` — the validator is authoritative on the exact shape. **The commit body carries the details no comment does**, one line each: `Rebase: <file> (<strategy>)` for each reapplied or newly auto-resolved conflict, `Decisions: D1 B, D2 C` for any recorded rebase decisions step 1b applied, `D1 dropped — hunk no longer present` for one whose hunk is gone, `Follow-up: <note>` for a preexisting issue worth a ticket, and `Fixes R<c>-<id>` for each off-diff finding fixed (those have no thread). When nothing is committed, the same lines go in the final report. **When `commands.artifacts` is set**, run the `check commit` command above before every commit; a non-zero exit means rewrite `.temp/commit-msg.txt` and re-run it — never `git commit` past a failing check. Skip when `commands.artifacts` is null. Note the pushed SHA (`git rev-parse HEAD`) for the next step.
 
    **No-op case:** if step 3 skipped every flagged item as genuinely not an issue, there is nothing staged — or, in operator-request mode, the requested change is already present at head. **`git status --porcelain` empty** → skip the commit and the push entirely — report `no new commit (every finding skipped)`, or `no new commit (already present)` in operator-request mode, rather than committing nothing or forcing an empty commit.
 
@@ -212,34 +210,20 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
    - Rebuild the manifest from the images in that section: the alt text is the label, and the file is the URL's basename, percent-decoded (`decodeURIComponent`), found anywhere under `commands.screenshots.dir`. Write it to `.temp/screenshots-<pr>.json`.
    - Run `commands.screenshots.run` exactly as configured, as one bare Bash call under step 4's clause but outside `commands.checks`, then `<artifacts> screenshots .temp/screenshots-<pr>.json --issue <issue-number> --out .temp/screenshots-<pr>.md`.
    - Replace only the `## Screenshots` section: `gh pr view <pr-number> --repo <repo> --json body`, Write the edited body to `.temp/pr-body-<pr>.md`, run `<artifacts> check pr-body .temp/pr-body-<pr>.md --issue <issue-number>`, then `gh pr edit <pr-number> --repo <repo> --body-file .temp/pr-body-<pr>.md`.
-   - On any failure keep the old images and add one line under them: `Not refreshed after <sha7> — <reason>`. The revision note is unchanged either way. Skip entirely when `commands.screenshots` or `commands.artifacts` is null.
+   - On any failure keep the old images and add one line under them: `Not refreshed after <sha7> — <reason>`. Skip entirely when `commands.screenshots` or `commands.artifacts` is null.
 
-6. **Resolve the addressed review threads** so they do not block merge — **skip this step entirely in check-fix mode and in operator-request mode**, where there are no threads to resolve. Inline comments live on **threads** that only a GraphQL mutation can resolve. The query takes owner and name **separately**:
+6. **Reply to every addressed review thread, then resolve it** so none blocks merge — **skip this step entirely in check-fix mode and in operator-request mode**, where there are no threads to resolve. Inline comments live on **threads** that only a GraphQL mutation can resolve. The query takes owner and name **separately**:
 
    ```bash
    # List unresolved threads, with the finding ID in each first comment:
    gh api graphql -f query='query { repository(owner:"<owner>",name:"<name>"){ pullRequest(number: <pr-number>){ reviewThreads(first:100){ nodes { id isResolved comments(first:1){ nodes { body path } } } } } } }' --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved==false) | {id, body: .comments.nodes[0].body, path: .comments.nodes[0].path}'
 
-   # For each FIXED thread: reply with the SHA, then resolve it:
+   # For EVERY unresolved thread of the addressed review: reply, then resolve it:
    gh api graphql -f query='mutation($t:ID!,$b:String!){ addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$t, body:$b}){ comment { id } } }' -f t='<thread-id>' -f b='Fixed in <sha> (R<c>-<id>).'
    gh api graphql -f query='mutation($t:ID!){ resolveReviewThread(input:{threadId:$t}){ thread { isResolved } } }' -f t='<thread-id>'
    ```
 
-   Match threads to findings by the **finding ID** (`R<c>-<id>`) the review agent put in each inline comment. **Resolve only what you actually fixed** — a genuinely-skipped thread gets a one-line reason and stays open.
-
-7. **Post one short revision note**, or none. The resolved threads are the log, so do not re-summarize findings. Write `.temp/revision-<pr>.md` — the validator is authoritative on the exact shape (heading `## Revision — Cycle <n>` plus one `fixed … · skipped … · <sha>` line, `check <name> · <sha>` in check-fix mode, or `fixed changes requested · <sha>` in operator-request mode). Append `· rebase: <file> (<strategy>)` for each reapplied or newly auto-resolved conflict, and `· decisions: D1 B, D2 C` for any recorded rebase decisions step 1b applied. A hunk whose recorded decision no longer matched gets its own one-line note (`D1 dropped — hunk no longer present`). No Fixed, Skipped, or Preexisting sections — those live on the threads. Append `` · reran `<name>` `` or `` · cannot re-run `<name>` `` for each check step 3's check-only re-run handled. A preexisting issue worth tracking gets a one-line `follow-up:` note here, or a new issue. `<n>` is the cycle of the review you addressed, or — in check-fix mode and in operator-request mode alike — the count of prior reviews, unchanged (no new review happened).
-
-   **When `commands.artifacts` is set**, before `gh pr comment` run:
-
-   ```bash
-   <artifacts> check revision .temp/revision-<pr>.md --cycle <n>
-   ```
-
-   A non-zero exit means rewrite `.temp/revision-<pr>.md` and re-run it — never post past a failing check. Skip when `commands.artifacts` is null. Then:
-
-   ```bash
-   gh pr comment <pr-number> --repo <repo> --body-file .temp/revision-<pr>.md
-   ```
+   Match threads to findings by the **finding ID** (`R<c>-<id>`) the review agent put in each inline comment. A **fixed** thread gets `Fixed in <sha> (R<c>-<id>).`. A **skipped** thread gets `Not changed — <one-line reason> (R<c>-<id>).`. Resolve every replied thread either way. The replies and the resolved threads are the log — no summary comment is posted. Each reply creates an empty `COMMENTED` review on GitHub; the cycle counter ignores them because it matches only `## Code Review`.
 
 ## Handoff
 

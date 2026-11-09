@@ -37,7 +37,7 @@ export function createRuntimeProbe(importSdk: () => Promise<{ query: SdkQuery }>
       sdk = await importSdk()
     } catch (error) {
       const text = messageOf(error)
-      return { diagnosis: classifyProbeFailure({ text, credentials: params.credentials, now: params.now }), detail: text }
+      return { diagnosis: classifyProbeFailure({ text }), detail: text }
     }
 
     const timeoutMs = params.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS
@@ -57,16 +57,16 @@ export function createRuntimeProbe(importSdk: () => Promise<{ query: SdkQuery }>
 
       if (last === null) {
         const text = 'the probe turn ended with no result message'
-        return { diagnosis: classifyProbeFailure({ text, credentials: params.credentials, now: params.now }), detail: text }
+        return { diagnosis: classifyProbeFailure({ text }), detail: text }
       }
       if (last.subtype === 'success' && !last.is_error) {
         return { diagnosis: 'verified', detail: null }
       }
       const text = resultText(last)
-      return { diagnosis: classifyProbeFailure({ text, credentials: params.credentials, now: params.now }), detail: text }
+      return { diagnosis: classifyProbeFailure({ text }), detail: text }
     } catch (error) {
       const text = messageOf(error)
-      return { diagnosis: classifyProbeFailure({ text, credentials: params.credentials, now: params.now }), detail: text }
+      return { diagnosis: classifyProbeFailure({ text }), detail: text }
     }
   }
 }

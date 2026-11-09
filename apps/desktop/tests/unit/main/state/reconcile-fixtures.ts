@@ -55,6 +55,7 @@ export function item(overrides: Partial<PipelineItem> = {}): PipelineItem {
     checkRollup: null,
     blockers: null,
     blockerComments: null,
+    closingPullRequests: null,
     ...overrides,
   }
 }

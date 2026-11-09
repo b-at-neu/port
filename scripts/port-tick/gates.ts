@@ -15,6 +15,54 @@ export interface CommentNode {
 
 const CODE_REVIEW_PREFIX = '## Code Review';
 const GATE_CLEARED_PREFIX = '## Gate cleared';
+const ESCALATION_PREFIX = '## Pipeline Escalation';
+const WITHDRAWN_PREFIX = '## Approval withdrawn';
+
+/** The causes a machine-posted `## Pipeline Escalation` can carry in its closing marker. */
+export const ESCALATION_CAUSES = ['zero-diff', 'sha-cap', 'cycle-cap', 'integration-red', 'refresh-stuck', 'budget', 'checks-pending'] as const;
+
+export type EscalationCause = (typeof ESCALATION_CAUSES)[number];
+
+/** The hidden last line of an escalation body: one cause on one head. */
+export function escalationMarker(cause: EscalationCause, sha: string): string {
+  return `<!-- port:escalation ${cause} ${sha} -->`;
+}
+
+/** True when the newest `## Pipeline Escalation` already carries this cause on this head, so a repeat posts nothing.
+ *  No comments, a legacy unmarked escalation, or an empty `sha` all read as false: post. */
+export function escalationRepeats({ comments, cause, sha }: { readonly comments: readonly CommentNode[] | undefined; readonly cause: EscalationCause; readonly sha: string }): boolean {
+  if (sha === '') return false;
+  const escalations = (comments ?? []).filter((c) => c.body.startsWith(ESCALATION_PREFIX));
+  if (escalations.length === 0) return false;
+  const newest = escalations.reduce((a, b) => (a.createdAt > b.createdAt ? a : b));
+  const marker = escalationMarker(cause, sha);
+  return newest.body.split('\n').some((line) => line.trim() === marker);
+}
+
+/** True when an `## Approval withdrawn` comment already names this head SHA. An empty `sha` reads as false: post. */
+export function withdrawalPosted({ comments, sha }: { readonly comments: readonly CommentNode[] | undefined; readonly sha: string }): boolean {
+  if (sha === '') return false;
+  return (comments ?? []).some((c) => c.body.startsWith(WITHDRAWN_PREFIX) && c.body.includes(`\`${sha}\``));
+}
+
+const ESCALATION_MARKER_LINE = /^<!-- port:escalation (\S+) (\S+) -->$/;
+
+/** The app's single dedup entry point: whether posting `body` would repeat what the pull request already shows. */
+export function commentRepeats({ body, comments, headRefOid }: { readonly body: string; readonly comments: readonly CommentNode[] | undefined; readonly headRefOid: string }): boolean {
+  if (body.startsWith(WITHDRAWN_PREFIX)) return withdrawalPosted({ comments, sha: headRefOid });
+  if (!body.startsWith(ESCALATION_PREFIX)) return false;
+  for (const line of body.split('\n')) {
+    const m = ESCALATION_MARKER_LINE.exec(line.trim());
+    const cause = ESCALATION_CAUSES.find((c) => c === m?.[1]);
+    if (m?.[2] !== undefined && cause !== undefined) return escalationRepeats({ comments, cause, sha: m[2] });
+  }
+  return false;
+}
+
+/** A plain gate clear is the `needs human` label event, so a clear counts as a `## Gate cleared` comment or a label event newer than `since`. */
+export function clearedSince({ comments, escalatedAt, since }: { readonly comments: readonly CommentNode[] | undefined; readonly escalatedAt: readonly string[]; readonly since: string }): boolean {
+  return (comments ?? []).some((c) => c.body.startsWith(GATE_CLEARED_PREFIX) && c.createdAt > since) || escalatedAt.some((t) => t > since);
+}
 
 /** The `## Code Review` count a pull request's reviews carry, exposed so a caller can
  *  display the cycle before the cap fires. */
@@ -73,11 +121,13 @@ export function zeroDiffGate({
   comments,
   headRefOid,
   checks,
+  escalatedAt = [],
 }: {
   readonly reviews: readonly ReviewNode[] | undefined;
   readonly comments: readonly CommentNode[] | undefined;
   readonly headRefOid: string;
   readonly checks?: ZeroDiffChecks;
+  readonly escalatedAt?: readonly string[];
 }): ZeroDiffResult {
   const codeReviews = (reviews ?? []).filter((r) => r.body.startsWith(CODE_REVIEW_PREFIX));
   if (codeReviews.length === 0) return { action: 'dispatch' };
@@ -88,8 +138,7 @@ export function zeroDiffGate({
   const reviewsOnHead = codeReviews.filter((r) => (r.commitOid ?? null) === headRefOid).length;
   if (reviewsOnHead >= MAX_REVIEWS_PER_SHA) return { action: 'escalate', reason: 'sha-cap', facts: { sha: headRefOid, reviewsOnHead } };
 
-  const clearedAfter = (comments ?? []).some((c) => c.body.startsWith(GATE_CLEARED_PREFIX) && c.createdAt > (newest.submittedAt ?? ''));
-  if (clearedAfter) return { action: 'dispatch-once' };
+  if (clearedSince({ comments, escalatedAt, since: newest.submittedAt ?? '' })) return { action: 'dispatch-once' };
 
   const named = checkOnlyNames(newest.body);
   if (named === null || checks === undefined) return { action: 'escalate' };
@@ -156,11 +205,13 @@ export function integrationRedGate({
   headRefOid,
   integration,
   now,
+  escalatedAt = [],
 }: {
   readonly comments: readonly CommentNode[] | undefined;
   readonly headRefOid: string;
   readonly integration: ReadonlyMap<string, IntegrationStatus> | null | undefined;
   readonly now: string | null;
+  readonly escalatedAt?: readonly string[];
 }): { readonly action: IntegrationRedAction; readonly facts?: IntegrationRedFacts } {
   const marked = (comments ?? []).flatMap((c) => {
     const named = integrationRedNames(c.body);
@@ -170,7 +221,7 @@ export function integrationRedGate({
 
   const newest = marked.reduce((a, b) => (a.createdAt > b.createdAt ? a : b));
   if (!headRefOid.startsWith(newest.named.head)) return { action: 'none' };
-  if ((comments ?? []).some((c) => c.body.startsWith(GATE_CLEARED_PREFIX) && c.createdAt > newest.createdAt)) return { action: 'none' };
+  if (clearedSince({ comments, escalatedAt, since: newest.createdAt })) return { action: 'none' };
 
   const facts = { checks: newest.named.checks, sha: headRefOid, state: integration == null ? ('unreadable' as const) : ('red' as const) };
   if (integration != null && newest.named.checks.every((n) => integration.get(n) === 'green')) return { action: 'refresh', facts };

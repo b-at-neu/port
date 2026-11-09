@@ -87,6 +87,21 @@ describe('escalateToHuman', () => {
     expect(result.labels.kind).toBe('terminal-owned')
   })
 
+  it('swaps the label and posts nothing when the body is null', async () => {
+    let commentCalled = false
+    const deps: EscalateToHumanDeps = {
+      applyLabels: () => Promise.resolve({ kind: 'applied', argv: [] } satisfies WriteOutcome),
+      postComment: () => {
+        commentCalled = true
+        return Promise.resolve({ kind: 'applied', argv: [] } satisfies WriteOutcome)
+      },
+    }
+    const result = await escalateToHuman(params({ body: null }), deps)
+    expect(commentCalled).toBe(false)
+    expect(result.comment).toBeNull()
+    expect(result.labels.kind).toBe('applied')
+  })
+
   it('reports a failed comment without discarding the successful swap', async () => {
     const deps: EscalateToHumanDeps = {
       applyLabels: () => Promise.resolve({ kind: 'applied', argv: [] } satisfies WriteOutcome),

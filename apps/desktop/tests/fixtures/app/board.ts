@@ -81,6 +81,7 @@ function pipelineItemsFor(now: Date, vocabulary: LabelVocabulary, seeds: readonl
       checkRollup: isPr ? [] : null,
       blockers: isPr ? null : (seed.blockers ?? { ok: true, open: [], shown: 0, total: 0 }),
       blockerComments: isPr || seed.stageKey !== 'blocked' ? null : (seed.blockerComments ?? []).map((c) => ({ body: c.body, createdAt: offsetMinutes(now, c.offsetMinutes), url: `https://github.com/acme/widgets/issues/${String(seed.number)}#issuecomment-1` })),
+      closingPullRequests: null,
     }
   })
 }

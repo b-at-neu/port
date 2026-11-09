@@ -32,7 +32,6 @@ export function baseDeps(overrides: Partial<HostedStoreDeps> = {}): HostedStoreD
   return {
     getSdk: () => Promise.resolve({ query: () => idleQuery(), renameSession: vi.fn(() => Promise.resolve(undefined)) }),
     resolveClaudeExecutable: () => Promise.resolve({ ok: true, path: '/usr/local/bin/claude' }),
-    readCredentialsTell: () => Promise.resolve({ present: false, expiresAt: null, hasRefreshToken: false }),
     listSessionsForFork: () => Promise.resolve({ ok: true, sessions: [] }),
     env: {},
     platform: 'linux',

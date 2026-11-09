@@ -186,8 +186,8 @@ interface DetailsResult {
   readonly rateLimit: RateLimitInfo
 }
 
-// Only an issue alias's own blockedBy/comments error is per-field: it costs a tag, never the board.
-const PER_FIELD_ERRORS: ReadonlySet<unknown> = new Set(['blockedBy', 'comments'])
+// Only an issue alias's own blockedBy/comments/closedByPullRequestsReferences error is per-field: it costs a tag, never the board.
+const PER_FIELD_ERRORS: ReadonlySet<unknown> = new Set(['blockedBy', 'comments', 'closedByPullRequestsReferences'])
 
 /** Any other detail alias that errors or comes back null fails the whole read: a missing review list would
  *  read as zero cycles, and a revise dispatch could go past the cap. */
@@ -197,6 +197,7 @@ async function readDetails(github: GitHubTransport, repo: GitHubRepoRef, items: 
     number: item.number,
     rollup: item.kind === 'pull-request' && (item.matchedKeys.includes('approved') || item.matchedKeys.includes('readyForReview')),
     blockerComments: item.kind === 'issue' && item.matchedKeys.includes('blocked'),
+    closingPullRequests: item.kind === 'issue' && item.matchedKeys.includes('prOpened'),
   }))
   const details: ItemDetail[] = []
   let total = rateLimit

@@ -104,6 +104,7 @@ function pipelineItemsFor(vocabulary: LabelVocabulary, labels: LabelMap, prs: Pr
     checkRollup: null,
     blockers: { ok: true, open: [], shown: 0, total: 0 },
     blockerComments: null,
+    closingPullRequests: null,
   }))
   const prItems: PipelineItem[] = [...prs.entries()].map(([number, pr]) => ({
     repo: 'o/scratch',
@@ -126,6 +127,7 @@ function pipelineItemsFor(vocabulary: LabelVocabulary, labels: LabelMap, prs: Pr
     checkRollup: [],
     blockers: null,
     blockerComments: null,
+    closingPullRequests: null,
   }))
   return [...issues, ...prItems]
 }
@@ -273,7 +275,6 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
     const store = createHostedStore({
       getSdk: () => Promise.resolve(createFakeSdk(seen, labels, prs)),
       resolveClaudeExecutable: () => Promise.resolve({ ok: true, path: '/usr/local/bin/claude' }),
-      readCredentialsTell: () => Promise.resolve({ present: false, expiresAt: null, hasRefreshToken: false }),
       listSessionsForFork: () => Promise.resolve({ ok: true, sessions: [] }),
       env: {},
       platform: 'linux',

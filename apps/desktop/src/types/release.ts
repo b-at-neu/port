@@ -1,6 +1,6 @@
 // Renderer-safe contract for the Releases screen: the status read, the phase it resolves to, and the two `release:run` steps.
 import type { BacklogLabel } from '@/types/backlog'
-import type { GhRunner, PathOps } from '@/types/platform'
+import type { CommandResult, GhRunner, PathOps } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
 
 export interface PullLink {
@@ -66,13 +66,19 @@ export interface ReleaseConfig {
 
 export type ReleaseConfigRead = { readonly ok: true; readonly config: ReleaseConfig } | { readonly ok: false; readonly message: string }
 
+/** Unlike `GitRunner`, takes an env, so a bump commit can be built under a throwaway `GIT_INDEX_FILE`. */
+export type ReleaseGitRunner = (args: readonly string[], options: { readonly cwd: string; readonly env?: NodeJS.ProcessEnv; readonly timeoutMs?: number }) => Promise<CommandResult>
+
 export interface ReleaseWriteContext {
   readonly repo: string
   readonly repoId: RepoId
   readonly version: string
   readonly auditDir: string
   readonly scratchDir: string
+  /** The registered local clone the bump commit is built and signed in. */
+  readonly root: string
   readonly gh?: GhRunner
+  readonly git?: ReleaseGitRunner
   readonly now?: () => Date
   readonly pathOps?: PathOps
 }

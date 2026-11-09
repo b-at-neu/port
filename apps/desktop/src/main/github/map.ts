@@ -1,7 +1,7 @@
 // Nodes → PipelineItem. matchedKeys is bucketed here, client-side, against the resolved vocabulary.
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import { integrationChecksOf } from '../../../../../scripts/port-tick/checks'
-import type { CheckContext, IntegrationChecks, IssueCommentNode, ItemDetail, ItemState, LabelEventNode, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, ReviewNode } from '@/types/github'
+import type { CheckContext, ClosingPullRequest, IntegrationChecks, IssueCommentNode, ItemDetail, ItemState, LabelEventNode, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, ReviewNode } from '@/types/github'
 import { toBlockerRead } from '@/main/github/blockers'
 
 interface ConnectionLike {
@@ -30,6 +30,7 @@ interface RawNode {
   readonly commits?: unknown
   readonly timelineItems?: unknown
   readonly blockedBy?: unknown
+  readonly closedByPullRequestsReferences?: unknown
 }
 
 function isRawNode(value: unknown): value is RawNode {
@@ -163,6 +164,20 @@ function issueCommentsOf(value: unknown): readonly IssueCommentNode[] {
   return out
 }
 
+/** `null` when the field errored or was never selected — an unreadable list is never an empty one; a node with a bad number or state is dropped. */
+function closingPullRequestsOf(value: unknown, errored: boolean): readonly ClosingPullRequest[] | null {
+  const nodes = asConnection(value)?.nodes
+  if (errored || !Array.isArray(nodes)) return null
+  const out: ClosingPullRequest[] = []
+  for (const node of nodes) {
+    if (typeof node !== 'object' || node === null) continue
+    const raw = node as Record<string, unknown>
+    if (typeof raw.number !== 'number' || (raw.state !== 'OPEN' && raw.state !== 'CLOSED' && raw.state !== 'MERGED')) continue
+    out.push({ number: raw.number, state: raw.state })
+  }
+  return out
+}
+
 /** `LabeledEvent` nodes, raw label name unresolved — a node missing `createdAt`/`label.name` is
  *  dropped; a ghost/deleted `actor` reads as `null`, never dropped. Absent `timelineItems` → `[]`. */
 function labelEventsOf(value: unknown): readonly LabelEventNode[] {
@@ -218,6 +233,7 @@ function nodeToItem(node: RawNode, kind: PipelineItemKind, repo: string, vocabul
     checkRollup: null,
     blockers: null,
     blockerComments: null,
+    closingPullRequests: null,
   }
 }
 
@@ -251,6 +267,7 @@ export function applyItemDetails(items: readonly PipelineItem[], details: readon
       checkRollup: isPullRequest ? checkRollupOf(node) : null,
       blockers: isPullRequest ? null : toBlockerRead(node.blockedBy, detail.erroredFields.includes('blockedBy')),
       blockerComments: commentsRead ? issueCommentsOf(node.comments) : null,
+      closingPullRequests: isPullRequest ? null : closingPullRequestsOf(node.closedByPullRequestsReferences, detail.erroredFields.includes('closedByPullRequestsReferences')),
     }
   })
 }

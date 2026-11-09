@@ -4,7 +4,6 @@ import type { ExpectedComponents, UsageReading, PluginRequest } from '@/types/ho
 
 // One hosted session: builds options, opens the query, runs the pump loop. The ring
 // exists only so a renderer attaching mid-stream is not blank; the on-disk transcript is the history.
-import type { CredentialsTell } from '@/types/runtime'
 import type { HostedHandle } from '@/types/hosting'
 import type { HostedQueryFn } from '@/main/hosting/sdk'
 import type {
@@ -63,7 +62,6 @@ interface CreateHostedHandleParams {
   readonly mode: SessionStartMode
   readonly cwd: string
   readonly executablePath: string
-  readonly credentials: CredentialsTell | null
   readonly now: () => number
   readonly onEvent: (envelope: SessionEventEnvelope) => void
   readonly onStatus: (snapshot: HostedSessionSnapshot) => void
@@ -283,7 +281,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
       end = { reason: 'completed', exitCode: null, signal: null, message: null, diagnosis: null }
     } catch (error) {
       const text = error instanceof Error ? error.message : String(error)
-      const classified = classifyEnd({ text, closeRequested, credentials: params.credentials, now: params.now() })
+      const classified = classifyEnd({ text, closeRequested })
       end = { reason: classified.reason, exitCode: classified.exitCode, signal: classified.signal, message: text, diagnosis: classified.diagnosis }
     }
     // An ended session must never report a pending prompt or a stale background task.

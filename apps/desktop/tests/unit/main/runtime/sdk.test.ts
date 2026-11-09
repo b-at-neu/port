@@ -15,7 +15,7 @@ async function* messages(...items: readonly FakeMessage[]): AsyncGenerator<FakeM
   for (const item of items) yield item
 }
 
-const BASE_PARAMS = { executablePath: '/home/operator/.local/bin/claude', cwd: '/repo', credentials: null, now: 1000 }
+const BASE_PARAMS = { executablePath: '/home/operator/.local/bin/claude', cwd: '/repo' }
 
 describe('createRuntimeProbe — no SDK ever loaded', () => {
   it('a successful, non-error result is verified', async () => {
@@ -66,11 +66,19 @@ describe('createRuntimeProbe — no SDK ever loaded', () => {
     expect(outcome).toEqual({ diagnosis: 'probe-failed', detail: 'spawn failed' })
   })
 
-  it('the credentials tell still wins inside a probe failure classification', async () => {
+  it('#677: a result whose errors name a failed token refresh is token-stale', async () => {
+    const probe = createRuntimeProbe(() =>
+      Promise.resolve({ query: () => messages({ type: 'result', subtype: 'error_during_execution', is_error: true, errors: ['Failed to refresh OAuth token'] }) }),
+    )
+    const outcome = await probe(BASE_PARAMS)
+    expect(outcome.diagnosis).toBe('token-stale')
+  })
+
+  it('#677: an unrelated error is probe-failed, never token-stale', async () => {
     const probe = createRuntimeProbe(() =>
       Promise.resolve({ query: () => messages({ type: 'result', subtype: 'error_during_execution', is_error: true, errors: ['connection reset'] }) }),
     )
-    const outcome = await probe({ ...BASE_PARAMS, credentials: { present: true, expiresAt: 0, hasRefreshToken: true } })
-    expect(outcome.diagnosis).toBe('token-stale')
+    const outcome = await probe(BASE_PARAMS)
+    expect(outcome.diagnosis).toBe('probe-failed')
   })
 })

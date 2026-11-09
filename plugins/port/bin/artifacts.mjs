@@ -52,16 +52,11 @@ const CODE_FINDINGS_LINE = 'Blocked by code findings.';
 const CHECK_ONLY_LINE = /^Blocked only by checks: `[^`]+`(, `[^`]+`)*$/;
 // Third verdict: posted when the head commit's checks never concluded within the bounded wait.
 export const REVIEW_HEADING = /^## Code Review — Cycle (\d+) · (approved|needs revision|blocked — checks pending)$/;
-export const REVISION_HEADING = /^## Revision — Cycle (\d+)$/;
 export const APPROVAL_WITHDRAWN_HEADING = '## Approval withdrawn';
 export const REBASE_REQUIRED_HEADING = '## Rebase required';
 export const CHANGES_REQUESTED_HEADING = '## Changes requested';
 export const INTEGRATION_RED_HEADING = '## Integration red';
 export const SHA_RE = /\b[0-9a-f]{7,40}\b/;
-// `fixed <ids> · skipped <ids> · <sha>`, either segment dropped when empty, or the
-// check-fix-mode form `check <name> · <sha>` with neither segment at all.
-export const REVISION_OPENS = /^(?:fixed|skipped|check)\b/;
-export const REVISION_DETAIL = /^(?:(?:fixed\b[^·]*·\s*)?(?:skipped\b[^·]*·\s*)?[0-9a-f]{7,40}\b|check\s+\S+\s*·\s*[0-9a-f]{7,40}\b)/;
 export const COMMIT_SUBJECT = /^#\d+ [a-z]/;
 export const SCRATCH_PATHS = /^(\.temp|\.agents)\//;
 // A verification step only the operator can run — a checkbox item opening with the bolded
@@ -101,7 +96,6 @@ const section = (ls, heading) => {
   const end = rest.findIndex((l) => l.startsWith('## '));
   return end === -1 ? rest : rest.slice(0, end);
 };
-const firstNonEmpty = (ls) => ls.find((l) => l.trim() !== '') ?? '';
 const firstNonEmptyIndex = (ls) => ls.findIndex((l) => l.trim() !== '');
 
 /** One clear line, no stack trace — nothing here is a failure mode a trace helps with. */
@@ -255,24 +249,6 @@ function checkReview(text, { cycle, strict } = {}) {
   return ok();
 }
 
-function checkRevision(text, { cycle } = {}) {
-  const ls = lines(text);
-  const first = (ls[0] ?? '').trim();
-  const m = REVISION_HEADING.exec(first);
-  if (!m) return fail(`heading must be '## Revision — Cycle <n>', got ${JSON.stringify(first)}`, "'## Revision — Cycle <n>'");
-  if (cycle != null && Number(m[1]) !== Number(cycle)) {
-    return fail(`heading is cycle ${m[1]}, expected ${cycle}`, `'## Revision — Cycle ${cycle}'`);
-  }
-  const detail = firstNonEmpty(ls.slice(1)).trim();
-  if (!REVISION_OPENS.test(detail) || !REVISION_DETAIL.test(detail)) {
-    return fail(
-      `needs one 'fixed … · skipped … · <sha>' or 'check <name> · <sha>' line, got ${JSON.stringify(detail)}`,
-      "'fixed <ids> · skipped <ids> · <sha>' or 'check <name> · <sha>'",
-    );
-  }
-  return ok();
-}
-
 /** Shared by `withdrawn` and `rebase-required`: heading on line 1, a 7-40 character hex SHA
  *  below it, and a backtick-quoted fact beside the SHA (`missingNoun` names it). */
 function checkShaAnnotated(heading, missingNoun) {
@@ -341,7 +317,6 @@ export const CHECKS = {
   commit: { run: checkCommit, heading: null },
   'pr-body': { run: checkPrBody, heading: null },
   review: { run: checkReview, heading: REVIEW_HEADING },
-  revision: { run: checkRevision, heading: REVISION_HEADING },
   withdrawn: { run: checkShaAnnotated(APPROVAL_WITHDRAWN_HEADING, 'check'), heading: APPROVAL_WITHDRAWN_HEADING },
   'rebase-required': { run: checkShaAnnotated(REBASE_REQUIRED_HEADING, 'base branch'), heading: REBASE_REQUIRED_HEADING },
   'changes-requested': { run: checkChangesRequested, heading: CHANGES_REQUESTED_HEADING },
@@ -522,21 +497,6 @@ function runAudit(argv) {
       for (const { oid, count } of failures) auditFail(at('review'), `${count} reviews share commit ${oid} — the review gate caps a head at ${MAX_REVIEWS_PER_SHA}`);
       for (const { oid, count } of repeats) note(`#${n}: ${count} reviews share commit ${oid} — the one authorized zero-diff re-review (operator override or check-only recheck), not a failure`);
       if (failures.length === 0) auditOk();
-    }
-
-    // --- Revision comments ---
-    for (const c of pr.comments) {
-      const first = (lines(c.body)[0] ?? '').trim();
-      if (!first.startsWith('## Revision')) continue;
-      const result = checkRevision(c.body);
-      fold(at('revision'), result);
-      if (!result.ok) continue;
-      const m = REVISION_HEADING.exec(first);
-      if (Number(m[1]) > cycles.length) {
-        auditFail(at('revision'), `cycle ${m[1]} exceeds the ${cycles.length} review(s) on this pull request`);
-      } else {
-        auditOk();
-      }
     }
 
     // --- Approval withdrawn / Rebase required / Changes requested --- Each is a fixed heading

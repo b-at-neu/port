@@ -11,12 +11,11 @@ export const CYCLE_CAP_ESCALATION_MARKER = 'review cycles reached the cap of'
 export const CYCLE_GRANT_LINE = '### Cycle grant'
 export const REBASE_DECISIONS_LINE = '### Rebase decisions'
 
-// The unblock comment, plus either a `### Cycle grant` block (counted by
-// `cycleGrantCount`) or a `### Rebase decisions` block — never both.
+// A `### Cycle grant` or `### Rebase decisions` block, never both; a plain pull-request clear has no body.
 export function gateClearedBody(
   route: 'revision' | 'review' | 'implementation',
   opts?: { readonly cycleGrant?: boolean; readonly rebaseDecisions?: readonly { readonly id: string; readonly path: string; readonly letter: string; readonly label: string }[] },
-): string {
+): string | null {
   const target = `back to ${route}.`
   const base = `${GATE_CLEARED_HEADING}\nCleared by the operator in port: ${target}`
   const decisions = opts?.rebaseDecisions ?? []
@@ -25,7 +24,7 @@ export function gateClearedBody(
     const lines = decisions.map((d) => `- ${d.id} \`${d.path}\` — **${d.letter} ${d.label}**`)
     return `${base}\n\n${REBASE_DECISIONS_LINE}\n${lines.join('\n')}`
   }
-  if (!opts?.cycleGrant) return base
+  if (!opts?.cycleGrant) return route === 'implementation' ? base : null
   return `${base}\n\n${CYCLE_GRANT_LINE}\nOne extra review cycle for this PR only; reviewCycleCap is unchanged.`
 }
 

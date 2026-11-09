@@ -118,6 +118,30 @@ describe('observationWrite — zero-diff reason', () => {
     const plan = observationWrite(observation, pr, vocabulary, 'dev')
     expect(plan.comment).toContain('the head has not moved')
   })
+
+  it('ends each escalation with the marker for its cause and head', () => {
+    const sha = (reason: 'zero-diff' | 'sha-cap'): string | null => {
+      const observation: TickObservation = { kind: 'zero-diff', reason, number: 52, itemKind: 'pull-request', count: 3, headRefOid: 'abc1234' }
+      return observationWrite(observation, pr, vocabulary, 'dev').comment
+    }
+    expect(sha('zero-diff')?.endsWith('\n<!-- port:escalation zero-diff abc1234 -->')).toBe(true)
+    expect(sha('sha-cap')?.endsWith('\n<!-- port:escalation sha-cap abc1234 -->')).toBe(true)
+  })
+})
+
+describe('observationWrite — escalation markers', () => {
+  const vocabulary = customVocabulary({})
+  const pr = item({ kind: 'pull-request', headRefOid: 'def5678', stage: 'trigger', stages: [{ key: 'needsRevision', name: 'needsRevision', role: 'trigger' }], matchedKeys: ['needsRevision'] })
+
+  it('marks the cycle-cap escalation with the item head', () => {
+    const observation: TickObservation = { kind: 'cycle-cap', number: 52, itemKind: 'pull-request', count: 5, cap: 5 }
+    expect(observationWrite(observation, pr, vocabulary, 'dev').comment?.endsWith('\n<!-- port:escalation cycle-cap def5678 -->')).toBe(true)
+  })
+
+  it('marks the integration-red escalation with its head', () => {
+    const observation: TickObservation = { kind: 'integration-red', number: 52, itemKind: 'pull-request', checks: ['test'], headRefOid: 'abc1234' }
+    expect(observationWrite(observation, pr, vocabulary, 'dev').comment?.endsWith('\n<!-- port:escalation integration-red abc1234 -->')).toBe(true)
+  })
 })
 
 describe('observationWrite — liveness-reset evidence', () => {

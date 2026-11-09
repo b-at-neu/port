@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { BACKOFF_CEILING_MS, SOURCE_BASE_INTERVAL_MS, initialHealth } from '@/types/board'
+import { BACKOFF_CEILING_MS, BUDGET_SHARE, SOURCE_BASE_INTERVAL_MS, initialHealth } from '@/types/board'
 import type { SourceHealth } from '@/types/board'
-import { afterFailure, afterSuccess, budgetedIntervalMs, deferredUntil, dueSources, nextDueAt } from '@/main/state/schedule'
+import { afterFailure, afterSuccess, budgetedIntervalMs, deferredUntil, dueSources, githubSweepGapMs, nextDueAt } from '@/main/state/schedule'
 
 const NOW = new Date('2026-01-01T00:10:00.000Z')
 
@@ -80,6 +80,34 @@ describe('budgetedIntervalMs', () => {
 
   it('a reset already past adds no headroom term', () => {
     expect(budgetedIntervalMs({ costs: [5], rateLimit: { ...window, remaining: 300, resetAt: '2026-01-01T00:00:00.000Z' }, now: NOW })).toBe(SOURCE_BASE_INTERVAL_MS.github)
+  })
+})
+
+describe('githubSweepGapMs', () => {
+  const window = { cost: 5, remaining: 4999, resetAt: '2026-01-01T01:00:00.000Z', limit: 5000 }
+
+  it('no rate limit known uses the fast-check floor', () => {
+    expect(githubSweepGapMs({ costs: [5], rateLimit: undefined, now: NOW })).toBe(10_000)
+  })
+
+  it('one cheap repository sits on the floor', () => {
+    expect(githubSweepGapMs({ costs: [5], rateLimit: window, now: NOW })).toBe(10_000)
+  })
+
+  it('two repositories are share-bound', () => {
+    expect(githubSweepGapMs({ costs: [5, 5], rateLimit: window, now: NOW })).toBe(14_400)
+  })
+
+  it('low headroom matches budgetedIntervalMs', () => {
+    const low = { ...window, remaining: 300 }
+    expect(githubSweepGapMs({ costs: [5], rateLimit: low, now: NOW })).toBe(150_000)
+  })
+
+  it.each([[5, 10], [146, 4]])('projected hourly use stays under the share at %i points for 1..%i repositories (below the backoff ceiling)', (cost, repositories) => {
+    for (let n = 1; n <= repositories; n++) {
+      const gap = githubSweepGapMs({ costs: Array.from({ length: n }, () => cost), rateLimit: window, now: NOW })
+      expect((n * cost * 3_600_000) / gap).toBeLessThanOrEqual(BUDGET_SHARE * 5000 + 1e-6)
+    }
   })
 })
 

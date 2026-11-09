@@ -5,6 +5,7 @@ import type { PipelineState, ReconciledItem, RepositoryState } from '@/types/sta
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS, initialHealth } from '@/types/board'
 import type { BoardSnapshot, RepositoryHealth } from '@/types/board'
 import { boardSignature, displayStatus, projectBoard, stageLabelOf } from '@/renderer/board/project'
+import { boardSections } from '@/renderer/board/sections'
 import { stageSession } from '../../../fixtures/stage-session'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
@@ -225,6 +226,24 @@ describe('projectBoard — one row per ticket', () => {
     expect(row?.stageLabel?.key).toBe('reviewing')
     expect(row?.displayStatus.status).toBe('in-flight')
     expect(projection.groups.map((group) => group.key)).toEqual(['reviewing'])
+  })
+
+  describe('a pr opened issue whose pull request is gone from the sweep', () => {
+    const prOpened = (linkReason: ReconciledItem['linkReason']) =>
+      item({ number: 644, stage: 'terminal', stages: [{ key: 'prOpened', name: 'pr opened', role: 'terminal' }], matchedKeys: ['prOpened'], status: 'terminal', linkReason })
+
+    it('is absent when its pull request merged in the gap, so it never lands under Unstaged', () => {
+      const projection = project([prOpened('counterpart-merged')])
+      expect(projection.rows).toEqual([])
+      expect(boardSections(projection.rows, { group: 'phase', repo: null })).toEqual([])
+    })
+
+    it('still lands under Unstaged when the pull request is closed unmerged', () => {
+      const projection = project([prOpened('counterpart-not-open')])
+      expect(projection.rows).toHaveLength(1)
+      const subGroups = boardSections(projection.rows, { group: 'phase', repo: null }).flatMap((section) => section.subGroups)
+      expect(subGroups.map((subGroup) => subGroup.key)).toEqual(['unstaged'])
+    })
   })
 
   it('keeps a pull request with no ticket as a row of its own, keyed as a pull request', () => {
