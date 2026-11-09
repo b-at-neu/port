@@ -3,16 +3,21 @@ import type { GhResult, GhRunner } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
 import type { AuditEntry } from '@/types/writes'
 import { isReleaseAuditEntry } from '@/types/writes'
+import { git } from '@/main/platform/git'
 import { readAuditLog } from '@/main/writes/audit'
 import { createBumpBranch, openBumpPr, openReleasePr, publishRelease } from '@/main/writes/release'
-import type { ReleaseWriteContext } from '@/types/release'
-import { mkdtemp, readFile, readdir } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import type { BranchHead, ReleaseGitRunner, ReleaseWriteContext } from '@/types/release'
+import { execFile } from 'node:child_process'
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises'
+import { devNull, tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
+
+const execFileAsync = promisify(execFile)
 
 async function context(gh: GhRunner): Promise<ReleaseWriteContext & { readonly dir: string }> {
   const dir = await mkdtemp(join(tmpdir(), 'release-write-'))
-  return { dir, repo: 'acme/widgets', repoId: 'repo-1' as unknown as RepoId, version: '0.3.0', auditDir: dir, scratchDir: dir, gh, now: () => new Date('2026-09-05T14:00:00.000Z') }
+  return { dir, repo: 'acme/widgets', repoId: 'repo-1' as unknown as RepoId, version: '0.3.0', auditDir: dir, scratchDir: dir, root: dir, gh, now: () => new Date('2026-09-05T14:00:00.000Z') }
 }
 
 async function entriesOf(dir: string): Promise<readonly AuditEntry[]> {
@@ -36,30 +41,105 @@ function recorder(responses: readonly GhResult[]): { readonly gh: GhRunner; read
 
 const OK = (stdout: string): GhResult => ({ ok: true, stdout, stderr: '' })
 
+interface Fixture {
+  readonly ctx: ReleaseWriteContext & { readonly dir: string }
+  readonly origin: string
+  readonly clone: string
+  readonly key: string
+  readonly head: BranchHead
+}
+
+const BUMPED = '{\n  "name": "x",\n  "version": "0.3.0"\n}\n'
+
+// A developer's own global config must not leak a signing key (or its absence) into the fixture.
+const ISOLATED_ENV: NodeJS.ProcessEnv = { GIT_CONFIG_GLOBAL: devNull, GIT_CONFIG_NOSYSTEM: '1' }
+
+const isolatedGit: ReleaseGitRunner = (args, options) => git(args, { ...options, env: { ...process.env, ...ISOLATED_ENV, ...options.env } })
+
+async function out(cwd: string, args: readonly string[]): Promise<string> {
+  const result = await isolatedGit(args, { cwd })
+  if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${JSON.stringify(result)}`)
+  return result.stdout.trim()
+}
+
+async function fixture(): Promise<Fixture> {
+  const dir = await mkdtemp(join(tmpdir(), 'release-bump-'))
+  const origin = join(dir, 'origin.git')
+  const clone = join(dir, 'clone')
+  const scratch = join(dir, 'scratch')
+  const key = join(dir, 'key')
+  await mkdir(scratch)
+  await out(dir, ['init', '--bare', '-b', 'dev', origin])
+  await out(dir, ['clone', origin, clone])
+  await out(clone, ['config', 'user.name', 'Port Test'])
+  await out(clone, ['config', 'user.email', 'test@example.invalid'])
+  await out(clone, ['checkout', '-b', 'dev'])
+  await writeFile(join(clone, 'package.json'), '{\n  "name": "x",\n  "version": "0.2.0"\n}\n')
+  await writeFile(join(clone, 'other.txt'), 'untouched\n')
+  await out(clone, ['add', '.'])
+  await out(clone, ['-c', 'commit.gpgsign=false', 'commit', '-m', 'initial'])
+  await out(clone, ['push', 'origin', 'dev'])
+  await execFileAsync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key])
+  await out(clone, ['config', 'gpg.format', 'ssh'])
+  await out(clone, ['config', 'user.signingkey', key])
+  const head = { oid: await out(clone, ['rev-parse', 'HEAD']), tree: await out(clone, ['rev-parse', 'HEAD^{tree}']) }
+  const ctx = { dir, repo: 'acme/widgets', repoId: 'repo-1' as unknown as RepoId, version: '0.3.0', auditDir: dir, scratchDir: scratch, root: clone, git: isolatedGit, now: () => new Date('2026-09-05T14:00:00.000Z') }
+  return { ctx, origin, clone, key, head }
+}
+
+async function scratchLeftovers(fx: Fixture): Promise<string[]> {
+  return (await readdir(fx.ctx.scratchDir)).filter((name) => name.startsWith('release-'))
+}
+
 describe('createBumpBranch', () => {
-  it('posts the tree, the commit and the ref through the Git Data API, then audits once', async () => {
-    const { gh, calls, bodies } = recorder([OK('tree-sha\n'), OK('commit-sha\n'), OK('ref-sha\n')])
-    const ctx = await context(gh)
-    const result = await createBumpBranch(ctx, { head: { oid: 'head-oid', tree: 'base-tree' }, files: [{ path: 'package.json', content: '{"version":"0.3.0"}\n' }] })
-    expect(result).toEqual({ ok: true, stdout: 'ref-sha\n' })
-    expect(calls.map((call) => call[3])).toEqual(['repos/acme/widgets/git/trees', 'repos/acme/widgets/git/commits', 'repos/acme/widgets/git/refs'])
-    expect(JSON.parse(bodies[0] ?? '')).toEqual({ base_tree: 'base-tree', tree: [{ path: 'package.json', mode: '100644', type: 'blob', content: '{"version":"0.3.0"}\n' }] })
-    expect(JSON.parse(bodies[1] ?? '')).toEqual({ message: 'bump version to v0.3.0', tree: 'tree-sha', parents: ['head-oid'] })
-    expect(JSON.parse(bodies[2] ?? '')).toEqual({ ref: 'refs/heads/bump/v0.3.0', sha: 'commit-sha' })
-    const entries = await entriesOf(ctx.dir)
+  it('pushes a signed commit that changes only the version files, then audits once', async () => {
+    const fx = await fixture()
+    const headBefore = await out(fx.clone, ['rev-parse', 'HEAD'])
+    const result = await createBumpBranch(fx.ctx, { head: fx.head, files: [{ path: 'package.json', content: BUMPED }], integration: 'dev' })
+    expect(result.ok).toBe(true)
+    const header = await out(fx.origin, ['cat-file', 'commit', 'bump/v0.3.0'])
+    expect(header).toContain('gpgsig ')
+    expect(header).toContain(`parent ${fx.head.oid}`)
+    expect(header).toContain('\n\nbump version to v0.3.0')
+    expect(await out(fx.origin, ['diff-tree', '--no-commit-id', '--name-only', '-r', 'bump/v0.3.0'])).toBe('package.json')
+    const blob = await isolatedGit(['cat-file', 'blob', 'bump/v0.3.0:package.json'], { cwd: fx.origin })
+    expect(blob.ok && blob.stdout).toBe(BUMPED)
+    expect(await out(fx.clone, ['status', '--porcelain'])).toBe('')
+    expect(await out(fx.clone, ['rev-parse', 'HEAD'])).toBe(headBefore)
+    expect(await scratchLeftovers(fx)).toEqual([])
+    const entries = await entriesOf(fx.ctx.dir)
     expect(entries).toHaveLength(1)
     expect(entries[0]).toMatchObject({ action: 'release-bump', version: '0.3.0', result: 'applied', failure: null })
-    expect((await readdir(ctx.dir)).filter((name) => name.startsWith('release-'))).toEqual([])
   })
 
-  it('stops at the first failing call, audits the failure and deletes its scratch files', async () => {
-    const { gh, calls } = recorder([OK('tree-sha'), { ok: false, kind: 'forbidden', stdout: '', stderr: 'no push access' }])
-    const ctx = await context(gh)
-    const result = await createBumpBranch(ctx, { head: { oid: 'o', tree: 't' }, files: [] })
-    expect(result).toEqual({ ok: false, stderr: 'no push access' })
-    expect(calls).toHaveLength(2)
-    expect((await entriesOf(ctx.dir))[0]).toMatchObject({ result: 'failed', failure: 'no push access' })
-    expect((await readdir(ctx.dir)).filter((name) => name.startsWith('release-'))).toEqual([])
+  it('fails without creating the branch when the commit cannot be signed', async () => {
+    const fx = await fixture()
+    await out(fx.clone, ['config', 'user.signingkey', join(fx.ctx.dir, 'missing-key')])
+    const result = await createBumpBranch(fx.ctx, { head: fx.head, files: [{ path: 'package.json', content: BUMPED }], integration: 'dev' })
+    expect(result.ok).toBe(false)
+    expect(!result.ok && result.stderr).toMatch(/^Couldn't sign the bump commit/)
+    expect(await out(fx.origin, ['ls-remote', '--heads', fx.origin, 'refs/heads/bump/v0.3.0'])).toBe('')
+    expect(await scratchLeftovers(fx)).toEqual([])
+    const entries = await entriesOf(fx.ctx.dir)
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({ action: 'release-bump', result: 'failed' })
+  })
+
+  it('refuses to overwrite a bump branch that already exists on origin', async () => {
+    const fx = await fixture()
+    await out(fx.clone, ['push', 'origin', 'HEAD:refs/heads/bump/v0.3.0'])
+    const result = await createBumpBranch(fx.ctx, { head: fx.head, files: [{ path: 'package.json', content: BUMPED }], integration: 'dev' })
+    expect(result.ok).toBe(false)
+    expect(!result.ok && result.stderr).toContain('bump/v0.3.0 already exists on origin')
+    expect(await out(fx.origin, ['rev-parse', 'bump/v0.3.0'])).toBe(fx.head.oid)
+  })
+
+  it("fails before writing anything when origin doesn't have the head", async () => {
+    const fx = await fixture()
+    const result = await createBumpBranch(fx.ctx, { head: { oid: '0'.repeat(40), tree: fx.head.tree }, files: [], integration: 'dev' })
+    expect(result.ok).toBe(false)
+    expect(!result.ok && result.stderr).toContain("doesn't have")
+    expect(await out(fx.origin, ['ls-remote', '--heads', fx.origin, 'refs/heads/bump/v0.3.0'])).toBe('')
   })
 })
 

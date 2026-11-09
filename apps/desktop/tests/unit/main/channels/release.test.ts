@@ -61,8 +61,8 @@ function depsFor(read: ReleaseRead, calls: Calls, overrides: Partial<ReleaseChan
     fetchStatus: () => Promise.resolve(read),
     fetchIssues: () => Promise.resolve({ ok: true, issues: [], note: null }),
     readFile: () => Promise.resolve({ ok: true, text: JSON.stringify({ name: 'x', version: '0.2.1-dev' }) }),
-    createBumpBranch: (_ctx, params) => {
-      record('bump', params)
+    createBumpBranch: (ctx, params) => {
+      record('bump', { ...params, root: ctx.root })
       return Promise.resolve({ ok: true, stdout: '' })
     },
     openBumpPr: () => {
@@ -168,7 +168,7 @@ describe('resolveReleaseRun open', () => {
     const result = await run(readOf({ kind: 'idle' }), { repoId: REPO_ID, step: 'open', version: 'v0.3.0' }, calls)
     expect(result).toEqual({ kind: 'opened' })
     expect(calls.names).toEqual(['bump', 'bump-pr', 'release-pr'])
-    expect(calls.seen['bump']).toEqual({ head: HEAD, files: [{ path: 'package.json', content: '{\n  "name": "x",\n  "version": "0.3.0"\n}\n' }] })
+    expect(calls.seen['bump']).toEqual({ head: HEAD, files: [{ path: 'package.json', content: '{\n  "name": "x",\n  "version": "0.3.0"\n}\n' }], integration: 'dev', root: '/repo' })
     expect(calls.seen['release-pr']).toMatchObject({ production: 'main', integration: 'dev', assignee: 'octo-operator' })
     expect((calls.seen['release-pr'] as { body: string }).body).toContain('## Release v0.3.0')
   })

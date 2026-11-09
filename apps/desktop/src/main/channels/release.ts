@@ -150,7 +150,7 @@ async function runOpen(ctx: RunContext, version: string): Promise<ReleaseRunResu
     if (ctx.integrationHead === null) return refused('state-changed', `${integration} has no head to bump from.`)
     const files = await bumpFiles(ctx.entry, config, ctx.integrationHead.oid, version, deps)
     if (typeof files === 'string') return refused('unsupported', files)
-    const bump = failed('bump', await deps.createBumpBranch(ctx.write, { head: ctx.integrationHead, files }))
+    const bump = failed('bump', await deps.createBumpBranch(ctx.write, { head: ctx.integrationHead, files, integration }))
     if (bump !== null) return bump
   }
 
@@ -210,7 +210,7 @@ export async function resolveReleaseRun(
     status: read.status,
     integrationHead: read.integrationHead,
     viewer: read.viewer,
-    write: { repo: entry.config.repo, repoId, version, auditDir, scratchDir, now: deps.now },
+    write: { repo: entry.config.repo, repoId, version, auditDir, scratchDir, root: entry.path, now: deps.now },
     deps,
   }
   return request.step === 'open' ? runOpen(ctx, version) : runPublish(ctx, version, request.notes)
