@@ -17,7 +17,7 @@ export const SOURCE_KINDS = ['github', 'sessions', 'worktrees', 'denials'] as co
 
 export type SourceKind = (typeof SOURCE_KINDS)[number]
 
-/** GitHub is expensive; the three local reads are cheap and run far more often. Shared by the scheduler and the staleness rule so the two agree on "one interval old". */
+/** GitHub is expensive; the three local reads are cheap and run far more often. `github` is the full-sweep cadence — CI checks and reviews ride only this tier — while change-triggered sweeps use `GITHUB_PRECHECK_INTERVAL_MS` as their floor. Shared by the scheduler and the staleness rule so the two agree on "one interval old". */
 export const SOURCE_BASE_INTERVAL_MS: Readonly<Record<SourceKind, number>> = {
   github: 60_000,
   sessions: 15_000,
@@ -25,7 +25,7 @@ export const SOURCE_BASE_INTERVAL_MS: Readonly<Record<SourceKind, number>> = {
   denials: 15_000,
 }
 
-/** The issues-list ETag pre-check's base cadence — far cheaper than a sweep, since a 304 costs no rate limit. */
+/** The issues-list ETag pre-check's cadence, and the floor under the sweeps it triggers — a 304 costs no rate limit. */
 export const GITHUB_PRECHECK_INTERVAL_MS = 10_000
 
 /** How long after an in-flight label is added an unclaimed item stays in flight, absorbing scan lag and GitHub/local clock skew. */
