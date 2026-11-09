@@ -1,5 +1,5 @@
 // Pure, clock passed in, no timer of its own — this module only ever answers "when is X next due" and "how does a read change X's health".
-import { BACKOFF_CEILING_MS, BUDGET_SHARE, DEFAULT_GRAPHQL_LIMIT, RATE_LIMIT_FLOOR, SOURCE_BASE_INTERVAL_MS, SOURCE_KINDS } from '@/types/board'
+import { BACKOFF_CEILING_MS, BUDGET_SHARE, DEFAULT_GRAPHQL_LIMIT, GITHUB_PRECHECK_INTERVAL_MS, RATE_LIMIT_FLOOR, SOURCE_BASE_INTERVAL_MS, SOURCE_KINDS } from '@/types/board'
 import type { SourceHealth, SourceKind } from '@/types/board'
 import type { RateLimitInfo } from '@/types/github'
 
@@ -41,7 +41,7 @@ interface BudgetedIntervalParams {
 
 const HOUR_MS = 3_600_000
 
-/** The GitHub interval that keeps projected hourly use, across every repository, under `BUDGET_SHARE` of the limit, and that spreads the headroom left above the floor over the time until reset. Base when no positive cost is known. */
+/** The GitHub interval that keeps projected hourly use, across every repository, under `BUDGET_SHARE` of the limit, and that spreads the headroom left above the floor over the time until reset. The floor when no positive cost is known. */
 export function budgetedIntervalMs(params: BudgetedIntervalParams): number {
   const total = params.costs.reduce((sum, cost) => sum + Math.max(0, cost), 0)
   const floorMs = params.floorMs ?? SOURCE_BASE_INTERVAL_MS.github
@@ -52,6 +52,18 @@ export function budgetedIntervalMs(params: BudgetedIntervalParams): number {
   const headroom = params.rateLimit.remaining - RATE_LIMIT_FLOOR
   const headroomMs = msUntilReset > 0 && headroom > 0 ? (msUntilReset * total) / headroom : 0
   return Math.min(BACKOFF_CEILING_MS, Math.max(floorMs, shareMs, headroomMs))
+}
+
+interface GithubSweepGapParams {
+  readonly costs: readonly number[]
+  readonly rateLimit: RateLimitInfo | undefined
+  readonly now: Date
+}
+
+/** The least time between sweeps a pre-check may trigger: the regular budget math on the fast-check floor instead of the 60s one. */
+export function githubSweepGapMs(params: GithubSweepGapParams): number {
+  if (params.rateLimit === undefined) return GITHUB_PRECHECK_INTERVAL_MS
+  return budgetedIntervalMs({ costs: params.costs, rateLimit: params.rateLimit, now: params.now, floorMs: GITHUB_PRECHECK_INTERVAL_MS })
 }
 
 /** Set whenever the failure was `rate-limited`, or the rate-limit window already reports `remaining` under the floor on an otherwise-ok read. */

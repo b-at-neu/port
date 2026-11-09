@@ -9,7 +9,7 @@ import type { RateLimitInfo } from '@/types/github'
 import { readSessionState } from '@/main/sessions/adapter'
 import type { RepoId } from '@/utils/repos'
 import type { RepositoryEntry } from '@/utils/repos'
-import { DEFAULT_POLL_POLICY, GITHUB_PRECHECK_INTERVAL_MS, SOURCE_KINDS, initialHealth, isDeferred } from '@/types/board'
+import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth, isDeferred } from '@/types/board'
 import type { BoardSnapshot, RepositoryHealth, SourceHealth, SourceKind } from '@/types/board'
 import type { RepoDispatchStatus, RunStatesSnapshot } from '@/types/dispatch'
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
@@ -21,7 +21,7 @@ import { buildDesktopTickEvent, recordTick as defaultRecordTick } from '@/main/t
 import type { DesktopTickEvent } from '@/types/trajectory'
 import type { RecordTickDeps } from '@/types/trajectory'
 import { isReady } from '@/main/state/read'
-import { afterFailure, afterSuccess, budgetedIntervalMs, deferredUntil, dueSources, nextDueAt } from '@/main/state/schedule'
+import { afterFailure, afterSuccess, budgetedIntervalMs, deferredUntil, dueSources, githubSweepGapMs, nextDueAt } from '@/main/state/schedule'
 import { createInProcessEngine } from '@/main/offload/engine'
 import { createGithubPrecheck } from '@/main/state/precheck'
 
@@ -243,11 +243,8 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     })
   }
 
-  /** The least time between sweeps a pre-check may trigger: the same budget math as the regular interval, minus its 60s floor. */
   function sweepGapMs(repoId: RepoId): number {
-    const rateLimit = githubRateLimit.get(repoId)
-    if (rateLimit === undefined) return GITHUB_PRECHECK_INTERVAL_MS
-    return budgetedIntervalMs({ costs: githubCosts(), rateLimit, now: now(), floorMs: GITHUB_PRECHECK_INTERVAL_MS })
+    return githubSweepGapMs({ costs: githubCosts(), rateLimit: githubRateLimit.get(repoId), now: now() })
   }
 
   function track(key: string, read: Promise<void>): Promise<void> {
