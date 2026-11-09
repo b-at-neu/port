@@ -23,7 +23,7 @@ type EffectiveConfigResult =
     }
   | { readonly ok: false; readonly problem: Extract<RepoProblem, { readonly kind: 'effective-config-unreadable' }> }
 
-/** The single job key under `jobs:` in `.github/workflows/approval-check.yml`, derived from the file, never typed as a literal. A minimal line-based read, not a YAML parser. */
+/** The single job key under `jobs:` in `.github/workflows/approval-check.yml` (and `artifacts.yml`), derived from the file, never typed as a literal. A minimal line-based read, not a YAML parser. */
 export function parseExcusedCheckName(text: string): string | null {
   const jobsIdx = text.indexOf('\njobs:')
   if (jobsIdx === -1) return null
@@ -82,10 +82,11 @@ export function labelOverridesOf(applied: readonly AppliedOverride[]): Partial<R
   return out
 }
 
-/** The approval-gate name first, then each applied `checks.<name>`, a later entry overwriting the same key exactly as the cockpit does. */
-export function foldDispositions(excusedCheck: string | null, applied: readonly AppliedOverride[]): Record<string, CheckDisposition> {
+/** The approval-gate name, then the history-derived artifacts audit, then each applied `checks.<name>`, a later entry overwriting the same key exactly as the cockpit does. */
+export function foldDispositions(excusedCheck: string | null, historyCheck: string | null, applied: readonly AppliedOverride[]): Record<string, CheckDisposition> {
   const out: Record<string, CheckDisposition> = {}
   if (excusedCheck !== null) out[excusedCheck] = { disposition: 'infrastructure', source: 'approval-gate' }
+  if (historyCheck !== null) out[historyCheck] = { disposition: 'blocking', source: 'artifacts-audit' }
   for (const a of applied) {
     if (!a.path.startsWith('checks.')) continue
     if (a.value !== 'blocking' && a.value !== 'infrastructure') continue
@@ -117,11 +118,19 @@ export async function resolveEffectiveConfig(read: RefReader, portResolved: Port
     }
   }
 
+  let historyCheckName: string | null = null
+  const artifactsResult = await read('.github/workflows/artifacts.yml')
+  if (artifactsResult.ok) {
+    historyCheckName = parseExcusedCheckName(artifactsResult.text)
+  } else if (artifactsResult.kind !== 'not-found') {
+    return { ok: false, problem: { kind: 'effective-config-unreadable', file: '.github/workflows/artifacts.yml', reason: 'io', message: artifactsResult.message } }
+  }
+
   return {
     ok: true,
     ...fromShape(cfg),
     labelOverrides: labelOverridesOf(applied),
-    checkDispositions: foldDispositions(excusedCheckName, applied),
+    checkDispositions: foldDispositions(excusedCheckName, historyCheckName, applied),
     applied,
     refused,
   }

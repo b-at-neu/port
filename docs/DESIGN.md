@@ -171,10 +171,10 @@ Dark surface lightness (CIE L*): sidebar 6.3 · background 10.7 · card 15.2 · 
 
 | Screen | Content |
 | --- | --- |
-| Needs you | Everything waiting on the operator, newest first, each with its action inline: plan reviews, PRs ready to merge, questions from stage sessions, needs-human escalations. Blocked tickets are not here: they are held, and the Board shows what they wait on |
+| Needs you | Everything waiting on the operator, newest first, each with its action inline: plan reviews, PRs ready to merge, questions from stage sessions, needs-human escalations, blocked tickets with the decision they wait on |
 | Board | Grouped list: **Waiting on you**, **In progress**, **Blocked**, **Queued**. Toggle grouping by phase or by repo, plus a repo filter |
 | Backlog | Open tickets not yet in a pipeline, with **Work on**: interactive plan review or auto-plan |
-| Releases | Per repo, the upcoming release (what merged since the last tag, the recommended version) with the one action its phase allows (**Cut release**, **Open PR**, **Publish**), then every previous release, whose notes open in the detail pane |
+| Releases | Per repo, the upcoming release (the PRs merged since the last release) with the one action its phase allows (**Cut release**, **Open PR**, **Publish**), then every previous release, whose notes open in the detail pane |
 | Session | Conversation and composer. **Changes** opens the session's diff in the detail pane |
 | History | Past sessions and transcripts, with search |
 | Audit log | Every write port made to GitHub, newest first, filterable by repo and ticket |
@@ -182,7 +182,7 @@ Dark surface lightness (CIE L*): sidebar 6.3 · background 10.7 · card 15.2 · 
 
 Scoping epics and analytics are out of scope for the first release.
 
-**Detail pane rule.** Selecting an item in a list (a ticket, worktree, denial or release) opens it in the right-hand pane instead of navigating away. Esc closes it. Full-page navigation is only for screens and sessions.
+**Detail pane rule.** Selecting an item in a list (a ticket, worktree, denial or release) opens it in the right-hand pane instead of navigating away. Esc closes it. Clicking the selected row again, or empty space on the page, deselects it and closes the pane; clicks on a control, inside the pane, or in a menu or dialog do not. Full-page navigation is only for screens and sessions.
 
 **Board row anatomy, left to right:**
 - ticket number (`muted-foreground`, tabular);
@@ -228,7 +228,7 @@ Scoping epics and analytics are out of scope for the first release.
 | Component | Treatment |
 | --- | --- |
 | `Screen`, `ScreenBody` | The layout every screen is built from: a 44px `ScreenHeader`, then one body variant: `list` (edge to edge, rows inset themselves), `page` (16px padding), `form` (16px padding, 512px column), `conversation` (16px padding, centred 680px column). A screen never sets its own outer padding |
-| `StatusPill` | Dot, then label, using the status roles. With a menu it shows a chevron: the repo run state is `● Running ▾` with Run, Drain and Pause, each with a one-line hint (Drain "finish in-flight", Pause "stop now") |
+| `StatusPill` | Dot, then label, using the status roles. With a menu it shows a chevron: the repo run state is `● Running ▾` with Run, Drain and Stop, each with a one-line hint (Drain "finish in-flight", Stop "stop now") |
 | `LabelChip` | A GitHub label as a full-radius pill: 11px/500, 1px `border` outline, max 8rem and truncating. Its fill is the label's own GitHub colour, which is repository data and not a design token, so this is the one place a hex reaches a component, applied through `style` from `renderer/lib/label-color.ts`. Text is black or white, whichever contrasts more with the fill. A missing or malformed colour falls back to `muted` with `foreground-secondary` text |
 | `PhasePill`, `PhaseDot` | A `StatusPill`'s anatomy as a solid fill from the phase palette (§1); its dot is drawn in the pill's text colour. `PhaseDot` is a ring while the stage is queued and filled while it is in flight, and pulses while the stage waits on you, or, for a running pipeline session in the sidebar, in its phase colour. Unstaged items use the `idle` role. The `needs-you` palette overrides the phase colour for anything that needs the operator |
 | `PhaseBar` | Five 10×4px segments with a 2px gap, for plan (including plan review), implement, review, revision, merge. Finished segments use `segment-past`, the current one the current stage's full phase dot colour, or `needs-you` when it waits on you, not-yet-reached ones `segment-future`; a merged item is every segment `done`. Tooltip names the phase |

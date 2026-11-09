@@ -101,15 +101,23 @@ describe('buildSessionOptions — operator session defaults (#364)', () => {
 })
 
 describe('buildSessionOptions — stage branch (#327)', () => {
+  const IMPL = { name: 'impl-agent', definition: { description: 'impl', prompt: 'body', disallowedTools: ['Agent'] } }
+
   it('sets agent, model and permissionMode: default from stage, never reading defaults', () => {
-    const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, defaults: { model: 'haiku', permissionMode: 'acceptEdits' }, stage: { agentName: 'port:impl-agent', model: 'sonnet' } })
+    const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, defaults: { model: 'haiku', permissionMode: 'acceptEdits' }, stage: { agent: IMPL, instructionsRoot: '/bundle', model: 'sonnet' } })
     expect(options.permissionMode).toBe('default')
     expect(options.model).toBe('sonnet')
-    expect((options as Record<string, unknown>)['agent']).toBe('port:impl-agent')
+    expect(options.agent).toBe('impl-agent')
+  })
+
+  it('defines the agent inline with the stage model and reads the bundle through additionalDirectories', () => {
+    const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, stage: { agent: IMPL, instructionsRoot: '/bundle', model: 'sonnet' } })
+    expect(options.agents).toEqual({ 'impl-agent': { description: 'impl', prompt: 'body', disallowedTools: ['Agent'], model: 'sonnet' } })
+    expect(options.additionalDirectories).toEqual(['/bundle'])
   })
 
   it('adds no allowedTools or systemPrompt', () => {
-    const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, stage: { agentName: 'port:plan-agent', model: 'opus' } }) as Record<string, unknown>
+    const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, stage: { agent: { name: 'plan-agent', definition: { description: 'plan', prompt: 'body' } }, instructionsRoot: '/bundle', model: 'opus' } }) as Record<string, unknown>
     expect(options['allowedTools']).toBeUndefined()
     expect(options['systemPrompt']).toBeUndefined()
   })

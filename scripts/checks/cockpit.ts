@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { root, pipelineSkillText } from '#lib/files.ts';
 import type { Reporter } from '#lib/report.ts';
 
@@ -104,6 +105,21 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(pipelineText.includes('unconditional'), 'cycle-cap', `${pipelineRel} never states the cycle cap is 'unconditional'`);
 
     expect(pipelineText.includes('Zero-diff review'), 'zero-diff-review', `${pipelineRel} carries no 'Zero-diff review' rule`);
+  }
+
+  // --- The integration-red hold: a pull request whose red check is also red on the integration
+  // branch forms no verdict, so every file that names the comment keeps the literal and the hold window. ---
+  {
+    const heading = '## Integration red';
+    for (const rel of ['plugins/port/agents/review-agent.md', 'plugins/port/docs/PIPELINE.md', 'plugins/port/docs/FORMATS.md', 'plugins/port/skills/pipeline/TICK-PROSE.md', 'plugins/port/skills/pipeline/SKILL.md']) {
+      expect(readFileSync(join(root, rel), 'utf8').includes(heading), 'integration-red', `${rel} never names the literal '${heading}'`);
+    }
+    const { INTEGRATION_RED_HOLD_HOURS } = await import(pathToFileURL(join(root, 'scripts/port-tick/gates.ts')).href);
+    const window = `${INTEGRATION_RED_HOLD_HOURS} hours`;
+    for (const rel of ['plugins/port/docs/PIPELINE.md', 'plugins/port/skills/pipeline/TICK-PROSE.md']) {
+      expect(readFileSync(join(root, rel), 'utf8').includes(window), 'integration-red', `${rel} never states the hold window as '${window}', which gates.ts's INTEGRATION_RED_HOLD_HOURS sets`);
+    }
+    expect(readFileSync(join(root, 'plugins/port/docs/PIPELINE.md'), 'utf8').includes('Red on integration'), 'integration-red', 'plugins/port/docs/PIPELINE.md carries no "Red on integration" rule');
   }
 
   // --- Liveness is a TaskList call, never a label inference: checks the unconditional-call

@@ -1,6 +1,6 @@
-// Pure envelope parse and failure classification — no I/O. gh api graphql exits non-zero whenever
-// the response carries errors, even when data is still usable, so the envelope itself decides.
-import type { GhResult } from '@/types/platform'
+// Pure envelope parse and failure classification — no I/O. A GraphQL reply can carry errors beside
+// usable data, so the envelope itself decides, never the status alone.
+import type { GitHubHttpResult } from '@/types/platform'
 import type { AliasInfo, EnvelopeFailureKind, GraphQLErrorEntry, SweepAlias, UnavailableAlias } from '@/types/github'
 
 export interface GraphQLEnvelope {
@@ -8,8 +8,17 @@ export interface GraphQLEnvelope {
   readonly errors?: readonly GraphQLErrorEntry[]
 }
 
-export function stdoutOf(result: GhResult): string | undefined {
-  return 'stdout' in result ? result.stdout : undefined
+/** The reply body when there is one; a classified failure keeps its body, a transport failure has none. */
+export function bodyOf(result: GitHubHttpResult): string | undefined {
+  return 'body' in result ? result.body : undefined
+}
+
+/** The read-side counterpart of `release.ts`'s `describe`, which stays on `GhResult` for the writes. */
+export function describeHttp(result: Exclude<GitHubHttpResult, { ok: true }>): string {
+  if ('message' in result && result.kind !== 'spawn-failed') return result.message
+  if (result.kind === 'not-found') return "gh isn't on PATH"
+  if (result.kind === 'spawn-failed') return result.message
+  return result.kind
 }
 
 type ParsedEnvelope = { readonly ok: true; readonly value: GraphQLEnvelope } | { readonly ok: false }
@@ -28,42 +37,42 @@ export function parseEnvelope(raw: string): ParsedEnvelope {
 
 type FailureVerdict =
   | { readonly kind: 'ok' }
-  | { readonly kind: Exclude<GhResult, { ok: true }>['kind'] | EnvelopeFailureKind; readonly message: string }
+  | { readonly kind: Exclude<GitHubHttpResult, { ok: true }>['kind'] | EnvelopeFailureKind; readonly message: string }
 
-/** Classification order, first match wins: an unresolved `gh` binary, any non-`unknown` classified
- *  exit, then the envelope itself (a partial response is `unavailable` per alias, not a failure). */
-export function classifyFailure(ghResult: GhResult, envelope: ParsedEnvelope | undefined): FailureVerdict {
-  if (!ghResult.ok) {
-    switch (ghResult.kind) {
+/** Classification order, first match wins: a failed token bootstrap, any non-`unknown` classified
+ *  status, then the envelope itself (a partial response is `unavailable` per alias, not a failure). */
+export function classifyFailure(result: GitHubHttpResult, envelope: ParsedEnvelope | undefined): FailureVerdict {
+  if (!result.ok) {
+    switch (result.kind) {
       case 'not-found':
-        return { kind: 'not-found', message: `gh isn't on PATH — looked in ${ghResult.searched.length} places` }
+        return { kind: 'not-found', message: `gh isn't on PATH — looked in ${result.searched.length} places` }
       case 'cwd-missing':
-        return { kind: 'cwd-missing', message: `working directory does not exist: ${ghResult.cwd}` }
+        return { kind: 'cwd-missing', message: `working directory does not exist: ${result.cwd}` }
       case 'signalled':
-        return { kind: 'signalled', message: `gh was killed by signal ${ghResult.signal}` }
+        return { kind: 'signalled', message: `gh was killed by signal ${result.signal}` }
       case 'timeout':
-        return { kind: 'timeout', message: `gh timed out after ${ghResult.timeoutMs}ms` }
+        return { kind: 'timeout', message: `GitHub didn't reply within ${result.timeoutMs}ms` }
       case 'output-too-large':
-        return { kind: 'output-too-large', message: `gh's output exceeded ${ghResult.maxBytes} bytes` }
+        return { kind: 'output-too-large', message: `GitHub's reply exceeded ${result.maxBytes} bytes` }
       case 'spawn-failed':
-        return { kind: 'spawn-failed', message: ghResult.message }
+        return { kind: 'spawn-failed', message: result.message }
       case 'unauthenticated':
       case 'rate-limited':
       case 'forbidden':
       case 'http-not-found':
       case 'network':
-        return { kind: ghResult.kind, message: ghResult.stderr }
+        return { kind: result.kind, message: result.message }
       case 'unknown':
         break // fall through to the envelope check below
       default: {
-        const _exhaustive: never = ghResult
-        return { kind: 'unknown', message: `unhandled gh classification: ${(_exhaustive as { kind: string }).kind}` }
+        const _exhaustive: never = result
+        return { kind: 'unknown', message: `unhandled GitHub classification: ${(_exhaustive as { kind: string }).kind}` }
       }
     }
   }
 
   if (envelope === undefined || !envelope.ok) {
-    if (!ghResult.ok) return { kind: 'unknown', message: ghResult.stderr }
+    if (!result.ok) return { kind: 'unknown', message: result.message }
     return { kind: 'unparseable', message: "GitHub's reply wasn't JSON" }
   }
 

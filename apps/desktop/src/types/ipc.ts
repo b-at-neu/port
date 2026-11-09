@@ -11,7 +11,7 @@ import type { GateAnswerResponse, GateDecision, GatePreflightResponse } from '@/
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { ItemActionResult, ItemDecisionResult, OperatorAction, OperatorDecision, RebasePick, UnblockRoute } from '@/types/actions'
 import type { DispatchControlResult, HeldForceDispatchResult } from '@/types/dispatch'
-import type { ReleaseRunRequest, ReleaseRunResult, ReleaseStatusResponse } from '@/types/release'
+import type { ReleaseIssuesRequest, ReleaseIssuesResponse, ReleaseRunRequest, ReleaseRunResult, ReleaseStatusResponse } from '@/types/release'
 import type { RuntimePreflight, RuntimeProbe } from '@/types/runtime'
 import type { GhStatus } from '@/types/gh'
 import type { NotificationPrefs, StorageReport, UsageSummary } from '@/types/settings'
@@ -383,13 +383,12 @@ export interface IpcMap {
     response: StorageReport
   }
   /** Spend and tokens of the sessions port hosted, per repository and period. */
-  'usage:summary': {
-    request: void
-    response: UsageSummary
-  }
+  'usage:summary': { request: void; response: UsageSummary }
   /** The Releases screen's own read and its one write — main re-derives the phase from GitHub before every step. */
   'release:status': { request: { repoId: RepoId }; response: ReleaseStatusResponse }
   'release:run': { request: ReleaseRunRequest; response: ReleaseRunResult }
+  /** The tickets a published release's merged pull requests closed — read from GitHub, never written. */
+  'release:issues': { request: ReleaseIssuesRequest; response: ReleaseIssuesResponse }
 }
 
 export const IPC_CHANNELS = [
@@ -460,6 +459,7 @@ export const IPC_CHANNELS = [
   'usage:summary',
   'release:status',
   'release:run',
+  'release:issues',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]

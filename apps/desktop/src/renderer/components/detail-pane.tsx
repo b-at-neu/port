@@ -23,6 +23,7 @@ export function DetailPane({ onClose, children, className, 'data-slot': dataSlot
       ref={(el) => el?.focus()}
       role="complementary"
       data-slot={dataSlot}
+      data-keeps-selection
       tabIndex={-1}
       onKeyDown={handleKeyDown}
       className={cn(

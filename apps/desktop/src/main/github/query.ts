@@ -135,6 +135,15 @@ export function buildItemDetailsQuery(refs: readonly ItemDetailRef[]): ItemDetai
   return { document, aliases }
 }
 
+const INTEGRATION_HISTORY_SIZE = 5
+
+/** The integration branch's recent commits with their rollups — the same selection `scripts/port-tick/query.ts` reads, for the integration-red gate. */
+export function buildIntegrationChecksQuery(integration: string): string {
+  const contexts = `contexts(first: 50) { nodes { __typename ... on CheckRun { name conclusion status startedAt completedAt detailsUrl } ... on StatusContext { context state createdAt targetUrl } } }`
+  const ref = `ref(qualifiedName: ${graphqlStringLiteral(`refs/heads/${integration}`)}) { target { ... on Commit { history(first: ${INTEGRATION_HISTORY_SIZE}) { nodes { oid statusCheckRollup { ${contexts} } } } } } }`
+  return ['query($owner: String!, $name: String!) {', '  repository(owner: $owner, name: $name) {', `    integrationHistory: ${ref}`, '  }', '  rateLimit { cost remaining resetAt limit }', '}'].join('\n')
+}
+
 interface ItemsByNumberAlias {
   readonly alias: string
   readonly number: number
@@ -156,7 +165,7 @@ export function buildItemsByNumberQuery(numbers: readonly number[]): ItemsByNumb
     const labelsField = `labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }`
     const assigneesField = `assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }`
     fields.push(
-      `  ${alias}: issueOrPullRequest(number: ${number}) { __typename ... on Issue { number title url state closedAt ${assigneesField} ${labelsField} } ... on PullRequest { number title url state mergedAt closedAt headRefName ${assigneesField} ${labelsField} } }`,
+      `  ${alias}: issueOrPullRequest(number: ${number}) { __typename ... on Issue { number title url state closedAt ${assigneesField} ${labelsField} } ... on PullRequest { number title url state mergedAt closedAt headRefName author { login } ${assigneesField} ${labelsField} } }`,
     )
     aliases.push({ alias, number })
   })

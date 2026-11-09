@@ -17,7 +17,7 @@ export interface EndedStage {
   readonly at: string
 }
 
-/** Why a trigger-stage item is held rather than actionable — first hit wins: `unowned` before `other-operator` before `session-required` before `contended`. `cycle-cap`/`zero-diff`/`check-hold` are checked per-item after that ladder; this app computes the decision and the report, never the write. */
+/** Why a trigger-stage item is held rather than actionable — first hit wins: `unowned` before `other-operator` before `session-required` before `contended`. `cycle-cap`/`zero-diff`/`check-hold`/`integration-red` are checked per-item after that ladder, and `integration-green` marks a pull request the integration-red hold hands to a refresh; this app computes the decision and the report, never the write. */
 export type TickHeldReason =
   | 'unowned'
   | 'other-operator'
@@ -26,15 +26,19 @@ export type TickHeldReason =
   | 'cycle-cap'
   | 'zero-diff'
   | 'check-hold'
+  | 'integration-red'
+  | 'integration-green'
   | 'refresh-wins'
   | 'conflicting'
   | 'mergeability-unknown'
 
-/** `TickHeld.escalation`'s own shape — `null` for every reason except `cycle-cap`/`zero-diff`/`check-hold`, which carry the count and cap, or the held checks and their deadline, without re-deriving either from raw review data. */
+/** `TickHeld.escalation`'s own shape — `null` for every reason except `cycle-cap`/`zero-diff`/`check-hold`/`integration-red`, which carry the count and cap, or the held checks and their deadline, without re-deriving either from raw review data. */
 export type TickEscalation =
   | { readonly kind: 'cycle-cap'; readonly count: number; readonly cap: number }
-  | { readonly kind: 'zero-diff' }
+  | { readonly kind: 'zero-diff'; readonly reason: 'zero-diff' | 'sha-cap' }
   | { readonly kind: 'check-hold'; readonly checks: readonly string[]; readonly state: 'pending' | 'red'; readonly escalateAt: string | null }
+  /** `expired` is the hold window running out, which is what `observe.ts` escalates; until then it is a plain hold with `escalateAt` as its deadline. */
+  | { readonly kind: 'integration-red'; readonly checks: readonly string[]; readonly state: 'red' | 'unreadable'; readonly escalateAt: string | null; readonly expired: boolean }
 
 /** The file-contention gate's own held detail — populated only for `reason: 'contended'`, `null` for the other reasons. */
 export interface TickContention {
@@ -61,7 +65,7 @@ export interface TickHeld {
   readonly trigger: LabelKey
   readonly reason: TickHeldReason
   readonly contention: TickContention | null
-  /** Populated only for `reason: 'cycle-cap'` / `'zero-diff'` / `'check-hold'`, `null` for every other reason. */
+  /** Populated only for `reason: 'cycle-cap'` / `'zero-diff'` / `'check-hold'` / `'integration-red'`, `null` for every other reason. */
   readonly escalation: TickEscalation | null
 }
 
@@ -86,7 +90,7 @@ export type TickBlind =
   | { readonly reason: 'stale-read'; readonly ageMs: number }
 
 /** The machine-observation write families this app ports from the cockpit's cadence, plus one report-only kind (`refresh-deferred`) that authorises no write of its own. `observe.ts`'s `observationsOf` is the only producer, except for `plan-missing`, which `main/tick/repair.ts`'s `repairsOf` produces. */
-export type TickObservationKind = 'liveness-reset' | 'cycle-cap' | 'zero-diff' | 'refresh' | 'refresh-stuck' | 'refresh-deferred' | 'withdraw-approval' | 'plan-missing'
+export type TickObservationKind = 'liveness-reset' | 'cycle-cap' | 'zero-diff' | 'integration-red' | 'refresh' | 'refresh-stuck' | 'refresh-deferred' | 'withdraw-approval' | 'plan-missing'
 
 interface TickObservationBase {
   readonly number: number
@@ -102,8 +106,16 @@ export type TickObservation =
       readonly evidence: 'ledger' | 'stage-error'
     })
   | (TickObservationBase & { readonly kind: 'cycle-cap'; readonly count: number; readonly cap: number })
-  | (TickObservationBase & { readonly kind: 'zero-diff'; readonly count: number; readonly headRefOid: string })
-  | (TickObservationBase & { readonly kind: 'refresh'; readonly sourceLabel: LabelKey; readonly headRefOid: string; readonly count: number })
+  | (TickObservationBase & { readonly kind: 'zero-diff'; readonly reason: 'zero-diff' | 'sha-cap'; readonly count: number; readonly headRefOid: string })
+  | (TickObservationBase & { readonly kind: 'integration-red'; readonly checks: readonly string[]; readonly headRefOid: string })
+  | (TickObservationBase & {
+      readonly kind: 'refresh'
+      readonly sourceLabel: LabelKey
+      readonly headRefOid: string
+      readonly count: number
+      /** `'integration-green'` is a refresh that resumes review, not one that clears a conflict, so it posts no `## Rebase required` comment. */
+      readonly cause: 'conflict' | 'integration-green'
+    })
   | (TickObservationBase & {
       readonly kind: 'refresh-stuck'
       readonly sourceLabel: LabelKey
@@ -114,6 +126,8 @@ export type TickObservation =
   | (TickObservationBase & { readonly kind: 'refresh-deferred' })
   | (TickObservationBase & {
       readonly kind: 'withdraw-approval'
+      /** `'human'` is a red check that grades the pull request's own review history, which no revision can clear. */
+      readonly route: 'revise' | 'human'
       readonly red: readonly { readonly name: string | null; readonly conclusion: string | null; readonly url: string | null }[]
       readonly headRefOid: string
     })

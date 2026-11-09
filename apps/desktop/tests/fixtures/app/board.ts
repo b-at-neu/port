@@ -104,6 +104,7 @@ function readyRepositoryState(now: Date, scenario: FixtureScenario): RepositoryS
     truncated: [],
     rateLimit: { cost: 1, remaining: 4999, resetAt: offsetMinutes(now, 60), limit: 5000 },
     viewer: VIEWER,
+    integrationChecks: {},
     fetchedAt: now.toISOString(),
   }
 
@@ -224,6 +225,7 @@ export function gadgetsRepositoryState(now: Date): RepositoryState {
     truncated: [],
     rateLimit: { cost: 1, remaining: 4987, resetAt: offsetMinutes(now, 60), limit: 5000 },
     viewer: VIEWER,
+    integrationChecks: {},
     fetchedAt: now.toISOString(),
   }
 

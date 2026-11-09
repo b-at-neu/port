@@ -1,7 +1,8 @@
 // One refresh primitive per source, each keeping the previous good value in place on a failed attempt. `watcher.ts` decides *when* to call these; no file here names a timer.
 import { fetchItemsByNumber } from '@/main/github/adapter'
+import { createEtagCache } from '@/main/github/conditional'
 import { fetchPipelineItems } from '@/main/github/pipeline'
-import type { GhRunner } from '@/types/platform'
+import type { GitHubTransport } from '@/types/platform'
 import { collectOrphanNumbers } from '@/main/state/attach'
 import { readDenials } from '@/main/local/denials'
 import { readWorktrees } from '@/main/local/worktrees'
@@ -14,7 +15,7 @@ import type { AgentRecord } from '@/types/sessions'
 import type { RefreshOutcome, SourceCache } from '@/types/state'
 
 export function createSourceCache(): SourceCache {
-  return { github: new Map(), itemStates: new Map(), worktrees: new Map(), denials: new Map(), sessions: null }
+  return { github: new Map(), itemStates: new Map(), worktrees: new Map(), denials: new Map(), etags: createEtagCache(), sessions: null }
 }
 
 function projectOk<T extends { readonly ok: boolean }>(previous: T | null, attempt: T): T {
@@ -25,23 +26,25 @@ interface RefreshGithubParams {
   readonly repoId: RepoId
   readonly repo: { readonly owner: string; readonly name: string }
   readonly vocabulary: LabelVocabulary
+  /** `branches.integration`, whose recent check history the integration-red gate compares against. */
+  readonly integration: string
   /** Read from whatever the worktree/session sources most recently returned — never re-fetched here; this primitive composes, it does not read a second source. */
   readonly worktreeEntries: readonly WorktreeEntry[]
   readonly agents: readonly AgentRecord[]
-  readonly gh?: GhRunner
+  readonly github?: GitHubTransport
   readonly now?: () => Date
 }
 
 /** Fires the conditional `fetchItemsByNumber` re-check itself whenever the fresh sweep leaves orphan numbers, so `itemStates` stays dependent on a GitHub refresh. */
 export async function refreshGithub(cache: SourceCache, params: RefreshGithubParams): Promise<RefreshOutcome> {
   const now = params.now ?? (() => new Date())
-  const fetch = await fetchPipelineItems({ repo: params.repo, vocabulary: params.vocabulary, gh: params.gh, now })
+  const fetch = await fetchPipelineItems({ repo: params.repo, vocabulary: params.vocabulary, integration: params.integration, github: params.github, now })
   const previous = cache.github.get(params.repoId) ?? null
   cache.github.set(params.repoId, projectOk(previous, fetch))
 
   if (fetch.ok) {
     const orphanNumbers = collectOrphanNumbers(fetch.items, params.worktreeEntries, params.agents)
-    cache.itemStates.set(params.repoId, orphanNumbers.length === 0 ? null : await fetchItemsByNumber({ repo: params.repo, numbers: orphanNumbers, gh: params.gh, now }))
+    cache.itemStates.set(params.repoId, orphanNumbers.length === 0 ? null : await fetchItemsByNumber({ repo: params.repo, numbers: orphanNumbers, github: params.github, now }))
   }
 
   return fetch.ok

@@ -38,7 +38,7 @@ The code review is a **real GitHub pull request review** (`gh api …/pulls/<pr>
 - **Escalating bar — what blocks rises with the cycle.** Pass 1 polishes everything, later passes converge: **cycle 1** any finding blocks; **cycle 2** Low and above (Nit does not); **cycle 3+** Critical and Medium only. A nit introduced during a revision cannot re-trigger at cycle 2 or later. The cockpit's cap is `reviewCycleCap` cycles, **unconditional** — it fires whatever the latest verdict said, which routes to `needs human`. A red required check, other than the `## Check evidence` carve-out, is **always** Critical, at every cycle — never downgraded to fit a later cycle's bar.
 - **Inline anchoring.** A comment is accepted only on a line **in the diff** — map it from `gh pr diff` hunk headers (added and context lines → `side:"RIGHT"`, new-version line; deletions → `side:"LEFT"`, old-version line). If the reviews API returns 422 for an unresolvable line, **resubmit with `comments:[]`** and list those findings in the body with permalinks, so a review always lands.
 - **Revision resolves threads, it does not summarize.** After pushing fixes, for each **fixed** finding reply `Fixed in <sha>` on its thread and resolve it via GraphQL (`addPullRequestReviewThreadReply` then `resolveReviewThread`), matched by ID; **genuinely-skipped** threads get a one-line reason and stay open. Then one short comment per cycle, or none: `## Revision — Cycle <n>` plus a single line `fixed <ids> · skipped <ids> · <sha>`, appending `· rebase: <file> (<strategy>)` if a conflict was auto-resolved, and `` · reran `<name>` `` (or `` · cannot re-run `<name>` ``) when the cycle re-ran a named red check instead of changing code. The detail line may instead open `check <name> · <sha>` for a check-fix cycle, or `fixed changes requested · <sha>` for an operator-request cycle — see `revise-agent.md` step 1 — with no `fixed`/`skipped` segment either way, since there are no threads to resolve in either mode.
-- **Other comments** — `## Pipeline Escalation` (revise: ambiguous rebase), `## Blocker` (impl: on the issue), `## Gate cleared` (cockpit: on the pull request, at `unblock #N`), `## Approval withdrawn` (cockpit: on the pull request, when a check goes red after approval — see "The `<labels.approved>` carve-out" in `## Check evidence`), `## Changes requested` (cockpit: on the pull request, at `revise #N` — see "Changes requested" below), and `## Rebase required` (cockpit or `review-agent`: when `mergeable` reads `CONFLICTING` — see "Rebase required" below) stay short: what is blocked/cleared/withdrawn/requested/needed and the decision required, via `--body-file`.
+- **Other comments** — `## Pipeline Escalation` (revise: ambiguous rebase), `## Blocker` (impl: on the issue), `## Gate cleared` (cockpit: on the pull request, at `unblock #N`), `## Approval withdrawn` (cockpit: on the pull request, when a check goes red after approval — see "The `<labels.approved>` carve-out" in `## Check evidence`), `## Changes requested` (cockpit: on the pull request, at `revise #N` — see "Changes requested" below), `## Rebase required` (cockpit or `review-agent`: when `mergeable` reads `CONFLICTING` — see "Rebase required" below), and `## Integration red` (`review-agent`: when a red `blocking` check is also red on `<integration>` — see "Integration red" below) stay short: what is blocked/cleared/withdrawn/requested/needed and the decision required, via `--body-file`. `## Blocker`'s first line under the heading is `**Decision needed:** …`, because the desktop app shows that line as the ticket's reason, and the context follows it.
 
 ### Approval withdrawn (cockpit writes it via `--body-file`)
 
@@ -51,6 +51,12 @@ Posted the same tick the cockpit routes an approved pull request back to `<label
 
 Names the check, its conclusion, its link, and the head SHA the conclusion belongs to — the four facts that authorise the removal, so the record stands on its own without the cockpit's own reasoning attached.
 
+**Approval withdrawn — escalation variant.** When the red check is the history-derived `audit-artifacts`, the cockpit routes to `<labels.needsHuman>` instead and appends one line after the per-check lines (the validator accepts extra lines):
+
+```
+This check grades the pull request's own review history, so no revision can change it — moved to `<labels.needsHuman>` instead of revision. A new head is the way past it.
+```
+
 ### Rebase required (cockpit and `review-agent` write it via `--body-file`)
 
 Posted whenever `mergeable` reads `CONFLICTING` — at the cockpit's dispatch gate, at its approved re-verify, or at `review-agent`'s own exit — the moment a pull request is labelled `<labels.refreshBranch>` for this reason. Two lines, no restated context:
@@ -61,6 +67,19 @@ Conflicts with `<base>` at `<head-sha>` — GitHub can't build a merge ref, so n
 ```
 
 Names the base branch and the head SHA the conflict was read against — enough for `revise-agent` to enter refresh mode (see `revise-agent.md`) without re-deriving anything, and enough for a human reading the thread to know the pipeline never had checks to go on.
+
+### Integration red (`review-agent` writes it via `--body-file`)
+
+Posted instead of a `## Code Review` when a red `blocking` check on the pull request is also red on `<integration>` (`PIPELINE.md` → "Check evidence" → "Red on integration"). It forms no verdict and consumes no cycle:
+
+```
+## Integration red
+Head `<head-sha>` · `<integration>` is already red on these checks, so the failure isn't from this diff:
+- `<check>` — <conclusion> on `<integration-sha>` · <run url>
+Also red here: `<check>`
+```
+
+One `- ` line per integration-red check. The `Also red here:` line is optional and lists red checks that are not red on `<integration>`; they are not findings. The comment is keyed to the head SHA: the cockpit holds the pull request while it stands, and any push ends the hold. `gates.ts`'s `integrationRedNames` parses it, and `artifacts.mjs check integration-red` validates it.
 
 ### Gate cleared (cockpit writes it via `--body-file`)
 

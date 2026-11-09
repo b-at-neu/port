@@ -1,13 +1,14 @@
 // The pipeline read: a paged two-connection sweep for the light fields, then a per-number detail
 // read for the heavy ones. Cost stays flat in the number of enabled labels.
-import type { GhRunner } from '@/types/platform'
-import { gh as defaultGh } from '@/main/platform/gh'
+import type { GitHubTransport } from '@/types/platform'
+import { githubHttp } from '@/main/platform/github-http'
 import { verifyVocabulary } from '@/utils/labels/vocabulary'
 import type { LabelVocabulary, RepoLabels } from '@/utils/labels/vocabulary'
 import type {
   AliasInfo,
   GitHubRepoRef,
   GraphQLErrorEntry,
+  IntegrationChecks,
   ItemDetail,
   PipelineFailureKind,
   PipelineFetch,
@@ -20,9 +21,10 @@ import type {
   TruncatedSet,
   UnavailableAlias,
 } from '@/types/github'
-import { classifyFailure, collectUnavailable, parseEnvelope, stdoutOf } from '@/main/github/envelope'
-import { applyItemDetails, mapPipelineItems } from '@/main/github/map'
-import { FIRST_SWEEP_PAGE, buildItemDetailsQuery, buildPipelineQuery } from '@/main/github/query'
+import { bodyOf, classifyFailure, collectUnavailable, parseEnvelope } from '@/main/github/envelope'
+import { applyItemDetails, mapPipelineItems, toIntegrationChecks } from '@/main/github/map'
+import { FIRST_SWEEP_PAGE, buildIntegrationChecksQuery, buildItemDetailsQuery, buildPipelineQuery } from '@/main/github/query'
+import { repoGraphqlRequest } from '@/main/github/request'
 
 const MAX_SWEEP_PAGES = 10
 const DETAIL_CHUNK_SIZE = 100
@@ -89,11 +91,11 @@ function toRepoLabels(value: unknown): RepoLabels {
   return { ok: true, names }
 }
 
-async function graphql(runner: GhRunner, repo: GitHubRepoRef, document: string): Promise<Reply> {
-  const ghResult = await runner(['api', 'graphql', '-f', `query=${document}`, '-f', `owner=${repo.owner}`, '-f', `name=${repo.name}`])
-  const stdout = stdoutOf(ghResult)
-  const parsed = stdout !== undefined ? parseEnvelope(stdout) : undefined
-  const verdict = classifyFailure(ghResult, parsed)
+async function graphql(github: GitHubTransport, repo: GitHubRepoRef, document: string): Promise<Reply> {
+  const result = await github(repoGraphqlRequest(document, repo))
+  const text = bodyOf(result)
+  const parsed = text !== undefined ? parseEnvelope(text) : undefined
+  const verdict = classifyFailure(result, parsed)
 
   if (verdict.kind !== 'ok') return { ok: false, kind: verdict.kind, message: verdict.message }
   // Re-checked here rather than asserted, so a contract violation is a reported value, never thrown.
@@ -147,7 +149,7 @@ interface SweepResult {
   readonly truncated: readonly TruncatedSet[]
 }
 
-async function sweep(runner: GhRunner, repo: GitHubRepoRef, vocabulary: LabelVocabulary): Promise<SweepResult | Failure> {
+async function sweep(github: GitHubTransport, repo: GitHubRepoRef, vocabulary: LabelVocabulary): Promise<SweepResult | Failure> {
   const state: SweepState = { nodes: { issues: [], pullRequests: [] }, totals: { issues: 0, pullRequests: 0 }, unavailable: new Map() }
   // An empty `labels:` list filters nothing, so with no enabled label the connections are not asked at all.
   const hasLabels = vocabulary.labels.length > 0
@@ -158,7 +160,7 @@ async function sweep(runner: GhRunner, repo: GitHubRepoRef, vocabulary: LabelVoc
   let truncated: readonly TruncatedSet[] = []
 
   for (let fetched = 1; ; fetched++) {
-    const reply = await graphql(runner, repo, buildPipelineQuery(vocabulary, page))
+    const reply = await graphql(github, repo, buildPipelineQuery(vocabulary, page))
     if (!reply.ok) return reply
     rateLimit = addRateLimit(rateLimit, reply.data.rateLimit)
     if (fetched === 1) {
@@ -189,7 +191,7 @@ const PER_FIELD_ERRORS: ReadonlySet<unknown> = new Set(['blockedBy', 'comments']
 
 /** Any other detail alias that errors or comes back null fails the whole read: a missing review list would
  *  read as zero cycles, and a revise dispatch could go past the cap. */
-async function readDetails(runner: GhRunner, repo: GitHubRepoRef, items: readonly PipelineItem[], rateLimit: RateLimitInfo): Promise<DetailsResult | Failure> {
+async function readDetails(github: GitHubTransport, repo: GitHubRepoRef, items: readonly PipelineItem[], rateLimit: RateLimitInfo): Promise<DetailsResult | Failure> {
   const refs = items.map((item) => ({
     kind: item.kind,
     number: item.number,
@@ -201,7 +203,7 @@ async function readDetails(runner: GhRunner, repo: GitHubRepoRef, items: readonl
 
   for (let start = 0; start < refs.length; start += DETAIL_CHUNK_SIZE) {
     const { document, aliases } = buildItemDetailsQuery(refs.slice(start, start + DETAIL_CHUNK_SIZE))
-    const reply = await graphql(runner, repo, document)
+    const reply = await graphql(github, repo, document)
     if (!reply.ok) return reply
     total = addRateLimit(total, reply.data.rateLimit)
     const errors = reply.errors ?? []
@@ -220,10 +222,25 @@ async function readDetails(runner: GhRunner, repo: GitHubRepoRef, items: readonl
   return { details, rateLimit: total }
 }
 
+interface IntegrationResult {
+  readonly checks: IntegrationChecks | null
+  readonly rateLimit: RateLimitInfo
+}
+
+/** A failed read, an errored alias or a missing branch is `null` (unreadable), never an empty record, and never fails the board. */
+async function readIntegrationChecks(github: GitHubTransport, repo: GitHubRepoRef, integration: string, rateLimit: RateLimitInfo): Promise<IntegrationResult> {
+  const reply = await graphql(github, repo, buildIntegrationChecksQuery(integration))
+  if (!reply.ok) return { checks: null, rateLimit }
+  const total = addRateLimit(rateLimit, reply.data.rateLimit)
+  const errored = (reply.errors ?? []).some((error) => error.path?.[1] === 'integrationHistory')
+  return { checks: errored ? null : toIntegrationChecks(reply.repository.integrationHistory), rateLimit: total }
+}
+
 interface FetchPipelineItemsParams {
   readonly repo: GitHubRepoRef
   readonly vocabulary: LabelVocabulary
-  readonly gh?: GhRunner
+  readonly integration: string
+  readonly github?: GitHubTransport
   readonly now?: () => Date
 }
 
@@ -234,17 +251,18 @@ function queriedLabelsOf(vocabulary: LabelVocabulary): readonly QueriedLabel[] {
 /** Every pipeline item, the repository's real label list, and the rate-limit cost together. Never
  *  filters the reply server-side, and no path returns an empty list for a read that did not succeed. */
 export async function fetchPipelineItems(params: FetchPipelineItemsParams): Promise<PipelineFetch> {
-  const runner = params.gh ?? defaultGh
+  const github = params.github ?? githubHttp
   const now = params.now ?? (() => new Date())
   const fetchedAt = now().toISOString()
   const repo = `${params.repo.owner}/${params.repo.name}`
 
-  const swept = await sweep(runner, params.repo, params.vocabulary)
+  const swept = await sweep(github, params.repo, params.vocabulary)
   if ('ok' in swept) return { ...swept, fetchedAt }
 
   const light = SWEEP_ALIASES.flatMap((alias) => mapPipelineItems(swept.state.nodes[alias], surfaceOf(alias), params.vocabulary, repo))
-  const detailed = await readDetails(runner, params.repo, light, swept.rateLimit)
+  const detailed = await readDetails(github, params.repo, light, swept.rateLimit)
   if ('ok' in detailed) return { ...detailed, fetchedAt }
+  const integration = await readIntegrationChecks(github, params.repo, params.integration, detailed.rateLimit)
 
   return {
     ok: true,
@@ -254,8 +272,9 @@ export async function fetchPipelineItems(params: FetchPipelineItemsParams): Prom
     vocabulary: verifyVocabulary(params.vocabulary, swept.repoLabels),
     unavailable: [...swept.state.unavailable.values()],
     truncated: swept.truncated,
-    rateLimit: detailed.rateLimit,
+    rateLimit: integration.rateLimit,
     viewer: swept.viewer,
+    integrationChecks: integration.checks,
     fetchedAt,
   }
 }

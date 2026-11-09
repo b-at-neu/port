@@ -92,7 +92,6 @@ export function BoardScreen() {
   const selection = useListSelection(flatRows.map(rowKey), {
     value: selectedRow !== null ? rowKey(selectedRow) : null,
     onChange: (key) => selectRow(key !== null ? (flatRows.find((row) => rowKey(row) === key) ?? null) : null),
-    toggle: true,
   })
 
   registerListNavigator('board', {
@@ -137,6 +136,7 @@ export function BoardScreen() {
 
   return (
     <Screen
+      onMouseDown={selection.surfaceProps().onMouseDown}
       header={
         <BoardHeader
           snapshot={snapshot}

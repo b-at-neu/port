@@ -103,6 +103,7 @@ export function createWorkerEngine(options: WorkerEngineOptions = {}): StateEngi
     refreshWorktrees: (params) => call('refreshWorktrees', params).catch(failedOutcome),
     refreshDenials: (params) => call('refreshDenials', params).catch(failedOutcome),
     refreshGithub: (params) => call('refreshGithub', params).catch(failedOutcome),
+    precheckGithub: (params) => call('precheckGithub', params).catch((error: unknown) => ({ ok: false, at: now().toISOString(), error: reasonOf(error) })),
     project: (params) => call('project', params),
     scanSessions: (params) => call('scanSessions', params).catch((error: unknown) => ({ ok: false, kind: 'sdk-failed', message: reasonOf(error), scannedAt: now().toISOString() })),
     listSessions: () => call('listSessions', undefined).catch((error: unknown) => ({ ok: false, kind: 'sdk-failed', message: reasonOf(error) })),
@@ -110,5 +111,7 @@ export function createWorkerEngine(options: WorkerEngineOptions = {}): StateEngi
     tailOpen: (params) => call('tailOpen', params),
     tailPoll: (params) => call('tailPoll', params),
     tailClose: (params) => call('tailClose', params).catch(() => undefined),
+    // A crashed or respawned worker starts with an empty cache anyway.
+    forgetRepo: (params) => call('forgetRepo', params).catch(() => undefined),
   }
 }

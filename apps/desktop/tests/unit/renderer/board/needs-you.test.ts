@@ -5,7 +5,7 @@ import type { TickReport } from '@/types/tick'
 import type { RepoDispatchStatus } from '@/types/dispatch'
 import type { SessionKey } from '@/types/hosting'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS, type BoardSnapshot } from '@/types/board'
-import { needsYouCount, needsYouItems, repoNeedsYou } from '@/renderer/board/needs-you'
+import { needsYouCount, needsYouItems, repoNeedsYou, waitsOnYou } from '@/renderer/board/needs-you'
 import { stageSession } from '../../../fixtures/stage-session'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
@@ -69,19 +69,14 @@ function readyRepo(overrides: Partial<Extract<RepositoryState, { ok: true }>> = 
     unavailable: [],
     truncated: [],
     rateLimit: { cost: 1, remaining: 4999, resetAt: '2026-01-01T02:00:00Z', limit: 5000 },
-    freshness: {
-      github: { at: NOW.toISOString() },
-      itemStates: { unavailable: 'no re-check needed' },
-      sessions: { at: NOW.toISOString() },
-      worktrees: { at: NOW.toISOString() },
-      denials: { at: NOW.toISOString() },
-    },
+    freshness: { github: { at: NOW.toISOString() }, itemStates: { unavailable: 'no re-check needed' }, sessions: { at: NOW.toISOString() }, worktrees: { at: NOW.toISOString() }, denials: { at: NOW.toISOString() } },
     worktreeTotals: { registered: 0, attached: 0, uncorrelated: 0 },
     viewer: 'op',
     approvalGate: true,
     disabled: [],
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
     reviewCycleCap: 5,
+    integrationChecks: {},
     ...overrides,
   }
 }
@@ -141,6 +136,7 @@ describe('needsYouItems', () => {
       ['gate', 'planReview', 'plan-review'],
       ['terminal', 'approved', 'ready-to-merge'],
       ['gate', 'needsHuman', 'needs-human'],
+      ['gate', 'blocked', 'blocked'],
     ]
     for (const [role, key, kind] of cases) {
       const repo = readyRepo({ items: [item({ stage: role, stages: [{ key: key as never, name: key, role: role as never }] })] })
@@ -150,9 +146,11 @@ describe('needsYouItems', () => {
     }
   })
 
-  it('a blocked stage key produces no item: it is held, shown on the Board instead', () => {
-    const repo = readyRepo({ items: [item({ stage: 'gate', stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }], matchedKeys: ['blocked'] })] })
-    expect(needsYouItems(snapshotOf([repo]), NOW)).toEqual([])
+  it('a blocked row is listed though the Board does not wait on it, and only for its assignee', () => {
+    const blocked = { stage: 'gate', stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }], matchedKeys: ['blocked'] } as const
+    const [listed] = needsYouItems(snapshotOf([readyRepo({ items: [item(blocked)] })]), NOW)
+    expect(listed?.matchedRow !== null && listed?.matchedRow !== undefined && waitsOnYou(listed.matchedRow)).toBe(false)
+    expect(needsYouItems(snapshotOf([readyRepo({ viewer: 'op', items: [item({ ...blocked, assignees: [] })] })]), NOW)).toEqual([])
   })
 
   it('a plan-review item the swap will approve produces no item', () => {
@@ -291,12 +289,12 @@ describe('needsYouItems', () => {
         lastResult: { subtype: 'success', isError: false, text, at: NOW.toISOString() },
       })
 
-    it('produces no row for the label alone', () => {
-      expect(needsYouItems(snapshotOf([readyRepo({ items: [blockedItem()] })]), NOW, [])).toEqual([])
+    it('produces one blocked row for the label alone', () => {
+      expect(needsYouItems(snapshotOf([readyRepo({ items: [blockedItem()] })]), NOW, []).map((i) => i.kind)).toEqual(['blocked'])
     })
 
-    it('produces no row for the label with its live session', () => {
-      expect(needsYouItems(snapshotOf([readyRepo({ items: [blockedItem()] })]), NOW, [blockedSession()])).toEqual([])
+    it('produces one blocked row for the label with its live session', () => {
+      expect(needsYouItems(snapshotOf([readyRepo({ items: [blockedItem()] })]), NOW, [blockedSession()]).map((i) => i.kind)).toEqual(['blocked'])
     })
 
     it('produces no row when the hand-back lands before the label swap', () => {
@@ -307,7 +305,7 @@ describe('needsYouItems', () => {
     it('still shows an escalated row beside a blocked one', () => {
       const escalated = item({ number: 52, stage: 'gate', stages: [{ key: 'needsHuman', name: 'needs human', role: 'gate' }], matchedKeys: ['needsHuman'] })
       const items = needsYouItems(snapshotOf([readyRepo({ items: [blockedItem(), escalated] })]), NOW, [blockedSession()])
-      expect(items.map((i) => i.kind)).toEqual(['needs-human'])
+      expect(items.map((i) => i.kind).sort()).toEqual(['blocked', 'needs-human'])
     })
   })
 
@@ -332,10 +330,10 @@ describe('needsYouItems', () => {
       expect(items[0]?.matchedRow?.ticket.ref.number).toBe(464)
     })
 
-    it("produces no row for a blocked label on the ticket with its review session's BLOCKED: hand-back", () => {
+    it("produces one blocked row for a blocked label on the ticket with its review session's BLOCKED: hand-back", () => {
       const blocked = pair({ stage: 'gate', stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }], matchedKeys: ['blocked'] })
       blocked[1] = { ...blocked[1], stage: 'gate', stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }] } as ReconciledItem
-      expect(needsYouItems(snapshotOf([readyRepo({ items: blocked })]), NOW, [reviewSession('BLOCKED: no checks ran')])).toEqual([])
+      expect(needsYouItems(snapshotOf([readyRepo({ items: blocked })]), NOW, [reviewSession('BLOCKED: no checks ran')]).map((i) => i.kind)).toEqual(['blocked'])
     })
 
     it('carries the ticket on a label-keyed row, whose number stays the pull request it writes to', () => {

@@ -36,7 +36,8 @@ export async function resolveWorktreesReport(
   const entry = await requireReadyRepo(registryDeps, "'worktrees:report'", request.id, deps.listRepositories)
   return deps.readWorktreeReport({
     repoRoot: entry.path,
-    worktreesCommand: entry.config.commands.worktrees,
+    repo: entry.config.repo,
+    integration: entry.config.branches.integration,
     git: registryDeps.git,
   })
 }
@@ -93,7 +94,9 @@ export async function resolveWorktreesReclaim(
 
   const result = await deps.runReclaim({
     repoRoot: entry.path,
-    worktreesCommand: entry.config.commands.worktrees,
+    repo: entry.config.repo,
+    integration: entry.config.branches.integration,
+    git: registryDeps.git,
     issue: request.issue,
     force,
   })
@@ -132,7 +135,7 @@ export interface WorktreesPurgeDeps {
 
 export const defaultWorktreesPurgeDeps: WorktreesPurgeDeps = { listRepositories, runPurge, appendAudit }
 
-// `path` must sit inside the registered repository; the script refuses anything that is not an orphan.
+// `path` must sit inside the registered repository; the purge refuses anything that is not an orphan.
 export async function resolveWorktreesPurge(
   registryDeps: RegistryDeps,
   request: IpcMap['worktrees:purge']['request'],
@@ -143,7 +146,7 @@ export async function resolveWorktreesPurge(
   const entry = await requireReadyRepo(registryDeps, "'worktrees:purge'", repoId, deps.listRepositories)
   const path = requireContainedPath(request.path, entry.path, 'worktrees:purge', 'path')
 
-  const result = await deps.runPurge({ repoRoot: entry.path, worktreesCommand: entry.config.commands.worktrees, path })
+  const result = await deps.runPurge({ repoRoot: entry.path, git: registryDeps.git, path })
 
   const base = { at: new Date().toISOString(), repo: entry.config.repo, repoId, action: 'worktree-purge' as const, path: pathOps.basename(path) }
   const auditEntry: PurgeAuditEntry = result.ok

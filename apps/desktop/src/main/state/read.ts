@@ -1,7 +1,7 @@
 import type { SourceCache, RepoSessionSlice } from '@/types/state'
 
 // `watcher.ts` calls the same two primitives (`refreshGithub` and friends, `projectFromCache`) on its own cadence rather than a second copy of this composition.
-import type { GhRunner } from '@/types/platform'
+import type { GitHubTransport } from '@/types/platform'
 import { readSessionState } from '@/main/sessions/adapter'
 import type { GitRunner } from '@/types/platform'
 import type { RepositoryEntry } from '@/utils/repos'
@@ -13,7 +13,7 @@ import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refr
 
 interface ReadPipelineStateParams {
   readonly repositories: readonly RepositoryEntry[]
-  readonly gh?: GhRunner
+  readonly github?: GitHubTransport
   readonly git?: GitRunner
   readonly sessionReader?: Parameters<typeof readSessionState>[0]['reader']
   /** Forwarded verbatim to `readSessionState`, so `read.test.ts` can attribute a fake session without touching the real machine's transcripts. */
@@ -75,7 +75,7 @@ export async function readPipelineState(params: ReadPipelineStateParams): Promis
     const sessions = cache.sessions
     const agents = sessions?.ok ? sessions.agents.filter((a) => a.repoId === entry.id) : []
     const repo = splitRepo(entry.config.repo)
-    await refreshGithub(cache, { repoId: entry.id, repo, vocabulary: entry.config.vocabulary, worktreeEntries, agents, gh: params.gh, now })
+    await refreshGithub(cache, { repoId: entry.id, repo, vocabulary: entry.config.vocabulary, integration: entry.config.branches.integration, worktreeEntries, agents, github: params.github, now })
   }
 
   return projectFromCache(cache, params.repositories, now)

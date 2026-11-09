@@ -26,6 +26,20 @@ export default async function ({ expect, fail, ok }: Reporter) {
     ok();
   }
 
+  // --- The per-SHA review cap is one number: the tick's dispatch gate and the audit must agree,
+  // guard: the audit failing by construction on a head the gate itself allowed. ---
+  {
+    const gates: any = await import(pathToFileURL(join(root, 'scripts/port-tick/gates.ts')).href);
+    const mod: any = await import(pathToFileURL(join(root, 'plugins/port/bin/artifacts.mjs')).href);
+    expect(gates.MAX_REVIEWS_PER_SHA === mod.MAX_REVIEWS_PER_SHA, 'artifacts-sha-cap', `gates.ts's MAX_REVIEWS_PER_SHA is ${gates.MAX_REVIEWS_PER_SHA}, artifacts.mjs's is ${mod.MAX_REVIEWS_PER_SHA} — the gate would allow a review the audit fails`);
+
+    const cap = mod.MAX_REVIEWS_PER_SHA;
+    const within = mod.shaReviewViolations(['a', 'a', 'b']);
+    expect(within.failures.length === 0 && within.repeats.length === 1, 'artifacts-sha-cap', `shaReviewViolations rejects a head at ${cap} reviews: ${JSON.stringify(within)}`);
+    const over = mod.shaReviewViolations(['060fdd01', '060fdd01', '060fdd01', '060fdd01']);
+    expect(over.failures.length === 1 && over.failures[0].count === 4, 'artifacts-sha-cap', `shaReviewViolations misses four reviews on one head: ${JSON.stringify(over)}`);
+  }
+
   // --- Artifact registry claims every heading constant, both directions: a `*_HEADING`
   // export with no matching CHECKS entry is unreachable from `check`; two entries sharing one heading means one artifact carries two kind names. ---
   {
@@ -107,6 +121,22 @@ export default async function ({ expect, fail, ok }: Reporter) {
       else if (run(headingAndShaOnly).ok) fail('artifacts-patterns', 'changes-requested accepts a body with only the heading and SHA, no request text');
       else if (run(renamedHeading).ok) fail('artifacts-patterns', 'changes-requested accepts a renamed heading');
       else expect(!run(noSha).ok, 'artifacts-patterns', 'changes-requested accepts a body with no SHA');
+    }
+
+    // The integration-red hold has a head line and per-check lines rather than a single backticked fact,
+    // so it is exercised on its own: one good body and four bad ones.
+    {
+      const good = '## Integration red\nHead `abc1234` · `dev` is already red on these checks, so the failure isn\'t from this diff:\n- `test` — FAILURE on `def5678` · https://example.com/run/1\nAlso red here: `lint`';
+      const noCheckLine = '## Integration red\nHead `abc1234` · `dev` is already red on these checks, so the failure isn\'t from this diff:\nAlso red here: `lint`';
+      const noHead = '## Integration red\n`dev` is already red on these checks:\n- `test` — FAILURE on `def5678` · https://example.com/run/1';
+      const shortHead = '## Integration red\nHead `abc12` · `dev` is already red on these checks:\n- `test` — FAILURE on `def5678` · https://example.com/run/1';
+      const renamedHeading = '## Integration failing\nHead `abc1234` · `dev` is already red on these checks:\n- `test` — FAILURE on `def5678` · https://example.com/run/1';
+      const run = CHECKS['integration-red'].run;
+      if (!run(good).ok) fail('artifacts-patterns', 'integration-red rejects its own good example');
+      else if (run(noCheckLine).ok) fail('artifacts-patterns', 'integration-red accepts a body with no red check line');
+      else if (run(noHead).ok) fail('artifacts-patterns', 'integration-red accepts a body with no Head line');
+      else if (run(shortHead).ok) fail('artifacts-patterns', 'integration-red accepts a head SHA under 7 characters');
+      else expect(!run(renamedHeading).ok, 'artifacts-patterns', 'integration-red accepts a renamed heading');
     }
 
     // pin: `CHANGES_REQUESTED_HEADING` ↔ its literal rendering in

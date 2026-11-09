@@ -1,7 +1,7 @@
 import { BUMP_BRANCH_DIR } from '@/utils/release/format'
 
 // Pure GraphQL builders for the Releases reads — every branch and path travels as a variable, never spliced into the document.
-const RELEASES_PAGE = 20
+export const RELEASES_PAGE = 20
 const BUMP_REFS_PAGE = 10
 const TICKET_LABEL_PAGE = 20
 
@@ -22,13 +22,13 @@ export function buildStateQuery(withFiles: boolean): string {
   return [
     `query(${variables.join(', ')}) {`,
     '  repository(owner: $owner, name: $name) {',
-    `    releases(first: ${String(RELEASES_PAGE)}, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { tagName name url publishedAt isDraft isPrerelease isLatest description } }`,
+    `    releases(first: ${String(RELEASES_PAGE + 1)}, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { tagName name url publishedAt isDraft isPrerelease isLatest description tagCommit { committedDate } } }`,
     `    openReleasePr: pullRequests(states: OPEN, baseRefName: $production, headRefName: $integration, first: 1, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { ${PR_FIELDS} } }`,
     `    closedReleasePr: pullRequests(states: [CLOSED, MERGED], baseRefName: $production, headRefName: $integration, first: 1, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { ${PR_FIELDS} } }`,
     `    bumpRefs: refs(refPrefix: $bumpRefPrefix, first: ${String(BUMP_REFS_PAGE)}) { nodes { name associatedPullRequests(states: OPEN, first: 1) { nodes { number url } } } }`,
     ...files,
     '    integrationHead: ref(qualifiedName: $integrationRef) { target { oid ... on Commit { tree { oid } } } }',
-    '    productionHead: ref(qualifiedName: $productionRef) { target { oid } }',
+    '    productionHead: ref(qualifiedName: $productionRef) { target { oid ... on Commit { committedDate } } }',
     '  }',
     '  viewer { login }',
     '}',
@@ -47,9 +47,27 @@ export function stateVariables(params: { readonly integration: string; readonly 
   }
 }
 
-/** Resolves ticket numbers through `issueOrPullRequest`; the numbers are integers the caller extracted, so inlining them is safe. */
-export function buildTicketsQuery(numbers: readonly number[]): string {
-  const fields = `title labels(first: ${String(TICKET_LABEL_PAGE)}) { nodes { name } } author { __typename login }`
-  const aliases = numbers.map((n) => `    t${String(n)}: issueOrPullRequest(number: ${String(Math.trunc(n))}) { ... on Issue { ${fields} } ... on PullRequest { ${fields} } }`)
-  return ['query($owner: String!, $name: String!) {', '  repository(owner: $owner, name: $name) {', ...aliases, '  }', '}'].join('\n')
+/** One aliased commit lookup per sha, each declared as a `GitObjectID!` variable `$c0…$cN`; a sha is never spliced into the document. */
+export function buildIncludedIssuesQuery(count: number): string {
+  const indexes = Array.from({ length: count }, (_, index) => index)
+  const issue = `number title url repository { nameWithOwner } labels(first: ${String(TICKET_LABEL_PAGE)}) { nodes { name color } }`
+  const aliases = indexes.map((n) => `    c${String(n)}: object(oid: $c${String(n)}) { ... on Commit { associatedPullRequests(first: 3) { nodes { merged closingIssuesReferences(first: 10) { nodes { ${issue} } } } } } }`)
+  return [`query($owner: String!, $name: String!${indexes.map((n) => `, $c${String(n)}: GitObjectID!`).join('')}) {`, '  repository(owner: $owner, name: $name) {', ...aliases, '  }', '}'].join('\n')
+}
+
+export const MERGED_PRS_PAGE = 100
+const MERGED_PR_LABELS = 10
+
+/** One page of pull requests merged into `$base`, most recently updated first; `$after` is the previous page's cursor. */
+export function buildMergedPrsQuery(): string {
+  return [
+    'query($owner: String!, $name: String!, $base: String!, $after: String) {',
+    '  repository(owner: $owner, name: $name) {',
+    `    pullRequests(states: MERGED, baseRefName: $base, first: ${String(MERGED_PRS_PAGE)}, after: $after, orderBy: {field: UPDATED_AT, direction: DESC}) {`,
+    '      pageInfo { hasNextPage endCursor }',
+    `      nodes { number title url mergedAt updatedAt author { __typename } labels(first: ${String(MERGED_PR_LABELS)}) { nodes { name color } } }`,
+    '    }',
+    '  }',
+    '}',
+  ].join('\n')
 }

@@ -58,7 +58,7 @@ describe('haltHeadingCopy', () => {
     expect(haltHeadingCopy(report)).toBe('Halted · 0 stopped, 0 skipped, 1 not stopped')
   })
 
-  it('takes a leading word override — run-state.ts\'s per-repository Pause passes "Paused" (#357 R1-M2)', () => {
+  it('takes a leading word override — run-state.ts\'s per-repository Stop passes "Stopped" (#357 R1-M2)', () => {
     const report: Extract<HaltReport, { readonly kind: 'completed' }> = {
       kind: 'completed',
       items: [
@@ -66,7 +66,7 @@ describe('haltHeadingCopy', () => {
         { kind: 'stopped', number: 2, itemKind: 'issue', repoId: 'repo-a' as RepoId, removedLabel: 'in progress', attachedAgent: null, stoppedTask: false },
       ],
     }
-    expect(haltHeadingCopy(report, 'Paused')).toBe('Paused · 2 stopped, 0 skipped')
+    expect(haltHeadingCopy(report, 'Stopped')).toBe('Stopped · 2 stopped, 0 skipped')
   })
 })
 

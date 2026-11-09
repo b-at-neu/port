@@ -2,7 +2,7 @@ import type { HostedStore } from '@/types/hosting'
 import type { StageRegistry } from '@/types/stage'
 
 // The real StageLauncher: a worktree, a hosted session, a send, and the hand-back watcher that closes and removes it.
-import type { GitRunner } from '@/types/platform'
+import type { FileResult, GitRunner, PathOps } from '@/types/platform'
 import type { CreateStageWorktreeParams, CreateStageWorktreeResult, ReleaseBranchOutcome, RemoveSessionWorktreeOutcome } from '@/types/workspace'
 import type { StageLaunchRequest, StageLaunchResult } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionDismissResult, SessionKey, SessionStartResult } from '@/types/hosting'
@@ -11,7 +11,7 @@ import type { StageOutcome } from '@/types/stage-session'
 import type { RepoId } from '@/utils/repos'
 import type { StageDenial, StageInstructionsLoader, StageResumeRequest } from '@/types/stage'
 import { proposedRule } from '@/main/stage/rule'
-import { STAGE_AGENT_NAMES } from '@/main/stage/agents'
+import { loadStageAgentDefinition } from '@/main/stage/bundle'
 import { classifyHandback } from '@/main/stage/handback'
 import { stageTitle } from '@/main/hosting/title'
 
@@ -40,8 +40,12 @@ interface CreateStageLauncherParams {
   /** The policy's `deny` arm, turned into a `StageDenial` — deduped and bounded on the dispatcher's own side. */
   readonly onDenial: (repoId: RepoId, denial: StageDenial) => void
   readonly newId: () => string
-  /** The first message's composed text, loaded from the installed plugin; a failure fails the launch. */
+  /** The first message's composed text and the inline agent, loaded from the bundled stage prompts; a failure fails the launch. */
   readonly loadInstructions: StageInstructionsLoader
+  /** The app's own `stage-prompts` folder, which a stage session may read. */
+  readonly bundleRoot: string
+  readonly readTextFile: (path: string) => Promise<FileResult<string>>
+  readonly ops: Pick<PathOps, 'join'>
 }
 
 /** The one place a failed `SessionStartResult` becomes a message for a dispatch record — never re-derived at a second call site. */
@@ -113,6 +117,9 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     const { entry, root, prompt } = request
     if (entry.claudeSessionId === null) return { ok: false, kind: 'failed', message: 'the session ended before Claude started it' }
 
+    const definition = await loadStageAgentDefinition({ root: params.bundleRoot, agent: entry.agent, ops: params.ops, readTextFile: params.readTextFile })
+    if (!definition.ok) return { ok: false, kind: 'failed', message: definition.message }
+
     let sessionKey: SessionKey | null = null
     const startResult = await params.store.start({
       repoId: entry.repoId,
@@ -125,7 +132,8 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       },
       stage: {
         tag: { agent: entry.agent, number: entry.number, kind: entry.kind, trigger: entry.trigger },
-        agentName: STAGE_AGENT_NAMES[entry.agent],
+        agent: { name: definition.name, definition: definition.definition },
+        instructionsRoot: params.bundleRoot,
         model: entry.model,
         sessionRequiredPaths: root.sessionRequiredPaths,
         onDeny: denialRecorder(entry.repoId, entry.agent, entry.number, () => sessionKey),
@@ -161,7 +169,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     const instructions = await params.loadInstructions(request, wt.path)
     if (!instructions.ok) {
       await removeAndRelease(root, wt.path, wt.branch, wt.baseSha)
-      return { ok: false, kind: 'failed', message: `Couldn't load the stage instructions from the installed port plugin: ${instructions.message}` }
+      return { ok: false, kind: 'failed', message: `Couldn't load the stage instructions from the app's bundled stage prompts: ${instructions.message}` }
     }
 
     const registryId = params.newId()
@@ -175,7 +183,8 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       workspace: { folder: wt.path, root: request.entry.path, worktree: { path: wt.path, branch: wt.branch }, base: { sha: wt.baseSha, label: wt.baseLabel } },
       stage: {
         tag: { agent: request.agent, number: request.number, kind: request.kind, trigger: request.trigger },
-        agentName: STAGE_AGENT_NAMES[request.agent],
+        agent: instructions.agent,
+        instructionsRoot: params.bundleRoot,
         model: request.model,
         sessionRequiredPaths: request.entry.config.sessionRequiredPaths,
         onDeny,

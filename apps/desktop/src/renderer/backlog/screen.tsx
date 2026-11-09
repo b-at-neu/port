@@ -297,6 +297,7 @@ export function BacklogScreen() {
 
   return (
     <Screen
+      onMouseDown={selection.surfaceProps().onMouseDown}
       header={
         <ScreenHeader className="justify-between">
           <span>Backlog</span>

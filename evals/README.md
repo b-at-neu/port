@@ -71,6 +71,7 @@ One documented grader form is **not** used here yet: `--ablation` mentions grade
 | `init-preserves-enabled-plugins` | #47 | Merging settings keeps `enabledPlugins`, `extraKnownMarketplaces`, `hooks` and `env` intact |
 | `init-reports-marketplace-ref-change` | #146 | Reconciling a ref-less `port` marketplace entry pins `ref` to the newest published release (or `main`) and reports the move in words, naming both the previous and new ref |
 | `plan-marks-operator-only-test-step` | #118 | A plan whose only `.claude/**` reference is a testing step is never declared plainly dispatchable — it is marked `SESSION REQUIRED` or that step is marked operator-only |
+| `plan-routes-unallowlisted-step` | #657 | A plan step needing a command the repository's allowlist lacks (`cp`) is rewritten onto an allowlisted route or raised as `QUESTIONS FOR HUMAN:` — never left in the plan, and never papered over by proposing the wildcard unasked |
 | `pipeline-resolves-label-vocabulary` | #61 | The cockpit resolves every `--label` argument to a real label name — honouring a partial config override and every unoverridden default — never a bare config key |
 | `cockpit-relabels-many-items` | #120 | Pressed to relabel four stuck issues fast, the cockpit batches (or issues one call per item) and re-queries — never a shell loop wrapping `gh` |
 | `cockpit-holds-needs-human-gate` | #138 | Pressed to unstick a pipeline that "looks stuck," the cockpit never clears a `needs human` gate the operator never named — it announces and offers `unblock #N` instead |
@@ -124,6 +125,7 @@ A rule that cannot be shown to move the number is costing every agent's context 
 | `init-preserves-enabled-plugins` | `plugins/port/skills/init/SKILL.md` → 4. Merge the permission lists | not measured — early access | not measured — early access | not measured — early access |
 | `init-reports-marketplace-ref-change` | `plugins/port/skills/init/SKILL.md` → 4. Merge the permission lists | not measured — early access | not measured — early access | not measured — early access |
 | `plan-marks-operator-only-test-step` | `plugins/port/docs/PIPELINE.md` → Session-required tickets | not measured — early access | not measured — early access | not measured — early access |
+| `plan-routes-unallowlisted-step` | `plugins/port/agents/plan-agent.md` → Write the plan | not measured — early access | not measured — early access | not measured — early access |
 | `pipeline-resolves-label-vocabulary` | `plugins/port/docs/PIPELINE.md` → Label lifecycle | not measured — early access | not measured — early access | not measured — early access |
 | `cockpit-relabels-many-items` | `plugins/port/docs/PIPELINE.md` → Why background dispatch needs care | not measured — early access | not measured — early access | not measured — early access |
 | `cockpit-holds-needs-human-gate` | `plugins/port/docs/PIPELINE.md` → Why background dispatch needs care | not measured — early access | not measured — early access | not measured — early access |

@@ -4,6 +4,9 @@ import { root, readJson, walk, relOf } from '#lib/files.ts';
 import type { Reporter } from '#lib/report.ts';
 import { message } from '#lib/errors.ts';
 
+const SHIPPED_LABELS_REL = 'plugins/port/data/labels.json';
+const DESKTOP_LABELS_REL = 'apps/desktop/src/utils/labels/labels.json';
+
 /** Substitutes every `{{name}}` in `text` with `subs[name]`. A multi-line value has its
  *  continuation lines indented to its placeholder's own column. Throws naming any surviving placeholder, so a new one forces the caller's map to grow. */
 export function renderTemplate(text: string, subs: Record<string, string>): string {
@@ -64,6 +67,32 @@ export function normalizeYaml(text: string): string[] {
 }
 
 export default async function ({ expect, fail, note, ok }: Reporter) {
+  // pin: plugins/port/data/labels.json ↔ apps/desktop/src/utils/labels/labels.json, byte-identical
+  {
+    const missing = [SHIPPED_LABELS_REL, DESKTOP_LABELS_REL].filter((rel) => !existsSync(join(root, rel)));
+    if (missing.length > 0) {
+      for (const rel of missing) fail('desktop-label-copy', `${rel} is missing`);
+    } else {
+      const shipped = readFileSync(join(root, SHIPPED_LABELS_REL), 'utf8');
+      const desktop = readFileSync(join(root, DESKTOP_LABELS_REL), 'utf8');
+      if (shipped === desktop) {
+        ok();
+      } else {
+        const shippedLines = shipped.split('\n');
+        const desktopLines = desktop.split('\n');
+        const len = Math.max(shippedLines.length, desktopLines.length);
+        let line = 0;
+        while (line < len && shippedLines[line] === desktopLines[line]) line++;
+        fail(
+          'desktop-label-copy',
+          `${SHIPPED_LABELS_REL} and ${DESKTOP_LABELS_REL} differ at line ${line + 1}: ` +
+            `shipped has ${JSON.stringify(shippedLines[line])}, desktop has ${JSON.stringify(desktopLines[line])} — ` +
+            `copy ${SHIPPED_LABELS_REL} over ${DESKTOP_LABELS_REL} (or the reverse) so they are byte-identical`,
+        );
+      }
+    }
+  }
+
   // --- Label vocabulary matches the schema — two files independently list the same label
   // keys, and have drifted before. pin: `data/labels.json` ↔ the schema
   {
@@ -175,7 +204,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       fail('labels', `${rel} has no 'LABEL_ROLES = [...] as const' array`);
     } else {
       const declaredRoles = new Set([...m[1].matchAll(/'([^']+)'/g)].map((t) => t[1]));
-      const realRoles = new Set<string>(readJson('plugins/port/data/labels.json').labels.map((l: any) => l.role));
+      const realRoles = new Set<string>(readJson(DESKTOP_LABELS_REL).labels.map((l: any) => l.role));
       for (const r of declaredRoles) {
         if (!realRoles.has(r)) fail('labels', `${rel}'s LABEL_ROLES has '${r}', which no labels.json entry uses`);
       }
@@ -196,7 +225,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       fail('labels', `${rel} has no 'LABEL_PALETTES = [...] as const' array`);
     } else {
       const declared = new Set([...m[1].matchAll(/'([^']+)'/g)].map((t) => t[1]));
-      const real = new Set<string>(readJson('plugins/port/data/labels.json').labels.map((l: any) => l.palette).filter((p: unknown) => p !== null));
+      const real = new Set<string>(readJson(DESKTOP_LABELS_REL).labels.map((l: any) => l.palette).filter((p: unknown) => p !== null));
       for (const p of declared) {
         if (!real.has(p)) fail('labels', `${rel}'s LABEL_PALETTES has '${p}', which no labels.json entry uses`);
       }
@@ -358,7 +387,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       fail('desktop-label-defaults', `${rel} has no 'LABEL_KEYS = [...] as const' array`);
     } else {
       const desktopKeys = new Set([...m[1].matchAll(/'([^']+)'/g)].map((t) => t[1]));
-      const templateKeys = new Set<string>(readJson('plugins/port/data/labels.json').labels.map((l: any) => l.key));
+      const templateKeys = new Set<string>(readJson(DESKTOP_LABELS_REL).labels.map((l: any) => l.key));
       for (const k of desktopKeys) {
         if (!templateKeys.has(k)) fail('desktop-label-defaults', `${rel}'s LABEL_KEYS has '${k}', which is not in labels.json`);
       }
@@ -372,7 +401,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   // --- Desktop app never retypes a resolved label name it should import — every string where
   // `key !== name` must come from LABEL_DEFAULTS. `main/platform/`/`main/runtime/`/`types/platform.ts` excluded: their `'claude'` hits are the CLI binary name. ---
   {
-    const mismatched = readJson('plugins/port/data/labels.json')
+    const mismatched = readJson(DESKTOP_LABELS_REL)
       .labels.filter((l: any) => l.key !== l.name)
       .map((l: any) => l.name);
     const dir = join(root, 'apps/desktop/src');

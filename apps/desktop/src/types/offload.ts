@@ -2,13 +2,17 @@ import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { LocalRepoRef } from '@/types/github'
 import type { ListSessionsResult, OpenTailParams, PollTailParams, CloseTailParams, SessionScan } from '@/types/sessions'
-import type { PipelineState, RefreshOutcome } from '@/types/state'
+import type { GithubPrecheckOutcome, PipelineState, RefreshOutcome } from '@/types/state'
 import type { RunSearchParams, SearchResult } from '@/types/search'
 import type { TranscriptTailOpen, TranscriptTailPoll } from '@/utils/sessions/transcript'
 
 interface RepoRoot {
   readonly repoId: RepoId
   readonly repoRoot: string
+}
+
+interface RepoIdParams {
+  readonly repoId: RepoId
 }
 
 interface ReposParams {
@@ -19,6 +23,7 @@ interface GithubParams {
   readonly repoId: RepoId
   readonly repo: { readonly owner: string; readonly name: string }
   readonly vocabulary: LabelVocabulary
+  readonly integration: string
 }
 
 type SearchParams = Pick<RunSearchParams, 'scan' | 'indexDir' | 'query' | 'scope'>
@@ -29,6 +34,7 @@ export interface StateEngine {
   refreshWorktrees(params: RepoRoot): Promise<RefreshOutcome>
   refreshDenials(params: RepoRoot): Promise<RefreshOutcome>
   refreshGithub(params: GithubParams): Promise<RefreshOutcome>
+  precheckGithub(params: Pick<GithubParams, 'repoId' | 'repo'>): Promise<GithubPrecheckOutcome>
   project(params: { readonly repositories: readonly RepositoryEntry[] }): Promise<PipelineState>
   scanSessions(params: ReposParams): Promise<SessionScan>
   listSessions(): Promise<ListSessionsResult>
@@ -36,6 +42,7 @@ export interface StateEngine {
   tailOpen(params: OpenTailParams): Promise<TranscriptTailOpen>
   tailPoll(params: PollTailParams): Promise<TranscriptTailPoll>
   tailClose(params: CloseTailParams): Promise<void>
+  forgetRepo(params: RepoIdParams): Promise<void>
 }
 
 export const OFFLOAD_OPS = [
@@ -43,6 +50,7 @@ export const OFFLOAD_OPS = [
   'refreshWorktrees',
   'refreshDenials',
   'refreshGithub',
+  'precheckGithub',
   'project',
   'scanSessions',
   'listSessions',
@@ -50,6 +58,7 @@ export const OFFLOAD_OPS = [
   'tailOpen',
   'tailPoll',
   'tailClose',
+  'forgetRepo',
 ] as const satisfies readonly (keyof StateEngine)[]
 
 export type OffloadOp = (typeof OFFLOAD_OPS)[number]

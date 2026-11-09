@@ -32,6 +32,21 @@ export const LABELS = {
 // --- Format contracts --------------------------------------------------------
 export const BODY_HEADINGS = ['## Summary', '## Changes', '## Testing plan', '## Automated checks'];
 export const REVIEW_PREFIX = '## Code Review';
+// The original review plus one repeat; the tick's dispatch gate pins the same number.
+export const MAX_REVIEWS_PER_SHA = 2;
+
+/** Counts reviews per commit oid: `failures` are heads past the cap, `repeats` heads at 2..cap. */
+export function shaReviewViolations(oids) {
+  const byOid = new Map();
+  for (const oid of oids) byOid.set(oid, (byOid.get(oid) ?? 0) + 1);
+  const failures = [];
+  const repeats = [];
+  for (const [oid, count] of byOid) {
+    if (count > MAX_REVIEWS_PER_SHA) failures.push({ oid, count });
+    else if (count > 1) repeats.push({ oid, count });
+  }
+  return { failures, repeats };
+}
 const CHECK_ONLY_PREFIX = 'Blocked only by checks:';
 const CODE_FINDINGS_LINE = 'Blocked by code findings.';
 const CHECK_ONLY_LINE = /^Blocked only by checks: `[^`]+`(, `[^`]+`)*$/;
@@ -41,6 +56,7 @@ export const REVISION_HEADING = /^## Revision — Cycle (\d+)$/;
 export const APPROVAL_WITHDRAWN_HEADING = '## Approval withdrawn';
 export const REBASE_REQUIRED_HEADING = '## Rebase required';
 export const CHANGES_REQUESTED_HEADING = '## Changes requested';
+export const INTEGRATION_RED_HEADING = '## Integration red';
 export const SHA_RE = /\b[0-9a-f]{7,40}\b/;
 // `fixed <ids> · skipped <ids> · <sha>`, either segment dropped when empty, or the
 // check-fix-mode form `check <name> · <sha>` with neither segment at all.
@@ -301,6 +317,24 @@ function checkChangesRequested(text) {
   return ok();
 }
 
+/** `## Integration red` — review-agent's no-verdict hold. Heading on line 1, a `Head `<sha>`` line
+ *  on line 2, then at least one ``- `<check>` — <conclusion> on `<sha>` · <url>`` line. */
+function checkIntegrationRed(text) {
+  const ls = lines(text);
+  const first = (ls[0] ?? '').trim();
+  if (first !== INTEGRATION_RED_HEADING) {
+    return fail(`line 1 must be exactly '${INTEGRATION_RED_HEADING}', got ${JSON.stringify(first)}`, `'${INTEGRATION_RED_HEADING}'`);
+  }
+  const second = (ls[1] ?? '').trim();
+  if (!/^Head `[0-9a-f]{7,40}` ·/.test(second)) {
+    return fail(`line 2 must open 'Head \`<sha>\` ·' with a 7-40 character hex SHA, got ${JSON.stringify(second)}`, "'Head `<head-sha>` · `<integration>` is already red on these checks, …'");
+  }
+  if (!ls.slice(2).some((l) => /^- `[^`]+` — .*`[0-9a-f]{7,40}`/.test(l.trim()))) {
+    return fail('no red check line follows', "at least one '- `<check>` — <conclusion> on `<integration-sha>` · <run url>' line");
+  }
+  return ok();
+}
+
 // One registry for both modes — kind -> { run, heading }; `null` marks the two kinds
 // `audit` matches by shape, not heading.
 export const CHECKS = {
@@ -311,6 +345,7 @@ export const CHECKS = {
   withdrawn: { run: checkShaAnnotated(APPROVAL_WITHDRAWN_HEADING, 'check'), heading: APPROVAL_WITHDRAWN_HEADING },
   'rebase-required': { run: checkShaAnnotated(REBASE_REQUIRED_HEADING, 'base branch'), heading: REBASE_REQUIRED_HEADING },
   'changes-requested': { run: checkChangesRequested, heading: CHANGES_REQUESTED_HEADING },
+  'integration-red': { run: checkIntegrationRed, heading: INTEGRATION_RED_HEADING },
 };
 
 function runCheck(argv) {
@@ -480,20 +515,13 @@ function runAudit(argv) {
       else auditOk();
     }
 
-    // --- Zero-diff review bounce --- A `## Gate cleared` exception authorizes one repeat
-    // review on the same commit.oid; three or more means the gate was bypassed.
+    // --- Zero-diff review bounce --- the override and the check-only recheck share one repeat
+    // on a commit.oid; a head past MAX_REVIEWS_PER_SHA means the gate was bypassed.
     {
-      const byOid = new Map();
-      for (const oid of reviewOids) byOid.set(oid, (byOid.get(oid) ?? 0) + 1);
-      for (const [oid, count] of byOid) {
-        if (count >= 3) {
-          auditFail(at('review'), `${count} reviews share commit ${oid} — the zero-diff gate should stop at one authorized repeat`);
-        } else if (count === 2) {
-          note(`#${n}: 2 reviews share commit ${oid} — the one authorized zero-diff re-review (operator override or check-only recheck), not a failure`);
-        } else {
-          auditOk();
-        }
-      }
+      const { failures, repeats } = shaReviewViolations(reviewOids);
+      for (const { oid, count } of failures) auditFail(at('review'), `${count} reviews share commit ${oid} — the review gate caps a head at ${MAX_REVIEWS_PER_SHA}`);
+      for (const { oid, count } of repeats) note(`#${n}: ${count} reviews share commit ${oid} — the one authorized zero-diff re-review (operator override or check-only recheck), not a failure`);
+      if (failures.length === 0) auditOk();
     }
 
     // --- Revision comments ---

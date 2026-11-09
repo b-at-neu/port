@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { GhResult } from '@/types/platform'
 import { fetchGatePreflight } from '@/main/github/gate'
-import type { GhRunner } from '@/types/platform'
-
-function fakeRunner(result: GhResult): GhRunner {
-  return () => Promise.resolve(result)
-}
+import { fakeTransport, httpFail, httpOk } from '../../../fixtures/github-http'
 
 describe('fetchGatePreflight', () => {
   it('resolves an Issue node with its body, labels, assignees, and viewer', async () => {
@@ -26,7 +21,7 @@ describe('fetchGatePreflight', () => {
         viewer: { login: 'alice' },
       },
     })
-    const result = await fetchGatePreflight({ repo: { owner: 'o', name: 'r' }, number: 148, gh: fakeRunner({ ok: true, stdout, stderr: '' }) })
+    const result = await fetchGatePreflight({ repo: { owner: 'o', name: 'r' }, number: 148, github: fakeTransport(httpOk(stdout)) })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.viewer).toBe('alice')
@@ -49,7 +44,7 @@ describe('fetchGatePreflight', () => {
         viewer: { login: 'alice' },
       },
     })
-    const result = await fetchGatePreflight({ repo: { owner: 'o', name: 'r' }, number: 5, gh: fakeRunner({ ok: true, stdout, stderr: '' }) })
+    const result = await fetchGatePreflight({ repo: { owner: 'o', name: 'r' }, number: 5, github: fakeTransport(httpOk(stdout)) })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.item).toEqual({ kind: 'pull-request', number: 5, title: 't', url: 'u', state: 'OPEN', body: '', labels: [], assignees: [] })
@@ -57,7 +52,7 @@ describe('fetchGatePreflight', () => {
 
   it('reports item: null for a number that does not resolve, without failing the fetch', async () => {
     const stdout = JSON.stringify({ data: { repository: { c0: null }, viewer: { login: 'alice' } } })
-    const result = await fetchGatePreflight({ repo: { owner: 'o', name: 'r' }, number: 999999, gh: fakeRunner({ ok: true, stdout, stderr: '' }) })
+    const result = await fetchGatePreflight({ repo: { owner: 'o', name: 'r' }, number: 999999, github: fakeTransport(httpOk(stdout)) })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.item).toBeNull()
@@ -67,18 +62,18 @@ describe('fetchGatePreflight', () => {
 
   it('fails the whole preflight when the viewer login cannot be resolved', async () => {
     const stdout = JSON.stringify({ data: { repository: { c0: null }, viewer: null } })
-    const result = await fetchGatePreflight({ repo: { owner: 'o', name: 'r' }, number: 1, gh: fakeRunner({ ok: true, stdout, stderr: '' }) })
+    const result = await fetchGatePreflight({ repo: { owner: 'o', name: 'r' }, number: 1, github: fakeTransport(httpOk(stdout)) })
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.kind).toBe('no-data')
   })
 
-  it('classifies a gh-level failure through the shared envelope classifier', async () => {
-    const result = await fetchGatePreflight({ repo: { owner: 'o', name: 'r' }, number: 1, gh: fakeRunner({ ok: false, kind: 'unauthenticated', stdout: '', stderr: 'gh: 401' }) })
+  it('classifies an HTTP failure through the shared envelope classifier', async () => {
+    const result = await fetchGatePreflight({ repo: { owner: 'o', name: 'r' }, number: 1, github: fakeTransport(httpFail('unauthenticated', 401, '', 'GitHub: Bad credentials (HTTP 401)')) })
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.kind).toBe('unauthenticated')
-    expect(result.message).toBe('gh: 401')
+    expect(result.message).toBe('GitHub: Bad credentials (HTTP 401)')
     expect(typeof result.fetchedAt).toBe('string')
   })
 })

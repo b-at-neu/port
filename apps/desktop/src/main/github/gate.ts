@@ -1,17 +1,13 @@
 // fetchGatePreflight — the plan gate's own one round trip. A new file to stay clear of the
 // file-size ratchet; reuses envelope.ts's parsing rather than hand-rolling a second reader.
-import { gh as defaultGh } from '@/main/platform/gh'
-import type { GhResult, GhRunner } from '@/types/platform'
+import { githubHttp } from '@/main/platform/github-http'
+import type { GitHubTransport } from '@/types/platform'
 import type { GatePreflightFetch, GatePreflightItem } from '@/types/github'
-import { classifyFailure, parseEnvelope } from '@/main/github/envelope'
+import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
 import { buildGatePreflightQuery } from '@/main/github/query'
+import { repoGraphqlRequest } from '@/main/github/request'
 import type { GitHubRepoRef } from '@/types/github'
-
-
-function stdoutOf(result: GhResult): string | undefined {
-  return 'stdout' in result ? result.stdout : undefined
-}
 
 function kindOfTypename(typename: unknown): 'issue' | 'pull-request' | undefined {
   if (typename === 'Issue') return 'issue'
@@ -22,23 +18,23 @@ function kindOfTypename(typename: unknown): 'issue' | 'pull-request' | undefined
 interface FetchGatePreflightParams {
   readonly repo: GitHubRepoRef
   readonly number: number
-  readonly gh?: GhRunner
+  readonly github?: GitHubTransport
   readonly now?: () => Date
 }
 
 /** The plan gate's one round trip: one issue's identity, labels, assignees, body, and the
  *  signed-in account's login. `item: null` covers "does not exist" or "alias errored", neither a failure. */
 export async function fetchGatePreflight(params: FetchGatePreflightParams): Promise<GatePreflightFetch> {
-  const runner = params.gh ?? defaultGh
+  const github = params.github ?? githubHttp
   const now = params.now ?? (() => new Date())
   const fetchedAt = now().toISOString()
 
   const { document } = buildGatePreflightQuery(params.number)
-  const ghResult = await runner(['api', 'graphql', '-f', `query=${document}`, '-f', `owner=${params.repo.owner}`, '-f', `name=${params.repo.name}`])
+  const result = await github(repoGraphqlRequest(document, params.repo))
 
-  const stdout = stdoutOf(ghResult)
-  const parsed = stdout !== undefined ? parseEnvelope(stdout) : undefined
-  const verdict = classifyFailure(ghResult, parsed)
+  const text = bodyOf(result)
+  const parsed = text !== undefined ? parseEnvelope(text) : undefined
+  const verdict = classifyFailure(result, parsed)
 
   if (verdict.kind !== 'ok') {
     return { ok: false, kind: verdict.kind, message: verdict.message, fetchedAt }

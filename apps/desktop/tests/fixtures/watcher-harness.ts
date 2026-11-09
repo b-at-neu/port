@@ -1,11 +1,12 @@
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepositoryEntry } from '@/utils/repos'
-import type { CommandResult, GhResult } from '@/types/platform'
+import type { CommandResult, ConditionalTransport, GitHubTransport } from '@/types/platform'
 import type { TimerFactory, TimerHandle } from '@/types/state'
+import { queryOf } from './github-http'
 import { RATE_LIMIT_REPLY, connection } from './pipeline-reply'
 
 /** One ready issue: the sweep reply names it, and the detail read (`d0`) answers with an empty timeline. */
-export function readyItemGh(signedInLogin: string, assignees: readonly string[], rateLimit: unknown = RATE_LIMIT_REPLY, labels: readonly string[] = ['ready']): (args: readonly string[]) => Promise<GhResult> {
+export function readyItemTransport(signedInLogin: string, assignees: readonly string[], rateLimit: unknown = RATE_LIMIT_REPLY, labels: readonly string[] = ['ready']): GitHubTransport {
   const issue = {
     number: 42,
     title: 'a ticket',
@@ -17,9 +18,39 @@ export function readyItemGh(signedInLogin: string, assignees: readonly string[],
   }
   const sweep = { repository: { issues: connection([issue]), pullRequests: connection([]), repoLabels: { totalCount: 0, nodes: [] } }, rateLimit, viewer: { login: signedInLogin } }
   const detail = { repository: { d0: { timelineItems: { nodes: [] } } }, rateLimit }
-  return (args) => {
-    const document = args.find((arg) => arg.startsWith('query=')) ?? ''
-    return Promise.resolve({ ok: true, stdout: JSON.stringify({ data: document.includes('d0:') ? detail : sweep }), stderr: '' })
+  return (request) => {
+    const document = queryOf(request)
+    return Promise.resolve({ ok: true, status: 200, headers: {}, body: JSON.stringify({ data: document.includes('d0:') ? detail : sweep }) })
+  }
+}
+
+interface ScriptedConditional {
+  readonly transport: ConditionalTransport
+  readonly bump: () => void
+  readonly fail: (on: boolean) => void
+  readonly calls: () => number
+}
+
+/** A fake issues-list endpoint: `bump()` moves the ETag, a matching `If-None-Match` answers 304, and `fail(true)` answers 500. */
+export function scriptedConditional(): ScriptedConditional {
+  let version = 1
+  let failing = false
+  let calls = 0
+  return {
+    transport: (request) => {
+      calls += 1
+      if (failing) return Promise.resolve({ ok: false, kind: 'unknown', status: 500, body: '', message: 'GitHub returned HTTP 500' })
+      const etag = `"v${String(version)}"`
+      if (request.ifNoneMatch === etag) return Promise.resolve({ ok: true, notModified: true, status: 304, headers: { etag } })
+      return Promise.resolve({ ok: true, notModified: false, status: 200, headers: { etag }, body: '[]' })
+    },
+    bump: () => {
+      version += 1
+    },
+    fail: (on) => {
+      failing = on
+    },
+    calls: () => calls,
   }
 }
 

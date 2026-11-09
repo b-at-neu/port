@@ -26,6 +26,7 @@ import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers, indexWorkSessions, workSessionsFor } from '@/main/state/attach'
 import { closingReference, IMPLEMENTATION_PLAN_HEADING, sessionRequiredAt } from '@/main/state/link'
 import { stageOf } from '@/main/state/stage'
+import { CLAIM_SCAN_GRACE_MS } from '@/types/board'
 import { codeReviewCount } from '../../../../../scripts/port-tick/gates'
 import { parseFilesBlock } from '../../../../../scripts/port-tick/contention'
 
@@ -51,12 +52,17 @@ function denialsFreshness(denials: DenialsRead): FreshnessEntry {
   return denials.ok ? { at: denials.readAt } : { unavailable: denials.message }
 }
 
-/** First hit wins within the `in-flight` role: a session scan that could not run is `sessions-unavailable`, never `stalled`. */
+/**
+ * First hit wins within the `in-flight` role: a session scan that could not run is `sessions-unavailable`, never `stalled`.
+ * `no-claimant` is not reported until a scan has run at least `CLAIM_SCAN_GRACE_MS` after the in-flight label was added (`awaiting-scan`); a missing timestamp keeps `stalled`.
+ */
 function statusOf(
   role: LabelRole | null,
   sessionsAvailable: boolean,
   agents: readonly AttachedAgent[],
   sessions: readonly AttachedSession[],
+  claimedAt: string | null,
+  sessionsScannedAt: string | null,
 ): { readonly status: ItemStatus; readonly statusEvidence: StatusEvidence | null } {
   if (role === null) return { status: 'unstaged', statusEvidence: null }
   if (role === 'trigger') return { status: 'waiting', statusEvidence: null }
@@ -66,6 +72,9 @@ function statusOf(
   if (agents.some((a) => a.activity !== 'dormant')) return { status: 'in-flight', statusEvidence: 'agent-active' }
   if (agents.length === 0 && sessions.some((s) => s.activity !== 'dormant')) return { status: 'in-flight', statusEvidence: 'session-active' }
   if (agents.length > 0 || sessions.length > 0) return { status: 'stalled', statusEvidence: 'all-dormant' }
+  if (claimedAt !== null && sessionsScannedAt !== null && Date.parse(sessionsScannedAt) < Date.parse(claimedAt) + CLAIM_SCAN_GRACE_MS) {
+    return { status: 'in-flight', statusEvidence: 'awaiting-scan' }
+  }
   return { status: 'stalled', statusEvidence: 'no-claimant' }
 }
 
@@ -149,7 +158,12 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     const worktreeAttachments = attachWorktrees(attachTarget, worktreeEntries)
     const workSessions = workSessionsFor(workSessionIndex, item)
 
-    const { status, statusEvidence } = statusOf(stageResult.stage, repoSessions.available, agents, sessions)
+    const stageHistory = stageHistoryOf(item.labelEvents, labelsByName)
+    const inFlightKey = stageResult.stages.find((s) => s.role === 'in-flight')?.key
+    const claimedAt = stageHistory.findLast((entry) => entry.key === inFlightKey)?.at ?? null
+    const sessionsScannedAt = 'at' in repoSessions.freshness ? repoSessions.freshness.at : null
+
+    const { status, statusEvidence } = statusOf(stageResult.stage, repoSessions.available, agents, sessions, claimedAt, sessionsScannedAt)
     const waitingOn: WaitingOn | null =
       status !== 'waiting' ? null : item.assignees.length === 0 ? 'nobody' : sessionRequired ? 'operator-session' : 'cockpit'
 
@@ -165,8 +179,6 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
 
     // `null` for a pull request — a `## Changes` block is prose, never this heading.
     const planPresent = item.kind === 'issue' ? item.body.split(/\r?\n/).some((line) => line.trim() === IMPLEMENTATION_PLAN_HEADING) : null
-
-    const stageHistory = stageHistoryOf(item.labelEvents, labelsByName)
 
     return {
       repoId,
@@ -243,6 +255,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     },
     worktreeTotals,
     viewer: pipelineFetch.viewer,
+    integrationChecks: pipelineFetch.integrationChecks,
     approvalGate: entry.config.modules.approvalGate,
     disabled: pipelineFetch.disabled,
     concurrency: entry.config.concurrency,

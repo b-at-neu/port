@@ -40,7 +40,7 @@ export function dispatchLine(repo: string, status: RepoDispatchStatus | undefine
     case 'draining':
       return `${repo} is draining, so nothing new starts. Run it to start planning.`
     case 'paused':
-      return `${repo} is paused. Run it to start planning.`
+      return `${repo} is stopped. Run it to start planning.`
     case 'dispatching':
       break
   }

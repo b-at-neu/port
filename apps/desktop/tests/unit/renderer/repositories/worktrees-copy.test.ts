@@ -15,7 +15,7 @@ import {
   reclaimNothingToReclaimTooltip,
   reclaimResultToast,
 } from '@/renderer/repositories/worktrees-copy'
-import type { InspectedWorktree, ReclaimedWorktree, WorktreesPurgeResult, WorktreesReclaimResult, WorktreesReport } from '@/types/reclaimer'
+import type { InspectedWorktree, ReclaimedWorktree, WorktreesPurgeResult, WorktreesReclaimResult } from '@/types/reclaimer'
 
 function worktree(overrides: Partial<InspectedWorktree> = {}): InspectedWorktree {
   return {
@@ -39,23 +39,19 @@ function worktree(overrides: Partial<InspectedWorktree> = {}): InspectedWorktree
 }
 
 describe('failureCopy', () => {
-  it('interpolates the runner token and the script message', () => {
-    const cases: ReadonlyArray<Extract<WorktreesReport, { ok: false }>> = [
-      { ok: false, kind: 'not-configured', message: '', readAt: '' },
-      { ok: false, kind: 'unsupported-runner', token: 'python', message: '', readAt: '' },
-      { ok: false, kind: 'unparseable-command', message: '', readAt: '' },
-      { ok: false, kind: 'not-found', message: '', readAt: '' },
-      { ok: false, kind: 'cwd-missing', message: '', readAt: '' },
-      { ok: false, kind: 'script-failed', message: 'boom', readAt: '' },
-      { ok: false, kind: 'report-unparseable', message: '', readAt: '' },
-      { ok: false, kind: 'timeout', message: '', readAt: '' },
-      { ok: false, kind: 'signalled', message: '', readAt: '' },
-      { ok: false, kind: 'output-too-large', message: '', readAt: '' },
-      { ok: false, kind: 'nonzero', message: 'exit 1', readAt: '' },
-      { ok: false, kind: 'spawn-failed', message: 'ENOENT', readAt: '' },
-    ]
-    expect(failureCopy(cases[1] as Extract<WorktreesReport, { ok: false; kind: 'unsupported-runner' }>)).toContain('python')
-    expect(failureCopy(cases[5] as Extract<WorktreesReport, { ok: false; kind: 'script-failed' }>)).toContain('boom')
+  it('names the integration branch and interpolates a git message', () => {
+    expect(failureCopy({ kind: 'no-integration-ref', message: '', integration: 'dev' })).toBe(
+      'Neither origin/dev nor a local dev branch exists, so finished worktrees can’t be identified. Fetch the repository, then inspect again.',
+    )
+    expect(failureCopy({ kind: 'nonzero', message: 'exit 1' })).toBe('git failed: exit 1')
+    expect(failureCopy({ kind: 'spawn-failed', message: 'ENOENT' })).toBe('Couldn’t run git: ENOENT')
+  })
+
+  it('has a distinct sentence for every other kind', () => {
+    const kinds = ['not-a-repository', 'github-unavailable', 'path-not-registered', 'not-found', 'cwd-missing', 'timeout', 'signalled', 'output-too-large'] as const
+    const copies = kinds.map((kind) => failureCopy({ kind, message: '' }))
+    expect(new Set(copies).size).toBe(kinds.length)
+    expect(copies.every((copy) => copy.length > 0)).toBe(true)
   })
 })
 
@@ -106,7 +102,7 @@ describe('reclaimResultToast', () => {
       removed: 2,
       results: [reclaimed(), reclaimed({ path: '/x', pathBasename: 'impl-50', issue: 50 })],
       readAt: 't',
-      call: ['bin/worktrees.mjs'],
+      call: ['reclaim'],
     }
     expect(reclaimResultToast(result)).toBe('Reclaimed 2 worktrees.')
   })
@@ -117,7 +113,7 @@ describe('reclaimResultToast', () => {
       removed: 1,
       results: [reclaimed(), reclaimed({ path: '/x', pathBasename: 'impl-50', issue: 50, outcome: 'failed', error: 'locked', branchDeleted: null })],
       readAt: 't',
-      call: ['bin/worktrees.mjs'],
+      call: ['reclaim'],
     }
     expect(reclaimResultToast(result)).toBe('Reclaimed 1 of 2. impl-50: locked')
   })
@@ -125,7 +121,7 @@ describe('reclaimResultToast', () => {
 
 describe('reclaimFailureToast / reclaimNothingToReclaimTooltip', () => {
   it('reuses failureCopy for a failed reclaim', () => {
-    expect(reclaimFailureToast({ ok: false, kind: 'script-failed', message: 'boom', readAt: 't', call: ['bin/worktrees.mjs'] })).toContain('boom')
+    expect(reclaimFailureToast({ ok: false, kind: 'nonzero', message: 'boom', readAt: 't', call: ['reclaim'] })).toContain('boom')
   })
 
   it('names why reclaim is disabled', () => {
@@ -169,7 +165,7 @@ describe('forced reclaim copy', () => {
   })
 
   it('toasts removed, nothing removed, and the target’s own failure', () => {
-    const base = { ok: true, readAt: 't', call: ['bin/worktrees.mjs'] } as const
+    const base = { ok: true, readAt: 't', call: ['reclaim'] } as const
     expect(forcedReclaimToast('impl-51', { ...base, removed: 1, results: [reclaimed({ pathBasename: 'impl-51' })] })).toBe('Reclaimed impl-51.')
     expect(forcedReclaimToast('impl-51', { ...base, removed: 0, results: [reclaimed({ outcome: 'kept' })] })).toBe(
       'Nothing was reclaimed. impl-51 changed since it was checked; its row shows why.',
@@ -179,7 +175,7 @@ describe('forced reclaim copy', () => {
 })
 
 describe('purgeResultToast', () => {
-  const base = { ok: true, pathBasename: 'impl-29-stale', readAt: 't', call: ['bin/worktrees.mjs'] } as const
+  const base = { ok: true, pathBasename: 'impl-29-stale', readAt: 't', call: ['reclaim'] } as const
   const result = (overrides: Partial<Extract<WorktreesPurgeResult, { ok: true }>>): Extract<WorktreesPurgeResult, { ok: true }> => ({
     ...base,
     outcome: 'deleted',

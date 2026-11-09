@@ -31,6 +31,9 @@ export interface PipelineSessionRow {
   readonly transcript: { readonly sessionId: string; readonly agentId: string | null } | null
 }
 
+/** What the operator sees for a repo's run state: a drain with nothing left in flight reads `stopped`. */
+export type RunStateDisplay = 'dispatching' | 'draining' | 'stopped'
+
 export interface ReadyPipelineRow {
   readonly ready: true
   readonly repoId: RepoId

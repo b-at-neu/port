@@ -40,6 +40,32 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
+  // --- `fetch(` appears under apps/desktop/src/main/ only in platform/github-http.ts, and `githubHttp`
+  // and `githubConditional` are imported only from main/github/ — the one network path stays one file, reached from one directory. ---
+  {
+    const transportFile = 'apps/desktop/src/main/platform/github-http.ts';
+    const mainFiles = walk(join(root, 'apps/desktop/src/main')).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
+    const callsFetch = /\bfetch\s*\(/;
+    const importsGithubHttp = /import\s*\{[^}]*\b(?:githubHttp|githubConditional)\b[^}]*\}\s*from\s*'@\/main\/platform\/github-http'/;
+    let transportCallsFetch = false;
+    let githubImportsIt = false;
+    for (const f of mainFiles) {
+      const rel = relOf(f);
+      const text = readFileSync(f, 'utf8');
+      if (callsFetch.test(text)) {
+        if (rel === transportFile) transportCallsFetch = true;
+        else fail('desktop-github-adapter', `${rel} calls 'fetch(' — only ${transportFile} may reach the network`);
+      }
+      if (importsGithubHttp.test(text)) {
+        if (rel.startsWith(`${dir}/`)) githubImportsIt = true;
+        else fail('desktop-github-adapter', `${rel} imports 'githubHttp' or 'githubConditional' — only ${dir}/ may read GitHub over HTTP`);
+      }
+    }
+    if (!transportCallsFetch) fail('desktop-github-adapter', `${transportFile} no longer calls 'fetch(' — the guard cannot pass vacuously`);
+    if (!githubImportsIt) fail('desktop-github-adapter', `no file under ${dir} imports 'githubHttp' or 'githubConditional' — the guard cannot pass vacuously`);
+    if (transportCallsFetch && githubImportsIt) ok();
+  }
+
   // pin: `main/github/query.ts`'s `CheckRollupFields` fragment selection ↔ `scripts/port-tick/query.ts`'s own `ROLLUP`, both directions
   {
     const queryFile = `${dir}/query.ts`;

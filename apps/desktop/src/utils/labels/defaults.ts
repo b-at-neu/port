@@ -1,5 +1,5 @@
-// The deliberate single point of contact with the shipped template: every other file under labels/ reads LABEL_DEFAULTS below, never this import directly.
-import template from '../../../../../plugins/port/data/labels.json'
+// The deliberate single point of contact with the vocabulary file: every other file under labels/ reads LABEL_DEFAULTS below, never this import directly.
+import template from './labels.json'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 
 /** Modules a label default can be gated behind, plus the `core` sentinel for a label always created regardless of config. */

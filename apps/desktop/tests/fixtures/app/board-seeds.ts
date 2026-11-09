@@ -151,7 +151,7 @@ const POPULATED_ITEM_SEEDS: readonly ItemSeed[] = [
     number: 56,
     title: 'Archive closed workspaces',
     stageKey: 'blocked',
-    blockerComments: [{ body: "## Blocker\nThe retention period isn't in the plan. Decide 30 or 90 days.", offsetMinutes: -11 }],
+    blockerComments: [{ body: "## Blocker\n\n**Decision needed:** keep closed workspaces 30 or 90 days?\n\nThe retention period isn't in the plan.", offsetMinutes: -11 }],
   },
   // Unassigned and queued, so planTick's ownership partition holds it with reason 'unowned' — the Board's "Waiting on you" row needs one.
   { kind: 'issue', number: 52, title: 'Add a dark-mode icon for the tray', stageKey: 'ready', assignees: [] },

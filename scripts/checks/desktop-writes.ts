@@ -23,10 +23,9 @@ export default async function ({ expect, fail, ok }: Reporter) {
     return;
   }
 
-  // --- '@/main/platform/gh' is imported under apps/desktop/src/ only from main/github/ and
-  // main/writes/, and both do import it. The import path is the mechanically checkable fact, since `gh`/`ghJson` are always called through an injected seam. ---
+  // --- `gh`/`ghJson` from '@/main/platform/gh' are imported under apps/desktop/src/ only from
+  // main/writes/, which does import them. Reads go through platform/github-http, never `gh`. ---
   {
-    let sawGithub = false;
     let sawWrites = false;
     // '@/main/platform/gh' also exports `ghAuthStatus`/`classifyGhExit`, legitimately imported
     // anywhere — only an import of `gh` or `ghJson` themselves is this rail's concern.
@@ -36,17 +35,14 @@ export default async function ({ expect, fail, ok }: Reporter) {
       if (rel.startsWith(`${platformDir}/`) || rel.endsWith('.test.ts')) continue;
       const text = readFileSync(f, 'utf8');
       if (!importsGhOrGhJson.test(text)) continue;
-      if (rel.startsWith(`${githubDir}/`)) {
-        sawGithub = true;
-      } else if (rel.startsWith(`${writesDir}/`)) {
+      if (rel.startsWith(`${writesDir}/`)) {
         sawWrites = true;
       } else {
-        fail('desktop-writes', `${rel} imports 'gh'/'ghJson' from '@/main/platform/gh' — only main/github/ and main/writes/ may call gh/ghJson`);
+        fail('desktop-writes', `${rel} imports 'gh'/'ghJson' from '@/main/platform/gh' — only main/writes/ may call gh/ghJson; ${githubDir}/ reads through platform/github-http`);
       }
     }
-    if (!sawGithub) fail('desktop-writes', `no file under ${githubDir} imports 'gh'/'ghJson' from '@/main/platform/gh' — the guard cannot pass vacuously`);
     if (!sawWrites) fail('desktop-writes', `no file under ${writesDir} imports 'gh'/'ghJson' from '@/main/platform/gh' — the guard cannot pass vacuously`);
-    if (sawGithub && sawWrites) ok();
+    else ok();
   }
 
   // --- No file under main/writes/ contains 'graphql' or builds a query — the observed state

@@ -1,4 +1,4 @@
-// The pause-pipeline confirmation — shown only while in-flight is above 0.
+// The stop-pipeline confirmation — shown only while in-flight is above 0.
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/renderer/components/ui/alert-dialog'
 import { usePauseRequest, setPauseRequest } from '@/renderer/shell/stores'
 import { useRunStateCommand } from '@/renderer/shell/run-state-command'
@@ -13,15 +13,15 @@ export function PauseConfirmDialog() {
       {request !== null ? (
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Pause {request.name}?</AlertDialogTitle>
+            <AlertDialogTitle>Stop {request.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              {request.inFlight} {request.inFlight === 1 ? 'agent is' : 'agents are'} working on this repo. Pausing stops them and removes their in-flight labels. Nothing new starts until you run it
+              {request.inFlight} {request.inFlight === 1 ? 'agent is' : 'agents are'} working on this repo. Stopping ends them and removes their in-flight labels. Nothing new starts until you run it
               again.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => runState.confirmPause(request.repoId, request.name)}>Pause pipeline</AlertDialogAction>
+            <AlertDialogAction onClick={() => runState.confirmPause(request.repoId, request.name)}>Stop pipeline</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       ) : null}

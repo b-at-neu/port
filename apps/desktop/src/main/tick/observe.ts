@@ -8,7 +8,7 @@ import type { ReconciledItem } from '@/types/state'
 import type { TickClaim, TickHeld, TickObservation } from '@/types/tick'
 import { approvedReverify, capRefreshes, refreshDecision } from '../../../../../scripts/port-tick/gates'
 
-import { rollupVerdict } from '../../../../../scripts/port-tick/checks'
+import { historyDerivedChecks, rollupVerdict } from '../../../../../scripts/port-tick/checks'
 import type { Disposition } from '../../../../../scripts/port-tick/checks'
 import { REFRESH_PAIR } from '@/main/tick/routing'
 
@@ -61,15 +61,20 @@ function livenessResetObservations(
 function escalationObservations(held: readonly TickHeld[], itemByNumber: ReadonlyMap<number, ReconciledItem>, viewer: string): readonly TickObservation[] {
   const out: TickObservation[] = []
   for (const h of held) {
-    if (h.reason !== 'cycle-cap' && h.reason !== 'zero-diff') continue
+    if (h.reason !== 'cycle-cap' && h.reason !== 'zero-diff' && h.reason !== 'integration-red') continue
     const item = itemByNumber.get(h.number)
     if (item === undefined || !eligible(item, viewer)) continue
-    if (h.reason === 'cycle-cap') {
+    if (h.reason === 'integration-red') {
+      if (h.escalation?.kind === 'integration-red' && h.escalation.expired && item.headRefOid !== null) {
+        out.push({ kind: 'integration-red', number: h.number, itemKind: h.kind, checks: h.escalation.checks, headRefOid: item.headRefOid })
+      }
+    } else if (h.reason === 'cycle-cap') {
       const count = h.escalation?.kind === 'cycle-cap' ? h.escalation.count : 0
       const cap = h.escalation?.kind === 'cycle-cap' ? h.escalation.cap : 0
       out.push({ kind: 'cycle-cap', number: h.number, itemKind: h.kind, count, cap })
     } else if (item.headRefOid !== null) {
-      out.push({ kind: 'zero-diff', number: h.number, itemKind: h.kind, count: item.reviewCycleCount ?? 0, headRefOid: item.headRefOid })
+      const reason = h.escalation?.kind === 'zero-diff' ? h.escalation.reason : 'zero-diff'
+      out.push({ kind: 'zero-diff', number: h.number, itemKind: h.kind, reason, count: item.reviewCycleCount ?? 0, headRefOid: item.headRefOid })
     }
   }
   return out
@@ -80,16 +85,17 @@ interface RefreshCandidate {
   readonly itemKind: ReconciledItem['kind']
   readonly sourceLabel: 'readyForReview' | 'approved'
   readonly headRefOid: string
+  readonly cause: 'conflict' | 'integration-green'
 }
 
 function refreshCandidatesOf(held: readonly TickHeld[], items: readonly ReconciledItem[], viewer: string, dispositions: Readonly<Record<string, Disposition>>): readonly RefreshCandidate[] {
   const candidates: RefreshCandidate[] = []
 
   for (const h of held) {
-    if (h.reason !== 'conflicting') continue
+    if (h.reason !== 'conflicting' && h.reason !== 'integration-green') continue
     const item = items.find((i) => i.number === h.number)
     if (item === undefined || !eligible(item, viewer) || item.headRefOid === null) continue
-    candidates.push({ number: h.number, itemKind: h.kind, sourceLabel: 'readyForReview', headRefOid: item.headRefOid })
+    candidates.push({ number: h.number, itemKind: h.kind, sourceLabel: 'readyForReview', headRefOid: item.headRefOid, cause: h.reason === 'conflicting' ? 'conflict' : 'integration-green' })
   }
 
   for (const item of items) {
@@ -99,7 +105,7 @@ function refreshCandidatesOf(held: readonly TickHeld[], items: readonly Reconcil
     const verdict = rollupVerdict(item.checkRollup, dispositions)
     const reverify = approvedReverify({ verdict, mergeable: item.mergeable })
     if (reverify.action !== 'refresh-in-place') continue
-    candidates.push({ number: item.number, itemKind: item.kind, sourceLabel: 'approved', headRefOid: item.headRefOid })
+    candidates.push({ number: item.number, itemKind: item.kind, sourceLabel: 'approved', headRefOid: item.headRefOid, cause: 'conflict' })
   }
 
   return candidates
@@ -119,7 +125,7 @@ function refreshObservations(held: readonly TickHeld[], items: readonly Reconcil
   for (const candidate of toRefresh) {
     const decision = refreshDecision(refreshMemo.get(repoId, candidate.number), candidate.headRefOid)
     if (decision.action === 'refresh') {
-      out.push({ kind: 'refresh', number: candidate.number, itemKind: candidate.itemKind, sourceLabel: candidate.sourceLabel, headRefOid: candidate.headRefOid, count: decision.count })
+      out.push({ kind: 'refresh', number: candidate.number, itemKind: candidate.itemKind, sourceLabel: candidate.sourceLabel, headRefOid: candidate.headRefOid, count: decision.count, cause: candidate.cause })
     } else {
       out.push({
         kind: 'refresh-stuck',
@@ -143,11 +149,11 @@ function withdrawApprovalObservations(items: readonly ReconciledItem[], viewer: 
     if (carries(item, 'refreshBranch') || carries(item, 'refreshing')) continue
     if (item.headRefOid === null) continue
     const verdict = rollupVerdict(item.checkRollup, dispositions)
-    const reverify = approvedReverify({ verdict, mergeable: item.mergeable })
-    if (reverify.action !== 'withdraw') continue
+    const reverify = approvedReverify({ verdict, mergeable: item.mergeable, historyDerived: historyDerivedChecks(dispositions) })
+    if (reverify.action !== 'withdraw' && reverify.action !== 'escalate') continue
     // Enriches each red check with its own url, looked up from the item's own rollup by name.
     const red = reverify.red.map((r) => ({ ...r, url: (item.checkRollup ?? []).find((c) => c.name === r.name)?.url ?? null }))
-    out.push({ kind: 'withdraw-approval', number: item.number, itemKind: item.kind, red, headRefOid: item.headRefOid })
+    out.push({ kind: 'withdraw-approval', number: item.number, itemKind: item.kind, route: reverify.action === 'escalate' ? 'human' : 'revise', red, headRefOid: item.headRefOid })
   }
   return out
 }

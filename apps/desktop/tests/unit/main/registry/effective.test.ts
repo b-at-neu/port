@@ -73,22 +73,31 @@ describe('labelOverridesOf', () => {
 
 describe('foldDispositions', () => {
   it('folds the approval-gate excusal in first, as source approval-gate', () => {
-    expect(foldDispositions('build', [])).toEqual({ build: { disposition: 'infrastructure', source: 'approval-gate' } })
+    expect(foldDispositions('build', null, [])).toEqual({ build: { disposition: 'infrastructure', source: 'approval-gate' } })
+  })
+
+  it('folds the history-derived artifacts audit in as a blocking artifacts-audit entry', () => {
+    expect(foldDispositions(null, 'audit', [])).toEqual({ audit: { disposition: 'blocking', source: 'artifacts-audit' } })
   })
 
   it('folds each applied checks.<name> entry, as source CLAUDE.md', () => {
     const applied = [override('checks.deploy-preview', 'infrastructure')]
-    expect(foldDispositions(null, applied)).toEqual({ 'deploy-preview': { disposition: 'infrastructure', source: 'CLAUDE.md' } })
+    expect(foldDispositions(null, null, applied)).toEqual({ 'deploy-preview': { disposition: 'infrastructure', source: 'CLAUDE.md' } })
   })
 
   it('a later CLAUDE.md entry overwrites the approval-gate name', () => {
     const applied = [override('checks.build', 'blocking')]
-    expect(foldDispositions('build', applied)).toEqual({ build: { disposition: 'blocking', source: 'CLAUDE.md' } })
+    expect(foldDispositions('build', null, applied)).toEqual({ build: { disposition: 'blocking', source: 'CLAUDE.md' } })
+  })
+
+  it('a CLAUDE.md entry overwrites the history-derived check, so an operator can still excuse it', () => {
+    const applied = [override('checks.audit', 'infrastructure')]
+    expect(foldDispositions(null, 'audit', applied)).toEqual({ audit: { disposition: 'infrastructure', source: 'CLAUDE.md' } })
   })
 
   it('ignores a non-disposition checks.* value', () => {
     const applied = [override('checks.build', 'nonsense')]
-    expect(foldDispositions(null, applied)).toEqual({})
+    expect(foldDispositions(null, null, applied)).toEqual({})
   })
 })
 

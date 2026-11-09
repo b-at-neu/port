@@ -1,12 +1,12 @@
 import type { AgentRecord, SessionRecord } from '@/types/sessions'
-import type { PipelineFetch, ItemsByNumberFetch } from '@/types/github'
+import type { EtagCache, PipelineFetch, ItemsByNumberFetch } from '@/types/github'
 import type { WorktreesRead } from '@/types/local'
 import type { BoardSnapshot, SourceKind } from '@/types/board'
 
 // Renderer-safe reconciled shapes for the unified state model. No import here may reach a Node builtin — only `main/state/` joins the four adapters. A condition a human or the environment could cause is a value, never a throw.
 import type { LabelKey, VocabularyReport } from '@/utils/labels/vocabulary'
 import type { LabelRole } from '@/utils/labels/defaults'
-import type { BlockerRead, CheckContext, IssueCommentNode, Mergeable, PipelineFailureKind, PipelineItemKind, PullRequestCommentNode, RateLimitInfo, ReviewNode, TruncatedSet, UnavailableAlias } from '@/types/github'
+import type { BlockerRead, CheckContext, IntegrationChecks, IssueCommentNode, Mergeable, PipelineFailureKind, PipelineItemKind, PullRequestCommentNode, RateLimitInfo, ReviewNode, TruncatedSet, UnavailableAlias } from '@/types/github'
 import type { RepoDiagnostic, RepoId, RepoProblem } from '@/utils/repos'
 import type { DenialsRead, UnresolvedReason } from '@/types/local'
 import type { PortStageAgent, SessionScan } from '@/types/sessions'
@@ -37,8 +37,8 @@ export interface StageResult {
 /** From `stage.role` plus the attachment ladder. `stalled` is a report, never a proof — a session scan that could not run is absence of evidence and never produces this verdict. */
 export type ItemStatus = 'waiting' | 'in-flight' | 'stalled' | 'gated' | 'terminal' | 'unstaged' | 'interrupted'
 
-/** Why `status` reads the way it does — distinguishes "nothing claims this" from "the transcript hasn't moved" from "the app couldn't even check". */
-export type StatusEvidence = 'sessions-unavailable' | 'agent-active' | 'session-active' | 'all-dormant' | 'no-claimant'
+/** Why `status` reads the way it does — distinguishes "nothing claims this" from "the transcript hasn't moved" from "the app couldn't even check". `awaiting-scan` means claimed on GitHub, and no session scan has run since then that could have seen the claimant. */
+export type StatusEvidence = 'sessions-unavailable' | 'agent-active' | 'session-active' | 'all-dormant' | 'no-claimant' | 'awaiting-scan'
 
 /** Accompanies `status: 'waiting'`, first hit wins: `nobody` is unassigned; `operator-session` means the `SESSION REQUIRED` marker holds; `cockpit` is the ordinary case. */
 export type WaitingOn = 'cockpit' | 'operator-session' | 'nobody'
@@ -194,6 +194,8 @@ export type RepositoryState =
       readonly worktreeTotals: WorktreeTotals | null
       /** The signed-in account's own login, carried straight off `PipelineFetch.viewer` — `null`, never a guess, when unresolvable. */
       readonly viewer: string | null
+      /** The integration branch's check statuses off `PipelineFetch.integrationChecks` — `null` when its history was unreadable, which the integration-red gate holds on rather than refreshing. */
+      readonly integrationChecks: IntegrationChecks | null
       /** `entry.config.modules.approvalGate`, copied onto every item read so the ungated selection and `actionsFor` never need a second config read. */
       readonly approvalGate: boolean
       /** Every module-gated label key this repository currently has turned off, so `planTick` never needs a second config read to report a gated stage as absent. */
@@ -247,12 +249,18 @@ export interface RefreshOutcome {
   readonly failureKind?: PipelineFailureKind | null
 }
 
+/** `changed` is false for a 304 and for the first, cache-priming 200. */
+export type GithubPrecheckOutcome =
+  | { readonly ok: true; readonly at: string; readonly changed: boolean }
+  | { readonly ok: false; readonly at: string; readonly error: string }
+
 export interface SourceCache {
   readonly github: Map<RepoId, PipelineFetch>
   /** Keyed with the fetch it belongs to, never independently schedulable — `SOURCE_KINDS` deliberately excludes `itemStates`. */
   readonly itemStates: Map<RepoId, ItemsByNumberFetch | null>
   readonly worktrees: Map<RepoId, WorktreesRead>
   readonly denials: Map<RepoId, DenialsRead>
+  readonly etags: EtagCache
   /** One machine-wide scan, never per repository. */
   sessions: SessionScan | null
 }

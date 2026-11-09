@@ -1,4 +1,4 @@
-// Run/Drain/Pause for one repository, as a React mutation with toasts.
+// Run/Drain/Stop for one repository, as a React mutation with toasts.
 import type { RepoId } from '@/utils/repos'
 import type { DispatchControlResult, RunState } from '@/types/dispatch'
 import type { ActionToast, ToastButton } from '@/types/toast'
@@ -16,7 +16,7 @@ type DispatchCommand = DispatchControlResult['command']
 const PENDING: Record<DispatchCommand, (repoName: string) => string> = {
   run: (repoName) => `Starting ${repoName}…`,
   drain: (repoName) => `Draining ${repoName}…`,
-  pause: (repoName) => `Pausing ${repoName}…`,
+  pause: (repoName) => `Stopping ${repoName}…`,
   'take-over': (repoName) => `Taking over ${repoName}…`,
 }
 
@@ -70,7 +70,7 @@ export function useRunStateCommand() {
     }
     if (result.report.kind === 'aborted') return { ...plain, tone: 'error', title: pauseAbortedCopy(result.report) }
     const lines = result.report.items.map((item) => haltItemLine(item, new Date()))
-    return { ...plain, tone: 'success', title: haltHeadingCopy(result.report, 'Paused'), description: [pauseReportNote(result.report, repoName), ...lines].join(' — ') }
+    return { ...plain, tone: 'success', title: haltHeadingCopy(result.report, 'Stopped'), description: [pauseReportNote(result.report, repoName), ...lines].join(' — ') }
   }
 
   async function send(command: DispatchCommand, repoId: RepoId, repoName: string, undoable = true): Promise<void> {

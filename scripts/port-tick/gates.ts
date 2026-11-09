@@ -1,4 +1,4 @@
-// Pure: mergeability routing, refresh-sweep bounds, zero-diff, cycle cap,
+// Pure: mergeability routing, refresh-sweep bounds, zero-diff, integration-red hold, cycle cap,
 // and approved re-verify. A leaf module — `wire.ts` adapts the raw shape.
 
 /** The two review-body fields either gate reads. */
@@ -35,6 +35,9 @@ export function checkOnlyNames(body: string): string[] | null {
   return [...line.slice(CHECK_ONLY_PREFIX.length).matchAll(/`([^`]+)`/g)].flatMap((m) => (m[1] === undefined ? [] : [m[1]]));
 }
 
+/** The original review plus one repeat; `artifacts.mjs audit` fails above it. */
+export const MAX_REVIEWS_PER_SHA = 2;
+
 export type ZeroDiffAction = 'dispatch' | 'dispatch-once' | 'recheck-dispatch' | 'hold-checks' | 'escalate';
 
 export type CheckStatus = 'green' | 'pending' | 'red';
@@ -54,8 +57,17 @@ export interface ZeroDiffFacts {
   readonly escalateAt?: string;
 }
 
-/** A reviewed head gets no second cycle unless it moved or a newer `## Gate cleared` authorised one;
- *  a check-only block holds then re-reviews once, and a missing `checks` or clock escalates. */
+export interface ShaCapFacts {
+  readonly sha: string;
+  readonly reviewsOnHead: number;
+}
+
+export type ZeroDiffResult =
+  | { readonly action: ZeroDiffAction; readonly reason?: undefined; readonly facts?: ZeroDiffFacts }
+  | { readonly action: 'escalate'; readonly reason: 'sha-cap'; readonly facts: ShaCapFacts };
+
+/** A reviewed head gets no second cycle unless it moved or a newer `## Gate cleared` authorised one, and never past
+ *  `MAX_REVIEWS_PER_SHA`; a check-only block holds then re-reviews once, and a missing `checks` or clock escalates. */
 export function zeroDiffGate({
   reviews,
   comments,
@@ -66,19 +78,21 @@ export function zeroDiffGate({
   readonly comments: readonly CommentNode[] | undefined;
   readonly headRefOid: string;
   readonly checks?: ZeroDiffChecks;
-}): { readonly action: ZeroDiffAction; readonly facts?: ZeroDiffFacts } {
+}): ZeroDiffResult {
   const codeReviews = (reviews ?? []).filter((r) => r.body.startsWith(CODE_REVIEW_PREFIX));
   if (codeReviews.length === 0) return { action: 'dispatch' };
 
   const newest = codeReviews.reduce((a, b) => ((a.submittedAt ?? '') > (b.submittedAt ?? '') ? a : b));
   if ((newest.commitOid ?? null) !== headRefOid) return { action: 'dispatch' };
 
+  const reviewsOnHead = codeReviews.filter((r) => (r.commitOid ?? null) === headRefOid).length;
+  if (reviewsOnHead >= MAX_REVIEWS_PER_SHA) return { action: 'escalate', reason: 'sha-cap', facts: { sha: headRefOid, reviewsOnHead } };
+
   const clearedAfter = (comments ?? []).some((c) => c.body.startsWith(GATE_CLEARED_PREFIX) && c.createdAt > (newest.submittedAt ?? ''));
   if (clearedAfter) return { action: 'dispatch-once' };
 
   const named = checkOnlyNames(newest.body);
-  const reviewsOnHead = codeReviews.filter((r) => (r.commitOid ?? null) === headRefOid).length;
-  if (named === null || checks === undefined || reviewsOnHead !== 1) return { action: 'escalate' };
+  if (named === null || checks === undefined) return { action: 'escalate' };
 
   const present: CheckStatus[] = [];
   for (const n of named) {
@@ -103,6 +117,72 @@ export function zeroDiffGate({
   return { action: 'hold-checks', facts: { ...facts, state: 'red', escalateAt: new Date(deadline).toISOString() } };
 }
 
+const INTEGRATION_RED_PREFIX = '## Integration red';
+const INTEGRATION_RED_HEAD = /^Head `([0-9a-f]{7,40})` ·/;
+const INTEGRATION_RED_CHECK = /^- `([^`]+)` — /;
+
+/** Hours an `## Integration red` hold waits for the integration branch to turn green before it escalates. */
+export const INTEGRATION_RED_HOLD_HOURS = 24;
+
+export type IntegrationStatus = 'green' | 'red';
+
+/** The head SHA and the check names an `## Integration red` comment names, or null when it is not one or is malformed. */
+export function integrationRedNames(body: string): { readonly head: string; readonly checks: readonly string[] } | null {
+  if (!body.startsWith(INTEGRATION_RED_PREFIX)) return null;
+  const lines = body.split('\n');
+  if (lines[0]?.trimEnd() !== INTEGRATION_RED_PREFIX) return null;
+  const head = INTEGRATION_RED_HEAD.exec(lines[1] ?? '')?.[1];
+  if (head === undefined) return null;
+  const checks = lines.slice(2).flatMap((l) => {
+    const name = INTEGRATION_RED_CHECK.exec(l)?.[1];
+    return name === undefined ? [] : [name];
+  });
+  return checks.length === 0 ? null : { head, checks };
+}
+
+export type IntegrationRedAction = 'none' | 'hold' | 'refresh' | 'escalate';
+
+export interface IntegrationRedFacts {
+  readonly checks: readonly string[];
+  readonly sha: string;
+  readonly state: 'red' | 'unreadable';
+  readonly escalateAt?: string;
+}
+
+/** A head carrying its own `## Integration red` is held until every named check is green on the integration
+ *  branch, then refreshed; an unreadable integration read holds, and the window bounds any hold. */
+export function integrationRedGate({
+  comments,
+  headRefOid,
+  integration,
+  now,
+}: {
+  readonly comments: readonly CommentNode[] | undefined;
+  readonly headRefOid: string;
+  readonly integration: ReadonlyMap<string, IntegrationStatus> | null | undefined;
+  readonly now: string | null;
+}): { readonly action: IntegrationRedAction; readonly facts?: IntegrationRedFacts } {
+  const marked = (comments ?? []).flatMap((c) => {
+    const named = integrationRedNames(c.body);
+    return named === null ? [] : [{ named, createdAt: c.createdAt }];
+  });
+  if (marked.length === 0) return { action: 'none' };
+
+  const newest = marked.reduce((a, b) => (a.createdAt > b.createdAt ? a : b));
+  if (!headRefOid.startsWith(newest.named.head)) return { action: 'none' };
+  if ((comments ?? []).some((c) => c.body.startsWith(GATE_CLEARED_PREFIX) && c.createdAt > newest.createdAt)) return { action: 'none' };
+
+  const facts = { checks: newest.named.checks, sha: headRefOid, state: integration == null ? ('unreadable' as const) : ('red' as const) };
+  if (integration != null && newest.named.checks.every((n) => integration.get(n) === 'green')) return { action: 'refresh', facts };
+
+  const created = Date.parse(newest.createdAt);
+  const current = now === null ? Number.NaN : Date.parse(now);
+  if (Number.isNaN(created) || Number.isNaN(current)) return { action: 'escalate', facts };
+  const deadline = created + INTEGRATION_RED_HOLD_HOURS * 3_600_000;
+  if (current >= deadline) return { action: 'escalate', facts };
+  return { action: 'hold', facts: { ...facts, escalateAt: new Date(deadline).toISOString() } };
+}
+
 const CYCLE_GRANT_LINE = '### Cycle grant';
 
 /** Operator-authorised extra cycles recorded — one per `## Gate cleared` comment carrying a
@@ -117,6 +197,16 @@ export function cycleGrantCount(comments: readonly CommentNode[] | undefined): n
  *  `comments` optional; absent means zero grants, fail closed. */
 export function cycleCapExceeded(reviews: readonly ReviewNode[] | undefined, cap: number, comments?: readonly CommentNode[]): boolean {
   return codeReviewCount(reviews) >= cap + cycleGrantCount(comments);
+}
+
+export interface ReviewDispatchFacts {
+  readonly cycle: number;
+  readonly selfAuthored: boolean;
+}
+
+/** An unknown author reads as self-authored, because `COMMENT` is the one review event GitHub accepts either way. */
+export function reviewDispatchFacts({ priorReviews, author, viewer }: { readonly priorReviews: number; readonly author: string | null; readonly viewer: string }): ReviewDispatchFacts {
+  return { cycle: priorReviews + 1, selfAuthored: author === null || author.toLowerCase() === viewer.toLowerCase() };
 }
 
 export type MergeabilityAction = 'dispatch' | 'refresh' | 'hold';
@@ -188,13 +278,23 @@ export interface ApprovedReverifyVerdict {
 
 export type ApprovedReverifyResult =
   | { readonly action: 'withdraw'; readonly red: ApprovedReverifyVerdict['red'] }
+  | { readonly action: 'escalate'; readonly red: ApprovedReverifyVerdict['red'] }
   | { readonly action: 'refresh-in-place' }
   | { readonly action: 'wait' }
   | { readonly action: 'announce-ready'; readonly green: ApprovedReverifyVerdict['green'] };
 
-/** The `<labels.approved>` rail's two authorising facts. A red check withdraws approval;
+/** A red check withdraws approval, or escalates when it is `historyDerived` (no revision can clear it);
  *  `CONFLICTING` only adds the refresh label, leaving approval in place. */
-export function approvedReverify({ verdict, mergeable }: { readonly verdict: ApprovedReverifyVerdict; readonly mergeable: string | null }): ApprovedReverifyResult {
+export function approvedReverify({
+  verdict,
+  mergeable,
+  historyDerived = [],
+}: {
+  readonly verdict: ApprovedReverifyVerdict;
+  readonly mergeable: string | null;
+  readonly historyDerived?: readonly string[];
+}): ApprovedReverifyResult {
+  if (verdict.red.some((r) => r.name !== null && historyDerived.includes(r.name))) return { action: 'escalate', red: verdict.red };
   if (verdict.red.length > 0) return { action: 'withdraw', red: verdict.red };
   if (mergeable === 'CONFLICTING') return { action: 'refresh-in-place' };
   if (verdict.pending || mergeable === 'UNKNOWN') return { action: 'wait' };

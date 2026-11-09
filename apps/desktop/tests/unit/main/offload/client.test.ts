@@ -53,7 +53,7 @@ describe('createWorkerEngine', () => {
 
   it('a crash settles every pending request into its failure shape, and the next call respawns', async () => {
     const { engine, workers } = setup()
-    const refresh = engine.refreshGithub({ repoId: 'r' as never, repo: { owner: 'o', name: 'n' }, vocabulary: {} as never })
+    const refresh = engine.refreshGithub({ repoId: 'r' as never, repo: { owner: 'o', name: 'n' }, vocabulary: {} as never, integration: 'dev' })
     const scan = engine.scanSessions({ repos: [] })
     const projection = engine.project({ repositories: [] })
     workers[0]!.crash('out of memory')
@@ -116,5 +116,26 @@ describe('createWorkerEngine', () => {
     const close = engine.tailClose({ tailId: 't' })
     workers[0]!.exit(1)
     await expect(close).resolves.toBeUndefined()
+  })
+
+  it('proxies precheckGithub, and a rejection resolves to a failure value', async () => {
+    const { engine, workers } = setup()
+    const params = { repoId: 'r' as never, repo: { owner: 'o', name: 'n' } }
+    const ok = engine.precheckGithub(params)
+    expect(workers[0]!.sent).toEqual([{ id: 1, op: 'precheckGithub', params }])
+    workers[0]!.reply({ id: 1, ok: true, value: { ok: true, at: now().toISOString(), changed: true } })
+    expect(await ok).toEqual({ ok: true, at: now().toISOString(), changed: true })
+
+    const failed = engine.precheckGithub(params)
+    workers[0]!.reply({ id: 2, ok: false, message: 'gone' })
+    expect(await failed).toEqual({ ok: false, at: now().toISOString(), error: 'gone' })
+  })
+
+  it('proxies forgetRepo, and a rejection resolves to undefined', async () => {
+    const { engine, workers } = setup()
+    const forget = engine.forgetRepo({ repoId: 'r' as never })
+    expect(workers[0]!.sent).toEqual([{ id: 1, op: 'forgetRepo', params: { repoId: 'r' } }])
+    workers[0]!.reply({ id: 1, ok: false, message: 'gone' })
+    await expect(forget).resolves.toBeUndefined()
   })
 })

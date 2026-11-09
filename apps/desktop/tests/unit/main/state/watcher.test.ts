@@ -3,11 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { RepositoryEntry } from '@/utils/repos'
-import type { GhResult } from '@/types/platform'
+import type { GitHubHttpResult, GitHubRequest } from '@/types/platform'
 import type { BoardSnapshot } from '@/types/board'
 import { createPipelineWatcher } from '@/main/state/watcher'
-import { EMPTY_PIPELINE_STDOUT, RATE_LIMIT_REPLY, connection } from '../../../fixtures/pipeline-reply'
-import { fakeGit, makeFakeTimer, readyEntry, readyItemGh } from '../../../fixtures/watcher-harness'
+import { httpOk, queryOf } from '../../../fixtures/github-http'
+import { EMPTY_PIPELINE_BODY, RATE_LIMIT_REPLY, connection } from '../../../fixtures/pipeline-reply'
+import { fakeGit, makeFakeTimer, readyEntry, readyItemTransport, scriptedConditional } from '../../../fixtures/watcher-harness'
 
 function makeSnapshotWaiter(): { readonly onSnapshot: (snapshot: BoardSnapshot) => void; readonly next: () => Promise<BoardSnapshot> } {
   let resolvers: ((snapshot: BoardSnapshot) => void)[] = []
@@ -37,10 +38,11 @@ describe('createPipelineWatcher — cadence', () => {
       now,
       setTimer: timer.factory,
       git: fakeGit(gitCounts),
-      gh: () => {
-        ghCalls += 1
-        return Promise.resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' } satisfies GhResult)
+      github: (request) => {
+        if (!queryOf(request).includes('integrationHistory:')) ghCalls += 1
+        return Promise.resolve(httpOk(EMPTY_PIPELINE_BODY))
       },
+      conditional: scriptedConditional().transport,
       sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
     })
 
@@ -72,7 +74,7 @@ describe('createPipelineWatcher — budgeted interval', () => {
         now,
         setTimer: makeFakeTimer().factory,
         git: fakeGit({ worktreeList: 0 }),
-        gh: readyItemGh('op', ['op'], { ...RATE_LIMIT_REPLY, cost, resetAt: '2026-01-01T00:00:10Z' }),
+        github: readyItemTransport('op', ['op'], { ...RATE_LIMIT_REPLY, cost, resetAt: '2026-01-01T00:00:10Z' }),
         sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
       })
       const snap = await watcher.refresh()
@@ -80,8 +82,8 @@ describe('createPipelineWatcher — budgeted interval', () => {
       return snap.health[0]?.github.intervalMs
     }
 
-    // Two round trips per poll (sweep, then detail) each report the cost, so a poll costs twice it.
-    expect(await intervalFor(73)).toBe(210_240)
+    // Three round trips per poll (sweep, detail, then the integration history) each report the cost, so a poll costs three times it.
+    expect(await intervalFor(73)).toBe(315_360)
     expect(await intervalFor(1)).toBe(60_000)
   })
 })
@@ -93,11 +95,12 @@ async function watcherWithHungReads(now: () => Date, timer: ReturnType<typeof ma
   const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
   const hung: (() => void)[] = []
   let ghCalls = 0
-  const gh = (): Promise<GhResult> => {
+  const github = (request: GitHubRequest): Promise<GitHubHttpResult> => {
+    if (queryOf(request).includes('integrationHistory:')) return Promise.resolve(httpOk(EMPTY_PIPELINE_BODY))
     ghCalls += 1
-    if (ghCalls === 1) return Promise.resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' })
+    if (ghCalls === 1) return Promise.resolve(httpOk(EMPTY_PIPELINE_BODY))
     return new Promise((resolve) => {
-      hung.push(() => resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' }))
+      hung.push(() => resolve(httpOk(EMPTY_PIPELINE_BODY)))
     })
   }
   const watcher = createPipelineWatcher({
@@ -106,7 +109,7 @@ async function watcherWithHungReads(now: () => Date, timer: ReturnType<typeof ma
     now,
     setTimer: timer.factory,
     git: fakeGit({ worktreeList: 0 }),
-    gh,
+    github,
     sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
   })
   // Prime every source once, so the race in each test is isolated to `github` alone.
@@ -165,19 +168,20 @@ describe('createPipelineWatcher — rate-limit deferral', () => {
       now,
       setTimer: makeFakeTimer().factory,
       git: fakeGit({ worktreeList: 0 }),
-      gh: () => {
+      github: () => {
         ghCalls += 1
-        return Promise.resolve({ ok: true, stdout: limited, stderr: '' } satisfies GhResult)
+        return Promise.resolve(httpOk(limited))
       },
       sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
     })
 
     const first = await watcher.refresh()
     expect(first.health[0]?.github.deferredUntil).toBe('2026-01-01T01:00:00Z')
-    expect(ghCalls).toBe(1)
+    // The sweep, then the integration history.
+    expect(ghCalls).toBe(2)
 
     await watcher.refresh({ repoId: 'repo-a' as RepositoryEntry['id'], source: 'github' })
-    expect(ghCalls).toBe(1)
+    expect(ghCalls).toBe(2)
   })
 })
 
@@ -195,7 +199,8 @@ describe('createPipelineWatcher — refresh() bypasses backoff', () => {
       now,
       setTimer: timer.factory,
       git: fakeGit(gitCounts),
-      gh: () => Promise.resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' } satisfies GhResult),
+      github: () => Promise.resolve(httpOk(EMPTY_PIPELINE_BODY)),
+      conditional: scriptedConditional().transport,
       sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
     })
 
@@ -222,7 +227,7 @@ describe('createPipelineWatcher — stop()', () => {
       now,
       setTimer: timer.factory,
       git: fakeGit(gitCounts),
-      gh: () => Promise.resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' } satisfies GhResult),
+      github: () => Promise.resolve(httpOk(EMPTY_PIPELINE_BODY)),
       sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
     })
 
@@ -256,7 +261,7 @@ describe('createPipelineWatcher — registry re-list', () => {
       now,
       setTimer: timer.factory,
       git: fakeGit({ worktreeList: 0 }),
-      gh: () => Promise.resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' } satisfies GhResult),
+      github: () => Promise.resolve(httpOk(EMPTY_PIPELINE_BODY)),
       sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
     })
 
@@ -286,7 +291,7 @@ describe('createPipelineWatcher — tick wiring (#105)', () => {
       now,
       setTimer: timer.factory,
       git: fakeGit({ worktreeList: 0 }),
-      gh: readyItemGh('op', ['op']),
+      github: readyItemTransport('op', ['op']),
       sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
     })
 
@@ -310,7 +315,7 @@ describe('createPipelineWatcher — tick wiring (#105)', () => {
       now,
       setTimer: timer.factory,
       git: fakeGit({ worktreeList: 0 }),
-      gh: readyItemGh('op', []),
+      github: readyItemTransport('op', []),
       sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
     })
 
@@ -334,7 +339,7 @@ describe('createPipelineWatcher — trajectory wiring (#111)', () => {
       now,
       setTimer: timer.factory,
       git: fakeGit({ worktreeList: 0 }),
-      gh: readyItemGh('op', ['op']),
+      github: readyItemTransport('op', ['op']),
       sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
       recordTick: (repoRoot, event) => {
         calls.push({ repoRoot, event })
@@ -369,7 +374,7 @@ describe('createPipelineWatcher — trajectory wiring (#111)', () => {
       now,
       setTimer: timer.factory,
       git: fakeGit({ worktreeList: 0 }),
-      gh: readyItemGh('op', ['op']),
+      github: readyItemTransport('op', ['op']),
       sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
       recordTick: () =>
         new Promise((resolve) => {
@@ -396,7 +401,7 @@ describe('createPipelineWatcher — stop() and nextWakeupAt', () => {
       now,
       setTimer: timer.factory,
       git: fakeGit({ worktreeList: 0 }),
-      gh: () => Promise.resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' } satisfies GhResult),
+      github: () => Promise.resolve(httpOk(EMPTY_PIPELINE_BODY)),
       sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
     })
 

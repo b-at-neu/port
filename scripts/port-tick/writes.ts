@@ -62,11 +62,39 @@ export function strandedRestoreWrite({
   };
 }
 
-/** The newest review already covers the current head with no `## Gate cleared` since. */
-export function zeroDiffWrite({ repo, labels, number }: { repo: string; labels: Record<string, string>; number: number }): any {
+/** The newest review already covers the current head with no `## Gate cleared` since, or the head
+ *  already carries `MAX_REVIEWS_PER_SHA` reviews (`reason: 'sha-cap'`, naming `sha` and `reviewsOnHead`). */
+export function zeroDiffWrite({
+  repo,
+  labels,
+  number,
+  reason,
+  sha,
+  reviewsOnHead,
+}: {
+  repo: string;
+  labels: Record<string, string>;
+  number: number;
+  reason?: 'sha-cap';
+  sha?: string;
+  reviewsOnHead?: number;
+}): any {
   return {
     command: labelEdit({ removeKey: 'readyForReview', addKey: 'needsHuman', number, repo, labels }),
-    why: 'zero-diff review gate',
+    why: reason === 'sha-cap' ? `per-SHA review cap (${reviewsOnHead} reviews on ${sha})` : 'zero-diff review gate',
+  };
+}
+
+/** One failed-job rerun of a workflow run, issued before a review is dispatched. */
+export function checkRerunWrite({ repo, runId, check }: { repo: string; runId: string; check: string }): any {
+  return { command: `gh run rerun ${runId} --failed --repo ${repo}`, why: `pre-review rerun: ${check}` };
+}
+
+/** An `## Integration red` hold outlived its window with a named check still red or unreadable. */
+export function integrationRedEscalationWrite({ repo, labels, number }: { repo: string; labels: Record<string, string>; number: number }): any {
+  return {
+    command: labelEdit({ removeKey: 'readyForReview', addKey: 'needsHuman', number, repo, labels }),
+    why: 'integration red past hold window',
   };
 }
 
@@ -83,6 +111,14 @@ export function approvalWithdrawnWrite({ repo, labels, number }: { repo: string;
   return {
     command: labelEdit({ removeKey: 'approved', addKey: 'needsRevision', number, repo, labels }),
     why: 'approval withdrawn: red check',
+  };
+}
+
+/** A history-derived check went red on an `<labels.approved>` pull request; no revision can clear it. */
+export function approvalEscalateWrite({ repo, labels, number }: { repo: string; labels: Record<string, string>; number: number }): any {
+  return {
+    command: labelEdit({ removeKey: 'approved', addKey: 'needsHuman', number, repo, labels }),
+    why: 'approval withdrawn: history-derived check',
   };
 }
 
@@ -110,7 +146,7 @@ export function livenessResetWrite({
 // A `gh pr edit` branch selector: leading digits, a dash, then the rest of the branch name.
 const BRANCH_SELECTOR_RE = /^\d+-[\w./-]+$/;
 
-/** The four `resolve --decision` answers a human gate accepts. Returns `null` for an
+/** The five `resolve --decision` answers a human gate accepts. Returns `null` for an
  *  unrecognized decision, or an invalid `branch`, or one paired with a plan-review decision. */
 export function gateResolveWrite({
   repo,
@@ -142,6 +178,9 @@ export function gateResolveWrite({
   }
   if (decision === 'back-to-review') {
     return { command: labelEdit({ removeKey: 'needsHuman', addKey: 'readyForReview', number: item, selector, repo, labels }), why: 'gate cleared: back to review' };
+  }
+  if (decision === 'refresh') {
+    return { command: labelEdit({ removeKey: 'needsHuman', addKey: 'refreshBranch', number: item, selector, repo, labels }), why: 'gate cleared: refresh and re-review' };
   }
   return null;
 }

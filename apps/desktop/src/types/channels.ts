@@ -137,6 +137,7 @@ export const QUERY_CHANNELS = [
   'storage:report',
   'usage:summary',
   'release:status',
+  'release:issues',
 ] as const
 
 export type QueryChannel = (typeof QUERY_CHANNELS)[number]

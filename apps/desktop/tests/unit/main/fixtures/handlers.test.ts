@@ -43,6 +43,7 @@ const SAMPLE_REQUESTS: Partial<Record<IpcChannel, unknown>> = {
   'backlog:list': { repoId: 'fixture-acme-widgets' },
   'release:status': { repoId: 'fixture-acme-widgets' },
   'release:run': { repoId: 'fixture-acme-widgets', step: 'open', version: '0.3.0' },
+  'release:issues': { repoId: 'fixture-acme-widgets', tag: 'v0.2.0', previousTag: 'v0.1.1' },
   'audit:list': { repoId: 'fixture-acme-widgets', number: 38 },
   'session:changes': { sessionKey: STREAMING_KEY },
   'session:pin:set': { sessionId: 'fixture-claude-1', pinned: true },
@@ -231,7 +232,6 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     const states = report.worktrees.map((w) => w.state).sort()
     expect(states).toEqual(['active', 'dirty', 'done', 'locked', 'locked'])
     expect(report.orphanDirs).toHaveLength(1)
-    expect(report.forcedActions).toBe('supported')
   })
 
   it('offers forced reclaim on the finished locked row and the dirty row, never on the active locked one', () => {
@@ -264,16 +264,17 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     expect(snapshots.filter((s) => s.stage !== null).map((s) => s.stage?.number).sort()).toEqual([38, 44, 51])
   })
 
-  it.runIf(scenario === 'populated')('keeps every blocked ticket off Needs you and shows #51, #55 and #56 on the Board with what they are held on', () => {
+  it.runIf(scenario === 'populated')('lists every blocked ticket on Needs you and shows #51, #55 and #56 on the Board with what they are held on', () => {
     const snapshot = handlers['board:snapshot'](undefined)
     const sessions = handlers['session:list'](undefined)
-    expect(needsYouItems(snapshot, now, sessions).filter((i) => [51, 55, 56].includes(i.number ?? 0))).toEqual([])
+    const blockedItems = needsYouItems(snapshot, now, sessions).filter((i) => i.kind === 'blocked')
+    expect(blockedItems.map((i) => i.number).sort()).toEqual([51, 55, 56])
     const rows = projectBoard({ snapshot, groupBy: 'repo', now, sessions }).rows
     const held = (number: number) => rows.find((r) => r.item.number === number)?.blockedOn
     expect(held(51)?.session).toMatchObject({ sessionKey: 'fixture-stage-impl-51' })
     expect(held(51)?.session?.text).toMatch(/^The Q3 ledger export has no currency column\./)
     expect(held(55)?.dependencies).toMatchObject({ ok: true, open: [{ number: 49 }, { number: 48 }] })
-    expect(held(56)?.comment?.text).toBe("The retention period isn't in the plan. Decide 30 or 90 days.")
+    expect(held(56)?.comment?.text).toBe('keep closed workspaces 30 or 90 days?')
   })
 
   it.runIf(scenario === 'populated')('dispatches #44 on the Board: in flight, with a live plan stage, before its label moves', () => {
@@ -350,6 +351,15 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     if (!result.ok) throw new Error('fixture release:status unexpectedly failed')
     expect(result.status.releases).toHaveLength(scenario === 'populated' ? 3 : 0)
     expect(result.status.phase.kind).toBe(scenario === 'populated' ? 'idle' : 'nothing-to-release')
+  })
+
+  it('serves twelve tickets for v0.2.0, none for v0.1.1 and three for v0.1.0 in the populated scenario only', () => {
+    const issuesOf = (tag: string, previousTag: string | null) => {
+      const result = handlers['release:issues']({ repoId: WIDGETS, tag, previousTag })
+      if (!result.ok) throw new Error('fixture release:issues unexpectedly failed')
+      return result.issues.length
+    }
+    expect([issuesOf('v0.2.0', 'v0.1.1'), issuesOf('v0.1.1', 'v0.1.0'), issuesOf('v0.1.0', null)]).toEqual(scenario === 'populated' ? [12, 0, 3] : [0, 0, 0])
   })
 
   it('refuses release:run as unsupported, never a side effect', () => {

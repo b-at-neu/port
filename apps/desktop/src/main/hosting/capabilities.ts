@@ -20,7 +20,7 @@ interface CreateCapabilityTrackerParams {
   readonly readExpectedComponents: (pluginPath: string) => Promise<ExpectedComponents | null>
   readonly samePath: (a: string, b: string) => boolean
   readonly onChange: () => void
-  /** A stage session hides and refuses every `port:` command, not just pipeline. */
+  /** A stage session hides and refuses every `port:` command and never checks the plugin's components. */
   readonly stage: boolean
   /** Test-only override of `CAPABILITIES_TIMEOUT_MS`. */
   readonly timeoutMs?: number
@@ -127,7 +127,7 @@ export function createCapabilityTracker(params: CreateCapabilityTrackerParams): 
   }
 
   async function start(query: HostedQuery): Promise<void> {
-    if (params.request.source === 'repository') await ensureExpected(params.request.path)
+    if (!params.stage && params.request.source === 'repository') await ensureExpected(params.request.path)
 
     try {
       const [reportedCommands, reportedAgents] = await Promise.race([Promise.all([query.supportedCommands(), query.supportedAgents()]), timeoutRejection(params.timeoutMs ?? CAPABILITIES_TIMEOUT_MS)])
@@ -145,7 +145,7 @@ export function createCapabilityTracker(params: CreateCapabilityTrackerParams): 
 
     if (message['subtype'] === 'init') {
       initPlugins = initPluginsOf(message)
-      if (params.request.source === 'installed' && initPlugins !== null) {
+      if (!params.stage && params.request.source === 'installed' && initPlugins !== null) {
         const loaded = initPlugins.find((plugin) => plugin.name === PLUGIN_NAME)
         if (loaded !== undefined) {
           void ensureExpected(loaded.path).then(() => {

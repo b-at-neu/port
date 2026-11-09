@@ -2,25 +2,21 @@ import { describe, expect, it } from 'vitest'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import { ghAuthStatus, ghJson } from '@/main/platform/gh'
-import type { GhResult, GhRunner } from '@/types/platform'
+import type { GitHubHttpResult, GitHubTransport } from '@/types/platform'
 import { fetchPipelineItems } from '@/main/github/pipeline'
 import { RATE_LIMIT_REPLY, connection } from '../../../fixtures/pipeline-reply'
+import { httpFail, httpOk, queryOf } from '../../../fixtures/github-http'
 
 const REPO = { owner: 'o', name: 'r' }
 const VOCABULARY = resolveVocabulary({})
 const REPO_LABELS_OK = { totalCount: VOCABULARY.labels.length, nodes: VOCABULARY.labels.map((label) => ({ name: label.name })) }
 
-function documentOf(args: readonly string[]): string {
-  return args.find((arg) => arg.startsWith('query=')) ?? ''
+function ok(body: unknown): GitHubHttpResult {
+  return httpOk(JSON.stringify(body))
 }
 
-function ok(body: unknown): GhResult {
-  return { ok: true, stdout: JSON.stringify(body), stderr: '' }
-}
-
-function partial(body: unknown): GhResult {
-  return { ok: false, kind: 'unknown', stdout: JSON.stringify(body), stderr: 'gh: some errors' }
-}
+// A partial GraphQL reply is a 200 whose body carries `errors` beside usable data.
+const partial = ok
 
 function node(number: number, labels: readonly string[], extra: Record<string, unknown> = {}): Record<string, unknown> {
   return { number, title: `item ${number}`, url: `https://github.com/o/r/issues/${number}`, body: '', state: 'OPEN', assignees: { nodes: [] }, labels: { nodes: labels.map((name) => ({ name })) }, ...extra }
@@ -44,7 +40,7 @@ function sweepBody(body: SweepBody): Record<string, unknown> {
 const ALIAS_PATTERN = /d(\d+): (issue|pullRequest)\(number: (\d+)\)/g
 
 /** One empty detail node per alias the document asks for. */
-function emptyDetails(document: string, rateLimit: unknown = RATE_LIMIT_REPLY): GhResult {
+function emptyDetails(document: string, rateLimit: unknown = RATE_LIMIT_REPLY): GitHubHttpResult {
   const repository: Record<string, unknown> = {}
   for (const match of document.matchAll(ALIAS_PATTERN)) {
     repository[`d${match[1]}`] = match[2] === 'issue' ? { timelineItems: { nodes: [] }, blockedBy: { totalCount: 0, nodes: [] } } : { timelineItems: { nodes: [] }, reviews: { nodes: [] }, comments: { nodes: [] } }
@@ -52,25 +48,33 @@ function emptyDetails(document: string, rateLimit: unknown = RATE_LIMIT_REPLY): 
   return ok({ data: { repository, rateLimit } })
 }
 
-interface Script {
-  readonly sweep: (document: string, call: number) => GhResult
-  readonly details?: (document: string) => GhResult
+/** The integration branch's history alias, `commits` being each commit's rollup contexts. */
+function integrationReply(commits: readonly (readonly unknown[])[], rateLimit: unknown = RATE_LIMIT_REPLY): GitHubHttpResult {
+  const nodes = commits.map((contexts) => ({ oid: 'abc', statusCheckRollup: { contexts: { nodes: contexts } } }))
+  return ok({ data: { repository: { integrationHistory: { target: { history: { nodes } } } }, rateLimit } })
 }
 
-function scripted(script: Script): { readonly runner: GhRunner; readonly documents: string[] } {
+interface Script {
+  readonly sweep: (document: string, call: number) => GitHubHttpResult
+  readonly details?: (document: string) => GitHubHttpResult
+  readonly integration?: (document: string) => GitHubHttpResult
+}
+
+function scripted(script: Script): { readonly runner: GitHubTransport; readonly documents: string[] } {
   const documents: string[] = []
   let sweeps = 0
-  const runner: GhRunner = (args) => {
-    const document = documentOf(args)
+  const runner: GitHubTransport = (request) => {
+    const document = queryOf(request)
     documents.push(document)
+    if (document.includes('integrationHistory:')) return Promise.resolve((script.integration ?? (() => integrationReply([])))(document))
     if (document.includes('d0:')) return Promise.resolve((script.details ?? ((detailDocument) => emptyDetails(detailDocument)))(document))
     return Promise.resolve(script.sweep(document, sweeps++))
   }
   return { runner, documents }
 }
 
-function fetchWith(runner: GhRunner, vocabulary: LabelVocabulary = VOCABULARY): ReturnType<typeof fetchPipelineItems> {
-  return fetchPipelineItems({ repo: REPO, vocabulary, gh: runner })
+function fetchWith(runner: GitHubTransport, vocabulary: LabelVocabulary = VOCABULARY): ReturnType<typeof fetchPipelineItems> {
+  return fetchPipelineItems({ repo: REPO, vocabulary, integration: 'dev', github: runner })
 }
 
 describe('fetchPipelineItems', () => {
@@ -82,10 +86,10 @@ describe('fetchPipelineItems', () => {
     expect(result.items).toHaveLength(1)
     expect(result.items[0]?.matchedKeys).toEqual(['ready'])
     expect(result.vocabulary.verdict).toBe('verified')
-    expect(result.rateLimit).toEqual({ ...RATE_LIMIT_REPLY, cost: 2 })
+    expect(result.rateLimit).toEqual({ ...RATE_LIMIT_REPLY, cost: 3 })
     expect(result.unavailable).toEqual([])
     expect(result.truncated).toEqual([])
-    expect(documents).toHaveLength(2)
+    expect(documents).toHaveLength(3)
   })
 
   it('an item with two vocabulary labels and a non-vocabulary label is one item with two keys', async () => {
@@ -106,7 +110,8 @@ describe('fetchPipelineItems', () => {
     if (!result.ok) return
     expect(result.items).toEqual([])
     expect(result.queried.map((q) => q.key)).toEqual(VOCABULARY.labels.map((label) => label.key))
-    expect(documents).toHaveLength(1)
+    expect(documents).toHaveLength(2)
+    expect(documents.filter((document) => document.includes('d0:'))).toEqual([])
   })
 
   it('asks for no connection at all when no label is enabled', async () => {
@@ -144,7 +149,7 @@ describe('fetchPipelineItems', () => {
     const result = await fetchWith(runner)
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(documents.filter((document) => !document.includes('d0:'))).toHaveLength(10)
+    expect(documents.filter((document) => !document.includes('d0:') && !document.includes('integrationHistory:'))).toHaveLength(10)
     expect(result.truncated).toEqual([{ alias: 'issues', surface: 'issue', totalCount: 5000, received: 10 }])
     expect(result.items).toHaveLength(10)
   })
@@ -154,7 +159,7 @@ describe('fetchPipelineItems', () => {
       sweep: (_document, call) =>
         call === 0
           ? ok(sweepBody({ issues: connection([node(1, ['ready'])], { hasNextPage: true, endCursor: 'cursor-1' }, 2), pullRequests: connection([]) }))
-          : { ok: false, kind: 'network', stdout: '', stderr: 'dial tcp: no such host' },
+          : httpFail('network', 502),
     })
     const result = await fetchWith(runner)
     expect(result.ok).toBe(false)
@@ -183,11 +188,11 @@ describe('fetchPipelineItems', () => {
   })
 
   it.each([
-    ['unauthenticated', { ok: false, kind: 'unauthenticated', stdout: '', stderr: 'gh: (HTTP 401)' } satisfies GhResult],
-    ['rate-limited', { ok: false, kind: 'rate-limited', stdout: '', stderr: 'gh: (HTTP 403) rate limit' } satisfies GhResult],
-    ['network', { ok: false, kind: 'network', stdout: '', stderr: 'dial tcp: no such host' } satisfies GhResult],
-  ])('%s returns ok: false with no items field, not an empty list', async (_label, ghResult) => {
-    const result = await fetchWith(() => Promise.resolve(ghResult))
+    ['unauthenticated', httpFail('unauthenticated', 401)],
+    ['rate-limited', httpFail('rate-limited', 403, 'API rate limit exceeded')],
+    ['network', httpFail('network', 503)],
+  ])('%s returns ok: false with no items field, not an empty list', async (_label, failure) => {
+    const result = await fetchWith(() => Promise.resolve(failure))
     expect(result.ok).toBe(false)
     expect('items' in result).toBe(false)
   })
@@ -220,7 +225,7 @@ describe('fetchPipelineItems — details', () => {
   const issue = node(1, ['ready'])
   const approvedPull = node(2, ['approved'], { mergedAt: null })
   const reviewPull = node(3, ['ready for review'], { mergedAt: null })
-  const sweep = (): GhResult => ok(sweepBody({ issues: connection([issue]), pullRequests: connection([approvedPull, reviewPull]) }))
+  const sweep = (): GitHubHttpResult => ok(sweepBody({ issues: connection([issue]), pullRequests: connection([approvedPull, reviewPull]) }))
 
   it('merges each detail onto its item, with the rollup only on a pull request at the approved or ready-for-review stage', async () => {
     const rollup = { commits: { nodes: [{ commit: { statusCheckRollup: { state: 'FAILURE', contexts: { nodes: [{ __typename: 'CheckRun', name: 'build', conclusion: 'FAILURE', status: 'COMPLETED' }] } } } }] } }
@@ -256,11 +261,42 @@ describe('fetchPipelineItems — details', () => {
     const { runner } = scripted({
       sweep: () => ok(sweepBody({ issues: connection([issue]), pullRequests: connection([]), rateLimit: { cost: 2, remaining: 4990, resetAt: '2026-01-01T00:30:00Z', limit: 5000 } })),
       details: (document) => emptyDetails(document, { cost: 3, remaining: 4987, resetAt: '2026-01-01T00:31:00Z', limit: 5000 }),
+      integration: () => integrationReply([], { cost: 1, remaining: 4986, resetAt: '2026-01-01T00:32:00Z', limit: 5000 }),
     })
     const result = await fetchWith(runner)
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(result.rateLimit).toEqual({ cost: 5, remaining: 4987, resetAt: '2026-01-01T00:31:00Z', limit: 5000 })
+    expect(result.rateLimit).toEqual({ cost: 6, remaining: 4986, resetAt: '2026-01-01T00:32:00Z', limit: 5000 })
+  })
+
+  it('reads the integration branch once, newest commit first, as its latest concluded status per check', async () => {
+    const build = (conclusion: string, startedAt: string): unknown => ({ __typename: 'CheckRun', name: 'test', status: 'COMPLETED', conclusion, startedAt })
+    const { runner, documents } = scripted({
+      sweep: () => ok(sweepBody({ issues: connection([]), pullRequests: connection([]) })),
+      integration: () => integrationReply([[build('FAILURE', '2026-01-02T00:00:00Z')], [build('SUCCESS', '2026-01-01T00:00:00Z'), { __typename: 'StatusContext', context: 'ci/legacy', state: 'SUCCESS', createdAt: '2026-01-01T00:00:00Z' }]]),
+    })
+    const result = await fetchWith(runner)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.integrationChecks).toEqual({ test: 'red', 'ci/legacy': 'green' })
+    const integrationDocuments = documents.filter((document) => document.includes('integrationHistory:'))
+    expect(integrationDocuments).toHaveLength(1)
+    expect(integrationDocuments[0]).toContain('refs/heads/dev')
+  })
+
+  it('an integration read that fails or errors is unreadable, never an empty record, and never fails the fetch', async () => {
+    const failed = scripted({ sweep: () => ok(sweepBody({ issues: connection([]), pullRequests: connection([]) })), integration: () => httpFail('unauthenticated', 401) })
+    const afterFailure = await fetchWith(failed.runner)
+    expect(afterFailure.ok).toBe(true)
+    if (afterFailure.ok) expect(afterFailure.integrationChecks).toBeNull()
+
+    const errored = scripted({
+      sweep: () => ok(sweepBody({ issues: connection([]), pullRequests: connection([]) })),
+      integration: () => ok({ data: { repository: { integrationHistory: null }, rateLimit: RATE_LIMIT_REPLY }, errors: [{ message: 'not found', path: ['repository', 'integrationHistory'] }] }),
+    })
+    const afterError = await fetchWith(errored.runner)
+    expect(afterError.ok).toBe(true)
+    if (afterError.ok) expect(afterError.integrationChecks).toBeNull()
   })
 
   it('chunks the detail read at 100 aliases per round trip', async () => {
@@ -276,7 +312,7 @@ describe('fetchPipelineItems — details', () => {
   })
 
   it('a failed detail call fails the whole read, keeping the caller on its last good one', async () => {
-    const { runner } = scripted({ sweep, details: () => ({ ok: false, kind: 'network', stdout: '', stderr: 'dial tcp: no such host' }) })
+    const { runner } = scripted({ sweep, details: () => httpFail('network', 502) })
     const result = await fetchWith(runner)
     expect(result.ok).toBe(false)
     if (result.ok) return
@@ -411,7 +447,7 @@ describe('fetchPipelineItems — live', () => {
     }
 
     const vocabulary = resolveVocabulary({ modules: { approvalGate: true, release: true, scope: true } })
-    const result = await fetchPipelineItems({ repo: { owner, name }, vocabulary })
+    const result = await fetchPipelineItems({ repo: { owner, name }, vocabulary, integration: 'dev' })
 
     expect(result.ok).toBe(true)
     if (!result.ok) return

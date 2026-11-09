@@ -1,8 +1,8 @@
-import { readJsonFile, readTextFile } from '@/main/platform/files'
+import { readTextFile } from '@/main/platform/files'
 import { defaultGitRunner } from '@/main/platform/git'
 import { pathOps } from '@/main/platform/paths'
 import { readAtDefaultRef } from '@/main/registry/harness'
-import { defaultClaudeHome } from '@/main/sessions/locate'
+import { loadStageAgentDefinition } from '@/main/stage/bundle'
 import type { StageLaunchRequest } from '@/types/dispatch'
 import type { FileResult, GitRunner, PathOps } from '@/types/platform'
 import type { StageInstructionsLoader, StageInstructionsResult } from '@/types/stage'
@@ -13,80 +13,10 @@ import { KIND_PROMPT_NAMES, composeStagePrompt, stageModeOf } from '@/utils/stag
 /** Every agent file is told to follow these `PIPELINE.md` sections, so they travel with its body. */
 export const STAGE_PIPELINE_SECTIONS = ['CLAUDE.md overrides', 'Operating rules (all stage agents)', 'Label lifecycle'] as const
 
-const PLUGIN_NAME = 'port'
-const MARKETPLACE = 'port'
-const PLUGIN_KEY = `${PLUGIN_NAME}@${MARKETPLACE}`
 const PLUGIN_ROOT_VARIABLE = '${CLAUDE_PLUGIN_ROOT}'
 
-interface InstallRecord {
-  readonly scope?: string
-  readonly projectPath?: string
-  readonly installPath?: string
-  readonly version?: string
-}
-
-interface KnownMarketplaces {
-  readonly [marketplace: string]: { readonly source?: { readonly source?: unknown; readonly path?: unknown }; readonly installLocation?: unknown } | undefined
-}
-
-interface MarketplaceManifest {
-  readonly plugins?: readonly { readonly name?: unknown; readonly source?: unknown }[]
-}
-
-interface InstalledPlugins {
-  readonly plugins?: Readonly<Record<string, readonly InstallRecord[]>>
-}
-
-type ReadJsonFile = <T>(path: string) => Promise<FileResult<T>>
 type ReadTextFile = (path: string) => Promise<FileResult<string>>
-type PathReader = Pick<PathOps, 'join' | 'samePath' | 'contains' | 'toPosix' | 'resolveFrom'>
-
-export type PluginRootResult =
-  | { readonly ok: true; readonly root: string; readonly origin: 'directory' | 'install-record'; readonly version: string | null }
-  | { readonly ok: false; readonly message: string }
-
-type LiveDirectoryRoot = { readonly kind: 'live'; readonly root: string } | { readonly kind: 'not-directory' } | { readonly kind: 'failed'; readonly message: string }
-
-/** A directory-source marketplace is read live, the way the CLI reads it, so a frozen install path can never go stale. */
-async function resolveLiveDirectoryRoot(claudeHome: string, ops: PathReader, readJsonFile: ReadJsonFile): Promise<LiveDirectoryRoot> {
-  const known = await readJsonFile<KnownMarketplaces>(ops.join(claudeHome, 'plugins', 'known_marketplaces.json'))
-  if (!known.ok) return { kind: 'not-directory' }
-  const entry = known.value[MARKETPLACE]
-  if (entry?.source?.source !== 'directory') return { kind: 'not-directory' }
-  const dir = [entry.source.path, entry.installLocation].find((value): value is string => typeof value === 'string' && value !== '')
-  if (dir === undefined) return { kind: 'failed', message: `the ${MARKETPLACE} marketplace in known_marketplaces.json has no directory path` }
-  const manifestFile = ops.join(dir, '.claude-plugin', 'marketplace.json')
-  const manifest = await readJsonFile<MarketplaceManifest>(manifestFile)
-  if (!manifest.ok) return { kind: 'failed', message: `couldn't read ${manifestFile}: ${manifest.message}` }
-  const source = manifest.value.plugins?.find((plugin) => plugin.name === PLUGIN_NAME)?.source
-  if (typeof source !== 'string') return { kind: 'failed', message: `${manifestFile} has no ${PLUGIN_NAME} plugin with a directory source` }
-  return { kind: 'live', root: ops.resolveFrom(dir, source) }
-}
-
-export interface ResolveInstalledPluginRootParams {
-  readonly claudeHome: string
-  readonly repoRoot: string
-  readonly worktree: string
-  readonly ops: PathReader
-  readonly readJsonFile: ReadJsonFile
-}
-
-/** Prefers the install scoped to this repository, then a project install, then the user one — never a path inside the stage worktree. */
-export async function resolveInstalledPluginRoot(params: ResolveInstalledPluginRootParams): Promise<PluginRootResult> {
-  const file = params.ops.join(params.claudeHome, 'plugins', 'installed_plugins.json')
-  const read = await params.readJsonFile<InstalledPlugins>(file)
-  if (!read.ok) return { ok: false, message: `couldn't read ${file}: ${read.message}` }
-
-  const records = (read.value.plugins?.[PLUGIN_KEY] ?? []).filter((record) => typeof record.installPath === 'string' && record.installPath !== '')
-  const forRepo = (scope: string) => records.find((record) => record.scope === scope && record.projectPath !== undefined && params.ops.samePath(record.projectPath, params.repoRoot))
-  const chosen = forRepo('local') ?? forRepo('project') ?? records.find((record) => record.scope === 'user')
-  if (chosen?.installPath === undefined) return { ok: false, message: `no ${PLUGIN_KEY} install record in ${file}` }
-  const live = await resolveLiveDirectoryRoot(params.claudeHome, params.ops, params.readJsonFile)
-  if (live.kind === 'failed') return { ok: false, message: live.message }
-  const root = live.kind === 'live' ? live.root : chosen.installPath
-  if (params.ops.contains(params.worktree, root)) return { ok: false, message: `the ${PLUGIN_KEY} install path ${root} is inside the stage worktree` }
-  return { ok: true, root, origin: live.kind === 'live' ? 'directory' : 'install-record', version: chosen.version ?? null }
-}
+type PathReader = Pick<PathOps, 'join' | 'contains' | 'toPosix'>
 
 function stripFrontmatter(text: string): string {
   return text.replace(/^---\n[\s\S]*?\n---\n/, '').trim()
@@ -143,7 +73,7 @@ export async function loadStageInstructions(params: LoadStageInstructionsParams)
   const sections: string[] = []
   for (const title of STAGE_PIPELINE_SECTIONS) {
     const section = extractSection(pipelineText, title)
-    if (section === null) return { ok: false, kind: 'missing-section', message: `${pipelineFile} has no "${title}" section` }
+    if (section === null) return { ok: false, message: `${pipelineFile} has no "${title}" section` }
     sections.push(withoutDuplicateBlocks(section, body).replace(/\n{3,}/g, '\n\n').trim())
   }
   const text = [body, ...sections].join('\n\n').replaceAll(PLUGIN_ROOT_VARIABLE, params.ops.toPosix(params.pluginRoot))
@@ -206,6 +136,7 @@ export function buildStageContext(request: StageLaunchRequest, pluginRoot: strin
   }
   for (const [key, enabled] of Object.entries(config.modules)) context.push([`modules.${key}`, String(enabled)])
   context.push(['sessionRequiredPaths', JSON.stringify(config.sessionRequiredPaths)], ['reviewCycleCap', String(config.reviewCycleCap)])
+  if (request.review !== null) context.push(['review.cycle', String(request.review.cycle)], ['review.selfAuthored', String(request.review.selfAuthored)])
   context.push(['docs.engineering', pointers.docs.engineering ?? 'null'], ['docs.design', pointers.docs.design ?? 'null'])
   for (const [key, value] of Object.entries(pointers.commands)) context.push([`commands.${key}`, value])
   for (const applied of config.overrides) context.push(['override', oneLine(`${applied.path} = ${JSON.stringify(applied.value)} (${applied.reason})`)])
@@ -216,29 +147,28 @@ export function buildStageContext(request: StageLaunchRequest, pluginRoot: strin
 }
 
 export interface StageInstructionsLoaderDeps {
-  readonly claudeHome: string
+  /** The app's own `stage-prompts` folder. */
+  readonly bundleRoot: string
   readonly ops: PathReader
   readonly readTextFile: ReadTextFile
-  readonly readJsonFile: ReadJsonFile
   readonly git: GitRunner
 }
 
-export function defaultStageInstructionsLoader(): StageInstructionsLoader {
-  return createStageInstructionsLoader({ claudeHome: defaultClaudeHome(), ops: pathOps, readTextFile, readJsonFile, git: defaultGitRunner() })
+export function defaultStageInstructionsLoader(bundleRoot: string): StageInstructionsLoader {
+  return createStageInstructionsLoader({ bundleRoot, ops: pathOps, readTextFile, git: defaultGitRunner() })
 }
 
 export function createStageInstructionsLoader(deps: StageInstructionsLoaderDeps): StageInstructionsLoader {
   return async (request, worktreePath) => {
-    const resolved = await resolveInstalledPluginRoot({ claudeHome: deps.claudeHome, repoRoot: request.entry.path, worktree: worktreePath, ops: deps.ops, readJsonFile: deps.readJsonFile })
-    if (!resolved.ok) return resolved
-    const instructions = await loadStageInstructions({ pluginRoot: resolved.root, agent: request.agent, ops: deps.ops, readTextFile: deps.readTextFile })
-    if (!instructions.ok) {
-      if (instructions.kind !== 'missing-section' || resolved.origin !== 'install-record') return instructions
-      return { ok: false, message: `${instructions.message} — the ${PLUGIN_KEY} install at ${resolved.root} (version ${resolved.version ?? 'unknown'}) looks out of date. Update or reinstall the plugin, then the next dispatch picks it up.` }
-    }
+    if (deps.ops.contains(worktreePath, deps.bundleRoot)) return { ok: false, message: `the bundled stage prompts at ${deps.bundleRoot} are inside the stage worktree` }
+    const definition = await loadStageAgentDefinition({ root: deps.bundleRoot, agent: request.agent, ops: deps.ops, readTextFile: deps.readTextFile })
+    if (!definition.ok) return definition
+    const instructions = await loadStageInstructions({ pluginRoot: deps.bundleRoot, agent: request.agent, ops: deps.ops, readTextFile: deps.readTextFile })
+    if (!instructions.ok) return instructions
     const pointers = await readStageConfigPointers(request.entry.path, deps.git)
     if (!pointers.ok) return pointers
-    const pluginRoot = deps.ops.toPosix(resolved.root)
-    return { ok: true, text: composeStagePrompt({ header: request.prompt, context: buildStageContext(request, pluginRoot, pointers), instructions: instructions.text, source: pluginRoot }) }
+    const root = deps.ops.toPosix(deps.bundleRoot)
+    const text = composeStagePrompt({ header: request.prompt, context: buildStageContext(request, root, pointers), instructions: instructions.text, source: root })
+    return { ok: true, text, agent: { name: definition.name, definition: definition.definition } }
   }
 }

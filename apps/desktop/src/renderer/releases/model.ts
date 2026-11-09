@@ -31,6 +31,14 @@ export function staleSinceAt(queries: readonly ReleaseQueryLike[]): number | nul
   return earliest
 }
 
+export const ISSUE_CAP = 10
+
+/** The rows the panel draws and how many the cap hides; expanding shows every row. */
+export function visibleIssues<T>(issues: readonly T[], expanded: boolean): { readonly shown: readonly T[]; readonly hidden: number } {
+  if (expanded || issues.length <= ISSUE_CAP) return { shown: issues, hidden: 0 }
+  return { shown: issues.slice(0, ISSUE_CAP), hidden: issues.length - ISSUE_CAP }
+}
+
 export function shortOid(oid: string): string {
   return oid.slice(0, 7)
 }

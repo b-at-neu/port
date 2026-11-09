@@ -1,8 +1,12 @@
-import type { GhRunner } from '@/types/platform'
+import type { GitHubHttpResult, GitHubTransport } from '@/types/platform'
 
 // Renderer-safe result and item shapes for the GitHub adapter. No import here may reach a Node builtin — only `main/github/` spawns `gh`.
 import type { LabelKey, LabelSource, VocabularyReport } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
+import type { IntegrationStatus } from '../../../../scripts/port-tick/gates'
+
+/** The integration branch's latest concluded status by check name, a plain record so it survives the offload worker's structured clone and any JSON hop. */
+export type IntegrationChecks = Readonly<Record<string, IntegrationStatus>>
 
 /** A remote GitHub locator — `github/adapter.ts`'s original `RepoRef` shape. */
 export interface GitHubRepoRef {
@@ -16,6 +20,18 @@ export interface LocalRepoRef {
   readonly root: string
 }
 
+/** Per-repo ETags keyed by request shape. `forget` bumps the repo's generation, so a `store` from a request that began before it is dropped. */
+export interface EtagCache {
+  lookup(repoId: RepoId, key: string): { readonly etag: string | null; readonly generation: number }
+  /** `etag: null` deletes. Ignored when `forget(repoId)` ran after the matching `lookup`. */
+  store(repoId: RepoId, key: string, etag: string | null, generation: number): void
+  forget(repoId: RepoId): void
+}
+
+export type ConditionalGetResult =
+  | { readonly ok: true; readonly outcome: 'modified'; readonly status: number; readonly headers: Readonly<Record<string, string>>; readonly body: string; readonly etag: string | null }
+  | { readonly ok: true; readonly outcome: 'not-modified'; readonly headers: Readonly<Record<string, string>>; readonly etag: string }
+  | Exclude<GitHubHttpResult, { ok: true }>
 
 export type PipelineItemKind = 'issue' | 'pull-request'
 
@@ -187,6 +203,8 @@ export type PipelineFetch =
       readonly rateLimit: RateLimitInfo
       /** The signed-in account's own login — `null`, never a guess, when absent or dropped. Unlike `fetchClaimPreflight`, an unresolvable viewer never fails this whole fetch. */
       readonly viewer: string | null
+      /** The integration branch's latest concluded status per check name — `null`, never an empty record, when its history could not be read. */
+      readonly integrationChecks: IntegrationChecks | null
       readonly fetchedAt: string
     }
   | {
@@ -209,6 +227,8 @@ export interface ResolvedItem {
   readonly assignees: readonly string[]
   /** A pull request's head branch; `null` for an issue. */
   readonly headRefName: string | null
+  /** A pull request's author login; `null` for an issue or a deleted account. */
+  readonly author: string | null
 }
 
 /** `fetchItemsByNumber`'s result — a number resolving to neither an issue nor a pull request lands in `unavailable`, never inferred as any particular state. */
@@ -288,10 +308,17 @@ export type GatePreflightFetch =
   | { readonly ok: true; readonly item: GatePreflightItem | null; readonly viewer: string; readonly fetchedAt: string }
   | { readonly ok: false; readonly kind: PipelineFailureKind; readonly message: string; readonly fetchedAt: string }
 
+export type ItemStateName = 'OPEN' | 'CLOSED' | 'MERGED'
+
+/** A `null` state is an alias that errored, was not found, or carried no state — never read as done. */
+export type ItemStatesRead =
+  | { readonly ok: true; readonly states: ReadonlyMap<number, ItemStateName | null> }
+  | { readonly ok: false; readonly kind: PipelineFailureKind; readonly message: string }
+
 export interface FetchItemsByNumberParams {
   readonly repo: GitHubRepoRef
   readonly numbers: readonly number[]
-  readonly gh?: GhRunner
+  readonly github?: GitHubTransport
   readonly now?: () => Date
 }
 

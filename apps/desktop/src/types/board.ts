@@ -25,6 +25,12 @@ export const SOURCE_BASE_INTERVAL_MS: Readonly<Record<SourceKind, number>> = {
   denials: 15_000,
 }
 
+/** The issues-list ETag pre-check's base cadence — far cheaper than a sweep, since a 304 costs no rate limit. */
+export const GITHUB_PRECHECK_INTERVAL_MS = 10_000
+
+/** How long after an in-flight label is added an unclaimed item stays in flight, absorbing scan lag and GitHub/local clock skew. */
+export const CLAIM_SCAN_GRACE_MS = SOURCE_BASE_INTERVAL_MS.sessions
+
 /** Backoff doubles from a source's base interval up to this ceiling. */
 export const BACKOFF_CEILING_MS = 15 * 60 * 1000
 
@@ -221,6 +227,7 @@ export type NeedsYouItem =
   | (NeedsYouItemBase & { readonly kind: 'plan-review'; readonly row: BoardItemRow })
   | (NeedsYouItemBase & { readonly kind: 'ready-to-merge'; readonly row: BoardItemRow })
   | (NeedsYouItemBase & { readonly kind: 'needs-human'; readonly row: BoardItemRow })
+  | (NeedsYouItemBase & { readonly kind: 'blocked'; readonly row: BoardItemRow })
   | (NeedsYouItemBase & { readonly kind: 'budget'; readonly note: BudgetNote })
   /** `owner` is this held item's own repository's `RepoDispatchStatus.owner` — `null` only when the repository reported none (never rendered: `heldAction` reads it only for a `contended` hold, which never arises on an unready repository). */
   | (NeedsYouItemBase & { readonly kind: 'held'; readonly held: TickHeld; readonly owner: DispatchOwner | null })
@@ -241,7 +248,7 @@ export type NeedsYouItem =
 export type NeedsYouBaseline = Readonly<Record<string, readonly string[]>>
 
 /** The groups Needs you renders — `stage-question`/`stage-questions` share `questions`, and `stage-approval` is `approvals`. */
-export type NeedsYouGroupKey = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'questions' | 'approvals' | 'denied' | 'interrupted' | 'usage-limit' | 'held' | 'stalled' | 'budget' | 'half-labelled' | 'launch-failed'
+export type NeedsYouGroupKey = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'blocked' | 'questions' | 'approvals' | 'denied' | 'interrupted' | 'usage-limit' | 'held' | 'stalled' | 'budget' | 'half-labelled' | 'launch-failed'
 
 export const PHASE_KEYS = ['plan', 'implement', 'review', 'revision', 'merge'] as const
 

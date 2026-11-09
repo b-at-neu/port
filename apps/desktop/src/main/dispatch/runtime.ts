@@ -59,7 +59,7 @@ export function createDispatchRuntime(deps: Omit<CreateDispatcherParams, 'ledger
   let bound: Pick<PipelineWatcher, 'republish' | 'refresh'> | null = null
   // A failed read is retried by the scheduled poll, so it is never surfaced here.
   const requestRead = (repoId: RepoId): void => void bound?.refresh({ repoId, source: 'github' }).catch(() => undefined)
-  const dispatcher = createDispatcher({ ...deps, denials, ledger, refreshMemo, forceDispatch, requestRead, budget: createBudgetGate(), escalate: escalateToHuman, writeObservation: applyObservation, onChange: () => bound?.republish() })
+  const dispatcher = createDispatcher({ ...deps, denials, ledger, refreshMemo, forceDispatch, requestRead, budget: createBudgetGate({ scratchDir: deps.dirs.scratch }), escalate: escalateToHuman, writeObservation: applyObservation, onChange: () => bound?.republish() })
   const autoPlannerDeps: AutoPlannerDeps = {
     listRepositories: deps.listRepositories,
     registryDeps: deps.registryDeps,

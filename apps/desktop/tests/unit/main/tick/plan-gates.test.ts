@@ -92,7 +92,7 @@ describe('planTick — cycle-cap and zero-diff gates (#108)', () => {
     const repo = readyRepo([reviewItem({ headRefOid: 'sha1', reviews, reviewCycleCount: 1 })])
     const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([])
-    expect(report.held).toEqual([{ number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } }])
+    expect(report.held).toEqual([{ number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff', reason: 'zero-diff' } }])
   })
 
   it('a review candidate whose head moved since the review dispatches again', () => {

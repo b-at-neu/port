@@ -5,7 +5,8 @@ import type { BoardSnapshot } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/types/board'
 import type { PipelineRow, ReadyPipelineRow } from '@/types/shell'
-import { phaseLineOf, pipelinesModel as pipelinesModelOf } from '@/renderer/shell/pipelines-model'
+import type { TickClaim, TickReport } from '@/types/tick'
+import { displayRunState, phaseLineOf, pipelinesModel as pipelinesModelOf } from '@/renderer/shell/pipelines-model'
 import { needsYouItems } from '@/renderer/board/needs-you'
 import { stageSession } from '../../../fixtures/stage-session'
 
@@ -112,6 +113,7 @@ function readyRepoState(overrides: Partial<Extract<RepositoryState, { ok: true }
     },
     worktreeTotals: { registered: 0, attached: 0, uncorrelated: 0 },
     viewer: 'op',
+    integrationChecks: {},
     approvalGate: true,
     disabled: [],
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
@@ -181,9 +183,9 @@ describe('pipelinesModel', () => {
     expect(row).toMatchObject({ ready: false, sessions: [{ key: 'live', number: 44, label: '#44', sessionKey: 'live', tone: { palette: 'plan', fill: 'active', pulse: true }, statusText: 'Planning' }] })
   })
 
-  it('reads a ready repository as paused with no snapshot yet', () => {
+  it('reads a ready repository as stopped with no snapshot yet', () => {
     const row = assertReady(pipelinesModel([readyEntry()], undefined)[0])
-    expect(row).toMatchObject({ ready: true, pill: { status: 'idle', label: 'Paused' }, inFlight: 0, needsYou: false, sessions: [] })
+    expect(row).toMatchObject({ ready: true, pill: { status: 'idle', label: 'Stopped' }, inFlight: 0, needsYou: false, sessions: [] })
   })
 
   it('lists a live session row, never a dormant one', () => {
@@ -312,6 +314,29 @@ describe('pipelinesModel', () => {
     expect(row.sessions).toEqual([{ key: 'hosted-revise', repoId: REPO_ID, number: 46, label: '#46 the ticket', tone: { palette: 'revise', fill: 'active', pulse: true }, statusText: 'Revising', phaseName: 'Revising', sessionKey: 'hosted-revise', transcript: null }])
   })
 
+  it('keeps a review session on a pull request as one row for its ticket', () => {
+    const linked = [
+      item({ number: 637, title: 'the ticket', linked: 670 }),
+      item({ number: 670, kind: 'pull-request', title: 'the pull request', linked: 637, stage: 'in-flight', stages: [{ key: 'reviewing', name: 'reviewing', role: 'in-flight' }], agents: [agent({ activity: 'active' })] }),
+    ]
+    const snapshot = snapshotOf([readyRepoState({ items: linked })])
+    const review = stageSession({ key: 'hosted-review', repoId: REPO_ID, stage: { agent: 'review', number: 670, kind: 'pull-request', trigger: 'readyForReview' } })
+    expect(assertReady(pipelinesModel([readyEntry()], snapshot)[0]).sessions).toHaveLength(1)
+    const row = assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [review])[0])
+    expect(row.sessions).toHaveLength(1)
+    expect(row.sessions[0]).toMatchObject({ number: 637, sessionKey: 'hosted-review' })
+  })
+
+  it('drops an idle review session on a pull request without resurrecting its ticket row', () => {
+    const linked = [
+      item({ number: 637, title: 'the ticket', linked: 670 }),
+      item({ number: 670, kind: 'pull-request', title: 'the pull request', linked: 637, stage: 'in-flight', stages: [{ key: 'reviewing', name: 'reviewing', role: 'in-flight' }], agents: [agent({ activity: 'active' })] }),
+    ]
+    const snapshot = snapshotOf([readyRepoState({ items: linked })])
+    const idle = stageSession({ key: 'hosted-review', repoId: REPO_ID, phase: 'ready', stage: { agent: 'review', number: 670, kind: 'pull-request', trigger: 'readyForReview' } })
+    expect(assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [idle])[0]).sessions).toEqual([])
+  })
+
   it('shows a ticket with a linked pull request as one item row, never a second for the pull request', () => {
     const linked = [item({ number: 46, title: 'the ticket', linked: 47 }), item({ number: 47, kind: 'pull-request', title: 'the pull request', linked: 46, agents: [agent({ activity: 'active' })] })]
     const row = assertReady(pipelinesModel([readyEntry()], snapshotOf([readyRepoState({ items: linked })]))[0])
@@ -335,5 +360,56 @@ describe('pipelinesModel', () => {
     const snapshot = { ...snapshotOf([readyRepoState()]), runStates: { store: { kind: 'loaded' as const }, repositories: [{ repoId: REPO_ID, state: 'draining' as const, since: null }] } }
     const row = assertReady(pipelinesModel([readyEntry()], snapshot)[0])
     expect(row.pill).toEqual({ status: 'attention', label: 'Draining' })
+  })
+})
+
+describe('displayRunState', () => {
+  const STAGE = { agent: 'impl', number: 42, kind: 'issue', trigger: 'planApproved' } as const
+  const CLAIM: TickClaim = { number: 42, kind: 'issue', inFlight: 'inProgress', class: 'matched', retryKey: null }
+
+  function tickOf(overrides: Partial<TickReport> = {}): TickReport {
+    return { repoId: REPO_ID, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], autoApprovals: [], disabledStages: [], nextTickAt: null, observations: [], labelRepairs: [], ...overrides }
+  }
+
+  function snapshotWith(state: 'dispatching' | 'draining' | 'paused', tick: readonly TickReport[]): BoardSnapshot {
+    return { ...snapshotOf([readyRepoState()]), tick, runStates: { store: { kind: 'loaded' as const }, repositories: [{ repoId: REPO_ID, state, since: null }] } }
+  }
+
+  it('reads a draining repository with nothing in flight as stopped, with the pill to match', () => {
+    const snapshot = snapshotWith('draining', [tickOf()])
+    expect(displayRunState(snapshot, REPO_ID, [])).toBe('stopped')
+    expect(assertReady(pipelinesModel([readyEntry()], snapshot)[0]).pill).toEqual({ status: 'idle', label: 'Stopped' })
+  })
+
+  it('keeps a draining repository draining while a claim is in flight', () => {
+    const snapshot = snapshotWith('draining', [tickOf({ claims: [CLAIM] })])
+    expect(displayRunState(snapshot, REPO_ID, [])).toBe('draining')
+    expect(assertReady(pipelinesModel([readyEntry()], snapshot)[0]).pill).toEqual({ status: 'attention', label: 'Draining' })
+  })
+
+  it('keeps a draining repository draining while a stage session is live, even one waiting on a permission prompt', () => {
+    const snapshot = snapshotWith('draining', [tickOf()])
+    const live = stageSession({ key: 'live', repoId: REPO_ID, stage: STAGE })
+    const waiting = { ...live, pendingPermissions: [pendingPermission()] }
+    expect(displayRunState(snapshot, REPO_ID, [live])).toBe('draining')
+    expect(displayRunState(snapshot, REPO_ID, [waiting])).toBe('draining')
+  })
+
+  it("ignores another repository's live session and this repository's ended one", () => {
+    const snapshot = snapshotWith('draining', [tickOf()])
+    const other = stageSession({ key: 'other', repoId: 'repo-b' as RepoId, stage: STAGE })
+    const ended = stageSession({ key: 'ended', repoId: REPO_ID, stage: STAGE, phase: 'ended' })
+    expect(displayRunState(snapshot, REPO_ID, [other, ended])).toBe('stopped')
+  })
+
+  it('never reads a blind or missing tick as a finished drain', () => {
+    expect(displayRunState(snapshotWith('draining', [tickOf({ blind: { reason: 'viewer-unknown' } })]), REPO_ID, [])).toBe('draining')
+    expect(displayRunState(snapshotWith('draining', []), REPO_ID, [])).toBe('draining')
+  })
+
+  it('passes a dispatching or paused repository through, and reads no snapshot as stopped', () => {
+    expect(displayRunState(snapshotWith('dispatching', [tickOf()]), REPO_ID, [])).toBe('dispatching')
+    expect(displayRunState(snapshotWith('paused', [tickOf({ claims: [CLAIM] })]), REPO_ID, [])).toBe('stopped')
+    expect(displayRunState(undefined, REPO_ID, [])).toBe('stopped')
   })
 })

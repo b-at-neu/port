@@ -157,7 +157,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   {
     const mainActionsFiles = allFiles.filter((f) => relOf(f).startsWith(`${mainActionsDir}/`));
     const rendererGateFiles = allFiles.filter((f) => relOf(f).startsWith(`${rendererGateDir}/`));
-    const mismatched = readJson('plugins/port/data/labels.json')
+    const mismatched = readJson('apps/desktop/src/utils/labels/labels.json')
       .labels.filter((l: any) => l.key !== l.name)
       .map((l: any) => l.name);
     let found = false;

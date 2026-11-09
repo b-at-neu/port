@@ -19,7 +19,7 @@ import { gateAnswer, gatePreflight } from '@/main/actions/gate'
 import { resolveClaimApply, resolveClaimPreflight } from '@/main/channels/claim'
 import { resolveAuditList } from '@/main/channels/audit'
 import { resolveBacklogList } from '@/main/channels/backlog'
-import { resolveReleaseRun, resolveReleaseStatus } from '@/main/channels/release'
+import { resolveReleaseIssues, resolveReleaseRun, resolveReleaseStatus } from '@/main/channels/release'
 import { resolveWorktreesPurge, resolveWorktreesReclaim, resolveWorktreesReport } from '@/main/channels/worktrees'
 import { resolveGhStatus } from '@/main/channels/gh'
 import { createDispatchRuntime } from '@/main/dispatch/runtime'
@@ -86,10 +86,7 @@ import { createSessionMenuRefresher } from '@/main/session-menu'
 
 type AppInfo = IpcMap['app:info']['response']
 
-type Handler<C extends IpcChannel> = (
-  event: IpcMainInvokeEvent,
-  request: IpcMap[C]['request']
-) => IpcMap[C]['response'] | Promise<IpcMap[C]['response']>
+type Handler<C extends IpcChannel> = (event: IpcMainInvokeEvent, request: IpcMap[C]['request']) => IpcMap[C]['response'] | Promise<IpcMap[C]['response']>
 
 const registered = new Set<IpcChannel>()
 
@@ -173,6 +170,8 @@ export function registerIpc(): RegisteredIpc {
   const runStates = createRunStateStore(app.getPath('userData'))
   void runStates.load(() => registeredRepoIds(registryDeps))
 
+  const { engine, close: closeOffload, ...offload } = createOffload({ onRespawn: () => void watcher.refresh() })
+
   handle('app:info', (_event, request) => {
     if (request !== undefined) {
       throw new Error("'app:info' takes no payload")
@@ -187,8 +186,9 @@ export function registerIpc(): RegisteredIpc {
     return listRepositories(registryDeps)
   })
 
-  // Forgetting a run-state entry never fails the registry call itself, only logs.
-  function forgetRunState(channel: string, repoId: Parameters<typeof runStates.forget>[0]): void {
+  // Forgetting a repo's run-state entry and cached ETags never fails the registry call itself, only logs. A re-added checkout gets the same id, so add forgets too.
+  function forgetRepoState(channel: string, repoId: Parameters<typeof runStates.forget>[0]): void {
+    void engine.forgetRepo({ repoId })
     void runStates.forget(repoId).then((f) => {
       if (!f.ok) console.error(`'${channel}' could not forget the run-state entry for '${String(repoId)}':`, f.message)
     })
@@ -197,14 +197,14 @@ export function registerIpc(): RegisteredIpc {
   handle('repos:add', async (_event, request) => {
     if (request !== undefined) throw new Error("'repos:add' takes no payload")
     const result = await addRepository(registryDeps)
-    if (result.ok && result.outcome === 'added') forgetRunState('repos:add', result.added)
+    if (result.ok && result.outcome === 'added') forgetRepoState('repos:add', result.added)
     return result
   })
 
   handle('repos:remove', async (_event, request) => {
     if (typeof request?.id !== 'string' || request.id === '') throw new Error("'repos:remove' requires a non-empty 'id'")
     const result = await removeRepository(registryDeps, request.id)
-    if (result.ok) forgetRunState('repos:remove', request.id)
+    if (result.ok) forgetRepoState('repos:remove', request.id)
     return result
   })
 
@@ -213,8 +213,6 @@ export function registerIpc(): RegisteredIpc {
   handle('worktrees:reclaim', (_event, request) => resolveWorktreesReclaim(registryDeps, request, app.getPath('userData')))
 
   handle('worktrees:purge', (_event, request) => resolveWorktreesPurge(registryDeps, request, app.getPath('userData')))
-
-  const { engine, close: closeOffload, ...offload } = createOffload({ onRespawn: () => void watcher.refresh() })
 
   handle('sessions:scan', (_event, request) => {
     if (request !== undefined) throw new Error("'sessions:scan' takes no payload")
@@ -266,12 +264,12 @@ export function registerIpc(): RegisteredIpc {
     persistence: createHostingPersistence({ dir: app.getPath('userData') }),
   })
   const sessionMenu = createSessionMenuRefresher({ store: hostedStore, platform: process.platform, isPackaged: app.isPackaged, send: broadcastAppCommand })
-
   const stageLauncher: StageLauncherHandle = createDefaultStageLauncher({
     store: hostedStore,
     registry: stageRegistry,
     onOutcome: (repoId, sessionKey, outcome) => dispatcherRef?.recordOutcome(repoId, sessionKey, outcome),
     onDenial: (repoId, denial) => dispatcherRef?.recordDenial(repoId, denial),
+    bundle: { isPackaged: app.isPackaged, mainDir: __dirname, resourcesPath: process.resourcesPath },
   })
   const hostingChannelDeps = defaultHostingChannelDeps(hostedStore, sessionIndex, {
     git: (args, cwd) => git(args, { cwd }),
@@ -334,6 +332,8 @@ export function registerIpc(): RegisteredIpc {
   handle('backlog:list', (_event, request) => resolveBacklogList(registryDeps, request))
 
   handle('release:status', (_event, request) => resolveReleaseStatus(registryDeps, request))
+
+  handle('release:issues', (_event, request) => resolveReleaseIssues(registryDeps, request))
 
   handle('release:run', (_event, request) => resolveReleaseRun(registryDeps, request, app.getPath('userData'), app.getPath('temp')))
 

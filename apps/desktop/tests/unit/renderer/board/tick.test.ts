@@ -23,7 +23,7 @@ describe('storeBannerCopy', () => {
 
   it('names the reason and the full path when the file cannot be read', () => {
     expect(storeBannerCopy({ kind: 'unreadable', message: 'boom', path: '/userData/dispatch.json' })).toBe(
-      "Every pipeline is paused — dispatch.json can't be read (boom). Fix or delete /userData/dispatch.json, then run each repository again.",
+      "Every pipeline is stopped — dispatch.json can't be read (boom). Fix or delete /userData/dispatch.json, then run each repository again.",
     )
   })
 })
@@ -80,8 +80,14 @@ describe('heldDetailCopy', () => {
   })
 
   it('names the zero-diff fact for a zero-diff hold (#108)', () => {
-    const held: TickHeld = { number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } }
+    const held: TickHeld = { number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff', reason: 'zero-diff' } }
     expect(heldDetailCopy(held)).toBe('#157 would escalate to needs human — the latest review already covers the current head.')
+  })
+
+  it('names the two-reviews rule for a sha-cap hold', () => {
+    const held: TickHeld = { number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff', reason: 'sha-cap' } }
+    expect(heldDetailCopy(held)).toBe('#157 would escalate to needs human — this head has had its two reviews, so only a new head gets another.')
+    expect(heldDetailCopy(held, 'app')).toBe('#157 escalating to needs human — this head has had its two reviews, so only a new head gets another.')
   })
 
   it('#292: owner "app" reads cycle-cap and zero-diff in the present tense, since this app is the one escalating', () => {
@@ -89,7 +95,7 @@ describe('heldDetailCopy', () => {
     expect(heldDetailCopy(capped, 'app')).toBe('#204 escalating to needs human — cycle 5 reached the cap of 5.')
     expect(heldDetailCopy(capped, 'none')).toBe('#204 would escalate to needs human — cycle 5 reached the cap of 5.')
 
-    const zeroDiff: TickHeld = { number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } }
+    const zeroDiff: TickHeld = { number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff', reason: 'zero-diff' } }
     expect(heldDetailCopy(zeroDiff, 'app')).toBe('#157 escalating to needs human — the latest review already covers the current head.')
     expect(heldDetailCopy(zeroDiff, 'none')).toBe('#157 would escalate to needs human — the latest review already covers the current head.')
   })
@@ -120,6 +126,41 @@ describe('heldDetailCopy', () => {
     expect(heldDetailCopy(red)).toBe(`#594 held — \`a\`, \`b\` are still red on the reviewed head. Re-run them on GitHub; it escalates to needs human at ${time} if they stay red.`)
     const open: TickHeld = { ...red, escalation: { kind: 'check-hold', checks: ['a'], state: 'red', escalateAt: null } }
     expect(heldDetailCopy(open)).toBe('#594 held — `a` is still red on the reviewed head. Re-run it on GitHub.')
+  })
+
+  it('names the red integration check and its deadline for an integration-red hold, and says so when it cannot read the branch', () => {
+    const escalateAt = '2026-01-02T00:00:00.000Z'
+    const when = new Date(escalateAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+    const held: TickHeld = {
+      number: 642,
+      kind: 'pull-request',
+      trigger: 'readyForReview',
+      reason: 'integration-red',
+      contention: null,
+      escalation: { kind: 'integration-red', checks: ['test'], state: 'red', escalateAt, expired: false },
+    }
+    expect(heldDetailCopy(held)).toBe(`#642 held — the integration branch is red on \`test\`, so review would only repeat it. It's refreshed once the integration branch is green; it escalates to needs human at ${when} if it stays red.`)
+    const unreadable: TickHeld = { ...held, escalation: { kind: 'integration-red', checks: ['test'], state: 'unreadable', escalateAt: null, expired: false } }
+    expect(heldDetailCopy(unreadable)).toBe("#642 held — the integration branch's checks couldn't be read, so review would only repeat it. It's refreshed once the integration branch is green.")
+  })
+
+  it('reads an expired integration-red hold as an escalation, present tense only when this app owns dispatch', () => {
+    const held: TickHeld = {
+      number: 642,
+      kind: 'pull-request',
+      trigger: 'readyForReview',
+      reason: 'integration-red',
+      contention: null,
+      escalation: { kind: 'integration-red', checks: ['test', 'lint'], state: 'red', escalateAt: null, expired: true },
+    }
+    expect(heldDetailCopy(held, 'app')).toBe('#642 escalating to needs human — the integration branch stayed red on `test`, `lint` past the hold window.')
+    expect(heldDetailCopy(held, 'none')).toBe('#642 would escalate to needs human — the integration branch stayed red on `test`, `lint` past the hold window.')
+  })
+
+  it('reads an integration-green hold as the refresh that resumes review', () => {
+    const held: TickHeld = { number: 642, kind: 'pull-request', trigger: 'readyForReview', reason: 'integration-green', contention: null, escalation: null }
+    expect(heldDetailCopy(held, 'app')).toBe('#642 held — the integration branch is green again, so this app is refreshing it (rebase + force-push) to resume review.')
+    expect(heldDetailCopy(held, 'none')).toBe("#642 held — the integration branch is green again. The cockpit's refresh sweep rebases it; this app doesn't.")
   })
 
   it('#292: a conflicting hold reads as this app actively refreshing it, instead of naming the cockpit\'s sweep', () => {
@@ -205,9 +246,10 @@ describe('observationDetailCopy', () => {
   it('every write-bearing kind has no detail line of its own here — it already has one from held/stalled above', () => {
     expect(observationDetailCopy({ kind: 'liveness-reset', number: 1, itemKind: 'issue', inFlight: 'inProgress', retryKey: 'ready', evidence: 'ledger' })).toBeNull()
     expect(observationDetailCopy({ kind: 'cycle-cap', number: 2, itemKind: 'pull-request', count: 5, cap: 5 })).toBeNull()
-    expect(observationDetailCopy({ kind: 'zero-diff', number: 3, itemKind: 'pull-request', count: 1, headRefOid: 'abc' })).toBeNull()
-    expect(observationDetailCopy({ kind: 'refresh', number: 4, itemKind: 'pull-request', sourceLabel: 'readyForReview', headRefOid: 'abc', count: 1 })).toBeNull()
+    expect(observationDetailCopy({ kind: 'zero-diff', reason: 'zero-diff', number: 3, itemKind: 'pull-request', count: 1, headRefOid: 'abc' })).toBeNull()
+    expect(observationDetailCopy({ kind: 'integration-red', number: 7, itemKind: 'pull-request', checks: ['test'], headRefOid: 'abc' })).toBeNull()
+    expect(observationDetailCopy({ kind: 'refresh', number: 4, itemKind: 'pull-request', sourceLabel: 'readyForReview', headRefOid: 'abc', count: 1, cause: 'conflict' })).toBeNull()
     expect(observationDetailCopy({ kind: 'refresh-stuck', number: 5, itemKind: 'pull-request', sourceLabel: 'readyForReview', reason: 'same-sha', sha: 'abc', count: 2 })).toBeNull()
-    expect(observationDetailCopy({ kind: 'withdraw-approval', number: 6, itemKind: 'pull-request', red: [], headRefOid: 'abc' })).toBeNull()
+    expect(observationDetailCopy({ kind: 'withdraw-approval', route: 'revise', number: 6, itemKind: 'pull-request', red: [], headRefOid: 'abc' })).toBeNull()
   })
 })

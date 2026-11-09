@@ -38,8 +38,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (seenAllowlisted.size === sdkAllowlist.size && !extraReferences) ok();
   }
 
-  // --- PORT_STAGE_AGENTS matches plugins/port/agents/'s basenames, both directions, so the
-  // union never drifts from the real agents it names. ---
+  // --- PORT_STAGE_AGENTS matches the basenames of plugins/port/agents/ and
+  // apps/desktop/stage-prompts/agents/, both directions. ---
   {
     const classifyFile = allFiles.find((f) => relOf(f) === `${sessionsDir}/classify.ts`);
     if (!classifyFile) {
@@ -51,20 +51,21 @@ export default async function ({ expect, fail, ok }: Reporter) {
         fail('desktop-sessions', `${sessionsDir}/classify.ts has no 'PORT_STAGE_AGENTS = [...]' array`);
       } else {
         const declared = new Set([...m[1].matchAll(/'([^']+)'/g)].map((t) => t[1]));
-        const agentsDir = join(root, 'plugins/port/agents');
-        const real = new Set(
-          readdirSync(agentsDir)
-            .filter((name) => name.endsWith('.md'))
-            .map((name) => name.slice(0, -'.md'.length)),
-        );
-        for (const name of declared) {
-          if (!real.has(name)) fail('desktop-sessions', `PORT_STAGE_AGENTS names '${name}', which has no plugins/port/agents/${name}.md`);
-        }
-        for (const name of real) {
-          if (!declared.has(name)) fail('desktop-sessions', `plugins/port/agents/${name}.md has no counterpart in PORT_STAGE_AGENTS`);
-        }
-        if (declared.size > 0 && [...declared].every((name) => real.has(name)) && [...real].every((name) => declared.has(name))) {
-          ok();
+        for (const dir of ['plugins/port/agents', 'apps/desktop/stage-prompts/agents']) {
+          const real = new Set(
+            readdirSync(join(root, dir))
+              .filter((name) => name.endsWith('.md'))
+              .map((name) => name.slice(0, -'.md'.length)),
+          );
+          for (const name of declared) {
+            if (!real.has(name)) fail('desktop-sessions', `PORT_STAGE_AGENTS names '${name}', which has no ${dir}/${name}.md`);
+          }
+          for (const name of real) {
+            if (!declared.has(name)) fail('desktop-sessions', `${dir}/${name}.md has no counterpart in PORT_STAGE_AGENTS`);
+          }
+          if (declared.size > 0 && [...declared].every((name) => real.has(name)) && [...real].every((name) => declared.has(name))) {
+            ok();
+          }
         }
       }
     }

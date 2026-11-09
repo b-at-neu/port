@@ -28,6 +28,7 @@ import type { StageOutcome } from '@/types/stage-session'
 import type { SessionKey } from '@/types/hosting'
 import type { InterruptedStage, StageDenial, StageDenialStore } from '@/types/stage'
 import type { StageWorktreeTarget } from '@/types/workspace'
+import type { ReviewDispatchFacts } from '../../../../scripts/port-tick/gates'
 
 /** `dispatch.json`'s own per-repository run state — `dispatching`, `draining` (scoped to one repository), or `paused` (the hard stop: the transition into it also stops every in-flight agent). */
 export const RUN_STATES = ['dispatching', 'draining', 'paused'] as const
@@ -123,7 +124,7 @@ export interface DispatchRecord {
 export type DispatcherState =
   | { readonly kind: 'idle' }
   | { readonly kind: 'active'; readonly recent: readonly DispatchRecord[] }
-  /** `commands.budget` is set, but the shipped script can't be run. Nothing dispatches while this holds — the gate that can't run must fail closed. */
+  /** `commands.budget` is set, but the budget gate can't run (its ceiling or session log is unreadable). Nothing dispatches while this holds — the gate that can't run must fail closed. */
   | { readonly kind: 'budget-unavailable'; readonly message: string }
   | { readonly kind: 'no-launcher' }
   | { readonly kind: 'at-capacity'; readonly limit: number; readonly waiting: number }
@@ -201,7 +202,11 @@ export interface BudgetGate {
   readonly reset: (entry: ReadyEntry) => Promise<BudgetResetResult>
   readonly sweep: (entry: ReadyEntry, sets: { readonly live: readonly string[]; readonly completed: readonly string[] }) => Promise<BudgetSweepResult>
   readonly check: (entry: ReadyEntry, candidate: Pick<TickActionable, 'kind' | 'number' | 'agent'>, model: string) => Promise<BudgetCheckResult>
+  /** The ticket's rendered cost ledger and its verdict. No caller yet. */
+  readonly report: (entry: ReadyEntry, issue: number) => Promise<BudgetReportResult>
 }
+
+export type BudgetReportResult = { readonly ok: true; readonly markdown: string; readonly verdict: Exclude<BudgetVerdict, 'hold'> } | BudgetGateFailure
 
 /** Never a `BudgetGateFailure` — a sweep failure must never block dispatch, only report it. */
 export interface BudgetSweepResult {
@@ -330,6 +335,8 @@ export interface StageLaunchRequest {
   readonly title: string
   /** Built by the dispatcher from its own fresh re-read, never from the renderer. */
   readonly target: StageWorktreeTarget
+  /** Set only for a review stage; becomes the `review.*` stage-context lines. */
+  readonly review: ReviewDispatchFacts | null
 }
 
 /** Every `TickObservation` kind this module writes — excludes the one report-only kind, `refresh-deferred`. */

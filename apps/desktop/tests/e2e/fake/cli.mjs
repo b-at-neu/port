@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // The E2E harness's fake gh/git/node/claude. Plain Node, no deps.
+import { createHash } from 'node:crypto'
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
 
 const [, , command, ...args] = process.argv
@@ -156,13 +157,6 @@ function handleComment(kind) {
 
 // --- gh: GraphQL ----------------------------------------------------------
 
-function graphqlArg() {
-  for (const arg of args) {
-    if (arg.startsWith('query=')) return arg.slice('query='.length)
-  }
-  return null
-}
-
 function nodeOf(kind, item) {
   return {
     __typename: kind === 'issue' ? 'Issue' : 'PullRequest',
@@ -195,9 +189,7 @@ function matchAll(regex, document) {
   return matches
 }
 
-function handleGraphQL() {
-  const document = graphqlArg()
-  if (document === null) return unscripted()
+function answerGraphQL(document) {
   const state = loadState()
   const repository = {}
 
@@ -252,7 +244,24 @@ function handleGraphQL() {
   if (document.includes('rateLimit {')) data.rateLimit = { cost: 1, remaining: 4999, resetAt: new Date(Date.now() + 3600_000).toISOString(), limit: 5000 }
   if (document.includes('viewer {')) data.viewer = { login: state.viewer }
 
-  process.stdout.write(JSON.stringify({ data }))
+  return JSON.stringify({ data })
+}
+
+// The issues-list pre-check: the ETag hashes the whole scripted state, so any scripted change moves it.
+function answerIssuesList(request) {
+  const etag = `"${createHash('sha1').update(JSON.stringify(loadState())).digest('hex')}"`
+  const notModified = request.ifNoneMatch === etag
+  process.stdout.write(JSON.stringify({ status: notModified ? 304 : 200, headers: { etag }, body: notModified ? '' : '[]' }))
+  return process.exit(0)
+}
+
+// `gh e2e-http <request JSON>`: the app's HTTP transport sends its read here instead of the network.
+function handleHttp() {
+  const request = JSON.parse(args[1] ?? '{}')
+  if (request.method === 'GET' && /^repos\/[^/]+\/[^/]+\/issues\?/.test(request.path)) return answerIssuesList(request)
+  if (request.method !== 'POST' || request.path !== 'graphql') return unscripted()
+  const body = answerGraphQL(JSON.parse(request.body).query)
+  process.stdout.write(JSON.stringify({ status: 200, headers: {}, body }))
   return process.exit(0)
 }
 
@@ -274,7 +283,7 @@ function handleGh() {
     process.stdout.write(JSON.stringify({ login: state.viewer }))
     return process.exit(0)
   }
-  if (sub === 'api' && args[1] === 'graphql') return handleGraphQL()
+  if (sub === 'e2e-http') return handleHttp()
   if ((sub === 'issue' || sub === 'pr') && args[1] === 'edit') return handleEdit(sub)
   if ((sub === 'issue' || sub === 'pr') && args[1] === 'comment') return handleComment(sub)
   return unscripted()

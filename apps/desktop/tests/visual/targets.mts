@@ -167,7 +167,15 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
     ],
   },
   backlog: { hash: '#/backlog', container: '#app', ready: '[data-slot="backlog-row"]' },
-  releases: { hash: '#/releases', container: '#app', ready: '[data-slot="release-row"]' },
+  releases: {
+    hash: '#/releases',
+    container: '#app',
+    ready: '[data-slot="release-row"]',
+    variants: [
+      { name: 'pane', click: '[data-release="fixture-acme-widgets:v0.2.0"]', ready: '[data-slot="release-issue-row"]' },
+      { name: 'pane-empty', click: '[data-release="fixture-acme-widgets:v0.1.1"]', ready: '[data-slot="release-issues-empty"]' },
+    ],
+  },
   audit: {
     hash: '#/audit',
     container: '#app',

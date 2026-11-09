@@ -264,6 +264,12 @@ describe('buildItemsByNumberQuery', () => {
     expect(extractFragment(document, 'PullRequest')).toContain('headRefName')
   })
 
+  it('selects the author inside the PullRequest fragment only', () => {
+    const { document } = buildItemsByNumberQuery([1])
+    expect(extractFragment(document, 'Issue')).not.toContain('author')
+    expect(extractFragment(document, 'PullRequest')).toContain('author { login }')
+  })
+
   it('returns an empty alias list and a still-valid document for no numbers', () => {
     const { document, aliases } = buildItemsByNumberQuery([])
     expect(aliases).toEqual([])

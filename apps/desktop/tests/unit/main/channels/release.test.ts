@@ -5,7 +5,7 @@ import type { RegistryDeps } from '@/types/registry'
 import type { ReleasePhase, ReleaseRead, ReleaseStatus } from '@/types/release'
 
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
-import { resolveReleaseRun, resolveReleaseStatus } from '@/main/channels/release'
+import { resolveReleaseIssues, resolveReleaseRun, resolveReleaseStatus } from '@/main/channels/release'
 import type { ReleaseChannelDeps } from '@/main/channels/release'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
@@ -42,7 +42,7 @@ const READY_ENTRY = {
 }
 
 function status(phase: ReleasePhase, overrides: Partial<ReleaseStatus> = {}): ReleaseStatus {
-  return { phase, versionSource: 'package', production: 'main', integration: 'dev', currentVersion: '0.2.0', candidates: [], entries: [{ number: 12, title: 'Add dark mode', labels: [], dependency: false }], truncatedNote: null, releases: [], productionHead: 'prod-oid', postPublishHook: 'node scripts/dev-window.ts', readAt: 't', ...overrides }
+  return { phase, versionSource: 'package', production: 'main', integration: 'dev', currentVersion: '0.2.0', sinceTag: 'v0.2.0', entries: [{ number: 12, title: 'Add dark mode', url: 'https://github.com/acme/widgets/pull/12', labels: [], mergedAt: '2026-08-02T00:00:00Z', dependency: false }], truncatedNote: null, releases: [], productionHead: 'prod-oid', postPublishHook: 'node scripts/dev-window.ts', readAt: 't', ...overrides }
 }
 
 interface Calls {
@@ -59,6 +59,7 @@ function depsFor(read: ReleaseRead, calls: Calls, overrides: Partial<ReleaseChan
     listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] } as ReposListResponse),
     readConfig: () => Promise.resolve({ ok: true, config: { versionSource: 'package', versionFiles: ['package.json'], versionCommand: null, postPublishHook: 'node scripts/dev-window.ts' } }),
     fetchStatus: () => Promise.resolve(read),
+    fetchIssues: () => Promise.resolve({ ok: true, issues: [], note: null }),
     readFile: () => Promise.resolve({ ok: true, text: JSON.stringify({ name: 'x', version: '0.2.1-dev' }) }),
     createBumpBranch: (_ctx, params) => {
       record('bump', params)
@@ -119,6 +120,34 @@ describe('resolveReleaseStatus', () => {
   })
 })
 
+describe('resolveReleaseIssues', () => {
+  const issues = { ok: true as const, issues: [{ number: 12, title: 'Add dark mode', url: 'https://github.com/acme/widgets/issues/12', labels: [] }], note: null }
+
+  it('rejects a missing repoId, a malformed tag or previousTag, and a repository that is not ready', async () => {
+    const deps = depsFor(readOf({ kind: 'idle' }), newCalls())
+    const good = { repoId: REPO_ID, tag: 'v0.2.0', previousTag: 'v0.1.0' }
+    await expect(resolveReleaseIssues(registryDeps, { ...good, repoId: undefined as unknown as RepoId }, deps)).rejects.toThrow("'release:issues' requires a non-empty 'repoId'")
+    await expect(resolveReleaseIssues(registryDeps, { ...good, tag: 'v1 --upload' }, deps)).rejects.toThrow("'release:issues' requires a 'tag'")
+    await expect(resolveReleaseIssues(registryDeps, { ...good, tag: 5 as unknown as string }, deps)).rejects.toThrow("'release:issues' requires a 'tag'")
+    await expect(resolveReleaseIssues(registryDeps, { ...good, previousTag: '../x?y' }, deps)).rejects.toThrow("'release:issues' requires 'previousTag'")
+    await expect(resolveReleaseIssues(registryDeps, { ...good, previousTag: undefined as unknown as null }, deps)).rejects.toThrow("'release:issues' requires 'previousTag'")
+    const notReady = { ...deps, listRepositories: () => Promise.resolve({ ok: true, repositories: [{ id: REPO_ID, path: '/repo', displayName: 'w', problem: { kind: 'directory-missing' as const }, diagnostics: [] }] } as ReposListResponse) }
+    await expect(resolveReleaseIssues(registryDeps, good, notReady)).rejects.toThrow("requires a 'ready' repository")
+  })
+
+  it("reads only the registered repository's own tags, and passes the response through", async () => {
+    let seen: unknown = null
+    const deps = depsFor(readOf({ kind: 'idle' }), newCalls(), {
+      fetchIssues: (params) => {
+        seen = params
+        return Promise.resolve(issues)
+      },
+    })
+    expect(await resolveReleaseIssues(registryDeps, { repoId: REPO_ID, tag: 'v0.2.0', previousTag: null }, deps)).toEqual(issues)
+    expect(seen).toEqual({ repo: { owner: 'acme', name: 'widgets' }, tag: 'v0.2.0', previousTag: null })
+  })
+})
+
 describe('resolveReleaseRun validation', () => {
   it('throws on a bad step or oversized or blank notes', async () => {
     await expect(run(readOf({ kind: 'idle' }), { repoId: REPO_ID, step: 'merge' as 'open', version: '0.3.0' }, newCalls())).rejects.toThrow("'release:run' step must be 'open' or 'publish'")
@@ -172,7 +201,7 @@ describe('resolveReleaseRun open', () => {
     const waiting = readOf({ kind: 'waiting-merge', version: '0.3.0', releasePr: { number: 612, url: 'u' } })
     expect(await run(waiting, { repoId: REPO_ID, step: 'open', version: '0.3.0' }, newCalls())).toMatchObject({ kind: 'refused', reason: 'state-changed' })
     expect(await run(readOf({ kind: 'bumped', version: '0.3.0' }), { repoId: REPO_ID, step: 'open', version: '0.4.0' }, newCalls())).toMatchObject({ kind: 'refused', reason: 'state-changed' })
-    const tagged = readOf({ kind: 'idle' }, { releases: [{ tagName: 'v0.3.0', name: 'v0.3.0', url: 'u', publishedAt: null, isPrerelease: false, isLatest: false, description: '' }] })
+    const tagged = readOf({ kind: 'idle' }, { releases: [{ tagName: 'v0.3.0', name: 'v0.3.0', url: 'u', publishedAt: null, isPrerelease: false, isLatest: false, description: '', previousTag: null }] })
     expect(await run(tagged, { repoId: REPO_ID, step: 'open', version: '0.3.0' }, newCalls())).toMatchObject({ kind: 'refused', reason: 'tag-exists' })
   })
 

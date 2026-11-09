@@ -17,6 +17,15 @@ export interface DirEntry {
   readonly kind: DirEntryKind
 }
 
+export interface StatInfo {
+  readonly kind: 'file' | 'directory' | 'other'
+  readonly size: number
+  readonly modifiedAt: string
+}
+
+/** `code` is the errno string (`EBUSY`), kept so a caller can tell a held file from a long path. */
+export type RemoveDirectoryResult = { readonly ok: true } | { readonly ok: false; readonly code: string | null; readonly message: string }
+
 export type FileResult<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly kind: FileFailureKind; readonly message: string }
 
 /** ENOENT is a value, never an exception — callers must distinguish "no config" from "unreadable". */
@@ -36,6 +45,39 @@ export type GhResult =
   | { readonly ok: true; readonly stdout: string; readonly stderr: string }
   | Exclude<CommandResult, { ok: true } | { ok: false; kind: 'nonzero' }>
   | { readonly ok: false; readonly kind: GhClassification; readonly stdout: string; readonly stderr: string }
+
+export interface GitHubRequest {
+  readonly method: 'GET' | 'POST'
+  /** `graphql` or `repos/…`, joined onto the API base. */
+  readonly path: string
+  readonly accept?: string
+  /** JSON text, POST only. */
+  readonly body?: string
+}
+
+export type GitHubHttpResult =
+  | { readonly ok: true; readonly status: number; readonly headers: Readonly<Record<string, string>>; readonly body: string }
+  | Exclude<CommandResult, { ok: true } | { ok: false; kind: 'nonzero' }>
+  | { readonly ok: false; readonly kind: GhClassification; readonly status: number | null; readonly body: string; readonly message: string }
+
+/** Injectable, so a test runs against a fake and needs no network or token. */
+export type GitHubTransport = (request: GitHubRequest) => Promise<GitHubHttpResult>
+
+export interface ConditionalRequest {
+  readonly method: 'GET'
+  readonly path: string
+  readonly accept?: string
+  /** Sent verbatim as `If-None-Match`; absent → an unconditional GET. */
+  readonly ifNoneMatch?: string
+}
+
+/** A 304 is a success here — `notModified` is the discriminant, and only a request that sent a validator can produce one. */
+export type ConditionalHttpResult =
+  | { readonly ok: true; readonly notModified: false; readonly status: number; readonly headers: Readonly<Record<string, string>>; readonly body: string }
+  | { readonly ok: true; readonly notModified: true; readonly status: 304; readonly headers: Readonly<Record<string, string>> }
+  | Exclude<GitHubHttpResult, { ok: true }>
+
+export type ConditionalTransport = (request: ConditionalRequest) => Promise<ConditionalHttpResult>
 
 export type DirectorySizeResult =
   | { readonly ok: true; readonly bytes: number; readonly entries: number; readonly truncated: boolean }

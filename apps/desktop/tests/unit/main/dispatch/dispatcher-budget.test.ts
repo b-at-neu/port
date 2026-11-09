@@ -118,6 +118,9 @@ function fakeBudget(overrides: Partial<BudgetGate> = {}): BudgetGate {
     check: () => {
       throw new Error('budget.check should not be invoked in this case')
     },
+    report: () => {
+      throw new Error('budget.report should not be invoked in this case')
+    },
     ...overrides,
   }
 }
@@ -181,10 +184,10 @@ describe('createDispatcher — budget bookkeeping', () => {
   })
 
   it('a reset failure reports budget-unavailable and dispatches nothing this pass', async () => {
-    const budget = fakeBudget({ reset: () => Promise.resolve({ ok: false, kind: 'unavailable', message: "commands.budget can't run (could not be parsed as a plain command prefix)." }) })
+    const budget = fakeBudget({ reset: () => Promise.resolve({ ok: false, kind: 'unavailable', message: "the budget ceiling can't be read (not on the default branch)." }) })
     const dispatcher = createDispatcher(baseDeps({ budget }))
     await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })]))
-    expect(dispatcher.status()[0]?.state).toEqual({ kind: 'budget-unavailable', message: "commands.budget can't run (could not be parsed as a plain command prefix)." })
+    expect(dispatcher.status()[0]?.state).toEqual({ kind: 'budget-unavailable', message: "the budget ceiling can't be read (not on the default branch)." })
   })
 
   it('sweeps even after ownership moves away from this app, while a session is still live', async () => {
@@ -205,7 +208,7 @@ describe('createDispatcher — budget bookkeeping', () => {
         launch,
         budget,
         readOwnership: () => Promise.resolve(ownership),
-        fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'], headRefName: null }], unavailable: [], fetchedAt: 'r' }),
+        fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'], headRefName: null, author: null }], unavailable: [], fetchedAt: 'r' }),
       }),
     )
 
@@ -228,7 +231,7 @@ describe('createDispatcher — the budget gate itself', () => {
     const deps = baseDeps({
       store,
       launch,
-      fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'], headRefName: null }], unavailable: [], fetchedAt: 'r' }),
+      fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'], headRefName: null, author: null }], unavailable: [], fetchedAt: 'r' }),
       ...overrides,
     })
     return { dispatcher: createDispatcher(deps) }

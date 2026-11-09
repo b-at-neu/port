@@ -77,6 +77,7 @@ function readyRepo(overrides: Partial<Extract<RepositoryState, { ok: true }>> = 
     },
     worktreeTotals: { registered: 0, attached: 0, uncorrelated: 0 },
     viewer: 'op',
+    integrationChecks: {},
     approvalGate: true,
     disabled: [],
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
@@ -309,6 +310,27 @@ describe('projectBoard — live stage sessions', () => {
     const [row] = project([inFlight], [planSession()]).rows
     expect(row?.displayStatus.status).toBe('in-flight')
     expect(row?.liveStage).not.toBeNull()
+  })
+
+  describe('a stalled item', () => {
+    const stalled = () => item({ status: 'stalled', statusEvidence: 'no-claimant', stage: 'in-flight', stages: [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }] })
+
+    it.each([['ready'], ['interrupting']] as const)('renders in flight while its %s hosted session is live', (phase) => {
+      const [row] = project([stalled()], [planSession({ phase })]).rows
+      expect(row?.item.status).toBe('stalled')
+      expect(row?.displayStatus.status).toBe('in-flight')
+    })
+
+    it('stays stalled when its only hosted session has ended', () => {
+      expect(project([stalled()], [planSession({ phase: 'ended' })]).rows[0]?.displayStatus.status).toBe('stalled')
+    })
+
+    it('renders interrupted over a live session', () => {
+      const snapshot = snapshotOf([readyRepo({ items: [stalled()] })], [health()])
+      const withInterrupted = { ...snapshot, dispatch: [{ repoId: REPO, interrupted: [{ repoId: REPO, number: 1 }] }] } as unknown as BoardSnapshot
+      const result = projectBoard({ snapshot: withInterrupted, groupBy: 'stage', now: NOW, sessions: [planSession()] })
+      expect(result.rows[0]?.displayStatus.status).toBe('interrupted')
+    })
   })
 
   it('defaults to no sessions', () => {

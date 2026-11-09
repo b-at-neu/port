@@ -1,5 +1,5 @@
 // The trigger-key to stage-agent map, pinned by scripts/checks/desktop-tick.ts against
-// plugins/port/data/labels.json's own trigger-role keys, both directions.
+// utils/labels/labels.json's own trigger-role keys, both directions.
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { StageAgent } from '@/types/tick'
 

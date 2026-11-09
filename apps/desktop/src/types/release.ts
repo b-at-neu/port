@@ -1,4 +1,5 @@
 // Renderer-safe contract for the Releases screen: the status read, the phase it resolves to, and the two `release:run` steps.
+import type { BacklogLabel } from '@/types/backlog'
 import type { GhRunner, PathOps } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
 
@@ -9,18 +10,18 @@ export interface PullLink {
 
 export type VersionKind = 'major' | 'minor' | 'patch'
 
-export interface VersionCandidate {
+export interface VersionOption {
   readonly kind: VersionKind
   readonly version: string
-  readonly recommended: boolean
-  readonly reason: string
-  readonly tickets: readonly number[]
 }
 
+/** A pull request merged into the integration branch; `dependency` only shapes the release body and notes draft, never the list. */
 export interface ReleaseEntry {
-  readonly number: number | null
+  readonly number: number
   readonly title: string
-  readonly labels: readonly string[]
+  readonly url: string
+  readonly labels: readonly BacklogLabel[]
+  readonly mergedAt: string
   readonly dependency: boolean
 }
 
@@ -32,7 +33,26 @@ export interface ReleaseInfo {
   readonly isPrerelease: boolean
   readonly isLatest: boolean
   readonly description: string
+  readonly previousTag: string | null
 }
+
+/** A ticket a pull request merged in a release closed. */
+export interface ReleaseIssue {
+  readonly number: number
+  readonly title: string
+  readonly url: string
+  readonly labels: readonly BacklogLabel[]
+}
+
+export interface ReleaseIssuesRequest {
+  readonly repoId: RepoId
+  readonly tag: string
+  readonly previousTag: string | null
+}
+
+export type ReleaseIssuesResponse =
+  | { readonly ok: true; readonly issues: readonly ReleaseIssue[]; readonly note: string | null }
+  | { readonly ok: false; readonly message: string }
 
 export type ReleaseVersionSource = 'tags' | 'package'
 
@@ -114,7 +134,7 @@ export interface ReleaseStatus {
   readonly production: string | null
   readonly integration: string
   readonly currentVersion: string | null
-  readonly candidates: readonly VersionCandidate[]
+  readonly sinceTag: string | null
   readonly entries: readonly ReleaseEntry[]
   readonly truncatedNote: string | null
   readonly releases: readonly ReleaseInfo[]

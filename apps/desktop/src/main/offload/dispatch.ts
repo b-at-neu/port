@@ -15,6 +15,8 @@ function run(engine: StateEngine, op: OffloadOp, params: unknown): Promise<unkno
       return engine.refreshDenials(params as OffloadParams['refreshDenials'])
     case 'refreshGithub':
       return engine.refreshGithub(params as OffloadParams['refreshGithub'])
+    case 'precheckGithub':
+      return engine.precheckGithub(params as OffloadParams['precheckGithub'])
     case 'project':
       return engine.project(params as OffloadParams['project'])
     case 'scanSessions':
@@ -29,6 +31,8 @@ function run(engine: StateEngine, op: OffloadOp, params: unknown): Promise<unkno
       return engine.tailPoll(params as OffloadParams['tailPoll'])
     case 'tailClose':
       return engine.tailClose(params as OffloadParams['tailClose'])
+    case 'forgetRepo':
+      return engine.forgetRepo(params as OffloadParams['forgetRepo'])
   }
 }
 

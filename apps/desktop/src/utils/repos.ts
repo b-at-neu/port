@@ -26,7 +26,7 @@ export type RepoProblem =
   | { readonly kind: 'config-unreadable'; readonly reason: RepoConfigReadFailureKind; readonly message: string }
   | { readonly kind: 'config-malformed'; readonly message: string }
   | { readonly kind: 'config-invalid'; readonly violations: readonly SchemaViolation[] }
-  | { readonly kind: 'effective-config-unreadable'; readonly file: 'CLAUDE.md' | '.github/workflows/approval-check.yml'; readonly reason: RepoConfigReadFailureKind; readonly message: string }
+  | { readonly kind: 'effective-config-unreadable'; readonly file: 'CLAUDE.md' | '.github/workflows/approval-check.yml' | '.github/workflows/artifacts.yml'; readonly reason: RepoConfigReadFailureKind; readonly message: string }
 
 /** Non-disqualifying — carried on a `ready` entry, listed but never blocking. */
 export type RepoDiagnostic =
@@ -40,7 +40,7 @@ export type RepoDiagnostic =
 /** One check's disposition: `blocking` (default — a red conclusion forms a finding and blocks) or `infrastructure` (red is reported, never blocks). A later `CLAUDE.md` entry can overwrite the approval-gate's own name. */
 export interface CheckDisposition {
   readonly disposition: 'blocking' | 'infrastructure'
-  readonly source: 'approval-gate' | 'CLAUDE.md'
+  readonly source: 'approval-gate' | 'CLAUDE.md' | 'artifacts-audit'
 }
 
 /** Everything a repository's config resolves to once it is `ready` — `owner`/`name` split off `repo`, every absent key defaulted off the imported schema, `labels` exposed only as a resolved vocabulary. */
@@ -58,7 +58,7 @@ export interface ResolvedRepoConfig {
   }
   readonly reviewCycleCap: number
   readonly vocabulary: LabelVocabulary
-  /** `worktrees` is the full `commands.worktrees` prefix, `null` meaning the repository has not installed the reclamation script. `budget` is the same shape, `null` meaning nothing measures or bounds ticket cost. */
+  /** `worktrees` is the full `commands.worktrees` prefix, `null` meaning the repository has not installed the reclamation script. `budget` is an on/off switch for this app, which reads it as such and never runs it: `null` means nothing measures or bounds ticket cost. */
   readonly commands: { readonly worktrees: string | null; readonly budget: string | null }
   /** The file-contention gate's own tuning — `sharedFiles` never contributes to a hold, `overlapThreshold` is how many non-shared paths an in-flight item must share with a candidate before it holds. */
   readonly concurrency: { readonly sharedFiles: readonly string[]; readonly overlapThreshold: number }

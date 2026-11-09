@@ -70,6 +70,7 @@ function repoWith(items: readonly ReconciledItem[]): Extract<RepositoryState, { 
     freshness: { github: { at: NOW.toISOString() }, itemStates: { unavailable: 'no re-check needed' }, sessions: { at: NOW.toISOString() }, worktrees: { at: NOW.toISOString() }, denials: { at: NOW.toISOString() } },
     worktreeTotals: { registered: 0, attached: 0, uncorrelated: 0 },
     viewer: 'op',
+    integrationChecks: {},
     approvalGate: true,
     disabled: [],
     concurrency: { sharedFiles: [], overlapThreshold: 2 },

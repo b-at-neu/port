@@ -3,7 +3,8 @@ import { mkdir, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInProcessEngine } from '@/main/offload/engine'
-import { fakeGit } from '../../../fixtures/watcher-harness'
+import type { RepoId } from '@/utils/repos'
+import { fakeGit, scriptedConditional } from '../../../fixtures/watcher-harness'
 
 const now = () => new Date('2026-01-01T00:00:00.000Z')
 const session = { sessionId: 's1', summary: null, lastModified: '2026-01-01T00:00:00.000Z', customTitle: 'hello', firstPrompt: null, gitBranch: null, cwd: null }
@@ -33,5 +34,25 @@ describe('createInProcessEngine', () => {
     const engine = createInProcessEngine({ sessionReader: () => Promise.resolve({ ok: true, sessions: [] }) })
     expect(await engine.tailPoll({ tailId: 'tail-1' })).toMatchObject({ ok: false, kind: 'unknown-tail' })
     await expect(engine.tailClose({ tailId: 'tail-1' })).resolves.toBeUndefined()
+  })
+
+  it('precheckGithub primes, reports a change only once the ETag moves, and re-primes after forgetRepo', async () => {
+    const conditional = scriptedConditional()
+    const engine = createInProcessEngine({ now, conditional: conditional.transport })
+    const params = { repoId: 'repo-1' as RepoId, repo: { owner: 'o', name: 'a' } }
+
+    expect(await engine.precheckGithub(params)).toMatchObject({ ok: true, changed: false })
+    expect(await engine.precheckGithub(params)).toMatchObject({ ok: true, changed: false })
+    conditional.bump()
+    expect(await engine.precheckGithub(params)).toMatchObject({ ok: true, changed: true })
+
+    conditional.bump()
+    await engine.forgetRepo({ repoId: params.repoId })
+    expect(await engine.precheckGithub(params)).toMatchObject({ ok: true, changed: false })
+  })
+
+  it('forgets a repo it never cached anything for without failing', async () => {
+    const engine = createInProcessEngine()
+    await expect(engine.forgetRepo({ repoId: 'repo-1' as RepoId })).resolves.toBeUndefined()
   })
 })

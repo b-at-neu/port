@@ -22,9 +22,46 @@ export function reconcile(keys: readonly string[], selected: string | null): str
   return selected !== null && keys.includes(selected) ? selected : null
 }
 
-/** Only a primary-button press on the selected row of a `toggle` list clears it. */
-export function clearsOnPress(toggle: boolean, key: string, selected: string | null, button: number): boolean {
-  return toggle && key === selected && button === 0
+export const KEEPS_SELECTION = [
+  'a[href]',
+  'button',
+  'input',
+  'select',
+  'textarea',
+  '[contenteditable="true"]',
+  '[role="button"]:not([data-row-key])',
+  '[role="menuitem"]',
+  '[role="menuitemcheckbox"]',
+  '[role="option"]',
+  '[role="tab"]',
+  '[role="checkbox"]',
+  '[role="switch"]',
+  '[role="combobox"]',
+  '[data-keeps-selection]',
+].join(', ')
+
+export type PressZone = 'row' | 'keep' | 'blank' | 'outside'
+
+/** Only a primary press on the selected row, away from any control inside it, clears it. */
+export function clearsOnPress(key: string, selected: string | null, button: number, onControl: boolean): boolean {
+  return !onControl && key === selected && button === 0
+}
+
+export function clearsOnSurfacePress(zone: PressZone, button: number, selected: string | null): boolean {
+  return zone === 'blank' && button === 0 && selected !== null
+}
+
+function pressZone(event: MouseEvent, surface: HTMLElement): PressZone {
+  const target = event.target
+  if (!(target instanceof Node) || !surface.contains(target)) return 'outside'
+  if (target instanceof HTMLElement && (event.nativeEvent.offsetX >= target.clientWidth || event.nativeEvent.offsetY >= target.clientHeight)) return 'keep'
+  const element = target instanceof Element ? target : target.parentElement
+  if (element === null) return 'blank'
+  const row = element.closest('[data-row-key]')
+  if (row !== null && surface.contains(row)) return 'row'
+  const control = element.closest(KEEPS_SELECTION)
+  if (control !== null && surface.contains(control)) return 'keep'
+  return 'blank'
 }
 
 export function listRowClass(selected: boolean): string {
@@ -42,8 +79,10 @@ interface RowProps {
 interface UseListSelectionOptions {
   readonly value?: string | null
   readonly onChange?: (key: string | null) => void
-  /** Pressing the selected row clears it, instead of keeping it selected. */
-  readonly toggle?: boolean
+}
+
+interface SurfaceProps {
+  onMouseDown: (event: MouseEvent<HTMLElement>) => void
 }
 
 interface ListSelection {
@@ -55,6 +94,8 @@ interface ListSelection {
   next(): void
   prev(): void
   rowProps(key: string): RowProps
+  /** Spread on the element spanning the page: a press on empty space clears the selection. */
+  surfaceProps(): SurfaceProps
 }
 
 function focusRow(key: string): void {
@@ -108,7 +149,9 @@ export function useListSelection(keys: readonly string[], options: UseListSelect
       tabIndex: 0,
       onFocus: () => select(key),
       onMouseDown: (event) => {
-        if (clearsOnPress(options.toggle === true, key, selectedKey, event.button)) {
+        const control = event.target instanceof Element ? event.target.closest(KEEPS_SELECTION) : null
+        const onControl = control !== null && control !== event.currentTarget && event.currentTarget.contains(control)
+        if (clearsOnPress(key, selectedKey, event.button, onControl)) {
           // Without this the focus that follows the press would select the row again.
           event.preventDefault()
           clear()
@@ -120,6 +163,14 @@ export function useListSelection(keys: readonly string[], options: UseListSelect
     }
   }
 
+  function surfaceProps(): SurfaceProps {
+    return {
+      onMouseDown: (event) => {
+        if (clearsOnSurfacePress(pressZone(event, event.currentTarget), event.button, selectedKey)) clear()
+      },
+    }
+  }
+
   return {
     selectedKey,
     select,
@@ -128,5 +179,6 @@ export function useListSelection(keys: readonly string[], options: UseListSelect
     next,
     prev,
     rowProps,
+    surfaceProps,
   }
 }

@@ -1,11 +1,10 @@
 // Every string on the Releases screen.
-import type { HookOutcome, PullLink, ReleaseRunResult, ReleaseStatus, VersionCandidate } from '@/types/release'
+import type { HookOutcome, PullLink, ReleaseRunResult, ReleaseStatus, VersionOption } from '@/types/release'
 
 export const RELEASES_TITLE = 'Releases'
 export const NO_REPOSITORIES = 'Register a repository to see its releases.'
 export const PREVIOUS_RELEASES = 'Previous releases'
 export const NO_RELEASES = 'No releases yet.'
-export const DEPENDENCIES_LABEL = 'Dependencies'
 export const CUT_RELEASE = 'Cut release'
 export const OPEN_RELEASE_PR = 'Open release PR'
 export const OPEN_BUMP_PR = 'Open bump PR'
@@ -14,12 +13,28 @@ export const OPEN_ON_GITHUB = 'Open on GitHub'
 export const WAITING_ON_YOU = 'Waiting on you'
 export const NOTES_EMPTY_TOOLTIP = "Notes can't be empty"
 export const NOTES_LABEL = 'Release notes'
+export const VERSION_PLACEHOLDER = 'Pick a version'
 export const CUSTOM_VERSION_LABEL = 'Custom version…'
 export const CUSTOM_VERSION_ERROR = 'Use X.Y.Z, optionally with a prerelease like 1.5.0-beta.1.'
 export const NOTES_EMPTY = 'No notes were written for this release.'
 export const LATEST_TAG = 'Latest'
 export const PRERELEASE_TAG = 'Prerelease'
 export const OPENED_TOAST = 'Opened the release pull request.'
+export const ISSUES_LABEL = 'Tickets included'
+export const ISSUES_EMPTY = 'No PRs in this release closed a ticket.'
+export const TRY_AGAIN = 'Try again'
+
+export function issuesHeading(count: number | null): string {
+  return count === null ? ISSUES_LABEL : `${ISSUES_LABEL} · ${String(count)}`
+}
+
+export function showMoreIssues(hidden: number): string {
+  return `Show ${String(hidden)} more`
+}
+
+export function issuesFailureCopy(message: string): string {
+  return `Couldn't read this release's tickets: ${message}`
+}
 
 export function readFailureCopy(repo: string, message: string): string {
   return `Couldn't read releases for ${repo}: ${message}`
@@ -29,17 +44,17 @@ export function currentVersionCopy(version: string | null): string | null {
   return version === null ? null : `Current v${version}`
 }
 
-export function upcomingLabel(candidates: readonly VersionCandidate[]): string {
-  const recommended = candidates.find((candidate) => candidate.recommended)
-  return recommended === undefined ? 'Upcoming' : `Upcoming · v${recommended.version} recommended`
+export function mergedSinceCopy(count: number, sinceTag: string | null): string {
+  const prs = `${String(count)} ${count === 1 ? 'PR' : 'PRs'} merged`
+  return sinceTag === null ? `${prs}, no release yet` : `${prs} since ${sinceTag}`
 }
 
-export function versionOptionLabel(candidate: VersionCandidate): string {
-  return `${candidate.version} — ${candidate.kind}${candidate.recommended ? ' (recommended)' : ''}`
+export function noMergedPrsCopy(integration: string, sinceTag: string | null): string {
+  return sinceTag === null ? `No PRs merged into ${integration} yet.` : `No PRs merged into ${integration} since ${sinceTag}.`
 }
 
-export function nothingToReleaseCopy(integration: string, current: string | null): string {
-  return current === null ? `Nothing to release. ${integration} has no changes to release.` : `Nothing to release. ${integration} has no changes since v${current}.`
+export function versionOptionLabel(option: VersionOption): string {
+  return `${option.version} — ${option.kind}`
 }
 
 export function cutDialogBody(status: ReleaseStatus): string {

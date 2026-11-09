@@ -1,9 +1,9 @@
 import type { Dirent } from 'node:fs'
 import { createReadStream } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { appendFile, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, readdir, rename, rm, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import type { ReadLinesFromResult, DirEntry, DirEntryKind, FileResult, FileFailureKind } from '@/types/platform'
+import type { ReadLinesFromResult, DirEntry, DirEntryKind, FileResult, FileFailureKind, RemoveDirectoryResult, StatInfo } from '@/types/platform'
 
 // Keeps a runaway denials log from OOM-ing the main process.
 const MAX_BYTES = 16 * 1024 * 1024
@@ -85,12 +85,6 @@ export async function listDirectory(path: string): Promise<FileResult<readonly D
   } catch (error) {
     return { ok: false, ...classifyFsError(error) }
   }
-}
-
-interface StatInfo {
-  readonly kind: 'file' | 'directory' | 'other'
-  readonly size: number
-  readonly modifiedAt: string
 }
 
 // `main/platform/` is the only place under `src/` allowed to reach `node:fs`.
@@ -200,6 +194,17 @@ export async function removeFile(path: string): Promise<FileResult<void>> {
     return { ok: true, value: undefined }
   } catch (error) {
     return { ok: false, ...classifyFsError(error) }
+  }
+}
+
+/** Retries a held file, then reports the errno instead of throwing; a missing path counts as removed. */
+export async function removeDirectory(path: string): Promise<RemoveDirectoryResult> {
+  try {
+    await rm(path, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
+    return { ok: true }
+  } catch (error) {
+    const err = error as ErrnoLike
+    return { ok: false, code: err.code ?? null, message: err.message ?? String(error) }
   }
 }
 

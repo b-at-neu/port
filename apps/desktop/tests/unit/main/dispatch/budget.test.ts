@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { budgetLiveSets, budgetRoute, dispatchArgs, escalationBody, parseSweepLine, parseVerdict, resetArgs, sumCostUsd, sweepArgs } from '@/main/dispatch/budget'
+import { budgetLiveSets, budgetRoute, escalationBody, sumCostUsd } from '@/main/dispatch/budget'
 import type { StageRecord } from '@/types/dispatch'
 import type { SessionKey } from '@/types/hosting'
-import type { TickActionable } from '@/types/tick'
 
 function record(overrides: Partial<StageRecord> = {}): StageRecord {
   return {
@@ -20,62 +19,6 @@ function record(overrides: Partial<StageRecord> = {}): StageRecord {
     ...overrides,
   }
 }
-
-describe('resetArgs / sweepArgs / dispatchArgs', () => {
-  it('resetArgs names the session', () => {
-    expect(resetArgs()).toEqual(['reset', '--session', 'desktop'])
-  })
-
-  it('sweepArgs passes empty strings for empty live/completed', () => {
-    expect(sweepArgs({ live: [], completed: [] })).toEqual(['sweep', '--live', '', '--completed', '', '--session', 'desktop'])
-  })
-
-  it('sweepArgs joins multiple descriptions with a comma', () => {
-    expect(sweepArgs({ live: ['impl #52', 'plan #7'], completed: ['review #9'] })).toEqual([
-      'sweep',
-      '--live',
-      'impl #52,plan #7',
-      '--completed',
-      'review #9',
-      '--session',
-      'desktop',
-    ])
-  })
-
-  it('dispatchArgs uses --issue for an issue candidate', () => {
-    const candidate: Pick<TickActionable, 'kind' | 'number' | 'agent'> = { kind: 'issue', number: 52, agent: 'impl' }
-    expect(dispatchArgs(candidate, 'sonnet')).toEqual(['dispatch', '--issue', '52', '--stage', 'impl', '--model', 'sonnet', '--session', 'desktop'])
-  })
-
-  it('dispatchArgs uses --pr for a pull-request candidate, with its own number', () => {
-    const candidate: Pick<TickActionable, 'kind' | 'number' | 'agent'> = { kind: 'pull-request', number: 213, agent: 'review' }
-    expect(dispatchArgs(candidate, 'opus')).toEqual(['dispatch', '--pr', '213', '--stage', 'review', '--model', 'opus', '--session', 'desktop'])
-  })
-})
-
-describe('parseVerdict', () => {
-  it('parses the verdict and human line from the first two lines', () => {
-    expect(parseVerdict('allow\n✅ #52 dispatch allowed — 3m 00s of its 120m ceiling used.\n')).toEqual({
-      verdict: 'allow',
-      line: '✅ #52 dispatch allowed — 3m 00s of its 120m ceiling used.',
-    })
-  })
-
-  it('returns null for an unrecognized first line', () => {
-    expect(parseVerdict('FAIL  something went wrong\n')).toBeNull()
-  })
-})
-
-describe('parseSweepLine', () => {
-  it('reads the last Budget line, bold markers stripped', () => {
-    const stdout = "note  unparseable entry 'bad' — treating it as not live\n**Budget:** session 2 dispatches · 41m 12s agent wall-clock\n"
-    expect(parseSweepLine(stdout)).toBe('session 2 dispatches · 41m 12s agent wall-clock')
-  })
-
-  it('returns null when no Budget line is present', () => {
-    expect(parseSweepLine('note  no dispatches this session\n')).toBeNull()
-  })
-})
 
 describe('budgetRoute', () => {
   it('allow dispatches and resets the hold streak', () => {
@@ -145,7 +88,7 @@ describe('sumCostUsd', () => {
 })
 
 describe('escalationBody', () => {
-  it('carries the script line verbatim and names the app as the stopping point', () => {
+  it('carries the gate line verbatim and names the app as the stopping point', () => {
     const body = escalationBody('⛔ #52 has consumed 2h 00m of agent wall-clock against a 120m ceiling — escalate instead of dispatching impl #52.')
     expect(body).toContain('## Pipeline Escalation')
     expect(body).toContain('⛔ #52 has consumed 2h 00m')

@@ -10,6 +10,7 @@ export const GROUP_NAMES: Readonly<Record<NeedsYouGroupKey, string>> = {
   'plan-review': 'Plan reviews',
   'ready-to-merge': 'Ready to merge',
   'needs-human': 'Escalated',
+  blocked: 'Blocked',
   questions: 'Questions',
   approvals: 'Edit approvals',
   denied: 'Denied commands',
@@ -76,6 +77,12 @@ function unblockReason(item: NeedsYouItem): string | null {
   return 'reason' in decision.context ? decision.context.reason : null
 }
 
+/** The decision behind a `blocked` row: the live session's reason, then the blocker comment's, else `null` for the fallback copy. */
+function blockedReason(item: Extract<NeedsYouItem, { readonly kind: 'blocked' }>): string | null {
+  const blockedOn = item.row.blockedOn
+  return blockedOn?.session?.text ?? blockedOn?.comment?.text ?? null
+}
+
 /** The repository's own resolved label name for a repair's label key — the matched row's `item.stages`
  *  already carries every label's resolved name, so this never re-derives one from the bare key. */
 function repairLabelName(item: Extract<NeedsYouItem, { readonly kind: 'half-labelled' }>, key: string): string {
@@ -134,6 +141,8 @@ export function needsYouLeadCopy(item: NeedsYouItem, now: Date = new Date()): st
       return `${label} is ready to merge`
     case 'needs-human':
       return `Unblock ${label}: ${unblockReason(item) ?? 'escalated without a reason'}`
+    case 'blocked':
+      return `Unblock ${label}: ${blockedReason(item) ?? 'its reason is on the ticket'}`
     case 'budget':
       switch (item.note.kind) {
         case 'escalation-failed':

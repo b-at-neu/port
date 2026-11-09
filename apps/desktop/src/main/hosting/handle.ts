@@ -1,4 +1,5 @@
 import type { ProjectedDelta, ContentBlock } from '@/types/hosting'
+import type { StageAgentLaunch } from '@/types/stage'
 import type { ExpectedComponents, UsageReading, PluginRequest } from '@/types/hosting-plugin'
 
 // One hosted session: builds options, opens the query, runs the pump loop. The ring
@@ -29,6 +30,7 @@ import { createControlsTracker } from '@/main/hosting/controls'
 
 import { createPermissionBroker } from '@/main/hosting/permissions'
 import { stagePolicy } from '@/main/hosting/stage-policy'
+import { createHookDenialTracker } from '@/main/hosting/hook-denials'
 import { createSessionProjector } from '@/main/hosting/project'
 
 import { createCapabilityTracker } from '@/main/hosting/capabilities'
@@ -79,7 +81,7 @@ interface CreateHostedHandleParams {
   /** Read before spawn and kept frozen on the handle for its whole life. */
   readonly history: SessionHistory
   /** Non-null only for a stage session: carried on the snapshot, drives `buildSessionOptions`'s stage branch, and builds the `stagePolicy` the permission broker consults first. */
-  readonly stage: { readonly tag: StageTag; readonly agentName: string; readonly model: string; readonly sessionRequiredPaths: readonly string[]; readonly editAllow: readonly string[]; readonly onDeny?: (toolName: string, input: Readonly<Record<string, unknown>>) => void } | null
+  readonly stage: { readonly tag: StageTag; readonly agent: StageAgentLaunch; readonly instructionsRoot: string; readonly model: string; readonly sessionRequiredPaths: readonly string[]; readonly editAllow: readonly string[]; readonly onDeny?: (toolName: string, input: Readonly<Record<string, unknown>>) => void } | null
 }
 
 interface HostedSendResult {
@@ -128,7 +130,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     canUseTool: broker.canUseTool,
     plugin: params.plugin,
     defaults: params.defaults,
-    stage: params.stage !== null ? { agentName: params.stage.agentName, model: params.stage.model } : null,
+    stage: params.stage !== null ? { agent: params.stage.agent, instructionsRoot: params.stage.instructionsRoot, model: params.stage.model } : null,
   })
   const startedAt = new Date(params.now()).toISOString()
   const projector = createSessionProjector({ cwd: params.cwd })
@@ -140,6 +142,8 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     stage: params.stage !== null,
   })
   const tasks = createTaskTracker()
+  // The guard hook denies an off-allowlist Bash call before `canUseTool`, so only the result in the stream shows it.
+  const hookDenials = params.stage?.onDeny !== undefined ? createHookDenialTracker() : null
 
   function emitEntries(delta: ProjectedDelta | null): void {
     if (delta === null) return
@@ -211,6 +215,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     capabilities.observe(message)
     controls.observe(message)
     if (tasks.observe(message)) emitStatus()
+    for (const denied of hookDenials?.observe(message) ?? []) params.stage?.onDeny?.(denied.toolName, denied.input)
     const observedAt = new Date(params.now()).toISOString()
     const reading = readRateLimit(message, observedAt)
     if (reading !== null) {

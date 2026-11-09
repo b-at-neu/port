@@ -7,7 +7,7 @@ import type { RepoDispatchStatus } from '@/types/dispatch'
 import type { BoardSnapshot } from '@/types/board'
 import { createPipelineWatcher } from '@/main/state/watcher'
 import { RATE_LIMIT_REPLY } from '../../../fixtures/pipeline-reply'
-import { fakeGit, makeFakeTimer, readyEntry, readyItemGh } from '../../../fixtures/watcher-harness'
+import { fakeGit, makeFakeTimer, readyEntry, readyItemTransport } from '../../../fixtures/watcher-harness'
 
 const AUTO_PLAN_LABELS = ['claude', 'auto plan', 'plan review']
 
@@ -24,7 +24,7 @@ async function build(options: { readonly dispatch: () => readonly RepoDispatchSt
     now: () => new Date('2026-01-01T00:00:00.000Z'),
     setTimer: makeFakeTimer().factory,
     git: fakeGit({ worktreeList: 0 }),
-    gh: readyItemGh('op', ['op'], RATE_LIMIT_REPLY, AUTO_PLAN_LABELS),
+    github: readyItemTransport('op', ['op'], RATE_LIMIT_REPLY, AUTO_PLAN_LABELS),
     sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
     dispatchStatus: options.dispatch,
     autoPlanRefused: options.refused,

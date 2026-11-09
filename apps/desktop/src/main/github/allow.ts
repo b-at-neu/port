@@ -1,8 +1,9 @@
 // The "Allow from now on" read: the integration head and the two `.claude/` files at that exact oid, plus any open pull request already proposing the rule. Any failed read fails the whole read — a partial one would enable a write.
-import { gh as defaultGh } from '@/main/platform/gh'
+import { githubHttp } from '@/main/platform/github-http'
 import type { BranchHead } from '@/types/release'
 import type { AllowBaseRead, ReadAllowBaseParams } from '@/types/stage'
-import { describe } from '@/main/github/release'
+import { describeHttp } from '@/main/github/envelope'
+import { RAW_ACCEPT, restRequest } from '@/main/github/request'
 import { CONFIG_PATH, SETTINGS_PATH } from '@/main/stage/allowlist'
 
 const SAFE_REF = /^[A-Za-z0-9._/-]+$/
@@ -28,27 +29,28 @@ function headOf(body: unknown): BranchHead | null {
 
 function prOf(list: unknown): { readonly number: number; readonly url: string } | null {
   const first = Array.isArray(list) ? obj(list[0] as unknown) : null
-  return typeof first?.number === 'number' && typeof first.url === 'string' ? { number: first.number, url: first.url } : null
+  return typeof first?.number === 'number' && typeof first.html_url === 'string' ? { number: first.number, url: first.html_url } : null
 }
 
 /** `readAllowBase({ repo, integration, branch })` — files are read at the head's oid, never the branch name, so they and the commit's parent agree. A 404 on `.claude/settings.json` reads as `null`. */
 export async function readAllowBase(params: ReadAllowBaseParams): Promise<AllowBaseRead> {
   if (!SAFE_REF.test(params.integration)) return { ok: false, message: `${params.integration} isn't a branch name port will read` }
-  const runner = params.gh ?? defaultGh
+  const github = params.github ?? githubHttp
   const slug = `${params.repo.owner}/${params.repo.name}`
 
-  const headRead = await runner(['api', `repos/${slug}/commits/${params.integration}`])
-  if (!headRead.ok) return { ok: false, message: describe(headRead) }
-  const head = headOf(parse(headRead.stdout))
+  const headRead = await github(restRequest(`repos/${slug}/commits/${params.integration}`))
+  if (!headRead.ok) return { ok: false, message: describeHttp(headRead) }
+  const head = headOf(parse(headRead.body))
   if (head === null) return { ok: false, message: "GitHub's commit read wasn't the expected shape" }
 
-  const config = await runner(['api', `repos/${slug}/contents/${CONFIG_PATH}?ref=${head.oid}`, '-H', 'Accept: application/vnd.github.raw'])
-  if (!config.ok) return { ok: false, message: `${CONFIG_PATH}: ${describe(config)}` }
+  const config = await github(restRequest(`repos/${slug}/contents/${CONFIG_PATH}?ref=${head.oid}`, RAW_ACCEPT))
+  if (!config.ok) return { ok: false, message: `${CONFIG_PATH}: ${describeHttp(config)}` }
 
-  const settings = await runner(['api', `repos/${slug}/contents/${SETTINGS_PATH}?ref=${head.oid}`, '-H', 'Accept: application/vnd.github.raw'])
-  if (!settings.ok && settings.kind !== 'http-not-found') return { ok: false, message: `${SETTINGS_PATH}: ${describe(settings)}` }
+  const settings = await github(restRequest(`repos/${slug}/contents/${SETTINGS_PATH}?ref=${head.oid}`, RAW_ACCEPT))
+  if (!settings.ok && settings.kind !== 'http-not-found') return { ok: false, message: `${SETTINGS_PATH}: ${describeHttp(settings)}` }
 
-  const prs = await runner(['pr', 'list', '--repo', slug, '--head', params.branch, '--base', params.integration, '--state', 'open', '--json', 'number,url'])
-  if (!prs.ok) return { ok: false, message: describe(prs) }
-  return { ok: true, head, settingsText: settings.ok ? settings.stdout : null, configText: config.stdout, openPr: prOf(parse(prs.stdout)) }
+  const headRef = encodeURIComponent(`${params.repo.owner}:${params.branch}`)
+  const prs = await github(restRequest(`repos/${slug}/pulls?head=${headRef}&base=${params.integration}&state=open&per_page=1`))
+  if (!prs.ok) return { ok: false, message: describeHttp(prs) }
+  return { ok: true, head, settingsText: settings.ok ? settings.body : null, configText: config.body, openPr: prOf(parse(prs.body)) }
 }
