@@ -122,7 +122,6 @@ export function baseParams(
     mode: { kind: 'fresh' as const },
     cwd: '/repo',
     executablePath: '/usr/local/bin/claude',
-    credentials: null,
     now: () => 1_000,
     onEvent: vi.fn(),
     onStatus: vi.fn(),

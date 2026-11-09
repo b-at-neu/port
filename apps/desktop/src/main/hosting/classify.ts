@@ -1,5 +1,5 @@
 // Unrecognised text is `stream-error` with the message carried verbatim, never a guessed reason.
-import type { CredentialsTell, RuntimeDiagnosis } from '@/types/runtime'
+import type { RuntimeDiagnosis } from '@/types/runtime'
 import type { SessionEndReason } from '@/types/hosting'
 import { classifyProbeFailure } from '@/main/runtime/classify'
 
@@ -15,8 +15,6 @@ export interface ClassifyEndInput {
   readonly text: string
   /** Whether this handle's own `close()` requested the abort, distinguishing a graceful stop from an unrequested one. */
   readonly closeRequested: boolean
-  readonly credentials: CredentialsTell | null
-  readonly now: number
 }
 
 export interface ClassifyEndResult {
@@ -27,7 +25,7 @@ export interface ClassifyEndResult {
 }
 
 function diagnose(input: ClassifyEndInput): RuntimeDiagnosis {
-  return classifyProbeFailure({ text: input.text, credentials: input.credentials, now: input.now })
+  return classifyProbeFailure({ text: input.text })
 }
 
 export function classifyEnd(input: ClassifyEndInput): ClassifyEndResult {

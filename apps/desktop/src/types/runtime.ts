@@ -47,8 +47,6 @@ export interface RuntimeProbe {
 export interface RunProbeParams {
   readonly executablePath: string
   readonly cwd: string
-  readonly credentials: CredentialsTell | null
-  readonly now: number
   readonly timeoutMs?: number
 }
 

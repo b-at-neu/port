@@ -273,7 +273,6 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
     const store = createHostedStore({
       getSdk: () => Promise.resolve(createFakeSdk(seen, labels, prs)),
       resolveClaudeExecutable: () => Promise.resolve({ ok: true, path: '/usr/local/bin/claude' }),
-      readCredentialsTell: () => Promise.resolve({ present: false, expiresAt: null, hasRefreshToken: false }),
       listSessionsForFork: () => Promise.resolve({ ok: true, sessions: [] }),
       env: {},
       platform: 'linux',
