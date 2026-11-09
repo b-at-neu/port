@@ -8,6 +8,11 @@ export function toReviewNode(raw: any): ReviewNode {
   return { body: raw?.body ?? '', submittedAt: raw?.submittedAt, commitOid: raw?.commit?.oid ?? null };
 }
 
+// The times the `needs human` label was added, read off a pull request's LABELED_EVENT timeline.
+export function needsHumanLabeledAt(timeline: any, needsHumanName: string): string[] {
+  return (timeline?.nodes ?? []).flatMap((n: any) => (n?.label?.name === needsHumanName && typeof n?.createdAt === 'string' ? [n.createdAt] : []));
+}
+
 // A raw statusCheckRollup's contexts.nodes, or null when the rollup is absent.
 export function toCheckContexts(rollup: any): readonly CheckContext[] | null {
   return rollup?.contexts?.nodes ?? null;

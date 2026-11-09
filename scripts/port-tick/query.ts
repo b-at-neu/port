@@ -48,16 +48,16 @@ export function buildQuery({
     prSet(
       'readyForReview',
       labels.readyForReview,
-      `mergeable headRefOid reviews(first: 30) { nodes { body submittedAt commit { oid } } } comments(last: 20) { nodes { body createdAt } } ${ROLLUP}`,
+      `mergeable headRefOid reviews(first: 30) { nodes { body submittedAt commit { oid } } } comments(last: 20) { nodes { body createdAt } } timelineItems(last: 20, itemTypes: [LABELED_EVENT]) { nodes { ... on LabeledEvent { createdAt label { name } } } } ${ROLLUP}`,
     ),
   );
-  parts.push(prSet('needsRevision', labels.needsRevision, 'mergeable reviews(first: 30) { nodes { body } } comments(last: 20) { nodes { body createdAt } }'));
+  parts.push(prSet('needsRevision', labels.needsRevision, 'mergeable headRefOid reviews(first: 30) { nodes { body } } comments(last: 20) { nodes { body createdAt } }'));
   parts.push(prSet('refreshBranch', labels.refreshBranch));
 
   // --- Gate sets ----------------------------------------------------------
   parts.push(issueSet('planReview', labels.planReview));
   parts.push(issueSet('blocked', labels.blocked));
-  parts.push(prSet('approved', labels.approved, `mergeable headRefOid ${ROLLUP}`));
+  parts.push(prSet('approved', labels.approved, `mergeable headRefOid comments(last: 20) { nodes { body createdAt } } ${ROLLUP}`));
   parts.push(prSet('needsHuman', labels.needsHuman));
 
   // --- In-flight sets -------------------------------------------------------
