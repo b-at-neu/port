@@ -7,7 +7,7 @@ import { pathOps as defaultPathOps } from '@/main/platform/paths'
 import { removeFile, writeTextFile } from '@/main/platform/files'
 import { appendAudit } from '@/main/writes/audit'
 import type { CommandResult } from '@/types/platform'
-import type { BranchHead,ReleaseAuditAction, ReleaseAuditEntry, ReleaseWriteContext, ReleaseWriteResult, VersionFileWrite } from '@/types/release'
+import type { BranchHead, ReleaseAuditAction, ReleaseAuditEntry, ReleaseWriteContext, ReleaseWriteResult, VersionFileWrite } from '@/types/release'
 import { bumpBranchName, bumpSubject, releasePrTitle, releaseTag } from '@/utils/release/format'
 
 async function record(ctx: ReleaseWriteContext, action: ReleaseAuditAction, call: readonly string[] | null, outcome: ReleaseWriteResult): Promise<ReleaseWriteResult> {

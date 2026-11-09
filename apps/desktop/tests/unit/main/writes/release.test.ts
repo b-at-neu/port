@@ -9,7 +9,8 @@ import { createBumpBranch, openBumpPr, openReleasePr, publishRelease } from '@/m
 import type { BranchHead, ReleaseGitRunner, ReleaseWriteContext } from '@/types/release'
 import { execFile } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises'
-import { devNull, tmpdir } from 'node:os'
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 
@@ -52,7 +53,9 @@ interface Fixture {
 const BUMPED = '{\n  "name": "x",\n  "version": "0.3.0"\n}\n'
 
 // A developer's own global config must not leak a signing key (or its absence) into the fixture.
-const ISOLATED_ENV: NodeJS.ProcessEnv = { GIT_CONFIG_GLOBAL: devNull, GIT_CONFIG_NOSYSTEM: '1' }
+const EMPTY_CONFIG = join(mkdtempSync(join(tmpdir(), 'release-gitconfig-')), 'gitconfig')
+writeFileSync(EMPTY_CONFIG, '')
+const ISOLATED_ENV: NodeJS.ProcessEnv = { GIT_CONFIG_GLOBAL: EMPTY_CONFIG, GIT_CONFIG_NOSYSTEM: '1' }
 
 const isolatedGit: ReleaseGitRunner = (args, options) => git(args, { ...options, env: { ...process.env, ...ISOLATED_ENV, ...options.env } })
 
