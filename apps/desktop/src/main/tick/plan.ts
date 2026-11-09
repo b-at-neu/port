@@ -107,6 +107,11 @@ function mergeabilityHeld(item: ReconciledItem, repoId: RepoId, unknownStreaks: 
   return null
 }
 
+/** When `needsHuman` was added — a plain unblock leaves no comment, so the gates read the label event. */
+function escalatedAtOf(item: ReconciledItem): string[] {
+  return item.stageHistory.filter((entry) => entry.key === 'needsHuman').map((entry) => entry.at)
+}
+
 /** The integration-red gate's held entry, or `null` to proceed. `refresh` is held as `integration-green` so `observe.ts` hands it to the refresh path; an unreadable `integrationChecks` holds rather than refreshes. */
 function integrationRedHeld(item: ReconciledItem, trigger: LabelKey, integrationChecks: IntegrationChecks | null, now: Date): TickHeld | null {
   const gate = integrationRedGate({
@@ -114,6 +119,7 @@ function integrationRedHeld(item: ReconciledItem, trigger: LabelKey, integration
     headRefOid: item.headRefOid ?? '',
     integration: integrationChecks === null ? null : new Map(Object.entries(integrationChecks)),
     now: now.toISOString(),
+    escalatedAt: escalatedAtOf(item),
   })
   if (gate.action === 'none' || gate.facts === undefined) return null
   const base = { number: item.number, kind: item.kind, trigger, contention: null }
@@ -234,7 +240,7 @@ function actionableAndHeld(
     if (agent === 'review') {
       // A null rollup was never selected, so the gate gets no check input and escalates.
       const checks = item.checkRollup === null ? undefined : zeroDiffChecksOf(item.checkRollup, checkDispositions, now.toISOString())
-      const gate = zeroDiffGate({ reviews: item.reviews ?? undefined, comments: item.comments ?? undefined, headRefOid: item.headRefOid ?? '', checks })
+      const gate = zeroDiffGate({ reviews: item.reviews ?? undefined, comments: item.comments ?? undefined, headRefOid: item.headRefOid ?? '', checks, escalatedAt: escalatedAtOf(item) })
       if (gate.action === 'escalate') {
         held.push({ number: item.number, kind: item.kind, trigger, reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff', reason: gate.reason ?? 'zero-diff' } })
         continue

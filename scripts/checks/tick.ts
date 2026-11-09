@@ -57,6 +57,9 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       integrationRedNames: modules['gates.ts'].integrationRedNames,
       integrationRedGate: modules['gates.ts'].integrationRedGate,
       cycleCapExceeded: modules['gates.ts'].cycleCapExceeded,
+      escalationRepeats: modules['gates.ts'].escalationRepeats,
+      withdrawalPosted: modules['gates.ts'].withdrawalPosted,
+      commentRepeats: modules['gates.ts'].commentRepeats,
       reviewDispatchFacts: modules['gates.ts'].reviewDispatchFacts,
       approvedReverify: modules['gates.ts'].approvedReverify,
       refreshWins: modules['gates.ts'].refreshWins,
@@ -313,8 +316,12 @@ function runCase(fn: string, impl: any, input: any): any {
     case 'zeroDiffGate': {
       const raw = input.checks;
       const checks = raw === undefined ? undefined : zeroDiffChecksOf(raw.contexts, raw.dispositions, raw.now);
-      return impl({ reviews: (input.reviews ?? []).map(toReviewNode), comments: input.comments, headRefOid: input.headRefOid, checks });
+      return impl({ reviews: (input.reviews ?? []).map(toReviewNode), comments: input.comments, headRefOid: input.headRefOid, checks, escalatedAt: input.escalatedAt });
     }
+    case 'escalationRepeats':
+    case 'withdrawalPosted':
+    case 'commentRepeats':
+      return impl(input);
     case 'integrationRedNames':
       return impl(input);
     case 'integrationRedGate':

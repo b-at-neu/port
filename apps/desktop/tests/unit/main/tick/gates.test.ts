@@ -21,6 +21,7 @@ interface ZeroDiffCase {
     readonly reviews: readonly RawReview[]
     readonly comments: readonly { readonly body: string; readonly createdAt: string }[]
     readonly headRefOid: string
+    readonly escalatedAt?: readonly string[]
     readonly checks?: { readonly contexts: readonly CheckContext[] | null; readonly dispositions: Readonly<Record<string, Disposition>>; readonly now: string | null }
   }
   readonly expected: { readonly action: string }
@@ -103,9 +104,9 @@ describe('gates — shared case table', () => {
   for (const row of table) {
     it(`${row.function} — ${row.name}`, () => {
       if (row.function === 'zeroDiffGate') {
-        const { reviews, comments, headRefOid, checks: raw } = row.input
+        const { reviews, comments, headRefOid, escalatedAt, checks: raw } = row.input
         const checks = raw === undefined ? undefined : zeroDiffChecksOf(raw.contexts, raw.dispositions, raw.now)
-        expect(zeroDiffGate({ reviews: reviews.map(toReviewNode), comments, headRefOid, checks })).toEqual(row.expected)
+        expect(zeroDiffGate({ reviews: reviews.map(toReviewNode), comments, headRefOid, checks, escalatedAt })).toEqual(row.expected)
         return
       }
       if (row.function === 'cycleCapExceeded') {

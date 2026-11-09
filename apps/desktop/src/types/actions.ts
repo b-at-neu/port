@@ -158,7 +158,8 @@ export interface EscalateToHumanParams {
   readonly number: number
   readonly trigger: LabelKey
   readonly viewer: string
-  readonly body: string
+  /** `null` swaps the labels and posts nothing — the escalation this repeats is already on the item. */
+  readonly body: string | null
   readonly action: string
   readonly auditDir: string
   readonly scratchDir: string

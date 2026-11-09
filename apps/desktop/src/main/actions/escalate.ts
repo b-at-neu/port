@@ -33,7 +33,7 @@ function buildWriteRequest(params: EscalateToHumanParams): LabelWriteRequest {
 
 export async function escalateToHuman(params: EscalateToHumanParams, deps: EscalateToHumanDeps = defaultEscalateDeps): Promise<EscalateToHumanResult> {
   const labels = await deps.applyLabels({ request: buildWriteRequest(params), repoRoot: params.entry.path, auditDir: params.auditDir })
-  if (labels.kind !== 'applied') return { labels, comment: null }
+  if (labels.kind !== 'applied' || params.body === null) return { labels, comment: null }
 
   const comment = await deps.postComment({
     request: { repoId: params.entry.id, repo: params.entry.config.repo, kind: params.kind, number: params.number, body: params.body, action: params.action, scratchDir: params.scratchDir },

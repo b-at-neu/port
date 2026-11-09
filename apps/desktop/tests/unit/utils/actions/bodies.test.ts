@@ -2,20 +2,20 @@ import { describe, expect, it } from 'vitest'
 import { CHANGES_REQUESTED_HEADING, CYCLE_GRANT_LINE, GATE_CLEARED_HEADING, REBASE_DECISIONS_LINE, changesRequestedBody, gateClearedBody } from '@/utils/actions/bodies'
 
 describe('gateClearedBody', () => {
-  it('names revision for the revision route', () => {
-    expect(gateClearedBody('revision')).toBe(`${GATE_CLEARED_HEADING}\nCleared by the operator in port: back to revision.`)
+  it('has no body for a plain revision clear — the label event is the record', () => {
+    expect(gateClearedBody('revision')).toBeNull()
   })
 
-  it('names review for the review route', () => {
-    expect(gateClearedBody('review')).toBe(`${GATE_CLEARED_HEADING}\nCleared by the operator in port: back to review.`)
+  it('has no body for a plain review clear', () => {
+    expect(gateClearedBody('review')).toBeNull()
   })
 
   it('names implementation for the implementation route', () => {
     expect(gateClearedBody('implementation')).toBe(`${GATE_CLEARED_HEADING}\nCleared by the operator in port: back to implementation.`)
   })
 
-  it('omits the cycle-grant block by default', () => {
-    expect(gateClearedBody('revision')).not.toContain(CYCLE_GRANT_LINE)
+  it('names the review route in a Cycle grant body', () => {
+    expect(gateClearedBody('review', { cycleGrant: true })).toContain(CYCLE_GRANT_LINE)
   })
 
   it('appends a Cycle grant block when cycleGrant is set', () => {
@@ -37,8 +37,8 @@ describe('gateClearedBody', () => {
     )
   })
 
-  it('adds no block for an empty decision list', () => {
-    expect(gateClearedBody('revision', { rebaseDecisions: [] })).not.toContain(REBASE_DECISIONS_LINE)
+  it('has no body for an empty decision list', () => {
+    expect(gateClearedBody('revision', { rebaseDecisions: [] })).toBeNull()
   })
 
   it('refuses a cycle grant together with rebase decisions', () => {

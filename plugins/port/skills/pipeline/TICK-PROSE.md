@@ -20,7 +20,7 @@ gh api graphql --include -F query=@.temp/tick-query.graphql --jq '{data, errors,
 
 The query is one `repository(owner:"<owner>", name:"<name>")` selection with one alias per set this tick needs, plus top-level `viewer { login }` and `rateLimit { cost remaining }` for the cost budget. Every connection carries `totalCount` beside `nodes`, and every issue/pull-request node carries `assignees(first:5){ nodes { login } }` — ownership is partitioned client-side now (see "Ownership is now enforced client-side" below), so **no alias filters by assignee**, unlike the old per-label REST calls. Aliases, unfiltered by assignee, `states: OPEN` on every connection:
 
-- **6 trigger sets** — `ready`, `planChangesRequested`, `planApproved` (adds `body`), `readyForReview` (adds `mergeable`, `headRefOid`, `reviews(first:30){ nodes { body submittedAt commit { oid } } }` for the zero-diff gate below, `comments(last:20){ nodes { body createdAt } }` for its `## Gate cleared` exception, and the head commit's `statusCheckRollup` for its check-only hold), `needsRevision` (adds `body`, `mergeable`, `reviews(first:30){ nodes { body } }` for the cycle cap, and `comments(last:20){ nodes { body createdAt } }` for its operator-granted cycles), `refreshBranch`. Read `rateLimit.cost` from the response after this widening rather than trusting the ~12-point figure below blindly — it is what the Cost budget paragraph already says to do, and the widened alias is exactly the kind of change that moves it.
+- **6 trigger sets** — `ready`, `planChangesRequested`, `planApproved` (adds `body`), `readyForReview` (adds `mergeable`, `headRefOid`, `reviews(first:30){ nodes { body submittedAt commit { oid } } }` for the zero-diff gate below, `comments(last:20){ nodes { body createdAt } }` for its `## Gate cleared` exception, `timelineItems(last:20, itemTypes:[LABELED_EVENT]){ nodes { ... on LabeledEvent { createdAt label { name } } } }` for its `<labels.needsHuman>` label-event clear, and the head commit's `statusCheckRollup` for its check-only hold), `needsRevision` (adds `body`, `mergeable`, `headRefOid`, `reviews(first:30){ nodes { body } }` for the cycle cap, and `comments(last:20){ nodes { body createdAt } }` for its operator-granted cycles), `refreshBranch`. Read `rateLimit.cost` from the response after this widening rather than trusting the ~12-point figure below blindly — it is what the Cost budget paragraph already says to do, and the widened alias is exactly the kind of change that moves it.
 - **4 gate sets** — `planReview` (adds `body`), `blocked`, `approved` (adds `headRefOid`, `mergeable`, and the latest commit's `statusCheckRollup` — see below), `needsHuman`.
 - **5 in-flight sets** — `planning`, `inProgress` (adds `body`), `reviewing`, `revising` (adds `body`), `refreshing`.
 - **`prOpened`** (adds `body`) — the whole unmerged-branch set for the file contention gate's occupied set, in the same call.
@@ -102,16 +102,19 @@ Every pull request is named by ticket, per "## Numbering".
 
 1. From the alias's `reviews`, take the newest node whose `body` starts with the literal `## Code Review` — the same predicate the cycle counter uses, so an empty drive-by review is never counted. **None** → dispatch.
 2. Its `commit.oid` differs from `headRefOid` → **dispatch**. Real progress always moves the head.
-3. Equal, **and** the newest `## Gate cleared` comment (from the alias's `comments`) is newer than that review's `submittedAt` → **dispatch, once**. The operator authorized this re-review through `unblock #N`; the next review resets the comparison by construction.
+3. Equal, **and** a `## Gate cleared` comment (from the alias's `comments`) **or** a `<labels.needsHuman>` labeled event (from the alias's `timelineItems`) is newer than that review's `submittedAt` → **dispatch, once**. The item sits at `<labels.readyForReview>` again, and the guard hook denies every removal of `<labels.needsHuman>` but the operator's `unblock #N`, so a newer label event is that clear. The next review resets the comparison by construction.
+
+   **Escalation dedup (steps 2a, 2b and 4, and the cycle cap).** Every escalation below ends with a hidden marker line `<!-- port:escalation <cause> <head-sha> -->`. When the newest `## Pipeline Escalation` in the alias's `comments` already ends with the same marker, skip the `gh pr comment` and still run the label swap and the announcement.
 2a. **Per-SHA cap.** Equal at step 2, count the `## Code Review` nodes whose `commit.oid` equals `headRefOid`. At or above `MAX_REVIEWS_PER_SHA` (2: the original review plus one repeat, the same number `artifacts.mjs audit` fails above) → **do not dispatch**, whatever a `## Gate cleared` or a check-only marker says: the operator override and the check-only recheck share that one repeat, and a review count on a head cannot go down. The way past it is a new head. Write `.temp/sha-cap-<pr>.md`:
 
    ```
    ## Pipeline Escalation
    Cycle <n> was the second review of `<sha>`, the most one head gets. A new head is the way past it.
+   <!-- port:escalation sha-cap <sha> -->
    ```
 
    then comment it, swap `<labels.readyForReview>` for `<labels.needsHuman>` as step 4 does, and announce that #<n>'s pull request hit the per-SHA review cap and that **Back to revision** is the only way forward.
-2b. **Integration-red hold.** Evaluated before steps 1–3, since a first review can be held too. Applies when the newest `## Integration red` comment (from the alias's `comments`) names a head SHA the current `headRefOid` starts with, and no `## Gate cleared` is newer than it — a push, including a refresh, ends the hold by changing the head. Parse its `- `<check>` — ` lines for the named checks, then reduce `integrationHistory` to each check's latest **concluded** status by name, newest commit first, and take the first match:
+2b. **Integration-red hold.** Evaluated before steps 1–3, since a first review can be held too. Applies when the newest `## Integration red` comment (from the alias's `comments`) names a head SHA the current `headRefOid` starts with, and no `## Gate cleared` comment or `<labels.needsHuman>` labeled event is newer than it — a push, including a refresh, ends the hold by changing the head. Parse its `- `<check>` — ` lines for the named checks, then reduce `integrationHistory` to each check's latest **concluded** status by name, newest commit first, and take the first match:
    - **Every named check is green on `<integration>`** → **do not dispatch review**. Treat the pull request as a Refresh sweep candidate with source `<labels.readyForReview>`, subject to the same-SHA guard and the per-tick cap, but post no `## Rebase required` comment — the refresh is not a conflict. Announce:
 
      > 🔄 #157's pull request: `dev` is green again on `test`, which held it. Refreshing it onto `dev` so review resumes on a head that includes the fix.
@@ -121,6 +124,7 @@ Every pull request is named by ticket, per "## Numbering".
      ## Pipeline Escalation
      `<integration>` stayed red on <checks> for 24 hours, so review of `<head-sha>` never resumed.
      The failure is not from this diff. Fix `<integration>`, then refresh the branch.
+     <!-- port:escalation integration-red <head-sha> -->
      ```
 
      then `gh pr comment <pr-number> --repo <repo> --body-file .temp/integration-red-escalation-<pr>.md`, `gh pr edit <pr-number> --repo <repo> --remove-label "<labels.readyForReview>" --add-label "<labels.needsHuman>"`, and announce:
@@ -152,6 +156,7 @@ Every pull request is named by ticket, per "## Numbering".
    ## Pipeline Escalation
    Cycle <n> already reviewed `<sha>` and the head has not moved, so no new review cycle was opened.
    Whatever is blocking this pull request is not visible to review or revision.
+   <!-- port:escalation zero-diff <sha> -->
    ```
 
    then `gh pr comment <pr-number> --repo <repo> --body-file .temp/zero-diff-<pr>.md`, `gh pr edit <pr-number> --repo <repo> --remove-label "<labels.readyForReview>" --add-label "<labels.needsHuman>"`, and announce:
@@ -223,7 +228,7 @@ The `needsRevision` alias in the same tick query already carries `reviews(first:
 
 **The effective cap is `reviewCycleCap` plus any operator-granted cycles on this pull request.** Count, from the same alias's `comments(last:20){ nodes { body createdAt } }`, the comments whose `body` starts with `## Gate cleared` **and** contains the line `### Cycle grant` — one grant per such comment, never a separate counter (see "Gate clear" → "Grant one more cycle" in `SKILL.md`, the one route that writes it). A grant older than the last 20 comments stops counting, which fails toward escalating again, recoverable by another `unblock #N`.
 
-**The cap is unconditional** — at or above the effective cap, escalate regardless of what the latest review found. At cycle 3+ a `<labels.needsRevision>` verdict reached *by a review finding* already implies Critical or Medium (the escalating bar), so a findings qualifier was redundant on the path it was written for, and unsatisfiable on every path that actually loops without one — `## Rebase required`, `## Approval withdrawn`, a liveness reset, or a manual re-label, all of which arrive here with a clean latest review. Write the note to `.temp/escalation-<pr>.md` with the Write tool — its `## Pipeline Escalation` first line names the cycle count and the effective cap, keeping the marker substring `review cycles reached the cap of` verbatim (`<n> review cycles reached the cap of <effective cap> (<reviewCycleCap> + <grants> grant(s))`, dropping the parenthetical when there are no grants) and never claims findings are open, since under this rule there need not be any — then
+**The cap is unconditional** — at or above the effective cap, escalate regardless of what the latest review found. At cycle 3+ a `<labels.needsRevision>` verdict reached *by a review finding* already implies Critical or Medium (the escalating bar), so a findings qualifier was redundant on the path it was written for, and unsatisfiable on every path that actually loops without one — `## Rebase required`, `## Approval withdrawn`, a liveness reset, or a manual re-label, all of which arrive here with a clean latest review. Write the note to `.temp/escalation-<pr>.md` with the Write tool — its `## Pipeline Escalation` first line names the cycle count and the effective cap, keeping the marker substring `review cycles reached the cap of` verbatim (`<n> review cycles reached the cap of <effective cap> (<reviewCycleCap> + <grants> grant(s))`, dropping the parenthetical when there are no grants) and never claims findings are open, since under this rule there need not be any — and ending with `<!-- port:escalation cycle-cap <headRefOid> -->` (skip the comment below when the newest `## Pipeline Escalation` already ends with it) — then
 
 ```bash
 gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --add-label "<labels.needsHuman>"

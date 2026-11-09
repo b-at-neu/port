@@ -341,6 +341,26 @@ export default async function ({ expect, fail, ok }: Reporter) {
       }
     }
     if (!violated) ok();
+
+    // pin: the escalation marker prefix and every cause the app emits ↔ `gates.ts`'s `escalationMarker` and `ESCALATION_CAUSES`
+    const budgetText = readFileSync(join(root, `${mainDispatchDir}/budget.ts`), 'utf8');
+    const gatesText = readFileSync(join(root, 'scripts/port-tick/gates.ts'), 'utf8');
+    const markerPrefix = '<!-- port:escalation ';
+    let markerDrift = false;
+    for (const [name, text] of [['gates.ts', gatesText], [observationFile, observationText], [`${mainDispatchDir}/budget.ts`, budgetText]] as const) {
+      if (!text.includes(markerPrefix)) {
+        markerDrift = true;
+        fail('desktop-dispatch', `${name} no longer writes the '${markerPrefix}' escalation marker prefix`);
+      }
+    }
+    const appCauses: readonly (readonly [string, string])[] = [['zero-diff', observationText], ['sha-cap', observationText], ['cycle-cap', observationText], ['integration-red', observationText], ['refresh-stuck', observationText], ['budget', budgetText]];
+    for (const [cause, text] of appCauses) {
+      if (!gatesText.includes(`'${cause}'`) || !text.includes(cause)) {
+        markerDrift = true;
+        fail('desktop-dispatch', `the '${cause}' escalation cause is missing from gates.ts's ESCALATION_CAUSES or from the app file that emits it`);
+      }
+    }
+    if (!markerDrift) ok();
   }
 
   // --- .autoApprovals is read under main/ only by dispatchable.ts's autoApprovableFrom —

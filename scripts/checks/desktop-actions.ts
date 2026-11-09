@@ -114,7 +114,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
       GATE_CLEARED_HEADING: string;
       PIPELINE_ESCALATION_HEADING: string;
       changesRequestedBody: (headRefOid: string, note: string) => string;
-      gateClearedBody: (route: 'revision' | 'review', opts?: { rebaseDecisions?: { id: string; path: string; letter: string; label: string }[] }) => string;
+      gateClearedBody: (route: 'revision' | 'review', opts?: { rebaseDecisions?: { id: string; path: string; letter: string; label: string }[] }) => string | null;
     };
     const artifacts = (await import(pathToFileURL(join(root, 'plugins/port/bin/artifacts.mjs')).href)) as {
       CHANGES_REQUESTED_HEADING: string;
@@ -137,7 +137,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
         { id: 'D2', path: 'src/format.ts', letter: 'C', label: 'keep both rounding modes' },
       ],
     });
-    const decisionLines = gateCleared.split('\n').filter((line) => line.startsWith('- D'));
+    const decisionLines = (gateCleared ?? '').split('\n').filter((line) => line.startsWith('- D'));
     expect(
       decisionLines.length === 2 && decisionLines.every((line) => /^- D\d+ `[^`]+` — \*\*[A-Z] [^*]+\*\*$/.test(line)),
       'desktop-actions',

@@ -4,9 +4,9 @@ import { partitionOwnership, issueSessionRequiredReason, prSessionRequiredReason
 import { parseFilesBlock, gateCandidates } from './contention.ts';
 import { rollupVerdict, zeroDiffChecksOf, historyDerivedChecks, preReviewRerun } from './checks.ts';
 import type { RerunRecord } from './checks.ts';
-import { mergeabilityRoute, refreshDecision, capRefreshes, zeroDiffGate, integrationRedGate, cycleCapExceeded, cycleGrantCount, approvedReverify, refreshWins } from './gates.ts';
+import { mergeabilityRoute, refreshDecision, capRefreshes, zeroDiffGate, integrationRedGate, cycleCapExceeded, cycleGrantCount, approvedReverify, refreshWins, escalationRepeats, withdrawalPosted } from './gates.ts';
 import type { IntegrationStatus } from './gates.ts';
-import { toReviewNode, toCheckContexts, assigneeLoginsOf } from './wire.ts';
+import { toReviewNode, toCheckContexts, assigneeLoginsOf, needsHumanLabeledAt } from './wire.ts';
 import { refreshSweepWrite, zeroDiffWrite, checkRerunWrite, integrationRedEscalationWrite, cycleCapWrite, approvalWithdrawnWrite, approvalEscalateWrite, strandedRestoreWrite } from './writes.ts';
 import { strandedPullRequests, lastKnownTrigger } from './reconcile.ts';
 
@@ -102,7 +102,8 @@ export function planReadyForReview(cfg: any, actionable: any, refreshBranchNumbe
       acc.unknownStreakUpdates.push({ item: item.number, remove: true });
     }
 
-    const irg = integrationRedGate({ comments: item.comments?.nodes, headRefOid: item.headRefOid, integration: integrationChecks, now: clock });
+    const escalatedAt = needsHumanLabeledAt(item.timelineItems, cfg.labels.needsHuman);
+    const irg = integrationRedGate({ comments: item.comments?.nodes, headRefOid: item.headRefOid, integration: integrationChecks, now: clock, escalatedAt });
     if (irg.action === 'hold') {
       acc.announce.push({ kind: 'integration-red-hold', item: item.number, facts: irg.facts });
       continue;
@@ -113,13 +114,14 @@ export function planReadyForReview(cfg: any, actionable: any, refreshBranchNumbe
     }
     if (irg.action === 'escalate') {
       acc.writes.push(integrationRedEscalationWrite({ repo: cfg.repo, labels: cfg.labels, number: item.number }));
-      acc.announce.push({ kind: 'integration-red-escalated', item: item.number, facts: irg.facts });
+      const comment = !escalationRepeats({ comments: item.comments?.nodes, cause: 'integration-red', sha: item.headRefOid });
+      acc.announce.push({ kind: 'integration-red-escalated', item: item.number, facts: { ...irg.facts, comment } });
       continue;
     }
 
     const contexts = toCheckContexts(item.commits?.nodes?.[0]?.commit?.statusCheckRollup);
     const checks = zeroDiffChecksOf(contexts, cfg.checkDispositions, clock);
-    const zd = zeroDiffGate({ reviews: (item.reviews?.nodes ?? []).map(toReviewNode), comments: item.comments?.nodes, headRefOid: item.headRefOid, checks });
+    const zd = zeroDiffGate({ reviews: (item.reviews?.nodes ?? []).map(toReviewNode), comments: item.comments?.nodes, headRefOid: item.headRefOid, checks, escalatedAt });
     if (zd.action === 'dispatch' || zd.action === 'dispatch-once') {
       const record: RerunRecord | undefined = rerunState[item.number];
       if (record !== undefined && record.sha !== item.headRefOid) acc.rerunUpdates.push({ item: item.number, remove: true });
@@ -147,7 +149,8 @@ export function planReadyForReview(cfg: any, actionable: any, refreshBranchNumbe
     if (zd.action === 'escalate') {
       const capped = zd.reason === 'sha-cap' ? zd.facts : null;
       acc.writes.push(zeroDiffWrite({ repo: cfg.repo, labels: cfg.labels, number: item.number, ...(capped === null ? {} : { reason: 'sha-cap' as const, ...capped }) }));
-      acc.announce.push({ kind: 'zero-diff', item: item.number, facts: capped === null ? { reason: 'zero-diff' } : { reason: 'sha-cap', ...capped } });
+      const comment = !escalationRepeats({ comments: item.comments?.nodes, cause: capped === null ? 'zero-diff' : 'sha-cap', sha: item.headRefOid });
+      acc.announce.push({ kind: 'zero-diff', item: item.number, facts: capped === null ? { reason: 'zero-diff', comment } : { reason: 'sha-cap', ...capped, comment } });
       continue;
     }
     acc.dispatch.push({ stage: 'review-agent', item: item.number, kind: 'review', model: cfg.models.review, reason: 'ready for review' });
@@ -171,7 +174,8 @@ export function planNeedsRevision(cfg: any, actionable: any, refreshBranchNumber
     const comments = item.comments?.nodes;
     if (cycleCapExceeded((item.reviews?.nodes ?? []).map(toReviewNode), cfg.reviewCycleCap, comments)) {
       acc.writes.push(cycleCapWrite({ repo: cfg.repo, labels: cfg.labels, number: item.number }));
-      acc.announce.push({ kind: 'cycle-cap', item: item.number, facts: { cap: cfg.reviewCycleCap, grants: cycleGrantCount(comments) } });
+      const comment = !escalationRepeats({ comments, cause: 'cycle-cap', sha: item.headRefOid ?? '' });
+      acc.announce.push({ kind: 'cycle-cap', item: item.number, facts: { cap: cfg.reviewCycleCap, grants: cycleGrantCount(comments), comment } });
       continue;
     }
     acc.dispatch.push({ stage: 'revise-agent', item: item.number, kind: 'revise', model: cfg.models.revise, reason: 'needs revision' });
@@ -193,10 +197,10 @@ export function planApproved(cfg: any, actionable: any, refreshBranchNumbers: nu
     const result = approvedReverify({ verdict, mergeable: item.mergeable, historyDerived: historyDerivedChecks(dispositions) });
     if (result.action === 'escalate') {
       acc.writes.push(approvalEscalateWrite({ repo: cfg.repo, labels: cfg.labels, number: item.number }));
-      acc.announce.push({ kind: 'approval-escalated', item: item.number, facts: { red: result.red } });
+      acc.announce.push({ kind: 'approval-escalated', item: item.number, facts: { red: result.red, comment: !withdrawalPosted({ comments: item.comments?.nodes, sha: item.headRefOid }) } });
     } else if (result.action === 'withdraw') {
       acc.writes.push(approvalWithdrawnWrite({ repo: cfg.repo, labels: cfg.labels, number: item.number }));
-      acc.announce.push({ kind: 'approval-withdrawn', item: item.number, facts: { red: result.red } });
+      acc.announce.push({ kind: 'approval-withdrawn', item: item.number, facts: { red: result.red, comment: !withdrawalPosted({ comments: item.comments?.nodes, sha: item.headRefOid }) } });
     } else if (result.action === 'refresh-in-place') {
       acc.refreshCandidates.push({ number: item.number, headRefOid: item.headRefOid, sourceLabelKey: 'approved' });
     } else if (result.action === 'announce-ready') {

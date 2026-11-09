@@ -43,7 +43,7 @@ describe('unblockConsequence', () => {
   it('keeps the pull request wording, with and without rebase decisions', () => {
     const decision = { id: 'D1', path: 'a.ts', summary: null, options: [], recommended: null }
     expect(unblockConsequence(context({ decisions: [decision] }))).toContain('sends it to revision')
-    expect(unblockConsequence(context())).toContain("Unblocking says you've handled this")
+    expect(unblockConsequence(context())).toContain('No comment is posted — the label change is the record.')
   })
 })
 

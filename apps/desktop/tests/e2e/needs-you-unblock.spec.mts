@@ -1,4 +1,4 @@
-// Flow 2: Unblock from Needs you — the comment lands before the label swap.
+// Flow 2: Unblock from Needs you — a plain clear swaps the label and posts no comment.
 import { expect, test } from '@playwright/test'
 import { assertNoDisallowedCalls, launchE2EApp } from './harness/app.mjs'
 import type { E2EApp } from './harness/app.mjs'
@@ -21,7 +21,7 @@ test.afterEach(async ({}) => {
   await harness.close()
 })
 
-test('unblocks a needs-human PR, removing the label and posting Gate cleared, in order', async () => {
+test('unblocks a needs-human PR, removing the label and posting no comment', async () => {
   const { page } = harness
 
   await page.getByRole('link', { name: /^Needs you/ }).click()
@@ -34,18 +34,19 @@ test('unblocks a needs-human PR, removing the label and posting Gate cleared, in
 
   await expect(page.getByRole('dialog')).toBeHidden()
   await expect(page.locator('[data-sonner-toast]')).toContainText('unblocked', { timeout: 15_000 })
+  await expect(page.locator('[data-sonner-toast]')).not.toContainText('Gate cleared')
   await expect(page.locator('[data-slot="needs-you-empty"]')).toBeVisible()
 
   const calls = await harness.calls()
   const editIndex = calls.findIndex((call) => call.command === 'gh' && call.args[0] === 'pr' && call.args[1] === 'edit' && call.args[2] === '202')
   const commentIndex = calls.findIndex((call) => call.command === 'gh' && call.args[0] === 'pr' && call.args[1] === 'comment' && call.args[2] === '202')
 
-  expect(commentIndex).toBeGreaterThanOrEqual(0)
-  expect(editIndex).toBeGreaterThan(commentIndex)
+  expect(commentIndex).toBe(-1)
+  expect(editIndex).toBeGreaterThanOrEqual(0)
   expect(calls[editIndex]?.args).toContain('--remove-label')
 
   const state = await harness.state()
   const pull = state.pulls.find((p) => p.number === 202)
   expect(pull?.labels).not.toContain('needs human')
-  expect(pull?.comments?.at(-1)).toContain('## Gate cleared')
+  expect(pull?.comments ?? []).toEqual([])
 })

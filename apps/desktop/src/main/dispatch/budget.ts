@@ -41,7 +41,8 @@ export function sumCostUsd(records: readonly StageRecord[]): number | null {
   return known.reduce((a, b) => a + b, 0)
 }
 
-/** `## Pipeline Escalation`'s body — `line` is the gate's own `exceeded` line, carried verbatim. */
-export function escalationBody(line: string): string {
-  return `## Pipeline Escalation\n${line}\nThis app's dispatcher stopped here instead of dispatching. Raise \`budget.wallClockMinutes\`, or take the ticket over by hand.`
+/** `## Pipeline Escalation`'s body — `line` is the gate's own `exceeded` line, carried verbatim. A pull request's `sha` adds the `budget` marker a repeat is matched on. */
+export function escalationBody(line: string, sha: string | null): string {
+  const marker = sha === null || sha === '' ? '' : `\n<!-- port:escalation budget ${sha} -->`
+  return `## Pipeline Escalation\n${line}\nThis app's dispatcher stopped here instead of dispatching. Raise \`budget.wallClockMinutes\`, or take the ticket over by hand.${marker}`
 }
