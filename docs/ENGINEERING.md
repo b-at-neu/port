@@ -209,9 +209,9 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 **`apps/desktop/src/main/writes/`**
 - only GitHub writer; only `command.ts` names `--add-label`/`--remove-label`
 - never `merge`, `close`, `--delete-branch`, or `ready`
-- `release.ts` writes the bump commit through the Git Data API from oids the status read supplied, so the operator's checkout is never touched; the release tag exists only because `gh release create` made it
+- `release.ts` builds the bump commit with git plumbing in the registered clone under a throwaway `GIT_INDEX_FILE`, signs it with `commit-tree -S` (never an unsigned fallback) and pushes it to a new `bump/v…` branch that is never overwritten, so the operator's checkout and index are never touched; the release tag exists only because `gh release create` made it
 - a release write has no ownership gate — it writes no pipeline label, and terminal ownership is about dispatch — and appends one `ReleaseAuditEntry` per attempt
-- `allow.ts` writes its commit through the Git Data API like `release.ts`, from the oid `main/github/allow.ts` read the two files at, and appends one `AllowAuditEntry` per attempt; a stale `allow/…` branch fails with its name rather than being deleted or force-updated
+- `allow.ts` writes its commit through the Git Data API, from the oid `main/github/allow.ts` read the two files at, and appends one `AllowAuditEntry` per attempt; a stale `allow/…` branch fails with its name rather than being deleted or force-updated
 
 **`apps/desktop/src/renderer/audit/`**
 - reads `audit:list` only; the screen is read-only and makes no write
