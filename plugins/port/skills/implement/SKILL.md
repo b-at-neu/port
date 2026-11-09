@@ -108,7 +108,7 @@ Then work inside the worktree and run each entry in `commands.bootstrap` in orde
 
 ## 5. Follow the agent file
 
-Read the resolved agent file and follow it end to end: label swaps, the plan checklist, the file-based commit format, `commands.checks`, push by refspec, the pull request body format, base `<integration>`, the issue's assignee, thread resolution, the revision note. Read `docs.engineering` too when it is set, as the agent file requires.
+Read the resolved agent file and follow it end to end: label swaps, the plan checklist, the file-based commit format, `commands.checks`, push by refspec, the pull request body format, base `<integration>`, the issue's assignee, thread replies and resolution. Read `docs.engineering` too when it is set, as the agent file requires.
 
 **Carry the marker into the pull request (impl mode).** The cockpit re-reads it there to decide stage 4, so the description must repeat it verbatim, directly under `Closes #N`:
 

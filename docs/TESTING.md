@@ -53,7 +53,6 @@ The output formats live in `FORMATS.md` prose and, until now, were asserted nowh
 node plugins/port/bin/artifacts.mjs check commit .temp/commit-msg.txt --issue 149      # one artifact file, offline
 node plugins/port/bin/artifacts.mjs check pr-body .temp/pr-149.md --issue 149
 node plugins/port/bin/artifacts.mjs check review .temp/review-65.json --cycle 1
-node plugins/port/bin/artifacts.mjs check revision .temp/revision-65.md --cycle 1
 node plugins/port/bin/artifacts.mjs check withdrawn .temp/withdrawn-196.md
 node plugins/port/bin/artifacts.mjs check rebase-required .temp/rebase-required-196.md
 
@@ -62,7 +61,7 @@ node plugins/port/bin/artifacts.mjs audit         # the 5 most recent, plus the 
 node plugins/port/bin/artifacts.mjs audit --limit 10
 ```
 
-**`check <kind> <file>` is the earlier net, not a second layer.** It is what `commands.artifacts` points the three stage agents at: each validates the file it just wrote — a commit message, a pull request body, a review payload, a revision note — before producing it, so a malformed one fails in the worktree seconds after it is written instead of after `<labels.approved>`. It is offline: no `gh`, no network, no config read, and it works in any worktree, including one with no `.claude/port.config.json`. A repository with no Node leaves `commands.artifacts` null and gets no production-time validation at all — `audit` below is then the only net.
+**`check <kind> <file>` is the earlier net, not a second layer.** It is what `commands.artifacts` points the three stage agents at: each validates the file it just wrote — a commit message, a pull request body, a review payload — before producing it, so a malformed one fails in the worktree seconds after it is written instead of after `<labels.approved>`. It is offline: no `gh`, no network, no config read, and it works in any worktree, including one with no `.claude/port.config.json`. A repository with no Node leaves `commands.artifacts` null and gets no production-time validation at all — `audit` below is then the only net.
 
 **`audit [<pr>...] [--limit <n>]`** now runs on every push (`opened`/`synchronize`) as well as at `<labels.approved>`, unchanged in what it asserts either way. Needs `gh` and a login; no model calls. This repository's own pull requests are the fixtures — no sandbox repository to maintain, and no stubbed `gh` whose fidelity has to be trusted.
 
@@ -70,7 +69,6 @@ node plugins/port/bin/artifacts.mjs audit --limit 10
 | --- | --- |
 | Body opens `Closes #N`, carries `## Summary` / `## Changes` / `## Testing plan` / `## Automated checks`, and the testing plan is a real `- [ ]` checklist | Pull request description format |
 | Every review heading is `## Code Review — Cycle <n> · <approved\|needs revision\|blocked — checks pending>` with a counts line under it, cycles running 1..N | Reviews and revisions |
-| Revision notes are `## Revision — Cycle <n>` plus one `fixed … · skipped … · <sha>` line or a `check <name> · <sha>` line in check-fix mode, no cycle above the review count | Reviews and revisions |
 | An `## Approval withdrawn` comment names both a check and a 7–40 character hex SHA | Check evidence — the `<labels.approved>` carve-out |
 | A `## Rebase required` comment names both a base branch and a 7–40 character hex SHA | Rebase required |
 | Commit subjects are `#N <imperative lowercase>`, under 80 characters, no trailing period, with a `Co-Authored-By:` trailer | Commit messages |

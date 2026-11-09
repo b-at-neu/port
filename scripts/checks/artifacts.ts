@@ -61,7 +61,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   // --- Artifact validator's patterns accept a good example, reject a bad one. The commit
   // case uses the real historical failure: a paragraph with no '#N ' prefix. ---
   {
-    const { COMMIT_SUBJECT, REVIEW_HEADING, REVISION_HEADING, REVISION_OPENS, REVISION_DETAIL, OPERATOR_ONLY_STEP, CHECKS } =
+    const { COMMIT_SUBJECT, REVIEW_HEADING, OPERATOR_ONLY_STEP, CHECKS } =
       await import(pathToFileURL(join(root, 'plugins/port/bin/artifacts.mjs')).href);
 
     const cases = [
@@ -72,19 +72,12 @@ export default async function ({ expect, fail, ok }: Reporter) {
         'The first commit on this branch has a malformed subject line: instead of the required format, its subject is an entire paragraph of explanatory text describing everything that changed across every file touched by this pull request in exhaustive detail',
       ],
       ['REVIEW_HEADING', REVIEW_HEADING, '## Code Review — Cycle 1 · approved', '## Code Audit — Cycle 1 · approved'],
-      ['REVISION_HEADING', REVISION_HEADING, '## Revision — Cycle 1', '## Revision (Cycle 1)'],
       ['OPERATOR_ONLY_STEP', OPERATOR_ONLY_STEP, '- [ ] **operator-only** click the button', '- [ ] click the button'],
     ];
     for (const [name, re, good, bad] of cases) {
       if (!re.test(good)) fail('artifacts-patterns', `${name} rejects its own good example ${JSON.stringify(good)}`);
       else expect(!re.test(bad), 'artifacts-patterns', `${name} accepts its bad example ${JSON.stringify(bad)}`);
     }
-
-    const goodDetail = 'fixed R1-C1 · abc1234';
-    const badDetail = 'Fixed the critical issue in the commit abc1234';
-    if (!(REVISION_OPENS.test(goodDetail) && REVISION_DETAIL.test(goodDetail))) {
-      fail('artifacts-patterns', `REVISION_DETAIL rejects its own good example ${JSON.stringify(goodDetail)}`);
-    } else expect(!(REVISION_OPENS.test(badDetail) && REVISION_DETAIL.test(badDetail)), 'artifacts-patterns', `REVISION_DETAIL accepts its bad example ${JSON.stringify(badDetail)}`);
 
     // withdrawn / rebase-required return { ok } from a closure, not a regex, so they're
     // exercised against canonical bodies (good), the same with only the SHA (bad: names no fact), and a renamed heading (bad: wrong line 1).
@@ -179,7 +172,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     const noCritical = JSON.stringify({ event: 'COMMENT', body: `## Code Review — Cycle 2 · needs revision\n2 Medium\n${marker}`, comments: [] });
     expect(!run(noCritical, strict).ok, 'artifacts-review-marker', 'strict review accepts a marker with no Critical in the counts line');
     expect(run(noCritical).ok, 'artifacts-review-marker', 'non-strict review rejects a marker with no Critical in the counts line');
-    expect(CHECKS.revision.run('## Revision — Cycle 2\nfixed 0 · skipped 1 · abc1234 · reran `run-e2e (macos-latest)`').ok, 'artifacts-review-marker', 'revision rejects a reran suffix');
+    expect(CHECKS.revision === undefined, 'artifacts-review-marker', "artifacts.mjs still registers the retired 'revision' check kind");
   }
 
   // --- Screenshots: the pr-body section rules and the publisher's pure helpers accept a good case and reject each bad one. ---

@@ -11,9 +11,7 @@ export const CYCLE_CAP_ESCALATION_MARKER = 'review cycles reached the cap of'
 export const CYCLE_GRANT_LINE = '### Cycle grant'
 export const REBASE_DECISIONS_LINE = '### Rebase decisions'
 
-// The unblock comment, plus either a `### Cycle grant` block (counted by
-// `cycleGrantCount`) or a `### Rebase decisions` block — never both. A plain
-// pull-request clear is the label event alone, so it has no body.
+// A `### Cycle grant` or `### Rebase decisions` block, never both; a plain pull-request clear has no body.
 export function gateClearedBody(
   route: 'revision' | 'review' | 'implementation',
   opts?: { readonly cycleGrant?: boolean; readonly rebaseDecisions?: readonly { readonly id: string; readonly path: string; readonly letter: string; readonly label: string }[] },
