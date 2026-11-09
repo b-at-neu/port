@@ -25,6 +25,8 @@ const LABEL_EVENTS_FIELD = `timelineItems(last: ${LABEL_EVENT_PAGE_SIZE}, itemTy
 const ISSUE_SWEEP_FIELDS = `number title url body state updatedAt assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } } labels(first: ${SWEEP_LABEL_PAGE_SIZE}) { totalCount nodes { name } }`
 
 const BLOCKER_COMMENTS_FIELD = `comments(last: ${BLOCKER_COMMENT_PAGE_SIZE}) { nodes { body createdAt url } }`
+const CLOSING_PULL_REQUEST_PAGE_SIZE = 5
+const CLOSING_PULL_REQUESTS_FIELD = `closedByPullRequestsReferences(first: ${CLOSING_PULL_REQUEST_PAGE_SIZE}, includeClosedPrs: true) { nodes { number state } }`
 
 // mergeable is the mergeability precondition mergeabilityRoute reads.
 const PULL_REQUEST_SWEEP_FIELDS = `${ISSUE_SWEEP_FIELDS} mergedAt headRefOid mergeable`
@@ -91,6 +93,8 @@ export interface ItemDetailRef {
   readonly rollup: boolean
   /** True only for an issue at the blocked stage — its newest comments carry the blocker's reason. */
   readonly blockerComments: boolean
+  /** True only for an issue at `pr opened` — the pull requests closing it, whatever their state, since the open-only sweep cannot see a merged one. */
+  readonly closingPullRequests: boolean
 }
 
 interface ItemDetailAlias extends ItemDetailRef {
@@ -112,7 +116,8 @@ export function buildItemDetailsQuery(refs: readonly ItemDetailRef[]): ItemDetai
     const alias = `d${idx}`
     if (ref.kind === 'issue') {
       const comments = ref.blockerComments ? ` ${BLOCKER_COMMENTS_FIELD}` : ''
-      fields.push(`  ${alias}: issue(number: ${ref.number}) { ${LABEL_EVENTS_FIELD} ${blockedByField(DETAIL_BLOCKER_PAGE_SIZE)}${comments} }`)
+      const closing = ref.closingPullRequests ? ` ${CLOSING_PULL_REQUESTS_FIELD}` : ''
+      fields.push(`  ${alias}: issue(number: ${ref.number}) { ${LABEL_EVENTS_FIELD} ${blockedByField(DETAIL_BLOCKER_PAGE_SIZE)}${comments}${closing} }`)
     } else {
       const rollup = ref.rollup ? ' ...CheckRollupFields' : ''
       fields.push(`  ${alias}: pullRequest(number: ${ref.number}) { ${PULL_REQUEST_DETAIL_FIELDS}${rollup} }`)

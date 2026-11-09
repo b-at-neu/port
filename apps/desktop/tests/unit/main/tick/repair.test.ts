@@ -135,10 +135,16 @@ describe('repairsOf — artifact shapes (issues only)', () => {
     expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'plan-missing-approved', labels: ['planApproved'], agent: null }])
   })
 
-  it('prOpened with linkReason counterpart-not-open reports pr-missing', () => {
+  it('prOpened with linkReason counterpart-not-open (closed unmerged) reports pr-missing', () => {
     const result = repairsOf({ items: [atStage('prOpened', 'terminal', { linkReason: 'counterpart-not-open' })], endedStages: [], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
     expect(result.observations).toEqual([])
     expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'pr-missing', labels: ['prOpened'], agent: null }])
+  })
+
+  it('prOpened with linkReason counterpart-merged produces no report and no observation', () => {
+    const result = repairsOf({ items: [atStage('prOpened', 'terminal', { linkReason: 'counterpart-merged' })], endedStages: [], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
+    expect(result.observations).toEqual([])
+    expect(result.reports).toEqual([])
   })
 
   it('a pull request never triggers an artifact shape', () => {

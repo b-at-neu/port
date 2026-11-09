@@ -147,9 +147,15 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
   const items: ReconciledItem[] = pipelineFetch.items.map((item) => {
     const stageResult = stageOf(item.matchedKeys, vocabulary)
     const linked = item.kind === 'pull-request' ? (prLinks.get(item.number) ?? null) : (issueLinks.get(item.number) ?? null)
-    // An issue carrying `prOpened` with no link in the open sweep means that pull request is no longer open, never "awaiting merge".
+    // An issue carrying `prOpened` with no link in the open sweep means that pull request is no longer open, never "awaiting merge"; only a positively read MERGED closer makes it `counterpart-merged`.
     const linkReason: LinkReason | null =
-      linked !== null ? null : item.kind === 'pull-request' || !item.matchedKeys.includes('prOpened') ? 'no-closing-keyword' : 'counterpart-not-open'
+      linked !== null
+        ? null
+        : item.kind === 'pull-request' || !item.matchedKeys.includes('prOpened')
+          ? 'no-closing-keyword'
+          : item.closingPullRequests?.some((pr) => pr.state === 'MERGED')
+            ? 'counterpart-merged'
+            : 'counterpart-not-open'
 
     const sessionRequired = sessionRequiredAt(item.body, item.kind)
     const attachTarget = { number: item.number, linked }
