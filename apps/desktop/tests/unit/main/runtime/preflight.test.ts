@@ -91,7 +91,7 @@ describe('runtimePreflight', () => {
     expect(result.version).toBeNull()
   })
 
-  it('#145: token-stale surfaces before any probe would run', async () => {
+  it('#677: an expired access token with a refresh token is unverified, never token-stale', async () => {
     const result = await runtimePreflight({
       resolveClaudeExecutable: () => Promise.resolve({ ok: true, path: '/usr/bin/claude' }),
       readClaudeVersion: () => Promise.resolve({ ok: true, raw: '2.1.0', belowMinimum: false }),
@@ -100,7 +100,7 @@ describe('runtimePreflight', () => {
       platform: 'linux',
       now: () => NOW,
     })
-    expect(result.diagnosis).toBe('token-stale')
+    expect(result.diagnosis).toBe('unverified')
   })
 
   it('a healthy install is unverified, carrying the resolved path and version', async () => {
@@ -144,7 +144,6 @@ function probeDeps(overrides: Partial<RuntimeProbeDeps>): RuntimeProbeDeps {
   return {
     listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
     resolveClaudeExecutable: () => Promise.resolve({ ok: true, path: '/usr/bin/claude' }),
-    readCredentialsTell: () => Promise.resolve({ present: false, expiresAt: null, hasRefreshToken: false }),
     probe: () => Promise.resolve({ diagnosis: 'verified', detail: null }),
     ensureDirectory: () => Promise.resolve({ ok: true, value: undefined }),
     env: {},

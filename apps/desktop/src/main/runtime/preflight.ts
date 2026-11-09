@@ -48,7 +48,7 @@ export async function runtimePreflight(deps: RuntimePreflightDeps = defaultPrefl
       version: null,
       credentials: null,
       apiKeyInEnvironment: apiKeyInEnvironment(deps.env),
-      diagnosis: classifyPreflight({ locate: located.kind, versionUsable: false, credentials: null, now }),
+      diagnosis: classifyPreflight({ locate: located.kind, versionUsable: false }),
       detail: located.kind === 'bundled-fallback' ? located.path : null,
     }
   }
@@ -62,7 +62,7 @@ export async function runtimePreflight(deps: RuntimePreflightDeps = defaultPrefl
     version: version.ok ? { raw: version.raw, belowMinimum: version.belowMinimum } : null,
     credentials,
     apiKeyInEnvironment: apiKeyInEnvironment(deps.env),
-    diagnosis: classifyPreflight({ locate: 'found', versionUsable: version.ok, credentials, now }),
+    diagnosis: classifyPreflight({ locate: 'found', versionUsable: version.ok }),
     detail: null,
   }
 }
@@ -70,7 +70,6 @@ export async function runtimePreflight(deps: RuntimePreflightDeps = defaultPrefl
 export interface RuntimeProbeDeps {
   readonly listRepositories: typeof listRepositories
   readonly resolveClaudeExecutable: typeof resolveClaudeExecutable
-  readonly readCredentialsTell: typeof readCredentialsTell
   readonly probe: RuntimeProbeFn
   readonly ensureDirectory: typeof ensureDirectory
   readonly env: NodeJS.ProcessEnv
@@ -81,7 +80,6 @@ export interface RuntimeProbeDeps {
 const defaultRuntimeProbeDeps: RuntimeProbeDeps = {
   listRepositories,
   resolveClaudeExecutable,
-  readCredentialsTell,
   probe: createRuntimeProbe(),
   ensureDirectory,
   env: process.env,
@@ -133,8 +131,7 @@ export async function runtimeProbe(params: RunRuntimeProbeParams, deps: RuntimeP
     }
   }
 
-  const credentials = await deps.readCredentialsTell()
-  const outcome = await deps.probe({ executablePath: located.path, cwd, credentials, now: deps.now() })
+  const outcome = await deps.probe({ executablePath: located.path, cwd })
 
   return {
     checkedAt,

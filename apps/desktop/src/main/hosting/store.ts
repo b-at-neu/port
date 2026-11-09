@@ -1,7 +1,6 @@
 import type { HostedHandle, MintedRestorable, SessionMarksTracker } from '@/types/hosting'
 import type { HostedQueryFn, HostedSdk } from '@/main/hosting/sdk'
 import type { WhichEnv, WhichOptions, WhichResult, FileResult, DirEntry } from '@/types/platform'
-import type { CredentialsTell } from '@/types/runtime'
 import type { HostingPersistence, SessionHistory } from '@/types/hosting'
 import type { ExpectedComponents, PluginRequest } from '@/types/hosting-plugin'
 import type { RemoveSessionWorktreeOutcome } from '@/types/workspace'
@@ -59,7 +58,6 @@ import { dropAdopted, mintRestorable, nextPersisted, persistedOpen } from '@/mai
 
 import { findAlreadyOpen, findFolderBusy } from '@/main/hosting/occupancy'
 import type { SessionReader } from '@/types/sessions'
-import { readCredentialsTell } from '@/main/runtime/credentials'
 import { resolveClaudeExecutable } from '@/main/runtime/locate'
 import { pathOps } from '@/main/platform/paths'
 import { defaultGitRunner } from '@/main/platform/git'
@@ -77,7 +75,6 @@ export interface HostedStoreDeps {
   readonly resolveClaudeExecutable: (options: { readonly env: WhichEnv; readonly platform: NodeJS.Platform; readonly which?: (options: WhichOptions) => Promise<WhichResult> }) => Promise<
     { readonly ok: true; readonly path: string } | { readonly ok: false; readonly kind: 'not-found'; readonly searched: readonly string[] } | { readonly ok: false; readonly kind: 'bundled-fallback'; readonly path: string }
   >
-  readonly readCredentialsTell: (options?: { readonly claudeHome?: string }) => Promise<CredentialsTell>
   readonly listSessionsForFork: SessionReader
   readonly env: NodeJS.ProcessEnv
   readonly platform: NodeJS.Platform
@@ -102,7 +99,6 @@ export interface HostedStoreDeps {
 export const defaultHostedStoreDeps: HostedStoreDeps = {
   getSdk: createHostedSdk(),
   resolveClaudeExecutable,
-  readCredentialsTell,
   listSessionsForFork: defaultForkListSessions,
   env: process.env,
   platform: process.platform,
@@ -216,7 +212,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     const stageParams = params.stage ?? null
     const pluginRequest: Promise<PluginRequest> = stageParams === null ? deps.resolvePluginRequest(cwd) : Promise.resolve({ source: 'installed' })
     const editAllowRead: Promise<readonly string[]> = stageParams === null ? Promise.resolve([]) : deps.readStageEditAllow(cwd)
-    const [credentials, sdk, plugin, history, editAllow] = await Promise.all([deps.readCredentialsTell(), deps.getSdk(), pluginRequest, deps.readHistory(params.mode), editAllowRead])
+    const [sdk, plugin, history, editAllow] = await Promise.all([deps.getSdk(), pluginRequest, deps.readHistory(params.mode), editAllowRead])
     const sessionKey = toSessionKey(nextId)
     nextId += 1
     const mode = params.mode
@@ -249,7 +245,6 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
         mode,
         cwd,
         executablePath: located.path,
-        credentials,
         now: deps.now,
         onEvent: deps.onEvent,
         onStatus: onHandleStatus,
