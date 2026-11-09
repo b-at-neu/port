@@ -89,9 +89,15 @@ describe('sumCostUsd', () => {
 
 describe('escalationBody', () => {
   it('carries the gate line verbatim and names the app as the stopping point', () => {
-    const body = escalationBody('⛔ #52 has consumed 2h 00m of agent wall-clock against a 120m ceiling — escalate instead of dispatching impl #52.')
+    const body = escalationBody('⛔ #52 has consumed 2h 00m of agent wall-clock against a 120m ceiling — escalate instead of dispatching impl #52.', null)
     expect(body).toContain('## Pipeline Escalation')
     expect(body).toContain('⛔ #52 has consumed 2h 00m')
     expect(body).toContain("This app's dispatcher stopped here")
+    expect(body).not.toContain('port:escalation')
+  })
+
+  it('ends a pull request body with the budget marker for its head', () => {
+    const body = escalationBody('⛔ over budget', 'abc123')
+    expect(body.endsWith('\n<!-- port:escalation budget abc123 -->')).toBe(true)
   })
 })

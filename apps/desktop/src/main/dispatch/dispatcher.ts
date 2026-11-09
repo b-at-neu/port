@@ -30,7 +30,7 @@ import type { PipelineItemKind, ResolvedItem } from '@/types/github'
 import type { StageWorktreeTarget } from '@/types/workspace'
 import type { EndedStage, TickActionable } from '@/types/tick'
 import type { StageOutcome } from '@/types/stage-session'
-import { reviewDispatchFacts } from '../../../../../scripts/port-tick/gates'
+import { escalationRepeats, reviewDispatchFacts } from '../../../../../scripts/port-tick/gates'
 import type { ReviewDispatchFacts } from '../../../../../scripts/port-tick/gates'
 import type { Dispatcher, CreateDispatcherParams } from '@/types/dispatch'
 
@@ -385,13 +385,16 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   async function escalateOverBudget(entry: ReadyEntry, candidate: TickActionable, line: string, notes: BudgetNote[], viewer: string): Promise<void> {
     const needsHumanLabel = labelName(entry.config.vocabulary, 'needsHuman') ?? 'needsHuman'
     const triggerLabel = labelName(entry.config.vocabulary, candidate.trigger) ?? candidate.trigger
+    const item = candidate.kind === 'pull-request' ? snapshotRepoState(entry.id)?.items.find((i) => i.number === candidate.number) : undefined
+    const sha = item?.headRefOid ?? null
+    const repeats = sha !== null && escalationRepeats({ comments: item?.comments ?? undefined, cause: 'budget', sha })
     const escalation = await deps.escalate({
       entry,
       kind: candidate.kind,
       number: candidate.number,
       trigger: candidate.trigger,
       viewer,
-      body: escalationBody(line),
+      body: repeats ? null : escalationBody(line, sha),
       action: 'budget-escalate',
       auditDir: deps.dirs.audit,
       scratchDir: deps.dirs.scratch,

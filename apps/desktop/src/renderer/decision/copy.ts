@@ -25,7 +25,7 @@ export function unblockConsequence(context: UnblockContext): string {
   if (context.decisions.length > 0) {
     return `Unblocking records your choices on the PR as "## Gate cleared", removes "${labelNameOf('needsHuman')}", and sends it to revision. Revision redoes the rebase with them on the next tick.`
   }
-  return `Unblocking says you've handled this. port posts "## Gate cleared" on the PR, removes "${labelNameOf('needsHuman')}", and the next tick picks it up.`
+  return `Unblocking removes "${labelNameOf('needsHuman')}" and the next tick picks it up. No comment is posted — the label change is the record.`
 }
 
 export function rebaseLegend(decision: RebaseDecision): string {
@@ -129,7 +129,8 @@ function decisionResultLines(params: DecisionResultParams): DecisionResultLines 
       const target = `"${labelNameOf(UNBLOCK_TARGET_LABEL[route ?? 'review'])}"`
       const verb = `dispatches ${route ?? 'review'}`
       const chosen = picks !== null && picks.length > 0 ? ` with ${picksChosenLine(picks)}` : ''
-      return { line: `${n} is unblocked and at ${target}${chosen}. "## Gate cleared" is posted; the next tick ${verb}.`, note: null, offerLabelOnly: false }
+      const line = comment === null ? `${n} is unblocked and at ${target}${chosen}. The next tick ${verb}.` : `${n} is unblocked and at ${target}${chosen}. "## Gate cleared" is posted; the next tick ${verb}.`
+      return { line, note: null, offerLabelOnly: false }
     }
     return {
       line: `${n} is back at "${labelNameOf('needsRevision')}". Your note is posted as "## Changes requested" and the approval is off. The next tick dispatches revision.`,

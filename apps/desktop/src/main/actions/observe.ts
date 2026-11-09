@@ -6,6 +6,7 @@ import type { LabelWriteRequest, WriteOutcome } from '@/types/writes'
 import { applyLabels, postComment } from '@/main/writes/apply'
 
 import { observationWrite } from '@/main/dispatch/observation'
+import { commentRepeats } from '../../../../../scripts/port-tick/gates'
 
 import type { ApplyObservationResult, ApplyObservationParams } from '@/types/actions'
 
@@ -34,6 +35,7 @@ export async function applyObservation(params: ApplyObservationParams, deps: App
 
   const labels = await deps.applyLabels({ request, repoRoot: params.entry.path, auditDir: params.auditDir })
   if (labels.kind !== 'applied' || plan.comment === null) return { labels, comment: null }
+  if (commentRepeats({ body: plan.comment, comments: params.item.comments ?? undefined, headRefOid: params.item.headRefOid ?? '' })) return { labels, comment: null }
 
   const comment = await deps.postComment({
     request: {

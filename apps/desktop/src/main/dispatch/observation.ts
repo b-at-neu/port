@@ -29,6 +29,11 @@ function precondition(item: ReconciledItem, vocabulary: LabelVocabulary, add: re
 
 const PIPELINE_ESCALATION = '## Pipeline Escalation'
 
+// A literal mirror of gates.ts's `escalationMarker`, pinned by scripts/checks/desktop-dispatch.ts.
+function escalationMarker(cause: 'zero-diff' | 'sha-cap' | 'cycle-cap' | 'integration-red' | 'refresh-stuck', sha: string | null): string {
+  return `\n<!-- port:escalation ${cause} ${sha ?? ''} -->`
+}
+
 function rebaseRequiredComment(headRefOid: string, integration: string): string {
   return `## Rebase required\nConflicts with \`${integration}\` at \`${headRefOid}\` — GitHub can't build a merge ref, so no checks ran on this diff.`
 }
@@ -50,21 +55,21 @@ export function observationWrite(observation: WriteObservation, item: Reconciled
     }
     case 'cycle-cap': {
       const add: readonly LabelKey[] = ['needsHuman']
-      const comment = `${PIPELINE_ESCALATION}\n${String(observation.count)} ${CYCLE_CAP_ESCALATION_MARKER} ${String(observation.cap)} without merging.`
+      const comment = `${PIPELINE_ESCALATION}\n${String(observation.count)} ${CYCLE_CAP_ESCALATION_MARKER} ${String(observation.cap)} without merging.${escalationMarker('cycle-cap', item.headRefOid)}`
       return { add, remove: ['needsRevision'], expect: precondition(item, vocabulary, add), action: 'observe-cycle-cap', comment }
     }
     case 'zero-diff': {
       const add: readonly LabelKey[] = ['needsHuman']
       const comment =
         observation.reason === 'sha-cap'
-          ? `${PIPELINE_ESCALATION}\nCycle ${String(observation.count)} was the second review of \`${observation.headRefOid}\`, the most one head gets. A new head is the way past it.`
-          : `${PIPELINE_ESCALATION}\nCycle ${String(observation.count)} already reviewed \`${observation.headRefOid}\` and the head has not moved, so no new review cycle was opened.\nWhatever is blocking this pull request is not visible to review or revision.`
+          ? `${PIPELINE_ESCALATION}\nCycle ${String(observation.count)} was the second review of \`${observation.headRefOid}\`, the most one head gets. A new head is the way past it.${escalationMarker('sha-cap', observation.headRefOid)}`
+          : `${PIPELINE_ESCALATION}\nCycle ${String(observation.count)} already reviewed \`${observation.headRefOid}\` and the head has not moved, so no new review cycle was opened.\nWhatever is blocking this pull request is not visible to review or revision.${escalationMarker('zero-diff', observation.headRefOid)}`
       return { add, remove: ['readyForReview'], expect: precondition(item, vocabulary, add), action: 'observe-zero-diff', comment }
     }
     case 'integration-red': {
       const add: readonly LabelKey[] = ['needsHuman']
       const names = observation.checks.map((name) => `\`${name}\``).join(', ')
-      const comment = `${PIPELINE_ESCALATION}\n\`${integration}\` stayed red on ${names} for 24 hours, so review of \`${observation.headRefOid}\` never resumed.\nThe failure is not from this diff. Fix \`${integration}\`, then refresh the branch.`
+      const comment = `${PIPELINE_ESCALATION}\n\`${integration}\` stayed red on ${names} for 24 hours, so review of \`${observation.headRefOid}\` never resumed.\nThe failure is not from this diff. Fix \`${integration}\`, then refresh the branch.${escalationMarker('integration-red', observation.headRefOid)}`
       return { add, remove: ['readyForReview'], expect: precondition(item, vocabulary, add), action: 'observe-integration-red', comment }
     }
     case 'refresh': {
@@ -79,7 +84,7 @@ export function observationWrite(observation: WriteObservation, item: Reconciled
         observation.reason === 'same-sha'
           ? 'a refresh — a second one would change nothing.'
           : `${String(observation.count - 1)} consecutive refreshes.`
-      const comment = `${PIPELINE_ESCALATION}\nStill conflicting at \`${observation.sha}\` after ${detail}`
+      const comment = `${PIPELINE_ESCALATION}\nStill conflicting at \`${observation.sha}\` after ${detail}${escalationMarker('refresh-stuck', observation.sha)}`
       return { add, remove: [observation.sourceLabel], expect: precondition(item, vocabulary, add), action: 'observe-refresh-stuck', comment }
     }
     case 'withdraw-approval': {

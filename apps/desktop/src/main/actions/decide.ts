@@ -97,12 +97,14 @@ export async function applyItemDecision(params: ApplyItemDecisionParams, deps: A
       request.decision === 'unblock'
         ? gateClearedBody(request.route ?? 'review', { cycleGrant, rebaseDecisions: chosenOptions(decisions, picks) })
         : changesRequestedBody(headRefOid ?? '', request.note ?? '')
-    comment = await deps.postComment({
-      request: { repoId: entry.id, repo: entry.config.repo, kind: item.kind, number: request.number, body, action: request.decision, scratchDir },
-      repoRoot: entry.path,
-      auditDir,
-    })
-    if (comment.kind !== 'applied') return { ok: false, reason: 'comment-failed', comment }
+    if (body !== null) {
+      comment = await deps.postComment({
+        request: { repoId: entry.id, repo: entry.config.repo, kind: item.kind, number: request.number, body, action: request.decision, scratchDir },
+        repoRoot: entry.path,
+        auditDir,
+      })
+      if (comment.kind !== 'applied') return { ok: false, reason: 'comment-failed', comment }
+    }
   }
 
   const labels = await deps.applyLabels({
