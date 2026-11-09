@@ -106,6 +106,8 @@ export interface PipelineItem {
   readonly blockers: BlockerRead | null
   /** The newest issue comments, selected only for a `blocked` issue — `null` when not selected, unreadable, or a pull request. */
   readonly blockerComments: readonly IssueCommentNode[] | null
+  /** Pull requests closing this issue, selected only for a `prOpened` issue — `null` when not selected or unreadable, never collapsed into `[]`. */
+  readonly closingPullRequests: readonly ClosingPullRequest[] | null
 }
 
 /** One entry per enabled label, reported beside the results so an empty `items` is attributable rather than ambiguous with a wrong query. */
@@ -131,8 +133,14 @@ export interface ItemDetail {
   readonly kind: PipelineItemKind
   readonly number: number
   readonly node: unknown
-  /** Issue fields (`blockedBy`, `comments`) GitHub reported an error for — read as unavailable, never as empty. */
+  /** Issue fields (`blockedBy`, `comments`, `closedByPullRequestsReferences`) GitHub reported an error for — read as unavailable, never as empty. */
   readonly erroredFields: readonly string[]
+}
+
+/** One pull request that GitHub reports as closing an issue, whatever its state. */
+export interface ClosingPullRequest {
+  readonly number: number
+  readonly state: ItemStateName
 }
 
 /** One entry per sweep connection named in a partial response's `errors[].path`. Never read as empty — excluded from any "nothing at this stage" claim. */

@@ -136,6 +136,7 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
   for (const repo of readyRepos) {
     const health = healthByRepo.get(repo.repoId)
     for (const ticket of ticketIndex(repo.items).tickets) {
+      if (ticket.pullRequest === null && ticket.issue?.linkReason === 'counterpart-merged') continue
       const item = ticket.primary
       const members = [ticket.issue, ticket.pullRequest].filter((member): member is ReconciledItem => member !== null)
       const actions = actionsFor({ item, viewer: repo.viewer, approvalGate: repo.approvalGate })

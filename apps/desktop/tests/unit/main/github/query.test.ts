@@ -135,12 +135,12 @@ describe('buildPipelineQuery', () => {
 describe('buildItemDetailsQuery', () => {
   it('emits one aliased lookup per item, in order, by kind', () => {
     const { document, aliases } = buildItemDetailsQuery([
-      { kind: 'issue', number: 7, rollup: false, blockerComments: false },
-      { kind: 'pull-request', number: 9, rollup: false, blockerComments: false },
+      { kind: 'issue', number: 7, rollup: false, blockerComments: false, closingPullRequests: false },
+      { kind: 'pull-request', number: 9, rollup: false, blockerComments: false, closingPullRequests: false },
     ])
     expect(aliases).toEqual([
-      { alias: 'd0', kind: 'issue', number: 7, rollup: false, blockerComments: false },
-      { alias: 'd1', kind: 'pull-request', number: 9, rollup: false, blockerComments: false },
+      { alias: 'd0', kind: 'issue', number: 7, rollup: false, blockerComments: false, closingPullRequests: false },
+      { alias: 'd1', kind: 'pull-request', number: 9, rollup: false, blockerComments: false, closingPullRequests: false },
     ])
     expect(document).toContain('d0: issue(number: 7)')
     expect(document).toContain('d1: pullRequest(number: 9)')
@@ -148,8 +148,8 @@ describe('buildItemDetailsQuery', () => {
 
   it('an issue reads its label timeline and blockedBy; a pull request also reads reviews and comments', () => {
     const { document } = buildItemDetailsQuery([
-      { kind: 'issue', number: 7, rollup: false, blockerComments: false },
-      { kind: 'pull-request', number: 9, rollup: false, blockerComments: false },
+      { kind: 'issue', number: 7, rollup: false, blockerComments: false, closingPullRequests: false },
+      { kind: 'pull-request', number: 9, rollup: false, blockerComments: false, closingPullRequests: false },
     ])
     const issue = document.split('\n').find((line) => line.includes('d0:')) ?? ''
     const pull = document.split('\n').find((line) => line.includes('d1:')) ?? ''
@@ -165,8 +165,8 @@ describe('buildItemDetailsQuery', () => {
 
   it('selects an issue comments connection only when its blockerComments flag is set', () => {
     const { document } = buildItemDetailsQuery([
-      { kind: 'issue', number: 7, rollup: false, blockerComments: true },
-      { kind: 'issue', number: 8, rollup: false, blockerComments: false },
+      { kind: 'issue', number: 7, rollup: false, blockerComments: true, closingPullRequests: false },
+      { kind: 'issue', number: 8, rollup: false, blockerComments: false, closingPullRequests: false },
     ])
     const flagged = document.split('\n').find((line) => line.includes('d0:')) ?? ''
     const plain = document.split('\n').find((line) => line.includes('d1:')) ?? ''
@@ -174,12 +174,24 @@ describe('buildItemDetailsQuery', () => {
     expect(plain).not.toContain('comments')
   })
 
+  it('selects closing pull requests only when the flag is set, and never on a pull request alias', () => {
+    const { document } = buildItemDetailsQuery([
+      { kind: 'issue', number: 7, rollup: false, blockerComments: false, closingPullRequests: true },
+      { kind: 'issue', number: 8, rollup: false, blockerComments: false, closingPullRequests: false },
+      { kind: 'pull-request', number: 9, rollup: false, blockerComments: false, closingPullRequests: true },
+    ])
+    const lineOf = (alias: string) => document.split('\n').find((line) => line.includes(`${alias}:`)) ?? ''
+    expect(lineOf('d0')).toContain('closedByPullRequestsReferences(first: 5, includeClosedPrs: true) { nodes { number state } }')
+    expect(lineOf('d1')).not.toContain('closedByPullRequestsReferences')
+    expect(lineOf('d2')).not.toContain('closedByPullRequestsReferences')
+  })
+
   it('spreads CheckRollupFields, and declares it, only when a pull request asks for the rollup', () => {
-    const without = buildItemDetailsQuery([{ kind: 'pull-request', number: 9, rollup: false, blockerComments: false }]).document
+    const without = buildItemDetailsQuery([{ kind: 'pull-request', number: 9, rollup: false, blockerComments: false, closingPullRequests: false }]).document
     expect(without).not.toContain('CheckRollupFields')
     const withRollup = buildItemDetailsQuery([
-      { kind: 'pull-request', number: 9, rollup: false, blockerComments: false },
-      { kind: 'pull-request', number: 10, rollup: true, blockerComments: false },
+      { kind: 'pull-request', number: 9, rollup: false, blockerComments: false, closingPullRequests: false },
+      { kind: 'pull-request', number: 10, rollup: true, blockerComments: false, closingPullRequests: false },
     ]).document
     expect(withRollup).toContain('d1: pullRequest(number: 10) {')
     expect(withRollup).toContain('...CheckRollupFields')
@@ -188,7 +200,7 @@ describe('buildItemDetailsQuery', () => {
   })
 
   it('carries rateLimit, so every round trip reports its own cost', () => {
-    expect(buildItemDetailsQuery([{ kind: 'issue', number: 1, rollup: false, blockerComments: false }]).document).toContain('rateLimit { cost remaining resetAt limit }')
+    expect(buildItemDetailsQuery([{ kind: 'issue', number: 1, rollup: false, blockerComments: false, closingPullRequests: false }]).document).toContain('rateLimit { cost remaining resetAt limit }')
   })
 })
 

@@ -78,8 +78,9 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - reads go through `platform/github-http`'s injectable `GitHubTransport`, never through `gh`; `request.ts` builds the GraphQL and REST requests, and `envelope.ts` classifies a reply from its status code and body
 - conditional REST reads go through `conditional.ts`'s `conditionalGet`; its per-repo ETag cache is keyed by path and `Accept`, and is forgotten when a repo is added or removed — GraphQL is never conditional
 - `precheck.ts` reads the issues list's ETag (`per_page=1`, sorted by `updated`) as the fast change signal and never parses the body; the first response only primes the cache
-- the pipeline read's detail alias fails the whole read on any error, because a missing review list would read as zero cycles; the one carve-out is an issue alias's own `blockedBy` or `comments` field, which goes into that detail's `erroredFields` and never reaches a pull request alias
+- the pipeline read's detail alias fails the whole read on any error, because a missing review list would read as zero cycles; the one carve-out is an issue alias's own `blockedBy`, `comments` or `closedByPullRequestsReferences` field, which goes into that detail's `erroredFields` and never reaches a pull request alias
 - an errored `blockedBy` becomes `{ ok: false }` and errored comments become `null`, so the Board shows "unknown" or "its reason is on the ticket", never "no blockers"
+- an errored or unselected `closedByPullRequestsReferences` becomes `closingPullRequests: null`, which reads as closed unmerged and keeps the `pr-missing` report; only a positively read `MERGED` closer suppresses it
 - `item-states.ts`'s `readItemStates` reads many items' states in one aliased round trip; an alias named in `errors[].path`, or absent, is `null`, never done
 
 **`apps/desktop/src/main/hosting/`**

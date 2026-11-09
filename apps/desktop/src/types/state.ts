@@ -43,9 +43,8 @@ export type StatusEvidence = 'sessions-unavailable' | 'agent-active' | 'session-
 /** Accompanies `status: 'waiting'`, first hit wins: `nobody` is unassigned; `operator-session` means the `SESSION REQUIRED` marker holds; `cockpit` is the ordinary case. */
 export type WaitingOn = 'cockpit' | 'operator-session' | 'nobody'
 
-/** Why `linked` is `null` — an issue at `pr opened` whose pull request
- *  merged is `counterpart-not-open`, never rendered as "awaiting merge". */
-export type LinkReason = 'no-closing-keyword' | 'counterpart-not-open'
+/** Why `linked` is `null` — `counterpart-merged` is an issue at `pr opened` whose closing pull request merged before GitHub closed the issue; `counterpart-not-open` is one whose pull request is closed unmerged, unknown or unreadable. Neither is ever rendered as "awaiting merge". */
+export type LinkReason = 'no-closing-keyword' | 'counterpart-not-open' | 'counterpart-merged'
 
 export type AgentAttachMatch = 'direct' | 'linked'
 

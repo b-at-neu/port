@@ -386,6 +386,40 @@ describe('fetchPipelineItems — details', () => {
     expect(result.items[0]?.blockerComments).toBeNull()
   })
 
+  it('asks for closing pull requests only on a pr opened issue, and maps them', async () => {
+    const opened = node(1, ['pr opened'])
+    const { runner, documents } = scripted({
+      sweep: () => ok(sweepBody({ issues: connection([opened, node(4, ['ready'])]), pullRequests: connection([]) })),
+      details: () =>
+        ok({
+          data: { repository: { d0: { timelineItems: { nodes: [] }, blockedBy: { totalCount: 0, nodes: [] }, closedByPullRequestsReferences: { nodes: [{ number: 9, state: 'MERGED' }] } }, d1: { timelineItems: { nodes: [] }, blockedBy: { totalCount: 0, nodes: [] } } }, rateLimit: RATE_LIMIT_REPLY },
+        }),
+    })
+    const result = await fetchWith(runner)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const detailDocument = documents.find((document) => document.includes('d0:')) ?? ''
+    expect(detailDocument.split('\n').find((line) => line.includes('d0:'))).toContain('closedByPullRequestsReferences')
+    expect(detailDocument.split('\n').find((line) => line.includes('d1:'))).not.toContain('closedByPullRequestsReferences')
+    expect(result.items[0]?.closingPullRequests).toEqual([{ number: 9, state: 'MERGED' }])
+    expect(result.items[1]?.closingPullRequests).toBeNull()
+  })
+
+  it('a closedByPullRequestsReferences error leaves closing pull requests unread, and the read still succeeds', async () => {
+    const { runner } = scripted({
+      sweep: () => ok(sweepBody({ issues: connection([node(1, ['pr opened'])]), pullRequests: connection([]) })),
+      details: () =>
+        partial({
+          data: { repository: { d0: { timelineItems: { nodes: [] }, blockedBy: { totalCount: 0, nodes: [] }, closedByPullRequestsReferences: null } }, rateLimit: RATE_LIMIT_REPLY },
+          errors: [{ type: 'SOME_ERROR', path: ['repository', 'd0', 'closedByPullRequestsReferences'], message: 'boom' }],
+        }),
+    })
+    const result = await fetchWith(runner)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.items[0]?.closingPullRequests).toBeNull()
+  })
+
   it('a pull request alias comments error still fails the whole read', async () => {
     const { runner } = scripted({
       sweep,
