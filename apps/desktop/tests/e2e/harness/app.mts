@@ -21,8 +21,10 @@ export interface Call {
 }
 
 export interface E2EApp {
-  readonly app: ElectronApplication
-  readonly page: Page
+  app: ElectronApplication
+  page: Page
+  /** Closes and relaunches the app on the same user data and fake state, past the setup wizard. */
+  relaunch(): Promise<void>
   /** Every call the fake has recorded so far, oldest first. */
   calls(): Promise<readonly Call[]>
   /** The fake's mutable state file, re-read fresh every call — the next poll's own view. */
@@ -83,30 +85,40 @@ export async function launchE2EApp(params: LaunchParams): Promise<E2EApp> {
 
   const electronBinary = createRequire(import.meta.url)('electron') as unknown as string
 
-  const electronApp = await _electron.launch({
-    executablePath: electronBinary,
-    args: ['--force-device-scale-factor=1', MAIN_ENTRY],
-    env,
-  })
+  const start = async (): Promise<{ app: ElectronApplication; page: Page }> => {
+    const app = await _electron.launch({
+      executablePath: electronBinary,
+      args: ['--force-device-scale-factor=1', MAIN_ENTRY],
+      env,
+    })
 
-  const page = await electronApp.firstWindow()
-  await electronApp.evaluate(({ BrowserWindow }: typeof import('electron')) => {
-    BrowserWindow.getAllWindows()[0]?.setContentSize(1280, 800)
-  })
+    const page = await app.firstWindow()
+    await app.evaluate(({ BrowserWindow }: typeof import('electron')) => {
+      BrowserWindow.getAllWindows()[0]?.setContentSize(1280, 800)
+    })
 
-  // The setup wizard's own Claude Code check always fails here (the fake refuses `claude
-  // --version`); "Skip for now" is always present, so every flow starts past the wizard.
-  const skip = page.getByRole('button', { name: 'Skip for now' })
-  try {
-    await skip.waitFor({ state: 'visible', timeout: 10_000 })
-    await skip.click()
-  } catch {
-    // Already past the wizard — nothing to skip.
+    // The setup wizard's own Claude Code check always fails here (the fake refuses `claude
+    // --version`); "Skip for now" is always present, so every flow starts past the wizard.
+    const skip = page.getByRole('button', { name: 'Skip for now' })
+    try {
+      await skip.waitFor({ state: 'visible', timeout: 10_000 })
+      await skip.click()
+    } catch {
+      // Already past the wizard — nothing to skip.
+    }
+    return { app, page }
   }
 
-  return {
-    app: electronApp,
-    page,
+  const first = await start()
+  const harness: E2EApp = {
+    app: first.app,
+    page: first.page,
+    async relaunch() {
+      await harness.app.close()
+      const next = await start()
+      harness.app = next.app
+      harness.page = next.page
+    },
     async calls() {
       const raw = await readFile(callsPath, 'utf8')
       return raw
@@ -119,10 +131,11 @@ export async function launchE2EApp(params: LaunchParams): Promise<E2EApp> {
       return JSON.parse(await readFile(statePath, 'utf8')) as SandboxState
     },
     async close() {
-      await electronApp.close()
+      await harness.app.close()
       await rm(sandboxDir, { recursive: true, force: true })
     },
   }
+  return harness
 }
 
 /** Every `node` call, or `claude` call beyond the setup wizard's own `--version` probe. */

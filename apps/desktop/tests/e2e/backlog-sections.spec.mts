@@ -43,11 +43,14 @@ test('collapses a section, skips it with the keyboard, and keeps it collapsed af
   await expect(gadgets.locator('[data-slot="backlog-row"].ring-2')).toHaveCount(1)
   await expect(widgets.locator('[data-slot="backlog-row"].ring-2')).toHaveCount(0)
 
-  await page.reload()
-  await page.getByRole('link', { name: 'Backlog', exact: true }).click()
-  await expect(widgets).toHaveAttribute('data-collapsed', 'true')
-  await expect(widgets.locator('[data-slot="backlog-row"]')).toHaveCount(0)
-  await expect(gadgets.locator('[data-slot="backlog-row"]')).toHaveCount(3)
+  await harness.relaunch()
+  const relaunched = harness.page
+  await relaunched.getByRole('link', { name: 'Backlog', exact: true }).click()
+  const widgetsAfter = relaunched.locator('[data-slot="backlog-group"][data-repo="acme/widgets"]')
+  const gadgetsAfter = relaunched.locator('[data-slot="backlog-group"][data-repo="acme/gadgets"]')
+  await expect(gadgetsAfter.locator('[data-slot="backlog-row"]')).toHaveCount(3)
+  await expect(widgetsAfter).toHaveAttribute('data-collapsed', 'true')
+  await expect(widgetsAfter.locator('[data-slot="backlog-row"]')).toHaveCount(0)
 })
 
 test('hides a repository from the filter, keeps it hidden after a reload, and restores it with Show all', async () => {
@@ -66,13 +69,16 @@ test('hides a repository from the filter, keeps it hidden after a reload, and re
   await expect(gadgets).toHaveCount(0)
   await expect(filter).toHaveText('Repositories · 1 of 2')
 
-  await page.reload()
-  await page.getByRole('link', { name: 'Backlog', exact: true }).click()
-  await expect(filter).toHaveText('Repositories · 1 of 2')
-  await expect(gadgets).toHaveCount(0)
+  await harness.relaunch()
+  const relaunched = harness.page
+  await relaunched.getByRole('link', { name: 'Backlog', exact: true }).click()
+  const filterAfter = relaunched.locator('[data-slot="backlog-repo-filter"]')
+  const gadgetsAfter = relaunched.locator('[data-slot="backlog-group"][data-repo="acme/gadgets"]')
+  await expect(filterAfter).toHaveText('Repositories · 1 of 2')
+  await expect(gadgetsAfter).toHaveCount(0)
 
-  await filter.click()
-  await page.getByRole('menuitem', { name: 'Show all' }).click()
-  await expect(gadgets).toBeVisible()
-  await expect(filter).toHaveText('Repositories')
+  await filterAfter.click()
+  await relaunched.getByRole('menuitem', { name: 'Show all' }).click()
+  await expect(gadgetsAfter).toBeVisible()
+  await expect(filterAfter).toHaveText('Repositories')
 })
