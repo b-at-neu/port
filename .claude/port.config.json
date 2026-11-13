@@ -10,6 +10,7 @@
     "bootstrap": ["pnpm install"],
     "checks": [{ "run": "node scripts/checks.ts", "fix": null }],
     "artifacts": "node plugins/port/bin/artifacts.mjs",
+    "screenshots": { "run": "pnpm screenshots", "dir": "apps/desktop/out/screenshots" },
     "worktrees": "node plugins/port/bin/worktrees.mjs",
     "tick": "node scripts/port-tick.ts"
   },
@@ -54,6 +55,7 @@
     "Bash(node plugins/port/bin/artifacts.mjs *)",
     "Bash(node plugins/port/bin/worktrees.mjs *)",
     "Bash(node scripts/port-tick.ts *)",
+    "Bash(pnpm screenshots)",
     "Bash(node scripts/dev-window.ts)",
     "Bash(node scripts/dev-window.ts *)"
   ]
