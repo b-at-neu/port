@@ -23,7 +23,7 @@ export function startUpdate(release: AvailableRelease): void {
 
 type RunCheck = (channel: 'update:check') => Promise<UpdateState>
 
-/** Writes the result into the `update:state` cache and never invalidates it: a refetch landing after the result would overwrite it with a stale read. */
+/** Writes the result into the `update:state` cache and never invalidates it: a refetch landing after the result would overwrite it with a stale read. A failed check never replaces a known `available`. */
 export async function checkForUpdates(client: QueryClient, run: RunCheck = invoke): Promise<void> {
   if (pending.get()) return
   pending.set(true)
@@ -34,7 +34,11 @@ export async function checkForUpdates(client: QueryClient, run: RunCheck = invok
       run: () => run('update:check'),
       toToast: (state) => checkToastOf(state, { update: startUpdate, retry: () => void checkForUpdates(client, run) }),
     })
-    if (result !== 'unreachable') client.setQueryData(ipcQueryOptions('update:state').queryKey, result)
+    if (result === 'unreachable') return
+    const { queryKey } = ipcQueryOptions('update:state')
+    const known = client.getQueryData(queryKey)
+    if (result.kind === 'error' && known?.kind === 'available') return
+    client.setQueryData(queryKey, result)
   } finally {
     pending.set(false)
   }

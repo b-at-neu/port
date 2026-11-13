@@ -1,4 +1,5 @@
 // The Settings → About update status line.
+import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/renderer/components/ui/button'
@@ -24,18 +25,17 @@ function CheckedAgo({ state, ago }: { readonly state: UpdateState; readonly ago:
   )
 }
 
-export function UpdateStatus() {
-  const client = useQueryClient()
-  const query = useUpdateState()
-  const checkPending = useUpdateCheckPending()
-  if (query.status === 'pending') return <Skeleton className="h-4 w-40" />
-  if (query.status === 'error') return <p className="text-small text-muted-foreground">{UPDATE_UNAVAILABLE}</p>
+interface StatusBodyProps {
+  readonly state: UpdateState
+  readonly checkPending: boolean
+  readonly check: () => void
+}
 
-  const state = query.data
-  const view = statusOf(state, Date.now())
+function StatusBody({ state, checkPending, check }: StatusBodyProps) {
+  const [now] = useState(() => Date.now())
+  const view = statusOf(state, now)
   const { release } = view
   const busy = checkPending || view.kind === 'checking'
-  const check = () => void checkForUpdates(client)
 
   if (view.kind === 'error') {
     return (
@@ -63,4 +63,16 @@ export function UpdateStatus() {
       ) : null}
     </div>
   )
+}
+
+export function UpdateStatus() {
+  const client = useQueryClient()
+  const query = useUpdateState()
+  const checkPending = useUpdateCheckPending()
+  if (query.status === 'pending') return <Skeleton className="h-4 w-40" />
+  if (query.status === 'error') return <p className="text-small text-muted-foreground">{UPDATE_UNAVAILABLE}</p>
+
+  const { data: state } = query
+  const key = state.kind === 'up-to-date' ? `${state.kind}-${state.checkedAt}` : state.kind
+  return <StatusBody key={key} state={state} checkPending={checkPending} check={() => void checkForUpdates(client)} />
 }

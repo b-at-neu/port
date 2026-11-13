@@ -12,6 +12,15 @@ const KEY = ipcQueryOptions('update:state').queryKey
 const BEFORE: UpdateState = { kind: 'idle', current: '0.1.0' }
 const UP_TO_DATE: UpdateState = { kind: 'up-to-date', current: '0.1.0', latest: '0.1.0', trigger: 'manual', checkedAt: '2026-05-01T11:58:00Z' }
 
+const AVAILABLE: UpdateState = {
+  kind: 'available',
+  current: '0.1.0',
+  release: { version: '0.2.0', tag: 'v0.2.0', notesUrl: 'https://example.com/notes', publishedAt: null, assets: [] },
+  trigger: 'startup',
+  checkedAt: '2026-05-01T11:00:00Z',
+}
+const OFFLINE: UpdateState = { kind: 'error', current: '0.1.0', reason: 'offline', detail: 'offline', trigger: 'manual', checkedAt: '2026-05-01T11:58:00Z' }
+
 function seededClient(): QueryClient {
   const client = new QueryClient()
   client.setQueryData(KEY, BEFORE)
@@ -51,6 +60,25 @@ describe('checkForUpdates', () => {
 
     release(UP_TO_DATE)
     await first
+  })
+
+  it('keeps a known available state when the check errors, and still toasts the failure', async () => {
+    const client = new QueryClient()
+    client.setQueryData(KEY, AVAILABLE)
+
+    await checkForUpdates(client, vi.fn().mockResolvedValue(OFFLINE))
+
+    expect(client.getQueryData(KEY)).toEqual(AVAILABLE)
+    expect(toast.error).toHaveBeenCalled()
+  })
+
+  it('overwrites an error state with the next result', async () => {
+    const client = new QueryClient()
+    client.setQueryData(KEY, OFFLINE)
+
+    await checkForUpdates(client, vi.fn().mockResolvedValue(UP_TO_DATE))
+
+    expect(client.getQueryData(KEY)).toEqual(UP_TO_DATE)
   })
 
   it('leaves the cache untouched when the invoke rejects, and can run again', async () => {
