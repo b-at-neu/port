@@ -120,8 +120,6 @@ export interface BoardSnapshot {
   readonly autoPlan: readonly AutoPlanStatus[]
 }
 
-export type GroupBy = 'stage' | 'repo'
-
 /** A presentation verdict — the only value it may change is `stalled` → `in-flight`; it never rewrites `ReconciledItem.status` itself. */
 export interface DisplayStatus {
   readonly status: ItemStatus
@@ -171,13 +169,6 @@ export type BlockedOnTag =
   | { readonly kind: 'unreadable'; readonly reason: string }
   | { readonly kind: 'fallback' }
 
-export interface BoardGroup {
-  /** The label `key` (grouped by stage) or the `RepoId` (grouped by repo), never a display name, so two repositories renaming a label still group together. */
-  readonly key: string
-  readonly name: string
-  readonly rows: readonly BoardItemRow[]
-}
-
 export interface BoardRepositorySummary {
   readonly repoId: RepoId
   readonly displayName: string
@@ -191,9 +182,7 @@ export interface BoardRepositorySummary {
 }
 
 export interface BoardProjection {
-  readonly groupBy: GroupBy
-  readonly groups: readonly BoardGroup[]
-  /** Every row, sorted the same way `groups` orders them, but unlike `groups` never drops a row whose `stageLabel` matches no `LABEL_DEFAULTS` entry. */
+  /** Every row, sorted by repo display name then number, including rows whose `stageLabel` matches no `LABEL_DEFAULTS` entry. */
   readonly rows: readonly BoardItemRow[]
   readonly notReady: readonly Extract<RepositoryState, { readonly ok: false }>[]
   readonly repositorySummaries: readonly BoardRepositorySummary[]
@@ -268,8 +257,6 @@ export interface PhaseDetail {
   readonly line: string
   readonly at: string | null
 }
-
-export type BoardGroupBy = 'phase' | 'repo'
 
 /** One (number, kind) a ticket answers to — its issue or its pull request. */
 export interface StageLinkTarget {

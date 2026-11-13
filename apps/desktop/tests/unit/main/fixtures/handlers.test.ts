@@ -96,7 +96,7 @@ describe('fixtureHandlers (failing scenario)', () => {
     expect(repositories.find((r) => !r.ok && r.reason === 'github-unavailable')).toMatchObject({ kind: 'network' })
     expect(repositories.filter((r) => !r.ok && r.reason === 'not-ready')).toHaveLength(1)
     expect(repositories.filter((r) => r.ok)).toHaveLength(1)
-    expect(projectBoard({ snapshot, groupBy: 'repo', now: NOW, sessions: [] }).rows).toHaveLength(0)
+    expect(projectBoard({ snapshot, now: NOW, sessions: [] }).rows).toHaveLength(0)
   })
 
   it('reports the run-state store as unreadable', () => {
@@ -269,7 +269,7 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     const sessions = handlers['session:list'](undefined)
     const blockedItems = needsYouItems(snapshot, now, sessions).filter((i) => i.kind === 'blocked')
     expect(blockedItems.map((i) => i.number).sort()).toEqual([51, 55, 56])
-    const rows = projectBoard({ snapshot, groupBy: 'repo', now, sessions }).rows
+    const rows = projectBoard({ snapshot, now, sessions }).rows
     const held = (number: number) => rows.find((r) => r.item.number === number)?.blockedOn
     expect(held(51)?.session).toMatchObject({ sessionKey: 'fixture-stage-impl-51' })
     expect(held(51)?.session?.text).toMatch(/^The Q3 ledger export has no currency column\./)
@@ -279,7 +279,7 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
 
   it.runIf(scenario === 'populated')('dispatches #44 on the Board: in flight, with a live plan stage, before its label moves', () => {
     const snapshot = handlers['board:snapshot'](undefined)
-    const rows = projectBoard({ snapshot, groupBy: 'repo', now, sessions: handlers['session:list'](undefined) }).rows
+    const rows = projectBoard({ snapshot, now, sessions: handlers['session:list'](undefined) }).rows
     const row = rows.find((r) => r.item.number === 44)
     expect(row?.liveStage).toMatchObject({ agent: 'plan', trigger: 'ready' })
     expect(row?.displayStatus.status).toBe('in-flight')

@@ -80,7 +80,7 @@ const HELD: BlockedOn = { dependencies: null, session: null, comment: null }
 describe('boardSections', () => {
   it('puts a planReview row in Waiting on you, an in-flight row in In progress, the rest in Queued', () => {
     const rows = [row({ number: 1, stageKey: 'planReview' }), row({ number: 2, stageKey: 'inProgress', status: 'in-flight' }), row({ number: 3, stageKey: 'ready', status: 'waiting' })]
-    const sections = boardSections(rows, { group: 'repo', repo: null })
+    const sections = boardSections(rows, { repo: null })
     expect(sections.map((s) => s.key)).toEqual(['waiting-on-you', 'in-progress', 'queued'])
     expect(sections[0]?.count).toBe(1)
     expect(sections[1]?.count).toBe(1)
@@ -88,12 +88,12 @@ describe('boardSections', () => {
   })
 
   it('puts an auto-approving plan-review row in In progress, never Waiting on you', () => {
-    const sections = boardSections([row({ number: 1, stageKey: 'planReview', autoApproving: true })], { group: 'repo', repo: null })
+    const sections = boardSections([row({ number: 1, stageKey: 'planReview', autoApproving: true })], { repo: null })
     expect(sections.map((s) => s.key)).toEqual(['in-progress'])
   })
 
   it('keeps a plan-review row that is not auto-approving in Waiting on you', () => {
-    const sections = boardSections([row({ number: 1, stageKey: 'planReview', autoApproving: false })], { group: 'repo', repo: null })
+    const sections = boardSections([row({ number: 1, stageKey: 'planReview', autoApproving: false })], { repo: null })
     expect(sections.map((s) => s.key)).toEqual(['waiting-on-you'])
   })
 
@@ -104,7 +104,7 @@ describe('boardSections', () => {
       displayStatus: { status: 'in-flight', staleGithub: false, githubAgeMs: null },
       liveStage: { agent: 'plan', trigger: 'ready', sessionKey: 'hosted-1' as SessionKey },
     }
-    const sections = boardSections([dispatched], { group: 'repo', repo: null })
+    const sections = boardSections([dispatched], { repo: null })
     expect(sections.map((s) => s.key)).toEqual(['in-progress'])
   })
 
@@ -114,7 +114,7 @@ describe('boardSections', () => {
       row({ number: 2, stageKey: 'ready', status: 'waiting' }),
       row({ number: 3, stageKey: 'inProgress', status: 'in-flight' }),
     ]
-    const sections = boardSections(rows, { group: 'repo', repo: null })
+    const sections = boardSections(rows, { repo: null })
     expect(sections.map((s) => [s.key, s.name, s.count])).toEqual([
       ['in-progress', 'In progress', 1],
       ['blocked', 'Blocked', 1],
@@ -123,24 +123,24 @@ describe('boardSections', () => {
   })
 
   it('puts an in-flight row with a live BLOCKED: session in Blocked, whatever its stage label says', () => {
-    const sections = boardSections([row({ number: 1, stageKey: 'inProgress', status: 'in-flight', blockedOn: HELD })], { group: 'repo', repo: null })
+    const sections = boardSections([row({ number: 1, stageKey: 'inProgress', status: 'in-flight', blockedOn: HELD })], { repo: null })
     expect(sections.map((s) => s.key)).toEqual(['blocked'])
   })
 
   it('keeps an escalated row in Waiting on you even when a BLOCKED: session is live on it', () => {
-    const sections = boardSections([row({ number: 1, stageKey: 'needsHuman', blockedOn: HELD })], { group: 'repo', repo: null })
+    const sections = boardSections([row({ number: 1, stageKey: 'needsHuman', blockedOn: HELD })], { repo: null })
     expect(sections.map((s) => s.key)).toEqual(['waiting-on-you'])
   })
 
   it('omits an empty section entirely', () => {
     const rows = [row({ number: 1, stageKey: 'ready', status: 'waiting' })]
-    const sections = boardSections(rows, { group: 'repo', repo: null })
+    const sections = boardSections(rows, { repo: null })
     expect(sections.map((s) => s.key)).toEqual(['queued'])
   })
 
   it('phase grouping orders sub-groups in pipeline order and names them from PHASE_NAMES', () => {
     const rows = [row({ number: 1, stageKey: 'inProgress', status: 'in-flight' }), row({ number: 2, stageKey: 'ready', status: 'waiting' })]
-    const sections = boardSections(rows, { group: 'phase', repo: null })
+    const sections = boardSections(rows, { repo: null })
     const inProgress = sections.find((s) => s.key === 'in-progress')
     expect(inProgress?.subGroups.map((g) => g.name)).toEqual(['Implementing'])
     const queued = sections.find((s) => s.key === 'queued')
@@ -149,25 +149,19 @@ describe('boardSections', () => {
 
   it('an unstaged row gets its own trailing phase sub-group', () => {
     const rows = [row({ number: 1, stageKey: null, status: 'waiting' })]
-    const sections = boardSections(rows, { group: 'phase', repo: null })
+    const sections = boardSections(rows, { repo: null })
     expect(sections[0]?.subGroups).toEqual([{ key: 'unstaged', name: 'Unstaged', rows: [rows[0]] }])
   })
 
   it('a stage PHASE_NAMES marks null (prOpened) also falls into Unstaged', () => {
     const rows = [row({ number: 1, stageKey: 'prOpened', status: 'terminal' })]
-    const sections = boardSections(rows, { group: 'phase', repo: null })
+    const sections = boardSections(rows, { repo: null })
     expect(sections[0]?.subGroups.map((g) => g.key)).toEqual(['unstaged'])
-  })
-
-  it('repo grouping orders sub-groups by first appearance and names them from the row', () => {
-    const rows = [row({ repoId: 'repo-a', repo: 'o/a', number: 1, stageKey: 'ready' }), row({ repoId: 'repo-b', repo: 'o/b', number: 2, stageKey: 'ready' })]
-    const sections = boardSections(rows, { group: 'repo', repo: null })
-    expect(sections[0]?.subGroups.map((g) => g.name)).toEqual(['o/a', 'o/b'])
   })
 
   it('the repo filter applies before sectioning', () => {
     const rows = [row({ repoId: 'repo-a', number: 1, stageKey: 'ready' }), row({ repoId: 'repo-b', number: 2, stageKey: 'ready' })]
-    const sections = boardSections(rows, { group: 'repo', repo: 'repo-b' as RepoId })
+    const sections = boardSections(rows, { repo:'repo-b' as RepoId })
     expect(sections[0]?.count).toBe(1)
     expect(sections[0]?.subGroups[0]?.rows[0]?.item.repoId).toBe('repo-b')
   })

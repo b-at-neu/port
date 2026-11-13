@@ -1,5 +1,4 @@
 // The pure board projection — everything the screen decides lives here, testable under `environment: 'node'` with no jsdom dependency.
-import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { isLiveStageSession } from '@/utils/stage/live'
 import { inspectDenials } from '@/renderer/local/inspect'
 import { actionsFor } from '@/utils/actions/plan'
@@ -8,7 +7,7 @@ import type { RepoId } from '@/utils/repos'
 import { ticketIndex } from '@/utils/tickets/ticket'
 import type { ReconciledItem, RepositoryFreshness, RepositoryState, StageLabel } from '@/types/state'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/types/board'
-import type { BoardGroup, BoardItemRow, BoardProjection, BoardRepositorySummary, BoardSnapshot, DisplayStatus, GroupBy, LiveStage, RepositoryHealth, SourceHealth, SourceKind } from '@/types/board'
+import type { BoardItemRow, BoardProjection, BoardRepositorySummary, BoardSnapshot, DisplayStatus, LiveStage, RepositoryHealth, SourceHealth, SourceKind } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import { blockedOnOf } from '@/renderer/board/blocked-on'
 
@@ -82,7 +81,6 @@ function compareRows(a: BoardItemRow, b: BoardItemRow, displayNameOf: ReadonlyMa
 
 interface ProjectBoardParams {
   readonly snapshot: BoardSnapshot
-  readonly groupBy: GroupBy
   readonly now: Date
   readonly sessions?: readonly HostedSessionSnapshot[]
 }
@@ -121,7 +119,7 @@ function newestLive(candidates: readonly (LiveStageEntry | undefined)[]): LiveSt
 /** Everything the board renders, computed once. Pure over an already-built
  *  `BoardSnapshot` — no IPC, no timer, no DOM. */
 export function projectBoard(params: ProjectBoardParams): BoardProjection {
-  const { snapshot, groupBy, now, sessions = [] } = params
+  const { snapshot, now, sessions = [] } = params
   const liveStages = liveStagesOf(sessions)
   const healthByRepo = new Map<RepoId, RepositoryHealth>(snapshot.health.map((h) => [h.repoId, h]))
   const notReady = snapshot.state.repositories.filter((r): r is Extract<RepositoryState, { readonly ok: false }> => !r.ok)
@@ -156,15 +154,6 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
   rows.sort((a, b) => compareRows(a, b, displayNameOf))
   const ungated = rows.filter((row) => row.actions.gate.available)
 
-  const groups: BoardGroup[] =
-    groupBy === 'repo'
-      ? readyRepos
-          .map((repo): BoardGroup => ({ key: repo.repoId, name: repo.displayName, rows: rows.filter((row) => row.item.repoId === repo.repoId) }))
-          .filter((group) => group.rows.length > 0)
-      : LABEL_DEFAULTS.filter((def) => def.role !== 'marker')
-          .map((def): BoardGroup => ({ key: def.key, name: def.name, rows: rows.filter((row) => row.stageLabel?.key === def.key) }))
-          .filter((group) => group.rows.length > 0)
-
   const repositorySummaries: BoardRepositorySummary[] = readyRepos.map((repo) => {
     const repoRows = rows.filter((row) => row.item.repoId === repo.repoId)
     return {
@@ -178,15 +167,14 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
     }
   })
 
-  const base = { groupBy, groups, rows, notReady, repositorySummaries, totalItems: rows.length, ungated }
+  const base = { rows, notReady, repositorySummaries, totalItems: rows.length, ungated }
   return { ...base, emittedAt: snapshot.emittedAt, signature: JSON.stringify(base) }
 }
 
 /** A compact string over every rendered field, deliberately excluding `emittedAt`, exported so a caller holding two projections can compare them directly. */
 export function boardSignature(projection: BoardProjection): string {
   return JSON.stringify({
-    groupBy: projection.groupBy,
-    groups: projection.groups,
+    rows: projection.rows,
     notReady: projection.notReady,
     repositorySummaries: projection.repositorySummaries,
     totalItems: projection.totalItems,

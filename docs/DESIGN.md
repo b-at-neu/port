@@ -172,7 +172,7 @@ Dark surface lightness (CIE L*): sidebar 6.3 · background 10.7 · card 15.2 · 
 | Screen | Content |
 | --- | --- |
 | Needs you | Everything waiting on the operator, newest first, each with its action inline: plan reviews, PRs ready to merge, questions from stage sessions, needs-human escalations, blocked tickets with the decision they wait on |
-| Board | Grouped list: **Waiting on you**, **In progress**, **Blocked**, **Queued**. Toggle grouping by phase or by repo, plus a repo filter |
+| Board | Grouped list: **Waiting on you**, **In progress**, **Blocked**, **Queued**, each grouped by phase, plus a repo filter |
 | Backlog | Open tickets not yet in a pipeline, with **Work on**: interactive plan review or auto-plan |
 | Releases | Per repo, the upcoming release (the PRs merged since the last release) with the one action its phase allows (**Cut release**, **Open PR**, **Publish**), then every previous release, whose notes open in the detail pane |
 | Session | Conversation and composer. **Changes** opens the session's diff in the detail pane |
