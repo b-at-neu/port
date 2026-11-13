@@ -4,7 +4,7 @@ import { useSyncExternalStore } from 'react'
 import type { RepoId } from '@/utils/repos'
 import type { NewSessionPreselect } from '@/types/session'
 
-function createStore<T>(initial: T) {
+export function createStore<T>(initial: T) {
   let value = initial
   const listeners = new Set<() => void>()
   function notify(): void {

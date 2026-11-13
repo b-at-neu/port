@@ -131,6 +131,27 @@ describe('fixtureHandlers (registry-error scenario)', () => {
   })
 })
 
+describe('fixtureHandlers update channels', () => {
+  it.each([
+    ['populated', 'up-to-date'],
+    ['empty', 'up-to-date'],
+    ['unregistered', 'up-to-date'],
+    ['update-available', 'available'],
+    ['failing', 'error'],
+    ['registry-error', 'checking'],
+  ] as const)('serves %s as %s', (scenario, kind) => {
+    const handlers = fixtureHandlers(NOW, scenario)
+    expect(handlers['update:state'](undefined).kind).toBe(kind)
+    expect(handlers['update:check'](undefined).kind).toBe(kind)
+  })
+
+  it('marks the startup read and the manual check by trigger', () => {
+    const handlers = fixtureHandlers(NOW, 'update-available')
+    expect(handlers['update:state'](undefined)).toMatchObject({ trigger: 'startup', release: { version: '0.2.0' } })
+    expect(handlers['update:check'](undefined)).toMatchObject({ trigger: 'manual' })
+  })
+})
+
 describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', (scenario) => {
   const now = NOW
   const handlers = fixtureHandlers(now, scenario)

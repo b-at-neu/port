@@ -7,6 +7,7 @@ import { ROUTE_IDS } from '@/renderer/router/routes'
 import { ABOUT_NOTICE, ABOUT_POWERED_BY } from '@/utils/about/copy'
 import { formatAppVersion } from '@/utils/about/version'
 import { WIDE_CARD } from '@/renderer/settings/copy'
+import { UpdateStatus } from '@/renderer/update/status'
 
 function VersionLines() {
   const query = useIpcQuery('app:info')
@@ -28,6 +29,7 @@ export function AboutTab() {
     <SettingsCard title="About" className={WIDE_CARD}>
       <p className="text-body font-semibold text-foreground">port</p>
       <VersionLines />
+      <UpdateStatus />
       <Link to={ROUTE_IDS.setup} className="w-fit rounded text-small text-primary-text hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
         Open setup checklist
       </Link>

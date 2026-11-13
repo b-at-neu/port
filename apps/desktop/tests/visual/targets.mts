@@ -62,6 +62,7 @@ export const SCENARIO_LANDING: Readonly<Record<NonDefaultScenario, string | null
   unregistered: '#/setup',
   failing: null,
   'registry-error': '#/setup',
+  'update-available': null,
 }
 
 // The permission dialog is app-wide — its one fixture session is served only
@@ -81,6 +82,10 @@ export const VARIANT_TARGETS: readonly VariantTarget[] = [
   { name: 'backlog-error', scenario: 'failing', target: { hash: '#/backlog', container: '#app', ready: "text=GitHub's rate limit is used up." } },
   { name: 'history-error', scenario: 'failing', target: { hash: '#/history', container: '#app', ready: "text=Couldn't read your Claude projects directory" } },
   { name: 'repos-error', scenario: 'registry-error', target: { hash: '#/settings?section=repositories', container: '#app', ready: "text=isn't valid JSON" } },
+  { name: 'update-available', scenario: 'update-available', target: { hash: '#/board', container: '#app', ready: '[data-slot="update-notice"]' } },
+  { name: 'about-update-available', scenario: 'update-available', target: { hash: '#/settings?section=about', container: '#app', ready: '[data-slot="update-status"][data-state="available"]' } },
+  { name: 'about-update-error', scenario: 'failing', target: { hash: '#/settings?section=about', container: '#app', ready: '[data-slot="update-status"][data-state="error"]' } },
+  { name: 'about-update-checking', scenario: 'registry-error', target: { hash: '#/settings?section=about', container: '#app', ready: '[data-slot="update-status"][data-state="checking"]' } },
 ]
 
 const FIXTURE_SESSION_ID = 'fixture-session-streaming'
@@ -164,7 +169,7 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'connections', hash: '#/settings?section=connections', ready: '[data-slot="connection-row"]' },
       { name: 'pipeline', hash: '#/settings?section=pipeline', ready: '[data-slot="settings-repo-config"]' },
       { name: 'usage', hash: '#/settings?section=usage', ready: '[data-slot="usage-row"]' },
-      { name: 'about', hash: '#/settings?section=about', ready: '[data-about-notice]' },
+      { name: 'about', hash: '#/settings?section=about', ready: '[data-slot="update-status"][data-state="up-to-date"]' },
       { name: 'status-popover', click: '[data-slot="status-dot"]', ready: '[data-slot="status-popover"]' },
     ],
   },

@@ -29,6 +29,10 @@ function jumpItem(entry: MenuSessionEntry, index: number, send: (command: AppCom
   return { label: entry.label, accelerator: spec.accelerator, registerAccelerator: false, click: () => send({ kind: 'open-session', sessionKey: entry.sessionKey }) }
 }
 
+function checkForUpdatesItem(send: (command: AppCommand) => void): MenuItemConstructorOptions {
+  return { label: 'Check for updates', registerAccelerator: false, click: () => send({ kind: 'check-for-updates' }) }
+}
+
 /** Pure — `platform`/`isPackaged`/`sessions` are passed in rather than read from `process`/`app`/the
  *  store. `sessions` is already ordered (pinned first) by the caller. */
 export function menuTemplate(platform: NodeJS.Platform, isPackaged: boolean, sessions: readonly MenuSessionEntry[], send: (command: AppCommand) => void): MenuItemConstructorOptions[] {
@@ -50,7 +54,7 @@ export function menuTemplate(platform: NodeJS.Platform, isPackaged: boolean, ses
   if (platform === 'darwin') {
     template.push({
       label: 'port',
-      submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }],
+      submenu: [{ role: 'about' }, checkForUpdatesItem(send), { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }],
     })
   }
 
@@ -61,6 +65,7 @@ export function menuTemplate(platform: NodeJS.Platform, isPackaged: boolean, ses
     { label: 'Session', submenu: sessionMenu },
     { label: 'Window', role: 'windowMenu' },
   )
+  if (platform !== 'darwin') template.push({ label: 'Help', submenu: [checkForUpdatesItem(send)] })
 
   return template
 }

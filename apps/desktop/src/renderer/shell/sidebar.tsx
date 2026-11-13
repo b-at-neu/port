@@ -16,6 +16,7 @@ import { SidebarSessions } from '@/renderer/shell/sidebar-sessions'
 import { SidebarFooter } from '@/renderer/shell/sidebar-footer'
 import { setSidebarCollapsed } from '@/renderer/shell/prefs'
 import { ROUTE_IDS } from '@/renderer/router/routes'
+import { UpdateNotice, UpdateRailButton } from '@/renderer/update/notice'
 
 const RAIL_SCREENS = [
   { to: ROUTE_IDS.board, icon: LayoutList, label: 'Board' },
@@ -48,6 +49,7 @@ function Rail({ onExpand, needsYouCount }: { readonly onExpand: () => void; read
         ))}
       </div>
       <div className="flex-1" />
+      <UpdateRailButton />
       <Tooltip>
         <TooltipTrigger asChild>
           <Link to={ROUTE_IDS.settings} className="flex size-8 items-center justify-center rounded-md hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Settings">
@@ -86,6 +88,7 @@ export function Sidebar() {
           <SidebarSessions />
         </div>
       </ScrollArea>
+      <UpdateNotice />
       <Separator />
       <SidebarFooter />
     </aside>
