@@ -10,22 +10,34 @@ import { readSdkManifest, sdkPlatformPackages } from './scripts/bundle-audit.mjs
 
 const root = join(import.meta.dirname, '../..')
 
+const portConfigPath = join(root, '.claude/port.config.json')
+
+function readPortConfig() {
+  try {
+    return JSON.parse(readFileSync(portConfigPath, 'utf8'))
+  } catch (error) {
+    throw new Error(`electron-builder.config.mjs: could not read ${portConfigPath}: ${error.message}`, { cause: error })
+  }
+}
+
+/** The `[owner, repo]` the update metadata points at, from `repo` in
+ *  `.claude/port.config.json`. */
+function readRepository(config) {
+  const parts = typeof config?.repo === 'string' ? config.repo.split('/') : []
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    throw new Error(`electron-builder.config.mjs: ${portConfigPath} has no 'repo' of the form owner/name`)
+  }
+  return parts
+}
+
 /** Reads the release version from the one place the rest of the repository
  *  already treats as authoritative (`.claude/port.config.json` →
  *  `release.versionFiles[0]`). Throws a named error at every link that
  *  could be missing rather than falling back to a default. */
-function readVersion() {
-  const configPath = join(root, '.claude/port.config.json')
-  let config
-  try {
-    config = JSON.parse(readFileSync(configPath, 'utf8'))
-  } catch (error) {
-    throw new Error(`electron-builder.config.mjs: could not read ${configPath}: ${error.message}`, { cause: error })
-  }
-
+function readVersion(config) {
   const versionFile = config?.release?.versionFiles?.[0]
   if (!versionFile) {
-    throw new Error(`electron-builder.config.mjs: ${configPath} has no release.versionFiles[0]`)
+    throw new Error(`electron-builder.config.mjs: ${portConfigPath} has no release.versionFiles[0]`)
   }
 
   const versionFilePath = join(root, versionFile)
@@ -43,7 +55,9 @@ function readVersion() {
   return versionManifest.version
 }
 
-const version = readVersion()
+const portConfig = readPortConfig()
+const version = readVersion(portConfig)
+const [owner, repo] = readRepository(portConfig)
 const forbidden = sdkPlatformPackages(readSdkManifest())
 
 const author = {
@@ -62,6 +76,9 @@ export default {
     author,
     homepage: 'https://github.com/b-at-neu/port',
   },
+  // Makes `dist` emit the latest*.yml update metadata and bake app-update.yml into the app.
+  // Nothing is published from here: `dist` passes --publish never and the release workflow uploads.
+  publish: { provider: 'github', owner, repo },
   directories: {
     output: 'dist',
     buildResources: 'build',
