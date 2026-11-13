@@ -1,6 +1,6 @@
 import type { ParsedVersion } from '@/utils/release/version'
 
-export type UpdateTrigger ='startup' | 'manual'
+export type UpdateTrigger = 'startup' | 'manual'
 
 export type UpdateErrorKind = 'offline' | 'rate-limited' | 'malformed' | 'unavailable'
 

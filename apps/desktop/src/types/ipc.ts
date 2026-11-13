@@ -49,9 +49,8 @@ import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionContr
 import type { ComposerAttachment } from '@/utils/hosting/attachments'
 import type { FolderEntry, SessionChanges } from '@/types/workspace'
 import type { AppCommand } from '@/utils/shell/commands'
+import type { AppInfo } from '@/types/settings'
 import type { UpdateState } from '@/types/update'
-
-export interface AppInfo { app: string; electron: string; node: string; chromium: string; commit: string | null }
 
 /** Every failure kind `readRegistry`/`writeRegistry` can report, shared by all three channels below. */
 export type RegistryFailureKind = 'registry-malformed' | 'registry-unsupported-version' | 'registry-unreadable' | 'registry-unwritable'
