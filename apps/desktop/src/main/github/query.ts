@@ -248,6 +248,10 @@ export function blockedByField(pageSize: number): string {
   return `blockedBy(first: ${pageSize}) { totalCount nodes { number title url state } }`
 }
 
+export function blockingField(pageSize: number): string {
+  return `blocking(first: ${pageSize}) { totalCount nodes { number title url state } }`
+}
+
 export function buildClaimPreflightQuery(number: number): ClaimPreflightQuery {
   const labelsField = `labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }`
   const assigneesField = `assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }`

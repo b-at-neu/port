@@ -8,6 +8,28 @@ export interface BacklogLabel {
   readonly color: string | null
 }
 
+export interface BacklogIssueRef {
+  readonly number: number
+  readonly title: string
+  readonly state: 'OPEN' | 'CLOSED'
+}
+
+// `parent: null` is a real "no parent"; only `ok: false` is a failed read.
+export type ParentRead =
+  | { readonly ok: true; readonly parent: BacklogIssueRef | null }
+  | { readonly ok: false; readonly reason: string }
+
+// `claimed` means the child carries a vocabulary label.
+export interface BacklogChild extends BacklogIssueRef {
+  readonly claimed: boolean
+  readonly blockers: BlockerRead
+}
+
+// `shown`/`total` mean the same as in `BlockerRead`.
+export type ChildrenRead =
+  | { readonly ok: true; readonly children: readonly BacklogChild[]; readonly shown: number; readonly total: number }
+  | { readonly ok: false; readonly reason: string }
+
 // An open issue carrying no vocabulary label — genuinely unclaimed.
 export interface BacklogItem {
   readonly number: number
@@ -18,6 +40,9 @@ export interface BacklogItem {
   readonly labels: readonly BacklogLabel[]
   readonly subIssueCount: number
   readonly blockers: BlockerRead
+  readonly blocking: BlockerRead
+  readonly parent: ParentRead
+  readonly children: ChildrenRead
 }
 
 // `exclude` wins over `include`; a non-empty `include` keeps an item carrying any one of its names.
@@ -77,6 +102,9 @@ export interface BacklogRowView {
   readonly labels: readonly BacklogLabel[]
   readonly subIssueCount: number
   readonly blockers: BlockerRead
+  readonly blocking: BlockerRead
+  readonly parent: ParentRead
+  readonly children: ChildrenRead
 }
 
 // What Work on must confirm before claiming; `truncation` is set when the blocker page held fewer than exist.

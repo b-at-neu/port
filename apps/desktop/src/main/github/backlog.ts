@@ -2,13 +2,14 @@
 import { githubHttp } from '@/main/platform/github-http'
 import type { GitHubTransport } from '@/types/platform'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
-import type { BacklogItem, BacklogLabel, BacklogResponse } from '@/types/backlog'
+import type { BacklogItem, BacklogLabel, BacklogResponse, ParentRead } from '@/types/backlog'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
 import { toBlockerRead } from '@/main/github/blockers'
-import { blockedByField } from '@/main/github/query'
+import { EMPTY_CHILDREN, fetchChildren } from '@/main/github/backlog-children'
+import { blockedByField, blockingField } from '@/main/github/query'
 import { repoGraphqlRequest } from '@/main/github/request'
-import type { GitHubRepoRef } from '@/types/github'
+import type { GitHubRepoRef, GraphQLErrorEntry } from '@/types/github'
 import { isHexColor } from '@/utils/hex-color'
 
 
@@ -16,6 +17,7 @@ const PAGE_SIZE = 100
 const ASSIGNEE_PAGE_SIZE = 10
 const ITEM_LABEL_PAGE_SIZE = 20
 const BLOCKER_PAGE_SIZE = 10
+const BLOCKING_PAGE_SIZE = 10
 
 export function labelsOf(value: unknown): readonly BacklogLabel[] {
   const nodes = (value as { nodes?: unknown } | null | undefined)?.nodes
@@ -35,6 +37,23 @@ function subIssueCountOf(value: unknown): number {
   return typeof total === 'number' && Number.isInteger(total) && total > 0 ? total : 0
 }
 
+function nodeFieldErrored(errors: readonly GraphQLErrorEntry[], index: number, field: string): boolean {
+  return errors.some((error) => {
+    const path = error.path
+    return path?.[0] === 'repository' && path[1] === 'issues' && path[2] === 'nodes' && path[3] === index && path[4] === field
+  })
+}
+
+function parentOf(issue: Record<string, unknown>, errored: boolean): ParentRead {
+  if (errored) return { ok: false, reason: "GitHub reported an error reading this issue's parent" }
+  if (!('parent' in issue)) return { ok: false, reason: 'parent is missing from the response' }
+  const parent = issue.parent
+  if (parent === null) return { ok: true, parent: null }
+  const raw = typeof parent === 'object' ? (parent as Record<string, unknown>) : {}
+  if (typeof raw.number !== 'number' || (raw.state !== 'OPEN' && raw.state !== 'CLOSED')) return { ok: false, reason: 'parent is malformed' }
+  return { ok: true, parent: { number: raw.number, title: typeof raw.title === 'string' ? raw.title : '', state: raw.state } }
+}
+
 function buildBacklogQuery(): string {
   return [
     'query($owner: String!, $name: String!) {',
@@ -50,6 +69,8 @@ function buildBacklogQuery(): string {
     '        subIssues { totalCount }',
     `        assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }`,
     `        ${blockedByField(BLOCKER_PAGE_SIZE)}`,
+    `        ${blockingField(BLOCKING_PAGE_SIZE)}`,
+    '        parent { number title state }',
     '      }',
     '    }',
     '  }',
@@ -106,15 +127,11 @@ export async function fetchBacklog(params: FetchBacklogParams): Promise<BacklogR
 
   const vocabularyNames = new Set(params.vocabulary.labels.map((label) => label.name))
 
-  const items: BacklogItem[] = []
+  const items: Omit<BacklogItem, 'children'>[] = []
   for (const [index, node] of nodes.entries()) {
     if (typeof node !== 'object' || node === null) continue
     const issue = node as Record<string, unknown>
     if (fieldListOf(issue.labels, 'name').some((name) => vocabularyNames.has(name))) continue
-    const blockersErrored = errors.some((error) => {
-      const path = error.path
-      return path?.[0] === 'repository' && path[1] === 'issues' && path[2] === 'nodes' && path[3] === index && path[4] === 'blockedBy'
-    })
     items.push({
       number: typeof issue.number === 'number' ? issue.number : 0,
       title: typeof issue.title === 'string' ? issue.title : '',
@@ -123,9 +140,19 @@ export async function fetchBacklog(params: FetchBacklogParams): Promise<BacklogR
       assignees: fieldListOf(issue.assignees, 'login'),
       labels: labelsOf(issue.labels),
       subIssueCount: subIssueCountOf(issue.subIssues),
-      blockers: toBlockerRead(issue.blockedBy, blockersErrored),
+      blockers: toBlockerRead(issue.blockedBy, nodeFieldErrored(errors, index, 'blockedBy')),
+      blocking: toBlockerRead(issue.blocking, nodeFieldErrored(errors, index, 'blocking'), 'blocking'),
+      parent: parentOf(issue, nodeFieldErrored(errors, index, 'parent')),
     })
   }
 
-  return { ok: true, items, scanned: nodes.length, total, viewer, fetchedAt }
+  const children = await fetchChildren({
+    repo: params.repo,
+    epics: items.filter((item) => item.subIssueCount > 0).map((item) => item.number),
+    claimedNames: vocabularyNames,
+    github,
+  })
+
+  const withChildren = items.map((item): BacklogItem => ({ ...item, children: children.get(item.number) ?? EMPTY_CHILDREN }))
+  return { ok: true, items: withChildren, scanned: nodes.length, total, viewer, fetchedAt }
 }

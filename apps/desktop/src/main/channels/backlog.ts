@@ -1,4 +1,4 @@
-// `'backlog:list'`'s composition: registry lookup, then the one round trip `fetchBacklog` makes.
+// `'backlog:list'`'s composition: registry lookup, then the list read and per-epic children read `fetchBacklog` makes.
 import type { BacklogDetailResponse, BacklogResponse } from '@/types/backlog'
 import type { IpcMap } from '@/types/ipc'
 import { fetchBacklog } from '@/main/github/backlog'
