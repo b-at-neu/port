@@ -15,7 +15,7 @@ import type { ReleaseIssuesRequest, ReleaseIssuesResponse, ReleaseRunRequest, Re
 import type { RuntimePreflight, RuntimeProbe } from '@/types/runtime'
 import type { GhStatus } from '@/types/gh'
 import type { NotificationPrefs, StorageReport, UsageSummary } from '@/types/settings'
-import type { BacklogResponse } from '@/types/backlog'
+import type { BacklogDetailResponse, BacklogResponse } from '@/types/backlog'
 import type { AuditRead } from '@/types/writes'
 import type { StageAllowResult, StageResumeResult, StageRestartResult } from '@/types/stage'
 import type {
@@ -257,10 +257,9 @@ export interface IpcMap {
     response: GhStatus
   }
   /** The Backlog screen's own read — open issues carrying no vocabulary label. */
-  'backlog:list': {
-    request: { repoId: RepoId }
-    response: BacklogResponse
-  }
+  'backlog:list': { request: { repoId: RepoId }; response: BacklogResponse }
+  /** One open issue's lazy detail read — GitHub-side failures are typed values, never throws. */
+  'backlog:detail': { request: { repoId: RepoId; number: number }; response: BacklogDetailResponse }
   /** The Audit screen's own read — `null` is explicit, never omitted; a `number` requires a `repoId`. */
   'audit:list': {
     request: { repoId: RepoId | null; number: number | null }
@@ -429,6 +428,7 @@ export const IPC_CHANNELS = [
   'session:restore:discard',
   'gh:status',
   'backlog:list',
+  'backlog:detail',
   'audit:list',
   'session:defaults',
   'session:defaults:set',

@@ -9,6 +9,7 @@ import { fixtureStorageReport, fixtureUsageSummary } from './settings'
 import { fixtureBoardSnapshot } from './board'
 import { fixtureAuditRead } from './audit'
 import { fixtureBacklog } from './backlog'
+import { fixtureBacklogDetail } from './backlog-detail'
 import { fixtureReleaseIssues, fixtureReleaseStatus } from './releases'
 import { fixtureClaimPreflight, fixtureGatePreflight } from './dialogs'
 import { fixtureFolders, fixtureSessionChanges } from './folders'
@@ -127,6 +128,7 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
 
     'gh:status': () => ({ kind: 'signed-in', checkedAt: now.toISOString(), account: 'octo-operator', scopes: ['repo', 'read:org', 'workflow'] }),
     'backlog:list': (request) => (scenario === 'failing' ? fixtureFailingBacklog(now, request.repoId) : fixtureBacklog(now, request.repoId)),
+    'backlog:detail': (request) => fixtureBacklogDetail(now, scenario, request),
     'audit:list': (request) => fixtureAuditRead(now, scenario, request),
     'session:defaults': () => DEFAULT_SESSION_DEFAULTS,
     'session:defaults:set': (request) => request,
