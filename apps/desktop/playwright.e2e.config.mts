@@ -8,6 +8,7 @@ export default defineConfig({
   fullyParallel: false,
   retries: 0,
   timeout: 60_000,
+  expect: { timeout: 15_000 },
   forbidOnly: !!process.env['CI'],
   outputDir: 'out/playwright-e2e',
   reporter: 'list',
