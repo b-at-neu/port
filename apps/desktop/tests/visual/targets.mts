@@ -166,7 +166,12 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'status-popover', click: '[data-slot="status-dot"]', ready: '[data-slot="status-popover"]' },
     ],
   },
-  backlog: { hash: '#/backlog', container: '#app', ready: '[data-slot="backlog-row"]' },
+  backlog: {
+    hash: '#/backlog',
+    container: '#app',
+    ready: '[data-slot="backlog-row"]',
+    variants: [{ name: 'repo-filter', click: '[data-slot="backlog-repo-filter"]', ready: '[role="menu"]' }],
+  },
   releases: {
     hash: '#/releases',
     container: '#app',

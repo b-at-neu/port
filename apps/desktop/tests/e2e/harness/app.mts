@@ -34,6 +34,8 @@ export interface LaunchParams {
   readonly state: SandboxState
   /** Extra `.claude/port.config.json` fields layered over the required `repo`. */
   readonly config?: Readonly<Record<string, unknown>>
+  /** Further `owner/name` repositories to register; the fake ignores owner/name, so each serves the same issues. */
+  readonly extraRepos?: readonly string[]
 }
 
 /** Fails fast with the actual remedy, the same contract as the visual harness's own launcher. */
@@ -53,7 +55,14 @@ export async function launchE2EApp(params: LaunchParams): Promise<E2EApp> {
 
   const config = { repo: params.state.repo, ...(params.config ?? {}) }
   await writeFile(join(repoDir, '.claude', 'port.config.json'), JSON.stringify(config, null, 2))
-  await writeFile(join(userDataDir, 'registry.json'), JSON.stringify({ version: 1, repositories: [{ path: repoDir }] }, null, 2))
+  const extraPaths: string[] = []
+  for (const [index, repo] of (params.extraRepos ?? []).entries()) {
+    const extraDir = join(sandboxDir, `repo-${String(index + 2)}`)
+    await mkdir(join(extraDir, '.claude'), { recursive: true })
+    await writeFile(join(extraDir, '.claude', 'port.config.json'), JSON.stringify({ ...config, repo }, null, 2))
+    extraPaths.push(extraDir)
+  }
+  await writeFile(join(userDataDir, 'registry.json'), JSON.stringify({ version: 1, repositories: [repoDir, ...extraPaths].map((path) => ({ path })) }, null, 2))
   await writeFile(statePath, JSON.stringify(params.state, null, 2))
   await writeFile(callsPath, '')
 

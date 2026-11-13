@@ -2,7 +2,7 @@
 import { useRef, useState } from 'react'
 import { useQueries, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { RefreshCw, ListTodo, ChevronDown, Loader2 } from 'lucide-react'
+import { RefreshCw, ListTodo, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
 import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
@@ -19,13 +19,15 @@ import { useListSelection } from '@/renderer/shell/list-selection'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { buildBacklogGroup, relativeAge, exactTime, staleSinceAt } from '@/renderer/backlog/group'
 import type { BacklogGroupView, BacklogLabelFilter, BacklogRowView } from '@/types/backlog'
-import { BACKLOG_FILTER_CLEAR, backlogCountCopy, backlogEmptyGroupCopy, backlogFilteredEmptyCopy, backlogNotReadyCopy } from '@/renderer/backlog/copy'
+import { BACKLOG_ALL_HIDDEN, BACKLOG_FILTER_CLEAR, BACKLOG_REPO_FILTER_SHOW_ALL, backlogCountCopy, backlogEmptyGroupCopy, backlogFilteredEmptyCopy, backlogGroupToggleAria, backlogNotReadyCopy } from '@/renderer/backlog/copy'
 import { workOnReasons } from '@/renderer/backlog/confirm'
 import { BlockedTag } from '@/renderer/backlog/blocked-tag'
 import { WorkOnConfirm } from '@/renderer/backlog/work-on-confirm'
 import { EMPTY_FILTER } from '@/renderer/backlog/filter'
-import { readBacklogFilters, setBacklogFilter } from '@/renderer/backlog/prefs'
+import { readBacklogCollapsed, readBacklogFilters, readBacklogHiddenRepos, setBacklogCollapsed, setBacklogFilter, setBacklogHiddenRepos } from '@/renderer/backlog/prefs'
+import { navigableRows, toggleHiddenRepo, visibleRepos } from '@/renderer/backlog/sections'
 import { LabelFilterMenu } from '@/renderer/backlog/label-filter-menu'
+import { RepoFilterMenu } from '@/renderer/backlog/repo-filter-menu'
 import { LabelChip } from '@/renderer/components/label-chip'
 import { isReadyRepo } from '@/utils/repos'
 import type { RepoId } from '@/utils/repos'
@@ -140,10 +142,26 @@ function BacklogRow({
   )
 }
 
-function GroupHeader({ group, filter, onFilterChange }: { readonly group: BacklogGroupView; readonly filter: BacklogLabelFilter; readonly onFilterChange: (filter: BacklogLabelFilter) => void }) {
+function GroupHeader({
+  group,
+  filter,
+  collapsed,
+  onToggleCollapsed,
+  onFilterChange,
+}: {
+  readonly group: BacklogGroupView
+  readonly filter: BacklogLabelFilter
+  readonly collapsed: boolean
+  readonly onToggleCollapsed: () => void
+  readonly onFilterChange: (filter: BacklogLabelFilter) => void
+}) {
+  const Chevron = collapsed ? ChevronRight : ChevronDown
   return (
-    <div className="flex h-8 items-center justify-between bg-sidebar px-4 text-small font-medium text-foreground-secondary">
-      <span>{group.kind === 'loaded' ? backlogCountCopy(group.repo, group.items.length, group.totalCount) : group.repo}</span>
+    <div className="flex h-8 items-center justify-between bg-sidebar pr-4 text-small font-medium text-foreground-secondary">
+      <button type="button" data-slot="backlog-group-toggle" aria-expanded={!collapsed} aria-label={backlogGroupToggleAria(group.repo, collapsed)} onClick={onToggleCollapsed} className={`flex h-full items-center gap-1 pl-4 pr-2 ${FOCUS_RING}`}>
+        <Chevron aria-hidden="true" className="size-3.5" />
+        <span>{group.kind === 'loaded' ? backlogCountCopy(group.repo, group.items.length, group.totalCount) : group.repo}</span>
+      </button>
       {group.kind === 'loaded' && group.labelOptions.length > 0 ? <LabelFilterMenu options={group.labelOptions} filter={filter} onChange={onFilterChange} /> : null}
     </div>
   )
@@ -220,12 +238,30 @@ export function BacklogScreen() {
   const [pendingKeys, setPendingKeys] = useState<ReadonlySet<string>>(new Set())
   const [confirm, setConfirm] = useState<{ readonly row: BacklogRowView; readonly planGate: PlanGate } | null>(null)
   const [filters, setFilters] = useState<ReadonlyMap<RepoId, BacklogLabelFilter>>(() => readBacklogFilters())
+  const [collapsed, setCollapsed] = useState<ReadonlySet<RepoId>>(() => readBacklogCollapsed())
+  const [hidden, setHidden] = useState<ReadonlySet<RepoId>>(() => readBacklogHiddenRepos())
   const now = new Date()
 
   const readyRepos: readonly ReadyRepo[] = reposQuery.data?.ok === true ? reposQuery.data.repositories.filter(isReadyRepo).map((e) => ({ id: e.id, repo: e.config.repo })) : []
   const notReadyRepos = reposQuery.data?.ok === true ? reposQuery.data.repositories.filter((e) => !isReadyRepo(e)) : []
 
-  const queries = useQueries({ queries: readyRepos.map((r) => ipcQueryOptions('backlog:list', { repoId: r.id })) })
+  const shownRepos = visibleRepos(readyRepos, hidden)
+  const queries = useQueries({ queries: shownRepos.map((r) => ipcQueryOptions('backlog:list', { repoId: r.id })) })
+
+  function toggleCollapsed(repoId: RepoId): void {
+    const next = !collapsed.has(repoId)
+    setCollapsed((previous) => {
+      const updated = new Set(previous)
+      if (next) updated.add(repoId)
+      else updated.delete(repoId)
+      return updated
+    })
+    setBacklogCollapsed(repoId, next)
+  }
+  function changeHidden(next: ReadonlySet<RepoId>): void {
+    setHidden(next)
+    setBacklogHiddenRepos(next)
+  }
 
   const filterOf = (repoId: RepoId): BacklogLabelFilter => filters.get(repoId) ?? EMPTY_FILTER
   function changeFilter(repoId: RepoId, filter: BacklogLabelFilter): void {
@@ -233,12 +269,12 @@ export function BacklogScreen() {
     setBacklogFilter(repoId, filter)
   }
 
-  const groups: BacklogGroupView[] = readyRepos.map((r, i) => {
+  const groups: BacklogGroupView[] = shownRepos.map((r, i) => {
     const q = queries[i]
     return buildBacklogGroup(r.id, r.repo, { status: q?.status ?? 'pending', data: q?.data, isError: q?.isError ?? false, dataUpdatedAt: q?.dataUpdatedAt ?? 0 }, filterOf(r.id))
   })
 
-  const flatRows: BacklogRowView[] = groups.flatMap((g) => (g.kind === 'loaded' ? g.items : []))
+  const flatRows = navigableRows(groups, collapsed)
   const flatKeys = flatRows.map((row) => rowKey(row.repoId, row.number))
   const selection = useListSelection(flatKeys)
 
@@ -303,6 +339,7 @@ export function BacklogScreen() {
           <span>Backlog</span>
           <div className="flex items-center gap-2">
             {stale !== null ? <span className="text-meta font-normal text-attention-dot">Updated {relativeAge(new Date(stale).toISOString(), now)}</span> : null}
+            {readyRepos.length > 1 ? <RepoFilterMenu repos={readyRepos} hidden={hidden} onToggle={(id) => changeHidden(toggleHiddenRepo(hidden, id))} onShowAll={() => changeHidden(new Set())} /> : null}
             <Button variant="ghost" size="small" onClick={refreshAll} disabled={isFetching}>
               <RefreshCw aria-hidden="true" className={isFetching ? 'size-3.5 animate-spin' : 'size-3.5'} />
               Refresh
@@ -320,13 +357,18 @@ export function BacklogScreen() {
             </div>
           ) : readyRepos.length === 0 ? (
             <EmptyState icon={ListTodo} message="Register a repository to see its open tickets." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.settings, search: { section: 'repositories' } }) }} className="px-4 py-6" />
+          ) : shownRepos.length === 0 ? (
+            <EmptyState icon={ListTodo} message={BACKLOG_ALL_HIDDEN} action={{ label: BACKLOG_REPO_FILTER_SHOW_ALL, onClick: () => changeHidden(new Set()) }} className="px-4 py-6" />
           ) : (
-            groups.map((group) => (
-              <div key={group.repoId}>
-                <GroupHeader group={group} filter={filterOf(group.repoId)} onFilterChange={(filter) => changeFilter(group.repoId, filter)} />
-                <GroupBody group={group} now={now} rowPropsFor={(key) => selection.rowProps(key)} menuOpenKey={menuOpenKey} pendingKeys={pendingKeys} setMenuOpenKey={setMenuOpenKey} onPick={pick} onClearFilter={() => changeFilter(group.repoId, EMPTY_FILTER)} />
-              </div>
-            ))
+            groups.map((group) => {
+              const isCollapsed = collapsed.has(group.repoId)
+              return (
+                <div key={group.repoId} data-slot="backlog-group" data-repo={group.repo} data-collapsed={isCollapsed}>
+                  <GroupHeader group={group} filter={filterOf(group.repoId)} collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(group.repoId)} onFilterChange={(filter) => changeFilter(group.repoId, filter)} />
+                  {isCollapsed ? null : <GroupBody group={group} now={now} rowPropsFor={(key) => selection.rowProps(key)} menuOpenKey={menuOpenKey} pendingKeys={pendingKeys} setMenuOpenKey={setMenuOpenKey} onPick={pick} onClearFilter={() => changeFilter(group.repoId, EMPTY_FILTER)} />}
+                </div>
+              )
+            })
           )}
           {notReadyRepos.map((entry) => (
             <p key={entry.id} className="px-4 py-1 text-meta text-muted-foreground">
