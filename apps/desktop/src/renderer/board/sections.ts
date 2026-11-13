@@ -1,7 +1,7 @@
 // The Board's four-section split — Waiting on you, In progress, Blocked, Queued —
-// each optionally broken into phase or repo sub-groups.
+// each broken into phase sub-groups.
 import { waitsOnYou } from '@/renderer/board/needs-you'
-import type { BoardGroupBy, BoardItemRow } from '@/types/board'
+import type { BoardItemRow } from '@/types/board'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import type { RepoId } from '@/utils/repos'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
@@ -22,7 +22,6 @@ interface BoardSection {
 }
 
 interface BoardSectionsParams {
-  readonly group: BoardGroupBy
   // null means every repository.
   readonly repo: RepoId | null
 }
@@ -56,36 +55,7 @@ function phaseGroupName(key: string): string {
   return PHASE_NAMES[key as keyof typeof PHASE_NAMES] ?? key
 }
 
-function repoGroupKey(row: BoardItemRow): string {
-  return row.item.repoId
-}
-
-function repoGroupName(row: BoardItemRow): string {
-  return row.item.repo
-}
-
-// Orders by first appearance — rows already sort by repo display name.
-function repoSubGroupsOf(rows: readonly BoardItemRow[]): readonly BoardSubGroup[] {
-  const order: string[] = []
-  const byKey = new Map<string, BoardItemRow[]>()
-  for (const row of rows) {
-    const key = repoGroupKey(row)
-    const group = byKey.get(key)
-    if (group === undefined) {
-      byKey.set(key, [row])
-      order.push(key)
-    } else {
-      group.push(row)
-    }
-  }
-  return order.map((key): BoardSubGroup => {
-    const groupRows = byKey.get(key) ?? []
-    return { key, name: groupRows[0] !== undefined ? repoGroupName(groupRows[0]) : key, rows: groupRows }
-  })
-}
-
-function subGroupsOf(rows: readonly BoardItemRow[], group: BoardGroupBy): readonly BoardSubGroup[] {
-  if (group === 'repo') return repoSubGroupsOf(rows)
+function subGroupsOf(rows: readonly BoardItemRow[]): readonly BoardSubGroup[] {
   return [...PIPELINE_ORDER, UNSTAGED_KEY]
     .map((key): BoardSubGroup => ({ key, name: phaseGroupName(key), rows: rows.filter((row) => phaseGroupKey(row) === key) }))
     .filter((subGroup) => subGroup.rows.length > 0)
@@ -108,7 +78,7 @@ export function boardSections(rows: readonly BoardItemRow[], params: BoardSectio
   return order
     .map((key): BoardSection => {
       const sectionRows = bySection.get(key) ?? []
-      return { key, name: SECTION_NAMES[key], count: sectionRows.length, subGroups: subGroupsOf(sectionRows, params.group) }
+      return { key, name: SECTION_NAMES[key], count: sectionRows.length, subGroups: subGroupsOf(sectionRows) }
     })
     .filter((section) => section.count > 0)
 }

@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { PipelineState, ReconciledItem, RepositoryState } from '@/types/state'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS, initialHealth } from '@/types/board'
@@ -167,43 +166,26 @@ describe('stageLabelOf', () => {
   })
 })
 
-describe('projectBoard — grouping', () => {
-  it('groups by stage, in LABEL_DEFAULTS order, omitting empty groups', () => {
-    const repo = readyRepo({ items: [item({ number: 1, stage: 'trigger', stages: [{ key: 'ready', name: 'ready', role: 'trigger' }], status: 'waiting' })] })
-    const projection = projectBoard({ snapshot: snapshotOf([repo], [health()]), groupBy: 'stage', now: NOW })
-    expect(projection.groups).toHaveLength(1)
-    expect(projection.groups[0]?.key).toBe('ready')
-    expect(projection.groups[0]?.rows).toHaveLength(1)
-  })
-
-  it('groups by repo when requested, two repositories renaming the same label differently still share one stage group', () => {
-    const vocabA = resolveVocabulary({ labels: { ready: 'triage' } })
-    const vocabB = resolveVocabulary({ labels: { ready: 'todo' } })
-    const repoA = readyRepo({ repoId: 'repo-a' as RepoId, displayName: 'o/a', vocabulary: { verdict: 'verified', present: [], missing: [], problems: [], repoLabels: { ok: true, names: [] } }, items: [item({ repoId: 'repo-a' as RepoId, number: 1 })] })
+describe('projectBoard — rows', () => {
+  it('projects rows from two repositories, sorted by repository display name', () => {
+    const repoA = readyRepo({ repoId: 'repo-a' as RepoId, displayName: 'o/a', items: [item({ repoId: 'repo-a' as RepoId, number: 1 })] })
     const repoB = readyRepo({ repoId: 'repo-b' as RepoId, displayName: 'o/b', items: [item({ repoId: 'repo-b' as RepoId, number: 2 })] })
-    void vocabA
-    void vocabB
-
-    const byStage = projectBoard({ snapshot: snapshotOf([repoA, repoB], [health(), health({ repoId: 'repo-b' as RepoId })]), groupBy: 'stage', now: NOW })
-    expect(byStage.groups).toHaveLength(1)
-    expect(byStage.groups[0]?.rows).toHaveLength(2)
-
-    const byRepo = projectBoard({ snapshot: snapshotOf([repoA, repoB], [health(), health({ repoId: 'repo-b' as RepoId })]), groupBy: 'repo', now: NOW })
-    expect(byRepo.groups).toHaveLength(2)
+    const projection = projectBoard({ snapshot: snapshotOf([repoB, repoA], [health(), health({ repoId: 'repo-b' as RepoId })]), now: NOW })
+    expect(projection.rows.map((r) => r.item.repoId)).toEqual(['repo-a', 'repo-b'])
   })
 
   it('sorts rows by repository display name, then number ascending, stably across two projections', () => {
     const repo = readyRepo({ items: [item({ number: 5 }), item({ number: 1 }), item({ number: 3 })] })
     const snapshot = snapshotOf([repo], [health()])
-    const first = projectBoard({ snapshot, groupBy: 'stage', now: NOW })
-    const second = projectBoard({ snapshot, groupBy: 'stage', now: NOW })
-    expect(first.groups[0]?.rows.map((r) => r.item.number)).toEqual([1, 3, 5])
-    expect(second.groups[0]?.rows.map((r) => r.item.number)).toEqual([1, 3, 5])
+    const first = projectBoard({ snapshot, now: NOW })
+    const second = projectBoard({ snapshot, now: NOW })
+    expect(first.rows.map((r) => r.item.number)).toEqual([1, 3, 5])
+    expect(second.rows.map((r) => r.item.number)).toEqual([1, 3, 5])
   })
 
   it('carries a not-ready repository into the projection rather than dropping it', () => {
     const notReady: RepositoryState = { ok: false, repoId: 'repo-bad' as RepoId, displayName: 'o/bad', reason: 'not-ready', problem: { kind: 'not-a-git-repository' } }
-    const projection = projectBoard({ snapshot: snapshotOf([notReady], []), groupBy: 'stage', now: NOW })
+    const projection = projectBoard({ snapshot: snapshotOf([notReady], []), now: NOW })
     expect(projection.notReady).toHaveLength(1)
   })
 })
@@ -215,7 +197,7 @@ describe('projectBoard — one row per ticket', () => {
     item({ number: 537, kind: 'pull-request', title: 'the pull request', url: 'https://github.com/o/a/pull/537', linked: 464, ...REVIEWING }),
   ]
   const project = (items: readonly ReconciledItem[], sessions: Parameters<typeof projectBoard>[0]['sessions'] = []) =>
-    projectBoard({ snapshot: snapshotOf([readyRepo({ items })], [health()]), groupBy: 'stage', now: NOW, sessions })
+    projectBoard({ snapshot: snapshotOf([readyRepo({ items })], [health()]), now: NOW, sessions })
 
   it('shows an unlabelled issue and its reviewing pull request as one row with the review status, never Unstaged', () => {
     const projection = project(linkedPair())
@@ -225,7 +207,8 @@ describe('projectBoard — one row per ticket', () => {
     expect(row?.item.number).toBe(537)
     expect(row?.stageLabel?.key).toBe('reviewing')
     expect(row?.displayStatus.status).toBe('in-flight')
-    expect(projection.groups.map((group) => group.key)).toEqual(['reviewing'])
+    const subGroups = boardSections(projection.rows, { repo: null }).flatMap((section) => section.subGroups)
+    expect(subGroups.map((subGroup) => subGroup.key)).toEqual(['reviewing'])
   })
 
   describe('a pr opened issue whose pull request is gone from the sweep', () => {
@@ -235,13 +218,13 @@ describe('projectBoard — one row per ticket', () => {
     it('is absent when its pull request merged in the gap, so it never lands under Unstaged', () => {
       const projection = project([prOpened('counterpart-merged')])
       expect(projection.rows).toEqual([])
-      expect(boardSections(projection.rows, { group: 'phase', repo: null })).toEqual([])
+      expect(boardSections(projection.rows, { repo: null })).toEqual([])
     })
 
     it('still lands under Unstaged when the pull request is closed unmerged', () => {
       const projection = project([prOpened('counterpart-not-open')])
       expect(projection.rows).toHaveLength(1)
-      const subGroups = boardSections(projection.rows, { group: 'phase', repo: null }).flatMap((section) => section.subGroups)
+      const subGroups = boardSections(projection.rows, { repo: null }).flatMap((section) => section.subGroups)
       expect(subGroups.map((subGroup) => subGroup.key)).toEqual(['unstaged'])
     })
   })
@@ -256,7 +239,7 @@ describe('projectBoard — one row per ticket', () => {
     const snapshot = snapshotOf([readyRepo({ items: linkedPair() })], [health()])
     const interrupted = { repoId: 'repo-a' as RepoId, number: 464 }
     const withInterrupted = { ...snapshot, dispatch: [{ repoId: 'repo-a' as RepoId, interrupted: [interrupted] }] } as unknown as BoardSnapshot
-    expect(projectBoard({ snapshot: withInterrupted, groupBy: 'stage', now: NOW }).rows[0]?.displayStatus.status).toBe('interrupted')
+    expect(projectBoard({ snapshot: withInterrupted, now: NOW }).rows[0]?.displayStatus.status).toBe('interrupted')
   })
 
   it("matches a live session on either of the ticket's numbers", () => {
@@ -268,13 +251,13 @@ describe('projectBoard — one row per ticket', () => {
 
   it('stamps autoApproving from the snapshot list, by repository and number', () => {
     const snapshot = { ...snapshotOf([readyRepo({ items: [item({ number: 5 }), item({ number: 6 })] })], [health()]), autoPlan: [{ repoId: 'repo-a' as RepoId, approving: [5] }] }
-    const rows = projectBoard({ snapshot, groupBy: 'stage', now: NOW }).rows
+    const rows = projectBoard({ snapshot, now: NOW }).rows
     expect(rows.map((row) => [row.item.number, row.autoApproving])).toEqual([[5, true], [6, false]])
   })
 
   it('ignores an approving number listed under another repository', () => {
     const snapshot = { ...snapshotOf([readyRepo({ items: [item({ number: 5 })] })], [health()]), autoPlan: [{ repoId: 'repo-b' as RepoId, approving: [5] }] }
-    expect(projectBoard({ snapshot, groupBy: 'stage', now: NOW }).rows[0]?.autoApproving).toBe(false)
+    expect(projectBoard({ snapshot, now: NOW }).rows[0]?.autoApproving).toBe(false)
   })
 
   it('sorts rows by the ticket number', () => {
@@ -288,7 +271,7 @@ describe('projectBoard — live stage sessions', () => {
   const planSession = (overrides: Partial<Parameters<typeof stageSession>[0]> = {}) =>
     stageSession({ repoId: REPO, stage: { agent: 'plan', number: 1, kind: 'issue', trigger: 'ready' }, ...overrides })
   const project = (items: readonly ReconciledItem[], sessions: Parameters<typeof projectBoard>[0]['sessions']) =>
-    projectBoard({ snapshot: snapshotOf([readyRepo({ items })], [health()]), groupBy: 'stage', now: NOW, sessions })
+    projectBoard({ snapshot: snapshotOf([readyRepo({ items })], [health()]), now: NOW, sessions })
 
   it('marks a queued item with a streaming stage session as in flight, with liveStage set', () => {
     const [row] = project([item()], [planSession({ key: 'hosted-plan' })]).rows
@@ -347,7 +330,7 @@ describe('projectBoard — live stage sessions', () => {
     it('renders interrupted over a live session', () => {
       const snapshot = snapshotOf([readyRepo({ items: [stalled()] })], [health()])
       const withInterrupted = { ...snapshot, dispatch: [{ repoId: REPO, interrupted: [{ repoId: REPO, number: 1 }] }] } as unknown as BoardSnapshot
-      const result = projectBoard({ snapshot: withInterrupted, groupBy: 'stage', now: NOW, sessions: [planSession()] })
+      const result = projectBoard({ snapshot: withInterrupted, now: NOW, sessions: [planSession()] })
       expect(result.rows[0]?.displayStatus.status).toBe('interrupted')
     })
   })
@@ -397,13 +380,13 @@ describe('projectBoard — denial burst (Decision 7)', () => {
       readAt: NOW.toISOString(),
     }
     const repo = readyRepo({ denials, items: [item()] })
-    const projection = projectBoard({ snapshot: snapshotOf([repo], [health()]), groupBy: 'repo', now: NOW })
+    const projection = projectBoard({ snapshot: snapshotOf([repo], [health()]), now: NOW })
     expect(projection.repositorySummaries[0]?.denialBurst).toBe('3 denials on one command in 2m')
   })
 
   it('no burst on a quiet log', () => {
     const repo = readyRepo({ items: [item()] })
-    const projection = projectBoard({ snapshot: snapshotOf([repo], [health()]), groupBy: 'repo', now: NOW })
+    const projection = projectBoard({ snapshot: snapshotOf([repo], [health()]), now: NOW })
     expect(projection.repositorySummaries[0]?.denialBurst).toBeNull()
   })
 })
@@ -412,8 +395,8 @@ describe('boardSignature — Decision 1 no-op guard', () => {
   it('changes when a rendered field changes', () => {
     const repoQuiet = readyRepo({ items: [item({ status: 'waiting' })] })
     const repoChanged = readyRepo({ items: [item({ status: 'gated', stage: 'gate', stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }] })] })
-    const a = projectBoard({ snapshot: snapshotOf([repoQuiet], [health()]), groupBy: 'stage', now: NOW })
-    const b = projectBoard({ snapshot: snapshotOf([repoChanged], [health()]), groupBy: 'stage', now: NOW })
+    const a = projectBoard({ snapshot: snapshotOf([repoQuiet], [health()]), now: NOW })
+    const b = projectBoard({ snapshot: snapshotOf([repoChanged], [health()]), now: NOW })
     expect(boardSignature(a)).not.toBe(boardSignature(b))
   })
 
@@ -421,8 +404,8 @@ describe('boardSignature — Decision 1 no-op guard', () => {
     const repo = readyRepo({ items: [item()] })
     const snapshotEarly = snapshotOf([repo], [health()])
     const snapshotLate = { ...snapshotEarly, emittedAt: '2026-01-01T09:00:00.000Z' }
-    const a = projectBoard({ snapshot: snapshotEarly, groupBy: 'stage', now: NOW })
-    const b = projectBoard({ snapshot: snapshotLate, groupBy: 'stage', now: NOW })
+    const a = projectBoard({ snapshot: snapshotEarly, now: NOW })
+    const b = projectBoard({ snapshot: snapshotLate, now: NOW })
     expect(boardSignature(a)).toBe(boardSignature(b))
   })
 })

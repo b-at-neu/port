@@ -11,7 +11,6 @@ export interface BoardItemRef {
  *  with no `search` still type-checks. */
 export interface BoardSearch {
   readonly item?: BoardItemRef | null
-  readonly group?: 'phase' | 'repo'
   readonly repo?: RepoId | null
 }
 
@@ -28,7 +27,7 @@ export type DenialsGroup = 'command' | 'actor'
 
 export interface RepoSearch {
   readonly tab?: RepoTab
-  /** The Denials tab's own tabs-in-tab, persisted so a reload keeps the chosen grouping. Irrelevant outside `tab=denials`, but harmless to carry. Named distinctly from `BoardSearch.group` — TanStack Router's search params are typed across the whole route tree, so two routes sharing a key must share its type. */
+  /** The Denials tab's own tabs-in-tab, persisted so a reload keeps the chosen grouping. Irrelevant outside `tab=denials`, but harmless to carry. TanStack Router's search params are typed across the whole route tree, so two routes sharing a key must share its type. */
   readonly denialsGroup?: DenialsGroup
 }
 
