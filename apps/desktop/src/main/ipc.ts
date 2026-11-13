@@ -2,7 +2,10 @@ import { app, BrowserWindow, ipcMain } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { join } from 'node:path'
 import { IPC_CHANNELS, type IpcChannel, type IpcEvent, type IpcEventMap, type IpcMap } from '@/types/ipc'
-import { SOURCE_KINDS, type BoardSnapshot } from '@/types/board'
+import { resolveBoardRefresh } from '@/main/channels/board'
+import { resolveUpdateCheck, resolveUpdateState } from '@/main/channels/update'
+import { fetchAppReleases } from '@/main/github/app-releases'
+import { createUpdateService } from '@/main/update/service'
 import { chooseDirectory } from '@/main/dialogs'
 import { defaultWorkspaceChannelDeps, resolveFoldersChoose, resolveFoldersList, resolveSessionChanges } from '@/main/channels/workspace'
 import { createRecentsStore } from '@/main/workspace/recents'
@@ -122,32 +125,6 @@ function getAppInfo(): AppInfo {
     chromium: process.versions.chrome,
     commit: __PORT_BUILD_COMMIT__
   }
-}
-
-export interface BoardRefreshDeps {
-  readonly listRepositories: typeof listRepositories
-  readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
-}
-
-export async function resolveBoardRefresh(
-  registryDeps: RegistryDeps,
-  request: IpcMap['board:refresh']['request'],
-  deps: BoardRefreshDeps,
-): Promise<BoardSnapshot> {
-  if (request?.repoId !== undefined) {
-    if (typeof request.repoId !== 'string' || request.repoId === '') {
-      throw new Error("'board:refresh' repoId must be a non-empty string when present")
-    }
-    const list = await deps.listRepositories(registryDeps)
-    if (!list.ok) throw new Error(`'board:refresh' could not list repositories: ${list.message}`)
-    if (!list.repositories.some((repository) => repository.id === request.repoId)) {
-      throw new Error(`'board:refresh' found no repository registered with id '${request.repoId}'`)
-    }
-  }
-  if (request?.source !== undefined && !(SOURCE_KINDS as readonly string[]).includes(request.source)) {
-    throw new Error(`'board:refresh' source must be one of ${SOURCE_KINDS.join(', ')}`)
-  }
-  return deps.refresh(request)
 }
 
 interface RegisteredIpc {
@@ -489,11 +466,25 @@ export function registerIpc(): RegisteredIpc {
 
   handle('held:force-dispatch', (_event, request) => resolveForceDispatch(request, { snapshot: watcher.snapshot, dispatcherStatus: () => dispatcher.status(), forceDispatch, republish: () => watcher.republish() }))
 
+  const update = createUpdateService({
+    version: app.getVersion(),
+    isPackaged: app.isPackaged,
+    repo: __PORT_RELEASE_REPO__,
+    fetchReleases: (repo) => fetchAppReleases(repo),
+    now: () => new Date(),
+  })
+
+  handle('update:state', (_event, request) => resolveUpdateState(request, update))
+
+  handle('update:check', (_event, request) => resolveUpdateCheck(request, update))
+
   for (const channel of IPC_CHANNELS) {
     if (!registered.has(channel)) {
       throw new Error(`IPC channel '${channel}' is declared but has no handler`)
     }
   }
+
+  void update.check('startup')
 
   return { watcher, hostedStore, dispatcher, shutdownDispatch: () => { shutdown(); void closeOffload() }, stageRegistry }
 }

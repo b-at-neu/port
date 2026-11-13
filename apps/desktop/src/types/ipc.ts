@@ -49,14 +49,9 @@ import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionContr
 import type { ComposerAttachment } from '@/utils/hosting/attachments'
 import type { FolderEntry, SessionChanges } from '@/types/workspace'
 import type { AppCommand } from '@/utils/shell/commands'
+import type { UpdateState } from '@/types/update'
 
-export interface AppInfo {
-  app: string
-  electron: string
-  node: string
-  chromium: string
-  commit: string | null
-}
+export interface AppInfo { app: string; electron: string; node: string; chromium: string; commit: string | null }
 
 /** Every failure kind `readRegistry`/`writeRegistry` can report, shared by all three channels below. */
 export type RegistryFailureKind = 'registry-malformed' | 'registry-unsupported-version' | 'registry-unreadable' | 'registry-unwritable'
@@ -389,6 +384,9 @@ export interface IpcMap {
   'release:run': { request: ReleaseRunRequest; response: ReleaseRunResult }
   /** The tickets a published release's merged pull requests closed — read from GitHub, never written. */
   'release:issues': { request: ReleaseIssuesRequest; response: ReleaseIssuesResponse }
+  /** The cached update state (no I/O), and a check that joins or runs one — a failure is an `error` state, never a rejection. */
+  'update:state': { request: void; response: UpdateState }
+  'update:check': { request: void; response: UpdateState }
 }
 
 export const IPC_CHANNELS = [
@@ -460,6 +458,8 @@ export const IPC_CHANNELS = [
   'release:status',
   'release:run',
   'release:issues',
+  'update:state',
+  'update:check',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]

@@ -40,6 +40,7 @@ function harness(replies: readonly (() => Promise<Response>)[], tokens: readonly
   return {
     transport: client.request,
     conditional: client.conditional,
+    publicTransport: client.public,
     sent,
     tokenReads: () => tokenReads,
     advance: (ms: number) => {
@@ -68,6 +69,24 @@ describe('classifyHttpStatus', () => {
     [304, {}, '', 'unknown'],
   ])('%i with %j is %s', (status, headers, body, expected) => {
     expect(classifyHttpStatus(status, headers, body)).toBe(expected)
+  })
+})
+
+describe('createGitHubClient public', () => {
+  it('sends no Authorization header and never reads a token', async () => {
+    const { publicTransport, sent, tokenReads } = harness([reply(200, '[]')])
+    const result = await publicTransport(REST)
+    expect(result.ok).toBe(true)
+    expect(sent[0]?.headers).not.toHaveProperty('Authorization')
+    expect(tokenReads()).toBe(0)
+  })
+
+  it('does not retry a 401 and classifies it', async () => {
+    const { publicTransport, sent, tokenReads } = harness([reply(401)])
+    const result = await publicTransport(REST)
+    expect(result).toMatchObject({ ok: false, kind: 'unauthenticated' })
+    expect(sent).toHaveLength(1)
+    expect(tokenReads()).toBe(0)
   })
 })
 

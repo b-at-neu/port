@@ -156,6 +156,8 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'usage:summary': () => fixtureUsageSummary(now),
     'release:status': (request) => fixtureReleaseStatus(now, scenario, request.repoId),
     'release:issues': (request) => fixtureReleaseIssues(scenario, request),
+    'update:state': () => ({ kind: 'disabled', reason: 'unpackaged', current: '0.1.0' }),
+    'update:check': () => ({ kind: 'disabled', reason: 'unpackaged', current: '0.1.0' }),
     'release:run': () => ({ kind: 'refused', reason: 'unsupported', message: 'Fixture mode: releases are not cut.' }),
   }
 }
