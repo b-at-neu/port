@@ -50,6 +50,11 @@ export function stageTargetsOf(row: BoardItemRow): readonly StageLinkTarget[] {
   return [row.ticket.issue, row.ticket.pullRequest].filter((member) => member !== null).map((member) => ({ number: member.number, kind: member.kind }))
 }
 
+/** The key a row is selected, navigated and linked by — the Board list and the kanban must agree on it. */
+export function rowKey(row: BoardItemRow): string {
+  return `${row.item.repoId}:${String(row.ticket.ref.number)}`
+}
+
 /** `stage-links.ts`'s own `operatorJoinedOf`, re-exported for the row — `true` when any dispatch record for this ticket carries an operator join. */
 export function operatorJoinedOf(records: readonly DispatchRecord[], row: BoardItemRow): boolean {
   return operatorJoinedOfRecords(records, stageTargetsOf(row))

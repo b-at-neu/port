@@ -26,7 +26,7 @@ import { boardSections } from '@/renderer/board/sections'
 import { boardColumns } from '@/renderer/board/columns'
 import { BoardKanban, BoardKanbanSkeleton } from '@/renderer/board/kanban'
 import { readBoardView, setBoardView } from '@/renderer/board/prefs'
-import { operatorJoinedOf } from '@/renderer/board/row-model'
+import { operatorJoinedOf, rowKey } from '@/renderer/board/row-model'
 import type { DispatchRecord } from '@/types/dispatch'
 
 // Registered once from main.ts's boot — never a useEffect inside the
@@ -35,10 +35,6 @@ export function connectItemActionPruning(client: QueryClient): () => void {
   return observeIpcQuery(client, 'board:snapshot', undefined, (result) => {
     if (result.status === 'success') pruneItemActionStates(result.data)
   })
-}
-
-function rowKey(row: BoardItemRow): string {
-  return `${row.item.repoId}:${String(row.ticket.ref.number)}`
 }
 
 // A pull request number still selects its ticket, so an older `?item=` link resolves.

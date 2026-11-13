@@ -5,14 +5,11 @@ import { TicketCard } from '@/renderer/components/ticket-card'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { cn } from '@/renderer/lib/utils'
 import { emptyColumnLabel } from '@/renderer/board/copy'
-import type { BoardColumn, BoardItemRow } from '@/types/board'
+import { rowKey } from '@/renderer/board/row-model'
+import type { BoardColumn } from '@/types/board'
 import type { useListSelection } from '@/renderer/shell/list-selection'
 
 const COLUMN_CLASS = 'flex min-w-60 flex-1 flex-col gap-2'
-
-function rowKey(row: BoardItemRow): string {
-  return `${row.item.repoId}:${String(row.ticket.ref.number)}`
-}
 
 interface BoardKanbanProps {
   readonly columns: readonly BoardColumn[]

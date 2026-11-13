@@ -211,7 +211,7 @@ export interface BoardColumn {
   readonly cards: readonly BoardColumnCard[]
 }
 
-export type ItemActionState ={ readonly kind: 'pending'; readonly action: OperatorAction } | { readonly kind: 'result'; readonly action: OperatorAction; readonly result: ItemActionResult }
+export type ItemActionState = {readonly kind: 'pending'; readonly action: OperatorAction } | { readonly kind: 'result'; readonly action: OperatorAction; readonly result: ItemActionResult }
 
 interface NeedsYouItemBase {
   readonly repoId: RepoId | null
