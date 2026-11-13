@@ -74,6 +74,26 @@ describe('menuTemplate', () => {
     expect(send).toHaveBeenCalledWith({ kind: 'open-session', sessionKey: 'session-2' })
   })
 
+  it('puts Check for updates after About in the darwin port menu', () => {
+    const send = vi.fn()
+    const port = menuTemplate('darwin', true, [], send)[0]
+    const items = port?.submenu as { role?: string; label?: string; registerAccelerator?: boolean; click?: () => void }[]
+    const about = items.findIndex((item) => item.role === 'about')
+    expect(items[about + 1]).toMatchObject({ label: 'Check for updates', registerAccelerator: false })
+    items[about + 1]?.click?.()
+    expect(send).toHaveBeenCalledWith({ kind: 'check-for-updates' })
+    expect(menuTemplate('darwin', true, [], send).some((item) => item.label === 'Help')).toBe(false)
+  })
+
+  it.each(['linux', 'win32'] as const)('puts Check for updates in a Help menu on %s', (platform) => {
+    const send = vi.fn()
+    const help = menuTemplate(platform, true, [], send).find((item) => item.label === 'Help')
+    const item = (help?.submenu as { label?: string; registerAccelerator?: boolean; click?: () => void }[] | undefined)?.[0]
+    expect(item).toMatchObject({ label: 'Check for updates', registerAccelerator: false })
+    item?.click?.()
+    expect(send).toHaveBeenCalledWith({ kind: 'check-for-updates' })
+  })
+
   it('clicking a command item calls send with its kind', () => {
     const send = vi.fn()
     const template = menuTemplate('linux', true, [], send)

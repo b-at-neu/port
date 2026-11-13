@@ -12,6 +12,7 @@ export interface KeyboardDeps {
   readonly openNeedsYou: (focus: string | null) => void
   readonly toggleSidebar: () => void
   readonly startRename: () => void
+  readonly checkForUpdates: () => void
   readonly currentListNavigator: () => { next(): void; prev(): void; open(): void; close?(): void } | undefined
 }
 

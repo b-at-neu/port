@@ -41,8 +41,18 @@ export function ipcQueryOptions<C extends QueryChannel>(channel: C, request?: Ip
   })
 }
 
-export function useIpcQuery<C extends QueryChannel>(channel: C, request?: IpcMap[C]['request'], options?: { readonly enabled?: boolean; readonly refetchInterval?: number }) {
-  return useQuery({ ...ipcQueryOptions(channel, request), enabled: options?.enabled, refetchInterval: options?.refetchInterval })
+interface IpcQueryOptions<C extends QueryChannel> {
+  readonly enabled?: boolean
+  readonly refetchInterval?: number | ((data: IpcMap[C]['response'] | undefined) => number | false)
+}
+
+/** Adapts a data-reading interval to TanStack's query-reading one. */
+export function queryInterval<D>(interval: number | ((data: D | undefined) => number | false) | undefined): number | ((query: { readonly state: { readonly data: D | undefined } }) => number | false) | undefined {
+  return typeof interval === 'function' ? (query) => interval(query.state.data) : interval
+}
+
+export function useIpcQuery<C extends QueryChannel>(channel: C, request?: IpcMap[C]['request'], options?: IpcQueryOptions<C>) {
+  return useQuery({ ...ipcQueryOptions(channel, request), enabled: options?.enabled, refetchInterval: queryInterval(options?.refetchInterval) })
 }
 
 export function useIpcMutation<C extends MutationChannel>(channel: C) {

@@ -16,6 +16,7 @@ import { liveSessionKeys, selectSession, setSessionsQueryClient } from '@/render
 import { selectedSession } from '@/renderer/session/selection'
 import { shouldRedirectToSetup } from '@/renderer/setup/launch-redirect'
 import { sharedSubscriptions } from '@/renderer/data/subscriptions'
+import { checkForUpdates } from '@/renderer/update/actions'
 
 const app = document.querySelector<HTMLDivElement>('#app')
 
@@ -52,6 +53,7 @@ const actionDeps: KeyboardDeps = {
     if (shellPrefs().sidebarCollapsed) setSidebarCollapsed(toggleSidebarCollapsed())
     setRenaming(key)
   },
+  checkForUpdates: () => void checkForUpdates(queryClient),
   currentListNavigator: () => {
     const screen = currentListScreen()
     return screen !== null ? listNavigatorFor(screen) : undefined

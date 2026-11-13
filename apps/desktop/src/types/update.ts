@@ -48,6 +48,22 @@ export interface UpdateService {
   readonly check: (trigger: UpdateTrigger) => Promise<UpdateState>
 }
 
+/** What the sidebar notice and the collapsed rail button show for an available release. */
+export interface UpdateNoticeView {
+  readonly version: string
+  readonly notesUrl: string
+  readonly release: AvailableRelease
+}
+
+/** The Settings → About status line: one row per `UpdateState` kind. */
+export interface UpdateStatusView {
+  readonly kind: UpdateState['kind']
+  readonly text: string
+  readonly checkedAgo: string | null
+  readonly release: AvailableRelease | null
+  readonly canCheck: boolean
+}
+
 export type UpdateState =
   | { readonly kind: 'disabled'; readonly reason: 'unpackaged' | 'dev-build' | 'unparseable-version'; readonly current: string }
   | { readonly kind: 'idle'; readonly current: string }
