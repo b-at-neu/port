@@ -76,4 +76,9 @@ jobs:
             echo "::error::no installers found in apps/desktop/dist"
             exit 1
           fi
-          gh release upload "$TAG" "${files[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+          metadata=(apps/desktop/dist/latest*.yml)
+          if [ "${#metadata[@]}" -eq 0 ]; then
+            echo "::error::no update metadata found in apps/desktop/dist"
+            exit 1
+          fi
+          gh release upload "$TAG" "${files[@]}" "${metadata[@]}" apps/desktop/dist/port-*.blockmap --clobber --repo "$GITHUB_REPOSITORY"

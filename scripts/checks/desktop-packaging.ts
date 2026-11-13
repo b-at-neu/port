@@ -119,11 +119,24 @@ export default async function ({ expect, fail, ok }: Reporter) {
         expect(got === expected, 'desktop-packaging', `asarArchivePath(${JSON.stringify(entry)}, ${JSON.stringify(separator)}) returned ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`);
       }
 
+      const winListing = ['port-1.0.0-win-x64.exe', 'port-1.0.0-win-x64.exe.blockmap', 'latest.yml'];
+      const winYml = (name: string) => `files:\n  - url: ${name}\n`;
+      expect(audit.updateMetadataGaps(winListing, () => winYml('port-1.0.0-win-x64.exe')).length === 0, 'desktop-packaging', 'updateMetadataGaps flagged a complete Windows listing');
+      expect(audit.updateMetadataGaps(['port-1.0.0-win-x64.exe', 'latest.yml'], () => winYml('port-1.0.0-win-x64.exe')).length === 1, 'desktop-packaging', 'updateMetadataGaps did not flag a missing blockmap');
+      expect(audit.updateMetadataGaps(winListing, () => winYml('other.exe')).length === 1, 'desktop-packaging', 'updateMetadataGaps did not flag a yml that does not name the installer');
+      expect(audit.updateMetadataGaps([], () => '').length === 1, 'desktop-packaging', 'updateMetadataGaps passed an empty listing');
+
+      const updateConfig = 'provider: github\nowner: acme\nrepo: widgets\n';
+      expect(audit.appUpdateConfigGaps(updateConfig, { owner: 'acme', repo: 'widgets' }).length === 0, 'desktop-packaging', 'appUpdateConfigGaps flagged a good config');
+      expect(audit.appUpdateConfigGaps(updateConfig, { owner: 'acme', repo: 'gadgets' }).length === 1, 'desktop-packaging', 'appUpdateConfigGaps did not flag a wrong repo');
+      expect(audit.appUpdateConfigGaps('', { owner: 'acme', repo: 'widgets' }).length === 1, 'desktop-packaging', 'appUpdateConfigGaps passed empty text');
+
       const auditBundleText = readFileSync(join(appDir, 'scripts/audit-bundle.mjs'), 'utf8');
       expect(auditBundleText.includes('asarArchivePath(entry, sep)') && !auditBundleText.includes('extractFile(asarPath, entry.slice(1))'), 'desktop-packaging', 'audit-bundle.mjs must pass extractFile the native-separator path from asarArchivePath(entry, sep), not entry.slice(1)');
 
       const dist: string = readJson('apps/desktop/package.json').scripts?.dist ?? '';
       expect(!/electron-vite build[^&]*--mode/.test(dist), 'desktop-packaging', `'dist' script must build in the default mode so no fixtures are compiled, got: ${dist}`);
+      expect(dist.includes('--publish never'), 'desktop-packaging', `'dist' script must keep --publish never — the release workflow does the uploading, got: ${dist}`);
     }
   }
 
@@ -137,6 +150,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
       expect(text.includes('sdkPlatformPackages('), 'desktop-packaging', `${relOf(configPath)} must call sdkPlatformPackages( to derive its exclusions`);
       expect(!/\basarUnpack\b/.test(text), 'desktop-packaging', `${relOf(configPath)} must not set asarUnpack — there are no native production dependencies`);
       expect(/extraResources:\s*\[\s*\{\s*from:\s*['"]NOTICE\.txt['"]/.test(text), 'desktop-packaging', `${relOf(configPath)} must copy NOTICE.txt through extraResources`);
+      expect(/provider:\s*['"]github['"]/.test(text), 'desktop-packaging', `${relOf(configPath)} must set a github publish provider so the build emits update metadata`);
       expect(/target:\s*\[\s*\{\s*target:\s*['"]dmg['"],\s*arch:\s*\[\s*['"]x64['"],\s*['"]arm64['"]\s*\]/.test(text), 'desktop-packaging', `${relOf(configPath)}'s mac target must build dmg for both x64 and arm64`);
 
       // --- productName/appId/executableName name 'port', never 'Claude' — the installed app must never present itself as a Claude product. ---
@@ -199,7 +213,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
       const text = readFileSync(releaseWorkflowPath, 'utf8');
       const triggers = onTriggers(text);
       expect(!(JSON.stringify(triggers) !== JSON.stringify(['release', 'workflow_dispatch'])), 'desktop-packaging', `${relOf(releaseWorkflowPath)} must trigger on exactly release and workflow_dispatch, got ${JSON.stringify(triggers)}`);
-      for (const needle of ['types: [published]', 'pnpm --filter @port/desktop dist', 'ubuntu-latest', 'macos-latest', 'windows-latest', 'gh release upload', '--clobber', 'contents: write']) {
+      for (const needle of ['types: [published]', 'pnpm --filter @port/desktop dist', 'ubuntu-latest', 'macos-latest', 'windows-latest', 'gh release upload', '--clobber', 'contents: write', 'apps/desktop/dist/latest*.yml', '.blockmap']) {
         expect(text.includes(needle), 'desktop-packaging', `${relOf(releaseWorkflowPath)} must include '${needle}'`);
       }
     }
