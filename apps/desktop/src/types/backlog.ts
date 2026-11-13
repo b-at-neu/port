@@ -37,6 +37,35 @@ export type BacklogResponse =
   | { readonly ok: true; readonly items: readonly BacklogItem[]; readonly scanned: number; readonly total: number; readonly viewer: string | null; readonly fetchedAt: string }
   | { readonly ok: false; readonly kind: PipelineFailureKind; readonly message: string; readonly fetchedAt: string }
 
+// `total > items.length` means the page held fewer links than exist.
+export type BacklogLinkList =
+  | { readonly ok: true; readonly items: readonly ClaimBlocker[]; readonly total: number }
+  | { readonly ok: false; readonly reason: string }
+
+// `parent: null` is a real "no parent"; only `ok: false` is a failed read.
+export type BacklogParentRead =
+  | { readonly ok: true; readonly parent: ClaimBlocker | null }
+  | { readonly ok: false; readonly reason: string }
+
+export interface BacklogDetail {
+  readonly number: number
+  readonly title: string
+  readonly url: string
+  readonly body: string
+  readonly author: string | null
+  readonly updatedAt: string
+  readonly assignees: readonly string[]
+  readonly parent: BacklogParentRead
+  readonly blockedBy: BacklogLinkList
+  readonly blocking: BacklogLinkList
+}
+
+export type BacklogDetailFailureKind = PipelineFailureKind | 'issue-missing' | 'issue-closed'
+
+export type BacklogDetailResponse =
+  | { readonly ok: true; readonly detail: BacklogDetail; readonly fetchedAt: string }
+  | { readonly ok: false; readonly kind: BacklogDetailFailureKind; readonly message: string; readonly fetchedAt: string }
+
 export interface BacklogRowView {
   readonly repoId: RepoId
   readonly repo: string

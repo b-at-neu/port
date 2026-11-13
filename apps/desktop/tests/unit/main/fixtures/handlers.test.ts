@@ -41,6 +41,7 @@ const SAMPLE_REQUESTS: Partial<Record<IpcChannel, unknown>> = {
   'session:restore': { restoreId: 'r1' },
   'session:restore:discard': { restoreId: null },
   'backlog:list': { repoId: 'fixture-acme-widgets' },
+  'backlog:detail': { repoId: 'fixture-acme-widgets', number: 45 },
   'release:status': { repoId: 'fixture-acme-widgets' },
   'release:run': { repoId: 'fixture-acme-widgets', step: 'open', version: '0.3.0' },
   'release:issues': { repoId: 'fixture-acme-widgets', tag: 'v0.2.0', previousTag: 'v0.1.1' },
@@ -106,6 +107,11 @@ describe('fixtureHandlers (failing scenario)', () => {
   it('fails backlog:list with a rate limit for widgets and a network error elsewhere', () => {
     expect(handlers['backlog:list']({ repoId: WIDGETS })).toMatchObject({ ok: false, kind: 'rate-limited' })
     expect(handlers['backlog:list']({ repoId: 'fixture-acme-gadgets' as RepoId })).toMatchObject({ ok: false, kind: 'network' })
+  })
+
+  it('fails backlog:detail with a rate limit for widgets and a network error elsewhere', () => {
+    expect(handlers['backlog:detail']({ repoId: WIDGETS, number: 45 })).toMatchObject({ ok: false, kind: 'rate-limited' })
+    expect(handlers['backlog:detail']({ repoId: 'fixture-acme-gadgets' as RepoId, number: 45 })).toMatchObject({ ok: false, kind: 'network' })
   })
 
   it('fails sessions:scan as projects-unreadable and still lists three repositories', () => {

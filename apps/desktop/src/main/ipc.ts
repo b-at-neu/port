@@ -21,7 +21,7 @@ import { applyItemDecision } from '@/main/actions/decide'
 import { gateAnswer, gatePreflight } from '@/main/actions/gate'
 import { resolveClaimApply, resolveClaimPreflight } from '@/main/channels/claim'
 import { resolveAuditList } from '@/main/channels/audit'
-import { resolveBacklogList } from '@/main/channels/backlog'
+import { resolveBacklogDetail, resolveBacklogList } from '@/main/channels/backlog'
 import { resolveReleaseIssues, resolveReleaseRun, resolveReleaseStatus } from '@/main/channels/release'
 import { resolveWorktreesPurge, resolveWorktreesReclaim, resolveWorktreesReport } from '@/main/channels/worktrees'
 import { resolveGhStatus } from '@/main/channels/gh'
@@ -307,6 +307,7 @@ export function registerIpc(): RegisteredIpc {
   handle('claim:apply', (_event, request) => resolveClaimApply(registryDeps, request, app.getPath('userData')))
 
   handle('backlog:list', (_event, request) => resolveBacklogList(registryDeps, request))
+  handle('backlog:detail', (_event, request) => resolveBacklogDetail(registryDeps, request))
 
   handle('release:status', (_event, request) => resolveReleaseStatus(registryDeps, request))
 
