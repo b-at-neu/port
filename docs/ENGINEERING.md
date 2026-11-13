@@ -229,6 +229,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - a ticket is blocked when its stage label is `blocked` or a live stage session's last hand-back is `BLOCKED:`; open `blockedBy` links alone never make it blocked
 - the comment source is the newest comment at or before the latest `blocked` label event, and no such event means no comment, so it fails toward the fallback copy rather than an unrelated comment
 - the comment's reason is its `Decision needed` line when there is one, else its first non-heading line
+- `columns.ts`'s `boardColumns` is the one kanban projection: a ticket lands in exactly one column, and it reads `row.blockedOn`, never a second "blocked" derivation
 - `blocker-answer.tsx` sends into the live session through `session/actions.ts`'s `send` and never writes a label; the agent clears its own block
 
 **`apps/desktop/src/renderer/components/conversation-model.ts`/`conversation-list.tsx`**

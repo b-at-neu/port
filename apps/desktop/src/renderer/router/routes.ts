@@ -44,10 +44,11 @@ export function parseBoardItemRef(item: unknown): BoardItemRef | null {
 
 /** `item=<repoId>:<number>` keeps the Board's selection in the URL. */
 export function boardSearchFromRaw(search: Readonly<Record<string, unknown>>): BoardSearch {
-  const { item, repo } = search
+  const { item, repo, view } = search
   return {
     item: parseBoardItemRef(item),
     repo: typeof repo === 'string' && repo !== '' ? (repo as RepoId) : null,
+    view: view === 'list' || view === 'board' ? view : null,
   }
 }
 

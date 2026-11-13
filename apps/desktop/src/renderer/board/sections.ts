@@ -42,7 +42,7 @@ function sectionOf(row: BoardItemRow): BoardSectionKey {
 }
 
 // LABEL_DEFAULTS' own order, names read straight from PHASE_NAMES.
-const PIPELINE_ORDER: readonly string[] = LABEL_DEFAULTS.filter((def) => def.role !== 'marker' && PHASE_NAMES[def.key] !== null).map((def) => def.key)
+export const PIPELINE_ORDER: readonly string[] = LABEL_DEFAULTS.filter((def) => def.role !== 'marker' && PHASE_NAMES[def.key] !== null).map((def) => def.key)
 const UNSTAGED_KEY = 'unstaged'
 
 function phaseGroupKey(row: BoardItemRow): string {

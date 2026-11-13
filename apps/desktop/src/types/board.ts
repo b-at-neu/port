@@ -10,6 +10,7 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { LabelPalette } from '@/utils/labels/defaults'
 import type { StageDenial, InterruptedStage } from '@/types/stage'
 import type { Ticket, TicketRef } from '@/types/ticket'
+import type { PhaseTone } from '@/types/components'
 import type { BlockerRead, ClaimBlocker, PipelineItemKind } from '@/types/github'
 
 /** The four sources the watcher polls independently; `itemStates` is a dependent re-check fired internally, never independently schedulable. */
@@ -194,7 +195,23 @@ export interface BoardProjection {
   readonly signature: string
 }
 
-export type ItemActionState = { readonly kind: 'pending'; readonly action: OperatorAction } | { readonly kind: 'result'; readonly action: OperatorAction; readonly result: ItemActionResult }
+export type BoardColumnKey = 'queued' | 'plan' | 'implement' | 'review' | 'revise' | 'needs-you'
+
+export interface BoardColumnCard {
+  readonly row: BoardItemRow
+  /** Carries a pipeline label but not the marker, so the merge gate is inactive. */
+  readonly ungated: boolean
+}
+
+export interface BoardColumn {
+  readonly key: BoardColumnKey
+  readonly name: string
+  /** The column header's dot, never pulsing. */
+  readonly tone: PhaseTone
+  readonly cards: readonly BoardColumnCard[]
+}
+
+export type ItemActionState ={ readonly kind: 'pending'; readonly action: OperatorAction } | { readonly kind: 'result'; readonly action: OperatorAction; readonly result: ItemActionResult }
 
 interface NeedsYouItemBase {
   readonly repoId: RepoId | null

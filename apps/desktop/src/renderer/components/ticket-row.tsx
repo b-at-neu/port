@@ -1,13 +1,12 @@
 // The Board's TicketRow (36px) — identity, PhaseBar/phase pill, and the
 // one next-action link; every operator action lives in the detail pane.
-import type { KeyboardEvent, MouseEvent } from 'react'
+import type { KeyboardEvent } from 'react'
 import { cn } from '@/renderer/lib/utils'
 import type { BoardItemRow } from '@/types/board'
 import { autoPlanTagLabel, autoPlanTagTitle, dispatchedTagLabel, dispatchedTagTitle, noTicketTagLabel, noTicketTagTitle, operatorJoinedTagLabel, operatorJoinedTagTitle } from '@/renderer/board/copy'
 import { prSuffixOf } from '@/utils/tickets/ticket'
-import { isDispatchedRow, nextActionFor, phaseLabelFor, phaseToneFor } from '@/renderer/board/row-model'
-import { openReviewDialog } from '@/renderer/gate/controller'
-import { openDecision } from '@/renderer/decision/controller'
+import { isDispatchedRow, phaseLabelFor, phaseToneFor } from '@/renderer/board/row-model'
+import { NextActionLink } from '@/renderer/components/next-action-link'
 import { PhaseBar } from '@/renderer/components/phase-bar'
 import { PhasePill } from '@/renderer/components/phase-pill'
 import { BlockedOnTag } from '@/renderer/components/blocked-on-tag'
@@ -18,41 +17,6 @@ interface TicketRowProps {
   readonly rowProps: ReturnType<ReturnType<typeof useListSelection>['rowProps']>
   /** `true` when an operator has typed into one of this item's stage sessions — renders an `Operator joined` tag after the phase pill. */
   readonly operatorJoined?: boolean
-}
-
-function NextActionLink({ row }: { readonly row: BoardItemRow }) {
-  const action = nextActionFor(row)
-  if (action === null) return null
-
-  function handleClick(event: MouseEvent): void {
-    event.stopPropagation()
-    if (action === null) return
-    switch (action.kind) {
-      case 'review-plan':
-        openReviewDialog(row.item.repoId, row.item.number)
-        return
-      case 'open-pr':
-        window.open(action.url, '_blank')
-        return
-      case 'decision': {
-        const availability = row.decisions[action.decision]
-        if (!availability.available) return
-        openDecision({ repoId: row.item.repoId, number: row.item.number, decision: action.decision, expectedStage: row.stageLabel?.key ?? null, context: availability.context })
-      }
-    }
-  }
-
-  return (
-    <button
-      type="button"
-      onMouseDown={(event) => event.stopPropagation()}
-      onFocus={(event) => event.stopPropagation()}
-      onClick={handleClick}
-      className="shrink-0 text-small text-primary-text hover:underline"
-    >
-      {action.label}
-    </button>
-  )
 }
 
 export function TicketRow({ row, rowProps, operatorJoined = false }: TicketRowProps) {

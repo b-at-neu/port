@@ -7,11 +7,15 @@ export interface BoardItemRef {
   readonly number: number
 }
 
+export type BoardView = 'list' | 'board'
+
 /** Every field optional at the type level — `navigate({ to: ROUTE_IDS.board })`
  *  with no `search` still type-checks. */
 export interface BoardSearch {
   readonly item?: BoardItemRef | null
   readonly repo?: RepoId | null
+  /** `null` means the URL carries no choice, so the remembered one applies. */
+  readonly view?: BoardView | null
 }
 
 export const SETTINGS_SECTIONS = ['general', 'repositories', 'connections', 'pipeline', 'usage', 'about'] as const

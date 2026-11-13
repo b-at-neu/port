@@ -3,7 +3,8 @@
 // the same rule `worktrees.ts`'s own header states. Pure string functions;
 // no DOM here.
 import type { ItemStatus, RepositoryFreshness, RepositoryState } from '@/types/state'
-import type { BoardSnapshot, SourceHealth, SourceKind } from '@/types/board'
+import type { BoardColumnKey, BoardSnapshot, SourceHealth, SourceKind } from '@/types/board'
+import type { BoardView } from '@/types/router'
 import { SOURCE_KINDS, isDeferred } from '@/types/board'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { RETRY_TRIGGER } from '@/utils/actions/plan'
@@ -26,6 +27,41 @@ function timeOf(iso: string): string {
   return Number.isNaN(parsed.getTime()) ? iso : parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+
+const COLUMN_NAMES: Readonly<Record<BoardColumnKey, string>> = {
+  queued: 'Queued',
+  plan: 'Plan',
+  implement: 'Implement',
+  review: 'Review',
+  revise: 'Revise',
+  'needs-you': 'Needs you',
+}
+
+/** A kanban column's header name. */
+export function columnName(key: BoardColumnKey): string {
+  return COLUMN_NAMES[key]
+}
+
+export function emptyColumnLabel(): string {
+  return 'No tickets'
+}
+
+export function ungatedTagLabel(): string {
+  return 'Ungated'
+}
+
+export function ungatedTagTitle(): string {
+  const markerName = LABEL_DEFAULTS.find((def) => def.key === 'marker')?.name ?? 'marker'
+  return `Carries a pipeline label but not "${markerName}", so CI can't tell it from a human PR and the merge gate is inactive.`
+}
+
+export function boardLayoutLabel(): string {
+  return 'Board layout'
+}
+
+export function boardViewLabel(view: BoardView): string {
+  return view === 'board' ? 'Board' : 'List'
+}
 
 /** The board row's "Operator joined" pill label and its accessible tooltip. */
 export function operatorJoinedTagLabel(): string {
