@@ -34,6 +34,48 @@ export function readBacklogFilters(storage: KeyValueStorage = window.localStorag
   return new Map(Object.entries(readAll(storage)) as [RepoId, BacklogLabelFilter][])
 }
 
+const COLLAPSED_KEY = 'port.backlogCollapsed.v1'
+const HIDDEN_REPOS_KEY = 'port.backlogHiddenRepos.v1'
+
+// A malformed value reads as the empty set — expanded and all shown, so nothing silently disappears.
+function readIdSet(storage: KeyValueStorage, key: string): ReadonlySet<RepoId> {
+  try {
+    const raw = storage.getItem(key)
+    if (raw === null) return new Set()
+    const parsed: unknown = JSON.parse(raw)
+    return isStringArray(parsed) ? new Set(parsed as RepoId[]) : new Set()
+  } catch {
+    return new Set()
+  }
+}
+
+function writeIdSet(storage: KeyValueStorage, key: string, ids: ReadonlySet<RepoId>): void {
+  try {
+    storage.setItem(key, JSON.stringify([...ids]))
+  } catch {
+    // Best-effort only — a full or blocked localStorage loses the preference, never the app.
+  }
+}
+
+export function readBacklogCollapsed(storage: KeyValueStorage = window.localStorage): ReadonlySet<RepoId> {
+  return readIdSet(storage, COLLAPSED_KEY)
+}
+
+export function setBacklogCollapsed(repoId: RepoId, collapsed: boolean, storage: KeyValueStorage = window.localStorage): void {
+  const next = new Set(readIdSet(storage, COLLAPSED_KEY))
+  if (collapsed) next.add(repoId)
+  else next.delete(repoId)
+  writeIdSet(storage, COLLAPSED_KEY, next)
+}
+
+export function readBacklogHiddenRepos(storage: KeyValueStorage = window.localStorage): ReadonlySet<RepoId> {
+  return readIdSet(storage, HIDDEN_REPOS_KEY)
+}
+
+export function setBacklogHiddenRepos(hidden: ReadonlySet<RepoId>, storage: KeyValueStorage = window.localStorage): void {
+  writeIdSet(storage, HIDDEN_REPOS_KEY, hidden)
+}
+
 // An empty filter removes the repository's entry.
 export function setBacklogFilter(repoId: RepoId, filter: BacklogLabelFilter, storage: KeyValueStorage = window.localStorage): void {
   const others = Object.fromEntries(Object.entries(readAll(storage)).filter(([key]) => key !== repoId))

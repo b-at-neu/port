@@ -7,8 +7,10 @@ import {
   backlogEmptyGroupCopy,
   backlogEpicReasonCopy,
   backlogFailureCopy,
+  backlogGroupToggleAria,
   backlogInvokeErrorCopy,
   backlogNotReadyCopy,
+  backlogRepoFilterButtonCopy,
   backlogStartAnywayTitle,
   backlogTruncatedCopy,
 } from '@/renderer/backlog/copy'
@@ -102,5 +104,18 @@ describe('blocked and epic confirmation copy', () => {
 
   it('states how many blockers are shown of the total', () => {
     expect(backlogBlockerTruncatedCopy(10, 14)).toBe('Showing 10 of 14 blockers.')
+  })
+})
+
+describe('repository section copy', () => {
+  it('names the repository filter by how many are shown', () => {
+    expect(backlogRepoFilterButtonCopy(3, 3)).toBe('Repositories')
+    expect(backlogRepoFilterButtonCopy(2, 3)).toBe('Repositories · 2 of 3')
+    expect(backlogRepoFilterButtonCopy(0, 3)).toBe('Repositories · 0 of 3')
+  })
+
+  it('labels the group toggle by what it will do', () => {
+    expect(backlogGroupToggleAria('acme/widgets', false)).toBe('Collapse acme/widgets')
+    expect(backlogGroupToggleAria('acme/widgets', true)).toBe('Expand acme/widgets')
   })
 })

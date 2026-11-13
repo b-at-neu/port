@@ -54,6 +54,18 @@ export function backlogFilteredEmptyCopy(repo: string): string {
   return `No open tickets in ${repo} match the label filter.`
 }
 
+export function backlogRepoFilterButtonCopy(shown: number, total: number): string {
+  return shown === total ? 'Repositories' : `Repositories · ${String(shown)} of ${String(total)}`
+}
+
+export const BACKLOG_REPO_FILTER_SHOW_ALL = 'Show all'
+
+export function backlogGroupToggleAria(repo: string, collapsed: boolean): string {
+  return `${collapsed ? 'Expand' : 'Collapse'} ${repo}`
+}
+
+export const BACKLOG_ALL_HIDDEN = 'Every repository is hidden by the filter.'
+
 export const BACKLOG_BLOCKED_LABEL = 'Blocked'
 
 export const BACKLOG_START_ANYWAY = 'Start anyway'
