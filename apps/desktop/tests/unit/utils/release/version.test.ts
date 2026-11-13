@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bumpOptions, normalizeVersion, parseVersion, stripPrerelease } from '@/utils/release/version'
+import { bumpOptions, compareVersions, isDevVersion, normalizeVersion, parseVersion, stripPrerelease } from '@/utils/release/version'
 
 describe('parseVersion', () => {
   it.each([
@@ -18,6 +18,45 @@ describe('parseVersion', () => {
     expect(normalizeVersion(' v1.5.0-dev ')).toBe('1.5.0-dev')
     expect(stripPrerelease('1.5.0-dev')).toBe('1.5.0')
     expect(stripPrerelease('nope')).toBeNull()
+  })
+})
+
+function compare(a: string, b: string): number {
+  const left = parseVersion(a)
+  const right = parseVersion(b)
+  if (left === null || right === null) throw new Error(`unparseable fixture: ${a} / ${b}`)
+  return compareVersions(left, right)
+}
+
+describe('compareVersions', () => {
+  it.each([
+    ['1.4.3', '1.4.3', 0],
+    ['1.4.4', '1.4.3', 1],
+    ['1.4.3', '1.5.0', -1],
+    ['2.0.0', '1.99.99', 1],
+    ['1.10.0', '1.9.0', 1],
+    ['1.5.0', '1.5.0-rc.1', 1],
+    ['1.5.0-rc.1', '1.5.0', -1],
+    ['1.5.0-rc.1', '1.4.9', 1],
+    ['1.5.0-alpha', '1.5.0-beta', -1],
+    ['1.5.0-rc.2', '1.5.0-rc.10', -1],
+    ['1.5.0-rc.1', '1.5.0-rc.1', 0],
+    ['1.5.0-1', '1.5.0-alpha', -1],
+    ['1.5.0-alpha', '1.5.0-alpha.1', -1],
+    ['1.5.0-alpha.1', '1.5.0-alpha.beta', -1],
+    ['1.5.0-dev', '1.5.0-rc.1', -1],
+  ])('compares %s with %s as %i', (a, b, expected) => {
+    expect(compare(a, b)).toBe(expected)
+  })
+})
+
+describe('isDevVersion', () => {
+  it.each(['1.4.2-dev', '1.5.0-dev.3', 'v1.5.0-dev'])('is true for %s', (text) => {
+    expect(isDevVersion(text)).toBe(true)
+  })
+
+  it.each(['1.4.2', '1.5.0-rc.1', '1.5.0-devel', '1.5.0-rc.dev', 'nope', ''])('is false for %j', (text) => {
+    expect(isDevVersion(text)).toBe(false)
   })
 })
 

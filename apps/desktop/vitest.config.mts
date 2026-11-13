@@ -7,7 +7,7 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
-  define: { __PORT_BUILD_COMMIT__: 'null' },
+  define: { __PORT_BUILD_COMMIT__: 'null', __PORT_RELEASE_REPO__: JSON.stringify('octo/port') },
   test: {
     environment: 'node',
     include: ['tests/unit/**/*.test.ts']

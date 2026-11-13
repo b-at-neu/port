@@ -41,12 +41,12 @@ export default async function ({ expect, fail, ok }: Reporter) {
   }
 
   // --- `fetch(` appears under apps/desktop/src/main/ only in platform/github-http.ts, and `githubHttp`
-  // and `githubConditional` are imported only from main/github/ — the one network path stays one file, reached from one directory. ---
+  // `githubConditional` and `githubPublic` are imported only from main/github/ — the one network path stays one file, reached from one directory. ---
   {
     const transportFile = 'apps/desktop/src/main/platform/github-http.ts';
     const mainFiles = walk(join(root, 'apps/desktop/src/main')).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
     const callsFetch = /\bfetch\s*\(/;
-    const importsGithubHttp = /import\s*\{[^}]*\b(?:githubHttp|githubConditional)\b[^}]*\}\s*from\s*'@\/main\/platform\/github-http'/;
+    const importsGithubHttp = /import\s*\{[^}]*\b(?:githubHttp|githubConditional|githubPublic)\b[^}]*\}\s*from\s*'@\/main\/platform\/github-http'/;
     let transportCallsFetch = false;
     let githubImportsIt = false;
     for (const f of mainFiles) {
@@ -58,11 +58,11 @@ export default async function ({ expect, fail, ok }: Reporter) {
       }
       if (importsGithubHttp.test(text)) {
         if (rel.startsWith(`${dir}/`)) githubImportsIt = true;
-        else fail('desktop-github-adapter', `${rel} imports 'githubHttp' or 'githubConditional' — only ${dir}/ may read GitHub over HTTP`);
+        else fail('desktop-github-adapter', `${rel} imports 'githubHttp', 'githubConditional' or 'githubPublic' — only ${dir}/ may read GitHub over HTTP`);
       }
     }
     if (!transportCallsFetch) fail('desktop-github-adapter', `${transportFile} no longer calls 'fetch(' — the guard cannot pass vacuously`);
-    if (!githubImportsIt) fail('desktop-github-adapter', `no file under ${dir} imports 'githubHttp' or 'githubConditional' — the guard cannot pass vacuously`);
+    if (!githubImportsIt) fail('desktop-github-adapter', `no file under ${dir} imports 'githubHttp', 'githubConditional' or 'githubPublic' — the guard cannot pass vacuously`);
     if (transportCallsFetch && githubImportsIt) ok();
   }
 

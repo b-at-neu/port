@@ -126,7 +126,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 **`apps/desktop/src/main/platform/`**
 - only importer of `node:child_process` / `node:fs` under `apps/desktop/src/`
 - spawnables a literal union (`KNOWN_COMMANDS`); paths via `pathKey`/`contains`, never `startsWith`
-- `github-http.ts` is the only `fetch` caller under `apps/desktop/src/main/`; its token comes only from `gh auth token` and is held in process memory, re-read once on a `401`, and a failed read is never cached; `githubConditional` shares that token, and a `304` is a `notModified` success only when a validator was sent
+- `github-http.ts` is the only `fetch` caller under `apps/desktop/src/main/`; its token comes only from `gh auth token` and is held in process memory, re-read once on a `401`, and a failed read is never cached; `githubConditional` shares that token, and a `304` is a `notModified` success only when a validator was sent; `githubPublic` sends no token and reads none, only for the app's own public releases
 - `disk.ts`'s `directorySize` never follows a symlink and is bounded by `maxEntries`; a cut-short or partly unreadable walk reports `truncated`, never an undercount presented as exact
 - `files.ts`'s `removeDirectory` retries a held file and returns the errno code instead of throwing, so a caller can tell a held file from a long path
 - `shell-env.ts` resolves the login shell's PATH once at startup, merges only PATH into `process.env`, and never blocks startup past its timeout
@@ -196,6 +196,13 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - the one write `main/tick/` itself never makes — computes there, writes here
 - appends to `.agents/desktop-events.jsonl`; every failure swallowed, never surfaced
 - called fire-and-forget from the watcher, never awaited
+
+**`apps/desktop/src/main/update/`**
+- startup and on-demand only, no timer
+- gated before I/O: an unpackaged, `-dev` or unparseable-version build never touches the network
+- never throws: every network or response condition is a typed `error` state
+- fails toward showing nothing, since a missed update costs one release cycle and a false "available" costs trust in every launch
+- the release source is the build-time `__PORT_RELEASE_REPO__`, never a renderer-supplied value
 
 **`apps/desktop/src/main/workspace/`** (#404)
 - sole creator/remover of session worktrees (`worktree.ts` for interactive sessions, `stage-worktree.ts` for stage sessions); never forces removal without an explicit caller choice
