@@ -100,6 +100,8 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'detail-sessions', hash: '#/board?item=fixture-acme-widgets:46', ready: '[role="complementary"]' },
       { name: 'gate-review', click: 'text=Review plan', ready: '[data-slot="dialog-content"]' },
       { name: 'repo-empty', hash: '#/board?repo=fixture-acme-gadgets', ready: "text=Nothing in this repository's pipeline." },
+      { name: 'kanban', hash: '#/board?view=board', ready: '[data-slot="ticket-card"]' },
+      { name: 'kanban-detail', hash: '#/board?view=board&item=fixture-acme-widgets:38', ready: '[role="complementary"]' },
     ],
   },
   repos: { hash: '#/repositories', container: '#app', ready: '[data-slot="repo-row"]' },

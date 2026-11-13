@@ -172,7 +172,7 @@ Dark surface lightness (CIE L*): sidebar 6.3 · background 10.7 · card 15.2 · 
 | Screen | Content |
 | --- | --- |
 | Needs you | Everything waiting on the operator, newest first, each with its action inline: plan reviews, PRs ready to merge, questions from stage sessions, needs-human escalations, blocked tickets with the decision they wait on |
-| Board | Grouped list: **Waiting on you**, **In progress**, **Blocked**, **Queued**, each grouped by phase, plus a repo filter |
+| Board | Grouped list: **Waiting on you**, **In progress**, **Blocked**, **Queued**, each grouped by phase, plus a repo filter; or a read-only kanban (List/Board toggle, `?view=`, remembered): Queued, Plan, Implement, Review, Revise, Needs you |
 | Backlog | Open tickets not yet in a pipeline, with **Work on**: interactive plan review or auto-plan |
 | Releases | Per repo, the upcoming release (the PRs merged since the last release) with the one action its phase allows (**Cut release**, **Open PR**, **Publish**), then every previous release, whose notes open in the detail pane |
 | Session | Conversation and composer. **Changes** opens the session's diff in the detail pane |
@@ -192,6 +192,12 @@ Scoping epics and analytics are out of scope for the first release.
 - phase pill;
 - blocked-on tag, on a blocked ticket only: the open dependency it waits on, else the agent's or the ticket's reason, else "Reason on ticket";
 - the one next action as a link ("Review plan", "Open PR", "Refresh").
+
+**Board card anatomy, top to bottom** (kanban view):
+- ticket number (`muted-foreground`, mono, tabular), the muted `(PR#537)` suffix, a "No ticket" tag on an unlinked PR, then on the right the repo tag (hidden on a single-repo board) and 16px icons with tooltips for Auto-plan and Dispatched;
+- title, clamped to two lines;
+- phase pill, blocked-on tag on a blocked ticket only, then the one next action as a link. An ungated PR in Needs you adds an `attention` "Ungated" tag and shows **Add gate label** in the action slot;
+- a 4px left edge in the card's own phase dot colour (`needs-you` red for a card that waits on you). Each column header is a `PhaseDot`, the name and a count over a 2px rule in the column's dot colour: Queued `idle`, then plan, implement, review, revise and `needs-you`. Column bodies stay on `background`.
 
 **Conversation:** document flow, not chat bubbles.
 - **Your messages:** `muted` blocks.
@@ -234,6 +240,7 @@ Scoping epics and analytics are out of scope for the first release.
 | `PhaseBar` | Five 10×4px segments with a 2px gap, for plan (including plan review), implement, review, revision, merge. Finished segments use `segment-past`, the current one the current stage's full phase dot colour, or `needs-you` when it waits on you, not-yet-reached ones `segment-future`; a merged item is every segment `done`. Tooltip names the phase |
 | `PhaseList` | Vertical version for the detail pane: an 8px dot per phase in the same colours as `PhaseBar`, with who and when ("Plan approved by you · 2h ago") and live cost and time on the current phase, and, under each phase, the sessions that ran it (agent or "Your session", when, state, cost), with a "Your sessions" group for ones no phase can claim |
 | `TicketRow`, `RepoPipelineRow`, `SessionRow`, `NeedsYouItem` | The list rows (§3) |
+| `TicketCard` | The Board kanban's card (§3): `card` surface, 1px `border`, 8px radius, 8px padding, a 4px left edge in its own phase dot. Hover is `accent`, selected is the list row's `selection` and `ring`. A kanban column header is a `PhaseDot` plus a 2px rule in the same dot colour |
 | `ToolCallRow`, `DiffView`, `Markdown`, `CodeBlock`, `Composer`, `ContextMeter` | Session pieces. `ContextMeter` is a `Context` label, a 56×4px bar and a percentage, with token counts in its tooltip. `ToolCallRow` carries a per-tool one-line summary and default-open rule (edits with a diff, TodoWrite, a running subagent, a failed Bash); its body delegates to `ToolCallDetail`'s Bash/TodoWrite/Task/lookup views. A subagent's children nest recursively under its row, indented with a `border-l` rule; an orphaned child (its parent row evicted from the window) carries the label "Subagent · parent call not shown" |
 | `BackgroundTasksPanel` | A `border` card between the command strip and composer, hidden when empty. Header `Background tasks · N`; each 36px row shows a type icon, a truncating description with a tooltip, a mono type tag, and a `Stop` ghost button that opens a confirm dialog |
 | `SettingsCard` | The one card every Settings tab is built from: `border`, `card` fill, 16px padding, an `h2` title in `muted-foreground`, an optional description, and right-aligned actions in the header row. A card that needs width spans two or three columns |

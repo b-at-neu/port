@@ -42,7 +42,7 @@ describe('transcriptSearchFromRaw', () => {
 
 describe('boardSearchFromRaw', () => {
   it('parses a valid item ref', () => {
-    expect(boardSearchFromRaw({ item: 'repo-a:41' })).toEqual({ item: { repoId: 'repo-a', number: 41 }, repo: null })
+    expect(boardSearchFromRaw({ item: 'repo-a:41' })).toEqual({ item: { repoId: 'repo-a', number: 41 }, repo: null, view: null })
   })
 
   it('falls back to no selection for a malformed or absent item', () => {
@@ -51,7 +51,15 @@ describe('boardSearchFromRaw', () => {
   })
 
   it('ignores a legacy group param', () => {
-    expect(boardSearchFromRaw({ group: 'repo' })).toEqual({ item: null, repo: null })
+    expect(boardSearchFromRaw({ group: 'repo' })).toEqual({ item: null, repo: null, view: null })
+  })
+
+  it.each(['list', 'board'])('keeps the %s view', (view) => {
+    expect(boardSearchFromRaw({ view }).view).toBe(view)
+  })
+
+  it.each(['kanban', '', 3, null, undefined])('reads view %j as no choice', (view) => {
+    expect(boardSearchFromRaw({ view }).view).toBeNull()
   })
 
   it('reads a repo filter, null when absent or empty', () => {

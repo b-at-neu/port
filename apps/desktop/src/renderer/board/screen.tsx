@@ -11,7 +11,7 @@ import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { ipcQueryOptions, observeIpcQuery, useIpcQuery } from '@/renderer/data/query'
 import { invoke } from '@/renderer/data/invoke'
 import { ROUTE_IDS } from '@/renderer/router/routes'
-import type { BoardItemRef, BoardSearch } from '@/types/router'
+import type { BoardItemRef, BoardSearch, BoardView } from '@/types/router'
 import { projectBoard } from '@/renderer/board/project'
 import type { BoardItemRow } from '@/types/board'
 import type { RepoId } from '@/utils/repos'
@@ -23,7 +23,10 @@ import { BoardHeader } from '@/renderer/board/header'
 import { ItemPane } from '@/renderer/board/item-pane'
 import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { boardSections } from '@/renderer/board/sections'
-import { operatorJoinedOf } from '@/renderer/board/row-model'
+import { boardColumns } from '@/renderer/board/columns'
+import { BoardKanban, BoardKanbanSkeleton } from '@/renderer/board/kanban'
+import { readBoardView, setBoardView } from '@/renderer/board/prefs'
+import { operatorJoinedOf, rowKey } from '@/renderer/board/row-model'
 import type { DispatchRecord } from '@/types/dispatch'
 
 // Registered once from main.ts's boot — never a useEffect inside the
@@ -32,10 +35,6 @@ export function connectItemActionPruning(client: QueryClient): () => void {
   return observeIpcQuery(client, 'board:snapshot', undefined, (result) => {
     if (result.status === 'success') pruneItemActionStates(result.data)
   })
-}
-
-function rowKey(row: BoardItemRow): string {
-  return `${row.item.repoId}:${String(row.ticket.ref.number)}`
 }
 
 // A pull request number still selects its ticket, so an older `?item=` link resolves.
@@ -75,13 +74,18 @@ export function BoardScreen() {
 
   const repo = search.repo ?? null
 
+  const view = search.view ?? readBoardView()
+  const kanban = view === 'board'
+
   const projection = snapshot !== null ? projectBoard({ snapshot, now, sessions: sessions.data ?? [] }) : null
-  // Ungated rows are the banner's alone, scoped to `repo` like `sectionRows`
-  // below so J/K and the ring never reach another repository's row.
-  const ungatedRows = projection !== null ? (repo === null ? projection.ungated : projection.ungated.filter((row) => row.item.repoId === repo)) : []
-  const sections = projection !== null ? boardSections(projection.rows.filter((row) => !row.actions.gate.available), { repo }) : []
+  const gatedRows = projection !== null ? projection.rows.filter((row) => !row.actions.gate.available) : []
+  // The list's Ungated banner owns these rows, scoped to `repo` so J/K never reaches another repository's row.
+  const ungatedRows = projection !== null && !kanban ? (repo === null ? projection.ungated : projection.ungated.filter((row) => row.item.repoId === repo)) : []
+  const sections = projection !== null && !kanban ? boardSections(gatedRows, { repo }) : []
   const sectionRows = sections.flatMap((section) => section.subGroups.flatMap((g) => g.rows))
-  const flatRows = projection !== null ? [...ungatedRows, ...sectionRows] : []
+  const columns = projection !== null && kanban ? boardColumns(gatedRows, projection.ungated, { repo }) : []
+  const flatRows = kanban ? columns.flatMap((column) => column.cards.map((card) => card.row)) : projection !== null ? [...ungatedRows, ...sectionRows] : []
+  const showRepo = repo === null && (snapshot?.state.repositories.filter((r) => r.ok).length ?? 0) > 1
 
   // An item that no longer matches any row closes the pane silently.
   const itemRef = search.item ?? null
@@ -143,6 +147,11 @@ export function BoardScreen() {
           onRefresh={() => void handleRefresh()}
           repo={repo}
           onRepoChange={(nextRepo: RepoId | null) => setSearch({ repo: nextRepo })}
+          view={view}
+          onViewChange={(nextView: BoardView) => {
+            setSearch({ view: nextView })
+            setBoardView(nextView)
+          }}
         />
       }
     >
@@ -150,11 +159,15 @@ export function BoardScreen() {
         <ScreenBody variant="list" className="flex-1">
           <div>
             {snapshot === null ? (
-              <div className="flex flex-col gap-1 px-4 py-2">
-                <Skeleton className="h-9 w-full" />
-                <Skeleton className="h-9 w-full" />
-                <Skeleton className="h-9 w-full" />
-              </div>
+              kanban ? (
+                <BoardKanbanSkeleton />
+              ) : (
+                <div className="flex flex-col gap-1 px-4 py-2">
+                  <Skeleton className="h-9 w-full" />
+                  <Skeleton className="h-9 w-full" />
+                  <Skeleton className="h-9 w-full" />
+                </div>
+              )
             ) : projection !== null ? (
               <>
                 {waitingSection !== undefined ? renderSection(waitingSection) : null}
@@ -168,6 +181,8 @@ export function BoardScreen() {
                     action={repo !== null ? { label: 'Show all repositories', onClick: () => setSearch({ repo: null }) } : undefined}
                     className="px-4 py-6"
                   />
+                ) : kanban ? (
+                  <BoardKanban columns={columns} selection={selection} showRepo={showRepo} />
                 ) : (
                   otherSections.map(renderSection)
                 )}
