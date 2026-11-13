@@ -23,7 +23,6 @@ import { BoardHeader } from '@/renderer/board/header'
 import { ItemPane } from '@/renderer/board/item-pane'
 import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { boardSections } from '@/renderer/board/sections'
-import type { BoardGroupBy } from '@/types/board'
 import { operatorJoinedOf } from '@/renderer/board/row-model'
 import type { DispatchRecord } from '@/types/dispatch'
 
@@ -74,14 +73,13 @@ export function BoardScreen() {
     setRefreshing(false)
   }
 
-  const group: BoardGroupBy = search.group === 'repo' ? 'repo' : 'phase'
   const repo = search.repo ?? null
 
-  const projection = snapshot !== null ? projectBoard({ snapshot, groupBy: group === 'repo' ? 'repo' : 'stage', now, sessions: sessions.data ?? [] }) : null
+  const projection = snapshot !== null ? projectBoard({ snapshot, now, sessions: sessions.data ?? [] }) : null
   // Ungated rows are the banner's alone, scoped to `repo` like `sectionRows`
   // below so J/K and the ring never reach another repository's row.
   const ungatedRows = projection !== null ? (repo === null ? projection.ungated : projection.ungated.filter((row) => row.item.repoId === repo)) : []
-  const sections = projection !== null ? boardSections(projection.rows.filter((row) => !row.actions.gate.available), { group, repo }) : []
+  const sections = projection !== null ? boardSections(projection.rows.filter((row) => !row.actions.gate.available), { repo }) : []
   const sectionRows = sections.flatMap((section) => section.subGroups.flatMap((g) => g.rows))
   const flatRows = projection !== null ? [...ungatedRows, ...sectionRows] : []
 
@@ -143,8 +141,6 @@ export function BoardScreen() {
           now={now}
           refreshing={refreshing}
           onRefresh={() => void handleRefresh()}
-          group={group}
-          onGroupChange={(nextGroup: BoardGroupBy) => setSearch({ group: nextGroup })}
           repo={repo}
           onRepoChange={(nextRepo: RepoId | null) => setSearch({ repo: nextRepo })}
         />

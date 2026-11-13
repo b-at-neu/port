@@ -104,8 +104,7 @@ function usageLimitItem(entries: readonly InterruptedStage[], repoNames: Readonl
 
 /** One entry per (repoId, number, kind), newest `at` first where known, then by repo then number descending. Session and dispatch kinds keep their own event time; row kinds and held/stalled/budget/half-labelled fall back to the matched item's `updatedAt`, or `null` when there is no matched row. `sessions` is `session:list`'s own read — `[]` when the caller has none (the empty default keeps every pre-existing call site byte-identical). */
 export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: readonly HostedSessionSnapshot[] = []): readonly NeedsYouItem[] {
-  const projection = projectBoard({ snapshot, groupBy: 'repo', now, sessions })
-  const rows = projection.groups.flatMap((group) => group.rows)
+  const { rows } = projectBoard({ snapshot, now, sessions })
   // Both of a ticket's numbers resolve to its one row, so a session or note on the pull request still lands on the ticket.
   const rowByKey = new Map<string, BoardItemRow>(
     rows.flatMap((row) => [row.ticket.issue, row.ticket.pullRequest].filter((member) => member !== null).map((member): [string, BoardItemRow] => [rowKey(row.item.repoId, member.number), row])),
