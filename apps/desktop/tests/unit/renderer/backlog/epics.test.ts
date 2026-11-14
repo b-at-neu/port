@@ -61,6 +61,13 @@ describe('buildEpicLayout', () => {
     expect(layout.remainder).toEqual(rows)
   })
 
+  it('passes the same row objects through, in input order, when there are no epics', () => {
+    const rows = [row(3, { labels: [{ name: 'bug', color: 'd73a4a' }] }), row(1, { assignee: 'octocat' }), row(2)]
+    const { remainder } = buildEpicLayout(rows)
+    expect(remainder).toHaveLength(rows.length)
+    remainder.forEach((r, i) => expect(r).toBe(rows[i]))
+  })
+
   it('places a chain and an independent ticket into waves', () => {
     const children = [child(2), child(3, { blockers: blockedBy(2) }), child(4, { blockers: blockedBy(3) }), child(5)]
     const rows = [epicRow(1, children), memberRow(2, 1), memberRow(3, 1), memberRow(4, 1), memberRow(5, 1)]
