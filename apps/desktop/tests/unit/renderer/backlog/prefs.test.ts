@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { KeyValueStorage } from '@/types/storage'
 import { EMPTY_FILTER } from '@/renderer/backlog/filter'
-import { readBacklogCollapsed, readBacklogFilters, readBacklogHiddenRepos, setBacklogCollapsed, setBacklogFilter, setBacklogHiddenRepos } from '@/renderer/backlog/prefs'
+import { readBacklogCollapsed, readBacklogCollapsedEpics, readBacklogFilters, readBacklogHiddenRepos, setBacklogCollapsed, setBacklogCollapsedEpic, setBacklogFilter, setBacklogHiddenRepos } from '@/renderer/backlog/prefs'
 
 const A = 'repo-a' as RepoId
 const B = 'repo-b' as RepoId
@@ -119,6 +119,35 @@ describe('backlog collapsed round-trip', () => {
     }
     expect(() => setBacklogCollapsed(A, true, storage)).not.toThrow()
     expect(() => setBacklogHiddenRepos(new Set([A]), storage)).not.toThrow()
+  })
+})
+
+describe('backlog collapsed epics prefs', () => {
+  it('round-trips an epic key and leaves collapsed repositories alone', () => {
+    const storage = fakeStorage()
+    setBacklogCollapsed(A, true, storage)
+    setBacklogCollapsedEpic('repo-a:41', true, storage)
+    setBacklogCollapsedEpic('repo-a:50', true, storage)
+    expect([...readBacklogCollapsedEpics(storage)]).toEqual(['repo-a:41', 'repo-a:50'])
+    setBacklogCollapsedEpic('repo-a:41', false, storage)
+    expect([...readBacklogCollapsedEpics(storage)]).toEqual(['repo-a:50'])
+    expect([...readBacklogCollapsed(storage)]).toEqual([A])
+  })
+
+  it.each(['{not json', 'null', '{}', '[1]'])('reads malformed value %s as the empty set', (raw) => {
+    const storage = fakeStorage()
+    storage.store.set('port.backlogCollapsedEpics.v1', raw)
+    expect(readBacklogCollapsedEpics(storage).size).toBe(0)
+  })
+
+  it('swallows a throwing setItem', () => {
+    const storage: KeyValueStorage = {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error('quota')
+      },
+    }
+    expect(() => setBacklogCollapsedEpic('repo-a:41', true, storage)).not.toThrow()
   })
 })
 

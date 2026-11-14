@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
-import type { BacklogGroupView, BacklogRowView } from '@/types/backlog'
-import { navigableRows, repoFilterCount, toggleHiddenRepo, visibleRepos } from '@/renderer/backlog/sections'
+import type { BacklogEpicGroup, BacklogEpicLayout, BacklogGroupView, BacklogRowView, BacklogWave } from '@/types/backlog'
+import { navigableRows, repoFilterCount, rowKey, toggleHiddenRepo, visibleRepos } from '@/renderer/backlog/sections'
 
 const A = 'repo-a' as RepoId
 const B = 'repo-b' as RepoId
@@ -12,8 +12,21 @@ function row(repoId: RepoId, number: number): BacklogRowView {
   return { repoId, number } as BacklogRowView
 }
 
-function loaded(repoId: RepoId, numbers: readonly number[]): BacklogGroupView {
-  return { kind: 'loaded', repoId, repo: String(repoId), items: numbers.map((n) => row(repoId, n)), totalCount: numbers.length, labelOptions: [], truncatedNote: null }
+function loaded(repoId: RepoId, numbers: readonly number[], layout: BacklogEpicLayout = { epics: [], remainder: numbers.map((n) => row(repoId, n)) }): BacklogGroupView {
+  return { kind: 'loaded', repoId, repo: String(repoId), items: numbers.map((n) => row(repoId, n)), totalCount: numbers.length, labelOptions: [], truncatedNote: null, layout }
+}
+
+function wave(number: number, rows: BacklogRowView[], inProgressOnly = false): BacklogWave {
+  return { number, rows, inProgress: inProgressOnly ? 1 : 0, unlisted: 0, inProgressOnly }
+}
+
+function epic(repoId: RepoId, number: number, waves: BacklogWave[], unplaced: BacklogRowView[] = []): BacklogEpicGroup {
+  return { epic: row(repoId, number), waves, unplaced, summary: { ok: false, reason: 'x' } }
+}
+
+const EPIC_LAYOUT: BacklogEpicLayout = {
+  epics: [epic(A, 100, [wave(1, [row(A, 101)]), wave(2, [], true), wave(3, [row(A, 103)])], [row(A, 104)])],
+  remainder: [row(A, 110)],
 }
 
 describe('visibleRepos', () => {
@@ -50,17 +63,39 @@ describe('repoFilterCount', () => {
   })
 })
 
+describe('rowKey', () => {
+  it('joins the repository id and the number', () => {
+    expect(rowKey(A, 41)).toBe('repo-a:41')
+  })
+})
+
 describe('navigableRows', () => {
+  const none = new Set<string>()
+
   it('lists loaded rows in group order', () => {
-    expect(navigableRows([loaded(A, [1, 2]), loaded(B, [3])], new Set()).map((r) => r.number)).toEqual([1, 2, 3])
+    expect(navigableRows([loaded(A, [1, 2]), loaded(B, [3])], new Set(), none).map((r) => r.number)).toEqual([1, 2, 3])
   })
 
   it('skips collapsed groups', () => {
-    expect(navigableRows([loaded(A, [1, 2]), loaded(B, [3])], new Set([A])).map((r) => r.number)).toEqual([3])
+    expect(navigableRows([loaded(A, [1, 2]), loaded(B, [3])], new Set([A]), none).map((r) => r.number)).toEqual([3])
   })
 
   it('skips groups that are not loaded', () => {
     const groups: BacklogGroupView[] = [{ kind: 'loading', repoId: A, repo: 'a' }, { kind: 'invoke-error', repoId: B, repo: 'b', message: 'x' }, loaded(C, [9])]
-    expect(navigableRows(groups, new Set()).map((r) => r.number)).toEqual([9])
+    expect(navigableRows(groups, new Set(), none).map((r) => r.number)).toEqual([9])
+  })
+
+  it('walks the epic, its wave rows and unplaced rows, then the remainder, skipping band-only waves', () => {
+    const groups = [loaded(A, [], EPIC_LAYOUT)]
+    expect(navigableRows(groups, new Set(), none).map((r) => r.number)).toEqual([100, 101, 103, 104, 110])
+  })
+
+  it('contributes only the epic row for a collapsed epic', () => {
+    const groups = [loaded(A, [], EPIC_LAYOUT)]
+    expect(navigableRows(groups, new Set(), new Set([rowKey(A, 100)])).map((r) => r.number)).toEqual([100, 110])
+  })
+
+  it('contributes nothing for a collapsed repository, whatever its epics', () => {
+    expect(navigableRows([loaded(A, [], EPIC_LAYOUT)], new Set([A]), none)).toEqual([])
   })
 })

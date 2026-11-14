@@ -6,6 +6,10 @@ interface RepoRef {
   readonly id: RepoId
 }
 
+export function rowKey(repoId: RepoId, number: number): string {
+  return `${repoId}:${String(number)}`
+}
+
 export function visibleRepos<T extends RepoRef>(repos: readonly T[], hidden: ReadonlySet<RepoId>): T[] {
   return repos.filter((repo) => !hidden.has(repo.id))
 }
@@ -22,6 +26,13 @@ export function repoFilterCount(repos: readonly RepoRef[], hidden: ReadonlySet<R
   return { shown: visibleRepos(repos, hidden).length, total: repos.length }
 }
 
-export function navigableRows(groups: readonly BacklogGroupView[], collapsed: ReadonlySet<RepoId>): BacklogRowView[] {
-  return groups.flatMap((group) => (group.kind === 'loaded' && !collapsed.has(group.repoId) ? group.items : []))
+export function navigableRows(groups: readonly BacklogGroupView[], collapsed: ReadonlySet<RepoId>, collapsedEpics: ReadonlySet<string>): BacklogRowView[] {
+  return groups.flatMap((group) => {
+    if (group.kind !== 'loaded' || collapsed.has(group.repoId)) return []
+    const epicRows = group.layout.epics.flatMap((entry) => {
+      if (collapsedEpics.has(rowKey(group.repoId, entry.epic.number))) return [entry.epic]
+      return [entry.epic, ...entry.waves.flatMap((wave) => wave.rows), ...entry.unplaced]
+    })
+    return [...epicRows, ...group.layout.remainder]
+  })
 }

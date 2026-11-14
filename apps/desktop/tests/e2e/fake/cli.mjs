@@ -157,8 +157,33 @@ function handleComment(kind) {
 
 // --- gh: GraphQL ----------------------------------------------------------
 
-function nodeOf(kind, item) {
+function shallowOf(item) {
   return {
+    number: item.number,
+    title: item.title,
+    state: item.state ?? 'OPEN',
+    labels: { nodes: (item.labels ?? []).map((name) => ({ name })) },
+    blockedBy: { totalCount: (item.blockedBy ?? []).length, nodes: item.blockedBy ?? [] },
+  }
+}
+
+function hierarchyOf(item, state) {
+  const parent = state.issues.find((i) => i.number === item.parent)
+  const children = state.issues.filter((i) => i.parent === item.number)
+  const blocking = state.issues.filter((i) => (i.blockedBy ?? []).some((blocker) => blocker.number === item.number))
+  return {
+    parent: parent ? { number: parent.number, title: parent.title, state: parent.state ?? 'OPEN' } : null,
+    subIssues: { totalCount: children.length, nodes: children.map(shallowOf) },
+    blocking: {
+      totalCount: blocking.length,
+      nodes: blocking.map((i) => ({ number: i.number, title: i.title, url: i.url ?? `https://github.com/x/x/issues/${String(i.number)}`, state: i.state ?? 'OPEN' })),
+    },
+  }
+}
+
+function nodeOf(kind, item, state) {
+  return {
+    ...(kind === 'issue' ? hierarchyOf(item, state) : {}),
     __typename: kind === 'issue' ? 'Issue' : 'PullRequest',
     number: item.number,
     title: item.title,
@@ -200,34 +225,34 @@ function answerGraphQL(document) {
   for (const match of matchAll(sweepPattern('issues'), document)) {
     const [, alias, list] = match
     const labels = JSON.parse(`[${list}]`)
-    const nodes = state.issues.filter((i) => (i.labels ?? []).some((name) => labels.includes(name)) && (i.state ?? 'OPEN') === 'OPEN').map((i) => nodeOf('issue', i))
+    const nodes = state.issues.filter((i) => (i.labels ?? []).some((name) => labels.includes(name)) && (i.state ?? 'OPEN') === 'OPEN').map((i) => nodeOf('issue', i, state))
     repository[alias] = { totalCount: nodes.length, pageInfo: lastPage, nodes }
   }
   for (const match of matchAll(sweepPattern('pullRequests'), document)) {
     const [, alias, list] = match
     const labels = JSON.parse(`[${list}]`)
-    const nodes = state.pulls.filter((p) => (p.labels ?? []).some((name) => labels.includes(name)) && (p.state ?? 'OPEN') === 'OPEN').map((p) => nodeOf('pull-request', p))
+    const nodes = state.pulls.filter((p) => (p.labels ?? []).some((name) => labels.includes(name)) && (p.state ?? 'OPEN') === 'OPEN').map((p) => nodeOf('pull-request', p, state))
     repository[alias] = { totalCount: nodes.length, pageInfo: lastPage, nodes }
   }
   for (const match of matchAll('(\\w+):\\s*issueOrPullRequest\\(number:\\s*(\\d+)\\)', document)) {
     const [, alias, numberText] = match
     const found = findItem(state, Number(numberText))
-    repository[alias] = found ? nodeOf(found.kind, found.item) : null
+    repository[alias] = found ? nodeOf(found.kind, found.item, state) : null
   }
   for (const match of matchAll('(\\w+):\\s*issue\\(number:\\s*(\\d+)\\)', document)) {
     const [, alias, numberText] = match
     const issue = state.issues.find((i) => i.number === Number(numberText))
-    repository[alias] = issue ? nodeOf('issue', issue) : null
+    repository[alias] = issue ? nodeOf('issue', issue, state) : null
   }
   for (const match of matchAll('(\\w+):\\s*pullRequest\\(number:\\s*(\\d+)\\)', document)) {
     const [, alias, numberText] = match
     const pull = state.pulls.find((p) => p.number === Number(numberText))
-    repository[alias] = pull ? nodeOf('pull-request', pull) : null
+    repository[alias] = pull ? nodeOf('pull-request', pull, state) : null
   }
   // The Backlog's own unaliased, unfiltered `issues(states: OPEN, …, orderBy: …)` (backlog.ts) —
   // every open issue, newest-updated first, with no `labels:` argument to key off at all.
   if (document.includes('orderBy: {field: UPDATED_AT')) {
-    const nodes = state.issues.filter((i) => (i.state ?? 'OPEN') === 'OPEN').map((i) => nodeOf('issue', i))
+    const nodes = state.issues.filter((i) => (i.state ?? 'OPEN') === 'OPEN').map((i) => nodeOf('issue', i, state))
     repository.issues = { totalCount: nodes.length, nodes }
   }
 

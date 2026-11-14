@@ -5,7 +5,12 @@ import {
   backlogBlockerLine,
   backlogBlockerTruncatedCopy,
   backlogEmptyGroupCopy,
+  BACKLOG_EPIC_TAG,
+  backlogEpicProgressAria,
+  backlogEpicProgressCopy,
   backlogEpicReasonCopy,
+  backlogEpicToggleAria,
+  backlogEpicTruncatedCopy,
   backlogFailureCopy,
   backlogGroupToggleAria,
   backlogInvokeErrorCopy,
@@ -13,6 +18,8 @@ import {
   backlogRepoFilterButtonCopy,
   backlogStartAnywayTitle,
   backlogTruncatedCopy,
+  backlogWaveBandCopy,
+  backlogWaveLabel,
 } from '@/renderer/backlog/copy'
 
 const EVERY_KIND: readonly PipelineFailureKind[] = [
@@ -117,5 +124,24 @@ describe('repository section copy', () => {
   it('labels the group toggle by what it will do', () => {
     expect(backlogGroupToggleAria('acme/widgets', false)).toBe('Collapse acme/widgets')
     expect(backlogGroupToggleAria('acme/widgets', true)).toBe('Expand acme/widgets')
+  })
+})
+
+describe('epic and wave copy', () => {
+  it('names the epic tag, waves and band', () => {
+    expect(BACKLOG_EPIC_TAG).toBe('Epic')
+    expect(backlogWaveLabel(2)).toBe('Wave 2')
+    expect(backlogWaveBandCopy(2, 1)).toBe('Wave 2 · 1 in progress')
+  })
+
+  it('words the progress, its accessible name and the truncation note', () => {
+    expect(backlogEpicProgressCopy(1, 3)).toBe('1/3')
+    expect(backlogEpicProgressAria(1, 3)).toBe('1 of 3 sub-issues done')
+    expect(backlogEpicTruncatedCopy(50, 70)).toBe('Counted 50 of 70 sub-issues.')
+  })
+
+  it('labels the epic toggle by what it will do', () => {
+    expect(backlogEpicToggleAria(41, false)).toBe('Collapse #41')
+    expect(backlogEpicToggleAria(41, true)).toBe('Expand #41')
   })
 })

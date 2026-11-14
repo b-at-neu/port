@@ -36,6 +36,7 @@ export function readBacklogFilters(storage: KeyValueStorage = window.localStorag
 }
 
 const COLLAPSED_KEY = 'port.backlogCollapsed.v1'
+const COLLAPSED_EPICS_KEY = 'port.backlogCollapsedEpics.v1'
 const HIDDEN_REPOS_KEY = 'port.backlogHiddenRepos.v1'
 
 export function readBacklogCollapsed(storage: KeyValueStorage = window.localStorage): ReadonlySet<RepoId> {
@@ -47,6 +48,17 @@ export function setBacklogCollapsed(repoId: RepoId, collapsed: boolean, storage:
   if (collapsed) next.add(repoId)
   else next.delete(repoId)
   writeIdSet(storage, COLLAPSED_KEY, next)
+}
+
+export function readBacklogCollapsedEpics(storage: KeyValueStorage = window.localStorage): ReadonlySet<string> {
+  return readIdSet<string>(storage, COLLAPSED_EPICS_KEY)
+}
+
+export function setBacklogCollapsedEpic(key: string, collapsed: boolean, storage: KeyValueStorage = window.localStorage): void {
+  const next = new Set(readIdSet<string>(storage, COLLAPSED_EPICS_KEY))
+  if (collapsed) next.add(key)
+  else next.delete(key)
+  writeIdSet(storage, COLLAPSED_EPICS_KEY, next)
 }
 
 export function readBacklogHiddenRepos(storage: KeyValueStorage = window.localStorage): ReadonlySet<RepoId> {

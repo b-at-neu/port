@@ -91,7 +91,7 @@ export function fixtureBacklog(now: Date, repoId: RepoId): BacklogResponse {
       assignees: [],
       labels: [],
       subIssueCount: 0,
-      blockers: UNBLOCKED,
+      blockers: BLOCKED_BY_39,
       blocking: BLOCKING_45,
       parent: { ok: true, parent: { number: 41, title: 'Overhaul the notification settings', state: 'OPEN' } },
       children: NO_CHILDREN,

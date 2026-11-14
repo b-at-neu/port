@@ -1,4 +1,5 @@
 // Renderer-safe contract for the Backlog screen's list; no import here may reach a Node builtin.
+import type { ReactNode } from 'react'
 import type { BlockerRead, ClaimBlocker, PipelineFailureKind } from '@/types/github'
 import type { RepoId } from '@/utils/repos'
 
@@ -139,6 +140,14 @@ export interface BacklogEpicGroup {
   readonly summary: BacklogEpicSummary
 }
 
+export interface BacklogRowExtras {
+  readonly slot?: string
+  readonly leading?: ReactNode
+  readonly afterTitle?: ReactNode
+}
+
+export type RenderBacklogRow = (row: BacklogRowView, extras?: BacklogRowExtras) => ReactNode
+
 export interface BacklogEpicLayout {
   readonly epics: readonly BacklogEpicGroup[]
   readonly remainder: readonly BacklogRowView[]
@@ -163,6 +172,7 @@ export type BacklogGroupView =
       readonly totalCount: number
       readonly labelOptions: readonly LabelOption[]
       readonly truncatedNote: string | null
+      readonly layout: BacklogEpicLayout
     }
 
 // `status` stays `'success'` on a refetch over previously-good data, so `isError`/`dataUpdatedAt` carry that fact separately.

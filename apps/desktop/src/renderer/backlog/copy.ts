@@ -92,6 +92,32 @@ export function backlogEpicReasonCopy(subIssueCount: number): string {
   return subIssueCount === 1 ? 'It has 1 sub-issue. Work on it happens in its sub-issue.' : `It has ${String(subIssueCount)} sub-issues. Work on it happens in its sub-issues.`
 }
 
+export const BACKLOG_EPIC_TAG = 'Epic'
+
+export function backlogWaveLabel(number: number): string {
+  return `Wave ${String(number)}`
+}
+
+export function backlogWaveBandCopy(number: number, inProgress: number): string {
+  return `${backlogWaveLabel(number)} · ${String(inProgress)} in progress`
+}
+
+export function backlogEpicProgressCopy(done: number, total: number): string {
+  return `${String(done)}/${String(total)}`
+}
+
+export function backlogEpicProgressAria(done: number, total: number): string {
+  return `${String(done)} of ${String(total)} sub-issues done`
+}
+
+export function backlogEpicTruncatedCopy(shown: number, total: number): string {
+  return `Counted ${String(shown)} of ${String(total)} sub-issues.`
+}
+
+export function backlogEpicToggleAria(number: number, collapsed: boolean): string {
+  return `${collapsed ? 'Expand' : 'Collapse'} #${String(number)}`
+}
+
 export function backlogInvokeErrorCopy(repo: string): string {
   return `Couldn't load open tickets for ${repo}. Retry, or check the repository on Repositories.`
 }
