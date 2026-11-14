@@ -76,8 +76,8 @@ const TAX_REGION_BLOCKERS: BlockerRead = {
   total: 2,
 }
 
-/** One item per stage family the board groups by, so the screenshot shows every group non-empty, plus two seeds for the Needs you screen's own label-kinds. */
-const POPULATED_ITEM_SEEDS: readonly ItemSeed[] = [
+/** The problem-heavy set: every stage family plus each Needs-you kind (needs human, blocked, conflicting, stalled), for the `attention` scenario's error captures. */
+const ATTENTION_ITEM_SEEDS: readonly ItemSeed[] = [
   { kind: 'issue', number: 41, title: 'Add CSV export to the reports page', stageKey: 'planReview' },
   {
     kind: 'issue',
@@ -161,6 +161,11 @@ const POPULATED_ITEM_SEEDS: readonly ItemSeed[] = [
   { kind: 'issue', number: 54, title: 'Migrate session storage to Redis', stageKey: 'inProgress', updatedMinutesAgo: -40 },
 ]
 
+const HEALTHY_NUMBERS: ReadonlySet<number> = new Set([41, 38, 44, 36, 35, 46, 47, 52, 55])
+
+/** A healthy pipeline: every stage family non-empty, with only routine Needs-you kinds (plan review, ready to merge, a ticket waiting on dependencies). */
+const POPULATED_ITEM_SEEDS: readonly ItemSeed[] = ATTENTION_ITEM_SEEDS.filter((seed) => HEALTHY_NUMBERS.has(seed.number))
+
 // Keeps only the routine, non-"needs you" seeds, so the Needs you screen renders its empty state while the Board stays non-empty.
 const EMPTY_ITEM_SEEDS: readonly ItemSeed[] = [
   { kind: 'issue', number: 38, title: 'Retry failed webhook deliveries', stageKey: 'inProgress' },
@@ -169,5 +174,6 @@ const EMPTY_ITEM_SEEDS: readonly ItemSeed[] = [
 ]
 
 export function itemSeedsFor(scenario: FixtureScenario): readonly ItemSeed[] {
-  return scenario === 'empty' ? EMPTY_ITEM_SEEDS : POPULATED_ITEM_SEEDS
+  if (scenario === 'empty') return EMPTY_ITEM_SEEDS
+  return scenario === 'attention' ? ATTENTION_ITEM_SEEDS : POPULATED_ITEM_SEEDS
 }

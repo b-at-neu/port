@@ -65,6 +65,7 @@ export const SCENARIO_LANDING: Readonly<Record<NonDefaultScenario, string | null
   'update-available': null,
   'update-downloading': null,
   'update-download-failed': null,
+  attention: null,
 }
 
 // The permission dialog is app-wide — its one fixture session is served only
@@ -91,6 +92,11 @@ export const VARIANT_TARGETS: readonly VariantTarget[] = [
   { name: 'about-update-downloading', scenario: 'update-downloading', target: { hash: '#/settings?section=about', container: '#app', ready: '[data-slot="update-status"] [data-slot="update-download"][data-state="downloading"]' } },
   { name: 'about-update-error', scenario: 'failing', target: { hash: '#/settings?section=about', container: '#app', ready: '[data-slot="update-status"][data-state="error"]' } },
   { name: 'about-update-checking', scenario: 'registry-error', target: { hash: '#/settings?section=about', container: '#app', ready: '[data-slot="update-status"][data-state="checking"]' } },
+  { name: 'needs-you-held', scenario: 'attention', target: { hash: '#/needs-you', container: '#app', ready: 'text=its branch conflicts with the base branch' } },
+  { name: 'needs-you-stalled', scenario: 'attention', target: { hash: '#/needs-you', container: '#app', ready: 'text=its agent stopped responding' } },
+  { name: 'board-attention', scenario: 'attention', target: { hash: '#/board', container: '#app', ready: 'text=Normalize currency rounding' } },
+  { name: 'settings-repo-problem', scenario: 'attention', target: { hash: '#/settings/repositories/fixture-acme-legacy-site', container: '#app', ready: '[role="alert"]' } },
+  { name: 'session-crashed', scenario: 'attention', target: { hash: '#/session?key=fixture-session-ended', container: '#app', ready: 'text=Crashed' } },
 ]
 
 const FIXTURE_SESSION_ID = 'fixture-session-streaming'
@@ -128,7 +134,6 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'denials', hash: '#/settings/repositories/fixture-acme-widgets?tab=denials', ready: '[data-slot="denial-shape-row"]' },
       { name: 'denials-actor', hash: '#/settings/repositories/fixture-acme-widgets?tab=denials&denialsGroup=actor', ready: '[data-slot="denial-actor-row"]' },
       { name: 'denials-empty', hash: '#/settings/repositories/fixture-acme-gadgets?tab=denials', ready: 'text=No denial log yet' },
-      { name: 'problem', hash: '#/settings/repositories/fixture-acme-legacy-site', ready: '[role="alert"]' },
       { name: 'mis-resolved', hash: '#/settings/repositories/fixture-acme-gadgets', ready: '[data-slot="label-verdict"]' },
     ],
   },
@@ -156,7 +161,7 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
     variants: [
       { name: 'streaming', hash: `#/session?key=${FIXTURE_SESSION_ID}`, ready: '[data-slot="tool-call-row"]' },
       { name: 'stage', hash: '#/session?key=fixture-stage-impl-38', ready: 'aside [aria-current="page"]' },
-      { name: 'ended', hash: '#/session?key=fixture-session-ended', ready: 'text=Crashed' },
+      { name: 'ended', hash: '#/session?key=fixture-session-ended', ready: 'text=Claude Code ended the session.' },
       { name: 'starting', hash: '#/session?key=fixture-session-starting', ready: 'text=Starting' },
       { name: 'question', hash: '#/session?key=fixture-session-question', ready: '[data-slot="question-card"]' },
       { name: 'plan', hash: '#/session?key=fixture-session-plan', ready: '[data-slot="plan-card"]' },
@@ -200,15 +205,7 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
     ready: '[data-slot="audit-row"]',
     variants: [{ name: 'filtered', hash: '#/audit?repo=fixture-acme-widgets&number=38', ready: '[data-slot="audit-row"]' }],
   },
-  needsYou: {
-    hash: '#/needs-you',
-    container: '#app',
-    ready: '[data-slot="needs-you-item"]',
-    variants: [
-      { name: 'held', ready: 'text=its branch conflicts with the base branch' },
-      { name: 'stalled', ready: 'text=its agent stopped responding' },
-    ],
-  },
+  needsYou: { hash: '#/needs-you', container: '#app', ready: '[data-slot="needs-you-item"]' },
   setup: { hash: '#/setup', container: '#app', ready: '#app [data-step]' },
   about: { hash: '#/about', container: '#app', ready: '#app [data-about-notice]' },
 }
