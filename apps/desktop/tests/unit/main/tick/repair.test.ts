@@ -25,7 +25,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
 }
 
 function ended(overrides: Partial<EndedStage> = {}): EndedStage {
-  return { agent: 'impl', number: 52, outcome: 'error', at: '2026-01-01T00:00:00.000Z', ...overrides }
+  return { agent: 'impl', number: 52, outcome: 'completed', at: '2026-01-01T00:00:00.000Z', labels: { kind: 'refused', reason: 'moved', detail: null }, ...overrides }
 }
 
 describe('repairsOf — guards', () => {
@@ -67,31 +67,56 @@ describe('repairsOf — guards', () => {
 })
 
 describe('repairsOf — contradictory wins over every other shape', () => {
-  it('reports contradictory even over a stage-error session', () => {
+  it('reports contradictory even over a refused hand-back', () => {
     const contradictory = item({ stages: [{ key: 'inProgress', name: 'inProgress', role: 'in-flight' }, { key: 'planReview', name: 'plan review', role: 'gate' }], matchedKeys: ['inProgress', 'planReview'] })
     const result = repairsOf({ items: [contradictory], endedStages: [ended()], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
     expect(result.observations).toEqual([])
-    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'contradictory', labels: ['inProgress', 'planReview'], agent: null }])
+    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'contradictory', labels: ['inProgress', 'planReview'], agent: null, reason: null }])
   })
 
   it('reports contradictory when both refresh-pair labels are present', () => {
     const both = item({ stages: [{ key: 'refreshBranch', name: 'refresh branch', role: 'trigger' }, { key: 'refreshing', name: 'refreshing', role: 'in-flight' }], matchedKeys: ['refreshBranch', 'refreshing'] })
     const result = repairsOf({ items: [both], endedStages: [], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
-    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'contradictory', labels: ['refreshBranch', 'refreshing'], agent: null }])
+    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'contradictory', labels: ['refreshBranch', 'refreshing'], agent: null, reason: null }])
   })
 })
 
 describe('repairsOf — session shapes', () => {
-  it('stage-error with a retry key repairs via liveness-reset, evidence stage-error', () => {
-    const result = repairsOf({ items: [item()], endedStages: [ended({ outcome: 'error' })], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
+  it('an error outcome produces no observation', () => {
+    const result = repairsOf({ items: [item()], endedStages: [ended({ outcome: 'error', labels: { kind: 'applied' } })], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
     expect(result.reports).toEqual([])
-    expect(result.observations).toEqual([{ kind: 'liveness-reset', number: 52, itemKind: 'issue', inFlight: 'inProgress', retryKey: 'planApproved', evidence: 'stage-error' }])
+    expect(result.observations).toEqual([])
   })
 
-  it('completed with the in-flight label still present reports handback-unlabelled', () => {
-    const result = repairsOf({ items: [item()], endedStages: [ended({ outcome: 'completed' })], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
+  it('a refused completed hand-back reports handback-unlabelled with its reason', () => {
+    const result = repairsOf({ items: [item()], endedStages: [ended({ labels: { kind: 'refused', reason: 'no-handback', detail: null } })], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
     expect(result.observations).toEqual([])
-    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'handback-unlabelled', labels: ['inProgress'], agent: 'impl' }])
+    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'handback-unlabelled', labels: ['inProgress'], agent: 'impl', reason: 'no-handback' }])
+  })
+
+  it('a refused error write reports handback-unlabelled too', () => {
+    const result = repairsOf({ items: [item()], endedStages: [ended({ outcome: 'error', labels: { kind: 'refused', reason: 'write-failed', detail: 'boom' } })], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
+    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'handback-unlabelled', labels: ['inProgress'], agent: 'impl', reason: 'write-failed' }])
+  })
+
+  it('an applied or pending hand-back reports nothing', () => {
+    for (const labels of [{ kind: 'applied' as const }, null]) {
+      const result = repairsOf({ items: [item()], endedStages: [ended({ labels })], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
+      expect(result.observations).toEqual([])
+      expect(result.reports).toEqual([])
+    }
+  })
+
+  it('an impl whose only label is blocked still reports a refused hand-back', () => {
+    const blocked = item({ stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }], matchedKeys: ['blocked'] })
+    const result = repairsOf({ items: [blocked], endedStages: [ended()], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
+    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'handback-unlabelled', labels: ['blocked'], agent: 'impl', reason: 'moved' }])
+  })
+
+  it('a refused write reports nothing once the labels no longer sit alone on the in-flight key', () => {
+    const moved = item({ stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }], matchedKeys: ['planReview'] })
+    const result = repairsOf({ items: [moved], endedStages: [ended()], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
+    expect(result.reports).toEqual([])
   })
 
   it.each(['questions', 'blocked', 'interrupted', 'usage-limit'] as const)('%s produces nothing', (outcome) => {
@@ -101,11 +126,11 @@ describe('repairsOf — session shapes', () => {
   })
 
   it('the newest ended stage for a number wins when more than one is present', () => {
-    const older = ended({ outcome: 'completed', at: '2025-12-31T00:00:00.000Z' })
-    const newer = ended({ outcome: 'error', at: '2025-12-31T23:00:00.000Z' })
+    const older = ended({ at: '2025-12-31T00:00:00.000Z' })
+    const newer = ended({ outcome: 'error', labels: { kind: 'applied' }, at: '2025-12-31T23:00:00.000Z' })
     const result = repairsOf({ items: [item()], endedStages: [older, newer], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
     expect(result.reports).toEqual([])
-    expect(result.observations).toEqual([{ kind: 'liveness-reset', number: 52, itemKind: 'issue', inFlight: 'inProgress', retryKey: 'planApproved', evidence: 'stage-error' }])
+    expect(result.observations).toEqual([])
   })
 })
 
@@ -132,13 +157,13 @@ describe('repairsOf — artifact shapes (issues only)', () => {
   it('planApproved with planPresent false reports plan-missing-approved', () => {
     const result = repairsOf({ items: [atStage('planApproved', 'trigger', { planPresent: false })], endedStages: [], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
     expect(result.observations).toEqual([])
-    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'plan-missing-approved', labels: ['planApproved'], agent: null }])
+    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'plan-missing-approved', labels: ['planApproved'], agent: null, reason: null }])
   })
 
   it('prOpened with linkReason counterpart-not-open (closed unmerged) reports pr-missing', () => {
     const result = repairsOf({ items: [atStage('prOpened', 'terminal', { linkReason: 'counterpart-not-open' })], endedStages: [], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
     expect(result.observations).toEqual([])
-    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'pr-missing', labels: ['prOpened'], agent: null }])
+    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'pr-missing', labels: ['prOpened'], agent: null, reason: null }])
   })
 
   it('prOpened with linkReason counterpart-merged produces no report and no observation', () => {

@@ -1,9 +1,15 @@
 import type { StageRecord } from '@/types/dispatch'
 
-// Pure budget policy: the session name, the verdict vocabulary, the two-strike hold rule, and
-// how stage records feed the ledger. No I/O — budget-gate.ts is what reads and writes the ledger.
+// Budget policy: session name, verdicts, the two-strike hold rule, ledger feeds and the over-budget escalation.
+// Writes arrive through an injected `escalate`; budget-gate.ts reads and writes the ledger.
 
-import type { BudgetVerdict } from '@/types/dispatch'
+import type { BudgetNote, BudgetVerdict } from '@/types/dispatch'
+import type { EscalateToHumanParams, EscalateToHumanResult, ReadyEntry } from '@/types/actions'
+import type { ReconciledItem } from '@/types/state'
+import type { TickActionable } from '@/types/tick'
+import { labelName } from '@/utils/labels/vocabulary'
+import { commentFailureMessage } from '@/main/dispatch/select'
+import { escalationRepeats } from '../../../../../scripts/port-tick/gates'
 
 /** One session log per dispatcher — sharing one log with the cockpit would close rows this
  *  app's own agents are still working through. */
@@ -39,6 +45,43 @@ export function sumCostUsd(records: readonly StageRecord[]): number | null {
   const known = records.map((r) => r.outcome?.costUsd).filter((c): c is number => c !== null && c !== undefined)
   if (known.length === 0) return null
   return known.reduce((a, b) => a + b, 0)
+}
+
+interface EscalateOverBudgetParams {
+  readonly entry: ReadyEntry
+  readonly candidate: TickActionable
+  readonly line: string
+  readonly notes: BudgetNote[]
+  readonly viewer: string
+  /** The candidate's board item, read only for a pull request's head and comments. */
+  readonly item: Pick<ReconciledItem, 'headRefOid' | 'comments'> | undefined
+  readonly escalate: (params: EscalateToHumanParams) => Promise<EscalateToHumanResult>
+  readonly dirs: { readonly audit: string; readonly scratch: string }
+}
+
+/** Swaps the candidate to `needsHuman` and records the outcome as a budget note. */
+export async function escalateOverBudget(params: EscalateOverBudgetParams): Promise<void> {
+  const { entry, candidate, line, notes, viewer, item, dirs } = params
+  const needsHumanLabel = labelName(entry.config.vocabulary, 'needsHuman') ?? 'needsHuman'
+  const triggerLabel = labelName(entry.config.vocabulary, candidate.trigger) ?? candidate.trigger
+  const sha = candidate.kind === 'pull-request' ? (item?.headRefOid ?? null) : null
+  const repeats = sha !== null && escalationRepeats({ comments: item?.comments ?? undefined, cause: 'budget', sha })
+  const escalation = await params.escalate({
+    entry,
+    kind: candidate.kind,
+    number: candidate.number,
+    trigger: candidate.trigger,
+    viewer,
+    body: repeats ? null : escalationBody(line, sha),
+    action: 'budget-escalate',
+    auditDir: dirs.audit,
+    scratchDir: dirs.scratch,
+  })
+  if (escalation.labels.kind === 'applied') {
+    notes.push({ kind: 'escalated', number: candidate.number, needsHumanLabel, commentFailedMessage: commentFailureMessage(escalation.comment) })
+  } else {
+    notes.push({ kind: 'escalation-failed', number: candidate.number, needsHumanLabel, triggerLabel, outcome: escalation.labels })
+  }
 }
 
 /** `## Pipeline Escalation`'s body — `line` is the gate's own `exceeded` line, carried verbatim. A pull request's `sha` adds the `budget` marker a repeat is matched on. */

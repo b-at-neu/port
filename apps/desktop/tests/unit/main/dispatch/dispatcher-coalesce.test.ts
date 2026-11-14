@@ -16,7 +16,7 @@ const SESSION_KEY = 'hosted-1' as SessionKey
 const OWNED_BY_APP: OwnershipRead = { kind: 'app', since: '2026-01-01T00:00:00Z', path: '/repo/.agents/cockpit.json', readAt: 'r' }
 
 function outcome(kind: StageOutcome['kind']): StageOutcome {
-  return { kind, detail: null, costUsd: null, resetsAt: null, worktree: 'kept', operatorJoined: false }
+  return { kind, detail: null, costUsd: null, resetsAt: null, worktree: 'kept', operatorJoined: false, handback: null }
 }
 
 function entry(): ReadyEntry {
@@ -89,6 +89,7 @@ function harness(overrides: Partial<CreateDispatcherParams> = {}) {
     writeObservation: () => {
       throw new Error('writeObservation should not be invoked')
     },
+    stageLabels: { claim: () => Promise.resolve({ kind: 'applied' }), transition: () => Promise.resolve({ kind: 'applied' }) },
     runState: () => 'dispatching',
     // The first read hangs until released, so a pass is in flight while later snapshots arrive.
     readOwnership: () => {
@@ -177,9 +178,11 @@ describe('createDispatcher — read on hand-back', () => {
     return rig
   }
 
-  it('a completed hand-back requests exactly one read for its repository', async () => {
+  it('a completed hand-back requests exactly one read for its repository, once its label write has settled', async () => {
     const { dispatcher, requestRead } = await trackedSession()
     dispatcher.recordOutcome(REPO_ID, SESSION_KEY, outcome('completed'))
+    expect(requestRead).not.toHaveBeenCalled()
+    await flush()
     expect(requestRead).toHaveBeenCalledTimes(1)
     expect(requestRead).toHaveBeenCalledWith(REPO_ID)
   })
@@ -187,12 +190,14 @@ describe('createDispatcher — read on hand-back', () => {
   it.each(['questions', 'blocked', 'error', 'usage-limit', 'interrupted'] as const)('a %s hand-back requests no read', async (kind) => {
     const { dispatcher, requestRead } = await trackedSession()
     dispatcher.recordOutcome(REPO_ID, SESSION_KEY, outcome(kind))
+    await flush()
     expect(requestRead).not.toHaveBeenCalled()
   })
 
   it('a hand-back for an untracked session requests no read', async () => {
     const { dispatcher, requestRead } = await trackedSession()
     dispatcher.recordOutcome(REPO_ID, 'hosted-other' as SessionKey, outcome('completed'))
+    await flush()
     expect(requestRead).not.toHaveBeenCalled()
   })
 })

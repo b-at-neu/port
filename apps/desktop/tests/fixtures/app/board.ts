@@ -304,7 +304,7 @@ export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'pop
                     state: 'ended',
                     at: offsetMinutes(now, -30),
                     detail: null,
-                    outcome: { kind: 'completed', detail: null, costUsd: 0.42, resetsAt: null, worktree: 'removed', operatorJoined: false },
+                    outcome: { kind: 'completed', detail: null, costUsd: 0.42, resetsAt: null, worktree: 'removed', operatorJoined: false, handback: { token: 'plan-written', arg: null } },
                     sessionKey: null,
                     claudeSessionId: 'fixture-session-plan-38',
                     operatorJoinedAt: null,

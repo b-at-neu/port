@@ -10,7 +10,6 @@ import type { StageLaunchRequest } from '@/types/dispatch'
 import type { FileResult, GitRunner } from '@/types/platform'
 import { makeTempDir } from '../../../fixtures/fs'
 import type { StageAgent } from '@/types/tick'
-import { LABEL_KEYS } from '@/utils/labels/vocabulary'
 import { parseStagePrompt } from '@/utils/stage/prompt'
 
 const ENTRY = FIXTURE_REPOSITORIES.find((r) => r.id === WIDGETS_ID) as ReadyEntry
@@ -61,11 +60,11 @@ describe('loadStageInstructions', () => {
     '<!-- shell-discipline:begin -->',
     'SHELL',
     '<!-- shell-discipline:end -->',
-    '<!-- label-cas:begin -->',
-    'CAS',
-    '<!-- label-cas:end -->',
-    '## Label lifecycle',
-    'labels',
+    '<!-- standards-precedence:begin -->',
+    'STANDARDS',
+    '<!-- standards-precedence:end -->',
+    '## Hand-back line',
+    'handback',
     '## Stages and models',
     'later',
   ].join('\n')
@@ -83,9 +82,9 @@ describe('loadStageInstructions', () => {
     expect(text).not.toContain('${CLAUDE_PLUGIN_ROOT}')
     expect(text).toContain('rules at /bundle/stage-prompts')
     expect(text.split('<!-- shell-discipline:begin -->')).toHaveLength(2)
-    expect(text).toContain('CAS')
+    expect(text).toContain('STANDARDS')
     expect(text).toContain('overrides text')
-    expect(text).toContain('labels')
+    expect(text).toContain('handback')
     expect(text).not.toContain('skip me')
     expect(text).not.toContain('later')
   })
@@ -111,9 +110,12 @@ describe('loadStageInstructions against the bundled stage prompts', () => {
     const text = result.ok ? result.text : ''
     expect(text).not.toContain('${CLAUDE_PLUGIN_ROOT}')
     for (const title of STAGE_PIPELINE_SECTIONS) expect(text).toContain(title)
-    for (const marker of ['shell-discipline', 'label-cas', 'standards-precedence']) {
+    for (const marker of ['shell-discipline', 'standards-precedence']) {
       expect(text.split(`<!-- ${marker}:begin -->`).length - 1).toBeLessThanOrEqual(1)
     }
+    expect(text).not.toContain('label-cas')
+    expect(text).not.toContain('--add-label')
+    expect(text).not.toContain('--remove-label')
   })
 
   it('has the review agent read both review facts from the stage context and derive neither itself', async () => {
@@ -153,18 +155,17 @@ function launchRequest(overrides: Partial<StageLaunchRequest> = {}): StageLaunch
     config: { ...ENTRY.config, overrides: [{ path: 'reviewCycleCap', value: 3, reason: 'small team', portDefault: 5, source: 'CLAUDE.md' }] },
     diagnostics: [{ kind: 'override-refused', path: 'commands.checks', line: 'commands.checks = x', reason: 'permission surface' }],
   }
-  return { entry, agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', model: 'sonnet', prompt: 'Implementation stage for issue #52. Run your pipeline stage for #52. Follow your Pre-flight, Label swap, Work, and Handoff steps exactly.', title: '#52 x', target: { kind: 'issue', title: 'x' }, review: null, ...overrides }
+  return { entry, agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', model: 'sonnet', prompt: 'Implementation stage for issue #52. Run your pipeline stage for #52. port has already moved its label. Follow your Pre-flight, Work, and Handoff steps exactly.', title: '#52 x', target: { kind: 'issue', title: 'x' }, review: null, ...overrides }
 }
 
 describe('buildStageContext', () => {
   const pointers = { ok: true, docs: { engineering: 'docs/ENGINEERING.md', design: null }, commands: { artifacts: 'node a.mjs' } } as const
 
-  it('emits the keys in a fixed order, with every label, override and refused override', () => {
+  it('emits the keys in a fixed order, with every override and refused override and no label name', () => {
     const context = buildStageContext(launchRequest(), '/bundle/stage-prompts', pointers)
     const keys = context.map(([key]) => key)
     expect(keys.slice(0, 8)).toEqual(['stage', 'item', 'mode', 'models.impl', 'plugin-root', 'repo', 'branches.integration', 'branches.production'])
-    expect(keys.filter((key) => key.startsWith('labels.')).length).toBeGreaterThan(10)
-    expect(keys.filter((key) => key.startsWith('labels.')).every((key) => LABEL_KEYS.includes(key.slice('labels.'.length) as never))).toBe(true)
+    expect(keys.filter((key) => key.startsWith('labels.'))).toEqual([])
     expect(keys.indexOf('sessionRequiredPaths')).toBeGreaterThan(keys.lastIndexOf('modules.approvalGate'))
     expect(keys.indexOf('docs.engineering')).toBeGreaterThan(keys.indexOf('reviewCycleCap'))
     expect(keys.indexOf('commands.artifacts')).toBeGreaterThan(keys.indexOf('docs.design'))
@@ -193,7 +194,7 @@ describe('createStageInstructionsLoader', () => {
   const ROOT = '/bundle/stage-prompts'
   const files = {
     [`${ROOT}/agents/impl-agent.md`]: '---\nname: impl-agent\ndescription: Implements a plan\ndisallowedTools: Agent\n---\nYou are the Impl agent.',
-    [`${ROOT}/docs/PIPELINE.md`]: '## CLAUDE.md overrides\no\n## Quick start\nq\n### Operating rules (all stage agents)\nr\n## Label lifecycle\nl\n## Stages and models\ns\n',
+    [`${ROOT}/docs/PIPELINE.md`]: '## CLAUDE.md overrides\no\n## Quick start\nq\n### Operating rules (all stage agents)\nr\n## Hand-back line\nh\n## Stages and models\ns\n',
   }
   const defaultBranchConfig = JSON.stringify({ docs: { engineering: null, design: null }, commands: { artifacts: 'node default.mjs' } })
 

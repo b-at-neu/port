@@ -119,6 +119,7 @@ function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispat
     writeObservation: () => {
       throw new Error('writeObservation should not be invoked unless a test wires its own')
     },
+    stageLabels: { claim: () => Promise.resolve({ kind: 'applied' }), transition: () => Promise.resolve({ kind: 'applied' }) },
     runState: () => 'dispatching',
     readOwnership: () => Promise.resolve(ABSENT_OWNERSHIP),
     // Harmless by default — readOwnership above stays `absent`, so this never changes outcomes.
@@ -464,7 +465,7 @@ function promptForActionable(overrides: Partial<TickActionable> = {}): TickActio
 }
 
 describe('promptFor', () => {
-  const INSTRUCTION = 'Run your pipeline stage for #52. Follow your Pre-flight, Label swap, Work, and Handoff steps exactly.'
+  const INSTRUCTION = 'Run your pipeline stage for #52. port has already moved its label. Follow your Pre-flight, Work, and Handoff steps exactly.'
 
   it('names the plan stage and the issue', () => {
     expect(promptFor(promptForActionable({ trigger: 'ready', agent: 'plan' }))).toBe(`Plan stage for issue #52. ${INSTRUCTION}`)

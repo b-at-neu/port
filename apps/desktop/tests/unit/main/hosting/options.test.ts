@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
+import { GUARD_ALLOWLIST_MISS_MARKER } from '@/main/hosting/guard-marker'
+import { LABEL_GUARD_MESSAGE } from '@/main/hosting/label-guard'
 import { buildSessionOptions } from '@/main/hosting/options'
 import type { CanUseTool } from '@/main/hosting/sdk'
 import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
@@ -120,5 +122,48 @@ describe('buildSessionOptions — stage branch (#327)', () => {
     const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, stage: { agent: { name: 'plan-agent', definition: { description: 'plan', prompt: 'body' } }, instructionsRoot: '/bundle', model: 'opus' } }) as Record<string, unknown>
     expect(options['allowedTools']).toBeUndefined()
     expect(options['systemPrompt']).toBeUndefined()
+  })
+
+  describe('label guard hook', () => {
+    const STAGE = { agent: IMPL, instructionsRoot: '/bundle', model: 'sonnet' }
+    const SIGNAL = { signal: new AbortController().signal }
+    const bashInput = (command: string) => ({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command }, tool_use_id: 't' }) as never
+
+    function guard() {
+      const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, stage: STAGE })
+      const matcher = options.hooks?.PreToolUse?.[0]
+      const hook = matcher?.hooks[0]
+      if (matcher === undefined || hook === undefined) throw new Error('no PreToolUse hook on the stage session')
+      return { matcher, hook }
+    }
+
+    it('a stage session carries one PreToolUse hook on Bash', () => {
+      const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, stage: STAGE })
+      expect(options.hooks?.PreToolUse).toHaveLength(1)
+      expect(guard().matcher.matcher).toBe('Bash')
+    })
+
+    it('an operator session carries no hooks', () => {
+      expect(buildSessionOptions({ ...BASE, mode: { kind: 'fresh' } }).hooks).toBeUndefined()
+    })
+
+    it('denies a label write with the reason the agent sees', async () => {
+      const result = await guard().hook(bashInput('gh issue edit 52 --repo o/a --add-label planning'), 't', SIGNAL)
+      expect(result).toEqual({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: LABEL_GUARD_MESSAGE } })
+    })
+
+    it('says nothing about a command that reads labels or writes none', async () => {
+      expect(await guard().hook(bashInput('gh pr view 8 --repo o/a --json labels'), 't', SIGNAL)).toEqual({})
+      expect(await guard().hook(bashInput('git status'), 't', SIGNAL)).toEqual({})
+    })
+
+    it('ignores a non-Bash tool and an input with no command', async () => {
+      expect(await guard().hook({ hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: { file_path: '/x' }, tool_use_id: 't' } as never, 't', SIGNAL)).toEqual({})
+      expect(await guard().hook({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: null, tool_use_id: 't' } as never, 't', SIGNAL)).toEqual({})
+    })
+
+    it('never uses the allowlist-miss reason, so a denial never becomes an Allow item', () => {
+      expect(LABEL_GUARD_MESSAGE).not.toContain(GUARD_ALLOWLIST_MISS_MARKER)
+    })
   })
 })

@@ -3,7 +3,8 @@ import type { RegistryDeps } from '@/types/registry'
 import type { AutoApprovePlanParams, ReadyEntry, EscalateToHumanParams, EscalateToHumanResult, ApplyObservationParams, ApplyObservationResult, ApplyItemActionParams } from '@/types/actions'
 import type { TickActionable, EndedStage, DispatchLedger, RefreshMemo, TickObservation, ForceDispatch } from '@/types/tick'
 import type { HostedStore } from '@/types/hosting'
-import type { FetchItemsByNumberParams, ItemsByNumberFetch } from '@/types/github'
+import type { FetchItemsByNumberParams, ItemsByNumberFetch, ResolvedItem } from '@/types/github'
+import type { StageEvent, StageTransitionResult } from '@/types/stage-labels'
 import type { ReposListResponse } from '@/types/ipc'
 import type { GitRunner, PathOps, FileFailureKind } from '@/types/platform'
 import type { LabelKey } from '@/utils/labels/vocabulary'
@@ -238,8 +239,10 @@ export interface Dispatcher {
   liveStageSessions(): readonly StageSessionSummary[]
   /** Stops new launches — called before `closeAll()` on quit. */
   shutdown(): void
-  /** Records a stage launcher's hand-back classification against its matching record, by session key. A no-op if the key is not tracked. */
+  /** Records a stage launcher's hand-back classification against its matching record, by session key, and plans the label move it implies. A no-op if the key is not tracked. */
   recordOutcome(repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome): void
+  /** A blocked stage session's next turn began — the app clears the block. A no-op if the key is not tracked. */
+  recordResumedTurn(repoId: RepoId, sessionKey: SessionKey): void
   /** `true` unless this app currently owns `repoId` — an unread repository (`'none'`) holds, the fail direction for `SESSION REQUIRED`. */
   holdsSessionRequired(repoId: RepoId): boolean
   /** Stage-denial bookkeeping: record (deduped by rule, bounded to 20), dismiss by id (operator's own Dismiss), or clear every denial proposing a given rule (once Allow succeeds or reports `already-allowed`). */
@@ -266,16 +269,23 @@ export interface CreateDispatcherParams {
   readonly budget: BudgetGate
   readonly escalate: (params: EscalateToHumanParams) => Promise<EscalateToHumanResult>
   readonly writeObservation: (params: ApplyObservationParams) => Promise<ApplyObservationResult>
+  /** Every label write a stage needs: the claim before launch, and rollback, hand-back and next-turn writes through `transition`. */
+  readonly stageLabels: StageLabelWrites
   readonly refreshMemo: RefreshMemo
   /** Cleared for `(repoId, candidate.number)` once a forced launch succeeds — `main/tick/plan.ts`'s own consumer of the same memo, never a second instance. */
   readonly forceDispatch: ForceDispatch
-  /** Asks for one GitHub read of this repository alone — never another source, never another repository. */
+  /** Asks for one GitHub read of this repository alone — never another source, never another repository. Fired once a hand-back's label write has settled. */
   readonly requestRead: (repoId: RepoId) => void
   readonly dirs: { readonly audit: string; readonly scratch: string }
   readonly onChange: () => void
   readonly now: () => Date
   /** Interrupted stage sessions for a repository, read from `main/stage/registry.ts` — `[]` when none is wired (tests, or before the registry loads). */
   readonly interrupted?: (repoId: RepoId) => readonly InterruptedStage[]
+}
+
+export interface StageLabelWrites {
+  readonly claim: (params: { readonly entry: ReadyEntry; readonly candidate: Pick<TickActionable, 'number' | 'kind' | 'agent' | 'trigger'>; readonly resolved: ResolvedItem; readonly auditDir: string }) => Promise<StageTransitionResult>
+  readonly transition: (params: { readonly entry: ReadyEntry; readonly record: Pick<TickActionable, 'number' | 'kind' | 'agent' | 'trigger'>; readonly event: StageEvent; readonly auditDir: string }) => Promise<StageTransitionResult>
 }
 
 export interface HaltDispatchDeps {

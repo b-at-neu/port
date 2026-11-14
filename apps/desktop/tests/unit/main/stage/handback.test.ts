@@ -11,7 +11,23 @@ describe('classifyHandback', () => {
 
   it('classifies completed on a success result with no QUESTIONS/BLOCKED marker', () => {
     const result = classifyHandback({ ...BASE, lastResult: { subtype: 'success', isError: false, text: 'All done, pull request opened.', at: 'now' } })
-    expect(result).toEqual({ kind: 'completed', detail: null, costUsd: null, resetsAt: null, worktree: 'removed', operatorJoined: false })
+    expect(result).toEqual({ kind: 'completed', detail: null, costUsd: null, resetsAt: null, worktree: 'removed', operatorJoined: false, handback: null })
+  })
+
+  it('carries a HANDBACK: line on completed, token and argument split', () => {
+    const result = classifyHandback({ ...BASE, lastResult: { subtype: 'success', isError: false, text: 'Opened it.\n\nHANDBACK: pr-opened #8', at: 'now' } })
+    expect(result).toMatchObject({ kind: 'completed', handback: { token: 'pr-opened', arg: '#8' } })
+  })
+
+  it('treats a review that ends HANDBACK: checks-pending as finished, never blocked', () => {
+    const result = classifyHandback({ ...BASE, lastResult: { subtype: 'success', isError: false, text: 'BLOCKED: checks never concluded\n\nHANDBACK: checks-pending', at: 'now' } })
+    expect(result).toMatchObject({ kind: 'completed', handback: { token: 'checks-pending', arg: null } })
+  })
+
+  it('lets questions win over a HANDBACK: line in an earlier paragraph', () => {
+    const result = classifyHandback({ ...BASE, lastResult: { subtype: 'success', isError: false, text: 'HANDBACK: plan-written\n\nQUESTIONS FOR HUMAN:\n- which branch?', at: 'now' } })
+    expect(result?.kind).toBe('questions')
+    expect(result?.handback).toBeNull()
   })
 
   it('classifies questions when the last paragraph starts with QUESTIONS FOR HUMAN:', () => {
@@ -22,7 +38,7 @@ describe('classifyHandback', () => {
 
   it('classifies blocked when a BLOCKED: line sits at line start outside a fence', () => {
     const result = classifyHandback({ ...BASE, lastResult: { subtype: 'success', isError: false, text: 'Tried the thing.\nBLOCKED: denied command xyz', at: 'now' } })
-    expect(result).toEqual({ kind: 'blocked', detail: 'BLOCKED: denied command xyz', costUsd: null, resetsAt: null, worktree: 'kept', operatorJoined: false })
+    expect(result).toEqual({ kind: 'blocked', detail: 'BLOCKED: denied command xyz', costUsd: null, resetsAt: null, worktree: 'kept', operatorJoined: false, handback: null })
   })
 
   it('does not count a BLOCKED: line inside a fenced code block', () => {
@@ -36,17 +52,17 @@ describe('classifyHandback', () => {
       lastResult: { subtype: 'error_during_execution', isError: true, text: 'hit the wall', at: 'now' },
       rateLimit: { status: 'rejected', window: 'five-hour', resetsAt: '2026-01-01T15:00:00Z', observedAt: 'now' },
     })
-    expect(result).toEqual({ kind: 'usage-limit', detail: null, costUsd: null, resetsAt: '2026-01-01T15:00:00Z', worktree: 'kept', operatorJoined: false })
+    expect(result).toEqual({ kind: 'usage-limit', detail: null, costUsd: null, resetsAt: '2026-01-01T15:00:00Z', worktree: 'kept', operatorJoined: false, handback: null })
   })
 
   it('classifies error on any other error result, naming the subtype and first line', () => {
     const result = classifyHandback({ ...BASE, lastResult: { subtype: 'error_max_turns', isError: true, text: 'ran out of turns\nmore detail', at: 'now' } })
-    expect(result).toEqual({ kind: 'error', detail: 'error_max_turns: ran out of turns', costUsd: null, resetsAt: null, worktree: 'kept', operatorJoined: false })
+    expect(result).toEqual({ kind: 'error', detail: 'error_max_turns: ran out of turns', costUsd: null, resetsAt: null, worktree: 'kept', operatorJoined: false, handback: null })
   })
 
   it('classifies interrupted when the phase ended with no lastResult at all', () => {
     const result = classifyHandback({ ...BASE, phase: 'ended', end: { reason: 'closed', exitCode: null, signal: null, message: null, diagnosis: null } })
-    expect(result).toEqual({ kind: 'interrupted', detail: 'closed', costUsd: null, resetsAt: null, worktree: 'kept', operatorJoined: false })
+    expect(result).toEqual({ kind: 'interrupted', detail: 'closed', costUsd: null, resetsAt: null, worktree: 'kept', operatorJoined: false, handback: null })
   })
 
   it('sets operatorJoined true when operatorJoinedAt is non-null', () => {

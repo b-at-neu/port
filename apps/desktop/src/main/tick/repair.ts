@@ -1,7 +1,6 @@
-// Pure: sorts a half-labelled ticket into a repair or a `half-labelled` report, never a guess.
+// Pure: sorts a half-labelled ticket into a repair or a report, never a guess. Only `plan-missing` is repaired; a refused hand-back write is reported with its reason.
 import type { ReconciledItem } from '@/types/state'
 import type { EndedStage, TickLabelRepair, TickObservation } from '@/types/tick'
-import { RETRY_TRIGGER } from '../../../../../scripts/port-tick/liveness'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import { isContradictory } from '@/main/tick/observe'
 import { AGENT_FOR_IN_FLIGHT } from '@/main/tick/routing'
@@ -38,25 +37,20 @@ function newestEndedStageFor(endedStages: readonly EndedStage[], number: number)
   return newest
 }
 
-function sessionShapeOf(item: ReconciledItem, ended: EndedStage, readAt: string | null): { readonly observation: TickObservation | null; readonly report: TickLabelRepair | null } | null {
+/** Reports a ticket whose own hand-back write was refused or never possible — the in-flight label (or an impl's `blocked`) still stands alone on it. */
+function sessionShapeOf(item: ReconciledItem, ended: EndedStage, readAt: string | null): TickLabelRepair | null {
   if (readAt === null || Date.parse(readAt) <= Date.parse(ended.at)) return null
+  if (ended.outcome !== 'completed' && ended.outcome !== 'error') return null
+  if (ended.labels?.kind !== 'refused') return null
 
   const roleBearing = roleBearingKeys(item)
-  const expectedInFlight = Object.entries(AGENT_FOR_IN_FLIGHT).find(([, agent]) => agent === ended.agent)?.[0] as LabelKey | undefined
-  if (expectedInFlight === undefined || roleBearing.length !== 1 || roleBearing[0] !== expectedInFlight) return null
-
-  if (ended.outcome === 'error') {
-    const retryKey = (RETRY_TRIGGER[expectedInFlight] as LabelKey | undefined) ?? null
-    if (retryKey === null) {
-      return { observation: null, report: { number: item.number, kind: item.kind, shape: 'handback-unlabelled', labels: roleBearing, agent: ended.agent } }
-    }
-    return { observation: { kind: 'liveness-reset', number: item.number, itemKind: item.kind, inFlight: expectedInFlight, retryKey, evidence: 'stage-error' }, report: null }
-  }
-  if (ended.outcome === 'completed') {
-    return { observation: null, report: { number: item.number, kind: item.kind, shape: 'handback-unlabelled', labels: roleBearing, agent: ended.agent } }
-  }
-  // 'questions' | 'blocked' | 'interrupted' | 'usage-limit' — deliberately not repaired or reported here.
-  return null
+  const owned = Object.entries(AGENT_FOR_IN_FLIGHT)
+    .filter(([, agent]) => agent === ended.agent)
+    .map(([key]) => key as LabelKey)
+  if (ended.agent === 'impl') owned.push('blocked')
+  const only = roleBearing[0]
+  if (roleBearing.length !== 1 || only === undefined || !owned.includes(only)) return null
+  return { number: item.number, kind: item.kind, shape: 'handback-unlabelled', labels: roleBearing, agent: ended.agent, reason: ended.labels.reason }
 }
 
 function artifactShapeOf(item: ReconciledItem): TickLabelRepair | { readonly observationOnly: true } | null {
@@ -67,10 +61,10 @@ function artifactShapeOf(item: ReconciledItem): TickLabelRepair | { readonly obs
 
   if (only === 'planReview' && item.planPresent === false) return { observationOnly: true }
   if (only === 'planApproved' && item.planPresent === false) {
-    return { number: item.number, kind: item.kind, shape: 'plan-missing-approved', labels: roleBearing, agent: null }
+    return { number: item.number, kind: item.kind, shape: 'plan-missing-approved', labels: roleBearing, agent: null, reason: null }
   }
   if (only === 'prOpened' && item.linkReason === 'counterpart-not-open') {
-    return { number: item.number, kind: item.kind, shape: 'pr-missing', labels: roleBearing, agent: null }
+    return { number: item.number, kind: item.kind, shape: 'pr-missing', labels: roleBearing, agent: null, reason: null }
   }
   return null
 }
@@ -84,7 +78,7 @@ export function repairsOf(params: RepairsOfParams): RepairsOfResult {
     if (!eligible(item, viewer, liveNumbers)) continue
 
     if (isContradictory(item)) {
-      reports.push({ number: item.number, kind: item.kind, shape: 'contradictory', labels: roleBearingKeys(item), agent: null })
+      reports.push({ number: item.number, kind: item.kind, shape: 'contradictory', labels: roleBearingKeys(item), agent: null, reason: null })
       continue
     }
 
@@ -92,8 +86,7 @@ export function repairsOf(params: RepairsOfParams): RepairsOfResult {
     if (ended !== null) {
       const shape = sessionShapeOf(item, ended, readAt)
       if (shape !== null) {
-        if (shape.observation !== null) observations.push(shape.observation)
-        if (shape.report !== null) reports.push(shape.report)
+        reports.push(shape)
         continue
       }
     }

@@ -44,7 +44,8 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - release version read from `release.versionFiles[0]`; `apps/desktop/package.json` is itself a `versionFiles` entry, kept equal to it by the `version-files-agree` check
 
 **`apps/desktop/src/main/actions/`**
-- only `applyLabels` caller across pause/resume/retry/gate/refresh/claim/escalate/observe/decide
+- only `applyLabels` caller across pause/resume/retry/gate/refresh/claim/escalate/observe/decide/stage
+- `stage.ts`'s `applyStageClaim`/`applyStageTransition` are every label write a stage session needs; `pr-opened` is verified (an open pull request on this issue's `<n>-` branch) before either write, and the pull request is written first
 - never trusts a renderer-supplied `expectedStage` to widen a write, only to refuse
 - `gate.ts` comments before the label swap; `escalate.ts`/`observe.ts` swap first
 - `decide.ts`'s `applyItemDecision` (#312) is the fifth comment-then-swap composition: check → re-read → comment → swap, `gateAnswer`'s own direction — pinned by `desktop-gate`/`desktop-actions`
@@ -66,7 +67,8 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - launches go through `launch.ts`'s `StageLauncher` seam (#327 implements it); `launch: null` until then reports `no-launcher` rather than idling silently
 - fires from `main/ipc.ts`'s `onTick:` only — a fresh poll, never `onSnapshot:`'s own republish, which would retrigger the loop off its own state change
 - a pass requested while one is in flight is coalesced into one follow-up on the newest snapshot, never dropped
-- a `completed` hand-back or an applied auto-approve requests one github-scoped read through the watcher, never a second clock, and the dispatch still comes from `onTick`
+- a `completed` hand-back's settled label write or an applied auto-approve requests one github-scoped read through the watcher, never a second clock, and the dispatch still comes from `onTick`
+- `transitions.ts` is the pure (stage, event) → label plan table and `handoff.ts` its per-repository queue: the claim runs before launch, a failed launch rolls it back, a failed write is retried up to `HANDOFF_ATTEMPTS` and then reported, and a missing or unknown `HANDBACK:` token, a moved label or an unverified pull request is refused and reported, never guessed past
 - capacity comes from the hosted-session store (`launch.ts`'s `freeSlots`); launches across every repository are serialized into one promise chain so two repositories never race for a slot
 - `ledger.record` only after a launch returns `ok`; the budget gate is the last veto before it
 - the budget gate (`budget-gate.ts`) runs in-process and never spawns `commands.budget`, which the app reads only as an on/off switch; `budget-ledger.ts` is pure with no value imports and byte-compatible with `bin/budget.mjs`, which `desktop-dispatch` pins; the ledger comment is read in `main/github/ledger-read.ts` and written in `main/writes/ledger-comment.ts`, which is cost bookkeeping and bypasses `command.ts` and the audit log since it writes no label
@@ -92,6 +94,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `project.ts`'s `createSessionProjector` (#219) reuses `createDeriver` for the same `TranscriptEntry` shape `main/sessions/` derives on disk, rather than a second `tool_use`/`tool_result` pairing (#123); `session:attach` replays its bounded window so a reload rebuilds from the same state a mid-stream push already describes
 - `project.ts`'s per-parent child derivers (#323) nest a subagent's own frames under its `Task` tool call rather than dropping them: one `createDeriver` and mirror-index map per live `parent_tool_use_id`, stamping every child entry and patch with `parentToolUseId`, deleted once the parent's own tool call pairs
 - `hosting/tasks.ts`'s `createTaskTracker` (#323) is the one background-task reader, observing `system/background_tasks_changed` (REPLACE semantics, `ambient` excluded) and `system/task_started`; `hosting/history.ts`'s `readHistory` (#323) is the one earlier-conversation read for resume/resume-at/fork, run before spawn and kept frozen on the handle
+- `label-guard.ts`'s `labelWriteOf` is pure and import-free; `options.ts` installs it as a stage session's `PreToolUse` hook on Bash, denying any issue or pull request label write with `LABEL_GUARD_MESSAGE`, which is never an Allow item because it is not the allowlist-miss reason
 - `hook-denials.ts`'s `createHookDenialTracker` (#657) is the only reader of guard-hook denials in a stage stream: the hook denies an off-allowlist Bash call before `canUseTool`, so only the paired `tool_result` shows it, and the tracker matches nothing but `guard-marker.ts`'s allowlist-miss reason, pinned against `guard-rules.mjs` by the `desktop-hosting` check
 - streaming input only, always: `input.ts`'s push-driven `AsyncIterable<SDKUserMessage>` keeps `interrupt()`/`setPermissionMode()` available for the handle's whole life — a string prompt would silently disable both
 - `sdk.ts` is the third lazy Agent SDK seam (alongside `sessions/sdk.ts` #78, `runtime/sdk.ts` #97), the only file here naming the package specifier
@@ -174,10 +177,10 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `default.ts`'s `createDefaultStageLauncher` binds every I/O seam of `createStageLauncher` to its production implementation, so `main/ipc.ts` passes only the store, the registry and the two dispatcher callbacks
 - a load failure fails the launch and removes the worktree — a stage is never dispatched without its instructions
 - a review stage's context also carries `review.cycle` and `review.selfAuthored`, computed by `gates.ts`'s `reviewDispatchFacts` in the dispatcher from the tick's review count and the re-read author; the desktop `review-agent.md` uses them and never re-derives either
-- `handback.ts`'s `classifyHandback` is pure, built on `utils/stage/handback-text.ts`'s `classifyHandbackText`, which also backs `renderer/board/needs-you.ts`; its `QUESTIONS FOR HUMAN:`/`BLOCKED:` prefixes live there and are pinned against the pipeline skill's own completion text
+- `handback.ts`'s `classifyHandback` is pure, built on `utils/stage/handback-text.ts`'s `classifyHandbackText`, which also backs `renderer/board/needs-you.ts`; its `QUESTIONS FOR HUMAN:`/`BLOCKED:`/`HANDBACK:` prefixes live there and are pinned against the bundled prompts by `desktop-dispatch`, and `desktop-stage-labels` pins the tokens both ways
 - removes a worktree only on `completed`, never forced; every other outcome keeps it. It removes the registry entry only when that removal succeeded — otherwise the entry stays as `cleanup-failed`
 - releases the branch after every worktree removal — launch failure paths, `completed`, and Restart — through `main/workspace/stage-worktree.ts`'s `releaseStageBranch`; a one-time sweep per repository root runs before the first launch and is never a gate on it
-- writes no label itself (phase 1) — stage sessions still write their own, the same way a terminal-dispatched agent does
+- never writes a label: a stage hands back a `HANDBACK:` line (or `BLOCKED:`/`QUESTIONS FOR HUMAN:`) and `main/dispatch/transitions.ts` maps it; the launcher reports the next turn after a block through `onResumedTurn`
 - "operator joined" is stamped by the hosted handle (`main/hosting/handle.ts`) on the first `session:send` into a stage session carrying `source: 'operator'`; the launcher's own prompt send never counts
 - `launcher.ts`'s `resume` (#554) is the only place an interrupted entry is restarted as a session: it is tracked like a launch, so its hand-back settles the same registry entry, and the entry flips back to `running` in place — never a second entry with the same id
 - `sweep.ts`'s `createInterruptedSweeper` (#554) is the registry's third remover, after a `completed` hand-back and Restart; `stale.ts` holds its pure decisions, and every one fails toward keeping the entry (a blind, partial or too-old read clears nothing)
@@ -191,7 +194,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - blind read → no actionable, held or claim counts at all
 - `auto-plan.ts`'s `autoApprovalsOf` (#313) ignores `sessionRequired` deliberately — the cockpit's own rule is that the swap still happens; `dispatchable.ts`'s `autoApprovalCandidatesFrom`/`autoApprovableFrom` are the only readers of `.autoApprovals` under `main/`
 - `auto-plan.ts`'s `autoPlanSwapCandidatesOf`/`autoPlanApprovingOf` is the one "will the swap act" predicate; the planner, `BoardSnapshot.autoPlan` and every renderer classification read it, never a second derivation
-- `repair.ts`'s `repairsOf` (#330) detects a half-labelled ticket a crashed stage session left behind; it repairs only `stage-error` (a `liveness-reset` with `evidence: 'stage-error'`) and `plan-missing` through the observation pass, and reports every other shape (`handback-unlabelled`, `contradictory`, `plan-missing-approved`, `pr-missing`) on `TickReport.labelRepairs` for a human to resolve — it never repairs an `interrupted`/`usage-limit` session, since those wait on the operator's own Resume/Restart
+- `repair.ts`'s `repairsOf` (#330) detects a half-labelled ticket a crashed stage session left behind; it repairs only `plan-missing` through the observation pass, and reports every other shape on `TickReport.labelRepairs` for a human to resolve; `handback-unlabelled` comes only from the app's own refused hand-back write and carries its reason — it never repairs an `interrupted`/`usage-limit` session, since those wait on the operator's own Resume/Restart
 
 **`apps/desktop/src/main/trajectory/`**
 - the one write `main/tick/` itself never makes — computes there, writes here
@@ -233,7 +236,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - a ticket is blocked when its stage label is `blocked` or a live stage session's last hand-back is `BLOCKED:`; open `blockedBy` links alone never make it blocked
 - the comment source is the newest comment at or before the latest `blocked` label event, and no such event means no comment, so it fails toward the fallback copy rather than an unrelated comment
 - the comment's reason is its `Decision needed` line when there is one, else its first non-heading line
-- `blocker-answer.tsx` sends into the live session through `session/actions.ts`'s `send` and never writes a label; the agent clears its own block
+- `blocker-answer.tsx` sends into the live session through `session/actions.ts`'s `send` and never writes a label; the app clears the block when the session's next turn starts
 - `columns.ts`'s `boardColumns` is the one kanban projection: a ticket lands in exactly one column, and it reads `row.blockedOn`, never a second "blocked" derivation
 - `lanes.ts`'s `boardLanes` builds each swimlane from `boardColumns`, never its own column rule; `navigableLaneRows` is the one kanban J/K order
 

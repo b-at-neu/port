@@ -50,8 +50,7 @@ export function observationWrite(observation: WriteObservation, item: Reconciled
   switch (observation.kind) {
     case 'liveness-reset': {
       const add: readonly LabelKey[] = [observation.retryKey]
-      const action = observation.evidence === 'stage-error' ? 'observe-stage-error-reset' : 'observe-liveness-reset'
-      return { add, remove: [observation.inFlight], expect: precondition(item, vocabulary, add), action, comment: null }
+      return { add, remove: [observation.inFlight], expect: precondition(item, vocabulary, add), action: 'observe-liveness-reset', comment: null }
     }
     case 'cycle-cap': {
       const add: readonly LabelKey[] = ['needsHuman']

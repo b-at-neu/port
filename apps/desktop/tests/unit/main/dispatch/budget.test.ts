@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest'
-import { budgetLiveSets, budgetRoute, escalationBody, sumCostUsd } from '@/main/dispatch/budget'
-import type { StageRecord } from '@/types/dispatch'
+import { describe, expect, it, vi } from 'vitest'
+import { budgetLiveSets, budgetRoute, escalateOverBudget, escalationBody, sumCostUsd } from '@/main/dispatch/budget'
+import type { EscalateToHumanParams, EscalateToHumanResult, ReadyEntry } from '@/types/actions'
+import type { BudgetNote, StageRecord } from '@/types/dispatch'
 import type { SessionKey } from '@/types/hosting'
+import type { TickActionable } from '@/types/tick'
+import { resolveVocabulary } from '@/utils/labels/vocabulary'
 
 function record(overrides: Partial<StageRecord> = {}): StageRecord {
   return {
@@ -45,7 +48,7 @@ describe('budgetLiveSets', () => {
   })
 
   it('an ended record whose outcome is completed, not covered by a live record, is completed', () => {
-    const { completed, live } = budgetLiveSets([record({ state: 'ended', outcome: { kind: 'completed', detail: null, costUsd: 1, resetsAt: null, worktree: 'removed', operatorJoined: false } })])
+    const { completed, live } = budgetLiveSets([record({ state: 'ended', outcome: { kind: 'completed', detail: null, costUsd: 1, resetsAt: null, worktree: 'removed', operatorJoined: false, handback: null } })])
     expect(completed).toEqual(['impl #52'])
     expect(live).not.toContain('impl #52')
   })
@@ -57,14 +60,14 @@ describe('budgetLiveSets', () => {
   })
 
   it('an ended record that crashed or errored closes as lost, not completed', () => {
-    const { completed, live } = budgetLiveSets([record({ state: 'ended', outcome: { kind: 'error', detail: 'boom', costUsd: 1, resetsAt: null, worktree: 'kept', operatorJoined: false } })])
+    const { completed, live } = budgetLiveSets([record({ state: 'ended', outcome: { kind: 'error', detail: 'boom', costUsd: 1, resetsAt: null, worktree: 'kept', operatorJoined: false, handback: null } })])
     expect(live).not.toContain('impl #52')
     expect(completed).not.toContain('impl #52')
   })
 
   it('a live record for a description wins over an ended one for the same description', () => {
     const records = [
-      record({ sessionKey: 's1' as SessionKey, state: 'ended', outcome: { kind: 'completed', detail: null, costUsd: 1, resetsAt: null, worktree: 'removed', operatorJoined: false } }),
+      record({ sessionKey: 's1' as SessionKey, state: 'ended', outcome: { kind: 'completed', detail: null, costUsd: 1, resetsAt: null, worktree: 'removed', operatorJoined: false, handback: null } }),
       record({ sessionKey: 's2' as SessionKey, state: 'started' }),
     ]
     const { live, completed } = budgetLiveSets(records)
@@ -76,14 +79,45 @@ describe('budgetLiveSets', () => {
 describe('sumCostUsd', () => {
   it('sums every record carrying a known cost', () => {
     const records = [
-      record({ outcome: { kind: 'completed', detail: null, costUsd: 1.5, resetsAt: null, worktree: 'removed', operatorJoined: false } }),
-      record({ sessionKey: 's2' as SessionKey, outcome: { kind: 'error', detail: null, costUsd: 0.5, resetsAt: null, worktree: 'kept', operatorJoined: false } }),
+      record({ outcome: { kind: 'completed', detail: null, costUsd: 1.5, resetsAt: null, worktree: 'removed', operatorJoined: false, handback: null } }),
+      record({ sessionKey: 's2' as SessionKey, outcome: { kind: 'error', detail: null, costUsd: 0.5, resetsAt: null, worktree: 'kept', operatorJoined: false, handback: null } }),
     ]
     expect(sumCostUsd(records)).toBe(2)
   })
 
   it('returns null when no record carries a known cost', () => {
     expect(sumCostUsd([record({ outcome: null })])).toBeNull()
+  })
+})
+
+describe('escalateOverBudget', () => {
+  const entry = { config: { vocabulary: resolveVocabulary({}) } } as unknown as ReadyEntry
+  const candidate = (overrides: Partial<TickActionable> = {}): TickActionable => ({ number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null, ...overrides })
+  const dirs = { audit: '/audit', scratch: '/scratch' }
+
+  it('records an escalated note when the swap applies, passing the budget body and action', async () => {
+    const notes: BudgetNote[] = []
+    const escalate = vi.fn<(params: EscalateToHumanParams) => Promise<EscalateToHumanResult>>(() => Promise.resolve({ labels: { kind: 'applied', argv: [] }, comment: null }))
+    await escalateOverBudget({ entry, candidate: candidate(), line: 'over', notes, viewer: 'op', item: undefined, escalate, dirs })
+    expect(escalate.mock.calls[0]?.[0]).toMatchObject({ kind: 'issue', number: 52, trigger: 'planApproved', viewer: 'op', action: 'budget-escalate', auditDir: '/audit', scratchDir: '/scratch', body: escalationBody('over', null) })
+    expect(notes).toEqual([{ kind: 'escalated', number: 52, needsHumanLabel: 'needs human', commentFailedMessage: null }])
+  })
+
+  it('records an escalation-failed note naming both labels when the swap is refused', async () => {
+    const notes: BudgetNote[] = []
+    const outcome = { kind: 'item-unavailable' } as const
+    await escalateOverBudget({ entry, candidate: candidate(), line: 'over', notes, viewer: 'op', item: undefined, escalate: () => Promise.resolve({ labels: outcome, comment: null }), dirs })
+    expect(notes).toEqual([{ kind: 'escalation-failed', number: 52, needsHumanLabel: 'needs human', triggerLabel: 'plan approved', outcome }])
+  })
+
+  it('carries the head sha on a pull request, and skips the comment body when that escalation already repeats', async () => {
+    const escalate = vi.fn<(params: EscalateToHumanParams) => Promise<EscalateToHumanResult>>(() => Promise.resolve({ labels: { kind: 'applied', argv: [] }, comment: null }))
+    await escalateOverBudget({ entry, candidate: candidate({ kind: 'pull-request', trigger: 'readyForReview', agent: 'review' }), line: 'over', notes: [], viewer: 'op', item: { headRefOid: 'abc123', comments: [] }, escalate, dirs })
+    expect(escalate.mock.calls[0]?.[0].body).toBe(escalationBody('over', 'abc123'))
+
+    const repeated = [{ body: escalationBody('over', 'abc123'), createdAt: '2026-01-01T00:00:00Z', author: 'op' }]
+    await escalateOverBudget({ entry, candidate: candidate({ kind: 'pull-request', trigger: 'readyForReview', agent: 'review' }), line: 'over', notes: [], viewer: 'op', item: { headRefOid: 'abc123', comments: repeated }, escalate, dirs })
+    expect(escalate.mock.calls[1]?.[0].body).toBeNull()
   })
 })
 

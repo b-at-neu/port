@@ -228,16 +228,6 @@ Canonical rules every stage agent follows. A Bash command matches the allowlist 
   - large markdown to GitHub → Write it under `.temp/`, then `--body-file` / `--input`.
 <!-- shell-discipline:end -->
 
-<!-- label-cas:begin -->
-**Every label transition is compare-and-swap.** `gh issue edit`/`gh pr edit --remove-label X` **exits 0 when X is not present**, so an edit issued against a stale view of the item silently degrades into a bare add and leaves two contradictory stage labels behind (#209). Before **every** `--remove-label` in this file:
-
-1. **Re-read the item's labels immediately before the edit** — `gh issue view <n> --repo <repo> --json labels` or `gh pr view <n> --repo <repo> --json labels`. A read from an earlier step does not count; the gap between it and the write is exactly where another writer moves in.
-2. **Source label present, and it is the only role-bearing label** → issue the edit, then re-read once more and confirm the source is gone and the target is there. The *source label* is the trigger or in-flight label this transition is defined on — an incidental conditional removal alongside it is not a source.
-3. **Source label absent, or a second role-bearing label is present** → **write nothing.** Markers (`<labels.marker>`, `<labels.autoPlan>`) never count toward this, and `<labels.refreshBranch>`/`<labels.refreshing>` are sanctioned beside `<labels.approved>` only — refresh is otherwise the only trigger in flight, and a leftover `<labels.readyForReview>`/`<labels.needsRevision>` beside it is a pre-#494 writer, not a second role-bearing label to tolerate going forward. Anything else is a state the label protocol says is impossible. Stop, and report the item, the label you expected, and the labels actually present, in the abort form this file already defines (`BLOCKED:` where it has one, otherwise its Pre-flight's plain stop-and-report).
-
-**This fails closed on the write and open on the report**, deliberately: an unnecessary stop costs one dispatch and a glance from the operator, while writing through a stale view costs a duplicate pull request or a silently lost stage label, and neither is visible until someone reads the labels by hand. **Never repair the state yourself** — reporting it is the whole job here.
-<!-- label-cas:end -->
-
 <!-- standards-precedence:begin -->
 **Three sources describe how code should be written, in a fixed order, joined by a fourth for interface work.** Conventions come from the repository's `CLAUDE.md` first, then `docs.engineering`, then `docs.design` when the ticket touches an interface, then the style visible in the surrounding code. The more specific and more human-authored source wins: a repository that stated a rule in `CLAUDE.md` has already said what it wants.
 
@@ -249,6 +239,15 @@ Canonical rules every stage agent follows. A Bash command matches the allowlist 
 <!-- standards-precedence:end -->
 
 - **When denied, stop — do not improvise.** A denied command returns a hook denial with a reason, not a prompt — the guard hook decided, not you. Do not retry or route around it: **emit `BLOCKED: <exact denied command + what you needed>`** so the cockpit surfaces it. Never spawn subagents.
+
+## Hand-back line
+
+port moves the ticket's labels, never a stage session. Your stage context already holds the label port set when it started you, and port moves it again from how you finish.
+
+- **Grammar.** `HANDBACK: <token>[ <arg>]` — the **last non-blank line** of your final message, **outside a code fence**, one per message. The token is the first word after the prefix and is case-sensitive; your agent file lists the tokens that are yours.
+- **Three endings.** `QUESTIONS FOR HUMAN:` and `BLOCKED:` pause: the session stays open and port waits for the human's answer. `HANDBACK:` finishes the stage, and the session closes.
+- **Never edit a label.** No label change through `gh issue edit` or `gh pr edit`, no label on `gh pr create`, no `gh api` call to an `issues/<n>/labels` path. A Bash call that tries is denied.
+- **A line port cannot use leaves the ticket for a human.** A finished stage with no `HANDBACK:` line, or one whose token is not in your agent file's list, moves nothing, and port reports the ticket as needing a person. Never guess a token.
 
 ## Label lifecycle
 

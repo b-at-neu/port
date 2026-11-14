@@ -244,7 +244,7 @@ describe('observationDetailCopy', () => {
   })
 
   it('every write-bearing kind has no detail line of its own here — it already has one from held/stalled above', () => {
-    expect(observationDetailCopy({ kind: 'liveness-reset', number: 1, itemKind: 'issue', inFlight: 'inProgress', retryKey: 'ready', evidence: 'ledger' })).toBeNull()
+    expect(observationDetailCopy({ kind: 'liveness-reset', number: 1, itemKind: 'issue', inFlight: 'inProgress', retryKey: 'ready' })).toBeNull()
     expect(observationDetailCopy({ kind: 'cycle-cap', number: 2, itemKind: 'pull-request', count: 5, cap: 5 })).toBeNull()
     expect(observationDetailCopy({ kind: 'zero-diff', reason: 'zero-diff', number: 3, itemKind: 'pull-request', count: 1, headRefOid: 'abc' })).toBeNull()
     expect(observationDetailCopy({ kind: 'integration-red', number: 7, itemKind: 'pull-request', checks: ['test'], headRefOid: 'abc' })).toBeNull()

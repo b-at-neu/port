@@ -242,18 +242,41 @@ export default async function ({ expect, fail, ok }: Reporter) {
     else if (!found) ok();
   }
 
-  // pin: `main/dispatch/dispatcher.ts`'s `DISPATCH_PROMPT`/`REFRESH_PROMPT` ↔ `pipeline/SKILL.md`'s "Dispatching" block, both directions
+  // pin: `main/dispatch/dispatcher.ts`'s `DISPATCH_PROMPT`/`REFRESH_PROMPT` ↔ the bundled agents' own headings, both directions
   {
     const dispatcherText = readFileSync(join(root, dispatcherFile), 'utf8');
     const dispatchPromptMatch = /DISPATCH_PROMPT\s*=\s*'([^']*)'/.exec(dispatcherText);
     const refreshPromptMatch = /REFRESH_PROMPT\s*=\s*'([^']*)'/.exec(dispatcherText);
+    const stepsMatch = dispatchPromptMatch ? /Follow your (.+?) steps exactly/.exec(dispatchPromptMatch[1]) : null;
     if (!dispatchPromptMatch || !refreshPromptMatch) {
       fail('desktop-dispatch', `${dispatcherFile} is missing DISPATCH_PROMPT or REFRESH_PROMPT as a single-quoted string literal`);
+    } else if (!stepsMatch) {
+      fail('desktop-dispatch', `${dispatcherFile}'s DISPATCH_PROMPT no longer names the steps the agent follows ("Follow your … steps exactly")`);
     } else {
-      const skillText = pipelineSkillText();
-      expect(skillText.includes(dispatchPromptMatch[1]), 'desktop-dispatch', `${dispatcherFile}'s DISPATCH_PROMPT is not byte-identical to any text in pipeline/SKILL.md's Dispatching block`);
-      expect(skillText.includes(refreshPromptMatch[1]), 'desktop-dispatch', `${dispatcherFile}'s REFRESH_PROMPT is not byte-identical to any text in pipeline/SKILL.md's Dispatching block`);
+      const steps = stepsMatch[1].split(/,\s*(?:and\s+)?/);
+      expect(!dispatchPromptMatch[1].includes('Label swap'), 'desktop-dispatch', `${dispatcherFile}'s DISPATCH_PROMPT still names a Label swap step — the app moves the label before launch`);
+      for (const stage of ['plan', 'impl', 'review', 'revise']) {
+        const rel = `apps/desktop/stage-prompts/agents/${stage}-agent.md`;
+        const text = readFileSync(join(root, rel), 'utf8');
+        for (const step of steps) {
+          expect(new RegExp(`^## ${step}\\b`, 'm').test(text), 'desktop-dispatch', `${rel} has no '## ${step}' heading, but DISPATCH_PROMPT tells the agent to follow it`);
+        }
+        expect(!/^## Label swap/m.test(text), 'desktop-dispatch', `${rel} still has a '## Label swap' section — port moves the label, never the agent`);
+      }
+      const revise = readFileSync(join(root, 'apps/desktop/stage-prompts/agents/revise-agent.md'), 'utf8');
+      expect(refreshPromptMatch[1].includes('refresh mode') && /^## Refresh mode$/m.test(revise), 'desktop-dispatch', `${dispatcherFile}'s REFRESH_PROMPT names "refresh mode", but the bundled revise-agent.md has no '## Refresh mode' section`);
     }
+  }
+
+  // --- dispatcher.ts claims before it launches, and rolls a failed launch back: a ticket never sits at a trigger with a session running, or at an in-flight label with none starting. ---
+  {
+    const text = readFileSync(join(root, dispatcherFile), 'utf8');
+    const claimIdx = text.indexOf('await claim(');
+    const launchIdx = text.indexOf('launch.launch(');
+    if (claimIdx === -1 || !text.includes('deps.stageLabels.claim(')) {
+      fail('desktop-dispatch', `${dispatcherFile} never claims through deps.stageLabels.claim( — a stage would launch with its trigger label still in place`);
+    } else expect(!(launchIdx === -1 || claimIdx > launchIdx), 'desktop-dispatch', `${dispatcherFile}'s 'await claim(' must precede launch.launch( in source order`);
+    expect(text.includes("event: { kind: 'rollback' }"), 'desktop-dispatch', `${dispatcherFile} never rolls a claim back — a failed launch would strand the in-flight label`);
   }
 
   // --- .observations is read under main/ only by dispatchable.ts's observableFrom, which
@@ -414,8 +437,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- utils/stage/handback-text.ts's QUESTIONS FOR HUMAN:/BLOCKED: prefixes each appear verbatim in
-  // the pipeline skill's own completion-handling text, both sides of the same contract. ---
+  // --- utils/stage/handback-text.ts's hand-back prefixes each appear verbatim in the bundled agents:
+  // QUESTIONS/BLOCKED somewhere, HANDBACK in every one of them. ---
   {
     const handbackFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/utils/stage/handback-text.ts');
     if (!handbackFile) {
@@ -424,15 +447,20 @@ export default async function ({ expect, fail, ok }: Reporter) {
       const text = readFileSync(handbackFile, 'utf8');
       const questionsMatch = /QUESTIONS_PREFIX\s*=\s*'([^']+)'/.exec(text);
       const blockedMatch = /BLOCKED_PREFIX\s*=\s*'([^']+)'/.exec(text);
-      if (!questionsMatch || !blockedMatch) {
-        fail('desktop-dispatch', "apps/desktop/src/utils/stage/handback-text.ts does not declare both QUESTIONS_PREFIX and BLOCKED_PREFIX as string literals");
+      const handbackMatch = /HANDBACK_PREFIX\s*=\s*'([^']+)'/.exec(text);
+      if (!questionsMatch || !blockedMatch || !handbackMatch) {
+        fail('desktop-dispatch', 'apps/desktop/src/utils/stage/handback-text.ts does not declare QUESTIONS_PREFIX, BLOCKED_PREFIX and HANDBACK_PREFIX as string literals');
       } else {
-        const skillText = pipelineSkillText();
-        const questionsOk = skillText.includes(questionsMatch[1]);
-        const blockedOk = skillText.includes(blockedMatch[1]);
-        if (!questionsOk) fail('desktop-dispatch', `handback-text.ts's QUESTIONS_PREFIX ('${questionsMatch[1]}') never appears verbatim in the pipeline skill text`);
-        if (!blockedOk) fail('desktop-dispatch', `handback-text.ts's BLOCKED_PREFIX ('${blockedMatch[1]}') never appears verbatim in the pipeline skill text`);
-        if (questionsOk && blockedOk) ok();
+        const agents = ['plan', 'impl', 'review', 'revise'].map((stage) => {
+          const rel = `apps/desktop/stage-prompts/agents/${stage}-agent.md`;
+          return { rel, text: readFileSync(join(root, rel), 'utf8') };
+        });
+        const everywhere = agents.map((a) => a.text).join('\n');
+        expect(everywhere.includes(questionsMatch[1]), 'desktop-dispatch', `handback-text.ts's QUESTIONS_PREFIX ('${questionsMatch[1]}') never appears verbatim in a bundled agent`);
+        expect(everywhere.includes(blockedMatch[1]), 'desktop-dispatch', `handback-text.ts's BLOCKED_PREFIX ('${blockedMatch[1]}') never appears verbatim in a bundled agent`);
+        for (const agent of agents) {
+          expect(agent.text.includes(handbackMatch[1]), 'desktop-dispatch', `handback-text.ts's HANDBACK_PREFIX ('${handbackMatch[1]}') never appears verbatim in ${agent.rel}`);
+        }
       }
     }
   }

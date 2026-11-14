@@ -3,11 +3,15 @@ import type { PipelineItemKind } from '@/types/github'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { StageOutcomeKind } from '@/types/stage-session'
+import type { StageLabelResult } from '@/types/stage-labels'
 import type { LedgerRow, UnmatchedResult } from '../../../../scripts/port-tick/liveness'
 import type { RefreshMemoEntry } from '../../../../scripts/port-tick/gates'
 
 /** A bare four-way key, never the session index's hyphenated `PortStageAgent` — this one names *what to dispatch next*, matching `models.<key>`, not *what already ran*. */
 export type StageAgent = 'plan' | 'impl' | 'review' | 'revise'
+
+/** Why the app's own label write for a stage session was refused or never made — reported on Needs you, never guessed past. */
+export type HandoffRefusal = 'moved' | 'no-handback' | 'unknown-handback' | 'pr-unverified' | 'terminal-owned' | 'write-failed' | 'unresolvable-label'
 
 /** One stage session this app's own launcher recorded as ended, projected from `DispatchRecord`s that are not `started` and carry a non-`null` outcome — `main/tick/repair.ts`'s own session-shape evidence, newest per number. */
 export interface EndedStage {
@@ -15,6 +19,8 @@ export interface EndedStage {
   readonly number: number
   readonly outcome: StageOutcomeKind
   readonly at: string
+  /** How the app's own hand-back write went — `null` while pending or when this outcome writes nothing. */
+  readonly labels: StageLabelResult | null
 }
 
 /** Why a trigger-stage item is held rather than actionable — first hit wins: `unowned` before `other-operator` before `session-required` before `contended`. `cycle-cap`/`zero-diff`/`check-hold`/`integration-red` are checked per-item after that ladder, and `integration-green` marks a pull request the integration-red hold hands to a refresh; this app computes the decision and the report, never the write. */
@@ -98,13 +104,7 @@ interface TickObservationBase {
 }
 
 export type TickObservation =
-  | (TickObservationBase & {
-      readonly kind: 'liveness-reset'
-      readonly inFlight: LabelKey
-      readonly retryKey: LabelKey
-      /** `'ledger'` is the ordinary stall ladder; `'stage-error'` is `main/tick/repair.ts`'s own session-crash evidence — same write, so the audit log can still tell the two apart. */
-      readonly evidence: 'ledger' | 'stage-error'
-    })
+  | (TickObservationBase & { readonly kind: 'liveness-reset'; readonly inFlight: LabelKey; readonly retryKey: LabelKey })
   | (TickObservationBase & { readonly kind: 'cycle-cap'; readonly count: number; readonly cap: number })
   | (TickObservationBase & { readonly kind: 'zero-diff'; readonly reason: 'zero-diff' | 'sha-cap'; readonly count: number; readonly headRefOid: string })
   | (TickObservationBase & { readonly kind: 'integration-red'; readonly checks: readonly string[]; readonly headRefOid: string })
@@ -147,6 +147,8 @@ export interface TickLabelRepair {
   readonly shape: TickLabelRepairShape
   readonly labels: readonly LabelKey[]
   readonly agent: StageAgent | null
+  /** Why the app's own hand-back write was refused — `null` for every shape that does not come from one. */
+  readonly reason: HandoffRefusal | null
 }
 
 /** One repository's own tick — `planTick`'s whole result. `disabledStages` is always `[]` on a blind repository. */

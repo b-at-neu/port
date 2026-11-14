@@ -2,7 +2,7 @@
 // `NeedsYouItem.kind` — a new kind is a compile error, never a blank row.
 import type { NeedsYouGroupKey, NeedsYouItem } from '@/types/board'
 import type { InterruptedStage } from '@/types/stage'
-import type { StageAgent } from '@/types/tick'
+import type { HandoffRefusal, StageAgent } from '@/types/tick'
 
 const STAGE_PHASE_NAME: Readonly<Record<StageAgent, string>> = { plan: 'Planning', impl: 'Implementing', review: 'Reviewing', revise: 'Revising' }
 
@@ -120,12 +120,24 @@ export function copyPathFailedToast(path: string): string {
   return `Couldn't copy the path. It's ${path}.`
 }
 
+const HANDOFF_REFUSAL_COPY: Readonly<Record<HandoffRefusal, string>> = {
+  'no-handback': 'it ended without a hand-back line',
+  'unknown-handback': "its hand-back line isn't one port knows",
+  'pr-unverified': "the pull request it named isn't open on its branch",
+  moved: 'its labels changed while it ran',
+  'write-failed': 'GitHub refused the change three times',
+  'terminal-owned': 'the terminal pipeline owns this repository now',
+  'unresolvable-label': "a label it needs isn't in this repository",
+}
+
 function halfLabelledCopy(item: Extract<NeedsYouItem, { readonly kind: 'half-labelled' }>, label: string): string {
   const names = item.repair.labels.map((key) => repairLabelName(item, key))
   switch (item.repair.shape) {
     case 'handback-unlabelled': {
       const agentName = item.repair.agent !== null ? STAGE_PHASE_NAME[item.repair.agent].toLowerCase() : 'stage'
-      return `${label}'s ${agentName} session finished, but its label is still "${names[0] ?? 'in flight'}". Check the ticket and set the right label.`
+      const current = names[0] ?? 'in flight'
+      if (item.repair.reason === null) return `${label}'s ${agentName} session finished, but its label is still "${current}". Check the ticket and set the right label.`
+      return `${label}'s ${agentName} session finished, but port couldn't move its label from "${current}": ${HANDOFF_REFUSAL_COPY[item.repair.reason]}. Check the ticket and set the right label.`
     }
     case 'contradictory':
       return `${label} has conflicting labels: ${names.map((n) => `"${n}"`).join(', ')}. Remove the one that's wrong.`
