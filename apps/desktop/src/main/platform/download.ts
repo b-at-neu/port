@@ -11,18 +11,25 @@ const DEFAULT_START_TIMEOUT_MS = 30_000
 /** Claims only the item for its own URL, so any other download keeps Electron's default behaviour. */
 export function createFileDownloader(session: Session, options: FileDownloaderOptions = {}): FileDownload {
   const startTimeoutMs = options.startTimeoutMs ?? DEFAULT_START_TIMEOUT_MS
+  const staleCancels = new Map<string, () => void>()
   return ({ url, savePath, onProgress }) =>
     new Promise((resolve) => {
+      staleCancels.get(url)?.()
       const neverStarted = AbortSignal.timeout(startTimeoutMs)
       const giveUp = (): void => {
         session.removeListener('will-download', claim)
+        const stop = (): void => {
+          session.removeListener('will-download', cancelLate)
+          if (staleCancels.get(url) === stop) staleCancels.delete(url)
+        }
         const cancelLate = (_event: unknown, item: DownloadItem): void => {
           if (item.getURLChain()[0] !== url) return
-          session.removeListener('will-download', cancelLate)
+          stop()
           item.cancel()
         }
         session.on('will-download', cancelLate)
-        AbortSignal.timeout(startTimeoutMs).addEventListener('abort', () => session.removeListener('will-download', cancelLate), { once: true })
+        staleCancels.set(url, stop)
+        AbortSignal.timeout(startTimeoutMs).addEventListener('abort', stop, { once: true })
         resolve({ ok: false, reason: 'interrupted', detail: 'download never started' })
       }
       const claim = (_event: unknown, item: DownloadItem): void => {

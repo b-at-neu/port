@@ -121,6 +121,23 @@ describe('createFileDownloader', () => {
     expect(session.listenerCount('will-download')).toBe(0)
   })
 
+  it('does not cancel a retry started inside the late-item window', async () => {
+    const session = new FakeSession()
+    const download = createFileDownloader(session as unknown as Session, { startTimeoutMs: 40 })
+    const first = download({ url: URL_, savePath: '/downloads/port.dmg', onProgress: vi.fn() })
+    await first
+
+    const retry = download({ url: URL_, savePath: '/downloads/port.dmg', onProgress: vi.fn() })
+    const item = new FakeItem([URL_])
+    session.emit('will-download', {}, item)
+    item.received = 200
+    item.emit('done', {}, 'completed')
+
+    expect(item.cancel).not.toHaveBeenCalled()
+    expect(item.savePath).toBe('/downloads/port.dmg')
+    expect(await retry).toMatchObject({ ok: true })
+  })
+
   it('does not time out once the download has started', async () => {
     const { session, result } = setup()
     const item = new FakeItem([URL_])
