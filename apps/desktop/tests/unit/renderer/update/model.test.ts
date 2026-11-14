@@ -101,6 +101,9 @@ const downloading = (receivedBytes: number, totalBytes: number): UpdateDownloadS
 const failed = (reason: UpdateDownloadErrorKind): UpdateDownloadState => ({ kind: 'failed', ...BASE, assetName: 'port-0.2.0.x', reason, detail: 'x', failedAt: CHECKED_AT })
 const NO_ASSET: UpdateDownloadState = { kind: 'no-asset', ...BASE, target: { os: 'linux', arch: 'arm64', package: 'deb' } }
 
+const RESTARTING: UpdateDownloadState = { kind: 'restarting', ...BASE, startedAt: CHECKED_AT }
+const RESTART_PENDING: UpdateDownloadState = { kind: 'restart-pending', ...BASE, finishedAt: CHECKED_AT }
+
 describe('downloadViewOf', () => {
   it.each<UpdateDownloadState | undefined>([undefined, IDLE])('is the available prompt for %j', (download) => {
     expect(downloadViewOf(RELEASE, download)).toMatchObject({
@@ -178,6 +181,29 @@ describe('downloadViewOf', () => {
     })
   })
 
+  it('shows a restarting state with no buttons, link or rail action', () => {
+    expect(downloadViewOf(RELEASE, RESTARTING)).toMatchObject({
+      kind: 'restarting',
+      title: 'Restarting to update to port 0.2.0',
+      hint: 'port will reopen on its own.',
+      railLabel: 'Restarting to update to port 0.2.0',
+      railAction: null,
+      linkLabel: null,
+      buttons: [],
+    })
+  })
+
+  it('offers Restart now once a restart is pending, which re-runs the update', () => {
+    expect(downloadViewOf(RELEASE, RESTART_PENDING)).toMatchObject({
+      kind: 'restart-pending',
+      title: 'port 0.2.0 is ready to install',
+      hint: 'Restart port to finish updating.',
+      railAction: 'download',
+      linkLabel: 'Release notes',
+      buttons: [{ action: 'download', label: 'Restart now', variant: 'default' }],
+    })
+  })
+
   it('points a missing asset at the release page, with no Update button', () => {
     expect(downloadViewOf(RELEASE, NO_ASSET)).toMatchObject({
       kind: 'no-asset',
@@ -193,8 +219,17 @@ describe('downloadViewOf', () => {
 describe('downloadToastOf', () => {
   const toastActions = () => ({ retry: vi.fn(), openPage: vi.fn() })
 
-  it.each<UpdateDownloadState>([IDLE, downloading(1, 2)])('shows no toast for $kind', (state) => {
+  it.each<UpdateDownloadState>([IDLE, downloading(1, 2), RESTARTING])('shows no toast for $kind', (state) => {
     expect(downloadToastOf(state, toastActions())).toBeNull()
+  })
+
+  it('reports a pending restart as info whose action retries the update', () => {
+    const a = toastActions()
+    const toast = downloadToastOf(RESTART_PENDING, a)
+    expect(toast).toMatchObject({ tone: 'info', title: 'port 0.2.0 is ready to install', description: 'Restart port to finish updating.' })
+    expect(toast?.action?.label).toBe('Restart now')
+    toast?.action?.onClick()
+    expect(a.retry).toHaveBeenCalledOnce()
   })
 
   it('reports an opened installer as a success with its hint', () => {

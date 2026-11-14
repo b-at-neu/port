@@ -9,7 +9,7 @@ const ASSET_NAME = 'port-0.2.0-mac-arm64.dmg'
 
 export function fixtureUpdateState(now: Date, scenario: FixtureScenario, trigger: UpdateTrigger): UpdateState {
   const checkedAt = new Date(now.getTime() - 2 * 60_000).toISOString()
-  if (scenario === 'update-available' || scenario === 'update-downloading' || scenario === 'update-download-failed') {
+  if (scenario === 'update-available' || scenario === 'update-downloading' || scenario === 'update-download-failed' || scenario === 'update-restart-pending' || scenario === 'update-restarting') {
     return {
       kind: 'available',
       current: CURRENT,
@@ -37,5 +37,7 @@ export function fixtureUpdateDownload(now: Date, scenario: FixtureScenario): Upd
   if (scenario === 'update-download-failed') {
     return { kind: 'failed', version: '0.2.0', notesUrl: NOTES_URL, assetName: ASSET_NAME, reason: 'interrupted', detail: 'interrupted', failedAt: at }
   }
+  if (scenario === 'update-restart-pending') return { kind: 'restart-pending', version: '0.2.0', notesUrl: NOTES_URL, finishedAt: at }
+  if (scenario === 'update-restarting') return { kind: 'restarting', version: '0.2.0', notesUrl: NOTES_URL, startedAt: at }
   return { kind: 'idle' }
 }

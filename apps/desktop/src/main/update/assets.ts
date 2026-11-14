@@ -50,6 +50,11 @@ export function pickAsset(release: AvailableRelease, target: InstallTarget, repo
   return null
 }
 
+/** macOS builds are ad-hoc signed and `.deb` is owned by the package manager, so neither can replace itself. */
+export function inPlaceSupported(target: InstallTarget | null): boolean {
+  return target !== null && (target.package === 'nsis' || target.package === 'appimage')
+}
+
 /** An AppImage is not executable once downloaded, so it is shown in its folder rather than opened. */
 export function openModeOf(target: InstallTarget): 'open' | 'reveal' {
   return target.package === 'appimage' ? 'reveal' : 'open'

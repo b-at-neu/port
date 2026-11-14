@@ -183,6 +183,15 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
+  // --- electron-updater is a runtime dependency — only `dependencies` ship in the asar, so a devDependency
+  // would build cleanly and fail on first launch of an installed app. ---
+  {
+    if (existsSync(packageJsonPath)) {
+      const pkg = readJson('apps/desktop/package.json');
+      expect(pkg.dependencies?.['electron-updater'] !== undefined && pkg.devDependencies?.['electron-updater'] === undefined, 'desktop-packaging', `${relOf(packageJsonPath)} must list electron-updater under dependencies and never devDependencies — only dependencies ship in the asar`);
+    }
+  }
+
   // --- the packaging workflow runs the three-OS matrix, proving "unsigned installers build on all three OSes". ---
   {
     if (!existsSync(workflowPath)) {

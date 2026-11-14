@@ -190,6 +190,8 @@ describe('fixtureHandlers update channels', () => {
     ['update-available', 'available'],
     ['update-downloading', 'available'],
     ['update-download-failed', 'available'],
+    ['update-restart-pending', 'available'],
+    ['update-restarting', 'available'],
     ['failing', 'error'],
     ['registry-error', 'checking'],
   ] as const)('serves %s as %s', (scenario, kind) => {
@@ -209,6 +211,8 @@ describe('fixtureHandlers update channels', () => {
     ['update-available', 'idle'],
     ['update-downloading', 'downloading'],
     ['update-download-failed', 'failed'],
+    ['update-restart-pending', 'restart-pending'],
+    ['update-restarting', 'restarting'],
   ] as const)('serves the %s download as %s on all three download channels', (scenario, kind) => {
     const handlers = fixtureHandlers(NOW, scenario)
     expect(handlers['update:download:state'](undefined).kind).toBe(kind)

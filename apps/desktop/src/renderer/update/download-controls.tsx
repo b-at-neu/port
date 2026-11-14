@@ -8,8 +8,8 @@ import { ReleaseNotesLink } from '@/renderer/update/release-notes-link'
 import type { AvailableRelease, UpdateDownloadView } from '@/types/update'
 
 function StateIcon({ kind }: { readonly kind: UpdateDownloadView['kind'] }) {
-  if (kind === 'downloading') return <Loader2 aria-hidden="true" className="size-4 shrink-0 animate-spin text-primary-text" />
-  if (kind === 'ready') return <CircleCheck aria-hidden="true" className="size-4 shrink-0 text-primary-text" />
+  if (kind === 'downloading' || kind === 'restarting') return <Loader2 aria-hidden="true" className="size-4 shrink-0 animate-spin text-primary-text" />
+  if (kind === 'ready' || kind === 'restart-pending') return <CircleCheck aria-hidden="true" className="size-4 shrink-0 text-primary-text" />
   return <CircleArrowUp aria-hidden="true" className="size-4 shrink-0 text-primary-text" />
 }
 

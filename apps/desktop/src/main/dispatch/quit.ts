@@ -48,6 +48,10 @@ interface CreateQuitGuardParams {
 interface QuitGuard {
   // true when the quit was intercepted; the caller must itself call preventDefault.
   intercept(preventDefault: () => void): boolean
+  // Asks before an installer is spawned; true marks the next quit as confirmed, and nothing quits here.
+  prepare(): Promise<boolean>
+  // Undoes a `prepare` whose install failed, so the next ordinary quit is guarded again.
+  cancelPrepared(): void
 }
 
 // Already confirmed or no live sessions: false. A prompt already open: prevent, no second dialog.
@@ -86,5 +90,28 @@ export function createQuitGuard(params: CreateQuitGuardParams): QuitGuard {
     return true
   }
 
-  return { intercept }
+  async function prepare(): Promise<boolean> {
+    if (confirmed) return true
+    const sessions = params.sessions()
+    const copy = quitWarningCopy(sessions)
+    if (copy === null) {
+      confirmed = true
+      return true
+    }
+    if (prompting) return false
+    prompting = true
+    const confirmResult = await params.confirm(copy).catch((error: unknown) => {
+      console.error('[dispatch] quit confirm dialog failed — failing open toward quit', error)
+      return true
+    })
+    prompting = false
+    if (confirmResult) confirmed = true
+    return confirmResult
+  }
+
+  function cancelPrepared(): void {
+    confirmed = false
+  }
+
+  return { intercept, prepare, cancelPrepared }
 }
