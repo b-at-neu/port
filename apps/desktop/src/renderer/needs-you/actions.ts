@@ -14,6 +14,7 @@ import {
   resumeAllDisabledReason,
   resumeAllToast,
 } from '@/renderer/needs-you/copy'
+import { decisionButtonLabel } from '@/renderer/board/copy'
 import { openReviewDialog } from '@/renderer/gate/controller'
 import { openDecision } from '@/renderer/decision/controller'
 import { openAllowDialog } from '@/renderer/needs-you/allow-dialog'
@@ -30,6 +31,7 @@ interface NeedsYouAction {
   readonly kind: NeedsYouActionKind
   readonly disabledReason: string | null
   readonly secondaryLabel?: string
+  readonly secondaryDisabledReason?: string | null
 }
 
 function disabledReasonCopy(reason: DecisionRefusal): string {
@@ -47,6 +49,19 @@ function disabledReasonCopy(reason: DecisionRefusal): string {
     case 'agent-live':
       return "This item's agent is still waiting in its session. Answer it there and it clears the block itself."
   }
+}
+
+function reviseDisabledReason(reason: DecisionRefusal): string {
+  if (reason === 'cycle-cap') return 'This PR has used all its review cycles. Sending it back would escalate straight to needs human. Merge it and open a follow-up, or raise reviewCycleCap first.'
+  return disabledReasonCopy(reason)
+}
+
+function readyToMergeAction(item: Extract<NeedsYouItem, { readonly kind: 'ready-to-merge' }>): NeedsYouAction {
+  const open = { label: 'Open PR', kind: 'open', disabledReason: null } as const
+  const revise = item.row.decisions.revise
+  if (revise.available) return { ...open, secondaryLabel: decisionButtonLabel('revise'), secondaryDisabledReason: null }
+  if (revise.reason === 'not-applicable') return open
+  return { ...open, secondaryLabel: decisionButtonLabel('revise'), secondaryDisabledReason: reviseDisabledReason(revise.reason) }
 }
 
 function unblockAction(item: Extract<NeedsYouItem, { readonly kind: 'needs-human' | 'blocked' }>): NeedsYouAction {
@@ -79,7 +94,7 @@ export function actionFor(item: NeedsYouItem, now: Date = new Date()): NeedsYouA
     case 'plan-review':
       return { label: 'Review plan', kind: 'review-plan', disabledReason: null }
     case 'ready-to-merge':
-      return { label: 'Open PR', kind: 'open', disabledReason: null }
+      return readyToMergeAction(item)
     case 'needs-human':
     case 'blocked':
       return unblockAction(item)
@@ -173,6 +188,11 @@ export function runSecondaryAction(item: NeedsYouItem, deps: RunActionDeps): voi
   const action = actionFor(item)
   if (action.kind === 'resume' && item.kind === 'stage-interrupted') openRestartDialog(item.interrupted)
   if (action.kind === 'approve' && item.kind === 'stage-approval') void answerProtectedEdit(item, 'deny', deps)
+  if (item.kind === 'ready-to-merge' && item.repoId !== null && item.number !== null) {
+    const revise = item.row.decisions.revise
+    if (!revise.available) return
+    openDecision({ repoId: item.repoId, number: item.number, decision: 'revise', expectedStage: item.row.stageLabel?.key ?? null, context: revise.context })
+  }
 }
 
 async function answerProtectedEdit(item: Extract<NeedsYouItem, { readonly kind: 'stage-approval' }>, decision: 'allow-once' | 'deny', deps: RunActionDeps): Promise<void> {

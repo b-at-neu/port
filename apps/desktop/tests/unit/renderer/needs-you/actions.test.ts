@@ -15,6 +15,7 @@ vi.mock('@/renderer/data/invoke', () => ({ invoke: vi.fn() }))
 
 const { actionFor, runAction, runSecondaryAction } = await import('@/renderer/needs-you/actions')
 const { invoke } = await import('@/renderer/data/invoke')
+const { openDecision } = await import('@/renderer/decision/controller')
 const invokeMock = invoke as unknown as ReturnType<typeof vi.fn>
 
 function usageLimit(resetsAt: string | null, ids: readonly string[] = ['a', 'b', 'c']): NeedsYouItem {
@@ -39,6 +40,46 @@ describe('actionFor — blocked', () => {
 
   it('disables Unblock while the agent is still live', () => {
     expect(actionFor(blocked({ available: false, reason: 'agent-live' }))).toMatchObject({ label: 'Unblock', disabledReason: "This item's agent is still waiting in its session. Answer it there and it clears the block itself." })
+  })
+})
+
+describe('ready-to-merge Request changes', () => {
+  const readyToMerge = (revise: object): NeedsYouItem =>
+    ({ kind: 'ready-to-merge', repoId: 'repo-a' as RepoId, repo: 'o/a', number: 202, title: 't', url: null, ticket: null, at: null, matchedRow: null, row: { decisions: { revise }, stageLabel: { key: 'approved' } } }) as unknown as NeedsYouItem
+  const context = { cyclesUsed: 1, cap: 5 }
+
+  beforeEach(() => {
+    vi.mocked(openDecision).mockReset()
+  })
+
+  it('offers Request changes beside Open PR when revise is available', () => {
+    expect(actionFor(readyToMerge({ available: true, context }))).toEqual({ label: 'Open PR', kind: 'open', disabledReason: null, secondaryLabel: 'Request changes', secondaryDisabledReason: null })
+  })
+
+  it('disables Request changes with the cap copy at the review cycle cap', () => {
+    const action = actionFor(readyToMerge({ available: false, reason: 'cycle-cap' }))
+    expect(action).toMatchObject({ secondaryLabel: 'Request changes' })
+    expect(action.secondaryDisabledReason).toContain('used all its review cycles')
+  })
+
+  it('reuses the ownership copy when the pull request is not the viewer’s', () => {
+    const action = actionFor(readyToMerge({ available: false, reason: 'not-owned' }))
+    expect(action).toMatchObject({ secondaryLabel: 'Request changes' })
+    expect(action.secondaryDisabledReason).toContain('Someone else owns this item')
+  })
+
+  it('leaves the button out when revise does not apply', () => {
+    expect(actionFor(readyToMerge({ available: false, reason: 'not-applicable' }))).toEqual({ label: 'Open PR', kind: 'open', disabledReason: null })
+  })
+
+  it('opens the revise dialog from the secondary action', () => {
+    runSecondaryAction(readyToMerge({ available: true, context }), { onToast: vi.fn() })
+    expect(openDecision).toHaveBeenCalledWith({ repoId: 'repo-a', number: 202, decision: 'revise', expectedStage: 'approved', context })
+  })
+
+  it('does nothing from the secondary action when revise is unavailable', () => {
+    runSecondaryAction(readyToMerge({ available: false, reason: 'cycle-cap' }), { onToast: vi.fn() })
+    expect(openDecision).not.toHaveBeenCalled()
   })
 })
 
