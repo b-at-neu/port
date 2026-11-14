@@ -1,5 +1,5 @@
 // Every string the update UI shows.
-import type { UpdateErrorKind, UpdateState } from '@/types/update'
+import type { InstallPackage, InstallTarget, UpdateDownloadErrorKind, UpdateErrorKind, UpdateState } from '@/types/update'
 
 export const UPDATE_CHECKING = 'Checking for updates…'
 export const UPDATE_NOT_CHECKED = 'Not checked yet'
@@ -24,6 +24,53 @@ export function updateLatestDescription(current: string): string {
 
 export function updateCurrentDescription(current: string): string {
   return `You're on ${current}.`
+}
+
+export const UPDATE_OPEN_PAGE_LABEL = 'Open release page'
+export const UPDATE_OPEN_LABEL = 'Open installer'
+export const UPDATE_REVEAL_LABEL = 'Show in folder'
+export const UPDATE_DOWNLOAD_PROGRESS_LABEL = 'Download progress'
+
+export function updateDownloadingTitle(version: string): string {
+  return `Downloading port ${version}`
+}
+
+export function updateDownloadedTitle(version: string): string {
+  return `port ${version} downloaded`
+}
+
+export function updateDownloadingRailLabel(version: string, percent: number | null): string {
+  return percent === null ? updateDownloadingTitle(version) : `${updateDownloadingTitle(version)} · ${percent}%`
+}
+
+export const UPDATE_READY_HINT: Readonly<Record<InstallPackage, string>> = {
+  dmg: 'Drag port into Applications to replace this version, then reopen port.',
+  nsis: 'Follow the installer to finish updating.',
+  appimage: 'Make the new AppImage executable and run it in place of this one.',
+  deb: 'Install it with your software installer, then restart port.',
+}
+
+export const UPDATE_OPEN_FAILED_HINT = "port couldn't open the installer, so it's shown in its folder. Open it from there."
+
+export const UPDATE_DOWNLOAD_FAILED_COPY: Readonly<Record<UpdateDownloadErrorKind, (version: string) => string>> = {
+  interrupted: (version) => `The download of port ${version} stopped. Check your connection and try again.`,
+  incomplete: (version) => `The download of port ${version} was incomplete. Try again.`,
+  unavailable: () => "port couldn't start the download. Try again, or get the installer from the release page.",
+}
+
+const PLATFORM_LABEL: Readonly<Record<InstallPackage, Readonly<Record<InstallTarget['arch'], string>>>> = {
+  dmg: { arm64: 'macOS (Apple silicon)', x64: 'macOS (Intel)' },
+  nsis: { arm64: 'Windows (Arm)', x64: 'Windows (x64)' },
+  appimage: { arm64: 'Linux AppImage (Arm)', x64: 'Linux AppImage (x64)' },
+  deb: { arm64: 'Linux .deb (Arm)', x64: 'Linux .deb (x64)' },
+}
+
+export function platformLabel(target: InstallTarget | null): string {
+  return target === null ? 'this system' : PLATFORM_LABEL[target.package][target.arch]
+}
+
+export function updateNoAssetCopy(version: string, target: InstallTarget | null): string {
+  return `There's no port ${version} download for ${platformLabel(target)}. Get it from the release page.`
 }
 
 export const UPDATE_ERROR_COPY: Readonly<Record<UpdateErrorKind, string>> = {

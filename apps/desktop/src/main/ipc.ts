@@ -3,9 +3,8 @@ import type { IpcMainInvokeEvent } from 'electron'
 import { join } from 'node:path'
 import { IPC_CHANNELS, type IpcChannel, type IpcEvent, type IpcEventMap, type IpcMap } from '@/types/ipc'
 import { resolveBoardRefresh } from '@/main/channels/board'
-import { resolveUpdateCheck, resolveUpdateState } from '@/main/channels/update'
-import { fetchAppReleases } from '@/main/github/app-releases'
-import { createUpdateService } from '@/main/update/service'
+import { resolveUpdateCheck, resolveUpdateDownload, resolveUpdateDownloadState, resolveUpdateOpen, resolveUpdateState } from '@/main/channels/update'
+import { createDefaultUpdate } from '@/main/update/default'
 import { chooseDirectory } from '@/main/dialogs'
 import { defaultWorkspaceChannelDeps, resolveFoldersChoose, resolveFoldersList, resolveSessionChanges } from '@/main/channels/workspace'
 import { createRecentsStore } from '@/main/workspace/recents'
@@ -467,17 +466,17 @@ export function registerIpc(): RegisteredIpc {
 
   handle('held:force-dispatch', (_event, request) => resolveForceDispatch(request, { snapshot: watcher.snapshot, dispatcherStatus: () => dispatcher.status(), forceDispatch, republish: () => watcher.republish() }))
 
-  const update = createUpdateService({
-    version: app.getVersion(),
-    isPackaged: app.isPackaged,
-    repo: __PORT_RELEASE_REPO__,
-    fetchReleases: (repo) => fetchAppReleases(repo),
-    now: () => new Date(),
-  })
+  const update = createDefaultUpdate()
 
-  handle('update:state', (_event, request) => resolveUpdateState(request, update))
+  handle('update:state', (_event, request) => resolveUpdateState(request, update.service))
 
-  handle('update:check', (_event, request) => resolveUpdateCheck(request, update))
+  handle('update:check', (_event, request) => resolveUpdateCheck(request, update.service))
+
+  handle('update:download', (_event, request) => resolveUpdateDownload(request, update.downloader))
+
+  handle('update:download:state', (_event, request) => resolveUpdateDownloadState(request, update.downloader))
+
+  handle('update:open', (_event, request) => resolveUpdateOpen(request, update.downloader))
 
   for (const channel of IPC_CHANNELS) {
     if (!registered.has(channel)) {
@@ -485,7 +484,7 @@ export function registerIpc(): RegisteredIpc {
     }
   }
 
-  void update.check('startup')
+  void update.service.check('startup')
 
   return { watcher, hostedStore, dispatcher, shutdownDispatch: () => { shutdown(); void closeOffload() }, stageRegistry }
 }

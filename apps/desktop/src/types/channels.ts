@@ -146,6 +146,7 @@ export const QUERY_CHANNELS = [
   'release:status',
   'release:issues',
   'update:state',
+  'update:download:state',
 ] as const
 
 export type QueryChannel = (typeof QUERY_CHANNELS)[number]
@@ -195,6 +196,8 @@ export const MUTATION_CHANNELS = [
   'notify:prefs:set',
   'release:run',
   'update:check',
+  'update:download',
+  'update:open',
 ] as const
 
 export type MutationChannel = (typeof MUTATION_CHANNELS)[number]

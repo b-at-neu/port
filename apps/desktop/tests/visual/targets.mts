@@ -63,6 +63,8 @@ export const SCENARIO_LANDING: Readonly<Record<NonDefaultScenario, string | null
   failing: null,
   'registry-error': '#/setup',
   'update-available': null,
+  'update-downloading': null,
+  'update-download-failed': null,
 }
 
 // The permission dialog is app-wide — its one fixture session is served only
@@ -84,6 +86,9 @@ export const VARIANT_TARGETS: readonly VariantTarget[] = [
   { name: 'repos-error', scenario: 'registry-error', target: { hash: '#/settings?section=repositories', container: '#app', ready: "text=isn't valid JSON" } },
   { name: 'update-available', scenario: 'update-available', target: { hash: '#/board', container: '#app', ready: '[data-slot="update-notice"]' } },
   { name: 'about-update-available', scenario: 'update-available', target: { hash: '#/settings?section=about', container: '#app', ready: '[data-slot="update-status"][data-state="available"]' } },
+  { name: 'update-downloading', scenario: 'update-downloading', target: { hash: '#/board', container: '#app', ready: '[data-slot="update-notice"] [data-slot="update-download"][data-state="downloading"]' } },
+  { name: 'update-download-failed', scenario: 'update-download-failed', target: { hash: '#/board', container: '#app', ready: '[data-slot="update-notice"] [data-slot="update-download"][data-state="failed"]' } },
+  { name: 'about-update-downloading', scenario: 'update-downloading', target: { hash: '#/settings?section=about', container: '#app', ready: '[data-slot="update-status"] [data-slot="update-download"][data-state="downloading"]' } },
   { name: 'about-update-error', scenario: 'failing', target: { hash: '#/settings?section=about', container: '#app', ready: '[data-slot="update-status"][data-state="error"]' } },
   { name: 'about-update-checking', scenario: 'registry-error', target: { hash: '#/settings?section=about', container: '#app', ready: '[data-slot="update-status"][data-state="checking"]' } },
 ]
