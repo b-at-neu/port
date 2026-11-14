@@ -1,7 +1,8 @@
 // Fixture mode's canned hosted-session data — the Session screen's own
 // states. Transcript entries live in `./entries`, split out to keep this file under the line limit.
 import type { SessionControls, SessionModels } from '@/utils/hosting/controls'
-import type { HostedSessionSnapshot, SessionAttachResult, SessionHistory, SessionKey } from '@/types/hosting'
+import type { HostedSessionSnapshot, SessionAttachResult, SessionEnd, SessionHistory, SessionKey } from '@/types/hosting'
+import type { FixtureScenario } from '@/types/fixtures'
 import type { SessionWorkspace } from '@/types/workspace'
 import type { SearchResult } from '@/types/search'
 import type { AgentRecord, SessionRecord, SessionScan } from '@/types/sessions'
@@ -105,7 +106,12 @@ const FIXTURE_USAGE = {
   observedAt: new Date(0).toISOString(),
 } as const
 
-export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapshot[] {
+/** Under `attention` the ended session crashed and a blocked stage session carries a `BLOCKED:` hand-back; every other scenario ends cleanly with neither. */
+export function fixtureSessionSnapshots(now: Date, scenario: FixtureScenario = 'populated'): readonly HostedSessionSnapshot[] {
+  const attention = scenario === 'attention'
+  const endedWith: SessionEnd = attention
+    ? { reason: 'exit-nonzero', exitCode: 1, signal: null, message: 'Error: ENOENT, no such file or directory', diagnosis: 'cli-missing' }
+    : { reason: 'completed', exitCode: 0, signal: null, message: null, diagnosis: null }
   const t = (minutesAgo: number) => new Date(now.getTime() - minutesAgo * MINUTE).toISOString()
   const capabilities = { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'loaded', path: '/home/you/.claude/plugins/port', version: '0.2.1' }, components: { kind: 'complete' }, slashCommands: [] } as const
 
@@ -169,7 +175,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       origin: { kind: 'fresh' },
       startedAt: t(30),
       queuedAfterInterrupt: null,
-      end: { reason: 'exit-nonzero', exitCode: 1, signal: null, message: 'Error: ENOENT, no such file or directory', diagnosis: 'cli-missing' },
+      end: endedWith,
       titled: null,
       pendingPermissions: [],
       capabilities,
@@ -301,22 +307,26 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       operatorJoinedAt: null,
     },
     stageImpl38,
-    {
-      ...stageImpl38,
-      sessionKey: STAGE_IMPL_51_KEY,
-      claudeSessionId: 'fixture-session-impl-51',
-      phase: 'ready',
-      title: '#51 backfill order totals for Q3',
-      usage: null,
-      stage: { agent: 'impl', number: 51, kind: 'issue', trigger: 'planApproved' },
-      lastResult: {
-        subtype: 'success',
-        isError: false,
-        text: "BLOCKED: The Q3 ledger export has no currency column. Should totals use the account's default currency or skip mixed-currency orders?",
-        at: t(1),
-      },
-      operatorJoinedAt: null,
-    },
+    ...(attention
+      ? [
+          {
+            ...stageImpl38,
+            sessionKey: STAGE_IMPL_51_KEY,
+            claudeSessionId: 'fixture-session-impl-51',
+            phase: 'ready',
+            title: '#51 backfill order totals for Q3',
+            usage: null,
+            stage: { agent: 'impl', number: 51, kind: 'issue', trigger: 'planApproved' },
+            lastResult: {
+              subtype: 'success',
+              isError: false,
+              text: "BLOCKED: The Q3 ledger export has no currency column. Should totals use the account's default currency or skip mixed-currency orders?",
+              at: t(1),
+            },
+            operatorJoinedAt: null,
+          } satisfies HostedSessionSnapshot,
+        ]
+      : []),
     {
       ...stageImpl38,
       sessionKey: STAGE_PLAN_44_KEY,
@@ -353,8 +363,8 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
   ]
 }
 
-export function fixtureSessionAttach(sessionKey: SessionKey, now: Date): SessionAttachResult {
-  const snapshot = [...fixtureSessionSnapshots(now), ...fixturePermissionSnapshots(now)].find((candidate) => candidate.sessionKey === sessionKey)
+export function fixtureSessionAttach(sessionKey: SessionKey, now: Date, scenario: FixtureScenario = 'populated'): SessionAttachResult {
+  const snapshot = [...fixtureSessionSnapshots(now, scenario),...fixturePermissionSnapshots(now)].find((candidate) => candidate.sessionKey === sessionKey)
   if (snapshot === undefined) return { ok: false, kind: 'unknown-session' }
   const entries = sessionKey === STREAMING_KEY ? fixtureAttachEntries(now) : []
   const history: SessionHistory = sessionKey === RESUMED_KEY ? { kind: 'loaded', entries: fixtureHistoryEntries(now), omittedBefore: 0, sourceSessionId: 'fixture-history-1' } : { kind: 'none' }

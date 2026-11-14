@@ -28,7 +28,8 @@ function labelEntry(now: Date, minutes: number, number: number, action: string, 
   }
 }
 
-function cannedEntries(now: Date): readonly AuditEntry[] {
+/** `attention` carries the full failure mix; every other scenario keeps the same rows but applied, with the `stop` verify failure as the screen's one deliberate failure row. */
+function cannedEntries(now: Date, attention: boolean): readonly AuditEntry[] {
   const edit = (number: number): readonly string[] => ['gh', 'issue', 'edit', String(number), '--repo', REPO]
   const comment = ['gh', 'issue', 'comment', '41', '--repo', REPO, '--body-file', 'comment.md']
   return [
@@ -40,16 +41,18 @@ function cannedEntries(now: Date): readonly AuditEntry[] {
       issue: null,
       force: null,
       call: ['node', 'plugins/port/bin/worktrees.mjs', 'reclaim'],
-      removed: ['impl-30'],
-      failed: ['impl-33'],
-      result: 'partial',
+      removed: attention ? ['impl-30'] : ['impl-30', 'impl-33'],
+      failed: attention ? ['impl-33'] : [],
+      result: attention ? 'partial' : 'applied',
       failure: null,
     },
     labelEntry(now, 1440, 41, 'unblock', comment, { kind: 'applied', argv: comment }, 212),
     labelEntry(now, 360, 38, 'auto-approve-plan', edit(38), { kind: 'applied', argv: edit(38) }),
     labelEntry(now, 240, 41, 'observe-refresh', edit(41), { kind: 'applied', argv: edit(41) }),
     labelEntry(now, 180, 38, 'pause', edit(38), { kind: 'applied', argv: edit(38) }),
-    labelEntry(now, 120, 38, 'resume', null, { kind: 'precondition-failed', conflict: { kind: 'precondition-failed', expected: ['paused'], observed: ['ready'], readAt: minutesAgo(now, 120) } }),
+    attention
+      ? labelEntry(now, 120, 38, 'resume', null, { kind: 'precondition-failed', conflict: { kind: 'precondition-failed', expected: ['paused'], observed: ['ready'], readAt: minutesAgo(now, 120) } })
+      : labelEntry(now, 120, 38, 'resume', edit(38), { kind: 'applied', argv: edit(38) }),
     labelEntry(now, 60, 41, 'retry', null, { kind: 'no-op' }),
     labelEntry(now, 15, 41, 'stop', edit(41), { kind: 'verify-failed', message: 'The re-read still showed the old labels.' }),
   ]
@@ -58,8 +61,9 @@ function cannedEntries(now: Date): readonly AuditEntry[] {
 export function fixtureAuditRead(now: Date, scenario: FixtureScenario, request: IpcMap['audit:list']['request']): AuditRead {
   if (scenario === 'empty') return { ok: true, entries: [], malformed: 0, previousPath: null, readAt: now.toISOString() }
 
-  const entries = cannedEntries(now).filter(
+  const attention = scenario === 'attention'
+  const entries = cannedEntries(now, attention).filter(
     (entry) => (request.repoId === null || entry.repoId === request.repoId) && (request.number === null || (isLabelAuditEntry(entry) && entry.number === request.number)),
   )
-  return { ok: true, entries, malformed: 1, previousPath: '/fixture/userData/writes.prev.jsonl', readAt: now.toISOString() }
+  return { ok: true, entries, malformed: attention ? 1 : 0, previousPath: attention ? '/fixture/userData/writes.prev.jsonl' : null, readAt: now.toISOString() }
 }
