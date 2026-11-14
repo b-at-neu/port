@@ -364,7 +364,7 @@ export function fixtureSessionSnapshots(now: Date, scenario: FixtureScenario = '
 }
 
 export function fixtureSessionAttach(sessionKey: SessionKey, now: Date, scenario: FixtureScenario = 'populated'): SessionAttachResult {
-  const snapshot = [...fixtureSessionSnapshots(now, scenario),...fixturePermissionSnapshots(now)].find((candidate) => candidate.sessionKey === sessionKey)
+  const snapshot = [...fixtureSessionSnapshots(now, scenario), ...fixturePermissionSnapshots(now)].find((candidate) => candidate.sessionKey === sessionKey)
   if (snapshot === undefined) return { ok: false, kind: 'unknown-session' }
   const entries = sessionKey === STREAMING_KEY ? fixtureAttachEntries(now) : []
   const history: SessionHistory = sessionKey === RESUMED_KEY ? { kind: 'loaded', entries: fixtureHistoryEntries(now), omittedBefore: 0, sourceSessionId: 'fixture-history-1' } : { kind: 'none' }
