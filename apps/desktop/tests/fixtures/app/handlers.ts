@@ -13,7 +13,7 @@ import { fixtureBacklogDetail } from './backlog-detail'
 import { fixtureReleaseIssues, fixtureReleaseStatus } from './releases'
 import { fixtureClaimPreflight, fixtureGatePreflight } from './dialogs'
 import { fixtureFolders, fixtureSessionChanges } from './folders'
-import { FIXTURE_REPOSITORIES } from './repos'
+import { fixtureRepositoriesFor } from './repos'
 import { fixtureAttachEntries } from './entries'
 import { fixturePermissionSnapshots, fixtureSearchResult, fixtureSessionAttach, fixtureSessionsScan, fixtureSessionSnapshots, STREAMING_KEY } from './sessions'
 import { fixtureSessionIndex } from './session-index'
@@ -49,7 +49,7 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'repos:list': () => {
       if (scenario === 'unregistered') return { ok: true, repositories: [] }
       if (scenario === 'registry-error') return FIXTURE_REGISTRY_ERROR
-      return { ok: true, repositories: FIXTURE_REPOSITORIES }
+      return { ok: true, repositories: fixtureRepositoriesFor(scenario) }
     },
 
     'board:snapshot': () => boardFor(now, scenario),
@@ -73,7 +73,7 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
 
     'session:list': () => {
       if (scenario === 'unregistered') return []
-      return scenario === 'empty' ? fixturePermissionSnapshots(now) : fixtureSessionSnapshots(now)
+      return scenario === 'empty' ? fixturePermissionSnapshots(now) : fixtureSessionSnapshots(now, scenario)
     },
     'session:index': () => (scenario === 'empty' || scenario === 'unregistered' ? [] : fixtureSessionIndex(now)),
     'session:capacity': () => ({ limit: 4, ceiling: 8 }),
@@ -98,7 +98,7 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
 
     // --- Writes, never a side effect ---------------------------------------
     'repos:add': () => ({ ok: true, outcome: 'cancelled' }),
-    'repos:remove': () => ({ ok: true, repositories: FIXTURE_REPOSITORIES }),
+    'repos:remove': () => ({ ok: true, repositories: fixtureRepositoriesFor(scenario) }),
 
     'item:action': () => ({ ok: true, outcome: { kind: 'no-op' } }),
 
@@ -120,7 +120,7 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'session:send': () => ({ ok: false, kind: 'unknown-session' }),
     'session:interrupt': () => ({ ok: false, kind: 'unknown-session' }),
     'session:close': () => ({ ok: false, kind: 'unknown-session' }),
-    'session:attach': (request) => fixtureSessionAttach(request.sessionKey, now),
+    'session:attach': (request) => fixtureSessionAttach(request.sessionKey, now, scenario),
     'session:permission:answer': () => ({ ok: false, kind: 'unknown-session' }),
     'session:invoke': () => ({ ok: false, kind: 'unknown-session' }),
     'session:dismiss': () => ({ ok: false, kind: 'unknown-session' }),

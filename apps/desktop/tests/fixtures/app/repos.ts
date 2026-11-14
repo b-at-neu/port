@@ -3,6 +3,7 @@ import { CONFIG_DEFAULTS } from '@/main/registry/schema'
 import { resolveVocabulary, verifyVocabulary } from '@/utils/labels/vocabulary'
 import type { VocabularyReport } from '@/utils/labels/vocabulary'
 import type { RepoId, RepositoryEntry, ResolvedRepoConfig } from '@/utils/repos'
+import type { FixtureScenario } from '@/types/fixtures'
 
 export const WIDGETS_ID = 'fixture-acme-widgets' as RepoId
 export const LEGACY_SITE_ID = 'fixture-acme-legacy-site' as RepoId
@@ -81,3 +82,8 @@ export const FIXTURE_REPOSITORIES: readonly RepositoryEntry[] = [
     diagnostics: [],
   },
 ]
+
+/** The not-ready `legacy-site` is a problem state, so only the scenarios that capture one carry it. */
+export function fixtureRepositoriesFor(scenario: FixtureScenario): readonly RepositoryEntry[] {
+  return scenario === 'attention' || scenario === 'failing' ? FIXTURE_REPOSITORIES : FIXTURE_REPOSITORIES.filter((repository) => repository.id !== LEGACY_SITE_ID)
+}
