@@ -14,6 +14,7 @@ import { proposedRule } from '@/main/stage/rule'
 import { loadStageAgentDefinition } from '@/main/stage/bundle'
 import { classifyHandback } from '@/main/stage/handback'
 import { stageTitle } from '@/main/hosting/title'
+import { bareTicketLabel } from '@/utils/tickets/ticket'
 
 import { inFlightKeyFor } from '@/main/tick/routing'
 import type { StageLauncherHandle } from '@/types/stage'
@@ -126,6 +127,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     const startResult = await params.store.start({
       repoId: entry.repoId,
       mode: { kind: 'resume', sessionId: entry.claudeSessionId },
+      initialTitle: stageTitle(entry.title ?? bareTicketLabel(entry.number, entry.kind)),
       workspace: {
         folder: entry.worktree.path,
         root: root.path,
@@ -218,6 +220,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       trigger: request.trigger,
       inFlight: inFlightKeyFor(request.agent, request.trigger),
       model: request.model,
+      title: request.title,
       claudeSessionId: null,
       worktree: { path: wt.path, branch: wt.branch, baseSha: wt.baseSha },
       startedAt: params.now().toISOString(),

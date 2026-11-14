@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { ReconciledItem } from '@/types/state'
-import { prSuffixOf, ticketIndex, ticketLabel, ticketLabelFor } from '@/utils/tickets/ticket'
+import { bareTicketLabel, prSuffixOf, ticketIndex, ticketLabel, ticketLabelFor } from '@/utils/tickets/ticket'
 
 const LABELLED = { stage: 'trigger', stages: [{ key: 'ready', name: 'ready', role: 'trigger' }] } as const
 
@@ -100,5 +100,10 @@ describe('ticketLabel / prSuffixOf / ticketLabelFor', () => {
     expect(ticketLabelFor(index, 537, 'pull-request')).toBe('#464 issue 464')
     expect(ticketLabelFor(index, 999, 'issue')).toBe('#999')
     expect(ticketLabelFor(index, 998, 'pull-request')).toBe('PR#998')
+  })
+
+  it('labels a bare number `#n` for an issue and `PR#n` for a pull request', () => {
+    expect(bareTicketLabel(52, 'issue')).toBe('#52')
+    expect(bareTicketLabel(47, 'pull-request')).toBe('PR#47')
   })
 })

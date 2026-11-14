@@ -119,6 +119,13 @@ describe('createStageLauncher.launch', () => {
     expect(deps.start).toHaveBeenCalledWith(expect.objectContaining({ initialTitle: '#46 Show the last sync time in the header' }))
   })
 
+  it('records the ticket label on the registry entry', async () => {
+    const deps = fakeDeps()
+    const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
+    await launcher.launch(request({ title: '#52 Add a dark mode icon' }))
+    expect(deps.registryMock.recordRunning).toHaveBeenCalledWith(expect.objectContaining({ title: '#52 Add a dark mode icon' }))
+  })
+
   it('removes the worktree and returns failed when the worktree itself cannot be created', async () => {
     const deps = fakeDeps()
     deps.createWorktree.mockResolvedValue({ ok: false, message: 'git worktree add failed' })
@@ -242,6 +249,22 @@ describe('createStageLauncher.resume', () => {
     expect(deps.send).toHaveBeenCalledWith('hosted-1', 'You were interrupted.')
     expect(deps.registryMock.markRunning).toHaveBeenCalledWith('reg-1')
     expect(deps.registryMock.recordRunning).not.toHaveBeenCalled()
+  })
+
+  it('reapplies the recorded ticket label as the resumed session title', async () => {
+    const deps = fakeDeps()
+    const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
+    await launcher.resume(resumeRequest({ entry: { ...INTERRUPTED, title: '#46 Show the last sync time in the header' } }))
+    expect(deps.start).toHaveBeenCalledWith(expect.objectContaining({ initialTitle: '#46 Show the last sync time in the header' }))
+  })
+
+  it('falls back to the bare number when the entry recorded no title', async () => {
+    const deps = fakeDeps()
+    const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
+    await launcher.resume(resumeRequest())
+    await launcher.resume(resumeRequest({ entry: { ...INTERRUPTED, number: 47, kind: 'pull-request' } }))
+    expect(deps.start).toHaveBeenNthCalledWith(1, expect.objectContaining({ initialTitle: '#52' }))
+    expect(deps.start).toHaveBeenNthCalledWith(2, expect.objectContaining({ initialTitle: 'PR#47' }))
   })
 
   it('fails the resume, naming the file, before starting when the bundled agent file is missing', async () => {
