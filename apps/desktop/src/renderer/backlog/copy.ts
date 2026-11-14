@@ -1,4 +1,5 @@
 // Every string the Backlog screen renders for a failure or an edge case — pure, one function per concern.
+import type { BacklogDetailFailureKind } from '@/types/backlog'
 import type { PipelineFailureKind } from '@/types/github'
 
 // The plan's own UX-states table, verbatim.
@@ -116,6 +117,81 @@ export function backlogEpicTruncatedCopy(shown: number, total: number): string {
 
 export function backlogEpicToggleAria(number: number, collapsed: boolean): string {
   return `${collapsed ? 'Expand' : 'Collapse'} #${String(number)}`
+}
+
+export function backlogDetailToggleAria(number: number, open: boolean): string {
+  return `${open ? 'Hide' : 'Show'} details for #${String(number)}`
+}
+
+export function backlogEpicInfoAria(number: number, open: boolean): string {
+  return `${open ? 'Hide' : 'Show'} info for #${String(number)}`
+}
+
+export function backlogDetailRegionAria(number: number): string {
+  return `Details for #${String(number)}`
+}
+
+export const BACKLOG_META_BLOCKED_BY = 'Blocked by'
+
+export const BACKLOG_META_BLOCKS = 'Blocks'
+
+export const BACKLOG_META_AUTHOR = 'Author'
+
+export const BACKLOG_META_UPDATED = 'Updated'
+
+export const BACKLOG_META_ASSIGNEE = 'Assignee'
+
+export const BACKLOG_META_DONE = 'Done'
+
+export const BACKLOG_META_IN_PROGRESS = 'In progress'
+
+export const BACKLOG_META_CAN_START = 'Can start now'
+
+export const BACKLOG_META_OPENED = 'Opened'
+
+export const BACKLOG_DETAIL_NONE = 'None'
+
+export const BACKLOG_DETAIL_UNASSIGNED = 'Unassigned'
+
+export const BACKLOG_DETAIL_NO_BODY = 'No description.'
+
+export const BACKLOG_DETAIL_UNREADABLE = "Couldn't read"
+
+export const BACKLOG_DETAIL_RETRY = 'Retry'
+
+export const BACKLOG_EPIC_SUBISSUES_UNREADABLE = "Couldn't read sub-issues"
+
+export function backlogDetailMoreCopy(more: number): string {
+  return `+${String(more)} more`
+}
+
+export function backlogEpicDoneCopy(done: number, total: number): string {
+  return `${String(done)} of ${String(total)} done`
+}
+
+export function backlogEpicInProgressCopy(count: number): string {
+  return `${String(count)} in progress`
+}
+
+export function backlogDetailFailureCopy(number: number, kind: BacklogDetailFailureKind, message: string): string {
+  switch (kind) {
+    case 'issue-missing':
+      return `#${String(number)} is no longer an open ticket. Refresh the backlog.`
+    case 'issue-closed':
+      return `#${String(number)} was closed. Refresh the backlog.`
+    case 'unauthenticated':
+    case 'not-found':
+    case 'rate-limited':
+    case 'network':
+    case 'timeout':
+      return backlogFailureCopy('', kind, message)
+    default:
+      return `Couldn't load the details of #${String(number)}: ${message}`
+  }
+}
+
+export function backlogDetailInvokeErrorCopy(number: number): string {
+  return `Couldn't load the details of #${String(number)}. Retry, or refresh the backlog.`
 }
 
 export function backlogInvokeErrorCopy(repo: string): string {

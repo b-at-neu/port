@@ -63,12 +63,22 @@ interface BacklogRowProps extends BacklogRowExtras {
   readonly pending: boolean
   readonly onMenuOpenChange: (open: boolean) => void
   readonly onPick: (planGate: PlanGateChoice) => boolean
+  readonly onToggleDetail: () => void
   readonly now: Date
 }
 
-export function BacklogRow({ row, rowProps, menuOpen, pending, onMenuOpenChange, onPick, now, slot = 'backlog-row', leading, afterTitle }: BacklogRowProps) {
+export function BacklogRow({ row, rowProps, menuOpen, pending, onMenuOpenChange, onPick, onToggleDetail, now, slot = 'backlog-row', leading, afterTitle }: BacklogRowProps) {
   return (
-    <div data-slot={slot} {...rowProps} className={`flex h-9 items-center gap-2 px-4 text-body ${rowProps.className}`}>
+    <div
+      data-slot={slot}
+      {...rowProps}
+      onKeyDown={(event) => {
+        if (event.key !== ' ' || event.target !== event.currentTarget) return
+        event.preventDefault()
+        onToggleDetail()
+      }}
+      className={`flex h-9 items-center gap-2 px-4 text-body ${rowProps.className}`}
+    >
       {leading}
       <span className="w-12 shrink-0 font-mono tabular-nums text-muted-foreground">#{row.number}</span>
       <a href={row.url} target="_blank" rel="noreferrer" className="min-w-24 flex-1 truncate text-foreground hover:underline">

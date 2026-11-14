@@ -27,6 +27,7 @@ function detailFor(now: Date, number: number): BacklogDetail | undefined {
         title: 'Document the webhook retry policy',
         url: 'https://github.com/acme/widgets/issues/45',
         body: '## Scope\n\nWrite down how webhook deliveries are retried.\n\n- Backoff schedule\n- When a delivery is abandoned',
+        createdAt: offsetHours(now, 24 * 6),
         updatedAt: offsetHours(now, 24),
         assignees: ['alice'],
         parent: { ok: true, parent: link(41, 'Overhaul the notification settings', 'OPEN') },
@@ -39,13 +40,25 @@ function detailFor(now: Date, number: number): BacklogDetail | undefined {
         title: 'Overhaul the notification settings',
         url: 'https://github.com/acme/widgets/issues/41',
         body: 'Rework how notification preferences are stored and presented.',
+        createdAt: offsetHours(now, 24 * 14),
         updatedAt: offsetHours(now, 120),
         blocking: { ok: true, items: [link(45, 'Document the webhook retry policy', 'OPEN')], total: 1 },
       }
     case 43:
-      return { ...base, number, title: 'Rate-limit the public search endpoint', url: 'https://github.com/acme/widgets/issues/43', body: 'Throttle anonymous search requests.', updatedAt: offsetHours(now, 96) }
+      return {
+        ...base,
+        number,
+        title: 'Rate-limit the public search endpoint',
+        url: 'https://github.com/acme/widgets/issues/43',
+        body: 'Throttle anonymous search requests so one client cannot starve the rest.\n\nStart with a **per-IP** limit, then revisit once the notification preferences have moved.',
+        createdAt: offsetHours(now, 24 * 9),
+        updatedAt: offsetHours(now, 96),
+        parent: { ok: true, parent: link(41, 'Overhaul the notification settings', 'OPEN') },
+        blockedBy: { ok: true, items: [link(39, 'Migrate stored notification preferences', 'OPEN')], total: 1 },
+        blocking: { ok: true, items: [link(45, 'Document the webhook retry policy', 'OPEN')], total: 1 },
+      }
     case 47:
-      return { ...base, number, title: 'Add dark mode to the email templates', url: 'https://github.com/acme/widgets/issues/47', body: 'Email templates ignore the recipient colour scheme.', updatedAt: offsetHours(now, 3) }
+      return { ...base, number, title: 'Add dark mode to the email templates', url: 'https://github.com/acme/widgets/issues/47', body: 'Email templates ignore the recipient colour scheme.', createdAt: offsetHours(now, 24 * 3), updatedAt: offsetHours(now, 3) }
     default:
       return undefined
   }

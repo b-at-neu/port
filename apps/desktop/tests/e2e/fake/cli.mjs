@@ -190,6 +190,8 @@ function nodeOf(kind, item, state) {
     url: item.url ?? `https://github.com/x/x/${kind === 'issue' ? 'issues' : 'pull'}/${String(item.number)}`,
     body: item.body ?? '',
     state: item.state ?? 'OPEN',
+    author: item.author ? { login: item.author } : null,
+    createdAt: item.createdAt ?? '2024-01-01T00:00:00Z',
     closedAt: item.closedAt ?? null,
     mergedAt: kind === 'pull-request' ? (item.mergedAt ?? null) : undefined,
     updatedAt: item.updatedAt ?? '2024-01-01T00:00:00Z',
@@ -234,9 +236,15 @@ function answerGraphQL(document) {
     const nodes = state.pulls.filter((p) => (p.labels ?? []).some((name) => labels.includes(name)) && (p.state ?? 'OPEN') === 'OPEN').map((p) => nodeOf('pull-request', p, state))
     repository[alias] = { totalCount: nodes.length, pageInfo: lastPage, nodes }
   }
+  const errors = []
   for (const match of matchAll('(\\w+):\\s*issueOrPullRequest\\(number:\\s*(\\d+)\\)', document)) {
     const [, alias, numberText] = match
     const found = findItem(state, Number(numberText))
+    if (found?.item.detailError) {
+      repository[alias] = null
+      errors.push({ type: 'FORBIDDEN', message: found.item.detailError, path: ['repository', alias] })
+      continue
+    }
     repository[alias] = found ? nodeOf(found.kind, found.item, state) : null
   }
   for (const match of matchAll('(\\w+):\\s*issue\\(number:\\s*(\\d+)\\)', document)) {
@@ -269,7 +277,7 @@ function answerGraphQL(document) {
   if (document.includes('rateLimit {')) data.rateLimit = { cost: 1, remaining: 4999, resetAt: new Date(Date.now() + 3600_000).toISOString(), limit: 5000 }
   if (document.includes('viewer {')) data.viewer = { login: state.viewer }
 
-  return JSON.stringify({ data })
+  return JSON.stringify(errors.length > 0 ? { data, errors } : { data })
 }
 
 // The issues-list pre-check: the ETag hashes the whole scripted state, so any scripted change moves it.

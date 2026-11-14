@@ -79,6 +79,7 @@ export interface BacklogDetail {
   readonly url: string
   readonly body: string
   readonly author: string | null
+  readonly createdAt: string | null
   readonly updatedAt: string
   readonly assignees: readonly string[]
   readonly parent: BacklogParentRead
@@ -140,10 +141,36 @@ export interface BacklogEpicGroup {
   readonly summary: BacklogEpicSummary
 }
 
+export interface BacklogLinkView {
+  readonly number: number
+  readonly title: string
+  readonly url: string
+  readonly closed: boolean
+}
+
+export type BacklogLinkListView =
+  | { readonly kind: 'failed'; readonly reason: string }
+  | { readonly kind: 'none' }
+  | { readonly kind: 'links'; readonly items: readonly BacklogLinkView[]; readonly more: number }
+
+export type BacklogAssigneeView = { readonly kind: 'unassigned' } | { readonly kind: 'people'; readonly text: string }
+
+export type BacklogEpicSummaryView =
+  | {
+      readonly ok: true
+      readonly done: number
+      readonly total: number
+      readonly inProgress: number
+      readonly canStart: readonly { readonly number: number; readonly title: string; readonly url: string }[]
+      readonly truncated: { readonly shown: number; readonly total: number } | null
+    }
+  | { readonly ok: false; readonly reason: string }
+
 export interface BacklogRowExtras {
   readonly slot?: string
   readonly leading?: ReactNode
   readonly afterTitle?: ReactNode
+  readonly panel?: ReactNode
 }
 
 export type RenderBacklogRow = (row: BacklogRowView, extras?: BacklogRowExtras) => ReactNode
