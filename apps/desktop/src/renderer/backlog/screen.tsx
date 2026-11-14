@@ -2,7 +2,8 @@
 import { useRef, useState } from 'react'
 import { useQueries, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { RefreshCw, ListTodo, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
+import { RefreshCw, ListTodo, ChevronDown, Loader2 } from 'lucide-react'
+import { CollapsibleGroupHeader } from '@/renderer/components/collapsible-group-header'
 import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
@@ -155,15 +156,16 @@ function GroupHeader({
   readonly onToggleCollapsed: () => void
   readonly onFilterChange: (filter: BacklogLabelFilter) => void
 }) {
-  const Chevron = collapsed ? ChevronRight : ChevronDown
   return (
-    <div className="flex h-8 items-center justify-between bg-sidebar pr-4 text-small font-medium text-foreground-secondary">
-      <button type="button" data-slot="backlog-group-toggle" aria-expanded={!collapsed} aria-label={backlogGroupToggleAria(group.repo, collapsed)} onClick={onToggleCollapsed} className={`flex h-full items-center gap-1 pl-4 pr-2 ${FOCUS_RING}`}>
-        <Chevron aria-hidden="true" className="size-3.5" />
-        <span>{group.kind === 'loaded' ? backlogCountCopy(group.repo, group.items.length, group.totalCount) : group.repo}</span>
-      </button>
+    <CollapsibleGroupHeader
+      label={group.kind === 'loaded' ? backlogCountCopy(group.repo, group.items.length, group.totalCount) : group.repo}
+      collapsed={collapsed}
+      onToggle={onToggleCollapsed}
+      toggleLabel={backlogGroupToggleAria(group.repo, collapsed)}
+      toggleSlot="backlog-group-toggle"
+    >
       {group.kind === 'loaded' && group.labelOptions.length > 0 ? <LabelFilterMenu options={group.labelOptions} filter={filter} onChange={onFilterChange} /> : null}
-    </div>
+    </CollapsibleGroupHeader>
   )
 }
 

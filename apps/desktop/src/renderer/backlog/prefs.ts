@@ -3,6 +3,7 @@ import type { RepoId } from '@/utils/repos'
 import type { BacklogLabelFilter } from '@/types/backlog'
 import type { KeyValueStorage } from '@/types/storage'
 import { activeCount } from '@/renderer/backlog/filter'
+import { readIdSet, writeIdSet } from '@/renderer/lib/id-set-storage'
 
 const STORAGE_KEY = 'port.backlogFilters.v1'
 
@@ -36,26 +37,6 @@ export function readBacklogFilters(storage: KeyValueStorage = window.localStorag
 
 const COLLAPSED_KEY = 'port.backlogCollapsed.v1'
 const HIDDEN_REPOS_KEY = 'port.backlogHiddenRepos.v1'
-
-// A malformed value reads as the empty set — expanded and all shown, so nothing silently disappears.
-function readIdSet(storage: KeyValueStorage, key: string): ReadonlySet<RepoId> {
-  try {
-    const raw = storage.getItem(key)
-    if (raw === null) return new Set()
-    const parsed: unknown = JSON.parse(raw)
-    return isStringArray(parsed) ? new Set(parsed as RepoId[]) : new Set()
-  } catch {
-    return new Set()
-  }
-}
-
-function writeIdSet(storage: KeyValueStorage, key: string, ids: ReadonlySet<RepoId>): void {
-  try {
-    storage.setItem(key, JSON.stringify([...ids]))
-  } catch {
-    // Best-effort only — a full or blocked localStorage loses the preference, never the app.
-  }
-}
 
 export function readBacklogCollapsed(storage: KeyValueStorage = window.localStorage): ReadonlySet<RepoId> {
   return readIdSet(storage, COLLAPSED_KEY)

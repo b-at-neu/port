@@ -46,6 +46,11 @@ export function emptyColumnLabel(): string {
   return 'No tickets'
 }
 
+/** The accessible name of a swimlane's collapse toggle. */
+export function laneToggleAria(name: string, collapsed: boolean): string {
+  return `${collapsed ? 'Expand' : 'Collapse'} ${name}`
+}
+
 export function ungatedTagLabel(): string {
   return 'Ungated'
 }
