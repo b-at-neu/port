@@ -137,6 +137,8 @@ describe('fixtureHandlers update channels', () => {
     ['empty', 'up-to-date'],
     ['unregistered', 'up-to-date'],
     ['update-available', 'available'],
+    ['update-downloading', 'available'],
+    ['update-download-failed', 'available'],
     ['failing', 'error'],
     ['registry-error', 'checking'],
   ] as const)('serves %s as %s', (scenario, kind) => {
@@ -149,6 +151,23 @@ describe('fixtureHandlers update channels', () => {
     const handlers = fixtureHandlers(NOW, 'update-available')
     expect(handlers['update:state'](undefined)).toMatchObject({ trigger: 'startup', release: { version: '0.2.0' } })
     expect(handlers['update:check'](undefined)).toMatchObject({ trigger: 'manual' })
+  })
+
+  it.each([
+    ['populated', 'idle'],
+    ['update-available', 'idle'],
+    ['update-downloading', 'downloading'],
+    ['update-download-failed', 'failed'],
+  ] as const)('serves the %s download as %s on all three download channels', (scenario, kind) => {
+    const handlers = fixtureHandlers(NOW, scenario)
+    expect(handlers['update:download:state'](undefined).kind).toBe(kind)
+    expect(handlers['update:download'](undefined).kind).toBe(kind)
+    expect(handlers['update:open']({ reveal: true }).kind).toBe(kind)
+  })
+
+  it('serves a download for the release the update state offers', () => {
+    const handlers = fixtureHandlers(NOW, 'update-downloading')
+    expect(handlers['update:download:state'](undefined)).toMatchObject({ version: '0.2.0', receivedBytes: 54 * 1024 * 1024, totalBytes: 120 * 1024 * 1024 })
   })
 })
 

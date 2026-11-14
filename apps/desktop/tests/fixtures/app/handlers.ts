@@ -20,7 +20,7 @@ import { fixtureSessionIndex } from './session-index'
 import type { FixtureScenario } from '@/types/fixtures'
 import type { BoardSnapshot } from '@/types/board'
 import { FIXTURE_REGISTRY_ERROR, fixtureFailingBacklog, fixtureFailingBoard, fixtureFailingSessionScan } from './failing'
-import { fixtureUpdateState } from './update'
+import { fixtureUpdateDownload, fixtureUpdateState } from './update'
 import { fixtureEmptySessionScan, fixtureUnregisteredBoard } from './unregistered'
 import { fixtureWorktreesPurge, fixtureWorktreesReclaim, fixtureWorktreesReport } from './worktrees'
 
@@ -161,6 +161,9 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'release:issues': (request) => fixtureReleaseIssues(scenario, request),
     'update:state': () => fixtureUpdateState(now, scenario, 'startup'),
     'update:check': () => fixtureUpdateState(now, scenario, 'manual'),
+    'update:download': () => fixtureUpdateDownload(now, scenario),
+    'update:download:state': () => fixtureUpdateDownload(now, scenario),
+    'update:open': () => fixtureUpdateDownload(now, scenario),
     'release:run': () => ({ kind: 'refused', reason: 'unsupported', message: 'Fixture mode: releases are not cut.' }),
   }
 }

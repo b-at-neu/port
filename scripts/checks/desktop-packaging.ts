@@ -151,6 +151,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
       expect(!/\basarUnpack\b/.test(text), 'desktop-packaging', `${relOf(configPath)} must not set asarUnpack — there are no native production dependencies`);
       expect(/extraResources:\s*\[\s*\{\s*from:\s*['"]NOTICE\.txt['"]/.test(text), 'desktop-packaging', `${relOf(configPath)} must copy NOTICE.txt through extraResources`);
       expect(/provider:\s*['"]github['"]/.test(text), 'desktop-packaging', `${relOf(configPath)} must set a github publish provider so the build emits update metadata`);
+      expect(text.includes("artifactName: 'port-${version}-${os}-${arch}.${ext}'"), 'desktop-packaging', `${relOf(configPath)} must keep artifactName port-\${version}-\${os}-\${arch}.\${ext}, the pattern apps/desktop/src/main/update/assets.ts matches`);
       expect(/target:\s*\[\s*\{\s*target:\s*['"]dmg['"],\s*arch:\s*\[\s*['"]x64['"],\s*['"]arm64['"]\s*\]/.test(text), 'desktop-packaging', `${relOf(configPath)}'s mac target must build dmg for both x64 and arm64`);
 
       // --- productName/appId/executableName name 'port', never 'Claude' — the installed app must never present itself as a Claude product. ---

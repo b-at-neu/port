@@ -6,10 +6,11 @@ import { Button } from '@/renderer/components/ui/button'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
-import { checkForUpdates, startUpdate, useUpdateCheckPending } from '@/renderer/update/actions'
-import { UPDATE_BUTTON_LABEL, UPDATE_CHECK_LABEL, UPDATE_RETRY_LABEL, UPDATE_UNAVAILABLE } from '@/renderer/update/copy'
-import { statusOf } from '@/renderer/update/model'
-import { ReleaseNotesLink } from '@/renderer/update/release-notes-link'
+import { checkForUpdates, useUpdateCheckPending } from '@/renderer/update/actions'
+import { UPDATE_CHECK_LABEL, UPDATE_RETRY_LABEL, UPDATE_UNAVAILABLE } from '@/renderer/update/copy'
+import { DownloadControls } from '@/renderer/update/download-controls'
+import { downloadViewOf, statusOf } from '@/renderer/update/model'
+import { useUpdateDownload } from '@/renderer/update/use-update-download'
 import { useUpdateState } from '@/renderer/update/use-update-state'
 import type { UpdateState } from '@/types/update'
 
@@ -35,6 +36,7 @@ function StatusBody({ state, checkPending, check }: StatusBodyProps) {
   const [now] = useState(() => Date.now())
   const view = statusOf(state, now)
   const { release } = view
+  const download = useUpdateDownload().data
   const busy = checkPending || view.kind === 'checking'
 
   if (view.kind === 'error') {
@@ -47,14 +49,8 @@ function StatusBody({ state, checkPending, check }: StatusBodyProps) {
 
   return (
     <div data-slot="update-status" data-state={view.kind} className="flex flex-wrap items-center gap-2">
-      <span className="text-small tabular-nums text-foreground">{view.text}</span>
+      {release === null ? <span className="text-small tabular-nums text-foreground">{view.text}</span> : <DownloadControls view={downloadViewOf(release, download)} release={release} />}
       {view.checkedAgo !== null ? <CheckedAgo state={state} ago={view.checkedAgo} /> : null}
-      {release !== null ? <ReleaseNotesLink href={release.notesUrl} /> : null}
-      {release !== null ? (
-        <Button size="small" onClick={() => startUpdate(release)}>
-          {UPDATE_BUTTON_LABEL}
-        </Button>
-      ) : null}
       {view.canCheck || view.kind === 'checking' ? (
         <Button variant="outline" size="small" disabled={busy} onClick={check}>
           {busy ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
