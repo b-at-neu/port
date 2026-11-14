@@ -20,6 +20,7 @@ interface WorkOnMenuProps {
   readonly open: boolean
   readonly pending: boolean
   readonly onOpenChange: (open: boolean) => void
+  // Returns true when it opened the confirm dialog, which then owns focus.
   readonly onPick: (planGate: PlanGateChoice) => boolean
 }
 

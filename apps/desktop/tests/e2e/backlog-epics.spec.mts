@@ -63,7 +63,7 @@ test('renders the epic as waves with a band, then the flat rows', async () => {
   await expect(epic.locator('[data-slot="backlog-row"]', { hasText: '#210' })).toHaveCount(0)
 })
 
-test('moves through the epic with J, then skips a collapsed epic and keeps it collapsed after a relaunch', async () => {
+test('moves through the epic with J, then skips a collapsed epic', async () => {
   const { page } = harness
   await page.getByRole('link', { name: 'Backlog', exact: true }).click()
   await expect(page.locator('[data-slot="backlog-epic"][data-epic="200"]')).toBeVisible()
@@ -84,6 +84,14 @@ test('moves through the epic with J, then skips a collapsed epic and keeps it co
   expect(await selectedNumber(page)).toMatch(/:200$/)
   await page.keyboard.press('j')
   expect(await selectedNumber(page)).toMatch(/:210$/)
+})
+
+test('keeps a collapsed epic collapsed after a relaunch', async () => {
+  const { page } = harness
+  await page.getByRole('link', { name: 'Backlog', exact: true }).click()
+  const epic = page.locator('[data-slot="backlog-epic"][data-epic="200"]')
+  await epic.getByRole('button', { name: 'Collapse #200' }).click()
+  await expect(epic).toHaveAttribute('data-collapsed', 'true')
 
   await harness.relaunch()
   const relaunched = harness.page

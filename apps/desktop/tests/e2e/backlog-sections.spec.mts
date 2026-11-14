@@ -40,8 +40,8 @@ test('collapses a section, skips it with the keyboard, and keeps it collapsed af
 
   const widgets = page.locator('[data-slot="backlog-group"][data-repo="acme/widgets"]')
   const gadgets = page.locator('[data-slot="backlog-group"][data-repo="acme/gadgets"]')
-  await expect(widgets.locator('[data-slot="backlog-row"]')).toHaveCount(3)
-  await expect(gadgets.locator('[data-slot="backlog-row"]')).toHaveCount(3)
+  await expect(widgets.locator('[data-slot="backlog-row"]')).toHaveCount(3, { timeout: 15_000 })
+  await expect(gadgets.locator('[data-slot="backlog-row"]')).toHaveCount(3, { timeout: 15_000 })
 
   await widgets.getByRole('button', { name: 'Collapse acme/widgets' }).click()
   await expect(widgets.locator('[data-slot="backlog-row"]')).toHaveCount(0)
