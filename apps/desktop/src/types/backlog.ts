@@ -107,6 +107,43 @@ export interface BacklogRowView {
   readonly children: ChildrenRead
 }
 
+// `unlisted` counts open unclaimed members not rendered in `rows`; `inProgressOnly` is true when only claimed members remain.
+export interface BacklogWave {
+  readonly number: number
+  readonly rows: readonly BacklogRowView[]
+  readonly inProgress: number
+  readonly unlisted: number
+  readonly inProgressOnly: boolean
+}
+
+// `uncertain` members have an order built from incomplete blocker data; `cycles` members block each other.
+export type BacklogEpicSummary =
+  | {
+      readonly ok: true
+      readonly done: number
+      readonly inProgress: number
+      readonly open: number
+      readonly total: number
+      readonly canStart: readonly BacklogChild[]
+      readonly truncated: { readonly shown: number; readonly total: number } | null
+      readonly uncertain: readonly number[]
+      readonly cycles: readonly number[]
+    }
+  | { readonly ok: false; readonly reason: string }
+
+// `unplaced` rows name the epic as parent but are not in its children read.
+export interface BacklogEpicGroup {
+  readonly epic: BacklogRowView
+  readonly waves: readonly BacklogWave[]
+  readonly unplaced: readonly BacklogRowView[]
+  readonly summary: BacklogEpicSummary
+}
+
+export interface BacklogEpicLayout {
+  readonly epics: readonly BacklogEpicGroup[]
+  readonly remainder: readonly BacklogRowView[]
+}
+
 // What Work on must confirm before claiming; `truncation` is set when the blocker page held fewer than exist.
 export interface WorkOnReasons {
   readonly blockers: readonly ClaimBlocker[]
