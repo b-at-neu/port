@@ -70,6 +70,7 @@ function row(overrides: {
     viewer: null,
     autoApproving: false,
     blockedOn: overrides.blockedOn ?? null,
+    held: null,
   }
 }
 
