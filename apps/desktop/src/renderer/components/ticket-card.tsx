@@ -20,8 +20,6 @@ import type { useListSelection } from '@/renderer/shell/list-selection'
 interface TicketCardProps {
   readonly row: BoardItemRow
   readonly ungated: boolean
-  /** Hidden on a board that shows one repository. */
-  readonly showRepo: boolean
   readonly rowProps: ReturnType<ReturnType<typeof useListSelection>['rowProps']>
 }
 
@@ -67,8 +65,7 @@ function AddGateAction({ row }: { readonly row: BoardItemRow }) {
   )
 }
 
-export function TicketCard({ row, ungated, showRepo, rowProps }: TicketCardProps) {
-  const { item } = row
+export function TicketCard({ row, ungated, rowProps }: TicketCardProps) {
   const ref = row.ticket.ref
   const prSuffix = prSuffixOf(ref)
   const tone = phaseToneFor(row)
@@ -97,8 +94,7 @@ export function TicketCard({ row, ungated, showRepo, rowProps }: TicketCardProps
           </span>
         ) : null}
         <span className="flex-1" />
-        {showRepo ? <span className="min-w-0 truncate text-meta text-muted-foreground">{item.repo}</span> : null}
-        {item.autoPlan ? (
+        {row.item.autoPlan ? (
           <IconTag label={autoPlanTagTitle()}>
             <Sparkles aria-hidden="true" className="size-4" />
           </IconTag>

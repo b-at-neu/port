@@ -231,6 +231,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - the comment's reason is its `Decision needed` line when there is one, else its first non-heading line
 - `blocker-answer.tsx` sends into the live session through `session/actions.ts`'s `send` and never writes a label; the agent clears its own block
 - `columns.ts`'s `boardColumns` is the one kanban projection: a ticket lands in exactly one column, and it reads `row.blockedOn`, never a second "blocked" derivation
+- `lanes.ts`'s `boardLanes` builds each swimlane from `boardColumns`, never its own column rule; `navigableLaneRows` is the one kanban J/K order
 
 **`apps/desktop/src/renderer/components/conversation-model.ts`/`conversation-list.tsx`**
 - the one `TranscriptEntry` → view-model mapping and the one pin-to-bottom, chunked-reveal list

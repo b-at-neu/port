@@ -211,6 +211,14 @@ export interface BoardColumn {
   readonly cards: readonly BoardColumnCard[]
 }
 
+/** One repository's swimlane: its own six columns and its card total. */
+export interface BoardLane {
+  readonly repoId: RepoId
+  readonly name: string
+  readonly count: number
+  readonly columns: readonly BoardColumn[]
+}
+
 export type ItemActionState = {readonly kind: 'pending'; readonly action: OperatorAction } | { readonly kind: 'result'; readonly action: OperatorAction; readonly result: ItemActionResult }
 
 interface NeedsYouItemBase {

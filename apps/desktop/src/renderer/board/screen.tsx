@@ -25,7 +25,8 @@ import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { boardSections } from '@/renderer/board/sections'
 import { boardColumns } from '@/renderer/board/columns'
 import { BoardKanban, BoardKanbanSkeleton } from '@/renderer/board/kanban'
-import { readBoardView, setBoardView } from '@/renderer/board/prefs'
+import { boardLanes, navigableLaneRows } from '@/renderer/board/lanes'
+import { readBoardCollapsedLanes, readBoardView, setBoardLaneCollapsed, setBoardView } from '@/renderer/board/prefs'
 import { operatorJoinedOf, rowKey } from '@/renderer/board/row-model'
 import type { DispatchRecord } from '@/types/dispatch'
 
@@ -49,6 +50,7 @@ export function BoardScreen() {
   const query = useIpcQuery('board:snapshot')
   const sessions = useIpcQuery('session:list')
   const [refreshing, setRefreshing] = useState(false)
+  const [collapsedLanes, setCollapsedLanes] = useState<ReadonlySet<RepoId>>(() => readBoardCollapsedLanes())
   const now = new Date()
 
   const snapshot = query.data ?? null
@@ -84,12 +86,28 @@ export function BoardScreen() {
   const sections = projection !== null && !kanban ? boardSections(gatedRows, { repo }) : []
   const sectionRows = sections.flatMap((section) => section.subGroups.flatMap((g) => g.rows))
   const columns = projection !== null && kanban ? boardColumns(gatedRows, projection.ungated, { repo }) : []
-  const flatRows = kanban ? columns.flatMap((column) => column.cards.map((card) => card.row)) : projection !== null ? [...ungatedRows, ...sectionRows] : []
-  const showRepo = repo === null && (snapshot?.state.repositories.filter((r) => r.ok).length ?? 0) > 1
+  const readyRepos = snapshot !== null ? snapshot.state.repositories.flatMap((r) => (r.ok ? [{ repoId: r.repoId, name: r.displayName }] : [])) : []
+  const laned = kanban && repo === null && readyRepos.length > 1
+  const lanes = laned && projection !== null ? boardLanes(gatedRows, projection.ungated, readyRepos) : null
+  // Every card, collapsed lanes included — a `?item=` into a collapsed lane still opens the pane.
+  const allRows = kanban ? columns.flatMap((column) => column.cards.map((card) => card.row)) : projection !== null ? [...ungatedRows, ...sectionRows] : []
+  const flatRows = lanes !== null ? navigableLaneRows(lanes, collapsedLanes) : allRows
 
   // An item that no longer matches any row closes the pane silently.
   const itemRef = search.item ?? null
-  const selectedRow = itemRef !== null ? (flatRows.find((row) => sameItem(row, itemRef)) ?? null) : null
+  const selectedRow = itemRef !== null ? (allRows.find((row) => sameItem(row, itemRef)) ?? null) : null
+
+  function toggleLane(repoId: RepoId): void {
+    const collapsing = !collapsedLanes.has(repoId)
+    setCollapsedLanes((prev) => {
+      const next = new Set(prev)
+      if (collapsing) next.add(repoId)
+      else next.delete(repoId)
+      return next
+    })
+    setBoardLaneCollapsed(repoId, collapsing)
+    if (collapsing && selectedRow !== null && selectedRow.item.repoId === repoId) selectRow(null)
+  }
 
   const selection = useListSelection(flatRows.map(rowKey), {
     value: selectedRow !== null ? rowKey(selectedRow) : null,
@@ -156,8 +174,8 @@ export function BoardScreen() {
       }
     >
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <ScreenBody variant="list" className="flex-1">
-          <div>
+        <ScreenBody variant="list" className={kanban ? 'flex flex-1 flex-col overflow-hidden' : 'flex-1'}>
+          <div className={kanban ? 'flex min-h-0 flex-1 flex-col' : undefined}>
             {snapshot === null ? (
               kanban ? (
                 <BoardKanbanSkeleton />
@@ -174,7 +192,7 @@ export function BoardScreen() {
                 <BoardBanners snapshot={snapshot} projection={projection} ungated={ungatedRows} selection={selection} />
                 {snapshot.state.repositories.length === 0 ? (
                   <EmptyState icon={LayoutGrid} message="Add a repository to see its pipeline." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.settings, search: { section: 'repositories' } }) }} className="px-4 py-6" />
-                ) : flatRows.length === 0 ? (
+                ) : allRows.length === 0 ? (
                   <EmptyState
                     icon={LayoutGrid}
                     message={repo !== null ? "Nothing in this repository's pipeline." : 'Nothing in the pipeline.'}
@@ -182,7 +200,7 @@ export function BoardScreen() {
                     className="px-4 py-6"
                   />
                 ) : kanban ? (
-                  <BoardKanban columns={columns} selection={selection} showRepo={showRepo} />
+                  <BoardKanban columns={columns} lanes={lanes} collapsed={collapsedLanes} onToggleLane={toggleLane} selection={selection} />
                 ) : (
                   otherSections.map(renderSection)
                 )}
