@@ -74,6 +74,29 @@ export type UpdateDownloadState =
       readonly finishedAt: string
     }
   | { readonly kind: 'failed'; readonly version: string; readonly notesUrl: string; readonly assetName: string; readonly reason: UpdateDownloadErrorKind; readonly detail: string; readonly failedAt: string }
+  | { readonly kind: 'restart-pending'; readonly version: string; readonly notesUrl: string; readonly finishedAt: string }
+  | { readonly kind: 'restarting'; readonly version: string; readonly notesUrl: string; readonly startedAt: string }
+
+export interface NativeUpdateInfo {
+  readonly version: string
+  readonly fileName: string
+}
+
+export interface NativeUpdater {
+  /** Resolves `null` when the feed offers no update. */
+  readonly check: () => Promise<NativeUpdateInfo | null>
+  readonly download: (onProgress: (transferred: number, total: number) => void) => Promise<void>
+  /** Quits, installs and relaunches. */
+  readonly install: () => void
+  readonly onError: (listener: (message: string) => void) => void
+}
+
+/** The quit guard's two halves, as the in-place update restart sees them. */
+export interface RestartSeams {
+  /** Resolves false when the operator declines to quit. */
+  readonly confirm: () => Promise<boolean>
+  readonly cancel: () => void
+}
 
 export interface FileDownloadRequest {
   readonly url: string

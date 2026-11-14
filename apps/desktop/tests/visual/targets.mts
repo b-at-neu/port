@@ -67,6 +67,8 @@ export const SCENARIO_LANDING: Readonly<Record<NonDefaultScenario, string | null
   'update-available': null,
   'update-downloading': null,
   'update-download-failed': null,
+  'update-restart-pending': null,
+  'update-restarting': null,
   attention: null,
 }
 
@@ -91,6 +93,8 @@ export const VARIANT_TARGETS: readonly VariantTarget[] = [
   { name: 'about-update-available', scenario: 'update-available', target: { hash: '#/settings?section=about', container: '#app', ready: '[data-slot="update-status"][data-state="available"]' } },
   { name: 'update-downloading', scenario: 'update-downloading', target: { hash: '#/board', container: '#app', ready: '[data-slot="update-notice"] [data-slot="update-download"][data-state="downloading"]' } },
   { name: 'update-download-failed', scenario: 'update-download-failed', target: { hash: '#/board', container: '#app', ready: '[data-slot="update-notice"] [data-slot="update-download"][data-state="failed"]' } },
+  { name: 'update-restart-pending', scenario: 'update-restart-pending', target: { hash: '#/board', container: '#app', ready: '[data-slot="update-notice"] [data-slot="update-download"][data-state="restart-pending"]' } },
+  { name: 'update-restarting', scenario: 'update-restarting', target: { hash: '#/board', container: '#app', ready: '[data-slot="update-notice"] [data-slot="update-download"][data-state="restarting"]' } },
   { name: 'about-update-downloading', scenario: 'update-downloading', target: { hash: '#/settings?section=about', container: '#app', ready: '[data-slot="update-status"] [data-slot="update-download"][data-state="downloading"]' } },
   { name: 'about-update-error', scenario: 'failing', target: { hash: '#/settings?section=about', container: '#app', ready: '[data-slot="update-status"][data-state="error"]' } },
   { name: 'about-update-checking', scenario: 'registry-error', target: { hash: '#/settings?section=about', container: '#app', ready: '[data-slot="update-status"][data-state="checking"]' } },

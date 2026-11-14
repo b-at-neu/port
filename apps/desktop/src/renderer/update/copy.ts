@@ -43,6 +43,19 @@ export function updateDownloadingRailLabel(version: string, percent: number | nu
   return percent === null ? updateDownloadingTitle(version) : `${updateDownloadingTitle(version)} · ${percent}%`
 }
 
+export function updateRestartingTitle(version: string): string {
+  return `Restarting to update to port ${version}`
+}
+
+export const UPDATE_RESTARTING_HINT = 'port will reopen on its own.'
+
+export function updateRestartPendingTitle(version: string): string {
+  return `port ${version} is ready to install`
+}
+
+export const UPDATE_RESTART_PENDING_HINT = 'Restart port to finish updating.'
+export const UPDATE_RESTART_LABEL = 'Restart now'
+
 export const UPDATE_READY_HINT: Readonly<Record<InstallPackage, string>> = {
   dmg: 'Drag port into Applications to replace this version, then reopen port.',
   nsis: 'Follow the installer to finish updating.',

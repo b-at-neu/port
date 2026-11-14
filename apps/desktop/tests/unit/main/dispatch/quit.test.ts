@@ -94,6 +94,48 @@ describe('createQuitGuard', () => {
     expect(quit).toHaveBeenCalled()
   })
 
+  it('prepare with no sessions confirms, and a later intercept passes', async () => {
+    const guard = createQuitGuard({ sessions: () => [], confirm: () => Promise.resolve(false), quit: vi.fn() })
+    expect(await guard.prepare()).toBe(true)
+    expect(guard.intercept(() => undefined)).toBe(false)
+  })
+
+  it('prepare with sessions confirms without ever calling quit', async () => {
+    const quit = vi.fn()
+    const guard = createQuitGuard({ sessions: () => [session()], confirm: () => Promise.resolve(true), quit })
+    expect(await guard.prepare()).toBe(true)
+    expect(quit).not.toHaveBeenCalled()
+    expect(guard.intercept(() => undefined)).toBe(false)
+  })
+
+  it('prepare cancelled returns false, and a later intercept still prompts', async () => {
+    const guard = createQuitGuard({ sessions: () => [session()], confirm: () => Promise.resolve(false), quit: vi.fn() })
+    expect(await guard.prepare()).toBe(false)
+    expect(guard.intercept(() => undefined)).toBe(true)
+  })
+
+  it('prepare while a prompt is open returns false without a second dialog', async () => {
+    let confirmCalls = 0
+    const guard = createQuitGuard({
+      sessions: () => [session()],
+      confirm: () => {
+        confirmCalls += 1
+        return new Promise(() => undefined)
+      },
+      quit: vi.fn(),
+    })
+    guard.intercept(() => undefined)
+    expect(await guard.prepare()).toBe(false)
+    expect(confirmCalls).toBe(1)
+  })
+
+  it('cancelPrepared makes a later intercept prompt again', async () => {
+    const guard = createQuitGuard({ sessions: () => [session()], confirm: () => Promise.resolve(true), quit: vi.fn() })
+    await guard.prepare()
+    guard.cancelPrepared()
+    expect(guard.intercept(() => undefined)).toBe(true)
+  })
+
   it('once confirmed, a later intercept passes through unintercepted', async () => {
     const guard = createQuitGuard({ sessions: () => [session()], confirm: () => Promise.resolve(true), quit: vi.fn() })
     guard.intercept(() => undefined)

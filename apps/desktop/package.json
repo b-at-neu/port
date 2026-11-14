@@ -75,6 +75,7 @@
     "@radix-ui/react-switch": "^1.4.1",
     "ajv": "^8.20.0",
     "cmdk": "^1.1.1",
+    "electron-updater": "^6.8.11",
     "sonner": "^2.0.8"
   }
 }

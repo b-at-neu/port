@@ -88,6 +88,14 @@ if (fixture.kind === 'invalid') {
     let shutdownDispatch: (() => void) | null = null
     let stageRegistry: StageRegistry | null = null
 
+    // Intercepts `before-quit` and (off darwin) the main window's own `close` while any stage
+    // session is still live, naming each one before the operator confirms.
+    const quitGuard = createQuitGuard({
+      sessions: () => dispatcher?.liveStageSessions() ?? [],
+      confirm: (copy) => confirmQuit(mainWindow, copy),
+      quit: () => app.quit(),
+    })
+
     app.on('second-instance', () => {
       if (!mainWindow) return
       if (mainWindow.isMinimized()) mainWindow.restore()
@@ -161,7 +169,7 @@ if (fixture.kind === 'invalid') {
         // Bounded by its own timeout; a failure or skip leaves `claude` resolution unaffected.
         await applyLoginShellPath({ platform: process.platform, env: process.env, isE2E: e2e.kind === 'on' })
         // registerIpc builds the real initial menu itself, from the hosted store it just created.
-        const registered = registerIpc()
+        const registered = registerIpc({ confirm: () => quitGuard.prepare(), cancel: () => quitGuard.cancelPrepared() })
         watcher = registered.watcher
         hostedStore = registered.hostedStore
         dispatcher = registered.dispatcher
@@ -174,14 +182,6 @@ if (fixture.kind === 'invalid') {
       app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) void createWindow()
       })
-    })
-
-    // Intercepts `before-quit` and (off darwin) the main window's own `close` while any stage
-    // session is still live, naming each one before the operator confirms.
-    const quitGuard = createQuitGuard({
-      sessions: () => dispatcher?.liveStageSessions() ?? [],
-      confirm: (copy) => confirmQuit(mainWindow, copy),
-      quit: () => app.quit(),
     })
 
     app.on('window-all-closed', () => {

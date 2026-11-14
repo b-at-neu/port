@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { installTargetOf, openModeOf, pickAsset } from '@/main/update/assets'
+import { inPlaceSupported, installTargetOf, openModeOf, pickAsset } from '@/main/update/assets'
 import type { AvailableRelease, InstallTarget, ReleaseAsset } from '@/types/update'
 
 const REPO = 'acme/port'
@@ -53,6 +53,24 @@ describe('installTargetOf', () => {
     ['freebsd', input('freebsd', 'x64'), null],
   ])('maps %s', (_label, given, expected) => {
     expect(installTargetOf(given)).toEqual(expected)
+  })
+})
+
+describe('inPlaceSupported', () => {
+  it.each<[string, InstallTarget | null, boolean]>([
+    ['nsis x64', { os: 'win', arch: 'x64', package: 'nsis' }, true],
+    ['nsis arm64', { os: 'win', arch: 'arm64', package: 'nsis' }, true],
+    ['appimage x64', { os: 'linux', arch: 'x64', package: 'appimage' }, true],
+    ['appimage arm64', { os: 'linux', arch: 'arm64', package: 'appimage' }, true],
+    ['dmg', { os: 'mac', arch: 'arm64', package: 'dmg' }, false],
+    ['deb', { os: 'linux', arch: 'x64', package: 'deb' }, false],
+    ['no target', null, false],
+  ])('%s → %s', (_label, target, expected) => {
+    expect(inPlaceSupported(target)).toBe(expected)
+  })
+
+  it.each([undefined, '', 'port.AppImage'])('a linux install with APPIMAGE %j is never in place', (appImage) => {
+    expect(inPlaceSupported(installTargetOf(input('linux', 'x64', { appImage })))).toBe(false)
   })
 })
 

@@ -15,6 +15,9 @@ import {
   UPDATE_OPEN_PAGE_LABEL,
   UPDATE_READY_HINT,
   UPDATE_RETRY_LABEL,
+  UPDATE_RESTART_LABEL,
+  UPDATE_RESTART_PENDING_HINT,
+  UPDATE_RESTARTING_HINT,
   UPDATE_REVEAL_LABEL,
   UPDATE_BUTTON_LABEL,
   UPDATE_UP_TO_DATE,
@@ -26,6 +29,8 @@ import {
   updateLatestDescription,
   updateNoAssetCopy,
   updateRailLabel,
+  updateRestartingTitle,
+  updateRestartPendingTitle,
 } from '@/renderer/update/copy'
 
 export function noticeOf(state: UpdateState | undefined): UpdateNoticeView | null {
@@ -129,6 +134,24 @@ export function downloadViewOf(release: AvailableRelease, download: UpdateDownlo
       const text = updateNoAssetCopy(release.version, download.target)
       return { kind: 'no-asset', title: text, hint: null, percent: null, progressText: null, railLabel: text, railAction: 'open-page', buttons: [], linkLabel: UPDATE_OPEN_PAGE_LABEL }
     }
+    case 'restarting': {
+      const title = updateRestartingTitle(release.version)
+      return { kind: 'restarting', title, hint: UPDATE_RESTARTING_HINT, percent: null, progressText: null, railLabel: title, railAction: null, buttons: [], linkLabel: null }
+    }
+    case 'restart-pending': {
+      const title = updateRestartPendingTitle(release.version)
+      return {
+        kind: 'restart-pending',
+        title,
+        hint: UPDATE_RESTART_PENDING_HINT,
+        percent: null,
+        progressText: null,
+        railLabel: title,
+        railAction: 'download',
+        buttons: [{ action: 'download', label: UPDATE_RESTART_LABEL, variant: 'default' }],
+        linkLabel: UPDATE_NOTES_LABEL,
+      }
+    }
   }
 }
 
@@ -137,12 +160,15 @@ interface DownloadToastActions {
   readonly openPage: (url: string) => void
 }
 
-/** `null` for `idle`/`downloading`, which a finished download never resolves with. */
+/** `null` for `idle`/`downloading`/`restarting`, which the app quitting never reports. */
 export function downloadToastOf(state: UpdateDownloadState, actions: DownloadToastActions): ActionToast | null {
   switch (state.kind) {
     case 'idle':
     case 'downloading':
+    case 'restarting':
       return null
+    case 'restart-pending':
+      return { tone: 'info', title: updateRestartPendingTitle(state.version), description: UPDATE_RESTART_PENDING_HINT, action: { label: UPDATE_RESTART_LABEL, onClick: actions.retry }, cancel: null }
     case 'ready':
       return { tone: state.opened === 'opened' ? 'success' : 'info', title: updateDownloadedTitle(state.version), description: readyHint(state), action: null, cancel: null }
     case 'failed':

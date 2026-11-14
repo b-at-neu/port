@@ -5,6 +5,7 @@ import { IPC_CHANNELS, type IpcChannel, type IpcEvent, type IpcEventMap, type Ip
 import { resolveBoardRefresh } from '@/main/channels/board'
 import { resolveUpdateCheck, resolveUpdateDownload, resolveUpdateDownloadState, resolveUpdateOpen, resolveUpdateState } from '@/main/channels/update'
 import { createDefaultUpdate } from '@/main/update/default'
+import type { RestartSeams } from '@/types/update'
 import { chooseDirectory } from '@/main/dialogs'
 import { defaultWorkspaceChannelDeps, resolveFoldersChoose, resolveFoldersList, resolveSessionChanges } from '@/main/channels/workspace'
 import { createRecentsStore } from '@/main/workspace/recents'
@@ -134,7 +135,7 @@ interface RegisteredIpc {
   readonly stageRegistry: StageRegistry
 }
 
-export function registerIpc(): RegisteredIpc {
+export function registerIpc(restart: RestartSeams): RegisteredIpc {
   // The one place a real `git` invocation and the real userData directory reach the registry.
   const registryDeps: RegistryDeps = {
     registryDir: app.getPath('userData'),
@@ -467,7 +468,7 @@ export function registerIpc(): RegisteredIpc {
 
   handle('held:force-dispatch', (_event, request) => resolveForceDispatch(request, { snapshot: watcher.snapshot, dispatcherStatus: () => dispatcher.status(), forceDispatch, republish: () => watcher.republish() }))
 
-  const update = createDefaultUpdate()
+  const update = createDefaultUpdate(restart)
 
   handle('update:state', (_event, request) => resolveUpdateState(request, update.service))
 
