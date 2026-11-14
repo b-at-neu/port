@@ -52,6 +52,8 @@ export interface InterruptedStage {
   readonly trigger: LabelKey
   readonly inFlight: LabelKey
   readonly model: string
+  /** The dispatcher's `#<n> <title>` label; absent on entries written before it was recorded. */
+  readonly title?: string
   /** `null` when the session died before the SDK ever minted one — Resume has nothing to resume. */
   readonly claudeSessionId: string | null
   /** `branch` is `null` for a detached worktree. */
