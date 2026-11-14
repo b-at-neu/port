@@ -16,7 +16,7 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-function setup(options: { release?: AvailableRelease | null; confirm?: boolean } = {}) {
+function setup(options: { release?: AvailableRelease | null; confirm?: boolean; now?: () => Date } = {}) {
   const check = deferred<NativeUpdateInfo | null>()
   const download = deferred<void>()
   let errorListener: (message: string) => void = () => undefined
@@ -41,7 +41,7 @@ function setup(options: { release?: AvailableRelease | null; confirm?: boolean }
   const confirmRestart = vi.fn(() => Promise.resolve(options.confirm ?? true))
   const cancelRestart = vi.fn()
   const release = options.release === undefined ? RELEASE : options.release
-  const updater = createInPlaceUpdater({ release: () => release, native: nativeFactory, fallback, confirmRestart, cancelRestart, now: () => NOW })
+  const updater = createInPlaceUpdater({ release: () => release, native: nativeFactory, fallback, confirmRestart, cancelRestart, now: options.now ?? (() => NOW) })
   return { updater, native, nativeFactory, fallback, confirmRestart, cancelRestart, check, download, emitError: (m: string) => errorListener(m), emitProgress: (t: number, total: number) => progress(t, total) }
 }
 
@@ -182,6 +182,19 @@ describe('createInPlaceUpdater', () => {
     expect(again.kind).toBe('restarting')
     expect(s.native.download).toHaveBeenCalledOnce()
     expect(s.native.install).toHaveBeenCalledOnce()
+  })
+
+  it('a restart that never quits becomes restart-pending again, and a later start retries it', async () => {
+    let clock = NOW
+    const s = setup({ now: () => clock })
+    await toRestarting(s)
+    expect(s.updater.state().kind).toBe('restarting')
+    clock = new Date(NOW.getTime() + 121_000)
+    expect(s.updater.state().kind).toBe('restart-pending')
+    const again = await s.updater.start()
+    expect(again.kind).toBe('restarting')
+    expect(s.native.install).toHaveBeenCalledTimes(2)
+    expect(s.native.download).toHaveBeenCalledOnce()
   })
 
   it('delegates open to the fallback', async () => {

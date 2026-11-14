@@ -12,6 +12,9 @@ export interface InPlaceUpdaterDeps {
   readonly now: () => Date
 }
 
+/** A restart the app has not quit for within this long is treated as stuck and offered again. */
+const RESTART_TIMEOUT_MS = 120_000
+
 export function createInPlaceUpdater(deps: InPlaceUpdaterDeps): UpdateDownloader {
   let own: UpdateDownloadState = { kind: 'idle' }
   let fallbackVersion: string | null = null
@@ -31,7 +34,14 @@ export function createInPlaceUpdater(deps: InPlaceUpdaterDeps): UpdateDownloader
     return created
   }
 
+  function expireRestart(): void {
+    if (own.kind !== 'restarting') return
+    if (deps.now().getTime() - Date.parse(own.startedAt) < RESTART_TIMEOUT_MS) return
+    own = { kind: 'restart-pending', version: own.version, notesUrl: own.notesUrl, finishedAt: deps.now().toISOString() }
+  }
+
   function state(): UpdateDownloadState {
+    expireRestart()
     return deps.release()?.version === fallbackVersion && fallbackVersion !== null ? deps.fallback.state() : own
   }
 
@@ -84,6 +94,7 @@ export function createInPlaceUpdater(deps: InPlaceUpdaterDeps): UpdateDownloader
 
   function start(): Promise<UpdateDownloadState> {
     if (inFlight !== null) return inFlight
+    expireRestart()
     const release = deps.release()
     if (release === null) return Promise.resolve(state())
     if (fallbackVersion === release.version) return deps.fallback.start()

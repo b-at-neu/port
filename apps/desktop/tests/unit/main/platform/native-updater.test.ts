@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const harness = vi.hoisted(() => ({ accessed: 0, fake: null as unknown }))
+const harness = vi.hoisted<{ accessed: number; fake: unknown }>(() => ({ accessed: 0, fake: null }))
 
 vi.mock('electron-updater', () => ({
   get autoUpdater() {
