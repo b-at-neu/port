@@ -27,6 +27,8 @@ export interface CaptureVariant {
   readonly hash?: string
   readonly click?: string
   readonly type?: { readonly selector: string; readonly text: string }
+  /** Clicked after the screenshot, to undo state the click persisted for every later capture. */
+  readonly restore?: string
   readonly ready: string
 }
 
@@ -111,8 +113,8 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'gate-review', click: 'text=Review plan', ready: '[data-slot="dialog-content"]' },
       { name: 'repo-empty', hash: '#/board?repo=fixture-acme-gadgets', ready: "text=Nothing in this repository's pipeline." },
       { name: 'repo-scoped', hash: '#/board?repo=fixture-acme-widgets', ready: 'aside [data-slot="repo-screen"][data-active="true"]' },
-      { name: 'sidebar-repo-collapsed', click: 'aside [data-slot="repo-group"] button[aria-expanded="true"]', ready: 'aside [data-slot="repo-group"] button[aria-expanded="false"]' },
-      { name: 'sidebar-rail', click: '[aria-label="Hide sidebar"]', ready: '[aria-label="Show sidebar"]' },
+      { name: 'sidebar-repo-collapsed', click: 'aside [data-slot="repo-group"] button[aria-label^="Collapse "]', ready: 'aside [data-slot="repo-group"] button[aria-label^="Expand "]', restore: 'aside [data-slot="repo-group"] button[aria-label^="Expand "]' },
+      { name: 'sidebar-rail', click: '[aria-label="Hide sidebar"]', ready: '[aria-label="Show sidebar"]', restore: '[aria-label="Show sidebar"]' },
       { name: 'kanban', hash: '#/board?view=board', ready: '[data-slot="ticket-card"]' },
       { name: 'kanban-detail', hash: '#/board?view=board&item=fixture-acme-widgets:38', ready: '[role="complementary"]' },
       { name: 'kanban-repo', hash: '#/board?view=board&repo=fixture-acme-widgets', ready: '[data-slot="ticket-card"]' },
