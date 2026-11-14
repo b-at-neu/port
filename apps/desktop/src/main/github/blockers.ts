@@ -2,12 +2,15 @@ import type { BlockerRead, ClaimBlocker } from '@/types/github'
 
 /** Reads a `blockedBy` connection into a `BlockerRead`. An unreadable connection is reported by
  *  name rather than folded into an empty list. `shown`/`total` count every node, open or closed. */
-export function toBlockerRead(value: unknown, errored: boolean): BlockerRead {
-  if (errored) return { ok: false, reason: "GitHub reported an error reading this issue's blockers" }
-  if (typeof value !== 'object' || value === null) return { ok: false, reason: 'blockedBy is missing from the response' }
+export function toBlockerRead(value: unknown, errored: boolean, field: 'blockedBy' | 'blocking' = 'blockedBy'): BlockerRead {
+  if (errored) {
+    const what = field === 'blocking' ? 'the issues this one blocks' : "this issue's blockers"
+    return { ok: false, reason: `GitHub reported an error reading ${what}` }
+  }
+  if (typeof value !== 'object' || value === null) return { ok: false, reason: `${field} is missing from the response` }
   const connection = value as { totalCount?: unknown; nodes?: unknown }
   if (typeof connection.totalCount !== 'number' || !Array.isArray(connection.nodes)) {
-    return { ok: false, reason: 'blockedBy is malformed' }
+    return { ok: false, reason: `${field} is malformed` }
   }
   const open: ClaimBlocker[] = []
   for (const node of connection.nodes) {

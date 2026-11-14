@@ -10,10 +10,14 @@ function query(overrides: Partial<BacklogQueryLike> = {}): BacklogQueryLike {
   return { status: 'success', data: undefined, isError: false, dataUpdatedAt: 0, ...overrides }
 }
 
+const NO_LINKS = { ok: true, open: [], shown: 0, total: 0 } as const
+const NO_PARENT = { ok: true, parent: null } as const
+const NO_CHILDREN = { ok: true, children: [], shown: 0, total: 0 } as const
+
 const OK_RESPONSE: Extract<BacklogResponse, { ok: true }> = {
   ok: true,
   items: [
-    { number: 47, title: 'Add dark mode', url: 'https://github.com/acme/widgets/issues/47', updatedAt: '2026-01-01T00:00:00Z', assignees: [], labels: [{ name: 'bug', color: 'd73a4a' }], subIssueCount: 0, blockers: { ok: true, open: [], shown: 0, total: 0 } },
+    { number: 47, title: 'Add dark mode', url: 'https://github.com/acme/widgets/issues/47', updatedAt: '2026-01-01T00:00:00Z', assignees: [], labels: [{ name: 'bug', color: 'd73a4a' }], subIssueCount: 0, blockers: NO_LINKS, blocking: NO_LINKS, parent: NO_PARENT, children: NO_CHILDREN },
     {
       number: 45,
       title: 'Document retries',
@@ -23,6 +27,9 @@ const OK_RESPONSE: Extract<BacklogResponse, { ok: true }> = {
       labels: [{ name: 'docs', color: null }],
       subIssueCount: 2,
       blockers: { ok: true, open: [{ number: 43, title: 'Rate-limit search', url: 'u43', state: 'OPEN' }], shown: 1, total: 1 },
+      blocking: { ok: true, open: [{ number: 50, title: 'Ship it', url: 'u50', state: 'OPEN' }], shown: 1, total: 1 },
+      parent: { ok: true, parent: { number: 41, title: 'Epic', state: 'OPEN' } },
+      children: { ok: true, children: [{ number: 46, title: 'Child', state: 'OPEN', claimed: false, blockers: NO_LINKS }], shown: 1, total: 1 },
     },
   ],
   scanned: 2,
@@ -69,6 +76,14 @@ describe('buildBacklogGroup', () => {
     if (group.kind !== 'loaded') throw new Error('expected loaded')
     expect(group.items[0]?.labels).toEqual([{ name: 'bug', color: 'd73a4a' }])
     expect(group.items[1]?.subIssueCount).toBe(2)
+  })
+
+  it('passes each row\'s parent, children and blocking through unchanged', () => {
+    const group = buildBacklogGroup(REPO_ID, 'acme/widgets', query({ data: OK_RESPONSE }))
+    if (group.kind !== 'loaded') throw new Error('expected loaded')
+    expect(group.items[1]?.parent).toEqual(OK_RESPONSE.items[1]?.parent)
+    expect(group.items[1]?.children).toEqual(OK_RESPONSE.items[1]?.children)
+    expect(group.items[1]?.blocking).toEqual(OK_RESPONSE.items[1]?.blocking)
   })
 
   it('passes each row\'s blockers through unchanged', () => {
