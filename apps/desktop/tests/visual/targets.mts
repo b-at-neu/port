@@ -207,7 +207,15 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
   },
   // `audit` is a redirect into Settings; this capture proves an old link still lands filtered.
   audit: { hash: '#/audit?repo=fixture-acme-widgets&number=38', container: '#app', ready: '[data-slot="audit-row"]' },
-  needsYou: { hash: '#/needs-you', container: '#app', ready: '[data-slot="needs-you-item"]' },
+  needsYou: {
+    hash: '#/needs-you',
+    container: '#app',
+    ready: '[data-slot="needs-you-item"]',
+    variants: [
+      { name: 'ready-to-merge', ready: 'button:has-text("Request changes")' },
+      { name: 'request-changes', click: 'button:has-text("Request changes")', ready: '[data-slot="dialog-content"]' },
+    ],
+  },
   setup: { hash: '#/setup', container: '#app', ready: '#app [data-step]' },
   about: { hash: '#/about', container: '#app', ready: '#app [data-about-notice]' },
 }

@@ -344,6 +344,7 @@ function Row({
         onAction={onAction}
         secondaryActionLabel={action.secondaryLabel}
         onSecondaryAction={action.secondaryLabel !== undefined ? onSecondaryAction : undefined}
+        secondaryActionDisabledReason={action.secondaryDisabledReason ?? null}
         onDismiss={onDismiss}
         expandable={hasDetail(item)}
         expanded={expanded}

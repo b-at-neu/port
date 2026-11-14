@@ -21,6 +21,7 @@ interface NeedsYouItemProps {
   readonly onAction: () => void
   readonly secondaryActionLabel?: string
   readonly onSecondaryAction?: () => void
+  readonly secondaryActionDisabledReason?: string | null
   /** Adds a trailing icon-only Dismiss button. */
   readonly onDismiss?: () => void
   readonly expandable: boolean
@@ -40,6 +41,7 @@ export function NeedsYouItem({
   onAction,
   secondaryActionLabel,
   onSecondaryAction,
+  secondaryActionDisabledReason,
   onDismiss,
   expandable,
   expanded,
@@ -82,9 +84,22 @@ export function NeedsYouItem({
           </Button>
         )}
         {secondaryActionLabel !== undefined && onSecondaryAction !== undefined ? (
-          <Button variant="outline" size="small" onClick={onSecondaryAction} disabled={actionPending} className="shrink-0">
-            {secondaryActionLabel}
-          </Button>
+          secondaryActionDisabledReason != null ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button variant="outline" size="small" disabled className="shrink-0">
+                    {secondaryActionLabel}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{secondaryActionDisabledReason}</TooltipContent>
+            </Tooltip>
+          ) : (
+            <Button variant="outline" size="small" onClick={onSecondaryAction} disabled={actionPending} className="shrink-0">
+              {secondaryActionLabel}
+            </Button>
+          )
         ) : null}
         {onDismiss !== undefined ? (
           <IconButton label="Dismiss" onClick={onDismiss}>
