@@ -80,7 +80,6 @@ test('moves through the epic with J, then skips a collapsed epic', async () => {
   await expect(epic.locator('[data-slot="backlog-wave"]')).toHaveCount(0)
   await expect(epic.getByRole('button', { name: 'Expand #200' })).toHaveAttribute('aria-expanded', 'false')
 
-  await epic.locator('[data-slot="backlog-epic-row"]').getByText('#200', { exact: true }).click()
   expect(await selectedNumber(page)).toMatch(/:200$/)
   await page.keyboard.press('j')
   expect(await selectedNumber(page)).toMatch(/:210$/)
