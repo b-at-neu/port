@@ -57,11 +57,15 @@ describe('ready-to-merge Request changes', () => {
   })
 
   it('disables Request changes with the cap copy at the review cycle cap', () => {
-    expect(actionFor(readyToMerge({ available: false, reason: 'cycle-cap' }))).toMatchObject({ secondaryLabel: 'Request changes', secondaryDisabledReason: expect.stringContaining('used all its review cycles') })
+    const action = actionFor(readyToMerge({ available: false, reason: 'cycle-cap' }))
+    expect(action).toMatchObject({ secondaryLabel: 'Request changes' })
+    expect(action.secondaryDisabledReason).toContain('used all its review cycles')
   })
 
   it('reuses the ownership copy when the pull request is not the viewer’s', () => {
-    expect(actionFor(readyToMerge({ available: false, reason: 'not-owned' }))).toMatchObject({ secondaryLabel: 'Request changes', secondaryDisabledReason: expect.stringContaining('Someone else owns this item') })
+    const action = actionFor(readyToMerge({ available: false, reason: 'not-owned' }))
+    expect(action).toMatchObject({ secondaryLabel: 'Request changes' })
+    expect(action.secondaryDisabledReason).toContain('Someone else owns this item')
   })
 
   it('leaves the button out when revise does not apply', () => {
