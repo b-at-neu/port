@@ -106,7 +106,7 @@ function resumedTurn(mode: StageMode, observed: readonly LabelKey[]): StageTrans
   return write('issue', ['inProgress'], ['blocked'], 'stage-unblocked')
 }
 
-/** `#12` or `12`, nothing else. */
+/** A pull request number, with or without a leading hash; nothing else. */
 export function pullRequestNumberOf(arg: string | null): number | null {
   if (arg === null) return null
   const match = /^#?(\d+)$/.exec(arg)
