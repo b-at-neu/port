@@ -27,6 +27,8 @@ export interface CaptureVariant {
   readonly hash?: string
   readonly click?: string
   readonly type?: { readonly selector: string; readonly text: string }
+  /** Clicked after the screenshot, to undo state the click persisted for every later capture. */
+  readonly restore?: string
   readonly ready: string
 }
 
@@ -74,7 +76,7 @@ export const SCENARIO_LANDING: Readonly<Record<NonDefaultScenario, string | null
 export const VARIANT_TARGETS: readonly VariantTarget[] = [
   { name: 'needs-you-empty', scenario: 'empty', target: { hash: '#/needs-you', container: '#app', ready: '[data-slot="needs-you-empty"]' } },
   { name: 'releases-empty', scenario: 'empty', target: { hash: '#/releases', container: '#app', ready: '[data-slot="releases-empty"]' } },
-  { name: 'audit-empty', scenario: 'empty', target: { hash: '#/audit', container: '#app', ready: '[data-slot="audit-empty"]' } },
+  { name: 'audit-empty', scenario: 'empty', target: { hash: '#/settings?section=audit', container: '#app', ready: '[data-slot="audit-empty"]' } },
   { name: 'session-permission', scenario: 'empty', target: { hash: '#/session?key=fixture-session-permission', container: '#app', ready: '[role="alertdialog"]' } },
   { name: 'board-unregistered', scenario: 'unregistered', target: { hash: '#/board', container: '#app', ready: 'text=Add a repository to see its pipeline.' } },
   { name: 'backlog-unregistered', scenario: 'unregistered', target: { hash: '#/backlog', container: '#app', ready: 'text=Register a repository to see its open tickets.' } },
@@ -110,6 +112,9 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'detail-sessions', hash: '#/board?item=fixture-acme-widgets:46', ready: '[role="complementary"]' },
       { name: 'gate-review', click: 'text=Review plan', ready: '[data-slot="dialog-content"]' },
       { name: 'repo-empty', hash: '#/board?repo=fixture-acme-gadgets', ready: "text=Nothing in this repository's pipeline." },
+      { name: 'repo-scoped', hash: '#/board?repo=fixture-acme-widgets', ready: 'aside [data-slot="repo-screen"][data-active="true"]' },
+      { name: 'sidebar-repo-collapsed', click: 'aside [data-slot="repo-group"] button[aria-label^="Collapse "]', ready: 'aside [data-slot="repo-group"] button[aria-label^="Expand "]', restore: 'aside [data-slot="repo-group"] button[aria-label^="Expand "]' },
+      { name: 'sidebar-rail', click: '[aria-label="Hide sidebar"]', ready: '[aria-label="Show sidebar"]', restore: '[aria-label="Show sidebar"]' },
       { name: 'kanban', hash: '#/board?view=board', ready: '[data-slot="ticket-card"]' },
       { name: 'kanban-detail', hash: '#/board?view=board&item=fixture-acme-widgets:38', ready: '[role="complementary"]' },
       { name: 'kanban-repo', hash: '#/board?view=board&repo=fixture-acme-widgets', ready: '[data-slot="ticket-card"]' },
@@ -175,6 +180,7 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'connections', hash: '#/settings?section=connections', ready: '[data-slot="connection-row"]' },
       { name: 'pipeline', hash: '#/settings?section=pipeline', ready: '[data-slot="settings-repo-config"]' },
       { name: 'usage', hash: '#/settings?section=usage', ready: '[data-slot="usage-row"]' },
+      { name: 'audit', hash: '#/settings?section=audit', ready: '[data-slot="audit-row"]' },
       { name: 'about', hash: '#/settings?section=about', ready: '[data-slot="update-status"][data-state="up-to-date"]' },
       { name: 'status-popover', click: '[data-slot="status-dot"]', ready: '[data-slot="status-popover"]' },
     ],
@@ -194,12 +200,8 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'pane-empty', click: '[data-release="fixture-acme-widgets:v0.1.1"]', ready: '[data-slot="release-issues-empty"]' },
     ],
   },
-  audit: {
-    hash: '#/audit',
-    container: '#app',
-    ready: '[data-slot="audit-row"]',
-    variants: [{ name: 'filtered', hash: '#/audit?repo=fixture-acme-widgets&number=38', ready: '[data-slot="audit-row"]' }],
-  },
+  // `audit` is a redirect into Settings; this capture proves an old link still lands filtered.
+  audit: { hash: '#/audit?repo=fixture-acme-widgets&number=38', container: '#app', ready: '[data-slot="audit-row"]' },
   needsYou: {
     hash: '#/needs-you',
     container: '#app',

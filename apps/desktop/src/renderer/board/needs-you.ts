@@ -338,6 +338,12 @@ export function needsYouCount(items: readonly NeedsYouItem[]): number {
   return items.length
 }
 
+/** A usage-limit item has no repo of its own, so it belongs to every repository with an entry in it. */
+export function belongsToRepo(item: NeedsYouItem, repoId: RepoId): boolean {
+  if (item.kind === 'usage-limit') return item.entries.some((entry) => entry.repoId === repoId)
+  return item.repoId === repoId
+}
+
 export function repoNeedsYou(items: readonly NeedsYouItem[], repoId: RepoId): number {
-  return items.filter((item) => item.repoId === repoId).length
+  return items.filter((item) => belongsToRepo(item, repoId)).length
 }

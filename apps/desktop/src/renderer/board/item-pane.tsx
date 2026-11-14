@@ -196,7 +196,7 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
           ))}
         </div>
       ) : null}
-      <Button variant="ghost" size="small" className="self-start" onClick={() => void navigate({ to: ROUTE_IDS.audit, search: { repo: item.repoId, number: item.number } })}>
+      <Button variant="ghost" size="small" className="self-start" onClick={() => void navigate({ to: ROUTE_IDS.settings, search: { section: 'audit', repo: item.repoId, number: item.number } })}>
         <ScrollText aria-hidden="true" className="size-3.5" />
         {writeHistoryLinkLabel()}
       </Button>

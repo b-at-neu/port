@@ -75,6 +75,7 @@ for (const [key, target] of Object.entries(SCREENSHOT_TARGETS)) {
         }
 
         await fixture.page.screenshot({ path: join(SCREENSHOT_DIR, `${key}-${variant.name}-${theme}.png`), animations: 'disabled', caret: 'hide' })
+        if (variant.restore !== undefined) await fixture.page.locator(variant.restore).first().click()
       })
     }
   }

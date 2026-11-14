@@ -19,8 +19,12 @@ const NOW = new Date('2026-01-01T01:00:00.000Z')
 const REPO_ID = 'repo-a' as RepoId
 
 /** `useNeedsYouItems` with nothing dismissed: the visible list is derived from the snapshot, then handed to the model. */
-function pipelinesModel(repos: readonly RepositoryEntry[], snapshot: BoardSnapshot | undefined, now: Date = NOW, sessions: readonly HostedSessionSnapshot[] = []) {
+function sidebarModel(repos: readonly RepositoryEntry[], snapshot: BoardSnapshot | undefined, now: Date = NOW, sessions: readonly HostedSessionSnapshot[] = []) {
   return pipelinesModelOf(repos, snapshot, snapshot !== undefined ? needsYouItems(snapshot, now) : [], sessions)
+}
+
+function pipelinesModel(repos: readonly RepositoryEntry[], snapshot: BoardSnapshot | undefined, now: Date = NOW, sessions: readonly HostedSessionSnapshot[] = []) {
+  return sidebarModel(repos, snapshot, now, sessions).repos
 }
 
 function agent(overrides: Partial<AttachedAgent> = {}): AttachedAgent {
@@ -169,7 +173,7 @@ function readyEntry(): RepositoryEntry {
 describe('pipelinesModel', () => {
   it('renders a bare not-ready row with no sessions', () => {
     const rows = pipelinesModel([notReadyEntry()], undefined)
-    expect(rows).toEqual([{ ready: false, repoId: 'repo-b', name: 'o/b', sessions: [] }])
+    expect(rows).toEqual([{ ready: false, repoId: 'repo-b', name: 'o/b', sessions: [], userSessions: [] }])
   })
 
   it('lists a live stage session under a not-ready repository, never an ended one or another repository\'s', () => {
@@ -185,7 +189,7 @@ describe('pipelinesModel', () => {
 
   it('reads a ready repository as stopped with no snapshot yet', () => {
     const row = assertReady(pipelinesModel([readyEntry()], undefined)[0])
-    expect(row).toMatchObject({ ready: true, pill: { status: 'idle', label: 'Stopped' }, inFlight: 0, needsYou: false, sessions: [] })
+    expect(row).toMatchObject({ ready: true, pill: { status: 'idle', label: 'Stopped' }, inFlight: 0, needsYouCount: 0, sessions: [], userSessions: [] })
   })
 
   it('lists a live session row, never a dormant one', () => {
@@ -215,13 +219,48 @@ describe('pipelinesModel', () => {
     const snapshot = snapshotOf([readyRepoState({ items: [waiting] })])
     const row = assertReady(pipelinesModel([readyEntry()], snapshot)[0])
     expect(row.sessions).toEqual([])
-    expect(row.needsYou).toBe(true)
+    expect(row.needsYouCount).toBe(1)
   })
 
   it('lights no dot for an item the visible list leaves out', () => {
     const waiting = item({ stage: 'gate', stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }], waitingOn: 'cockpit', agents: [agent()] })
     const snapshot = snapshotOf([readyRepoState({ items: [waiting] })])
-    expect(assertReady(pipelinesModelOf([readyEntry()], snapshot, [])[0]).needsYou).toBe(false)
+    expect(assertReady(pipelinesModelOf([readyEntry()], snapshot, []).repos[0]).needsYouCount).toBe(0)
+  })
+
+  describe('user sessions', () => {
+    function userSession(key: string, repoId: RepoId | null, overrides: Partial<HostedSessionSnapshot> = {}): HostedSessionSnapshot {
+      const base = stageSession({ key, repoId: REPO_ID, stage: { agent: 'plan', number: 1, kind: 'issue', trigger: 'ready' } })
+      return { ...base, repoId, stage: null, ...overrides }
+    }
+
+    it("gives each repository only its own open user sessions and leaves stage sessions out", () => {
+      const stage = { agent: 'plan', number: 44, kind: 'issue', trigger: 'ready' } as const
+      const sessions = [
+        userSession('mine', REPO_ID),
+        userSession('theirs', 'repo-b' as RepoId),
+        userSession('ended', REPO_ID, { phase: 'ended' }),
+        stageSession({ key: 'stage', repoId: REPO_ID, stage }),
+      ]
+      const model = sidebarModel([readyEntry(), notReadyEntry()], undefined, NOW, sessions)
+      expect(model.repos.map((row) => row.userSessions.map((s) => s.sessionKey))).toEqual([['mine'], ['theirs']])
+      expect(model.otherSessions).toEqual([])
+    })
+
+    it('puts a session with no repository, or an unregistered one, in otherSessions', () => {
+      const sessions = [userSession('none', null), userSession('unknown', 'repo-z' as RepoId), userSession('mine', REPO_ID)]
+      const model = sidebarModel([readyEntry()], undefined, NOW, sessions)
+      expect(model.otherSessions.map((s) => s.sessionKey)).toEqual(['none', 'unknown'])
+      expect(assertReady(model.repos[0]).userSessions.map((s) => s.sessionKey)).toEqual(['mine'])
+    })
+
+    it('counts the same items its filtered screen lists', () => {
+      const waiting = item({ stage: 'gate', stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }], waitingOn: 'cockpit' })
+      const snapshot = snapshotOf([readyRepoState({ items: [waiting, item({ number: 43, stage: 'gate', stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }], waitingOn: 'cockpit' })] })])
+      const items = needsYouItems(snapshot, NOW)
+      expect(assertReady(pipelinesModelOf([readyEntry()], snapshot, items).repos[0]).needsYouCount).toBe(items.filter((i) => i.repoId === REPO_ID).length)
+      expect(items).toHaveLength(2)
+    })
   })
 
   it('drops a stage session while it waits on a permission prompt, and lists it again once answered', () => {

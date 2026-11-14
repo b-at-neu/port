@@ -13,6 +13,7 @@ import { RepositoriesTab } from '@/renderer/repositories/list-tab'
 import { ConnectionsTab } from '@/renderer/settings/connections-tab'
 import { PipelineTab } from '@/renderer/settings/pipeline-tab'
 import { UsageTab } from '@/renderer/settings/usage-tab'
+import { AuditTab } from '@/renderer/audit/tab'
 import { AboutTab } from '@/renderer/settings/about-tab'
 
 function TabBody({ section }: { readonly section: SettingsSection }) {
@@ -27,6 +28,8 @@ function TabBody({ section }: { readonly section: SettingsSection }) {
       return <PipelineTab />
     case 'usage':
       return <UsageTab />
+    case 'audit':
+      return <AuditTab />
     case 'about':
       return <AboutTab />
   }

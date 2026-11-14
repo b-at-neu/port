@@ -1,4 +1,4 @@
-// The Audit screen — every write port made to GitHub, newest first. Read-only: it reads `audit:list` and writes nothing.
+// Settings → Audit log — every write port made to GitHub, newest first. Read-only: it reads `audit:list` and writes nothing.
 import { useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { RefreshCw, ScrollText, X } from 'lucide-react'
@@ -8,11 +8,11 @@ import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { EmptyState } from '@/renderer/components/empty-state'
 import { ErrorBanner } from '@/renderer/components/error-banner'
-import { ScreenHeader } from '@/renderer/components/screen-header'
-import { Screen, ScreenBody } from '@/renderer/components/screen'
+import { SettingsCard } from '@/renderer/components/settings-card'
 import { StatusPill } from '@/renderer/components/status-pill'
 import { useIpcQuery } from '@/renderer/data/query'
 import { ROUTE_IDS } from '@/renderer/router/routes'
+import { WIDE_CARD } from '@/renderer/settings/copy'
 import { formatAgo } from '@/renderer/lib/relative-time'
 import { auditRows } from '@/renderer/audit/model'
 import {
@@ -36,8 +36,8 @@ function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { st
   return 'config' in entry
 }
 
-export function AuditScreen() {
-  const search = useSearch({ from: ROUTE_IDS.audit })
+export function AuditTab() {
+  const search = useSearch({ from: ROUTE_IDS.settings })
   const navigate = useNavigate()
   const repoId = search.repo ?? null
   const number = search.number ?? null
@@ -49,73 +49,68 @@ export function AuditScreen() {
   const readAt = audit.data?.readAt ?? ''
 
   function setFilters(next: { readonly repo: RepoId | null; readonly number: number | null }): void {
-    void navigate({ to: ROUTE_IDS.audit, search: next })
+    void navigate({ to: ROUTE_IDS.settings, search: { section: 'audit', ...next }, replace: true })
   }
 
+  const actions = (
+    <>
+      <Select value={repoId ?? 'all'} onValueChange={(value) => setFilters({ repo: value === 'all' ? null : (value as RepoId), number: null })}>
+        <SelectTrigger className="w-48">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">{ALL_REPOSITORIES}</SelectItem>
+          {readyRepos.map((repo) => (
+            <SelectItem key={repo.id} value={repo.id}>
+              {repo.config.repo}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {number !== null ? (
+        <Button variant="outline" size="small" aria-label={REMOVE_TICKET_FILTER} onClick={() => setFilters({ repo: repoId, number: null })}>
+          #{number}
+          <X aria-hidden="true" className="size-3.5" />
+        </Button>
+      ) : null}
+      <Button variant="ghost" size="small" onClick={() => void audit.refetch()} disabled={audit.isFetching}>
+        <RefreshCw aria-hidden="true" className={audit.isFetching ? 'size-3.5 animate-spin' : 'size-3.5'} />
+        {REFRESH_LABEL}
+      </Button>
+    </>
+  )
+
   return (
-    <Screen
-      header={
-        <ScreenHeader className="justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <span>{AUDIT_TITLE}</span>
-            <Select value={repoId ?? 'all'} onValueChange={(value) => setFilters({ repo: value === 'all' ? null : (value as RepoId), number: null })}>
-              <SelectTrigger className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{ALL_REPOSITORIES}</SelectItem>
-                {readyRepos.map((repo) => (
-                  <SelectItem key={repo.id} value={repo.id}>
-                    {repo.config.repo}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {number !== null ? (
-              <Button variant="outline" size="small" aria-label={REMOVE_TICKET_FILTER} onClick={() => setFilters({ repo: repoId, number: null })}>
-                #{number}
-                <X aria-hidden="true" className="size-3.5" />
-              </Button>
-            ) : null}
-          </div>
-          <Button variant="ghost" size="small" onClick={() => void audit.refetch()} disabled={audit.isFetching}>
-            <RefreshCw aria-hidden="true" className={audit.isFetching ? 'size-3.5 animate-spin' : 'size-3.5'} />
-            {REFRESH_LABEL}
-          </Button>
-        </ScreenHeader>
-      }
-    >
-      <ScreenBody variant="list">
-        {audit.status === 'pending' ? (
-          <div className="flex flex-col gap-1 px-4 py-2">
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-9 w-full" />
-          </div>
-        ) : audit.status === 'error' ? (
-          <ErrorBanner message={INVOKE_ERROR} className="mx-4 my-2" />
-        ) : !audit.data.ok ? (
-          <ErrorBanner message={failureCopy(audit.data.kind, audit.data.message)} className="mx-4 my-2" />
-        ) : audit.data.entries.length === 0 ? (
-          filtered ? (
-            <EmptyState icon={ScrollText} message={emptyFilteredCopy(repoName, number)} action={{ label: SHOW_ALL_ACTION, onClick: () => setFilters({ repo: null, number: null }) }} className="px-4 py-6" data-slot="audit-empty" />
-          ) : (
-            <EmptyState icon={ScrollText} message={EMPTY_UNFILTERED} className="px-4 py-6" data-slot="audit-empty" />
-          )
+    <SettingsCard title={AUDIT_TITLE} className={WIDE_CARD} actions={actions}>
+      {audit.status === 'pending' ? (
+        <div className="flex flex-col gap-1">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+        </div>
+      ) : audit.status === 'error' ? (
+        <ErrorBanner message={INVOKE_ERROR} />
+      ) : !audit.data.ok ? (
+        <ErrorBanner message={failureCopy(audit.data.kind, audit.data.message)} />
+      ) : audit.data.entries.length === 0 ? (
+        filtered ? (
+          <EmptyState icon={ScrollText} message={emptyFilteredCopy(repoName, number)} action={{ label: SHOW_ALL_ACTION, onClick: () => setFilters({ repo: null, number: null }) }} className="py-6" data-slot="audit-empty" />
         ) : (
-          <div className="flex flex-col">
-            {auditRows(audit.data.entries).map((row) => (
-              <AuditRow key={row.key} row={row} readAt={readAt} />
-            ))}
-            {footnotes(audit.data.malformed, audit.data.previousPath, audit.data.entries.length).map((note) => (
-              <p key={note} className="px-4 py-1 text-meta text-muted-foreground">
-                {note}
-              </p>
-            ))}
-          </div>
-        )}
-      </ScreenBody>
-    </Screen>
+          <EmptyState icon={ScrollText} message={EMPTY_UNFILTERED} className="py-6" data-slot="audit-empty" />
+        )
+      ) : (
+        <div className="flex flex-col">
+          {auditRows(audit.data.entries).map((row) => (
+            <AuditRow key={row.key} row={row} readAt={readAt} />
+          ))}
+          {footnotes(audit.data.malformed, audit.data.previousPath, audit.data.entries.length).map((note) => (
+            <p key={note} className="py-1 text-meta text-muted-foreground">
+              {note}
+            </p>
+          ))}
+        </div>
+      )}
+    </SettingsCard>
   )
 }
 
@@ -126,7 +121,7 @@ function AuditRow({ row, readAt }: { readonly row: AuditRowView; readonly readAt
 
   return (
     <div className="flex flex-col" data-slot="audit-row">
-      <div className="flex h-9 items-center gap-3 px-4">
+      <div className="flex h-9 items-center gap-3">
         <Tooltip>
           <TooltipTrigger asChild>
             <span tabIndex={0} className="w-16 shrink-0 rounded-sm text-meta text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{formatAgo(new Date(readAt).getTime() - new Date(row.at).getTime())}</span>
@@ -153,7 +148,7 @@ function AuditRow({ row, readAt }: { readonly row: AuditRowView; readonly readAt
           </Button>
         ) : null}
       </div>
-      {open && row.detail !== null ? <p className="px-4 pb-2 text-meta text-muted-foreground">{row.detail}</p> : null}
+      {open && row.detail !== null ? <p className="pb-2 text-meta text-muted-foreground">{row.detail}</p> : null}
     </div>
   )
 }

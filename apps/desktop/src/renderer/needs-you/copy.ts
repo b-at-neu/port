@@ -23,6 +23,10 @@ export const GROUP_NAMES: Readonly<Record<NeedsYouGroupKey, string>> = {
   'launch-failed': 'Launch failures',
 }
 
+export function nothingInRepoCopy(repo: string): string {
+  return `Nothing in ${repo} needs you right now.`
+}
+
 export const LAUNCH_FAILED_HELP = 'port retries every few minutes. Fix the cause above and the next attempt picks it up.'
 
 export const LAUNCH_FAILED_NO_DETAIL = 'No error message was recorded.'

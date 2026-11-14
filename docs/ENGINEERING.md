@@ -225,7 +225,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `allow.ts` writes its commit through the Git Data API, from the oid `main/github/allow.ts` read the two files at, and appends one `AllowAuditEntry` per attempt; a stale `allow/…` branch fails with its name rather than being deleted or force-updated
 
 **`apps/desktop/src/renderer/audit/`**
-- reads `audit:list` only; the screen is read-only and makes no write
+- reads `audit:list` only; the Settings → Audit log tab is read-only and makes no write
 - `model.ts` is the one `AuditEntry` → row mapping
 
 **`apps/desktop/src/renderer/board/`**
