@@ -7,11 +7,10 @@ import type { StageLaunchRequest } from '@/types/dispatch'
 import type { FileResult, GitRunner, PathOps } from '@/types/platform'
 import type { StageInstructionsLoader, StageInstructionsResult } from '@/types/stage'
 import type { StageAgent } from '@/types/tick'
-import { LABEL_KEYS, labelName } from '@/utils/labels/vocabulary'
 import { KIND_PROMPT_NAMES, composeStagePrompt, stageModeOf } from '@/utils/stage/prompt'
 
 /** Every agent file is told to follow these `PIPELINE.md` sections, so they travel with its body. */
-export const STAGE_PIPELINE_SECTIONS = ['CLAUDE.md overrides', 'Operating rules (all stage agents)', 'Label lifecycle'] as const
+export const STAGE_PIPELINE_SECTIONS = ['CLAUDE.md overrides', 'Operating rules (all stage agents)', 'Hand-back line'] as const
 
 const PLUGIN_ROOT_VARIABLE = '${CLAUDE_PLUGIN_ROOT}'
 
@@ -130,10 +129,6 @@ export function buildStageContext(request: StageLaunchRequest, pluginRoot: strin
     ['branches.integration', config.branches.integration],
     ['branches.production', config.branches.production ?? 'null'],
   ]
-  for (const key of LABEL_KEYS) {
-    const name = labelName(config.vocabulary, key)
-    if (name !== undefined) context.push([`labels.${key}`, name])
-  }
   for (const [key, enabled] of Object.entries(config.modules)) context.push([`modules.${key}`, String(enabled)])
   context.push(['sessionRequiredPaths', JSON.stringify(config.sessionRequiredPaths)], ['reviewCycleCap', String(config.reviewCycleCap)])
   if (request.review !== null) context.push(['review.cycle', String(request.review.cycle)], ['review.selfAuthored', String(request.review.selfAuthored)])

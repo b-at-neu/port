@@ -244,6 +244,7 @@ export function registerIpc(): RegisteredIpc {
     store: hostedStore,
     registry: stageRegistry,
     onOutcome: (repoId, sessionKey, outcome) => dispatcherRef?.recordOutcome(repoId, sessionKey, outcome),
+    onResumedTurn: (repoId, sessionKey) => dispatcherRef?.recordResumedTurn(repoId, sessionKey),
     onDenial: (repoId, denial) => dispatcherRef?.recordDenial(repoId, denial),
     bundle: { isPackaged: app.isPackaged, mainDir: __dirname, resourcesPath: process.resourcesPath },
   })

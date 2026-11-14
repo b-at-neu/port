@@ -3,6 +3,7 @@
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import type { EndedStage } from '@/types/tick'
 import type { StageRecord } from '@/types/dispatch'
+import type { StageLabelResult } from '@/types/stage-labels'
 
 // Hosted snapshots whose `phase !== 'ended'` — operator and stage sessions
 // alike; stage sessions share the hosted cap.
@@ -26,11 +27,12 @@ export function refreshRecords(records: readonly StageRecord[], snapshotOf: (ses
 }
 
 // This repository's own ended stage-session records, newest per number — `main/tick/repair.ts`'s session-shape evidence, projected here rather than in `dispatcher.ts` to keep that file under its line limit.
-export function endedStagesOf(records: readonly StageRecord[]): readonly EndedStage[] {
+export function endedStagesOf(records: readonly StageRecord[], resultFor: (sessionKey: SessionKey) => StageLabelResult | null): readonly EndedStage[] {
   const newestByNumber = new Map<number, EndedStage>()
   for (const record of records) {
     if (record.state === 'started' || record.outcome === null) continue
-    const candidate: EndedStage = { agent: record.agent, number: record.number, outcome: record.outcome.kind, at: record.at }
+    const labels = record.sessionKey === null ? null : resultFor(record.sessionKey)
+    const candidate: EndedStage = { agent: record.agent, number: record.number, outcome: record.outcome.kind, at: record.at, labels }
     const existing = newestByNumber.get(record.number)
     if (existing === undefined || Date.parse(candidate.at) > Date.parse(existing.at)) newestByNumber.set(record.number, candidate)
   }

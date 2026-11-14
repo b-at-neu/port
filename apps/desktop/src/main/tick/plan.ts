@@ -387,7 +387,6 @@ export function planTick(params: PlanTickParams): TickReport {
     viewer: repository.viewer,
     readAt,
   })
-  const repaired = new Set(repairObservations.filter((o) => o.kind === 'liveness-reset').map((o) => o.number))
 
   const observations: readonly TickObservation[] = [
     ...repairObservations,
@@ -399,7 +398,6 @@ export function planTick(params: PlanTickParams): TickReport {
       viewer: repository.viewer,
       refreshMemo,
       checkDispositions,
-      repaired,
     }),
   ]
 

@@ -55,6 +55,7 @@ function fakeDeps(overrides: Partial<{ start: SessionStartResult }> = {}) {
   const releaseBranch = vi.fn().mockResolvedValue('deleted')
   const sweepBranches = vi.fn().mockResolvedValue({ done: true, deleted: [] })
   const onOutcome = vi.fn()
+  const onResumedTurn = vi.fn()
   const registryMock = { recordRunning: vi.fn(), markRunning: vi.fn(), setSessionId: vi.fn(), markInterrupted: vi.fn(), markAllQuit: vi.fn(), remove: vi.fn(), list: vi.fn(() => []), load: vi.fn() }
   const registry = registryMock as unknown as Parameters<typeof createStageLauncher>[0]['registry']
   const onDenial = vi.fn()
@@ -68,7 +69,7 @@ function fakeDeps(overrides: Partial<{ start: SessionStartResult }> = {}) {
     }),
   )
   const readTextFile = vi.fn((path: string) => Promise.resolve<FileResult<string>>(path === pathOps.join('/bundle', 'agents', 'impl-agent.md') ? { ok: true, value: '---\nname: impl-agent\ndescription: impl\ndisallowedTools: Agent\n---\nbody\n' } : { ok: false, kind: 'not-found', message: `ENOENT ${path}` }))
-  return { store, removeWorktree, createWorktree, releaseBranch, sweepBranches, onOutcome, close, dismiss, send, start, registry, registryMock, onDenial, newId, loadInstructions, bundleRoot: '/bundle', ops: pathOps, readTextFile }
+  return { store, removeWorktree, createWorktree, releaseBranch, sweepBranches, onOutcome, onResumedTurn, close, dismiss, send, start, registry, registryMock, onDenial, newId, loadInstructions, bundleRoot: '/bundle', ops: pathOps, readTextFile }
 }
 
 describe('createStageLauncher.launch', () => {
@@ -357,6 +358,29 @@ describe('createStageLauncher.observe', () => {
     // A later completed result on the same session is still classified.
     launcher.observe(baseSnapshot({ lastResult: { subtype: 'success', isError: false, text: 'all done now', at: 't2' } }))
     await vi.waitFor(() => expect(deps.close).toHaveBeenCalledWith('hosted-1'))
+  })
+
+  it('calls onResumedTurn exactly once when a blocked session streams again', async () => {
+    const deps = fakeDeps()
+    const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
+    await launcher.launch(request())
+    const blocked = { subtype: 'success', isError: false, text: 'BLOCKED: need a decision', at: 't1' }
+    launcher.observe(baseSnapshot({ phase: 'ready', lastResult: blocked }))
+    await vi.waitFor(() => expect(deps.onOutcome).toHaveBeenCalledTimes(1))
+    expect(deps.onResumedTurn).not.toHaveBeenCalled()
+    launcher.observe(baseSnapshot({ phase: 'streaming', lastResult: blocked }))
+    launcher.observe(baseSnapshot({ phase: 'streaming', lastResult: blocked }))
+    expect(deps.onResumedTurn).toHaveBeenCalledTimes(1)
+    expect(deps.onResumedTurn).toHaveBeenCalledWith(WIDGETS_ID, 'hosted-1')
+  })
+
+  it('does not call onResumedTurn for a session that never blocked', async () => {
+    const deps = fakeDeps()
+    const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
+    await launcher.launch(request())
+    launcher.observe(baseSnapshot({ phase: 'ready' }))
+    launcher.observe(baseSnapshot({ phase: 'streaming' }))
+    expect(deps.onResumedTurn).not.toHaveBeenCalled()
   })
 
   it('ignores a snapshot for an untracked session key', () => {

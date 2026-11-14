@@ -7,7 +7,7 @@ import type { CreateStageWorktreeParams, CreateStageWorktreeResult, ReleaseBranc
 import type { StageLaunchRequest, StageLaunchResult } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionDismissResult, SessionKey, SessionStartResult } from '@/types/hosting'
 
-import type { StageOutcome } from '@/types/stage-session'
+import type { StageOutcome, StageOutcomeKind } from '@/types/stage-session'
 import type { RepoId } from '@/utils/repos'
 import type { StageDenial, StageInstructionsLoader, StageResumeRequest } from '@/types/stage'
 import { proposedRule } from '@/main/stage/rule'
@@ -35,6 +35,8 @@ interface CreateStageLauncherParams {
   readonly sweepBranches: (root: string) => Promise<unknown>
   readonly now: () => Date
   readonly onOutcome: (repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome) => void
+  /** Fired once when a session that handed back `blocked` starts its next turn. */
+  readonly onResumedTurn: (repoId: RepoId, sessionKey: SessionKey) => void
   /** `stage-sessions.json`'s sole writer — every launch records `running` here, every hand-back clears or marks it. */
   readonly registry: StageRegistry
   /** The policy's `deny` arm, turned into a `StageDenial` — deduped and bounded on the dispatcher's own side. */
@@ -81,7 +83,7 @@ function cleanupFailureDetail(result: Exclude<SessionDismissResult, { readonly o
 }
 
 export function createStageLauncher(params: CreateStageLauncherParams): StageLauncherHandle {
-  const tracked = new Map<SessionKey, { readonly repoId: RepoId; readonly registryId: string; readonly root: string; readonly branch: string | null; readonly baseSha: string; lastSeenResultAt: string | null; sawSessionId: boolean }>()
+  const tracked = new Map<SessionKey, { readonly repoId: RepoId; readonly registryId: string; readonly root: string; readonly branch: string | null; readonly baseSha: string; lastSeenResultAt: string | null; sawSessionId: boolean; lastOutcome: StageOutcomeKind | null; blockedIdle: boolean }>()
   const swept = new Set<string>()
 
   async function removeAndRelease(root: string, path: string, branch: string | null, baseSha: string): Promise<RemoveSessionWorktreeOutcome> {
@@ -151,7 +153,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       return { ok: false, kind: 'failed', message: `could not send the resume prompt: ${sendResult.kind}` }
     }
 
-    tracked.set(sessionKey, { repoId: entry.repoId, registryId: entry.id, root: root.path, branch: entry.worktree.branch, baseSha: entry.worktree.baseSha, lastSeenResultAt: null, sawSessionId: false })
+    tracked.set(sessionKey, { repoId: entry.repoId, registryId: entry.id, root: root.path, branch: entry.worktree.branch, baseSha: entry.worktree.baseSha, lastSeenResultAt: null, sawSessionId: false, lastOutcome: null, blockedIdle: false })
     params.registry.markRunning(entry.id)
     return { ok: true, sessionKey }
   }
@@ -206,7 +208,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       return { ok: false, kind: 'failed', message: `could not send the stage prompt: ${sendResult.kind}` }
     }
 
-    tracked.set(sessionKey, { repoId: request.entry.id, registryId, root, branch: wt.branch, baseSha: wt.baseSha, lastSeenResultAt: null, sawSessionId: false })
+    tracked.set(sessionKey, { repoId: request.entry.id, registryId, root, branch: wt.branch, baseSha: wt.baseSha, lastSeenResultAt: null, sawSessionId: false, lastOutcome: null, blockedIdle: false })
     params.registry.recordRunning({
       id: registryId,
       repoId: request.entry.id,
@@ -235,7 +237,16 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     const resultAt = snapshot.lastResult?.at ?? null
     const newResult = resultAt !== null && resultAt !== entry.lastSeenResultAt
     const atEnd = snapshot.phase === 'ended'
-    if (!newResult && !atEnd) return
+    if (!newResult && !atEnd) {
+      if (entry.lastOutcome !== 'blocked') return
+      if (snapshot.phase !== 'streaming') entry.blockedIdle = true
+      else if (entry.blockedIdle) {
+        entry.lastOutcome = null
+        entry.blockedIdle = false
+        params.onResumedTurn(entry.repoId, snapshot.sessionKey)
+      }
+      return
+    }
     entry.lastSeenResultAt = resultAt
 
     const outcome = classifyHandback({
@@ -247,6 +258,8 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       operatorJoinedAt: snapshot.operatorJoinedAt,
     })
     if (outcome === null) return
+    entry.lastOutcome = outcome.kind
+    entry.blockedIdle = outcome.kind === 'blocked' && snapshot.phase !== 'streaming'
 
     serialize(() => settle(snapshot.sessionKey, entry.repoId, entry.registryId, outcome))
   }
@@ -283,7 +296,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       tracked.delete(sessionKey)
       const message = error instanceof Error ? error.message : String(error)
       params.registry.markInterrupted(registryId, 'error', `hand-back settle failed: ${message}`, null, outcome.costUsd)
-      params.onOutcome(repoId, sessionKey, { kind: 'error', detail: `hand-back settle failed: ${message}`, costUsd: outcome.costUsd, resetsAt: null, worktree: 'remove-failed', operatorJoined: outcome.operatorJoined })
+      params.onOutcome(repoId, sessionKey, { kind: 'error', detail: `hand-back settle failed: ${message}`, costUsd: outcome.costUsd, resetsAt: null, worktree: 'remove-failed', operatorJoined: outcome.operatorJoined, handback: null })
     }
   }
 
