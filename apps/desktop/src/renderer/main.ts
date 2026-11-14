@@ -7,9 +7,8 @@ import { connectItemActionPruning } from '@/renderer/board/screen'
 import { connectNeedsYouNotifications } from '@/renderer/needs-you/notify'
 import { mountReact } from '@/renderer/react/mount'
 import { themeStore } from '@/renderer/theme/store'
-import { trackLastRoute } from '@/renderer/shell/prefs'
 import { initSidebarCollapsed, listNavigatorFor, openNewSessionDialog, openPalette, setRenaming, toggleSidebarCollapsed } from '@/renderer/shell/stores'
-import { shellPrefs, setSidebarCollapsed } from '@/renderer/shell/prefs'
+import { isRepoScreenRoute, restoreHashOf, setLastRepo, shellPrefs, setSidebarCollapsed, trackLastRoute } from '@/renderer/shell/prefs'
 import { installKeyboardMap, runAppCommand } from '@/renderer/shell/keyboard'
 import type { KeyboardDeps } from '@/types/shell'
 import { liveSessionKeys, selectSession, setSessionsQueryClient } from '@/renderer/session/actions'
@@ -65,11 +64,14 @@ sharedSubscriptions().subscribe('app:command', (command) => runAppCommand(comman
 
 async function boot(): Promise<void> {
   router.subscribe('onResolved', () => {
-    trackLastRoute(router.state.location.pathname)
+    const { pathname, search } = router.state.location
+    trackLastRoute(pathname)
+    const repo: unknown = (search as Record<string, unknown>).repo
+    if (isRepoScreenRoute(pathname) && typeof repo === 'string' && repo !== '') setLastRepo(repo)
   })
   // Restores the last screen on a fresh launch; an explicit deep link wins.
-  const lastRoute = shellPrefs().lastRoute
-  if (lastRoute !== null && (location.hash === '' || location.hash === '#/')) router.history.replace(`#${lastRoute}`)
+  const restoreHash = restoreHashOf(shellPrefs())
+  if (restoreHash !== null && (location.hash === '' || location.hash === '#/')) router.history.replace(restoreHash)
   await router.load()
   if (await shouldRedirectToSetup(queryClient)) await router.navigate({ to: ROUTE_IDS.setup })
   // Seeds the `repos:list` cache once; `repositories/screen.tsx`'s own query keeps it current from here on.

@@ -1,14 +1,15 @@
-// Pure projection onto the sidebar's Pipelines section — one row per
-// registered repository.
+// Pure projection onto the sidebar — one group per registered repository, plus the sessions that
+// belong to none.
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import type { BoardSnapshot, NeedsYouItem } from '@/types/board'
 import type { DispatchOwner } from '@/types/dispatch'
-import type { HostedSessionSnapshot } from '@/types/hosting'
+import type { HostedSessionSnapshot, SessionMarks } from '@/types/hosting'
+import { orderSessions } from '@/utils/shell/session-order'
 import type { TicketIndex } from '@/types/ticket'
 import { repoNeedsYou } from '@/renderer/board/needs-you'
 import { ticketIndex, ticketLabel } from '@/utils/tickets/ticket'
 import type { PhaseTone, PillStatus } from '@/types/components'
-import type { PipelineRow, PipelineSessionRow, RunStateDisplay } from '@/types/shell'
+import type { PipelineRow, PipelineSessionRow, RunStateDisplay, SidebarModel } from '@/types/shell'
 import { stageKeyOf } from '@/renderer/board/row-model'
 import { stageAgentPhaseName } from '@/renderer/board/copy'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
@@ -100,12 +101,28 @@ function pillFor(snapshot: BoardSnapshot | undefined, repoId: RepoId, owner: Dis
   return { status: 'idle', label: 'Stopped' }
 }
 
-/** Lists only running sessions that do not need the operator, and their dots pulse. A not-`ready` repository gets a bare row with no menu; before the first read a ready row falls back to stopped. */
+/** Lists only running sessions that do not need the operator, and their dots pulse. A not-`ready` repository gets a bare row with no menu; before the first read a ready row falls back to stopped. Every row carries its own user sessions, and the rest go to `otherSessions`. */
 export function pipelinesModel(
   repos: readonly RepositoryEntry[],
   snapshot: BoardSnapshot | undefined,
   needsYou: readonly NeedsYouItem[],
   sessions: readonly HostedSessionSnapshot[] = [],
+  marks?: SessionMarks,
+): SidebarModel {
+  const userSessions = orderSessions(sessions, marks)
+  const registered = new Set<RepoId>(repos.map((entry) => entry.id))
+  return {
+    repos: repoRows(repos, snapshot, needsYou, sessions, userSessions),
+    otherSessions: userSessions.filter((session) => session.repoId === null || !registered.has(session.repoId)),
+  }
+}
+
+function repoRows(
+  repos: readonly RepositoryEntry[],
+  snapshot: BoardSnapshot | undefined,
+  needsYou: readonly NeedsYouItem[],
+  sessions: readonly HostedSessionSnapshot[],
+  userSessions: readonly HostedSessionSnapshot[],
 ): readonly PipelineRow[] {
   const needsYouNumbers = new Map<RepoId, Set<number>>()
   for (const item of needsYou) {
@@ -121,7 +138,8 @@ export function pipelinesModel(
     const index = ticketIndex(repoState !== undefined && repoState.ok ? repoState.items : [])
     const stageSessions = sessions.filter((s) => s.phase !== 'ended' && s.stage !== null && s.repoId === entry.id)
     const stageRows = stageSessions.filter(isRunning).map((s) => stageRowFor(entry.id, s, index))
-    if (!('config' in entry)) return { ready: false, repoId: entry.id, name: entry.displayName, sessions: stageRows }
+    const ownSessions = userSessions.filter((session) => session.repoId === entry.id)
+    if (!('config' in entry)) return { ready: false, repoId: entry.id, name: entry.displayName, sessions: stageRows, userSessions: ownSessions }
 
     const tick = snapshot?.tick.find((t) => t.repoId === entry.id)
     const numbers = needsYouNumbers.get(entry.id) ?? new Set<number>()
@@ -139,8 +157,9 @@ export function pipelinesModel(
       owner,
       unreadableMessage: dispatchStatus?.unreadableMessage ?? null,
       inFlight: tick?.claims.length ?? 0,
-      needsYou: repoNeedsYou(needsYou, entry.id) > 0,
+      needsYouCount: repoNeedsYou(needsYou, entry.id),
       sessions: [...itemRows.filter((row) => !stageNumbers.has(row.number)), ...stageRows],
+      userSessions: ownSessions,
     }
   })
 }

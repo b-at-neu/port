@@ -1,4 +1,4 @@
-import type { SessionKey } from '@/types/hosting'
+import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import type { RepoId } from '@/utils/repos'
 import type { DispatchOwner } from '@/types/dispatch'
 import type { PhaseTone, PillStatus } from '@/types/components'
@@ -44,8 +44,11 @@ export interface ReadyPipelineRow {
   readonly owner: DispatchOwner
   readonly unreadableMessage: string | null
   readonly inFlight: number
-  readonly needsYou: boolean
+  /** How many Needs you items belong to this repository — the same count its filtered screen lists. */
+  readonly needsYouCount: number
   readonly sessions: readonly PipelineSessionRow[]
+  /** The operator's own open sessions in this repository, pinned first. */
+  readonly userSessions: readonly HostedSessionSnapshot[]
 }
 
 interface NotReadyPipelineRow {
@@ -53,9 +56,24 @@ interface NotReadyPipelineRow {
   readonly repoId: RepoId
   readonly name: string
   readonly sessions: readonly PipelineSessionRow[]
+  readonly userSessions: readonly HostedSessionSnapshot[]
 }
 
 export type PipelineRow = ReadyPipelineRow | NotReadyPipelineRow
+
+export interface SidebarModel {
+  readonly repos: readonly PipelineRow[]
+  /** Open user sessions whose repository is `null` or not registered. */
+  readonly otherSessions: readonly HostedSessionSnapshot[]
+}
+
+export type RepoScreenKey = 'board' | 'needsYou' | 'backlog' | 'releases'
+
+/** The repo-scoped screen the route is showing. */
+export interface ActiveRepoScreen {
+  readonly repoId: RepoId
+  readonly screen: RepoScreenKey
+}
 
 /** The session the routed screen shows, as far as the sidebar can mark its row. */
 export type SidebarSelection =

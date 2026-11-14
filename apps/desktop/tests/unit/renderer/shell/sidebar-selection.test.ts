@@ -18,7 +18,7 @@ function detectedRow(rowKey: string, sessionId: string, agentId: string | null):
 }
 
 function repo(repoId: string, sessions: readonly PipelineSessionRow[]): PipelineRow {
-  return { ready: false, repoId: repoId as RepoId, name: repoId, sessions }
+  return { ready: false, repoId: repoId as RepoId, name: repoId, sessions, userSessions: [] }
 }
 
 const NONE = { sessionKey: undefined, transcriptSessionId: undefined, transcriptAgentId: undefined }
@@ -86,28 +86,41 @@ describe('isPipelineRowSelected', () => {
 describe('repoHoldsSelection', () => {
   const row = repo('a', [stageRow('a1', 'x'), stageRow('a2', 'y')])
 
-  it('is true for a collapsed repo holding the selected row', () => {
-    expect(repoHoldsSelection(row, true, 'a2')).toBe(true)
+  const screenOf = (repoId: string) => ({ repoId: repoId as RepoId, screen: 'backlog' as const })
+
+  it('is session for a collapsed repo holding the selected row', () => {
+    expect(repoHoldsSelection(row, true, 'a2', null)).toBe('session')
   })
 
-  it('is false for an expanded repo, since the row itself carries the selection', () => {
-    expect(repoHoldsSelection(row, false, 'a2')).toBe(false)
+  it('is session for a collapsed repo holding the open user session', () => {
+    const withUser: PipelineRow = { ...row, userSessions: [{ sessionKey: key('u1') } as PipelineRow['userSessions'][number]] }
+    expect(repoHoldsSelection(withUser, true, null, null, { kind: 'session', sessionKey: key('u1') })).toBe('session')
+    expect(repoHoldsSelection(withUser, true, null, null, { kind: 'session', sessionKey: key('u2') })).toBeNull()
   })
 
-  it('is false when nothing is selected or the selection is in another repo', () => {
-    expect(repoHoldsSelection(row, true, null)).toBe(false)
-    expect(repoHoldsSelection(row, true, 'b1')).toBe(false)
+  it('is screen for a collapsed repo holding the active screen', () => {
+    expect(repoHoldsSelection(row, true, null, screenOf('a'))).toBe('screen')
+  })
+
+  it('is null for an expanded repo, since the row itself carries the selection', () => {
+    expect(repoHoldsSelection(row, false, 'a2', screenOf('a'))).toBeNull()
+  })
+
+  it('is null when nothing is selected or the selection is in another repo', () => {
+    expect(repoHoldsSelection(row, true, null, null)).toBeNull()
+    expect(repoHoldsSelection(row, true, 'b1', screenOf('b'))).toBeNull()
   })
 })
 
 describe('repoToggleLabel', () => {
   it('names the action by collapse state', () => {
-    expect(repoToggleLabel('acme/widgets', false, false)).toBe('Collapse acme/widgets')
-    expect(repoToggleLabel('acme/widgets', true, false)).toBe('Expand acme/widgets')
+    expect(repoToggleLabel('acme/widgets', false, null)).toBe('Collapse acme/widgets')
+    expect(repoToggleLabel('acme/widgets', true, null)).toBe('Expand acme/widgets')
   })
 
-  it('says a collapsed repo contains the open session', () => {
-    expect(repoToggleLabel('acme/widgets', true, true)).toBe('Expand acme/widgets, contains the open session')
+  it('says a collapsed repo contains the open session or screen', () => {
+    expect(repoToggleLabel('acme/widgets', true, 'session')).toBe('Expand acme/widgets, contains the open session')
+    expect(repoToggleLabel('acme/widgets', true, 'screen')).toBe('Expand acme/widgets, contains the open screen')
   })
 })
 

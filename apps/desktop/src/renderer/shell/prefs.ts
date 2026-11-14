@@ -1,12 +1,13 @@
 // A malformed field falls back to its default rather than throwing — a
 // hand-edited or stale value must never crash the app on launch.
-import { RESTORABLE_ROUTES } from '@/renderer/router/routes'
+import { RESTORABLE_ROUTES, ROUTE_IDS } from '@/renderer/router/routes'
 
 interface ShellPrefs {
   readonly v: 1
   readonly sidebarCollapsed: boolean
   readonly collapsedRepos: readonly string[]
   readonly lastRoute: string | null
+  readonly lastRepo: string | null
   readonly selectedSession: string | null
 }
 
@@ -17,6 +18,7 @@ const DEFAULT_PREFS: ShellPrefs = {
   sidebarCollapsed: false,
   collapsedRepos: [],
   lastRoute: null,
+  lastRepo: null,
   selectedSession: null,
 }
 
@@ -35,6 +37,7 @@ export function parseShellPrefs(raw: string | null): ShellPrefs {
       sidebarCollapsed: typeof value.sidebarCollapsed === 'boolean' ? value.sidebarCollapsed : DEFAULT_PREFS.sidebarCollapsed,
       collapsedRepos: isStringArray(value.collapsedRepos) ? value.collapsedRepos : DEFAULT_PREFS.collapsedRepos,
       lastRoute: typeof value.lastRoute === 'string' && RESTORABLE_ROUTES.includes(value.lastRoute) ? value.lastRoute : DEFAULT_PREFS.lastRoute,
+      lastRepo: typeof value.lastRepo === 'string' && value.lastRepo !== '' ? value.lastRepo : DEFAULT_PREFS.lastRepo,
       selectedSession: typeof value.selectedSession === 'string' ? value.selectedSession : DEFAULT_PREFS.selectedSession,
     }
   } catch {
@@ -62,6 +65,24 @@ export function setRepoCollapsed(repoId: string, collapsed: boolean): void {
 
 export function setSelectedSession(claudeSessionId: string | null): void {
   writePrefs({ ...shellPrefs(), selectedSession: claudeSessionId })
+}
+
+export function setLastRepo(repoId: string): void {
+  writePrefs({ ...shellPrefs(), lastRepo: repoId })
+}
+
+const REPO_SCREEN_ROUTES: readonly string[] = [ROUTE_IDS.board, ROUTE_IDS.needsYou, ROUTE_IDS.backlog, ROUTE_IDS.releases]
+
+/** Whether `pathname` is one of the four screens a `?repo=` scopes. */
+export function isRepoScreenRoute(pathname: string): boolean {
+  return REPO_SCREEN_ROUTES.includes(pathname)
+}
+
+/** The hash a launch restores: a repo screen keeps its repository, any other route restores bare. */
+export function restoreHashOf(prefs: Pick<ShellPrefs, 'lastRoute' | 'lastRepo'>): string | null {
+  if (prefs.lastRoute === null) return null
+  if (prefs.lastRepo !== null && isRepoScreenRoute(prefs.lastRoute)) return `#${prefs.lastRoute}?repo=${encodeURIComponent(prefs.lastRepo)}`
+  return `#${prefs.lastRoute}`
 }
 
 /** Only a `RESTORABLE_ROUTES` pathname is persisted — a transient route never becomes the restore target. */

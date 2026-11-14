@@ -1,8 +1,9 @@
 // The Backlog screen — open, unclaimed issues per ready repo; Work on claims at once, or after a confirmation for a blocked ticket or an epic, and reports by toast. No `useEffect`: the list navigator is registered directly in the render body.
 import { useRef, useState } from 'react'
 import { useQueries, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { RefreshCw, ListTodo, ChevronDown, Loader2 } from 'lucide-react'
+import { SHOW_ALL_REPOSITORIES, unknownRepoCopy } from '@/renderer/lib/copy'
 import { CollapsibleGroupHeader } from '@/renderer/components/collapsible-group-header'
 import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
@@ -244,10 +245,14 @@ export function BacklogScreen() {
   const [hidden, setHidden] = useState<ReadonlySet<RepoId>>(() => readBacklogHiddenRepos())
   const now = new Date()
 
-  const readyRepos: readonly ReadyRepo[] = reposQuery.data?.ok === true ? reposQuery.data.repositories.filter(isReadyRepo).map((e) => ({ id: e.id, repo: e.config.repo })) : []
-  const notReadyRepos = reposQuery.data?.ok === true ? reposQuery.data.repositories.filter((e) => !isReadyRepo(e)) : []
+  const scopedRepo = useSearch({ from: ROUTE_IDS.backlog }).repo ?? null
 
-  const shownRepos = visibleRepos(readyRepos, hidden)
+  const entries = reposQuery.data?.ok === true ? reposQuery.data.repositories : []
+  const readyRepos: readonly ReadyRepo[] = entries.filter(isReadyRepo).map((e) => ({ id: e.id, repo: e.config.repo }))
+  const notReadyRepos = entries.filter((e) => !isReadyRepo(e) && (scopedRepo === null || e.id === scopedRepo))
+  const unknownRepo = scopedRepo !== null && reposQuery.data?.ok === true && !entries.some((e) => e.id === scopedRepo) ? scopedRepo : null
+
+  const shownRepos = scopedRepo !== null ? readyRepos.filter((r) => r.id === scopedRepo) : visibleRepos(readyRepos, hidden)
   const queries = useQueries({ queries: shownRepos.map((r) => ipcQueryOptions('backlog:list', { repoId: r.id })) })
 
   function toggleCollapsed(repoId: RepoId): void {
@@ -341,7 +346,7 @@ export function BacklogScreen() {
           <span>Backlog</span>
           <div className="flex items-center gap-2">
             {stale !== null ? <span className="text-meta font-normal text-attention-dot">Updated {relativeAge(new Date(stale).toISOString(), now)}</span> : null}
-            {readyRepos.length > 1 ? <RepoFilterMenu repos={readyRepos} hidden={hidden} onToggle={(id) => changeHidden(toggleHiddenRepo(hidden, id))} onShowAll={() => changeHidden(new Set())} /> : null}
+            {scopedRepo === null && readyRepos.length > 1 ? <RepoFilterMenu repos={readyRepos} hidden={hidden} onToggle={(id) => changeHidden(toggleHiddenRepo(hidden, id))} onShowAll={() => changeHidden(new Set())} /> : null}
             <Button variant="ghost" size="small" onClick={refreshAll} disabled={isFetching}>
               <RefreshCw aria-hidden="true" className={isFetching ? 'size-3.5 animate-spin' : 'size-3.5'} />
               Refresh
@@ -357,9 +362,11 @@ export function BacklogScreen() {
               <Skeleton className="h-5 w-full" />
               <Skeleton className="h-5 w-full" />
             </div>
+          ) : unknownRepo !== null ? (
+            <EmptyState icon={ListTodo} message={unknownRepoCopy(unknownRepo)} action={{ label: SHOW_ALL_REPOSITORIES, onClick: () => void navigate({ to: ROUTE_IDS.backlog, search: { repo: null } }) }} className="px-4 py-6" />
           ) : readyRepos.length === 0 ? (
             <EmptyState icon={ListTodo} message="Register a repository to see its open tickets." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.settings, search: { section: 'repositories' } }) }} className="px-4 py-6" />
-          ) : shownRepos.length === 0 ? (
+          ) : scopedRepo !== null && shownRepos.length === 0 ? null : shownRepos.length === 0 ? (
             <EmptyState icon={ListTodo} message={BACKLOG_ALL_HIDDEN} action={{ label: BACKLOG_REPO_FILTER_SHOW_ALL, onClick: () => changeHidden(new Set()) }} className="px-4 py-6" />
           ) : (
             groups.map((group) => {
