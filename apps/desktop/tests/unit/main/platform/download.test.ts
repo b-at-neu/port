@@ -9,6 +9,7 @@ class FakeItem extends EventEmitter {
   savePath: string | null = null
   received = 0
   total = 0
+  readonly cancel = vi.fn()
   constructor(private readonly chain: string[]) {
     super()
   }
@@ -99,10 +100,24 @@ describe('createFileDownloader', () => {
     expect(await result).toEqual({ ok: false, reason: 'interrupted', detail: state })
   })
 
-  it('times out when no download starts, and removes its listener', async () => {
+  it('times out when no download starts, and cancels a late item instead of letting it save', async () => {
     const { session, result } = setup()
 
     expect(await result).toEqual({ ok: false, reason: 'interrupted', detail: 'download never started' })
+
+    const late = new FakeItem([URL_])
+    session.emit('will-download', {}, late)
+    expect(late.cancel).toHaveBeenCalledOnce()
+    expect(late.savePath).toBeNull()
+    expect(session.listenerCount('will-download')).toBe(0)
+  })
+
+  it('stops watching for a late item after a further timeout window', async () => {
+    const { session, result } = setup()
+    await result
+
+    await new Promise((done) => setTimeout(done, 80))
+
     expect(session.listenerCount('will-download')).toBe(0)
   })
 

@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createUpdateDownloader } from '@/main/update/download'
 import type { UpdateDownloaderDeps } from '@/main/update/download'
@@ -50,7 +51,8 @@ function harness(overrides: Partial<UpdateDownloaderDeps> = {}): Harness {
   return { deps, download, open, reveal, requests, finish: (result) => finish(result) }
 }
 
-const completed: FileDownloadResult = { ok: true, path: `/downloads/${DMG}`, receivedBytes: SIZE }
+const SAVED = join('/downloads', DMG)
+const completed: FileDownloadResult = { ok: true, path: SAVED, receivedBytes: SIZE }
 
 beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => undefined)
@@ -64,7 +66,7 @@ describe('createUpdateDownloader', () => {
     void downloader.start()
 
     expect(downloader.state()).toMatchObject({ kind: 'downloading', version: '1.5.0', assetName: DMG, receivedBytes: 0, totalBytes: SIZE })
-    expect(h.requests[0]).toMatchObject({ url: ASSET.url, savePath: `/downloads/${DMG}` })
+    expect(h.requests[0]).toMatchObject({ url: ASSET.url, savePath: SAVED })
   })
 
   it('tracks progress and keeps the asset size when the transport reports no total', () => {
@@ -97,8 +99,8 @@ describe('createUpdateDownloader', () => {
     const done = downloader.start()
     h.finish(completed)
 
-    expect(await done).toMatchObject({ kind: 'ready', assetName: DMG, path: `/downloads/${DMG}`, package: 'dmg', opened: 'opened', openError: null })
-    expect(h.open).toHaveBeenCalledWith(`/downloads/${DMG}`)
+    expect(await done).toMatchObject({ kind: 'ready', assetName: DMG, path: SAVED, package: 'dmg', opened: 'opened', openError: null })
+    expect(h.open).toHaveBeenCalledWith(SAVED)
     expect(h.reveal).not.toHaveBeenCalled()
   })
 
@@ -110,7 +112,7 @@ describe('createUpdateDownloader', () => {
     h.finish(completed)
 
     expect(await done).toMatchObject({ kind: 'ready', opened: 'revealed', openError: 'no application' })
-    expect(h.reveal).toHaveBeenCalledWith(`/downloads/${DMG}`)
+    expect(h.reveal).toHaveBeenCalledWith(SAVED)
   })
 
   it('only reveals an AppImage', async () => {
@@ -227,7 +229,7 @@ describe('createUpdateDownloader', () => {
       await first
 
       expect(await downloader.open(true)).toMatchObject({ kind: 'ready' })
-      expect(h.reveal).toHaveBeenCalledWith(`/downloads/${DMG}`)
+      expect(h.reveal).toHaveBeenCalledWith(SAVED)
       expect(h.download).toHaveBeenCalledOnce()
     })
 

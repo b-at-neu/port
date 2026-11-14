@@ -16,6 +16,13 @@ export function createFileDownloader(session: Session, options: FileDownloaderOp
       const neverStarted = AbortSignal.timeout(startTimeoutMs)
       const giveUp = (): void => {
         session.removeListener('will-download', claim)
+        const cancelLate = (_event: unknown, item: DownloadItem): void => {
+          if (item.getURLChain()[0] !== url) return
+          session.removeListener('will-download', cancelLate)
+          item.cancel()
+        }
+        session.on('will-download', cancelLate)
+        AbortSignal.timeout(startTimeoutMs).addEventListener('abort', () => session.removeListener('will-download', cancelLate), { once: true })
         resolve({ ok: false, reason: 'interrupted', detail: 'download never started' })
       }
       const claim = (_event: unknown, item: DownloadItem): void => {
