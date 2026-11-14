@@ -1,10 +1,18 @@
 // Flow: collapse a Backlog section, filter repositories, and keep both across a reload.
 import { expect, test } from '@playwright/test'
+import type { Page } from '@playwright/test'
 import { assertNoDisallowedCalls, launchE2EApp } from './harness/app.mjs'
 import type { E2EApp } from './harness/app.mjs'
 import { sandboxState } from './fake/state.mjs'
 
 let harness: E2EApp
+
+// With two repositories the sidebar has one Backlog link per repo group, so open the unscoped screen by route.
+async function openAllBacklog(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    window.location.hash = '#/backlog'
+  })
+}
 
 test.beforeEach(async () => {
   harness = await launchE2EApp({
@@ -28,7 +36,7 @@ test.afterEach(async ({}) => {
 
 test('collapses a section, skips it with the keyboard, and keeps it collapsed after a reload', async () => {
   const { page } = harness
-  await page.getByRole('link', { name: 'Backlog', exact: true }).click()
+  await openAllBacklog(page)
 
   const widgets = page.locator('[data-slot="backlog-group"][data-repo="acme/widgets"]')
   const gadgets = page.locator('[data-slot="backlog-group"][data-repo="acme/gadgets"]')
@@ -45,7 +53,7 @@ test('collapses a section, skips it with the keyboard, and keeps it collapsed af
 
   await harness.relaunch()
   const relaunched = harness.page
-  await relaunched.getByRole('link', { name: 'Backlog', exact: true }).click()
+  await openAllBacklog(relaunched)
   const widgetsAfter = relaunched.locator('[data-slot="backlog-group"][data-repo="acme/widgets"]')
   const gadgetsAfter = relaunched.locator('[data-slot="backlog-group"][data-repo="acme/gadgets"]')
   await expect(gadgetsAfter.locator('[data-slot="backlog-row"]')).toHaveCount(3)
@@ -55,7 +63,7 @@ test('collapses a section, skips it with the keyboard, and keeps it collapsed af
 
 test('hides a repository from the filter, keeps it hidden after a reload, and restores it with Show all', async () => {
   const { page } = harness
-  await page.getByRole('link', { name: 'Backlog', exact: true }).click()
+  await openAllBacklog(page)
 
   const gadgets = page.locator('[data-slot="backlog-group"][data-repo="acme/gadgets"]')
   await expect(gadgets).toBeVisible()
@@ -71,7 +79,7 @@ test('hides a repository from the filter, keeps it hidden after a reload, and re
 
   await harness.relaunch()
   const relaunched = harness.page
-  await relaunched.getByRole('link', { name: 'Backlog', exact: true }).click()
+  await openAllBacklog(relaunched)
   const filterAfter = relaunched.locator('[data-slot="backlog-repo-filter"]')
   const gadgetsAfter = relaunched.locator('[data-slot="backlog-group"][data-repo="acme/gadgets"]')
   await expect(filterAfter).toHaveText('Repositories · 1 of 2')

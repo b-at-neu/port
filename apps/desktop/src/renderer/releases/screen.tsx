@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import { useQueries, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { ExternalLink, Loader2, RefreshCw, Tag } from 'lucide-react'
-import { SHOW_ALL_REPOSITORIES, unknownRepoCopy } from '@/renderer/lib/copy'
+import { SHOW_ALL_REPOSITORIES, releasesNotReadyCopy, unknownRepoCopy } from '@/renderer/lib/copy'
 import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
@@ -210,6 +210,8 @@ export function ReleasesScreen() {
   const entries = reposQuery.data?.ok === true ? reposQuery.data.repositories : []
   const readyRepos = entries.filter(isReadyRepo).filter((entry) => scopedRepo === null || entry.id === scopedRepo).map((entry) => ({ id: entry.id, repo: entry.config.repo }))
   const unknownRepo = scopedRepo !== null && reposQuery.data?.ok === true && !entries.some((entry) => entry.id === scopedRepo) ? scopedRepo : null
+  const scopedEntry = entries.find((entry) => entry.id === scopedRepo)
+  const scopedLabel = scopedEntry === undefined ? '' : 'config' in scopedEntry ? scopedEntry.config.repo : scopedEntry.displayName
   const queries = useQueries({
     queries: readyRepos.map((repo) => ({ ...ipcQueryOptions('release:status', { repoId: repo.id }), refetchInterval: refetchIntervalFor })),
   })
@@ -279,7 +281,9 @@ export function ReleasesScreen() {
             </div>
           ) : unknownRepo !== null ? (
             <EmptyState icon={Tag} message={unknownRepoCopy(unknownRepo)} action={{ label: SHOW_ALL_REPOSITORIES, onClick: () => void navigate({ to: ROUTE_IDS.releases, search: { repo: null } }) }} className="px-4 py-6" />
-          ) : readyRepos.length === 0 && scopedRepo !== null ? null : readyRepos.length === 0 ? (
+          ) : readyRepos.length === 0 && scopedRepo !== null ? (
+            <EmptyState icon={Tag} message={releasesNotReadyCopy(scopedLabel)} action={{ label: SHOW_ALL_REPOSITORIES, onClick: () => void navigate({ to: ROUTE_IDS.releases, search: { repo: null } }) }} className="px-4 py-6" />
+          ) : readyRepos.length === 0 ? (
             <EmptyState icon={Tag} message={NO_REPOSITORIES} action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.settings, search: { section: 'repositories' } }) }} className="px-4 py-6" />
           ) : (
             groups.map((group) => (
