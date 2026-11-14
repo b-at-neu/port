@@ -10,6 +10,7 @@ import { itemActionState, runItemAction, subscribeItemActions } from '@/renderer
 import { isDispatchedRow, phaseLabelFor, phaseToneFor } from '@/renderer/board/row-model'
 import { prSuffixOf } from '@/utils/tickets/ticket'
 import { BlockedOnTag } from '@/renderer/components/blocked-on-tag'
+import { HeldTag } from '@/renderer/components/held-tag'
 import { NextActionLink } from '@/renderer/components/next-action-link'
 import { PhasePill } from '@/renderer/components/phase-pill'
 import { PHASE_EDGE_CLASS } from '@/renderer/components/phase-classes'
@@ -110,6 +111,7 @@ export function TicketCard({ row, ungated, rowProps }: TicketCardProps) {
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <PhasePill tone={tone} label={phaseLabelFor(row)} className="shrink-0" />
+        {row.held !== null ? <HeldTag held={row.held} /> : null}
         {ungated ? (
           <span title={ungatedTagTitle()} className="shrink-0 rounded-full bg-attention-pill px-1.5 py-0.5 text-meta text-attention-pill-foreground">
             {ungatedTagLabel()}

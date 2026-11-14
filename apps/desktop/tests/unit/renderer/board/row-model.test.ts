@@ -76,6 +76,7 @@ function row(overrides: {
     viewer: null,
     autoApproving: overrides.autoApproving ?? false,
     blockedOn: null,
+    held: null,
   }
 }
 

@@ -3,6 +3,7 @@ import type { RepoId } from '@/utils/repos'
 import type { PipelineState, ReconciledItem, RepositoryState } from '@/types/state'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS, initialHealth } from '@/types/board'
 import type { BoardSnapshot, RepositoryHealth } from '@/types/board'
+import type { TickHeld, TickReport } from '@/types/tick'
 import { boardSignature, displayStatus, projectBoard, stageLabelOf } from '@/renderer/board/project'
 import { boardSections } from '@/renderer/board/sections'
 import { stageSession } from '../../../fixtures/stage-session'
@@ -258,6 +259,39 @@ describe('projectBoard — one row per ticket', () => {
   it('ignores an approving number listed under another repository', () => {
     const snapshot = { ...snapshotOf([readyRepo({ items: [item({ number: 5 })] })], [health()]), autoPlan: [{ repoId: 'repo-b' as RepoId, approving: [5] }] }
     expect(projectBoard({ snapshot, now: NOW }).rows[0]?.autoApproving).toBe(false)
+  })
+
+  describe('held', () => {
+    const REPO_A = 'repo-a' as RepoId
+    const entry: TickHeld = { number: 5, kind: 'issue', trigger: 'ready', reason: 'check-hold', contention: null, escalation: { kind: 'check-hold', checks: ['e2e'], state: 'red', escalateAt: null } }
+    const tick = (overrides: Partial<TickReport>): TickReport => ({
+      repoId: REPO_A,
+      displayName: 'o/a',
+      blind: null,
+      actionable: [],
+      held: [entry],
+      claims: [],
+      disabledStages: [],
+      nextTickAt: NOW.toISOString(),
+      observations: [],
+      autoApprovals: [],
+      labelRepairs: [],
+      ...overrides,
+    })
+    const withTick = (report: TickReport) =>
+      ({ ...snapshotOf([readyRepo({ items: [item({ number: 5 }), item({ number: 6 })] })], [health()]), tick: [report], dispatch: [{ repoId: REPO_A, owner: 'app', interrupted: [] }] }) as unknown as BoardSnapshot
+
+    it("attaches a row's own holds and its repository's owner", () => {
+      const rows = projectBoard({ snapshot: withTick(tick({})), now: NOW }).rows
+      expect(rows[0]?.held?.entries[0]?.reason).toBe('check-hold')
+      expect(rows[0]?.held?.owner).toBe('app')
+      expect(rows[1]?.held).toBeNull()
+    })
+
+    it('is null for a blind report', () => {
+      const rows = projectBoard({ snapshot: withTick(tick({ blind: { reason: 'not-ready' } })), now: NOW }).rows
+      expect(rows[0]?.held).toBeNull()
+    })
   })
 
   it('sorts rows by the ticket number', () => {

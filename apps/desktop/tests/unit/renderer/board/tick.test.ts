@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { TickActionable, TickClaim, TickHeld, TickObservation, TickReport } from '@/types/tick'
-import { cycleDetailCopy, heldDetailCopy, itemDetailLines, observationDetailCopy, stalledDetailCopy, storeBannerCopy, uncheckedDetailCopy } from '@/renderer/board/tick'
+import { cycleDetailCopy, heldDetailCopy, heldEntriesFor, heldTagLabel, itemDetailLines, observationDetailCopy, stalledDetailCopy, storeBannerCopy, uncheckedDetailCopy } from '@/renderer/board/tick'
 
 const NOW = new Date('2026-01-01T00:00:00.000Z')
 
@@ -109,7 +109,9 @@ describe('heldDetailCopy', () => {
       contention: null,
       escalation: { kind: 'check-hold', checks: ['run-e2e (macos-latest)'], state: 'pending', escalateAt: null },
     }
-    expect(heldDetailCopy(held)).toBe("#594 held — waiting for `run-e2e (macos-latest)` to finish its re-run. It's re-reviewed once it passes.")
+    expect(heldDetailCopy(held)).toBe(
+      "#594 held — waiting for `run-e2e (macos-latest)` to finish its re-run. It's re-reviewed once it passes, or post a `## Gate cleared` comment on the PR to authorise one review now.",
+    )
   })
 
   it('names the deadline for a red check-hold, and drops the clause without one', () => {
@@ -123,9 +125,11 @@ describe('heldDetailCopy', () => {
       contention: null,
       escalation: { kind: 'check-hold', checks: ['a', 'b'], state: 'red', escalateAt },
     }
-    expect(heldDetailCopy(red)).toBe(`#594 held — \`a\`, \`b\` are still red on the reviewed head. Re-run them on GitHub; it escalates to needs human at ${time} if they stay red.`)
+    expect(heldDetailCopy(red)).toBe(
+      `#594 held — \`a\`, \`b\` are still red on the reviewed head. Re-run them on GitHub, or post a \`## Gate cleared\` comment on the PR to authorise one review. It escalates to needs human at ${time} if they stay red.`,
+    )
     const open: TickHeld = { ...red, escalation: { kind: 'check-hold', checks: ['a'], state: 'red', escalateAt: null } }
-    expect(heldDetailCopy(open)).toBe('#594 held — `a` is still red on the reviewed head. Re-run it on GitHub.')
+    expect(heldDetailCopy(open)).toBe('#594 held — `a` is still red on the reviewed head. Re-run it on GitHub, or post a `## Gate cleared` comment on the PR to authorise one review.')
   })
 
   it('names the red integration check and its deadline for an integration-red hold, and says so when it cannot read the branch', () => {
@@ -234,6 +238,58 @@ describe('itemDetailLines', () => {
 
   it('is empty for a blind repository', () => {
     expect(itemDetailLines(report({ blind: { reason: 'viewer-unknown' } }), 1, 'none')).toEqual([])
+  })
+
+  it('prints the same held lines the card tag carries', () => {
+    const entries = [
+      { number: 1, kind: 'issue', trigger: 'ready', reason: 'unowned', contention: null, escalation: null },
+      { number: 1, kind: 'issue', trigger: 'ready', reason: 'other-operator', contention: null, escalation: null },
+    ] satisfies TickHeld[]
+    const rep = report({ held: entries })
+    const tagLines = heldEntriesFor(rep, 1, 'issue').map((entry) => heldDetailCopy(entry, 'app'))
+    expect(itemDetailLines(rep, 1, 'app')).toEqual(tagLines)
+  })
+})
+
+describe('heldTagLabel', () => {
+  const base: TickHeld = { number: 7, kind: 'pull-request', trigger: 'readyForReview', reason: 'unowned', contention: null, escalation: null }
+  const check = (state: 'pending' | 'red'): TickHeld => ({ ...base, reason: 'check-hold', escalation: { kind: 'check-hold', checks: ['a'], state, escalateAt: null } })
+
+  it('labels each reason', () => {
+    expect(heldTagLabel(check('pending'))).toBe('Held · check pending')
+    expect(heldTagLabel(check('red'))).toBe('Held · check red')
+    expect(heldTagLabel(base)).toBe('Held · unassigned')
+    expect(heldTagLabel({ ...base, reason: 'other-operator' })).toBe("Held · someone else's")
+    expect(heldTagLabel({ ...base, reason: 'session-required' })).toBe('Held · session required')
+    expect(heldTagLabel({ ...base, reason: 'cycle-cap' })).toBe('Held · cycle cap')
+    expect(heldTagLabel({ ...base, reason: 'zero-diff' })).toBe('Held · already reviewed')
+    expect(heldTagLabel({ ...base, reason: 'integration-red' })).toBe('Held · integration red')
+    expect(heldTagLabel({ ...base, reason: 'integration-green' })).toBe('Held · refreshing')
+    expect(heldTagLabel({ ...base, reason: 'refresh-wins' })).toBe('Held · refresh first')
+    expect(heldTagLabel({ ...base, reason: 'conflicting' })).toBe('Held · conflicts')
+    expect(heldTagLabel({ ...base, reason: 'mergeability-unknown' })).toBe('Held · checking mergeable')
+  })
+
+  it('names the blocker for a contended hold, and falls back without one', () => {
+    expect(heldTagLabel({ ...base, reason: 'contended', contention: { blocker: 12, blockerStage: 'implement', depth: 1, paths: ['a'] } })).toBe('Held · behind #12')
+    expect(heldTagLabel({ ...base, reason: 'contended' })).toBe('Held · contended')
+  })
+})
+
+describe('heldEntriesFor', () => {
+  const issue: TickHeld = { number: 1, kind: 'issue', trigger: 'ready', reason: 'unowned', contention: null, escalation: null }
+  const pr: TickHeld = { ...issue, kind: 'pull-request', trigger: 'refreshBranch', reason: 'conflicting' }
+
+  it('is empty for an absent or blind report', () => {
+    expect(heldEntriesFor(undefined, 1, 'issue')).toEqual([])
+    expect(heldEntriesFor(report({ held: [issue], blind: { reason: 'viewer-unknown' } }), 1, 'issue')).toEqual([])
+  })
+
+  it('matches on number and kind, and returns both entries for one number', () => {
+    const rep = report({ held: [issue, pr, { ...issue, number: 2 }] })
+    expect(heldEntriesFor(rep, 1, 'issue')).toEqual([issue])
+    expect(heldEntriesFor(rep, 1, 'pull-request')).toEqual([pr])
+    expect(heldEntriesFor(report({ held: [issue, { ...pr, kind: 'issue' }] }), 1, 'issue')).toHaveLength(2)
   })
 })
 

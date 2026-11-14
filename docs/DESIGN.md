@@ -192,13 +192,14 @@ Scoping epics and analytics are out of scope for the first release.
 - repo tag;
 - `PhaseBar`;
 - phase pill;
+- held tag, on a held item only: `Held · <reason>`, with the full reason and its unblocking action in the tooltip;
 - blocked-on tag, on a blocked ticket only: the open dependency it waits on, else the agent's or the ticket's reason, else "Reason on ticket";
 - the one next action as a link ("Review plan", "Open PR", "Refresh").
 
 **Board card anatomy, top to bottom** (kanban view):
 - ticket number (`muted-foreground`, mono, tabular), the muted `(PR#537)` suffix, a "No ticket" tag on an unlinked PR, then on the right 16px icons with tooltips for Auto-plan and Dispatched. The kanban never shows a repo tag, because the lane, or the filter, names the repository;
 - title, clamped to two lines;
-- phase pill, blocked-on tag on a blocked ticket only, then the one next action as a link. An ungated PR in Needs you adds an `attention` "Ungated" tag and shows **Add gate label** in the action slot;
+- phase pill, held tag on a held item only (`Held · <reason>`, full reason and its unblocking action in the tooltip), blocked-on tag on a blocked ticket only, then the one next action as a link. An ungated PR in Needs you adds an `attention` "Ungated" tag and shows **Add gate label** in the action slot;
 - a 4px left edge in the card's own phase dot colour (`needs-you` red for a card that waits on you). Each column header is a `PhaseDot`, the name and a count over a 2px rule in the column's dot colour: Queued `idle`, then plan, implement, review, revise and `needs-you`. Column bodies stay on `background`.
 
 **Board lanes** (kanban view, All repositories, two or more ready repositories):

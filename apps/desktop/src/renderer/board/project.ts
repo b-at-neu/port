@@ -7,9 +7,12 @@ import type { RepoId } from '@/utils/repos'
 import { ticketIndex } from '@/utils/tickets/ticket'
 import type { ReconciledItem, RepositoryFreshness, RepositoryState, StageLabel } from '@/types/state'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/types/board'
-import type { BoardItemRow, BoardProjection, BoardRepositorySummary, BoardSnapshot, DisplayStatus, LiveStage, RepositoryHealth, SourceHealth, SourceKind } from '@/types/board'
+import type { BoardItemRow, BoardProjection, BoardRepositorySummary, BoardSnapshot, DisplayStatus, LiveStage, RepositoryHealth, RowHeld, SourceHealth, SourceKind } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import { blockedOnOf } from '@/renderer/board/blocked-on'
+import { heldEntriesFor } from '@/renderer/board/tick'
+import type { DispatchOwner } from '@/types/dispatch'
+import type { TickReport } from '@/types/tick'
 
 /** The eventual-consistency suppression; `item.status` is never rewritten. Fails toward under-reporting — renders `in-flight` rather than a possibly-phantom `stalled`. */
 export function displayStatus(item: { readonly status: string }, repoHealth: RepositoryHealth | undefined, freshness: RepositoryFreshness, now: Date): DisplayStatus {
@@ -116,6 +119,11 @@ function newestLive(candidates: readonly (LiveStageEntry | undefined)[]): LiveSt
   return newest
 }
 
+function rowHeldOf(report: TickReport | undefined, owner: DispatchOwner | undefined, item: ReconciledItem): RowHeld | null {
+  const entries = heldEntriesFor(report, item.number, item.kind)
+  return entries.length > 0 ? { entries, owner: owner ?? 'none' } : null
+}
+
 /** Everything the board renders, computed once. Pure over an already-built
  *  `BoardSnapshot` — no IPC, no timer, no DOM. */
 export function projectBoard(params: ProjectBoardParams): BoardProjection {
@@ -129,6 +137,9 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
   // A row whose (repoId, number) is interrupted overrides to `interrupted`, whatever `item.status` says.
   const interruptedKeys = new Set(snapshot.dispatch.flatMap((d) => d.interrupted.map((i) => `${d.repoId}:${String(i.number)}`)))
   const autoApprovingKeys = new Set(snapshot.autoPlan.flatMap((status) => status.approving.map((number) => `${status.repoId}:${String(number)}`)))
+
+  const reportByRepo = new Map<RepoId, TickReport>(snapshot.tick.map((report) => [report.repoId, report]))
+  const ownerByRepo = new Map<RepoId, DispatchOwner | undefined>(snapshot.dispatch.map((d) => [d.repoId, d.owner]))
 
   const rows: BoardItemRow[] = []
   for (const repo of readyRepos) {
@@ -148,7 +159,7 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
       const stageLabel = stageLabelOf(item)
       const autoApproving = autoApprovingKeys.has(`${repo.repoId}:${String(item.number)}`)
       const blockedOn = blockedOnOf({ ticket, stageKey: stageLabel?.key, sessions, repoId: repo.repoId })
-      rows.push({ item, ticket, displayStatus: ds, liveStage, stageLabel, actions, decisions, viewer: repo.viewer, autoApproving, blockedOn })
+      rows.push({ item, ticket, displayStatus: ds, liveStage, stageLabel, actions, decisions, viewer: repo.viewer, autoApproving, blockedOn, held: rowHeldOf(reportByRepo.get(repo.repoId), ownerByRepo.get(repo.repoId), item) })
     }
   }
   rows.sort((a, b) => compareRows(a, b, displayNameOf))

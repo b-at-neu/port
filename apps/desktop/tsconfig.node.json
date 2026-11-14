@@ -20,6 +20,7 @@
     "src/renderer/board/needs-you.ts",
     "src/renderer/board/project.ts",
     "src/renderer/board/stage-links.ts",
+    "src/renderer/board/tick.ts",
     "src/types/**/*",
     "src/utils/**/*",
     "tests/unit/main/**/*",
