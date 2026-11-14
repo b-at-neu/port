@@ -198,7 +198,10 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
     hash: '#/backlog',
     container: '#app',
     ready: '[data-slot="backlog-row"]',
-    variants: [{ name: 'repo-filter', click: '[data-slot="backlog-repo-filter"]', ready: '[role="menu"]' }],
+    variants: [
+      { name: 'repo-filter', click: '[data-slot="backlog-repo-filter"]', ready: '[role="menu"]' },
+      { name: 'epic-collapsed', click: '[data-slot="backlog-epic-toggle"]', ready: '[data-slot="backlog-epic"][data-collapsed="true"]' },
+    ],
   },
   releases: {
     hash: '#/releases',
