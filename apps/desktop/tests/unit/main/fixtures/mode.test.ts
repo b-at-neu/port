@@ -67,13 +67,13 @@ describe('fixtureMode', () => {
     })
   })
 
-  it.each(['unregistered', 'failing', 'registry-error', 'update-available', 'update-downloading', 'update-download-failed'])('is on with the %s scenario when requested', (scenario) => {
+  it.each(['unregistered', 'failing', 'registry-error', 'update-available', 'update-downloading', 'update-download-failed', 'attention'])('is on with the %s scenario when requested', (scenario) => {
     expect(fixtureMode({ [FIXTURE_ENV.flag]: '1', [FIXTURE_ENV.userData]: '/tmp/fixtures', [FIXTURE_ENV.scenario]: scenario }, false, DEV, isAbsolutePosix)).toEqual({ kind: 'on', userData: '/tmp/fixtures', scenario })
   })
 
   it('is invalid when the scenario is unrecognised, naming every allowed value', () => {
     const result = fixtureMode({ [FIXTURE_ENV.flag]: '1', [FIXTURE_ENV.userData]: '/tmp/fixtures', [FIXTURE_ENV.scenario]: 'bogus' }, false, DEV, isAbsolutePosix)
-    expect(result).toEqual({ kind: 'invalid', reason: 'PORT_FIXTURES_SCENARIO must be one of: populated, empty, unregistered, failing, registry-error, update-available, update-downloading, update-download-failed' })
+    expect(result).toEqual({ kind: 'invalid', reason: 'PORT_FIXTURES_SCENARIO must be one of: populated, empty, unregistered, failing, registry-error, update-available, update-downloading, update-download-failed, attention' })
   })
 
   it('is on in a packaged build when the build honours the flag packaged', () => {

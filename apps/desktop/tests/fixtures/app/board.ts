@@ -242,6 +242,7 @@ export function gadgetsRepositoryState(now: Date): RepositoryState {
 
 /** `tick` is built with the real `planTick` over a fresh ledger, same as the real app gets on every restart. No dispatcher is wired in fixture mode — nothing in this module spawns anything. */
 export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'populated'): BoardSnapshot {
+  const attention = scenario === 'attention'
   const ready = readyRepositoryState(now, scenario)
   const notReady = notReadyRepositoryState()
   const gadgets = gadgetsRepositoryState(now)
@@ -254,15 +255,16 @@ export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'pop
   const nextDecisionAt = new Date(now.getTime() + SOURCE_BASE_INTERVAL_MS.github)
 
   // Stands in for the earlier tick a fresh ledger never saw, so the stalled seed's first observation here classifies as a reset rather than a first sighting.
-  if (scenario !== 'empty') ledger.advance(WIDGETS_ID, 54, { class: 'suspect', nextState: 'suspect', nextResets: 0 })
+  if (attention) ledger.advance(WIDGETS_ID, 54, { class: 'suspect', nextState: 'suspect', nextResets: 0 })
 
   const tickParams = { ledger, unknownStreaks, nextDecisionAt, now: () => now, reviewCycleCap: readyEntry.config.reviewCycleCap, startedTasks: [], refreshMemo, checkDispositions: readyEntry.config.checkDispositions, holdSessionRequired: true }
   const gadgetsTickParams = { ...tickParams, reviewCycleCap: gadgetsEntryConfig.config.reviewCycleCap, checkDispositions: gadgetsEntryConfig.config.checkDispositions }
-  const tick = [planTick({ repository: ready, ...tickParams }), planTick({ repository: notReady, ...tickParams }), planTick({ repository: gadgets, ...gadgetsTickParams })]
+  const repositories = attention ? [ready, notReady, gadgets] : [ready, gadgets]
+  const tick = [planTick({ repository: ready, ...tickParams }), ...(attention ? [planTick({ repository: notReady, ...tickParams })] : []), planTick({ repository: gadgets, ...gadgetsTickParams })]
 
   return {
     state: {
-      repositories: [ready, notReady, gadgets],
+      repositories,
       sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 1, scanMs: 1, scannedAt: now.toISOString() },
       readAt: now.toISOString(),
     },
@@ -318,11 +320,11 @@ export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'pop
           line: null,
           problem: null,
           costUsd: null,
-          notes: scenario === 'empty' ? [] : [{ kind: 'escalated', number: 44, needsHumanLabel: LABEL_DEFAULTS.find((def) => def.key === 'needsHuman')?.name ?? 'needsHuman', commentFailedMessage: null }],
+          notes: !attention ? [] : [{ kind: 'escalated', number: 44, needsHumanLabel: LABEL_DEFAULTS.find((def) => def.key === 'needsHuman')?.name ?? 'needsHuman', commentFailedMessage: null }],
         },
         observed: [],
         denials: [],
-        interrupted: scenario === 'empty' ? [] : interruptedStages(now),
+        interrupted: attention ? interruptedStages(now) : [],
       },
     ],
     autoPlan: [],

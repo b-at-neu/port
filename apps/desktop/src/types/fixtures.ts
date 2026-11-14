@@ -1,4 +1,4 @@
-export const FIXTURE_SCENARIOS = ['populated', 'empty', 'unregistered', 'failing', 'registry-error', 'update-available', 'update-downloading', 'update-download-failed'] as const
+export const FIXTURE_SCENARIOS = ['populated', 'empty', 'unregistered', 'failing', 'registry-error', 'update-available', 'update-downloading', 'update-download-failed', 'attention'] as const
 
 export type FixtureScenario = (typeof FIXTURE_SCENARIOS)[number]
 
