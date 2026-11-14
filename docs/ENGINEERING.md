@@ -41,6 +41,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 **`apps/desktop/electron-builder.config.mjs`**
 - the packaging boundary, with `apps/desktop/scripts/`
 - `bundle-audit.mjs` is pure — `node:` builtins only, no `node_modules` needed
+- the `publish` block (owner and repo from `.claude/port.config.json` → `repo`) makes `dist` emit `latest*.yml`, the blockmaps and the packaged `app-update.yml` that `electron-updater` reads; nothing is published from `dist`, which passes `--publish never`, and `desktop-release.yml` uploads them; the audit fails a build that is missing them
 - release version read from `release.versionFiles[0]`; `apps/desktop/package.json` is itself a `versionFiles` entry, kept equal to it by the `version-files-agree` check
 
 **`apps/desktop/src/main/actions/`**
