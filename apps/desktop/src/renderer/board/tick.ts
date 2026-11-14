@@ -2,6 +2,7 @@
 import type { DispatchOwner, RunStatesSnapshot } from '@/types/dispatch'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { PipelineItemKind } from '@/types/github'
 import type { TickActionable, TickClaim, TickHeld, TickObservation, TickReport } from '@/types/tick'
 
 function labelNameOf(key: LabelKey): string {
@@ -65,12 +66,12 @@ export function heldDetailCopy(held: TickHeld, owner: DispatchOwner = 'none'): s
       // Defensive: `planTick` never emits `reason: 'check-hold'` without a populated `escalation` of the same kind.
       if (e === null || e.kind !== 'check-hold') return `#${n} held — waiting on a check.`
       const names = e.checks.map((name) => `\`${name}\``).join(', ')
-      if (e.state === 'pending') return `#${n} held — waiting for ${names} to finish its re-run. It's re-reviewed once it passes.`
+      if (e.state === 'pending') return `#${n} held — waiting for ${names} to finish its re-run. It's re-reviewed once it passes, or post a \`## Gate cleared\` comment on the PR to authorise one review now.`
       const at = e.escalateAt === null ? null : new Date(e.escalateAt)
       const many = e.checks.length > 1
-      const rerun = `Re-run ${many ? 'them' : 'it'} on GitHub`
-      const escalation = at === null || Number.isNaN(at.getTime()) ? '' : `; it escalates to needs human at ${at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} if ${many ? 'they stay' : 'it stays'} red`
-      return `#${n} held — ${names} ${many ? 'are' : 'is'} still red on the reviewed head. ${rerun}${escalation}.`
+      const rerun = `Re-run ${many ? 'them' : 'it'} on GitHub, or post a \`## Gate cleared\` comment on the PR to authorise one review.`
+      const escalation = at === null || Number.isNaN(at.getTime()) ? '' : ` It escalates to needs human at ${at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} if ${many ? 'they stay' : 'it stays'} red.`
+      return `#${n} held — ${names} ${many ? 'are' : 'is'} still red on the reviewed head. ${rerun}${escalation}`
     }
     case 'integration-red': {
       const e = held.escalation
@@ -96,6 +97,42 @@ export function heldDetailCopy(held: TickHeld, owner: DispatchOwner = 'none'): s
     case 'mergeability-unknown':
       return `#${n} held one poll — GitHub hasn't worked out mergeability yet.`
   }
+}
+
+/** The short inline label a held card carries; the full line stays `heldDetailCopy`'s. */
+export function heldTagLabel(held: TickHeld): string {
+  switch (held.reason) {
+    case 'check-hold':
+      return held.escalation?.kind === 'check-hold' && held.escalation.state === 'red' ? 'Held · check red' : 'Held · check pending'
+    case 'unowned':
+      return 'Held · unassigned'
+    case 'other-operator':
+      return "Held · someone else's"
+    case 'session-required':
+      return 'Held · session required'
+    case 'contended':
+      return held.contention === null ? 'Held · contended' : `Held · behind #${String(held.contention.blocker)}`
+    case 'cycle-cap':
+      return 'Held · cycle cap'
+    case 'zero-diff':
+      return 'Held · already reviewed'
+    case 'integration-red':
+      return 'Held · integration red'
+    case 'integration-green':
+      return 'Held · refreshing'
+    case 'refresh-wins':
+      return 'Held · refresh first'
+    case 'conflicting':
+      return 'Held · conflicts'
+    case 'mergeability-unknown':
+      return 'Held · checking mergeable'
+  }
+}
+
+/** This item's own holds — `[]` for an absent or blind report, matched on number and kind. */
+export function heldEntriesFor(report: TickReport | undefined, number: number, kind: PipelineItemKind): readonly TickHeld[] {
+  if (report === undefined || report.blind !== null) return []
+  return report.held.filter((h) => h.number === number && h.kind === kind)
 }
 
 /** "Actionable detail, approaching the cap" (plan's own **UX states**) —

@@ -153,6 +153,14 @@ export interface BoardItemRow {
   readonly autoApproving: boolean
   /** What a blocked ticket is held on, `null` when it is not blocked. */
   readonly blockedOn: BlockedOn | null
+  /** This row's own tick holds, `null` when not held or the report is blind. */
+  readonly held: RowHeld | null
+}
+
+/** A held row's tick entries and its repository's dispatch owner — the two inputs `heldDetailCopy` reads, so the card and the pane print the same sentence. */
+export interface RowHeld {
+  readonly entries: readonly TickHeld[]
+  readonly owner: DispatchOwner
 }
 
 /** Every source for what a blocked ticket is held on; the row tag shows the most specific, the pane shows all. */
