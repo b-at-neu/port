@@ -14,7 +14,7 @@ const LINK_FIELDS = new Set(['blockedBy', 'blocking', 'parent'])
 
 function buildBacklogDetailQuery(number: number): string {
   const issueFields = [
-    'number title url state body updatedAt',
+    'number title url state body createdAt updatedAt',
     'author { login }',
     `assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }`,
     'parent { number title url state }',
@@ -129,6 +129,7 @@ export async function fetchBacklogDetail(params: FetchBacklogDetailParams): Prom
       url: typeof raw.url === 'string' ? raw.url : '',
       body: typeof raw.body === 'string' ? raw.body : '',
       author: typeof author === 'string' && author !== '' ? author : null,
+      createdAt: typeof raw.createdAt === 'string' && raw.createdAt !== '' ? raw.createdAt : null,
       updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : '',
       assignees: fieldListOf(raw.assignees, 'login'),
       parent: toParentRead(raw.parent, erroredFields.has('parent')),

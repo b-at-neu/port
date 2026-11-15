@@ -12,6 +12,7 @@ function issueNode(overrides: Record<string, unknown> = {}): Record<string, unkn
     url: 'https://github.com/o/r/issues/45',
     state: 'OPEN',
     body: '## Scope\n\nText.',
+    createdAt: '2026-08-20T09:00:00Z',
     updatedAt: '2026-09-04T10:00:00Z',
     author: { login: 'alice' },
     assignees: { nodes: [{ login: 'alice' }] },
@@ -47,6 +48,7 @@ describe('fetchBacklogDetail', () => {
       url: 'https://github.com/o/r/issues/45',
       body: '## Scope\n\nText.',
       author: 'alice',
+      createdAt: '2026-08-20T09:00:00Z',
       updatedAt: '2026-09-04T10:00:00Z',
       assignees: ['alice'],
       parent: { ok: true, parent: { number: 41, title: 'Epic', url: 'u41', state: 'OPEN' } },
@@ -81,6 +83,18 @@ describe('fetchBacklogDetail', () => {
     if (!result.ok) throw new Error('unexpected failure')
     expect(result.detail.author).toBeNull()
     expect(result.detail.body).toBe('')
+  })
+
+  it.each([[undefined], [null], [''], [42]])('gives a null createdAt for %s', async (createdAt) => {
+    const result = await run(reply(issueNode({ createdAt })))
+    if (!result.ok) throw new Error('unexpected failure')
+    expect(result.detail.createdAt).toBeNull()
+  })
+
+  it('asks for createdAt', async () => {
+    const { transport, requests } = recordingTransport(() => reply(issueNode()))
+    await fetchBacklogDetail({ repo: REPO, number: 45, github: transport })
+    expect(graphqlBodyOf(requests[0]).query).toContain('createdAt updatedAt')
   })
 
   it('treats a null parent as no parent', async () => {

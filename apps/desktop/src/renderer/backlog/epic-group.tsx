@@ -1,9 +1,11 @@
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, Info } from 'lucide-react'
 import { Button } from '@/renderer/components/ui/button'
+import { IconButton } from '@/renderer/components/icon-button'
+import { EpicInfoPanel } from '@/renderer/backlog/detail-panel'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { MeterBar } from '@/renderer/components/meter-bar'
-import { BACKLOG_EPIC_TAG, backlogEpicProgressAria, backlogEpicProgressCopy, backlogEpicToggleAria, backlogEpicTruncatedCopy, backlogWaveBandCopy, backlogWaveLabel } from '@/renderer/backlog/copy'
+import { BACKLOG_EPIC_TAG, backlogEpicProgressAria, backlogEpicInfoAria, backlogEpicProgressCopy, backlogEpicToggleAria, backlogEpicTruncatedCopy, backlogWaveBandCopy, backlogWaveLabel } from '@/renderer/backlog/copy'
 import type { BacklogEpicGroup, BacklogEpicSummary, BacklogWave, RenderBacklogRow } from '@/types/backlog'
 
 const FOCUS_RING = 'outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
@@ -30,7 +32,14 @@ function Progress({ summary }: { readonly summary: Extract<BacklogEpicSummary, {
   )
 }
 
-function EpicRow({ group, collapsed, onToggle, renderRow }: { readonly group: BacklogEpicGroup; readonly collapsed: boolean; readonly onToggle: () => void; readonly renderRow: RenderBacklogRow }) {
+interface EpicInfoProps {
+  readonly detailOpen: boolean
+  readonly detailId: string
+  readonly now: Date
+  readonly onToggleDetail: () => void
+}
+
+function EpicRow({ group, collapsed, onToggle, renderRow, detailOpen, detailId, now, onToggleDetail }: { readonly group: BacklogEpicGroup; readonly collapsed: boolean; readonly onToggle: () => void; readonly renderRow: RenderBacklogRow } & EpicInfoProps) {
   const Chevron = collapsed ? ChevronRight : ChevronDown
   return renderRow(group.epic, {
     slot: 'backlog-epic-row',
@@ -43,8 +52,12 @@ function EpicRow({ group, collapsed, onToggle, renderRow }: { readonly group: Ba
       <>
         <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-meta text-foreground-secondary">{BACKLOG_EPIC_TAG}</span>
         {group.summary.ok ? <Progress summary={group.summary} /> : null}
+        <IconButton label={backlogEpicInfoAria(group.epic.number, detailOpen)} expanded={detailOpen} controls={detailId} slot="backlog-epic-info" onClick={onToggleDetail}>
+          <Info aria-hidden="true" className="size-4" />
+        </IconButton>
       </>
     ),
+    panel: <EpicInfoPanel group={group} id={detailId} now={now} />,
   })
 }
 
@@ -88,10 +101,10 @@ function EpicBody({ group, renderRow }: { readonly group: BacklogEpicGroup; read
   )
 }
 
-export function EpicGroup({ group, collapsed, onToggle, renderRow }: { readonly group: BacklogEpicGroup; readonly collapsed: boolean; readonly onToggle: () => void; readonly renderRow: RenderBacklogRow }) {
+export function EpicGroup({ group, collapsed, onToggle, renderRow, ...info }: { readonly group: BacklogEpicGroup; readonly collapsed: boolean; readonly onToggle: () => void; readonly renderRow: RenderBacklogRow } & EpicInfoProps) {
   return (
     <div data-slot="backlog-epic" data-epic={group.epic.number} data-collapsed={collapsed} className="border-b border-border">
-      <EpicRow group={group} collapsed={collapsed} onToggle={onToggle} renderRow={renderRow} />
+      <EpicRow group={group} collapsed={collapsed} onToggle={onToggle} renderRow={renderRow} {...info} />
       {collapsed ? null : <EpicBody group={group} renderRow={renderRow} />}
     </div>
   )

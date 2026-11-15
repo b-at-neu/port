@@ -30,12 +30,13 @@ export function createQueryClient(): QueryClient {
  *  also gets `staleTime: Infinity` (#319) — a reclamation report runs only on
  *  an explicit Inspect/Refresh (`worktrees-tab.tsx` passes `enabled: false`
  *  and calls `refetch()` itself), never polled. `release:issues` is
- *  `Infinity` too — a published tag range never changes. */
+ *  `Infinity` too (a tag range never changes), as is `backlog:detail`: Refresh updates it. */
 export function ipcQueryOptions<C extends QueryChannel>(channel: C, request?: IpcMap[C]['request'], extraKey?: readonly unknown[]) {
   return queryOptions({
     queryKey: [channel, request ?? null, ...(extraKey ?? [])] as const,
     queryFn: () => invoke(channel, request),
-    ...(channel === 'board:snapshot' || channel === 'worktrees:report' || channel === 'release:issues' ? { staleTime: Infinity } : {}),
+    ...(channel === 'board:snapshot' || channel === 'worktrees:report' || channel === 'release:issues' || channel === 'backlog:detail' ? { staleTime: Infinity } : {}),
+    ...(channel === 'backlog:detail' ? { gcTime: Infinity } : {}),
     ...(channel === 'backlog:list' || channel === 'release:status' ? { staleTime: 60_000 } : {}),
     ...(channel === 'storage:report' ? { staleTime: 5 * 60_000 } : {}),
   })

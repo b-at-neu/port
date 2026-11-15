@@ -1,5 +1,5 @@
 // The Backlog screen — open, unclaimed issues per ready repo; Work on claims at once, or after a confirmation for a blocked ticket or an epic, and reports by toast. No `useEffect`: the list navigator is registered directly in the render body.
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useQueries, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { RefreshCw, ListTodo } from 'lucide-react'
@@ -26,6 +26,8 @@ import { EMPTY_FILTER } from '@/renderer/backlog/filter'
 import { readBacklogCollapsed, readBacklogCollapsedEpics, readBacklogFilters, readBacklogHiddenRepos, setBacklogCollapsed, setBacklogCollapsedEpic, setBacklogFilter, setBacklogHiddenRepos } from '@/renderer/backlog/prefs'
 import { navigableRows, rowKey, toggleHiddenRepo, visibleRepos } from '@/renderer/backlog/sections'
 import { BacklogRow } from '@/renderer/backlog/backlog-row'
+import { detailPanelId } from '@/renderer/backlog/detail'
+import { DetailToggle, TicketDetailPanel } from '@/renderer/backlog/detail-panel'
 import { EpicGroup } from '@/renderer/backlog/epic-group'
 import { LabelFilterMenu } from '@/renderer/backlog/label-filter-menu'
 import { RepoFilterMenu } from '@/renderer/backlog/repo-filter-menu'
@@ -72,8 +74,10 @@ function GroupBody({
   menuOpenKey,
   pendingKeys,
   collapsedEpics,
+  openDetails,
   setMenuOpenKey,
   onToggleEpic,
+  onToggleDetail,
   onPick,
   onClearFilter,
 }: {
@@ -83,8 +87,10 @@ function GroupBody({
   readonly menuOpenKey: string | null
   readonly pendingKeys: ReadonlySet<string>
   readonly collapsedEpics: ReadonlySet<string>
+  readonly openDetails: ReadonlySet<string>
   readonly setMenuOpenKey: (key: string | null) => void
   readonly onToggleEpic: (key: string) => void
+  readonly onToggleDetail: (key: string) => void
   readonly onPick: (row: BacklogRowView, planGate: PlanGateChoice) => boolean
   readonly onClearFilter: () => void
 }) {
@@ -112,18 +118,25 @@ function GroupBody({
   }
   const renderRow: RenderBacklogRow = (row, extras) => {
     const key = rowKey(row.repoId, row.number)
+    const open = openDetails.has(key)
+    const id = detailPanelId(key)
+    const { panel, ...rowExtras } = extras ?? {}
     return (
-      <BacklogRow
-        key={key}
-        row={row}
-        now={now}
-        rowProps={rowPropsFor(key)}
-        menuOpen={menuOpenKey === key}
-        pending={pendingKeys.has(key)}
-        onMenuOpenChange={(open) => setMenuOpenKey(open ? key : null)}
-        onPick={(planGate) => onPick(row, planGate)}
-        {...extras}
-      />
+      <Fragment key={key}>
+        <BacklogRow
+          row={row}
+          now={now}
+          rowProps={rowPropsFor(key)}
+          menuOpen={menuOpenKey === key}
+          pending={pendingKeys.has(key)}
+          onMenuOpenChange={(next) => setMenuOpenKey(next ? key : null)}
+          onPick={(planGate) => onPick(row, planGate)}
+          onToggleDetail={() => onToggleDetail(key)}
+          {...rowExtras}
+          leading={rowExtras.leading ?? <DetailToggle open={open} number={row.number} controls={id} onToggle={() => onToggleDetail(key)} />}
+        />
+        {open ? (panel ?? <TicketDetailPanel row={row} id={id} now={now} />) : null}
+      </Fragment>
     )
   }
   return (
@@ -131,7 +144,19 @@ function GroupBody({
       {group.truncatedNote !== null ? <p className="px-4 py-1 text-meta text-muted-foreground">{group.truncatedNote}</p> : null}
       {group.layout.epics.map((entry) => {
         const key = rowKey(entry.epic.repoId, entry.epic.number)
-        return <EpicGroup key={key} group={entry} collapsed={collapsedEpics.has(key)} onToggle={() => onToggleEpic(key)} renderRow={renderRow} />
+        return (
+          <EpicGroup
+            key={key}
+            group={entry}
+            collapsed={collapsedEpics.has(key)}
+            onToggle={() => onToggleEpic(key)}
+            renderRow={renderRow}
+            detailOpen={openDetails.has(key)}
+            detailId={detailPanelId(key)}
+            now={now}
+            onToggleDetail={() => onToggleDetail(key)}
+          />
+        )
       })}
       {group.layout.remainder.map((row) => renderRow(row))}
     </div>
@@ -148,6 +173,7 @@ export function BacklogScreen() {
   const [filters, setFilters] = useState<ReadonlyMap<RepoId, BacklogLabelFilter>>(() => readBacklogFilters())
   const [collapsed, setCollapsed] = useState<ReadonlySet<RepoId>>(() => readBacklogCollapsed())
   const [collapsedEpics, setCollapsedEpics] = useState<ReadonlySet<string>>(() => readBacklogCollapsedEpics())
+  const [openDetails, setOpenDetails] = useState<ReadonlySet<string>>(new Set())
   const [hidden, setHidden] = useState<ReadonlySet<RepoId>>(() => readBacklogHiddenRepos())
   const now = new Date()
 
@@ -180,6 +206,14 @@ export function BacklogScreen() {
       return updated
     })
     setBacklogCollapsedEpic(key, next)
+  }
+  function toggleDetail(key: string): void {
+    setOpenDetails((previous) => {
+      const updated = new Set(previous)
+      if (updated.has(key)) updated.delete(key)
+      else updated.add(key)
+      return updated
+    })
   }
   function changeHidden(next: ReadonlySet<RepoId>): void {
     setHidden(next)
@@ -249,6 +283,7 @@ export function BacklogScreen() {
 
   function refreshAll(): void {
     for (const q of queries) void q.refetch()
+    void queryClient.invalidateQueries({ queryKey: ['backlog:detail'] })
   }
 
   const stale = staleSinceAt(queries.map((q) => ({ query: { status: q.status, data: q.data, isError: q.isError, dataUpdatedAt: q.dataUpdatedAt } })))
@@ -298,8 +333,10 @@ export function BacklogScreen() {
                       menuOpenKey={menuOpenKey}
                       pendingKeys={pendingKeys}
                       collapsedEpics={collapsedEpics}
+                      openDetails={openDetails}
                       setMenuOpenKey={setMenuOpenKey}
                       onToggleEpic={toggleEpic}
+                      onToggleDetail={toggleDetail}
                       onPick={pick}
                       onClearFilter={() => changeFilter(group.repoId, EMPTY_FILTER)}
                     />
