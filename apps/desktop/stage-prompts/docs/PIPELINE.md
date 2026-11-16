@@ -247,6 +247,7 @@ port moves the ticket's labels, never a stage session. Your stage context alread
 - **Grammar.** `HANDBACK: <token>[ <arg>]` — the **last non-blank line** of your final message, **outside a code fence**, one per message. The token is the first word after the prefix and is case-sensitive; your agent file lists the tokens that are yours.
 - **Three endings.** `QUESTIONS FOR HUMAN:` and `BLOCKED:` pause: the session stays open and port waits for the human's answer. `HANDBACK:` finishes the stage, and the session closes.
 - **Never edit a label.** No label change through `gh issue edit` or `gh pr edit`, no label on `gh pr create`, no `gh api` call to an `issues/<n>/labels` path. A Bash call that tries is denied.
+- **Never edit an issue body.** No `gh issue edit --body`/`--body-file`, and no `gh api` PATCH of an issue. A Bash call that tries is denied. The plan reaches the issue through port.
 - **A line port cannot use leaves the ticket for a human.** A finished stage with no `HANDBACK:` line, or one whose token is not in your agent file's list, moves nothing, and port reports the ticket as needing a person. Never guess a token.
 
 ## Label lifecycle

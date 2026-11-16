@@ -123,6 +123,10 @@ export function handbackRefusal(event: StageEvent, mode: StageMode): HandoffRefu
   if (!HANDBACK_TOKENS[mode].includes(handback.token)) return 'unknown-handback'
   if (mode === 'impl' && pullRequestNumberOf(handback.arg) === null) return 'unknown-handback'
   if (mode === 'refresh' && handback.token === 'refreshed' && handback.arg !== 'clean' && handback.arg !== 'resolved') return 'unknown-handback'
+  if (mode === 'plan' && handback.token === 'plan-written') {
+    if (event.plan === null || event.plan.kind === 'missing') return 'no-plan-file'
+    if (event.plan.kind === 'empty') return 'empty-plan-file'
+  }
   return null
 }
 

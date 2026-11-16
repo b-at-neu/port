@@ -10,7 +10,7 @@ import { readOwnership } from '@/main/dispatch/ownership'
 import { fetchClaimPreflight, fetchItemsByNumber } from '@/main/github/adapter'
 import { fetchGatePreflight } from '@/main/github/gate'
 import { listRepositories } from '@/main/registry'
-import { postComment } from '@/main/writes/apply'
+import { postComment, postIssueBody } from '@/main/writes/apply'
 import type { ApplyItemActionParams, ApplyItemDecisionParams, ApplyObservationParams, AutoApprovePlanParams, EscalateToHumanParams, GateAnswerParams, GatePreflightParams } from '@/types/actions'
 import type { ClaimDeps } from '@/types/claim'
 import type { StageLabelWrites } from '@/types/dispatch'
@@ -21,7 +21,7 @@ import type { WriteState } from '@/types/writes'
 export function bindActions(state: { readonly writeState: WriteState; readonly stateLabels: StateLabelsReader }) {
   const { writeState, stateLabels } = state
   const gateDeps: GateDeps = { listRepositories, fetchGatePreflight, readOwnership, writeState, stateLabels, postComment, now: () => new Date() }
-  const stageDeps = { writeState, stateLabels, fetchItemsByNumber }
+  const stageDeps = { writeState, postIssueBody, stateLabels, fetchItemsByNumber }
   const stageLabels: StageLabelWrites = { claim: (params) => applyStageClaim(params, stageDeps), transition: (params) => applyStageTransition(params, stageDeps) }
   const claimDeps: ClaimDeps = { listRepositories, fetchClaimPreflight, writeState, stateLabels }
   return {

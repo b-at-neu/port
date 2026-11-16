@@ -115,7 +115,7 @@ describe('createDispatchRuntime', () => {
     await runtime.dispatcher.consider(SNAPSHOT)
     expect(refreshes).toEqual([])
 
-    runtime.dispatcher.recordOutcome(REPO_ID, SESSION_KEY, COMPLETED)
+    runtime.dispatcher.recordOutcome(REPO_ID, SESSION_KEY, COMPLETED, null)
     await flush()
     expect(refreshes).toEqual([{ repoId: REPO_ID, source: 'github' }])
   })
@@ -123,6 +123,6 @@ describe('createDispatchRuntime', () => {
   it('a hand-back before the watcher is bound requests nothing and throws nothing', async () => {
     const runtime = createDispatchRuntime(runtimeDeps())
     await runtime.dispatcher.consider(SNAPSHOT)
-    expect(() => runtime.dispatcher.recordOutcome(REPO_ID, SESSION_KEY, COMPLETED)).not.toThrow()
+    expect(() => runtime.dispatcher.recordOutcome(REPO_ID, SESSION_KEY, COMPLETED, null)).not.toThrow()
   })
 })

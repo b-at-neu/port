@@ -8,6 +8,8 @@ import type { StageLaunchRequest, StageLaunchResult } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionDismissResult, SessionKey, SessionStartResult } from '@/types/hosting'
 
 import type { StageOutcome, StageOutcomeKind } from '@/types/stage-session'
+import type { StagePlanFile } from '@/types/stage-labels'
+import type { StageAgent } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
 import type { StageDenial, StageInstructionsLoader, StageResumeRequest } from '@/types/stage'
 import { proposedRule } from '@/main/stage/rule'
@@ -35,7 +37,8 @@ interface CreateStageLauncherParams {
   /** Runs once per repository root per process, never awaited as a gate. */
   readonly sweepBranches: (root: string) => Promise<unknown>
   readonly now: () => Date
-  readonly onOutcome: (repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome) => void
+  /** `plan` is non-null only for a completed `plan-written` hand-back. */
+  readonly onOutcome: (repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome, plan: StagePlanFile | null) => void
   /** Fired once when a session that handed back `blocked` starts its next turn. */
   readonly onResumedTurn: (repoId: RepoId, sessionKey: SessionKey) => void
   /** `stage-sessions.json`'s sole writer — every launch records `running` here, every hand-back clears or marks it. */
@@ -84,7 +87,7 @@ function cleanupFailureDetail(result: Exclude<SessionDismissResult, { readonly o
 }
 
 export function createStageLauncher(params: CreateStageLauncherParams): StageLauncherHandle {
-  const tracked = new Map<SessionKey, { readonly repoId: RepoId; readonly registryId: string; readonly root: string; readonly branch: string | null; readonly baseSha: string; lastSeenResultAt: string | null; sawSessionId: boolean; lastOutcome: StageOutcomeKind | null; blockedIdle: boolean }>()
+  const tracked = new Map<SessionKey, { readonly repoId: RepoId; readonly registryId: string; readonly agent: StageAgent; readonly number: number; readonly path: string; readonly root: string; readonly branch: string | null; readonly baseSha: string; lastSeenResultAt: string | null; sawSessionId: boolean; lastOutcome: StageOutcomeKind | null; blockedIdle: boolean }>()
   const swept = new Set<string>()
 
   async function removeAndRelease(root: string, path: string, branch: string | null, baseSha: string): Promise<RemoveSessionWorktreeOutcome> {
@@ -155,7 +158,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       return { ok: false, kind: 'failed', message: `could not send the resume prompt: ${sendResult.kind}` }
     }
 
-    tracked.set(sessionKey, { repoId: entry.repoId, registryId: entry.id, root: root.path, branch: entry.worktree.branch, baseSha: entry.worktree.baseSha, lastSeenResultAt: null, sawSessionId: false, lastOutcome: null, blockedIdle: false })
+    tracked.set(sessionKey, { repoId: entry.repoId, registryId: entry.id, agent: entry.agent, number: entry.number, path: entry.worktree.path, root: root.path, branch: entry.worktree.branch, baseSha: entry.worktree.baseSha, lastSeenResultAt: null, sawSessionId: false, lastOutcome: null, blockedIdle: false })
     params.registry.markRunning(entry.id)
     return { ok: true, sessionKey }
   }
@@ -222,7 +225,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       return { ok: false, kind: 'failed', message: `could not send the stage prompt: ${sendResult.kind}` }
     }
 
-    tracked.set(sessionKey, { repoId: request.entry.id, registryId, root, branch: wt.branch, baseSha: wt.baseSha, lastSeenResultAt: null, sawSessionId: false, lastOutcome: null, blockedIdle: false })
+    tracked.set(sessionKey, { repoId: request.entry.id, registryId, agent: request.agent, number: request.number, path: wt.path, root, branch: wt.branch, baseSha: wt.baseSha, lastSeenResultAt: null, sawSessionId: false, lastOutcome: null, blockedIdle: false })
     params.registry.recordRunning({
       id: registryId,
       repoId: request.entry.id,
@@ -279,16 +282,26 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     serialize(() => settle(snapshot.sessionKey, entry.repoId, entry.registryId, outcome))
   }
 
+  /** Read before the worktree is removed; only a completed `plan-written` hand-back carries a plan. */
+  async function readPlanFile(sessionKey: SessionKey, outcome: StageOutcome): Promise<StagePlanFile | null> {
+    const held = tracked.get(sessionKey)
+    if (held === undefined || held.agent !== 'plan' || outcome.handback?.token !== 'plan-written') return null
+    const read = await params.readTextFile(params.ops.join(held.path, '.temp', `plan-${String(held.number)}.md`))
+    if (!read.ok) return { kind: 'missing', detail: read.kind === 'not-found' ? null : read.message }
+    return read.value.trim() === '' ? { kind: 'empty' } : { kind: 'read', body: read.value }
+  }
+
   async function settle(sessionKey: SessionKey, repoId: RepoId, registryId: string, outcome: StageOutcome): Promise<void> {
     try {
       if (outcome.kind === 'questions' || outcome.kind === 'blocked') {
         // The session is still open — the registry entry stays `running`.
-        params.onOutcome(repoId, sessionKey, outcome)
+        params.onOutcome(repoId, sessionKey, outcome, null)
         return
       }
 
       if (outcome.kind === 'completed') {
         await params.store.close(sessionKey)
+        const plan = await readPlanFile(sessionKey, outcome)
         const dismissResult = await params.store.dismiss(sessionKey, 'remove')
         const held = tracked.get(sessionKey)
         if (dismissResult.ok && held !== undefined && held.branch !== null) await params.releaseBranch(held.root, held.branch, held.baseSha)
@@ -296,7 +309,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
         tracked.delete(sessionKey)
         if (dismissResult.ok) params.registry.remove(registryId)
         else params.registry.markInterrupted(registryId, 'cleanup-failed', cleanupFailureDetail(dismissResult), null, outcome.costUsd)
-        params.onOutcome(repoId, sessionKey, { ...outcome, worktree })
+        params.onOutcome(repoId, sessionKey, { ...outcome, worktree }, plan)
         return
       }
 
@@ -306,12 +319,12 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       // `crash`/`quit` are reserved for a boot-time find and the quit path's own `markAllQuit`.
       const reason = outcome.kind === 'usage-limit' ? 'usage-limit' : 'error'
       params.registry.markInterrupted(registryId, reason, outcome.detail, outcome.resetsAt, outcome.costUsd)
-      params.onOutcome(repoId, sessionKey, outcome)
+      params.onOutcome(repoId, sessionKey, outcome, null)
     } catch (error) {
       tracked.delete(sessionKey)
       const message = error instanceof Error ? error.message : String(error)
       params.registry.markInterrupted(registryId, 'error', `hand-back settle failed: ${message}`, null, outcome.costUsd)
-      params.onOutcome(repoId, sessionKey, { kind: 'error', detail: `hand-back settle failed: ${message}`, costUsd: outcome.costUsd, resetsAt: null, worktree: 'remove-failed', operatorJoined: outcome.operatorJoined, handback: null })
+      params.onOutcome(repoId, sessionKey, { kind: 'error', detail: `hand-back settle failed: ${message}`, costUsd: outcome.costUsd, resetsAt: null, worktree: 'remove-failed', operatorJoined: outcome.operatorJoined, handback: null }, null)
     }
   }
 

@@ -209,9 +209,17 @@ describe('createDispatcher — stage label writes', () => {
   it('recordOutcome settles the label move through the hand-back write', async () => {
     const { dispatcher, transition } = rig()
     await consider(dispatcher)
-    dispatcher.recordOutcome(REPO_ID, KEY, completed({ token: 'pr-opened', arg: '#8' }))
+    dispatcher.recordOutcome(REPO_ID, KEY, completed({ token: 'pr-opened', arg: '#8' }), null)
     await settle()
-    expect(transition.mock.calls[0]?.[0]).toMatchObject({ record: { number: 52, sessionKey: KEY }, event: { kind: 'outcome', outcome: 'completed', handback: { token: 'pr-opened', arg: '#8' } } })
+    expect(transition.mock.calls[0]?.[0]).toMatchObject({ record: { number: 52, sessionKey: KEY }, event: { kind: 'outcome', outcome: 'completed', handback: { token: 'pr-opened', arg: '#8' }, plan: null } })
+  })
+
+  it('recordOutcome carries the captured plan file to the write', async () => {
+    const { dispatcher, transition } = rig()
+    await consider(dispatcher)
+    dispatcher.recordOutcome(REPO_ID, KEY, completed({ token: 'plan-written', arg: null }), { kind: 'read', body: '## Implementation Plan' })
+    await settle()
+    expect(transition.mock.calls[0]?.[0]).toMatchObject({ event: { plan: { kind: 'read', body: '## Implementation Plan' } }, scratchDir: expect.any(String) })
   })
 
   it('records the hand-back write result on the ended stage the tick reads', async () => {
@@ -221,7 +229,7 @@ describe('createDispatcher — stage label writes', () => {
       stageLabels: { claim: () => Promise.resolve(APPLIED), transition: () => Promise.resolve({ kind: 'refused', reason: 'no-handback', retryable: false, detail: null }) },
     })
     await consider(dispatcher)
-    dispatcher.recordOutcome(REPO_ID, KEY, completed(null))
+    dispatcher.recordOutcome(REPO_ID, KEY, completed(null), null)
     await settle()
     phase = 'ended'
     await dispatcher.consider(snapshotWith([tickReport()]))

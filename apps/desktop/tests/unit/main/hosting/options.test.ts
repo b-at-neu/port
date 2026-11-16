@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { GUARD_ALLOWLIST_MISS_MARKER } from '@/main/hosting/guard-marker'
-import { LABEL_GUARD_MESSAGE } from '@/main/hosting/label-guard'
+import { ISSUE_BODY_GUARD_MESSAGE, LABEL_GUARD_MESSAGE } from '@/main/hosting/label-guard'
 import { buildSessionOptions } from '@/main/hosting/options'
 import type { CanUseTool } from '@/main/hosting/sdk'
 import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
@@ -152,6 +152,21 @@ describe('buildSessionOptions — stage branch (#327)', () => {
       expect(result).toEqual({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: LABEL_GUARD_MESSAGE } })
     })
 
+    it.each(['gh issue edit 52 --repo o/a --body-file .temp/plan-52.md', 'gh api repos/o/a/issues/52 -X PATCH -F body=@.temp/p.md'])('denies an issue-body write with its own reason: %s', async (command) => {
+      const result = await guard().hook(bashInput(command), 't', SIGNAL)
+      expect(result).toEqual({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: ISSUE_BODY_GUARD_MESSAGE } })
+    })
+
+    it('a command that is both a label and a body write gets the label reason', async () => {
+      const result = await guard().hook(bashInput('gh issue edit 52 --add-label x --body-file .temp/p.md'), 't', SIGNAL)
+      expect(result).toMatchObject({ hookSpecificOutput: { permissionDecisionReason: LABEL_GUARD_MESSAGE } })
+    })
+
+    it('lets a comment and a pull request description through', async () => {
+      expect(await guard().hook(bashInput('gh issue comment 52 --body-file .temp/b.md'), 't', SIGNAL)).toEqual({})
+      expect(await guard().hook(bashInput('gh pr edit 8 --body-file .temp/pr-body-8.md'), 't', SIGNAL)).toEqual({})
+    })
+
     it('says nothing about a command that reads labels or writes none', async () => {
       expect(await guard().hook(bashInput('gh pr view 8 --repo o/a --json labels'), 't', SIGNAL)).toEqual({})
       expect(await guard().hook(bashInput('git status'), 't', SIGNAL)).toEqual({})
@@ -164,6 +179,7 @@ describe('buildSessionOptions — stage branch (#327)', () => {
 
     it('never uses the allowlist-miss reason, so a denial never becomes an Allow item', () => {
       expect(LABEL_GUARD_MESSAGE).not.toContain(GUARD_ALLOWLIST_MISS_MARKER)
+      expect(ISSUE_BODY_GUARD_MESSAGE).not.toContain(GUARD_ALLOWLIST_MISS_MARKER)
     })
   })
 })

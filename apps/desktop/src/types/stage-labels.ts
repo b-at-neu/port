@@ -7,11 +7,15 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 /** `revise` split by its trigger: a refresh runs the same agent against a different set of labels and tokens. */
 export type StageMode = StageAgent | 'refresh'
 
+/** The plan file a completed `plan-written` hand-back left behind, read before the worktree was removed. */
+export type StagePlanFile = { readonly kind: 'read'; readonly body: string } | { readonly kind: 'missing'; readonly detail: string | null } | { readonly kind: 'empty' }
+
 export type StageEvent =
   | { readonly kind: 'claim' }
   | { readonly kind: 'rollback' }
   | { readonly kind: 'resumed-turn' }
-  | { readonly kind: 'outcome'; readonly outcome: StageOutcomeKind; readonly handback: StageHandback | null }
+  /** `plan` is `null` for every outcome except a completed `plan-written`. */
+  | { readonly kind: 'outcome'; readonly outcome: StageOutcomeKind; readonly handback: StageHandback | null; readonly plan: StagePlanFile | null }
 
 /** One label write the table plans. `numberFrom: 'arg'` names the pull request a `pr-opened` hand-back carries. */
 export interface StagePlannedWrite {

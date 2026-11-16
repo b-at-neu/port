@@ -46,7 +46,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 
 **`apps/desktop/src/main/actions/`**
 - every pause/resume/retry/gate/refresh/claim/escalate/observe/decide/stage write goes through the injected `writeState`, never `applyLabels`; `bound.ts` binds each action to it once at the composition root
-- `stage.ts`'s `applyStageClaim`/`applyStageTransition` are every label write a stage session needs; `pr-opened` is verified (an open pull request on this issue's `<n>-` branch) before either write, and the pull request is written first
+- `stage.ts`'s `applyStageClaim`/`applyStageTransition` are every label write a stage session needs; `pr-opened` is verified (an open pull request on this issue's `<n>-` branch) before either write, and the pull request is written first; a `plan-written` body is posted before the label write, and only once the table has planned one
 - never trusts a renderer-supplied `expectedStage` to widen a write, only to refuse
 - `gate.ts` comments before the label swap; `escalate.ts`/`observe.ts` swap first
 - `decide.ts`'s `applyItemDecision` (#312) is the fifth comment-then-swap composition: check → re-read → comment → swap, `gateAnswer`'s own direction — pinned by `desktop-gate`/`desktop-actions`
@@ -95,7 +95,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `project.ts`'s `createSessionProjector` (#219) reuses `createDeriver` for the same `TranscriptEntry` shape `main/sessions/` derives on disk, rather than a second `tool_use`/`tool_result` pairing (#123); `session:attach` replays its bounded window so a reload rebuilds from the same state a mid-stream push already describes
 - `project.ts`'s per-parent child derivers (#323) nest a subagent's own frames under its `Task` tool call rather than dropping them: one `createDeriver` and mirror-index map per live `parent_tool_use_id`, stamping every child entry and patch with `parentToolUseId`, deleted once the parent's own tool call pairs
 - `hosting/tasks.ts`'s `createTaskTracker` (#323) is the one background-task reader, observing `system/background_tasks_changed` (REPLACE semantics, `ambient` excluded) and `system/task_started`; `hosting/history.ts`'s `readHistory` (#323) is the one earlier-conversation read for resume/resume-at/fork, run before spawn and kept frozen on the handle
-- `label-guard.ts`'s `labelWriteOf` is pure and import-free; `options.ts` installs it as a stage session's `PreToolUse` hook on Bash, denying any issue or pull request label write with `LABEL_GUARD_MESSAGE`, which is never an Allow item because it is not the allowlist-miss reason
+- `label-guard.ts`'s `labelWriteOf` is pure and import-free; `options.ts` installs it as a stage session's `PreToolUse` hook on Bash, denying any issue or pull request label write with `LABEL_GUARD_MESSAGE`, which is never an Allow item because it is not the allowlist-miss reason; `issueBodyWriteOf` is checked after it and denies an issue-body write with `ISSUE_BODY_GUARD_MESSAGE`
 - `hook-denials.ts`'s `createHookDenialTracker` (#657) is the only reader of guard-hook denials in a stage stream: the hook denies an off-allowlist Bash call before `canUseTool`, so only the paired `tool_result` shows it, and the tracker matches nothing but `guard-marker.ts`'s allowlist-miss reason, pinned against `guard-rules.mjs` by the `desktop-hosting` check
 - streaming input only, always: `input.ts`'s push-driven `AsyncIterable<SDKUserMessage>` keeps `interrupt()`/`setPermissionMode()` available for the handle's whole life — a string prompt would silently disable both
 - `sdk.ts` is the third lazy Agent SDK seam (alongside `sessions/sdk.ts` #78, `runtime/sdk.ts` #97), the only file here naming the package specifier
@@ -195,6 +195,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - a load failure fails the launch and removes the worktree — a stage is never dispatched without its instructions
 - a review stage's context also carries `review.cycle` and `review.selfAuthored`, computed by `gates.ts`'s `reviewDispatchFacts` in the dispatcher from the tick's review count and the re-read author; the desktop `review-agent.md` uses them and never re-derives either
 - `handback.ts`'s `classifyHandback` is pure, built on `utils/stage/handback-text.ts`'s `classifyHandbackText`, which also backs `renderer/board/needs-you.ts`; its `QUESTIONS FOR HUMAN:`/`BLOCKED:`/`HANDBACK:` prefixes live there and are pinned against the bundled prompts by `desktop-dispatch`, and `desktop-stage-labels` pins the tokens both ways
+- on a completed `plan-written`, reads `.temp/plan-<N>.md` before removing the worktree and hands it to the dispatcher with the outcome
 - removes a worktree only on `completed`, never forced; every other outcome keeps it. It removes the registry entry only when that removal succeeded — otherwise the entry stays as `cleanup-failed`
 - releases the branch after every worktree removal — launch failure paths, `completed`, and Restart — through `main/workspace/stage-worktree.ts`'s `releaseStageBranch`; a one-time sweep per repository root runs before the first launch and is never a gate on it
 - never writes a label: a stage hands back a `HANDBACK:` line (or `BLOCKED:`/`QUESTIONS FOR HUMAN:`) and `main/dispatch/transitions.ts` maps it; the launcher reports the next turn after a block through `onResumedTurn`
@@ -243,6 +244,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 **`apps/desktop/src/main/writes/`**
 - only GitHub writer; only `command.ts` names `--add-label`/`--remove-label`
 - never `merge`, `close`, `--delete-branch`, or `ready`
+- `postIssueBody` is the only issue-body write
 - `release.ts` builds the bump commit with git plumbing in the registered clone under a throwaway `GIT_INDEX_FILE`, signs it with `commit-tree -S` (never an unsigned fallback) and pushes it to a new `bump/v…` branch that is never overwritten, so the operator's checkout and index are never touched; the release tag exists only because `gh release create` made it
 - a release write has no ownership gate — it writes no pipeline label, and terminal ownership is about dispatch — and appends one `ReleaseAuditEntry` per attempt
 - `allow.ts` writes its commit through the Git Data API, from the oid `main/github/allow.ts` read the two files at, and appends one `AllowAuditEntry` per attempt; a stale `allow/…` branch fails with its name rather than being deleted or force-updated

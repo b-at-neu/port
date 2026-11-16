@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { HANDBACK_TOKENS, eventWrites, expectFor, handbackRefusal, itemKindFor, pullRequestNumberOf, stageModeFor, transitionFor } from '@/main/dispatch/transitions'
-import type { StageEvent, StageMode } from '@/types/stage-labels'
+import type { StageEvent, StageMode, StagePlanFile } from '@/types/stage-labels'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 
 function handback(mode: StageMode, observed: readonly LabelKey[], token: string, arg: string | null = null, extra: { prObserved?: readonly LabelKey[]; approvalGate?: boolean } = {}) {
-  const event: StageEvent = { kind: 'outcome', outcome: 'completed', handback: { token, arg } }
+  const event: StageEvent = { kind: 'outcome', outcome: 'completed', handback: { token, arg }, plan: { kind: 'read', body: '## Implementation Plan' } }
   return transitionFor({ event, mode, observed, approvalGate: extra.approvalGate ?? true, prObserved: extra.prObserved })
 }
 
@@ -85,19 +85,19 @@ describe('rollback and error', () => {
   })
 
   it('an error outcome resets under its own action', () => {
-    const result = transitionFor({ event: { kind: 'outcome', outcome: 'error', handback: null }, mode: 'impl', observed: ['inProgress'], approvalGate: true })
+    const result = transitionFor({ event: { kind: 'outcome', outcome: 'error', handback: null, plan: null }, mode: 'impl', observed: ['inProgress'], approvalGate: true })
     expect(onlyWrite(result)[0]).toMatchObject({ add: ['planApproved'], remove: ['inProgress'], action: 'stage-error-reset' })
   })
 })
 
 describe('blocked and the next turn', () => {
   it('impl moves inProgress to blocked', () => {
-    const result = transitionFor({ event: { kind: 'outcome', outcome: 'blocked', handback: null }, mode: 'impl', observed: ['inProgress'], approvalGate: true })
+    const result = transitionFor({ event: { kind: 'outcome', outcome: 'blocked', handback: null, plan: null }, mode: 'impl', observed: ['inProgress'], approvalGate: true })
     expect(onlyWrite(result)).toEqual([{ itemKind: 'issue', numberFrom: 'item', add: ['blocked'], remove: ['inProgress'], action: 'stage-blocked' }])
   })
 
   it.each(['plan', 'review', 'revise', 'refresh'] as const)('%s writes nothing on blocked', (mode) => {
-    expect(transitionFor({ event: { kind: 'outcome', outcome: 'blocked', handback: null }, mode, observed: [], approvalGate: true })).toEqual({ kind: 'none' })
+    expect(transitionFor({ event: { kind: 'outcome', outcome: 'blocked', handback: null, plan: null }, mode, observed: [], approvalGate: true })).toEqual({ kind: 'none' })
   })
 
   it('impl moves blocked back to inProgress on the next turn', () => {
@@ -110,7 +110,7 @@ describe('blocked and the next turn', () => {
   })
 
   it.each(['questions', 'interrupted', 'usage-limit'] as const)('%s writes nothing', (outcome) => {
-    expect(transitionFor({ event: { kind: 'outcome', outcome, handback: null }, mode: 'impl', observed: ['inProgress'], approvalGate: true })).toEqual({ kind: 'none' })
+    expect(transitionFor({ event: { kind: 'outcome', outcome, handback: null, plan: null }, mode: 'impl', observed: ['inProgress'], approvalGate: true })).toEqual({ kind: 'none' })
   })
 })
 
@@ -191,7 +191,24 @@ describe('pr-opened', () => {
 
 describe('unusable hand-backs', () => {
   it('completed with no hand-back line is no-handback', () => {
-    expect(transitionFor({ event: { kind: 'outcome', outcome: 'completed', handback: null }, mode: 'plan', observed: ['planning'], approvalGate: true })).toEqual({ kind: 'refused', reason: 'no-handback' })
+    expect(transitionFor({ event: { kind: 'outcome', outcome: 'completed', handback: null, plan: null }, mode: 'plan', observed: ['planning'], approvalGate: true })).toEqual({ kind: 'refused', reason: 'no-handback' })
+  })
+
+  const planWritten = (plan: StagePlanFile | null): StageEvent => ({ kind: 'outcome', outcome: 'completed', handback: { token: 'plan-written', arg: null }, plan })
+
+  it('plan-written with no plan file is no-plan-file', () => {
+    expect(handbackRefusal(planWritten(null), 'plan')).toBe('no-plan-file')
+    expect(handbackRefusal(planWritten({ kind: 'missing', detail: null }), 'plan')).toBe('no-plan-file')
+    expect(transitionFor({ event: planWritten({ kind: 'missing', detail: 'EACCES' }), mode: 'plan', observed: ['planning'], approvalGate: true })).toEqual({ kind: 'refused', reason: 'no-plan-file' })
+  })
+
+  it('plan-written with an empty plan file is empty-plan-file', () => {
+    expect(transitionFor({ event: planWritten({ kind: 'empty' }), mode: 'plan', observed: ['planning'], approvalGate: true })).toEqual({ kind: 'refused', reason: 'empty-plan-file' })
+  })
+
+  it('plan-written with a read plan plans the planning to planReview swap unchanged', () => {
+    const result = transitionFor({ event: planWritten({ kind: 'read', body: 'body' }), mode: 'plan', observed: ['planning'], approvalGate: true })
+    expect(onlyWrite(result)[0]).toMatchObject({ add: ['planReview'], remove: ['planning'], action: 'stage-handback-plan-written' })
   })
 
   it('a token outside the stage vocabulary is unknown-handback', () => {
@@ -214,8 +231,8 @@ describe('unusable hand-backs', () => {
   })
 
   it('handbackRefusal reads no labels, so it can run before any read', () => {
-    expect(handbackRefusal({ kind: 'outcome', outcome: 'completed', handback: null }, 'impl')).toBe('no-handback')
-    expect(handbackRefusal({ kind: 'outcome', outcome: 'completed', handback: { token: 'pr-opened', arg: '#8' } }, 'impl')).toBeNull()
+    expect(handbackRefusal({ kind: 'outcome', outcome: 'completed', handback: null, plan: null }, 'impl')).toBe('no-handback')
+    expect(handbackRefusal({ kind: 'outcome', outcome: 'completed', handback: { token: 'pr-opened', arg: '#8' }, plan: null }, 'impl')).toBeNull()
     expect(handbackRefusal({ kind: 'claim' }, 'impl')).toBeNull()
   })
 })
@@ -245,13 +262,13 @@ describe('helpers', () => {
   })
 
   it('eventWrites skips the outcomes that wait for the session or for Resume', () => {
-    expect(eventWrites({ kind: 'outcome', outcome: 'questions', handback: null }, 'impl')).toBe(false)
-    expect(eventWrites({ kind: 'outcome', outcome: 'interrupted', handback: null }, 'impl')).toBe(false)
-    expect(eventWrites({ kind: 'outcome', outcome: 'usage-limit', handback: null }, 'impl')).toBe(false)
-    expect(eventWrites({ kind: 'outcome', outcome: 'blocked', handback: null }, 'review')).toBe(false)
-    expect(eventWrites({ kind: 'outcome', outcome: 'blocked', handback: null }, 'impl')).toBe(true)
-    expect(eventWrites({ kind: 'outcome', outcome: 'completed', handback: null }, 'plan')).toBe(true)
-    expect(eventWrites({ kind: 'outcome', outcome: 'error', handback: null }, 'plan')).toBe(true)
+    expect(eventWrites({ kind: 'outcome', outcome: 'questions', handback: null, plan: null }, 'impl')).toBe(false)
+    expect(eventWrites({ kind: 'outcome', outcome: 'interrupted', handback: null, plan: null }, 'impl')).toBe(false)
+    expect(eventWrites({ kind: 'outcome', outcome: 'usage-limit', handback: null, plan: null }, 'impl')).toBe(false)
+    expect(eventWrites({ kind: 'outcome', outcome: 'blocked', handback: null, plan: null }, 'review')).toBe(false)
+    expect(eventWrites({ kind: 'outcome', outcome: 'blocked', handback: null, plan: null }, 'impl')).toBe(true)
+    expect(eventWrites({ kind: 'outcome', outcome: 'completed', handback: null, plan: null }, 'plan')).toBe(true)
+    expect(eventWrites({ kind: 'outcome', outcome: 'error', handback: null, plan: null }, 'plan')).toBe(true)
   })
 })
 

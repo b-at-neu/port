@@ -13,7 +13,7 @@ export default async function ({ expect, fail }: Reporter) {
   const guardRel = 'apps/desktop/src/main/hosting/label-guard.ts';
 
   // --- (a) No bundled agent writes, or tells anyone to write, a label. ---
-  const forbidden = ['--add-label', '--remove-label', 'label-cas', '<labels.', '--label'];
+  const forbidden = ['--add-label', '--remove-label', 'label-cas', '<labels.', '--label', 'gh issue edit'];
   for (const stage of stages) {
     const text = readFileSync(join(root, agentRel(stage)), 'utf8');
     for (const needle of forbidden) {
@@ -63,4 +63,22 @@ export default async function ({ expect, fail }: Reporter) {
   const reads = ['gh pr view 8 --repo o/a --json labels', 'gh issue view 52 --repo o/a --json labels,title', 'gh pr create --repo o/a --title t --assignee op', 'gh issue comment 52 --body-file .temp/b.md'];
   for (const command of writes) expect(labelWriteOf(command) !== null, 'desktop-stage-labels', `${guardRel} lets '${command}' through`);
   for (const command of reads) expect(labelWriteOf(command) === null, 'desktop-stage-labels', `${guardRel} denies '${command}', which writes no label`);
+
+  // --- (d) The same guard denies an issue-body write in every form, and lets comments, views and a pull request description through. ---
+  const { issueBodyWriteOf } = await import(pathToFileURL(join(root, guardRel)).href);
+  const bodyWrites = [
+    'gh issue edit 52 --repo o/a --body-file .temp/plan-52.md',
+    'gh issue edit 52 -b x',
+    'gh api repos/o/a/issues/52 -X PATCH -F body=@.temp/p.md',
+    'gh api repos/o/a/issues/52 --input .temp/p.json',
+  ];
+  const bodyReads = [
+    'gh issue comment 52 --body-file .temp/b.md',
+    'gh pr edit 8 --body-file .temp/pr-body-8.md',
+    'gh api repos/o/a/issues/52',
+    'gh api repos/o/a/issues/52/comments -f body=x',
+    'gh issue view 52 --json body',
+  ];
+  for (const command of bodyWrites) expect(issueBodyWriteOf(command), 'desktop-stage-labels', `${guardRel} lets '${command}' through`);
+  for (const command of bodyReads) expect(!issueBodyWriteOf(command), 'desktop-stage-labels', `${guardRel} denies '${command}', which writes no issue body`);
 }
