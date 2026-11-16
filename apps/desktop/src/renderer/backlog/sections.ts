@@ -29,10 +29,11 @@ export function repoFilterCount(repos: readonly RepoRef[], hidden: ReadonlySet<R
 export function navigableRows(groups: readonly BacklogGroupView[], collapsed: ReadonlySet<RepoId>, collapsedEpics: ReadonlySet<string>): BacklogRowView[] {
   return groups.flatMap((group) => {
     if (group.kind !== 'loaded' || collapsed.has(group.repoId)) return []
-    const epicRows = group.layout.epics.flatMap((entry) => {
-      if (collapsedEpics.has(rowKey(group.repoId, entry.epic.number))) return [entry.epic]
-      return [entry.epic, ...entry.waves.flatMap((wave) => wave.rows), ...entry.unplaced]
+    return group.layout.entries.flatMap((entry) => {
+      if (entry.kind === 'row') return [entry.row]
+      const { epic, waves, unplaced } = entry.group
+      if (collapsedEpics.has(rowKey(group.repoId, epic.number))) return [epic]
+      return [epic, ...waves.flatMap((wave) => wave.rows), ...unplaced]
     })
-    return [...epicRows, ...group.layout.remainder]
   })
 }

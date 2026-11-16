@@ -14,7 +14,7 @@ function row(overrides: Partial<BacklogRowView> = {}): BacklogRowView {
     title: 'Document retries',
     url: 'u',
     assignee: null,
-    updatedAt: 'x',
+    createdAt: 'x',
     labels: [],
     subIssueCount: 0,
     blockers: { ok: true, open: [], shown: 0, total: 0 },

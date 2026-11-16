@@ -12,7 +12,7 @@ function row(repoId: RepoId, number: number): BacklogRowView {
   return { repoId, number } as BacklogRowView
 }
 
-function loaded(repoId: RepoId, numbers: readonly number[], layout: BacklogEpicLayout = { epics: [], remainder: numbers.map((n) => row(repoId, n)) }): BacklogGroupView {
+function loaded(repoId: RepoId, numbers: readonly number[], layout: BacklogEpicLayout = { entries: numbers.map((n) => ({ kind: 'row', row: row(repoId, n) })) }): BacklogGroupView {
   return { kind: 'loaded', repoId, repo: String(repoId), items: numbers.map((n) => row(repoId, n)), totalCount: numbers.length, labelOptions: [], truncatedNote: null, layout }
 }
 
@@ -25,8 +25,11 @@ function epic(repoId: RepoId, number: number, waves: BacklogWave[], unplaced: Ba
 }
 
 const EPIC_LAYOUT: BacklogEpicLayout = {
-  epics: [epic(A, 100, [wave(1, [row(A, 101)]), wave(2, [], true), wave(3, [row(A, 103)])], [row(A, 104)])],
-  remainder: [row(A, 110)],
+  entries: [
+    { kind: 'row', row: row(A, 120) },
+    { kind: 'epic', group: epic(A, 100, [wave(1, [row(A, 101)]), wave(2, [], true), wave(3, [row(A, 103)])], [row(A, 104)]) },
+    { kind: 'row', row: row(A, 110) },
+  ],
 }
 
 describe('visibleRepos', () => {
@@ -85,14 +88,14 @@ describe('navigableRows', () => {
     expect(navigableRows(groups, new Set(), none).map((r) => r.number)).toEqual([9])
   })
 
-  it('walks the epic, its wave rows and unplaced rows, then the remainder, skipping band-only waves', () => {
+  it('walks entries in order, an epic then its wave rows and unplaced rows, skipping band-only waves', () => {
     const groups = [loaded(A, [], EPIC_LAYOUT)]
-    expect(navigableRows(groups, new Set(), none).map((r) => r.number)).toEqual([100, 101, 103, 104, 110])
+    expect(navigableRows(groups, new Set(), none).map((r) => r.number)).toEqual([120, 100, 101, 103, 104, 110])
   })
 
-  it('contributes only the epic row for a collapsed epic', () => {
+  it('contributes only the epic row for a collapsed epic, in the middle of the list', () => {
     const groups = [loaded(A, [], EPIC_LAYOUT)]
-    expect(navigableRows(groups, new Set(), new Set([rowKey(A, 100)])).map((r) => r.number)).toEqual([100, 110])
+    expect(navigableRows(groups, new Set(), new Set([rowKey(A, 100)])).map((r) => r.number)).toEqual([120, 100, 110])
   })
 
   it('contributes nothing for a collapsed repository, whatever its epics', () => {

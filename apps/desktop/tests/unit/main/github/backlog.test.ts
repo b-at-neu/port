@@ -28,7 +28,7 @@ async function fetchWithChildren(listNodes: readonly Record<string, unknown>[], 
 }
 
 function issueNode(number: number, extra: Record<string, unknown>): Record<string, unknown> {
-  return { number, title: `t${String(number)}`, url: `u${String(number)}`, updatedAt: 'x', labels: { nodes: [] }, assignees: { nodes: [] }, ...extra }
+  return { number, title: `t${String(number)}`, url: `u${String(number)}`, createdAt: 'x', labels: { nodes: [] }, assignees: { nodes: [] }, ...extra }
 }
 
 async function fetchNodes(nodes: readonly Record<string, unknown>[], errors?: readonly unknown[]) {
@@ -46,8 +46,8 @@ describe('fetchBacklog', () => {
           issues: {
             totalCount: 2,
             nodes: [
-              { number: 47, title: 'Add dark mode', url: 'u47', updatedAt: '2026-01-01T00:00:00Z', labels: { nodes: [] }, assignees: { nodes: [] }, blockedBy: NO_BLOCKERS, blocking: NO_BLOCKERS, parent: null },
-              { number: 45, title: 'Already claimed', url: 'u45', updatedAt: '2026-01-02T00:00:00Z', labels: { nodes: [{ name: READY_LABEL }] }, assignees: { nodes: [{ login: 'alice' }] }, blockedBy: NO_BLOCKERS },
+              { number: 47, title: 'Add dark mode', url: 'u47', createdAt: '2026-01-01T00:00:00Z', labels: { nodes: [] }, assignees: { nodes: [] }, blockedBy: NO_BLOCKERS, blocking: NO_BLOCKERS, parent: null },
+              { number: 45, title: 'Already claimed', url: 'u45', createdAt: '2026-01-02T00:00:00Z', labels: { nodes: [{ name: READY_LABEL }] }, assignees: { nodes: [{ login: 'alice' }] }, blockedBy: NO_BLOCKERS },
             ],
           },
         },
@@ -58,11 +58,27 @@ describe('fetchBacklog', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.items).toEqual([
-      { number: 47, title: 'Add dark mode', url: 'u47', updatedAt: '2026-01-01T00:00:00Z', assignees: [], labels: [], subIssueCount: 0, blockers: NO_LINKS, blocking: NO_LINKS, parent: { ok: true, parent: null }, children: NO_CHILDREN },
+      { number: 47, title: 'Add dark mode', url: 'u47', createdAt: '2026-01-01T00:00:00Z', assignees: [], labels: [], subIssueCount: 0, blockers: NO_LINKS, blocking: NO_LINKS, parent: { ok: true, parent: null }, children: NO_CHILDREN },
     ])
     expect(result.scanned).toBe(2)
     expect(result.total).toBe(2)
     expect(result.viewer).toBe('octo-dev')
+  })
+
+  it('queries open issues newest-created first, selecting createdAt and never updatedAt', async () => {
+    const recording = recordingTransport(() => JSON.stringify({ data: { repository: { issues: { totalCount: 0, nodes: [] } }, viewer: { login: 'octo-dev' } } }))
+    await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, github: recording.transport })
+    const document = queryOf(recording.requests[0])
+    expect(document).toContain('orderBy: {field: CREATED_AT, direction: DESC}')
+    expect(document).toContain('createdAt')
+    expect(document).not.toContain('updatedAt')
+    expect(document).not.toContain('UPDATED_AT')
+  })
+
+  it('maps a missing createdAt to an empty string', async () => {
+    const bare = { number: 1, title: 't1', url: 'u1', labels: { nodes: [] }, assignees: { nodes: [] }, blockedBy: NO_BLOCKERS }
+    const result = await fetchNodes([bare, issueNode(2, { blockedBy: NO_BLOCKERS, createdAt: '2026-01-01T00:00:00Z' })])
+    expect(result.items.map((item) => item.createdAt)).toEqual(['', '2026-01-01T00:00:00Z'])
   })
 
   it('carries each label with a lowercased colour, null when missing or malformed, and the sub-issue count', async () => {
@@ -76,13 +92,13 @@ describe('fetchBacklog', () => {
                 number: 1,
                 title: 'parent',
                 url: 'u1',
-                updatedAt: 'x',
+                createdAt: 'x',
                 labels: { nodes: [{ name: 'bug', color: 'D73A4A' }, { name: 'odd', color: 'xyz' }, { name: 'bare' }, { color: 'ffffff' }] },
                 assignees: { nodes: [] },
                 subIssues: { totalCount: 3 },
               },
-              { number: 2, title: 'no field', url: 'u2', updatedAt: 'x', labels: { nodes: [] }, assignees: { nodes: [] } },
-              { number: 3, title: 'bad count', url: 'u3', updatedAt: 'x', labels: { nodes: [] }, assignees: { nodes: [] }, subIssues: { totalCount: -1 } },
+              { number: 2, title: 'no field', url: 'u2', createdAt: 'x', labels: { nodes: [] }, assignees: { nodes: [] } },
+              { number: 3, title: 'bad count', url: 'u3', createdAt: 'x', labels: { nodes: [] }, assignees: { nodes: [] }, subIssues: { totalCount: -1 } },
             ],
           },
         },
@@ -143,7 +159,7 @@ describe('fetchBacklog', () => {
         repository: {
           issues: {
             totalCount: 150,
-            nodes: [{ number: 1, title: 't', url: 'u', updatedAt: 'x', labels: { nodes: [] }, assignees: { nodes: [] } }],
+            nodes: [{ number: 1, title: 't', url: 'u', createdAt: 'x', labels: { nodes: [] }, assignees: { nodes: [] } }],
           },
         },
         viewer: { login: 'octo-dev' },

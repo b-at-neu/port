@@ -142,12 +142,13 @@ function GroupBody({
   return (
     <div>
       {group.truncatedNote !== null ? <p className="px-4 py-1 text-meta text-muted-foreground">{group.truncatedNote}</p> : null}
-      {group.layout.epics.map((entry) => {
-        const key = rowKey(entry.epic.repoId, entry.epic.number)
+      {group.layout.entries.map((entry) => {
+        if (entry.kind === 'row') return renderRow(entry.row)
+        const key = rowKey(entry.group.epic.repoId, entry.group.epic.number)
         return (
           <EpicGroup
             key={key}
-            group={entry}
+            group={entry.group}
             collapsed={collapsedEpics.has(key)}
             onToggle={() => onToggleEpic(key)}
             renderRow={renderRow}
@@ -158,7 +159,6 @@ function GroupBody({
           />
         )
       })}
-      {group.layout.remainder.map((row) => renderRow(row))}
     </div>
   )
 }

@@ -258,9 +258,13 @@ function answerGraphQL(document) {
     repository[alias] = pull ? nodeOf('pull-request', pull, state) : null
   }
   // The Backlog's own unaliased, unfiltered `issues(states: OPEN, …, orderBy: …)` (backlog.ts) —
-  // every open issue, newest-updated first, with no `labels:` argument to key off at all.
-  if (document.includes('orderBy: {field: UPDATED_AT')) {
-    const nodes = state.issues.filter((i) => (i.state ?? 'OPEN') === 'OPEN').map((i) => nodeOf('issue', i, state))
+  // every open issue, newest-created first, with no `labels:` argument to key off at all.
+  if (document.includes('orderBy: {field: CREATED_AT')) {
+    const createdMs = (i) => Date.parse(i.createdAt ?? '2024-01-01T00:00:00Z')
+    const nodes = state.issues
+      .filter((i) => (i.state ?? 'OPEN') === 'OPEN')
+      .sort((a, b) => createdMs(b) - createdMs(a))
+      .map((i) => nodeOf('issue', i, state))
     repository.issues = { totalCount: nodes.length, nodes }
   }
 

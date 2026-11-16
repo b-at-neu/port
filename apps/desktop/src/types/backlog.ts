@@ -36,7 +36,7 @@ export interface BacklogItem {
   readonly number: number
   readonly title: string
   readonly url: string
-  readonly updatedAt: string
+  readonly createdAt: string
   readonly assignees: readonly string[]
   readonly labels: readonly BacklogLabel[]
   readonly subIssueCount: number
@@ -100,7 +100,7 @@ export interface BacklogRowView {
   readonly title: string
   readonly url: string
   readonly assignee: string | null
-  readonly updatedAt: string
+  readonly createdAt: string
   readonly labels: readonly BacklogLabel[]
   readonly subIssueCount: number
   readonly blockers: BlockerRead
@@ -175,9 +175,13 @@ export interface BacklogRowExtras {
 
 export type RenderBacklogRow = (row: BacklogRowView, extras?: BacklogRowExtras) => ReactNode
 
+// One timeline slot: an epic group or a loose row, ordered by its own created time.
+export type BacklogLayoutEntry =
+  | { readonly kind: 'epic'; readonly group: BacklogEpicGroup }
+  | { readonly kind: 'row'; readonly row: BacklogRowView }
+
 export interface BacklogEpicLayout {
-  readonly epics: readonly BacklogEpicGroup[]
-  readonly remainder: readonly BacklogRowView[]
+  readonly entries: readonly BacklogLayoutEntry[]
 }
 
 // What Work on must confirm before claiming; `truncation` is set when the blocker page held fewer than exist.

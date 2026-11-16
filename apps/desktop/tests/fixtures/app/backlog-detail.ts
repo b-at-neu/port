@@ -40,7 +40,7 @@ function detailFor(now: Date, number: number): BacklogDetail | undefined {
         title: 'Overhaul the notification settings',
         url: 'https://github.com/acme/widgets/issues/41',
         body: 'Rework how notification preferences are stored and presented.',
-        createdAt: offsetHours(now, 24 * 14),
+        createdAt: offsetHours(now, 24 * 4),
         updatedAt: offsetHours(now, 120),
         blocking: { ok: true, items: [link(45, 'Document the webhook retry policy', 'OPEN')], total: 1 },
       }
