@@ -109,9 +109,9 @@ export function BacklogRow({ row, rowProps, menuOpen, pending, onMenuOpenChange,
       {row.assignee !== null ? <span className="shrink-0 text-meta text-muted-foreground">{row.assignee}</span> : null}
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="shrink-0 text-meta text-muted-foreground">{relativeAge(row.updatedAt, now)}</span>
+          <span data-slot="backlog-age" className="shrink-0 text-meta text-muted-foreground">{relativeAge(row.createdAt, now)}</span>
         </TooltipTrigger>
-        <TooltipContent>{exactTime(row.updatedAt)}</TooltipContent>
+        <TooltipContent>{exactTime(row.createdAt)}</TooltipContent>
       </Tooltip>
       <WorkOnMenu open={menuOpen} pending={pending} onOpenChange={onMenuOpenChange} onPick={onPick} />
     </div>

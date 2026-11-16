@@ -24,7 +24,7 @@ export function backlogFailureCopy(repo: string, kind: PipelineFailureKind, mess
 }
 
 export function backlogTruncatedCopy(scanned: number): string {
-  return `Showing the ${String(scanned)} most recently updated open tickets. Older ones aren't listed.`
+  return `Showing the ${String(scanned)} newest open tickets. Older ones aren't listed.`
 }
 
 export function backlogEmptyGroupCopy(repo: string): string {

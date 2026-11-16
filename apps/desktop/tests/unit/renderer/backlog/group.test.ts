@@ -17,12 +17,12 @@ const NO_CHILDREN = { ok: true, children: [], shown: 0, total: 0 } as const
 const OK_RESPONSE: Extract<BacklogResponse, { ok: true }> = {
   ok: true,
   items: [
-    { number: 47, title: 'Add dark mode', url: 'https://github.com/acme/widgets/issues/47', updatedAt: '2026-01-01T00:00:00Z', assignees: [], labels: [{ name: 'bug', color: 'd73a4a' }], subIssueCount: 0, blockers: NO_LINKS, blocking: NO_LINKS, parent: NO_PARENT, children: NO_CHILDREN },
+    { number: 47, title: 'Add dark mode', url: 'https://github.com/acme/widgets/issues/47', createdAt: '2026-01-01T00:00:00Z', assignees: [], labels: [{ name: 'bug', color: 'd73a4a' }], subIssueCount: 0, blockers: NO_LINKS, blocking: NO_LINKS, parent: NO_PARENT, children: NO_CHILDREN },
     {
       number: 45,
       title: 'Document retries',
       url: 'https://github.com/acme/widgets/issues/45',
-      updatedAt: '2026-01-01T00:00:00Z',
+      createdAt: '2026-01-01T00:00:00Z',
       assignees: ['alice'],
       labels: [{ name: 'docs', color: null }],
       subIssueCount: 2,
@@ -139,34 +139,43 @@ function epicResponse(): Extract<BacklogResponse, { ok: true }> {
 }
 
 describe('buildBacklogGroup layout', () => {
-  it('groups children under their epic, with the flat remainder after it', () => {
+  it('groups children under their epic, with the loose row after it', () => {
     const group = buildBacklogGroup(REPO_ID, 'acme/widgets', query({ data: epicResponse() }))
     if (group.kind !== 'loaded') throw new Error('expected loaded')
-    expect(group.layout.epics.map((entry) => entry.epic.number)).toEqual([41])
-    expect(group.layout.epics[0]?.waves.map((wave) => [wave.number, wave.rows.map((row) => row.number)])).toEqual([[1, [42]], [2, [43]]])
-    expect(group.layout.remainder.map((row) => row.number)).toEqual([50])
+    const [first, second] = group.layout.entries
+    expect(group.layout.entries.map((entry) => entry.kind)).toEqual(['epic', 'row'])
+    if (first?.kind !== 'epic' || second?.kind !== 'row') throw new Error('expected an epic then a row')
+    expect(first.group.epic.number).toBe(41)
+    expect(first.group.waves.map((wave) => [wave.number, wave.rows.map((row) => row.number)])).toEqual([[1, [42]], [2, [43]]])
+    expect(second.row.number).toBe(50)
   })
 
   it('keeps wave numbers when a filter hides a wave member', () => {
     const group = buildBacklogGroup(REPO_ID, 'acme/widgets', query({ data: epicResponse() }), { include: ['bug'], exclude: [] })
     if (group.kind !== 'loaded') throw new Error('expected loaded')
-    const waves = group.layout.epics[0]?.waves
-    expect(waves?.map((wave) => [wave.number, wave.rows.map((row) => row.number)])).toEqual([[1, [42]], [2, []]])
-    expect(group.layout.epics[0]?.epic.number).toBe(41)
+    const first = group.layout.entries[0]
+    if (first?.kind !== 'epic') throw new Error('expected an epic first')
+    expect(first.group.waves.map((wave) => [wave.number, wave.rows.map((row) => row.number)])).toEqual([[1, [42]], [2, []]])
+    expect(first.group.epic.number).toBe(41)
   })
 
   it('keeps a filtered-out epic as the header of its shown children', () => {
     const group = buildBacklogGroup(REPO_ID, 'acme/widgets', query({ data: epicResponse() }), { include: ['bug'], exclude: [] })
     if (group.kind !== 'loaded') throw new Error('expected loaded')
     expect(group.items.map((row) => row.number)).toEqual([42, 50])
-    expect(group.layout.epics).toHaveLength(1)
+    expect(group.layout.entries.filter((entry) => entry.kind === 'epic')).toHaveLength(1)
   })
 
-  it('puts every row of a repository with no epics in the remainder', () => {
+  it('projects createdAt into the row view', () => {
+    const group = buildBacklogGroup(REPO_ID, 'acme/widgets', query({ data: OK_RESPONSE }))
+    if (group.kind !== 'loaded') throw new Error('expected loaded')
+    expect(group.items[0]?.createdAt).toBe('2026-01-01T00:00:00Z')
+  })
+
+  it('makes every row of a repository with no epics a row entry', () => {
     const group = buildBacklogGroup(REPO_ID, 'acme/widgets', query({ data: { ...OK_RESPONSE, items: [OK_RESPONSE.items[0]!] } }))
     if (group.kind !== 'loaded') throw new Error('expected loaded')
-    expect(group.layout.epics).toEqual([])
-    expect(group.layout.remainder).toEqual(group.items)
+    expect(group.layout.entries).toEqual(group.items.map((row) => ({ kind: 'row', row })))
   })
 })
 

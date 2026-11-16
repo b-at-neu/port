@@ -96,7 +96,7 @@ describe('backlogFailureCopy', () => {
 
 describe('other backlog copy', () => {
   it('truncated names the scanned count', () => {
-    expect(backlogTruncatedCopy(100)).toContain('100')
+    expect(backlogTruncatedCopy(100)).toBe("Showing the 100 newest open tickets. Older ones aren't listed.")
   })
 
   it('invoke error names the repository', () => {
