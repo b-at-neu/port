@@ -159,6 +159,12 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - fails closed (`effective-config-unreadable`) rather than silently running on port defaults
 - imports `scripts/port-tick/overrides.ts` directly — no app-owned copy
 
+**`apps/desktop/src/main/registry/index.ts`**
+- `listRepositories` is the one cached reader of registry inspections: in-flight shared, `REPOSITORY_LIST_TTL_MS`, keyed by the `RegistryDeps` object
+- add/remove invalidate it; only the watcher's explicit refresh passes `fresh`
+- a failed read is never cached
+- callers never add a second cache of their own
+
 **`apps/desktop/src/main/registry/schema.ts`**
 - the only reader of `schema/port.config.schema.json`'s shape and defaults
 - never a hand-transcribed TypeScript interface of the config shape

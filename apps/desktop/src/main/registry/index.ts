@@ -12,11 +12,64 @@ async function inspectAll(paths: readonly string[], git: GitRunner) {
   return Promise.all(paths.map((path) => inspectRepository(path, { git })))
 }
 
-export async function listRepositories(deps: RegistryDeps): Promise<ReposListResponse> {
+export const REPOSITORY_LIST_TTL_MS = 5_000
+
+interface ListCache {
+  generation: number
+  inFlight: Promise<ReposListResponse> | null
+  settled: { readonly readAt: number; readonly result: ReposListResponse } | null
+}
+
+const listCaches = new WeakMap<RegistryDeps, ListCache>()
+
+function cacheOf(deps: RegistryDeps): ListCache {
+  const existing = listCaches.get(deps)
+  if (existing) return existing
+  const created: ListCache = { generation: 0, inFlight: null, settled: null }
+  listCaches.set(deps, created)
+  return created
+}
+
+const clockOf = (deps: RegistryDeps): number => (deps.now ?? Date.now)()
+
+async function readAndInspect(deps: RegistryDeps): Promise<ReposListResponse> {
   const registry = await readRegistry(deps.registryDir)
   if (!registry.ok) return { ok: false, kind: registry.kind, message: registry.message }
   const repositories = await inspectAll(registry.repositories, deps.git)
   return { ok: true, repositories }
+}
+
+/** Invalidates the cache, then seeds it with a list the caller just inspected, so the refetch after an add or remove costs no git. */
+function replaceCache(deps: RegistryDeps, readAt: number, repositories: readonly RepositoryEntry[]): void {
+  const cache = cacheOf(deps)
+  cache.generation++
+  cache.inFlight = null
+  cache.settled = { readAt, result: { ok: true, repositories } }
+}
+
+export function listRepositories(deps: RegistryDeps, options?: { readonly fresh?: boolean }): Promise<ReposListResponse> {
+  const cache = cacheOf(deps)
+  const fresh = options?.fresh === true
+  if (!fresh) {
+    if (cache.settled && clockOf(deps) - cache.settled.readAt < REPOSITORY_LIST_TTL_MS) return Promise.resolve(cache.settled.result)
+    if (cache.inFlight) return cache.inFlight
+  }
+
+  const readAt = clockOf(deps)
+  const generation = cache.generation
+  const read: Promise<ReposListResponse> = readAndInspect(deps).then(
+    (result) => {
+      if (cache.inFlight === read) cache.inFlight = null
+      if (result.ok && cache.generation === generation) cache.settled = { readAt, result }
+      return result
+    },
+    (error: unknown) => {
+      if (cache.inFlight === read) cache.inFlight = null
+      throw error
+    },
+  )
+  cache.inFlight = read
+  return read
 }
 
 export async function addRepository(deps: RegistryDeps): Promise<ReposAddResponse> {
@@ -46,7 +99,9 @@ export async function addRepository(deps: RegistryDeps): Promise<ReposAddRespons
   const written = await writeRegistry(deps.registryDir, newPaths)
   if (!written.ok) return { ok: false, kind: written.kind, message: written.message }
 
+  const readAt = clockOf(deps)
   const repositories = await inspectAll(newPaths, deps.git)
+  replaceCache(deps, readAt, repositories)
   const added = repositories.find((entry) => pathOps.samePath(entry.path, effectivePath))
   return { ok: true, outcome: 'added', added: added?.id ?? (pathOps.pathKey(effectivePath) as unknown as RepoId), repositories }
 }
@@ -90,6 +145,8 @@ export async function removeRepository(deps: RegistryDeps, id: RepoId): Promise<
   const written = await writeRegistry(deps.registryDir, remaining)
   if (!written.ok) return { ok: false, kind: 'registry-unwritable', message: written.message }
 
+  const readAt = clockOf(deps)
   const repositories = await inspectAll(remaining, deps.git)
+  replaceCache(deps, readAt, repositories)
   return { ok: true, repositories }
 }

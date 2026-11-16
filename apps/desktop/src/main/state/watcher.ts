@@ -38,7 +38,7 @@ type RecordTickFn = (repoRoot: string, event: DesktopTickEvent, deps?: RecordTic
 
 interface CreatePipelineWatcherParams {
   /** A static list, or a provider re-invoked on the GitHub cadence, so a repository added or removed appears on the board without a restart. */
-  readonly repositories: readonly RepositoryEntry[] | (() => Promise<readonly RepositoryEntry[]>)
+  readonly repositories: readonly RepositoryEntry[] | ((options: { readonly fresh: boolean }) => Promise<readonly RepositoryEntry[]>)
   readonly onSnapshot: (snapshot: BoardSnapshot) => void
   /** Fired after `buildSnapshot()` on the timer path and in `refresh()` — never in `republish()`, so a dispatch pass never re-triggers itself off its own state change. */
   readonly onTick?: (snapshot: BoardSnapshot) => void
@@ -350,8 +350,10 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
 
     const currentReady = repositories.filter(isReady)
     const githubWillRun = currentReady.some((entry) => isDue('github', entry.id) || isForced(request, 'github', entry.id))
-    if (typeof params.repositories === 'function' && (!hasListedRepositories || githubWillRun)) {
-      repositories = await params.repositories()
+    // An explicit github-scoped refresh bypasses the list cache, so a manual refresh always re-reads config.
+    const explicit = request !== undefined && (request.source === undefined || request.source === 'github')
+    if (typeof params.repositories === 'function' && (!hasListedRepositories || githubWillRun || explicit)) {
+      repositories = await params.repositories({ fresh: explicit })
       hasListedRepositories = true
     }
 

@@ -276,6 +276,54 @@ describe('createPipelineWatcher — registry re-list', () => {
 
     expect(second.state.repositories).toHaveLength(2)
   })
+
+  describe('the provider fresh flag', () => {
+    async function setup() {
+      let currentMs = Date.parse('2026-01-01T00:00:00.000Z')
+      const timer = makeFakeTimer()
+      const waiter = makeSnapshotWaiter()
+      const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
+      const fresh: boolean[] = []
+      const watcher = createPipelineWatcher({
+        repositories: (options) => {
+          fresh.push(options.fresh)
+          return Promise.resolve([readyEntry('repo-a', root, 'o/a')])
+        },
+        onSnapshot: waiter.onSnapshot,
+        now: () => new Date(currentMs),
+        setTimer: timer.factory,
+        git: fakeGit({ worktreeList: 0 }),
+        github: () => Promise.resolve(httpOk(EMPTY_PIPELINE_BODY)),
+        sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+      })
+      return { watcher, timer, waiter, fresh, advance: (ms: number) => (currentMs += ms) }
+    }
+
+    it('the timer tick is not fresh', async () => {
+      const { watcher, timer, waiter, fresh, advance } = await setup()
+      await watcher.refresh({ source: 'worktrees' })
+      fresh.length = 0
+      const p = waiter.next()
+      advance(60_000)
+      timer.fire()
+      await p
+      expect(fresh).toEqual([false])
+    })
+
+    it('refresh({}) and a github-scoped refresh are fresh', async () => {
+      const { watcher, fresh } = await setup()
+      await watcher.refresh({})
+      await watcher.refresh({ repoId: 'repo-a' as RepositoryEntry['id'], source: 'github' })
+      expect(fresh).toEqual([true, true])
+    })
+
+    it('a worktrees-scoped refresh does not force a fresh list', async () => {
+      const { watcher, fresh } = await setup()
+      await watcher.refresh({ source: 'worktrees' })
+      await watcher.refresh({ source: 'worktrees' })
+      expect(fresh).toEqual([false])
+    })
+  })
 })
 
 describe('createPipelineWatcher — tick wiring (#105)', () => {

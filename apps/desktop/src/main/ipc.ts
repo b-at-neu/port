@@ -281,8 +281,8 @@ export function registerIpc(restart: RestartSeams): RegisteredIpc {
   // a pass must never block the broadcast the renderer is waiting on.
   const watcher = createPipelineWatcher({
     engine,
-    repositories: async () => {
-      const list = await listRepositories(registryDeps)
+    repositories: async ({ fresh }) => {
+      const list = await listRepositories(registryDeps, { fresh })
       return list.ok ? list.repositories : []
     },
     git: (args, cwd) => git(args, { cwd }),
