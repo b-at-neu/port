@@ -68,7 +68,7 @@ describe('fetchBacklog', () => {
   it('queries open issues newest-created first, selecting createdAt and never updatedAt', async () => {
     const recording = recordingTransport(() => JSON.stringify({ data: { repository: { issues: { totalCount: 0, nodes: [] } }, viewer: { login: 'octo-dev' } } }))
     await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, github: recording.transport })
-    const document = queryOf(recording.requests[0]!)
+    const document = queryOf(recording.requests[0])
     expect(document).toContain('orderBy: {field: CREATED_AT, direction: DESC}')
     expect(document).toContain('createdAt')
     expect(document).not.toContain('updatedAt')
