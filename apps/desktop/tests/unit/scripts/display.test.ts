@@ -9,6 +9,7 @@ describe('displayPlan', () => {
 
   it('refuses on Linux with neither xvfb nor a display, naming how to install it', () => {
     const plan = displayPlan({ platform: 'linux', hasXvfb: false, hasDisplay: false })
+    if (plan.kind === 'xvfb') throw new Error('expected a refusal')
     expect(plan.kind).toBe('refuse')
     expect(plan.lines).toHaveLength(2)
     expect(plan.lines[0]).toBe('[screenshots] No display and no xvfb-run, so there is nowhere to open the app window.')
@@ -17,6 +18,7 @@ describe('displayPlan', () => {
 
   it('falls back to the desktop on Linux without xvfb, saying so plainly', () => {
     const plan = displayPlan({ platform: 'linux', hasXvfb: false, hasDisplay: true })
+    if (plan.kind === 'xvfb') throw new Error('expected the desktop fallback')
     expect(plan.kind).toBe('desktop')
     expect(plan.lines).toHaveLength(3)
     expect(plan.lines[0]).toBe('[screenshots] xvfb-run not found — the app window will open on your desktop for this run.')
@@ -29,6 +31,7 @@ describe('displayPlan', () => {
     for (const hasXvfb of [true, false]) {
       for (const hasDisplay of [true, false]) {
         const plan = displayPlan({ platform: 'darwin', hasXvfb, hasDisplay })
+        if (plan.kind === 'xvfb') throw new Error('expected the desktop plan')
         expect(plan.kind).toBe('desktop')
         expect(plan.lines).toEqual([
           '[screenshots] macOS has no virtual display — the app window opens in the background for this run.',
@@ -40,6 +43,7 @@ describe('displayPlan', () => {
 
   it('runs in the background on Windows', () => {
     const plan = displayPlan({ platform: 'win32', hasXvfb: false, hasDisplay: false })
+    if (plan.kind === 'xvfb') throw new Error('expected the desktop plan')
     expect(plan.kind).toBe('desktop')
     expect(plan.lines).toEqual([
       '[screenshots] Windows has no virtual display — the app window opens in the background for this run.',
