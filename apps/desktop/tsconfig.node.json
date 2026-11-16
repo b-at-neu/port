@@ -10,6 +10,7 @@
     }
   },
   "include": [
+    "scripts/display.d.mts",
     "scripts/type-moves.d.mts",
     "src/main/**/*",
     "src/preload/**/*",
