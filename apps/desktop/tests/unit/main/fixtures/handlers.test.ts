@@ -41,6 +41,7 @@ const SAMPLE_REQUESTS: Partial<Record<IpcChannel, unknown>> = {
   'session:restore': { restoreId: 'r1' },
   'session:restore:discard': { restoreId: null },
   'backlog:list': { repoId: 'fixture-acme-widgets' },
+  'backlog:detail': { repoId: 'fixture-acme-widgets', number: 45 },
   'release:status': { repoId: 'fixture-acme-widgets' },
   'release:run': { repoId: 'fixture-acme-widgets', step: 'open', version: '0.3.0' },
   'release:issues': { repoId: 'fixture-acme-widgets', tag: 'v0.2.0', previousTag: 'v0.1.1' },
@@ -108,6 +109,11 @@ describe('fixtureHandlers (failing scenario)', () => {
     expect(handlers['backlog:list']({ repoId: 'fixture-acme-gadgets' as RepoId })).toMatchObject({ ok: false, kind: 'network' })
   })
 
+  it('fails backlog:detail with a rate limit for widgets and a network error elsewhere', () => {
+    expect(handlers['backlog:detail']({ repoId: WIDGETS, number: 45 })).toMatchObject({ ok: false, kind: 'rate-limited' })
+    expect(handlers['backlog:detail']({ repoId: 'fixture-acme-gadgets' as RepoId, number: 45 })).toMatchObject({ ok: false, kind: 'network' })
+  })
+
   it('fails sessions:scan as projects-unreadable and still lists three repositories', () => {
     expect(handlers['sessions:scan'](undefined)).toMatchObject({ ok: false, kind: 'projects-unreadable' })
     const repos = handlers['repos:list'](undefined)
@@ -125,16 +131,110 @@ describe('fixtureHandlers (registry-error scenario)', () => {
   })
 })
 
+describe('fixtureHandlers (attention scenario)', () => {
+  const handlers = fixtureHandlers(NOW, 'attention')
+  const snapshot = handlers['board:snapshot'](undefined)
+  const sessions = handlers['session:list'](undefined)
+
+  it('reports repos:list with two ready entries and the not-ready legacy-site', () => {
+    const result = handlers['repos:list'](undefined)
+    if (!result.ok) throw new Error('fixture repos:list unexpectedly failed')
+    expect(result.repositories).toHaveLength(3)
+    expect(result.repositories.filter((r) => !('config' in r))).toHaveLength(1)
+    expect(snapshot.state.repositories.filter((r) => !r.ok)).toHaveLength(1)
+  })
+
+  it('carries a held #53 (conflicting) and a stalled #54 in the Needs you list', () => {
+    const items = needsYouItems(snapshot, NOW)
+    expect(items.find((i) => i.kind === 'held' && i.number === 53)).toMatchObject({ held: { reason: 'conflicting' } })
+    expect(items.find((i) => i.kind === 'stalled' && i.number === 54)).toBeDefined()
+  })
+
+  it('carries #37 at needs human with an Unblock that lists its two rebase decisions', () => {
+    const item = needsYouItems(snapshot, NOW).find((i) => i.kind === 'needs-human' && i.number === 37)
+    const unblock = item !== undefined && item.kind === 'needs-human' ? item.matchedRow?.decisions.unblock : undefined
+    expect(unblock).toMatchObject({
+      available: true,
+      context: {
+        decisions: [
+          { id: 'D1', path: 'src/money.ts', recommended: 'B' },
+          { id: 'D2', path: 'src/format.ts', recommended: 'C' },
+        ],
+      },
+    })
+  })
+
+  it('reports session:list with nine snapshots, a crashed ended one, and three stage sessions', () => {
+    expect(sessions).toHaveLength(9)
+    expect(sessions.find((s) => s.phase === 'ended')?.end?.diagnosis).not.toBeNull()
+    expect(sessions.filter((s) => s.stage !== null).map((s) => s.stage?.number).sort()).toEqual([38, 44, 51])
+  })
+
+  it('lists every blocked ticket on Needs you and shows #51, #55 and #56 on the Board with what they are held on', () => {
+    const blockedItems = needsYouItems(snapshot, NOW, sessions).filter((i) => i.kind === 'blocked')
+    expect(blockedItems.map((i) => i.number).sort()).toEqual([51, 55, 56])
+    const rows = projectBoard({ snapshot, now: NOW, sessions }).rows
+    const held = (number: number) => rows.find((r) => r.item.number === number)?.blockedOn
+    expect(held(51)?.session).toMatchObject({ sessionKey: 'fixture-stage-impl-51' })
+    expect(held(51)?.session?.text).toMatch(/^The Q3 ledger export has no currency column\./)
+    expect(held(55)?.dependencies).toMatchObject({ ok: true, open: [{ number: 49 }, { number: 48 }] })
+    expect(held(56)?.comment?.text).toBe('keep closed workspaces 30 or 90 days?')
+  })
+})
+
+describe('fixtureHandlers update channels', () => {
+  it.each([
+    ['populated', 'up-to-date'],
+    ['empty', 'up-to-date'],
+    ['unregistered', 'up-to-date'],
+    ['update-available', 'available'],
+    ['update-downloading', 'available'],
+    ['update-download-failed', 'available'],
+    ['update-restart-pending', 'available'],
+    ['update-restarting', 'available'],
+    ['failing', 'error'],
+    ['registry-error', 'checking'],
+  ] as const)('serves %s as %s', (scenario, kind) => {
+    const handlers = fixtureHandlers(NOW, scenario)
+    expect(handlers['update:state'](undefined).kind).toBe(kind)
+    expect(handlers['update:check'](undefined).kind).toBe(kind)
+  })
+
+  it('marks the startup read and the manual check by trigger', () => {
+    const handlers = fixtureHandlers(NOW, 'update-available')
+    expect(handlers['update:state'](undefined)).toMatchObject({ trigger: 'startup', release: { version: '0.2.0' } })
+    expect(handlers['update:check'](undefined)).toMatchObject({ trigger: 'manual' })
+  })
+
+  it.each([
+    ['populated', 'idle'],
+    ['update-available', 'idle'],
+    ['update-downloading', 'downloading'],
+    ['update-download-failed', 'failed'],
+    ['update-restart-pending', 'restart-pending'],
+    ['update-restarting', 'restarting'],
+  ] as const)('serves the %s download as %s on all three download channels', (scenario, kind) => {
+    const handlers = fixtureHandlers(NOW, scenario)
+    expect(handlers['update:download:state'](undefined).kind).toBe(kind)
+    expect(handlers['update:download'](undefined).kind).toBe(kind)
+    expect(handlers['update:open']({ reveal: true }).kind).toBe(kind)
+  })
+
+  it('serves a download for the release the update state offers', () => {
+    const handlers = fixtureHandlers(NOW, 'update-downloading')
+    expect(handlers['update:download:state'](undefined)).toMatchObject({ version: '0.2.0', receivedBytes: 54 * 1024 * 1024, totalBytes: 120 * 1024 * 1024 })
+  })
+})
+
 describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', (scenario) => {
   const now = NOW
   const handlers = fixtureHandlers(now, scenario)
 
-  it('reports repos:list with two ready and one not-ready entry', () => {
+  it('reports repos:list with two ready entries and no not-ready one', () => {
     const result = handlers['repos:list'](undefined)
     if (!result.ok) throw new Error('fixture repos:list unexpectedly failed')
-    expect(result.repositories).toHaveLength(3)
+    expect(result.repositories).toHaveLength(2)
     expect(result.repositories.filter((r) => 'config' in r)).toHaveLength(2)
-    expect(result.repositories.filter((r) => !('config' in r))).toHaveLength(1)
   })
 
   it('reports runtime:preflight as unverified', () => {
@@ -144,10 +244,9 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
   describe('board:snapshot', () => {
     const snapshot = handlers['board:snapshot'](undefined)
 
-    it('has two ok repositories and one not-ready repository', () => {
-      expect(snapshot.state.repositories).toHaveLength(3)
+    it('has two ok repositories and no not-ready repository', () => {
+      expect(snapshot.state.repositories).toHaveLength(2)
       expect(snapshot.state.repositories.filter((r) => r.ok)).toHaveLength(2)
-      expect(snapshot.state.repositories.filter((r) => !r.ok)).toHaveLength(1)
     })
 
     it.runIf(scenario === 'populated')('has one item each with status gated, in-flight, waiting, and terminal', () => {
@@ -164,8 +263,11 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
       expect(needsYouItems(snapshot, now)).toHaveLength(0)
     })
 
-    it.runIf(scenario === 'populated')('produces a non-empty Needs you list', () => {
-      expect(needsYouItems(snapshot, now).length).toBeGreaterThan(0)
+    it.runIf(scenario === 'populated')('produces a Needs you list of only plan-review, ready-to-merge and blocked items, with nothing interrupted', () => {
+      const sessions = handlers['session:list'](undefined)
+      const kinds = new Set(needsYouItems(snapshot, now, sessions).map((i) => i.kind))
+      expect([...kinds].sort()).toEqual(['blocked', 'plan-review', 'ready-to-merge'])
+      expect(snapshot.dispatch.every((d) => d.interrupted.length === 0 && d.budget?.notes.length === 0)).toBe(true)
     })
 
     it('never times anything after now', () => {
@@ -185,27 +287,6 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
       expect(report?.held.find((h) => h.number === 52)?.reason).toBe('unowned')
     })
 
-    it.runIf(scenario === 'populated')('carries a held #53 (conflicting) and a stalled #54 in the Needs you list', () => {
-      const items = needsYouItems(snapshot, now)
-      const held = items.find((i) => i.kind === 'held' && i.number === 53)
-      const stalled = items.find((i) => i.kind === 'stalled' && i.number === 54)
-      expect(held).toMatchObject({ held: { reason: 'conflicting' } })
-      expect(stalled).toBeDefined()
-    })
-
-    it.runIf(scenario === 'populated')('carries #37 at needs human with an Unblock that lists its two rebase decisions', () => {
-      const item = needsYouItems(snapshot, now).find((i) => i.kind === 'needs-human' && i.number === 37)
-      const unblock = item !== undefined && item.kind === 'needs-human' ? item.matchedRow?.decisions.unblock : undefined
-      expect(unblock).toMatchObject({
-        available: true,
-        context: {
-          decisions: [
-            { id: 'D1', path: 'src/money.ts', recommended: 'B' },
-            { id: 'D2', path: 'src/format.ts', recommended: 'C' },
-          ],
-        },
-      })
-    })
   })
 
   it('reports gate:preflight as answerable, with a plan body carrying a heading, list, code, table and link', () => {
@@ -255,26 +336,21 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     expect(purge.pathBasename).toBe('impl-29-stale')
   })
 
-  it.runIf(scenario === 'populated')('reports session:list with nine snapshots covering streaming, ended, starting, a question, a plan, three stage sessions, and a resumed session', () => {
+  it.runIf(scenario === 'populated')('reports session:list with eight snapshots, a cleanly ended one, and two stage sessions', () => {
     const snapshots = handlers['session:list'](undefined)
-    expect(snapshots.map((s) => s.phase).sort()).toEqual(['ended', 'ready', 'ready', 'starting', 'streaming', 'streaming', 'streaming', 'streaming', 'streaming'])
-    expect(snapshots.find((s) => s.phase === 'ended')?.end?.diagnosis).not.toBeNull()
+    expect(snapshots.map((s) => s.phase).sort()).toEqual(['ended', 'ready', 'starting', 'streaming', 'streaming', 'streaming', 'streaming', 'streaming'])
+    expect(snapshots.find((s) => s.phase === 'ended')?.end?.reason).toBe('completed')
     expect(snapshots.filter((s) => s.pendingPermissions.some((p) => p.interaction?.kind === 'question'))).toHaveLength(1)
     expect(snapshots.filter((s) => s.pendingPermissions.some((p) => p.interaction?.kind === 'plan'))).toHaveLength(1)
-    expect(snapshots.filter((s) => s.stage !== null).map((s) => s.stage?.number).sort()).toEqual([38, 44, 51])
+    expect(snapshots.filter((s) => s.stage !== null).map((s) => s.stage?.number).sort()).toEqual([38, 44])
   })
 
-  it.runIf(scenario === 'populated')('lists every blocked ticket on Needs you and shows #51, #55 and #56 on the Board with what they are held on', () => {
+  it.runIf(scenario === 'populated')('lists only #55 as blocked on Needs you, held on its two open dependencies', () => {
     const snapshot = handlers['board:snapshot'](undefined)
     const sessions = handlers['session:list'](undefined)
-    const blockedItems = needsYouItems(snapshot, now, sessions).filter((i) => i.kind === 'blocked')
-    expect(blockedItems.map((i) => i.number).sort()).toEqual([51, 55, 56])
+    expect(needsYouItems(snapshot, now, sessions).filter((i) => i.kind === 'blocked').map((i) => i.number)).toEqual([55])
     const rows = projectBoard({ snapshot, now, sessions }).rows
-    const held = (number: number) => rows.find((r) => r.item.number === number)?.blockedOn
-    expect(held(51)?.session).toMatchObject({ sessionKey: 'fixture-stage-impl-51' })
-    expect(held(51)?.session?.text).toMatch(/^The Q3 ledger export has no currency column\./)
-    expect(held(55)?.dependencies).toMatchObject({ ok: true, open: [{ number: 49 }, { number: 48 }] })
-    expect(held(56)?.comment?.text).toBe('keep closed workspaces 30 or 90 days?')
+    expect(rows.find((r) => r.item.number === 55)?.blockedOn?.dependencies).toMatchObject({ ok: true, open: [{ number: 49 }, { number: 48 }] })
   })
 
   it.runIf(scenario === 'populated')('dispatches #44 on the Board: in flight, with a live plan stage, before its label moves', () => {

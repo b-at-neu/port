@@ -1,7 +1,7 @@
 // Which sidebar row the routed screen is showing, derived from the route alone.
 import { useMatch } from '@tanstack/react-router'
 import type { SessionKey } from '@/types/hosting'
-import type { PipelineRow, PipelineSessionRow, SidebarSelection } from '@/types/shell'
+import type { ActiveRepoScreen, PipelineRow, PipelineSessionRow, SidebarSelection } from '@/types/shell'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 
 export const SELECTED_ROW_CLASS = 'bg-selection text-primary-text'
@@ -31,14 +31,19 @@ export function selectedPipelineRowKey(rows: readonly PipelineRow[], selection: 
   return null
 }
 
-/** A collapsed repo hides its sessions, so it takes the selected style when one of them is open. */
-export function repoHoldsSelection(row: PipelineRow, collapsed: boolean, selectedKey: string | null): boolean {
-  return collapsed && selectedKey !== null && row.sessions.some((session) => session.key === selectedKey)
+/** A collapsed repo hides its rows, so it takes the selected style when the open screen or session is inside it. */
+export function repoHoldsSelection(row: PipelineRow, collapsed: boolean, selectedKey: string | null, activeScreen: ActiveRepoScreen | null, selection: SidebarSelection = null): 'session' | 'screen' | null {
+  if (!collapsed) return null
+  if (activeScreen?.repoId === row.repoId) return 'screen'
+  if (selectedKey !== null && row.sessions.some((session) => session.key === selectedKey)) return 'session'
+  if (selection !== null && selection.kind === 'session' && row.userSessions.some((session) => session.sessionKey === selection.sessionKey)) return 'session'
+  return null
 }
 
-export function repoToggleLabel(name: string, collapsed: boolean, holdsSelection: boolean): string {
+export function repoToggleLabel(name: string, collapsed: boolean, holds: 'session' | 'screen' | null): string {
   if (!collapsed) return `Collapse ${name}`
-  return holdsSelection ? `Expand ${name}, contains the open session` : `Expand ${name}`
+  if (holds === 'screen') return `Expand ${name}, contains the open screen`
+  return holds === 'session' ? `Expand ${name}, contains the open session` : `Expand ${name}`
 }
 
 export function useSidebarSelection(): SidebarSelection {

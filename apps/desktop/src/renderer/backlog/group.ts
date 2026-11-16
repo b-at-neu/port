@@ -2,6 +2,7 @@
 import type { BacklogGroupView, BacklogLabelFilter, BacklogQueryLike } from '@/types/backlog'
 import type { RepoId } from '@/utils/repos'
 import { backlogFailureCopy, backlogInvokeErrorCopy, backlogTruncatedCopy } from '@/renderer/backlog/copy'
+import { buildEpicLayout } from '@/renderer/backlog/epics'
 import { EMPTY_FILTER, applyLabelFilter, labelOptionsOf } from '@/renderer/backlog/filter'
 
 function assigneeLine(assignees: readonly string[], viewer: string | null): string | null {
@@ -30,9 +31,14 @@ export function buildBacklogGroup(repoId: RepoId, repo: string, query: BacklogQu
     labels: item.labels,
     subIssueCount: item.subIssueCount,
     blockers: item.blockers,
+    blocking: item.blocking,
+    parent: item.parent,
+    children: item.children,
   }))
   const truncatedNote = response.total > response.scanned ? backlogTruncatedCopy(response.scanned) : null
-  return { kind: 'loaded', repoId, repo, items: applyLabelFilter(rows, filter), totalCount: rows.length, labelOptions: labelOptionsOf(rows, filter), truncatedNote }
+  const items = applyLabelFilter(rows, filter)
+  const layout = buildEpicLayout(rows, new Set(items.map((row) => row.number)))
+  return { kind: 'loaded', repoId, repo, items, totalCount: rows.length, labelOptions: labelOptionsOf(rows, filter), truncatedNote, layout }
 }
 
 // The header's `staleSince` line — the earliest read still shown behind a group whose refetch has since failed.

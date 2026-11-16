@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
@@ -11,7 +11,16 @@ import { DISPATCH_STORE_DEFAULTS, storeStub } from '../../../fixtures/store'
 const REPO_ID = 'repo-a' as RepoId
 const SESSION_KEY = 'hosted-1' as SessionKey
 
-const COMPLETED: StageOutcome = { kind: 'completed', detail: null, costUsd: null, resetsAt: null, worktree: 'removed', operatorJoined: false }
+vi.mock('@/main/actions/stage', () => ({
+  applyStageClaim: () => Promise.resolve({ kind: 'applied' }),
+  applyStageTransition: () => Promise.resolve({ kind: 'applied' }),
+}))
+
+const COMPLETED: StageOutcome = { kind: 'completed', detail: null, costUsd: null, resetsAt: null, worktree: 'removed', operatorJoined: false, handback: { token: 'pr-opened', arg: '#8' } }
+
+async function flush(): Promise<void> {
+  for (let i = 0; i < 5; i++) await Promise.resolve()
+}
 
 function fakeStore(overrides: Partial<HostedStore> = {}): HostedStore {
   return storeStub({ ...DISPATCH_STORE_DEFAULTS, ...overrides })
@@ -89,7 +98,7 @@ describe('createDispatchRuntime', () => {
     expect(republished).toBe(true)
   })
 
-  it('a completed hand-back reaches the watcher as one github-scoped refresh of that repository', async () => {
+  it('a settled hand-back write reaches the watcher as one github-scoped refresh of that repository', async () => {
     const refreshes: (RefreshRequest | undefined)[] = []
     const runtime = createDispatchRuntime(runtimeDeps())
     runtime.bindWatcher({
@@ -103,6 +112,7 @@ describe('createDispatchRuntime', () => {
     expect(refreshes).toEqual([])
 
     runtime.dispatcher.recordOutcome(REPO_ID, SESSION_KEY, COMPLETED)
+    await flush()
     expect(refreshes).toEqual([{ repoId: REPO_ID, source: 'github' }])
   })
 

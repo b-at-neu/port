@@ -2,7 +2,10 @@ import { app, BrowserWindow, ipcMain } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { join } from 'node:path'
 import { IPC_CHANNELS, type IpcChannel, type IpcEvent, type IpcEventMap, type IpcMap } from '@/types/ipc'
-import { SOURCE_KINDS, type BoardSnapshot } from '@/types/board'
+import { resolveBoardRefresh } from '@/main/channels/board'
+import { resolveUpdateCheck, resolveUpdateDownload, resolveUpdateDownloadState, resolveUpdateOpen, resolveUpdateState } from '@/main/channels/update'
+import { createDefaultUpdate } from '@/main/update/default'
+import type { RestartSeams } from '@/types/update'
 import { chooseDirectory } from '@/main/dialogs'
 import { defaultWorkspaceChannelDeps, resolveFoldersChoose, resolveFoldersList, resolveSessionChanges } from '@/main/channels/workspace'
 import { createRecentsStore } from '@/main/workspace/recents'
@@ -18,7 +21,7 @@ import { applyItemDecision } from '@/main/actions/decide'
 import { gateAnswer, gatePreflight } from '@/main/actions/gate'
 import { resolveClaimApply, resolveClaimPreflight } from '@/main/channels/claim'
 import { resolveAuditList } from '@/main/channels/audit'
-import { resolveBacklogList } from '@/main/channels/backlog'
+import { resolveBacklogDetail, resolveBacklogList } from '@/main/channels/backlog'
 import { resolveReleaseIssues, resolveReleaseRun, resolveReleaseStatus } from '@/main/channels/release'
 import { resolveWorktreesPurge, resolveWorktreesReclaim, resolveWorktreesReport } from '@/main/channels/worktrees'
 import { resolveGhStatus } from '@/main/channels/gh'
@@ -124,32 +127,6 @@ function getAppInfo(): AppInfo {
   }
 }
 
-export interface BoardRefreshDeps {
-  readonly listRepositories: typeof listRepositories
-  readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
-}
-
-export async function resolveBoardRefresh(
-  registryDeps: RegistryDeps,
-  request: IpcMap['board:refresh']['request'],
-  deps: BoardRefreshDeps,
-): Promise<BoardSnapshot> {
-  if (request?.repoId !== undefined) {
-    if (typeof request.repoId !== 'string' || request.repoId === '') {
-      throw new Error("'board:refresh' repoId must be a non-empty string when present")
-    }
-    const list = await deps.listRepositories(registryDeps)
-    if (!list.ok) throw new Error(`'board:refresh' could not list repositories: ${list.message}`)
-    if (!list.repositories.some((repository) => repository.id === request.repoId)) {
-      throw new Error(`'board:refresh' found no repository registered with id '${request.repoId}'`)
-    }
-  }
-  if (request?.source !== undefined && !(SOURCE_KINDS as readonly string[]).includes(request.source)) {
-    throw new Error(`'board:refresh' source must be one of ${SOURCE_KINDS.join(', ')}`)
-  }
-  return deps.refresh(request)
-}
-
 interface RegisteredIpc {
   readonly watcher: PipelineWatcher
   readonly hostedStore: HostedStore
@@ -158,7 +135,7 @@ interface RegisteredIpc {
   readonly stageRegistry: StageRegistry
 }
 
-export function registerIpc(): RegisteredIpc {
+export function registerIpc(restart: RestartSeams): RegisteredIpc {
   // The one place a real `git` invocation and the real userData directory reach the registry.
   const registryDeps: RegistryDeps = {
     registryDir: app.getPath('userData'),
@@ -268,6 +245,7 @@ export function registerIpc(): RegisteredIpc {
     store: hostedStore,
     registry: stageRegistry,
     onOutcome: (repoId, sessionKey, outcome) => dispatcherRef?.recordOutcome(repoId, sessionKey, outcome),
+    onResumedTurn: (repoId, sessionKey) => dispatcherRef?.recordResumedTurn(repoId, sessionKey),
     onDenial: (repoId, denial) => dispatcherRef?.recordDenial(repoId, denial),
     bundle: { isPackaged: app.isPackaged, mainDir: __dirname, resourcesPath: process.resourcesPath },
   })
@@ -330,6 +308,7 @@ export function registerIpc(): RegisteredIpc {
   handle('claim:apply', (_event, request) => resolveClaimApply(registryDeps, request, app.getPath('userData')))
 
   handle('backlog:list', (_event, request) => resolveBacklogList(registryDeps, request))
+  handle('backlog:detail', (_event, request) => resolveBacklogDetail(registryDeps, request))
 
   handle('release:status', (_event, request) => resolveReleaseStatus(registryDeps, request))
 
@@ -489,11 +468,25 @@ export function registerIpc(): RegisteredIpc {
 
   handle('held:force-dispatch', (_event, request) => resolveForceDispatch(request, { snapshot: watcher.snapshot, dispatcherStatus: () => dispatcher.status(), forceDispatch, republish: () => watcher.republish() }))
 
+  const update = createDefaultUpdate(restart)
+
+  handle('update:state', (_event, request) => resolveUpdateState(request, update.service))
+
+  handle('update:check', (_event, request) => resolveUpdateCheck(request, update.service))
+
+  handle('update:download', (_event, request) => resolveUpdateDownload(request, update.downloader))
+
+  handle('update:download:state', (_event, request) => resolveUpdateDownloadState(request, update.downloader))
+
+  handle('update:open', (_event, request) => resolveUpdateOpen(request, update.downloader))
+
   for (const channel of IPC_CHANNELS) {
     if (!registered.has(channel)) {
       throw new Error(`IPC channel '${channel}' is declared but has no handler`)
     }
   }
+
+  void update.service.check('startup')
 
   return { watcher, hostedStore, dispatcher, shutdownDispatch: () => { shutdown(); void closeOffload() }, stageRegistry }
 }

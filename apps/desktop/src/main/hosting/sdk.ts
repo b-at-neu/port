@@ -1,8 +1,8 @@
 // One of three lazy Agent SDK seams, the only file in main/hosting/ naming the package specifier,
 // exposing exactly `query` and `renameSession`. Every other file imports its types from here.
-import type { AgentInfo, CanUseTool, EffortLevel, ModelInfo, Options, PermissionMode, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage, SlashCommand } from '@anthropic-ai/claude-agent-sdk'
+import type { AgentInfo, CanUseTool, EffortLevel, HookCallback, ModelInfo, Options, PermissionMode, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage, SlashCommand } from '@anthropic-ai/claude-agent-sdk'
 
-export type { AgentInfo, CanUseTool, EffortLevel, ModelInfo, Options, PermissionMode, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage, SlashCommand }
+export type { AgentInfo, CanUseTool, EffortLevel, HookCallback, ModelInfo, Options, PermissionMode, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage, SlashCommand }
 
 export type HostedQueryFn = (params: { prompt: string | AsyncIterable<SDKUserMessage>; options?: Options }) => HostedQuery
 

@@ -10,10 +10,14 @@ function query(overrides: Partial<BacklogQueryLike> = {}): BacklogQueryLike {
   return { status: 'success', data: undefined, isError: false, dataUpdatedAt: 0, ...overrides }
 }
 
+const NO_LINKS = { ok: true, open: [], shown: 0, total: 0 } as const
+const NO_PARENT = { ok: true, parent: null } as const
+const NO_CHILDREN = { ok: true, children: [], shown: 0, total: 0 } as const
+
 const OK_RESPONSE: Extract<BacklogResponse, { ok: true }> = {
   ok: true,
   items: [
-    { number: 47, title: 'Add dark mode', url: 'https://github.com/acme/widgets/issues/47', updatedAt: '2026-01-01T00:00:00Z', assignees: [], labels: [{ name: 'bug', color: 'd73a4a' }], subIssueCount: 0, blockers: { ok: true, open: [], shown: 0, total: 0 } },
+    { number: 47, title: 'Add dark mode', url: 'https://github.com/acme/widgets/issues/47', updatedAt: '2026-01-01T00:00:00Z', assignees: [], labels: [{ name: 'bug', color: 'd73a4a' }], subIssueCount: 0, blockers: NO_LINKS, blocking: NO_LINKS, parent: NO_PARENT, children: NO_CHILDREN },
     {
       number: 45,
       title: 'Document retries',
@@ -23,6 +27,9 @@ const OK_RESPONSE: Extract<BacklogResponse, { ok: true }> = {
       labels: [{ name: 'docs', color: null }],
       subIssueCount: 2,
       blockers: { ok: true, open: [{ number: 43, title: 'Rate-limit search', url: 'u43', state: 'OPEN' }], shown: 1, total: 1 },
+      blocking: { ok: true, open: [{ number: 50, title: 'Ship it', url: 'u50', state: 'OPEN' }], shown: 1, total: 1 },
+      parent: { ok: true, parent: { number: 41, title: 'Epic', state: 'OPEN' } },
+      children: { ok: true, children: [{ number: 46, title: 'Child', state: 'OPEN', claimed: false, blockers: NO_LINKS }], shown: 1, total: 1 },
     },
   ],
   scanned: 2,
@@ -71,6 +78,14 @@ describe('buildBacklogGroup', () => {
     expect(group.items[1]?.subIssueCount).toBe(2)
   })
 
+  it('passes each row\'s parent, children and blocking through unchanged', () => {
+    const group = buildBacklogGroup(REPO_ID, 'acme/widgets', query({ data: OK_RESPONSE }))
+    if (group.kind !== 'loaded') throw new Error('expected loaded')
+    expect(group.items[1]?.parent).toEqual(OK_RESPONSE.items[1]?.parent)
+    expect(group.items[1]?.children).toEqual(OK_RESPONSE.items[1]?.children)
+    expect(group.items[1]?.blocking).toEqual(OK_RESPONSE.items[1]?.blocking)
+  })
+
   it('passes each row\'s blockers through unchanged', () => {
     const group = buildBacklogGroup(REPO_ID, 'acme/widgets', query({ data: OK_RESPONSE }))
     if (group.kind !== 'loaded') throw new Error('expected loaded')
@@ -94,6 +109,64 @@ describe('buildBacklogGroup', () => {
     const group = buildBacklogGroup(REPO_ID, 'acme/widgets', query({ data: response }))
     expect(group.kind).toBe('loaded')
     if (group.kind === 'loaded') expect(group.items[0]?.assignee).toBeNull()
+  })
+})
+
+function epicResponse(): Extract<BacklogResponse, { ok: true }> {
+  const base = OK_RESPONSE.items[0]!
+  const child = (number: number, blockedBy: number[], labels: { name: string; color: string | null }[]) => ({
+    ...base,
+    number,
+    labels,
+    parent: { ok: true, parent: { number: 41, title: 'Epic', state: 'OPEN' } } as const,
+    blockers: { ok: true, open: blockedBy.map((n) => ({ number: n, title: `T${String(n)}`, url: '', state: 'OPEN' as const })), shown: blockedBy.length, total: blockedBy.length } as const,
+  })
+  const members = [
+    { number: 42, title: 'A', state: 'OPEN' as const, claimed: false, blockers: NO_LINKS },
+    { number: 43, title: 'B', state: 'OPEN' as const, claimed: false, blockers: { ok: true, open: [{ number: 42, title: 'A', url: '', state: 'OPEN' as const }], shown: 1, total: 1 } as const },
+  ]
+  return {
+    ...OK_RESPONSE,
+    items: [
+      { ...base, number: 41, labels: [], subIssueCount: 2, children: { ok: true, children: members, shown: 2, total: 2 } },
+      child(42, [], [{ name: 'bug', color: null }]),
+      child(43, [42], []),
+      { ...base, number: 50, labels: [{ name: 'bug', color: null }] },
+    ],
+    total: 4,
+    scanned: 4,
+  }
+}
+
+describe('buildBacklogGroup layout', () => {
+  it('groups children under their epic, with the flat remainder after it', () => {
+    const group = buildBacklogGroup(REPO_ID, 'acme/widgets', query({ data: epicResponse() }))
+    if (group.kind !== 'loaded') throw new Error('expected loaded')
+    expect(group.layout.epics.map((entry) => entry.epic.number)).toEqual([41])
+    expect(group.layout.epics[0]?.waves.map((wave) => [wave.number, wave.rows.map((row) => row.number)])).toEqual([[1, [42]], [2, [43]]])
+    expect(group.layout.remainder.map((row) => row.number)).toEqual([50])
+  })
+
+  it('keeps wave numbers when a filter hides a wave member', () => {
+    const group = buildBacklogGroup(REPO_ID, 'acme/widgets', query({ data: epicResponse() }), { include: ['bug'], exclude: [] })
+    if (group.kind !== 'loaded') throw new Error('expected loaded')
+    const waves = group.layout.epics[0]?.waves
+    expect(waves?.map((wave) => [wave.number, wave.rows.map((row) => row.number)])).toEqual([[1, [42]], [2, []]])
+    expect(group.layout.epics[0]?.epic.number).toBe(41)
+  })
+
+  it('keeps a filtered-out epic as the header of its shown children', () => {
+    const group = buildBacklogGroup(REPO_ID, 'acme/widgets', query({ data: epicResponse() }), { include: ['bug'], exclude: [] })
+    if (group.kind !== 'loaded') throw new Error('expected loaded')
+    expect(group.items.map((row) => row.number)).toEqual([42, 50])
+    expect(group.layout.epics).toHaveLength(1)
+  })
+
+  it('puts every row of a repository with no epics in the remainder', () => {
+    const group = buildBacklogGroup(REPO_ID, 'acme/widgets', query({ data: { ...OK_RESPONSE, items: [OK_RESPONSE.items[0]!] } }))
+    if (group.kind !== 'loaded') throw new Error('expected loaded')
+    expect(group.layout.epics).toEqual([])
+    expect(group.layout.remainder).toEqual(group.items)
   })
 })
 

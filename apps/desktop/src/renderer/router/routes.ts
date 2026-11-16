@@ -1,9 +1,9 @@
 // Every route id `router.tsx` registers, plus the search-param parsers each
 // route needs — the one literal spelling both files read, so they never drift.
 import type { RepoId } from '@/utils/repos'
-import type { AuditSearch, BoardItemRef, BoardSearch, HistorySearch, NeedsYouSearch, RepoSearch, SearchSearch, SessionSearch, SettingsSearch, SettingsSection, TranscriptSearch } from '@/types/router'
+import type { AuditSearch, BacklogSearch, BoardItemRef, BoardSearch, HistorySearch, NeedsYouSearch, ReleasesSearch, RepoSearch, SearchSearch, SessionSearch, SettingsSearch, SettingsSection, TranscriptSearch } from '@/types/router'
 
-// `repos`, `repo` and `about` stay registered only as redirects into Settings.
+// `repos`, `repo`, `audit` and `about` stay registered only as redirects into Settings.
 export const ROUTE_IDS = {
   board: '/board',
   backlog: '/backlog',
@@ -24,7 +24,7 @@ export const ROUTE_IDS = {
 
 /** Every route a launch or `shell/prefs.ts`'s `trackLastRoute` may restore
  *  onto — screens whose state survives a quit/relaunch. */
-export const RESTORABLE_ROUTES: readonly string[] = [ROUTE_IDS.board, ROUTE_IDS.repos, ROUTE_IDS.session, ROUTE_IDS.settings, ROUTE_IDS.backlog, ROUTE_IDS.releases, ROUTE_IDS.needsYou, ROUTE_IDS.history, ROUTE_IDS.audit]
+export const RESTORABLE_ROUTES: readonly string[] = [ROUTE_IDS.board, ROUTE_IDS.repos, ROUTE_IDS.session, ROUTE_IDS.settings, ROUTE_IDS.backlog, ROUTE_IDS.releases, ROUTE_IDS.needsYou, ROUTE_IDS.history]
 
 const BOARD_ITEM_RE = /^(.+):(\d+)$/
 
@@ -44,20 +44,22 @@ export function parseBoardItemRef(item: unknown): BoardItemRef | null {
 
 /** `item=<repoId>:<number>` keeps the Board's selection in the URL. */
 export function boardSearchFromRaw(search: Readonly<Record<string, unknown>>): BoardSearch {
-  const { item, repo } = search
+  const { item, repo, view } = search
   return {
     item: parseBoardItemRef(item),
     repo: typeof repo === 'string' && repo !== '' ? (repo as RepoId) : null,
+    view: view === 'list' || view === 'board' ? view : null,
   }
 }
 
 // Exhaustive over `SettingsSection` by type, since this file takes no runtime import of `@/types`.
-const SECTION_IDS: Readonly<Record<SettingsSection, true>> = { general: true, repositories: true, connections: true, pipeline: true, usage: true, about: true }
+const SECTION_IDS: Readonly<Record<SettingsSection, true>> = { general: true, repositories: true, connections: true, pipeline: true, usage: true, audit: true, about: true }
 
-/** An unknown or missing `section` reads as `'general'`. */
+/** An unknown or missing `section` reads as `'general'`; `repo` and `number` survive only for `'audit'`. */
 export function settingsSearchFromRaw(search: Readonly<Record<string, unknown>>): SettingsSearch {
   const { section } = search
-  return { section: typeof section === 'string' && Object.hasOwn(SECTION_IDS, section) ? (section as SettingsSection) : 'general' }
+  const parsed = typeof section === 'string' && Object.hasOwn(SECTION_IDS, section) ? (section as SettingsSection) : 'general'
+  return parsed === 'audit' ? { section: parsed, ...auditSearchFromRaw(search) } : { section: parsed }
 }
 
 export function repoSearchFromRaw(search: Readonly<Record<string, unknown>>): RepoSearch {
@@ -79,10 +81,22 @@ export function auditSearchFromRaw(search: Readonly<Record<string, unknown>>): A
   return { repo: repoId, number: repoId !== null && typeof number === 'number' && Number.isSafeInteger(number) && number > 0 ? number : null }
 }
 
-/** `focus` is a non-empty string, else `null`. */
+/** `focus` and `repo` are each a non-empty string, else `null`. */
 export function needsYouSearchFromRaw(search: Readonly<Record<string, unknown>>): NeedsYouSearch {
-  const { focus } = search
-  return { focus: typeof focus === 'string' && focus !== '' ? focus : null }
+  const { focus, repo } = search
+  return { focus: typeof focus === 'string' && focus !== '' ? focus : null, repo: typeof repo === 'string' && repo !== '' ? (repo as RepoId) : null }
+}
+
+/** `repo` scopes Backlog to one repository; absent or invalid means every repository. */
+export function backlogSearchFromRaw(search: Readonly<Record<string, unknown>>): BacklogSearch {
+  const { repo } = search
+  return { repo: typeof repo === 'string' && repo !== '' ? (repo as RepoId) : null }
+}
+
+/** `repo` scopes Releases to one repository; absent or invalid means every repository. */
+export function releasesSearchFromRaw(search: Readonly<Record<string, unknown>>): ReleasesSearch {
+  const { repo } = search
+  return { repo: typeof repo === 'string' && repo !== '' ? (repo as RepoId) : null }
 }
 
 export function searchSearchFromRaw(search: Readonly<Record<string, unknown>>): SearchSearch {

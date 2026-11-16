@@ -144,22 +144,14 @@ describe('observationWrite — escalation markers', () => {
   })
 })
 
-describe('observationWrite — liveness-reset evidence', () => {
+describe('observationWrite — liveness-reset', () => {
   const vocabulary = customVocabulary({})
   const base = item({ stage: 'in-flight', stages: [{ key: 'inProgress', name: 'inProgress', role: 'in-flight' }], matchedKeys: ['inProgress'] })
 
-  it('a ledger-evidenced reset writes the ordinary action name', () => {
-    const observation: TickObservation = { kind: 'liveness-reset', number: 52, itemKind: 'issue', inFlight: 'inProgress', retryKey: 'planApproved', evidence: 'ledger' }
+  it('writes the retry trigger in place of the in-flight label', () => {
+    const observation: TickObservation = { kind: 'liveness-reset', number: 52, itemKind: 'issue', inFlight: 'inProgress', retryKey: 'planApproved' }
     const plan = observationWrite(observation, base, vocabulary, 'dev')
     expect(plan.action).toBe('observe-liveness-reset')
-    expect(plan.add).toEqual(['planApproved'])
-    expect(plan.remove).toEqual(['inProgress'])
-  })
-
-  it('a stage-error-evidenced reset writes the same labels, under a distinct action name', () => {
-    const observation: TickObservation = { kind: 'liveness-reset', number: 52, itemKind: 'issue', inFlight: 'inProgress', retryKey: 'planApproved', evidence: 'stage-error' }
-    const plan = observationWrite(observation, base, vocabulary, 'dev')
-    expect(plan.action).toBe('observe-stage-error-reset')
     expect(plan.add).toEqual(['planApproved'])
     expect(plan.remove).toEqual(['inProgress'])
   })

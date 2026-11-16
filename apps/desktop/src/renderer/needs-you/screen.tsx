@@ -14,12 +14,12 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { router } from '@/renderer/router/router'
-import { needsYouItems } from '@/renderer/board/needs-you'
+import { belongsToRepo, needsYouItems } from '@/renderer/board/needs-you'
 import type { NeedsYouItem as NeedsYouItemModel } from '@/types/board'
 import { registerListNavigator } from '@/renderer/shell/stores'
 import { useListSelection } from '@/renderer/shell/list-selection'
-import { UNDO_LABEL } from '@/renderer/lib/copy'
-import { CLEANUP_FAILED_HELP, ENDED_DENIAL_LINE, LAUNCH_FAILED_HELP, LAUNCH_FAILED_NO_DETAIL, REFRESH_FAILED_TOAST, dismissedToast, needsYouLeadCopy, refreshedToast, usageLimitEntryLine } from '@/renderer/needs-you/copy'
+import { SHOW_ALL_REPOSITORIES, UNDO_LABEL } from '@/renderer/lib/copy'
+import { CLEANUP_FAILED_HELP, ENDED_DENIAL_LINE, LAUNCH_FAILED_HELP, LAUNCH_FAILED_NO_DETAIL, REFRESH_FAILED_TOAST, dismissedToast, needsYouLeadCopy, nothingInRepoCopy, refreshedToast, usageLimitEntryLine } from '@/renderer/needs-you/copy'
 import { dismiss, dismissedKeys, undismiss, visibleItems } from '@/renderer/needs-you/dismissed'
 import { dismissKeyOf } from '@/renderer/needs-you/dismiss-key'
 import { groupNeedsYou } from '@/renderer/needs-you/groups'
@@ -153,13 +153,18 @@ export function NeedsYouScreen() {
   const sessionListKey = ipcQueryOptions('session:list').queryKey
   const now = new Date()
 
-  const items = useNeedsYouItems()
+  const scopedRepo = search.repo ?? null
+  const allItems = useNeedsYouItems()
+  const items = scopedRepo === null ? allItems : allItems.filter((item) => belongsToRepo(item, scopedRepo))
+  const reposQuery = useIpcQuery('repos:list')
+  const scopedName = (reposQuery.data?.ok === true ? reposQuery.data.repositories.find((entry) => entry.id === scopedRepo) : undefined)
+  const scopedLabel = scopedName === undefined ? (scopedRepo ?? '') : 'config' in scopedName ? scopedName.config.repo : scopedName.displayName
   const groups = groupNeedsYou(items)
   // Keyboard navigation walks the rows in the order they render.
   const ordered = groups.flatMap((group) => group.items)
   const selection = useListSelection(ordered.map(dismissKeyOf), {
     value: search.focus ?? null,
-    onChange: (focus) => void navigate({ to: ROUTE_IDS.needsYou, search: { focus }, replace: true }),
+    onChange: (focus) => void navigate({ to: ROUTE_IDS.needsYou, search: { focus, repo: scopedRepo }, replace: true }),
   })
 
   registerListNavigator('needsYou', {
@@ -247,7 +252,17 @@ export function NeedsYouScreen() {
           ) : (
             <>
               {items.length === 0 ? (
-                <EmptyState icon={Inbox} message="Nothing needs you right now." className="px-4 py-6" data-slot="needs-you-empty" />
+                scopedRepo === null ? (
+                  <EmptyState icon={Inbox} message="Nothing needs you right now." className="px-4 py-6" data-slot="needs-you-empty" />
+                ) : (
+                  <EmptyState
+                    icon={Inbox}
+                    message={nothingInRepoCopy(scopedLabel)}
+                    action={{ label: SHOW_ALL_REPOSITORIES, onClick: () => void navigate({ to: ROUTE_IDS.needsYou, search: { focus: null, repo: null } }) }}
+                    className="px-4 py-6"
+                    data-slot="needs-you-empty"
+                  />
+                )
               ) : (
                 groups.map((group) => (
                   <section key={group.key} aria-label={group.name}>
@@ -329,6 +344,7 @@ function Row({
         onAction={onAction}
         secondaryActionLabel={action.secondaryLabel}
         onSecondaryAction={action.secondaryLabel !== undefined ? onSecondaryAction : undefined}
+        secondaryActionDisabledReason={action.secondaryDisabledReason ?? null}
         onDismiss={onDismiss}
         expandable={hasDetail(item)}
         expanded={expanded}

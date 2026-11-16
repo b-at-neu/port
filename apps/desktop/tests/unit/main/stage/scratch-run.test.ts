@@ -26,6 +26,8 @@ import { createDispatchLedger, createForceDispatch, createRefreshMemo, createUnk
 import { planTick } from '@/main/tick/plan'
 import { reconcileRepository } from '@/main/state/reconcile'
 import type { ReadyEntry } from '@/types/actions'
+import type { ApplyLabelsParams, WriteOutcome } from '@/types/writes'
+import { applyStageClaim, applyStageTransition } from '@/main/actions/stage'
 import type { CreateStageWorktreeResult, RemoveSessionWorktreeOutcome } from '@/types/workspace'
 
 const REPO_ID = 'repo-scratch' as RepoId
@@ -60,7 +62,7 @@ function readyEntry(): ReadyEntry {
 
 /** `#N`'s current labels, the fake "GitHub" every read in this test goes through. */
 type LabelMap = Map<number, Set<LabelKey>>
-type PrMap = Map<number, { closes: number; labels: Set<LabelKey> }>
+type PrMap = Map<number, { closes: number; branch: string; labels: Set<LabelKey> }>
 
 function moveLabel(labels: LabelMap, number: number, from: LabelKey, to: LabelKey): void {
   const set = labels.get(number)
@@ -199,8 +201,8 @@ function fakeQuery() {
   }
 }
 
-/** Branches on `options.agent`; each scripted session moves the fake "GitHub" the way the real stage agent would, then emits init + a success result. Any other agent, or a missing one, throws loudly. */
-function createFakeSdk(seen: Options[], labels: LabelMap, prs: PrMap): HostedSdk {
+/** Branches on `options.agent`; each scripted session opens its pull request where the real agent would and ends with a `HANDBACK:` line, never touching a label. Any other agent, or a missing one, throws loudly. */
+function createFakeSdk(seen: Options[], prs: PrMap): HostedSdk {
   return {
     query: ({ prompt, options }) => {
       if (options === undefined) throw new Error('scratch-run fake: query called with no options')
@@ -213,16 +215,12 @@ function createFakeSdk(seen: Options[], labels: LabelMap, prs: PrMap): HostedSdk
       void (async () => {
         await prompt[Symbol.asyncIterator]().next() // the first user turn — store.send() really went through the handle
         if (options.agent === 'plan-agent') {
-          moveLabel(labels, 7, 'ready', 'planning')
-          moveLabel(labels, 7, 'planning', 'planReview')
           fake.push({ type: 'system', subtype: 'init', session_id: 'sdk-plan' })
-          fake.push({ type: 'result', subtype: 'success', is_error: false, result: 'Plan written.', total_cost_usd: 0.4 })
+          fake.push({ type: 'result', subtype: 'success', is_error: false, result: 'Plan written.\n\nHANDBACK: plan-written', total_cost_usd: 0.4 })
         } else {
-          moveLabel(labels, 7, 'planApproved', 'inProgress')
-          prs.set(8, { closes: 7, labels: new Set<LabelKey>(['marker', 'readyForReview']) })
-          moveLabel(labels, 7, 'inProgress', 'prOpened')
+          prs.set(8, { closes: 7, branch: '7-scratch-ticket', labels: new Set<LabelKey>() })
           fake.push({ type: 'system', subtype: 'init', session_id: 'sdk-impl' })
-          fake.push({ type: 'result', subtype: 'success', is_error: false, result: 'PR opened.', total_cost_usd: 0.6 })
+          fake.push({ type: 'result', subtype: 'success', is_error: false, result: 'PR opened.\n\nHANDBACK: pr-opened #8', total_cost_usd: 0.6 })
         }
         fake.finish()
       })()
@@ -259,21 +257,40 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       const unavailable: number[] = []
       for (const number of params.numbers) {
         const set = labels.get(number)
-        if (set === undefined) {
+        const pr = prs.get(number)
+        if (set !== undefined) {
+          resolved.push({ number, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: `issue ${String(number)}`, url: `https://example.test/issues/${String(number)}`, labels: namesOf(VOCABULARY, set), assignees: [VIEWER], headRefName: null, author: null })
+        } else if (pr !== undefined) {
+          resolved.push({ number, kind: 'pull-request', state: 'OPEN', mergedAt: null, closedAt: null, title: `pr ${String(number)}`, url: `https://example.test/pull/${String(number)}`, labels: namesOf(VOCABULARY, pr.labels), assignees: [VIEWER], headRefName: pr.branch, author: VIEWER })
+        } else {
           unavailable.push(number)
-          continue
         }
-        resolved.push({ number, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: `issue ${String(number)}`, url: `https://example.test/issues/${String(number)}`, labels: namesOf(VOCABULARY, set), assignees: [VIEWER], headRefName: null, author: null })
       }
       return Promise.resolve({ ok: true, resolved, unavailable, fetchedAt: NOW_ISO })
     }
+
+    // The fake "GitHub" write: refuses a stale precondition the way the real chokepoint does, and records every label write the app makes.
+    const labelWrites: { readonly action: string; readonly number: number }[] = []
+    function applyLabels(params: ApplyLabelsParams): Promise<WriteOutcome> {
+      const { request } = params
+      const set = request.kind === 'issue' ? labels.get(request.number) : prs.get(request.number)?.labels
+      if (set === undefined) return Promise.resolve({ kind: 'item-unavailable' })
+      if (!request.expect.present.every((key) => set.has(key)) || !request.expect.absent.every((key) => !set.has(key))) {
+        return Promise.resolve({ kind: 'precondition-failed', conflict: { kind: 'precondition-failed', expected: [], observed: [], readAt: NOW_ISO } })
+      }
+      for (const key of request.remove) set.delete(key)
+      for (const key of request.add) set.add(key)
+      labelWrites.push({ action: request.action, number: request.number })
+      return Promise.resolve({ kind: 'applied', argv: [] })
+    }
+    const writeDeps = { applyLabels, fetchItemsByNumber }
 
     // Late-binding, the same construction order `main/ipc.ts` uses: onStatus closes over stageLauncher,
     // stageLauncher's onOutcome/onDenial close over dispatcherRef — both assigned right after.
     let dispatcherRef: Dispatcher | null = null
 
     const store = createHostedStore({
-      getSdk: () => Promise.resolve(createFakeSdk(seen, labels, prs)),
+      getSdk: () => Promise.resolve(createFakeSdk(seen, prs)),
       resolveClaudeExecutable: () => Promise.resolve({ ok: true, path: '/usr/local/bin/claude' }),
       listSessionsForFork: () => Promise.resolve({ ok: true, sessions: [] }),
       env: {},
@@ -311,6 +328,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       sweepBranches: () => Promise.resolve(undefined),
       now: () => new Date(NOW_ISO),
       onOutcome: (repoId, sessionKey, outcome) => dispatcherRef?.recordOutcome(repoId, sessionKey, outcome),
+      onResumedTurn: (repoId, sessionKey) => dispatcherRef?.recordResumedTurn(repoId, sessionKey),
       registry: stageRegistry,
       onDenial: (repoId, denial: StageDenial) => dispatcherRef?.recordDenial(repoId, denial),
       newId: () => `id-${String(Math.random())}`,
@@ -355,6 +373,11 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       },
       writeObservation: () => {
         throw new Error('writeObservation should not be invoked in this scenario')
+      },
+      // The run scripts only plan and impl, so a review of the opened pull request is skipped the way a moved claim is.
+      stageLabels: {
+        claim: (claimParams) => (claimParams.candidate.agent === 'review' ? Promise.resolve({ kind: 'refused', reason: 'moved', retryable: false, detail: null }) : applyStageClaim(claimParams, writeDeps)),
+        transition: (transitionParams) => applyStageTransition(transitionParams, writeDeps),
       },
       refreshMemo,
       forceDispatch,
@@ -422,6 +445,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
 
     await tick()
     await waitForEndedCompleted(1)
+    await vi.waitFor(() => expect(labels.get(7)?.has('planReview')).toBe(true))
 
     // The human gate hasn't been applied yet, so nothing new launches.
     await tick()
@@ -430,6 +454,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
     moveLabel(labels, 7, 'planReview', 'planApproved')
     await tick()
     await waitForEndedCompleted(2)
+    await vi.waitFor(() => expect(labels.get(7)?.has('prOpened')).toBe(true))
 
     // No actionable item remains after the impl stage settles.
     const beforeFinal = seen.length
@@ -443,7 +468,15 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
     expect(listedSnapshots.every((s) => s.stage !== null)).toBe(true)
 
     expect([...(labels.get(7) ?? [])]).toContain('prOpened')
-    expect([...(prs.get(8)?.labels ?? [])]).toContain('readyForReview')
+    expect([...(labels.get(7) ?? [])]).not.toContain('inProgress')
+    expect([...(prs.get(8)?.labels ?? [])]).toEqual(expect.arrayContaining(['readyForReview', 'marker']))
+    expect(labelWrites).toEqual([
+      { action: 'stage-claim', number: 7 },
+      { action: 'stage-handback-plan-written', number: 7 },
+      { action: 'stage-claim', number: 7 },
+      { action: 'stage-handback-pr-opened', number: 8 },
+      { action: 'stage-handback-pr-opened', number: 7 },
+    ])
 
     expect(createdWorktrees).toHaveLength(2)
     expect(removedWorktrees).toHaveLength(2)

@@ -1,151 +1,69 @@
 // The Backlog screen — open, unclaimed issues per ready repo; Work on claims at once, or after a confirmation for a blocked ticket or an epic, and reports by toast. No `useEffect`: the list navigator is registered directly in the render body.
-import { useRef, useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useQueries, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
-import { RefreshCw, ListTodo, ChevronDown, Loader2 } from 'lucide-react'
+import { useNavigate, useSearch } from '@tanstack/react-router'
+import { RefreshCw, ListTodo } from 'lucide-react'
+import { SHOW_ALL_REPOSITORIES, unknownRepoCopy } from '@/renderer/lib/copy'
+import { CollapsibleGroupHeader } from '@/renderer/components/collapsible-group-header'
 import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/renderer/components/ui/dropdown-menu'
 import { ScreenHeader } from '@/renderer/components/screen-header'
 import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { EmptyState } from '@/renderer/components/empty-state'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { ipcQueryOptions, useIpcQuery } from '@/renderer/data/query'
 import { workOn } from '@/renderer/claim/work-on'
-import { PLAN_GATE_OPTIONS } from '@/renderer/claim/copy'
 import { registerListNavigator } from '@/renderer/shell/stores'
 import { useListSelection } from '@/renderer/shell/list-selection'
 import { ROUTE_IDS } from '@/renderer/router/routes'
-import { buildBacklogGroup, relativeAge, exactTime, staleSinceAt } from '@/renderer/backlog/group'
-import type { BacklogGroupView, BacklogLabelFilter, BacklogRowView } from '@/types/backlog'
-import { BACKLOG_FILTER_CLEAR, backlogCountCopy, backlogEmptyGroupCopy, backlogFilteredEmptyCopy, backlogNotReadyCopy } from '@/renderer/backlog/copy'
+import { buildBacklogGroup, relativeAge, staleSinceAt } from '@/renderer/backlog/group'
+import type { BacklogGroupView, BacklogLabelFilter, BacklogRowView, RenderBacklogRow } from '@/types/backlog'
+import type { PlanGateChoice } from '@/types/claim'
+import { BACKLOG_ALL_HIDDEN, BACKLOG_FILTER_CLEAR, BACKLOG_REPO_FILTER_SHOW_ALL, backlogCountCopy, backlogEmptyGroupCopy, backlogFilteredEmptyCopy, backlogGroupToggleAria, backlogNotReadyCopy } from '@/renderer/backlog/copy'
 import { workOnReasons } from '@/renderer/backlog/confirm'
-import { BlockedTag } from '@/renderer/backlog/blocked-tag'
 import { WorkOnConfirm } from '@/renderer/backlog/work-on-confirm'
 import { EMPTY_FILTER } from '@/renderer/backlog/filter'
-import { readBacklogFilters, setBacklogFilter } from '@/renderer/backlog/prefs'
+import { readBacklogCollapsed, readBacklogCollapsedEpics, readBacklogFilters, readBacklogHiddenRepos, setBacklogCollapsed, setBacklogCollapsedEpic, setBacklogFilter, setBacklogHiddenRepos } from '@/renderer/backlog/prefs'
+import { navigableRows, rowKey, toggleHiddenRepo, visibleRepos } from '@/renderer/backlog/sections'
+import { BacklogRow } from '@/renderer/backlog/backlog-row'
+import { detailPanelId } from '@/renderer/backlog/detail'
+import { DetailToggle, TicketDetailPanel } from '@/renderer/backlog/detail-panel'
+import { EpicGroup } from '@/renderer/backlog/epic-group'
 import { LabelFilterMenu } from '@/renderer/backlog/label-filter-menu'
-import { LabelChip } from '@/renderer/components/label-chip'
+import { RepoFilterMenu } from '@/renderer/backlog/repo-filter-menu'
 import { isReadyRepo } from '@/utils/repos'
 import type { RepoId } from '@/utils/repos'
 
-const MAX_CHIPS = 3
-const FOCUS_RING = 'outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+type RowProps = ReturnType<ReturnType<typeof useListSelection>['rowProps']>
 
 interface ReadyRepo {
   readonly id: RepoId
   readonly repo: string
 }
 
-function rowKey(repoId: RepoId, number: number): string {
-  return `${repoId}:${String(number)}`
-}
-
-type PlanGate = 'review' | 'auto'
-
-interface WorkOnMenuProps {
-  readonly open: boolean
-  readonly pending: boolean
-  readonly onOpenChange: (open: boolean) => void
-  // Returns true when it opened the confirm dialog, which then owns focus.
-  readonly onPick: (planGate: PlanGate) => boolean
-}
-
-function WorkOnMenu({ open, pending, onOpenChange, onPick }: WorkOnMenuProps) {
-  const picked = useRef<PlanGate | null>(null)
-
-  return (
-    <DropdownMenu open={open} onOpenChange={onOpenChange}>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="small" data-slot="backlog-work-on" disabled={pending}>
-          Work on
-          {pending ? <Loader2 aria-hidden="true" className="size-3.5 animate-spin" /> : <ChevronDown aria-hidden="true" className="size-3.5" />}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        onCloseAutoFocus={(event) => {
-          const planGate = picked.current
-          picked.current = null
-          if (planGate !== null && onPick(planGate)) event.preventDefault()
-        }}
-      >
-        {PLAN_GATE_OPTIONS.map((option) => (
-          <Tooltip key={option.value}>
-            <TooltipTrigger asChild>
-              <DropdownMenuItem onSelect={() => (picked.current = option.value)}>{option.label}</DropdownMenuItem>
-            </TooltipTrigger>
-            <TooltipContent>{option.hint}</TooltipContent>
-          </Tooltip>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-function BacklogRow({
-  row,
-  rowProps,
-  menuOpen,
-  pending,
-  onMenuOpenChange,
-  onPick,
-  now,
+function GroupHeader({
+  group,
+  filter,
+  collapsed,
+  onToggleCollapsed,
+  onFilterChange,
 }: {
-  readonly row: BacklogRowView
-  readonly rowProps: ReturnType<ReturnType<typeof useListSelection>['rowProps']>
-  readonly menuOpen: boolean
-  readonly pending: boolean
-  readonly onMenuOpenChange: (open: boolean) => void
-  readonly onPick: (planGate: PlanGate) => boolean
-  readonly now: Date
+  readonly group: BacklogGroupView
+  readonly filter: BacklogLabelFilter
+  readonly collapsed: boolean
+  readonly onToggleCollapsed: () => void
+  readonly onFilterChange: (filter: BacklogLabelFilter) => void
 }) {
   return (
-    <div data-slot="backlog-row" {...rowProps} className={`flex h-9 items-center gap-2 px-4 text-body ${rowProps.className}`}>
-      <span className="w-12 shrink-0 font-mono tabular-nums text-muted-foreground">#{row.number}</span>
-      <a href={row.url} target="_blank" rel="noreferrer" className="min-w-24 flex-1 truncate text-foreground hover:underline">
-        {row.title}
-      </a>
-      <BlockedTag row={row} />
-      {row.labels.length > 0 ? (
-        <div className="flex min-w-0 max-w-48 gap-1">
-          {row.labels.slice(0, MAX_CHIPS).map((label) => (
-            <LabelChip key={label.name} label={label} />
-          ))}
-          {row.labels.length > MAX_CHIPS ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span tabIndex={0} className={`shrink-0 rounded-full bg-muted px-1.5 text-meta font-medium text-foreground-secondary ${FOCUS_RING}`}>+{row.labels.length - MAX_CHIPS}</span>
-              </TooltipTrigger>
-              <TooltipContent>
-                {row.labels
-                  .slice(MAX_CHIPS)
-                  .map((label) => label.name)
-                  .join(', ')}
-              </TooltipContent>
-            </Tooltip>
-          ) : null}
-        </div>
-      ) : null}
-      {row.assignee !== null ? <span className="shrink-0 text-meta text-muted-foreground">{row.assignee}</span> : null}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="shrink-0 text-meta text-muted-foreground">{relativeAge(row.updatedAt, now)}</span>
-        </TooltipTrigger>
-        <TooltipContent>{exactTime(row.updatedAt)}</TooltipContent>
-      </Tooltip>
-      <WorkOnMenu open={menuOpen} pending={pending} onOpenChange={onMenuOpenChange} onPick={onPick} />
-    </div>
-  )
-}
-
-function GroupHeader({ group, filter, onFilterChange }: { readonly group: BacklogGroupView; readonly filter: BacklogLabelFilter; readonly onFilterChange: (filter: BacklogLabelFilter) => void }) {
-  return (
-    <div className="flex h-8 items-center justify-between bg-sidebar px-4 text-small font-medium text-foreground-secondary">
-      <span>{group.kind === 'loaded' ? backlogCountCopy(group.repo, group.items.length, group.totalCount) : group.repo}</span>
+    <CollapsibleGroupHeader
+      label={group.kind === 'loaded' ? backlogCountCopy(group.repo, group.items.length, group.totalCount) : group.repo}
+      collapsed={collapsed}
+      onToggle={onToggleCollapsed}
+      toggleLabel={backlogGroupToggleAria(group.repo, collapsed)}
+      toggleSlot="backlog-group-toggle"
+    >
       {group.kind === 'loaded' && group.labelOptions.length > 0 ? <LabelFilterMenu options={group.labelOptions} filter={filter} onChange={onFilterChange} /> : null}
-    </div>
+    </CollapsibleGroupHeader>
   )
 }
 
@@ -155,17 +73,25 @@ function GroupBody({
   rowPropsFor,
   menuOpenKey,
   pendingKeys,
+  collapsedEpics,
+  openDetails,
   setMenuOpenKey,
+  onToggleEpic,
+  onToggleDetail,
   onPick,
   onClearFilter,
 }: {
   readonly group: BacklogGroupView
   readonly now: Date
-  readonly rowPropsFor: (key: string) => ReturnType<ReturnType<typeof useListSelection>['rowProps']>
+  readonly rowPropsFor: (key: string) => RowProps
   readonly menuOpenKey: string | null
   readonly pendingKeys: ReadonlySet<string>
+  readonly collapsedEpics: ReadonlySet<string>
+  readonly openDetails: ReadonlySet<string>
   readonly setMenuOpenKey: (key: string | null) => void
-  readonly onPick: (row: BacklogRowView, planGate: PlanGate) => boolean
+  readonly onToggleEpic: (key: string) => void
+  readonly onToggleDetail: (key: string) => void
+  readonly onPick: (row: BacklogRowView, planGate: PlanGateChoice) => boolean
   readonly onClearFilter: () => void
 }) {
   if (group.kind === 'loading') {
@@ -190,24 +116,49 @@ function GroupBody({
     }
     return <EmptyState icon={ListTodo} message={backlogEmptyGroupCopy(group.repo)} className="px-4" />
   }
+  const renderRow: RenderBacklogRow = (row, extras) => {
+    const key = rowKey(row.repoId, row.number)
+    const open = openDetails.has(key)
+    const id = detailPanelId(key)
+    const { panel, ...rowExtras } = extras ?? {}
+    return (
+      <Fragment key={key}>
+        <BacklogRow
+          row={row}
+          now={now}
+          rowProps={rowPropsFor(key)}
+          menuOpen={menuOpenKey === key}
+          pending={pendingKeys.has(key)}
+          onMenuOpenChange={(next) => setMenuOpenKey(next ? key : null)}
+          onPick={(planGate) => onPick(row, planGate)}
+          onToggleDetail={() => onToggleDetail(key)}
+          {...rowExtras}
+          leading={rowExtras.leading ?? <DetailToggle open={open} number={row.number} controls={id} onToggle={() => onToggleDetail(key)} />}
+        />
+        {open ? (panel ?? <TicketDetailPanel row={row} id={id} now={now} />) : null}
+      </Fragment>
+    )
+  }
   return (
     <div>
       {group.truncatedNote !== null ? <p className="px-4 py-1 text-meta text-muted-foreground">{group.truncatedNote}</p> : null}
-      {group.items.map((row) => {
-        const key = rowKey(row.repoId, row.number)
+      {group.layout.epics.map((entry) => {
+        const key = rowKey(entry.epic.repoId, entry.epic.number)
         return (
-          <BacklogRow
+          <EpicGroup
             key={key}
-            row={row}
+            group={entry}
+            collapsed={collapsedEpics.has(key)}
+            onToggle={() => onToggleEpic(key)}
+            renderRow={renderRow}
+            detailOpen={openDetails.has(key)}
+            detailId={detailPanelId(key)}
             now={now}
-            rowProps={rowPropsFor(key)}
-            menuOpen={menuOpenKey === key}
-            pending={pendingKeys.has(key)}
-            onMenuOpenChange={(open) => setMenuOpenKey(open ? key : null)}
-            onPick={(planGate) => onPick(row, planGate)}
+            onToggleDetail={() => onToggleDetail(key)}
           />
         )
       })}
+      {group.layout.remainder.map((row) => renderRow(row))}
     </div>
   )
 }
@@ -218,14 +169,56 @@ export function BacklogScreen() {
   const queryClient = useQueryClient()
   const [menuOpenKey, setMenuOpenKey] = useState<string | null>(null)
   const [pendingKeys, setPendingKeys] = useState<ReadonlySet<string>>(new Set())
-  const [confirm, setConfirm] = useState<{ readonly row: BacklogRowView; readonly planGate: PlanGate } | null>(null)
+  const [confirm, setConfirm] = useState<{ readonly row: BacklogRowView; readonly planGate: PlanGateChoice } | null>(null)
   const [filters, setFilters] = useState<ReadonlyMap<RepoId, BacklogLabelFilter>>(() => readBacklogFilters())
+  const [collapsed, setCollapsed] = useState<ReadonlySet<RepoId>>(() => readBacklogCollapsed())
+  const [collapsedEpics, setCollapsedEpics] = useState<ReadonlySet<string>>(() => readBacklogCollapsedEpics())
+  const [openDetails, setOpenDetails] = useState<ReadonlySet<string>>(new Set())
+  const [hidden, setHidden] = useState<ReadonlySet<RepoId>>(() => readBacklogHiddenRepos())
   const now = new Date()
 
-  const readyRepos: readonly ReadyRepo[] = reposQuery.data?.ok === true ? reposQuery.data.repositories.filter(isReadyRepo).map((e) => ({ id: e.id, repo: e.config.repo })) : []
-  const notReadyRepos = reposQuery.data?.ok === true ? reposQuery.data.repositories.filter((e) => !isReadyRepo(e)) : []
+  const scopedRepo = useSearch({ from: ROUTE_IDS.backlog }).repo ?? null
 
-  const queries = useQueries({ queries: readyRepos.map((r) => ipcQueryOptions('backlog:list', { repoId: r.id })) })
+  const entries = reposQuery.data?.ok === true ? reposQuery.data.repositories : []
+  const readyRepos: readonly ReadyRepo[] = entries.filter(isReadyRepo).map((e) => ({ id: e.id, repo: e.config.repo }))
+  const notReadyRepos = entries.filter((e) => !isReadyRepo(e) && (scopedRepo === null || e.id === scopedRepo))
+  const unknownRepo = scopedRepo !== null && reposQuery.data?.ok === true && !entries.some((e) => e.id === scopedRepo) ? scopedRepo : null
+
+  const shownRepos = scopedRepo !== null ? readyRepos.filter((r) => r.id === scopedRepo) : visibleRepos(readyRepos, hidden)
+  const queries = useQueries({ queries: shownRepos.map((r) => ipcQueryOptions('backlog:list', { repoId: r.id })) })
+
+  function toggleCollapsed(repoId: RepoId): void {
+    const next = !collapsed.has(repoId)
+    setCollapsed((previous) => {
+      const updated = new Set(previous)
+      if (next) updated.add(repoId)
+      else updated.delete(repoId)
+      return updated
+    })
+    setBacklogCollapsed(repoId, next)
+  }
+  function toggleEpic(key: string): void {
+    const next = !collapsedEpics.has(key)
+    setCollapsedEpics((previous) => {
+      const updated = new Set(previous)
+      if (next) updated.add(key)
+      else updated.delete(key)
+      return updated
+    })
+    setBacklogCollapsedEpic(key, next)
+  }
+  function toggleDetail(key: string): void {
+    setOpenDetails((previous) => {
+      const updated = new Set(previous)
+      if (updated.has(key)) updated.delete(key)
+      else updated.add(key)
+      return updated
+    })
+  }
+  function changeHidden(next: ReadonlySet<RepoId>): void {
+    setHidden(next)
+    setBacklogHiddenRepos(next)
+  }
 
   const filterOf = (repoId: RepoId): BacklogLabelFilter => filters.get(repoId) ?? EMPTY_FILTER
   function changeFilter(repoId: RepoId, filter: BacklogLabelFilter): void {
@@ -233,12 +226,12 @@ export function BacklogScreen() {
     setBacklogFilter(repoId, filter)
   }
 
-  const groups: BacklogGroupView[] = readyRepos.map((r, i) => {
+  const groups: BacklogGroupView[] = shownRepos.map((r, i) => {
     const q = queries[i]
     return buildBacklogGroup(r.id, r.repo, { status: q?.status ?? 'pending', data: q?.data, isError: q?.isError ?? false, dataUpdatedAt: q?.dataUpdatedAt ?? 0 }, filterOf(r.id))
   })
 
-  const flatRows: BacklogRowView[] = groups.flatMap((g) => (g.kind === 'loaded' ? g.items : []))
+  const flatRows = navigableRows(groups, collapsed, collapsedEpics)
   const flatKeys = flatRows.map((row) => rowKey(row.repoId, row.number))
   const selection = useListSelection(flatKeys)
 
@@ -251,7 +244,7 @@ export function BacklogScreen() {
     })
   }
 
-  function start(row: BacklogRowView, planGate: PlanGate): void {
+  function start(row: BacklogRowView, planGate: PlanGateChoice): void {
     const key = rowKey(row.repoId, row.number)
     setPending(key, true)
     void workOn({
@@ -263,7 +256,7 @@ export function BacklogScreen() {
     }).finally(() => setPending(key, false))
   }
 
-  function pick(row: BacklogRowView, planGate: PlanGate): boolean {
+  function pick(row: BacklogRowView, planGate: PlanGateChoice): boolean {
     if (workOnReasons(row) === null) {
       start(row, planGate)
       return false
@@ -290,6 +283,7 @@ export function BacklogScreen() {
 
   function refreshAll(): void {
     for (const q of queries) void q.refetch()
+    void queryClient.invalidateQueries({ queryKey: ['backlog:detail'] })
   }
 
   const stale = staleSinceAt(queries.map((q) => ({ query: { status: q.status, data: q.data, isError: q.isError, dataUpdatedAt: q.dataUpdatedAt } })))
@@ -303,6 +297,7 @@ export function BacklogScreen() {
           <span>Backlog</span>
           <div className="flex items-center gap-2">
             {stale !== null ? <span className="text-meta font-normal text-attention-dot">Updated {relativeAge(new Date(stale).toISOString(), now)}</span> : null}
+            {scopedRepo === null && readyRepos.length > 1 ? <RepoFilterMenu repos={readyRepos} hidden={hidden} onToggle={(id) => changeHidden(toggleHiddenRepo(hidden, id))} onShowAll={() => changeHidden(new Set())} /> : null}
             <Button variant="ghost" size="small" onClick={refreshAll} disabled={isFetching}>
               <RefreshCw aria-hidden="true" className={isFetching ? 'size-3.5 animate-spin' : 'size-3.5'} />
               Refresh
@@ -318,15 +313,37 @@ export function BacklogScreen() {
               <Skeleton className="h-5 w-full" />
               <Skeleton className="h-5 w-full" />
             </div>
+          ) : unknownRepo !== null ? (
+            <EmptyState icon={ListTodo} message={unknownRepoCopy(unknownRepo)} action={{ label: SHOW_ALL_REPOSITORIES, onClick: () => void navigate({ to: ROUTE_IDS.backlog, search: { repo: null } }) }} className="px-4 py-6" />
           ) : readyRepos.length === 0 ? (
             <EmptyState icon={ListTodo} message="Register a repository to see its open tickets." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.settings, search: { section: 'repositories' } }) }} className="px-4 py-6" />
+          ) : scopedRepo !== null && shownRepos.length === 0 ? null : shownRepos.length === 0 ? (
+            <EmptyState icon={ListTodo} message={BACKLOG_ALL_HIDDEN} action={{ label: BACKLOG_REPO_FILTER_SHOW_ALL, onClick: () => changeHidden(new Set()) }} className="px-4 py-6" />
           ) : (
-            groups.map((group) => (
-              <div key={group.repoId}>
-                <GroupHeader group={group} filter={filterOf(group.repoId)} onFilterChange={(filter) => changeFilter(group.repoId, filter)} />
-                <GroupBody group={group} now={now} rowPropsFor={(key) => selection.rowProps(key)} menuOpenKey={menuOpenKey} pendingKeys={pendingKeys} setMenuOpenKey={setMenuOpenKey} onPick={pick} onClearFilter={() => changeFilter(group.repoId, EMPTY_FILTER)} />
-              </div>
-            ))
+            groups.map((group) => {
+              const isCollapsed = collapsed.has(group.repoId)
+              return (
+                <div key={group.repoId} data-slot="backlog-group" data-repo={group.repo} data-collapsed={isCollapsed}>
+                  <GroupHeader group={group} filter={filterOf(group.repoId)} collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(group.repoId)} onFilterChange={(filter) => changeFilter(group.repoId, filter)} />
+                  {isCollapsed ? null : (
+                    <GroupBody
+                      group={group}
+                      now={now}
+                      rowPropsFor={(key) => selection.rowProps(key)}
+                      menuOpenKey={menuOpenKey}
+                      pendingKeys={pendingKeys}
+                      collapsedEpics={collapsedEpics}
+                      openDetails={openDetails}
+                      setMenuOpenKey={setMenuOpenKey}
+                      onToggleEpic={toggleEpic}
+                      onToggleDetail={toggleDetail}
+                      onPick={pick}
+                      onClearFilter={() => changeFilter(group.repoId, EMPTY_FILTER)}
+                    />
+                  )}
+                </div>
+              )
+            })
           )}
           {notReadyRepos.map((entry) => (
             <p key={entry.id} className="px-4 py-1 text-meta text-muted-foreground">

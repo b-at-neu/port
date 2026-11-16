@@ -156,33 +156,35 @@ Dark surface lightness (CIE L*): sidebar 6.3 · background 10.7 · card 15.2 · 
 **Window:** native title bar on every platform. Three columns: the sidebar, the main area, and an optional detail pane. The app restores the last screen, selection and collapsed state on launch.
 
 **Sidebar, top to bottom:**
-1. **Mark and wordmark.**
-2. **Screens:** Board, Needs you (red count), Backlog, Releases, Audit log.
-3. **Pipelines:** one row per registered repo. Each row has:
-   - a caret that collapses it, with the state remembered;
+1. **Mark and wordmark,** then **New session**, **History** and **Hide sidebar** as icon buttons on the right.
+2. **Repo groups:** one collapsible group per registered repo (`RepoGroup`, §4). The header has:
+   - a caret that collapses the group, with the state remembered;
    - the repo name;
+   - a red count of what waits on you, shown only above 0, so a collapsed group still signals;
    - its run-state `StatusPill` menu (§4).
 
-   The repo's stage sessions that are actively running and not waiting on you are nested under it, labelled `#N <title>`. Each has a `PhaseDot` in its phase colour, so the colour alone says which phase it is in; it pulses while the session runs. A session that needs you, sits idle or has reached a gate or "Ready to merge" leaves the list. The row for the session on screen, a live stage session or a stage transcript, is drawn in `selection`. If its repo is collapsed, the repo row is drawn in `selection` instead. A collapsed repo with a session that needs you shows a red dot next to its name, only when more than one repo is registered.
-4. **Your sessions:** a header with **New session** and **History** as icon buttons on its right, then your own live sessions. The open one is drawn in `selection`.
+   Expanded, the group holds four screen rows, **Board**, **Needs you** (with the same count), **Backlog** and **Releases**, each opening that screen scoped to the repo with `?repo=`. The row for the open screen is drawn in `accent`. Under a `Sessions` label come the repo's stage sessions that are actively running and not waiting on you, labelled `#N <title>`, then your own live sessions in it. Each stage row has a `PhaseDot` in its phase colour, so the colour alone says which phase it is in; it pulses while the session runs. A session that needs you, sits idle or has reached a gate or "Ready to merge" leaves the list. The row for the session on screen is drawn in `selection`. If the group is collapsed, its header is drawn in `selection` instead, whether it holds the open screen or the open session.
+3. **Other sessions:** your live sessions in no registered repo, tagged with their folder. Hidden when empty.
+4. **Update notice:** a bordered card with the new version, a **Release notes** link and an **Update** button. It appears only when a newer release is available, and the collapsed rail shows an icon instead. On macOS and Linux `.deb`, clicking **Update** downloads the installer, with a progress bar, then opens it; a failed download offers **Try again** and the release page. On Windows and Linux AppImage, **Update** downloads the update in place and restarts port to install it, asking first when stage sessions are running; if that fails it falls back to the installer download.
 5. **Footer:** a Settings button across the full footer width, plus one status dot for the `claude` CLI and `gh`, red when either is missing or signed out. The dot opens a popover on hover, focus and click: one line per connection with its state and age, a line per repository read, and a link to Settings → Connections. Leaving closes it after 150ms, and Esc closes it.
+
+**Collapsed rail (48px):** the expand button, then icons for the selected repo only, Board, Needs you (with a red dot when that repo has something waiting), Backlog and Releases, then the update button and Settings. The selected repo is the one on screen, else the one whose session is open, else the last one used, else the first. There are no per-repo icons.
 
 **Screens in the first release:**
 
 | Screen | Content |
 | --- | --- |
 | Needs you | Everything waiting on the operator, newest first, each with its action inline: plan reviews, PRs ready to merge, questions from stage sessions, needs-human escalations, blocked tickets with the decision they wait on |
-| Board | Grouped list: **Waiting on you**, **In progress**, **Blocked**, **Queued**, each grouped by phase, plus a repo filter |
+| Board | Grouped list: **Waiting on you**, **In progress**, **Blocked**, **Queued**, each grouped by phase, plus a repo filter; or a read-only kanban (List/Board toggle, `?view=`, remembered): Queued, Plan, Implement, Review, Revise, Needs you, with one collapsible swimlane per repository when several are visible |
 | Backlog | Open tickets not yet in a pipeline, with **Work on**: interactive plan review or auto-plan |
 | Releases | Per repo, the upcoming release (the PRs merged since the last release) with the one action its phase allows (**Cut release**, **Open PR**, **Publish**), then every previous release, whose notes open in the detail pane |
 | Session | Conversation and composer. **Changes** opens the session's diff in the detail pane |
 | History | Past sessions and transcripts, with search |
-| Audit log | Every write port made to GitHub, newest first, filterable by repo and ticket |
-| Settings | Full width, with six tabs of cards in a responsive grid, chosen by `?section=`: General (theme, notifications, keyboard shortcuts), Repositories (the repository list, and one page per repo with tabs Overview, Worktrees, Denials), Connections (Claude Code, `gh`, the GitHub rate limit, each repository's last read), Pipeline (session limit, new-session defaults, a read-only view of each repository's config), Usage & storage (spend by repository and period, disk use), About (version, runtime versions, setup checklist, notices). The old `/repositories` and `/about` routes redirect here |
+| Settings | Full width, with seven tabs of cards in a responsive grid, chosen by `?section=`: General (theme, notifications, keyboard shortcuts), Repositories (the repository list, and one page per repo with tabs Overview, Worktrees, Denials), Connections (Claude Code, `gh`, the GitHub rate limit, each repository's last read), Pipeline (session limit, new-session defaults, a read-only view of each repository's config), Usage & storage (spend by repository and period, disk use), Audit log (every write port made to GitHub, newest first, filterable by repo and ticket), About (version, update status, runtime versions, setup checklist, notices). The old `/repositories`, `/audit` and `/about` routes redirect here |
 
 Scoping epics and analytics are out of scope for the first release.
 
-**Detail pane rule.** Selecting an item in a list (a ticket, worktree, denial or release) opens it in the right-hand pane instead of navigating away. Esc closes it. Clicking the selected row again, or empty space on the page, deselects it and closes the pane; clicks on a control, inside the pane, or in a menu or dialog do not. Full-page navigation is only for screens and sessions.
+**Detail pane rule.** Selecting an item in a list (a ticket, worktree, denial or release) opens it in the right-hand pane instead of navigating away. Esc closes it. Clicking the selected row again, or empty space on the page, deselects it and closes the pane; clicks on a control, inside the pane, or in a menu or dialog do not. Full-page navigation is only for screens and sessions. The Backlog is the exception: a ticket's details expand inline under its row, so they read alongside its wave.
 
 **Board row anatomy, left to right:**
 - ticket number (`muted-foreground`, tabular);
@@ -190,8 +192,22 @@ Scoping epics and analytics are out of scope for the first release.
 - repo tag;
 - `PhaseBar`;
 - phase pill;
+- held tag, on a held item only: `Held · <reason>`, with the full reason and its unblocking action in the tooltip;
 - blocked-on tag, on a blocked ticket only: the open dependency it waits on, else the agent's or the ticket's reason, else "Reason on ticket";
 - the one next action as a link ("Review plan", "Open PR", "Refresh").
+
+**Board card anatomy, top to bottom** (kanban view):
+- ticket number (`muted-foreground`, mono, tabular), the muted `(PR#537)` suffix, a "No ticket" tag on an unlinked PR, then on the right 16px icons with tooltips for Auto-plan and Dispatched. The kanban never shows a repo tag, because the lane, or the filter, names the repository;
+- title, clamped to two lines;
+- phase pill, held tag on a held item only (`Held · <reason>`, full reason and its unblocking action in the tooltip), blocked-on tag on a blocked ticket only, then the one next action as a link. An ungated PR in Needs you adds an `attention` "Ungated" tag and shows **Add gate label** in the action slot;
+- a 4px left edge in the card's own phase dot colour (`needs-you` red for a card that waits on you). Each column header is a `PhaseDot`, the name and a count over a 2px rule in the column's dot colour: Queued `idle`, then plan, implement, review, revise and `needs-you`. Column bodies stay on `background`.
+
+**Board lanes** (kanban view, All repositories, two or more ready repositories):
+- column headers stay pinned at the top and count every card across all lanes, collapsed ones included;
+- each lane is a band holding the six columns, under a 32px `sidebar` header with a chevron toggle and `Name · N`, the count covering every card in the lane;
+- a collapsed lane shows only its header, and the collapsed set is remembered per user;
+- one repository, or a repo filter, shows no lane header;
+- J / K move through the visible cards in lane order, skipping collapsed lanes.
 
 **Conversation:** document flow, not chat bubbles.
 - **Your messages:** `muted` blocks.
@@ -214,6 +230,7 @@ Scoping epics and analytics are out of scope for the first release.
 | ↑ / ↓ | Previous / next sent prompt when the composer is empty |
 | Esc | Close suggestions, else stop Claude's turn when the composer is focused; otherwise close the pane or dialog |
 | J / K, then Enter | Move through Board and Backlog rows, open the selected one |
+| Space | Show or hide the selected Backlog row's details |
 
 ## 4. Component treatments
 
@@ -233,7 +250,9 @@ Scoping epics and analytics are out of scope for the first release.
 | `PhasePill`, `PhaseDot` | A `StatusPill`'s anatomy as a solid fill from the phase palette (§1); its dot is drawn in the pill's text colour. `PhaseDot` is a ring while the stage is queued and filled while it is in flight, and pulses while the stage waits on you, or, for a running pipeline session in the sidebar, in its phase colour. Unstaged items use the `idle` role. The `needs-you` palette overrides the phase colour for anything that needs the operator |
 | `PhaseBar` | Five 10×4px segments with a 2px gap, for plan (including plan review), implement, review, revision, merge. Finished segments use `segment-past`, the current one the current stage's full phase dot colour, or `needs-you` when it waits on you, not-yet-reached ones `segment-future`; a merged item is every segment `done`. Tooltip names the phase |
 | `PhaseList` | Vertical version for the detail pane: an 8px dot per phase in the same colours as `PhaseBar`, with who and when ("Plan approved by you · 2h ago") and live cost and time on the current phase, and, under each phase, the sessions that ran it (agent or "Your session", when, state, cost), with a "Your sessions" group for ones no phase can claim |
-| `TicketRow`, `RepoPipelineRow`, `SessionRow`, `NeedsYouItem` | The list rows (§3) |
+| `TicketRow`, `RepoGroup`, `SessionRow`, `NeedsYouItem` | The list rows (§3) |
+| `CollapsibleGroupHeader` | A 32px `sidebar` group header with a chevron toggle, a `Name · N` label and an optional trailing control; the Backlog's repository groups and the Board's kanban lanes |
+| `TicketCard` | The Board kanban's card (§3): `card` surface, 1px `border`, 8px radius, 8px padding, a 4px left edge in its own phase dot. Hover is `accent`, selected is the list row's `selection` and `ring`. A kanban column header is a `PhaseDot` plus a 2px rule in the same dot colour |
 | `ToolCallRow`, `DiffView`, `Markdown`, `CodeBlock`, `Composer`, `ContextMeter` | Session pieces. `ContextMeter` is a `Context` label, a 56×4px bar and a percentage, with token counts in its tooltip. `ToolCallRow` carries a per-tool one-line summary and default-open rule (edits with a diff, TodoWrite, a running subagent, a failed Bash); its body delegates to `ToolCallDetail`'s Bash/TodoWrite/Task/lookup views. A subagent's children nest recursively under its row, indented with a `border-l` rule; an orphaned child (its parent row evicted from the window) carries the label "Subagent · parent call not shown" |
 | `BackgroundTasksPanel` | A `border` card between the command strip and composer, hidden when empty. Header `Background tasks · N`; each 36px row shows a type icon, a truncating description with a tooltip, a mono type tag, and a `Stop` ghost button that opens a confirm dialog |
 | `SettingsCard` | The one card every Settings tab is built from: `border`, `card` fill, 16px padding, an `h2` title in `muted-foreground`, an optional description, and right-aligned actions in the header row. A card that needs width spans two or three columns |

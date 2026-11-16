@@ -1,10 +1,9 @@
 // The app's one router — code-based, hash history (`loadFile` serves
 // `file://`, where path history cannot resolve).
 import { createHashHistory, createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router'
-import { ROUTE_IDS, auditSearchFromRaw, boardSearchFromRaw, historySearchFromRaw, needsYouSearchFromRaw, repoSearchFromRaw, searchSearchFromRaw, sessionSearchFromRaw, settingsSearchFromRaw, transcriptSearchFromRaw } from '@/renderer/router/routes'
-import type { AuditSearch, BoardSearch, HistorySearch, NeedsYouSearch, RepoSearch, SearchSearch, SessionSearch, SettingsSearch, TranscriptSearch } from '@/types/router'
+import { ROUTE_IDS, auditSearchFromRaw, backlogSearchFromRaw, boardSearchFromRaw, historySearchFromRaw, needsYouSearchFromRaw, releasesSearchFromRaw, repoSearchFromRaw, searchSearchFromRaw, sessionSearchFromRaw, settingsSearchFromRaw, transcriptSearchFromRaw } from '@/renderer/router/routes'
+import type { AuditSearch, BacklogSearch, BoardSearch, HistorySearch, NeedsYouSearch, ReleasesSearch, RepoSearch, SearchSearch, SessionSearch, SettingsSearch, TranscriptSearch } from '@/types/router'
 import { SettingsScreen } from '@/renderer/settings/screen'
-import { AuditScreen } from '@/renderer/audit/screen'
 import { BacklogScreen } from '@/renderer/backlog/screen'
 import { ReleasesScreen } from '@/renderer/releases/screen'
 import { NeedsYouScreen } from '@/renderer/needs-you/screen'
@@ -87,13 +86,25 @@ const settingsRoute = createRoute({
   component: SettingsScreen,
   validateSearch: (search: Record<string, unknown>): SettingsSearch => settingsSearchFromRaw(search),
 })
-const backlogRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.backlog, component: BacklogScreen })
-const releasesRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.releases, component: ReleasesScreen })
+const backlogRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: ROUTE_IDS.backlog,
+  component: BacklogScreen,
+  validateSearch: (search: Record<string, unknown>): BacklogSearch => backlogSearchFromRaw(search),
+})
+const releasesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: ROUTE_IDS.releases,
+  component: ReleasesScreen,
+  validateSearch: (search: Record<string, unknown>): ReleasesSearch => releasesSearchFromRaw(search),
+})
 const auditRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: ROUTE_IDS.audit,
-  component: AuditScreen,
   validateSearch: (search: Record<string, unknown>): AuditSearch => auditSearchFromRaw(search),
+  beforeLoad: ({ search }) => {
+    throw redirect({ to: ROUTE_IDS.settings, search: { section: 'audit', repo: search.repo, number: search.number } })
+  },
 })
 const needsYouRoute = createRoute({
   getParentRoute: () => rootRoute,

@@ -37,6 +37,30 @@ export const PHASE_RING_CLASS: Readonly<Record<PhasePalette, string>> = {
   unstaged: 'border border-idle-dot',
 }
 
+/** A kanban column header's bottom rule. */
+export const PHASE_RULE_CLASS: Readonly<Record<PhasePalette, string>> = {
+  plan: 'border-b-2 border-phase-plan-dot',
+  implement: 'border-b-2 border-phase-implement-dot',
+  review: 'border-b-2 border-phase-review-dot',
+  revise: 'border-b-2 border-phase-revise-dot',
+  refresh: 'border-b-2 border-phase-refresh-dot',
+  'needs-you': 'border-b-2 border-phase-needs-you-dot',
+  done: 'border-b-2 border-phase-done-dot',
+  unstaged: 'border-b-2 border-idle-dot',
+}
+
+/** A kanban card's left edge. */
+export const PHASE_EDGE_CLASS: Readonly<Record<PhasePalette, string>> = {
+  plan: 'border-l-4 border-l-phase-plan-dot',
+  implement: 'border-l-4 border-l-phase-implement-dot',
+  review: 'border-l-4 border-l-phase-review-dot',
+  revise: 'border-l-4 border-l-phase-revise-dot',
+  refresh: 'border-l-4 border-l-phase-refresh-dot',
+  'needs-you': 'border-l-4 border-l-phase-needs-you-dot',
+  done: 'border-l-4 border-l-phase-done-dot',
+  unstaged: 'border-l-4 border-l-idle-dot',
+}
+
 export const PHASE_DOT_ON_PILL_CLASS = 'bg-current'
 
 export const PHASE_RING_ON_PILL_CLASS = 'border border-current'

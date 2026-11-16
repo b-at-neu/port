@@ -37,4 +37,11 @@ export interface StageOutcome {
   readonly worktree: StageWorktreeOutcome
   /** `true` when an operator sent a message into this stage session before it reached this outcome. */
   readonly operatorJoined: boolean
+  /** The final message's `HANDBACK:` line — set only on `completed`, and `null` when the stage ended without one. */
+  readonly handback: StageHandback | null
+}
+
+export interface StageHandback {
+  readonly token: string
+  readonly arg: string | null
 }

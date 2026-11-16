@@ -18,6 +18,9 @@ function row(overrides: Partial<BacklogRowView> = {}): BacklogRowView {
     labels: [],
     subIssueCount: 0,
     blockers: { ok: true, open: [], shown: 0, total: 0 },
+    blocking: { ok: true, open: [], shown: 0, total: 0 },
+    parent: { ok: true, parent: null },
+    children: { ok: true, children: [], shown: 0, total: 0 },
     ...overrides,
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@port/desktop",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "private": true,
   "description": "Desktop cockpit for the port pipeline. Runs your own installed Claude Code under your own account.",
   "main": "out/main/index.js",
@@ -75,6 +75,7 @@
     "@radix-ui/react-switch": "^1.4.1",
     "ajv": "^8.20.0",
     "cmdk": "^1.1.1",
+    "electron-updater": "^6.8.11",
     "sonner": "^2.0.8"
   }
 }

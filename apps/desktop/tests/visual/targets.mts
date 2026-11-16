@@ -27,6 +27,8 @@ export interface CaptureVariant {
   readonly hash?: string
   readonly click?: string
   readonly type?: { readonly selector: string; readonly text: string }
+  /** Clicked after the screenshot, to undo state the click persisted for every later capture. */
+  readonly restore?: string
   readonly ready: string
 }
 
@@ -62,6 +64,12 @@ export const SCENARIO_LANDING: Readonly<Record<NonDefaultScenario, string | null
   unregistered: '#/setup',
   failing: null,
   'registry-error': '#/setup',
+  'update-available': null,
+  'update-downloading': null,
+  'update-download-failed': null,
+  'update-restart-pending': null,
+  'update-restarting': null,
+  attention: null,
 }
 
 // The permission dialog is app-wide — its one fixture session is served only
@@ -71,7 +79,7 @@ export const SCENARIO_LANDING: Readonly<Record<NonDefaultScenario, string | null
 export const VARIANT_TARGETS: readonly VariantTarget[] = [
   { name: 'needs-you-empty', scenario: 'empty', target: { hash: '#/needs-you', container: '#app', ready: '[data-slot="needs-you-empty"]' } },
   { name: 'releases-empty', scenario: 'empty', target: { hash: '#/releases', container: '#app', ready: '[data-slot="releases-empty"]' } },
-  { name: 'audit-empty', scenario: 'empty', target: { hash: '#/audit', container: '#app', ready: '[data-slot="audit-empty"]' } },
+  { name: 'audit-empty', scenario: 'empty', target: { hash: '#/settings?section=audit', container: '#app', ready: '[data-slot="audit-empty"]' } },
   { name: 'session-permission', scenario: 'empty', target: { hash: '#/session?key=fixture-session-permission', container: '#app', ready: '[role="alertdialog"]' } },
   { name: 'board-unregistered', scenario: 'unregistered', target: { hash: '#/board', container: '#app', ready: 'text=Add a repository to see its pipeline.' } },
   { name: 'backlog-unregistered', scenario: 'unregistered', target: { hash: '#/backlog', container: '#app', ready: 'text=Register a repository to see its open tickets.' } },
@@ -81,6 +89,20 @@ export const VARIANT_TARGETS: readonly VariantTarget[] = [
   { name: 'backlog-error', scenario: 'failing', target: { hash: '#/backlog', container: '#app', ready: "text=GitHub's rate limit is used up." } },
   { name: 'history-error', scenario: 'failing', target: { hash: '#/history', container: '#app', ready: "text=Couldn't read your Claude projects directory" } },
   { name: 'repos-error', scenario: 'registry-error', target: { hash: '#/settings?section=repositories', container: '#app', ready: "text=isn't valid JSON" } },
+  { name: 'update-available', scenario: 'update-available', target: { hash: '#/board', container: '#app', ready: '[data-slot="update-notice"]' } },
+  { name: 'about-update-available', scenario: 'update-available', target: { hash: '#/settings?section=about', container: '#app', ready: '[data-slot="update-status"][data-state="available"]' } },
+  { name: 'update-downloading', scenario: 'update-downloading', target: { hash: '#/board', container: '#app', ready: '[data-slot="update-notice"] [data-slot="update-download"][data-state="downloading"]' } },
+  { name: 'update-download-failed', scenario: 'update-download-failed', target: { hash: '#/board', container: '#app', ready: '[data-slot="update-notice"] [data-slot="update-download"][data-state="failed"]' } },
+  { name: 'update-restart-pending', scenario: 'update-restart-pending', target: { hash: '#/board', container: '#app', ready: '[data-slot="update-notice"] [data-slot="update-download"][data-state="restart-pending"]' } },
+  { name: 'update-restarting', scenario: 'update-restarting', target: { hash: '#/board', container: '#app', ready: '[data-slot="update-notice"] [data-slot="update-download"][data-state="restarting"]' } },
+  { name: 'about-update-downloading', scenario: 'update-downloading', target: { hash: '#/settings?section=about', container: '#app', ready: '[data-slot="update-status"] [data-slot="update-download"][data-state="downloading"]' } },
+  { name: 'about-update-error', scenario: 'failing', target: { hash: '#/settings?section=about', container: '#app', ready: '[data-slot="update-status"][data-state="error"]' } },
+  { name: 'about-update-checking', scenario: 'registry-error', target: { hash: '#/settings?section=about', container: '#app', ready: '[data-slot="update-status"][data-state="checking"]' } },
+  { name: 'needs-you-held', scenario: 'attention', target: { hash: '#/needs-you', container: '#app', ready: 'text=its branch conflicts with the base branch' } },
+  { name: 'needs-you-stalled', scenario: 'attention', target: { hash: '#/needs-you', container: '#app', ready: 'text=its agent stopped responding' } },
+  { name: 'board-attention', scenario: 'attention', target: { hash: '#/board', container: '#app', ready: 'text=Normalize currency rounding' } },
+  { name: 'settings-repo-problem', scenario: 'attention', target: { hash: '#/settings/repositories/fixture-acme-legacy-site', container: '#app', ready: '[role="alert"]' } },
+  { name: 'session-crashed', scenario: 'attention', target: { hash: '#/session?key=fixture-session-ended', container: '#app', ready: 'text=Crashed' } },
 ]
 
 const FIXTURE_SESSION_ID = 'fixture-session-streaming'
@@ -100,6 +122,13 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'detail-sessions', hash: '#/board?item=fixture-acme-widgets:46', ready: '[role="complementary"]' },
       { name: 'gate-review', click: 'text=Review plan', ready: '[data-slot="dialog-content"]' },
       { name: 'repo-empty', hash: '#/board?repo=fixture-acme-gadgets', ready: "text=Nothing in this repository's pipeline." },
+      { name: 'repo-scoped', hash: '#/board?repo=fixture-acme-widgets', ready: 'aside [data-slot="repo-screen"][data-active="true"]' },
+      { name: 'sidebar-repo-collapsed', click: 'aside [data-slot="repo-group"] button[aria-label^="Collapse "]', ready: 'aside [data-slot="repo-group"] button[aria-label^="Expand "]', restore: 'aside [data-slot="repo-group"] button[aria-label^="Expand "]' },
+      { name: 'sidebar-rail', click: '[aria-label="Hide sidebar"]', ready: '[aria-label="Show sidebar"]', restore: '[aria-label="Show sidebar"]' },
+      { name: 'kanban', hash: '#/board?view=board', ready: '[data-slot="ticket-card"]' },
+      { name: 'kanban-detail', hash: '#/board?view=board&item=fixture-acme-widgets:38', ready: '[role="complementary"]' },
+      { name: 'kanban-held-detail', hash: '#/board?view=board&item=fixture-acme-widgets:53', ready: '[data-slot="held-tag"]' },
+      { name: 'kanban-repo', hash: '#/board?view=board&repo=fixture-acme-widgets', ready: '[data-slot="ticket-card"]' },
     ],
   },
   repos: { hash: '#/repositories', container: '#app', ready: '[data-slot="repo-row"]' },
@@ -115,7 +144,6 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'denials', hash: '#/settings/repositories/fixture-acme-widgets?tab=denials', ready: '[data-slot="denial-shape-row"]' },
       { name: 'denials-actor', hash: '#/settings/repositories/fixture-acme-widgets?tab=denials&denialsGroup=actor', ready: '[data-slot="denial-actor-row"]' },
       { name: 'denials-empty', hash: '#/settings/repositories/fixture-acme-gadgets?tab=denials', ready: 'text=No denial log yet' },
-      { name: 'problem', hash: '#/settings/repositories/fixture-acme-legacy-site', ready: '[role="alert"]' },
       { name: 'mis-resolved', hash: '#/settings/repositories/fixture-acme-gadgets', ready: '[data-slot="label-verdict"]' },
     ],
   },
@@ -143,7 +171,7 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
     variants: [
       { name: 'streaming', hash: `#/session?key=${FIXTURE_SESSION_ID}`, ready: '[data-slot="tool-call-row"]' },
       { name: 'stage', hash: '#/session?key=fixture-stage-impl-38', ready: 'aside [aria-current="page"]' },
-      { name: 'ended', hash: '#/session?key=fixture-session-ended', ready: 'text=Crashed' },
+      { name: 'ended', hash: '#/session?key=fixture-session-ended', ready: 'text=Claude Code ended the session.' },
       { name: 'starting', hash: '#/session?key=fixture-session-starting', ready: 'text=Starting' },
       { name: 'question', hash: '#/session?key=fixture-session-question', ready: '[data-slot="question-card"]' },
       { name: 'plan', hash: '#/session?key=fixture-session-plan', ready: '[data-slot="plan-card"]' },
@@ -162,11 +190,22 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'connections', hash: '#/settings?section=connections', ready: '[data-slot="connection-row"]' },
       { name: 'pipeline', hash: '#/settings?section=pipeline', ready: '[data-slot="settings-repo-config"]' },
       { name: 'usage', hash: '#/settings?section=usage', ready: '[data-slot="usage-row"]' },
-      { name: 'about', hash: '#/settings?section=about', ready: '[data-about-notice]' },
+      { name: 'audit', hash: '#/settings?section=audit', ready: '[data-slot="audit-row"]' },
+      { name: 'about', hash: '#/settings?section=about', ready: '[data-slot="update-status"][data-state="up-to-date"]' },
       { name: 'status-popover', click: '[data-slot="status-dot"]', ready: '[data-slot="status-popover"]' },
     ],
   },
-  backlog: { hash: '#/backlog', container: '#app', ready: '[data-slot="backlog-row"]' },
+  backlog: {
+    hash: '#/backlog',
+    container: '#app',
+    ready: '[data-slot="backlog-row"]',
+    variants: [
+      { name: 'repo-filter', click: '[data-slot="backlog-repo-filter"]', ready: '[role="menu"]' },
+      { name: 'epic-collapsed', click: '[data-slot="backlog-epic-toggle"]', restore: '[data-slot="backlog-epic-toggle"]', ready: '[data-slot="backlog-epic"][data-collapsed="true"]' },
+      { name: 'ticket-detail', click: '[data-slot="backlog-detail-toggle"]', restore: '[data-slot="backlog-detail-toggle"]', ready: '[data-slot="backlog-detail"] [data-slot="backlog-detail-meta"]' },
+      { name: 'epic-info', click: '[data-slot="backlog-epic-info"]', restore: '[data-slot="backlog-epic-info"]', ready: '[data-slot="backlog-epic-info-panel"] [data-slot="backlog-detail-meta"]' },
+    ],
+  },
   releases: {
     hash: '#/releases',
     container: '#app',
@@ -176,19 +215,15 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'pane-empty', click: '[data-release="fixture-acme-widgets:v0.1.1"]', ready: '[data-slot="release-issues-empty"]' },
     ],
   },
-  audit: {
-    hash: '#/audit',
-    container: '#app',
-    ready: '[data-slot="audit-row"]',
-    variants: [{ name: 'filtered', hash: '#/audit?repo=fixture-acme-widgets&number=38', ready: '[data-slot="audit-row"]' }],
-  },
+  // `audit` is a redirect into Settings; this capture proves an old link still lands filtered.
+  audit: { hash: '#/audit?repo=fixture-acme-widgets&number=38', container: '#app', ready: '[data-slot="audit-row"]' },
   needsYou: {
     hash: '#/needs-you',
     container: '#app',
     ready: '[data-slot="needs-you-item"]',
     variants: [
-      { name: 'held', ready: 'text=its branch conflicts with the base branch' },
-      { name: 'stalled', ready: 'text=its agent stopped responding' },
+      { name: 'ready-to-merge', ready: 'button:has-text("Request changes")' },
+      { name: 'request-changes', click: 'button:has-text("Request changes")', ready: '[data-slot="dialog-content"]' },
     ],
   },
   setup: { hash: '#/setup', container: '#app', ready: '#app [data-step]' },

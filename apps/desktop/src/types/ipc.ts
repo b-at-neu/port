@@ -15,7 +15,7 @@ import type { ReleaseIssuesRequest, ReleaseIssuesResponse, ReleaseRunRequest, Re
 import type { RuntimePreflight, RuntimeProbe } from '@/types/runtime'
 import type { GhStatus } from '@/types/gh'
 import type { NotificationPrefs, StorageReport, UsageSummary } from '@/types/settings'
-import type { BacklogResponse } from '@/types/backlog'
+import type { BacklogDetailResponse, BacklogResponse } from '@/types/backlog'
 import type { AuditRead } from '@/types/writes'
 import type { StageAllowResult, StageResumeResult, StageRestartResult } from '@/types/stage'
 import type {
@@ -49,14 +49,8 @@ import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionContr
 import type { ComposerAttachment } from '@/utils/hosting/attachments'
 import type { FolderEntry, SessionChanges } from '@/types/workspace'
 import type { AppCommand } from '@/utils/shell/commands'
-
-export interface AppInfo {
-  app: string
-  electron: string
-  node: string
-  chromium: string
-  commit: string | null
-}
+import type { AppInfo } from '@/types/settings'
+import type { UpdateDownloadState, UpdateState } from '@/types/update'
 
 /** Every failure kind `readRegistry`/`writeRegistry` can report, shared by all three channels below. */
 export type RegistryFailureKind = 'registry-malformed' | 'registry-unsupported-version' | 'registry-unreadable' | 'registry-unwritable'
@@ -76,22 +70,10 @@ export type ReposRemoveResponse =
   | { readonly ok: false; readonly kind: 'not-registered' | 'registry-unwritable'; readonly message: string }
 
 export interface IpcMap {
-  'app:info': {
-    request: void
-    response: AppInfo
-  }
-  'repos:list': {
-    request: void
-    response: ReposListResponse
-  }
-  'repos:add': {
-    request: void
-    response: ReposAddResponse
-  }
-  'repos:remove': {
-    request: { id: RepoId }
-    response: ReposRemoveResponse
-  }
+  'app:info': { request: void; response: AppInfo }
+  'repos:list': { request: void; response: ReposListResponse }
+  'repos:add': { request: void; response: ReposAddResponse }
+  'repos:remove': { request: { id: RepoId }; response: ReposRemoveResponse }
   'worktrees:report': {
     request: { id: RepoId }
     response: WorktreesReport
@@ -102,10 +84,7 @@ export interface IpcMap {
     response: WorktreesReclaimResult
   }
   'worktrees:purge': { request: { id: RepoId; path: string }; response: WorktreesPurgeResult }
-  'sessions:scan': {
-    request: void
-    response: SessionScan
-  }
+  'sessions:scan': { request: void; response: SessionScan }
   'transcript:tail:open': {
     request: { sessionId: string; agentId: string | null }
     response: TranscriptTailOpen
@@ -263,10 +242,9 @@ export interface IpcMap {
     response: GhStatus
   }
   /** The Backlog screen's own read — open issues carrying no vocabulary label. */
-  'backlog:list': {
-    request: { repoId: RepoId }
-    response: BacklogResponse
-  }
+  'backlog:list': { request: { repoId: RepoId }; response: BacklogResponse }
+  /** One open issue's lazy detail read — GitHub-side failures are typed values, never throws. */
+  'backlog:detail': { request: { repoId: RepoId; number: number }; response: BacklogDetailResponse }
   /** The Audit screen's own read — `null` is explicit, never omitted; a `number` requires a `repoId`. */
   'audit:list': {
     request: { repoId: RepoId | null; number: number | null }
@@ -389,6 +367,13 @@ export interface IpcMap {
   'release:run': { request: ReleaseRunRequest; response: ReleaseRunResult }
   /** The tickets a published release's merged pull requests closed — read from GitHub, never written. */
   'release:issues': { request: ReleaseIssuesRequest; response: ReleaseIssuesResponse }
+  /** The cached update state (no I/O), and a check that joins or runs one — a failure is an `error` state, never a rejection. */
+  'update:state': { request: void; response: UpdateState }
+  'update:check': { request: void; response: UpdateState }
+  /** The installer download: start or join one, read its cached state (no I/O), and open or reveal the finished file. The renderer never names a URL or a path. */
+  'update:download': { request: void; response: UpdateDownloadState }
+  'update:download:state': { request: void; response: UpdateDownloadState }
+  'update:open': { request: { reveal: boolean }; response: UpdateDownloadState }
 }
 
 export const IPC_CHANNELS = [
@@ -432,6 +417,7 @@ export const IPC_CHANNELS = [
   'session:restore:discard',
   'gh:status',
   'backlog:list',
+  'backlog:detail',
   'audit:list',
   'session:defaults',
   'session:defaults:set',
@@ -460,6 +446,11 @@ export const IPC_CHANNELS = [
   'release:status',
   'release:run',
   'release:issues',
+  'update:state',
+  'update:check',
+  'update:download',
+  'update:download:state',
+  'update:open',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]

@@ -41,7 +41,7 @@ export function CommandPalette() {
       <CommandList>
         <CommandEmpty>No matching commands.</CommandEmpty>
         <CommandGroup heading="Go to">
-          <CommandItem onSelect={() => go(ROUTE_IDS.board)}>
+          <CommandItem onSelect={() => go(ROUTE_IDS.needsYou)}>
             Needs you{needsYouCount > 0 ? ` (${String(needsYouCount)})` : ''}
           </CommandItem>
           <CommandItem onSelect={() => go(ROUTE_IDS.board)}>Board</CommandItem>
@@ -80,7 +80,14 @@ export function CommandPalette() {
             </CommandItem>
           ))}
           <CommandItem onSelect={() => go(ROUTE_IDS.history)}>History…</CommandItem>
-          <CommandItem onSelect={() => go(ROUTE_IDS.audit)}>Audit log</CommandItem>
+          <CommandItem
+            onSelect={() => {
+              void navigate({ to: ROUTE_IDS.settings, search: { section: 'audit' } })
+              closePalette()
+            }}
+          >
+            Audit log
+          </CommandItem>
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="Pipelines">

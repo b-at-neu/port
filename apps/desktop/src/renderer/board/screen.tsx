@@ -11,7 +11,7 @@ import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { ipcQueryOptions, observeIpcQuery, useIpcQuery } from '@/renderer/data/query'
 import { invoke } from '@/renderer/data/invoke'
 import { ROUTE_IDS } from '@/renderer/router/routes'
-import type { BoardItemRef, BoardSearch } from '@/types/router'
+import type { BoardItemRef, BoardSearch, BoardView } from '@/types/router'
 import { projectBoard } from '@/renderer/board/project'
 import type { BoardItemRow } from '@/types/board'
 import type { RepoId } from '@/utils/repos'
@@ -23,7 +23,11 @@ import { BoardHeader } from '@/renderer/board/header'
 import { ItemPane } from '@/renderer/board/item-pane'
 import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { boardSections } from '@/renderer/board/sections'
-import { operatorJoinedOf } from '@/renderer/board/row-model'
+import { boardColumns } from '@/renderer/board/columns'
+import { BoardKanban, BoardKanbanSkeleton } from '@/renderer/board/kanban'
+import { boardLanes, navigableLaneRows } from '@/renderer/board/lanes'
+import { readBoardCollapsedLanes, readBoardView, setBoardLaneCollapsed, setBoardView } from '@/renderer/board/prefs'
+import { operatorJoinedOf, rowKey } from '@/renderer/board/row-model'
 import type { DispatchRecord } from '@/types/dispatch'
 
 // Registered once from main.ts's boot — never a useEffect inside the
@@ -32,10 +36,6 @@ export function connectItemActionPruning(client: QueryClient): () => void {
   return observeIpcQuery(client, 'board:snapshot', undefined, (result) => {
     if (result.status === 'success') pruneItemActionStates(result.data)
   })
-}
-
-function rowKey(row: BoardItemRow): string {
-  return `${row.item.repoId}:${String(row.ticket.ref.number)}`
 }
 
 // A pull request number still selects its ticket, so an older `?item=` link resolves.
@@ -50,6 +50,7 @@ export function BoardScreen() {
   const query = useIpcQuery('board:snapshot')
   const sessions = useIpcQuery('session:list')
   const [refreshing, setRefreshing] = useState(false)
+  const [collapsedLanes, setCollapsedLanes] = useState<ReadonlySet<RepoId>>(() => readBoardCollapsedLanes())
   const now = new Date()
 
   const snapshot = query.data ?? null
@@ -75,17 +76,38 @@ export function BoardScreen() {
 
   const repo = search.repo ?? null
 
+  const view = search.view ?? readBoardView()
+  const kanban = view === 'board'
+
   const projection = snapshot !== null ? projectBoard({ snapshot, now, sessions: sessions.data ?? [] }) : null
-  // Ungated rows are the banner's alone, scoped to `repo` like `sectionRows`
-  // below so J/K and the ring never reach another repository's row.
-  const ungatedRows = projection !== null ? (repo === null ? projection.ungated : projection.ungated.filter((row) => row.item.repoId === repo)) : []
-  const sections = projection !== null ? boardSections(projection.rows.filter((row) => !row.actions.gate.available), { repo }) : []
+  const gatedRows = projection !== null ? projection.rows.filter((row) => !row.actions.gate.available) : []
+  // The list's Ungated banner owns these rows, scoped to `repo` so J/K never reaches another repository's row.
+  const ungatedRows = projection !== null && !kanban ? (repo === null ? projection.ungated : projection.ungated.filter((row) => row.item.repoId === repo)) : []
+  const sections = projection !== null && !kanban ? boardSections(gatedRows, { repo }) : []
   const sectionRows = sections.flatMap((section) => section.subGroups.flatMap((g) => g.rows))
-  const flatRows = projection !== null ? [...ungatedRows, ...sectionRows] : []
+  const columns = projection !== null && kanban ? boardColumns(gatedRows, projection.ungated, { repo }) : []
+  const readyRepos = snapshot !== null ? snapshot.state.repositories.flatMap((r) => (r.ok ? [{ repoId: r.repoId, name: r.displayName }] : [])) : []
+  const laned = kanban && repo === null && readyRepos.length > 1
+  const lanes = laned && projection !== null ? boardLanes(gatedRows, projection.ungated, readyRepos) : null
+  // Every card, collapsed lanes included — a `?item=` into a collapsed lane still opens the pane.
+  const allRows = kanban ? columns.flatMap((column) => column.cards.map((card) => card.row)) : projection !== null ? [...ungatedRows, ...sectionRows] : []
+  const flatRows = lanes !== null ? navigableLaneRows(lanes, collapsedLanes) : allRows
 
   // An item that no longer matches any row closes the pane silently.
   const itemRef = search.item ?? null
-  const selectedRow = itemRef !== null ? (flatRows.find((row) => sameItem(row, itemRef)) ?? null) : null
+  const selectedRow = itemRef !== null ? (allRows.find((row) => sameItem(row, itemRef)) ?? null) : null
+
+  function toggleLane(repoId: RepoId): void {
+    const collapsing = !collapsedLanes.has(repoId)
+    setCollapsedLanes((prev) => {
+      const next = new Set(prev)
+      if (collapsing) next.add(repoId)
+      else next.delete(repoId)
+      return next
+    })
+    setBoardLaneCollapsed(repoId, collapsing)
+    if (collapsing && selectedRow !== null && selectedRow.item.repoId === repoId) selectRow(null)
+  }
 
   const selection = useListSelection(flatRows.map(rowKey), {
     value: selectedRow !== null ? rowKey(selectedRow) : null,
@@ -143,31 +165,42 @@ export function BoardScreen() {
           onRefresh={() => void handleRefresh()}
           repo={repo}
           onRepoChange={(nextRepo: RepoId | null) => setSearch({ repo: nextRepo })}
+          view={view}
+          onViewChange={(nextView: BoardView) => {
+            setSearch({ view: nextView })
+            setBoardView(nextView)
+          }}
         />
       }
     >
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <ScreenBody variant="list" className="flex-1">
-          <div>
+        <ScreenBody variant="list" className={kanban ? 'flex flex-1 flex-col overflow-hidden' : 'flex-1'}>
+          <div className={kanban ? 'flex min-h-0 flex-1 flex-col' : undefined}>
             {snapshot === null ? (
-              <div className="flex flex-col gap-1 px-4 py-2">
-                <Skeleton className="h-9 w-full" />
-                <Skeleton className="h-9 w-full" />
-                <Skeleton className="h-9 w-full" />
-              </div>
+              kanban ? (
+                <BoardKanbanSkeleton />
+              ) : (
+                <div className="flex flex-col gap-1 px-4 py-2">
+                  <Skeleton className="h-9 w-full" />
+                  <Skeleton className="h-9 w-full" />
+                  <Skeleton className="h-9 w-full" />
+                </div>
+              )
             ) : projection !== null ? (
               <>
                 {waitingSection !== undefined ? renderSection(waitingSection) : null}
                 <BoardBanners snapshot={snapshot} projection={projection} ungated={ungatedRows} selection={selection} />
                 {snapshot.state.repositories.length === 0 ? (
                   <EmptyState icon={LayoutGrid} message="Add a repository to see its pipeline." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.settings, search: { section: 'repositories' } }) }} className="px-4 py-6" />
-                ) : flatRows.length === 0 ? (
+                ) : allRows.length === 0 ? (
                   <EmptyState
                     icon={LayoutGrid}
                     message={repo !== null ? "Nothing in this repository's pipeline." : 'Nothing in the pipeline.'}
                     action={repo !== null ? { label: 'Show all repositories', onClick: () => setSearch({ repo: null }) } : undefined}
                     className="px-4 py-6"
                   />
+                ) : kanban ? (
+                  <BoardKanban columns={columns} lanes={lanes} collapsed={collapsedLanes} onToggleLane={toggleLane} selection={selection} />
                 ) : (
                   otherSections.map(renderSection)
                 )}

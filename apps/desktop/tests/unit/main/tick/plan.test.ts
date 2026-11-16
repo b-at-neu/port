@@ -370,7 +370,7 @@ describe('planTick — autoApprovals (#313)', () => {
 })
 
 describe('planTick — endedStages / labelRepairs (#330)', () => {
-  it('a stage-error number yields one liveness-reset (evidence: stage-error) and no second ledger reset', () => {
+  it('an error outcome yields no liveness-reset of its own — the app rolled the label back itself', () => {
     const repo = readyRepo([item({ stage: 'in-flight', stages: [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }], status: 'stalled', statusEvidence: 'no-claimant' })])
     const report = planTick({
       repository: repo,
@@ -383,10 +383,9 @@ describe('planTick — endedStages / labelRepairs (#330)', () => {
       refreshMemo: createRefreshMemo(),
       checkDispositions: NO_CHECK_DISPOSITIONS,
       holdSessionRequired: true,
-      endedStages: [{ agent: 'impl', number: 1, outcome: 'error', at: '2025-12-31T00:00:00.000Z' }],
+      endedStages: [{ agent: 'impl', number: 1, outcome: 'error', at: '2025-12-31T00:00:00.000Z', labels: { kind: 'applied' } }],
     })
-    const resets = report.observations.filter((o) => o.kind === 'liveness-reset')
-    expect(resets).toEqual([{ kind: 'liveness-reset', number: 1, itemKind: 'issue', inFlight: 'inProgress', retryKey: 'planApproved', evidence: 'stage-error' }])
+    expect(report.observations.filter((o) => o.kind === 'liveness-reset')).toEqual([])
   })
 
   it('labelRepairs is [] on a blind report', () => {

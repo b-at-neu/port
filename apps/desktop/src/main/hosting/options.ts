@@ -1,5 +1,6 @@
 // Pure mapping from SessionStartMode to Options. sessionId is deliberately never passed; init stays the single source.
-import type { CanUseTool, Options } from '@/main/hosting/sdk'
+import type { CanUseTool, HookCallback, Options } from '@/main/hosting/sdk'
+import { LABEL_GUARD_MESSAGE, labelWriteOf } from '@/main/hosting/label-guard'
 import type { SessionDefaults, SessionStartMode } from '@/types/hosting'
 import type { PluginRequest } from '@/types/hosting-plugin'
 import type { StageAgentLaunch } from '@/types/stage'
@@ -21,12 +22,21 @@ interface BuildSessionOptionsParams {
   readonly stage: { readonly agent: StageAgentLaunch; readonly instructionsRoot: string; readonly model: string } | null
 }
 
+/** Denies a Bash call that writes a label — the repository allowlist's `Bash(gh *)` would otherwise let a stray instruction through. */
+const labelGuardHook: HookCallback = (input) => {
+  if (input.hook_event_name !== 'PreToolUse' || input.tool_name !== 'Bash') return Promise.resolve({})
+  const command = typeof input.tool_input === 'object' && input.tool_input !== null && 'command' in input.tool_input ? input.tool_input.command : null
+  if (typeof command !== 'string' || labelWriteOf(command) === null) return Promise.resolve({})
+  return Promise.resolve({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: LABEL_GUARD_MESSAGE } })
+}
+
 function stageOptions(stage: NonNullable<BuildSessionOptionsParams['stage']>): Options {
   return {
     agents: { [stage.agent.name]: { ...stage.agent.definition, model: stage.model } },
     agent: stage.agent.name,
     model: stage.model,
     additionalDirectories: [stage.instructionsRoot],
+    hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [labelGuardHook] }] },
   }
 }
 

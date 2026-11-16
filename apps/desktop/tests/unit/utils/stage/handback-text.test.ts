@@ -39,4 +39,33 @@ describe('classifyHandbackText', () => {
   it('returns null for plain text with neither marker', () => {
     expect(classifyHandbackText('All done, pull request opened.')).toBeNull()
   })
+
+  it('classifies a HANDBACK: last line, token only', () => {
+    expect(classifyHandbackText('Plan written.\n\nHANDBACK: plan-written')).toEqual({ kind: 'handback', token: 'plan-written', arg: null })
+  })
+
+  it('splits a token from its argument and trims it', () => {
+    expect(classifyHandbackText('Opened.\nHANDBACK: pr-opened   #8  ')).toEqual({ kind: 'handback', token: 'pr-opened', arg: '#8' })
+    expect(classifyHandbackText('HANDBACK: refreshed clean')).toEqual({ kind: 'handback', token: 'refreshed', arg: 'clean' })
+  })
+
+  it('does not count a HANDBACK: line inside a fenced code block', () => {
+    expect(classifyHandbackText('Example:\n```\nHANDBACK: plan-written\n```')).toBeNull()
+  })
+
+  it('does not count a HANDBACK: line that is not the last non-blank line', () => {
+    expect(classifyHandbackText('HANDBACK: plan-written\n\nOne more thing.')).toBeNull()
+  })
+
+  it('does not count a bare prefix with no token', () => {
+    expect(classifyHandbackText('HANDBACK:')).toBeNull()
+  })
+
+  it('lets a HANDBACK: last line win over an earlier BLOCKED: line', () => {
+    expect(classifyHandbackText('BLOCKED: checks never concluded\n\nHANDBACK: checks-pending')).toEqual({ kind: 'handback', token: 'checks-pending', arg: null })
+  })
+
+  it('lets questions win over a HANDBACK: line', () => {
+    expect(classifyHandbackText('HANDBACK: plan-written\n\nQUESTIONS FOR HUMAN:\n1. which?')).toEqual({ kind: 'questions' })
+  })
 })

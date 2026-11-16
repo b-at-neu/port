@@ -1,4 +1,4 @@
-// The only `fetch` caller under apps/desktop/src/main/. The token comes only from `gh auth token` and lives in process memory for a short TTL, so a `gh auth logout` is noticed.
+// The only `fetch` caller under apps/desktop/src/main/. The token comes only from `gh auth token` and lives in process memory for a short TTL, so a `gh auth logout` is noticed; one transport reads public data with no token at all.
 import { e2eFakePath, runCommand } from '@/main/platform/run'
 
 import type { CommandResult, ConditionalHttpResult, ConditionalTransport, GhClassification, GitHubHttpResult, GitHubTransport } from '@/types/platform'
@@ -97,8 +97,8 @@ function toConditionalResult(exchange: Exchange, validatorSent: boolean): Condit
   return result.ok ? { ok: true, notModified: false, status: result.status, headers: result.headers, body: result.body } : result
 }
 
-/** `request` and `conditional` share one token memo and one 401 re-read-and-retry-once. */
-export function createGitHubClient(options: TransportOptions): { readonly request: GitHubTransport; readonly conditional: ConditionalTransport } {
+/** `request` and `conditional` share one token memo and one 401 re-read-and-retry-once; `public` sends no token at all. */
+export function createGitHubClient(options: TransportOptions): { readonly request: GitHubTransport; readonly conditional: ConditionalTransport; readonly public: GitHubTransport } {
   let cached: Promise<TokenRead> | null = null
   let readAt = 0
 
@@ -114,13 +114,13 @@ export function createGitHubClient(options: TransportOptions): { readonly reques
     return cached
   }
 
-  async function send(request: WireRequest, bearer: string): Promise<Exchange> {
+  async function send(request: WireRequest, bearer: string | null): Promise<Exchange> {
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${bearer}`,
       'User-Agent': 'port-desktop',
       'X-GitHub-Api-Version': '2022-11-28',
       Accept: request.accept ?? DEFAULT_ACCEPT,
     }
+    if (bearer !== null) headers.Authorization = `Bearer ${bearer}`
     if (request.body !== undefined) headers['Content-Type'] = 'application/json'
     if (request.ifNoneMatch !== undefined) headers['If-None-Match'] = request.ifNoneMatch
     try {
@@ -161,6 +161,10 @@ export function createGitHubClient(options: TransportOptions): { readonly reques
       return result.ok ? toResult(result.status, result.headers, result.body) : result
     },
     conditional: async (request) => toConditionalResult(await exchange(request), request.ifNoneMatch !== undefined),
+    public: async (request) => {
+      const result = await send(request, null)
+      return result.ok ? toResult(result.status, result.headers, result.body) : result
+    },
   }
 }
 
@@ -193,4 +197,11 @@ export const githubHttp: GitHubTransport = async (request) => {
 export const githubConditional: ConditionalTransport = async (request) => {
   if (e2eFakePath() === null) return real.conditional(request)
   return toConditionalResult(fromFake(await runCommand('gh', ['e2e-http', JSON.stringify(request)])), request.ifNoneMatch !== undefined)
+}
+
+/** No token, no 401 retry: only for reads of public data such as the app's own releases. */
+export const githubPublic: GitHubTransport = async (request) => {
+  if (e2eFakePath() === null) return real.public(request)
+  const reply = fromFake(await runCommand('gh', ['e2e-http', JSON.stringify(request)]))
+  return reply.ok ? toResult(reply.status, reply.headers, reply.body) : reply
 }

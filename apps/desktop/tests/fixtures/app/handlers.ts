@@ -9,16 +9,18 @@ import { fixtureStorageReport, fixtureUsageSummary } from './settings'
 import { fixtureBoardSnapshot } from './board'
 import { fixtureAuditRead } from './audit'
 import { fixtureBacklog } from './backlog'
+import { fixtureBacklogDetail } from './backlog-detail'
 import { fixtureReleaseIssues, fixtureReleaseStatus } from './releases'
 import { fixtureClaimPreflight, fixtureGatePreflight } from './dialogs'
 import { fixtureFolders, fixtureSessionChanges } from './folders'
-import { FIXTURE_REPOSITORIES } from './repos'
+import { fixtureRepositoriesFor } from './repos'
 import { fixtureAttachEntries } from './entries'
 import { fixturePermissionSnapshots, fixtureSearchResult, fixtureSessionAttach, fixtureSessionsScan, fixtureSessionSnapshots, STREAMING_KEY } from './sessions'
 import { fixtureSessionIndex } from './session-index'
 import type { FixtureScenario } from '@/types/fixtures'
 import type { BoardSnapshot } from '@/types/board'
 import { FIXTURE_REGISTRY_ERROR, fixtureFailingBacklog, fixtureFailingBoard, fixtureFailingSessionScan } from './failing'
+import { fixtureUpdateDownload, fixtureUpdateState } from './update'
 import { fixtureEmptySessionScan, fixtureUnregisteredBoard } from './unregistered'
 import { fixtureWorktreesPurge, fixtureWorktreesReclaim, fixtureWorktreesReport } from './worktrees'
 
@@ -47,7 +49,7 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'repos:list': () => {
       if (scenario === 'unregistered') return { ok: true, repositories: [] }
       if (scenario === 'registry-error') return FIXTURE_REGISTRY_ERROR
-      return { ok: true, repositories: FIXTURE_REPOSITORIES }
+      return { ok: true, repositories: fixtureRepositoriesFor(scenario) }
     },
 
     'board:snapshot': () => boardFor(now, scenario),
@@ -71,7 +73,7 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
 
     'session:list': () => {
       if (scenario === 'unregistered') return []
-      return scenario === 'empty' ? fixturePermissionSnapshots(now) : fixtureSessionSnapshots(now)
+      return scenario === 'empty' ? fixturePermissionSnapshots(now) : fixtureSessionSnapshots(now, scenario)
     },
     'session:index': () => (scenario === 'empty' || scenario === 'unregistered' ? [] : fixtureSessionIndex(now)),
     'session:capacity': () => ({ limit: 4, ceiling: 8 }),
@@ -96,7 +98,7 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
 
     // --- Writes, never a side effect ---------------------------------------
     'repos:add': () => ({ ok: true, outcome: 'cancelled' }),
-    'repos:remove': () => ({ ok: true, repositories: FIXTURE_REPOSITORIES }),
+    'repos:remove': () => ({ ok: true, repositories: fixtureRepositoriesFor(scenario) }),
 
     'item:action': () => ({ ok: true, outcome: { kind: 'no-op' } }),
 
@@ -118,7 +120,7 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'session:send': () => ({ ok: false, kind: 'unknown-session' }),
     'session:interrupt': () => ({ ok: false, kind: 'unknown-session' }),
     'session:close': () => ({ ok: false, kind: 'unknown-session' }),
-    'session:attach': (request) => fixtureSessionAttach(request.sessionKey, now),
+    'session:attach': (request) => fixtureSessionAttach(request.sessionKey, now, scenario),
     'session:permission:answer': () => ({ ok: false, kind: 'unknown-session' }),
     'session:invoke': () => ({ ok: false, kind: 'unknown-session' }),
     'session:dismiss': () => ({ ok: false, kind: 'unknown-session' }),
@@ -127,6 +129,7 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
 
     'gh:status': () => ({ kind: 'signed-in', checkedAt: now.toISOString(), account: 'octo-operator', scopes: ['repo', 'read:org', 'workflow'] }),
     'backlog:list': (request) => (scenario === 'failing' ? fixtureFailingBacklog(now, request.repoId) : fixtureBacklog(now, request.repoId)),
+    'backlog:detail': (request) => fixtureBacklogDetail(now, scenario, request),
     'audit:list': (request) => fixtureAuditRead(now, scenario, request),
     'session:defaults': () => DEFAULT_SESSION_DEFAULTS,
     'session:defaults:set': (request) => request,
@@ -156,6 +159,11 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'usage:summary': () => fixtureUsageSummary(now),
     'release:status': (request) => fixtureReleaseStatus(now, scenario, request.repoId),
     'release:issues': (request) => fixtureReleaseIssues(scenario, request),
+    'update:state': () => fixtureUpdateState(now, scenario, 'startup'),
+    'update:check': () => fixtureUpdateState(now, scenario, 'manual'),
+    'update:download': () => fixtureUpdateDownload(now, scenario),
+    'update:download:state': () => fixtureUpdateDownload(now, scenario),
+    'update:open': () => fixtureUpdateDownload(now, scenario),
     'release:run': () => ({ kind: 'refused', reason: 'unsupported', message: 'Fixture mode: releases are not cut.' }),
   }
 }

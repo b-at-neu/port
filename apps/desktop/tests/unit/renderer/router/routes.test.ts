@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { auditSearchFromRaw, boardSearchFromRaw, historySearchFromRaw, needsYouSearchFromRaw, repoSearchFromRaw, searchSearchFromRaw, sessionSearchFromRaw, settingsSearchFromRaw, transcriptSearchFromRaw } from '@/renderer/router/routes'
+import { auditSearchFromRaw, backlogSearchFromRaw, boardSearchFromRaw, historySearchFromRaw, needsYouSearchFromRaw, releasesSearchFromRaw, repoSearchFromRaw, searchSearchFromRaw, sessionSearchFromRaw, settingsSearchFromRaw, transcriptSearchFromRaw } from '@/renderer/router/routes'
 
 describe('settingsSearchFromRaw', () => {
   it.each(['general', 'repositories', 'connections', 'pipeline', 'usage', 'about'])('keeps the %s section', (section) => {
     expect(settingsSearchFromRaw({ section })).toEqual({ section })
+  })
+
+  it('keeps the audit section with its repo and ticket filter', () => {
+    expect(settingsSearchFromRaw({ section: 'audit', repo: 'repo-a', number: 38 })).toEqual({ section: 'audit', repo: 'repo-a', number: 38 })
+    expect(settingsSearchFromRaw({ section: 'audit' })).toEqual({ section: 'audit', repo: null, number: null })
+  })
+
+  it('drops repo and number outside the audit section', () => {
+    expect(settingsSearchFromRaw({ section: 'usage', repo: 'repo-a', number: 38 })).toEqual({ section: 'usage' })
   })
 
   it.each([undefined, '', 'nope', 3, null])('reads %j as general', (section) => {
@@ -42,7 +51,7 @@ describe('transcriptSearchFromRaw', () => {
 
 describe('boardSearchFromRaw', () => {
   it('parses a valid item ref', () => {
-    expect(boardSearchFromRaw({ item: 'repo-a:41' })).toEqual({ item: { repoId: 'repo-a', number: 41 }, repo: null })
+    expect(boardSearchFromRaw({ item: 'repo-a:41' })).toEqual({ item: { repoId: 'repo-a', number: 41 }, repo: null, view: null })
   })
 
   it('falls back to no selection for a malformed or absent item', () => {
@@ -51,7 +60,15 @@ describe('boardSearchFromRaw', () => {
   })
 
   it('ignores a legacy group param', () => {
-    expect(boardSearchFromRaw({ group: 'repo' })).toEqual({ item: null, repo: null })
+    expect(boardSearchFromRaw({ group: 'repo' })).toEqual({ item: null, repo: null, view: null })
+  })
+
+  it.each(['list', 'board'])('keeps the %s view', (view) => {
+    expect(boardSearchFromRaw({ view }).view).toBe(view)
+  })
+
+  it.each(['kanban', '', 3, null, undefined])('reads view %j as no choice', (view) => {
+    expect(boardSearchFromRaw({ view }).view).toBeNull()
   })
 
   it('reads a repo filter, null when absent or empty', () => {
@@ -116,6 +133,27 @@ describe('needsYouSearchFromRaw', () => {
     expect(needsYouSearchFromRaw({ focus: '' }).focus).toBeNull()
     expect(needsYouSearchFromRaw({ focus: 7 }).focus).toBeNull()
     expect(needsYouSearchFromRaw({ focus: { key: 'x' } }).focus).toBeNull()
+  })
+})
+
+describe('needsYouSearchFromRaw repo', () => {
+  it('reads a repo filter, null when absent, empty or not a string', () => {
+    expect(needsYouSearchFromRaw({ repo: 'repo-a' }).repo).toBe('repo-a')
+    expect(needsYouSearchFromRaw({}).repo).toBeNull()
+    expect(needsYouSearchFromRaw({ repo: '' }).repo).toBeNull()
+    expect(needsYouSearchFromRaw({ repo: 4 }).repo).toBeNull()
+  })
+})
+
+describe.each([
+  ['backlogSearchFromRaw', backlogSearchFromRaw],
+  ['releasesSearchFromRaw', releasesSearchFromRaw],
+])('%s', (_name, parse) => {
+  it('reads a repo filter, null when absent, empty or not a string', () => {
+    expect(parse({ repo: 'repo-a' })).toEqual({ repo: 'repo-a' })
+    expect(parse({})).toEqual({ repo: null })
+    expect(parse({ repo: '' })).toEqual({ repo: null })
+    expect(parse({ repo: 4 })).toEqual({ repo: null })
   })
 })
 

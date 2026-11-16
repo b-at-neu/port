@@ -12,33 +12,27 @@ import type { SessionKey } from '@/types/hosting'
 import type { ReadyEntry } from '@/types/actions'
 
 import { dispatchableFrom, observableFrom } from '@/main/tick/dispatchable'
-
-
-
-import { labelName } from '@/utils/labels/vocabulary'
 import { KIND_PROMPT_NAMES, STAGE_PROMPT_NAMES } from '@/utils/stage/prompt'
 import { ticketIndex, ticketLabelFor } from '@/utils/tickets/ticket'
 import { runObservationPass } from '@/main/dispatch/observe-pass'
-import { commentFailureMessage, selectDispatches, survived } from '@/main/dispatch/select'
-import { budgetLiveSets, budgetRoute, escalationBody, sumCostUsd } from '@/main/dispatch/budget'
+import { selectDispatches, survived } from '@/main/dispatch/select'
+import { budgetLiveSets, budgetRoute, escalateOverBudget, sumCostUsd } from '@/main/dispatch/budget'
+import { createStageHandoff } from '@/main/dispatch/handoff'
 import type { StageDenial } from '@/types/stage'
-
 import { boundRecords, endedStagesOf, freeSlots, refreshRecords } from '@/main/dispatch/launch'
-
-
 import type { PipelineItemKind, ResolvedItem } from '@/types/github'
 import type { StageWorktreeTarget } from '@/types/workspace'
 import type { EndedStage, TickActionable } from '@/types/tick'
 import type { StageOutcome } from '@/types/stage-session'
-import { escalationRepeats, reviewDispatchFacts } from '../../../../../scripts/port-tick/gates'
+import { reviewDispatchFacts } from '../../../../../scripts/port-tick/gates'
 import type { ReviewDispatchFacts } from '../../../../../scripts/port-tick/gates'
 import type { Dispatcher, CreateDispatcherParams } from '@/types/dispatch'
 
 const RECENT_LIMIT = 20
 const NOTE_LIMIT = 20
 
-/** Byte-identical to the pipeline skill's own "Dispatching" block, pinned by desktop-dispatch.ts. */
-export const DISPATCH_PROMPT = '<Stage> stage for <kind> #<n>. Run your pipeline stage for #<n>. Follow your Pre-flight, Label swap, Work, and Handoff steps exactly.'
+/** The text the stage session's first message opens with; port has already moved the label, so no agent step names one. */
+export const DISPATCH_PROMPT = '<Stage> stage for <kind> #<n>. Run your pipeline stage for #<n>. port has already moved its label. Follow your Pre-flight, Work, and Handoff steps exactly.'
 export const REFRESH_PROMPT = 'Refresh stage for pull request #<n>. Run your pipeline stage for pull request #<n> in refresh mode.'
 
 /** `launch.ts`'s own `StageLaunchRequest.prompt` is filled from this, never re-derived at the launcher. */
@@ -99,6 +93,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   let stopped = false
   // Serializes every repository's own launch section so two repositories never race for the same free slot.
   let launchQueue: Promise<void> = Promise.resolve()
+  const handoff = createStageHandoff({ write: deps.stageLabels.transition, auditDir: deps.dirs.audit, onChange: deps.onChange, requestRead: deps.requestRead })
 
   function serialize<T>(fn: () => Promise<T>): Promise<T> {
     const result = launchQueue.then(fn)
@@ -149,7 +144,11 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     next[idx] = { ...existing, outcome }
     state.records = next
     deps.onChange()
-    if (outcome.kind === 'completed') deps.requestRead(repoId)
+    handoff.settle(repoId, { ...existing, sessionKey }, outcome)
+  }
+  function recordResumedTurn(repoId: RepoId, sessionKey: SessionKey): void {
+    const record = repoStates.get(repoId)?.records.find((r) => r.sessionKey === sessionKey)
+    if (record !== undefined) handoff.resumedTurn(repoId, { ...record, sessionKey })
   }
   function holdsSessionRequired(repoId: RepoId): boolean {
     return stateFor(repoId).owner !== 'app'
@@ -225,6 +224,9 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
         report(entry.id, owner, { kind: 'idle' }, runState)
         return
       }
+
+      handoff.remember(entry)
+      await handoff.retryPending(entry.id)
 
       if (tick === undefined || tick.blind !== null || viewer === null) {
         report(entry.id, owner, activeOrIdle(entry.id), runState)
@@ -307,7 +309,8 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
           notes.push({ kind: 'held', number: candidate.number, line: result.line })
           continue
         }
-        await escalateOverBudget(entry, candidate, result.line, notes, viewer)
+        const item = candidate.kind === 'pull-request' ? snapshotRepoState(entry.id)?.items.find((i) => i.number === candidate.number) : undefined
+        await escalateOverBudget({ entry, candidate, line: result.line, notes, viewer, item, escalate: deps.escalate, dirs: deps.dirs })
       }
       gated = kept
       state.budget = { line: state.budget?.line ?? null, problem: state.budget?.problem ?? null, costUsd: state.budget?.costUsd ?? null, notes: notes.length > NOTE_LIMIT ? notes.slice(notes.length - NOTE_LIMIT) : notes }
@@ -342,6 +345,8 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
           }
           review = reviewDispatchFacts({ priorReviews: candidate.cycle.count, author: resolvedByNumber.get(candidate.number)?.author ?? null, viewer })
         }
+        const claimed = await claim(entry, candidate, resolvedByNumber.get(candidate.number))
+        if (!claimed) continue
         try {
           const result = await launch.launch({
             entry,
@@ -365,11 +370,14 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
             deps.ledger.record(entry.id, candidate.number)
             deps.forceDispatch.clear(entry.id, candidate.number)
           } else if (result.kind === 'at-capacity') {
+            await rollback(entry, candidate)
             waiting += 1
           } else {
+            await rollback(entry, candidate)
             pushRecord(entry.id, newStageRecord(candidate, 'failed', at, null, result.message))
           }
         } catch (error) {
+          await rollback(entry, candidate)
           const at = deps.now().toISOString()
           const message = error instanceof Error ? error.message : String(error)
           pushRecord(entry.id, newStageRecord(candidate, 'failed', at, null, message))
@@ -382,28 +390,21 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     else report(entry.id, owner, activeOrIdle(entry.id), runState)
   }
 
-  async function escalateOverBudget(entry: ReadyEntry, candidate: TickActionable, line: string, notes: BudgetNote[], viewer: string): Promise<void> {
-    const needsHumanLabel = labelName(entry.config.vocabulary, 'needsHuman') ?? 'needsHuman'
-    const triggerLabel = labelName(entry.config.vocabulary, candidate.trigger) ?? candidate.trigger
-    const item = candidate.kind === 'pull-request' ? snapshotRepoState(entry.id)?.items.find((i) => i.number === candidate.number) : undefined
-    const sha = item?.headRefOid ?? null
-    const repeats = sha !== null && escalationRepeats({ comments: item?.comments ?? undefined, cause: 'budget', sha })
-    const escalation = await deps.escalate({
-      entry,
-      kind: candidate.kind,
-      number: candidate.number,
-      trigger: candidate.trigger,
-      viewer,
-      body: repeats ? null : escalationBody(line, sha),
-      action: 'budget-escalate',
-      auditDir: deps.dirs.audit,
-      scratchDir: deps.dirs.scratch,
-    })
-    if (escalation.labels.kind === 'applied') {
-      notes.push({ kind: 'escalated', number: candidate.number, needsHumanLabel, commentFailedMessage: commentFailureMessage(escalation.comment) })
-    } else {
-      notes.push({ kind: 'escalation-failed', number: candidate.number, needsHumanLabel, triggerLabel, outcome: escalation.labels })
+  /** Trigger → in-flight before the session exists. `moved` skips silently, since the next read shows the truth; any other refusal is a launch failure. */
+  async function claim(entry: ReadyEntry, candidate: TickActionable, resolved: ResolvedItem | undefined): Promise<boolean> {
+    if (resolved === undefined) return false
+    const result = await deps.stageLabels.claim({ entry, candidate, resolved, auditDir: deps.dirs.audit })
+    if (result.kind === 'applied') return true
+    if (result.reason !== 'moved') {
+      const detail = `port couldn't move the label before starting: ${result.reason}${result.detail === null ? '' : ` (${result.detail})`}`
+      pushRecord(entry.id, newStageRecord(candidate, 'failed', deps.now().toISOString(), null, detail))
     }
+    return false
+  }
+
+  /** Undoes a claim whose launch failed; a refused rollback is left to the stall ladder. */
+  async function rollback(entry: ReadyEntry, candidate: TickActionable): Promise<void> {
+    await deps.stageLabels.transition({ entry, record: candidate, event: { kind: 'rollback' }, auditDir: deps.dirs.audit })
   }
 
   // The most recent consider() call's own snapshot, the one a pass reads when it starts.
@@ -447,7 +448,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     return { live: liveStages(repoId), interrupted: (deps.interrupted?.(repoId) ?? []).map((i) => `${i.agent} #${String(i.number)}`) }
   }
   function endedStages(repoId: RepoId): readonly EndedStage[] {
-    return endedStagesOf(repoStates.get(repoId)?.records ?? [])
+    return endedStagesOf(repoStates.get(repoId)?.records ?? [], (sessionKey) => handoff.resultFor(sessionKey))
   }
   function liveStageSessions(): readonly StageSessionSummary[] {
     const summaries: StageSessionSummary[] = []
@@ -487,5 +488,5 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     stopped = true
   }
 
-  return { consider, status, stopFor, standDown, liveStages, stageLiveness, endedStages, liveStageSessions, shutdown, recordOutcome, holdsSessionRequired, recordDenial, dismissDenial, clearDenialsFor }
+  return { consider, status, stopFor, standDown, liveStages, stageLiveness, endedStages, liveStageSessions, shutdown, recordOutcome, recordResumedTurn, holdsSessionRequired, recordDenial, dismissDenial, clearDenialsFor }
 }

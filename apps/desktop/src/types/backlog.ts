@@ -1,4 +1,5 @@
 // Renderer-safe contract for the Backlog screen's list; no import here may reach a Node builtin.
+import type { ReactNode } from 'react'
 import type { BlockerRead, ClaimBlocker, PipelineFailureKind } from '@/types/github'
 import type { RepoId } from '@/utils/repos'
 
@@ -7,6 +8,28 @@ export interface BacklogLabel {
   readonly name: string
   readonly color: string | null
 }
+
+export interface BacklogIssueRef {
+  readonly number: number
+  readonly title: string
+  readonly state: 'OPEN' | 'CLOSED'
+}
+
+// `parent: null` is a real "no parent"; only `ok: false` is a failed read.
+export type ParentRead =
+  | { readonly ok: true; readonly parent: BacklogIssueRef | null }
+  | { readonly ok: false; readonly reason: string }
+
+// `claimed` means the child carries a vocabulary label.
+export interface BacklogChild extends BacklogIssueRef {
+  readonly claimed: boolean
+  readonly blockers: BlockerRead
+}
+
+// `shown`/`total` mean the same as in `BlockerRead`.
+export type ChildrenRead =
+  | { readonly ok: true; readonly children: readonly BacklogChild[]; readonly shown: number; readonly total: number }
+  | { readonly ok: false; readonly reason: string }
 
 // An open issue carrying no vocabulary label — genuinely unclaimed.
 export interface BacklogItem {
@@ -18,6 +41,9 @@ export interface BacklogItem {
   readonly labels: readonly BacklogLabel[]
   readonly subIssueCount: number
   readonly blockers: BlockerRead
+  readonly blocking: BlockerRead
+  readonly parent: ParentRead
+  readonly children: ChildrenRead
 }
 
 // `exclude` wins over `include`; a non-empty `include` keeps an item carrying any one of its names.
@@ -37,6 +63,36 @@ export type BacklogResponse =
   | { readonly ok: true; readonly items: readonly BacklogItem[]; readonly scanned: number; readonly total: number; readonly viewer: string | null; readonly fetchedAt: string }
   | { readonly ok: false; readonly kind: PipelineFailureKind; readonly message: string; readonly fetchedAt: string }
 
+// `total > items.length` means the page held fewer links than exist.
+export type BacklogLinkList =
+  | { readonly ok: true; readonly items: readonly ClaimBlocker[]; readonly total: number }
+  | { readonly ok: false; readonly reason: string }
+
+// `parent: null` is a real "no parent"; only `ok: false` is a failed read.
+export type BacklogParentRead =
+  | { readonly ok: true; readonly parent: ClaimBlocker | null }
+  | { readonly ok: false; readonly reason: string }
+
+export interface BacklogDetail {
+  readonly number: number
+  readonly title: string
+  readonly url: string
+  readonly body: string
+  readonly author: string | null
+  readonly createdAt: string | null
+  readonly updatedAt: string
+  readonly assignees: readonly string[]
+  readonly parent: BacklogParentRead
+  readonly blockedBy: BacklogLinkList
+  readonly blocking: BacklogLinkList
+}
+
+export type BacklogDetailFailureKind = PipelineFailureKind | 'issue-missing' | 'issue-closed'
+
+export type BacklogDetailResponse =
+  | { readonly ok: true; readonly detail: BacklogDetail; readonly fetchedAt: string }
+  | { readonly ok: false; readonly kind: BacklogDetailFailureKind; readonly message: string; readonly fetchedAt: string }
+
 export interface BacklogRowView {
   readonly repoId: RepoId
   readonly repo: string
@@ -48,6 +104,80 @@ export interface BacklogRowView {
   readonly labels: readonly BacklogLabel[]
   readonly subIssueCount: number
   readonly blockers: BlockerRead
+  readonly blocking: BlockerRead
+  readonly parent: ParentRead
+  readonly children: ChildrenRead
+}
+
+// `unlisted` counts open unclaimed members not rendered in `rows`; `inProgressOnly` is true when only claimed members remain.
+export interface BacklogWave {
+  readonly number: number
+  readonly rows: readonly BacklogRowView[]
+  readonly inProgress: number
+  readonly unlisted: number
+  readonly inProgressOnly: boolean
+}
+
+// `uncertain` members have an order built from incomplete blocker data; `cycles` members block each other.
+export type BacklogEpicSummary =
+  | {
+      readonly ok: true
+      readonly done: number
+      readonly inProgress: number
+      readonly open: number
+      readonly total: number
+      readonly canStart: readonly BacklogChild[]
+      readonly truncated: { readonly shown: number; readonly total: number } | null
+      readonly uncertain: readonly number[]
+      readonly cycles: readonly number[]
+    }
+  | { readonly ok: false; readonly reason: string }
+
+// `unplaced` rows name the epic as parent but are not in its children read.
+export interface BacklogEpicGroup {
+  readonly epic: BacklogRowView
+  readonly waves: readonly BacklogWave[]
+  readonly unplaced: readonly BacklogRowView[]
+  readonly summary: BacklogEpicSummary
+}
+
+export interface BacklogLinkView {
+  readonly number: number
+  readonly title: string
+  readonly url: string
+  readonly closed: boolean
+}
+
+export type BacklogLinkListView =
+  | { readonly kind: 'failed'; readonly reason: string }
+  | { readonly kind: 'none' }
+  | { readonly kind: 'links'; readonly items: readonly BacklogLinkView[]; readonly more: number }
+
+export type BacklogAssigneeView = { readonly kind: 'unassigned' } | { readonly kind: 'people'; readonly text: string }
+
+export type BacklogEpicSummaryView =
+  | {
+      readonly ok: true
+      readonly done: number
+      readonly total: number
+      readonly inProgress: number
+      readonly canStart: readonly { readonly number: number; readonly title: string; readonly url: string }[]
+      readonly truncated: { readonly shown: number; readonly total: number } | null
+    }
+  | { readonly ok: false; readonly reason: string }
+
+export interface BacklogRowExtras {
+  readonly slot?: string
+  readonly leading?: ReactNode
+  readonly afterTitle?: ReactNode
+  readonly panel?: ReactNode
+}
+
+export type RenderBacklogRow = (row: BacklogRowView, extras?: BacklogRowExtras) => ReactNode
+
+export interface BacklogEpicLayout {
+  readonly epics: readonly BacklogEpicGroup[]
+  readonly remainder: readonly BacklogRowView[]
 }
 
 // What Work on must confirm before claiming; `truncation` is set when the blocker page held fewer than exist.
@@ -69,6 +199,7 @@ export type BacklogGroupView =
       readonly totalCount: number
       readonly labelOptions: readonly LabelOption[]
       readonly truncatedNote: string | null
+      readonly layout: BacklogEpicLayout
     }
 
 // `status` stays `'success'` on a refetch over previously-good data, so `isError`/`dataUpdatedAt` carry that fact separately.

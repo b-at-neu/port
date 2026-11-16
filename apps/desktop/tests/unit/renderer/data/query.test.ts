@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/renderer/data/invoke', () => ({ invoke: vi.fn() }))
 
-import { createQueryClient, ipcQueryOptions } from '@/renderer/data/query'
+import { createQueryClient, ipcQueryOptions, queryInterval } from '@/renderer/data/query'
 import { invoke } from '@/renderer/data/invoke'
 
 describe('createQueryClient', () => {
@@ -14,6 +14,20 @@ describe('createQueryClient', () => {
     expect(defaults.queries?.refetchOnWindowFocus).toBe(false)
     expect(defaults.mutations?.networkMode).toBe('always')
     expect(defaults.mutations?.retry).toBe(false)
+  })
+})
+
+describe('queryInterval', () => {
+  it('passes a number or undefined through', () => {
+    expect(queryInterval(500)).toBe(500)
+    expect(queryInterval(undefined)).toBeUndefined()
+  })
+
+  it('hands a function the query’s cached data', () => {
+    const adapted = queryInterval((data: string | undefined) => (data === 'busy' ? 1000 : false))
+    if (typeof adapted !== 'function') throw new Error('expected a function')
+    expect(adapted({ state: { data: 'busy' } })).toBe(1000)
+    expect(adapted({ state: { data: undefined } })).toBe(false)
   })
 })
 

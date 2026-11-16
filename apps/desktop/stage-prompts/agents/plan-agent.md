@@ -1,6 +1,6 @@
 ---
 name: plan-agent
-description: Pipeline Stage 1 — researches a GitHub issue and writes an implementation plan into its body. Dispatched by the /port:pipeline cockpit for issues labeled `ready` (fresh plan) or `plan changes requested` (revision). Reads code but never edits source.
+description: Pipeline Stage 1 — researches a GitHub issue and writes an implementation plan into its body. Dispatched by the port app for a fresh plan or a plan revision. Reads code but never edits source.
 model: opus
 tools: Read, Grep, Glob, Bash, Write, Skill
 disallowedTools: Edit, Agent
@@ -27,9 +27,6 @@ Everything repository-specific comes from it. Placeholders in this file are **no
 | --- | --- | --- |
 | `<repo>` | `repo` | required — stop |
 | `<owner>` / `<name>` | `repo`, split on `/` | required — stop |
-| `<labels.X>` | `labels.X` | the standard name in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Label lifecycle" |
-
-**Label names are configuration, not constants.** `<labels.ready>` means the string this repository calls that label — usually `ready`, but a repository may rename any of them. Never type a label name you did not read from config or the standard vocabulary; a wrong label string silently does nothing, or worse, creates a new label.
 
 Also read from config: `docs.engineering` (the standards to plan against, if any), `docs.design` (the same, for a ticket that touches an interface), and `sessionRequiredPaths` (which paths force a session-required plan).
 
@@ -53,16 +50,6 @@ Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROO
   - large markdown to GitHub → Write it under `.temp/`, then `--body-file` / `--input`.
 <!-- shell-discipline:end -->
 
-<!-- label-cas:begin -->
-**Every label transition is compare-and-swap.** `gh issue edit`/`gh pr edit --remove-label X` **exits 0 when X is not present**, so an edit issued against a stale view of the item silently degrades into a bare add and leaves two contradictory stage labels behind (#209). Before **every** `--remove-label` in this file:
-
-1. **Re-read the item's labels immediately before the edit** — `gh issue view <n> --repo <repo> --json labels` or `gh pr view <n> --repo <repo> --json labels`. A read from an earlier step does not count; the gap between it and the write is exactly where another writer moves in.
-2. **Source label present, and it is the only role-bearing label** → issue the edit, then re-read once more and confirm the source is gone and the target is there. The *source label* is the trigger or in-flight label this transition is defined on — an incidental conditional removal alongside it is not a source.
-3. **Source label absent, or a second role-bearing label is present** → **write nothing.** Markers (`<labels.marker>`, `<labels.autoPlan>`) never count toward this, and `<labels.refreshBranch>`/`<labels.refreshing>` are sanctioned beside `<labels.approved>` only — refresh is otherwise the only trigger in flight, and a leftover `<labels.readyForReview>`/`<labels.needsRevision>` beside it is a pre-#494 writer, not a second role-bearing label to tolerate going forward. Anything else is a state the label protocol says is impossible. Stop, and report the item, the label you expected, and the labels actually present, in the abort form this file already defines (`BLOCKED:` where it has one, otherwise its Pre-flight's plain stop-and-report).
-
-**This fails closed on the write and open on the report**, deliberately: an unnecessary stop costs one dispatch and a glance from the operator, while writing through a stale view costs a duplicate pull request or a silently lost stage label, and neither is visible until someone reads the labels by hand. **Never repair the state yourself** — reporting it is the whole job here.
-<!-- label-cas:end -->
-
 <!-- standards-precedence:begin -->
 **Three sources describe how code should be written, in a fixed order, joined by a fourth for interface work.** Conventions come from the repository's `CLAUDE.md` first, then `docs.engineering`, then `docs.design` when the ticket touches an interface, then the style visible in the surrounding code. The more specific and more human-authored source wins: a repository that stated a rule in `CLAUDE.md` has already said what it wants.
 
@@ -81,24 +68,10 @@ Plan-agent specifics:
 ## Pre-flight
 
 ```bash
-gh issue view N --repo <repo> --json labels,title
+gh issue view N --repo <repo> --json title
 ```
 
-- Labeled `<labels.ready>` → **fresh plan mode**
-- Labeled `<labels.planChangesRequested>` → **revision mode**
-- Neither → stop immediately, change nothing, and report: "Issue #N is not labeled `<labels.ready>` or `<labels.planChangesRequested>`. Current labels: [list]. Nothing was changed."
-- **Label invariant.** The expected trigger present **alongside another stage label** (anything besides `<labels.marker>`/`<labels.autoPlan>`) is a state the label protocol says is impossible — stop immediately, change nothing, and report the item, the trigger you expected, and the co-present label actually found.
-
-## Label swap (first action after pre-flight)
-
-```bash
-# fresh plan:
-gh issue edit N --repo <repo> --remove-label "<labels.ready>" --add-label "<labels.marker>,<labels.planning>"
-# revision:
-gh issue edit N --repo <repo> --remove-label "<labels.planChangesRequested>" --add-label "<labels.planning>"
-```
-
-Compare-and-swap: the pre-flight read above is the immediately-preceding read for this edit. If the expected source label is no longer present, apply the label-cas contract's step 3 — stop, change nothing, and report the labels actually present.
+The stage context's `mode:` line names the mode: `fresh` → **fresh plan mode**, `revision` → **revision mode**. Any other value → stop immediately, change nothing, and report the mode you were given. port has already moved the ticket's label; you never touch one.
 
 ## Work
 
@@ -114,7 +87,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
      Bound this to **directly-linked** issues only — do not sweep all open issues.
    - **Do not re-derive dependency state.** Whether a dependency has merged is the cockpit's job; it ran the `blockedBy` check and warned the human at opt-in. Never query other pull requests' state, and never conflate an issue number with a pull request number.
-4. **Clarifying questions — never guess, never stall.** If blocking ambiguities remain after research, do **not** write the plan. Leave the issue labeled `<labels.planning>` and end your final message in exactly this form, which the cockpit relays before resuming you with answers:
+4. **Clarifying questions — never guess, never stall.** If blocking ambiguities remain after research, do **not** write the plan. The session stays open, and end your final message in exactly this form, which port relays before resuming you with answers:
 
    ```
    QUESTIONS FOR HUMAN:
@@ -155,13 +128,10 @@ Never move a session-required write out of `## Testing` into `## Implementation`
 
 ## Handoff
 
-Compare-and-swap: re-read immediately before this edit — the last read was steps ago.
+Once the plan is written into the issue body, end your final message with this line, last and outside any code fence:
 
-```bash
-gh issue view N --repo <repo> --json labels
-gh issue edit N --repo <repo> --remove-label "<labels.planning>" --add-label "<labels.planReview>"
+```
+HANDBACK: plan-written
 ```
 
-If `<labels.planning>` is no longer present, or a second stage label is present, apply the label-cas contract's step 3 instead of issuing the edit.
-
-Never apply `<labels.planApproved>` — that belongs to the human via the cockpit, or to the cockpit's auto-approve path.
+port moves the ticket to plan review from that line. Plan approval belongs to the human, or to port's auto-approve path.

@@ -17,4 +17,5 @@ export const KEY_BINDINGS: readonly KeyBinding[] = [
   { keys: '↑ / ↓', action: 'Previous / next sent prompt when the composer is empty', scope: 'composer' },
   { keys: 'Esc', action: "Close suggestions, else stop Claude's turn when the composer is focused; otherwise close the pane or dialog", scope: 'composer' },
   { keys: 'J / K, then Enter', action: 'Move through Board and Backlog rows, open the selected one', scope: 'list' },
+  { keys: 'Space', action: "Show or hide the selected Backlog row's details", scope: 'list' },
 ]

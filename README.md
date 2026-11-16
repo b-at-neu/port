@@ -101,7 +101,7 @@ Full walkthrough: [docs/USAGE.md](docs/USAGE.md). Reference for the label lifecy
 
 A native cockpit, built on your own `claude` install and your own account — port never handles login. "Powered by Claude": `apps/desktop` runs your own installed Claude Code under your own account, the same as the terminal cockpit above.
 
-Installers are unsigned and attached to every [GitHub release](https://github.com/b-at-neu/port/releases/latest). Full install steps, building your own, and development: [apps/desktop/README.md](apps/desktop/README.md).
+Installers are unsigned and attached to every [GitHub release](https://github.com/b-at-neu/port/releases/latest). Full install steps, building your own, and development: [apps/desktop/README.md](apps/desktop/README.md). An installed app checks for a newer release at every launch. **Update** installs it in place on Windows and Linux AppImage, and downloads and opens the installer on macOS and `.deb`. See [apps/desktop/README.md](apps/desktop/README.md#updates).
 
 ## Skills
 

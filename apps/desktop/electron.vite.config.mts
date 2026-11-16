@@ -1,5 +1,6 @@
 import { fileURLToPath, URL } from 'node:url'
 import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -20,6 +21,21 @@ function buildCommit(): string | null {
   }
 }
 
+/** The `owner/name` slug from the root `.claude/port.config.json`; throws a named error rather than guess. */
+function releaseRepo(): string {
+  const configPath = fileURLToPath(new URL('../../.claude/port.config.json', import.meta.url))
+  let repo: unknown
+  try {
+    repo = (JSON.parse(readFileSync(configPath, 'utf8')) as { repo?: unknown }).repo
+  } catch (error) {
+    throw new Error(`electron.vite.config.mts: could not read ${configPath}: ${error instanceof Error ? error.message : String(error)}`, { cause: error })
+  }
+  if (typeof repo !== 'string' || !/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+    throw new Error(`electron.vite.config.mts: ${configPath} has no valid 'repo' (expected owner/name)`)
+  }
+  return repo
+}
+
 // Only `development`, `--mode fixtures` and `--mode smoke` bundle fixture data; `smoke` alone also honours `PORT_FIXTURES` when packaged. Every other mode, `production` included, resolves `#app-fixtures` to the stub.
 export default defineConfig(({ mode }) => {
   const fixtures = fixtureBuild(mode)
@@ -34,7 +50,8 @@ export default defineConfig(({ mode }) => {
       define: {
         __PORT_FIXTURES__: JSON.stringify(fixtures.compiled),
         __PORT_PACKAGED_FIXTURES__: JSON.stringify(fixtures.packaged),
-        __PORT_BUILD_COMMIT__: JSON.stringify(buildCommit())
+        __PORT_BUILD_COMMIT__: JSON.stringify(buildCommit()),
+        __PORT_RELEASE_REPO__: JSON.stringify(releaseRepo())
       },
       plugins: [externalizeDepsPlugin()],
       build: {

@@ -54,10 +54,15 @@ export function ticketLabel(ref: TicketRef): string {
   return `${ref.kind === 'issue' ? '#' : 'PR#'}${String(ref.number)} ${ref.title}`
 }
 
+/** `#<n>` for an issue, `PR#<n>` for a pull request — the label of a number with no known title. */
+export function bareTicketLabel(number: number, kind: ReconciledItem['kind']): string {
+  return `${kind === 'issue' ? '#' : 'PR#'}${String(number)}`
+}
+
 /** The label of the ticket a number resolves to; a number outside the sweep falls back to its bare `#<n>` or `PR#<n>`. */
 export function ticketLabelFor(index: TicketIndex, number: number, kind: ReconciledItem['kind']): string {
   const ticket = index.byNumber.get(number)
-  return ticket !== undefined ? ticketLabel(ticket.ref) : `${kind === 'issue' ? '#' : 'PR#'}${String(number)}`
+  return ticket !== undefined ? ticketLabel(ticket.ref) : bareTicketLabel(number, kind)
 }
 
 /** `(PR#<n>)` for a ticket with a linked pull request, `null` otherwise. */

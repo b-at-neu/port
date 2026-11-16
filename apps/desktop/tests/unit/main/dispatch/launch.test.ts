@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { boundRecords, freeSlots, liveCount, refreshRecords } from '@/main/dispatch/launch'
+import { boundRecords, endedStagesOf, freeSlots, liveCount, refreshRecords } from '@/main/dispatch/launch'
 import type { StageRecord } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import type { SessionControls, SessionModels } from '@/utils/hosting/controls'
@@ -63,6 +63,29 @@ describe('liveCount / freeSlots', () => {
 
   it('reports the remainder under the limit', () => {
     expect(freeSlots(4, [snapshot()])).toBe(3)
+  })
+})
+
+describe('endedStagesOf', () => {
+  const COMPLETED = { kind: 'completed' as const, detail: null, costUsd: null, resetsAt: null, worktree: 'removed' as const, operatorJoined: false, handback: null }
+
+  it('carries the hand-back write result for the record’s session', () => {
+    const refused = { kind: 'refused' as const, reason: 'moved' as const, detail: null }
+    const result = endedStagesOf([record({ state: 'ended', outcome: COMPLETED })], (key) => (key === 'hosted-1' ? refused : null))
+    expect(result).toEqual([{ agent: 'impl', number: 52, outcome: 'completed', at: '2026-01-01T00:00:00Z', labels: refused }])
+  })
+
+  it('reports no labels result while the write is pending, and for a record with no session', () => {
+    expect(endedStagesOf([record({ state: 'ended', outcome: COMPLETED })], () => null)[0]?.labels).toBeNull()
+    expect(endedStagesOf([record({ state: 'failed', sessionKey: null, outcome: COMPLETED })], () => ({ kind: 'applied' }))[0]?.labels).toBeNull()
+  })
+
+  it('skips a live record and one with no outcome, and keeps the newest per number', () => {
+    const older = record({ state: 'ended', outcome: COMPLETED, at: '2026-01-01T00:00:00Z' })
+    const newer = record({ sessionKey: 'hosted-2' as SessionKey, state: 'ended', outcome: { ...COMPLETED, kind: 'error' }, at: '2026-01-01T01:00:00Z' })
+    const live = record({ sessionKey: 'hosted-3' as SessionKey, number: 60, state: 'started', outcome: COMPLETED })
+    const bare = record({ sessionKey: 'hosted-4' as SessionKey, number: 61, state: 'ended', outcome: null })
+    expect(endedStagesOf([older, newer, live, bare], () => null)).toEqual([{ agent: 'impl', number: 52, outcome: 'error', at: '2026-01-01T01:00:00Z', labels: null }])
   })
 })
 

@@ -153,6 +153,30 @@ describe('createStageRegistry', () => {
     ])
   })
 
+  it('carries the recorded title through markInterrupted, list and a reload from the written file', async () => {
+    const first = fakeDeps({ ok: false })
+    const registry = createStageRegistry({ path: '/tmp/x.json', readJson: first.readJson, writeJsonAtomic: first.writeJsonAtomic, now: () => new Date() })
+    registry.recordRunning({ ...entry, title: '#300 Show the sync time' })
+    registry.markInterrupted('s1', 'error', null, null, null)
+    expect(registry.list()[0]?.title).toBe('#300 Show the sync time')
+
+    const written = first.writes.at(-1)
+    const second = fakeDeps({ ok: true, value: written })
+    const reloaded = createStageRegistry({ path: '/tmp/x.json', readJson: second.readJson, writeJsonAtomic: second.writeJsonAtomic, now: () => new Date() })
+    expect((await reloaded.load())[0]?.title).toBe('#300 Show the sync time')
+  })
+
+  it('loads an entry with no title, or a non-string title, as interrupted with no title', async () => {
+    const stored = { ...entry, reason: 'quit', detail: null, resetsAt: null, costUsd: null, interruptedAt: '2026-01-01T00:00:00.000Z', state: 'interrupted' }
+    const deps = fakeDeps({ ok: true, value: { version: 1, entries: [stored, { ...stored, id: 's2', title: 42 }] } })
+    const registry = createStageRegistry({ path: '/tmp/x.json', readJson: deps.readJson, writeJsonAtomic: deps.writeJsonAtomic, now: () => new Date() })
+    const loaded = await registry.load()
+    expect(loaded.map((e) => [e.id, e.title])).toEqual([
+      ['s1', undefined],
+      ['s2', undefined],
+    ])
+  })
+
   it('setSessionId attaches a claudeSessionId to a tracked entry', () => {
     const deps = fakeDeps({ ok: false })
     const registry = createStageRegistry({ path: '/tmp/x.json', readJson: deps.readJson, writeJsonAtomic: deps.writeJsonAtomic, now: () => new Date() })

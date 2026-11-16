@@ -3,6 +3,14 @@ import type { HostedSessionSnapshot } from '@/types/hosting'
 import type { UsageTotals } from '@/utils/hosting/usage'
 import type { RepoId } from '@/utils/repos'
 
+export interface AppInfo {
+  app: string
+  electron: string
+  node: string
+  chromium: string
+  commit: string | null
+}
+
 /** Both default to on, so a lost file never silences a real wait. */
 export interface NotificationPrefs {
   /** "When something needs you" — Needs you items that just appeared. */

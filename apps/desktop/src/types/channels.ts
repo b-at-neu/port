@@ -25,6 +25,12 @@ import type { AssertEqual } from '@/types/assert-type'
 import type { NotificationPrefs } from '@/types/settings'
 import type { ReadWorktreeReportParams, WorktreesReport } from '@/types/reclaimer'
 
+/** The seam `'board:refresh'` composes through. */
+export interface BoardRefreshDeps {
+  readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
+  readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
+}
+
 export interface GateChannelDeps {
   readonly gatePreflight: (params: GatePreflightParams) => Promise<GatePreflightResponse>
   readonly gateAnswer: (params: GateAnswerParams) => Promise<GateAnswerResponse>
@@ -128,6 +134,7 @@ export const QUERY_CHANNELS = [
   'gh:status',
   'session:defaults',
   'backlog:list',
+  'backlog:detail',
   'audit:list',
   'session:files',
   'folders:list',
@@ -138,6 +145,8 @@ export const QUERY_CHANNELS = [
   'usage:summary',
   'release:status',
   'release:issues',
+  'update:state',
+  'update:download:state',
 ] as const
 
 export type QueryChannel = (typeof QUERY_CHANNELS)[number]
@@ -186,6 +195,9 @@ export const MUTATION_CHANNELS = [
   'notify:needs-you',
   'notify:prefs:set',
   'release:run',
+  'update:check',
+  'update:download',
+  'update:open',
 ] as const
 
 export type MutationChannel = (typeof MUTATION_CHANNELS)[number]

@@ -1,4 +1,4 @@
-// Every string the Audit screen renders — pure, no DOM.
+// Every string the Audit log tab renders — pure, no DOM.
 import type { AuditReadFailureKind } from '@/types/writes'
 import { AUDIT_LIST_LIMIT } from '@/types/writes'
 

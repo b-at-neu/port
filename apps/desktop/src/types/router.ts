@@ -7,19 +7,25 @@ export interface BoardItemRef {
   readonly number: number
 }
 
+export type BoardView = 'list' | 'board'
+
 /** Every field optional at the type level — `navigate({ to: ROUTE_IDS.board })`
  *  with no `search` still type-checks. */
 export interface BoardSearch {
   readonly item?: BoardItemRef | null
   readonly repo?: RepoId | null
+  /** `null` means the URL carries no choice, so the remembered one applies. */
+  readonly view?: BoardView | null
 }
 
-export const SETTINGS_SECTIONS = ['general', 'repositories', 'connections', 'pipeline', 'usage', 'about'] as const
+export const SETTINGS_SECTIONS = ['general', 'repositories', 'connections', 'pipeline', 'usage', 'audit', 'about'] as const
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]
 
-/** The key is `section`, not `tab`, because `RepoSearch.tab` already owns `tab` with another type across the route tree. */
+/** The key is `section`, not `tab`, because `RepoSearch.tab` already owns `tab` with another type across the route tree. `repo` and `number` only mean something with `section: 'audit'`. */
 export interface SettingsSearch {
   readonly section?: SettingsSection
+  readonly repo?: RepoId | null
+  readonly number?: number | null
 }
 
 type RepoTab = 'overview' | 'worktrees' | 'denials'
@@ -45,6 +51,15 @@ export interface AuditSearch {
 export interface NeedsYouSearch {
   /** The selected row's `dismissKeyOf` key. */
   readonly focus?: string | null
+  readonly repo?: RepoId | null
+}
+
+export interface BacklogSearch {
+  readonly repo?: RepoId | null
+}
+
+export interface ReleasesSearch {
+  readonly repo?: RepoId | null
 }
 
 export interface SearchSearch {

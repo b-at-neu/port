@@ -9,6 +9,10 @@ export interface SandboxIssue {
   readonly body?: string
   readonly blockedBy?: ReadonlyArray<{ readonly number: number; readonly title: string; readonly url: string; readonly state: string }>
   readonly comments?: readonly string[]
+  readonly parent?: number
+  readonly author?: string
+  readonly createdAt?: string
+  readonly detailError?: string
 }
 
 export interface SandboxPull {

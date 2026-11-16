@@ -107,6 +107,10 @@ export function runAppCommand(command: AppCommand, deps: KeyboardDeps): void {
     deps.openNeedsYou(command.focus)
     return
   }
+  if (command.kind === 'check-for-updates') {
+    deps.checkForUpdates()
+    return
+  }
   const jumpMatch = JUMP_RE.exec(command.kind)
   if (jumpMatch?.[1] !== undefined) {
     runAction({ kind: 'jump-to-session', index: Number(jumpMatch[1]) - 1 }, deps)

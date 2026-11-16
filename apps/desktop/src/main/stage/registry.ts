@@ -65,6 +65,7 @@ function toInterrupted(entries: readonly StoredEntry[]): readonly InterruptedSta
       trigger: e.trigger,
       inFlight: e.inFlight,
       model: e.model,
+      title: e.title,
       claudeSessionId: e.claudeSessionId,
       worktree: e.worktree,
       startedAt: e.startedAt,
@@ -101,7 +102,8 @@ export function createStageRegistry(params: CreateStageRegistryParams): StageReg
     const loadedAt = params.now().toISOString()
     // Every `running` entry at boot means the process died before it could mark itself otherwise.
     entries = dedupedById(value.entries.filter(isRawEntry)).map((e): StoredEntry => {
-      const stamped = { ...e, interruptedAt: e.interruptedAt ?? loadedAt }
+      const { title, ...rest } = e
+      const stamped = { ...rest, ...(typeof title === 'string' ? { title } : {}), interruptedAt: e.interruptedAt ?? loadedAt }
       return e.state === 'running' ? { ...stamped, state: 'interrupted', reason: 'crash', detail: null } : stamped
     })
     void persist()

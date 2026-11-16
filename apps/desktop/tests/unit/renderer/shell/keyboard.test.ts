@@ -30,6 +30,7 @@ describe('runAppCommand open-needs-you', () => {
       openNeedsYou: vi.fn(),
       toggleSidebar: vi.fn(),
       startRename: vi.fn(),
+      checkForUpdates: vi.fn(),
       currentListNavigator: vi.fn(() => undefined),
     }
   }
@@ -45,6 +46,13 @@ describe('runAppCommand open-needs-you', () => {
     const d = deps()
     runAppCommand({ kind: 'open-needs-you', focus: null }, d)
     expect(d.openNeedsYou).toHaveBeenCalledWith(null)
+  })
+
+  it('runs the update check once for check-for-updates', () => {
+    const d = deps()
+    runAppCommand({ kind: 'check-for-updates' }, d)
+    expect(d.checkForUpdates).toHaveBeenCalledOnce()
+    expect(d.openPalette).not.toHaveBeenCalled()
   })
 
   it('leaves the other commands off Needs you', () => {

@@ -1,4 +1,5 @@
 // DESIGN §4 ContextMeter — a label, a 56×4px track and the percentage; token counts stay in the tooltip.
+import { MeterBar } from '@/renderer/components/meter-bar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { CONTEXT_METER_LABEL, contextMeterLabel } from '@/renderer/session/rail-copy'
 import { contextPercent, type SessionUsage } from '@/utils/hosting/usage'
@@ -20,9 +21,7 @@ export function ContextMeter({ usage }: { readonly usage: SessionUsage | null })
           className="flex items-center gap-1.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <span className="text-meta text-muted-foreground">{CONTEXT_METER_LABEL}</span>
-          <span className="h-1 w-14 overflow-hidden rounded-full bg-border">
-            {percent !== null ? <span className="block h-full rounded-full bg-primary-text" style={{ width: `${String(percent)}%` }} /> : null}
-          </span>
+          <MeterBar percent={percent} fill="primary" />
           <span className="text-meta text-muted-foreground tabular-nums">{percent !== null ? `${String(percent)}%` : '—'}</span>
         </div>
       </TooltipTrigger>

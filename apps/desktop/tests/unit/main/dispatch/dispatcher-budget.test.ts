@@ -140,6 +140,7 @@ function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispat
     writeObservation: () => {
       throw new Error('writeObservation should not be invoked unless a test wires its own')
     },
+    stageLabels: { claim: () => Promise.resolve({ kind: 'applied' }), transition: () => Promise.resolve({ kind: 'applied' }) },
     runState: () => 'dispatching',
     readOwnership: () => Promise.resolve(OWNED_BY_APP),
     takeOwnership: () => Promise.resolve({ ok: true, path: 'p' }),
