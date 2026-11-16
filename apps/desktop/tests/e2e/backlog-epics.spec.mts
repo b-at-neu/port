@@ -20,7 +20,7 @@ test.beforeEach(async () => {
         { number: 203, title: 'Third step', labels: [], parent: 200, blockedBy: [issue(202)] },
         { number: 205, title: 'Already done', labels: [], state: 'CLOSED', parent: 200 },
         { number: 210, title: 'Unrelated', labels: [] },
-        { number: 211, title: 'Newest loose ticket', labels: [], createdAt: '2024-03-01T00:00:00Z', updatedAt: new Date().toISOString() },
+        { number: 211, title: 'Newest loose ticket', labels: [], createdAt: '2024-03-01T00:00:00Z' },
       ],
     }),
   })
