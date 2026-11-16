@@ -64,26 +64,29 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- applyLabels( is called under apps/desktop/src/ only from main/actions/, the one write chokepoint. No exception left. ---
+  // --- Every pipeline write reaches GitHub through writeState: main/actions/ never calls applyLabels( itself, and the one caller is the state writer. ---
   {
     const definitionFile = 'apps/desktop/src/main/writes/apply.ts';
+    const writerFile = 'apps/desktop/src/main/pipeline-state/writer.ts';
     let found = false;
-    let sawMainActions = false;
+    let sawWriter = false;
     for (const f of allFiles) {
       const rel = relOf(f);
       // main/writes/apply.ts is the function's own definition site, not a call.
       if (rel.endsWith('.test.ts') || rel === definitionFile) continue;
       const text = readFileSync(f, 'utf8');
       if (!/\bapplyLabels\(/.test(text)) continue;
-      if (rel.startsWith(`${mainActionsDir}/`)) {
-        sawMainActions = true;
+      if (rel === writerFile) {
+        sawWriter = true;
       } else {
         found = true;
-        fail('desktop-actions', `${rel} calls applyLabels( — only ${mainActionsDir}/ may`);
+        fail('desktop-actions', `${rel} calls applyLabels( — only ${writerFile} may; every action writes through writeState`);
       }
     }
-    if (!sawMainActions) fail('desktop-actions', `no file under ${mainActionsDir} calls applyLabels( — the guard cannot pass vacuously`);
+    if (!sawWriter) fail('desktop-actions', `${writerFile} no longer calls applyLabels( — the guard cannot pass vacuously`);
     else if (!found) ok();
+    const actionsUseWriteState = mainActionsFiles.filter((f) => !relOf(f).endsWith('.test.ts') && /\bdeps\.writeState\(/.test(readFileSync(f, 'utf8')));
+    expect(actionsUseWriteState.length > 0, 'desktop-actions', `no file under ${mainActionsDir} calls deps.writeState( — the guard cannot pass vacuously`);
   }
 
   // --- renderer/board/project.ts's ungated selection names approvalGate, so the section is

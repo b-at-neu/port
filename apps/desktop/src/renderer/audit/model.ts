@@ -2,6 +2,7 @@
 import type { AuditEntry, AuditRowView, LabelAuditEntry, PurgeAuditEntry, ReclaimAuditEntry } from '@/types/writes'
 import type { ReleaseAuditEntry } from '@/types/release'
 import { isAllowAuditEntry, isLabelAuditEntry, isPurgeAuditEntry, isReleaseAuditEntry } from '@/types/writes'
+import { mirrorReason } from '@/renderer/lib/mirror-reason'
 
 type Outcome = AuditRowView['outcome']
 
@@ -90,7 +91,7 @@ function resultDetail(result: LabelAuditEntry['result']): string | null {
     case 'state-unsaved':
       return `Port couldn't save its pipeline state: ${result.message}`
     case 'mirror-failed':
-      return resultDetail(result.mirror)
+      return mirrorReason(result.mirror)
     case 'terminal-owned':
       return `A terminal cockpit has owned this repository since ${result.since}.`
     case 'ownership-unreadable':

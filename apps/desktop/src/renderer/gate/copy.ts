@@ -4,7 +4,7 @@
 // state. Pure string functions; no DOM here.
 import type { GateAnswerResponse, GateDecision, GateVerdict } from '@/types/gate'
 import type { OwnershipSummary } from '@/types/writes'
-import { mirrorReason } from '@/utils/writes/mirror-reason'
+import { mirrorReason } from '@/renderer/lib/mirror-reason'
 
 /** #331: the Reviewing step's own disabled-controls reason — `null` while
  *  `ownership` is `'app'` or `'absent'`, since Approve/Request changes work
@@ -88,7 +88,7 @@ interface ResultParams {
 /** The result toast: `applied` is a success, every other outcome an error. */
 export function resultCopy(params: ResultParams): ResultCopy {
   const { response } = params
-  const applied = response.kind === 'answered' && response.labels.kind === 'applied'
+  const applied = response.kind === 'answered' && (response.labels.kind === 'applied' || response.labels.kind === 'mirror-failed')
   return { ...resultLines(params), tone: applied ? 'success' : 'error' }
 }
 

@@ -245,3 +245,6 @@ export interface ApplyLabelsParams {
   readonly now?: () => Date
   readonly pathOps?: PathOps
 }
+
+/** Every pipeline write goes through this: the store precondition, the store commit, then the label mirror. */
+export type WriteState = (params: ApplyLabelsParams) => Promise<WriteOutcome>

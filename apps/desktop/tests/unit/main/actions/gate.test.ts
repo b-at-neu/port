@@ -7,7 +7,7 @@ import type { LabelWriteRequest, OwnershipSummary, WriteOutcome } from '@/types/
 import type { OwnershipRead } from '@/types/dispatch'
 import type { ReposListResponse } from '@/types/ipc'
 import { autoApprovePlan, gateAnswer, gatePreflight } from '@/main/actions/gate'
-import type { GateDeps } from '@/main/actions/gate'
+import type { GateDeps } from '@/types/gate'
 import type { RegistryDeps } from '@/types/registry'
 import { readyEntry } from '../../../fixtures/board-state'
 

@@ -5,19 +5,19 @@ import type { BoardSnapshot } from '@/types/board'
 import type { HostedSessionSnapshot, HostedStore, SessionKey } from '@/types/hosting'
 import type { StageOutcome } from '@/types/stage-session'
 import type { RefreshRequest } from '@/types/state'
-import type { BoundActions } from '@/main/actions/bound'
+import type { DispatchActions } from '@/types/dispatch'
 import { createDispatchRuntime } from '@/main/dispatch/runtime'
 import { DISPATCH_STORE_DEFAULTS, storeStub } from '../../../fixtures/store'
 
 const REPO_ID = 'repo-a' as RepoId
 const SESSION_KEY = 'hosted-1' as SessionKey
 
-const ACTIONS = {
+const ACTIONS: DispatchActions = {
   stageLabels: { claim: () => Promise.resolve({ kind: 'applied' }), transition: () => Promise.resolve({ kind: 'applied' }) },
   escalateToHuman: () => Promise.reject(new Error('unused')),
   applyObservation: () => Promise.reject(new Error('unused')),
   autoApprovePlan: () => Promise.reject(new Error('unused')),
-} as unknown as BoundActions
+}
 
 const COMPLETED: StageOutcome = { kind: 'completed', detail: null, costUsd: null, resetsAt: null, worktree: 'removed', operatorJoined: false, handback: { token: 'pr-opened', arg: '#8' } }
 

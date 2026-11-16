@@ -14,7 +14,7 @@ import type { StageAgent } from '@/types/tick'
 import { worstHealth } from '@/renderer/board/project'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
-import { mirrorReason } from '@/utils/writes/mirror-reason'
+import { mirrorReason } from '@/renderer/lib/mirror-reason'
 
 const STAGE_NAME: Readonly<Record<StageAgent, string>> = { plan: 'Planning', impl: 'Implementing', review: 'Reviewing', revise: 'Revising' }
 

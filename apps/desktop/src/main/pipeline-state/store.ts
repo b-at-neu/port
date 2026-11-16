@@ -1,27 +1,15 @@
-// pipeline-state.json's only writer. A transition is never reported as applied until it is on disk.
+// The pipeline state file's only writer. A transition is never reported as applied until it is on disk.
 import { emptyFile, parseFile, prune, seedFrom, transition, trackedOf, viewOf, withItem } from '@/main/pipeline-state/model'
-import type { PipelineItemKind } from '@/types/github'
-import type { PipelineStateFile, PipelineView, RepoRecord, StoreTransitionResult, TrackedRef, TransitionInput } from '@/types/pipeline-state'
+import type { PipelineStateFile, PipelineStateStore, RepoRecord, StoreTransitionResult } from '@/types/pipeline-state'
 import type { FileResult } from '@/types/platform'
-import type { RepositoryState } from '@/types/state'
 import type { RepoId } from '@/utils/repos'
 
 interface CreatePipelineStateStoreParams {
+  /** The file's full path; the composition in `default.ts` is the only place that names it. */
   readonly path: string
   readonly readJson: <T>(path: string) => Promise<FileResult<T>>
   readonly writeJsonAtomic: (path: string, value: unknown) => Promise<FileResult<void>>
   readonly now: () => Date
-}
-
-export interface PipelineStateStore {
-  /** Settles once the file has been read; every read and transition waits on it. */
-  readonly ready: Promise<void>
-  readonly view: (repoId: RepoId) => PipelineView
-  readonly tracked: (repoId: RepoId) => readonly TrackedRef[] | null
-  readonly seed: (repoId: RepoId, state: Extract<RepositoryState, { readonly ok: true }>) => Promise<void>
-  readonly markHeld: (repoId: RepoId) => void
-  readonly prune: (repoId: RepoId, closed: readonly number[]) => Promise<void>
-  readonly transition: (repoId: RepoId, ref: { readonly kind: PipelineItemKind; readonly number: number }, input: TransitionInput) => Promise<StoreTransitionResult>
 }
 
 export function createPipelineStateStore(params: CreatePipelineStateStoreParams): PipelineStateStore {
@@ -76,10 +64,11 @@ export function createPipelineStateStore(params: CreatePipelineStateStoreParams)
     markHeld: (repoId) => {
       const record = file.repositories[repoId]
       if (record === undefined || record.heldBy !== null) return
+      // Memory moves at once so the very next read is already labels; the write follows in order.
+      file = withRecord(repoId, { ...record, heldBy: 'terminal' })
       void serialize(async () => {
-        await ready
-        const current = file.repositories[repoId]
-        if (current !== undefined) await persistBestEffort(repoId, { ...current, heldBy: 'terminal' })
+        const result = await params.writeJsonAtomic(params.path, file)
+        if (!result.ok) console.error(`[pipeline-state] could not write ${params.path}: ${result.message}`)
       })
     },
     prune: (repoId, closed) =>

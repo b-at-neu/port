@@ -286,6 +286,14 @@ export interface CreateDispatcherParams {
   readonly interrupted?: (repoId: RepoId) => readonly InterruptedStage[]
 }
 
+/** The writes the dispatch runtime hands to the dispatcher and the auto-planner, already bound to the state writer. */
+export interface DispatchActions {
+  readonly stageLabels: StageLabelWrites
+  readonly escalateToHuman: (params: EscalateToHumanParams) => Promise<EscalateToHumanResult>
+  readonly applyObservation: (params: ApplyObservationParams) => Promise<ApplyObservationResult>
+  readonly autoApprovePlan: (params: AutoApprovePlanParams) => Promise<WriteOutcome>
+}
+
 export interface StageLabelWrites {
   readonly claim: (params: { readonly entry: ReadyEntry; readonly candidate: Pick<TickActionable, 'number' | 'kind' | 'agent' | 'trigger'>; readonly resolved: ResolvedItem; readonly auditDir: string }) => Promise<StageTransitionResult>
   readonly transition: (params: { readonly entry: ReadyEntry; readonly record: Pick<TickActionable, 'number' | 'kind' | 'agent' | 'trigger'>; readonly event: StageEvent; readonly auditDir: string }) => Promise<StageTransitionResult>

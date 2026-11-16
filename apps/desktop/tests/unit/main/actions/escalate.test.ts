@@ -72,6 +72,19 @@ describe('escalateToHuman', () => {
     expect(result.comment?.kind).toBe('applied')
   })
 
+  it('comments when the state moved but its label mirror failed, and stays quiet when the state did not save', async () => {
+    const posted: string[] = []
+    const postComment: EscalateToHumanDeps['postComment'] = () => (posted.push('comment'), Promise.resolve({ kind: 'applied', argv: [] } satisfies WriteOutcome))
+    const mirror: WriteOutcome = { kind: 'mirror-failed', mirror: { kind: 'write-failed', classification: 'network', stderr: 'offline', reread: null } }
+    const moved = await escalateToHuman(params(), { writeState: () => Promise.resolve(mirror), postComment })
+    expect(moved.labels.kind).toBe('mirror-failed')
+    expect(moved.comment?.kind).toBe('applied')
+
+    const unsaved = await escalateToHuman(params(), { writeState: () => Promise.resolve({ kind: 'state-unsaved', message: 'disk full' }), postComment })
+    expect(unsaved.comment).toBeNull()
+    expect(posted).toEqual(['comment'])
+  })
+
   it('never comments when the label swap does not apply', async () => {
     let commentCalled = false
     const deps: EscalateToHumanDeps = {

@@ -3,7 +3,7 @@ import { lastLaunchFailed } from '@/renderer/board/dispatch-failures'
 import type { ClaimApplyResponse, ClaimToast, ClaimVerdict, PlanGateChoice } from '@/types/claim'
 import type { RepoDispatchStatus } from '@/types/dispatch'
 import type { WriteOutcome } from '@/types/writes'
-import { mirrorReason } from '@/utils/writes/mirror-reason'
+import { mirrorReason } from '@/renderer/lib/mirror-reason'
 
 type Claimable = Extract<ClaimVerdict, { kind: 'claimable' }>
 type Refusal = Exclude<ClaimVerdict, { kind: 'claimable' }>

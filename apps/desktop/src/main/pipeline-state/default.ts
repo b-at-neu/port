@@ -10,7 +10,7 @@ import { applyLabels } from '@/main/writes/apply'
 import { appendAudit } from '@/main/writes/audit'
 import type { PipelineView, StateLabelsReader, TrackedRef } from '@/types/pipeline-state'
 import type { RepositoryState } from '@/types/state'
-import type { ApplyLabelsParams, WriteOutcome } from '@/types/writes'
+import type { WriteState } from '@/types/writes'
 import type { RepoId } from '@/utils/repos'
 
 interface CreatePipelineStateParams {
@@ -19,14 +19,17 @@ interface CreatePipelineStateParams {
   readonly ownerOf: (repoId: RepoId) => string | null
 }
 
-export interface PipelineState {
-  readonly writeState: (params: ApplyLabelsParams) => Promise<WriteOutcome>
-  readonly view: (repoId: RepoId) => PipelineView
+interface PipelineState {
+  readonly writeState: WriteState
   readonly stateLabels: StateLabelsReader
-  readonly tracked: (repoId: RepoId) => readonly TrackedRef[] | null
-  readonly seed: (repoId: RepoId, state: Extract<RepositoryState, { readonly ok: true }>) => Promise<void>
-  readonly prune: (repoId: RepoId, closed: readonly number[]) => Promise<void>
-  readonly ready: Promise<void>
+  /** The watcher's own seams onto the store, spread into its deps. */
+  readonly watcherDeps: {
+    readonly pipelineView: (repoId: RepoId) => PipelineView
+    readonly trackedRefs: (repoId: RepoId) => readonly TrackedRef[] | null
+    readonly seedPipelineState: (repoId: RepoId, state: Extract<RepositoryState, { readonly ok: true }>) => Promise<void>
+    readonly prunePipelineState: (repoId: RepoId, closed: readonly number[]) => Promise<void>
+    readonly pipelineReady: () => Promise<void>
+  }
 }
 
 export function createPipelineState(params: CreatePipelineStateParams): PipelineState {
@@ -46,11 +49,13 @@ export function createPipelineState(params: CreatePipelineStateParams): Pipeline
 
   return {
     writeState,
-    view,
     stateLabels: (repoId, kind, number, vocabulary) => stateLabelsOf(view(repoId), kind, number, vocabulary),
-    tracked: (repoId) => (heldByTerminal(repoId) ? null : store.tracked(repoId)),
-    seed: (repoId, state) => store.seed(repoId, state),
-    prune: (repoId, closed) => store.prune(repoId, closed),
-    ready: store.ready,
+    watcherDeps: {
+      pipelineView: view,
+      trackedRefs: (repoId) => (heldByTerminal(repoId) ? null : store.tracked(repoId)),
+      seedPipelineState: (repoId, state) => store.seed(repoId, state),
+      prunePipelineState: (repoId, closed) => store.prune(repoId, closed),
+      pipelineReady: () => store.ready,
+    },
   }
 }

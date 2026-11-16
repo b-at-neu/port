@@ -288,11 +288,7 @@ export function registerIpc(restart: RestartSeams): RegisteredIpc {
     git: (args, cwd) => git(args, { cwd }),
     runStates: (repoIds) => runStates.snapshot(repoIds),
     ...watcherDeps,
-    pipelineView: pipelineState.view,
-    trackedRefs: pipelineState.tracked,
-    seedPipelineState: pipelineState.seed,
-    prunePipelineState: pipelineState.prune,
-    pipelineReady: () => pipelineState.ready,
+    ...pipelineState.watcherDeps,
     onSnapshot: (snapshot) => {
       broadcast('board:update', snapshot)
       void autoPlanner.consider(snapshot)

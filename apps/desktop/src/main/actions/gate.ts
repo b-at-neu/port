@@ -1,5 +1,4 @@
-import type { ApplyLabelsParams, PostCommentParams } from '@/types/writes'
-import type { GateClassifyItem, GatePlan } from '@/types/gate'
+import type { GateClassifyItem, GateDeps, GatePlan } from '@/types/gate'
 import type { ReadyEntry } from '@/types/actions'
 
 // No `gh` import here — the read comes from `../github`, the write from `../writes`.
@@ -10,27 +9,13 @@ import type { GatePreflightFetch } from '@/types/github'
 import { labelName } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { LabelWriteRequest, OwnershipSummary, WriteOutcome } from '@/types/writes'
-import type { fetchGatePreflight } from '@/main/github/gate'
 import { IMPLEMENTATION_PLAN_HEADING, sessionRequiredMarkerAt } from '@/main/state/link'
 import { requireReadyRepo } from '@/main/registry'
-import type { listRepositories } from '@/main/registry'
 import type { RegistryDeps } from '@/types/registry'
 
 import { toOwnershipSummary } from '@/main/dispatch/ownership'
-import type { readOwnership } from '@/main/dispatch/ownership'
-import type { StateLabelsReader } from '@/types/pipeline-state'
 
 import type { AutoApprovePlanParams, GateAnswerParams, GatePreflightParams } from '@/types/actions'
-
-export interface GateDeps {
-  readonly listRepositories: typeof listRepositories
-  readonly fetchGatePreflight: typeof fetchGatePreflight
-  readonly readOwnership: typeof readOwnership
-  readonly writeState: (params: ApplyLabelsParams) => Promise<WriteOutcome>
-  readonly stateLabels: StateLabelsReader
-  readonly postComment: (params: PostCommentParams) => Promise<WriteOutcome>
-  readonly now: () => Date
-}
 
 function resolveReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, deps: Pick<GateDeps, 'listRepositories'>) {
   return requireReadyRepo(

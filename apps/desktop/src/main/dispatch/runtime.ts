@@ -1,5 +1,5 @@
 import type { DispatchLedger, UnknownStreaks, RefreshMemo, ForceDispatch } from '@/types/tick'
-import type { Dispatcher, AutoPlanner, CreateDispatcherParams, AutoPlannerDeps } from '@/types/dispatch'
+import type { Dispatcher, AutoPlanner, CreateDispatcherParams, AutoPlannerDeps, DispatchActions } from '@/types/dispatch'
 import type { PipelineWatcher } from '@/types/state'
 
 // Bundles the dispatch loop's own process-lifetime state so main/ipc.ts creates one thing
@@ -8,7 +8,6 @@ import { createDispatchLedger, createForceDispatch, createRefreshMemo, createUnk
 
 import type { RepoId } from '@/utils/repos'
 import type { RepoDispatchStatus } from '@/types/dispatch'
-import type { BoundActions } from '@/main/actions/bound'
 import { createBudgetGate } from '@/main/dispatch/budget-gate'
 import { createDispatcher } from '@/main/dispatch/dispatcher'
 import { readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
@@ -47,7 +46,7 @@ interface DispatchRuntime {
   readonly shutdown: () => void
 }
 
-type RuntimeDeps = Omit<CreateDispatcherParams, 'ledger' | 'onChange' | 'budget' | 'escalate' | 'writeObservation' | 'stageLabels' | 'refreshMemo' | 'forceDispatch' | 'requestRead' | 'denials'> & { readonly actions: BoundActions }
+type RuntimeDeps = Omit<CreateDispatcherParams, 'ledger' | 'onChange' | 'budget' | 'escalate' | 'writeObservation' | 'stageLabels' | 'refreshMemo' | 'forceDispatch' | 'requestRead' | 'denials'> & { readonly actions: DispatchActions }
 
 export function createDispatchRuntime({ actions, ...deps }: RuntimeDeps): DispatchRuntime {
   const denials = createStageDenialStore({ path: join(deps.dirs.audit, 'stage-denials.json'), readJson: readJsonFile, writeJsonAtomic: writeJsonFileAtomic })

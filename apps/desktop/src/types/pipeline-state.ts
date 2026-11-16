@@ -2,6 +2,7 @@
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { PipelineItemKind } from '@/types/github'
+import type { RepositoryState } from '@/types/state'
 
 export interface StoredHistoryRow {
   readonly at: string
@@ -64,6 +65,17 @@ export interface TransitionInput {
 }
 
 export type TransitionResult = { readonly ok: true; readonly item: StoredItem; readonly changed: boolean } | { readonly ok: false; readonly reason: 'precondition-failed' }
+
+export interface PipelineStateStore {
+  /** Settles once the file has been read; every read and transition waits on it. */
+  readonly ready: Promise<void>
+  readonly view: (repoId: RepoId) => PipelineView
+  readonly tracked: (repoId: RepoId) => readonly TrackedRef[] | null
+  readonly seed: (repoId: RepoId, state: Extract<RepositoryState, { readonly ok: true }>) => Promise<void>
+  readonly markHeld: (repoId: RepoId) => void
+  readonly prune: (repoId: RepoId, closed: readonly number[]) => Promise<void>
+  readonly transition: (repoId: RepoId, ref: { readonly kind: PipelineItemKind; readonly number: number }, input: TransitionInput) => Promise<StoreTransitionResult>
+}
 
 export type StoreTransitionResult =
   | { readonly ok: true; readonly changed: boolean }

@@ -3,7 +3,6 @@ import { applyItemAction } from '@/main/actions/apply'
 import { applyItemDecision } from '@/main/actions/decide'
 import { escalateToHuman } from '@/main/actions/escalate'
 import { autoApprovePlan, gateAnswer, gatePreflight } from '@/main/actions/gate'
-import type { GateDeps } from '@/main/actions/gate'
 import { applyObservation } from '@/main/actions/observe'
 import { recoverPausedTrigger } from '@/main/actions/resume'
 import { applyStageClaim, applyStageTransition } from '@/main/actions/stage'
@@ -12,12 +11,14 @@ import { fetchClaimPreflight, fetchItemsByNumber } from '@/main/github/adapter'
 import { fetchGatePreflight } from '@/main/github/gate'
 import { listRepositories } from '@/main/registry'
 import { postComment } from '@/main/writes/apply'
-import type { PipelineState } from '@/main/pipeline-state/default'
 import type { ApplyItemActionParams, ApplyItemDecisionParams, ApplyObservationParams, AutoApprovePlanParams, EscalateToHumanParams, GateAnswerParams, GatePreflightParams } from '@/types/actions'
 import type { ClaimDeps } from '@/types/claim'
 import type { StageLabelWrites } from '@/types/dispatch'
+import type { GateDeps } from '@/types/gate'
+import type { StateLabelsReader } from '@/types/pipeline-state'
+import type { WriteState } from '@/types/writes'
 
-export function bindActions(state: Pick<PipelineState, 'writeState' | 'stateLabels'>) {
+export function bindActions(state: { readonly writeState: WriteState; readonly stateLabels: StateLabelsReader }) {
   const { writeState, stateLabels } = state
   const gateDeps: GateDeps = { listRepositories, fetchGatePreflight, readOwnership, writeState, stateLabels, postComment, now: () => new Date() }
   const stageDeps = { writeState, stateLabels, fetchItemsByNumber }
@@ -35,5 +36,3 @@ export function bindActions(state: Pick<PipelineState, 'writeState' | 'stateLabe
     claimDeps,
   }
 }
-
-export type BoundActions = ReturnType<typeof bindActions>

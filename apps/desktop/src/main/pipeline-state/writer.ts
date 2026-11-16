@@ -1,6 +1,6 @@
 // The one writer every pipeline transition goes through: the store precondition, the store commit, then the label mirror.
 import { stateLabelsOf } from '@/main/pipeline-state/labels'
-import type { PipelineStateStore } from '@/main/pipeline-state/store'
+import type { PipelineStateStore } from '@/types/pipeline-state'
 import { buildCommand, resolveKeys } from '@/main/writes/command'
 import { evaluate } from '@/main/writes/scope'
 import type { OwnershipRead, ReadOwnershipParams } from '@/types/dispatch'

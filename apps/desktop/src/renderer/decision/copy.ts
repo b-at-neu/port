@@ -1,6 +1,6 @@
 // Every string the decision dialog renders — one function per union, pure.
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
-import { mirrorReason } from '@/utils/writes/mirror-reason'
+import { mirrorReason } from '@/renderer/lib/mirror-reason'
 import type { ItemDecisionResult, OperatorDecision, RebaseDecision, RebaseOption, RebasePick, ReviseContext, UnblockContext, UnblockRoute } from '@/types/actions'
 
 function labelNameOf(key: string): string {

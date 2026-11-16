@@ -53,6 +53,8 @@ function cannedEntries(now: Date, attention: boolean): readonly AuditEntry[] {
     attention
       ? labelEntry(now, 120, 38, 'resume', null, { kind: 'precondition-failed', conflict: { kind: 'precondition-failed', expected: ['paused'], observed: ['ready'], readAt: minutesAgo(now, 120) } })
       : labelEntry(now, 120, 38, 'resume', edit(38), { kind: 'applied', argv: edit(38) }),
+    labelEntry(now, 90, 38, 'approve-plan', null, { kind: 'mirror-failed', mirror: { kind: 'write-failed', classification: 'network', stderr: 'dial tcp: lookup api.github.com: no such host', reread: null } }),
+    labelEntry(now, 75, 41, 'stage-claim', null, { kind: 'state-unsaved', message: 'ENOSPC: no space left on device' }),
     labelEntry(now, 60, 41, 'retry', null, { kind: 'no-op' }),
     labelEntry(now, 15, 41, 'stop', edit(41), { kind: 'verify-failed', message: 'The re-read still showed the old labels.' }),
   ]

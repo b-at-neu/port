@@ -29,9 +29,8 @@ export function selectDispatches(params: SelectDispatchesParams): readonly TickA
   })
 }
 
-/** The re-read survivor test: the trigger's resolved name is still present, no other
- *  role-bearing label is present alongside it, and the viewer is still among the assignees.
- *  `stateLabels` are the store's names for the item; `null` keeps the labels GitHub just returned. */
+/** The re-read survivor test: the trigger's resolved name is still present, no other role-bearing
+ *  label is present alongside it, and the viewer is still an assignee. `stateLabels` are the store's names; `null` keeps GitHub's. */
 export function survived(resolved: ResolvedItem, candidate: TickActionable, vocabulary: LabelVocabulary, viewer: string, stateLabels: readonly string[] | null = null): boolean {
   const labels = stateLabels ?? resolved.labels
   const triggerLabel = vocabulary.labels.find((l) => l.key === candidate.trigger)

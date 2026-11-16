@@ -1,10 +1,25 @@
 import type { LabelPrecondition } from '@/types/writes'
-import type { PipelineItemKind } from '@/types/github'
+import type { GatePreflightFetch, GitHubRepoRef, PipelineItemKind } from '@/types/github'
+import type { OwnershipRead } from '@/types/dispatch'
+import type { ReposListResponse } from '@/types/ipc'
+import type { RegistryDeps } from '@/types/registry'
+import type { StateLabelsReader } from '@/types/pipeline-state'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 
 // Renderer-safe contract for the plan gate dialog. No import here may reach a Node builtin — only `main/actions/gate.ts` resolves a repository, spawns `gh`, or reads `.agents/cockpit.json`.
-import type { OwnershipSummary, WriteOutcome } from '@/types/writes'
+import type { ApplyLabelsParams, OwnershipSummary, PostCommentParams, WriteOutcome } from '@/types/writes'
+
+/** The seams `main/actions/gate.ts` reads and writes through, bound once at the composition root. */
+export interface GateDeps {
+  readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
+  readonly fetchGatePreflight: (params: { readonly repo: GitHubRepoRef; readonly number: number }) => Promise<GatePreflightFetch>
+  readonly readOwnership: (params: { readonly repoRoot: string; readonly repo: string; readonly now?: () => Date }) => Promise<OwnershipRead>
+  readonly writeState: (params: ApplyLabelsParams) => Promise<WriteOutcome>
+  readonly stateLabels: StateLabelsReader
+  readonly postComment: (params: PostCommentParams) => Promise<WriteOutcome>
+  readonly now: () => Date
+}
 
 /** The two decisions the dialog's Reviewing step offers — validated at `main/channels/gate.ts` against this exact list. */
 export const GATE_DECISIONS = ['approve', 'request-changes'] as const
