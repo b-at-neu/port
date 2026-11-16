@@ -188,7 +188,6 @@ export interface BacklogEpicLayout {
 export interface WorkOnReasons {
   readonly blockers: readonly ClaimBlocker[]
   readonly truncation: { readonly shown: number; readonly total: number } | null
-  readonly subIssueCount: number
 }
 
 export type BacklogGroupView =
