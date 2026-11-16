@@ -207,11 +207,13 @@ describe('listRepositories cache', () => {
   })
 
   it('does not cache a failed read', async () => {
-    const { deps, registryDir } = await registeredDeps({ now: () => 0 })
+    let clock = 0
+    const { deps, registryDir } = await registeredDeps({ now: () => clock })
     await writeFile(join(registryDir, 'registry.json'), '{ not json')
     const failed = await listRepositories(deps, { fresh: true })
     expect(failed.ok).toBe(false)
     await writeFile(join(registryDir, 'registry.json'), JSON.stringify({ version: 1, repositories: [] }))
+    clock += REPOSITORY_LIST_TTL_MS
     expect(await listRepositories(deps)).toEqual({ ok: true, repositories: [] })
   })
 
