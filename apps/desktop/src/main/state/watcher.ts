@@ -1,5 +1,6 @@
 import type { DispatchLedger, UnknownStreaks, RefreshMemo, ForceDispatch } from '@/types/tick'
-import type { PipelineState, RefreshOutcome } from '@/types/state'
+import type { PipelineState, RefreshOutcome, RepositoryState } from '@/types/state'
+import type { PipelineView, TrackedRef } from '@/types/pipeline-state'
 import type { StateEngine } from '@/types/offload'
 
 // The only clock in main — one timer, rescheduled to the earliest `nextDueAt`. `schedule.ts` decides *when*; this file is the only place under `src/main/` allowed to name `setTimeout`.
@@ -73,6 +74,15 @@ interface CreatePipelineWatcherParams {
   readonly endedStages?: (repoId: RepoId) => readonly EndedStage[]
   /** The auto-planner's refused swaps, read fresh per repository. `undefined` reads as none. */
   readonly autoPlanRefused?: (repoId: RepoId) => ReadonlySet<number>
+  /** Read fresh on every projection. `undefined` reads every repository by labels, byte-identical to today. */
+  readonly pipelineView?: (repoId: RepoId) => PipelineView
+  /** The store's tracked items for a repository's GitHub read; `null` reads by labels. */
+  readonly trackedRefs?: (repoId: RepoId) => readonly TrackedRef[] | null
+  /** Seeds a repository whose view was `labels` from the state just projected. */
+  readonly seedPipelineState?: (repoId: RepoId, state: Extract<RepositoryState, { readonly ok: true }>) => Promise<void>
+  readonly prunePipelineState?: (repoId: RepoId, closed: readonly number[]) => Promise<void>
+  /** Settles once the store has loaded; the first projection waits on it. */
+  readonly pipelineReady?: () => Promise<void>
 }
 
 function repoRefOf(entry: Extract<RepositoryEntry, { status: 'ready' }>): { readonly owner: string; readonly name: string } {
@@ -165,14 +175,28 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
 
   async function composeSnapshot(): Promise<BoardSnapshot | null> {
     const entries = repositories
+    await params.pipelineReady?.()
+    const views: Record<string, PipelineView> = {}
+    for (const entry of entries.filter(isReady)) views[entry.id] = params.pipelineView?.(entry.id) ?? { kind: 'labels' }
     let state: PipelineState
     try {
-      state = await engine.project({ repositories: entries })
+      state = await engine.project({ repositories: entries, views })
     } catch (error) {
       console.error('[watcher] projection failed', error)
       return null
     }
+    await seedUnseeded(state, views)
     return assembleSnapshot(state)
+  }
+
+  /** Seeding sees the same items the board just showed, so no ticket changes stage. A terminal-held repository is skipped: its labels are the record. */
+  async function seedUnseeded(state: PipelineState, views: Readonly<Record<string, PipelineView>>): Promise<void> {
+    if (params.seedPipelineState === undefined) return
+    const terminal = new Set((params.dispatchStatus?.() ?? []).filter((status) => status.owner === 'terminal').map((status) => status.repoId))
+    for (const repository of state.repositories) {
+      if (!repository.ok || views[repository.repoId]?.kind !== 'labels' || terminal.has(repository.repoId)) continue
+      await params.seedPipelineState(repository.repoId, repository)
+    }
   }
 
   function assembleSnapshot(state: PipelineState): BoardSnapshot {
@@ -281,8 +305,9 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       outcome = await engine.refreshDenials({ repoId: entry.id, repoRoot: entry.path })
     } else {
       const startedAt = now().toISOString()
-      outcome = await engine.refreshGithub({ repoId: entry.id, repo: repoRefOf(entry), vocabulary: entry.config.vocabulary, integration: entry.config.branches.integration })
+      outcome = await engine.refreshGithub({ repoId: entry.id, repo: repoRefOf(entry), vocabulary: entry.config.vocabulary, integration: entry.config.branches.integration, tracked: params.trackedRefs?.(entry.id) ?? null })
       precheck.settled(entry.id, startedAt, outcome.ok)
+      if (outcome.closed !== undefined && outcome.closed.length > 0) await params.prunePipelineState?.(entry.id, outcome.closed)
     }
     const current = ensureHealth(entry.id)
     const previous = current[kind]

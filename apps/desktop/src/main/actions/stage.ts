@@ -1,20 +1,19 @@
-// Every label write a stage session needs — claim, rollback, hand-back, next turn — through `applyLabels` and nowhere else.
-import { fetchItemsByNumber } from '@/main/github/adapter'
+// Every state write a stage session needs — claim, rollback, hand-back, next turn — through `writeState` and nowhere else.
 import { expectFor, handbackRefusal, pullRequestNumberOf, stageModeFor, transitionFor } from '@/main/dispatch/transitions'
-import { applyLabels } from '@/main/writes/apply'
 import type { ReadyEntry } from '@/types/actions'
 import type { FetchItemsByNumberParams, ItemsByNumberFetch, ResolvedItem } from '@/types/github'
+import type { StateLabelsReader } from '@/types/pipeline-state'
 import type { StageEvent, StagePlannedWrite, StageTransition, StageTransitionResult } from '@/types/stage-labels'
 import type { HandoffRefusal, TickActionable } from '@/types/tick'
 import type { ApplyLabelsParams, LabelWriteRequest, WriteOutcome } from '@/types/writes'
-import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
+import { stateMoved } from '@/types/writes'
+import type { LabelKey } from '@/utils/labels/vocabulary'
 
 export interface StageWriteDeps {
-  readonly applyLabels: (params: ApplyLabelsParams) => Promise<WriteOutcome>
+  readonly writeState: (params: ApplyLabelsParams) => Promise<WriteOutcome>
+  readonly stateLabels: StateLabelsReader
   readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
 }
-
-export const defaultStageWriteDeps: StageWriteDeps = { applyLabels, fetchItemsByNumber }
 
 type StageSubject = Pick<TickActionable, 'number' | 'kind' | 'agent' | 'trigger'>
 
@@ -33,10 +32,11 @@ interface ApplyStageTransitionParams {
   readonly auditDir: string
 }
 
-const SETTLED_KINDS: ReadonlySet<WriteOutcome['kind']> = new Set(['applied', 'no-op'])
-
-function roleBearingKeysOf(resolved: ResolvedItem, vocabulary: LabelVocabulary): readonly LabelKey[] {
-  return vocabulary.labels.filter((l) => l.role !== 'marker' && resolved.labels.includes(l.name)).map((l) => l.key)
+/** The store's role-bearing keys for the item; GitHub's labels only under a labels view. */
+function roleBearingKeysOf(entry: ReadyEntry, resolved: ResolvedItem, deps: StageWriteDeps): readonly LabelKey[] {
+  const { vocabulary } = entry.config
+  const labels = deps.stateLabels(entry.id, resolved.kind, resolved.number, vocabulary) ?? resolved.labels
+  return vocabulary.labels.filter((l) => l.role !== 'marker' && labels.includes(l.name)).map((l) => l.key)
 }
 
 function refused(reason: HandoffRefusal, retryable: boolean, detail: string | null = null): StageTransitionResult {
@@ -56,17 +56,20 @@ function refusalOf(outcome: WriteOutcome): StageTransitionResult {
       return refused('write-failed', true, outcome.stderr)
     case 'verify-failed':
       return refused('write-failed', true, outcome.message)
+    case 'state-unsaved':
+      return refused('write-failed', true, outcome.message)
     case 'ownership-unreadable':
       return refused('write-failed', true, outcome.message)
     case 'item-unavailable':
       return refused('write-failed', true, 'the item could not be read')
     case 'applied':
     case 'no-op':
+    case 'mirror-failed':
       return { kind: 'applied' }
   }
 }
 
-function requestFor(entry: ReadyEntry, planned: StagePlannedWrite, number: number, resolved: ResolvedItem): LabelWriteRequest {
+function requestFor(entry: ReadyEntry, planned: StagePlannedWrite, number: number, resolved: ResolvedItem, deps: StageWriteDeps): LabelWriteRequest {
   const { vocabulary } = entry.config
   return {
     repoId: entry.id,
@@ -78,7 +81,7 @@ function requestFor(entry: ReadyEntry, planned: StagePlannedWrite, number: numbe
     remove: planned.remove,
     addAssignees: [],
     removeAssignees: [],
-    expect: expectFor(roleBearingKeysOf(resolved, vocabulary), vocabulary, planned.add, resolved.assignees),
+    expect: expectFor(roleBearingKeysOf(entry, resolved, deps), vocabulary, planned.add, resolved.assignees),
     action: planned.action,
   }
 }
@@ -91,16 +94,16 @@ async function applyWrites(entry: ReadyEntry, transition: StageTransition, items
     const number = planned.numberFrom === 'arg' ? prNumber : itemNumber
     const resolved = number === null ? undefined : itemsByNumber.get(number)
     if (number === null || resolved === undefined) return refused('write-failed', true, 'the item could not be read')
-    const outcome = await deps.applyLabels({ request: requestFor(entry, planned, number, resolved), repoRoot: entry.path, auditDir })
-    if (!SETTLED_KINDS.has(outcome.kind)) return refusalOf(outcome)
+    const outcome = await deps.writeState({ request: requestFor(entry, planned, number, resolved, deps), repoRoot: entry.path, auditDir })
+    if (!stateMoved(outcome)) return refusalOf(outcome)
   }
   return { kind: 'applied' }
 }
 
 /** Trigger → in-flight, planned from the dispatcher's own re-read so the claim never makes a second read. */
-export async function applyStageClaim(params: ApplyStageClaimParams, deps: StageWriteDeps = defaultStageWriteDeps): Promise<StageTransitionResult> {
+export async function applyStageClaim(params: ApplyStageClaimParams, deps: StageWriteDeps): Promise<StageTransitionResult> {
   const { entry, candidate, resolved } = params
-  const observed = roleBearingKeysOf(resolved, entry.config.vocabulary)
+  const observed = roleBearingKeysOf(entry, resolved, deps)
   const transition = transitionFor({ event: { kind: 'claim' }, mode: stageModeFor(candidate.agent, candidate.trigger), observed, approvalGate: entry.config.modules.approvalGate })
   return applyWrites(entry, transition, new Map([[candidate.number, resolved]]), candidate.number, null, params.auditDir, deps)
 }
@@ -110,7 +113,7 @@ function isOpenPullRequestOn(resolved: ResolvedItem | undefined, issueNumber: nu
 }
 
 /** Rollback, hand-back and next-turn writes: a fresh read first, then the table. A `pr-opened` hand-back is verified against the pull request it names before anything is written. */
-export async function applyStageTransition(params: ApplyStageTransitionParams, deps: StageWriteDeps = defaultStageWriteDeps): Promise<StageTransitionResult> {
+export async function applyStageTransition(params: ApplyStageTransitionParams, deps: StageWriteDeps): Promise<StageTransitionResult> {
   const { entry, record, event } = params
   const mode = stageModeFor(record.agent, record.trigger)
   const unusable = handbackRefusal(event, mode)
@@ -128,12 +131,11 @@ export async function applyStageTransition(params: ApplyStageTransitionParams, d
   const prResolved = prNumber === null ? undefined : itemsByNumber.get(prNumber)
   if (prNumber !== null && !isOpenPullRequestOn(prResolved, record.number)) return refused('pr-unverified', false)
 
-  const { vocabulary } = entry.config
   const transition = transitionFor({
     event,
     mode,
-    observed: roleBearingKeysOf(resolved, vocabulary),
-    prObserved: prResolved === undefined ? undefined : roleBearingKeysOf(prResolved, vocabulary),
+    observed: roleBearingKeysOf(entry, resolved, deps),
+    prObserved: prResolved === undefined ? undefined : roleBearingKeysOf(entry, prResolved, deps),
     approvalGate: entry.config.modules.approvalGate,
   })
   return applyWrites(entry, transition, itemsByNumber, record.number, prNumber, params.auditDir, deps)

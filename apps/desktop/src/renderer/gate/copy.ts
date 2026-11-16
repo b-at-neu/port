@@ -4,6 +4,7 @@
 // state. Pure string functions; no DOM here.
 import type { GateAnswerResponse, GateDecision, GateVerdict } from '@/types/gate'
 import type { OwnershipSummary } from '@/types/writes'
+import { mirrorReason } from '@/utils/writes/mirror-reason'
 
 /** #331: the Reviewing step's own disabled-controls reason — `null` while
  *  `ownership` is `'app'` or `'absent'`, since Approve/Request changes work
@@ -143,6 +144,8 @@ function answeredCopy(n: string, decision: GateDecision, response: Extract<GateA
     return { line: `#${n} moved to \`plan changes requested\`.`, note: 'Your feedback is on the issue.', actions: ['dismiss'] }
   }
 
+  if (labels.kind === 'mirror-failed') return { line: `Plan answered for #${n}.`, note: `The GitHub label couldn't be updated — ${mirrorReason(labels.mirror)}.`, actions: ['dismiss'] }
+
   if (comment !== null && comment.kind === 'applied') {
     // The comment landed but the label swap itself aborted — presented
     // exactly as that, per the plan's own "fails toward saying precisely
@@ -174,9 +177,12 @@ function labelAbortDetail(labels: Extract<GateAnswerResponse, { kind: 'answered'
     case 'unresolvable-label':
       return `Check the following keys in .claude/port.config.json's labels: ${labels.keys.join(', ')}.`
     case 'verify-failed':
+    case 'state-unsaved':
       return labels.message
     case 'item-unavailable':
       return 'The item is no longer available.'
+    case 'mirror-failed':
+      return mirrorReason(labels.mirror)
     case 'no-op':
     case 'applied':
       return ''
@@ -206,7 +212,10 @@ function labelOnlyCopy(n: string, labels: Extract<GateAnswerResponse, { kind: 'a
       return { line: `Couldn't re-read #${n} before writing.`, note: 'The item is no longer available. Nothing was written.', actions: ['dismiss'] }
     case 'unresolvable-label':
       return { line: "This repository's label vocabulary doesn't resolve.", note: `Check the following keys in .claude/port.config.json's labels: ${labels.keys.join(', ')}.`, actions: ['dismiss'] }
+    case 'state-unsaved':
+      return { line: `Couldn't save the decision for #${n}.`, note: `${labels.message} Nothing was written.`, actions: ['dismiss'] }
     case 'applied':
+    case 'mirror-failed':
       // Unreachable from this branch (handled above) — exhaustive for the
       // type checker only.
       return { line: '', note: null, actions: ['dismiss'] }

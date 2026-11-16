@@ -8,10 +8,7 @@ import { createDispatchLedger, createForceDispatch, createRefreshMemo, createUnk
 
 import type { RepoId } from '@/utils/repos'
 import type { RepoDispatchStatus } from '@/types/dispatch'
-import { applyObservation } from '@/main/actions/observe'
-import { autoApprovePlan } from '@/main/actions/gate'
-import { applyStageClaim, applyStageTransition } from '@/main/actions/stage'
-import { escalateToHuman } from '@/main/actions/escalate'
+import type { BoundActions } from '@/main/actions/bound'
 import { createBudgetGate } from '@/main/dispatch/budget-gate'
 import { createDispatcher } from '@/main/dispatch/dispatcher'
 import { readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
@@ -50,7 +47,9 @@ interface DispatchRuntime {
   readonly shutdown: () => void
 }
 
-export function createDispatchRuntime(deps: Omit<CreateDispatcherParams, 'ledger' | 'onChange' | 'budget' | 'escalate' | 'writeObservation' | 'stageLabels' | 'refreshMemo' | 'forceDispatch' | 'requestRead' | 'denials'>): DispatchRuntime {
+type RuntimeDeps = Omit<CreateDispatcherParams, 'ledger' | 'onChange' | 'budget' | 'escalate' | 'writeObservation' | 'stageLabels' | 'refreshMemo' | 'forceDispatch' | 'requestRead' | 'denials'> & { readonly actions: BoundActions }
+
+export function createDispatchRuntime({ actions, ...deps }: RuntimeDeps): DispatchRuntime {
   const denials = createStageDenialStore({ path: join(deps.dirs.audit, 'stage-denials.json'), readJson: readJsonFile, writeJsonAtomic: writeJsonFileAtomic })
   void denials.load()
   const ledger = createDispatchLedger()
@@ -60,13 +59,13 @@ export function createDispatchRuntime(deps: Omit<CreateDispatcherParams, 'ledger
   let bound: Pick<PipelineWatcher, 'republish' | 'refresh'> | null = null
   // A failed read is retried by the scheduled poll, so it is never surfaced here.
   const requestRead = (repoId: RepoId): void => void bound?.refresh({ repoId, source: 'github' }).catch(() => undefined)
-  const dispatcher = createDispatcher({ ...deps, denials, ledger, refreshMemo, forceDispatch, requestRead, budget: createBudgetGate({ scratchDir: deps.dirs.scratch }), escalate: escalateToHuman, writeObservation: applyObservation, stageLabels: { claim: applyStageClaim, transition: applyStageTransition }, onChange: () => bound?.republish() })
+  const dispatcher = createDispatcher({ ...deps, denials, ledger, refreshMemo, forceDispatch, requestRead, budget: createBudgetGate({ scratchDir: deps.dirs.scratch }), escalate: actions.escalateToHuman, writeObservation: actions.applyObservation, stageLabels: actions.stageLabels, onChange: () => bound?.republish() })
   const autoPlannerDeps: AutoPlannerDeps = {
     listRepositories: deps.listRepositories,
     registryDeps: deps.registryDeps,
     readOwnership: deps.readOwnership,
     runState: deps.runState,
-    autoApprove: autoApprovePlan,
+    autoApprove: actions.autoApprovePlan,
     requestRead,
     onChange: () => bound?.republish(),
     auditDir: deps.dirs.audit,

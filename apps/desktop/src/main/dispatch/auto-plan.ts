@@ -2,6 +2,7 @@
 import type { BoardSnapshot } from '@/types/board'
 import type { RepoId } from '@/utils/repos'
 import type { ReadyEntry } from '@/types/actions'
+import { stateMoved } from '@/types/writes'
 import { autoApprovalCandidatesFrom } from '@/main/tick/dispatchable'
 import { autoPlanSwapCandidatesOf } from '@/main/tick/auto-plan'
 
@@ -71,8 +72,8 @@ export function createAutoPlanner(deps: AutoPlannerDeps): AutoPlanner {
         let landed = false
         try {
           const outcome = await deps.autoApprove({ entry, item: { number, assignees: item.assignees }, auditDir: deps.auditDir })
-          if (outcome.kind === 'applied') applied += 1
-          landed = outcome.kind === 'applied' || outcome.kind === 'no-op'
+          if (outcome.kind === 'applied' || outcome.kind === 'mirror-failed') applied += 1
+          landed = stateMoved(outcome)
         } catch {
           // Swallowed; reattempted on the next fresher GitHub read, never surfaced as an error.
         }

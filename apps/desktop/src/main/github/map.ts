@@ -205,12 +205,13 @@ function matchedKeysOf(labels: readonly string[], vocabulary: LabelVocabulary): 
   return vocabulary.labels.filter((label) => present.has(label.name.toLowerCase())).map((label) => label.key)
 }
 
-function nodeToItem(node: RawNode, kind: PipelineItemKind, repo: string, vocabulary: LabelVocabulary): PipelineItem | undefined {
+/** `keys` is the store's own key set for a tracked item, which skips the "no matched label" drop. */
+function nodeToItem(node: RawNode, kind: PipelineItemKind, repo: string, vocabulary: LabelVocabulary, keys?: readonly LabelKey[]): PipelineItem | undefined {
   const number = numberField(node.number)
   if (number === undefined) return undefined
   const labels = fieldListOf(node.labels, 'name')
-  const matchedKeys = matchedKeysOf(labels, vocabulary)
-  if (matchedKeys.length === 0) return undefined
+  const matchedKeys = keys ?? matchedKeysOf(labels, vocabulary)
+  if (keys === undefined && matchedKeys.length === 0) return undefined
   const isPullRequest = kind === 'pull-request'
   return {
     repo,
@@ -247,6 +248,11 @@ export function mapPipelineItems(nodes: readonly unknown[], kind: PipelineItemKi
     if (item) byNumber.set(item.number, item)
   }
   return [...byNumber.values()]
+}
+
+/** One node read by number for a tracked item: it carries the store's keys whatever labels it still has. */
+export function mapTrackedItem(node: unknown, kind: PipelineItemKind, vocabulary: LabelVocabulary, repo: string, keys: readonly LabelKey[]): PipelineItem | undefined {
+  return isRawNode(node) ? nodeToItem(node, kind, repo, vocabulary, keys) : undefined
 }
 
 /** Overlays the detail read onto the swept items. An item with no detail keeps its placeholders —

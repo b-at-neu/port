@@ -9,7 +9,8 @@ import type { AuditEntry, LabelAuditEntry, WriteOutcome } from '@/types/writes'
 import { isLabelAuditEntry } from '@/types/writes'
 import { readAuditLog } from '@/main/writes/audit'
 import type { GhRunner, GitRunner } from '@/types/platform'
-import { applyItemDecision, defaultApplyItemDecisionDeps } from '@/main/actions/decide'
+import { applyItemDecision } from '@/main/actions/decide'
+import { applyLabels, postComment } from '@/main/writes/apply'
 import type { ApplyItemDecisionDeps } from '@/main/actions/decide'
 import { boardSnapshot as snapshotOf, readyEntry, reconciledItem, repositoryState } from '../../../fixtures/board-state'
 
@@ -57,9 +58,10 @@ function fetchReturning(fetch: ItemsByNumberFetch): ApplyItemDecisionDeps['fetch
 
 function depsWith(overrides: Partial<ApplyItemDecisionDeps>): ApplyItemDecisionDeps {
   return {
-    applyLabels: () => {
+    writeState: () => {
       throw new Error('applyLabels should not be invoked in this case')
     },
+    stateLabels: () => null,
     postComment: () => {
       throw new Error('postComment should not be invoked in this case')
     },
@@ -145,7 +147,7 @@ describe('applyItemDecision — comment then swap', () => {
     let labelCalls = 0
     const deps = depsWith({
       postComment: () => Promise.resolve({ kind: 'write-failed', classification: 'unknown', stderr: 'boom', reread: null }),
-      applyLabels: () => {
+      writeState: () => {
         labelCalls++
         return Promise.resolve({ kind: 'applied', argv: [] })
       },
@@ -168,7 +170,7 @@ describe('applyItemDecision — comment then swap', () => {
         commentCalls++
         throw new Error('should not be called')
       },
-      applyLabels: () => Promise.resolve({ kind: 'applied', argv: [] }),
+      writeState: () => Promise.resolve({ kind: 'applied', argv: [] }),
       fetchItemsByNumber: fetchReturning({ ok: true, resolved: [resolvedItem()], unavailable: [], fetchedAt: NOW().toISOString() }),
     })
     const result = await applyItemDecision(
@@ -187,7 +189,7 @@ describe('applyItemDecision — comment then swap', () => {
         calls.push('comment')
         return Promise.resolve({ kind: 'applied', argv: [] })
       },
-      applyLabels: () => {
+      writeState: () => {
         calls.push('labels')
         return Promise.resolve({ kind: 'applied', argv: [] })
       },
@@ -210,7 +212,7 @@ describe('applyItemDecision — comment then swap', () => {
         body = params.request.body
         return Promise.resolve({ kind: 'applied', argv: [] })
       },
-      applyLabels: () => Promise.resolve({ kind: 'applied', argv: [] }),
+      writeState: () => Promise.resolve({ kind: 'applied', argv: [] }),
       fetchItemsByNumber: fetchReturning({ ok: true, resolved: [resolvedItem()], unavailable: [], fetchedAt: NOW().toISOString() }),
     })
     await applyItemDecision(
@@ -229,7 +231,7 @@ describe('applyItemDecision — comment then swap', () => {
         body = params.request.body
         return Promise.resolve({ kind: 'applied', argv: [] })
       },
-      applyLabels: () => Promise.resolve({ kind: 'applied', argv: [] }),
+      writeState: () => Promise.resolve({ kind: 'applied', argv: [] }),
       fetchItemsByNumber: fetchReturning({ ok: true, resolved: [resolvedItem()], unavailable: [], fetchedAt: NOW().toISOString() }),
     })
     await applyItemDecision(
@@ -291,7 +293,7 @@ describe('applyItemDecision — rebase decisions', () => {
         body = params.request.body
         return Promise.resolve({ kind: 'applied', argv: [] })
       },
-      applyLabels: (params) => {
+      writeState: (params) => {
         calls.push('labels')
         labels = params.request
         return Promise.resolve({ kind: 'applied', argv: [] })
@@ -365,7 +367,7 @@ describe('applyItemDecision — blocked issue', () => {
         comment = p.request
         return Promise.resolve({ kind: 'applied', argv: [] })
       },
-      applyLabels: (p) => {
+      writeState: (p) => {
         calls.push('labels')
         write = p.request
         return Promise.resolve({ kind: 'applied', argv: [] })
@@ -421,8 +423,9 @@ describe('applyItemDecision — real writers', () => {
         liveStage: false,
       },
       {
-        applyLabels: (params) => defaultApplyItemDecisionDeps.applyLabels({ ...params, gh, now: NOW, fetchItemsByNumber }),
-        postComment: (params) => defaultApplyItemDecisionDeps.postComment({ ...params, gh, now: NOW }),
+        writeState: (params) => applyLabels({ ...params, gh, now: NOW, fetchItemsByNumber }),
+        stateLabels: () => null,
+        postComment: (params) => postComment({ ...params, gh, now: NOW }),
         fetchItemsByNumber,
       },
     )

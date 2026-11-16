@@ -64,6 +64,7 @@ export function fetchOf(items: readonly PipelineItem[]): PipelineFetch {
   return {
     ok: true,
     items,
+    closed: [],
     queried: [],
     disabled: [],
     vocabulary: { verdict: 'verified', present: [], missing: [], problems: [], repoLabels: { ok: true, names: [] } },

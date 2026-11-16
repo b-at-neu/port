@@ -1,0 +1,71 @@
+// Contract for the app-owned pipeline state store: plain JSON, safe to cross the state worker boundary.
+import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { RepoId } from '@/utils/repos'
+import type { PipelineItemKind } from '@/types/github'
+
+export interface StoredHistoryRow {
+  readonly at: string
+  readonly action: string
+  readonly add: readonly LabelKey[]
+  readonly remove: readonly LabelKey[]
+  readonly actor: string | null
+}
+
+/** `keys` holds the role-bearing stage keys; `marked` and `autoPlan` carry the two marker keys. */
+export interface StoredItem {
+  readonly kind: PipelineItemKind
+  readonly number: number
+  readonly keys: readonly LabelKey[]
+  readonly marked: boolean
+  readonly autoPlan: boolean
+  readonly claimedAt: string | null
+  readonly reviewCycles: number
+  readonly history: readonly StoredHistoryRow[]
+  readonly updatedAt: string
+}
+
+export interface RepoRecord {
+  readonly seededAt: string
+  readonly heldBy: 'terminal' | null
+  /** Keyed `issue:<n>` / `pull-request:<n>`. */
+  readonly items: Readonly<Record<string, StoredItem>>
+}
+
+export interface PipelineStateFile {
+  readonly version: 1
+  readonly repositories: Readonly<Record<string, RepoRecord>>
+}
+
+/** The store's label names for one item, for a reader that still takes a label list: `null` under a labels view (keep GitHub's), `[]` for an untracked item under a store view. */
+export type StateLabelsReader = (repoId: RepoId, kind: PipelineItemKind, number: number, vocabulary: LabelVocabulary) => readonly string[] | null
+
+/** Every stored key, markers included. */
+export function fullKeysOf(item: Pick<StoredItem, 'keys' | 'marked' | 'autoPlan'>): readonly LabelKey[] {
+  return [...(item.marked ? (['marker'] as const) : []), ...(item.autoPlan ? (['autoPlan'] as const) : []), ...item.keys]
+}
+
+/** `labels` means GitHub's labels decide stage, as before; `store` means the stored items do. */
+export type PipelineView = { readonly kind: 'labels' } | { readonly kind: 'store'; readonly items: readonly StoredItem[] }
+
+/** A tracked item and the full key set (markers included) it carries in the store. */
+export interface TrackedRef {
+  readonly kind: PipelineItemKind
+  readonly number: number
+  readonly keys: readonly LabelKey[]
+}
+
+export interface TransitionInput {
+  readonly add: readonly LabelKey[]
+  readonly remove: readonly LabelKey[]
+  readonly expect: { readonly present: readonly LabelKey[]; readonly absent: readonly LabelKey[] }
+  readonly action: string
+  readonly at: string
+  readonly actor: string | null
+}
+
+export type TransitionResult = { readonly ok: true; readonly item: StoredItem; readonly changed: boolean } | { readonly ok: false; readonly reason: 'precondition-failed' }
+
+export type StoreTransitionResult =
+  | { readonly ok: true; readonly changed: boolean }
+  | { readonly ok: false; readonly reason: 'precondition-failed' }
+  | { readonly ok: false; readonly reason: 'persist-failed'; readonly message: string }

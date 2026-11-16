@@ -10,19 +10,14 @@ import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
 import type { ReconciledItem, RepositoryState } from '@/types/state'
 import type { LabelWriteRequest, WriteOutcome } from '@/types/writes'
-import { applyLabels } from '@/main/writes/apply'
-
-import { recoverPausedTrigger } from '@/main/actions/resume'
 
 import type { ApplyItemActionParams, ItemActionRequest, ReadyEntry } from '@/types/actions'
 
 
 export interface ApplyItemActionDeps {
-  readonly applyLabels: (params: ApplyLabelsParams) => Promise<WriteOutcome>
+  readonly writeState: (params: ApplyLabelsParams) => Promise<WriteOutcome>
   readonly recoverPausedTrigger: (params: RecoverPausedTriggerParams) => Promise<RecoverPausedTriggerResult>
 }
-
-export const defaultApplyItemActionDeps: ApplyItemActionDeps = { applyLabels, recoverPausedTrigger }
 
 export function findRepoState(snapshot: BoardSnapshot, repoId: RepoId): Extract<RepositoryState, { readonly ok: true }> | null {
   const state = snapshot.state.repositories.find((repository) => repository.repoId === repoId)
@@ -68,7 +63,7 @@ function buildWriteRequest(entry: ReadyEntry, request: ItemActionRequest, plan: 
   }
 }
 
-export async function applyItemAction(params: ApplyItemActionParams, deps: ApplyItemActionDeps = defaultApplyItemActionDeps): Promise<ItemActionResult> {
+export async function applyItemAction(params: ApplyItemActionParams, deps: ApplyItemActionDeps): Promise<ItemActionResult> {
   const { request, snapshot, entry, auditDir } = params
   const repoState = findRepoState(snapshot, entry.id)
   if (repoState === null) return { ok: false, reason: 'repo-unavailable' }
@@ -95,6 +90,6 @@ export async function applyItemAction(params: ApplyItemActionParams, deps: Apply
     plan = { ...plan, add: [recovered.trigger] }
   }
 
-  const outcome = await deps.applyLabels({ request: buildWriteRequest(entry, request, plan), repoRoot: entry.path, auditDir })
+  const outcome = await deps.writeState({ request: buildWriteRequest(entry, request, plan), repoRoot: entry.path, auditDir })
   return { ok: true, outcome }
 }

@@ -4,12 +4,8 @@ import { actionsFor, stageKeyOf } from '@/utils/actions/plan'
 import { labelName } from '@/utils/labels/vocabulary'
 import type { HaltItemOutcome, HaltReport } from '@/types/dispatch'
 import type { ReconciledItem } from '@/types/state'
-import { applyItemAction as defaultApplyItemAction } from '@/main/actions/apply'
-
 
 import type { HaltDispatchDeps, HaltDispatchParams } from '@/types/dispatch'
-
-export const defaultHaltDispatchDeps: HaltDispatchDeps = { applyItemAction: defaultApplyItemAction }
 
 /** The one attached-agent or attached-session name a halt outcome reports — never a liveness
  *  claim, only what this app found on disk. An item with more than one attachment reports its first. */
@@ -22,7 +18,7 @@ function attachedAgentName(item: ReconciledItem): string | null {
 
 /** Order is load-bearing: `runStates.set` runs first, and a failed write aborts the halt entirely.
  *  Every in-flight item is then visited sequentially; `standDown` runs last, once per ready entry. */
-export async function haltDispatch(params: HaltDispatchParams, deps: HaltDispatchDeps = defaultHaltDispatchDeps): Promise<HaltReport> {
+export async function haltDispatch(params: HaltDispatchParams, deps: HaltDispatchDeps): Promise<HaltReport> {
   const { snapshot, entries, runStates, repoIds, auditDir, now } = params
   const written = await runStates.set(repoIds, 'paused', now().toISOString())
   if (!written.ok) return { kind: 'aborted', reason: 'run-state-unwritable', message: written.message, path: runStates.path }
@@ -66,7 +62,7 @@ export async function haltDispatch(params: HaltDispatchParams, deps: HaltDispatc
         auditDir,
       })
 
-      if (result.ok && result.outcome.kind === 'applied') {
+      if (result.ok && (result.outcome.kind === 'applied' || result.outcome.kind === 'mirror-failed')) {
         const removedKey = availability.plan.remove[0] ?? inFlight
         const removedLabel = labelName(entry.config.vocabulary, removedKey) ?? removedKey
         items.push({ kind: 'stopped', number: item.number, itemKind: item.kind, repoId: repoState.repoId, removedLabel, attachedAgent: attachedAgentName(item), stoppedTask })

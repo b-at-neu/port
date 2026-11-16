@@ -1,0 +1,39 @@
+// Every action with its state writer and store-label reader bound, built once at the composition root.
+import { applyItemAction } from '@/main/actions/apply'
+import { applyItemDecision } from '@/main/actions/decide'
+import { escalateToHuman } from '@/main/actions/escalate'
+import { autoApprovePlan, gateAnswer, gatePreflight } from '@/main/actions/gate'
+import type { GateDeps } from '@/main/actions/gate'
+import { applyObservation } from '@/main/actions/observe'
+import { recoverPausedTrigger } from '@/main/actions/resume'
+import { applyStageClaim, applyStageTransition } from '@/main/actions/stage'
+import { readOwnership } from '@/main/dispatch/ownership'
+import { fetchClaimPreflight, fetchItemsByNumber } from '@/main/github/adapter'
+import { fetchGatePreflight } from '@/main/github/gate'
+import { listRepositories } from '@/main/registry'
+import { postComment } from '@/main/writes/apply'
+import type { PipelineState } from '@/main/pipeline-state/default'
+import type { ApplyItemActionParams, ApplyItemDecisionParams, ApplyObservationParams, AutoApprovePlanParams, EscalateToHumanParams, GateAnswerParams, GatePreflightParams } from '@/types/actions'
+import type { ClaimDeps } from '@/types/claim'
+import type { StageLabelWrites } from '@/types/dispatch'
+
+export function bindActions(state: Pick<PipelineState, 'writeState' | 'stateLabels'>) {
+  const { writeState, stateLabels } = state
+  const gateDeps: GateDeps = { listRepositories, fetchGatePreflight, readOwnership, writeState, stateLabels, postComment, now: () => new Date() }
+  const stageDeps = { writeState, stateLabels, fetchItemsByNumber }
+  const stageLabels: StageLabelWrites = { claim: (params) => applyStageClaim(params, stageDeps), transition: (params) => applyStageTransition(params, stageDeps) }
+  const claimDeps: ClaimDeps = { listRepositories, fetchClaimPreflight, writeState, stateLabels }
+  return {
+    applyItemAction: (params: ApplyItemActionParams) => applyItemAction(params, { writeState, recoverPausedTrigger }),
+    applyItemDecision: (params: ApplyItemDecisionParams) => applyItemDecision(params, { writeState, stateLabels, postComment, fetchItemsByNumber }),
+    gatePreflight: (params: GatePreflightParams) => gatePreflight(params, gateDeps),
+    gateAnswer: (params: GateAnswerParams) => gateAnswer(params, gateDeps),
+    autoApprovePlan: (params: AutoApprovePlanParams) => autoApprovePlan(params, { writeState }),
+    escalateToHuman: (params: EscalateToHumanParams) => escalateToHuman(params, { writeState, postComment }),
+    applyObservation: (params: ApplyObservationParams) => applyObservation(params, { writeState, postComment }),
+    stageLabels,
+    claimDeps,
+  }
+}
+
+export type BoundActions = ReturnType<typeof bindActions>

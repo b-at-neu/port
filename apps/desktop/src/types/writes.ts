@@ -92,6 +92,15 @@ export type WriteOutcome =
   | { readonly kind: 'item-unavailable' }
   | { readonly kind: 'verify-failed'; readonly message: string }
   | { readonly kind: 'write-failed'; readonly classification: GhWriteFailureKind; readonly stderr: string; readonly reread: ObservedItem | null }
+  /** The pipeline state could not be saved — nothing changed, and a retry is safe. */
+  | { readonly kind: 'state-unsaved'; readonly message: string }
+  /** The state moved and the GitHub label write did not; `mirror` is that write's own outcome. */
+  | { readonly kind: 'mirror-failed'; readonly mirror: WriteOutcome }
+
+/** The state moved: the write applied, changed nothing, or moved the state while its label mirror failed. */
+export function stateMoved(outcome: WriteOutcome): boolean {
+  return outcome.kind === 'applied' || outcome.kind === 'no-op' || outcome.kind === 'mirror-failed'
+}
 
 /** One line per attempt, `\n`-terminated JSON, in `writes.jsonl`. `call` is the exact argv that ran, or `null` for an abort/no-op arm.
  *  Writes and write attempts only; a read is never logged. */

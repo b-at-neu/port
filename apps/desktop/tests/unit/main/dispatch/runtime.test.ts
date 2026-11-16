@@ -1,20 +1,23 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
 import type { HostedSessionSnapshot, HostedStore, SessionKey } from '@/types/hosting'
 import type { StageOutcome } from '@/types/stage-session'
 import type { RefreshRequest } from '@/types/state'
+import type { BoundActions } from '@/main/actions/bound'
 import { createDispatchRuntime } from '@/main/dispatch/runtime'
 import { DISPATCH_STORE_DEFAULTS, storeStub } from '../../../fixtures/store'
 
 const REPO_ID = 'repo-a' as RepoId
 const SESSION_KEY = 'hosted-1' as SessionKey
 
-vi.mock('@/main/actions/stage', () => ({
-  applyStageClaim: () => Promise.resolve({ kind: 'applied' }),
-  applyStageTransition: () => Promise.resolve({ kind: 'applied' }),
-}))
+const ACTIONS = {
+  stageLabels: { claim: () => Promise.resolve({ kind: 'applied' }), transition: () => Promise.resolve({ kind: 'applied' }) },
+  escalateToHuman: () => Promise.reject(new Error('unused')),
+  applyObservation: () => Promise.reject(new Error('unused')),
+  autoApprovePlan: () => Promise.reject(new Error('unused')),
+} as unknown as BoundActions
 
 const COMPLETED: StageOutcome = { kind: 'completed', detail: null, costUsd: null, resetsAt: null, worktree: 'removed', operatorJoined: false, handback: { token: 'pr-opened', arg: '#8' } }
 
@@ -63,6 +66,7 @@ function runtimeDeps(overrides: Partial<Parameters<typeof createDispatchRuntime>
         ],
       }),
     registryDeps: { registryDir: '/r', git: () => Promise.reject(new Error('unused')), chooseDirectory: () => Promise.resolve(null) },
+    actions: ACTIONS,
     dirs: { audit: '/audit', scratch: '/scratch' },
     now: () => new Date('2026-01-01T00:00:00Z'),
     ...overrides,

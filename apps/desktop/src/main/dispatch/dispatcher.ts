@@ -268,7 +268,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       const resolvedByNumber = new Map(reread.resolved.map((r) => [r.number, r] as const))
       const survivors = candidates.filter((c) => {
         const resolved = resolvedByNumber.get(c.number)
-        return resolved !== undefined && !reread.unavailable.includes(c.number) && survived(resolved, c, entry.config.vocabulary, viewer)
+        return resolved !== undefined && !reread.unavailable.includes(c.number) && survived(resolved, c, entry.config.vocabulary, viewer, deps.stateLabels?.(entry.id, c.kind, c.number, entry.config.vocabulary) ?? null)
       })
       if (survivors.length === 0) {
         report(entry.id, owner, activeOrIdle(entry.id), runState)

@@ -138,6 +138,7 @@ function buildPipelineFetch(vocabulary: LabelVocabulary, labels: LabelMap, prs: 
   return {
     ok: true,
     items: pipelineItemsFor(vocabulary, labels, prs),
+    closed: [],
     queried: queriedLabelsFor(vocabulary),
     disabled: vocabulary.disabled,
     vocabulary: verifyVocabulary(vocabulary, { ok: true, names: vocabulary.labels.map((label) => label.name) }),
@@ -283,7 +284,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       labelWrites.push({ action: request.action, number: request.number })
       return Promise.resolve({ kind: 'applied', argv: [] })
     }
-    const writeDeps = { applyLabels, fetchItemsByNumber }
+    const writeDeps = { writeState: applyLabels, stateLabels: () => null, fetchItemsByNumber }
 
     // Late-binding, the same construction order `main/ipc.ts` uses: onStatus closes over stageLauncher,
     // stageLauncher's onOutcome/onDenial close over dispatcherRef — both assigned right after.

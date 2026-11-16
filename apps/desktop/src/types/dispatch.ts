@@ -8,6 +8,7 @@ import type { StageEvent, StageTransitionResult } from '@/types/stage-labels'
 import type { ReposListResponse } from '@/types/ipc'
 import type { GitRunner, PathOps, FileFailureKind } from '@/types/platform'
 import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { StateLabelsReader } from '@/types/pipeline-state'
 
 export type BudgetGateFailure = { readonly ok: false; readonly kind: 'unavailable' | 'failed'; readonly message: string }
 
@@ -271,6 +272,8 @@ export interface CreateDispatcherParams {
   readonly writeObservation: (params: ApplyObservationParams) => Promise<ApplyObservationResult>
   /** Every label write a stage needs: the claim before launch, and rollback, hand-back and next-turn writes through `transition`. */
   readonly stageLabels: StageLabelWrites
+  /** Where a candidate's labels come from at the survivor test; absent reads GitHub's. */
+  readonly stateLabels?: StateLabelsReader
   readonly refreshMemo: RefreshMemo
   /** Cleared for `(repoId, candidate.number)` once a forced launch succeeds — `main/tick/plan.ts`'s own consumer of the same memo, never a second instance. */
   readonly forceDispatch: ForceDispatch

@@ -4,7 +4,7 @@ import type { ClaimDeps } from '@/types/claim'
 // split every other channel here follows.
 import { PLAN_GATE_CHOICES } from '@/types/claim'
 import type { IpcMap } from '@/types/ipc'
-import { claimApply, claimPreflight, defaultClaimDeps } from '@/main/claim'
+import { claimApply, claimPreflight } from '@/main/claim'
 
 import type { RegistryDeps } from '@/types/registry'
 import { requireRepoId } from '@/main/registry'
@@ -13,7 +13,7 @@ import { requireRepoId } from '@/main/registry'
 export async function resolveClaimPreflight(
   registryDeps: RegistryDeps,
   request: IpcMap['claim:preflight']['request'],
-  deps: ClaimDeps = defaultClaimDeps,
+  deps: ClaimDeps,
 ): ReturnType<typeof claimPreflight> {
   const repoId = requireRepoId(request?.repoId, "'claim:preflight'")
   if (!Number.isInteger(request.number) || request.number <= 0) {
@@ -27,7 +27,7 @@ export async function resolveClaimApply(
   registryDeps: RegistryDeps,
   request: IpcMap['claim:apply']['request'],
   auditDir: string,
-  deps: ClaimDeps = defaultClaimDeps,
+  deps: ClaimDeps,
 ): ReturnType<typeof claimApply> {
   const repoId = requireRepoId(request?.repoId, "'claim:apply'")
   if (!Number.isInteger(request.number) || request.number <= 0) {

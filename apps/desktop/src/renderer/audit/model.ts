@@ -44,6 +44,10 @@ function labelOutcome(result: LabelAuditEntry['result']): Outcome {
     case 'write-failed':
     case 'verify-failed':
       return { tone: 'danger', label: 'Failed' }
+    case 'state-unsaved':
+      return { tone: 'danger', label: 'Not saved' }
+    case 'mirror-failed':
+      return { tone: 'attention', label: 'Label not updated' }
     case 'terminal-owned':
     case 'ownership-unreadable':
     case 'unresolvable-label':
@@ -83,6 +87,10 @@ function resultDetail(result: LabelAuditEntry['result']): string | null {
       return `${result.classification}: ${result.stderr.split('\n')[0] ?? ''}`.trimEnd()
     case 'verify-failed':
       return result.message
+    case 'state-unsaved':
+      return `Port couldn't save its pipeline state: ${result.message}`
+    case 'mirror-failed':
+      return resultDetail(result.mirror)
     case 'terminal-owned':
       return `A terminal cockpit has owned this repository since ${result.since}.`
     case 'ownership-unreadable':

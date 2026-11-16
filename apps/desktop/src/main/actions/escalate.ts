@@ -3,17 +3,14 @@ import type { ApplyLabelsParams, PostCommentParams } from '@/types/writes'
 // Swaps the trigger label for `needsHuman`, then comments — a failed swap never posts a
 // comment that would repeat on every poll.
 import type { LabelWriteRequest, WriteOutcome } from '@/types/writes'
-import { applyLabels, postComment } from '@/main/writes/apply'
-
+import { stateMoved } from '@/types/writes'
 
 import type { EscalateToHumanResult, EscalateToHumanParams } from '@/types/actions'
 
 export interface EscalateToHumanDeps {
-  readonly applyLabels: (params: ApplyLabelsParams) => Promise<WriteOutcome>
+  readonly writeState: (params: ApplyLabelsParams) => Promise<WriteOutcome>
   readonly postComment: (params: PostCommentParams) => Promise<WriteOutcome>
 }
-
-export const defaultEscalateDeps: EscalateToHumanDeps = { applyLabels, postComment }
 
 function buildWriteRequest(params: EscalateToHumanParams): LabelWriteRequest {
   return {
@@ -31,9 +28,9 @@ function buildWriteRequest(params: EscalateToHumanParams): LabelWriteRequest {
   }
 }
 
-export async function escalateToHuman(params: EscalateToHumanParams, deps: EscalateToHumanDeps = defaultEscalateDeps): Promise<EscalateToHumanResult> {
-  const labels = await deps.applyLabels({ request: buildWriteRequest(params), repoRoot: params.entry.path, auditDir: params.auditDir })
-  if (labels.kind !== 'applied' || params.body === null) return { labels, comment: null }
+export async function escalateToHuman(params: EscalateToHumanParams, deps: EscalateToHumanDeps): Promise<EscalateToHumanResult> {
+  const labels = await deps.writeState({ request: buildWriteRequest(params), repoRoot: params.entry.path, auditDir: params.auditDir })
+  if (!stateMoved(labels) || params.body === null) return { labels, comment: null }
 
   const comment = await deps.postComment({
     request: { repoId: params.entry.id, repo: params.entry.config.repo, kind: params.kind, number: params.number, body: params.body, action: params.action, scratchDir: params.scratchDir },
