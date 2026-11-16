@@ -17,6 +17,7 @@ import { applyNavigationGuards } from '@/main/navigation'
 import { ABOUT_NOTICE, ABOUT_POWERED_BY } from '@/utils/about/copy'
 import { formatAppVersion } from '@/utils/about/version'
 import { menuTemplate } from '@/main/menu'
+import { presentWindow, windowPresentation } from '@/main/presentation'
 import { chromeSandboxPath, needsNoSandbox } from '@/main/sandbox'
 import type { StageRegistry } from '@/types/stage'
 
@@ -76,6 +77,11 @@ if (fixture.kind === 'invalid') {
     setE2ERoute({ fake: e2e.fake })
   }
 
+  const presentation = windowPresentation({ fixture: fixture.kind, e2e: e2e.kind, platform: process.platform })
+  if (presentation.activationPolicy !== null) {
+    app.setActivationPolicy(presentation.activationPolicy)
+  }
+
   const gotLock = app.requestSingleInstanceLock()
 
   if (!gotLock) {
@@ -121,7 +127,8 @@ if (fixture.kind === 'invalid') {
           contextIsolation: true,
           nodeIntegration: false,
           sandbox: true,
-          webSecurity: true
+          webSecurity: true,
+          backgroundThrottling: presentation.backgroundThrottling
         }
       })
       mainWindow = window
@@ -136,7 +143,7 @@ if (fixture.kind === 'invalid') {
       }
 
       window.on('ready-to-show', () => {
-        window.show()
+        presentWindow(window, presentation)
       })
 
       const rendererUrl = process.env['ELECTRON_RENDERER_URL']
@@ -155,7 +162,7 @@ if (fixture.kind === 'invalid') {
       app.setAboutPanelOptions({ applicationName: 'port', applicationVersion: formatAppVersion(app.getVersion(), __PORT_BUILD_COMMIT__), credits: [ABOUT_POWERED_BY, ABOUT_NOTICE].join('\n') })
 
       const dockIconPath = devDockIconPath({ platform: process.platform, isPackaged: app.isPackaged, mainDir: __dirname, resourcesPath: process.resourcesPath })
-      if (dockIconPath !== null && (await pathExists(dockIconPath))) {
+      if (presentation.activationPolicy !== 'accessory' && dockIconPath !== null && (await pathExists(dockIconPath))) {
         app.dock?.setIcon(dockIconPath)
       }
 

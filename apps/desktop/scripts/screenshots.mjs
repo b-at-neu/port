@@ -9,6 +9,7 @@ import { createRequire } from 'node:module'
 import { existsSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { displayPlan } from './display.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const appRoot = join(here, '..')
@@ -37,17 +38,20 @@ function run(command, args) {
 }
 
 async function main() {
-  const isLinux = process.platform === 'linux'
-  const hasDisplay = Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY)
+  const plan = displayPlan({
+    platform: process.platform,
+    hasXvfb: process.platform === 'linux' && commandExists('xvfb-run'),
+    hasDisplay: Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY),
+  })
 
   let code
-  if (isLinux && commandExists('xvfb-run')) {
+  if (plan.kind === 'xvfb') {
     code = await run('xvfb-run', ['-a', '--server-args=-screen 0 1920x1080x24', process.execPath, playwrightCli, 'test', ...forwardedArgs])
-  } else if (isLinux && !hasDisplay) {
-    console.error('No display and no xvfb-run. Install xvfb (`sudo apt install xvfb`) or run with a display.')
+  } else if (plan.kind === 'refuse') {
+    for (const line of plan.lines) console.error(line)
     process.exit(1)
   } else {
-    if (isLinux) console.log('xvfb-run not found; windows will open on your display.')
+    for (const line of plan.lines) console.warn(line)
     code = await run(process.execPath, [playwrightCli, 'test', ...forwardedArgs])
   }
 

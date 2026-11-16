@@ -81,6 +81,26 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
+  // --- main/index.ts presents its window through presentWindow( with the resolved modes — a bare
+  // .show() would take focus on every fixture and e2e launch. ---
+  {
+    const text = readFileSync(join(root, 'apps/desktop/src/main/index.ts'), 'utf8');
+    let violated = false;
+    if (!/windowPresentation\(\s*\{[^}]*\bfixture:\s*fixture\.kind\b[^}]*\be2e:\s*e2e\.kind\b/.test(text)) {
+      violated = true;
+      fail('desktop-visual', 'apps/desktop/src/main/index.ts does not call windowPresentation( with both fixture.kind and e2e.kind');
+    }
+    if (!/\bpresentWindow\(/.test(text)) {
+      violated = true;
+      fail('desktop-visual', 'apps/desktop/src/main/index.ts does not call presentWindow(');
+    }
+    if (/\b(?:window|mainWindow)\.show\(\)/.test(text)) {
+      violated = true;
+      fail('desktop-visual', 'apps/desktop/src/main/index.ts calls a bare window.show() — present through presentWindow( so fixture and e2e launches stay unfocused');
+    }
+    if (!violated) ok();
+  }
+
   // --- router.tsx's own paths stay inside ROUTE_IDS, '/' or '*' — a literal path would
   // escape tests/visual/targets.mts's exhaustive capture/skip table. ---
   {
