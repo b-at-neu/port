@@ -10,7 +10,7 @@ type Showable = { show(): void; showInactive(): void }
 
 export function windowPresentation(input: { fixture: ModeKind; e2e: ModeKind; platform: NodeJS.Platform }): WindowPresentation {
   if (input.fixture === 'on' || input.e2e === 'on') {
-    return { show: 'inactive', backgroundThrottling: false, activationPolicy: input.platform === 'darwin' ? 'accessory' : null }
+    return { show: 'inactive', backgroundThrottling: false, activationPolicy: input.fixture === 'on' && input.platform === 'darwin' ? 'accessory' : null }
   }
   return { show: 'focus', backgroundThrottling: true, activationPolicy: null }
 }

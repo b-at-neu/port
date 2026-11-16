@@ -12,7 +12,11 @@ describe('windowPresentation', () => {
     expect(windowPresentation({ fixture: 'off', e2e: 'on', platform: 'win32' })).toEqual({ show: 'inactive', backgroundThrottling: false, activationPolicy: null })
   })
 
-  it('runs as an accessory app on macOS only', () => {
+  it('keeps the regular activation policy for an e2e launch on macOS', () => {
+    expect(windowPresentation({ fixture: 'off', e2e: 'on', platform: 'darwin' }).activationPolicy).toBeNull()
+  })
+
+  it('runs a fixture launch as an accessory app on macOS only', () => {
     expect(windowPresentation({ fixture: 'on', e2e: 'off', platform: 'darwin' }).activationPolicy).toBe('accessory')
     expect(windowPresentation({ fixture: 'on', e2e: 'off', platform: 'linux' }).activationPolicy).toBeNull()
     expect(windowPresentation({ fixture: 'on', e2e: 'off', platform: 'win32' }).activationPolicy).toBeNull()
