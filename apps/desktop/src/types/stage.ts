@@ -185,4 +185,6 @@ export interface StageRegistry {
   markAllQuit(): Promise<void>
   remove(id: string): void
   list(): readonly InterruptedStage[]
+  /** The worktree path of every `running` entry — `list()` only ever returns interrupted ones. */
+  runningWorktreePaths(): readonly string[]
 }
