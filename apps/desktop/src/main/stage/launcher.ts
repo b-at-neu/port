@@ -48,7 +48,7 @@ interface CreateStageLauncherParams {
   /** The app's own `stage-prompts` folder, which a stage session may read. */
   readonly bundleRoot: string
   readonly readTextFile: (path: string) => Promise<FileResult<string>>
-  readonly ops: Pick<PathOps, 'join'>
+  readonly ops: Pick<PathOps, 'join' | 'samePath'>
 }
 
 /** The one place a failed `SessionStartResult` becomes a message for a dispatch record — never re-derived at a second call site. */
@@ -167,8 +167,20 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       void params.sweepBranches(root).catch(() => undefined)
     }
 
-    const wt = await params.createWorktree({ root, git: params.git, agent: request.agent, number: request.number, integration: request.entry.config.branches.integration, target: request.target })
+    const liveWorktrees = new Set<string>(params.registry.runningWorktreePaths())
+    for (const snapshot of params.store.list()) {
+      if (snapshot.phase !== 'ended' && snapshot.workspace.worktree !== null) liveWorktrees.add(snapshot.workspace.worktree.path)
+    }
+
+    const wt = await params.createWorktree({ root, git: params.git, agent: request.agent, number: request.number, integration: request.entry.config.branches.integration, target: request.target, liveWorktrees })
     if (!wt.ok) return { ok: false, kind: 'failed', message: `Couldn't create the stage worktree: ${wt.message}` }
+
+    const reclaimed = wt.reclaimed
+    if (reclaimed !== null) {
+      for (const superseded of params.registry.list()) {
+        if (params.ops.samePath(superseded.worktree.path, reclaimed)) params.registry.remove(superseded.id)
+      }
+    }
 
     const instructions = await params.loadInstructions(request, wt.path)
     if (!instructions.ok) {

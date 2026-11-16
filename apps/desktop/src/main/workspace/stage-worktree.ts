@@ -1,5 +1,5 @@
 // Creates and releases the worktrees stage sessions run in, always from a fresh fetch of origin and never from the main checkout's HEAD.
-import type { CommandResult, GitRunner } from '@/types/platform'
+import type { CommandResult, GitRunner, PathOps } from '@/types/platform'
 import type { CreateStageWorktreeParams, CreateStageWorktreeResult, ReleaseBranchOutcome } from '@/types/workspace'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
 import { pathExists } from '@/main/platform/files'
@@ -66,19 +66,77 @@ async function planStart(params: CreateStageWorktreeParams): Promise<PlanResult>
   return { ok: true, plan: { branch: name, start, baseLabel: name } }
 }
 
-type BranchCheck = { readonly ok: true; readonly exists: boolean } | { readonly ok: false; readonly message: string }
+type BranchCheck = { readonly ok: true; readonly exists: boolean; readonly reclaimed: string | null } | { readonly ok: false; readonly message: string }
 
-async function checkLocalBranch(git: GitRunner, root: string, branch: string, start: string): Promise<BranchCheck> {
+/** A folder name narrows the candidates for ownership; it is not proof, so the clean and published checks still gate the removal. */
+function isOwnStageWorktree(ops: PathOps, root: string, number: number, path: string): boolean {
+  if (!ops.samePath(ops.dirname(path), ops.join(root, '.claude', 'worktrees'))) return false
+  return new RegExp(`^(plan|impl|review|revise)-${String(number)}(-[0-9a-f]{6})?$`).test(ops.basename(path))
+}
+
+type PublishedCheck = { readonly ok: true } | { readonly ok: false; readonly message: string }
+
+async function checkPublished(git: GitRunner, root: string, branch: string, tip: string, path: string): Promise<PublishedCheck> {
+  const unpublished = failed(`Branch ${branch} is checked out in ${path} with commits that aren't on origin. Push the branch, then retry.`)
+  const couldNotCheck = (reason: string): PublishedCheck => failed(`Couldn't check the leftover worktree at ${path}: ${reason}. Retry, or remove it with: git worktree remove "${path}"`)
+
+  const base = await git(['config', '--get', `branch.${branch}.portBase`], root)
+  if (base.ok && base.stdout.trim() === tip) return { ok: true }
+  if (!base.ok && !(base.kind === 'nonzero' && base.code === 1)) return couldNotCheck(reasonOf(base))
+
+  const remoteRef = `refs/remotes/origin/${branch}`
+  const published = await git(['merge-base', '--is-ancestor', tip, remoteRef], root)
+  if (published.ok) return { ok: true }
+  if (published.kind === 'nonzero' && published.code === 1) return unpublished
+
+  const present = await git(['rev-parse', '--verify', '--quiet', remoteRef], root)
+  if (!present.ok && present.kind === 'nonzero' && present.code === 1) return unpublished
+  return couldNotCheck(reasonOf(published))
+}
+
+/** Removes a leftover worktree holding `branch` only when it is port's own, not live, clean and fully published; any doubt refuses. */
+async function reclaimWorktree(params: CreateStageWorktreeParams, ops: PathOps, branch: string, tip: string, path: string): Promise<PublishedCheck> {
+  const { git, root, number, liveWorktrees } = params
+  const prefix = `Branch ${branch} is checked out in ${path}`
+
+  if (!isOwnStageWorktree(ops, root, number, path)) return failed(`${prefix}, which port didn't create. Finish or remove that worktree, then retry.`)
+  for (const live of liveWorktrees) {
+    if (ops.samePath(live, path)) return failed(`${prefix}, where a stage session is still open. Stop that session, then retry.`)
+  }
+
+  const present = await pathExists(path)
+  if (present) {
+    const status = await git(['status', '--porcelain', '--untracked-files=all'], path)
+    if (!status.ok) return failed(`Couldn't check the leftover worktree at ${path}: ${reasonOf(status)}. Retry, or remove it with: git worktree remove "${path}"`)
+    if (status.stdout.trim() !== '') return failed(`${prefix}, which has uncommitted or untracked changes. Commit and push or discard them, then retry — or remove it with: git worktree remove --force "${path}"`)
+  }
+
+  const published = await checkPublished(git, root, branch, tip, path)
+  if (!published.ok) return published
+
+  const removed = present ? await git(['worktree', 'remove', path], root) : await git(['worktree', 'prune'], root)
+  if (!removed.ok) return failed(`Couldn't remove the leftover worktree at ${path}: ${reasonOf(removed)}.`)
+  return { ok: true }
+}
+
+async function checkLocalBranch(params: CreateStageWorktreeParams, ops: PathOps, branch: string, start: string): Promise<BranchCheck> {
+  const { git, root } = params
   const listed = await git(['for-each-ref', '--format=%(refname)\t%(objectname)\t%(worktreepath)', `refs/heads/${branch}`], root)
   if (!listed.ok) return failed(`git for-each-ref failed: ${reasonOf(listed)}`)
   const row = listed.stdout.split('\n').map((line) => line.split('\t')).find((cols) => cols[0] === `refs/heads/${branch}`)
-  if (row === undefined) return { ok: true, exists: false }
+  if (row === undefined) return { ok: true, exists: false, reclaimed: null }
 
+  const tip = (row[1] ?? '').trim()
   const checkedOutAt = (row[2] ?? '').trim()
-  if (checkedOutAt !== '') return failed(`Branch ${branch} is checked out in ${checkedOutAt}. Resume or restart that stage first.`)
+  let reclaimed: string | null = null
+  if (checkedOutAt !== '') {
+    const outcome = await reclaimWorktree(params, ops, branch, tip, checkedOutAt)
+    if (!outcome.ok) return outcome
+    reclaimed = checkedOutAt
+  }
 
-  const ancestry = await git(['merge-base', '--is-ancestor', (row[1] ?? '').trim(), start], root)
-  if (ancestry.ok) return { ok: true, exists: true }
+  const ancestry = await git(['merge-base', '--is-ancestor', tip, start], root)
+  if (ancestry.ok) return { ok: true, exists: true, reclaimed }
   if (ancestry.kind === 'nonzero' && ancestry.code === 1) return failed(`Local branch ${branch} has commits that aren't on origin. Push or delete it, then retry.`)
   return failed(`git merge-base failed: ${reasonOf(ancestry)}`)
 }
@@ -99,9 +157,9 @@ export async function createStageWorktree(params: CreateStageWorktreeParams): Pr
   if (!resolved.ok) return failed(`Couldn't resolve ${start}: ${reasonOf(resolved)}`)
   const baseSha = resolved.stdout.trim()
 
-  let local: BranchCheck = { ok: true, exists: false }
+  let local: BranchCheck = { ok: true, exists: false, reclaimed: null }
   if (branch !== null) {
-    local = await checkLocalBranch(git, root, branch, start)
+    local = await checkLocalBranch(params, ops, branch, start)
     if (!local.ok) return local
   }
 
@@ -129,7 +187,7 @@ export async function createStageWorktree(params: CreateStageWorktreeParams): Pr
     }
   }
 
-  return { ok: true, path, branch, baseSha, baseLabel }
+  return { ok: true, path, branch, baseSha, baseLabel, reclaimed: local.reclaimed }
 }
 
 async function discardNewWorktree(git: GitRunner, root: string, path: string, createdBranch: string | null): Promise<void> {

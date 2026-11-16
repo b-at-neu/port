@@ -245,7 +245,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       worktreeCounter += 1
       const path = `/scratch/session-${String(worktreeCounter)}`
       createdWorktrees.push(path)
-      return Promise.resolve({ ok: true, path, branch: `session-${String(worktreeCounter)}`, baseSha: 'base-sha', baseLabel: `session-${String(worktreeCounter)}` })
+      return Promise.resolve({ ok: true, path, branch: `session-${String(worktreeCounter)}`, baseSha: 'base-sha', baseLabel: `session-${String(worktreeCounter)}`, reclaimed: null })
     }
     function removeWorktree(path: string, force: boolean): Promise<RemoveSessionWorktreeOutcome> {
       removedWorktrees.push({ path, force })
