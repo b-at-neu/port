@@ -22,6 +22,7 @@ import type {
   WaitingOn,
 } from '@/types/state'
 import type { LabelEventNode } from '@/types/github'
+import { fullKeysOf, type PipelineView, type StoredItem } from '@/types/pipeline-state'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers, indexWorkSessions, workSessionsFor } from '@/main/state/attach'
 import { closingReference, IMPLEMENTATION_PLAN_HEADING, sessionRequiredAt } from '@/main/state/link'
@@ -37,6 +38,19 @@ interface ReconcileRepositoryInput {
   readonly repoSessions: RepoSessionSlice
   readonly worktrees: WorktreesRead
   readonly denials: DenialsRead
+  /** `undefined` or `labels` reads stage from GitHub's labels; `store` reads it from the stored items. */
+  readonly view?: PipelineView
+}
+
+/** Every added key becomes a stage entry, oldest first — a marker is never a stage. */
+function storedHistoryOf(stored: StoredItem): readonly StageEntry[] {
+  const out: StageEntry[] = []
+  for (const row of stored.history) {
+    for (const key of row.add) {
+      if (key !== 'marker' && key !== 'autoPlan') out.push({ key, actor: row.actor, at: row.at })
+    }
+  }
+  return out.sort((a, b) => a.at.localeCompare(b.at))
 }
 
 function itemStatesFreshness(fetch: ItemsByNumberFetch | null): FreshnessEntry {
@@ -102,7 +116,8 @@ function resolveOrphan(number: number, fetch: ItemsByNumberFetch | null, worktre
 }
 
 export function reconcileRepository(input: ReconcileRepositoryInput): RepositoryState {
-  const { entry, pipelineFetch, itemsByNumberFetch, repoSessions, worktrees, denials } = input
+  const { entry, pipelineFetch, itemsByNumberFetch, repoSessions, worktrees, denials, view } = input
+  const stored = new Map((view?.kind === 'store' ? view.items : []).map((item) => [`${item.kind}:${String(item.number)}`, item] as const))
   const repoId = entry.id
   const repo = entry.config.repo
   const displayName = entry.displayName
@@ -129,12 +144,14 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
   const vocabulary = entry.config.vocabulary
   const labelsByName = new Map(vocabulary.labels.map((label) => [label.name, label.key]))
   const worktreeEntries = worktrees.ok ? worktrees.entries : []
-  const orphanNumbers = collectOrphanNumbers(pipelineFetch.items, worktreeEntries, repoSessions.agents)
+  // Under a store view the store, not the cached sweep, decides which items exist.
+  const fetchedItems = view?.kind === 'store' ? pipelineFetch.items.filter((item) => stored.has(`${item.kind}:${String(item.number)}`)) : pipelineFetch.items
+  const orphanNumbers = collectOrphanNumbers(fetchedItems, worktreeEntries, repoSessions.agents)
   const workSessionIndex = indexWorkSessions(repoSessions.sessions, worktreeEntries)
 
   // The closing-keyword join, both directions: a pull request's body names the issue it closes, and the issue's `linked` is the first pull request naming it back.
   const prLinks = new Map<number, number>()
-  for (const item of pipelineFetch.items) {
+  for (const item of fetchedItems) {
     if (item.kind !== 'pull-request') continue
     const ref = closingReference(item.body)
     if (ref !== null) prLinks.set(item.number, ref)
@@ -144,14 +161,16 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     if (!issueLinks.has(issueNumber)) issueLinks.set(issueNumber, prNumber)
   }
 
-  const items: ReconciledItem[] = pipelineFetch.items.map((item) => {
-    const stageResult = stageOf(item.matchedKeys, vocabulary)
+  const items: ReconciledItem[] = fetchedItems.map((item) => {
+    const own: StoredItem | undefined = stored.get(`${item.kind}:${String(item.number)}`)
+    const matchedKeys = own === undefined ? item.matchedKeys : fullKeysOf(own)
+    const stageResult = stageOf(matchedKeys, vocabulary)
     const linked = item.kind === 'pull-request' ? (prLinks.get(item.number) ?? null) : (issueLinks.get(item.number) ?? null)
     // An issue carrying `prOpened` with no link in the open sweep means that pull request is no longer open, never "awaiting merge"; only a positively read MERGED closer makes it `counterpart-merged`.
     const linkReason: LinkReason | null =
       linked !== null
         ? null
-        : item.kind === 'pull-request' || !item.matchedKeys.includes('prOpened')
+        : item.kind === 'pull-request' || !matchedKeys.includes('prOpened')
           ? 'no-closing-keyword'
           : item.closingPullRequests?.some((pr) => pr.state === 'MERGED')
             ? 'counterpart-merged'
@@ -164,7 +183,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     const worktreeAttachments = attachWorktrees(attachTarget, worktreeEntries)
     const workSessions = workSessionsFor(workSessionIndex, item)
 
-    const stageHistory = stageHistoryOf(item.labelEvents, labelsByName)
+    const stageHistory = own === undefined ? stageHistoryOf(item.labelEvents, labelsByName) : storedHistoryOf(own)
     const inFlightKey = stageResult.stages.find((s) => s.role === 'in-flight')?.key
     const claimedAt = stageHistory.findLast((entry) => entry.key === inFlightKey)?.at ?? null
     const sessionsScannedAt = 'at' in repoSessions.freshness ? repoSessions.freshness.at : null
@@ -180,8 +199,8 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     // Parsed for issues only — a pull request's `## Changes` block is prose, not a fence.
     const claimedFiles = item.kind === 'issue' ? parseFilesBlock(item.body) : null
 
-    // Precomputed so the renderer never re-derives it from raw review bodies; `null` for an issue.
-    const reviewCycleCount = item.kind === 'pull-request' ? codeReviewCount(item.reviews ?? undefined) : null
+    // Precomputed so the renderer never re-derives it from raw review bodies; `null` for an issue. The stored count is a high-water mark, so it fails toward the cap.
+    const reviewCycleCount = item.kind === 'pull-request' ? Math.max(own?.reviewCycles ?? 0, codeReviewCount(item.reviews ?? undefined)) : null
 
     // `null` for a pull request — a `## Changes` block is prose, never this heading.
     const planPresent = item.kind === 'issue' ? item.body.split(/\r?\n/).some((line) => line.trim() === IMPLEMENTATION_PLAN_HEADING) : null
@@ -213,7 +232,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
       mergedAt: item.mergedAt,
       updatedAt: item.updatedAt,
       stageHistory,
-      matchedKeys: item.matchedKeys,
+      matchedKeys,
       sources,
       claimedFiles,
       headRefOid: item.headRefOid,

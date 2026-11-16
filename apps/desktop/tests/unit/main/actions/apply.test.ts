@@ -29,7 +29,7 @@ function request(overrides: Partial<ItemActionRequest> = {}): ItemActionRequest 
 function fakeDeps(overrides: Partial<ApplyItemActionDeps> = {}): { readonly deps: ApplyItemActionDeps; readonly calls: LabelWriteRequest[] } {
   const calls: LabelWriteRequest[] = []
   const deps: ApplyItemActionDeps = {
-    applyLabels: (params: ApplyLabelsParams): Promise<WriteOutcome> => {
+    writeState: (params: ApplyLabelsParams): Promise<WriteOutcome> => {
       calls.push(params.request)
       return Promise.resolve({ kind: 'applied', argv: [] })
     },

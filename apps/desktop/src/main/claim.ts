@@ -3,14 +3,11 @@ import { classifyPreflight, buildClaimRequest } from '@/main/claim/classify'
 import type { ClaimApplyResponse, ClaimPreflight, ClaimPreflightResponse, PlanGateChoice } from '@/types/claim'
 import type { ClaimPreflightFetch } from '@/types/github'
 import type { RepoId } from '@/utils/repos'
-import { fetchClaimPreflight } from '@/main/github/adapter'
-import { listRepositories, requireReadyRepo } from '@/main/registry'
+import type { ReadyEntry } from '@/types/actions'
+import { requireReadyRepo } from '@/main/registry'
 import type { RegistryDeps } from '@/types/registry'
-import { applyClaimLabels } from '@/main/actions/claim'
 
 import type { ClaimDeps } from '@/types/claim'
-
-export const defaultClaimDeps: ClaimDeps = { listRepositories, fetchClaimPreflight, applyClaimLabels }
 
 function resolveReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, deps: ClaimDeps) {
   return requireReadyRepo(
@@ -22,10 +19,11 @@ function resolveReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, deps: Cla
   )
 }
 
-// `null` passes straight through so `classifyPreflight` reports `not-found` itself.
-function toClaimPreflight(fetch: Extract<ClaimPreflightFetch, { readonly ok: true }>): ClaimPreflight | null {
+// `null` passes straight through so `classifyPreflight` reports `not-found` itself. Under a store view the labels are the store's.
+function toClaimPreflight(fetch: Extract<ClaimPreflightFetch, { readonly ok: true }>, entry: ReadyEntry, deps: ClaimDeps): ClaimPreflight | null {
   if (fetch.item === null) return null
-  return { ...fetch.item, viewer: fetch.viewer, readAt: fetch.fetchedAt }
+  const labels = deps.stateLabels(entry.id, fetch.item.kind, fetch.item.number, entry.config.vocabulary) ?? fetch.item.labels
+  return { ...fetch.item, labels, viewer: fetch.viewer, readAt: fetch.fetchedAt }
 }
 
 interface ClaimPreflightParams {
@@ -34,12 +32,12 @@ interface ClaimPreflightParams {
   readonly number: number
 }
 
-export async function claimPreflight(params: ClaimPreflightParams, deps: ClaimDeps = defaultClaimDeps): Promise<ClaimPreflightResponse> {
+export async function claimPreflight(params: ClaimPreflightParams, deps: ClaimDeps): Promise<ClaimPreflightResponse> {
   const entry = await resolveReadyEntry(params.registryDeps, params.repoId, deps)
   const fetch = await deps.fetchClaimPreflight({ repo: { owner: entry.config.owner, name: entry.config.name }, number: params.number })
   if (!fetch.ok) return { kind: 'failed', message: fetch.message }
 
-  const preflight = toClaimPreflight(fetch)
+  const preflight = toClaimPreflight(fetch, entry, deps)
   const verdict = classifyPreflight({ item: preflight, vocabulary: entry.config.vocabulary })
   if (preflight === null) return { kind: 'unresolved' }
   return { kind: 'resolved', preflight, verdict }
@@ -63,12 +61,12 @@ function sameAssigneeSet(a: readonly string[], b: readonly string[]): boolean {
 }
 
 // **Re-runs the preflight itself** rather than trusting anything the renderer held.
-export async function claimApply(params: ClaimApplyParams, deps: ClaimDeps = defaultClaimDeps): Promise<ClaimApplyResponse> {
+export async function claimApply(params: ClaimApplyParams, deps: ClaimDeps): Promise<ClaimApplyResponse> {
   const entry = await resolveReadyEntry(params.registryDeps, params.repoId, deps)
   const fetch = await deps.fetchClaimPreflight({ repo: { owner: entry.config.owner, name: entry.config.name }, number: params.number })
   if (!fetch.ok) return { kind: 'preflight-failed', message: fetch.message }
 
-  const preflight = toClaimPreflight(fetch)
+  const preflight = toClaimPreflight(fetch, entry, deps)
   const verdict = classifyPreflight({ item: preflight, vocabulary: entry.config.vocabulary })
   if (verdict.kind !== 'claimable') {
     return { kind: 'refused', verdict }
@@ -91,6 +89,6 @@ export async function claimApply(params: ClaimApplyParams, deps: ClaimDeps = def
     planGate: params.planGate,
   })
 
-  const outcome = await deps.applyClaimLabels({ request, repoRoot: entry.path, auditDir: params.auditDir })
+  const outcome = await deps.writeState({ request, repoRoot: entry.path, auditDir: params.auditDir })
   return { kind: 'write', outcome }
 }

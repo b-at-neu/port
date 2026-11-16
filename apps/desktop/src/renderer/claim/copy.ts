@@ -3,6 +3,7 @@ import { lastLaunchFailed } from '@/renderer/board/dispatch-failures'
 import type { ClaimApplyResponse, ClaimToast, ClaimVerdict, PlanGateChoice } from '@/types/claim'
 import type { RepoDispatchStatus } from '@/types/dispatch'
 import type { WriteOutcome } from '@/types/writes'
+import { mirrorReason } from '@/renderer/lib/mirror-reason'
 
 type Claimable = Extract<ClaimVerdict, { kind: 'claimable' }>
 type Refusal = Exclude<ClaimVerdict, { kind: 'claimable' }>
@@ -115,6 +116,10 @@ export function writeOutcomeCopy(number: number, outcome: WriteOutcome): { reado
     case 'terminal-owned':
     case 'ownership-unreadable':
       return { line: 'Blocked by repository ownership.', note: 'This should be unreachable for Work on — please report it.' }
+    case 'state-unsaved':
+      return { line: `Couldn't save the claim for #${String(number)}.`, note: `${outcome.message} Nothing was written.` }
+    case 'mirror-failed':
+      return { line: `Claimed #${String(number)}.`, note: `The GitHub label couldn't be updated — ${mirrorReason(outcome.mirror)}.` }
   }
 }
 
@@ -147,7 +152,7 @@ export function applyResponseToast(repo: string, number: number, response: Claim
       return unreachableGitHubToast(response.message)
     case 'write': {
       const copy = writeOutcomeCopy(number, response.outcome)
-      const succeeded = response.outcome.kind === 'applied' || response.outcome.kind === 'no-op'
+      const succeeded = response.outcome.kind === 'applied' || response.outcome.kind === 'no-op' || response.outcome.kind === 'mirror-failed'
       return { tone: succeeded ? 'success' : 'error', title: copy.line, description: copy.note }
     }
   }

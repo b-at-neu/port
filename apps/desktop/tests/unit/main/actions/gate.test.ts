@@ -7,7 +7,7 @@ import type { LabelWriteRequest, OwnershipSummary, WriteOutcome } from '@/types/
 import type { OwnershipRead } from '@/types/dispatch'
 import type { ReposListResponse } from '@/types/ipc'
 import { autoApprovePlan, gateAnswer, gatePreflight } from '@/main/actions/gate'
-import type { GateDeps } from '@/main/actions/gate'
+import type { GateDeps } from '@/types/gate'
 import type { RegistryDeps } from '@/types/registry'
 import { readyEntry } from '../../../fixtures/board-state'
 
@@ -35,9 +35,10 @@ function depsWith(overrides: Partial<GateDeps>): GateDeps {
       throw new Error('fetchGatePreflight should not be invoked in this case')
     },
     readOwnership: () => Promise.resolve(ABSENT_OWNERSHIP),
-    applyLabels: () => {
+    writeState: () => {
       throw new Error('applyLabels should not be invoked in this case')
     },
+    stateLabels: () => null,
     postComment: () => {
       throw new Error('postComment should not be invoked in this case')
     },
@@ -133,7 +134,7 @@ describe('gateAnswer', () => {
     const outcome: WriteOutcome = { kind: 'applied', argv: ['issue', 'edit', '148'] }
     const deps = depsWith({
       fetchGatePreflight: () => Promise.resolve(preflightFetch()),
-      applyLabels: (p) => {
+      writeState: (p) => {
         received = p.request
         return Promise.resolve(outcome)
       },
@@ -160,7 +161,7 @@ describe('gateAnswer', () => {
         expect(p.request.action).toBe('request-plan-changes')
         return Promise.resolve(commentOutcome)
       },
-      applyLabels: () => {
+      writeState: () => {
         order.push('labels')
         return Promise.resolve(labelOutcome)
       },
@@ -188,7 +189,7 @@ describe('gateAnswer', () => {
     const deps = depsWith({
       fetchGatePreflight: () => Promise.resolve(preflightFetch()),
       postComment: () => Promise.resolve(commentOutcome),
-      applyLabels: () => {
+      writeState: () => {
         labelsCalled = true
         return Promise.resolve({ kind: 'applied', argv: [] })
       },
@@ -210,7 +211,7 @@ describe('gateAnswer', () => {
         commentCalled = true
         return Promise.resolve({ kind: 'applied', argv: [] })
       },
-      applyLabels: () => Promise.resolve(labelOutcome),
+      writeState: () => Promise.resolve(labelOutcome),
     })
     const result = await gateAnswer(
       { registryDeps, repoId: REPO_ID, number: 148, decision: 'request-changes', feedback: 'x', skipComment: true, auditDir: '/audit', scratchDir: '/scratch' },
@@ -226,7 +227,7 @@ describe('autoApprovePlan', () => {
     let received: LabelWriteRequest | undefined
     const outcome: WriteOutcome = { kind: 'applied', argv: ['issue', 'edit', '148'] }
     const deps = depsWith({
-      applyLabels: (p) => {
+      writeState: (p) => {
         received = p.request
         return Promise.resolve(outcome)
       },

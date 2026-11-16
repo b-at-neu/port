@@ -244,6 +244,8 @@ export interface RefreshOutcome {
   readonly error?: string
   /** GitHub-only — the window this attempt read, so `schedule.ts`'s `deferredUntil` can defer even a successful-but-low-headroom read. */
   readonly rateLimit?: RateLimitInfo | null
+  /** GitHub-only — tracked items the read found closed, merged or gone. */
+  readonly closed?: readonly number[]
   /** GitHub-only — so a `rate-limited` failure can defer to `resetAt` rather than double the interval like any other failure. */
   readonly failureKind?: PipelineFailureKind | null
 }

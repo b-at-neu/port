@@ -16,9 +16,8 @@ import type { StageLauncherHandle, StageRegistry } from '@/types/stage'
 import { createOffload } from '@/main/offload/deps'
 import { statPath } from '@/main/platform/files'
 import type { HostedStore, SessionKey } from '@/types/hosting'
-import { applyItemAction } from '@/main/actions/apply'
-import { applyItemDecision } from '@/main/actions/decide'
-import { gateAnswer, gatePreflight } from '@/main/actions/gate'
+import { bindActions } from '@/main/actions/bound'
+import { createPipelineState } from '@/main/pipeline-state/default'
 import { resolveClaimApply, resolveClaimPreflight } from '@/main/channels/claim'
 import { resolveAuditList } from '@/main/channels/audit'
 import { resolveBacklogDetail, resolveBacklogList } from '@/main/channels/backlog'
@@ -27,7 +26,7 @@ import { resolveWorktreesPurge, resolveWorktreesReclaim, resolveWorktreesReport 
 import { resolveGhStatus } from '@/main/channels/gh'
 import { createDispatchRuntime } from '@/main/dispatch/runtime'
 import { createRunStateStore } from '@/main/dispatch/store'
-import { defaultHaltDispatchDeps, haltDispatch } from '@/main/dispatch/halt'
+import { haltDispatch } from '@/main/dispatch/halt'
 import { registeredRepoIds, resolveDispatchControl } from '@/main/dispatch/resolve'
 import type { Dispatcher } from '@/types/dispatch'
 import { fetchItemsByNumber } from '@/main/github/adapter'
@@ -215,6 +214,10 @@ export function registerIpc(restart: RestartSeams): RegisteredIpc {
   // so construction order between the launcher and the dispatcher that owns recordOutcome stays acyclic.
   let dispatcherRef: Dispatcher | null = null
 
+  // The app's own record of every ticket's stage; every pipeline write goes through its `writeState`.
+  const pipelineState = createPipelineState({ dir: app.getPath('userData'), ownerOf: (repoId) => dispatcherRef?.status().find((status) => status.repoId === repoId)?.owner ?? null })
+  const actions = bindActions(pipelineState)
+
   // stage-sessions.json's sole writer. Loaded once at boot — a `running` entry found then can only
   // mean the process died before it marked itself otherwise, and promotes to `crash`.
   const stageRegistry = createStageRegistry({ path: join(app.getPath('userData'), 'stage-sessions.json'), readJson: readJsonFile, writeJsonAtomic: writeJsonFileAtomic, now: () => new Date() })
@@ -266,6 +269,8 @@ export function registerIpc(restart: RestartSeams): RegisteredIpc {
     fetchItemsByNumber,
     listRepositories,
     registryDeps,
+    actions,
+    stateLabels: pipelineState.stateLabels,
     dirs: { audit: app.getPath('userData'), scratch: app.getPath('temp') },
     now: () => new Date(),
     interrupted: (repoId) => stageRegistry.list().filter((entry) => entry.repoId === repoId),
@@ -283,6 +288,7 @@ export function registerIpc(restart: RestartSeams): RegisteredIpc {
     git: (args, cwd) => git(args, { cwd }),
     runStates: (repoIds) => runStates.snapshot(repoIds),
     ...watcherDeps,
+    ...pipelineState.watcherDeps,
     onSnapshot: (snapshot) => {
       broadcast('board:update', snapshot)
       void autoPlanner.consider(snapshot)
@@ -303,9 +309,9 @@ export function registerIpc(restart: RestartSeams): RegisteredIpc {
 
   handle('board:refresh', (_event, request) => resolveBoardRefresh(registryDeps, request, { listRepositories, refresh: watcher.refresh }))
 
-  handle('claim:preflight', (_event, request) => resolveClaimPreflight(registryDeps, request))
+  handle('claim:preflight', (_event, request) => resolveClaimPreflight(registryDeps, request, actions.claimDeps))
 
-  handle('claim:apply', (_event, request) => resolveClaimApply(registryDeps, request, app.getPath('userData')))
+  handle('claim:apply', (_event, request) => resolveClaimApply(registryDeps, request, app.getPath('userData'), actions.claimDeps))
 
   handle('backlog:list', (_event, request) => resolveBacklogList(registryDeps, request))
   handle('backlog:detail', (_event, request) => resolveBacklogDetail(registryDeps, request))
@@ -341,13 +347,13 @@ export function registerIpc(restart: RestartSeams): RegisteredIpc {
   handle('session:archive:set', (_event, request) => sessionMenu.withRefresh(resolveSessionArchiveSet(request, hostingChannelDeps)))
 
   handle('item:action', (_event, request) =>
-    resolveItemAction(registryDeps, request, app.getPath('userData'), { listRepositories, applyItemAction, snapshot: watcher.snapshot, refresh: watcher.refresh }),
+    resolveItemAction(registryDeps, request, app.getPath('userData'), { listRepositories, applyItemAction: actions.applyItemAction, snapshot: watcher.snapshot, refresh: watcher.refresh }),
   )
 
   handle('item:decide', (_event, request) =>
     resolveItemDecision(registryDeps, request, app.getPath('userData'), app.getPath('temp'), {
       listRepositories,
-      applyItemDecision,
+      applyItemDecision: actions.applyItemDecision,
       sessions: () => hostedStore.list(),
       snapshot: watcher.snapshot,
       refresh: watcher.refresh,
@@ -360,7 +366,7 @@ export function registerIpc(restart: RestartSeams): RegisteredIpc {
       listRepositories,
       runStates,
       haltDispatch: (params) =>
-        haltDispatch(params, { ...defaultHaltDispatchDeps, stopFor: (repoId, number) => dispatcher.stopFor(repoId, number), standDown: (repoId) => dispatcher.standDown(repoId) }),
+        haltDispatch(params, { applyItemAction: actions.applyItemAction, stopFor: (repoId, number) => dispatcher.stopFor(repoId, number), standDown: (repoId) => dispatcher.standDown(repoId) }),
       takeOwnership,
       releaseOwnership,
       snapshot: watcher.snapshot,
@@ -378,7 +384,7 @@ export function registerIpc(restart: RestartSeams): RegisteredIpc {
   handle('runtime:probe', (_event, request) => resolveRuntimeProbe(registryDeps, request, join(app.getPath('userData'), 'runtime-probe')))
 
   // `refresh` is the live watcher's method, never a second poll built here.
-  const gateChannelDeps: GateChannelDeps = { gatePreflight, gateAnswer, refresh: watcher.refresh }
+  const gateChannelDeps: GateChannelDeps = { gatePreflight: actions.gatePreflight, gateAnswer: actions.gateAnswer, refresh: watcher.refresh }
 
   handle('gate:preflight', (_event, request) => resolveGatePreflight(registryDeps, request, gateChannelDeps))
 
@@ -436,7 +442,7 @@ export function registerIpc(restart: RestartSeams): RegisteredIpc {
     launcher: stageLauncher,
     removeWorktree: (path, force) => removeSessionWorktreeAt({ path, force, git: defaultGitRunner() }),
     releaseBranch: (root, branch, baseSha) => releaseStageBranch({ root, git: defaultGitRunner(), branch, baseSha }),
-    applyItemAction,
+    applyItemAction: actions.applyItemAction,
     snapshot: watcher.snapshot,
     auditDir: app.getPath('userData'),
     scratchDir: app.getPath('temp'),

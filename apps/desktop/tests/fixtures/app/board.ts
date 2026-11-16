@@ -98,6 +98,7 @@ function readyRepositoryState(now: Date, scenario: FixtureScenario): RepositoryS
   const pipelineFetch: PipelineFetch = {
     ok: true,
     items,
+    closed: [],
     queried: queriedLabelsFor(vocabulary),
     disabled: vocabulary.disabled,
     vocabulary: WIDGETS_VOCABULARY_REPORT,
@@ -219,6 +220,7 @@ export function gadgetsRepositoryState(now: Date): RepositoryState {
   const pipelineFetch: PipelineFetch = {
     ok: true,
     items: [],
+    closed: [],
     queried: queriedLabelsFor(vocabulary),
     disabled: vocabulary.disabled,
     vocabulary: GADGETS_VOCABULARY_REPORT,

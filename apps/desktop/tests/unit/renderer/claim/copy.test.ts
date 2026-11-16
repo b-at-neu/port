@@ -168,11 +168,18 @@ describe('applyResponseToast', () => {
     [{ kind: 'item-unavailable' }, 'error'],
     [{ kind: 'verify-failed', message: 'm' }, 'error'],
     [{ kind: 'write-failed', classification: 'unknown', stderr: 'boom', reread: null }, 'error'],
+    [{ kind: 'state-unsaved', message: 'disk full' }, 'error'],
+    [{ kind: 'mirror-failed', mirror: { kind: 'verify-failed', message: 'offline' } }, 'success'],
   ] as unknown as ReadonlyArray<readonly [WriteOutcome, 'success' | 'error']>
 
   it.each(outcomes)('maps the %j write outcome through writeOutcomeCopy with the matching tone', (outcome, tone) => {
     const copy = writeOutcomeCopy(101, outcome)
     expect(applyResponseToast(REPO, 101, { kind: 'write', outcome })).toEqual({ tone, title: copy.line, description: copy.note })
+  })
+
+  it('says what moved and what did not for the two state-store outcomes', () => {
+    expect(writeOutcomeCopy(101, { kind: 'state-unsaved', message: 'disk full' })).toEqual({ line: "Couldn't save the claim for #101.", note: 'disk full Nothing was written.' })
+    expect(writeOutcomeCopy(101, { kind: 'mirror-failed', mirror: { kind: 'verify-failed', message: 'offline' } })).toEqual({ line: 'Claimed #101.', note: "The GitHub label couldn't be updated — offline." })
   })
 
   it('no longer promises a next tick on a plain applied write', () => {

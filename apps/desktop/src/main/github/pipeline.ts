@@ -22,8 +22,9 @@ import type {
   UnavailableAlias,
 } from '@/types/github'
 import { bodyOf, classifyFailure, collectUnavailable, parseEnvelope } from '@/main/github/envelope'
-import { applyItemDetails, mapPipelineItems, toIntegrationChecks } from '@/main/github/map'
-import { FIRST_SWEEP_PAGE, buildIntegrationChecksQuery, buildItemDetailsQuery, buildPipelineQuery } from '@/main/github/query'
+import { applyItemDetails, mapPipelineItems, mapTrackedItem, toIntegrationChecks } from '@/main/github/map'
+import { FIRST_SWEEP_PAGE, buildIntegrationChecksQuery, buildItemDetailsQuery, buildPipelineQuery, buildTrackedItemsQuery } from '@/main/github/query'
+import type { TrackedRef } from '@/types/pipeline-state'
 import { repoGraphqlRequest } from '@/main/github/request'
 
 const MAX_SWEEP_PAGES = 10
@@ -223,6 +224,40 @@ async function readDetails(github: GitHubTransport, repo: GitHubRepoRef, items: 
   return { details, rateLimit: total }
 }
 
+interface TrackedResult {
+  readonly items: readonly PipelineItem[]
+  readonly closed: readonly number[]
+  readonly rateLimit: RateLimitInfo
+}
+
+/** An alias GitHub reports as not found is gone for good, so it is closed; any other error or a malformed node fails the whole read, the same rule as the detail read. */
+async function readTracked(github: GitHubTransport, repo: GitHubRepoRef, vocabulary: LabelVocabulary, missing: readonly TrackedRef[], rateLimit: RateLimitInfo): Promise<TrackedResult | Failure> {
+  const items: PipelineItem[] = []
+  const closed: number[] = []
+  let total = rateLimit
+  for (let start = 0; start < missing.length; start += DETAIL_CHUNK_SIZE) {
+    const chunk = missing.slice(start, start + DETAIL_CHUNK_SIZE)
+    const { document, aliases } = buildTrackedItemsQuery(chunk)
+    const reply = await graphql(github, repo, document)
+    if (!reply.ok) return reply
+    total = addRateLimit(total, reply.data.rateLimit)
+    const errors = reply.errors ?? []
+    for (const [idx, alias] of aliases.entries()) {
+      const node = asRecord(reply.repository[alias.alias])
+      const own = errors.filter((error) => error.path?.[1] === alias.alias)
+      if (node === undefined && own.length > 0 && own.every((error) => error.type === 'NOT_FOUND')) {
+        closed.push(alias.number)
+        continue
+      }
+      const item = node === undefined || own.length > 0 ? undefined : mapTrackedItem(node, alias.kind, vocabulary, `${repo.owner}/${repo.name}`, chunk[idx]?.keys ?? [])
+      if (item === undefined) return { ok: false, kind: 'no-data', message: `the read of tracked ${alias.kind} #${alias.number} came back empty` }
+      if (item.state === 'OPEN') items.push(item)
+      else closed.push(alias.number)
+    }
+  }
+  return { items, closed, rateLimit: total }
+}
+
 interface IntegrationResult {
   readonly checks: IntegrationChecks | null
   readonly rateLimit: RateLimitInfo
@@ -241,6 +276,8 @@ interface FetchPipelineItemsParams {
   readonly repo: GitHubRepoRef
   readonly vocabulary: LabelVocabulary
   readonly integration: string
+  /** The store's items: non-null makes them, not the swept labels, the set of items read. `null` is the label path. */
+  readonly tracked?: readonly TrackedRef[] | null
   readonly github?: GitHubTransport
   readonly now?: () => Date
 }
@@ -260,14 +297,33 @@ export async function fetchPipelineItems(params: FetchPipelineItemsParams): Prom
   const swept = await sweep(github, params.repo, params.vocabulary)
   if ('ok' in swept) return { ...swept, fetchedAt }
 
-  const light = SWEEP_ALIASES.flatMap((alias) => mapPipelineItems(swept.state.nodes[alias], surfaceOf(alias), params.vocabulary, repo))
-  const detailed = await readDetails(github, params.repo, light, swept.rateLimit)
+  const sweptItems = SWEEP_ALIASES.flatMap((alias) => mapPipelineItems(swept.state.nodes[alias], surfaceOf(alias), params.vocabulary, repo))
+  let light = sweptItems
+  let closed: readonly number[] = []
+  let rateLimit = swept.rateLimit
+  const trackedRefs = params.tracked ?? null
+  if (trackedRefs !== null) {
+    const tracked = new Map(trackedRefs.map((ref) => [`${ref.kind}:${String(ref.number)}`, ref]))
+    const kept = sweptItems.flatMap((item) => {
+      const ref = tracked.get(`${item.kind}:${String(item.number)}`)
+      return ref === undefined ? [] : [{ ...item, matchedKeys: ref.keys }]
+    })
+    const seen = new Set(kept.map((item) => `${item.kind}:${String(item.number)}`))
+    const missing = trackedRefs.filter((ref) => !seen.has(`${ref.kind}:${String(ref.number)}`))
+    const read = await readTracked(github, params.repo, params.vocabulary, missing, rateLimit)
+    if ('ok' in read) return { ...read, fetchedAt }
+    light = [...kept, ...read.items]
+    closed = read.closed
+    rateLimit = read.rateLimit
+  }
+  const detailed = await readDetails(github, params.repo, light, rateLimit)
   if ('ok' in detailed) return { ...detailed, fetchedAt }
   const integration = await readIntegrationChecks(github, params.repo, params.integration, detailed.rateLimit)
 
   return {
     ok: true,
     items: applyItemDetails(light, detailed.details),
+    closed,
     queried: queriedLabelsOf(params.vocabulary),
     disabled: params.vocabulary.disabled,
     vocabulary: verifyVocabulary(params.vocabulary, swept.repoLabels),

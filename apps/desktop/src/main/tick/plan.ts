@@ -12,7 +12,7 @@ import type { ClaimedItem, OccupiedEntry } from '../../../../../scripts/port-tic
 import { gateCandidates } from '../../../../../scripts/port-tick/contention'
 import type { Disposition } from '../../../../../scripts/port-tick/checks'
 import { zeroDiffChecksOf } from '../../../../../scripts/port-tick/checks'
-import { cycleCapExceeded, cycleGrantCount, integrationRedGate, mergeabilityRoute, refreshWins, zeroDiffGate } from '../../../../../scripts/port-tick/gates'
+import { cycleGrantCount, integrationRedGate, mergeabilityRoute, refreshWins, zeroDiffGate } from '../../../../../scripts/port-tick/gates'
 
 import { RETRY_TRIGGER } from '../../../../../scripts/port-tick/liveness'
 import { observationsOf } from '@/main/tick/observe'
@@ -217,7 +217,7 @@ function actionableAndHeld(
 
     // The cycle-cap gate: unconditional, fires whatever the latest review said. The effective cap
     // folds in any operator-granted cycles.
-    if (agent === 'revise' && cycleCapExceeded(item.reviews ?? undefined, reviewCycleCap, item.comments ?? undefined)) {
+    if (agent === 'revise' && (item.reviewCycleCount ?? 0) >= reviewCycleCap + cycleGrantCount(item.comments ?? undefined)) {
       held.push({
         number: item.number,
         kind: item.kind,

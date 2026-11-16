@@ -13,6 +13,7 @@ import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { WorktreeEntry } from '@/types/local'
 import type { AgentRecord } from '@/types/sessions'
 import type { RefreshOutcome, SourceCache } from '@/types/state'
+import type { TrackedRef } from '@/types/pipeline-state'
 
 export function createSourceCache(): SourceCache {
   return { github: new Map(), itemStates: new Map(), worktrees: new Map(), denials: new Map(), etags: createEtagCache(), sessions: null }
@@ -28,6 +29,7 @@ interface RefreshGithubParams {
   readonly vocabulary: LabelVocabulary
   /** `branches.integration`, whose recent check history the integration-red gate compares against. */
   readonly integration: string
+  readonly tracked?: readonly TrackedRef[] | null
   /** Read from whatever the worktree/session sources most recently returned — never re-fetched here; this primitive composes, it does not read a second source. */
   readonly worktreeEntries: readonly WorktreeEntry[]
   readonly agents: readonly AgentRecord[]
@@ -38,7 +40,7 @@ interface RefreshGithubParams {
 /** Fires the conditional `fetchItemsByNumber` re-check itself whenever the fresh sweep leaves orphan numbers, so `itemStates` stays dependent on a GitHub refresh. */
 export async function refreshGithub(cache: SourceCache, params: RefreshGithubParams): Promise<RefreshOutcome> {
   const now = params.now ?? (() => new Date())
-  const fetch = await fetchPipelineItems({ repo: params.repo, vocabulary: params.vocabulary, integration: params.integration, github: params.github, now })
+  const fetch = await fetchPipelineItems({ repo: params.repo, vocabulary: params.vocabulary, integration: params.integration, tracked: params.tracked, github: params.github, now })
   const previous = cache.github.get(params.repoId) ?? null
   cache.github.set(params.repoId, projectOk(previous, fetch))
 
@@ -48,7 +50,7 @@ export async function refreshGithub(cache: SourceCache, params: RefreshGithubPar
   }
 
   return fetch.ok
-    ? { ok: true, at: fetch.fetchedAt, rateLimit: fetch.rateLimit }
+    ? { ok: true, at: fetch.fetchedAt, rateLimit: fetch.rateLimit, closed: fetch.closed }
     : { ok: false, at: fetch.fetchedAt, error: fetch.message, failureKind: fetch.kind }
 }
 

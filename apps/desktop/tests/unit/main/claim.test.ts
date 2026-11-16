@@ -34,9 +34,10 @@ function depsWith(overrides: Partial<ClaimDeps>): ClaimDeps {
     fetchClaimPreflight: () => {
       throw new Error('fetchClaimPreflight should not be invoked in this case')
     },
-    applyClaimLabels: () => {
-      throw new Error('applyClaimLabels should not be invoked in this case')
+    writeState: () => {
+      throw new Error('writeState should not be invoked in this case')
     },
+    stateLabels: () => null,
     ...overrides,
   }
 }
@@ -96,12 +97,12 @@ describe('claimApply', () => {
     expect(result).toEqual({ kind: 'moved', confirmed: [], current: ['bob'], readAt: '2026-01-01T00:00:00.000Z' })
   })
 
-  it('builds the request and forwards applyLabels\' outcome unchanged, when confirmed and fresh assignees agree', async () => {
+  it('builds the request and forwards writeState\'s outcome unchanged, when confirmed and fresh assignees agree', async () => {
     let received: LabelWriteRequest | undefined
     const outcome: WriteOutcome = { kind: 'applied', argv: ['issue', 'edit', '93'] }
     const deps = depsWith({
       fetchClaimPreflight: () => Promise.resolve(preflightFetch()),
-      applyClaimLabels: (params) => {
+      writeState: (params) => {
         received = params.request
         return Promise.resolve(outcome)
       },
@@ -111,6 +112,12 @@ describe('claimApply', () => {
     expect(received?.add).toEqual(['marker', 'ready', 'autoPlan'])
     expect(received?.addAssignees).toEqual(['alice'])
     expect(received?.repo).toBe('acme/widgets')
+  })
+
+  it('refuses a ticket the store already tracks, even when GitHub shows no labels', async () => {
+    const deps = depsWith({ fetchClaimPreflight: () => Promise.resolve(preflightFetch()), stateLabels: () => ['claude', 'ready'] })
+    const result = await claimApply({ registryDeps, repoId: REPO_ID, number: 93, planGate: 'review', confirmedAssignees: [], auditDir: '/audit' }, deps)
+    expect(result).toEqual({ kind: 'refused', verdict: { kind: 'already-claimed', markerName: 'claude' } })
   })
 
   it('surfaces an unreachable preflight as preflight-failed, without writing', async () => {

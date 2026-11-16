@@ -60,6 +60,14 @@ describe('planTick — cycle-cap and zero-diff gates (#108)', () => {
     ])
   })
 
+  it('the cap reads the item\'s review count, so a stored high-water mark holds a revise that GitHub\'s reviews alone would not', () => {
+    const reviews = [{ body: '## Code Review — Cycle 1', submittedAt: '2026-01-01T00:00:00Z', commitOid: 'sha1' }]
+    const repo = readyRepo([reviseItem({ reviews, reviewCycleCount: 5 })])
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    expect(report.actionable).toEqual([])
+    expect(report.held).toMatchObject([{ number: 204, reason: 'cycle-cap', escalation: { kind: 'cycle-cap', count: 5, cap: 5 } }])
+  })
+
   it('a revise candidate at cap with one grant comment dispatches, cap folded into cycle', () => {
     const reviews = Array.from({ length: 5 }, (_, i) => ({ body: `## Code Review — Cycle ${String(i + 1)}`, submittedAt: '2026-01-01T00:00:00Z', commitOid: 'sha1' }))
     const comments = [{ body: '## Gate cleared\n\n### Cycle grant\nOne extra review cycle for this PR only; reviewCycleCap is unchanged.', createdAt: '2026-01-01T00:00:00Z' }]

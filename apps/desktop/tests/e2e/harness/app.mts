@@ -132,7 +132,8 @@ export async function launchE2EApp(params: LaunchParams): Promise<E2EApp> {
     },
     async close() {
       await harness.app.close()
-      await rm(sandboxDir, { recursive: true, force: true })
+      // The app may still be finishing an atomic state write as it exits; retry the ENOTEMPTY it races.
+      await rm(sandboxDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
     },
   }
   return harness

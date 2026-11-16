@@ -5,6 +5,7 @@ import type { GitHubTransport } from '@/types/platform'
 import { readSessionState } from '@/main/sessions/adapter'
 import type { GitRunner } from '@/types/platform'
 import type { RepositoryEntry } from '@/utils/repos'
+import type { PipelineView } from '@/types/pipeline-state'
 import type { FreshnessEntry, PipelineState, RepositoryState } from '@/types/state'
 import { reconcileRepository } from '@/main/state/reconcile'
 
@@ -31,7 +32,7 @@ function splitRepo(repo: string): { readonly owner: string; readonly name: strin
 }
 
 /** Builds one `PipelineState` from whatever a `SourceCache` currently holds — no I/O of its own. Shared by `readPipelineState` and `watcher.ts` so the join logic exists once. */
-export function projectFromCache(cache: SourceCache, repositories: readonly RepositoryEntry[], now: () => Date = () => new Date()): PipelineState {
+export function projectFromCache(cache: SourceCache, repositories: readonly RepositoryEntry[], now: () => Date = () => new Date(), views: Readonly<Record<string, PipelineView>> = {}): PipelineState {
   const readAt = now().toISOString()
   const sessionScan = cache.sessions ?? { ok: false as const, kind: 'sdk-unavailable' as const, message: 'sessions have not been scanned yet', scannedAt: readAt }
   const sessionsFreshness: FreshnessEntry = sessionScan.ok ? { at: sessionScan.scannedAt } : { unavailable: sessionScan.message }
@@ -52,7 +53,7 @@ export function projectFromCache(cache: SourceCache, repositories: readonly Repo
     const repoSessionRecords = sessionScan.ok ? sessionScan.sessions.filter((s) => s.repoId === entry.id) : []
     const repoSessions: RepoSessionSlice = { agents: repoAgents, sessions: repoSessionRecords, available: sessionScan.ok, freshness: sessionsFreshness }
 
-    repositoriesOut.push(reconcileRepository({ entry, pipelineFetch, itemsByNumberFetch, repoSessions, worktrees, denials }))
+    repositoriesOut.push(reconcileRepository({ entry, pipelineFetch, itemsByNumberFetch, repoSessions, worktrees, denials, view: views[entry.id] }))
   }
 
   return { repositories: repositoriesOut, sessions: sessionScan, readAt }

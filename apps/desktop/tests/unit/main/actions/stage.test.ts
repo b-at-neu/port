@@ -43,10 +43,10 @@ function pr(number: number, overrides: Partial<ResolvedItem> = {}): ResolvedItem
   return { number, kind: 'pull-request', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: [], assignees: ['op'], headRefName: '52-add-thing', author: 'op', ...overrides }
 }
 
-function deps(items: readonly ResolvedItem[], outcomes: readonly WriteOutcome[] = []) {
+function deps(items: readonly ResolvedItem[], outcomes: readonly WriteOutcome[] = [], stored: readonly string[] | null = null) {
   const queue = [...outcomes]
   const applied: ApplyLabelsParams[] = []
-  const applyLabels = vi.fn((params: ApplyLabelsParams): Promise<WriteOutcome> => {
+  const writeState = vi.fn((params: ApplyLabelsParams): Promise<WriteOutcome> => {
     applied.push(params)
     return Promise.resolve(queue.shift() ?? { kind: 'applied', argv: [] })
   })
@@ -54,8 +54,9 @@ function deps(items: readonly ResolvedItem[], outcomes: readonly WriteOutcome[] 
     const wanted = new Set(params.numbers)
     return Promise.resolve({ ok: true as const, resolved: items.filter((i) => wanted.has(i.number)), unavailable: params.numbers.filter((n) => !items.some((i) => i.number === n)), fetchedAt: 'r' })
   })
-  const writeDeps: StageWriteDeps = { applyLabels, fetchItemsByNumber }
-  return { writeDeps, applied, applyLabels, fetchItemsByNumber }
+  const stateLabels = vi.fn((): readonly string[] | null => stored)
+  const writeDeps: StageWriteDeps = { writeState, stateLabels, fetchItemsByNumber }
+  return { writeDeps, applied, writeState, fetchItemsByNumber, stateLabels }
 }
 
 const IMPL = { number: 52, kind: 'issue', agent: 'impl', trigger: 'planApproved' } as const
@@ -82,7 +83,7 @@ describe('applyStageClaim', () => {
     const rig = deps([])
     const result = await applyStageClaim({ entry: entry(), candidate: IMPL, resolved: issue(['plan approved', 'blocked']), auditDir: '/audit' }, rig.writeDeps)
     expect(result).toEqual({ kind: 'refused', reason: 'moved', retryable: false, detail: null })
-    expect(rig.applyLabels).not.toHaveBeenCalled()
+    expect(rig.writeState).not.toHaveBeenCalled()
   })
 
   it('maps a failed precondition at the chokepoint to moved, never retryable', async () => {
@@ -105,6 +106,7 @@ describe('applyStageTransition — refusals map from the write outcome', () => {
     [{ kind: 'verify-failed', message: 'no net' }, 'write-failed', true],
     [{ kind: 'ownership-unreadable', path: 'p', message: 'bad' }, 'write-failed', true],
     [{ kind: 'item-unavailable' }, 'write-failed', true],
+    [{ kind: 'state-unsaved', message: 'disk full' }, 'write-failed', true],
   ])('%j → %s (retryable: %s)', async (outcome, reason, retryable) => {
     const rig = deps([planning], [outcome])
     const result = await applyStageTransition({ entry: entry(), record, event, auditDir: '/audit' }, rig.writeDeps)
@@ -116,11 +118,30 @@ describe('applyStageTransition — refusals map from the write outcome', () => {
     expect(await applyStageTransition({ entry: entry(), record, event, auditDir: '/audit' }, rig.writeDeps)).toEqual({ kind: 'applied' })
   })
 
+  it('treats a failed label mirror as applied, since the state moved', async () => {
+    const rig = deps([planning], [{ kind: 'mirror-failed', mirror: { kind: 'write-failed', classification: 'network', stderr: 'boom', reread: null } }])
+    expect(await applyStageTransition({ entry: entry(), record, event, auditDir: '/audit' }, rig.writeDeps)).toEqual({ kind: 'applied' })
+  })
+
+  it('observes the stage from the store, not from the labels GitHub returned', async () => {
+    const rig = deps([planning], [], ['claude', 'plan review'])
+    const result = await applyStageTransition({ entry: entry(), record, event, auditDir: '/audit' }, rig.writeDeps)
+    expect(result).toEqual({ kind: 'refused', reason: 'moved', retryable: false, detail: null })
+    expect(rig.writeState).not.toHaveBeenCalled()
+  })
+
+  it('claims a ticket whose labels were removed on GitHub when the store still holds its stage', async () => {
+    const rig = deps([], [], ['claude', 'plan approved'])
+    const result = await applyStageClaim({ entry: entry(), candidate: IMPL, resolved: issue([]), auditDir: '/audit' }, rig.writeDeps)
+    expect(result).toEqual({ kind: 'applied' })
+    expect(rig.applied[0]?.request.expect.present).toEqual(['planApproved'])
+  })
+
   it('an unreadable item is a retryable write-failed with no write', async () => {
     const rig = deps([])
     const result = await applyStageTransition({ entry: entry(), record, event, auditDir: '/audit' }, rig.writeDeps)
     expect(result).toMatchObject({ kind: 'refused', reason: 'write-failed', retryable: true })
-    expect(rig.applyLabels).not.toHaveBeenCalled()
+    expect(rig.writeState).not.toHaveBeenCalled()
   })
 
   it('a failed read is a retryable write-failed with the message', async () => {
@@ -148,7 +169,7 @@ describe('applyStageTransition — refusals map from the write outcome', () => {
     const rig = deps([planning])
     const result = await applyStageTransition({ entry: entry(), record, event: { kind: 'outcome', outcome: 'interrupted', handback: null }, auditDir: '/audit' }, rig.writeDeps)
     expect(result).toEqual({ kind: 'applied' })
-    expect(rig.applyLabels).not.toHaveBeenCalled()
+    expect(rig.writeState).not.toHaveBeenCalled()
   })
 })
 
@@ -180,14 +201,14 @@ describe('applyStageTransition — pr-opened', () => {
     const rig = deps([inProgress, pr(8, { state: 'CLOSED' })])
     const result = await applyStageTransition({ entry: entry(), record, event: PR_OPENED, auditDir: '/audit' }, rig.writeDeps)
     expect(result).toEqual({ kind: 'refused', reason: 'pr-unverified', retryable: false, detail: null })
-    expect(rig.applyLabels).not.toHaveBeenCalled()
+    expect(rig.writeState).not.toHaveBeenCalled()
   })
 
   it('rejects a pull request on another issue’s branch', async () => {
     const rig = deps([inProgress, pr(8, { headRefName: '53-other-thing' })])
     const result = await applyStageTransition({ entry: entry(), record, event: PR_OPENED, auditDir: '/audit' }, rig.writeDeps)
     expect(result).toMatchObject({ reason: 'pr-unverified' })
-    expect(rig.applyLabels).not.toHaveBeenCalled()
+    expect(rig.writeState).not.toHaveBeenCalled()
   })
 
   it('does not match a branch that only starts with the same digits', async () => {
@@ -198,7 +219,7 @@ describe('applyStageTransition — pr-opened', () => {
   it('rejects an issue named as the pull request', async () => {
     const rig = deps([inProgress, issue([], 8)])
     expect(await applyStageTransition({ entry: entry(), record, event: PR_OPENED, auditDir: '/audit' }, rig.writeDeps)).toMatchObject({ reason: 'pr-unverified' })
-    expect(rig.applyLabels).not.toHaveBeenCalled()
+    expect(rig.writeState).not.toHaveBeenCalled()
   })
 
   it('rejects a pull request that does not exist', async () => {
@@ -226,7 +247,7 @@ describe('applyStageTransition — pr-opened', () => {
     const rig = deps([issue(['in progress', 'blocked']), pr(8)])
     const result = await applyStageTransition({ entry: entry(), record, event: PR_OPENED, auditDir: '/audit' }, rig.writeDeps)
     expect(result).toMatchObject({ reason: 'moved' })
-    expect(rig.applyLabels).not.toHaveBeenCalled()
+    expect(rig.writeState).not.toHaveBeenCalled()
   })
 
   it('accepts a blocked issue', async () => {

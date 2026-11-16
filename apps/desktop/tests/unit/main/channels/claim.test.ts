@@ -44,9 +44,10 @@ function claimDepsWith(overrides: Partial<ClaimDeps>): ClaimDeps {
     fetchClaimPreflight: () => {
       throw new Error('fetchClaimPreflight should not be invoked in this case')
     },
-    applyClaimLabels: () => {
-      throw new Error('applyClaimLabels should not be invoked in this case')
+    writeState: () => {
+      throw new Error('writeState should not be invoked in this case')
     },
+    stateLabels: () => null,
     ...overrides,
   }
 }

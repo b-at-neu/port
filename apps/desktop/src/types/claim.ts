@@ -6,6 +6,7 @@ import type { WriteOutcome } from '@/types/writes'
 import type { GitHubTransport } from '@/types/platform'
 import type { RegistryDeps } from '@/types/registry'
 import type { ReposListResponse } from '@/types/ipc'
+import type { StateLabelsReader } from '@/types/pipeline-state'
 
 /** IPC-validated at `main/ipc.ts` against this exact list — a literal union carries no runtime list of its own to check a request against. */
 export const PLAN_GATE_CHOICES = ['review', 'auto'] as const
@@ -61,5 +62,7 @@ export interface ClaimToast {
 export interface ClaimDeps {
   readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
   readonly fetchClaimPreflight: (params: { readonly repo: GitHubRepoRef; readonly number: number; readonly github?: GitHubTransport; readonly now?: () => Date }) => Promise<ClaimPreflightFetch>
-  readonly applyClaimLabels: (params: ApplyLabelsParams) => Promise<WriteOutcome>
+  readonly writeState: (params: ApplyLabelsParams) => Promise<WriteOutcome>
+  /** The store's labels for an item, so a ticket the store tracks is refused exactly as a labelled one is. */
+  readonly stateLabels: StateLabelsReader
 }
