@@ -53,6 +53,8 @@ test('renders the epic as waves with a band, then the flat rows', async () => {
   await expect(progress.locator('[data-slot="meter-segment"]').nth(1)).toHaveAttribute('data-fill', 'progress')
   await progress.hover()
   await expect(page.getByRole('tooltip').first()).toContainText('1 done · 1 in progress · 2 not started')
+  await page.mouse.move(0, 0)
+  await expect(page.getByRole('tooltip')).toHaveCount(0)
 
   await expect(epic.locator('[data-slot="backlog-wave"][data-wave="1"] [data-slot="backlog-row"]')).toContainText('#201')
   const band = epic.locator('[data-slot="backlog-wave-band"]')

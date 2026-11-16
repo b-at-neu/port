@@ -1,6 +1,6 @@
 // Work on's confirmation for a blocked ticket — lists its open blockers.
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/renderer/components/ui/alert-dialog'
-import { BACKLOG_START_ANYWAY, backlogBlockedReasonCopy, backlogBlockerLine, backlogBlockerTruncatedCopy,backlogStartAnywayTitle } from '@/renderer/backlog/copy'
+import { BACKLOG_START_ANYWAY, backlogBlockedReasonCopy, backlogBlockerLine, backlogBlockerTruncatedCopy, backlogStartAnywayTitle } from '@/renderer/backlog/copy'
 import type { WorkOnReasons } from '@/types/backlog'
 
 interface WorkOnConfirmProps {
