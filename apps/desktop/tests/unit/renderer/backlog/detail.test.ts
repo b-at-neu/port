@@ -61,9 +61,10 @@ describe('assigneeView', () => {
 })
 
 describe('epicSummaryView', () => {
-  const child = (number: number) => ({ number, title: `Ticket ${String(number)}`, state: 'OPEN' as const, claimed: false, blockers: { ok: true as const, open: [], shown: 0, total: 0 } })
+  const child = (number: number) => ({ number, title: `Ticket ${String(number)}`, state: 'OPEN' as const, claimed: false, blockers: { ok: true as const, open: [], closed: [], shown: 0, total: 0 } })
   const ok = (overrides: Partial<Extract<BacklogEpicSummary, { ok: true }>> = {}): BacklogEpicSummary => ({
     ok: true,
+    wavesMayShift: false,
     done: 1,
     inProgress: 2,
     open: 3,
