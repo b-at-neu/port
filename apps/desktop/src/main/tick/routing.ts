@@ -22,10 +22,6 @@ export const AGENT_FOR_IN_FLIGHT: Readonly<Partial<Record<LabelKey, StageAgent>>
   refreshing: 'revise',
 }
 
-/** The one label pair sanctioned to sit beside each other. Transcribed byte-for-byte from
- *  scripts/port-tick/reconcile.ts's own REFRESH_PAIR, pinned both directions. */
-export const REFRESH_PAIR: readonly LabelKey[] = ['refreshBranch', 'refreshing']
-
 /** The forward direction of `AGENT_FOR_IN_FLIGHT` — `main/stage/launcher.ts`'s own seam for the in-flight key a just-launched stage carries, disambiguating `revise`'s two in-flight keys by `trigger`. */
 export function inFlightKeyFor(agent: StageAgent, trigger: LabelKey): LabelKey {
   if (trigger === 'refreshBranch') return 'refreshing'

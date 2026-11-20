@@ -69,7 +69,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - fires from `main/ipc.ts`'s `onTick:` only — a fresh poll, never `onSnapshot:`'s own republish, which would retrigger the loop off its own state change
 - a pass requested while one is in flight is coalesced into one follow-up on the newest snapshot, never dropped
 - a `completed` hand-back's settled label write or an applied auto-approve requests one github-scoped read through the watcher, never a second clock, and the dispatch still comes from `onTick`
-- `transitions.ts` is the pure (stage, event) → label plan table and `handoff.ts` its per-repository queue: the claim runs before launch, a failed launch rolls it back, a failed write is retried up to `HANDOFF_ATTEMPTS` and then reported, and a missing or unknown `HANDBACK:` token, a moved label or an unverified pull request is refused and reported, never guessed past
+- `transitions.ts` is the pure (stage, event) → label plan table and `handoff.ts` its per-repository queue: the claim runs before launch, a failed launch rolls it back, a failed write is retried up to `HANDOFF_ATTEMPTS` and then reported, and a missing or unknown `HANDBACK:` token, a moved stage or an unverified pull request is refused and reported, never guessed past
 - capacity comes from the hosted-session store (`launch.ts`'s `freeSlots`); launches across every repository are serialized into one promise chain so two repositories never race for a slot
 - `ledger.record` only after a launch returns `ok`; the budget gate is the last veto before it
 - the budget gate (`budget-gate.ts`) runs in-process and never spawns `commands.budget`, which the app reads only as an on/off switch; `budget-ledger.ts` is pure with no value imports and byte-compatible with `bin/budget.mjs`, which `desktop-dispatch` pins; the ledger comment is read in `main/github/ledger-read.ts` and written in `main/writes/ledger-comment.ts`, which is cost bookkeeping and bypasses `command.ts` and the audit log since it writes no label
@@ -130,11 +130,15 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - a worker crash fails closed into each op's existing failure value, never an empty result; a failed projection keeps the last good board and still schedules the next tick
 
 **`apps/desktop/src/main/pipeline-state/`**
-- the app's own record of every ticket's stage, claim, gates, review cycles and history, and the source of truth for what the tick, reconcile, repair and dispatch decide; GitHub labels are a mirror written after it
+- the app's own record of every ticket's stage, claim, gates, review cycles and history, and the source of truth for what the tick, reconcile, repair and dispatch decide; GitHub labels are a one-way display mirror written after it, never read for a decision
 - `store.ts` is the state file's only writer, and `default.ts` is the only place that names the file; a transition awaits its atomic write and reports `persist-failed` without changing memory, so it is never reported as applied until it is on disk
-- `writer.ts`'s `writeState` is the only caller of `applyLabels`: it checks `expect.present`/`absent` against the store, commits the store, then mirrors the label diff with the label half of the precondition emptied; a failed mirror is `mirror-failed` and never rolls the store back
-- a repository the store does not hold, a terminal owner and an unresolvable key all fall through to `applyLabels` itself, which refuses or writes exactly as before
-- fails toward reseeding: a missing, malformed or newer-version file loads empty and every repository reseeds from its labels on the next projection, never toward refusing to start; a bad item is dropped, never its repository
+- `mirror.ts` is pure and imports nothing from `main/platform/`, `main/writes/` or `main/github/`: it maps stored keys to display labels, finds an item's counterpart, and diffs the desired names against the observed ones
+- `writer.ts`'s `writeState` is the only caller of `applyLabels`: it checks `expect.present` against the store, commits the store, then writes the whole label set for the post-transition state, so a label added, removed or edited by hand is overwritten; a failed mirror is `mirror-failed`, is recorded on the stored item and never rolls the store back
+- an app-only repository mirrors the seven display labels; any other repository mirrors the store's own full key set, so a terminal cockpit that takes it over still finds its record
+- a pull request write re-mirrors its ticket in the same call, and a ticket write re-mirrors its pull request, each only when its diff is not empty; a counterpart failure is recorded but never changes the write's outcome
+- a repository the store does not hold is refused as `state-unsaved` ("not loaded yet"), a terminal owner as `terminal-owned`, and an unresolvable key as `unresolvable-label`; nothing is written around the store
+- `finish.ts` writes the terminal state (`approved`) on a merged pull request and its ticket before the store prunes them, and retries up to ten recorded mirror failures each poll, each item at most once per five minutes; neither runs a transition
+- fails toward reseeding: a missing, malformed or newer-version file loads empty and every repository reseeds from its labels on the next projection, never toward refusing to start; a bad item is dropped, never its repository, and a failure with an unknown outcome kind is dropped, never its item
 - `reconcile.ts` overrides `matchedKeys`, `stageHistory` and `reviewCycleCount` from the view, and `reviewCycleCount` is the larger of the stored count and the GitHub reviews, so the cap can only hold earlier
 - a repository the terminal cockpit holds reads labels, because labels are the record there; when the owner leaves, the next view is `labels` once and the watcher reseeds
 
@@ -216,7 +220,8 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `auto-plan.ts`'s `autoApprovalsOf` (#313) ignores `sessionRequired` deliberately — the cockpit's own rule is that the swap still happens; `dispatchable.ts`'s `autoApprovalCandidatesFrom`/`autoApprovableFrom` are the only readers of `.autoApprovals` under `main/`
 - `auto-plan.ts`'s `autoPlanSwapCandidatesOf`/`autoPlanApprovingOf` is the one "will the swap act" predicate; the planner, `BoardSnapshot.autoPlan` and every renderer classification read it, never a second derivation
 - `adopt.ts`'s `adoptionsOf` decides, from GitHub evidence alone, which hand-back a finished stage already implies; an adoption is applied through the hand-back table and its verification, never a label plan of its own, and any missing, partial or ambiguous evidence adopts nothing, so today's reset or dispatch runs unchanged
-- `repair.ts`'s `repairsOf` (#330) detects a half-labelled ticket a crashed stage session left behind; it repairs only `plan-missing` through the observation pass, and reports every other shape on `TickReport.labelRepairs` for a human to resolve; `handback-unlabelled` comes only from the app's own refused hand-back write and carries its reason — it never repairs an `interrupted`/`usage-limit` session, since those wait on the operator's own Resume/Restart
+- `repair.ts`'s `repairsOf` (#330) detects a half-recorded ticket a crashed stage session left behind; it repairs only `plan-missing` through the observation pass, and reports every other shape on `TickReport.labelRepairs` for a human to resolve; `handback-unlabelled` comes only from the app's own refused hand-back write and carries its reason — it never repairs an `interrupted`/`usage-limit` session, since those wait on the operator's own Resume/Restart
+- the shapes are `handback-unlabelled`, `mirror-failed`, `plan-missing-approved` and `pr-missing`; `mirror-failed` is checked before eligibility, for any open item assigned to the viewer that carries a stored `mirrorFailure`, since it reports what GitHub shows rather than what a stage is doing; there is no contradictory-labels shape, because the store is the one writer and a hand-edited label decides nothing
 
 **`apps/desktop/src/main/trajectory/`**
 - the one write `main/tick/` itself never makes — computes there, writes here
@@ -247,6 +252,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 
 **`apps/desktop/src/main/writes/`**
 - only GitHub writer; only `command.ts` names `--add-label`/`--remove-label`
+- `applyLabels` takes resolved label names and the item as the caller read it, and carries no precondition: it reads ownership, skips an unchanged item as `no-op`, runs `gh`, and audits once; whether a transition may happen is the store's decision, made before it
 - never `merge`, `close`, `--delete-branch`, or `ready`
 - `postIssueBody` is the only issue-body write
 - `rerun.ts` is the one `gh run rerun` caller: failed jobs of one Actions run, audited once per attempt, never a cancel or a re-run of a passing run

@@ -6,6 +6,7 @@ import type { BoardSnapshot, SourceKind } from '@/types/board'
 // Renderer-safe reconciled shapes for the unified state model. No import here may reach a Node builtin — only `main/state/` joins the four adapters. A condition a human or the environment could cause is a value, never a throw.
 import type { LabelKey, VocabularyReport } from '@/utils/labels/vocabulary'
 import type { LabelRole } from '@/utils/labels/defaults'
+import type { MirrorFailure } from '@/types/pipeline-state'
 import type { BlockerRead, CheckContext, ClosingPullRequest, IntegrationChecks, IssueCommentNode, Mergeable, PipelineFailureKind, PipelineItemKind, PullRequestCommentNode, RateLimitInfo, ReviewNode, TruncatedSet, UnavailableAlias } from '@/types/github'
 import type { RepoDiagnostic, RepoId, RepoProblem } from '@/utils/repos'
 import type { DenialsRead, UnresolvedReason } from '@/types/local'
@@ -155,6 +156,8 @@ export interface ReconciledItem {
   readonly blockerComments: readonly IssueCommentNode[] | null
   /** Copied straight off `PipelineItem` — the pull requests closing this issue, `null` when unread or errored and for a pull request. Feeds `main/tick/adopt.ts`. */
   readonly closingPullRequests: readonly ClosingPullRequest[] | null
+  /** The store's failed label mirror for this item — set only under a store view. */
+  readonly mirrorFailure?: MirrorFailure | null
 }
 
 /** `{ at }` when the source answered, `{ unavailable: <reason> }` when it did not — never a stale-looking timestamp standing in for "did not run". */
@@ -248,6 +251,8 @@ export interface RefreshOutcome {
   readonly rateLimit?: RateLimitInfo | null
   /** GitHub-only — tracked items the read found closed, merged or gone. */
   readonly closed?: readonly number[]
+  /** GitHub-only — the pull requests among the tracked items that merged. */
+  readonly merged?: readonly number[]
   /** GitHub-only — so a `rate-limited` failure can defer to `resetAt` rather than double the interval like any other failure. */
   readonly failureKind?: PipelineFailureKind | null
 }

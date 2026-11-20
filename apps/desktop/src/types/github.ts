@@ -207,6 +207,8 @@ export type PipelineFetch =
       readonly items: readonly PipelineItem[]
       /** Tracked items the read found closed, merged or gone — empty on the label path. */
       readonly closed: readonly number[]
+      /** The pull requests among `closed` that merged — empty on the label path. */
+      readonly merged: readonly number[]
       readonly queried: readonly QueriedLabel[]
       readonly disabled: readonly LabelKey[]
       readonly vocabulary: VocabularyReport

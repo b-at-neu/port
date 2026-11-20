@@ -15,7 +15,7 @@ import { zeroDiffChecksOf } from '../../../../../scripts/port-tick/checks'
 import { cycleGrantCount, integrationRedGate, mergeabilityRoute, refreshWins, zeroDiffGate } from '../../../../../scripts/port-tick/gates'
 
 import { RETRY_TRIGGER } from '../../../../../scripts/port-tick/liveness'
-import { isContradictory, observationsOf } from '@/main/tick/observe'
+import { observationsOf } from '@/main/tick/observe'
 import { adoptionsOf, heldVerdictAdoption, openPullRequestAdoption } from '@/main/tick/adopt'
 import { partitionOwnership } from '../../../../../scripts/port-tick/classify'
 import { AGENT_FOR_IN_FLIGHT, AGENT_FOR_TRIGGER } from '@/main/tick/routing'
@@ -241,7 +241,7 @@ function actionableAndHeld(
       }
     }
     // A head that already has an approving verdict adopts it: neither held nor reviewed again.
-    if (agent === 'review' && !isContradictory(item)) {
+    if (agent === 'review') {
       const adoption = heldVerdictAdoption(item)
       if (adoption !== null) {
         adoptions.push(adoption)
@@ -266,7 +266,7 @@ function actionableAndHeld(
     }
 
     // An issue whose pull request is already open on its own branch is adopted, never dispatched a second time.
-    if (agent === 'impl' && !isContradictory(item)) {
+    if (agent === 'impl') {
       const adoption = openPullRequestAdoption(item)
       if (adoption !== null) {
         adoptions.push(adoption)

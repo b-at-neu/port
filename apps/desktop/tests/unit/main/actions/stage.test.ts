@@ -4,7 +4,7 @@ import type { StageWriteDeps } from '@/main/actions/stage'
 import type { ReadyEntry } from '@/types/actions'
 import type { ResolvedItem } from '@/types/github'
 import type { StageEvent, StagePlanFile } from '@/types/stage-labels'
-import type { ApplyLabelsParams, PostCommentParams, WriteOutcome } from '@/types/writes'
+import type { PostCommentParams, WriteOutcome, WriteStateParams } from '@/types/writes'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 
@@ -45,8 +45,8 @@ function pr(number: number, overrides: Partial<ResolvedItem> = {}): ResolvedItem
 
 function deps(items: readonly ResolvedItem[], outcomes: readonly WriteOutcome[] = [], stored: readonly string[] | null = null, bodyOutcomes: readonly WriteOutcome[] = []) {
   const queue = [...outcomes]
-  const applied: ApplyLabelsParams[] = []
-  const writeState = vi.fn((params: ApplyLabelsParams): Promise<WriteOutcome> => {
+  const applied: WriteStateParams[] = []
+  const writeState = vi.fn((params: WriteStateParams): Promise<WriteOutcome> => {
     applied.push(params)
     return Promise.resolve(queue.shift() ?? { kind: 'applied', argv: [] })
   })
@@ -80,8 +80,7 @@ describe('applyStageClaim', () => {
     expect(call?.repoRoot).toBe('/repo')
     expect(call?.request).toMatchObject({ kind: 'issue', number: 52, add: ['inProgress'], remove: ['planApproved'], action: 'stage-claim', repo: 'o/a' })
     expect(call?.request.expect.present).toEqual(['planApproved'])
-    expect(call?.request.expect.absent).toContain('blocked')
-    expect(call?.request.expect.absent).not.toContain('inProgress')
+    expect(call?.request.expect.absent).toEqual([])
     expect(call?.request.expect.assignees).toEqual({ kind: 'exactly', logins: ['op'] })
   })
 

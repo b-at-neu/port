@@ -4,7 +4,7 @@ import type { PipelineView, StoredItem } from '@/types/pipeline-state'
 import { denialsOf, entry, fetchOf, item, sessionsOf, worktreesOf } from './reconcile-fixtures'
 
 function stored(overrides: Partial<StoredItem> = {}): StoredItem {
-  return { kind: 'issue', number: 79, keys: ['planReview'], marked: true, autoPlan: false, claimedAt: null, reviewCycles: 0, history: [], updatedAt: 't', ...overrides }
+  return { kind: 'issue', number: 79, keys: ['planReview'], marked: true, autoPlan: false, claimedAt: null, reviewCycles: 0, history: [], updatedAt: 't', issue: null, mirrorFailure: null, ...overrides }
 }
 
 function reconcile(items: Parameters<typeof fetchOf>[0], view: PipelineView | undefined) {
@@ -47,6 +47,13 @@ describe('reconcileRepository — store view', () => {
     const low = reconcile([pr], { kind: 'store', items: [stored({ kind: 'pull-request', number: 5, keys: ['readyForReview'], reviewCycles: 0 })] })
     expect(high.items[0]?.reviewCycleCount).toBe(4)
     expect(low.items[0]?.reviewCycleCount).toBe(1)
+  })
+
+  it('copies the stored mirror failure onto the item, and sets nothing without a store view', () => {
+    const mirrorFailure = { at: '2026-01-01T00:00:00Z', outcome: { kind: 'item-unavailable' as const } }
+    expect(reconcile([item()], { kind: 'store', items: [stored({ mirrorFailure })] }).items[0]?.mirrorFailure).toEqual(mirrorFailure)
+    expect(reconcile([item()], { kind: 'store', items: [stored()] }).items[0]?.mirrorFailure).toBeNull()
+    expect(reconcile([item()], { kind: 'labels' }).items[0]).not.toHaveProperty('mirrorFailure')
   })
 
   it('reads labels exactly as before under a labels view or no view', () => {

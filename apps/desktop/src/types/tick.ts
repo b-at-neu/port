@@ -1,5 +1,6 @@
 // Renderer-safe shapes for the tick engine — what one repository's tick would dispatch, what it holds back and why, and what each in-flight claim resolves to. No import here may reach a Node builtin — only `main/tick/` computes these.
 import type { PipelineItemKind } from '@/types/github'
+import type { MirrorFailure } from '@/types/pipeline-state'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { StageHandback, StageOutcomeKind } from '@/types/stage-session'
@@ -145,7 +146,7 @@ export interface TickAutoApproval {
 }
 
 /** `main/tick/repair.ts`'s own report-only shapes — a human decision is needed, since repairing any of these would be a guess. */
-export type TickLabelRepairShape = 'handback-unlabelled' | 'contradictory' | 'plan-missing-approved' | 'pr-missing'
+export type TickLabelRepairShape = 'handback-unlabelled' | 'mirror-failed' | 'plan-missing-approved' | 'pr-missing'
 
 export interface TickLabelRepair {
   readonly number: number
@@ -155,6 +156,8 @@ export interface TickLabelRepair {
   readonly agent: StageAgent | null
   /** Why the app's own hand-back write was refused — `null` for every shape that does not come from one. */
   readonly reason: HandoffRefusal | null
+  /** The label mirror write that failed — `null` for every shape but `mirror-failed`. */
+  readonly mirror: MirrorFailure | null
 }
 
 /** One repository's own tick — `planTick`'s whole result. `disabledStages` is always `[]` on a blind repository. */

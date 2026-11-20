@@ -1,4 +1,5 @@
 // Renderer-safe contract for the write chokepoint: every mutation the app makes to GitHub is expressed in `LabelKey` values and a stated precondition, never a raw argv or a bypassing `gh` call. No import here may reach a Node builtin.
+import type { MirrorVocabulary } from '@/utils/labels/display'
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { ReclaimerFailureKind } from '@/types/reclaimer'
@@ -22,6 +23,8 @@ export interface LabelWriteRequest {
   readonly kind: 'issue' | 'pull-request'
   readonly number: number
   readonly vocabulary: LabelVocabulary
+  /** Which label set the post-transition state is mirrored as; required so no builder defaults to legacy by accident. */
+  readonly mirror: MirrorVocabulary
   readonly add: readonly LabelKey[]
   readonly remove: readonly LabelKey[]
   readonly addAssignees: readonly string[]
@@ -261,7 +264,7 @@ export interface PostCommentParams {
   readonly pathOps?: PathOps
 }
 
-export interface ApplyLabelsParams {
+export interface WriteStateParams {
   readonly request: LabelWriteRequest
   readonly repoRoot: string
   readonly auditDir: string
@@ -272,5 +275,27 @@ export interface ApplyLabelsParams {
   readonly pathOps?: PathOps
 }
 
-/** Every pipeline write goes through this: the store precondition, the store commit, then the label mirror. */
-export type WriteState = (params: ApplyLabelsParams) => Promise<WriteOutcome>
+/** One label write on resolved names: the mirror call. `observed` is the read the diff was computed from. */
+export interface ApplyLabelsParams {
+  readonly repo: string
+  readonly repoId: RepoId
+  readonly kind: 'issue' | 'pull-request'
+  readonly number: number
+  readonly action: string
+  readonly addNames: readonly string[]
+  readonly removeNames: readonly string[]
+  readonly addAssignees: readonly string[]
+  readonly removeAssignees: readonly string[]
+  readonly observed: ObservedItem
+  readonly repoRoot: string
+  readonly auditDir: string
+  readonly gh?: GhRunner
+  readonly git?: GitRunner
+  /** The re-read a failed call reports as `reread`. */
+  readonly fetchItemsByNumber?: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
+  readonly now?: () => Date
+  readonly pathOps?: PathOps
+}
+
+/** Every pipeline write goes through this: the store precondition, the store commit, then the full-state label mirror. */
+export type WriteState = (params: WriteStateParams) => Promise<WriteOutcome>

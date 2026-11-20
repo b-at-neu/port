@@ -230,13 +230,15 @@ async function readDetails(github: GitHubTransport, repo: GitHubRepoRef, items: 
 interface TrackedResult {
   readonly items: readonly PipelineItem[]
   readonly closed: readonly number[]
+  readonly merged: readonly number[]
   readonly rateLimit: RateLimitInfo
 }
 
-/** An alias GitHub reports as not found is gone for good, so it is closed; any other error or a malformed node fails the whole read, the same rule as the detail read. */
+/** An alias GitHub reports as not found is gone for good, so it is closed; any other error or a malformed node fails the whole read, the same rule as the detail read. A closed pull request with `mergedAt` is also merged. */
 async function readTracked(github: GitHubTransport, repo: GitHubRepoRef, vocabulary: LabelVocabulary, missing: readonly TrackedRef[], rateLimit: RateLimitInfo): Promise<TrackedResult | Failure> {
   const items: PipelineItem[] = []
   const closed: number[] = []
+  const merged: number[] = []
   let total = rateLimit
   for (let start = 0; start < missing.length; start += DETAIL_CHUNK_SIZE) {
     const chunk = missing.slice(start, start + DETAIL_CHUNK_SIZE)
@@ -254,11 +256,15 @@ async function readTracked(github: GitHubTransport, repo: GitHubRepoRef, vocabul
       }
       const item = node === undefined || own.length > 0 ? undefined : mapTrackedItem(node, alias.kind, vocabulary, `${repo.owner}/${repo.name}`, chunk[idx]?.keys ?? [])
       if (item === undefined) return { ok: false, kind: 'no-data', message: `the read of tracked ${alias.kind} #${alias.number} came back empty` }
-      if (item.state === 'OPEN') items.push(item)
-      else closed.push(alias.number)
+      if (item.state === 'OPEN') {
+        items.push(item)
+        continue
+      }
+      closed.push(alias.number)
+      if (item.kind === 'pull-request' && item.mergedAt !== null) merged.push(alias.number)
     }
   }
-  return { items, closed, rateLimit: total }
+  return { items, closed, merged, rateLimit: total }
 }
 
 interface IntegrationResult {
@@ -305,6 +311,7 @@ export async function fetchPipelineItems(params: FetchPipelineItemsParams): Prom
   const sweptItems = SWEEP_ALIASES.flatMap((alias) => mapPipelineItems(swept.state.nodes[alias], surfaceOf(alias), params.vocabulary, repo))
   let light = sweptItems
   let closed: readonly number[] = []
+  let merged: readonly number[] = []
   let rateLimit = swept.rateLimit
   const trackedRefs = params.tracked ?? null
   if (trackedRefs !== null) {
@@ -319,6 +326,7 @@ export async function fetchPipelineItems(params: FetchPipelineItemsParams): Prom
     if ('ok' in read) return { ...read, fetchedAt }
     light = [...kept, ...read.items]
     closed = read.closed
+    merged = read.merged
     rateLimit = read.rateLimit
   }
   const detailed = await readDetails(github, params.repo, light, rateLimit)
@@ -329,6 +337,7 @@ export async function fetchPipelineItems(params: FetchPipelineItemsParams): Prom
     ok: true,
     items: applyItemDetails(light, detailed.details),
     closed,
+    merged,
     queried: queriedLabelsOf(params.vocabulary),
     disabled: params.vocabulary.disabled,
     vocabulary: verifyVocabulary(params.verify ?? params.vocabulary, swept.repoLabels),

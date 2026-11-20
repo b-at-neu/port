@@ -178,25 +178,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // pin: `main/tick/routing.ts`'s `REFRESH_PAIR` ↔ `scripts/port-tick/reconcile.ts`'s own `REFRESH_PAIR`, both directions
-  {
-    const routingFile = `${mainDir}/routing.ts`;
-    const routingText = readFileSync(join(root, routingFile), 'utf8');
-    const appMatch = /const REFRESH_PAIR[^=]*=\s*\[([^\]]*)\]/.exec(routingText);
-    const engineText = readFileSync(join(root, 'scripts/port-tick/reconcile.ts'), 'utf8');
-    const engineMatch = /const REFRESH_PAIR\s*=\s*\[([^\]]*)\]/.exec(engineText);
-
-    if (!appMatch) {
-      fail('desktop-tick', `${routingFile} has no 'REFRESH_PAIR = [...]' array to compare`);
-    } else if (!engineMatch) {
-      fail('desktop-tick', `scripts/port-tick/reconcile.ts has no 'REFRESH_PAIR = [...]' array to compare`);
-    } else {
-      const appKeys = [...appMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
-      const engineKeys = [...engineMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
-      expect(!(appKeys.length !== engineKeys.length || appKeys.some((k, i) => k !== engineKeys[i])), 'desktop-tick', `${routingFile}'s REFRESH_PAIR (${appKeys.join(', ')}) and scripts/port-tick/reconcile.ts's (${engineKeys.join(', ')}) disagree`);
-    }
-  }
-
   // pin: `main/dispatch/observation.ts`'s `observationWrite` label plan ↔ `scripts/port-tick/writes.ts`'s own write functions, both directions
   {
     const observationPath = join(root, 'apps/desktop/src/main/dispatch/observation.ts');

@@ -7,7 +7,7 @@ import type { RecoverPausedTriggerResult } from '@/types/actions'
 import { applyItemAction } from '@/main/actions/apply'
 import type { ApplyItemActionDeps } from '@/main/actions/apply'
 import type { ItemActionRequest } from '@/types/actions'
-import type { ApplyLabelsParams } from '@/types/writes'
+import type { WriteStateParams } from '@/types/writes'
 import { boardSnapshot as snapshotOf, readyEntry as entry, reconciledItem, repositoryState as repoState } from '../../../fixtures/board-state'
 
 const REPO_ID = 'repo-a' as RepoId
@@ -29,7 +29,7 @@ function request(overrides: Partial<ItemActionRequest> = {}): ItemActionRequest 
 function fakeDeps(overrides: Partial<ApplyItemActionDeps> = {}): { readonly deps: ApplyItemActionDeps; readonly calls: LabelWriteRequest[] } {
   const calls: LabelWriteRequest[] = []
   const deps: ApplyItemActionDeps = {
-    writeState: (params: ApplyLabelsParams): Promise<WriteOutcome> => {
+    writeState: (params: WriteStateParams): Promise<WriteOutcome> => {
       calls.push(params.request)
       return Promise.resolve({ kind: 'applied', argv: [] })
     },
