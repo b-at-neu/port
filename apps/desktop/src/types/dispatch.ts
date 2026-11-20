@@ -1,7 +1,7 @@
 import type { BoardSnapshot } from '@/types/board'
 import type { RegistryDeps } from '@/types/registry'
-import type { AutoApprovePlanParams, ReadyEntry, EscalateToHumanParams, EscalateToHumanResult, ApplyObservationParams, ApplyObservationResult, ApplyItemActionParams } from '@/types/actions'
-import type { TickActionable, EndedStage, DispatchLedger, RefreshMemo, TickObservation, ForceDispatch } from '@/types/tick'
+import type { AutoApprovePlanParams, ReadyEntry, EscalateToHumanParams, EscalateToHumanResult, ApplyObservationParams, ApplyObservationResult, ApplyItemActionParams, RerunChecksParams } from '@/types/actions'
+import type { TickActionable, EndedStage, DispatchLedger, RefreshMemo, RerunMemo, TickObservation, ForceDispatch } from '@/types/tick'
 import type { HostedStore } from '@/types/hosting'
 import type { FetchItemsByNumberParams, ItemsByNumberFetch, ResolvedItem } from '@/types/github'
 import type { StageEvent, StagePlanFile, StageTransitionResult } from '@/types/stage-labels'
@@ -244,6 +244,8 @@ export interface Dispatcher {
   recordOutcome(repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome, plan: StagePlanFile | null): void
   /** A blocked stage session's next turn began — the app clears the block. A no-op if the key is not tracked. */
   recordResumedTurn(repoId: RepoId, sessionKey: SessionKey): void
+  /** An interrupted entry was resumed as a session: its hand-back now settles labels. */
+  trackResumed(repoId: RepoId, sessionKey: SessionKey, entry: InterruptedStage): void
   /** `true` unless this app currently owns `repoId` — an unread repository (`'none'`) holds, the fail direction for `SESSION REQUIRED`. */
   holdsSessionRequired(repoId: RepoId): boolean
   /** Stage-denial bookkeeping: record (deduped by rule, bounded to 20), dismiss by id (operator's own Dismiss), or clear every denial proposing a given rule (once Allow succeeds or reports `already-allowed`). */
@@ -270,6 +272,9 @@ export interface CreateDispatcherParams {
   readonly budget: BudgetGate
   readonly escalate: (params: EscalateToHumanParams) => Promise<EscalateToHumanResult>
   readonly writeObservation: (params: ApplyObservationParams) => Promise<ApplyObservationResult>
+  readonly rerunChecks: (params: RerunChecksParams) => Promise<'applied' | 'failed'>
+  /** Shared with the tick's own `rerun-checks` observation, never a second instance that would disagree on which head was re-run. */
+  readonly rerunMemo: RerunMemo
   /** Every label write a stage needs: the claim before launch, and rollback, hand-back and next-turn writes through `transition`. */
   readonly stageLabels: StageLabelWrites
   /** Where a candidate's labels come from at the survivor test; absent reads GitHub's. */
@@ -291,6 +296,7 @@ export interface DispatchActions {
   readonly stageLabels: StageLabelWrites
   readonly escalateToHuman: (params: EscalateToHumanParams) => Promise<EscalateToHumanResult>
   readonly applyObservation: (params: ApplyObservationParams) => Promise<ApplyObservationResult>
+  readonly rerunChecks: (params: RerunChecksParams) => Promise<'applied' | 'failed'>
   readonly autoApprovePlan: (params: AutoApprovePlanParams) => Promise<WriteOutcome>
 }
 
@@ -330,6 +336,8 @@ export interface StageRecord {
   readonly trigger: LabelKey
   readonly state: 'started' | 'ended' | 'failed'
   readonly at: string
+  /** The first refresh that saw the session ended — `null` while started and for a `failed` record. */
+  readonly endedAt: string | null
   readonly detail: string | null
   /** `null` until the launcher classifies a hand-back for this record's session; never set for a `failed` record. */
   readonly outcome: StageOutcome | null
@@ -361,7 +369,7 @@ export interface StageLaunchRequest {
 }
 
 /** Every `TickObservation` kind this module writes — excludes the one report-only kind, `refresh-deferred`. */
-export type WriteObservation = Exclude<TickObservation, { readonly kind: 'refresh-deferred' }>
+export type WriteObservation = Exclude<TickObservation, { readonly kind: 'refresh-deferred' | 'adopt' | 'rerun-checks' }>
 
 export type TakeOwnershipResult = OwnershipWriteResult | { readonly ok: false; readonly kind: 'refused'; readonly verdict: Extract<OwnershipRead, { kind: 'terminal' | 'unreadable' }>; readonly path: string }
 

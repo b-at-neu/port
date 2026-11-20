@@ -299,6 +299,18 @@ describe('observationDetailCopy', () => {
     expect(observationDetailCopy(observation)).toBe('#73 conflicts too — refreshes are capped this poll; it goes next.')
   })
 
+  it('names an adoption by the phase it moves the ticket to', () => {
+    const adopt = (agent: 'review' | 'impl', token: string, arg: string | null = null): TickObservation => ({ kind: 'adopt', number: 779, itemKind: 'pull-request', agent, trigger: 'readyForReview', handback: { token, arg }, evidence: 'review' })
+    expect(observationDetailCopy(adopt('review', 'approved'))).toBe('#779 already finished on GitHub — moving it to Ready to merge.')
+    expect(observationDetailCopy(adopt('review', 'needs-revision'))).toBe('#779 already finished on GitHub — moving it to Needs revision.')
+    expect(observationDetailCopy(adopt('impl', 'pr-opened', '#780'))).toBe('#779 already finished on GitHub — moving it to Waiting for review.')
+  })
+
+  it('names the checks a failed-jobs retry covers', () => {
+    const observation: TickObservation = { kind: 'rerun-checks', number: 594, itemKind: 'pull-request', runs: [{ check: 'run-e2e', runId: '1' }, { check: 'lint', runId: '2' }], headRefOid: 'abc' }
+    expect(observationDetailCopy(observation)).toBe('#594 retrying run-e2e, lint on the reviewed head before reviewing again.')
+  })
+
   it('every write-bearing kind has no detail line of its own here — it already has one from held/stalled above', () => {
     expect(observationDetailCopy({ kind: 'liveness-reset', number: 1, itemKind: 'issue', inFlight: 'inProgress', retryKey: 'ready' })).toBeNull()
     expect(observationDetailCopy({ kind: 'cycle-cap', number: 2, itemKind: 'pull-request', count: 5, cap: 5 })).toBeNull()

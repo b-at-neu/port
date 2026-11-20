@@ -1,4 +1,4 @@
-import { readTextFile } from '@/main/platform/files'
+import { pathExists, readTextFile } from '@/main/platform/files'
 import { defaultGitRunner } from '@/main/platform/git'
 import { pathOps } from '@/main/platform/paths'
 import { stageBundleRoot } from '@/main/stage/bundle'
@@ -10,7 +10,7 @@ import type { StageBundleRootInput, StageLauncherHandle } from '@/types/stage'
 
 type StageLauncherParams = Parameters<typeof createStageLauncher>[0]
 
-type DefaultStageLauncherParams = Pick<StageLauncherParams, 'store' | 'registry' | 'onOutcome' | 'onResumedTurn' | 'onDenial'> & { readonly bundle: StageBundleRootInput }
+type DefaultStageLauncherParams = Pick<StageLauncherParams, 'store' | 'registry' | 'onOutcome' | 'onResumedTurn' | 'onResumed' | 'onDenial'> & { readonly bundle: StageBundleRootInput }
 
 /** The app's real launcher: every I/O seam bound to its production implementation. */
 export function createDefaultStageLauncher({ bundle, ...params }: DefaultStageLauncherParams): StageLauncherHandle {
@@ -28,6 +28,7 @@ export function createDefaultStageLauncher({ bundle, ...params }: DefaultStageLa
     loadInstructions: defaultStageInstructionsLoader(bundleRoot),
     bundleRoot,
     readTextFile,
+    pathExists,
     ops: pathOps,
   })
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { HANDOFF_ATTEMPTS, createStageHandoff } from '@/main/dispatch/handoff'
+import { HANDOFF_ATTEMPTS, HANDOFF_RETRY_WINDOW_MS, createStageHandoff } from '@/main/dispatch/handoff'
 import type { ReadyEntry } from '@/types/actions'
 import type { SessionKey } from '@/types/hosting'
 import type { StageTransitionResult } from '@/types/stage-labels'
@@ -19,12 +19,16 @@ function outcome(kind: StageOutcome['kind'], handback: StageOutcome['handback'] 
 const APPLIED: StageTransitionResult = { kind: 'applied' }
 const TRANSIENT: StageTransitionResult = { kind: 'refused', reason: 'write-failed', retryable: true, detail: 'boom' }
 
+const clock = { ms: Date.parse('2026-01-01T00:00:00.000Z') }
+const now = (): Date => new Date(clock.ms)
+
 function rig(results: readonly StageTransitionResult[] = [APPLIED]) {
+  clock.ms = Date.parse('2026-01-01T00:00:00.000Z')
   const queue = [...results]
   const write = vi.fn(() => Promise.resolve(queue.shift() ?? APPLIED))
   const requestRead = vi.fn()
   const onChange = vi.fn()
-  const handoff = createStageHandoff({ write, auditDir: '/audit', scratchDir: '/scratch', onChange, requestRead })
+  const handoff = createStageHandoff({ write, auditDir: '/audit', scratchDir: '/scratch', onChange, requestRead, now })
   handoff.remember(ENTRY)
   return { handoff, write, requestRead, onChange }
 }
@@ -44,7 +48,7 @@ describe('createStageHandoff', () => {
     expect(onChange).toHaveBeenCalled()
   })
 
-  it('retries a transient failure on later passes, up to three attempts in all, then reports a refusal', async () => {
+  it('retries a transient failure on later passes, up to three attempts in all once the retry window has passed, then reports a refusal', async () => {
     const { handoff, write, requestRead } = rig([TRANSIENT, TRANSIENT, TRANSIENT, APPLIED])
     handoff.settle(REPO, RECORD, outcome('completed', { token: 'pr-opened', arg: '#8' }), null)
     await flush()
@@ -52,6 +56,7 @@ describe('createStageHandoff', () => {
 
     await handoff.retryPending(REPO)
     expect(handoff.resultFor(KEY)).toBeNull()
+    clock.ms += HANDOFF_RETRY_WINDOW_MS + 1
     await handoff.retryPending(REPO)
     expect(write).toHaveBeenCalledTimes(HANDOFF_ATTEMPTS)
     expect(handoff.resultFor(KEY)).toEqual({ kind: 'refused', reason: 'write-failed', detail: 'boom' })
@@ -59,6 +64,25 @@ describe('createStageHandoff', () => {
 
     await handoff.retryPending(REPO)
     expect(write).toHaveBeenCalledTimes(HANDOFF_ATTEMPTS)
+  })
+
+  it('keeps retrying a transient failure past three attempts while the retry window is open, so a write that fails while DNS returns after a wake still lands', async () => {
+    const { handoff, write } = rig([TRANSIENT, TRANSIENT, TRANSIENT, TRANSIENT, APPLIED])
+    handoff.settle(REPO, RECORD, outcome('completed', { token: 'pr-opened', arg: '#8' }), null)
+    await flush()
+    for (let pass = 0; pass < 4; pass++) await handoff.retryPending(REPO)
+    expect(write).toHaveBeenCalledTimes(5)
+    expect(handoff.resultFor(KEY)).toEqual({ kind: 'applied' })
+  })
+
+  it('reports the ticket as pending until its write settles', async () => {
+    const { handoff } = rig([TRANSIENT, APPLIED])
+    handoff.settle(REPO, RECORD, outcome('completed', { token: 'pr-opened', arg: '#8' }), null)
+    await flush()
+    expect([...handoff.pendingNumbers(REPO)]).toEqual([52])
+    expect([...handoff.pendingNumbers(OTHER_REPO)]).toEqual([])
+    await handoff.retryPending(REPO)
+    expect([...handoff.pendingNumbers(REPO)]).toEqual([])
   })
 
   it('a transient failure followed by success reports applied', async () => {
@@ -91,7 +115,7 @@ describe('createStageHandoff', () => {
 
   it('a throw counts as a retryable write failure', async () => {
     const write = vi.fn().mockRejectedValueOnce(new Error('exploded')).mockResolvedValue(APPLIED)
-    const handoff = createStageHandoff({ write, auditDir: '/audit', scratchDir: '/scratch', onChange: vi.fn(), requestRead: vi.fn() })
+    const handoff = createStageHandoff({ write, auditDir: '/audit', scratchDir: '/scratch', onChange: vi.fn(), requestRead: vi.fn(), now })
     handoff.remember(ENTRY)
     handoff.settle(REPO, RECORD, outcome('completed', { token: 'pr-opened', arg: '#8' }), null)
     await flush()
@@ -166,7 +190,7 @@ describe('createStageHandoff', () => {
       order.push(`end ${String(params.record.number)}`)
       return Promise.resolve(APPLIED)
     })
-    const handoff = createStageHandoff({ write, auditDir: '/audit', scratchDir: '/scratch', onChange: vi.fn(), requestRead: vi.fn() })
+    const handoff = createStageHandoff({ write, auditDir: '/audit', scratchDir: '/scratch', onChange: vi.fn(), requestRead: vi.fn(), now })
     handoff.remember(ENTRY)
     handoff.settle(REPO, RECORD, outcome('completed', { token: 'pr-opened', arg: '#8' }), null)
     handoff.settle(REPO, { ...RECORD, sessionKey: 'hosted-2' as SessionKey, number: 53 }, outcome('completed', { token: 'pr-opened', arg: '#9' }), null)
@@ -187,7 +211,7 @@ describe('createStageHandoff', () => {
 
   it('does not write for a repository it has not seen, and keeps the write pending', async () => {
     const write = vi.fn(() => Promise.resolve(APPLIED))
-    const handoff = createStageHandoff({ write, auditDir: '/audit', scratchDir: '/scratch', onChange: vi.fn(), requestRead: vi.fn() })
+    const handoff = createStageHandoff({ write, auditDir: '/audit', scratchDir: '/scratch', onChange: vi.fn(), requestRead: vi.fn(), now })
     handoff.settle(REPO, RECORD, outcome('completed', { token: 'pr-opened', arg: '#8' }), null)
     await flush()
     expect(write).not.toHaveBeenCalled()

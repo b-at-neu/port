@@ -50,6 +50,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     planPresent: null,
     blockers: null,
     blockerComments: null,
+    closingPullRequests: null,
     ...overrides,
   }
 }
@@ -244,6 +245,7 @@ describe('needsYouItems', () => {
       detail: null,
       resetsAt: null,
       costUsd: null,
+      networkRetries: 0,
     }
     const items = needsYouItems(snapshotOf([], { dispatch: [dispatchStatus({ interrupted: [interrupted] })] }), NOW)
     expect(items).toHaveLength(1)

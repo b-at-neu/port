@@ -107,6 +107,8 @@ function interruptedCopy(item: Extract<NeedsYouItem, { readonly kind: 'stage-int
       return `${phase} ${label} ended with an error${i.detail !== null ? ` (${i.detail})` : ''}`
     case 'cleanup-failed':
       return `${phase} ${label} finished, but its worktree is still there${i.detail !== null ? ` (${i.detail})` : ''}`
+    case 'network':
+      return `${phase} ${label} lost its connection${i.resetsAt !== null ? `, retrying at ${new Date(i.resetsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}`
   }
 }
 

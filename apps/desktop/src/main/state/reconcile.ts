@@ -244,6 +244,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
       planPresent,
       blockers: item.blockers,
       blockerComments: item.blockerComments,
+      closingPullRequests: item.closingPullRequests,
     }
   })
 

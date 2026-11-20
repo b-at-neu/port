@@ -19,7 +19,7 @@ function fakeDeps(initial: { readonly ok: true; readonly value: unknown } | { re
   return { readJson, writeJsonAtomic, writes }
 }
 
-const entry: Omit<InterruptedStage, 'reason' | 'detail' | 'resetsAt' | 'costUsd' | 'interruptedAt'> = {
+const entry: Omit<InterruptedStage, 'reason' | 'detail' | 'resetsAt' | 'costUsd' | 'interruptedAt' | 'networkRetries'> = {
   id: 's1',
   repoId: 'repo1' as RepoId,
   agent: 'impl',
@@ -43,13 +43,45 @@ describe('createStageRegistry', () => {
     expect(registry.list()[0]?.reason).toBe('crash')
   })
 
-  it('runningWorktreePaths returns only running entries', () => {
+  it('running returns only running entries', () => {
     const deps = fakeDeps({ ok: false })
     const registry = createStageRegistry({ path: '/tmp/stage-sessions.json', readJson: deps.readJson, writeJsonAtomic: deps.writeJsonAtomic, now: () => new Date() })
     registry.recordRunning(entry)
     registry.recordRunning({ ...entry, id: 's2', worktree: { path: '/tmp/wt2', branch: 'b2', baseSha: 'sha' } })
     registry.markInterrupted('s2', 'crash', null, null, null)
-    expect(registry.runningWorktreePaths()).toEqual(['/tmp/wt'])
+    expect(registry.running().map((e) => e.worktree.path)).toEqual(['/tmp/wt'])
+  })
+
+  it('an old file entry with no networkRetries loads as zero', async () => {
+    const deps = fakeDeps({ ok: true, value: { version: 1, entries: [{ ...entry, reason: 'error', detail: null, resetsAt: null, costUsd: null, interruptedAt: '2026-01-01T00:00:00.000Z', state: 'interrupted' }] } })
+    const registry = createStageRegistry({ path: '/tmp/stage-sessions.json', readJson: deps.readJson, writeJsonAtomic: deps.writeJsonAtomic, now: () => new Date() })
+    await registry.load()
+    expect(registry.list()[0]?.networkRetries).toBe(0)
+  })
+
+  it('a network interruption sets the next backoff instant, and each resume counts one retry', () => {
+    const deps = fakeDeps({ ok: false })
+    const at = new Date('2026-01-01T00:00:00.000Z')
+    const registry = createStageRegistry({ path: '/tmp/stage-sessions.json', readJson: deps.readJson, writeJsonAtomic: deps.writeJsonAtomic, now: () => at })
+    registry.recordRunning(entry)
+    registry.markInterrupted('s1', 'network', 'EAI_AGAIN', null, null)
+    expect(registry.list()[0]).toMatchObject({ reason: 'network', networkRetries: 0, resetsAt: '2026-01-01T00:01:00.000Z' })
+    registry.markRunning('s1')
+    registry.markInterrupted('s1', 'network', 'EAI_AGAIN', null, null)
+    expect(registry.list()[0]).toMatchObject({ networkRetries: 1, resetsAt: '2026-01-01T00:05:00.000Z' })
+    registry.markRunning('s1')
+    registry.markInterrupted('s1', 'network', 'EAI_AGAIN', null, null)
+    expect(registry.list()[0]).toMatchObject({ networkRetries: 2, resetsAt: '2026-01-01T00:15:00.000Z' })
+  })
+
+  it('any other reason resets the retry count', () => {
+    const deps = fakeDeps({ ok: false })
+    const registry = createStageRegistry({ path: '/tmp/stage-sessions.json', readJson: deps.readJson, writeJsonAtomic: deps.writeJsonAtomic, now: () => new Date() })
+    registry.recordRunning(entry)
+    registry.markInterrupted('s1', 'network', null, null, null)
+    registry.markRunning('s1')
+    registry.markInterrupted('s1', 'error', 'boom', null, null)
+    expect(registry.list()[0]?.networkRetries).toBe(0)
   })
 
   it('markAllQuit marks every running entry quit', () => {

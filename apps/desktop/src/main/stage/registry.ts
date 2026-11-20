@@ -3,6 +3,7 @@
 import type { InterruptedReason, InterruptedStage } from '@/types/stage'
 import type { FileResult } from '@/types/platform'
 import type { StageRegistry } from '@/types/stage'
+import { NETWORK_BACKOFF_MS } from '@/main/stage/stale'
 
 const CURRENT_VERSION = 1
 
@@ -12,8 +13,8 @@ interface StoredEntry extends InterruptedStage {
   readonly state: RegistryState
 }
 
-/** An old file's entry carries no `interruptedAt`. */
-type RawEntry = Omit<StoredEntry, 'interruptedAt'> & { readonly interruptedAt?: string }
+/** An old file's entry carries no `interruptedAt` or `networkRetries`. */
+type RawEntry = Omit<StoredEntry, 'interruptedAt' | 'networkRetries'> & { readonly interruptedAt?: string; readonly networkRetries?: number }
 
 interface RegistryFileShape {
   readonly version: number
@@ -74,6 +75,7 @@ function toInterrupted(entries: readonly StoredEntry[]): readonly InterruptedSta
       detail: e.detail,
       resetsAt: e.resetsAt,
       costUsd: e.costUsd,
+      networkRetries: e.networkRetries,
     }),
   )
 }
@@ -103,15 +105,15 @@ export function createStageRegistry(params: CreateStageRegistryParams): StageReg
     // Every `running` entry at boot means the process died before it could mark itself otherwise.
     entries = dedupedById(value.entries.filter(isRawEntry)).map((e): StoredEntry => {
       const { title, ...rest } = e
-      const stamped = { ...rest, ...(typeof title === 'string' ? { title } : {}), interruptedAt: e.interruptedAt ?? loadedAt }
+      const stamped = { ...rest, ...(typeof title === 'string' ? { title } : {}), interruptedAt: e.interruptedAt ?? loadedAt, networkRetries: typeof e.networkRetries === 'number' ? e.networkRetries : 0 }
       return e.state === 'running' ? { ...stamped, state: 'interrupted', reason: 'crash', detail: null } : stamped
     })
     void persist()
     return toInterrupted(entries)
   }
 
-  function recordRunning(entry: Omit<InterruptedStage, 'reason' | 'detail' | 'resetsAt' | 'costUsd' | 'interruptedAt'>): void {
-    const next: StoredEntry = { ...entry, interruptedAt: entry.startedAt, reason: 'crash', detail: null, resetsAt: null, costUsd: null, state: 'running' }
+  function recordRunning(entry: Omit<InterruptedStage, 'reason' | 'detail' | 'resetsAt' | 'costUsd' | 'interruptedAt' | 'networkRetries'>): void {
+    const next: StoredEntry = { ...entry, interruptedAt: entry.startedAt, reason: 'crash', detail: null, resetsAt: null, costUsd: null, networkRetries: 0, state: 'running' }
     entries = [...entries.filter((e) => e.id !== entry.id), next]
     void persist()
   }
@@ -121,7 +123,7 @@ export function createStageRegistry(params: CreateStageRegistryParams): StageReg
     const existing = entries[idx]
     if (existing === undefined) return
     const next = [...entries]
-    next[idx] = { ...existing, state: 'running', reason: 'crash', detail: null, resetsAt: null, costUsd: null }
+    next[idx] = { ...existing, state: 'running', reason: 'crash', detail: null, resetsAt: null, costUsd: null, networkRetries: existing.reason === 'network' ? existing.networkRetries + 1 : existing.networkRetries }
     entries = next
     void persist()
   }
@@ -143,7 +145,10 @@ export function createStageRegistry(params: CreateStageRegistryParams): StageReg
     const next = [...entries]
     const existing = next[idx]
     if (existing === undefined) return
-    next[idx] = { ...existing, state: 'interrupted', reason, detail, resetsAt, costUsd, interruptedAt: params.now().toISOString() }
+    const at = params.now()
+    const networkRetries = reason === 'network' ? existing.networkRetries : 0
+    const due = reason === 'network' ? new Date(at.getTime() + (NETWORK_BACKOFF_MS[Math.min(networkRetries, NETWORK_BACKOFF_MS.length - 1)] ?? 0)).toISOString() : resetsAt
+    next[idx] = { ...existing, state: 'interrupted', reason, detail, resetsAt: due, costUsd, networkRetries, interruptedAt: at.toISOString() }
     entries = next
     void persist()
   }
@@ -163,9 +168,9 @@ export function createStageRegistry(params: CreateStageRegistryParams): StageReg
     return toInterrupted(entries.filter((e) => e.state === 'interrupted'))
   }
 
-  function runningWorktreePaths(): readonly string[] {
-    return entries.filter((e) => e.state === 'running').map((e) => e.worktree.path)
+  function running(): readonly InterruptedStage[] {
+    return toInterrupted(entries.filter((e) => e.state === 'running'))
   }
 
-  return { load, recordRunning, markRunning, setSessionId, markInterrupted, markAllQuit, remove, list, runningWorktreePaths }
+  return { load, recordRunning, markRunning, setSessionId, markInterrupted, markAllQuit, remove, list, running }
 }

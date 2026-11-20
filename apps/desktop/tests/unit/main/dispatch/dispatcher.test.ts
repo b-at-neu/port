@@ -115,6 +115,8 @@ function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispat
     launch: null,
     ledger: { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined, observeUnmatched: () => ({ class: 'no-record' }) },
     refreshMemo: { get: () => undefined, set: vi.fn(), clear: vi.fn() },
+    rerunMemo: { get: () => undefined, set: vi.fn() },
+    rerunChecks: () => Promise.resolve('applied'),
     forceDispatch: { has: () => false, set: vi.fn(), clear: vi.fn(), prune: vi.fn() },
     writeObservation: () => {
       throw new Error('writeObservation should not be invoked unless a test wires its own')
@@ -225,7 +227,7 @@ describe('createDispatcher — stageLiveness', () => {
   })
 
   it('reports live and interrupted descriptions once this app owns the repository', async () => {
-    const interrupted = [{ id: 'i1', repoId: REPO_ID, agent: 'plan' as const, number: 7, kind: 'issue' as const, trigger: 'ready' as const, inFlight: 'planning' as const, model: 'opus', claudeSessionId: null, worktree: { path: '/wt', branch: 'b', baseSha: 's' }, startedAt: 't', interruptedAt: 't', reason: 'crash' as const, detail: null, resetsAt: null, costUsd: null }]
+    const interrupted = [{ id: 'i1', repoId: REPO_ID, agent: 'plan' as const, number: 7, kind: 'issue' as const, trigger: 'ready' as const, inFlight: 'planning' as const, model: 'opus', claudeSessionId: null, worktree: { path: '/wt', branch: 'b', baseSha: 's' }, startedAt: 't', interruptedAt: 't', reason: 'crash' as const, detail: null, resetsAt: null, costUsd: null, networkRetries: 0 }]
     const dispatcher = createDispatcher(baseDeps({ readOwnership: () => Promise.resolve(OWNED_BY_APP), interrupted: () => interrupted }))
     await dispatcher.consider(snapshotWith([tickReport()]))
     expect(dispatcher.stageLiveness(REPO_ID)).toEqual({ live: [], interrupted: ['plan #7'] })

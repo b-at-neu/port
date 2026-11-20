@@ -329,6 +329,33 @@ describe('applyStageTransition — pr-opened', () => {
   })
 })
 
+describe('applyStageTransition — adopt', () => {
+  const ADOPT: StageEvent = { kind: 'adopt', handback: { token: 'pr-opened', arg: '#8' } }
+  const params = { entry: entry(), record: IMPL, event: ADOPT, auditDir: '/audit', scratchDir: '/scratch' }
+
+  it('verifies the pull request like a hand-back and writes it before the issue', async () => {
+    const rig = deps([issue(['plan approved']), pr(8)])
+    expect(await applyStageTransition(params, rig.writeDeps)).toEqual({ kind: 'applied' })
+    expect(rig.applied.map((c) => [c.request.kind, c.request.number, c.request.action])).toEqual([
+      ['pull-request', 8, 'stage-adopt-pr-opened'],
+      ['issue', 52, 'stage-adopt-pr-opened'],
+    ])
+    expect(rig.applied[1]?.request).toMatchObject({ add: ['prOpened'], remove: ['planApproved'] })
+  })
+
+  it('refuses pr-unverified, with no write, when the pull request is not open on the issue’s own branch', async () => {
+    const rig = deps([issue(['plan approved']), pr(8, { headRefName: '53-other-thing' })])
+    expect(await applyStageTransition(params, rig.writeDeps)).toMatchObject({ kind: 'refused', reason: 'pr-unverified', retryable: false })
+    expect(rig.writeState).not.toHaveBeenCalled()
+  })
+
+  it('is moved, with no write, when the issue left plan approved since it was observed', async () => {
+    const rig = deps([issue(['in progress', 'blocked']), pr(8)])
+    expect(await applyStageTransition(params, rig.writeDeps)).toMatchObject({ reason: 'moved' })
+    expect(rig.writeState).not.toHaveBeenCalled()
+  })
+})
+
 describe('applyStageTransition — other events', () => {
   it('a rollback re-reads the item and restores the trigger', async () => {
     const rig = deps([issue(['in progress'])])

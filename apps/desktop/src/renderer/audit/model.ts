@@ -1,7 +1,7 @@
 // The one `AuditEntry` → row mapping — pure, no DOM.
 import type { AuditEntry, AuditRowView, LabelAuditEntry, PurgeAuditEntry, ReclaimAuditEntry } from '@/types/writes'
 import type { ReleaseAuditEntry } from '@/types/release'
-import { isAllowAuditEntry, isLabelAuditEntry, isPurgeAuditEntry, isReleaseAuditEntry } from '@/types/writes'
+import { isAllowAuditEntry, isLabelAuditEntry, isPurgeAuditEntry, isReleaseAuditEntry, isRerunAuditEntry } from '@/types/writes'
 import { mirrorReason } from '@/renderer/lib/mirror-reason'
 
 type Outcome = AuditRowView['outcome']
@@ -64,7 +64,7 @@ function releaseOutcome(result: ReleaseAuditEntry['result']): Outcome {
 export function outcomeOf(entry: AuditEntry): Outcome {
   if (isLabelAuditEntry(entry)) return labelOutcome(entry.result)
   if (isPurgeAuditEntry(entry)) return purgeOutcome(entry.result)
-  if (isAllowAuditEntry(entry)) return releaseOutcome(entry.result)
+  if (isAllowAuditEntry(entry) || isRerunAuditEntry(entry)) return releaseOutcome(entry.result)
   return isReleaseAuditEntry(entry) ? releaseOutcome(entry.result) : reclaimOutcome(entry.result)
 }
 
@@ -109,6 +109,7 @@ function resultDetail(result: LabelAuditEntry['result']): string | null {
 export function detailOf(entry: AuditEntry): string | null {
   if (isPurgeAuditEntry(entry)) return entry.failure === null ? `Directory ${entry.path}.` : `Directory ${entry.path}. ${entry.failure}`
   if (isAllowAuditEntry(entry)) return entry.failure === null ? `Allow ${entry.rule}.` : `Allow ${entry.rule}. ${entry.failure}`
+  if (isRerunAuditEntry(entry)) return entry.failure === null ? `Re-ran ${entry.check} on PR #${String(entry.number)}.` : `Re-ran ${entry.check} on PR #${String(entry.number)}. ${entry.failure}`
   if (isReleaseAuditEntry(entry)) return entry.failure === null ? `Release v${entry.version}.` : `Release v${entry.version}. ${entry.failure}`
   if (!isLabelAuditEntry(entry)) {
     const counts = `Removed ${String(entry.removed.length)}, failed ${String(entry.failed.length)}.`

@@ -106,7 +106,7 @@ export interface PipelineItem {
   readonly blockers: BlockerRead | null
   /** The newest issue comments, selected only for a `blocked` issue — `null` when not selected, unreadable, or a pull request. */
   readonly blockerComments: readonly IssueCommentNode[] | null
-  /** Pull requests closing this issue, selected only for a `prOpened` issue — `null` when not selected or unreadable, never collapsed into `[]`. */
+  /** Pull requests closing this issue, selected only for a `planApproved`, `inProgress`, `blocked` or `prOpened` issue — `null` when not selected or unreadable, never collapsed into `[]`. */
   readonly closingPullRequests: readonly ClosingPullRequest[] | null
 }
 
@@ -141,6 +141,8 @@ export interface ItemDetail {
 export interface ClosingPullRequest {
   readonly number: number
   readonly state: ItemStateName
+  /** `null` when GitHub's value is missing — a pull request on an unknown branch is never adopted. */
+  readonly headRefName: string | null
 }
 
 /** One entry per sweep connection named in a partial response's `errors[].path`. Never read as empty — excluded from any "nothing at this stage" claim. */

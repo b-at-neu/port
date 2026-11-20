@@ -17,7 +17,7 @@ function noopFs() {
   return { readJson, writeJsonAtomic }
 }
 
-const entry: Omit<InterruptedStage, 'reason' | 'detail' | 'resetsAt' | 'costUsd' | 'interruptedAt'> = {
+const entry: Omit<InterruptedStage, 'reason' | 'detail' | 'resetsAt' | 'costUsd' | 'interruptedAt' | 'networkRetries'> = {
   id: 's1',
   repoId: 'repo1' as RepoId,
   agent: 'impl',

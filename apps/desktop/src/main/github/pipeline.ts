@@ -3,7 +3,7 @@
 import type { GitHubTransport } from '@/types/platform'
 import { githubHttp } from '@/main/platform/github-http'
 import { verifyVocabulary } from '@/utils/labels/vocabulary'
-import type { LabelVocabulary, RepoLabels, VerifiableVocabulary } from '@/utils/labels/vocabulary'
+import type { LabelKey, LabelVocabulary, RepoLabels, VerifiableVocabulary } from '@/utils/labels/vocabulary'
 import type {
   AliasInfo,
   GitHubRepoRef,
@@ -190,6 +190,9 @@ interface DetailsResult {
 // Only an issue alias's own blockedBy/comments/closedByPullRequestsReferences error is per-field: it costs a tag, never the board.
 const PER_FIELD_ERRORS: ReadonlySet<unknown> = new Set(['blockedBy', 'comments', 'closedByPullRequestsReferences'])
 
+/** The issue stages whose closing pull requests are read: one that already opened its pull request can be adopted instead of re-dispatched. */
+const CLOSING_READ_KEYS: readonly LabelKey[] = ['planApproved', 'inProgress', 'blocked', 'prOpened']
+
 /** Any other detail alias that errors or comes back null fails the whole read: a missing review list would
  *  read as zero cycles, and a revise dispatch could go past the cap. */
 async function readDetails(github: GitHubTransport, repo: GitHubRepoRef, items: readonly PipelineItem[], rateLimit: RateLimitInfo): Promise<DetailsResult | Failure> {
@@ -198,7 +201,7 @@ async function readDetails(github: GitHubTransport, repo: GitHubRepoRef, items: 
     number: item.number,
     rollup: item.kind === 'pull-request' && (item.matchedKeys.includes('approved') || item.matchedKeys.includes('readyForReview')),
     blockerComments: item.kind === 'issue' && item.matchedKeys.includes('blocked'),
-    closingPullRequests: item.kind === 'issue' && item.matchedKeys.includes('prOpened'),
+    closingPullRequests: item.kind === 'issue' && CLOSING_READ_KEYS.some((key) => item.matchedKeys.includes(key)),
   }))
   const details: ItemDetail[] = []
   let total = rateLimit

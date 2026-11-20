@@ -10,6 +10,9 @@ import type { RepoId } from '@/utils/repos'
 /** Total attempts for one hand-back write, the first included. */
 export const HANDOFF_ATTEMPTS = 3
 
+/** A retryable refusal keeps retrying this long after its first attempt, so a write that fails while DNS comes back after a wake still lands. */
+export const HANDOFF_RETRY_WINDOW_MS = 600_000
+
 type HandoffRecord = Pick<TickActionable, 'number' | 'kind' | 'agent' | 'trigger'> & { readonly sessionKey: SessionKey }
 
 interface PendingWrite {
@@ -19,6 +22,8 @@ interface PendingWrite {
   /** `null` for a write nobody reads a result for, such as the next turn after a block. */
   readonly resultKey: SessionKey | null
   attempts: number
+  /** Epoch milliseconds of the first attempt, `null` before it. */
+  firstAttemptAt: number | null
 }
 
 interface StageHandoffDeps {
@@ -28,6 +33,7 @@ interface StageHandoffDeps {
   readonly onChange: () => void
   /** Asks for one GitHub read of this repository alone, so the next stage sees the label just written. */
   readonly requestRead: (repoId: RepoId) => void
+  readonly now: () => Date
 }
 
 export interface StageHandoff {
@@ -41,6 +47,8 @@ export interface StageHandoff {
   retryPending(repoId: RepoId): Promise<void>
   /** `null` means pending, or that this outcome writes nothing. */
   resultFor(sessionKey: SessionKey): StageLabelResult | null
+  /** The tickets with a write still being attempted for the repository — their session is settling, not dead. */
+  pendingNumbers(repoId: RepoId): ReadonlySet<number>
 }
 
 export function createStageHandoff(deps: StageHandoffDeps): StageHandoff {
@@ -59,13 +67,15 @@ export function createStageHandoff(deps: StageHandoffDeps): StageHandoff {
     const entry = entries.get(write.repoId)
     if (entry === undefined || pending.get(id) !== write) return
     write.attempts += 1
+    write.firstAttemptAt ??= deps.now().getTime()
     let result: StageTransitionResult
     try {
       result = await deps.write({ entry, record: write.record, event: write.event, auditDir: deps.auditDir, scratchDir: deps.scratchDir })
     } catch (error) {
       result = { kind: 'refused', reason: 'write-failed', retryable: true, detail: error instanceof Error ? error.message : String(error) }
     }
-    if (result.kind === 'refused' && result.retryable && write.attempts < HANDOFF_ATTEMPTS) return
+    const windowOpen = deps.now().getTime() - write.firstAttemptAt < HANDOFF_RETRY_WINDOW_MS
+    if (result.kind === 'refused' && result.retryable && (write.attempts < HANDOFF_ATTEMPTS || windowOpen)) return
     pending.delete(id)
     if (write.resultKey !== null) results.set(write.resultKey, result.kind === 'applied' ? { kind: 'applied' } : { kind: 'refused', reason: result.reason, detail: result.detail })
     if (write.event.kind === 'outcome' && write.event.outcome === 'completed') deps.requestRead(write.repoId)
@@ -85,15 +95,16 @@ export function createStageHandoff(deps: StageHandoffDeps): StageHandoff {
       const event: StageEvent = { kind: 'outcome', outcome: outcome.kind, handback: outcome.handback, plan }
       if (!eventWrites(event, stageModeFor(record.agent, record.trigger))) return
       results.delete(record.sessionKey)
-      enqueue(record.sessionKey, { repoId, record, event, resultKey: record.sessionKey, attempts: 0 })
+      enqueue(record.sessionKey, { repoId, record, event, resultKey: record.sessionKey, attempts: 0, firstAttemptAt: null })
     },
     resumedTurn(repoId, record) {
-      enqueue(`resumed:${record.sessionKey}`, { repoId, record, event: { kind: 'resumed-turn' }, resultKey: null, attempts: 0 })
+      enqueue(`resumed:${record.sessionKey}`, { repoId, record, event: { kind: 'resumed-turn' }, resultKey: null, attempts: 0, firstAttemptAt: null })
     },
     async retryPending(repoId) {
       const due = [...pending.entries()].filter(([, write]) => write.repoId === repoId)
       await Promise.all(due.map(([id, write]) => serialize(repoId, () => attempt(id, write))))
     },
     resultFor: (sessionKey) => results.get(sessionKey) ?? null,
+    pendingNumbers: (repoId) => new Set([...pending.values()].filter((write) => write.repoId === repoId && write.event.kind === 'outcome').map((write) => write.record.number)),
   }
 }

@@ -121,7 +121,7 @@ export async function applyStageTransition(params: ApplyStageTransitionParams, d
   const mode = stageModeFor(record.agent, record.trigger)
   const unusable = handbackRefusal(event, mode)
   if (unusable !== null) return refused(unusable, false, event.kind === 'outcome' && event.plan?.kind === 'missing' ? event.plan.detail : null)
-  const handback = event.kind === 'outcome' ? event.handback : null
+  const handback = event.kind === 'outcome' || event.kind === 'adopt' ? event.handback : null
   const prNumber = mode === 'impl' && handback?.token === 'pr-opened' ? pullRequestNumberOf(handback.arg) : null
 
   const numbers = prNumber === null ? [record.number] : [record.number, prNumber]

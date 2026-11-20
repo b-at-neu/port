@@ -161,6 +161,61 @@ describe('hand-back tokens', () => {
   })
 })
 
+describe('a hand-back that lands after a liveness reset', () => {
+  it('review approved applies from readyForReview, the trigger the reset put back, and removes that label', () => {
+    expect(onlyWrite(handback('review', ['readyForReview'], 'approved'))).toEqual([{ itemKind: 'pull-request', numberFrom: 'item', add: ['approved'], remove: ['readyForReview'], action: 'stage-handback-approved' }])
+  })
+
+  it.each([
+    ['plan', 'plan-written', ['ready'], 'planReview', 'ready'],
+    ['revise', 'revised', ['needsRevision'], 'readyForReview', 'needsRevision'],
+    ['revise', 'escalated', ['needsRevision'], 'needsHuman', 'needsRevision'],
+  ] as const)('%s %s applies from the reset trigger %s', (mode, token, observed, target, source) => {
+    expect(onlyWrite(handback(mode, observed, token))[0]).toMatchObject({ add: [target], remove: [source] })
+  })
+
+  it('a refresh hand-back applies from refreshBranch', () => {
+    expect(onlyWrite(handback('refresh', ['refreshBranch'], 'refreshed', 'resolved'))[0]).toMatchObject({ add: ['readyForReview'], remove: ['refreshBranch'] })
+  })
+
+  it('pr-opened applies from planApproved, removing it', () => {
+    const writes = onlyWrite(handback('impl', ['planApproved'], 'pr-opened', '#8'))
+    expect(writes[1]).toMatchObject({ add: ['prOpened'], remove: ['planApproved'] })
+  })
+
+  it('a head-moved hand-back onto a label that is already there writes nothing', () => {
+    expect(handback('review', ['readyForReview'], 'head-moved')).toEqual({ kind: 'none' })
+  })
+
+  it('still tolerates nothing else: both the in-flight label and its trigger present is moved', () => {
+    expect(handback('review', ['reviewing', 'readyForReview'], 'approved')).toEqual({ kind: 'refused', reason: 'moved' })
+    expect(handback('review', ['needsRevision'], 'approved')).toEqual({ kind: 'refused', reason: 'moved' })
+  })
+})
+
+describe('adopt', () => {
+  const adopt = (mode: StageMode, observed: readonly LabelKey[], token: string, arg: string | null = null, prObserved: readonly LabelKey[] = []) =>
+    transitionFor({ event: { kind: 'adopt', handback: { token, arg } }, mode, observed, prObserved, approvalGate: true })
+
+  it('plans the same rows as a completed hand-back, under its own action name', () => {
+    expect(onlyWrite(adopt('review', ['reviewing'], 'approved'))).toEqual([{ itemKind: 'pull-request', numberFrom: 'item', add: ['approved'], remove: ['reviewing'], action: 'stage-adopt-approved' }])
+    expect(onlyWrite(adopt('impl', ['planApproved'], 'pr-opened', '#780'))[1]).toMatchObject({ add: ['prOpened'], remove: ['planApproved'], action: 'stage-adopt-pr-opened' })
+  })
+
+  it('needs no plan file, since an adopted plan is already in the issue body', () => {
+    expect(onlyWrite(adopt('plan', ['planning'], 'plan-written'))[0]).toMatchObject({ add: ['planReview'], remove: ['planning'] })
+  })
+
+  it('refuses an unknown token and an impl adoption with no pull request', () => {
+    expect(adopt('review', ['reviewing'], 'nonsense')).toEqual({ kind: 'refused', reason: 'unknown-handback' })
+    expect(adopt('impl', ['planApproved'], 'pr-opened', null)).toEqual({ kind: 'refused', reason: 'unknown-handback' })
+  })
+
+  it('is moved when the labels are not exactly a source', () => {
+    expect(adopt('review', ['approved'], 'approved')).toEqual({ kind: 'refused', reason: 'moved' })
+  })
+})
+
 describe('pr-opened', () => {
   it('writes the pull request first, then the issue', () => {
     const writes = onlyWrite(handback('impl', ['inProgress'], 'pr-opened', '#8'))

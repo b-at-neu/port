@@ -95,12 +95,41 @@ describe('planTick — cycle-cap and zero-diff gates (#108)', () => {
     expect(report.held).toEqual([])
   })
 
-  it('a review candidate whose newest review already covers the current head is held, zero-diff', () => {
+  it('a review candidate whose newest review needs revision on the unchanged head gets one more review, never an escalation', () => {
     const reviews = [{ body: '## Code Review — Cycle 1 · needs revision', submittedAt: '2026-01-01T00:00:00Z', commitOid: 'sha1' }]
     const repo = readyRepo([reviewItem({ headRefOid: 'sha1', reviews, reviewCycleCount: 1 })])
     const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    expect(report.held).toEqual([])
+    expect(report.actionable).toEqual([{ number: 157, kind: 'pull-request', trigger: 'readyForReview', agent: 'review', unchecked: false, cycle: { count: 1, cap: 5 } }])
+    expect(report.observations).toEqual([])
+  })
+
+  it('two reviews on one head still escalate as sha-cap, because that is a decision for a person', () => {
+    const reviews = [
+      { body: '## Code Review — Cycle 1 · needs revision', submittedAt: '2026-01-01T00:00:00Z', commitOid: 'sha1' },
+      { body: '## Code Review — Cycle 2 · needs revision', submittedAt: '2026-01-01T00:30:00Z', commitOid: 'sha1' },
+    ]
+    const repo = readyRepo([reviewItem({ headRefOid: 'sha1', reviews, reviewCycleCount: 2 })])
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([])
-    expect(report.held).toEqual([{ number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff', reason: 'zero-diff' } }])
+    expect(report.held).toEqual([{ number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff', reason: 'sha-cap' } }])
+  })
+
+  it('a review candidate whose head already has an approving review adopts it: no hold, no second review', () => {
+    const reviews = [{ body: '## Code Review — Cycle 2 · approved', submittedAt: '2026-01-01T00:00:00Z', commitOid: 'sha1' }]
+    const repo = readyRepo([reviewItem({ headRefOid: 'sha1', reviews, reviewCycleCount: 2 })])
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    expect(report.actionable).toEqual([])
+    expect(report.held).toEqual([])
+    expect(report.observations).toEqual([{ kind: 'adopt', number: 157, itemKind: 'pull-request', agent: 'review', trigger: 'readyForReview', handback: { token: 'approved', arg: null }, evidence: 'held-verdict' }])
+  })
+
+  it('an approving review on an older head is not adopted for the new head', () => {
+    const reviews = [{ body: '## Code Review — Cycle 1 · approved', submittedAt: '2026-01-01T00:00:00Z', commitOid: 'old-sha' }]
+    const repo = readyRepo([reviewItem({ headRefOid: 'new-sha', reviews, reviewCycleCount: 1 })])
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    expect(report.observations).toEqual([])
+    expect(report.actionable).toHaveLength(1)
   })
 
   it('a review candidate whose head moved since the review dispatches again', () => {

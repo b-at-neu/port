@@ -181,7 +181,7 @@ describe('buildItemDetailsQuery', () => {
       { kind: 'pull-request', number: 9, rollup: false, blockerComments: false, closingPullRequests: true },
     ])
     const lineOf = (alias: string) => document.split('\n').find((line) => line.includes(`${alias}:`)) ?? ''
-    expect(lineOf('d0')).toContain('closedByPullRequestsReferences(first: 5, includeClosedPrs: true) { nodes { number state } }')
+    expect(lineOf('d0')).toContain('closedByPullRequestsReferences(first: 5, includeClosedPrs: true) { nodes { number state headRefName } }')
     expect(lineOf('d1')).not.toContain('closedByPullRequestsReferences')
     expect(lineOf('d2')).not.toContain('closedByPullRequestsReferences')
   })

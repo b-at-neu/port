@@ -2,7 +2,7 @@
 import type { PipelineItemKind } from '@/types/github'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
-import type { StageOutcomeKind } from '@/types/stage-session'
+import type { StageHandback, StageOutcomeKind } from '@/types/stage-session'
 import type { StageLabelResult } from '@/types/stage-labels'
 import type { LedgerRow, UnmatchedResult } from '../../../../scripts/port-tick/liveness'
 import type { RefreshMemoEntry } from '../../../../scripts/port-tick/gates'
@@ -96,7 +96,10 @@ export type TickBlind =
   | { readonly reason: 'stale-read'; readonly ageMs: number }
 
 /** The machine-observation write families this app ports from the cockpit's cadence, plus one report-only kind (`refresh-deferred`) that authorises no write of its own. `observe.ts`'s `observationsOf` is the only producer, except for `plan-missing`, which `main/tick/repair.ts`'s `repairsOf` produces. */
-export type TickObservationKind = 'liveness-reset' | 'cycle-cap' | 'zero-diff' | 'integration-red' | 'refresh' | 'refresh-stuck' | 'refresh-deferred' | 'withdraw-approval' | 'plan-missing'
+export type TickObservationKind = 'liveness-reset' | 'cycle-cap' | 'zero-diff' | 'integration-red' | 'refresh' | 'refresh-stuck' | 'refresh-deferred' | 'withdraw-approval' | 'plan-missing' | 'adopt' | 'rerun-checks'
+
+/** Which GitHub fact an adoption was read from. */
+export type AdoptionEvidence = 'plan' | 'pr' | 'review' | 'head-moved' | 'held-verdict'
 
 interface TickObservationBase {
   readonly number: number
@@ -132,6 +135,9 @@ export type TickObservation =
       readonly headRefOid: string
     })
   | (TickObservationBase & { readonly kind: 'plan-missing' })
+  /** `trigger` is the stage's own trigger label, which with `agent` names the hand-back table row `main/dispatch/transitions.ts` applies. */
+  | (TickObservationBase & { readonly kind: 'adopt'; readonly agent: StageAgent; readonly trigger: LabelKey; readonly handback: StageHandback; readonly evidence: AdoptionEvidence })
+  | (TickObservationBase & { readonly kind: 'rerun-checks'; readonly runs: readonly { readonly check: string; readonly runId: string }[]; readonly headRefOid: string })
 
 /** One `autoPlan` issue at `planReview` alone, assigned to the viewer — the app's own auto-plan swap acts on this set while it owns the repository. */
 export interface TickAutoApproval {
@@ -175,6 +181,12 @@ export interface RefreshMemo {
   readonly get: (repoId: RepoId, number: number) => RefreshMemoEntry | undefined
   readonly set: (repoId: RepoId, number: number, entry: RefreshMemoEntry) => void
   readonly clear: (repoId: RepoId, number: number) => void
+}
+
+/** The head each pull request's failed checks were last re-run on, so one head is re-run once. Same per-process, restart-forgets lifetime as `RefreshMemo`. */
+export interface RerunMemo {
+  readonly get: (repoId: RepoId, number: number) => string | undefined
+  readonly set: (repoId: RepoId, number: number, headRefOid: string) => void
 }
 
 export interface UnknownStreaks {

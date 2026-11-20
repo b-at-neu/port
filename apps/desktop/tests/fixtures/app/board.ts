@@ -353,6 +353,7 @@ function interruptedStages(now: Date): readonly InterruptedStage[] {
     detail: reason === 'cleanup-failed' ? 'it has uncommitted changes' : null,
     resetsAt: reason === 'usage-limit' ? resetsAt : null,
     costUsd: 1.1,
+    networkRetries: 0,
   })
   return [
     stopped('limit-38', 38, 'impl', 'usage-limit', 12),

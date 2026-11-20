@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { boundRecords, endedStagesOf, freeSlots, liveCount, refreshRecords } from '@/main/dispatch/launch'
+import { SETTLE_GRACE_MS, boundRecords, endedStagesOf, freeSlots, liveCount, refreshRecords, settlingDescriptions } from '@/main/dispatch/launch'
 import type { StageRecord } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import type { SessionControls, SessionModels } from '@/utils/hosting/controls'
@@ -44,6 +44,7 @@ function record(overrides: Partial<StageRecord> = {}): StageRecord {
     trigger: 'planApproved',
     state: 'started',
     at: '2026-01-01T00:00:00Z',
+    endedAt: null,
     detail: null,
     outcome: null,
     claudeSessionId: null,
@@ -51,6 +52,8 @@ function record(overrides: Partial<StageRecord> = {}): StageRecord {
     ...overrides,
   }
 }
+
+const NOW = '2026-01-01T00:10:00.000Z'
 
 describe('liveCount / freeSlots', () => {
   it('counts only non-ended snapshots', () => {
@@ -90,39 +93,69 @@ describe('endedStagesOf', () => {
 })
 
 describe('refreshRecords', () => {
-  it('ends a started record whose handle is gone', () => {
-    const result = refreshRecords([record()], () => null)
+  it('ends a started record whose handle is gone, stamping when it was first seen ended', () => {
+    const result = refreshRecords([record()], () => null, NOW)
     expect(result[0]?.state).toBe('ended')
+    expect(result[0]?.endedAt).toBe(NOW)
   })
 
   it('ends a started record whose handle itself ended', () => {
-    const result = refreshRecords([record()], () => snapshot({ phase: 'ended' }))
+    const result = refreshRecords([record()], () => snapshot({ phase: 'ended' }), NOW)
     expect(result[0]?.state).toBe('ended')
+    expect(result[0]?.endedAt).toBe(NOW)
   })
 
   it('leaves a started record alone while its handle is still live', () => {
-    const result = refreshRecords([record()], () => snapshot({ phase: 'streaming' }))
+    const result = refreshRecords([record()], () => snapshot({ phase: 'streaming' }), NOW)
     expect(result[0]?.state).toBe('started')
+    expect(result[0]?.endedAt).toBeNull()
   })
 
   it('never touches an already-ended or failed record', () => {
-    const ended = record({ state: 'ended' })
+    const ended = record({ state: 'ended', endedAt: '2026-01-01T00:01:00.000Z' })
     const failed = record({ state: 'failed', sessionKey: null, detail: 'boom' })
-    const result = refreshRecords([ended, failed], () => null)
+    const result = refreshRecords([ended, failed], () => null, NOW)
     expect(result).toEqual([ended, failed])
   })
 
   it('copies claudeSessionId and operatorJoinedAt off a still-live snapshot', () => {
-    const result = refreshRecords([record()], () => snapshot({ phase: 'streaming', claudeSessionId: 'sdk-1', operatorJoinedAt: '2026-01-01T00:05:00.000Z' }))
+    const result = refreshRecords([record()], () => snapshot({ phase: 'streaming', claudeSessionId: 'sdk-1', operatorJoinedAt: '2026-01-01T00:05:00.000Z' }), NOW)
     expect(result[0]?.claudeSessionId).toBe('sdk-1')
     expect(result[0]?.operatorJoinedAt).toBe('2026-01-01T00:05:00.000Z')
   })
 
   it('keeps the newest copied values once the handle is gone', () => {
-    const result = refreshRecords([record()], () => snapshot({ phase: 'ended', claudeSessionId: 'sdk-1', operatorJoinedAt: '2026-01-01T00:05:00.000Z' }))
+    const result = refreshRecords([record()], () => snapshot({ phase: 'ended', claudeSessionId: 'sdk-1', operatorJoinedAt: '2026-01-01T00:05:00.000Z' }), NOW)
     expect(result[0]?.state).toBe('ended')
     expect(result[0]?.claudeSessionId).toBe('sdk-1')
     expect(result[0]?.operatorJoinedAt).toBe('2026-01-01T00:05:00.000Z')
+  })
+})
+
+describe('settlingDescriptions', () => {
+  const now = new Date(NOW)
+  const none: ReadonlySet<number> = new Set()
+
+  it('counts an ended session with no classified outcome inside the grace as settling', () => {
+    const ended = record({ state: 'ended', endedAt: '2026-01-01T00:09:00.000Z' })
+    expect(settlingDescriptions([ended], none, now)).toEqual(['impl #52'])
+  })
+
+  it('stops counting it once the grace has passed, so a launcher that never reports is bounded', () => {
+    const ended = record({ state: 'ended', endedAt: new Date(now.getTime() - SETTLE_GRACE_MS - 1).toISOString() })
+    expect(settlingDescriptions([ended], none, now)).toEqual([])
+  })
+
+  it('never counts a session whose outcome was classified, a live one or a failed launch', () => {
+    const classified = record({ state: 'ended', endedAt: '2026-01-01T00:09:30.000Z', outcome: { kind: 'completed', detail: null, costUsd: null, resetsAt: null, worktree: 'removed', operatorJoined: false, handback: null } })
+    const live = record({ number: 53 })
+    const failed = record({ number: 54, state: 'failed', sessionKey: null })
+    expect(settlingDescriptions([classified, live, failed], none, now)).toEqual([])
+  })
+
+  it('counts a ticket whose hand-back write is still pending, however old its record is', () => {
+    const classified = record({ state: 'ended', endedAt: '2026-01-01T00:01:00.000Z', outcome: { kind: 'completed', detail: null, costUsd: null, resetsAt: null, worktree: 'removed', operatorJoined: false, handback: null } })
+    expect(settlingDescriptions([classified], new Set([52]), now)).toEqual(['impl #52'])
   })
 })
 

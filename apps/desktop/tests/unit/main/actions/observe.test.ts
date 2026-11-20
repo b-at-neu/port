@@ -73,6 +73,7 @@ function item(comments: ReconciledItem['comments']): ReconciledItem {
     planPresent: null,
     blockers: null,
     blockerComments: null,
+    closingPullRequests: null,
   }
 }
 

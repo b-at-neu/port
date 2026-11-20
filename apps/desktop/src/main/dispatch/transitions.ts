@@ -115,19 +115,31 @@ export function pullRequestNumberOf(arg: string | null): number | null {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
 }
 
-/** Why a finished stage's `HANDBACK:` line cannot be acted on — checked before any read, since it never changes. */
+/** The hand-back a completed outcome or an adoption carries, `undefined` for any other event. */
+function handbackOf(event: StageEvent): StageHandback | null | undefined {
+  if (event.kind === 'adopt') return event.handback
+  return event.kind === 'outcome' && event.outcome === 'completed' ? event.handback : undefined
+}
+
+/** Why a finished stage's `HANDBACK:` line cannot be acted on — checked before any read, since it never changes. An adopted hand-back's plan is already in the issue body, so it needs no plan file. */
 export function handbackRefusal(event: StageEvent, mode: StageMode): HandoffRefusal | null {
-  if (event.kind !== 'outcome' || event.outcome !== 'completed') return null
-  const { handback } = event
+  const handback = handbackOf(event)
+  if (handback === undefined) return null
   if (handback === null) return 'no-handback'
   if (!HANDBACK_TOKENS[mode].includes(handback.token)) return 'unknown-handback'
   if (mode === 'impl' && pullRequestNumberOf(handback.arg) === null) return 'unknown-handback'
   if (mode === 'refresh' && handback.token === 'refreshed' && handback.arg !== 'clean' && handback.arg !== 'resolved') return 'unknown-handback'
-  if (mode === 'plan' && handback.token === 'plan-written') {
+  if (event.kind === 'outcome' && mode === 'plan' && handback.token === 'plan-written') {
     if (event.plan === null || event.plan.kind === 'missing') return 'no-plan-file'
     if (event.plan.kind === 'empty') return 'empty-plan-file'
   }
   return null
+}
+
+/** The in-flight key a mode's hand-back settles, and the trigger a liveness reset may already have put back in its place. */
+function sourcesOf(inFlight: LabelKey): readonly LabelKey[] {
+  const retry = RETRY_TRIGGER[inFlight] as LabelKey | undefined
+  return retry === undefined ? [inFlight] : [inFlight, retry]
 }
 
 /** Whether an event writes anything at all — the rest wait for the session to carry on or for Resume/Restart. */
@@ -137,12 +149,12 @@ export function eventWrites(event: StageEvent, mode: StageMode): boolean {
   return event.outcome === 'completed' || event.outcome === 'error'
 }
 
-function prOpened(observed: readonly LabelKey[], prObserved: readonly LabelKey[], approvalGate: boolean): StageTransition {
-  const match = matchSource(observed, ['inProgress', 'blocked'])
+function prOpened(observed: readonly LabelKey[], prObserved: readonly LabelKey[], approvalGate: boolean, actionPrefix: string): StageTransition {
+  const match = matchSource(observed, ['inProgress', 'blocked', 'planApproved'])
   if (match === null) return MOVED
   if (prObserved.some((key) => key !== 'readyForReview')) return MOVED
   const prAdd: readonly LabelKey[] = approvalGate ? ['readyForReview', 'marker'] : ['readyForReview']
-  const action = 'stage-handback-pr-opened'
+  const action = `${actionPrefix}-pr-opened`
   return {
     kind: 'write',
     writes: [
@@ -152,51 +164,57 @@ function prOpened(observed: readonly LabelKey[], prObserved: readonly LabelKey[]
   }
 }
 
-function refreshed(arg: string | null, observed: readonly LabelKey[]): StageTransition {
-  const match = matchSource(observed, ['refreshing'], ['approved'])
+function refreshed(arg: string | null, observed: readonly LabelKey[], action: string): StageTransition {
+  const match = matchSource(observed, sourcesOf('refreshing'), ['approved'])
   if (match === null) return MOVED
   const approved = match.tolerated.includes('approved')
   const clean = arg === 'clean'
-  const action = `stage-handback-refreshed-${clean ? 'clean' : 'resolved'}`
-  if (clean) return write('pull-request', approved ? [] : ['readyForReview'], ['refreshing'], action)
-  return write('pull-request', ['readyForReview'], approved ? ['refreshing', 'approved'] : ['refreshing'], action)
+  const refreshAction = `${action}-${clean ? 'clean' : 'resolved'}`
+  if (clean) return write('pull-request', approved ? [] : ['readyForReview'], [match.source], refreshAction)
+  return write('pull-request', ['readyForReview'], approved ? [match.source, 'approved'] : [match.source], refreshAction)
 }
 
-function handbackTransition(mode: StageMode, handback: StageHandback, params: TransitionParams): StageTransition {
+/** A write that moves `source` to `target`, or nothing when a reset already put the item there. */
+function move(itemKind: PipelineItemKind, target: LabelKey, source: LabelKey, action: string): StageTransition {
+  return source === target ? { kind: 'none' } : write(itemKind, [target], [source], action)
+}
+
+const REVIEW_TARGET: Readonly<Record<string, LabelKey>> = { approved: 'approved', 'needs-revision': 'needsRevision', 'checks-pending': 'needsHuman', 'rebase-required': 'refreshBranch', 'head-moved': 'readyForReview' }
+
+function handbackTransition(mode: StageMode, handback: StageHandback, params: TransitionParams, actionPrefix: string): StageTransition {
   const { observed, approvalGate } = params
   const itemKind = itemKindFor(mode)
-  const action = `stage-handback-${handback.token}`
+  const action = `${actionPrefix}-${handback.token}`
   switch (`${mode}:${handback.token}`) {
     case 'plan:plan-written': {
-      const match = matchSource(observed, ['planning'])
-      return match === null ? MOVED : write(itemKind, ['planReview'], ['planning'], action)
+      const match = matchSource(observed, sourcesOf('planning'))
+      return match === null ? MOVED : write(itemKind, ['planReview'], [match.source], action)
     }
     case 'impl:pr-opened':
-      return prOpened(observed, params.prObserved ?? [], approvalGate)
+      return prOpened(observed, params.prObserved ?? [], approvalGate, actionPrefix)
     case 'review:approved':
     case 'review:needs-revision':
     case 'review:checks-pending':
     case 'review:rebase-required':
     case 'review:head-moved': {
-      const match = matchSource(observed, ['reviewing'])
-      if (match === null) return MOVED
-      const target: LabelKey = { approved: 'approved', 'needs-revision': 'needsRevision', 'checks-pending': 'needsHuman', 'rebase-required': 'refreshBranch', 'head-moved': 'readyForReview' }[handback.token] as LabelKey
-      return write(itemKind, [target], ['reviewing'], action)
+      const match = matchSource(observed, sourcesOf('reviewing'))
+      const target = REVIEW_TARGET[handback.token]
+      return match === null || target === undefined ? MOVED : move(itemKind, target, match.source, action)
     }
     case 'revise:revised': {
-      const match = matchSource(observed, ['revising'])
-      return match === null ? MOVED : write(itemKind, ['readyForReview'], ['revising'], action)
+      const match = matchSource(observed, sourcesOf('revising'))
+      return match === null ? MOVED : move(itemKind, 'readyForReview', match.source, action)
     }
     case 'revise:escalated': {
-      const match = matchSource(observed, ['revising'])
-      return match === null ? MOVED : write(itemKind, ['needsHuman'], ['revising'], action)
+      const match = matchSource(observed, sourcesOf('revising'))
+      return match === null ? MOVED : write(itemKind, ['needsHuman'], [match.source], action)
     }
     case 'refresh:refreshed':
-      return refreshed(handback.arg, observed)
+      return refreshed(handback.arg, observed, action)
     case 'refresh:escalated': {
-      const match = matchSource(observed, ['refreshing'], ['approved'])
+      const match = matchSource(observed, sourcesOf('refreshing'), ['approved'])
       if (match === null) return MOVED
-      return write(itemKind, ['needsHuman'], match.tolerated.includes('approved') ? ['refreshing', 'approved'] : ['refreshing'], action)
+      return write(itemKind, ['needsHuman'], match.tolerated.includes('approved') ? [match.source, 'approved'] : [match.source], action)
     }
     default:
       return { kind: 'refused', reason: 'unknown-handback' }
@@ -213,12 +231,16 @@ export function transitionFor(params: TransitionParams): StageTransition {
       return reset(mode, observed, 'stage-rollback')
     case 'resumed-turn':
       return resumedTurn(mode, observed)
+    case 'adopt': {
+      const refusal = handbackRefusal(event, mode)
+      return refusal === null ? handbackTransition(mode, event.handback, params, 'stage-adopt') : { kind: 'refused', reason: refusal }
+    }
     case 'outcome':
       switch (event.outcome) {
         case 'completed': {
           const refusal = handbackRefusal(event, mode)
           if (refusal !== null || event.handback === null) return { kind: 'refused', reason: refusal ?? 'no-handback' }
-          return handbackTransition(mode, event.handback, params)
+          return handbackTransition(mode, event.handback, params, 'stage-handback')
         }
         case 'blocked':
           return blocked(mode, observed)

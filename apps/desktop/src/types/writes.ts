@@ -162,6 +162,28 @@ export interface AllowAuditEntry {
   readonly failure: string | null
 }
 
+/** One failed-jobs re-run of an Actions run, written once per attempt. */
+export interface RerunAuditEntry {
+  readonly at: string
+  readonly repo: string
+  readonly repoId: RepoId
+  readonly action: 'observe-rerun-checks'
+  readonly number: number
+  readonly check: string
+  readonly runId: string
+  readonly call: readonly string[] | null
+  readonly result: 'applied' | 'failed'
+  readonly failure: string | null
+}
+
+export interface RerunContext {
+  readonly repo: string
+  readonly repoId: RepoId
+  readonly auditDir: string
+  readonly gh?: GhRunner
+  readonly now?: () => Date
+}
+
 export interface AllowWriteContext {
   readonly repo: string
   readonly repoId: RepoId
@@ -174,13 +196,17 @@ export interface AllowWriteContext {
 
 export type AllowWriteResult = { readonly ok: true; readonly number: number; readonly url: string } | { readonly ok: false; readonly step: 'commit' | 'pr'; readonly message: string }
 
-export type AuditEntry = LabelAuditEntry | ReclaimAuditEntry | PurgeAuditEntry | ReleaseAuditEntry | AllowAuditEntry
+export type AuditEntry = LabelAuditEntry | ReclaimAuditEntry | PurgeAuditEntry | ReleaseAuditEntry | AllowAuditEntry | RerunAuditEntry
 
 const RELEASE_ACTIONS: readonly string[] = ['release-bump', 'release-pr', 'release-publish', 'release-hook']
 
-// The worktree, release and allow actions are the only `action` values `LabelAuditEntry` never takes.
+// The worktree, release, allow and re-run actions are the only `action` values `LabelAuditEntry` never takes.
 export function isLabelAuditEntry(entry: AuditEntry): entry is LabelAuditEntry {
-  return entry.action !== 'worktree-reclaim' && entry.action !== 'worktree-purge' && entry.action !== 'allow-propose' && !RELEASE_ACTIONS.includes(entry.action)
+  return entry.action !== 'worktree-reclaim' && entry.action !== 'worktree-purge' && entry.action !== 'allow-propose' && entry.action !== 'observe-rerun-checks' && !RELEASE_ACTIONS.includes(entry.action)
+}
+
+export function isRerunAuditEntry(entry: AuditEntry): entry is RerunAuditEntry {
+  return entry.action === 'observe-rerun-checks'
 }
 
 export function isAllowAuditEntry(entry: AuditEntry): entry is AllowAuditEntry {
