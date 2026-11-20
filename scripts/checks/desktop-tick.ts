@@ -51,7 +51,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     const routingFile = `${mainDir}/routing.ts`;
     const routingText = readFileSync(join(root, routingFile), 'utf8');
     const routingMatch = /const AGENT_FOR_TRIGGER[^{]*\{([^}]*)\}/.exec(routingText);
-    const labelsJson = readJson('apps/desktop/src/utils/labels/labels.json');
+    const labelsJson = readJson('apps/desktop/src/utils/labels/labels.legacy.json');
     const triggerKeys = new Set<string>(labelsJson.labels.filter((l: any) => l.role === 'trigger').map((l: any) => l.key));
 
     if (!routingMatch) {
@@ -118,7 +118,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
       fail('desktop-tick', `${planFile} has no 'occupiedSetOf' function to check`);
     } else {
       const keys = new Set([...fnMatch[1].matchAll(/'(\w+)'/g)].map((m) => m[1]));
-      const labelsJson = readJson('apps/desktop/src/utils/labels/labels.json');
+      const labelsJson = readJson('apps/desktop/src/utils/labels/labels.legacy.json');
       const roleByKey = new Map(labelsJson.labels.map((l: any) => [l.key, l.role]));
       const expected = { inProgress: 'in-flight', prOpened: 'terminal' };
       let violated = false;

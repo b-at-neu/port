@@ -77,6 +77,13 @@ describe('diagnosticCopy', () => {
     )
   })
 
+  it('names the old label keys a legacy repository still renames, and that they still apply', () => {
+    const copy = diagnosticCopy({ kind: 'legacy-label-overrides', keys: ['ready', 'blocked'] })
+    expect(copy).toBe(
+      'Old label names in config. .claude/port.config.json renames labels from the old set (ready, blocked). They still apply here. Run /port:init to move this repository to the new labels.',
+    )
+  })
+
   it('names a block-level refusal by its marker line, path null', () => {
     const copy = diagnosticCopy({ kind: 'override-refused', path: null, line: '<!-- port-overrides:begin -->', reason: 'a second port-overrides block was found — only the first is read, never merged' })
     expect(copy).toBe('CLAUDE.md override refused: <!-- port-overrides:begin --> — a second port-overrides block was found — only the first is read, never merged. The port value stands.')
@@ -146,6 +153,11 @@ describe('verdictCopy', () => {
 
   it('counts the missing labels for partial', () => {
     expect(verdictCopy('partial', 18, 3, undefined)).toBe("3 of 18 labels are missing on GitHub. Items carrying them won't show.")
+  })
+
+  it('points an app-only repository at /port:init for missing labels', () => {
+    expect(verdictCopy('partial', 7, 2, undefined, true)).toBe('2 of 7 labels are missing on GitHub. Run /port:init to create the missing labels.')
+    expect(verdictCopy('mis-resolved', 7, 7, undefined, true)).toContain('Run /port:init to create them')
   })
 
   it('names the config and CLAUDE.md for mis-resolved', () => {

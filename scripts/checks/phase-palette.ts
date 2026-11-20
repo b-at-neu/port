@@ -133,8 +133,9 @@ export default async function ({ expect, fail, ok }: Reporter) {
         fail('phase-palette', `palette '${palette}' lists ${keys.join(', ')} in labels.json but ${inDesign.join(', ')} in ${DESIGN_REL} §1 — make the two lists match`);
       }
     }
-    for (const palette of designed.keys()) {
-      if (!byPalette.has(palette)) {
+    for (const [palette, keys] of designed) {
+      // A row whose keys cell is `—` is an app-only phase and needs no label.
+      if (keys.length > 0 && !byPalette.has(palette)) {
         bad = true;
         fail('phase-palette', `${DESIGN_REL} §1 has a row for palette '${palette}', which no labels.json entry uses — remove the row or give a label that palette`);
       }
@@ -168,21 +169,23 @@ export default async function ({ expect, fail, ok }: Reporter) {
   const members = (palette: string) => labels.filter((l) => l.palette === palette);
   const lightDot = (palette: string) => resolved(themes.light, `phase-${palette}-dot`);
 
-  // --- (c) exactly one label per palette wears the light dot colour: the anchor GitHub and the app share ---
+  // --- (c) a palette with a label has exactly one, and it wears the light dot colour GitHub and the app share ---
   {
     let bad = false;
     for (const row of rows) {
       const dot = lightDot(row.palette);
-      const anchors = members(row.palette).filter((l) => dot !== null && bare(l.color) === bare(dot));
-      if (anchors.length !== 1) {
+      const palette = members(row.palette);
+      if (palette.length === 0) continue;
+      const anchors = palette.filter((l) => dot !== null && bare(l.color) === bare(dot));
+      if (palette.length !== 1 || anchors.length !== 1) {
         bad = true;
-        fail('phase-palette', `palette '${row.palette}' has ${anchors.length} labels coloured ${dot ?? '(no light dot)'} in ${LABELS_REL}, expected exactly one — set its in-flight label to the light --phase-${row.palette}-dot, or move the dot`);
+        fail('phase-palette', `palette '${row.palette}' has ${palette.length} labels and ${anchors.length} coloured ${dot ?? '(no light dot)'} in ${LABELS_REL}, expected exactly one of each — set its label to the light --phase-${row.palette}-dot, or move the dot`);
       }
     }
     if (!bad) ok();
   }
 
-  // --- (d) every member stays on its anchor's hue; refresh stays grey ---
+  // --- (d) every member stays on its anchor's hue; refresh, an app-only phase, stays grey ---
   {
     let bad = false;
     for (const row of rows) {
@@ -198,22 +201,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
         } else if (hueGap(hsl(color).h, hsl(dot).h) > HUE_TOLERANCE) {
           bad = true;
           fail('phase-palette', `'${l.key}' (${l.color}) is ${Math.round(hueGap(hsl(color).h, hsl(dot).h))}° from palette '${row.palette}'s anchor ${dot}, over the ${HUE_TOLERANCE}° limit — one palette is one hue`);
-        }
-      }
-    }
-    if (!bad) ok();
-  }
-
-  // --- (e) a queued trigger is lighter than its anchor ---
-  {
-    let bad = false;
-    for (const row of rows) {
-      const dot = lightDot(row.palette);
-      if (dot === null) continue;
-      for (const l of members(row.palette).filter((x) => x.role === 'trigger')) {
-        if (luminance(l.color.toLowerCase()) <= luminance(dot)) {
-          bad = true;
-          fail('phase-palette', `trigger '${l.key}' (${l.color}) is not lighter than palette '${row.palette}'s anchor ${dot} — a queued label must be the lighter shade`);
         }
       }
     }

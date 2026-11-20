@@ -55,7 +55,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   // named, and the sanctioned co-presence pair is exactly refreshBranch/refreshing. ---
   if (canonicalBlock !== null) {
     const canonical = canonicalBlock;
-    const markerKeys = readJson('plugins/port/data/labels.json')
+    const markerKeys = readJson('plugins/port/data/labels.legacy.json')
       .labels.filter((l: any) => l.role === 'marker')
       .map((l: any) => l.key);
     for (const key of markerKeys) {

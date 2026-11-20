@@ -4,8 +4,8 @@ import { root, readJson, walk, relOf } from '#lib/files.ts';
 import type { Reporter } from '#lib/report.ts';
 import { message } from '#lib/errors.ts';
 
-const SHIPPED_LABELS_REL = 'plugins/port/data/labels.json';
-const DESKTOP_LABELS_REL = 'apps/desktop/src/utils/labels/labels.json';
+const SHIPPED_LABELS_REL = 'plugins/port/data/labels.legacy.json';
+const DESKTOP_LABELS_REL = 'apps/desktop/src/utils/labels/labels.legacy.json';
 
 /** Substitutes every `{{name}}` in `text` with `subs[name]`. A multi-line value has its
  *  continuation lines indented to its placeholder's own column. Throws naming any surviving placeholder, so a new one forces the caller's map to grow. */
@@ -67,7 +67,7 @@ export function normalizeYaml(text: string): string[] {
 }
 
 export default async function ({ expect, fail, note, ok }: Reporter) {
-  // pin: plugins/port/data/labels.json ↔ apps/desktop/src/utils/labels/labels.json, byte-identical
+  // pin: plugins/port/data/labels.legacy.json ↔ apps/desktop/src/utils/labels/labels.legacy.json, byte-identical
   {
     const missing = [SHIPPED_LABELS_REL, DESKTOP_LABELS_REL].filter((rel) => !existsSync(join(root, rel)));
     if (missing.length > 0) {
@@ -93,23 +93,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- Label vocabulary matches the schema — two files independently list the same label
-  // keys, and have drifted before. pin: `data/labels.json` ↔ the schema
-  {
-    const templateKeys = new Set<string>(readJson('plugins/port/data/labels.json').labels.map((l: any) => l.key));
-    const schemaKeys = new Set(
-      Object.keys(readJson('schema/port.config.schema.json').properties.labels.properties),
-    );
-    for (const k of templateKeys) {
-      if (!schemaKeys.has(k)) fail('labels', `'${k}' is in labels.json but not the schema`);
-    }
-    for (const k of schemaKeys) {
-      if (!templateKeys.has(k)) fail('labels', `'${k}' is in the schema but not labels.json`);
-    }
-    ok();
-  }
-
-  // pin: `pipeline/SKILL.md`'s inline label table ↔ `labels.json`
+  // pin: `pipeline/SKILL.md`'s inline label table ↔ `labels.legacy.json`
   {
     // The inline vocabulary table lives in PREFLIGHT.md — a structural table parse, so this names one file directly rather than the skill union.
     const skillRel = 'plugins/port/skills/pipeline/PREFLIGHT.md';
@@ -127,7 +111,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
         if (row) inline.set(row[1], { name: row[2], role: row[3] });
       }
       const canonical = new Map<string, any>(
-        readJson('plugins/port/data/labels.json').labels.map((l: any) => [l.key, { name: l.name, role: l.role }]),
+        readJson(SHIPPED_LABELS_REL).labels.map((l: any) => [l.key, { name: l.name, role: l.role }]),
       );
       for (const [key, entry] of inline) {
         const c = canonical.get(key);
@@ -157,7 +141,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   // --- No config key appears as a literal --label argument — `gh ... --label <unknown>`
   // exits 0 with an empty result, so a config key typed directly matches nothing silently. Also checked against the collapsed tick query's GraphQL `labels: [...]` list. ---
   {
-    const mismatched = readJson('plugins/port/data/labels.json')
+    const mismatched = readJson(SHIPPED_LABELS_REL)
       .labels.filter((l: any) => l.key !== l.name)
       .map((l: any) => l.key);
     const files = walk(join(root, 'plugins')).filter((f) => f.endsWith('.md'));
@@ -238,7 +222,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
 
   // --- Label colours are well-formed and distinct — a shared colour collapses two labels pixel-identical, and previousColors entries must be well-formed too ---
   {
-    const labels = readJson('plugins/port/data/labels.json').labels;
+    const labels = readJson(SHIPPED_LABELS_REL).labels;
     const seen = new Map();
     for (const l of labels) {
       if (!/^[0-9A-F]{6}$/.test(l.color)) {
@@ -265,7 +249,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
 
   // --- Every label carries a palette — null for a marker and a phase for everything else, so a new label cannot ship uncoloured by phase ---
   {
-    const labels = readJson('plugins/port/data/labels.json').labels;
+    const labels = readJson(SHIPPED_LABELS_REL).labels;
     for (const l of labels) {
       const expectsNull = l.role === 'marker';
       if (expectsNull !== (l.palette === null)) {
@@ -300,8 +284,11 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
 
     const cfg = readJson('.claude/port.config.json');
-    const labelDefs = readJson('plugins/port/data/labels.json').labels;
-    const resolvedName = (key: string): string => cfg.labels?.[key] ?? labelDefs.find((l: any) => l.key === key).name;
+    // An app-only repository's workflows render on the seven labels; every other on the legacy 17.
+    const appOnly = cfg.appOnly === true;
+    const labelDefs = readJson(appOnly ? 'plugins/port/data/labels.json' : SHIPPED_LABELS_REL).labels;
+    const resolvedName = (key: string): string => (appOnly ? (cfg.labels?.[key] ?? cfg.states?.[key]) : cfg.labels?.[key]) ?? labelDefs.find((l: any) => l.key === key).name;
+    const markerKey = appOnly ? 'port' : 'marker';
     const blockingLabels = labelDefs
       .filter((l: any) => l.role === 'in-flight' || l.role === 'gate')
       .filter((l: any) => l.module === 'core' || cfg.modules?.[l.module])
@@ -318,7 +305,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
         subs: {
           integration: cfg.branches.integration,
           approvedLabel: resolvedName('approved'),
-          markerLabel: resolvedName('marker'),
+          markerLabel: resolvedName(markerKey),
           blockingLabels,
         },
       },
@@ -330,7 +317,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
         disabledNote: 'commands.artifacts is not set',
         subs: {
           approvedLabel: resolvedName('approved'),
-          markerLabel: resolvedName('marker'),
+          markerLabel: resolvedName(markerKey),
           artifactsCommand: cfg.commands?.artifacts,
         },
       },

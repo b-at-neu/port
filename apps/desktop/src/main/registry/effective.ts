@@ -1,5 +1,7 @@
 // Resolves a repository's *effective* config: the port-resolved values `inspect.ts` built, with the default branch's `CLAUDE.md` `port-overrides` block folded on top. Composition only — `overrides.ts` does the actual parsing and validation.
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
+import { DISPLAY_DEFAULTS, DISPLAY_KEYS } from '@/utils/labels/display'
+import type { DisplayKey } from '@/utils/labels/display'
 import { LABEL_KEYS } from '@/utils/labels/vocabulary'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { AppliedOverride, CheckDisposition, RepoProblem } from '@/utils/repos'
@@ -16,7 +18,10 @@ type EffectiveConfigResult =
       readonly reviewCycleCap: number
       readonly concurrency: { readonly sharedFiles: readonly string[]; readonly overlapThreshold: number }
       readonly sessionRequiredPaths: readonly string[]
+      /** The applied `labels.<legacy key>` overrides — empty on an app-only repository. */
       readonly labelOverrides: Readonly<Partial<Record<LabelKey, string>>>
+      /** The applied `labels.<key>`/`states.<key>` overrides of an app-only repository — empty on any other. */
+      readonly displayOverrides: Readonly<Partial<Record<DisplayKey, string>>>
       readonly checkDispositions: Readonly<Record<string, CheckDisposition>>
       readonly applied: readonly AppliedOverride[]
       readonly refused: readonly { readonly path: string | null; readonly line: string; readonly reason: string }[]
@@ -36,17 +41,29 @@ function isNonBlankString(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== ''
 }
 
-/** `labels` maps every `LABEL_KEYS` entry to a non-blank `rawLabels[key]`, else the default name, so an override's `portDefault` reads the real value. */
-export function toShape(portResolved: PortResolved, rawLabels: Readonly<Record<string, unknown>>): EffectiveConfigShape {
-  const labels: Record<string, string> = {}
-  for (const def of LABEL_DEFAULTS) {
-    const raw = rawLabels[def.key]
-    labels[def.key] = isNonBlankString(raw) ? raw : def.name
+/** The two maps the app-only vocabulary splits across: `labels` holds the marker and the gate, `states` the rest. */
+const APP_LABEL_KEYS: readonly DisplayKey[] = ['port', 'needsYou']
+const APP_STATE_KEYS: readonly DisplayKey[] = DISPLAY_KEYS.filter((key) => !APP_LABEL_KEYS.includes(key))
+
+function namesOf(keys: readonly string[], defaults: readonly { readonly key: string; readonly name: string }[], raw: Readonly<Record<string, unknown>>): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const def of defaults) {
+    if (!keys.includes(def.key)) continue
+    const value = raw[def.key]
+    out[def.key] = isNonBlankString(value) ? value : def.name
   }
+  return out
+}
+
+/** Each map holds its keys' non-blank `raw` value, else the default name, so an override's `portDefault` reads the real value. An app-only repository's `labels`/`states` are the display maps; any other keeps the legacy `labels` and no `states`. */
+export function toShape(portResolved: PortResolved, rawLabels: Readonly<Record<string, unknown>>, rawStates: Readonly<Record<string, unknown>> = {}, appOnly = false): EffectiveConfigShape {
+  const labels = appOnly ? namesOf(APP_LABEL_KEYS, DISPLAY_DEFAULTS, rawLabels) : namesOf(LABEL_KEYS, LABEL_DEFAULTS, rawLabels)
+  const states = appOnly ? namesOf(APP_STATE_KEYS, DISPLAY_DEFAULTS, rawStates) : {}
   return {
     integration: portResolved.branches.integration,
     production: portResolved.branches.production,
     labels,
+    states,
     models: { ...portResolved.models },
     modules: { ...portResolved.modules },
     reviewCycleCap: portResolved.reviewCycleCap,
@@ -82,6 +99,20 @@ export function labelOverridesOf(applied: readonly AppliedOverride[]): Partial<R
   return out
 }
 
+/** The `labels.<key>`/`states.<key>` entries among `applied` that name a display key, as `{ [key]: value }` — `resolveDisplayVocabulary`'s own `overrides` input. */
+export function displayOverridesOf(applied: readonly AppliedOverride[]): Partial<Record<DisplayKey, string>> {
+  const out: Partial<Record<DisplayKey, string>> = {}
+  const known = DISPLAY_KEYS as readonly string[]
+  for (const a of applied) {
+    if (typeof a.value !== 'string') continue
+    const prefix = a.path.startsWith('labels.') ? 'labels.' : a.path.startsWith('states.') ? 'states.' : null
+    if (prefix === null) continue
+    const key = a.path.slice(prefix.length)
+    if (known.includes(key)) out[key as DisplayKey] = a.value
+  }
+  return out
+}
+
 /** The approval-gate name, then the history-derived artifacts audit, then each applied `checks.<name>`, a later entry overwriting the same key exactly as the cockpit does. */
 export function foldDispositions(excusedCheck: string | null, historyCheck: string | null, applied: readonly AppliedOverride[]): Record<string, CheckDisposition> {
   const out: Record<string, CheckDisposition> = {}
@@ -96,7 +127,13 @@ export function foldDispositions(excusedCheck: string | null, historyCheck: stri
 }
 
 /** Fails closed (`effective-config-unreadable`) when a config file exists but cannot be read, since an unread override could rename a label or change a gate. Absent file is not a failure. */
-export async function resolveEffectiveConfig(read: RefReader, portResolved: PortResolved, rawLabels: Readonly<Record<string, unknown>>): Promise<EffectiveConfigResult> {
+export async function resolveEffectiveConfig(
+  read: RefReader,
+  portResolved: PortResolved,
+  rawLabels: Readonly<Record<string, unknown>>,
+  rawStates: Readonly<Record<string, unknown>>,
+  appOnly: boolean,
+): Promise<EffectiveConfigResult> {
   const claudeMdResult = await read('CLAUDE.md')
   let claudeMdText = ''
   if (claudeMdResult.ok) {
@@ -106,7 +143,8 @@ export async function resolveEffectiveConfig(read: RefReader, portResolved: Port
   }
 
   const parsed = parseOverrides(claudeMdText)
-  const { cfg, applied, refused } = applyOverrides(toShape(portResolved, rawLabels), parsed, { labelKeys: [...LABEL_KEYS] })
+  const keys = appOnly ? { labelKeys: [...APP_LABEL_KEYS], stateKeys: [...APP_STATE_KEYS] } : { labelKeys: [...LABEL_KEYS], stateKeys: [] }
+  const { cfg, applied, refused } = applyOverrides(toShape(portResolved, rawLabels, rawStates, appOnly), parsed, keys)
 
   let excusedCheckName: string | null = null
   if (cfg.modules.approvalGate) {
@@ -129,7 +167,8 @@ export async function resolveEffectiveConfig(read: RefReader, portResolved: Port
   return {
     ok: true,
     ...fromShape(cfg),
-    labelOverrides: labelOverridesOf(applied),
+    labelOverrides: appOnly ? {} : labelOverridesOf(applied),
+    displayOverrides: appOnly ? displayOverridesOf(applied) : {},
     checkDispositions: foldDispositions(excusedCheckName, historyCheckName, applied),
     applied,
     refused,

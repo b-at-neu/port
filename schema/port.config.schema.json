@@ -178,100 +178,66 @@
 
     "labels": {
       "type": "object",
-      "description": "Overrides for the label vocabulary. Labels are the durable state machine, so these are the strings the agents read and write. An omitted key uses the standard name shown as its default; override only where a repository already uses a different word.",
+      "description": "Overrides for the two non-state labels the port app writes. The casing is used verbatim, and reads match case-insensitively. An omitted key uses the standard name shown as its default; override only where a repository already uses a different word.",
       "additionalProperties": false,
       "properties": {
-        "marker": {
+        "port": {
           "type": "string",
-          "description": "Marks an item as pipeline-owned. On a pull request it is also what activates the approval gate.",
-          "default": "claude"
+          "minLength": 1,
+          "description": "Marks an item as pipeline-owned.",
+          "default": "port"
         },
-        "ready": {
+        "needsYou": {
           "type": "string",
-          "description": "Trigger: plan this issue.",
-          "default": "ready"
-        },
+          "minLength": 1,
+          "description": "Gate: the pipeline is waiting on a person.",
+          "default": "needs you"
+        }
+      }
+    },
+
+    "states": {
+      "type": "object",
+      "description": "Overrides for the five state labels. The casing is used verbatim, and reads match case-insensitively. An omitted key uses the standard name shown as its default.",
+      "additionalProperties": false,
+      "properties": {
         "planning": {
           "type": "string",
+          "minLength": 1,
           "description": "In flight: a plan is being researched.",
           "default": "planning"
         },
-        "planReview": {
+        "implementing": {
           "type": "string",
-          "description": "Gate: the plan is written and awaiting human approval.",
-          "default": "plan review"
-        },
-        "planChangesRequested": {
-          "type": "string",
-          "description": "Trigger: revise the plan from human feedback.",
-          "default": "plan changes requested"
-        },
-        "planApproved": {
-          "type": "string",
-          "description": "Trigger: implement the approved plan.",
-          "default": "plan approved"
-        },
-        "autoPlan": {
-          "type": "string",
-          "description": "Marker: skip the plan gate and approve automatically.",
-          "default": "auto plan"
-        },
-        "inProgress": {
-          "type": "string",
+          "minLength": 1,
           "description": "In flight: implementation underway.",
-          "default": "in progress"
-        },
-        "prOpened": {
-          "type": "string",
-          "description": "Terminal on the issue: remaining state lives on the pull request.",
-          "default": "pr opened"
-        },
-        "blocked": {
-          "type": "string",
-          "description": "Gate: implementation hit something needing a human decision.",
-          "default": "blocked"
-        },
-        "readyForReview": {
-          "type": "string",
-          "description": "Trigger: review this pull request.",
-          "default": "ready for review"
+          "default": "implementing"
         },
         "reviewing": {
           "type": "string",
+          "minLength": 1,
           "description": "In flight: review underway.",
           "default": "reviewing"
         },
-        "needsRevision": {
-          "type": "string",
-          "description": "Trigger: apply the review findings.",
-          "default": "needs revision"
-        },
         "revising": {
           "type": "string",
+          "minLength": 1,
           "description": "In flight: fixes underway.",
           "default": "revising"
         },
         "approved": {
           "type": "string",
+          "minLength": 1,
           "description": "Terminal: findings are at or under the current cycle's bar; a human merges.",
           "default": "approved"
-        },
-        "needsHuman": {
-          "type": "string",
-          "description": "Gate: the pipeline stopped and needs a person.",
-          "default": "needs human"
-        },
-        "refreshBranch": {
-          "type": "string",
-          "description": "Trigger: rebase and force-push with no code changes.",
-          "default": "refresh branch"
-        },
-        "refreshing": {
-          "type": "string",
-          "description": "In flight: branch refresh underway.",
-          "default": "refreshing"
         }
       }
+    },
+
+    "appOnly": {
+      "type": "boolean",
+      "description": "Set by `/port:init` when the repository moves to the app vocabulary. The terminal cockpit refuses a repository with this set.",
+      "default": false
     },
 
     "modules": {

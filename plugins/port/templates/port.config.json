@@ -27,6 +27,8 @@
     "revise": "sonnet"
   },
   "labels": {},
+  "states": {},
+  "appOnly": true,
   "modules": {
     "approvalGate": false,
     "release": true,

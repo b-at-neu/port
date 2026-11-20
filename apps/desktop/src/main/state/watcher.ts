@@ -8,6 +8,7 @@ import type { ConditionalTransport, GitHubTransport } from '@/types/platform'
 import type { GitRunner } from '@/types/platform'
 import type { RateLimitInfo } from '@/types/github'
 import { readSessionState } from '@/main/sessions/adapter'
+import { verifiableVocabularyOf } from '@/utils/labels/display'
 import type { RepoId } from '@/utils/repos'
 import type { RepositoryEntry } from '@/utils/repos'
 import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth, isDeferred } from '@/types/board'
@@ -305,7 +306,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       outcome = await engine.refreshDenials({ repoId: entry.id, repoRoot: entry.path })
     } else {
       const startedAt = now().toISOString()
-      outcome = await engine.refreshGithub({ repoId: entry.id, repo: repoRefOf(entry), vocabulary: entry.config.vocabulary, integration: entry.config.branches.integration, tracked: params.trackedRefs?.(entry.id) ?? null })
+      outcome = await engine.refreshGithub({ repoId: entry.id, repo: repoRefOf(entry), vocabulary: entry.config.vocabulary, verify: verifiableVocabularyOf(entry.config), integration: entry.config.branches.integration, tracked: params.trackedRefs?.(entry.id) ?? null })
       precheck.settled(entry.id, startedAt, outcome.ok)
       if (outcome.closed !== undefined && outcome.closed.length > 0) await params.prunePipelineState?.(entry.id, outcome.closed)
     }

@@ -3,7 +3,7 @@
 import type { GitHubTransport } from '@/types/platform'
 import { githubHttp } from '@/main/platform/github-http'
 import { verifyVocabulary } from '@/utils/labels/vocabulary'
-import type { LabelVocabulary, RepoLabels } from '@/utils/labels/vocabulary'
+import type { LabelVocabulary, RepoLabels, VerifiableVocabulary } from '@/utils/labels/vocabulary'
 import type {
   AliasInfo,
   GitHubRepoRef,
@@ -275,6 +275,8 @@ async function readIntegrationChecks(github: GitHubTransport, repo: GitHubRepoRe
 interface FetchPipelineItemsParams {
   readonly repo: GitHubRepoRef
   readonly vocabulary: LabelVocabulary
+  /** What the repository's label list is checked against: the display vocabulary on an app-only repository. Absent means `vocabulary`. */
+  readonly verify?: VerifiableVocabulary
   readonly integration: string
   /** The store's items: non-null makes them, not the swept labels, the set of items read. `null` is the label path. */
   readonly tracked?: readonly TrackedRef[] | null
@@ -326,7 +328,7 @@ export async function fetchPipelineItems(params: FetchPipelineItemsParams): Prom
     closed,
     queried: queriedLabelsOf(params.vocabulary),
     disabled: params.vocabulary.disabled,
-    vocabulary: verifyVocabulary(params.vocabulary, swept.repoLabels),
+    vocabulary: verifyVocabulary(params.verify ?? params.vocabulary, swept.repoLabels),
     unavailable: [...swept.state.unavailable.values()],
     truncated: swept.truncated,
     rateLimit: integration.rateLimit,

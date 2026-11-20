@@ -7,7 +7,7 @@ import { join, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 // --- Label vocabulary --------------------------------------------------------
-// Mirrors data/labels.json (key, default name, module); layer 1 asserts the two agree.
+// Mirrors data/labels.legacy.json (key, default name, module); layer 1 asserts the two agree.
 export const LABELS = {
   marker: { name: 'claude', module: 'core' },
   autoPlan: { name: 'auto plan', module: 'core' },
