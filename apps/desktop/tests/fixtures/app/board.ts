@@ -129,7 +129,7 @@ function readyRepositoryState(now: Date, scenario: FixtureScenario): RepositoryS
     activity: 'active',
   }
 
-  return reconcileRepository({
+  const state = reconcileRepository({
     entry,
     pipelineFetch,
     itemsByNumberFetch: null,
@@ -137,6 +137,15 @@ function readyRepositoryState(now: Date, scenario: FixtureScenario): RepositoryS
     worktrees: { ok: true, mainPath: '/home/you/src/widgets', entries: scenario === 'empty' ? [] : [OPERATOR_WORKTREE], subjectsAvailable: true, readAt: now.toISOString() },
     denials: widgetsDenialsRead(now, '/home/you/src/widgets/.agents/denials.log'),
   })
+  return scenario === 'attention' && state.ok ? withMirrorFailure(state, MIRROR_FAILED_NUMBER, now) : state
+}
+
+const MIRROR_FAILED_NUMBER = 46
+
+/** The store's recorded failed label write on one ticket, so the real `repairsOf` reports it under Label problems. */
+function withMirrorFailure(state: Extract<RepositoryState, { readonly ok: true }>, number: number, now: Date): RepositoryState {
+  const outcome = { kind: 'write-failed' as const, classification: 'unknown' as const, stderr: "could not add label: 'implementing' not found", reread: null }
+  return { ...state, items: state.items.map((item) => (item.number === number ? { ...item, mirrorFailure: { at: offsetMinutes(now, -3), outcome } } : item)) }
 }
 
 const OPERATOR_WORKTREE_PATH = '/home/you/src/widgets/.claude/worktrees/impl-46'
