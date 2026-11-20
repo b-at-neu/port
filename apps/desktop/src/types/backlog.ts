@@ -177,7 +177,6 @@ export interface BacklogRowExtras {
   readonly slot?: string
   readonly leading?: ReactNode
   readonly afterTitle?: ReactNode
-  readonly panel?: ReactNode
 }
 
 export type RenderBacklogRow = (row: BacklogRowView, extras?: BacklogRowExtras) => ReactNode

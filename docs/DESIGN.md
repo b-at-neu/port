@@ -184,7 +184,7 @@ Dark surface lightness (CIE L*): sidebar 6.3 · background 10.7 · card 15.2 · 
 
 Scoping epics and analytics are out of scope for the first release.
 
-**Detail pane rule.** Selecting an item in a list (a ticket, worktree, denial or release) opens it in the right-hand pane instead of navigating away. Esc closes it. Clicking the selected row again, or empty space on the page, deselects it and closes the pane; clicks on a control, inside the pane, or in a menu or dialog do not. Full-page navigation is only for screens and sessions. The Backlog is the exception: a ticket's details expand inline under its row, so they read alongside its wave.
+**Detail pane rule.** Selecting an item in a list (a ticket, worktree, denial or release) opens it in the right-hand pane instead of navigating away. Esc closes it. Clicking the selected row again, or empty space on the page, deselects it and closes the pane; clicks on a control, inside the pane, or in a menu or dialog do not. Full-page navigation is only for screens and sessions. On the Backlog, J / K move the selection without opening the pane, since each open reads GitHub; a click or Space opens it.
 
 **Board row anatomy, left to right:**
 - ticket number (`muted-foreground`, tabular);
@@ -230,7 +230,7 @@ Scoping epics and analytics are out of scope for the first release.
 | ↑ / ↓ | Previous / next sent prompt when the composer is empty |
 | Esc | Close suggestions, else stop Claude's turn when the composer is focused; otherwise close the pane or dialog |
 | J / K, then Enter | Move through Board and Backlog rows, open the selected one |
-| Space | Show or hide the selected Backlog row's details |
+| Space | Open the selected Backlog row in the detail pane |
 
 ## 4. Component treatments
 

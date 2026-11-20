@@ -51,7 +51,13 @@ export function clearsOnSurfacePress(zone: PressZone, button: number, selected: 
   return zone === 'blank' && button === 0 && selected !== null
 }
 
-function pressZone(event: MouseEvent, surface: HTMLElement): PressZone {
+/** A press on a control inside the row, never on the row itself. */
+export function isControlPress(event: MouseEvent): boolean {
+  const control = event.target instanceof Element ? event.target.closest(KEEPS_SELECTION) : null
+  return control !== null && control !== event.currentTarget && event.currentTarget.contains(control)
+}
+
+export function pressZone(event: MouseEvent, surface: HTMLElement): PressZone {
   const target = event.target
   if (!(target instanceof Node) || !surface.contains(target)) return 'outside'
   if (target instanceof HTMLElement && (event.nativeEvent.offsetX >= target.clientWidth || event.nativeEvent.offsetY >= target.clientHeight)) return 'keep'
@@ -149,9 +155,7 @@ export function useListSelection(keys: readonly string[], options: UseListSelect
       tabIndex: 0,
       onFocus: () => select(key),
       onMouseDown: (event) => {
-        const control = event.target instanceof Element ? event.target.closest(KEEPS_SELECTION) : null
-        const onControl = control !== null && control !== event.currentTarget && event.currentTarget.contains(control)
-        if (clearsOnPress(key, selectedKey, event.button, onControl)) {
+        if (clearsOnPress(key, selectedKey, event.button, isControlPress(event))) {
           // Without this the focus that follows the press would select the row again.
           event.preventDefault()
           clear()

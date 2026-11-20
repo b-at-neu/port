@@ -1,16 +1,84 @@
 import { describe, expect, it } from 'vitest'
-import { assigneeView, detailPanelId, epicSummaryView, linkListView } from '@/renderer/backlog/detail'
-import type { BacklogEpicSummary } from '@/types/backlog'
+import { assigneeView, backlogRowPress, epicSummaryView, findEpicGroup, linkListView } from '@/renderer/backlog/detail'
+import type { BacklogEpicGroup, BacklogEpicSummary, BacklogGroupView, BacklogRowView } from '@/types/backlog'
+import type { RepoId } from '@/utils/repos'
 
-const link = (number: number, state = 'OPEN') => ({ number, title: `Ticket ${String(number)}`, url: `https://example.test/${String(number)}`, state })
+const link = (number: number, state = 'OPEN') => ({
+  number,
+  title: `Ticket ${String(number)}`,
+  url: `https://example.test/${String(number)}`,
+  state,
+})
 
-describe('detailPanelId', () => {
-  it('replaces every character outside the id-safe set', () => {
-    expect(detailPanelId('owner/repo:name:45')).toBe('backlog-detail-owner-repo-name-45')
+const A = 'repo-a' as RepoId
+const B = 'repo-b' as RepoId
+
+function row(repoId: RepoId, number: number): BacklogRowView {
+  return { repoId, number } as BacklogRowView
+}
+
+function epicGroup(repoId: RepoId, number: number): BacklogEpicGroup {
+  return { epic: row(repoId, number), waves: [], unplaced: [], summary: { ok: false, reason: 'x' } }
+}
+
+function loaded(repoId: RepoId, group: BacklogEpicGroup): BacklogGroupView {
+  return {
+    kind: 'loaded',
+    repoId,
+    repo: String(repoId),
+    items: [],
+    totalCount: 0,
+    labelOptions: [],
+    truncatedNote: null,
+    layout: {
+      entries: [
+        { kind: 'epic', group },
+        { kind: 'row', row: row(repoId, 7) },
+      ],
+    },
+  }
+}
+
+describe('backlogRowPress', () => {
+  it('only selects on a control press', () => {
+    expect(backlogRowPress({ key: 'a:1', detailKey: 'a:1', button: 0, onControl: true })).toBe('select')
   })
 
-  it('keeps letters, digits, underscores and dashes', () => {
-    expect(detailPanelId('a_b-C9')).toBe('backlog-detail-a_b-C9')
+  it('only selects on a non-primary press', () => {
+    expect(backlogRowPress({ key: 'a:1', detailKey: null, button: 2, onControl: false })).toBe('select')
+  })
+
+  it('closes on a primary press on the shown row', () => {
+    expect(backlogRowPress({ key: 'a:1', detailKey: 'a:1', button: 0, onControl: false })).toBe('close')
+  })
+
+  it('opens on a primary press on another row', () => {
+    expect(backlogRowPress({ key: 'a:2', detailKey: 'a:1', button: 0, onControl: false })).toBe('open')
+  })
+
+  it('opens on a primary press with nothing shown', () => {
+    expect(backlogRowPress({ key: 'a:1', detailKey: null, button: 0, onControl: false })).toBe('open')
+  })
+})
+
+describe('findEpicGroup', () => {
+  const epic = epicGroup(A, 41)
+  const groups = [loaded(A, epic), { kind: 'loading', repoId: B, repo: 'b' } satisfies BacklogGroupView]
+
+  it('finds an epic in a loaded group', () => {
+    expect(findEpicGroup(groups, A, 41)).toBe(epic)
+  })
+
+  it('returns null for a regular row', () => {
+    expect(findEpicGroup(groups, A, 7)).toBeNull()
+  })
+
+  it('returns null for another repository', () => {
+    expect(findEpicGroup(groups, B, 41)).toBeNull()
+  })
+
+  it('returns null for a loading group', () => {
+    expect(findEpicGroup([{ kind: 'loading', repoId: A, repo: 'a' }], A, 41)).toBeNull()
   })
 })
 
@@ -61,7 +129,13 @@ describe('assigneeView', () => {
 })
 
 describe('epicSummaryView', () => {
-  const child = (number: number) => ({ number, title: `Ticket ${String(number)}`, state: 'OPEN' as const, claimed: false, blockers: { ok: true as const, open: [], closed: [], shown: 0, total: 0 } })
+  const child = (number: number) => ({
+    number,
+    title: `Ticket ${String(number)}`,
+    state: 'OPEN' as const,
+    claimed: false,
+    blockers: { ok: true as const, open: [], closed: [], shown: 0, total: 0 },
+  })
   const ok = (overrides: Partial<Extract<BacklogEpicSummary, { ok: true }>> = {}): BacklogEpicSummary => ({
     ok: true,
     wavesMayShift: false,
@@ -91,10 +165,16 @@ describe('epicSummaryView', () => {
   })
 
   it('passes truncation through', () => {
-    expect(epicSummaryView(ok({ truncated: { shown: 50, total: 70 } }), 'u/1')).toMatchObject({ ok: true, truncated: { shown: 50, total: 70 } })
+    expect(epicSummaryView(ok({ truncated: { shown: 50, total: 70 } }), 'u/1')).toMatchObject({
+      ok: true,
+      truncated: { shown: 50, total: 70 },
+    })
   })
 
   it('carries the reason of a failed read', () => {
-    expect(epicSummaryView({ ok: false, reason: 'no sub-issues' }, 'u/1')).toEqual({ ok: false, reason: 'no sub-issues' })
+    expect(epicSummaryView({ ok: false, reason: 'no sub-issues' }, 'u/1')).toEqual({
+      ok: false,
+      reason: 'no sub-issues',
+    })
   })
 })

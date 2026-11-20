@@ -202,8 +202,8 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
     variants: [
       { name: 'repo-filter', click: '[data-slot="backlog-repo-filter"]', ready: '[role="menu"]' },
       { name: 'epic-collapsed', click: '[data-slot="backlog-epic-toggle"]', restore: '[data-slot="backlog-epic-toggle"]', ready: '[data-slot="backlog-epic"][data-collapsed="true"]' },
-      { name: 'ticket-detail', click: '[data-slot="backlog-detail-toggle"]', restore: '[data-slot="backlog-detail-toggle"]', ready: '[data-slot="backlog-detail"] [data-slot="backlog-detail-meta"]' },
-      { name: 'epic-info', click: '[data-slot="backlog-epic-info"]', restore: '[data-slot="backlog-epic-info"]', ready: '[data-slot="backlog-epic-info-panel"] [data-slot="backlog-detail-meta"]' },
+      { name: 'detail', click: '[data-slot="backlog-row"][data-row-key$=":45"]', restore: '[aria-label="Close details"]', ready: '[data-slot="backlog-detail"][data-ticket="45"] [data-slot="backlog-detail-meta"]' },
+      { name: 'epic-detail', click: '[data-slot="backlog-epic-row"]', restore: '[aria-label="Close details"]', ready: '[data-slot="backlog-detail"][data-ticket="41"] [data-slot="backlog-detail-meta"]' },
     ],
   },
   releases: {

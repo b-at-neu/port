@@ -64,11 +64,11 @@ interface BacklogRowProps extends BacklogRowExtras {
   readonly pending: boolean
   readonly onMenuOpenChange: (open: boolean) => void
   readonly onPick: (planGate: PlanGateChoice) => boolean
-  readonly onToggleDetail: () => void
+  readonly onOpenDetail: () => void
   readonly now: Date
 }
 
-export function BacklogRow({ row, rowProps, menuOpen, pending, onMenuOpenChange, onPick, onToggleDetail, now, slot = 'backlog-row', leading, afterTitle }: BacklogRowProps) {
+export function BacklogRow({ row, rowProps, menuOpen, pending, onMenuOpenChange, onPick, onOpenDetail, now, slot = 'backlog-row', leading, afterTitle }: BacklogRowProps) {
   return (
     <div
       data-slot={slot}
@@ -76,15 +76,13 @@ export function BacklogRow({ row, rowProps, menuOpen, pending, onMenuOpenChange,
       onKeyDown={(event) => {
         if (event.key !== ' ' || event.target !== event.currentTarget) return
         event.preventDefault()
-        onToggleDetail()
+        onOpenDetail()
       }}
       className={`flex h-9 items-center gap-2 px-4 text-body ${rowProps.className}`}
     >
       {leading}
       <span className="w-12 shrink-0 font-mono tabular-nums text-muted-foreground">#{row.number}</span>
-      <a href={row.url} target="_blank" rel="noreferrer" className="min-w-24 flex-1 truncate text-foreground hover:underline">
-        {row.title}
-      </a>
+      <span className="min-w-24 flex-1 truncate text-foreground">{row.title}</span>
       {afterTitle}
       <BlockedTag row={row} />
       {row.labels.length > 0 ? (
