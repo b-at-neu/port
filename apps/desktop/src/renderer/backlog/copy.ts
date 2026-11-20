@@ -90,6 +90,7 @@ export function backlogBlockedReasonCopy(count: number): string {
 }
 
 export const BACKLOG_EPIC_TAG = 'Epic'
+export const BACKLOG_WAVES_MAY_SHIFT = 'Wave numbers may change. Not every dependency could be read.'
 
 export function backlogWaveLabel(number: number): string {
   return `Wave ${String(number)}`

@@ -1,5 +1,5 @@
 // Fixture mode's own canned backlog: one populated scenario for `acme/widgets`.
-import type { BacklogItem, BacklogResponse, ChildrenRead, ParentRead } from '@/types/backlog'
+import type { BacklogItem, BacklogResponse, ChildBlockerRead, ChildrenRead, ParentRead } from '@/types/backlog'
 import type { BlockerRead } from '@/types/github'
 import type { RepoId } from '@/utils/repos'
 import { WIDGETS_ID } from './repos'
@@ -32,13 +32,31 @@ const BLOCKING_45: BlockerRead = {
   total: 1,
 }
 
-// The notification epic's sub-issues: one done, one claimed, one open and waiting on the claimed one.
+const CHILD_UNBLOCKED: ChildBlockerRead = { ok: true, open: [], closed: [], shown: 0, total: 0 }
+
+const CHILD_BLOCKED_BY_CLOSED_38: ChildBlockerRead = {
+  ok: true,
+  open: [],
+  closed: [{ number: 38, title: 'Audit the current notification channels', url: 'https://github.com/acme/widgets/issues/38', state: 'CLOSED' }],
+  shown: 1,
+  total: 1,
+}
+
+const CHILD_BLOCKED_BY_39: ChildBlockerRead = {
+  ok: true,
+  open: [{ number: 39, title: 'Migrate stored notification preferences', url: 'https://github.com/acme/widgets/issues/39', state: 'OPEN' }],
+  closed: [],
+  shown: 1,
+  total: 1,
+}
+
+// The notification epic's sub-issues: one done, one claimed and blocked by the done one (so it sits in Wave 2), one open and waiting on the claimed one (Wave 3).
 const EPIC_41_CHILDREN: ChildrenRead = {
   ok: true,
   children: [
-    { number: 38, title: 'Audit the current notification channels', state: 'CLOSED', claimed: false, blockers: UNBLOCKED },
-    { number: 39, title: 'Migrate stored notification preferences', state: 'OPEN', claimed: true, blockers: UNBLOCKED },
-    { number: 43, title: 'Rate-limit the public search endpoint', state: 'OPEN', claimed: false, blockers: BLOCKED_BY_39 },
+    { number: 38, title: 'Audit the current notification channels', state: 'CLOSED', claimed: false, blockers: CHILD_UNBLOCKED },
+    { number: 39, title: 'Migrate stored notification preferences', state: 'OPEN', claimed: true, blockers: CHILD_BLOCKED_BY_CLOSED_38 },
+    { number: 43, title: 'Rate-limit the public search endpoint', state: 'OPEN', claimed: false, blockers: CHILD_BLOCKED_BY_39 },
   ],
   shown: 3,
   total: 3,
