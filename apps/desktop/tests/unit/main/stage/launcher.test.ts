@@ -406,7 +406,6 @@ describe('createStageLauncher.observe', () => {
     expect(deps.releaseBranch).not.toHaveBeenCalled()
   })
 
-
   it('on questions, leaves the session open and tracked, but still reports the outcome', async () => {
     const deps = fakeDeps()
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })

@@ -60,7 +60,7 @@ async function settle(read: FileResult<string>, text: string, agent: StageLaunch
     now: () => new Date(),
     onOutcome,
     onResumedTurn: vi.fn(),
-    registry: registry as never,
+    registry,
     onDenial: vi.fn(),
     newId: () => 'id-1',
     loadInstructions,

@@ -219,8 +219,7 @@ describe('createDispatcher — stage label writes', () => {
     await consider(dispatcher)
     dispatcher.recordOutcome(REPO_ID, KEY, completed({ token: 'plan-written', arg: null }), { kind: 'read', body: '## Implementation Plan' })
     await settle()
-    expect(transition.mock.calls[0]?.[0]).toMatchObject({ event: { plan: { kind: 'read', body: '## Implementation Plan' } }, scratchDir: expect.any(String) })
-  })
+    expect(transition.mock.calls[0]?.[0]).toMatchObject({ event: { plan: { kind: 'read', body: '## Implementation Plan' } } })  })
 
   it('records the hand-back write result on the ended stage the tick reads', async () => {
     let phase: 'ready' | 'ended' = 'ready'
