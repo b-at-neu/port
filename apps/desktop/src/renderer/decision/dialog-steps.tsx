@@ -59,7 +59,7 @@ export function ConfirmUnblockStep({ state }: { readonly state: Extract<Decision
           <Button onClick={() => submitUnblock('implementation')}>Send back to implementation</Button>
         ) : (
           <>
-            {decisions.length === 0 ? (
+            {state.context.routes.includes('review') ? (
               <Button variant="outline" onClick={() => submitUnblock('review')}>
                 Send to review
               </Button>

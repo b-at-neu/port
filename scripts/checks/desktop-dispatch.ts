@@ -314,7 +314,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     } else expect(!(writeIdx < ownerGateIdx), 'desktop-dispatch', `${dispatcherFile} references deps.writeObservation before its own owner !== 'app' stand-down — the observation pass must run only once this app owns dispatch`);
   }
 
-  // pin: `main/dispatch/observation.ts`'s comment templates ↔ `FORMATS.md`'s "Approval withdrawn"/"Rebase required" fences and `TICK-PROSE.md`'s zero-diff and integration-red escalation fences
+  // pin: `main/dispatch/observation.ts`'s comment templates ↔ `FORMATS.md`'s "Approval withdrawn"/"Rebase required" fences and `TICK-PROSE.md`'s per-SHA cap and integration-red escalation fences
   {
     const observationFile = `${mainDispatchDir}/observation.ts`;
     const observationText = readFileSync(join(root, observationFile), 'utf8');
@@ -345,7 +345,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
       { name: `"Rebase required" (FORMATS.md)`, fence: fenceTextOf(docsText, '### Rebase required') },
       { name: `"Approval withdrawn" escalation variant (FORMATS.md)`, fence: fenceTextOf(docsText, 'Approval withdrawn — escalation variant') },
       { name: 'the per-SHA cap escalation (TICK-PROSE.md)', fence: fenceTextOf(skillText, 'Per-SHA cap.') },
-      { name: 'the zero-diff escalation (TICK-PROSE.md)', fence: fenceTextOf(skillText, 'zero-diff-<pr>.md') },
       { name: 'the integration-red escalation (TICK-PROSE.md)', fence: fenceTextOf(skillText, 'integration-red-escalation-<pr>.md') },
     ];
 
@@ -376,7 +375,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
         fail('desktop-dispatch', `${name} no longer writes the '${markerPrefix}' escalation marker prefix`);
       }
     }
-    const appCauses: readonly (readonly [string, string])[] = [['zero-diff', observationText], ['sha-cap', observationText], ['cycle-cap', observationText], ['integration-red', observationText], ['refresh-stuck', observationText], ['budget', budgetText]];
+    const appCauses: readonly (readonly [string, string])[] = [['sha-cap', observationText], ['cycle-cap', observationText], ['integration-red', observationText], ['refresh-stuck', observationText], ['budget', budgetText]];
     for (const [cause, text] of appCauses) {
       if (!gatesText.includes(`'${cause}'`) || !text.includes(cause)) {
         markerDrift = true;

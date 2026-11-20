@@ -122,7 +122,7 @@ const HANDOFF_REFUSAL_COPY: Readonly<Record<HandoffRefusal, string>> = {
   'unknown-handback': "its hand-back line isn't one port knows",
   'pr-unverified': "the pull request it named isn't open on its branch",
   moved: 'its stage changed while it ran',
-  'write-failed': 'GitHub refused the change three times',
+  'write-failed': 'GitHub kept refusing the change',
   'terminal-owned': 'the terminal pipeline owns this repository now',
   'unresolvable-label': "a label it needs isn't in this repository",
   'no-plan-file': 'it left no plan file to post',
