@@ -93,7 +93,7 @@ function deps(): { readonly posted: PostCommentParams[]; readonly labelCalls: ()
     posted,
     labelCalls: () => labels,
     value: {
-      applyLabels: () => {
+      writeState: () => {
         labels++
         return Promise.resolve(APPLIED)
       },

@@ -45,7 +45,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - release version read from `release.versionFiles[0]`; `apps/desktop/package.json` is itself a `versionFiles` entry, kept equal to it by the `version-files-agree` check
 
 **`apps/desktop/src/main/actions/`**
-- only `applyLabels` caller across pause/resume/retry/gate/refresh/claim/escalate/observe/decide/stage
+- every pause/resume/retry/gate/refresh/claim/escalate/observe/decide/stage write goes through the injected `writeState`, never `applyLabels`; `bound.ts` binds each action to it once at the composition root
 - `stage.ts`'s `applyStageClaim`/`applyStageTransition` are every label write a stage session needs; `pr-opened` is verified (an open pull request on this issue's `<n>-` branch) before either write, and the pull request is written first
 - never trusts a renderer-supplied `expectedStage` to widen a write, only to refuse
 - `gate.ts` comments before the label swap; `escalate.ts`/`observe.ts` swap first
@@ -127,6 +127,15 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `precheckGithub` runs in the worker because the ETag cache lives there; a changed ETag schedules a budget-gated GitHub sweep through the watcher's one clock, and a pre-check failure never touches GitHub health
 - a worker crash fails closed into each op's existing failure value, never an empty result; a failed projection keeps the last good board and still schedules the next tick
 
+**`apps/desktop/src/main/pipeline-state/`**
+- the app's own record of every ticket's stage, claim, gates, review cycles and history, and the source of truth for what the tick, reconcile, repair and dispatch decide; GitHub labels are a mirror written after it
+- `store.ts` is the state file's only writer, and `default.ts` is the only place that names the file; a transition awaits its atomic write and reports `persist-failed` without changing memory, so it is never reported as applied until it is on disk
+- `writer.ts`'s `writeState` is the only caller of `applyLabels`: it checks `expect.present`/`absent` against the store, commits the store, then mirrors the label diff with the label half of the precondition emptied; a failed mirror is `mirror-failed` and never rolls the store back
+- a repository the store does not hold, a terminal owner and an unresolvable key all fall through to `applyLabels` itself, which refuses or writes exactly as before
+- fails toward reseeding: a missing, malformed or newer-version file loads empty and every repository reseeds from its labels on the next projection, never toward refusing to start; a bad item is dropped, never its repository
+- `reconcile.ts` overrides `matchedKeys`, `stageHistory` and `reviewCycleCount` from the view, and `reviewCycleCount` is the larger of the stored count and the GitHub reviews, so the cap can only hold earlier
+- a repository the terminal cockpit holds reads labels, because labels are the record there; when the owner leaves, the next view is `labels` once and the watcher reseeds
+
 **`apps/desktop/src/main/platform/`**
 - only importer of `node:child_process` / `node:fs` under `apps/desktop/src/`
 - spawnables a literal union (`KNOWN_COMMANDS`); paths via `pathKey`/`contains`, never `startsWith`
@@ -149,6 +158,12 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - reads `CLAUDE.md` and the approval workflow through an injected ref reader (`harness.ts`'s `readAtDefaultRef`, `origin/HEAD`), the same ref stage agents read — never the checked-out files
 - fails closed (`effective-config-unreadable`) rather than silently running on port defaults
 - imports `scripts/port-tick/overrides.ts` directly — no app-owned copy
+
+**`apps/desktop/src/main/registry/index.ts`**
+- `listRepositories` is the one cached reader of registry inspections: in-flight shared, `REPOSITORY_LIST_TTL_MS`, keyed by the `RegistryDeps` object
+- add/remove invalidate it; only the watcher's explicit refresh passes `fresh`
+- a failed read is never cached
+- callers never add a second cache of their own
 
 **`apps/desktop/src/main/registry/schema.ts`**
 - the only reader of `schema/port.config.schema.json`'s shape and defaults

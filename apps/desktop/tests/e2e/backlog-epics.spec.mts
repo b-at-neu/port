@@ -14,12 +14,13 @@ test.beforeEach(async () => {
       viewer: 'octocat',
       repo: 'acme/widgets',
       issues: [
-        { number: 200, title: 'Ship the thing', labels: [] },
+        { number: 200, title: 'Ship the thing', labels: [], createdAt: '2024-02-01T00:00:00Z' },
         { number: 201, title: 'First step', labels: [], parent: 200 },
         { number: 202, title: 'Second step', labels: ['claude', 'in progress'], parent: 200, blockedBy: [issue(201)] },
         { number: 203, title: 'Third step', labels: [], parent: 200, blockedBy: [issue(202)] },
         { number: 205, title: 'Already done', labels: [], state: 'CLOSED', parent: 200 },
         { number: 210, title: 'Unrelated', labels: [] },
+        { number: 211, title: 'Newest loose ticket', labels: [], createdAt: '2024-03-01T00:00:00Z' },
       ],
     }),
   })
@@ -63,12 +64,31 @@ test('renders the epic as waves with a band, then the flat rows', async () => {
   await expect(epic.locator('[data-slot="backlog-row"]', { hasText: '#210' })).toHaveCount(0)
 })
 
+test('interleaves the epic among loose tickets by created time, newest first', async () => {
+  const { page } = harness
+  await page.getByRole('link', { name: 'Backlog', exact: true }).click()
+  await expect(page.locator('[data-slot="backlog-epic"][data-epic="200"]')).toBeVisible()
+
+  const texts = await page.locator('[data-slot="backlog-epic-row"], [data-slot="backlog-row"]').allTextContents()
+  const numbers = texts.map((text) => /#(\d+)/.exec(text)?.[1])
+  expect(numbers).toEqual(['211', '200', '201', '203', '210'])
+})
+
+test('reads a row age from its created time, not its updated time', async () => {
+  const { page } = harness
+  await page.getByRole('link', { name: 'Backlog', exact: true }).click()
+
+  const age = page.locator('[data-slot="backlog-row"]', { hasText: '#211' }).locator('[data-slot="backlog-age"]')
+  await expect(age).toHaveText(/\d+d ago/)
+  await expect(age).not.toHaveText('just now')
+})
+
 test('moves through the epic with J, then skips a collapsed epic', async () => {
   const { page } = harness
   await page.getByRole('link', { name: 'Backlog', exact: true }).click()
   await expect(page.locator('[data-slot="backlog-epic"][data-epic="200"]')).toBeVisible()
 
-  const expected = ['200', '201', '203', '210']
+  const expected = ['211', '200', '201', '203', '210']
   for (const number of expected) {
     await page.keyboard.press('j')
     expect(await selectedNumber(page)).toMatch(new RegExp(`:${number}$`))

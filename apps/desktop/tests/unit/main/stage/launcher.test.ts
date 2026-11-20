@@ -49,14 +49,15 @@ function fakeDeps(overrides: Partial<{ start: SessionStartResult }> = {}) {
   const dismiss = vi.fn().mockResolvedValue({ ok: true })
   const send = vi.fn().mockReturnValue({ ok: true, uuid: 'u1', queued: true })
   const start = vi.fn<(params: StartSessionParams) => Promise<SessionStartResult>>().mockResolvedValue(started)
-  const store = { start, send, close, dismiss } as unknown as Parameters<typeof createStageLauncher>[0]['store']
+  const list = vi.fn((): readonly HostedSessionSnapshot[] => [])
+  const store = { start, send, close, dismiss, list } as unknown as Parameters<typeof createStageLauncher>[0]['store']
   const removeWorktree = vi.fn().mockResolvedValue({ outcome: 'removed' })
-  const createWorktree = vi.fn().mockResolvedValue({ ok: true, path: '/repo/.claude/worktrees/impl-52', branch: '52-add-a-dark-mode-icon', baseSha: 'abc', baseLabel: '52-add-a-dark-mode-icon' })
+  const createWorktree = vi.fn().mockResolvedValue({ ok: true, path: '/repo/.claude/worktrees/impl-52', branch: '52-add-a-dark-mode-icon', baseSha: 'abc', baseLabel: '52-add-a-dark-mode-icon', reclaimed: null })
   const releaseBranch = vi.fn().mockResolvedValue('deleted')
   const sweepBranches = vi.fn().mockResolvedValue({ done: true, deleted: [] })
   const onOutcome = vi.fn()
   const onResumedTurn = vi.fn()
-  const registryMock = { recordRunning: vi.fn(), markRunning: vi.fn(), setSessionId: vi.fn(), markInterrupted: vi.fn(), markAllQuit: vi.fn(), remove: vi.fn(), list: vi.fn(() => []), load: vi.fn() }
+  const registryMock = { recordRunning: vi.fn(), markRunning: vi.fn(), setSessionId: vi.fn(), markInterrupted: vi.fn(), markAllQuit: vi.fn(), remove: vi.fn(), list: vi.fn((): readonly InterruptedStage[] => []), runningWorktreePaths: vi.fn((): readonly string[] => []), load: vi.fn() }
   const registry = registryMock as unknown as Parameters<typeof createStageLauncher>[0]['registry']
   const onDenial = vi.fn()
   let nextId = 0
@@ -69,7 +70,7 @@ function fakeDeps(overrides: Partial<{ start: SessionStartResult }> = {}) {
     }),
   )
   const readTextFile = vi.fn((path: string) => Promise.resolve<FileResult<string>>(path === pathOps.join('/bundle', 'agents', 'impl-agent.md') ? { ok: true, value: '---\nname: impl-agent\ndescription: impl\ndisallowedTools: Agent\n---\nbody\n' } : { ok: false, kind: 'not-found', message: `ENOENT ${path}` }))
-  return { store, removeWorktree, createWorktree, releaseBranch, sweepBranches, onOutcome, onResumedTurn, close, dismiss, send, start, registry, registryMock, onDenial, newId, loadInstructions, bundleRoot: '/bundle', ops: pathOps, readTextFile }
+  return { store, storeList: list, removeWorktree, createWorktree, releaseBranch, sweepBranches, onOutcome, onResumedTurn, close, dismiss, send, start, registry, registryMock, onDenial, newId, loadInstructions, bundleRoot: '/bundle', ops: pathOps, readTextFile }
 }
 
 describe('createStageLauncher.launch', () => {
@@ -157,7 +158,42 @@ describe('createStageLauncher.launch', () => {
     const git = vi.fn() as never
     const launcher = createStageLauncher({ ...deps, git, now: () => new Date() })
     await launcher.launch(request())
-    expect(deps.createWorktree).toHaveBeenCalledWith({ root: ENTRY.path, git, agent: 'impl', number: 52, integration: ENTRY.config.branches.integration, target: { kind: 'issue', title: 'Add a dark-mode icon for the tray' } })
+    expect(deps.createWorktree).toHaveBeenCalledWith({ root: ENTRY.path, git, agent: 'impl', number: 52, integration: ENTRY.config.branches.integration, target: { kind: 'issue', title: 'Add a dark-mode icon for the tray' }, liveWorktrees: new Set() })
+  })
+
+  it('passes every running registry path and every open session worktree as live', async () => {
+    const deps = fakeDeps()
+    deps.registryMock.runningWorktreePaths.mockReturnValue(['/repo/.claude/worktrees/impl-9'])
+    deps.storeList.mockReturnValue([
+      baseSnapshot({ workspace: { folder: '/repo/.claude/worktrees/impl-8', root: '/repo', worktree: { path: '/repo/.claude/worktrees/impl-8', branch: null }, base: null } }),
+      baseSnapshot({ phase: 'ended', workspace: { folder: '/repo/.claude/worktrees/impl-7', root: '/repo', worktree: { path: '/repo/.claude/worktrees/impl-7', branch: null }, base: null } }),
+      baseSnapshot({ workspace: { folder: '/repo', root: '/repo', worktree: null, base: null } }),
+    ])
+    const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
+    await launcher.launch(request())
+    expect(deps.createWorktree).toHaveBeenCalledWith(expect.objectContaining({ liveWorktrees: new Set(['/repo/.claude/worktrees/impl-9', '/repo/.claude/worktrees/impl-8']) }))
+  })
+
+  it('drops every registry entry pointing at a reclaimed worktree before recording the new run', async () => {
+    const deps = fakeDeps()
+    const reclaimed = '/repo/.claude/worktrees/impl-52'
+    deps.createWorktree.mockResolvedValue({ ok: true, path: reclaimed, branch: '52-add-a-dark-mode-icon', baseSha: 'abc', baseLabel: '52-add-a-dark-mode-icon', reclaimed })
+    deps.registryMock.list.mockReturnValue([
+      { ...INTERRUPTED, id: 'old-1', worktree: { path: reclaimed, branch: null, baseSha: 'abc' } },
+      { ...INTERRUPTED, id: 'old-2', worktree: { path: reclaimed, branch: null, baseSha: 'abc' } },
+      { ...INTERRUPTED, id: 'other', worktree: { path: '/repo/.claude/worktrees/impl-60', branch: null, baseSha: 'abc' } },
+    ])
+    const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
+    await launcher.launch(request())
+    expect(deps.registryMock.remove.mock.calls).toEqual([['old-1'], ['old-2']])
+    expect(deps.registryMock.remove.mock.invocationCallOrder[1]).toBeLessThan(deps.registryMock.recordRunning.mock.invocationCallOrder[0] ?? 0)
+  })
+
+  it('leaves the registry alone when nothing was reclaimed', async () => {
+    const deps = fakeDeps()
+    const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
+    await launcher.launch(request())
+    expect(deps.registryMock.remove).not.toHaveBeenCalled()
   })
 
   it('sweeps stale session branches once per repository root, never as a gate', async () => {
@@ -173,7 +209,7 @@ describe('createStageLauncher.launch', () => {
 
   it('records no branch for a detached worktree and releases nothing', async () => {
     const deps = fakeDeps({ start: { ok: false, kind: 'not-git' } })
-    deps.createWorktree.mockResolvedValue({ ok: true, path: '/repo/.claude/worktrees/plan-52', branch: null, baseSha: 'abc', baseLabel: 'origin/dev' })
+    deps.createWorktree.mockResolvedValue({ ok: true, path: '/repo/.claude/worktrees/plan-52', branch: null, baseSha: 'abc', baseLabel: 'origin/dev', reclaimed: null })
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     await launcher.launch(request({ agent: 'plan', trigger: 'ready' }))
     expect(deps.removeWorktree).toHaveBeenCalled()

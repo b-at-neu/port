@@ -23,4 +23,6 @@ export interface RegistryDeps {
   readonly registryDir: string
   readonly git: GitRunner
   readonly chooseDirectory: () => Promise<string | null>
+  /** The clock `listRepositories`'s TTL reads. Defaults to `Date.now`. */
+  readonly now?: () => number
 }

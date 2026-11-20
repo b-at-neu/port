@@ -144,6 +144,19 @@ describe('createDispatcher — stage label writes', () => {
     expect(claim.mock.calls[0]?.[0]).toMatchObject({ entry: { id: REPO_ID }, candidate: ACTIONABLE[0], resolved: { number: 52, labels: ['plan approved'] }, auditDir: '/audit' })
   })
 
+  it('tests survival against the store\'s labels, so a ticket whose labels were removed on GitHub still launches', async () => {
+    const withoutLabels = () => Promise.resolve({ ok: true as const, resolved: [{ number: 52, kind: 'issue' as const, state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: [], assignees: ['op'], headRefName: null, author: null }], unavailable: [], fetchedAt: 'r' })
+    const { dispatcher, calls } = rig({ fetchItemsByNumber: withoutLabels, stateLabels: () => ['claude', 'plan approved'] })
+    await consider(dispatcher)
+    expect(calls).toEqual(['claim', 'launch'])
+  })
+
+  it('launches nothing for a ticket the store does not track, even when GitHub shows its trigger label', async () => {
+    const { dispatcher, calls } = rig({ stateLabels: () => [] })
+    await consider(dispatcher)
+    expect(calls).toEqual([])
+  })
+
   it('a moved claim launches nothing and records nothing', async () => {
     const { dispatcher, calls } = rig({ stageLabels: { claim: () => Promise.resolve(refused('moved')), transition: () => Promise.resolve(APPLIED) } })
     await consider(dispatcher)

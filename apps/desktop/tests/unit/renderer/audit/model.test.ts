@@ -63,6 +63,8 @@ describe('outcomeOf', () => {
     [{ kind: 'ownership-unreadable', path: 'p', message: 'm' }, 'attention', 'Refused'],
     [{ kind: 'unresolvable-label', keys: ['planApproved'] }, 'attention', 'Refused'],
     [{ kind: 'item-unavailable' }, 'attention', 'Refused'],
+    [{ kind: 'state-unsaved', message: 'disk full' }, 'danger', 'Not saved'],
+    [{ kind: 'mirror-failed', mirror: { kind: 'verify-failed', message: 'offline' } }, 'attention', 'Label not updated'],
   ] as const)('maps the %j write outcome', (result, tone, label) => {
     expect(outcomeOf(labelEntry({ result }))).toEqual({ tone, label })
   })
@@ -107,6 +109,8 @@ describe('detailOf', () => {
     [{ kind: 'ownership-unreadable', path: '.agents/cockpit.json', message: 'EACCES' }, "Couldn't read .agents/cockpit.json: EACCES"],
     [{ kind: 'unresolvable-label', keys: ['planApproved', 'approved'] }, 'No label is configured for planApproved, approved.'],
     [{ kind: 'item-unavailable' }, "The item couldn't be read."],
+    [{ kind: 'state-unsaved', message: 'disk full' }, "Port couldn't save its pipeline state: disk full"],
+    [{ kind: 'mirror-failed', mirror: { kind: 'write-failed', classification: 'network', stderr: 'offline\nretry', reread: null } }, 'offline'],
   ] as const)('explains the %j refusal', (result, expected) => {
     expect(detailOf(labelEntry({ result }))).toBe(expected)
   })

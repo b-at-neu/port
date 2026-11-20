@@ -14,6 +14,7 @@ import type { StageAgent } from '@/types/tick'
 import { worstHealth } from '@/renderer/board/project'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
+import { mirrorReason } from '@/renderer/lib/mirror-reason'
 
 const STAGE_NAME: Readonly<Record<StageAgent, string>> = { plan: 'Planning', impl: 'Implementing', review: 'Reviewing', revise: 'Revising' }
 
@@ -464,6 +465,13 @@ export function actionResultCopy(params: {
       const base = `GitHub refused the write: ${outcome.stderr}.`
       const suffix = outcome.reread !== null ? ` #${n} now reads ${outcome.reread.labels.join(', ') || 'no labels'}.` : ` This app couldn't re-read #${n} afterwards, so what landed is unknown.`
       return base + suffix
+    }
+    case 'state-unsaved':
+      return `port couldn't save its pipeline state for #${n}, so nothing changed — ${outcome.message}. Try again.`
+    case 'mirror-failed': {
+      const added = plan?.add[0]
+      const phase = added === undefined ? 'its new state' : (PHASE_NAMES[added] ?? labelNameOf(added))
+      return `#${n} moved to ${phase}, but its GitHub label couldn't be updated — ${mirrorReason(outcome.mirror)}. The next write will correct it.`
     }
   }
 }

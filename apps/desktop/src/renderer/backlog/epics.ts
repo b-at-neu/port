@@ -1,4 +1,4 @@
-import type { BacklogChild, BacklogEpicGroup, BacklogEpicLayout, BacklogEpicSummary, BacklogRowView, BacklogWave } from '@/types/backlog'
+import type { BacklogChild, BacklogEpicGroup, BacklogEpicLayout, BacklogEpicSummary, BacklogLayoutEntry, BacklogRowView, BacklogWave } from '@/types/backlog'
 
 interface Placement {
   readonly layerOf: ReadonlyMap<number, number>
@@ -143,15 +143,36 @@ function buildEpic(
   return { epic, waves, unplaced: visibleUnplaced, summary }
 }
 
+// An unparsable or empty time sorts as oldest.
+function createdMs(createdAt: string): number {
+  const ms = Date.parse(createdAt)
+  return Number.isNaN(ms) ? Number.NEGATIVE_INFINITY : ms
+}
+
+function entryCreatedAt(entry: BacklogLayoutEntry): string {
+  return entry.kind === 'epic' ? entry.group.epic.createdAt : entry.row.createdAt
+}
+
 export function buildEpicLayout(rows: readonly BacklogRowView[], shown?: ReadonlySet<number>): BacklogEpicLayout {
   const isShown = (row: BacklogRowView): boolean => shown === undefined || shown.has(row.number)
   const placed = new Set<number>()
-  const epics: BacklogEpicGroup[] = []
+  const groups = new Map<number, BacklogEpicGroup>()
   for (const row of rows) {
     if (!isEpic(row)) continue
     const group = buildEpic(row, rows, placed, isShown)
-    if (group) epics.push(group)
+    if (group) groups.set(row.number, group)
   }
-  const remainder = rows.filter((row) => !isEpic(row) && !placed.has(row.number) && isShown(row))
-  return { epics, remainder }
+  const entries: BacklogLayoutEntry[] = []
+  for (const row of rows) {
+    const group = groups.get(row.number)
+    if (group) entries.push({ kind: 'epic', group })
+    else if (!isEpic(row) && !placed.has(row.number) && isShown(row)) entries.push({ kind: 'row', row })
+  }
+  // Array.prototype.sort is stable, so equal times keep the server's order.
+  entries.sort((a, b) => {
+    const [left, right] = [createdMs(entryCreatedAt(a)), createdMs(entryCreatedAt(b))]
+    if (left === right) return 0
+    return right > left ? 1 : -1
+  })
+  return { entries }
 }

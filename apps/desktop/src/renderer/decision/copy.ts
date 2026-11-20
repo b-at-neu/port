@@ -1,5 +1,6 @@
 // Every string the decision dialog renders — one function per union, pure.
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
+import { mirrorReason } from '@/renderer/lib/mirror-reason'
 import type { ItemDecisionResult, OperatorDecision, RebaseDecision, RebaseOption, RebasePick, ReviseContext, UnblockContext, UnblockRoute } from '@/types/actions'
 
 function labelNameOf(key: string): string {
@@ -87,7 +88,7 @@ interface DecisionResultCopy extends DecisionResultLines {
 
 /** The result toast (the plan's own **UX states**): `applied` is a success, every other outcome an error. */
 export function decisionResultCopy(params: DecisionResultParams): DecisionResultCopy {
-  const applied = params.response.ok && params.response.labels.kind === 'applied'
+  const applied = params.response.ok && (params.response.labels.kind === 'applied' || params.response.labels.kind === 'mirror-failed')
   return { ...decisionResultLines(params), tone: applied ? 'success' : 'error' }
 }
 
@@ -138,6 +139,9 @@ function decisionResultLines(params: DecisionResultParams): DecisionResultLines 
       offerLabelOnly: false,
     }
   }
+
+  if (labels.kind === 'mirror-failed') return { line: `Decision recorded for ${n}.`, note: `The GitHub label couldn't be updated — ${mirrorReason(labels.mirror)}.`, offerLabelOnly: false }
+  if (labels.kind === 'state-unsaved') return { line: `Couldn't save the decision for ${n}.`, note: `${labels.message} Nothing was written.`, offerLabelOnly: false }
 
   if (comment !== null && comment.kind === 'applied') {
     const detail = labels.kind === 'precondition-failed' && labels.conflict.kind === 'precondition-failed' ? `now: ${labels.conflict.observed.join(', ') || 'nothing'}` : null

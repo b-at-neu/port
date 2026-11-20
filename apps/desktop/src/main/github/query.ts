@@ -86,6 +86,31 @@ export function buildPipelineQuery(vocabulary: LabelVocabulary, page: SweepPage)
   ].join('\n')
 }
 
+interface TrackedItemsAlias {
+  readonly alias: string
+  readonly kind: PipelineItemKind
+  readonly number: number
+}
+
+interface TrackedItemsQuery {
+  readonly document: string
+  readonly aliases: readonly TrackedItemsAlias[]
+}
+
+/** The sweep's own fields for tracked items by number, so an item whose labels are gone still reads. `<idx>` is the position, since the number alone cannot name an issue and a pull request. */
+export function buildTrackedItemsQuery(refs: readonly ItemRef[]): TrackedItemsQuery {
+  const aliases: TrackedItemsAlias[] = []
+  const fields: string[] = []
+  refs.forEach((ref, idx) => {
+    const alias = `t${idx}`
+    if (ref.kind === 'issue') fields.push(`  ${alias}: issue(number: ${ref.number}) { ${ISSUE_SWEEP_FIELDS} }`)
+    else fields.push(`  ${alias}: pullRequest(number: ${ref.number}) { ${PULL_REQUEST_SWEEP_FIELDS} }`)
+    aliases.push({ alias, kind: ref.kind, number: ref.number })
+  })
+  const document = ['query($owner: String!, $name: String!) {', '  repository(owner: $owner, name: $name) {', ...fields, '  }', '  rateLimit { cost remaining resetAt limit }', '}'].join('\n')
+  return { document, aliases }
+}
+
 /** `rollup` is true only for a pull request at the approved or ready-for-review stage. */
 export interface ItemDetailRef {
   readonly kind: PipelineItemKind

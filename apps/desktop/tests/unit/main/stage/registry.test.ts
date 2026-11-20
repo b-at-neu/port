@@ -43,6 +43,15 @@ describe('createStageRegistry', () => {
     expect(registry.list()[0]?.reason).toBe('crash')
   })
 
+  it('runningWorktreePaths returns only running entries', () => {
+    const deps = fakeDeps({ ok: false })
+    const registry = createStageRegistry({ path: '/tmp/stage-sessions.json', readJson: deps.readJson, writeJsonAtomic: deps.writeJsonAtomic, now: () => new Date() })
+    registry.recordRunning(entry)
+    registry.recordRunning({ ...entry, id: 's2', worktree: { path: '/tmp/wt2', branch: 'b2', baseSha: 'sha' } })
+    registry.markInterrupted('s2', 'crash', null, null, null)
+    expect(registry.runningWorktreePaths()).toEqual(['/tmp/wt'])
+  })
+
   it('markAllQuit marks every running entry quit', () => {
     const deps = fakeDeps({ ok: false })
     const registry = createStageRegistry({ path: '/tmp/stage-sessions.json', readJson: deps.readJson, writeJsonAtomic: deps.writeJsonAtomic, now: () => new Date() })

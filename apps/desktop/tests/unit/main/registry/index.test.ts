@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { CommandResult } from '@/types/platform'
 import { pathOps } from '@/main/platform/paths'
 import type { GitRunner } from '@/types/platform'
-import { addRepository, listRepositories, removeRepository } from '@/main/registry/index'
+import { REPOSITORY_LIST_TTL_MS, addRepository, listRepositories, removeRepository } from '@/main/registry/index'
 import { readRegistry } from '@/main/registry/store'
 import { makeTempDir } from '../../../fixtures/fs'
 
@@ -98,6 +98,132 @@ describe('addRepository', () => {
     expect(result.repositories).toHaveLength(1)
     const entry = result.repositories[0]
     expect(entry && 'problem' in entry && entry.problem.kind).toBe('not-a-git-repository')
+  })
+})
+
+function countingGit(inner: GitRunner): { readonly git: GitRunner; readonly calls: () => number; readonly reset: () => void } {
+  let count = 0
+  return {
+    git: (args, cwd) => {
+      count++
+      return inner(args, cwd)
+    },
+    calls: () => count,
+    reset: () => {
+      count = 0
+    },
+  }
+}
+
+async function registeredDeps(extra: { readonly now?: () => number; readonly wrap?: (git: GitRunner) => GitRunner } = {}) {
+  const registryDir = await makeTempDir('port-registry-index-')
+  const repoDir = await makeTempDir('port-registry-repo-')
+  await makeRepo(repoDir)
+  const counter = countingGit(fakeGit([repoDir]))
+  const git = extra.wrap ? extra.wrap(counter.git) : counter.git
+  const deps = { registryDir, git, chooseDirectory: () => Promise.resolve(repoDir), now: extra.now }
+  const added = await addRepository(deps)
+  if (!added.ok || added.outcome !== 'added') throw new Error('unreachable')
+  return { deps, counter, registryDir, repoDir, added: added.added }
+}
+
+describe('listRepositories cache', () => {
+  it('shares one inspection between concurrent callers', async () => {
+    let clock = 0
+    const { deps, counter } = await registeredDeps({ now: () => clock })
+    clock += REPOSITORY_LIST_TTL_MS
+    counter.reset()
+    const single = await listRepositories({ ...deps }, { fresh: true })
+    const perList = counter.calls()
+    expect(perList).toBeGreaterThan(0)
+
+    const other = { ...deps }
+    counter.reset()
+    const [a, b] = await Promise.all([listRepositories(other), listRepositories(other)])
+    expect(counter.calls()).toBe(perList)
+    expect(a).toBe(b)
+    expect(a).toEqual(single)
+  })
+
+  it('reuses the result within the TTL and re-inspects after it', async () => {
+    let clock = 0
+    const { deps, counter } = await registeredDeps({ now: () => clock })
+    clock += REPOSITORY_LIST_TTL_MS
+    await listRepositories(deps)
+    counter.reset()
+    clock += REPOSITORY_LIST_TTL_MS - 1
+    await listRepositories(deps)
+    expect(counter.calls()).toBe(0)
+    clock += 1
+    await listRepositories(deps)
+    expect(counter.calls()).toBeGreaterThan(0)
+  })
+
+  it('fresh re-inspects inside the TTL and a following non-fresh call reuses it', async () => {
+    const { deps, counter } = await registeredDeps({ now: () => 0 })
+    counter.reset()
+    await listRepositories(deps, { fresh: true })
+    expect(counter.calls()).toBeGreaterThan(0)
+    counter.reset()
+    await listRepositories(deps)
+    expect(counter.calls()).toBe(0)
+  })
+
+  it('reflects an add and a remove immediately', async () => {
+    const registryDir = await makeTempDir('port-registry-index-')
+    const repoDir = await makeTempDir('port-registry-repo-')
+    await makeRepo(repoDir)
+    const deps = { registryDir, git: fakeGit([repoDir]), chooseDirectory: () => Promise.resolve(repoDir), now: () => 0 }
+    const empty = await listRepositories(deps)
+    expect(empty).toEqual({ ok: true, repositories: [] })
+
+    const added = await addRepository(deps)
+    if (!added.ok || added.outcome !== 'added') throw new Error('unreachable')
+    const afterAdd = await listRepositories(deps)
+    expect(afterAdd.ok && afterAdd.repositories.map((entry) => entry.id)).toEqual([added.added])
+
+    await removeRepository(deps, added.added)
+    expect(await listRepositories(deps)).toEqual({ ok: true, repositories: [] })
+  })
+
+  it('a list in flight during a remove never re-caches the removed repository', async () => {
+    let release: () => void = () => undefined
+    let gated = false
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const { deps, added } = await registeredDeps({
+      now: () => 0,
+      wrap: (git) => (args, cwd) => (gated ? gate.then(() => git(args, cwd)) : git(args, cwd)),
+    })
+    gated = true
+    const stale = listRepositories(deps, { fresh: true })
+    gated = false
+    await removeRepository(deps, added)
+    release()
+    const staleResult = await stale
+    expect(staleResult.ok && staleResult.repositories).toHaveLength(1)
+    expect(await listRepositories(deps)).toEqual({ ok: true, repositories: [] })
+  })
+
+  it('does not cache a failed read', async () => {
+    let clock = 0
+    const { deps, registryDir } = await registeredDeps({ now: () => clock })
+    await writeFile(join(registryDir, 'registry.json'), '{ not json')
+    const failed = await listRepositories(deps, { fresh: true })
+    expect(failed.ok).toBe(false)
+    await writeFile(join(registryDir, 'registry.json'), JSON.stringify({ version: 1, repositories: [] }))
+    clock += REPOSITORY_LIST_TTL_MS
+    expect(await listRepositories(deps)).toEqual({ ok: true, repositories: [] })
+  })
+
+  it('never shares a cache between separate deps objects', async () => {
+    const first = await registeredDeps({ now: () => 0 })
+    const second = await registeredDeps({ now: () => 0 })
+    await listRepositories(first.deps)
+    second.counter.reset()
+    await listRepositories(second.deps, { fresh: true })
+    expect(second.counter.calls()).toBeGreaterThan(0)
   })
 })
 

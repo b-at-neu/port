@@ -53,7 +53,7 @@ describe('escalateToHuman', () => {
   it('swaps the label first, then comments — both applied', async () => {
     const calls: string[] = []
     const deps: EscalateToHumanDeps = {
-      applyLabels: (p) => {
+      writeState: (p) => {
         calls.push('applyLabels')
         expect(p.request.add).toEqual(['needsHuman'])
         expect(p.request.remove).toEqual(['planApproved'])
@@ -72,10 +72,23 @@ describe('escalateToHuman', () => {
     expect(result.comment?.kind).toBe('applied')
   })
 
+  it('comments when the state moved but its label mirror failed, and stays quiet when the state did not save', async () => {
+    const posted: string[] = []
+    const postComment: EscalateToHumanDeps['postComment'] = () => (posted.push('comment'), Promise.resolve({ kind: 'applied', argv: [] } satisfies WriteOutcome))
+    const mirror: WriteOutcome = { kind: 'mirror-failed', mirror: { kind: 'write-failed', classification: 'network', stderr: 'offline', reread: null } }
+    const moved = await escalateToHuman(params(), { writeState: () => Promise.resolve(mirror), postComment })
+    expect(moved.labels.kind).toBe('mirror-failed')
+    expect(moved.comment?.kind).toBe('applied')
+
+    const unsaved = await escalateToHuman(params(), { writeState: () => Promise.resolve({ kind: 'state-unsaved', message: 'disk full' }), postComment })
+    expect(unsaved.comment).toBeNull()
+    expect(posted).toEqual(['comment'])
+  })
+
   it('never comments when the label swap does not apply', async () => {
     let commentCalled = false
     const deps: EscalateToHumanDeps = {
-      applyLabels: () => Promise.resolve({ kind: 'terminal-owned', since: '2026-01-01T00:00:00Z' } satisfies WriteOutcome),
+      writeState: () => Promise.resolve({ kind: 'terminal-owned', since: '2026-01-01T00:00:00Z' } satisfies WriteOutcome),
       postComment: () => {
         commentCalled = true
         return Promise.resolve({ kind: 'applied', argv: [] } satisfies WriteOutcome)
@@ -90,7 +103,7 @@ describe('escalateToHuman', () => {
   it('swaps the label and posts nothing when the body is null', async () => {
     let commentCalled = false
     const deps: EscalateToHumanDeps = {
-      applyLabels: () => Promise.resolve({ kind: 'applied', argv: [] } satisfies WriteOutcome),
+      writeState: () => Promise.resolve({ kind: 'applied', argv: [] } satisfies WriteOutcome),
       postComment: () => {
         commentCalled = true
         return Promise.resolve({ kind: 'applied', argv: [] } satisfies WriteOutcome)
@@ -104,7 +117,7 @@ describe('escalateToHuman', () => {
 
   it('reports a failed comment without discarding the successful swap', async () => {
     const deps: EscalateToHumanDeps = {
-      applyLabels: () => Promise.resolve({ kind: 'applied', argv: [] } satisfies WriteOutcome),
+      writeState: () => Promise.resolve({ kind: 'applied', argv: [] } satisfies WriteOutcome),
       postComment: () => Promise.resolve({ kind: 'write-failed', classification: 'unknown', stderr: 'boom', reread: null } satisfies WriteOutcome),
     }
     const result = await escalateToHuman(params(), deps)

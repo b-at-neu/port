@@ -138,6 +138,7 @@ function buildPipelineFetch(vocabulary: LabelVocabulary, labels: LabelMap, prs: 
   return {
     ok: true,
     items: pipelineItemsFor(vocabulary, labels, prs),
+    closed: [],
     queried: queriedLabelsFor(vocabulary),
     disabled: vocabulary.disabled,
     vocabulary: verifyVocabulary(vocabulary, { ok: true, names: vocabulary.labels.map((label) => label.name) }),
@@ -245,7 +246,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       worktreeCounter += 1
       const path = `/scratch/session-${String(worktreeCounter)}`
       createdWorktrees.push(path)
-      return Promise.resolve({ ok: true, path, branch: `session-${String(worktreeCounter)}`, baseSha: 'base-sha', baseLabel: `session-${String(worktreeCounter)}` })
+      return Promise.resolve({ ok: true, path, branch: `session-${String(worktreeCounter)}`, baseSha: 'base-sha', baseLabel: `session-${String(worktreeCounter)}`, reclaimed: null })
     }
     function removeWorktree(path: string, force: boolean): Promise<RemoveSessionWorktreeOutcome> {
       removedWorktrees.push({ path, force })
@@ -283,7 +284,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       labelWrites.push({ action: request.action, number: request.number })
       return Promise.resolve({ kind: 'applied', argv: [] })
     }
-    const writeDeps = { applyLabels, fetchItemsByNumber }
+    const writeDeps = { writeState: applyLabels, stateLabels: () => null, fetchItemsByNumber }
 
     // Late-binding, the same construction order `main/ipc.ts` uses: onStatus closes over stageLauncher,
     // stageLauncher's onOutcome/onDenial close over dispatcherRef — both assigned right after.

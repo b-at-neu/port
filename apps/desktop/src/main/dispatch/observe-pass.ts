@@ -32,6 +32,7 @@ interface ObservationPassState {
 function observationOutcomeOf(outcome: WriteOutcome): ObservationRecord['outcome'] {
   switch (outcome.kind) {
     case 'applied':
+    case 'mirror-failed':
       return 'written'
     case 'no-op':
       return 'already'
@@ -44,6 +45,7 @@ function observationOutcomeOf(outcome: WriteOutcome): ObservationRecord['outcome
       return 'refused'
     case 'verify-failed':
     case 'write-failed':
+    case 'state-unsaved':
       return 'failed'
   }
 }
@@ -74,7 +76,7 @@ export async function runObservationPass(
     try {
       const result = await deps.writeObservation({ entry, item, observation: observation as WriteObservation, auditDir: deps.dirs.audit, scratchDir: deps.dirs.scratch })
       state.observedWriteAt.set(observation.number, at)
-      if (result.labels.kind === 'applied') {
+      if (observationOutcomeOf(result.labels) === 'written') {
         if (observation.kind === 'refresh') deps.refreshMemo.set(entry.id, observation.number, { sha: observation.headRefOid, count: observation.count })
         else if (observation.kind === 'refresh-stuck') deps.refreshMemo.clear(entry.id, observation.number)
       }

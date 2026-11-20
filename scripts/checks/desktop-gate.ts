@@ -70,19 +70,19 @@ export default async function ({ expect, fail, ok }: Reporter) {
         if (rel === gateActionFile) sawGateFile = true;
         else sawDecideFile = true;
         const commentIdx = text.indexOf('postComment(');
-        const labelsIdx = text.indexOf('applyLabels(');
+        const labelsIdx = text.indexOf('writeState(');
         if (labelsIdx === -1 || commentIdx > labelsIdx) {
           found = true;
-          fail('desktop-gate', `${rel}'s postComment( call must precede its applyLabels( call in source order — the comment-then-swap ordering`);
+          fail('desktop-gate', `${rel}'s postComment( call must precede its writeState( call in source order — the comment-then-swap ordering`);
         }
       } else if (rel === escalateActionFile || rel === observeActionFile) {
         if (rel === escalateActionFile) sawEscalateFile = true;
         else sawObserveFile = true;
-        const labelsIdx = text.indexOf('applyLabels(');
+        const labelsIdx = text.indexOf('writeState(');
         const commentIdx = text.indexOf('postComment(');
         if (labelsIdx === -1 || labelsIdx > commentIdx) {
           found = true;
-          fail('desktop-gate', `${rel}'s applyLabels( call must precede its postComment( call in source order — the swap-then-comment ordering`);
+          fail('desktop-gate', `${rel}'s writeState( call must precede its postComment( call in source order — the swap-then-comment ordering`);
         }
       } else {
         found = true;

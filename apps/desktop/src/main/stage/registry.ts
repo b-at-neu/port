@@ -163,5 +163,9 @@ export function createStageRegistry(params: CreateStageRegistryParams): StageReg
     return toInterrupted(entries.filter((e) => e.state === 'interrupted'))
   }
 
-  return { load, recordRunning, markRunning, setSessionId, markInterrupted, markAllQuit, remove, list }
+  function runningWorktreePaths(): readonly string[] {
+    return entries.filter((e) => e.state === 'running').map((e) => e.worktree.path)
+  }
+
+  return { load, recordRunning, markRunning, setSessionId, markInterrupted, markAllQuit, remove, list, runningWorktreePaths }
 }

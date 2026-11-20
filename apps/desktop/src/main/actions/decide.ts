@@ -12,22 +12,19 @@ import { labelName } from '@/utils/labels/vocabulary'
 import type { ReconciledItem } from '@/types/state'
 import type { LabelWriteRequest, ObservedItem, WriteOutcome } from '@/types/writes'
 import { evaluate } from '@/main/writes/scope'
-import { applyLabels, postComment } from '@/main/writes/apply'
-
-import { fetchItemsByNumber } from '@/main/github/adapter'
 
 import type { ItemsByNumberFetch } from '@/types/github'
+import type { StateLabelsReader } from '@/types/pipeline-state'
 import { findRepoState, movedResult } from '@/main/actions/apply'
 
 import type { ApplyItemDecisionParams } from '@/types/actions'
 
 export interface ApplyItemDecisionDeps {
-  readonly applyLabels: (params: ApplyLabelsParams) => Promise<WriteOutcome>
+  readonly writeState: (params: ApplyLabelsParams) => Promise<WriteOutcome>
+  readonly stateLabels: StateLabelsReader
   readonly postComment: (params: PostCommentParams) => Promise<WriteOutcome>
   readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
 }
-
-export const defaultApplyItemDecisionDeps: ApplyItemDecisionDeps = { applyLabels, postComment, fetchItemsByNumber }
 
 function findItem(repoState: ReturnType<typeof findRepoState>, number: number): ReconciledItem | null {
   if (repoState === null) return null
@@ -36,7 +33,7 @@ function findItem(repoState: ReturnType<typeof findRepoState>, number: number): 
 
 // Fixed order: find the item, refuse moved, check availability, validate a
 // revise note, re-read fresh, post the comment, then swap the labels.
-export async function applyItemDecision(params: ApplyItemDecisionParams, deps: ApplyItemDecisionDeps = defaultApplyItemDecisionDeps): Promise<ItemDecisionResult> {
+export async function applyItemDecision(params: ApplyItemDecisionParams, deps: ApplyItemDecisionDeps): Promise<ItemDecisionResult> {
   const { request, snapshot, entry, auditDir, scratchDir, liveStage } = params
   const repoState = findRepoState(snapshot, entry.id)
   if (repoState === null) return { ok: false, reason: 'repo-unavailable' }
@@ -84,7 +81,7 @@ export async function applyItemDecision(params: ApplyItemDecisionParams, deps: A
 
   const presentNames = plan.expect.present.map((key) => labelName(entry.config.vocabulary, key)).filter((name): name is string => name !== undefined)
   const absentNames = plan.expect.absent.map((key) => labelName(entry.config.vocabulary, key)).filter((name): name is string => name !== undefined)
-  const observed: ObservedItem = { labels: fresh.labels, assignees: fresh.assignees, readAt: fetch.fetchedAt }
+  const observed: ObservedItem = { labels: deps.stateLabels(entry.id, item.kind, request.number, entry.config.vocabulary) ?? fresh.labels, assignees: fresh.assignees, readAt: fetch.fetchedAt }
   const verdict = evaluate({ presentNames, absentNames, assignees: plan.expect.assignees }, observed)
   if (!verdict.satisfied) {
     return { ok: false, reason: 'moved', expected: verdict.expected.join(', ') || 'nothing', observed: verdict.observed.join(', ') || 'nothing' }
@@ -107,7 +104,7 @@ export async function applyItemDecision(params: ApplyItemDecisionParams, deps: A
     }
   }
 
-  const labels = await deps.applyLabels({
+  const labels = await deps.writeState({
     request: buildWriteRequest(entry, item.kind, request.number, plan),
     repoRoot: entry.path,
     auditDir,

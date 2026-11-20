@@ -1,9 +1,9 @@
 import type { ApplyLabelsParams, PostCommentParams } from '@/types/writes'
 
-// Label-first, then (only on `applied`, and only when the plan carries one) the comment —
-// a failed comment must still leave the label write standing.
+// State-first, then (only once the state moved, and only when the plan carries one) the comment —
+// a failed comment must still leave the state write standing.
 import type { LabelWriteRequest, WriteOutcome } from '@/types/writes'
-import { applyLabels, postComment } from '@/main/writes/apply'
+import { stateMoved } from '@/types/writes'
 
 import { observationWrite } from '@/main/dispatch/observation'
 import { commentRepeats } from '../../../../../scripts/port-tick/gates'
@@ -11,13 +11,11 @@ import { commentRepeats } from '../../../../../scripts/port-tick/gates'
 import type { ApplyObservationResult, ApplyObservationParams } from '@/types/actions'
 
 interface ApplyObservationDeps {
-  readonly applyLabels: (params: ApplyLabelsParams) => Promise<WriteOutcome>
+  readonly writeState: (params: ApplyLabelsParams) => Promise<WriteOutcome>
   readonly postComment: (params: PostCommentParams) => Promise<WriteOutcome>
 }
 
-export const defaultApplyObservationDeps: ApplyObservationDeps = { applyLabels, postComment }
-
-export async function applyObservation(params: ApplyObservationParams, deps: ApplyObservationDeps = defaultApplyObservationDeps): Promise<ApplyObservationResult> {
+export async function applyObservation(params: ApplyObservationParams, deps: ApplyObservationDeps): Promise<ApplyObservationResult> {
   const plan = observationWrite(params.observation, params.item, params.entry.config.vocabulary, params.entry.config.branches.integration)
   const request: LabelWriteRequest = {
     repoId: params.entry.id,
@@ -33,8 +31,8 @@ export async function applyObservation(params: ApplyObservationParams, deps: App
     action: plan.action,
   }
 
-  const labels = await deps.applyLabels({ request, repoRoot: params.entry.path, auditDir: params.auditDir })
-  if (labels.kind !== 'applied' || plan.comment === null) return { labels, comment: null }
+  const labels = await deps.writeState({ request, repoRoot: params.entry.path, auditDir: params.auditDir })
+  if (!stateMoved(labels) || plan.comment === null) return { labels, comment: null }
   if (commentRepeats({ body: plan.comment, comments: params.item.comments ?? undefined, headRefOid: params.item.headRefOid ?? '' })) return { labels, comment: null }
 
   const comment = await deps.postComment({

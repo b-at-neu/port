@@ -37,7 +37,7 @@ function forEachRef(branch: string, tip: string, worktreePath = ''): CommandResu
 
 async function params(overrides: Partial<CreateStageWorktreeParams> & { readonly git: GitRunner }): Promise<CreateStageWorktreeParams> {
   const root = await makeTempDir()
-  return { root, agent: 'impl', number: 467, integration: 'dev', target: { kind: 'issue', title: 'Stage worktrees use the issue branch' }, random: () => 'abcdef0123', ...overrides }
+  return { root, agent: 'impl', number: 467, integration: 'dev', target: { kind: 'issue', title: 'Stage worktrees use the issue branch' }, liveWorktrees: new Set(), random: () => 'abcdef0123', ...overrides }
 }
 
 function argvOf(calls: readonly string[][], ...prefix: string[]): string[][] {
@@ -80,7 +80,7 @@ describe('createStageWorktree — start point and branch per stage', () => {
     const p = await params({ git, agent: 'plan' })
     const result = await createStageWorktree(p)
     const path = join(p.root, '.claude', 'worktrees', 'plan-467')
-    expect(result).toEqual({ ok: true, path, branch: null, baseSha: START_SHA, baseLabel: 'origin/dev' })
+    expect(result).toEqual({ ok: true, path, branch: null, baseSha: START_SHA, baseLabel: 'origin/dev', reclaimed: null })
     expect(calls[0]).toEqual(['fetch', 'origin'])
     expect(argvOf(calls, 'rev-parse', '--verify')[0]).toEqual(['rev-parse', '--verify', 'refs/remotes/origin/dev^{commit}'])
     expect(argvOf(calls, 'worktree')).toEqual([['worktree', 'add', '--detach', path, START_SHA]])
@@ -101,7 +101,7 @@ describe('createStageWorktree — start point and branch per stage', () => {
     const p = await params({ git, agent: 'revise', number: 500, target: { kind: 'pr', headRefName: '467-stage-worktrees' } })
     const result = await createStageWorktree(p)
     const path = join(p.root, '.claude', 'worktrees', 'revise-500')
-    expect(result).toEqual({ ok: true, path, branch: '467-stage-worktrees', baseSha: START_SHA, baseLabel: '467-stage-worktrees' })
+    expect(result).toEqual({ ok: true, path, branch: '467-stage-worktrees', baseSha: START_SHA, baseLabel: '467-stage-worktrees', reclaimed: null })
     expect(argvOf(calls, 'worktree')).toEqual([['worktree', 'add', '-b', '467-stage-worktrees', path, START_SHA]])
     expect(argvOf(calls, 'config')).toEqual([['config', 'branch.467-stage-worktrees.portBase', START_SHA]])
   })
@@ -118,7 +118,7 @@ describe('createStageWorktree — start point and branch per stage', () => {
     const p = await params({ git })
     const result = await createStageWorktree(p)
     const path = join(p.root, '.claude', 'worktrees', 'impl-467')
-    expect(result).toEqual({ ok: true, path, branch: '467-stage-worktrees-use-the-issue-branch', baseSha: START_SHA, baseLabel: '467-stage-worktrees-use-the-issue-branch' })
+    expect(result).toEqual({ ok: true, path, branch: '467-stage-worktrees-use-the-issue-branch', baseSha: START_SHA, baseLabel: '467-stage-worktrees-use-the-issue-branch', reclaimed: null })
     expect(argvOf(calls, 'ls-remote')).toEqual([['ls-remote', '--heads', 'origin', 'refs/heads/467-*']])
     expect(argvOf(calls, 'check-ref-format')).toEqual([['check-ref-format', '--branch', '467-stage-worktrees-use-the-issue-branch']])
     expect(argvOf(calls, 'rev-parse', '--verify')[0]).toEqual(['rev-parse', '--verify', 'refs/remotes/origin/dev^{commit}'])
@@ -245,7 +245,7 @@ describe('createStageWorktree — a local branch of the same name', () => {
   it('refuses when it is checked out in another worktree', async () => {
     const { git } = recorder(withStart((args) => (args[0] === 'for-each-ref' ? forEachRef(derived, 'aaaa', '/elsewhere/impl-467') : undefined)))
     const result = await createStageWorktree(await params({ git }))
-    expect(result).toEqual({ ok: false, message: `Branch ${derived} is checked out in /elsewhere/impl-467. Resume or restart that stage first.` })
+    expect(result).toEqual({ ok: false, message: `Branch ${derived} is checked out in /elsewhere/impl-467, which port didn't create. Finish or remove that worktree, then retry.` })
   })
 
   it('fast-forwards it with -B when its tip is an ancestor of the start', async () => {

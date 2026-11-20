@@ -27,7 +27,7 @@ export function buildBacklogGroup(repoId: RepoId, repo: string, query: BacklogQu
     title: item.title,
     url: item.url,
     assignee: assigneeLine(item.assignees, response.viewer),
-    updatedAt: item.updatedAt,
+    createdAt: item.createdAt,
     labels: item.labels,
     subIssueCount: item.subIssueCount,
     blockers: item.blockers,
