@@ -373,7 +373,7 @@ describe('createStageLauncher.observe', () => {
     await vi.waitFor(() => expect(deps.onOutcome).toHaveBeenCalled())
     expect(deps.close).toHaveBeenCalledWith('hosted-1')
     expect(deps.dismiss).toHaveBeenCalledWith('hosted-1', 'remove')
-    expect(deps.onOutcome).toHaveBeenCalledWith(WIDGETS_ID, 'hosted-1', expect.objectContaining({ kind: 'completed', worktree: 'removed' }))
+    expect(deps.onOutcome).toHaveBeenCalledWith(WIDGETS_ID, 'hosted-1', expect.objectContaining({ kind: 'completed', worktree: 'removed' }), null)
     expect(deps.releaseBranch).toHaveBeenCalledWith(ENTRY.path, '52-add-a-dark-mode-icon', 'abc')
     expect(deps.registryMock.remove).toHaveBeenCalledWith('id-1')
     expect(deps.registryMock.markInterrupted).not.toHaveBeenCalled()
@@ -402,7 +402,7 @@ describe('createStageLauncher.observe', () => {
     await launcher.launch(request())
     launcher.observe(baseSnapshot({ lastResult: { subtype: 'success', isError: false, text: 'all done', at: 't1' } }))
     await vi.waitFor(() => expect(deps.onOutcome).toHaveBeenCalled())
-    expect(deps.onOutcome).toHaveBeenCalledWith(WIDGETS_ID, 'hosted-1', expect.objectContaining({ worktree: 'kept-dirty' }))
+    expect(deps.onOutcome).toHaveBeenCalledWith(WIDGETS_ID, 'hosted-1', expect.objectContaining({ worktree: 'kept-dirty' }), null)
     expect(deps.releaseBranch).not.toHaveBeenCalled()
   })
 

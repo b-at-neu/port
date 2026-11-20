@@ -1,6 +1,6 @@
 // Pure mapping from SessionStartMode to Options. sessionId is deliberately never passed; init stays the single source.
 import type { CanUseTool, HookCallback, Options } from '@/main/hosting/sdk'
-import { LABEL_GUARD_MESSAGE, labelWriteOf } from '@/main/hosting/label-guard'
+import { ISSUE_BODY_GUARD_MESSAGE, LABEL_GUARD_MESSAGE, issueBodyWriteOf, labelWriteOf } from '@/main/hosting/label-guard'
 import type { SessionDefaults, SessionStartMode } from '@/types/hosting'
 import type { PluginRequest } from '@/types/hosting-plugin'
 import type { StageAgentLaunch } from '@/types/stage'
@@ -22,12 +22,18 @@ interface BuildSessionOptionsParams {
   readonly stage: { readonly agent: StageAgentLaunch; readonly instructionsRoot: string; readonly model: string } | null
 }
 
-/** Denies a Bash call that writes a label — the repository allowlist's `Bash(gh *)` would otherwise let a stray instruction through. */
+function denyBash(reason: string) {
+  return Promise.resolve({ hookSpecificOutput: { hookEventName: 'PreToolUse' as const, permissionDecision: 'deny' as const, permissionDecisionReason: reason } })
+}
+
+/** Denies a Bash call that writes a label or an issue body — the repository allowlist's `Bash(gh *)` would otherwise let a stray instruction through. */
 const labelGuardHook: HookCallback = (input) => {
   if (input.hook_event_name !== 'PreToolUse' || input.tool_name !== 'Bash') return Promise.resolve({})
   const command = typeof input.tool_input === 'object' && input.tool_input !== null && 'command' in input.tool_input ? input.tool_input.command : null
-  if (typeof command !== 'string' || labelWriteOf(command) === null) return Promise.resolve({})
-  return Promise.resolve({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: LABEL_GUARD_MESSAGE } })
+  if (typeof command !== 'string') return Promise.resolve({})
+  if (labelWriteOf(command) !== null) return denyBash(LABEL_GUARD_MESSAGE)
+  if (issueBodyWriteOf(command)) return denyBash(ISSUE_BODY_GUARD_MESSAGE)
+  return Promise.resolve({})
 }
 
 function stageOptions(stage: NonNullable<BuildSessionOptionsParams['stage']>): Options {

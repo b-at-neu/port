@@ -10,7 +10,7 @@ import { isLabelAuditEntry } from '@/types/writes'
 import type { CommandResult } from '@/types/platform'
 import type { GhResult } from '@/types/platform'
 import type { ItemsByNumberFetch, ResolvedItem } from '@/types/github'
-import { applyLabels, postComment } from '@/main/writes/apply'
+import { applyLabels, postComment, postIssueBody } from '@/main/writes/apply'
 import type { GhRunner, GitRunner } from '@/types/platform'
 import { readAuditLog } from '@/main/writes/audit'
 import { takeOwnership } from '@/main/dispatch/ownership'
@@ -272,5 +272,69 @@ describe('postComment', () => {
 
     const remaining = await readdir(scratchDir)
     expect(remaining).toEqual([])
+  })
+})
+
+describe('postIssueBody', () => {
+  it('edits the issue body from a scratch file, deleted afterwards, and audits the byte length only', async () => {
+    const { repoRoot } = await makeDirs()
+    const scratchDir = await mkdtemp(join(tmpdir(), 'port-writes-body-'))
+    const auditDir = await mkdtemp(join(tmpdir(), 'port-writes-body-audit-'))
+    let argv: readonly string[] = []
+    let bodyFileContent: string | undefined
+    const gh: GhRunner = async (args) => {
+      argv = args
+      const path = args[args.indexOf('--body-file') + 1]
+      if (path) bodyFileContent = await readFile(path, 'utf8')
+      return { ok: true, stdout: '', stderr: '' } satisfies GhResult
+    }
+
+    const outcome = await postIssueBody({ request: commentRequest({ scratchDir, number: 52, body: 'secret plan', action: 'stage-handback-plan-body' }), repoRoot, auditDir, gh, now })
+    expect(outcome.kind).toBe('applied')
+    expect(argv.slice(0, 6)).toEqual(['issue', 'edit', '52', '--repo', 'o/r', '--body-file'])
+    expect(bodyFileContent).toBe('secret plan')
+    expect(await readdir(scratchDir)).toEqual([])
+
+    const log = await readAuditLog(auditDir)
+    if (!log.ok) throw new Error('unreachable')
+    expect(log.entries).toHaveLength(1)
+    expect(labelEntry(log.entries[0])).toMatchObject({ action: 'stage-handback-plan-body', commentBytes: Buffer.byteLength('secret plan', 'utf8') })
+    expect(JSON.stringify(log.entries[0])).not.toContain('secret plan')
+  })
+
+  it('is a write-failed with the gh message when gh fails, and still deletes the scratch file', async () => {
+    const { repoRoot } = await makeDirs()
+    const scratchDir = await mkdtemp(join(tmpdir(), 'port-writes-body-'))
+    const auditDir = await mkdtemp(join(tmpdir(), 'port-writes-body-audit-'))
+    const gh: GhRunner = () => Promise.resolve({ ok: false, kind: 'unknown', stdout: '', stderr: 'boom' } satisfies GhResult)
+
+    const outcome = await postIssueBody({ request: commentRequest({ scratchDir }), repoRoot, auditDir, gh, now })
+    expect(outcome).toMatchObject({ kind: 'write-failed', stderr: 'boom' })
+    expect(await readdir(scratchDir)).toEqual([])
+  })
+
+  it('refuses a pull request without calling gh', async () => {
+    const { repoRoot } = await makeDirs()
+    const scratchDir = await mkdtemp(join(tmpdir(), 'port-writes-body-'))
+    const auditDir = await mkdtemp(join(tmpdir(), 'port-writes-body-audit-'))
+
+    const outcome = await postIssueBody({ request: commentRequest({ scratchDir, kind: 'pull-request' }), repoRoot, auditDir, gh: neverCalledGh(), now })
+    expect(outcome).toMatchObject({ kind: 'write-failed' })
+    expect(await readdir(scratchDir)).toEqual([])
+    const log = await readAuditLog(auditDir)
+    if (!log.ok) throw new Error('unreachable')
+    expect(log.entries).toHaveLength(1)
+  })
+
+  it('refuses with terminal-owned and writes no scratch file when a terminal cockpit owns the repo', async () => {
+    const { repoRoot } = await makeDirs()
+    await mkdir(join(repoRoot, '.agents'), { recursive: true })
+    await writeFile(join(repoRoot, '.agents', 'cockpit.json'), JSON.stringify({ repo: 'o/r', owner: 'terminal', since: '2026-01-01T00:00:00Z' }), 'utf8')
+    const scratchDir = await mkdtemp(join(tmpdir(), 'port-writes-body-'))
+    const auditDir = await mkdtemp(join(tmpdir(), 'port-writes-body-audit-'))
+
+    const outcome = await postIssueBody({ request: commentRequest({ scratchDir }), repoRoot, auditDir, gh: neverCalledGh(), now })
+    expect(outcome).toEqual({ kind: 'terminal-owned', since: '2026-01-01T00:00:00Z' })
+    expect(await readdir(scratchDir)).toEqual([])
   })
 })

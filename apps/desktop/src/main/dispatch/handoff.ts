@@ -2,7 +2,7 @@
 import { eventWrites, stageModeFor } from '@/main/dispatch/transitions'
 import type { ReadyEntry } from '@/types/actions'
 import type { SessionKey } from '@/types/hosting'
-import type { StageEvent, StageLabelResult, StageTransitionResult } from '@/types/stage-labels'
+import type { StageEvent, StageLabelResult, StagePlanFile, StageTransitionResult } from '@/types/stage-labels'
 import type { StageOutcome } from '@/types/stage-session'
 import type { TickActionable } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
@@ -22,8 +22,9 @@ interface PendingWrite {
 }
 
 interface StageHandoffDeps {
-  readonly write: (params: { readonly entry: ReadyEntry; readonly record: HandoffRecord; readonly event: StageEvent; readonly auditDir: string }) => Promise<StageTransitionResult>
+  readonly write: (params: { readonly entry: ReadyEntry; readonly record: HandoffRecord; readonly event: StageEvent; readonly auditDir: string; readonly scratchDir: string }) => Promise<StageTransitionResult>
   readonly auditDir: string
+  readonly scratchDir: string
   readonly onChange: () => void
   /** Asks for one GitHub read of this repository alone, so the next stage sees the label just written. */
   readonly requestRead: (repoId: RepoId) => void
@@ -32,8 +33,8 @@ interface StageHandoffDeps {
 export interface StageHandoff {
   /** Called once per pass, so a retry has the repository's current entry. */
   remember(entry: ReadyEntry): void
-  /** Fire-and-forget: plans and writes this outcome's label move, serialized per repository. */
-  settle(repoId: RepoId, record: HandoffRecord, outcome: StageOutcome): void
+  /** Fire-and-forget: plans and writes this outcome's label move, serialized per repository. `plan` is captured once and replayed on every retry, since the worktree is gone by then. */
+  settle(repoId: RepoId, record: HandoffRecord, outcome: StageOutcome, plan: StagePlanFile | null): void
   /** The session's next turn began after a block. */
   resumedTurn(repoId: RepoId, record: HandoffRecord): void
   /** Retries every pending write for the repository; resolves once each has been attempted. */
@@ -60,7 +61,7 @@ export function createStageHandoff(deps: StageHandoffDeps): StageHandoff {
     write.attempts += 1
     let result: StageTransitionResult
     try {
-      result = await deps.write({ entry, record: write.record, event: write.event, auditDir: deps.auditDir })
+      result = await deps.write({ entry, record: write.record, event: write.event, auditDir: deps.auditDir, scratchDir: deps.scratchDir })
     } catch (error) {
       result = { kind: 'refused', reason: 'write-failed', retryable: true, detail: error instanceof Error ? error.message : String(error) }
     }
@@ -80,8 +81,8 @@ export function createStageHandoff(deps: StageHandoffDeps): StageHandoff {
     remember(entry) {
       entries.set(entry.id, entry)
     },
-    settle(repoId, record, outcome) {
-      const event: StageEvent = { kind: 'outcome', outcome: outcome.kind, handback: outcome.handback }
+    settle(repoId, record, outcome, plan) {
+      const event: StageEvent = { kind: 'outcome', outcome: outcome.kind, handback: outcome.handback, plan }
       if (!eventWrites(event, stageModeFor(record.agent, record.trigger))) return
       results.delete(record.sessionKey)
       enqueue(record.sessionKey, { repoId, record, event, resultKey: record.sessionKey, attempts: 0 })

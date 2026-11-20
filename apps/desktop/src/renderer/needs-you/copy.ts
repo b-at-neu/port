@@ -128,6 +128,8 @@ const HANDOFF_REFUSAL_COPY: Readonly<Record<HandoffRefusal, string>> = {
   'write-failed': 'GitHub refused the change three times',
   'terminal-owned': 'the terminal pipeline owns this repository now',
   'unresolvable-label': "a label it needs isn't in this repository",
+  'no-plan-file': 'it left no plan file to post',
+  'empty-plan-file': 'its plan file was empty',
 }
 
 function halfLabelledCopy(item: Extract<NeedsYouItem, { readonly kind: 'half-labelled' }>, label: string): string {

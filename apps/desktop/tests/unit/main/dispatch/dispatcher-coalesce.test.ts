@@ -180,7 +180,7 @@ describe('createDispatcher — read on hand-back', () => {
 
   it('a completed hand-back requests exactly one read for its repository, once its label write has settled', async () => {
     const { dispatcher, requestRead } = await trackedSession()
-    dispatcher.recordOutcome(REPO_ID, SESSION_KEY, outcome('completed'))
+    dispatcher.recordOutcome(REPO_ID, SESSION_KEY, outcome('completed'), null)
     expect(requestRead).not.toHaveBeenCalled()
     await flush()
     expect(requestRead).toHaveBeenCalledTimes(1)
@@ -189,14 +189,14 @@ describe('createDispatcher — read on hand-back', () => {
 
   it.each(['questions', 'blocked', 'error', 'usage-limit', 'interrupted'] as const)('a %s hand-back requests no read', async (kind) => {
     const { dispatcher, requestRead } = await trackedSession()
-    dispatcher.recordOutcome(REPO_ID, SESSION_KEY, outcome(kind))
+    dispatcher.recordOutcome(REPO_ID, SESSION_KEY, outcome(kind), null)
     await flush()
     expect(requestRead).not.toHaveBeenCalled()
   })
 
   it('a hand-back for an untracked session requests no read', async () => {
     const { dispatcher, requestRead } = await trackedSession()
-    dispatcher.recordOutcome(REPO_ID, 'hosted-other' as SessionKey, outcome('completed'))
+    dispatcher.recordOutcome(REPO_ID, 'hosted-other' as SessionKey, outcome('completed'), null)
     await flush()
     expect(requestRead).not.toHaveBeenCalled()
   })

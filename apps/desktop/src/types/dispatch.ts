@@ -4,7 +4,7 @@ import type { AutoApprovePlanParams, ReadyEntry, EscalateToHumanParams, Escalate
 import type { TickActionable, EndedStage, DispatchLedger, RefreshMemo, TickObservation, ForceDispatch } from '@/types/tick'
 import type { HostedStore } from '@/types/hosting'
 import type { FetchItemsByNumberParams, ItemsByNumberFetch, ResolvedItem } from '@/types/github'
-import type { StageEvent, StageTransitionResult } from '@/types/stage-labels'
+import type { StageEvent, StagePlanFile, StageTransitionResult } from '@/types/stage-labels'
 import type { ReposListResponse } from '@/types/ipc'
 import type { GitRunner, PathOps, FileFailureKind } from '@/types/platform'
 import type { LabelKey } from '@/utils/labels/vocabulary'
@@ -241,7 +241,7 @@ export interface Dispatcher {
   /** Stops new launches — called before `closeAll()` on quit. */
   shutdown(): void
   /** Records a stage launcher's hand-back classification against its matching record, by session key, and plans the label move it implies. A no-op if the key is not tracked. */
-  recordOutcome(repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome): void
+  recordOutcome(repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome, plan: StagePlanFile | null): void
   /** A blocked stage session's next turn began — the app clears the block. A no-op if the key is not tracked. */
   recordResumedTurn(repoId: RepoId, sessionKey: SessionKey): void
   /** `true` unless this app currently owns `repoId` — an unread repository (`'none'`) holds, the fail direction for `SESSION REQUIRED`. */
@@ -296,7 +296,7 @@ export interface DispatchActions {
 
 export interface StageLabelWrites {
   readonly claim: (params: { readonly entry: ReadyEntry; readonly candidate: Pick<TickActionable, 'number' | 'kind' | 'agent' | 'trigger'>; readonly resolved: ResolvedItem; readonly auditDir: string }) => Promise<StageTransitionResult>
-  readonly transition: (params: { readonly entry: ReadyEntry; readonly record: Pick<TickActionable, 'number' | 'kind' | 'agent' | 'trigger'>; readonly event: StageEvent; readonly auditDir: string }) => Promise<StageTransitionResult>
+  readonly transition: (params: { readonly entry: ReadyEntry; readonly record: Pick<TickActionable, 'number' | 'kind' | 'agent' | 'trigger'>; readonly event: StageEvent; readonly auditDir: string; readonly scratchDir: string }) => Promise<StageTransitionResult>
 }
 
 export interface HaltDispatchDeps {

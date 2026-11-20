@@ -12,7 +12,7 @@ Every plan, review, summary, and comment is written for a human scanning fast:
 - **No meta-commentary** — do not describe the document itself.
 - **Say it once** — never repeat a point across sections, or across body, inline, and summary.
 
-### Implementation plan (`plan-agent` writes it into the issue body)
+### Implementation plan (`plan-agent` writes it to `.temp/plan-N.md`; port posts it as the issue body)
 
 Appended below the ticket under a `---` then `## Implementation Plan`; revision mode replaces only that block. **Do not restate the ticket** — reference it. Fixed sections in this order; conditional ones appear **only when they apply**:
 

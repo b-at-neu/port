@@ -23,6 +23,7 @@ import { boundRecords, endedStagesOf, freeSlots, refreshRecords } from '@/main/d
 import type { PipelineItemKind, ResolvedItem } from '@/types/github'
 import type { StageWorktreeTarget } from '@/types/workspace'
 import type { EndedStage, TickActionable } from '@/types/tick'
+import type { StagePlanFile } from '@/types/stage-labels'
 import type { StageOutcome } from '@/types/stage-session'
 import { reviewDispatchFacts } from '../../../../../scripts/port-tick/gates'
 import type { ReviewDispatchFacts } from '../../../../../scripts/port-tick/gates'
@@ -93,7 +94,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   let stopped = false
   // Serializes every repository's own launch section so two repositories never race for the same free slot.
   let launchQueue: Promise<void> = Promise.resolve()
-  const handoff = createStageHandoff({ write: deps.stageLabels.transition, auditDir: deps.dirs.audit, onChange: deps.onChange, requestRead: deps.requestRead })
+  const handoff = createStageHandoff({ write: deps.stageLabels.transition, auditDir: deps.dirs.audit, scratchDir: deps.dirs.scratch, onChange: deps.onChange, requestRead: deps.requestRead })
 
   function serialize<T>(fn: () => Promise<T>): Promise<T> {
     const result = launchQueue.then(fn)
@@ -132,7 +133,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       : { kind: 'idle' }
   }
 
-  function recordOutcome(repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome): void {
+  function recordOutcome(repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome, plan: StagePlanFile | null): void {
     const state = repoStates.get(repoId)
     if (state === undefined) return
     const idx = state.records.findIndex((r) => r.sessionKey === sessionKey)
@@ -144,7 +145,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     next[idx] = { ...existing, outcome }
     state.records = next
     deps.onChange()
-    handoff.settle(repoId, { ...existing, sessionKey }, outcome)
+    handoff.settle(repoId, { ...existing, sessionKey }, outcome, plan)
   }
   function recordResumedTurn(repoId: RepoId, sessionKey: SessionKey): void {
     const record = repoStates.get(repoId)?.records.find((r) => r.sessionKey === sessionKey)
@@ -404,7 +405,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
 
   /** Undoes a claim whose launch failed; a refused rollback is left to the stall ladder. */
   async function rollback(entry: ReadyEntry, candidate: TickActionable): Promise<void> {
-    await deps.stageLabels.transition({ entry, record: candidate, event: { kind: 'rollback' }, auditDir: deps.dirs.audit })
+    await deps.stageLabels.transition({ entry, record: candidate, event: { kind: 'rollback' }, auditDir: deps.dirs.audit, scratchDir: deps.dirs.scratch })
   }
 
   // The most recent consider() call's own snapshot, the one a pass reads when it starts.

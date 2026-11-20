@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LABEL_GUARD_MESSAGE, labelWriteOf } from '@/main/hosting/label-guard'
+import { ISSUE_BODY_GUARD_MESSAGE, LABEL_GUARD_MESSAGE, issueBodyWriteOf, labelWriteOf } from '@/main/hosting/label-guard'
 
 describe('labelWriteOf', () => {
   it.each([
@@ -43,5 +43,40 @@ describe('labelWriteOf', () => {
 
   it('carries the reason the agent sees', () => {
     expect(LABEL_GUARD_MESSAGE).toBe("port moves pipeline labels itself. Don't edit labels — finish with your HANDBACK: line.")
+  })
+})
+
+describe('issueBodyWriteOf', () => {
+  it.each([
+    'gh issue edit 52 --repo o/a --body-file .temp/plan-52.md',
+    'gh issue edit 52 --repo o/a --body "new body"',
+    'gh issue edit 52 --body-file=.temp/plan-52.md',
+    'gh issue edit 52 -b x',
+    'gh issue edit 52 -F .temp/plan-52.md',
+    'gh api repos/o/a/issues/52 -X PATCH -F body=@.temp/p.md',
+    'gh api --method PATCH repos/o/a/issues/52 -f body=x',
+    'gh api repos/o/a/issues/52 --input .temp/p.json',
+    'gh api "repos/o/a/issues/52" -f body=x',
+  ])('denies %s', (command) => {
+    expect(issueBodyWriteOf(command)).toBe(true)
+  })
+
+  it.each([
+    'gh issue comment 52 --body-file .temp/b.md',
+    'gh issue view 52 --json body',
+    'gh issue edit 52 --repo o/a --add-label planning',
+    'gh pr edit 8 --body-file .temp/pr-body-8.md',
+    'gh pr create --repo o/a --base dev --title t --body-file .temp/pr-52.md',
+    'gh api repos/o/a/issues/52',
+    'gh api repos/o/a/issues/52/comments -f body=x',
+    'gh api repos/o/a/issues/52/comments --input .temp/c.json',
+    'gh api repos/o/a/pulls/8/reviews --input .temp/review-8.json',
+    'git push origin HEAD:52-thing',
+  ])('allows %s', (command) => {
+    expect(issueBodyWriteOf(command)).toBe(false)
+  })
+
+  it('carries the reason the agent sees', () => {
+    expect(ISSUE_BODY_GUARD_MESSAGE).toBe('port posts the plan itself. Write it to .temp/plan-<N>.md and finish with your HANDBACK: line.')
   })
 })

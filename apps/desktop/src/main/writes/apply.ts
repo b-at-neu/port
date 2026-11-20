@@ -168,12 +168,11 @@ export async function applyLabels(params: ApplyLabelsParams): Promise<WriteOutco
 
 /** Passes `--body-file` from a scratch file, deleted in a `finally` — argv-length limits on Windows
  *  are the reason, not shell quoting. Audited with byte length, never the text. */
-export async function postComment(params: PostCommentParams): Promise<WriteOutcome> {
+async function postBodyFile(params: PostCommentParams, argvFor: (scratchPath: string) => readonly string[], refusal: string | null): Promise<WriteOutcome> {
   const now = params.now ?? (() => new Date())
   const pathOps = params.pathOps ?? defaultPathOps
   const gh = params.gh ?? defaultGh
   const { request, auditDir } = params
-  const subcommand = request.kind === 'pull-request' ? 'pr' : 'issue'
   const scratchPath = pathOps.join(request.scratchDir, `write-comment-${request.kind}-${request.number}-${randomUUID()}.md`)
   const bodyBytes = Buffer.byteLength(request.body, 'utf8')
 
@@ -203,6 +202,9 @@ export async function postComment(params: PostCommentParams): Promise<WriteOutco
   if (ownership.kind === 'unreadable') {
     return record('unreadable', null, { kind: 'ownership-unreadable', path: ownership.path, message: ownership.message })
   }
+  if (refusal !== null) {
+    return record(ownership.kind, null, { kind: 'write-failed', classification: 'unknown', stderr: refusal, reread: null })
+  }
 
   const written = await writeTextFile(scratchPath, request.body)
   if (!written.ok) {
@@ -210,7 +212,7 @@ export async function postComment(params: PostCommentParams): Promise<WriteOutco
   }
 
   try {
-    const argv = [subcommand, 'comment', String(request.number), '--repo', request.repo, '--body-file', scratchPath]
+    const argv = argvFor(scratchPath)
     const result = await gh(argv)
     if (!result.ok) {
       return await record(ownership.kind, argv, { kind: 'write-failed', classification: result.kind, stderr: describeGhFailure(result), reread: null })
@@ -219,4 +221,17 @@ export async function postComment(params: PostCommentParams): Promise<WriteOutco
   } finally {
     await removeFile(scratchPath)
   }
+}
+
+export async function postComment(params: PostCommentParams): Promise<WriteOutcome> {
+  const { request } = params
+  const subcommand = request.kind === 'pull-request' ? 'pr' : 'issue'
+  return postBodyFile(params, (scratchPath) => [subcommand, 'comment', String(request.number), '--repo', request.repo, '--body-file', scratchPath], null)
+}
+
+/** The only issue-body write: replaces the issue's whole body from a scratch file. Never edits a pull request. */
+export async function postIssueBody(params: PostCommentParams): Promise<WriteOutcome> {
+  const { request } = params
+  const refusal = request.kind === 'pull-request' ? 'an issue body write never edits a pull request' : null
+  return postBodyFile(params, (scratchPath) => ['issue', 'edit', String(request.number), '--repo', request.repo, '--body-file', scratchPath], refusal)
 }
