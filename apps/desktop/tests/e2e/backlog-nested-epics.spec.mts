@@ -83,7 +83,6 @@ test('collapsing the nested epic hides its tickets, and collapsing the parent hi
   await expect(page.locator('[data-slot="backlog-row"]', { hasText: '#412' })).toHaveCount(0)
   await expect(page.locator('[data-slot="backlog-row"]', { hasText: '#402' })).toBeVisible()
 
-  for (let step = 0; step < 3; step++) await page.keyboard.press('j')
   expect(await selectedNumber(page)).toMatch(/:410$/)
   await page.keyboard.press('j')
   expect(await selectedNumber(page)).toMatch(/:402$/)
