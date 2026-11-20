@@ -1,9 +1,11 @@
 import { Fragment } from 'react'
 import type { ReactNode } from 'react'
-import { ArrowRight, Ban, ChevronDown, ChevronRight, CircleCheck, CircleDot, Clock, Pencil, Play, User, UserX } from 'lucide-react'
+import { ArrowRight, Ban, CircleCheck, CircleDot, Clock, Pencil, Play, User, UserX } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { IconButton } from '@/renderer/components/icon-button'
+import { DetailPane } from '@/renderer/components/detail-pane'
+import { PaneCloseButton } from '@/renderer/components/pane-close-button'
 import { ErrorBanner } from '@/renderer/components/error-banner'
+import { openTicketLinkLabel } from '@/renderer/board/copy'
 import { Markdown } from '@/renderer/components/markdown'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
@@ -11,12 +13,14 @@ import { useIpcQuery } from '@/renderer/data/query'
 import { exactTime, relativeAge } from '@/renderer/backlog/group'
 import { assigneeView, epicSummaryView, linkListView } from '@/renderer/backlog/detail'
 import {
+  BACKLOG_DETAIL_CLOSE,
   BACKLOG_DETAIL_NONE,
   BACKLOG_DETAIL_NO_BODY,
   BACKLOG_DETAIL_RETRY,
   BACKLOG_DETAIL_UNASSIGNED,
   BACKLOG_DETAIL_UNREADABLE,
   BACKLOG_EPIC_SUBISSUES_UNREADABLE,
+  BACKLOG_EPIC_TAG,
   BACKLOG_META_ASSIGNEE,
   BACKLOG_META_AUTHOR,
   BACKLOG_META_BLOCKED_BY,
@@ -30,7 +34,6 @@ import {
   backlogDetailInvokeErrorCopy,
   backlogDetailMoreCopy,
   backlogDetailRegionAria,
-  backlogDetailToggleAria,
   backlogEpicDoneCopy,
   backlogEpicInProgressCopy,
   backlogEpicTruncatedCopy,
@@ -45,18 +48,9 @@ function useBacklogDetail(row: BacklogRowView) {
 
 type DetailQuery = ReturnType<typeof useBacklogDetail>
 
-export function DetailToggle({ open, number, controls, onToggle }: { readonly open: boolean; readonly number: number; readonly controls: string; readonly onToggle: () => void }) {
-  const Chevron = open ? ChevronDown : ChevronRight
+function MetaList({ children }: { readonly children: ReactNode }) {
   return (
-    <IconButton label={backlogDetailToggleAria(number, open)} expanded={open} controls={controls} slot="backlog-detail-toggle" onClick={onToggle}>
-      <Chevron aria-hidden="true" className="size-4" />
-    </IconButton>
-  )
-}
-
-function MetaRow({ children }: { readonly children: ReactNode }) {
-  return (
-    <div data-slot="backlog-detail-meta" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-meta text-muted-foreground">
+    <div data-slot="backlog-detail-meta" className="flex flex-col gap-1.5 text-meta text-muted-foreground">
       {children}
     </div>
   )
@@ -87,7 +81,16 @@ function LinkItem({ number, title, url, closed }: { readonly number: number; rea
   )
 }
 
-function LinkValues({ items }: { readonly items: readonly { readonly number: number; readonly title: string; readonly url: string; readonly closed?: boolean }[] }) {
+function LinkValues({
+  items,
+}: {
+  readonly items: readonly {
+    readonly number: number
+    readonly title: string
+    readonly url: string
+    readonly closed?: boolean
+  }[]
+}) {
   return (
     <span>
       {items.map((item, index) => (
@@ -148,18 +151,10 @@ function failed(query: DetailQuery): boolean {
   return query.isError || query.data?.ok === false
 }
 
-function PanelRoot({ id, slot, number, children }: { readonly id: string; readonly slot: string; readonly number: number; readonly children: ReactNode }) {
-  return (
-    <div id={id} role="region" aria-label={backlogDetailRegionAria(number)} data-slot={slot} data-keeps-selection className="flex flex-col gap-3 pb-3 pl-26 pr-4 pt-1">
-      {children}
-    </div>
-  )
-}
-
-function TicketMeta({ detail, now }: { readonly detail: BacklogDetail; readonly now: Date }) {
+function TicketMetaItems({ detail, now }: { readonly detail: BacklogDetail; readonly now: Date }) {
   const assignee = assigneeView(detail.assignees)
   return (
-    <MetaRow>
+    <>
       <MetaItem icon={Ban} name={BACKLOG_META_BLOCKED_BY} field="blocked-by">
         <LinkListValue view={linkListView(detail.blockedBy)} />
       </MetaItem>
@@ -177,29 +172,17 @@ function TicketMeta({ detail, now }: { readonly detail: BacklogDetail; readonly 
       <MetaItem icon={assignee.kind === 'unassigned' ? UserX : User} name={BACKLOG_META_ASSIGNEE} field="assignee">
         <span>{assignee.kind === 'unassigned' ? BACKLOG_DETAIL_UNASSIGNED : assignee.text}</span>
       </MetaItem>
-    </MetaRow>
+    </>
   )
 }
 
-export function TicketDetailPanel({ row, id, now }: { readonly row: BacklogRowView; readonly id: string; readonly now: Date }) {
-  const query = useBacklogDetail(row)
-  const response = query.data
+function MetaSkeleton() {
   return (
-    <PanelRoot id={id} slot="backlog-detail" number={row.number}>
-      {failed(query) ? (
-        <DetailError query={query} number={row.number} />
-      ) : response?.ok === true ? (
-        <>
-          <DetailBody body={response.detail.body} />
-          <TicketMeta detail={response.detail} now={now} />
-        </>
-      ) : (
-        <>
-          <BodySkeleton />
-          <Skeleton className="h-4 w-64" />
-        </>
-      )}
-    </PanelRoot>
+    <>
+      <Skeleton className="h-4 w-2/3" />
+      <Skeleton className="h-4 w-1/2" />
+      <Skeleton className="h-4 w-1/3" />
+    </>
   )
 }
 
@@ -247,16 +230,44 @@ function EpicDetailItems({ query, now }: { readonly query: DetailQuery; readonly
   )
 }
 
-export function EpicInfoPanel({ group, id, now }: { readonly group: BacklogEpicGroup; readonly id: string; readonly now: Date }) {
-  const query = useBacklogDetail(group.epic)
+interface BacklogDetailPaneProps {
+  readonly row: BacklogRowView
+  readonly epic: BacklogEpicGroup | null
+  readonly now: Date
+  readonly onClose: () => void
+}
+
+export function BacklogDetailPane({ row, epic, now, onClose }: BacklogDetailPaneProps) {
+  const query = useBacklogDetail(row)
   const response = query.data
+  const isFailed = failed(query)
   return (
-    <PanelRoot id={id} slot="backlog-epic-info-panel" number={group.epic.number}>
-      {failed(query) ? <DetailError query={query} number={group.epic.number} /> : response?.ok === true ? <DetailBody body={response.detail.body} /> : <BodySkeleton />}
-      <MetaRow>
-        <EpicSummaryItems group={group} />
-        <EpicDetailItems query={query} now={now} />
-      </MetaRow>
-    </PanelRoot>
+    <DetailPane onClose={onClose} data-slot="backlog-detail" data-ticket={row.number} aria-label={backlogDetailRegionAria(row.number)}>
+      <div className="flex flex-col gap-1">
+        <div className="flex items-start justify-between gap-2">
+          <h2 className="text-title font-semibold text-foreground">{row.title}</h2>
+          <PaneCloseButton label={BACKLOG_DETAIL_CLOSE} onClick={onClose} />
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-small text-muted-foreground">
+          <span>#{row.number}</span>
+          <span>{row.repo}</span>
+          {epic !== null ? <span>{BACKLOG_EPIC_TAG}</span> : null}
+        </div>
+        <div className="flex items-center gap-3 text-small">
+          <a href={row.url} target="_blank" rel="noreferrer" className="text-primary-text hover:underline">
+            {openTicketLinkLabel()}
+          </a>
+        </div>
+      </div>
+      {epic !== null ? (
+        <MetaList>
+          <EpicSummaryItems group={epic} />
+          <EpicDetailItems query={query} now={now} />
+        </MetaList>
+      ) : isFailed ? null : (
+        <MetaList>{response?.ok === true ? <TicketMetaItems detail={response.detail} now={now} /> : <MetaSkeleton />}</MetaList>
+      )}
+      <div className="flex flex-col gap-3 border-t border-border pt-3">{isFailed ? <DetailError query={query} number={row.number} /> : response?.ok === true ? <DetailBody body={response.detail.body} /> : <BodySkeleton />}</div>
+    </DetailPane>
   )
 }

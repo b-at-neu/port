@@ -22,10 +22,8 @@ import {
   backlogDetailInvokeErrorCopy,
   backlogDetailMoreCopy,
   backlogDetailRegionAria,
-  backlogDetailToggleAria,
   backlogEmptyGroupCopy,
   backlogEpicDoneCopy,
-  backlogEpicInfoAria,
   backlogEpicInProgressCopy,
   BACKLOG_EPIC_TAG,
   backlogEpicProgressAria,
@@ -145,11 +143,7 @@ describe('repository section copy', () => {
 })
 
 describe('detail copy', () => {
-  it('labels the toggles by what they will do', () => {
-    expect(backlogDetailToggleAria(45, false)).toBe('Show details for #45')
-    expect(backlogDetailToggleAria(45, true)).toBe('Hide details for #45')
-    expect(backlogEpicInfoAria(41, false)).toBe('Show info for #41')
-    expect(backlogEpicInfoAria(41, true)).toBe('Hide info for #41')
+  it('labels the pane', () => {
     expect(backlogDetailRegionAria(45)).toBe('Details for #45')
   })
 

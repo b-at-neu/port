@@ -122,13 +122,7 @@ export function backlogEpicToggleAria(number: number, collapsed: boolean): strin
   return `${collapsed ? 'Expand' : 'Collapse'} #${String(number)}`
 }
 
-export function backlogDetailToggleAria(number: number, open: boolean): string {
-  return `${open ? 'Hide' : 'Show'} details for #${String(number)}`
-}
-
-export function backlogEpicInfoAria(number: number, open: boolean): string {
-  return `${open ? 'Hide' : 'Show'} info for #${String(number)}`
-}
+export const BACKLOG_DETAIL_CLOSE = 'Close details'
 
 export function backlogDetailRegionAria(number: number): string {
   return `Details for #${String(number)}`
