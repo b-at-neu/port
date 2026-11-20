@@ -124,6 +124,7 @@ describe('interrupted entries', () => {
       detail: null,
       resetsAt: null,
       costUsd: null,
+      networkRetries: 0,
       ...overrides,
     }
   }

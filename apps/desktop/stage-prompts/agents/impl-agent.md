@@ -94,7 +94,7 @@ port has already moved the ticket's label; you never touch one.
 gh pr list --repo <repo> --state open --json number,url,headRefName,body --jq '[.[] | select(((.body // "") | test("(?i)\\bcloses #N\\b")) or (.headRefName | startswith("N-"))) | {number, url, headRefName}]'
 ```
 
-Non-empty → stop, change nothing, and end with `BLOCKED: #N already has an open pull request (#<pr>, branch <head>) — I would be re-implementing work that exists. Nothing was changed.`
+Non-empty → stop and change nothing. When exactly one pull request is listed and its `headRefName` starts `N-`, it is this ticket's own finished work: end with `HANDBACK: pr-opened #<pr>`, which port verifies and applies. Otherwise (a pull request on a foreign branch, or several) end with `BLOCKED: #N already has an open pull request (#<pr>, branch <head>) — I would be re-implementing work that exists. Nothing was changed.`
 
 **Resume-branch lookup.** The open-pull-request lookup above is unchanged and still wins — a resume never overrides it. Otherwise, check for a branch a prior attempt pushed and never opened a pull request for:
 

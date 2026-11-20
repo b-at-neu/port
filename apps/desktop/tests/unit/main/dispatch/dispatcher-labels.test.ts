@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createDispatcher } from '@/main/dispatch/dispatcher'
+import { SETTLE_GRACE_MS } from '@/main/dispatch/launch'
 import type { BoardSnapshot } from '@/types/board'
 import type { ReadyEntry } from '@/types/actions'
 import type { CreateDispatcherParams, OwnershipRead, StageLabelWrites, StageLaunchResult, StageLauncher } from '@/types/dispatch'
@@ -246,5 +247,78 @@ describe('createDispatcher — stage label writes', () => {
     dispatcher.recordResumedTurn(REPO_ID, KEY)
     await settle()
     expect(transition.mock.calls[0]?.[0]).toMatchObject({ event: { kind: 'resumed-turn' } })
+  })
+})
+
+describe('createDispatcher — a resumed session, a superseded outcome and a settling one', () => {
+  const RESUMED_KEY = 'hosted-2' as SessionKey
+  const INTERRUPTED = {
+    id: 'reg-1',
+    repoId: REPO_ID,
+    agent: 'impl' as const,
+    number: 52,
+    kind: 'issue' as const,
+    trigger: 'planApproved' as const,
+    inFlight: 'inProgress' as const,
+    model: 'sonnet',
+    claudeSessionId: 'sdk-1',
+    worktree: { path: '/wt', branch: 'b', baseSha: 's' },
+    startedAt: '2026-01-01T00:00:00.000Z',
+    interruptedAt: '2026-01-01T00:01:00.000Z',
+    reason: 'network' as const,
+    detail: null,
+    resetsAt: null,
+    costUsd: null,
+    networkRetries: 1,
+  }
+
+  it('trackResumed makes a resumed session’s hand-back write its labels', async () => {
+    const { dispatcher, transition } = rig()
+    await dispatcher.consider(snapshotWith([tickReport()]))
+    dispatcher.trackResumed(REPO_ID, RESUMED_KEY, INTERRUPTED)
+    dispatcher.recordOutcome(REPO_ID, RESUMED_KEY, completed({ token: 'pr-opened', arg: '#8' }), null)
+    await settle()
+    expect(transition.mock.calls[0]?.[0]).toMatchObject({ record: { number: 52, agent: 'impl', trigger: 'planApproved', sessionKey: RESUMED_KEY }, event: { kind: 'outcome', outcome: 'completed' } })
+  })
+
+  it('an older session’s outcome writes no label once a newer session owns the ticket, but is still recorded', async () => {
+    let at = new Date('2026-01-01T00:00:00Z')
+    const { dispatcher, transition } = rig({ now: () => at })
+    await consider(dispatcher)
+    at = new Date('2026-01-01T00:10:00Z')
+    dispatcher.trackResumed(REPO_ID, RESUMED_KEY, INTERRUPTED)
+    dispatcher.recordOutcome(REPO_ID, KEY, completed({ token: 'pr-opened', arg: '#8' }), null)
+    await settle()
+    expect(transition).not.toHaveBeenCalled()
+    await dispatcher.consider(snapshotWith([tickReport()]))
+    expect(recent(dispatcher).find((r) => r.sessionKey === KEY)?.outcome).toMatchObject({ kind: 'completed' })
+  })
+
+  it('a session that just ended with no classified outcome counts as live until the grace passes', async () => {
+    let phase: 'ready' | 'ended' = 'ready'
+    let at = new Date('2026-01-01T00:00:00Z')
+    const { dispatcher } = rig({ store: storeStub({ ...DISPATCH_STORE_DEFAULTS, snapshotOf: () => live(phase) }), now: () => at })
+    await consider(dispatcher)
+    expect(dispatcher.stageLiveness(REPO_ID)?.live).toEqual(['impl #52'])
+    phase = 'ended'
+    await dispatcher.consider(snapshotWith([tickReport()]))
+    expect(dispatcher.liveStages(REPO_ID)).toEqual([])
+    expect(dispatcher.stageLiveness(REPO_ID)?.live).toEqual(['impl #52'])
+    at = new Date(at.getTime() + SETTLE_GRACE_MS + 1)
+    expect(dispatcher.stageLiveness(REPO_ID)?.live).toEqual([])
+  })
+
+  it('a ticket whose hand-back write is still being retried stays live past the grace', async () => {
+    let phase: 'ready' | 'ended' = 'ready'
+    let at = new Date('2026-01-01T00:00:00Z')
+    const transient: StageTransitionResult = { kind: 'refused', reason: 'write-failed', retryable: true, detail: 'EAI_AGAIN' }
+    const { dispatcher } = rig({ store: storeStub({ ...DISPATCH_STORE_DEFAULTS, snapshotOf: () => live(phase) }), now: () => at, stageLabels: { claim: () => Promise.resolve(APPLIED), transition: () => Promise.resolve(transient) } })
+    await consider(dispatcher)
+    dispatcher.recordOutcome(REPO_ID, KEY, completed({ token: 'pr-opened', arg: '#8' }), null)
+    await settle()
+    phase = 'ended'
+    await dispatcher.consider(snapshotWith([tickReport()]))
+    at = new Date(at.getTime() + SETTLE_GRACE_MS * 3)
+    expect(dispatcher.stageLiveness(REPO_ID)?.live).toEqual(['impl #52'])
   })
 })

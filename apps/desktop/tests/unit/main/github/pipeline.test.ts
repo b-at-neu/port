@@ -386,23 +386,22 @@ describe('fetchPipelineItems — details', () => {
     expect(result.items[0]?.blockerComments).toBeNull()
   })
 
-  it('asks for closing pull requests only on a pr opened issue, and maps them', async () => {
-    const opened = node(1, ['pr opened'])
+  it('asks for closing pull requests on pr opened, plan approved, in progress and blocked issues only, and maps them with their branch', async () => {
+    const empty = { timelineItems: { nodes: [] }, blockedBy: { totalCount: 0, nodes: [] } }
+    const closing = (nodes: readonly unknown[]) => ({ ...empty, closedByPullRequestsReferences: { nodes } })
     const { runner, documents } = scripted({
-      sweep: () => ok(sweepBody({ issues: connection([opened, node(4, ['ready'])]), pullRequests: connection([]) })),
-      details: () =>
-        ok({
-          data: { repository: { d0: { timelineItems: { nodes: [] }, blockedBy: { totalCount: 0, nodes: [] }, closedByPullRequestsReferences: { nodes: [{ number: 9, state: 'MERGED' }] } }, d1: { timelineItems: { nodes: [] }, blockedBy: { totalCount: 0, nodes: [] } } }, rateLimit: RATE_LIMIT_REPLY },
-        }),
+      sweep: () => ok(sweepBody({ issues: connection([node(1, ['pr opened']), node(2, ['plan approved']), node(3, ['in progress']), node(5, ['blocked']), node(4, ['ready'])]), pullRequests: connection([]) })),
+      details: () => ok({ data: { repository: { d0: closing([{ number: 9, state: 'MERGED' }]), d1: closing([{ number: 780, state: 'OPEN', headRefName: '2-the-fix' }]), d2: closing([]), d3: closing([]), d4: empty }, rateLimit: RATE_LIMIT_REPLY } }),
     })
     const result = await fetchWith(runner)
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    const detailDocument = documents.find((document) => document.includes('d0:')) ?? ''
-    expect(detailDocument.split('\n').find((line) => line.includes('d0:'))).toContain('closedByPullRequestsReferences')
-    expect(detailDocument.split('\n').find((line) => line.includes('d1:'))).not.toContain('closedByPullRequestsReferences')
+    const lines = (documents.find((document) => document.includes('d0:')) ?? '').split('\n')
+    for (const alias of ['d0:', 'd1:', 'd2:', 'd3:']) expect(lines.find((line) => line.includes(alias))).toContain('closedByPullRequestsReferences')
+    expect(lines.find((line) => line.includes('d4:'))).not.toContain('closedByPullRequestsReferences')
     expect(result.items[0]?.closingPullRequests).toEqual([{ number: 9, state: 'MERGED', headRefName: null }])
-    expect(result.items[1]?.closingPullRequests).toBeNull()
+    expect(result.items[1]?.closingPullRequests).toEqual([{ number: 780, state: 'OPEN', headRefName: '2-the-fix' }])
+    expect(result.items[4]?.closingPullRequests).toBeNull()
   })
 
   it('a closedByPullRequestsReferences error leaves closing pull requests unread, and the read still succeeds', async () => {

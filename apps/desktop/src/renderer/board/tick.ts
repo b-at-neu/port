@@ -208,7 +208,7 @@ export function observationDetailCopy(observation: TickObservation): string | nu
     case 'adopt':
       return `#${n} already finished on GitHub — moving it to ${ADOPTED_PHASE[`${observation.agent}:${observation.handback.token}`] ?? 'its next stage'}.`
     case 'rerun-checks':
-      return `#${n} re-running ${observation.runs.map((run) => run.check).join(', ')} on the reviewed head before reviewing again.`
+      return `#${n} retrying ${observation.runs.map((run) => run.check).join(', ')} on the reviewed head before reviewing again.`
     case 'liveness-reset':
     case 'cycle-cap':
     case 'zero-diff':

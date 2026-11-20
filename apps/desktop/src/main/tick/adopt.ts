@@ -73,10 +73,9 @@ function adoptionOf(item: ReconciledItem, claim: TickClaim): Pick<Adoption, 'age
     case 'reviewing': {
       const newest = newestCodeReview(item.reviews)
       if (newest === null || item.headRefOid === null || newest.commitOid !== item.headRefOid || newest.submittedAt < at) return null
-      const verdict = verdictOf(newest)
-      if (verdict === 'approved') return { agent: 'review', trigger: 'readyForReview', handback: { token: 'approved', arg: null }, evidence: 'review' }
-      if (verdict === 'needs revision') return { agent: 'review', trigger: 'readyForReview', handback: { token: 'needs-revision', arg: null }, evidence: 'review' }
-      return null
+      // A review title spells the verdict with spaces; the hand-back token spells it with hyphens.
+      const token = verdictOf(newest)?.replaceAll(' ', '-')
+      return token === 'approved' || token === 'needs-revision' ? { agent: 'review', trigger: 'readyForReview', handback: { token, arg: null }, evidence: 'review' } : null
     }
     case 'revising': {
       const newest = newestCodeReview(item.reviews)

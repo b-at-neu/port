@@ -49,7 +49,7 @@ async function settle(read: FileResult<string>, text: string, agent: StageLaunch
   const readTextFile = vi.fn((path: string) => Promise.resolve<FileResult<string>>(path === PLAN_PATH ? read : { ok: false, kind: 'not-found', message: `ENOENT ${path}` }))
   const onOutcome = vi.fn()
   const loadInstructions = vi.fn<StageInstructionsLoader>().mockResolvedValue({ ok: true, text: 'prompt', agent: { name: 'plan-agent', definition: { description: 'plan', prompt: 'body' } } })
-  const registry = { recordRunning: vi.fn(), markRunning: vi.fn(), setSessionId: vi.fn(), markInterrupted: vi.fn(), markAllQuit: vi.fn(), remove: vi.fn(), list: vi.fn((): readonly InterruptedStage[] => []), runningWorktreePaths: vi.fn((): readonly string[] => []), load: vi.fn() }
+  const registry = { recordRunning: vi.fn(), markRunning: vi.fn(), setSessionId: vi.fn(), markInterrupted: vi.fn(), markAllQuit: vi.fn(), remove: vi.fn(), list: vi.fn((): readonly InterruptedStage[] => []), running: vi.fn((): readonly InterruptedStage[] => []), load: vi.fn() }
   const launcher = createStageLauncher({
     store: store as never,
     git: vi.fn() as never,
@@ -60,6 +60,8 @@ async function settle(read: FileResult<string>, text: string, agent: StageLaunch
     now: () => new Date(),
     onOutcome,
     onResumedTurn: vi.fn(),
+    onResumed: vi.fn(),
+    pathExists: () => Promise.resolve(true),
     registry,
     onDenial: vi.fn(),
     newId: () => 'id-1',

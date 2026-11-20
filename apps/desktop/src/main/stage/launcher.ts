@@ -11,7 +11,9 @@ import type { StageOutcome, StageOutcomeKind } from '@/types/stage-session'
 import type { StagePlanFile } from '@/types/stage-labels'
 import type { StageAgent } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
-import type { StageDenial, StageInstructionsLoader, StageResumeRequest } from '@/types/stage'
+import type { InterruptedStage, StageDenial, StageInstructionsLoader, StageResumeRequest } from '@/types/stage'
+import { RESUME_PROMPT } from '@/main/stage/recover'
+import { isTransientNetworkFailure } from '@/main/stage/handback'
 import { proposedRule } from '@/main/stage/rule'
 import { loadStageAgentDefinition } from '@/main/stage/bundle'
 import { classifyHandback } from '@/main/stage/handback'
@@ -51,6 +53,9 @@ interface CreateStageLauncherParams {
   /** The app's own `stage-prompts` folder, which a stage session may read. */
   readonly bundleRoot: string
   readonly readTextFile: (path: string) => Promise<FileResult<string>>
+  readonly pathExists: (path: string) => Promise<boolean>
+  /** Fired when `resume` starts an interrupted entry as a session, so its hand-back settles labels. */
+  readonly onResumed: (repoId: RepoId, sessionKey: SessionKey, entry: InterruptedStage) => void
   readonly ops: Pick<PathOps, 'join' | 'samePath'>
 }
 
@@ -119,7 +124,14 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     }
   }
 
+  /** An operator's or the sweeper's resume: the same session start, then the dispatcher is told so its hand-back settles labels. */
   async function resume(request: StageResumeRequest): Promise<StageLaunchResult> {
+    const result = await startResume(request)
+    if (result.ok) params.onResumed(request.entry.repoId, result.sessionKey, request.entry)
+    return result
+  }
+
+  async function startResume(request: StageResumeRequest): Promise<StageLaunchResult> {
     const { entry, root, prompt } = request
     if (entry.claudeSessionId === null) return { ok: false, kind: 'failed', message: 'the session ended before Claude started it' }
 
@@ -163,6 +175,14 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     return { ok: true, sessionKey }
   }
 
+  /** An interrupted entry for this ticket and agent, with its session and worktree intact and no reset still pending, is resumed instead of launched fresh — its work is kept. `null` falls through to a fresh launch. */
+  async function resumeInterrupted(request: StageLaunchRequest): Promise<StageLaunchResult | null> {
+    const entry = params.registry.list().find((e) => e.repoId === request.entry.id && e.number === request.number && e.agent === request.agent && e.claudeSessionId !== null && (e.resetsAt === null || Date.parse(e.resetsAt) <= params.now().getTime()))
+    if (entry === undefined || !(await params.pathExists(entry.worktree.path))) return null
+    const result = await startResume({ entry, root: { path: request.entry.path, sessionRequiredPaths: request.entry.config.sessionRequiredPaths }, prompt: RESUME_PROMPT.replace('<n>', String(entry.number)) })
+    return result.ok ? result : null
+  }
+
   async function launch(request: StageLaunchRequest): Promise<StageLaunchResult> {
     const root = request.entry.path
     if (!swept.has(root)) {
@@ -170,7 +190,11 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       void params.sweepBranches(root).catch(() => undefined)
     }
 
-    const liveWorktrees = new Set<string>(params.registry.runningWorktreePaths())
+    const resumed = await resumeInterrupted(request)
+    if (resumed !== null) return resumed
+
+    // Only a live hosted session holds a worktree: a registry `running` entry whose session died must not block the reclaim.
+    const liveWorktrees = new Set<string>()
     for (const snapshot of params.store.list()) {
       if (snapshot.phase !== 'ended' && snapshot.workspace.worktree !== null) liveWorktrees.add(snapshot.workspace.worktree.path)
     }
@@ -314,10 +338,10 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       }
 
       // error, usage-limit, interrupted: close the session where needed, keep the worktree, and mark it.
-      if (outcome.kind === 'error' || outcome.kind === 'usage-limit') await params.store.close(sessionKey)
+      if (outcome.kind === 'error' || outcome.kind === 'usage-limit' || outcome.kind === 'interrupted') await params.store.close(sessionKey)
       tracked.delete(sessionKey)
       // `crash`/`quit` are reserved for a boot-time find and the quit path's own `markAllQuit`.
-      const reason = outcome.kind === 'usage-limit' ? 'usage-limit' : 'error'
+      const reason = outcome.kind === 'usage-limit' ? 'usage-limit' : outcome.kind === 'interrupted' && isTransientNetworkFailure(outcome.detail) ? 'network' : 'error'
       params.registry.markInterrupted(registryId, reason, outcome.detail, outcome.resetsAt, outcome.costUsd)
       params.onOutcome(repoId, sessionKey, outcome, null)
     } catch (error) {

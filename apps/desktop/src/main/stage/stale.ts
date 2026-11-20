@@ -86,13 +86,31 @@ function mayAutoLaunch(status: readonly RepoDispatchStatus[], repoId: Interrupte
   return repo !== undefined && repo.owner === 'app' && repo.runState === RUN_TARGET.run
 }
 
-/** `autoResumable(entries, now, status)` — usage-limit entries past their reset whose repository this app owns and is running, oldest interruption first. A paused, draining or terminal-owned repository never launches. */
+/** Wait before the next automatic resume of a network failure, indexed by retries already made. */
+export const NETWORK_BACKOFF_MS: readonly number[] = [60_000, 300_000, 900_000]
+
+/** Retries after which a network entry is restarted instead of resumed. */
+export const NETWORK_RETRY_LIMIT = NETWORK_BACKOFF_MS.length
+
+/** `autoResumable(entries, now, status)` — usage-limit entries past their reset plus network entries past their backoff, whose repository this app owns and is running, oldest interruption first. A paused, draining or terminal-owned repository never launches. */
 export function autoResumable(entries: readonly InterruptedStage[], now: Date, status: readonly RepoDispatchStatus[]): readonly string[] {
   return entries
     .filter((entry) => {
-      if (entry.reason !== 'usage-limit' || entry.resetsAt === null || entry.claudeSessionId === null) return false
-      return instantOf(entry.resetsAt) + AUTO_RESUME_GRACE_MS <= now.getTime() && mayAutoLaunch(status, entry.repoId)
+      if ((entry.reason !== 'usage-limit' && entry.reason !== 'network') || entry.resetsAt === null || entry.claudeSessionId === null) return false
+      if (entry.reason === 'network' && entry.networkRetries >= NETWORK_RETRY_LIMIT) return false
+      const grace = entry.reason === 'usage-limit' ? AUTO_RESUME_GRACE_MS : 0
+      return instantOf(entry.resetsAt) + grace <= now.getTime() && mayAutoLaunch(status, entry.repoId)
     })
     .sort((a, b) => instantOf(a.interruptedAt) - instantOf(b.interruptedAt))
     .map((entry) => entry.id)
+}
+
+/** Network entries with nothing left to resume: retries used up, or no session id to resume. Only on an owned, running repository. */
+export function networkGivenUp(entries: readonly InterruptedStage[], status: readonly RepoDispatchStatus[]): readonly string[] {
+  return entries.filter((entry) => entry.reason === 'network' && (entry.networkRetries >= NETWORK_RETRY_LIMIT || entry.claudeSessionId === null) && mayAutoLaunch(status, entry.repoId)).map((entry) => entry.id)
+}
+
+/** Running entries whose worktree no live session holds: the session died without a hand-back. */
+export function orphanedRunning(running: readonly InterruptedStage[], liveWorktreePaths: readonly string[], samePath: (a: string, b: string) => boolean): readonly string[] {
+  return running.filter((entry) => !liveWorktreePaths.some((path) => samePath(path, entry.worktree.path))).map((entry) => entry.id)
 }

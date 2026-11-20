@@ -5,7 +5,7 @@ import type { BoardSnapshot } from '@/types/board'
 import type { DispatchRecord, RepoDispatchStatus } from '@/types/dispatch'
 import type { ItemsByNumberFetch } from '@/types/github'
 import type { FileResult } from '@/types/platform'
-import type { InterruptedStage, StageResumeResult } from '@/types/stage'
+import type { InterruptedStage, StageRestartResult, StageResumeResult } from '@/types/stage'
 import type { RemoveSessionWorktreeOutcome } from '@/types/workspace'
 import type { RepoId } from '@/utils/repos'
 import { boardSnapshot, reconciledItem, repositoryState } from '../../../fixtures/board-state'
@@ -22,7 +22,7 @@ function freshRegistry(now: () => Date = () => INTERRUPTED_AT) {
   return createStageRegistry({ path: '/tmp/stage-sessions.json', readJson, writeJsonAtomic, now })
 }
 
-type NewEntry = Omit<InterruptedStage, 'reason' | 'detail' | 'resetsAt' | 'costUsd' | 'interruptedAt'>
+type NewEntry = Omit<InterruptedStage, 'reason' | 'detail' | 'resetsAt' | 'costUsd' | 'interruptedAt' | 'networkRetries'>
 
 function newEntry(overrides: Partial<NewEntry> = {}): NewEntry {
   return {
@@ -70,8 +70,13 @@ function setup(registry = freshRegistry(), now: Date = AFTER_RESET) {
     return Promise.resolve(true)
   })
   const onChange = vi.fn()
-  const sweeper = createInterruptedSweeper({ registry, fetchItemsByNumber, removeWorktree, pathExists, resume, onChange, now: () => now })
-  return { registry, sweeper, removeWorktree, pathExists, fetchItemsByNumber, resume, onChange }
+  const live: string[] = []
+  const restart = vi.fn((id: string): Promise<StageRestartResult> => {
+    void id
+    return Promise.resolve({ kind: 'ok' })
+  })
+  const sweeper = createInterruptedSweeper({ registry, fetchItemsByNumber, removeWorktree, pathExists, resume, restart, liveWorktreePaths: () => live, samePath: (a, b) => a === b, onChange, now: () => now })
+  return { registry, sweeper, removeWorktree, pathExists, fetchItemsByNumber, resume, restart, live, onChange }
 }
 
 describe('createInterruptedSweeper — stale entries', () => {
@@ -314,5 +319,79 @@ describe('createInterruptedSweeper — passes', () => {
     await deps.sweeper.consider(snapshotWith(moved), [status()])
     expect(deps.registry.list()).toEqual([])
     errors.mockRestore()
+  })
+})
+
+describe('createInterruptedSweeper — orphaned running entries', () => {
+  it('marks a running entry no live session holds as a crash, so it can be cleared or resumed', async () => {
+    const deps = setup()
+    deps.registry.recordRunning(newEntry())
+    await deps.sweeper.consider(snapshotWith(inFlight), [status()])
+    expect(deps.registry.running()).toEqual([])
+    expect(deps.registry.list()[0]).toMatchObject({ reason: 'crash', detail: 'the session ended without a hand-back' })
+    expect(deps.onChange).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves a running entry alone while a live session holds its worktree', async () => {
+    const deps = setup()
+    deps.registry.recordRunning(newEntry())
+    deps.live.push('/wt/e1')
+    await deps.sweeper.consider(snapshotWith(inFlight), [status()])
+    expect(deps.registry.running()).toHaveLength(1)
+    expect(deps.onChange).not.toHaveBeenCalled()
+  })
+})
+
+describe('createInterruptedSweeper — network failures', () => {
+  const NETWORK_NOW = new Date('2026-01-01T00:11:00.000Z')
+
+  function networkEntry(deps: ReturnType<typeof setup>, retries: number): void {
+    deps.registry.recordRunning(newEntry())
+    for (let i = 0; i < retries; i++) {
+      deps.registry.markInterrupted('e1', 'network', 'EAI_AGAIN', null, null)
+      deps.registry.markRunning('e1')
+    }
+    deps.registry.markInterrupted('e1', 'network', 'EAI_AGAIN', null, 1.5)
+  }
+
+  it('resumes a network entry once its backoff has passed', async () => {
+    const deps = setup(freshRegistry(), NETWORK_NOW)
+    networkEntry(deps, 0)
+    await deps.sweeper.consider(snapshotWith(inFlight), [status()])
+    expect(deps.resume).toHaveBeenCalledWith('e1')
+  })
+
+  it('waits while the backoff is still running', async () => {
+    const deps = setup(freshRegistry(), new Date('2026-01-01T00:10:30.000Z'))
+    networkEntry(deps, 0)
+    await deps.sweeper.consider(snapshotWith(inFlight), [status()])
+    expect(deps.resume).not.toHaveBeenCalled()
+    expect(deps.restart).not.toHaveBeenCalled()
+  })
+
+  it('restarts an entry that stayed down after three retries', async () => {
+    const deps = setup(freshRegistry(), NETWORK_NOW)
+    networkEntry(deps, 3)
+    await deps.sweeper.consider(snapshotWith(inFlight), [status()])
+    expect(deps.resume).not.toHaveBeenCalled()
+    expect(deps.restart).toHaveBeenCalledWith('e1')
+    expect(deps.onChange).toHaveBeenCalled()
+  })
+
+  it('turns a dirty restart into an error entry naming the uncommitted changes', async () => {
+    const deps = setup(freshRegistry(), NETWORK_NOW)
+    deps.restart.mockResolvedValue({ kind: 'worktree-dirty' })
+    networkEntry(deps, 3)
+    await deps.sweeper.consider(snapshotWith(inFlight), [status()])
+    expect(deps.registry.list()[0]).toMatchObject({ reason: 'error', networkRetries: 0, detail: 'the network stayed down after 3 retries, and its worktree has uncommitted changes' })
+  })
+
+  it('reports any other refusal as an error entry with its reason', async () => {
+    const deps = setup(freshRegistry(), NETWORK_NOW)
+    deps.restart.mockResolvedValue({ kind: 'label-refused', reason: 'moved' })
+    networkEntry(deps, 3)
+    await deps.sweeper.consider(snapshotWith(inFlight), [status()])
+    expect(deps.registry.list()[0]).toMatchObject({ reason: 'error' })
+    expect(deps.registry.list()[0]?.detail).toContain('moved')
   })
 })
