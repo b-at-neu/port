@@ -81,7 +81,7 @@ function params(comments: ReconciledItem['comments']): ApplyObservationParams {
   return {
     entry: ENTRY,
     item: item(comments),
-    observation: { kind: 'zero-diff', reason: 'zero-diff', number: 52, itemKind: 'pull-request', count: 2, headRefOid: 'abc1234' },
+    observation: { kind: 'zero-diff', number: 52, itemKind: 'pull-request', count: 2, headRefOid: 'abc1234' },
     auditDir: '/audit',
     scratchDir: '/scratch',
   }
@@ -116,7 +116,7 @@ describe('applyObservation — escalation dedup', () => {
 
   it('applies the labels but skips the comment when the newest escalation already carries this cause on this head', async () => {
     const d = deps()
-    const comments = [{ body: '## Pipeline Escalation\nEarlier.\n<!-- port:escalation zero-diff abc1234 -->', createdAt: '2026-01-01T00:00:00Z' }]
+    const comments = [{ body: '## Pipeline Escalation\nEarlier.\n<!-- port:escalation sha-cap abc1234 -->', createdAt: '2026-01-01T00:00:00Z' }]
     const result = await applyObservation(params(comments), d.value)
     expect(d.labelCalls()).toBe(1)
     expect(d.posted).toHaveLength(0)
@@ -126,7 +126,7 @@ describe('applyObservation — escalation dedup', () => {
 
   it('posts again for the same cause on a moved head', async () => {
     const d = deps()
-    const comments = [{ body: '## Pipeline Escalation\nEarlier.\n<!-- port:escalation zero-diff old1111 -->', createdAt: '2026-01-01T00:00:00Z' }]
+    const comments = [{ body: '## Pipeline Escalation\nEarlier.\n<!-- port:escalation sha-cap old1111 -->', createdAt: '2026-01-01T00:00:00Z' }]
     await applyObservation(params(comments), d.value)
     expect(d.posted).toHaveLength(1)
   })

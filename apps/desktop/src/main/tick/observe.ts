@@ -65,8 +65,7 @@ function escalationObservations(held: readonly TickHeld[], itemByNumber: Readonl
       const cap = h.escalation?.kind === 'cycle-cap' ? h.escalation.cap : 0
       out.push({ kind: 'cycle-cap', number: h.number, itemKind: h.kind, count, cap })
     } else if (item.headRefOid !== null) {
-      const reason = h.escalation?.kind === 'zero-diff' ? h.escalation.reason : 'zero-diff'
-      out.push({ kind: 'zero-diff', number: h.number, itemKind: h.kind, reason, count: item.reviewCycleCount ?? 0, headRefOid: item.headRefOid })
+      out.push({ kind: 'zero-diff', number: h.number, itemKind: h.kind, count: item.reviewCycleCount ?? 0, headRefOid: item.headRefOid })
     }
   }
   return out

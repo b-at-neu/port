@@ -30,7 +30,7 @@ function precondition(item: ReconciledItem, vocabulary: LabelVocabulary, add: re
 const PIPELINE_ESCALATION = '## Pipeline Escalation'
 
 // A literal mirror of gates.ts's `escalationMarker`, pinned by scripts/checks/desktop-dispatch.ts.
-function escalationMarker(cause: 'zero-diff' | 'sha-cap' | 'cycle-cap' | 'integration-red' | 'refresh-stuck', sha: string | null): string {
+function escalationMarker(cause: 'sha-cap' | 'cycle-cap' | 'integration-red' | 'refresh-stuck', sha: string | null): string {
   return `\n<!-- port:escalation ${cause} ${sha ?? ''} -->`
 }
 
@@ -59,10 +59,7 @@ export function observationWrite(observation: WriteObservation, item: Reconciled
     }
     case 'zero-diff': {
       const add: readonly LabelKey[] = ['needsHuman']
-      const comment =
-        observation.reason === 'sha-cap'
-          ? `${PIPELINE_ESCALATION}\nCycle ${String(observation.count)} was the second review of \`${observation.headRefOid}\`, the most one head gets. A new head is the way past it.${escalationMarker('sha-cap', observation.headRefOid)}`
-          : `${PIPELINE_ESCALATION}\nCycle ${String(observation.count)} already reviewed \`${observation.headRefOid}\` and the head has not moved, so no new review cycle was opened.\nWhatever is blocking this pull request is not visible to review or revision.${escalationMarker('zero-diff', observation.headRefOid)}`
+      const comment = `${PIPELINE_ESCALATION}\nCycle ${String(observation.count)} was the second review of \`${observation.headRefOid}\`, the most one head gets. A new head is the way past it.${escalationMarker('sha-cap', observation.headRefOid)}`
       return { add, remove: ['readyForReview'], expect: precondition(item, vocabulary, add), action: 'observe-zero-diff', comment }
     }
     case 'integration-red': {
