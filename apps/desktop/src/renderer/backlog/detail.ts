@@ -9,12 +9,20 @@ export function backlogRowPress({ key, detailKey, button, onControl }: { readonl
   return key === detailKey ? 'close' : 'open'
 }
 
+function searchEpics(epics: readonly BacklogEpicGroup[], number: number): BacklogEpicGroup | null {
+  for (const epic of epics) {
+    if (epic.epic.number === number) return epic
+    const nested = searchEpics(epic.epics, number)
+    if (nested) return nested
+  }
+  return null
+}
+
 export function findEpicGroup(groups: readonly BacklogGroupView[], repoId: RepoId, number: number): BacklogEpicGroup | null {
   for (const group of groups) {
     if (group.kind !== 'loaded' || group.repoId !== repoId) continue
-    for (const entry of group.layout.entries) {
-      if (entry.kind === 'epic' && entry.group.epic.number === number) return entry.group
-    }
+    const found = searchEpics(group.layout.entries.flatMap((entry) => (entry.kind === 'epic' ? [entry.group] : [])), number)
+    if (found) return found
   }
   return null
 }

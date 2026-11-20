@@ -38,7 +38,6 @@ import {
   backlogRepoFilterButtonCopy,
   backlogStartAnywayTitle,
   backlogTruncatedCopy,
-  backlogWaveBandCopy,
   backlogWaveLabel,
 } from '@/renderer/backlog/copy'
 
@@ -188,10 +187,9 @@ describe('detail copy', () => {
 })
 
 describe('epic and wave copy', () => {
-  it('names the epic tag, waves and band', () => {
+  it('names the epic tag and waves', () => {
     expect(BACKLOG_EPIC_TAG).toBe('Epic')
     expect(backlogWaveLabel(2)).toBe('Wave 2')
-    expect(backlogWaveBandCopy(2, 1)).toBe('Wave 2 · 1 in progress')
   })
 
   it('words the progress, its accessible name and the truncation note', () => {

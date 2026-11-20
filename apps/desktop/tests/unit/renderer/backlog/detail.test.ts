@@ -17,8 +17,8 @@ function row(repoId: RepoId, number: number): BacklogRowView {
   return { repoId, number } as BacklogRowView
 }
 
-function epicGroup(repoId: RepoId, number: number): BacklogEpicGroup {
-  return { epic: row(repoId, number), waves: [], unplaced: [], summary: { ok: false, reason: 'x' } }
+function epicGroup(repoId: RepoId, number: number, epics: BacklogEpicGroup[] = []): BacklogEpicGroup {
+  return { epic: row(repoId, number), start: 1, waves: [], epics, unplaced: [], summary: { ok: false, reason: 'x' } }
 }
 
 function loaded(repoId: RepoId, group: BacklogEpicGroup): BacklogGroupView {
@@ -67,6 +67,11 @@ describe('findEpicGroup', () => {
 
   it('finds an epic in a loaded group', () => {
     expect(findEpicGroup(groups, A, 41)).toBe(epic)
+  })
+
+  it('finds a nested epic', () => {
+    const inner = epicGroup(A, 48)
+    expect(findEpicGroup([loaded(A, epicGroup(A, 41, [inner]))], A, 48)).toBe(inner)
   })
 
   it('returns null for a regular row', () => {

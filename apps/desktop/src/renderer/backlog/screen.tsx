@@ -139,7 +139,7 @@ function GroupBody({
       {group.layout.entries.map((entry) => {
         if (entry.kind === 'row') return renderRow(entry.row)
         const key = rowKey(entry.group.epic.repoId, entry.group.epic.number)
-        return <EpicGroup key={key} group={entry.group} collapsed={collapsedEpics.has(key)} onToggle={() => onToggleEpic(key)} renderRow={renderRow} />
+        return <EpicGroup key={key} group={entry.group} collapsedEpics={collapsedEpics} onToggleEpic={onToggleEpic} renderRow={renderRow} />
       })}
     </div>
   )

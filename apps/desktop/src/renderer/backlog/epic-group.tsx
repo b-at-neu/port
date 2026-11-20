@@ -3,8 +3,9 @@ import { Button } from '@/renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { MeterBar } from '@/renderer/components/meter-bar'
-import { epicProgressSegments } from '@/renderer/backlog/epics'
-import { BACKLOG_EPIC_TAG, BACKLOG_WAVES_MAY_SHIFT, backlogEpicProgressAria, backlogEpicProgressCopy, backlogEpicProgressTooltip, backlogEpicToggleAria, backlogEpicTruncatedCopy, backlogWaveBandCopy, backlogWaveLabel } from '@/renderer/backlog/copy'
+import { epicBodyEntries, epicProgressSegments } from '@/renderer/backlog/epics'
+import { rowKey } from '@/renderer/backlog/sections'
+import { BACKLOG_EPIC_TAG, BACKLOG_WAVES_MAY_SHIFT, backlogEpicProgressAria, backlogEpicProgressCopy, backlogEpicProgressTooltip, backlogEpicToggleAria, backlogEpicTruncatedCopy, backlogWaveLabel } from '@/renderer/backlog/copy'
 import type { BacklogEpicGroup, BacklogEpicSummary, BacklogWave, RenderBacklogRow } from '@/types/backlog'
 
 const FOCUS_RING = 'outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
@@ -37,12 +38,14 @@ function Progress({ summary }: { readonly summary: Extract<BacklogEpicSummary, {
 
 interface EpicProps {
   readonly group: BacklogEpicGroup
-  readonly collapsed: boolean
-  readonly onToggle: () => void
+  readonly collapsedEpics: ReadonlySet<string>
+  readonly onToggleEpic: (key: string) => void
   readonly renderRow: RenderBacklogRow
+  readonly nested?: boolean
+  readonly first?: boolean
 }
 
-function EpicRow({ group, collapsed, onToggle, renderRow }: EpicProps) {
+function EpicRow({ group, collapsed, onToggle, renderRow }: { readonly group: BacklogEpicGroup; readonly collapsed: boolean; readonly onToggle: () => void; readonly renderRow: RenderBacklogRow }) {
   const Chevron = collapsed ? ChevronRight : ChevronDown
   return renderRow(group.epic, {
     slot: 'backlog-epic-row',
@@ -63,13 +66,6 @@ function EpicRow({ group, collapsed, onToggle, renderRow }: EpicProps) {
 function WaveBlock({ wave, first, renderRow }: { readonly wave: BacklogWave; readonly first: boolean; readonly renderRow: RenderBacklogRow }) {
   const label = backlogWaveLabel(wave.number)
   const border = first ? '' : 'border-t border-border'
-  if (wave.inProgressOnly) {
-    return (
-      <div data-slot="backlog-wave-band" data-wave={wave.number} className={`flex h-9 items-center pl-4 text-small text-muted-foreground ${border}`}>
-        {backlogWaveBandCopy(wave.number, wave.inProgress)}
-      </div>
-    )
-  }
   return (
     <div role="group" aria-label={label} data-slot="backlog-wave" data-wave={wave.number} className={`flex ${border}`}>
       <div className="w-16 shrink-0 pl-4 pt-2.5 text-meta font-medium text-muted-foreground">{label}</div>
@@ -78,9 +74,10 @@ function WaveBlock({ wave, first, renderRow }: { readonly wave: BacklogWave; rea
   )
 }
 
-function EpicBody({ group, renderRow }: { readonly group: BacklogEpicGroup; readonly renderRow: RenderBacklogRow }) {
-  const waves = group.waves.filter((wave) => wave.rows.length > 0 || wave.inProgressOnly)
+function EpicBody({ group, collapsedEpics, onToggleEpic, renderRow }: Omit<EpicProps, 'nested' | 'first'>) {
+  const entries = epicBodyEntries(group)
   const note = group.summary.ok && group.summary.wavesMayShift
+  if (group.summary.ok && !note && entries.length === 0 && group.unplaced.length === 0) return null
   return (
     <div className="border-t border-border">
       {!group.summary.ok ? (
@@ -93,11 +90,14 @@ function EpicBody({ group, renderRow }: { readonly group: BacklogEpicGroup; read
           {BACKLOG_WAVES_MAY_SHIFT}
         </p>
       ) : null}
-      {waves.map((wave, index) => (
-        <WaveBlock key={wave.number} wave={wave} first={index === 0 && !note} renderRow={renderRow} />
-      ))}
+      {entries.map((entry, index) => {
+        const first = index === 0 && !note && group.summary.ok
+        if (entry.kind === 'wave') return <WaveBlock key={`wave-${String(entry.wave.number)}`} wave={entry.wave} first={first} renderRow={renderRow} />
+        const key = rowKey(entry.group.epic.repoId, entry.group.epic.number)
+        return <EpicGroup key={key} group={entry.group} collapsedEpics={collapsedEpics} onToggleEpic={onToggleEpic} renderRow={renderRow} nested first={first} />
+      })}
       {group.unplaced.length > 0 ? (
-        <div data-slot="backlog-unplaced" className={`flex ${waves.length > 0 || !group.summary.ok ? 'border-t border-border' : ''}`}>
+        <div data-slot="backlog-unplaced" className={`flex ${entries.length > 0 || !group.summary.ok ? 'border-t border-border' : ''}`}>
           <div className="w-16 shrink-0" />
           <div className="min-w-0 flex-1">{group.unplaced.map((row) => renderRow(row))}</div>
         </div>
@@ -106,11 +106,14 @@ function EpicBody({ group, renderRow }: { readonly group: BacklogEpicGroup; read
   )
 }
 
-export function EpicGroup({ group, collapsed, onToggle, renderRow }: EpicProps) {
+export function EpicGroup({ group, collapsedEpics, onToggleEpic, renderRow, nested = false, first = false }: EpicProps) {
+  const key = rowKey(group.epic.repoId, group.epic.number)
+  const collapsed = collapsedEpics.has(key)
+  const border = nested ? `pl-4 ${first ? '' : 'border-t border-border'}` : 'border-b border-border'
   return (
-    <div data-slot="backlog-epic" data-epic={group.epic.number} data-collapsed={collapsed} className="border-b border-border">
-      <EpicRow group={group} collapsed={collapsed} onToggle={onToggle} renderRow={renderRow} />
-      {collapsed ? null : <EpicBody group={group} renderRow={renderRow} />}
+    <div data-slot="backlog-epic" data-epic={group.epic.number} data-collapsed={collapsed} data-nested={nested ? 'true' : undefined} className={border}>
+      <EpicRow group={group} collapsed={collapsed} onToggle={() => onToggleEpic(key)} renderRow={renderRow} />
+      {collapsed ? null : <EpicBody group={group} collapsedEpics={collapsedEpics} onToggleEpic={onToggleEpic} renderRow={renderRow} />}
     </div>
   )
 }

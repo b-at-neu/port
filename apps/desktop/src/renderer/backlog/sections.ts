@@ -1,6 +1,7 @@
 // Pure Backlog section logic — which repositories show, and which rows keyboard navigation can reach.
 import type { RepoId } from '@/utils/repos'
-import type { BacklogGroupView, BacklogRowView } from '@/types/backlog'
+import { epicBodyEntries } from '@/renderer/backlog/epics'
+import type { BacklogEpicGroup, BacklogGroupView, BacklogRowView } from '@/types/backlog'
 
 interface RepoRef {
   readonly id: RepoId
@@ -26,14 +27,16 @@ export function repoFilterCount(repos: readonly RepoRef[], hidden: ReadonlySet<R
   return { shown: visibleRepos(repos, hidden).length, total: repos.length }
 }
 
+function epicRows(group: BacklogEpicGroup, collapsedEpics: ReadonlySet<string>): BacklogRowView[] {
+  const { epic, unplaced } = group
+  if (collapsedEpics.has(rowKey(epic.repoId, epic.number))) return [epic]
+  const body = epicBodyEntries(group).flatMap((entry) => (entry.kind === 'wave' ? entry.wave.rows : epicRows(entry.group, collapsedEpics)))
+  return [epic, ...body, ...unplaced]
+}
+
 export function navigableRows(groups: readonly BacklogGroupView[], collapsed: ReadonlySet<RepoId>, collapsedEpics: ReadonlySet<string>): BacklogRowView[] {
   return groups.flatMap((group) => {
     if (group.kind !== 'loaded' || collapsed.has(group.repoId)) return []
-    return group.layout.entries.flatMap((entry) => {
-      if (entry.kind === 'row') return [entry.row]
-      const { epic, waves, unplaced } = entry.group
-      if (collapsedEpics.has(rowKey(group.repoId, epic.number))) return [epic]
-      return [epic, ...waves.flatMap((wave) => wave.rows), ...unplaced]
-    })
+    return group.layout.entries.flatMap((entry) => (entry.kind === 'row' ? [entry.row] : epicRows(entry.group, collapsedEpics)))
   })
 }
