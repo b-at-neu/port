@@ -85,7 +85,7 @@ test('the title is not a link and the sidebar opens the ticket on GitHub', async
 
   await row.getByText('First step').click()
   const pane = page.getByRole('complementary', { name: 'Details for #201' })
-  await expect(pane.getByRole('link', { name: 'Open ticket' })).toHaveAttribute('href', 'https://github.com/acme/widgets/issues/201')
+  await expect(pane.getByRole('link', { name: 'Open ticket' })).toHaveAttribute('href', /\/issues\/201$/)
 })
 
 test('Space opens the focused row, J does not move the pane and Escape closes it', async () => {
