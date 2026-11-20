@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { BacklogChild, BacklogEpicGroup, BacklogRowView, ChildrenRead, ParentRead } from '@/types/backlog'
 import type { BlockerRead } from '@/types/github'
-import { buildEpicLayout } from '@/renderer/backlog/epics'
+import { buildEpicLayout, epicProgressSegments, isEpic } from '@/renderer/backlog/epics'
 
 const REPO_ID = 'repo-a' as RepoId
 const NO_LINKS: BlockerRead = { ok: true, open: [], shown: 0, total: 0 }
@@ -301,5 +301,38 @@ describe('buildEpicLayout', () => {
   it('does not mutate its input', () => {
     const rows = Object.freeze([epicRow(1, [child(2)]), memberRow(2, 1)])
     expect(() => buildEpicLayout(rows)).not.toThrow()
+  })
+})
+
+describe('isEpic', () => {
+  it('is true for a readable children read with sub-issues', () => {
+    expect(isEpic(epicRow(1, [child(2)]))).toBe(true)
+  })
+
+  it('falls back to the sub-issue count when the children read failed', () => {
+    expect(isEpic(row(1, { subIssueCount: 2, children: { ok: false, reason: 'nope' } }))).toBe(true)
+  })
+
+  it('is false for a plain row', () => {
+    expect(isEpic(row(1))).toBe(false)
+  })
+})
+
+describe('epicProgressSegments', () => {
+  it('splits the bar into done then in progress', () => {
+    expect(epicProgressSegments(1, 1, 4)).toEqual({ done: 25, inProgress: 25 })
+  })
+
+  it('is empty for an epic with no sub-issues', () => {
+    expect(epicProgressSegments(0, 0, 0)).toEqual({ done: 0, inProgress: 0 })
+  })
+
+  it('never sums past 100 after rounding', () => {
+    const { done, inProgress } = epicProgressSegments(1, 1, 3)
+    expect(done + inProgress).toBeLessThanOrEqual(100)
+  })
+
+  it('fills the bar when everything is done', () => {
+    expect(epicProgressSegments(3, 0, 3)).toEqual({ done: 100, inProgress: 0 })
   })
 })

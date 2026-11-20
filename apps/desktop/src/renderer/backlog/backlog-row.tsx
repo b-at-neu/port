@@ -8,6 +8,7 @@ import { PLAN_GATE_OPTIONS } from '@/renderer/claim/copy'
 import type { useListSelection } from '@/renderer/shell/list-selection'
 import { exactTime, relativeAge } from '@/renderer/backlog/group'
 import { BlockedTag } from '@/renderer/backlog/blocked-tag'
+import { isEpic } from '@/renderer/backlog/epics'
 import type { BacklogRowExtras, BacklogRowView } from '@/types/backlog'
 import type { PlanGateChoice } from '@/types/claim'
 
@@ -113,7 +114,7 @@ export function BacklogRow({ row, rowProps, menuOpen, pending, onMenuOpenChange,
         </TooltipTrigger>
         <TooltipContent>{exactTime(row.createdAt)}</TooltipContent>
       </Tooltip>
-      <WorkOnMenu open={menuOpen} pending={pending} onOpenChange={onMenuOpenChange} onPick={onPick} />
+      {isEpic(row) ? null : <WorkOnMenu open={menuOpen} pending={pending} onOpenChange={onMenuOpenChange} onPick={onPick} />}
     </div>
   )
 }

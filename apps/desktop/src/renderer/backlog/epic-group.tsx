@@ -5,29 +5,34 @@ import { EpicInfoPanel } from '@/renderer/backlog/detail-panel'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { MeterBar } from '@/renderer/components/meter-bar'
-import { BACKLOG_EPIC_TAG, backlogEpicProgressAria, backlogEpicInfoAria, backlogEpicProgressCopy, backlogEpicToggleAria, backlogEpicTruncatedCopy, backlogWaveBandCopy, backlogWaveLabel } from '@/renderer/backlog/copy'
+import { epicProgressSegments } from '@/renderer/backlog/epics'
+import { BACKLOG_EPIC_TAG, backlogEpicProgressAria, backlogEpicInfoAria, backlogEpicProgressCopy, backlogEpicProgressTooltip, backlogEpicToggleAria, backlogEpicTruncatedCopy, backlogWaveBandCopy, backlogWaveLabel } from '@/renderer/backlog/copy'
 import type { BacklogEpicGroup, BacklogEpicSummary, BacklogWave, RenderBacklogRow } from '@/types/backlog'
 
 const FOCUS_RING = 'outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
 
 function Progress({ summary }: { readonly summary: Extract<BacklogEpicSummary, { ok: true }> }) {
-  const { done, total, truncated } = summary
-  const percent = total === 0 ? 0 : Math.round((done / total) * 100)
-  const bar = (
-    <span role="progressbar" aria-valuemin={0} aria-valuenow={done} aria-valuemax={total} aria-label={backlogEpicProgressAria(done, total)} className="flex shrink-0 items-center gap-1.5">
-      <MeterBar percent={percent} fill="success" />
-      <span className="text-meta tabular-nums text-muted-foreground">{backlogEpicProgressCopy(done, total)}</span>
-    </span>
-  )
-  if (truncated === null) return bar
+  const { done, inProgress, total, truncated } = summary
+  const percents = epicProgressSegments(done, inProgress, total)
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <span tabIndex={0} className={`rounded ${FOCUS_RING}`}>
-          {bar}
+          <span role="progressbar" aria-valuemin={0} aria-valuenow={done} aria-valuemax={total} aria-label={backlogEpicProgressAria(done, total, inProgress)} className="flex shrink-0 items-center gap-1.5">
+            <MeterBar
+              segments={[
+                { percent: percents.done, fill: 'success' },
+                { percent: percents.inProgress, fill: 'progress' },
+              ]}
+            />
+            <span className="text-meta tabular-nums text-muted-foreground">{backlogEpicProgressCopy(done, total, inProgress)}</span>
+          </span>
         </span>
       </TooltipTrigger>
-      <TooltipContent>{backlogEpicTruncatedCopy(truncated.shown, truncated.total)}</TooltipContent>
+      <TooltipContent>
+        <p>{backlogEpicProgressTooltip(done, inProgress, total)}</p>
+        {truncated !== null ? <p>{backlogEpicTruncatedCopy(truncated.shown, truncated.total)}</p> : null}
+      </TooltipContent>
     </Tooltip>
   )
 }

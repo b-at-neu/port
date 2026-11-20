@@ -21,7 +21,7 @@ export function ContextMeter({ usage }: { readonly usage: SessionUsage | null })
           className="flex items-center gap-1.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <span className="text-meta text-muted-foreground">{CONTEXT_METER_LABEL}</span>
-          <MeterBar percent={percent} fill="primary" />
+          <MeterBar segments={percent === null ? [] : [{ percent, fill: 'primary' }]} />
           <span className="text-meta text-muted-foreground tabular-nums">{percent !== null ? `${String(percent)}%` : '—'}</span>
         </div>
       </TooltipTrigger>

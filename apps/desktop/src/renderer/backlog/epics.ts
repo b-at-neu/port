@@ -5,8 +5,15 @@ interface Placement {
   readonly cycles: readonly number[]
 }
 
-function isEpic(row: BacklogRowView): boolean {
+export function isEpic(row: BacklogRowView): boolean {
   return row.children.ok ? row.children.total > 0 : row.subIssueCount > 0
+}
+
+// Percentages of the bar; in progress is cumulative-rounded so the two never sum past 100.
+export function epicProgressSegments(done: number, inProgress: number, total: number): { readonly done: number; readonly inProgress: number } {
+  if (total === 0) return { done: 0, inProgress: 0 }
+  const donePercent = Math.round((done / total) * 100)
+  return { done: donePercent, inProgress: Math.round(((done + inProgress) / total) * 100) - donePercent }
 }
 
 function isUncertain(child: BacklogChild): boolean {

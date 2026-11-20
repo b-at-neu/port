@@ -1,4 +1,4 @@
-// Flow: an epic renders as ordered waves, collapses, and keeps keyboard navigation and Work on.
+// Flow: an epic renders as ordered waves with a segmented progress bar, collapses, and keeps keyboard navigation; Work on lives on its sub-tickets, not the epic.
 import { expect, test } from '@playwright/test'
 import { assertNoDisallowedCalls, launchE2EApp } from './harness/app.mjs'
 import type { E2EApp } from './harness/app.mjs'
@@ -45,7 +45,16 @@ test('renders the epic as waves with a band, then the flat rows', async () => {
   const epicRow = epic.locator('[data-slot="backlog-epic-row"]')
   await expect(epicRow).toContainText('#200')
   await expect(epicRow).toContainText('Epic')
-  await expect(epicRow.getByRole('progressbar')).toContainText('1/4')
+  const progress = epicRow.getByRole('progressbar')
+  await expect(progress).toContainText('1/4 · 1 in progress')
+  await expect(progress).toHaveAttribute('aria-label', '1 of 4 sub-issues done, 1 in progress')
+  await expect(progress.locator('[data-slot="meter-segment"]')).toHaveCount(2)
+  await expect(progress.locator('[data-slot="meter-segment"]').nth(0)).toHaveAttribute('data-fill', 'success')
+  await expect(progress.locator('[data-slot="meter-segment"]').nth(1)).toHaveAttribute('data-fill', 'progress')
+  await progress.hover()
+  await expect(page.getByRole('tooltip').first()).toContainText('1 done · 1 in progress · 2 not started')
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('tooltip')).toHaveCount(0)
 
   await expect(epic.locator('[data-slot="backlog-wave"][data-wave="1"] [data-slot="backlog-row"]')).toContainText('#201')
   const band = epic.locator('[data-slot="backlog-wave-band"]')
@@ -116,6 +125,21 @@ test('keeps a collapsed epic collapsed after a relaunch', async () => {
   const relaunched = harness.page
   await relaunched.getByRole('link', { name: 'Backlog', exact: true }).click()
   await expect(relaunched.locator('[data-slot="backlog-epic"][data-epic="200"]')).toHaveAttribute('data-collapsed', 'true')
+})
+
+test('gives an epic row no Work on, and Enter on a selected epic opens nothing', async () => {
+  const { page } = harness
+  await page.getByRole('link', { name: 'Backlog', exact: true }).click()
+
+  const epicRow = page.locator('[data-slot="backlog-epic-row"]', { hasText: '#200' })
+  await expect(epicRow).toBeVisible()
+  await expect(epicRow.getByRole('button', { name: 'Work on' })).toHaveCount(0)
+  await expect(page.locator('[data-slot="backlog-row"]', { hasText: '#203' }).getByRole('button', { name: 'Work on' })).toBeVisible()
+
+  for (let step = 0; step < 2; step++) await page.keyboard.press('j')
+  expect(await selectedNumber(page)).toMatch(/:200$/)
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('menu')).toHaveCount(0)
 })
 
 test('opens Work on from a sub-ticket and asks before claiming a blocked one', async () => {

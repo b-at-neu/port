@@ -1,4 +1,4 @@
-// The Backlog screen — open, unclaimed issues per ready repo; Work on claims at once, or after a confirmation for a blocked ticket or an epic, and reports by toast. No `useEffect`: the list navigator is registered directly in the render body.
+// The Backlog screen — open, unclaimed issues per ready repo; Work on claims at once, or after a confirmation for a blocked ticket, and reports by toast. No `useEffect`: the list navigator is registered directly in the render body.
 import { Fragment, useState } from 'react'
 import { useQueries, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
@@ -21,6 +21,7 @@ import type { BacklogGroupView, BacklogLabelFilter, BacklogRowView, RenderBacklo
 import type { PlanGateChoice } from '@/types/claim'
 import { BACKLOG_ALL_HIDDEN, BACKLOG_FILTER_CLEAR, BACKLOG_REPO_FILTER_SHOW_ALL, backlogCountCopy, backlogEmptyGroupCopy, backlogFilteredEmptyCopy, backlogGroupToggleAria, backlogNotReadyCopy } from '@/renderer/backlog/copy'
 import { workOnReasons } from '@/renderer/backlog/confirm'
+import { isEpic } from '@/renderer/backlog/epics'
 import { WorkOnConfirm } from '@/renderer/backlog/work-on-confirm'
 import { EMPTY_FILTER } from '@/renderer/backlog/filter'
 import { readBacklogCollapsed, readBacklogCollapsedEpics, readBacklogFilters, readBacklogHiddenRepos, setBacklogCollapsed, setBacklogCollapsedEpic, setBacklogFilter, setBacklogHiddenRepos } from '@/renderer/backlog/prefs'
@@ -277,7 +278,7 @@ export function BacklogScreen() {
     prev: () => selection.prev(),
     open: () => {
       const selected = flatRows.find((row) => rowKey(row.repoId, row.number) === selection.selectedKey)
-      if (selected !== undefined) setMenuOpenKey(rowKey(selected.repoId, selected.number))
+      if (selected !== undefined && !isEpic(selected)) setMenuOpenKey(rowKey(selected.repoId, selected.number))
     },
   })
 
