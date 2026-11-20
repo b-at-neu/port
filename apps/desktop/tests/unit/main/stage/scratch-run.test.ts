@@ -26,7 +26,7 @@ import { createDispatchLedger, createForceDispatch, createRefreshMemo, createUnk
 import { planTick } from '@/main/tick/plan'
 import { reconcileRepository } from '@/main/state/reconcile'
 import type { ReadyEntry } from '@/types/actions'
-import type { ApplyLabelsParams, PostCommentParams, WriteOutcome } from '@/types/writes'
+import type { PostCommentParams, WriteOutcome, WriteStateParams } from '@/types/writes'
 import { applyStageClaim, applyStageTransition } from '@/main/actions/stage'
 import type { CreateStageWorktreeResult, RemoveSessionWorktreeOutcome } from '@/types/workspace'
 
@@ -138,7 +138,7 @@ function buildPipelineFetch(vocabulary: LabelVocabulary, labels: LabelMap, prs: 
   return {
     ok: true,
     items: pipelineItemsFor(vocabulary, labels, prs),
-    closed: [],
+    closed: [], merged: [],
     queried: queriedLabelsFor(vocabulary),
     disabled: vocabulary.disabled,
     vocabulary: verifyVocabulary(vocabulary, { ok: true, names: vocabulary.labels.map((label) => label.name) }),
@@ -272,7 +272,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
 
     // The fake "GitHub" write: refuses a stale precondition the way the real chokepoint does, and records every label write the app makes.
     const labelWrites: { readonly action: string; readonly number: number }[] = []
-    function applyLabels(params: ApplyLabelsParams): Promise<WriteOutcome> {
+    function applyLabels(params: WriteStateParams): Promise<WriteOutcome> {
       const { request } = params
       const set = request.kind === 'issue' ? labels.get(request.number) : prs.get(request.number)?.labels
       if (set === undefined) return Promise.resolve({ kind: 'item-unavailable' })

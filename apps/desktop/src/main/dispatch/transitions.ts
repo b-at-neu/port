@@ -3,7 +3,7 @@ import type { PipelineItemKind } from '@/types/github'
 import type { StageEvent, StageMode, StagePlannedWrite, StageTransition } from '@/types/stage-labels'
 import type { StageHandback } from '@/types/stage-session'
 import type { HandoffRefusal, StageAgent } from '@/types/tick'
-import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { LabelKey } from '@/utils/labels/vocabulary'
 import { inFlightKeyFor } from '@/main/tick/routing'
 import { RETRY_TRIGGER } from '../../../../../scripts/port-tick/liveness'
 
@@ -254,9 +254,7 @@ export function transitionFor(params: TransitionParams): StageTransition {
   }
 }
 
-/** The exact precondition for one write, mirroring `observation.ts`: the observed role-bearing set is present, every other role-bearing key is absent unless the write adds it, and the assignees are exactly as read. */
-export function expectFor(observed: readonly LabelKey[], vocabulary: LabelVocabulary, add: readonly LabelKey[], assignees: readonly string[]) {
-  const allRoleBearing = vocabulary.labels.filter((l) => l.role !== 'marker').map((l) => l.key)
-  const absent = allRoleBearing.filter((key) => !observed.includes(key) && !add.includes(key))
-  return { present: observed, absent, assignees: { kind: 'exactly' as const, logins: assignees } }
+/** The exact precondition for one write: the observed role-bearing set is present and the assignees are exactly as read. The serialized store refuses a stale `present`, and nothing else adds a key. */
+export function expectFor(observed: readonly LabelKey[], assignees: readonly string[]) {
+  return { present: observed, absent: [], assignees: { kind: 'exactly' as const, logins: assignees } }
 }

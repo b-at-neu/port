@@ -2,10 +2,8 @@ import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
-import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
-import type { AuditEntry, CommentRequest, LabelAuditEntry, LabelWriteRequest, WriteOutcome } from '@/types/writes'
+import type { ApplyLabelsParams, AuditEntry, CommentRequest, LabelAuditEntry, ObservedItem, WriteOutcome } from '@/types/writes'
 import { isLabelAuditEntry } from '@/types/writes'
 import type { CommandResult } from '@/types/platform'
 import type { GhResult } from '@/types/platform'
@@ -15,7 +13,6 @@ import type { GhRunner, GitRunner } from '@/types/platform'
 import { readAuditLog } from '@/main/writes/audit'
 import { takeOwnership } from '@/main/dispatch/ownership'
 
-const VOCABULARY: LabelVocabulary = resolveVocabulary({})
 const REPO_ID = 'repo-1' as unknown as RepoId
 const NOT_A_REPO: CommandResult = { ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'fatal: not a git repository' }
 const now = () => new Date('2026-01-01T00:00:00.000Z')
@@ -27,19 +24,24 @@ async function makeDirs(): Promise<{ readonly repoRoot: string; readonly auditDi
   return { repoRoot, auditDir, git }
 }
 
-function request(overrides: Partial<LabelWriteRequest> = {}): LabelWriteRequest {
+function observedOf(labels: readonly string[] = [], assignees: readonly string[] = []): ObservedItem {
+  return { labels, assignees, readAt: '2026-01-01T00:00:00.000Z' }
+}
+
+function params(dirs: { readonly repoRoot: string; readonly auditDir: string; readonly git: GitRunner }, overrides: Partial<ApplyLabelsParams> = {}): ApplyLabelsParams {
   return {
-    repoId: REPO_ID,
     repo: 'o/r',
+    repoId: REPO_ID,
     kind: 'issue',
     number: 1,
-    vocabulary: VOCABULARY,
-    add: [],
-    remove: [],
+    action: 'test',
+    addNames: [],
+    removeNames: [],
     addAssignees: [],
     removeAssignees: [],
-    expect: { present: [], absent: [], assignees: { kind: 'any' } },
-    action: 'test',
+    observed: observedOf(),
+    now,
+    ...dirs,
     ...overrides,
   }
 }
@@ -51,20 +53,6 @@ function labelEntry(entry: AuditEntry | undefined): LabelAuditEntry {
 
 function resolvedItem(overrides: Partial<ResolvedItem> = {}): ResolvedItem {
   return { number: 1, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: [], assignees: [], headRefName: null, author: null, ...overrides }
-}
-
-function fetcherReturning(fetch: ItemsByNumberFetch): { readonly fn: (params: unknown) => Promise<ItemsByNumberFetch>; calls: number } {
-  const state = { calls: 0 }
-  const fn = () => {
-    state.calls++
-    return Promise.resolve(fetch)
-  }
-  return {
-    fn,
-    get calls() {
-      return state.calls
-    },
-  }
 }
 
 function neverCalledGh(): GhRunner {
@@ -79,13 +67,10 @@ describe('applyLabels — ownership', () => {
     await mkdir(join(repoRoot, '.agents'), { recursive: true })
     await writeFile(join(repoRoot, '.agents', 'cockpit.json'), JSON.stringify({ repo: 'o/r', owner: 'terminal', since: '2026-01-01T00:00:00Z' }), 'utf8')
 
-    const req = request({ add: ['ready'], remove: ['blocked'] })
     const gh = neverCalledGh()
-    const fetcher = fetcherReturning({ ok: true, resolved: [], unavailable: [], fetchedAt: now().toISOString() })
 
-    const outcome = await applyLabels({ request: req, repoRoot, auditDir, git, gh, fetchItemsByNumber: fetcher.fn, now })
+    const outcome = await applyLabels(params({ repoRoot, auditDir, git }, { addNames: ['ready'], removeNames: ['blocked'], gh }))
     expect(outcome).toEqual({ kind: 'terminal-owned', since: '2026-01-01T00:00:00Z' })
-    expect(fetcher.calls).toBe(0)
 
     const log = await readAuditLog(auditDir)
     if (!log.ok) throw new Error('unreachable')
@@ -99,9 +84,7 @@ describe('applyLabels — ownership', () => {
     await mkdir(join(repoRoot, '.agents'), { recursive: true })
     await writeFile(join(repoRoot, '.agents', 'cockpit.json'), '{not json', 'utf8')
 
-    const req = request({ add: ['ready'], remove: ['blocked'] })
-    const gh = neverCalledGh()
-    const outcome = await applyLabels({ request: req, repoRoot, auditDir, git, gh, now })
+    const outcome = await applyLabels(params({ repoRoot, auditDir, git }, { addNames: ['ready'], removeNames: ['blocked'], gh: neverCalledGh() }))
     expect(outcome.kind).toBe('ownership-unreadable')
 
     const log = await readAuditLog(auditDir)
@@ -113,15 +96,13 @@ describe('applyLabels — ownership', () => {
     const { repoRoot, auditDir, git } = await makeDirs()
     await takeOwnership({ repoRoot, repo: 'o/r', git, now })
 
-    const req = request({ add: ['planApproved'], remove: ['planReview'], expect: { present: ['planReview'], absent: [], assignees: { kind: 'any' } } })
-    const fetcher = fetcherReturning({ ok: true, resolved: [resolvedItem({ labels: ['plan review'] })], unavailable: [], fetchedAt: now().toISOString() })
     let ghCalled: readonly string[] | undefined
     const gh: GhRunner = (args) => {
       ghCalled = args
       return Promise.resolve({ ok: true, stdout: '', stderr: '' } satisfies GhResult)
     }
 
-    const outcome = await applyLabels({ request: req, repoRoot, auditDir, git, gh, fetchItemsByNumber: fetcher.fn, now })
+    const outcome = await applyLabels(params({ repoRoot, auditDir, git }, { addNames: ['plan approved'], removeNames: ['plan review'], observed: observedOf(['plan review']), gh }))
     expect(outcome).toEqual({ kind: 'applied', argv: ghCalled })
     expect(ghCalled).toEqual(['issue', 'edit', '1', '--repo', 'o/r', '--add-label', 'plan approved', '--remove-label', 'plan review'])
 
@@ -132,11 +113,9 @@ describe('applyLabels — ownership', () => {
 
   it('proceeds to a real write when nobody owns the repo yet', async () => {
     const { repoRoot, auditDir, git } = await makeDirs()
-    const req = request({ add: ['ready'], remove: ['blocked'] })
-    const fetcher = fetcherReturning({ ok: true, resolved: [resolvedItem({ labels: ['blocked'] })], unavailable: [], fetchedAt: now().toISOString() })
     const gh: GhRunner = () => Promise.resolve({ ok: true, stdout: '', stderr: '' } satisfies GhResult)
 
-    const outcome = await applyLabels({ request: req, repoRoot, auditDir, git, gh, fetchItemsByNumber: fetcher.fn, now })
+    const outcome = await applyLabels(params({ repoRoot, auditDir, git }, { addNames: ['ready'], removeNames: ['blocked'], observed: observedOf(['blocked']), gh }))
     expect(outcome.kind).toBe('applied')
 
     const log = await readAuditLog(auditDir)
@@ -145,36 +124,37 @@ describe('applyLabels — ownership', () => {
   })
 })
 
-describe('applyLabels — precondition', () => {
-  it('reports precondition-failed with both name readings when it is violated', async () => {
+describe('applyLabels — no precondition', () => {
+  it('writes the names it was given without reading the item or comparing labels', async () => {
     const { repoRoot, auditDir, git } = await makeDirs()
-    const req = request({ add: ['blocked'], expect: { present: ['ready'], absent: [], assignees: { kind: 'any' } } })
-    const fetcher = fetcherReturning({ ok: true, resolved: [resolvedItem({ labels: ['in progress'] })], unavailable: [], fetchedAt: '2026-01-02T00:00:00Z' })
-    const gh = neverCalledGh()
+    let reads = 0
+    const fetchItemsByNumber = (): Promise<ItemsByNumberFetch> => {
+      reads++
+      return Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: now().toISOString() })
+    }
+    const gh: GhRunner = () => Promise.resolve({ ok: true, stdout: '', stderr: '' } satisfies GhResult)
 
-    const outcome = await applyLabels({ request: req, repoRoot, auditDir, git, gh, fetchItemsByNumber: fetcher.fn, now })
-    expect(outcome.kind).toBe('precondition-failed')
-    if (outcome.kind !== 'precondition-failed') return
-    expect(outcome.conflict).toEqual({ kind: 'precondition-failed', expected: ['ready'], observed: ['in progress'], readAt: '2026-01-02T00:00:00Z' })
+    const outcome = await applyLabels(params({ repoRoot, auditDir, git }, { addNames: ['blocked'], observed: observedOf(['in progress']), gh, fetchItemsByNumber }))
+    expect(outcome.kind).toBe('applied')
+    expect(reads).toBe(0)
+
+    const log = await readAuditLog(auditDir)
+    if (!log.ok) throw new Error('unreachable')
+    expect(labelEntry(log.entries[0])).toMatchObject({ precondition: null, observed: { labels: ['in progress'] } })
   })
 })
 
 describe('applyLabels — no-op', () => {
   it('makes no gh call when the requested state already holds', async () => {
     const { repoRoot, auditDir, git } = await makeDirs()
-    const req = request({ add: ['ready'] })
-    const fetcher = fetcherReturning({ ok: true, resolved: [resolvedItem({ labels: ['ready'] })], unavailable: [], fetchedAt: now().toISOString() })
-    const gh = neverCalledGh()
-
-    const outcome = await applyLabels({ request: req, repoRoot, auditDir, git, gh, fetchItemsByNumber: fetcher.fn, now })
+    const outcome = await applyLabels(params({ repoRoot, auditDir, git }, { addNames: ['ready'], observed: observedOf(['ready']), gh: neverCalledGh() }))
     expect(outcome).toEqual({ kind: 'no-op' })
   })
 })
 
 describe('applyLabels — an unknown label at gh', () => {
-  it('surfaces gh stderr verbatim in write-failed, with a best-effort re-read', async () => {
+  it('surfaces gh stderr verbatim in write-failed, with one best-effort re-read', async () => {
     const { repoRoot, auditDir, git } = await makeDirs()
-    const req = request({ add: ['ready'] })
     let calls = 0
     const fetchItemsByNumber = (): Promise<ItemsByNumberFetch> => {
       calls++
@@ -182,25 +162,11 @@ describe('applyLabels — an unknown label at gh', () => {
     }
     const gh: GhRunner = () => Promise.resolve({ ok: false, kind: 'unknown', stdout: '', stderr: "gh: label 'ready' not found" } satisfies GhResult)
 
-    const outcome: WriteOutcome = await applyLabels({ request: req, repoRoot, auditDir, git, gh, fetchItemsByNumber, now })
+    const outcome: WriteOutcome = await applyLabels(params({ repoRoot, auditDir, git }, { addNames: ['ready'], gh, fetchItemsByNumber }))
     expect(outcome.kind).toBe('write-failed')
     if (outcome.kind !== 'write-failed') return
     expect(outcome.stderr).toBe("gh: label 'ready' not found")
-    expect(calls).toBe(2) // the verify read, then the best-effort re-read
-  })
-})
-
-describe('applyLabels — unresolvable-label', () => {
-  it('aborts before any gh, ownership, or verify call for a module-disabled or unknown key', async () => {
-    const { repoRoot, auditDir, git } = await makeDirs()
-    const emptyVocabulary: LabelVocabulary = { labels: [], disabled: [], problems: [] }
-    const req = request({ vocabulary: emptyVocabulary, add: ['ready'] })
-    const gh = neverCalledGh()
-    const fetcher = fetcherReturning({ ok: true, resolved: [], unavailable: [], fetchedAt: now().toISOString() })
-
-    const outcome = await applyLabels({ request: req, repoRoot, auditDir, git, gh, fetchItemsByNumber: fetcher.fn, now })
-    expect(outcome).toEqual({ kind: 'unresolvable-label', keys: ['ready'] })
-    expect(fetcher.calls).toBe(0)
+    expect(calls).toBe(1)
   })
 })
 

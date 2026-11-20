@@ -1,4 +1,5 @@
-import type { ApplyLabelsParams, PostCommentParams } from '@/types/writes'
+import type { PostCommentParams, WriteStateParams } from '@/types/writes'
+import { mirrorVocabularyOf } from '@/utils/labels/display'
 
 // State-first, then (only once the state moved, and only when the plan carries one) the comment —
 // a failed comment must still leave the state write standing.
@@ -11,7 +12,7 @@ import { commentRepeats } from '../../../../../scripts/port-tick/gates'
 import type { ApplyObservationResult, ApplyObservationParams } from '@/types/actions'
 
 interface ApplyObservationDeps {
-  readonly writeState: (params: ApplyLabelsParams) => Promise<WriteOutcome>
+  readonly writeState: (params: WriteStateParams) => Promise<WriteOutcome>
   readonly postComment: (params: PostCommentParams) => Promise<WriteOutcome>
 }
 
@@ -23,6 +24,7 @@ export async function applyObservation(params: ApplyObservationParams, deps: App
     kind: params.observation.itemKind,
     number: params.observation.number,
     vocabulary: params.entry.config.vocabulary,
+    mirror: mirrorVocabularyOf(params.entry.config),
     add: plan.add,
     remove: plan.remove,
     addAssignees: [],

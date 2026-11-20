@@ -29,6 +29,10 @@ describe('survived — store labels', () => {
     expect(survived(resolved(['claude', 'plan approved']), CANDIDATE, VOCABULARY, 'op', [])).toBe(false)
   })
 
+  it('applies no single-label rule: another stage label beside the trigger changes nothing', () => {
+    expect(survived(resolved(['plan approved', 'in progress']), CANDIDATE, VOCABULARY, 'op')).toBe(true)
+  })
+
   it('still takes the assignees from GitHub', () => {
     expect(survived(resolved([], ['someone-else']), CANDIDATE, VOCABULARY, 'op', ['plan approved'])).toBe(false)
   })

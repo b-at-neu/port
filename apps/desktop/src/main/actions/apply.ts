@@ -1,4 +1,5 @@
-import type { ApplyLabelsParams } from '@/types/writes'
+import type { WriteStateParams } from '@/types/writes'
+import { mirrorVocabularyOf } from '@/utils/labels/display'
 import type { RecoverPausedTriggerParams, RecoverPausedTriggerResult } from '@/types/actions'
 
 // A renderer-supplied `expectedStage` is only ever grounds to refuse, never to widen a plan.
@@ -15,7 +16,7 @@ import type { ApplyItemActionParams, ItemActionRequest, ReadyEntry } from '@/typ
 
 
 export interface ApplyItemActionDeps {
-  readonly writeState: (params: ApplyLabelsParams) => Promise<WriteOutcome>
+  readonly writeState: (params: WriteStateParams) => Promise<WriteOutcome>
   readonly recoverPausedTrigger: (params: RecoverPausedTriggerParams) => Promise<RecoverPausedTriggerResult>
 }
 
@@ -54,6 +55,7 @@ function buildWriteRequest(entry: ReadyEntry, request: ItemActionRequest, plan: 
     kind: request.kind,
     number: request.number,
     vocabulary: entry.config.vocabulary,
+    mirror: mirrorVocabularyOf(entry.config),
     add: plan.add,
     remove: plan.remove,
     addAssignees: plan.addAssignees,

@@ -1,8 +1,7 @@
-// Pure: sorts a half-labelled ticket into a repair or a report, never a guess. Only `plan-missing` is repaired; a refused hand-back write is reported with its reason.
+// Pure: sorts a half-recorded ticket into a repair or a report, never a guess. Only `plan-missing` is repaired; a refused hand-back write and a failed label mirror are reported with their reason.
 import type { ReconciledItem } from '@/types/state'
 import type { EndedStage, TickLabelRepair, TickObservation } from '@/types/tick'
 import type { LabelKey } from '@/utils/labels/vocabulary'
-import { isContradictory } from '@/main/tick/observe'
 import { AGENT_FOR_IN_FLIGHT } from '@/main/tick/routing'
 
 interface RepairsOfParams {
@@ -28,6 +27,12 @@ function eligible(item: ReconciledItem, viewer: string, liveNumbers: ReadonlySet
   return item.marked && item.assignees.includes(viewer) && !liveNumbers.has(item.number) && item.state === 'OPEN'
 }
 
+/** A failed label write is reported even while a session is live: it says what GitHub shows, not what the stage is doing. */
+function mirrorShapeOf(item: ReconciledItem, viewer: string): TickLabelRepair | null {
+  if (item.mirrorFailure === undefined || item.mirrorFailure === null || item.state !== 'OPEN' || !item.assignees.includes(viewer)) return null
+  return { number: item.number, kind: item.kind, shape: 'mirror-failed', labels: item.stages.map((s) => s.key), agent: null, reason: null, mirror: item.mirrorFailure }
+}
+
 function newestEndedStageFor(endedStages: readonly EndedStage[], number: number): EndedStage | null {
   let newest: EndedStage | null = null
   for (const stage of endedStages) {
@@ -50,7 +55,7 @@ function sessionShapeOf(item: ReconciledItem, ended: EndedStage, readAt: string 
   if (ended.agent === 'impl') owned.push('blocked')
   const only = roleBearing[0]
   if (roleBearing.length !== 1 || only === undefined || !owned.includes(only)) return null
-  return { number: item.number, kind: item.kind, shape: 'handback-unlabelled', labels: roleBearing, agent: ended.agent, reason: ended.labels.reason }
+  return { number: item.number, kind: item.kind, shape: 'handback-unlabelled', labels: roleBearing, agent: ended.agent, reason: ended.labels.reason, mirror: null }
 }
 
 function artifactShapeOf(item: ReconciledItem): TickLabelRepair | { readonly observationOnly: true } | null {
@@ -61,10 +66,10 @@ function artifactShapeOf(item: ReconciledItem): TickLabelRepair | { readonly obs
 
   if (only === 'planReview' && item.planPresent === false) return { observationOnly: true }
   if (only === 'planApproved' && item.planPresent === false) {
-    return { number: item.number, kind: item.kind, shape: 'plan-missing-approved', labels: roleBearing, agent: null, reason: null }
+    return { number: item.number, kind: item.kind, shape: 'plan-missing-approved', labels: roleBearing, agent: null, reason: null, mirror: null }
   }
   if (only === 'prOpened' && item.linkReason === 'counterpart-not-open') {
-    return { number: item.number, kind: item.kind, shape: 'pr-missing', labels: roleBearing, agent: null, reason: null }
+    return { number: item.number, kind: item.kind, shape: 'pr-missing', labels: roleBearing, agent: null, reason: null, mirror: null }
   }
   return null
 }
@@ -75,12 +80,9 @@ export function repairsOf(params: RepairsOfParams): RepairsOfResult {
   const reports: TickLabelRepair[] = []
 
   for (const item of items) {
+    const mirror = mirrorShapeOf(item, viewer)
+    if (mirror !== null) reports.push(mirror)
     if (!eligible(item, viewer, liveNumbers)) continue
-
-    if (isContradictory(item)) {
-      reports.push({ number: item.number, kind: item.kind, shape: 'contradictory', labels: roleBearingKeys(item), agent: null, reason: null })
-      continue
-    }
 
     const ended = newestEndedStageFor(endedStages, item.number)
     if (ended !== null) {

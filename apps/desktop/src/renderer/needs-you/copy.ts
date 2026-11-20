@@ -1,6 +1,7 @@
 // Every lead-copy string the Needs you screen renders, one switch over
 // `NeedsYouItem.kind` — a new kind is a compile error, never a blank row.
 import type { NeedsYouGroupKey, NeedsYouItem } from '@/types/board'
+import { mirrorReason } from '@/renderer/lib/mirror-reason'
 import type { InterruptedStage } from '@/types/stage'
 import type { HandoffRefusal, StageAgent } from '@/types/tick'
 
@@ -87,12 +88,6 @@ function blockedReason(item: Extract<NeedsYouItem, { readonly kind: 'blocked' }>
   return blockedOn?.session?.text ?? blockedOn?.comment?.text ?? null
 }
 
-/** The repository's own resolved label name for a repair's label key — the matched row's `item.stages`
- *  already carries every label's resolved name, so this never re-derives one from the bare key. */
-function repairLabelName(item: Extract<NeedsYouItem, { readonly kind: 'half-labelled' }>, key: string): string {
-  return item.matchedRow?.item.stages.find((s) => s.key === key)?.name ?? key
-}
-
 function interruptedCopy(item: Extract<NeedsYouItem, { readonly kind: 'stage-interrupted' }>, label: string): string {
   const i = item.interrupted
   const phase = STAGE_PHASE_NAME[i.agent]
@@ -126,7 +121,7 @@ const HANDOFF_REFUSAL_COPY: Readonly<Record<HandoffRefusal, string>> = {
   'no-handback': 'it ended without a hand-back line',
   'unknown-handback': "its hand-back line isn't one port knows",
   'pr-unverified': "the pull request it named isn't open on its branch",
-  moved: 'its labels changed while it ran',
+  moved: 'its stage changed while it ran',
   'write-failed': 'GitHub refused the change three times',
   'terminal-owned': 'the terminal pipeline owns this repository now',
   'unresolvable-label': "a label it needs isn't in this repository",
@@ -135,16 +130,16 @@ const HANDOFF_REFUSAL_COPY: Readonly<Record<HandoffRefusal, string>> = {
 }
 
 function halfLabelledCopy(item: Extract<NeedsYouItem, { readonly kind: 'half-labelled' }>, label: string): string {
-  const names = item.repair.labels.map((key) => repairLabelName(item, key))
   switch (item.repair.shape) {
     case 'handback-unlabelled': {
-      const agentName = item.repair.agent !== null ? STAGE_PHASE_NAME[item.repair.agent].toLowerCase() : 'stage'
-      const current = names[0] ?? 'in flight'
-      if (item.repair.reason === null) return `${label}'s ${agentName} session finished, but its label is still "${current}". Check the ticket and set the right label.`
-      return `${label}'s ${agentName} session finished, but port couldn't move its label from "${current}": ${HANDOFF_REFUSAL_COPY[item.repair.reason]}. Check the ticket and set the right label.`
+      const agent = item.repair.agent
+      const agentName = agent !== null ? STAGE_PHASE_NAME[agent].toLowerCase() : 'stage'
+      const phase = agent !== null ? STAGE_PHASE_NAME[agent] : 'its current stage'
+      const reason = item.repair.reason === null ? '' : `: ${HANDOFF_REFUSAL_COPY[item.repair.reason]}`
+      return `${label}'s ${agentName} session finished, but port couldn't record its next stage${reason}. It stays at ${phase} until port retries it.`
     }
-    case 'contradictory':
-      return `${label} has conflicting labels: ${names.map((n) => `"${n}"`).join(', ')}. Remove the one that's wrong.`
+    case 'mirror-failed':
+      return `${label}'s GitHub labels are out of date: ${item.repair.mirror === null ? 'a label write failed' : mirrorReason(item.repair.mirror.outcome)}. port tries again on its next poll.`
     case 'plan-missing-approved':
       return `${label} is approved, but its body has no implementation plan. Restore the plan or move it back to "ready".`
     case 'pr-missing':

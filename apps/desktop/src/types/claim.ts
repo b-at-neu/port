@@ -1,4 +1,4 @@
-import type { ApplyLabelsParams } from '@/types/writes'
+import type { WriteStateParams } from '@/types/writes'
 
 // Renderer-safe contract for Work on's claim (the "work on #N" flow). No import here may reach a Node builtin — only `main/claim.ts` resolves a repository, spawns `gh`, or writes a label.
 import type { BlockerRead, ClaimPreflightFetch, GitHubRepoRef, PipelineItemKind } from '@/types/github'
@@ -62,7 +62,7 @@ export interface ClaimToast {
 export interface ClaimDeps {
   readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
   readonly fetchClaimPreflight: (params: { readonly repo: GitHubRepoRef; readonly number: number; readonly github?: GitHubTransport; readonly now?: () => Date }) => Promise<ClaimPreflightFetch>
-  readonly writeState: (params: ApplyLabelsParams) => Promise<WriteOutcome>
+  readonly writeState: (params: WriteStateParams) => Promise<WriteOutcome>
   /** The store's labels for an item, so a ticket the store tracks is refused exactly as a labelled one is. */
   readonly stateLabels: StateLabelsReader
 }

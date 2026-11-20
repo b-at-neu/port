@@ -328,23 +328,11 @@ describe('helpers', () => {
 })
 
 describe('expectFor', () => {
-  const vocabulary = resolveVocabulary({})
-
-  it('names the exact observed set present and every other role-bearing key absent', () => {
-    const expected = expectFor(['inProgress'], vocabulary, ['prOpened'], ['op'])
+  it('names the exact observed set present, no absent keys, and the assignees exactly', () => {
+    const expected = expectFor(['inProgress'], ['op'])
     expect(expected.present).toEqual(['inProgress'])
-    expect(expected.absent).toContain('planApproved')
-    expect(expected.absent).not.toContain('inProgress')
-    expect(expected.absent).not.toContain('prOpened')
-    expect(expected.absent).not.toContain('marker')
+    expect(expected.absent).toEqual([])
     expect(expected.assignees).toEqual({ kind: 'exactly', logins: ['op'] })
-  })
-
-  it('works over a renamed vocabulary, since it only ever names keys', () => {
-    const renamed = resolveVocabulary({ labels: { inProgress: 'wip', planApproved: 'go' } })
-    const expected = expectFor(['inProgress'], renamed, ['blocked'], ['op'])
-    expect(expected.present).toEqual(['inProgress'])
-    expect(expected.absent).toContain('planApproved')
   })
 })
 

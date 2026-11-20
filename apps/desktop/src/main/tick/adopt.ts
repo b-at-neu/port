@@ -3,7 +3,6 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { ClosingPullRequest, ReviewNode } from '@/types/github'
 import type { ReconciledItem } from '@/types/state'
 import type { TickClaim, TickObservation } from '@/types/tick'
-import { isContradictory } from '@/main/tick/observe'
 
 type Adoption = Extract<TickObservation, { readonly kind: 'adopt' }>
 
@@ -94,7 +93,7 @@ export function adoptionsOf(params: { readonly items: readonly ReconciledItem[];
   for (const claim of params.claims) {
     if (!ADOPTABLE_CLASSES.includes(claim.class)) continue
     const item = itemByNumber.get(claim.number)
-    if (item === undefined || !item.assignees.includes(params.viewer) || isContradictory(item)) continue
+    if (item === undefined || !item.assignees.includes(params.viewer)) continue
     const adoption = adoptionOf(item, claim)
     if (adoption !== null) out.push({ kind: 'adopt', number: claim.number, itemKind: claim.kind, ...adoption })
   }

@@ -51,7 +51,7 @@ export async function refreshGithub(cache: SourceCache, params: RefreshGithubPar
   }
 
   return fetch.ok
-    ? { ok: true, at: fetch.fetchedAt, rateLimit: fetch.rateLimit, closed: fetch.closed }
+    ? { ok: true, at: fetch.fetchedAt, rateLimit: fetch.rateLimit, closed: fetch.closed, merged: fetch.merged }
     : { ok: false, at: fetch.fetchedAt, error: fetch.message, failureKind: fetch.kind }
 }
 

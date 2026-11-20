@@ -1,14 +1,6 @@
 // The only file in the app allowed to name `--add-label`/`--remove-label`. Pure: no `gh`, no filesystem.
 import { labelName } from '@/utils/labels/vocabulary'
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
-import type { LabelWriteRequest } from '@/types/writes'
-
-interface ResolvedNames {
-  readonly addNames: readonly string[]
-  readonly removeNames: readonly string[]
-}
-
-type BuildCommandResult = ({ readonly ok: true; readonly argv: readonly string[] } & ResolvedNames) | { readonly ok: false; readonly unresolved: readonly LabelKey[] }
 
 interface KeyResolution {
   readonly names: string[]
@@ -27,19 +19,23 @@ export function resolveKeys(vocabulary: LabelVocabulary, keys: readonly LabelKey
   return { names, unresolved }
 }
 
+interface BuildCommandParams {
+  readonly kind: 'issue' | 'pull-request'
+  readonly number: number
+  readonly repo: string
+  readonly addNames: readonly string[]
+  readonly removeNames: readonly string[]
+  readonly addAssignees: readonly string[]
+  readonly removeAssignees: readonly string[]
+}
+
 // Never `merge`, `close`, `--delete-branch`, or `ready`, which stay human actions on GitHub.
-export function buildCommand(request: LabelWriteRequest): BuildCommandResult {
-  const add = resolveKeys(request.vocabulary, request.add)
-  const remove = resolveKeys(request.vocabulary, request.remove)
-  const unresolved = [...add.unresolved, ...remove.unresolved]
-  if (unresolved.length > 0) return { ok: false, unresolved }
-
-  const subcommand = request.kind === 'pull-request' ? 'pr' : 'issue'
-  const argv: string[] = [subcommand, 'edit', String(request.number), '--repo', request.repo]
-  for (const name of add.names) argv.push('--add-label', name)
-  for (const name of remove.names) argv.push('--remove-label', name)
-  for (const login of request.addAssignees) argv.push('--add-assignee', login)
-  for (const login of request.removeAssignees) argv.push('--remove-assignee', login)
-
-  return { ok: true, argv, addNames: add.names, removeNames: remove.names }
+export function buildCommand(params: BuildCommandParams): readonly string[] {
+  const subcommand = params.kind === 'pull-request' ? 'pr' : 'issue'
+  const argv: string[] = [subcommand, 'edit', String(params.number), '--repo', params.repo]
+  for (const name of params.addNames) argv.push('--add-label', name)
+  for (const name of params.removeNames) argv.push('--remove-label', name)
+  for (const login of params.addAssignees) argv.push('--add-assignee', login)
+  for (const login of params.removeAssignees) argv.push('--remove-assignee', login)
+  return argv
 }

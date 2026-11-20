@@ -1,5 +1,5 @@
 // The pipeline state file's only writer. A transition is never reported as applied until it is on disk.
-import { emptyFile, parseFile, prune, seedFrom, transition, trackedOf, viewOf, withItem } from '@/main/pipeline-state/model'
+import { emptyFile, parseFile, prune, recordMirror, seedFrom, transition, trackedOf, viewOf, withItem } from '@/main/pipeline-state/model'
 import type { PipelineStateFile, PipelineStateStore, RepoRecord, StoreTransitionResult } from '@/types/pipeline-state'
 import type { FileResult } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
@@ -82,6 +82,14 @@ export function createPipelineStateStore(params: CreatePipelineStateStoreParams)
         if (record === undefined) return
         const pruned = prune(record, closed)
         if (pruned !== record) await persistBestEffort(repoId, pruned)
+      }),
+    recordMirror: (repoId, ref, failure) =>
+      serialize(async () => {
+        await ready
+        const record = file.repositories[repoId]
+        if (record === undefined) return
+        const next = recordMirror(record, ref, failure)
+        if (next !== record) await persistBestEffort(repoId, next)
       }),
     transition: (repoId, ref, input) =>
       serialize(async (): Promise<StoreTransitionResult> => {

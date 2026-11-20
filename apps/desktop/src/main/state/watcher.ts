@@ -83,7 +83,10 @@ interface CreatePipelineWatcherParams {
   readonly trackedRefs?: (repoId: RepoId) => readonly TrackedRef[] | null
   /** Seeds a repository whose view was `labels` from the state just projected. */
   readonly seedPipelineState?: (repoId: RepoId, state: Extract<RepositoryState, { readonly ok: true }>) => Promise<void>
-  readonly prunePipelineState?: (repoId: RepoId, closed: readonly number[]) => Promise<void>
+  /** Writes the terminal state of each merged pull request, then drops the closed items. Undefined keeps today's behaviour: nothing is written or dropped. */
+  readonly finishPipelineState?: (entry: Extract<RepositoryEntry, { readonly status: 'ready' }>, finished: { readonly closed: readonly number[]; readonly merged: readonly number[] }) => Promise<void>
+  /** Re-mirrors the items whose last label write failed. Fire-and-forget: it never blocks a snapshot. */
+  readonly retryMirrors?: (entry: Extract<RepositoryEntry, { readonly status: 'ready' }>) => Promise<void>
   /** Settles once the store has loaded; the first projection waits on it. */
   readonly pipelineReady?: () => Promise<void>
 }
@@ -189,7 +192,22 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       return null
     }
     await seedUnseeded(state, views)
+    retryFailedMirrors(entries, views)
     return assembleSnapshot(state)
+  }
+
+  /** One pass per projection over the repositories the store holds; a failure is already recorded on the item, so it is only logged here. */
+  function retryFailedMirrors(entries: readonly RepositoryEntry[], views: Readonly<Record<string, PipelineView>>): void {
+    if (params.retryMirrors === undefined) return
+    for (const entry of entries.filter(isReady)) {
+      const key = `${entry.id}:mirror`
+      if (views[entry.id]?.kind !== 'store' || inFlight.has(key)) continue
+      inFlight.add(key)
+      params
+        .retryMirrors(entry)
+        .catch((error: unknown) => console.error('[watcher] mirror retry failed', error))
+        .finally(() => inFlight.delete(key))
+    }
   }
 
   /** Seeding sees the same items the board just showed, so no ticket changes stage. A terminal-held repository is skipped: its labels are the record. */
@@ -311,7 +329,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       const startedAt = now().toISOString()
       outcome = await engine.refreshGithub({ repoId: entry.id, repo: repoRefOf(entry), vocabulary: entry.config.vocabulary, verify: verifiableVocabularyOf(entry.config), integration: entry.config.branches.integration, tracked: params.trackedRefs?.(entry.id) ?? null })
       precheck.settled(entry.id, startedAt, outcome.ok)
-      if (outcome.closed !== undefined && outcome.closed.length > 0) await params.prunePipelineState?.(entry.id, outcome.closed)
+      if (outcome.closed !== undefined && outcome.closed.length > 0) await params.finishPipelineState?.(entry, { closed: outcome.closed, merged: outcome.merged ?? [] })
     }
     const current = ensureHealth(entry.id)
     const previous = current[kind]

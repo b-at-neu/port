@@ -66,18 +66,28 @@ describe('repairsOf — guards', () => {
   })
 })
 
-describe('repairsOf — contradictory wins over every other shape', () => {
-  it('reports contradictory even over a refused hand-back', () => {
-    const contradictory = item({ stages: [{ key: 'inProgress', name: 'inProgress', role: 'in-flight' }, { key: 'planReview', name: 'plan review', role: 'gate' }], matchedKeys: ['inProgress', 'planReview'] })
-    const result = repairsOf({ items: [contradictory], endedStages: [ended()], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
+describe('repairsOf — mirror-failed', () => {
+  const failure = { at: '2026-01-01T00:30:00.000Z', outcome: { kind: 'item-unavailable' as const } }
+
+  it('reports a failed label mirror with the failure it recorded', () => {
+    const result = repairsOf({ items: [item({ mirrorFailure: failure })], endedStages: [], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
     expect(result.observations).toEqual([])
-    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'contradictory', labels: ['inProgress', 'planReview'], agent: null, reason: null }])
+    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'mirror-failed', labels: ['inProgress'], agent: null, reason: null, mirror: failure }])
   })
 
-  it('reports contradictory when both refresh-pair labels are present', () => {
-    const both = item({ stages: [{ key: 'refreshBranch', name: 'refresh branch', role: 'trigger' }, { key: 'refreshing', name: 'refreshing', role: 'in-flight' }], matchedKeys: ['refreshBranch', 'refreshing'] })
-    const result = repairsOf({ items: [both], endedStages: [], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
-    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'contradictory', labels: ['refreshBranch', 'refreshing'], agent: null, reason: null }])
+  it('reports it for an unmarked item and while a stage session is live', () => {
+    const result = repairsOf({ items: [item({ marked: false, mirrorFailure: failure })], endedStages: [], liveNumbers: new Set([52]), viewer: VIEWER, readAt: READ_AT })
+    expect(result.reports).toHaveLength(1)
+  })
+
+  it('skips a closed item, an item assigned to someone else and an item with no failure', () => {
+    const items = [item({ state: 'CLOSED', mirrorFailure: failure }), item({ assignees: ['someone-else'], mirrorFailure: failure }), item({ mirrorFailure: null }), item()]
+    expect(repairsOf({ items, endedStages: [], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT }).reports).toEqual([])
+  })
+
+  it('reports beside a session shape on the same item', () => {
+    const result = repairsOf({ items: [item({ mirrorFailure: failure })], endedStages: [ended()], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
+    expect(result.reports.map((report) => report.shape)).toEqual(['mirror-failed', 'handback-unlabelled'])
   })
 })
 
@@ -91,12 +101,12 @@ describe('repairsOf — session shapes', () => {
   it('a refused completed hand-back reports handback-unlabelled with its reason', () => {
     const result = repairsOf({ items: [item()], endedStages: [ended({ labels: { kind: 'refused', reason: 'no-handback', detail: null } })], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
     expect(result.observations).toEqual([])
-    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'handback-unlabelled', labels: ['inProgress'], agent: 'impl', reason: 'no-handback' }])
+    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'handback-unlabelled', labels: ['inProgress'], agent: 'impl', reason: 'no-handback', mirror: null }])
   })
 
   it('a refused error write reports handback-unlabelled too', () => {
     const result = repairsOf({ items: [item()], endedStages: [ended({ outcome: 'error', labels: { kind: 'refused', reason: 'write-failed', detail: 'boom' } })], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
-    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'handback-unlabelled', labels: ['inProgress'], agent: 'impl', reason: 'write-failed' }])
+    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'handback-unlabelled', labels: ['inProgress'], agent: 'impl', reason: 'write-failed', mirror: null }])
   })
 
   it('an applied or pending hand-back reports nothing', () => {
@@ -110,7 +120,7 @@ describe('repairsOf — session shapes', () => {
   it('an impl whose only label is blocked still reports a refused hand-back', () => {
     const blocked = item({ stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }], matchedKeys: ['blocked'] })
     const result = repairsOf({ items: [blocked], endedStages: [ended()], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
-    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'handback-unlabelled', labels: ['blocked'], agent: 'impl', reason: 'moved' }])
+    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'handback-unlabelled', labels: ['blocked'], agent: 'impl', reason: 'moved', mirror: null }])
   })
 
   it('a refused write reports nothing once the labels no longer sit alone on the in-flight key', () => {
@@ -157,13 +167,13 @@ describe('repairsOf — artifact shapes (issues only)', () => {
   it('planApproved with planPresent false reports plan-missing-approved', () => {
     const result = repairsOf({ items: [atStage('planApproved', 'trigger', { planPresent: false })], endedStages: [], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
     expect(result.observations).toEqual([])
-    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'plan-missing-approved', labels: ['planApproved'], agent: null, reason: null }])
+    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'plan-missing-approved', labels: ['planApproved'], agent: null, reason: null, mirror: null }])
   })
 
   it('prOpened with linkReason counterpart-not-open (closed unmerged) reports pr-missing', () => {
     const result = repairsOf({ items: [atStage('prOpened', 'terminal', { linkReason: 'counterpart-not-open' })], endedStages: [], liveNumbers: new Set(), viewer: VIEWER, readAt: READ_AT })
     expect(result.observations).toEqual([])
-    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'pr-missing', labels: ['prOpened'], agent: null, reason: null }])
+    expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'pr-missing', labels: ['prOpened'], agent: null, reason: null, mirror: null }])
   })
 
   it('prOpened with linkReason counterpart-merged produces no report and no observation', () => {

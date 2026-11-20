@@ -125,11 +125,9 @@ describe('adoptionsOf — claims no live session holds', () => {
     expect(adopt([inProgressItem({ closingPullRequests: prs })], [claim({ class: cls })])).toHaveLength(1)
   })
 
-  it('an item the viewer does not own, or with contradictory labels, adopts nothing', () => {
+  it('an item the viewer does not own adopts nothing', () => {
     const prs = [{ number: 780, state: 'OPEN' as const, headRefName: '1-the-fix' }]
     expect(adopt([inProgressItem({ closingPullRequests: prs, assignees: ['someone-else'] })], [claim()])).toEqual([])
-    const contradictory = inProgressItem({ closingPullRequests: prs, stages: [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }, { key: 'planning', name: 'planning', role: 'in-flight' }] })
-    expect(adopt([contradictory], [claim()])).toEqual([])
   })
 })
 

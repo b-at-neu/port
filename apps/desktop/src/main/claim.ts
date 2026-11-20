@@ -2,6 +2,7 @@
 import { classifyPreflight, buildClaimRequest } from '@/main/claim/classify'
 import type { ClaimApplyResponse, ClaimPreflight, ClaimPreflightResponse, PlanGateChoice } from '@/types/claim'
 import type { ClaimPreflightFetch } from '@/types/github'
+import { mirrorVocabularyOf } from '@/utils/labels/display'
 import type { RepoId } from '@/utils/repos'
 import type { ReadyEntry } from '@/types/actions'
 import { requireReadyRepo } from '@/main/registry'
@@ -84,6 +85,7 @@ export async function claimApply(params: ClaimApplyParams, deps: ClaimDeps): Pro
     preflight,
     verdict,
     vocabulary: entry.config.vocabulary,
+    mirror: mirrorVocabularyOf(entry.config),
     repoId: params.repoId,
     repo: entry.config.repo,
     planGate: params.planGate,

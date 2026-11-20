@@ -6,7 +6,7 @@ import { mirrorReason } from '@/renderer/lib/mirror-reason'
 
 type Outcome = AuditRowView['outcome']
 
-const AUTOMATIC_ACTIONS: ReadonlySet<string> = new Set(['auto-approve-plan', 'budget-escalate'])
+const AUTOMATIC_ACTIONS: ReadonlySet<string> = new Set(['auto-approve-plan', 'budget-escalate', 'mirror-merged', 'mirror-retry'])
 
 export function actorOf(action: string): AuditRowView['actor'] {
   return AUTOMATIC_ACTIONS.has(action) || action.startsWith('observe-') ? 'port' : 'you'

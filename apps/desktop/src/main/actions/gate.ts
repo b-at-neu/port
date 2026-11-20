@@ -6,6 +6,7 @@ import { buildAutoApprovePlan, buildGatePlan, classifyGate } from '@/main/gate/c
 
 import type { GateAction, GateAnswerResponse, GatePreflight, GatePreflightResponse } from '@/types/gate'
 import type { GatePreflightFetch } from '@/types/github'
+import { mirrorVocabularyOf } from '@/utils/labels/display'
 import { labelName } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { LabelWriteRequest, OwnershipSummary, WriteOutcome } from '@/types/writes'
@@ -89,6 +90,7 @@ function buildWriteRequest(entry: ReadyEntry, number: number, plan: GatePlan, ac
     kind: 'issue',
     number,
     vocabulary: entry.config.vocabulary,
+    mirror: mirrorVocabularyOf(entry.config),
     add: plan.add,
     remove: plan.remove,
     addAssignees: [],

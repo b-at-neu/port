@@ -5,12 +5,13 @@ import type { FetchItemsByNumberParams, ItemsByNumberFetch, ResolvedItem } from 
 import type { StateLabelsReader } from '@/types/pipeline-state'
 import type { StageEvent, StagePlannedWrite, StageTransition, StageTransitionResult } from '@/types/stage-labels'
 import type { HandoffRefusal, TickActionable } from '@/types/tick'
-import type { ApplyLabelsParams, LabelWriteRequest, PostCommentParams, WriteOutcome } from '@/types/writes'
+import type { LabelWriteRequest, PostCommentParams, WriteOutcome, WriteStateParams } from '@/types/writes'
 import { stateMoved } from '@/types/writes'
+import { mirrorVocabularyOf } from '@/utils/labels/display'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 
 export interface StageWriteDeps {
-  readonly writeState: (params: ApplyLabelsParams) => Promise<WriteOutcome>
+  readonly writeState: (params: WriteStateParams) => Promise<WriteOutcome>
   readonly postIssueBody: (params: PostCommentParams) => Promise<WriteOutcome>
   readonly stateLabels: StateLabelsReader
   readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
@@ -80,11 +81,12 @@ function requestFor(entry: ReadyEntry, planned: StagePlannedWrite, number: numbe
     kind: planned.itemKind,
     number,
     vocabulary,
+    mirror: mirrorVocabularyOf(entry.config),
     add: planned.add,
     remove: planned.remove,
     addAssignees: [],
     removeAssignees: [],
-    expect: expectFor(roleBearingKeysOf(entry, resolved, deps), vocabulary, planned.add, resolved.assignees),
+    expect: expectFor(roleBearingKeysOf(entry, resolved, deps), resolved.assignees),
     action: planned.action,
   }
 }

@@ -1,7 +1,7 @@
 import type { RefreshMemo, RerunMemo } from '@/types/tick'
 
 // Pure: turns the report pieces planTick already computed into the four machine-observation write
-// families. Every observation needs the viewer among the item's assignees and a non-contradictory label set.
+// families. Every observation needs the viewer among the item's assignees.
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { ReconciledItem } from '@/types/state'
@@ -10,7 +10,6 @@ import { approvedReverify, capRefreshes, refreshDecision } from '../../../../../
 
 import { actionsJobOf, historyDerivedChecks, rollupVerdict } from '../../../../../scripts/port-tick/checks'
 import type { Disposition } from '../../../../../scripts/port-tick/checks'
-import { REFRESH_PAIR } from '@/main/tick/routing'
 
 interface ObservationsOfParams {
   readonly repoId: RepoId
@@ -27,16 +26,8 @@ interface ObservationsOfParams {
   readonly rerunMemo?: RerunMemo
 }
 
-/** At most one role-bearing key outside `REFRESH_PAIR`, or both at once. */
-export function isContradictory(item: Pick<ReconciledItem, 'stages'>): boolean {
-  const roleBearing = item.stages.filter((s) => s.role !== 'marker').map((s) => s.key)
-  const nonRefresh = roleBearing.filter((k) => !REFRESH_PAIR.includes(k))
-  const bothRefresh = REFRESH_PAIR.every((k) => roleBearing.includes(k))
-  return nonRefresh.length >= 2 || bothRefresh
-}
-
-function eligible(item: Pick<ReconciledItem, 'assignees' | 'stages'>, viewer: string): boolean {
-  return item.assignees.includes(viewer) && !isContradictory(item)
+function eligible(item: Pick<ReconciledItem, 'assignees'>, viewer: string): boolean {
+  return item.assignees.includes(viewer)
 }
 
 function carries(item: ReconciledItem, key: LabelKey): boolean {

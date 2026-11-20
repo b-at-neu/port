@@ -215,7 +215,7 @@ export function registerIpc(restart: RestartSeams): RegisteredIpc {
   let dispatcherRef: Dispatcher | null = null
 
   // The app's own record of every ticket's stage; every pipeline write goes through its `writeState`.
-  const pipelineState = createPipelineState({ dir: app.getPath('userData'), ownerOf: (repoId) => dispatcherRef?.status().find((status) => status.repoId === repoId)?.owner ?? null })
+  const pipelineState = createPipelineState({ dir: app.getPath('userData'), auditDir: app.getPath('userData'), ownerOf: (repoId) => dispatcherRef?.status().find((status) => status.repoId === repoId)?.owner ?? null })
   const actions = bindActions(pipelineState)
 
   // stage-sessions.json's sole writer. Loaded once at boot — a `running` entry found then can only

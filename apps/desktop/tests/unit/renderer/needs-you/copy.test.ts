@@ -106,49 +106,40 @@ describe('needsYouLeadCopy', () => {
     expect(needsYouLeadCopy(item)).toBe('Retry #39: its agent stopped responding')
   })
 
-  it('half-labelled — handback-unlabelled uses the resolved label name and the agent\'s phase name', () => {
+  it('half-labelled — handback-unlabelled names the agent and the phase it stays at', () => {
     const item = {
       ...base({ number: 52 }),
       kind: 'half-labelled',
-      matchedRow: { item: { stages: [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }] } },
-      repair: { number: 52, kind: 'issue', shape: 'handback-unlabelled', labels: ['inProgress'], agent: 'impl', reason: null },
+      repair: { number: 52, kind: 'issue', shape: 'handback-unlabelled', labels: ['inProgress'], agent: 'impl', reason: null, mirror: null },
     } as unknown as NeedsYouItem
-    expect(needsYouLeadCopy(item)).toBe('#52\'s implementing session finished, but its label is still "in progress". Check the ticket and set the right label.')
+    expect(needsYouLeadCopy(item)).toBe("#52's implementing session finished, but port couldn't record its next stage. It stays at Implementing until port retries it.")
   })
 
   it.each([
     ['no-handback', 'it ended without a hand-back line'],
     ['unknown-handback', "its hand-back line isn't one port knows"],
     ['pr-unverified', "the pull request it named isn't open on its branch"],
-    ['moved', 'its labels changed while it ran'],
+    ['moved', 'its stage changed while it ran'],
     ['write-failed', 'GitHub refused the change three times'],
     ['terminal-owned', 'the terminal pipeline owns this repository now'],
     ['unresolvable-label', "a label it needs isn't in this repository"],
-  ] as const)('half-labelled — a refused hand-back (%s) names why port could not move the label', (reason, copy) => {
+  ] as const)('half-labelled — a refused hand-back (%s) names why port could not record the stage', (reason, copy) => {
     const item = {
       ...base({ number: 52 }),
       kind: 'half-labelled',
-      matchedRow: { item: { stages: [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }] } },
-      repair: { number: 52, kind: 'issue', shape: 'handback-unlabelled', labels: ['inProgress'], agent: 'impl', reason },
+      repair: { number: 52, kind: 'issue', shape: 'handback-unlabelled', labels: ['inProgress'], agent: 'impl', reason, mirror: null },
     } as unknown as NeedsYouItem
-    expect(needsYouLeadCopy(item)).toBe(`#52's implementing session finished, but port couldn't move its label from "in progress": ${copy}. Check the ticket and set the right label.`)
+    expect(needsYouLeadCopy(item)).toBe(`#52's implementing session finished, but port couldn't record its next stage: ${copy}. It stays at Implementing until port retries it.`)
   })
 
-  it('half-labelled — contradictory names every conflicting label', () => {
+  it('half-labelled — mirror-failed says the labels are out of date and why', () => {
+    const outcome = { kind: 'write-failed', classification: 'unknown', stderr: "'reviewing' not found\nmore", reread: null }
     const item = {
       ...base({ number: 52 }),
       kind: 'half-labelled',
-      matchedRow: {
-        item: {
-          stages: [
-            { key: 'planning', name: 'planning', role: 'in-flight' },
-            { key: 'planReview', name: 'plan review', role: 'gate' },
-          ],
-        },
-      },
-      repair: { number: 52, kind: 'issue', shape: 'contradictory', labels: ['planning', 'planReview'], agent: null },
+      repair: { number: 52, kind: 'issue', shape: 'mirror-failed', labels: ['reviewing'], agent: null, reason: null, mirror: { at: '2026-01-01T00:00:00Z', outcome } },
     } as unknown as NeedsYouItem
-    expect(needsYouLeadCopy(item)).toBe('#52 has conflicting labels: "planning", "plan review". Remove the one that\'s wrong.')
+    expect(needsYouLeadCopy(item)).toBe("#52's GitHub labels are out of date: 'reviewing' not found. port tries again on its next poll.")
   })
 
   it('half-labelled — plan-missing-approved', () => {

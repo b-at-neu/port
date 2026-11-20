@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import template from '@/utils/labels/labels.json'
-import { DISPLAY_DEFAULTS, DISPLAY_KEYS, resolveDisplayVocabulary, verifiableVocabularyOf } from '@/utils/labels/display'
+import { DISPLAY_DEFAULTS, DISPLAY_KEYS, mirrorVocabularyOf, resolveDisplayVocabulary, verifiableVocabularyOf } from '@/utils/labels/display'
 import { resolveVocabulary, verifyVocabulary } from '@/utils/labels/vocabulary'
 
 describe('DISPLAY_KEYS / DISPLAY_DEFAULTS match the shipped display template', () => {
@@ -61,6 +61,20 @@ describe('verifying the display vocabulary against a repository', () => {
     const report = verifyVocabulary(resolveDisplayVocabulary({}), { ok: true, names: ['claude', 'planning', 'reviewing'] })
     expect(report.verdict).toBe('partial')
     expect(report.missing).toEqual(['port', 'needs you', 'implementing', 'revising', 'approved'])
+  })
+})
+
+describe('mirrorVocabularyOf', () => {
+  const displayVocabulary = resolveDisplayVocabulary({})
+
+  it('mirrors the display labels only when the repository is app-only with a resolved display vocabulary', () => {
+    expect(mirrorVocabularyOf({ appOnly: true, displayVocabulary })).toEqual({ kind: 'display', labels: displayVocabulary })
+  })
+
+  it('mirrors the legacy set otherwise', () => {
+    expect(mirrorVocabularyOf({ appOnly: false, displayVocabulary })).toEqual({ kind: 'legacy' })
+    expect(mirrorVocabularyOf({ appOnly: true })).toEqual({ kind: 'legacy' })
+    expect(mirrorVocabularyOf({})).toEqual({ kind: 'legacy' })
   })
 })
 

@@ -1,4 +1,5 @@
-import type { ApplyLabelsParams, PostCommentParams } from '@/types/writes'
+import type { PostCommentParams, WriteStateParams } from '@/types/writes'
+import { mirrorVocabularyOf } from '@/utils/labels/display'
 import type { FetchItemsByNumberParams } from '@/types/github'
 import type { ReadyEntry, RebaseDecision, RebasePick, UnblockRoute } from '@/types/actions'
 
@@ -20,7 +21,7 @@ import { findRepoState, movedResult } from '@/main/actions/apply'
 import type { ApplyItemDecisionParams } from '@/types/actions'
 
 export interface ApplyItemDecisionDeps {
-  readonly writeState: (params: ApplyLabelsParams) => Promise<WriteOutcome>
+  readonly writeState: (params: WriteStateParams) => Promise<WriteOutcome>
   readonly stateLabels: StateLabelsReader
   readonly postComment: (params: PostCommentParams) => Promise<WriteOutcome>
   readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
@@ -134,6 +135,7 @@ function buildWriteRequest(entry: ReadyEntry, kind: ReconciledItem['kind'], numb
     kind,
     number,
     vocabulary: entry.config.vocabulary,
+    mirror: mirrorVocabularyOf(entry.config),
     add: plan.add,
     remove: plan.remove,
     addAssignees: [],

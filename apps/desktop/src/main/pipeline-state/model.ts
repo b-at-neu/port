@@ -1,8 +1,9 @@
 // Pure: no I/O. The store file's validation, seeding, transitions and views.
 import { HANDBACK_TOKENS } from '@/main/dispatch/transitions'
 import type { PipelineItemKind } from '@/types/github'
-import { fullKeysOf, type PipelineStateFile, type PipelineView, type RepoRecord, type StoredHistoryRow, type StoredItem, type TrackedRef, type TransitionInput, type TransitionResult } from '@/types/pipeline-state'
+import { fullKeysOf, type MirrorFailure, type PipelineStateFile, type PipelineView, type RepoRecord, type StoredHistoryRow, type StoredItem, type TrackedRef, type TransitionInput, type TransitionResult } from '@/types/pipeline-state'
 import type { RepositoryState } from '@/types/state'
+import type { WriteOutcome } from '@/types/writes'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { LABEL_KEYS, type LabelKey } from '@/utils/labels/vocabulary'
 
@@ -46,6 +47,28 @@ function rowOf(value: unknown): StoredHistoryRow | null {
   return { at: value.at, action: value.action, add, remove, actor: value.actor }
 }
 
+const OUTCOME_KINDS: ReadonlySet<string> = new Set([
+  'applied',
+  'no-op',
+  'precondition-failed',
+  'terminal-owned',
+  'ownership-unreadable',
+  'unresolvable-label',
+  'item-unavailable',
+  'verify-failed',
+  'write-failed',
+  'state-unsaved',
+  'mirror-failed',
+])
+
+/** A failure whose outcome kind is unknown is dropped, never the item. */
+function mirrorFailureOf(value: unknown): MirrorFailure | null {
+  if (!isRecord(value) || typeof value.at !== 'string' || !isRecord(value.outcome)) return null
+  const kind = value.outcome.kind
+  if (typeof kind !== 'string' || !OUTCOME_KINDS.has(kind)) return null
+  return { at: value.at, outcome: value.outcome as unknown as WriteOutcome }
+}
+
 function itemOf(value: unknown): StoredItem | null {
   if (!isRecord(value)) return null
   if (value.kind !== 'issue' && value.kind !== 'pull-request') return null
@@ -56,7 +79,20 @@ function itemOf(value: unknown): StoredItem | null {
   if (typeof value.reviewCycles !== 'number' || typeof value.updatedAt !== 'string') return null
   if (value.claimedAt !== null && typeof value.claimedAt !== 'string') return null
   const history = value.history.map(rowOf).filter((row): row is StoredHistoryRow => row !== null)
-  return { kind: value.kind, number: value.number, keys, marked: value.marked, autoPlan: value.autoPlan, claimedAt: value.claimedAt, reviewCycles: value.reviewCycles, history, updatedAt: value.updatedAt }
+  const issue = typeof value.issue === 'number' && Number.isSafeInteger(value.issue) ? value.issue : null
+  return {
+    kind: value.kind,
+    number: value.number,
+    keys,
+    marked: value.marked,
+    autoPlan: value.autoPlan,
+    claimedAt: value.claimedAt,
+    reviewCycles: value.reviewCycles,
+    history,
+    updatedAt: value.updatedAt,
+    issue,
+    mirrorFailure: mirrorFailureOf(value.mirrorFailure),
+  }
 }
 
 function recordOf(value: unknown): RepoRecord | null {
@@ -97,6 +133,8 @@ export function seedFrom(state: Extract<RepositoryState, { readonly ok: true }>,
       reviewCycles: item.reviewCycleCount ?? 0,
       history,
       updatedAt: at,
+      issue: item.kind === 'pull-request' ? (item.linked) : null,
+      mirrorFailure: null,
     }
   }
   return { seededAt: at, heldBy: null, items }
@@ -129,7 +167,9 @@ export function transition(record: RepoRecord, ref: { readonly kind: PipelineIte
     if (IN_FLIGHT.has(key)) claimedAt = input.at
   }
 
-  const changed = existing === undefined || keys.length !== existing.keys.length || keys.some((k, i) => k !== existing.keys[i]) || marked !== existing.marked || autoPlan !== existing.autoPlan
+  const issue = ref.kind === 'pull-request' ? (existing?.issue ?? input.issue) : null
+  const changed =
+    existing === undefined || keys.length !== existing.keys.length || keys.some((k, i) => k !== existing.keys[i]) || marked !== existing.marked || autoPlan !== existing.autoPlan || issue !== existing.issue
   if (!changed) return { ok: true, item: existing, changed: false }
   const row: StoredHistoryRow = { at: input.at, action: input.action, add: input.add, remove: input.remove, actor: input.actor }
   const item: StoredItem = {
@@ -142,8 +182,24 @@ export function transition(record: RepoRecord, ref: { readonly kind: PipelineIte
     reviewCycles: (existing?.reviewCycles ?? 0) + (CYCLE_ACTIONS.has(input.action) ? 1 : 0),
     history: [...(existing?.history ?? []), row].slice(-HISTORY_CAP),
     updatedAt: input.at,
+    issue,
+    mirrorFailure: existing?.mirrorFailure ?? null,
   }
   return { ok: true, item, changed: true }
+}
+
+// A repeated failure keeps its first instant, so a retry that fails the same way is not a new event.
+function failureKeyOf(outcome: WriteOutcome): string {
+  return outcome.kind === 'write-failed' ? `write-failed|${outcome.classification}|${outcome.stderr}` : JSON.stringify(outcome)
+}
+
+/** The record unchanged when the item is missing or already holds this failure. */
+export function recordMirror(record: RepoRecord, ref: { readonly kind: PipelineItemKind; readonly number: number }, failure: MirrorFailure | null): RepoRecord {
+  const existing = record.items[itemKey(ref.kind, ref.number)]
+  if (existing === undefined) return record
+  const held = existing.mirrorFailure
+  const same = held === failure || (held !== null && failure !== null && failureKeyOf(held.outcome) === failureKeyOf(failure.outcome))
+  return same ? record : withItem(record, { ...existing, mirrorFailure: failure })
 }
 
 export function withItem(record: RepoRecord, item: StoredItem): RepoRecord {
