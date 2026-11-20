@@ -19,10 +19,10 @@ import { selectDispatches, survived } from '@/main/dispatch/select'
 import { budgetLiveSets, budgetRoute, escalateOverBudget, sumCostUsd } from '@/main/dispatch/budget'
 import { createStageHandoff } from '@/main/dispatch/handoff'
 import type { StageDenial } from '@/types/stage'
-import { boundRecords, endedStagesOf, freeSlots, refreshRecords } from '@/main/dispatch/launch'
-import type { PipelineItemKind, ResolvedItem } from '@/types/github'
-import type { StageWorktreeTarget } from '@/types/workspace'
+import { boundRecords, endedStagesOf, freeSlots, newStageRecord, refreshRecords, settlingDescriptions, targetOf } from '@/main/dispatch/launch'
+import type { ResolvedItem } from '@/types/github'
 import type { EndedStage, TickActionable } from '@/types/tick'
+import type { InterruptedStage } from '@/types/stage'
 import type { StagePlanFile } from '@/types/stage-labels'
 import type { StageOutcome } from '@/types/stage-session'
 import { reviewDispatchFacts } from '../../../../../scripts/port-tick/gates'
@@ -73,15 +73,6 @@ function emptyRepoState(): RepoDispatcherState {
   }
 }
 
-function targetOf(kind: PipelineItemKind, resolved: ResolvedItem | undefined): StageWorktreeTarget {
-  if (kind === 'pull-request') return { kind: 'pr', headRefName: resolved?.headRefName ?? null }
-  return { kind: 'issue', title: resolved?.title ?? '' }
-}
-
-function newStageRecord(candidate: TickActionable, state: 'started' | 'failed', at: string, sessionKey: SessionKey | null, detail: string | null): StageRecord {
-  return { sessionKey, agent: candidate.agent, number: candidate.number, kind: candidate.kind, trigger: candidate.trigger, state, at, detail, outcome: null, claudeSessionId: null, operatorJoinedAt: null }
-}
-
 function ownerOf(ownership: OwnershipRead): DispatchOwner {
   return ownership.kind === 'absent' ? 'none' : ownership.kind
 }
@@ -94,7 +85,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   let stopped = false
   // Serializes every repository's own launch section so two repositories never race for the same free slot.
   let launchQueue: Promise<void> = Promise.resolve()
-  const handoff = createStageHandoff({ write: deps.stageLabels.transition, auditDir: deps.dirs.audit, scratchDir: deps.dirs.scratch, onChange: deps.onChange, requestRead: deps.requestRead })
+  const handoff = createStageHandoff({ write: deps.stageLabels.transition, auditDir: deps.dirs.audit, scratchDir: deps.dirs.scratch, onChange: deps.onChange, requestRead: deps.requestRead, now: deps.now })
 
   function serialize<T>(fn: () => Promise<T>): Promise<T> {
     const result = launchQueue.then(fn)
@@ -145,7 +136,13 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     next[idx] = { ...existing, outcome }
     state.records = next
     deps.onChange()
+    // A newer session on the same ticket owns it now, so this older outcome writes no label.
+    if (next.some((r) => r.number === existing.number && r.state === 'started' && r.at > existing.at)) return
     handoff.settle(repoId, { ...existing, sessionKey }, outcome, plan)
+  }
+  /** A resumed session settles labels like a launched one; it joins the records as `started`. */
+  function trackResumed(repoId: RepoId, sessionKey: SessionKey, entry: InterruptedStage): void {
+    pushRecord(repoId, newStageRecord(entry, 'started', deps.now().toISOString(), sessionKey, null))
   }
   function recordResumedTurn(repoId: RepoId, sessionKey: SessionKey): void {
     const record = repoStates.get(repoId)?.records.find((r) => r.sessionKey === sessionKey)
@@ -201,7 +198,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       const state = stateFor(entry.id)
       state.ownedSince = ownership.kind === 'app' || ownership.kind === 'terminal' ? ownership.since : null
       state.unreadableMessage = ownership.kind === 'unreadable' ? ownership.message : null
-      state.records = refreshRecords(state.records, (sessionKey) => deps.store.snapshotOf(sessionKey))
+      state.records = refreshRecords(state.records, (sessionKey) => deps.store.snapshotOf(sessionKey), deps.now().toISOString())
 
       const anyLive = state.records.some((r) => r.state === 'started')
       if (entry.config.commands.budget !== null && (owner === 'app' || anyLive)) {
@@ -241,6 +238,9 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
         if (repoState !== undefined) {
           await runObservationPass(entry, observable, repoState, state, {
             writeObservation: deps.writeObservation,
+            transition: deps.stageLabels.transition,
+            rerunChecks: deps.rerunChecks,
+            rerunMemo: deps.rerunMemo,
             refreshMemo: deps.refreshMemo,
             dirs: deps.dirs,
             now: deps.now,
@@ -446,7 +446,8 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   }
   function stageLiveness(repoId: RepoId): { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null {
     if (stateFor(repoId).owner !== 'app') return null
-    return { live: liveStages(repoId), interrupted: (deps.interrupted?.(repoId) ?? []).map((i) => `${i.agent} #${String(i.number)}`) }
+    const settling = settlingDescriptions(repoStates.get(repoId)?.records ?? [], handoff.pendingNumbers(repoId), deps.now())
+    return { live: [...liveStages(repoId), ...settling], interrupted: (deps.interrupted?.(repoId) ?? []).map((i) => `${i.agent} #${String(i.number)}`) }
   }
   function endedStages(repoId: RepoId): readonly EndedStage[] {
     return endedStagesOf(repoStates.get(repoId)?.records ?? [], (sessionKey) => handoff.resultFor(sessionKey))
@@ -489,5 +490,5 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     stopped = true
   }
 
-  return { consider, status, stopFor, standDown, liveStages, stageLiveness, endedStages, liveStageSessions, shutdown, recordOutcome, recordResumedTurn, holdsSessionRequired, recordDenial, dismissDenial, clearDenialsFor }
+  return { consider, status, stopFor, standDown, liveStages, stageLiveness, endedStages, liveStageSessions, shutdown, recordOutcome, recordResumedTurn, trackResumed, holdsSessionRequired, recordDenial, dismissDenial, clearDenialsFor }
 }

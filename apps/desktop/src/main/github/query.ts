@@ -26,7 +26,7 @@ const ISSUE_SWEEP_FIELDS = `number title url body state updatedAt assignees(firs
 
 const BLOCKER_COMMENTS_FIELD = `comments(last: ${BLOCKER_COMMENT_PAGE_SIZE}) { nodes { body createdAt url } }`
 const CLOSING_PULL_REQUEST_PAGE_SIZE = 5
-const CLOSING_PULL_REQUESTS_FIELD = `closedByPullRequestsReferences(first: ${CLOSING_PULL_REQUEST_PAGE_SIZE}, includeClosedPrs: true) { nodes { number state } }`
+const CLOSING_PULL_REQUESTS_FIELD = `closedByPullRequestsReferences(first: ${CLOSING_PULL_REQUEST_PAGE_SIZE}, includeClosedPrs: true) { nodes { number state headRefName } }`
 
 // mergeable is the mergeability precondition mergeabilityRoute reads.
 const PULL_REQUEST_SWEEP_FIELDS = `${ISSUE_SWEEP_FIELDS} mergedAt headRefOid mergeable`

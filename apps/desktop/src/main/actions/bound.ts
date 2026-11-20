@@ -11,7 +11,8 @@ import { fetchClaimPreflight, fetchItemsByNumber } from '@/main/github/adapter'
 import { fetchGatePreflight } from '@/main/github/gate'
 import { listRepositories } from '@/main/registry'
 import { postComment, postIssueBody } from '@/main/writes/apply'
-import type { ApplyItemActionParams, ApplyItemDecisionParams, ApplyObservationParams, AutoApprovePlanParams, EscalateToHumanParams, GateAnswerParams, GatePreflightParams } from '@/types/actions'
+import { rerunChecks } from '@/main/actions/rerun'
+import type { ApplyItemActionParams, ApplyItemDecisionParams, ApplyObservationParams, AutoApprovePlanParams, EscalateToHumanParams, GateAnswerParams, GatePreflightParams, RerunChecksParams } from '@/types/actions'
 import type { ClaimDeps } from '@/types/claim'
 import type { StageLabelWrites } from '@/types/dispatch'
 import type { GateDeps } from '@/types/gate'
@@ -32,6 +33,7 @@ export function bindActions(state: { readonly writeState: WriteState; readonly s
     autoApprovePlan: (params: AutoApprovePlanParams) => autoApprovePlan(params, { writeState }),
     escalateToHuman: (params: EscalateToHumanParams) => escalateToHuman(params, { writeState, postComment }),
     applyObservation: (params: ApplyObservationParams) => applyObservation(params, { writeState, postComment }),
+    rerunChecks: (params: RerunChecksParams) => rerunChecks(params),
     stageLabels,
     claimDeps,
   }

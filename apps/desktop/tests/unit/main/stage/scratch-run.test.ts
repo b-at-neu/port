@@ -385,6 +385,8 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
         transition: (transitionParams) => applyStageTransition(transitionParams, writeDeps),
       },
       refreshMemo,
+      rerunMemo: { get: () => undefined, set: () => undefined },
+      rerunChecks: () => Promise.resolve('applied'),
       forceDispatch,
       requestRead: () => undefined,
       dirs: { audit: '/audit', scratch: '/scratch' },

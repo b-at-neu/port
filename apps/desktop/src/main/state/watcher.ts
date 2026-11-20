@@ -1,4 +1,4 @@
-import type { DispatchLedger, UnknownStreaks, RefreshMemo, ForceDispatch } from '@/types/tick'
+import type { DispatchLedger, UnknownStreaks, RefreshMemo, RerunMemo, ForceDispatch } from '@/types/tick'
 import type { PipelineState, RefreshOutcome, RepositoryState } from '@/types/state'
 import type { PipelineView, TrackedRef } from '@/types/pipeline-state'
 import type { StateEngine } from '@/types/offload'
@@ -61,6 +61,8 @@ interface CreatePipelineWatcherParams {
   readonly unknownStreaks?: UnknownStreaks
   /** Shared with the dispatcher's own observation pass, never a second instance that would disagree with what the dispatcher just wrote. */
   readonly refreshMemo?: RefreshMemo
+  /** Shared with the dispatcher's own observation pass, so one head's failed checks are re-run once. `undefined` never re-runs a check. */
+  readonly rerunMemo?: RerunMemo
   /** The Needs-you "Dispatch anyway" override — shared with the dispatcher's own consumption pass, never a second instance that would disagree on which entries are still live. */
   readonly forceDispatch?: ForceDispatch
   /** This repository's own dispatcher session's `started` tasks, as descriptions. `undefined` reads as `[]`. */
@@ -227,6 +229,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
           reviewCycleCap,
           startedTasks: startedTasks(repository.repoId),
           refreshMemo,
+          rerunMemo: params.rerunMemo,
           checkDispositions,
           holdSessionRequired: params.holdSessionRequired?.(repository.repoId) ?? true,
           stageLiveness: params.stageLiveness?.(repository.repoId) ?? null,

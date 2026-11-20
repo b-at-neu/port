@@ -85,6 +85,8 @@ function harness(overrides: Partial<CreateDispatcherParams> = {}) {
     },
     ledger: { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined, observeUnmatched: () => ({ class: 'no-record' }) },
     refreshMemo: { get: () => undefined, set: vi.fn(), clear: vi.fn() },
+    rerunMemo: { get: () => undefined, set: vi.fn() },
+    rerunChecks: () => Promise.resolve('applied'),
     forceDispatch: { has: () => false, set: vi.fn(), clear: vi.fn(), prune: vi.fn() },
     writeObservation: () => {
       throw new Error('writeObservation should not be invoked')

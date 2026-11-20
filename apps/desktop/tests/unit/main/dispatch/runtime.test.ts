@@ -16,6 +16,7 @@ const ACTIONS: DispatchActions = {
   stageLabels: { claim: () => Promise.resolve({ kind: 'applied' }), transition: () => Promise.resolve({ kind: 'applied' }) },
   escalateToHuman: () => Promise.reject(new Error('unused')),
   applyObservation: () => Promise.reject(new Error('unused')),
+  rerunChecks: () => Promise.reject(new Error('unused')),
   autoApprovePlan: () => Promise.reject(new Error('unused')),
 }
 

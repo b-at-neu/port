@@ -401,7 +401,7 @@ describe('fetchPipelineItems — details', () => {
     const detailDocument = documents.find((document) => document.includes('d0:')) ?? ''
     expect(detailDocument.split('\n').find((line) => line.includes('d0:'))).toContain('closedByPullRequestsReferences')
     expect(detailDocument.split('\n').find((line) => line.includes('d1:'))).not.toContain('closedByPullRequestsReferences')
-    expect(result.items[0]?.closingPullRequests).toEqual([{ number: 9, state: 'MERGED' }])
+    expect(result.items[0]?.closingPullRequests).toEqual([{ number: 9, state: 'MERGED', headRefName: null }])
     expect(result.items[1]?.closingPullRequests).toBeNull()
   })
 

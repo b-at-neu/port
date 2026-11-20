@@ -14,6 +14,8 @@ export type StageEvent =
   | { readonly kind: 'claim' }
   | { readonly kind: 'rollback' }
   | { readonly kind: 'resumed-turn' }
+  /** A hand-back the finished work already implies, read from GitHub rather than from a session. */
+  | { readonly kind: 'adopt'; readonly handback: StageHandback }
   /** `plan` is `null` for every outcome except a completed `plan-written`. */
   | { readonly kind: 'outcome'; readonly outcome: StageOutcomeKind; readonly handback: StageHandback | null; readonly plan: StagePlanFile | null }
 

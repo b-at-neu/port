@@ -203,6 +203,14 @@ export interface ApplyObservationParams {
   readonly scratchDir: string
 }
 
+/** Re-runs the failed jobs of each named Actions run; `failed` when any one re-run did not start. */
+export interface RerunChecksParams {
+  readonly entry: ReadyEntry
+  readonly number: number
+  readonly runs: readonly { readonly check: string; readonly runId: string }[]
+  readonly auditDir: string
+}
+
 export interface RecoverPausedTriggerParams {
   readonly auditDir: string
   readonly repo: string

@@ -184,6 +184,15 @@ export function stalledDetailCopy(claim: TickClaim, owner: DispatchOwner = 'none
   }
 }
 
+/** The phase an adopted hand-back lands on, keyed `<agent>:<token>`. */
+const ADOPTED_PHASE: Readonly<Record<string, string>> = {
+  'plan:plan-written': 'Plan review',
+  'impl:pr-opened': 'Waiting for review',
+  'review:approved': 'Ready to merge',
+  'review:needs-revision': 'Needs revision',
+  'revise:revised': 'Waiting for review',
+}
+
 /** #292: hover detail for the one report-only observation kind —
  *  `refresh-deferred` — which never becomes an `ObservationRecord` write
  *  (`main/tick/dispatchable.ts`'s `observableFrom` excludes it), so this is
@@ -196,6 +205,10 @@ export function observationDetailCopy(observation: TickObservation): string | nu
   switch (observation.kind) {
     case 'refresh-deferred':
       return `#${n} conflicts too — refreshes are capped this poll; it goes next.`
+    case 'adopt':
+      return `#${n} already finished on GitHub — moving it to ${ADOPTED_PHASE[`${observation.agent}:${observation.handback.token}`] ?? 'its next stage'}.`
+    case 'rerun-checks':
+      return `#${n} re-running ${observation.runs.map((run) => run.check).join(', ')} on the reviewed head before reviewing again.`
     case 'liveness-reset':
     case 'cycle-cap':
     case 'zero-diff':

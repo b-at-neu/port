@@ -142,9 +142,12 @@ describe('applyItemDetails', () => {
   })
 
   it('maps closing pull requests, drops a malformed node, and reads null when absent or errored', () => {
-    const closed = { nodes: [{ number: 669, state: 'MERGED' }, { number: 'x', state: 'MERGED' }, { number: 670, state: 'WEIRD' }] }
+    const closed = { nodes: [{ number: 669, state: 'MERGED', headRefName: '669-fix' }, { number: 'x', state: 'MERGED' }, { number: 670, state: 'WEIRD' }, { number: 671, state: 'OPEN' }] }
     const selected = applyItemDetails(mapIssues([issueNode()]), [{ kind: 'issue', number: 1, node: { closedByPullRequestsReferences: closed }, erroredFields: [] }])
-    expect(selected[0]?.closingPullRequests).toEqual([{ number: 669, state: 'MERGED' }])
+    expect(selected[0]?.closingPullRequests).toEqual([
+      { number: 669, state: 'MERGED', headRefName: '669-fix' },
+      { number: 671, state: 'OPEN', headRefName: null },
+    ])
     expect(applyItemDetails(mapIssues([issueNode()]), [{ kind: 'issue', number: 1, node: { closedByPullRequestsReferences: { nodes: [] } }, erroredFields: [] }])[0]?.closingPullRequests).toEqual([])
     expect(applyItemDetails(mapIssues([issueNode()]), [{ kind: 'issue', number: 1, node: {}, erroredFields: [] }])[0]?.closingPullRequests).toBeNull()
     expect(applyItemDetails(mapIssues([issueNode()]), [{ kind: 'issue', number: 1, node: { closedByPullRequestsReferences: null }, erroredFields: ['closedByPullRequestsReferences'] }])[0]?.closingPullRequests).toBeNull()

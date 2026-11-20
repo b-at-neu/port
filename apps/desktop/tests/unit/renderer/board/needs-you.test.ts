@@ -50,6 +50,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     planPresent: null,
     blockers: null,
     blockerComments: null,
+    closingPullRequests: null,
     ...overrides,
   }
 }

@@ -44,6 +44,7 @@ export function reconciledItem(overrides: Partial<ReconciledItem> = {}): Reconci
     planPresent: null,
     blockers: null,
     blockerComments: null,
+    closingPullRequests: null,
     ...overrides,
   }
 }

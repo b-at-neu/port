@@ -1,10 +1,10 @@
-import type { DispatchLedger, UnknownStreaks, RefreshMemo, ForceDispatch } from '@/types/tick'
+import type { DispatchLedger, UnknownStreaks, RefreshMemo, RerunMemo, ForceDispatch } from '@/types/tick'
 import type { Dispatcher, AutoPlanner, CreateDispatcherParams, AutoPlannerDeps, DispatchActions } from '@/types/dispatch'
 import type { PipelineWatcher } from '@/types/state'
 
 // Bundles the dispatch loop's own process-lifetime state so main/ipc.ts creates one thing
 // instead of wiring several by hand.
-import { createDispatchLedger, createForceDispatch, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
+import { createDispatchLedger, createForceDispatch, createRefreshMemo, createRerunMemo, createUnknownStreaks } from '@/main/tick/ledger'
 
 import type { RepoId } from '@/utils/repos'
 import type { RepoDispatchStatus } from '@/types/dispatch'
@@ -22,6 +22,7 @@ interface WatcherDeps {
   readonly ledger: DispatchLedger
   readonly unknownStreaks: UnknownStreaks
   readonly refreshMemo: RefreshMemo
+  readonly rerunMemo: RerunMemo
   readonly forceDispatch: ForceDispatch
   readonly startedTasks: (repoId: RepoId) => readonly string[]
   readonly dispatchStatus: () => readonly RepoDispatchStatus[]
@@ -35,6 +36,7 @@ interface DispatchRuntime {
   readonly ledger: DispatchLedger
   readonly unknownStreaks: UnknownStreaks
   readonly refreshMemo: RefreshMemo
+  readonly rerunMemo: RerunMemo
   readonly dispatcher: Dispatcher
   readonly forceDispatch: ForceDispatch
   /** The auto-plan swap's own snapshot consumer, gated on this app owning the repository. */
@@ -46,7 +48,7 @@ interface DispatchRuntime {
   readonly shutdown: () => void
 }
 
-type RuntimeDeps = Omit<CreateDispatcherParams, 'ledger' | 'onChange' | 'budget' | 'escalate' | 'writeObservation' | 'stageLabels' | 'refreshMemo' | 'forceDispatch' | 'requestRead' | 'denials'> & { readonly actions: DispatchActions }
+type RuntimeDeps = Omit<CreateDispatcherParams, 'ledger' | 'onChange' | 'budget' | 'escalate' | 'writeObservation' | 'rerunChecks' | 'rerunMemo' | 'stageLabels' | 'refreshMemo' | 'forceDispatch' | 'requestRead' | 'denials'> & { readonly actions: DispatchActions }
 
 export function createDispatchRuntime({ actions, ...deps }: RuntimeDeps): DispatchRuntime {
   const denials = createStageDenialStore({ path: join(deps.dirs.audit, 'stage-denials.json'), readJson: readJsonFile, writeJsonAtomic: writeJsonFileAtomic })
@@ -54,11 +56,12 @@ export function createDispatchRuntime({ actions, ...deps }: RuntimeDeps): Dispat
   const ledger = createDispatchLedger()
   const unknownStreaks = createUnknownStreaks()
   const refreshMemo = createRefreshMemo()
+  const rerunMemo = createRerunMemo()
   const forceDispatch = createForceDispatch()
   let bound: Pick<PipelineWatcher, 'republish' | 'refresh'> | null = null
   // A failed read is retried by the scheduled poll, so it is never surfaced here.
   const requestRead = (repoId: RepoId): void => void bound?.refresh({ repoId, source: 'github' }).catch(() => undefined)
-  const dispatcher = createDispatcher({ ...deps, denials, ledger, refreshMemo, forceDispatch, requestRead, budget: createBudgetGate({ scratchDir: deps.dirs.scratch }), escalate: actions.escalateToHuman, writeObservation: actions.applyObservation, stageLabels: actions.stageLabels, onChange: () => bound?.republish() })
+  const dispatcher = createDispatcher({ ...deps, denials, ledger, refreshMemo, rerunMemo, rerunChecks: actions.rerunChecks, forceDispatch, requestRead, budget: createBudgetGate({ scratchDir: deps.dirs.scratch }), escalate: actions.escalateToHuman, writeObservation: actions.applyObservation, stageLabels: actions.stageLabels, onChange: () => bound?.republish() })
   const autoPlannerDeps: AutoPlannerDeps = {
     listRepositories: deps.listRepositories,
     registryDeps: deps.registryDeps,
@@ -75,6 +78,7 @@ export function createDispatchRuntime({ actions, ...deps }: RuntimeDeps): Dispat
     ledger,
     unknownStreaks,
     refreshMemo,
+    rerunMemo,
     dispatcher,
     forceDispatch,
     autoPlanner,
@@ -82,6 +86,7 @@ export function createDispatchRuntime({ actions, ...deps }: RuntimeDeps): Dispat
       ledger,
       unknownStreaks,
       refreshMemo,
+      rerunMemo,
       forceDispatch,
       startedTasks: (repoId) => dispatcher.liveStages(repoId),
       dispatchStatus: () => dispatcher.status(),
