@@ -122,7 +122,7 @@ export function createStageSweeper(registryDeps: RegistryDeps, deps: StageChanne
     resume: (id) => resolveStageResume(registryDeps, { id }, deps),
     restart: (id) => resolveStageRestart(registryDeps, { id }, deps),
     liveWorktreePaths: () => deps.store.list().flatMap((snapshot) => (snapshot.phase !== 'ended' && snapshot.workspace.worktree !== null ? [snapshot.workspace.worktree.path] : [])),
-    samePath: pathOps.samePath,
+    samePath: (a, b) => pathOps.samePath(a, b),
     now: () => new Date(),
     ...hooks,
   })

@@ -55,7 +55,7 @@ async function run(text: string) {
     onResumedTurn: vi.fn(),
     onResumed: vi.fn(),
     pathExists: () => Promise.resolve(false),
-    registry: registry as never,
+    registry,
     onDenial: vi.fn(),
     newId: () => 'id-1',
     loadInstructions: vi.fn().mockResolvedValue({ ok: true, text: 'go', agent: { name: 'impl-agent', definition: { description: 'impl', prompt: 'body' } } }),
