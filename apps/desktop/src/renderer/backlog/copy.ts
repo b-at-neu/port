@@ -96,10 +96,6 @@ export function backlogWaveLabel(number: number): string {
   return `Wave ${String(number)}`
 }
 
-export function backlogWaveBandCopy(number: number, inProgress: number): string {
-  return `${backlogWaveLabel(number)} · ${String(inProgress)} in progress`
-}
-
 export function backlogEpicProgressCopy(done: number, total: number, inProgress: number): string {
   const base = `${String(done)}/${String(total)}`
   return inProgress > 0 ? `${base} · ${String(inProgress)} in progress` : base

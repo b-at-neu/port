@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { BacklogChild, BacklogEpicGroup, BacklogRowView, ChildBlockerRead, ChildrenRead, ParentRead } from '@/types/backlog'
 import type { BlockerRead } from '@/types/github'
-import { buildEpicLayout, epicProgressSegments, isEpic } from '@/renderer/backlog/epics'
+import { buildEpicLayout, epicBodyEntries, epicProgressSegments, isEpic } from '@/renderer/backlog/epics'
 
 const REPO_ID = 'repo-a' as RepoId
 const NO_LINKS: BlockerRead = { ok: true, open: [], shown: 0, total: 0 }
@@ -225,21 +225,13 @@ describe('buildEpicLayout', () => {
     })
   })
 
-  it('counts a claimed child in its wave and lets it block a later wave', () => {
+  it('hides a claimed child wave but lets it block a later wave', () => {
     const children = [child(2, { claimed: true }), child(3, { blockers: blockedBy(2) })]
     const rows = [epicRow(1, children), memberRow(3, 1)]
     const group = epicsOf(buildEpicLayout(rows))[0]!
-    expect(group.waves[0]).toMatchObject({ number: 1, rows: [], inProgress: 1, unlisted: 0, inProgressOnly: true })
-    expect(waveNumbers(group)).toEqual([[], [3]])
+    expect(waveNumbers(group)).toEqual([[3]])
+    expect(group.waves.map((w) => w.number)).toEqual([2])
     expect(summaryOf(group).canStart).toEqual([])
-  })
-
-  it('does not mark a wave in-progress-only when it also holds a row', () => {
-    const children = [child(2, { claimed: true }), child(3)]
-    const rows = [epicRow(1, children), memberRow(3, 1)]
-    const wave = epicsOf(buildEpicLayout(rows))[0]!.waves[0]!
-    expect(wave).toMatchObject({ inProgress: 1, inProgressOnly: false })
-    expect(wave.rows.map((r) => r.number)).toEqual([3])
   })
 
   it('ignores a blocker outside the epic for wave placement but never offers the child to start', () => {
@@ -315,17 +307,111 @@ describe('buildEpicLayout', () => {
     expect(rowsOf(layout).map((r) => r.number)).toEqual([3, 4, 5])
   })
 
-  it('makes a nested epic its own group, counts it as unlisted, and never duplicates it', () => {
-    const inner = epicRow(2, [child(3)], { parent: { ok: true, parent: { number: 1, title: 'Epic 1', state: 'OPEN' } } })
-    const outer = epicRow(1, [child(2), child(4)])
-    const rows = [outer, inner, memberRow(3, 2), memberRow(4, 1)]
-    const layout = buildEpicLayout(rows)
-    const epics = epicsOf(layout)
-    expect(epics.map((g) => g.epic.number)).toEqual([1, 2])
-    expect(epics[0]!.waves[0]).toMatchObject({ unlisted: 1 })
-    expect(waveNumbers(epics[0]!)).toEqual([[4]])
-    expect(waveNumbers(epics[1]!)).toEqual([[3]])
-    expect(rowsOf(layout)).toEqual([])
+  describe('nested epics', () => {
+    const nestedEpic = (number: number, children: readonly BacklogChild[], parent: number) => epicRow(number, children, { parent: { ok: true, parent: { number: parent, title: `Epic ${parent}`, state: 'OPEN' } } })
+
+    it('nests instead of making a top-level group', () => {
+      const rows = [epicRow(1, [child(2), child(20)]), memberRow(2, 1), nestedEpic(20, [child(21)], 1), memberRow(21, 20)]
+      const layout = buildEpicLayout(rows)
+      const epics = epicsOf(layout)
+      expect(epics).toHaveLength(1)
+      expect(epics[0]!.epics.map((g) => g.epic.number)).toEqual([20])
+      expect(waveNumbers(epics[0]!)).toEqual([[2]])
+      expect(waveNumbers(epics[0]!.epics[0]!)).toEqual([[21]])
+      expect(rowsOf(layout)).toEqual([])
+    })
+
+    it('continues numbering through a nested epic', () => {
+      const parent = epicRow(1, [child(2), child(20, { blockers: blockedBy(2) }), child(3, { blockers: blockedBy(20) })])
+      const inner = nestedEpic(20, [child(21), child(22, { blockers: blockedBy(21) })], 1)
+      const group = epicsOf(buildEpicLayout([parent, memberRow(2, 1), inner, memberRow(21, 20), memberRow(22, 20), memberRow(3, 1)]))[0]!
+      expect(group.waves.map((w) => ({ number: w.number, rows: w.rows.map((r) => r.number) }))).toEqual([
+        { number: 1, rows: [2] },
+        { number: 4, rows: [3] },
+      ])
+      const nested = group.epics[0]!
+      expect(nested.start).toBe(2)
+      expect(nested.waves.map((w) => ({ number: w.number, rows: w.rows.map((r) => r.number) }))).toEqual([
+        { number: 2, rows: [21] },
+        { number: 3, rows: [22] },
+      ])
+    })
+
+    it('shares the nested epic first number with a parallel ticket', () => {
+      const parent = epicRow(1, [child(2), child(20, { blockers: blockedBy(2) }), child(3, { blockers: blockedBy(20) }), child(4, { blockers: blockedBy(2) })])
+      const inner = nestedEpic(20, [child(21)], 1)
+      const group = epicsOf(buildEpicLayout([parent, memberRow(2, 1), inner, memberRow(21, 20), memberRow(3, 1), memberRow(4, 1)]))[0]!
+      const order = epicBodyEntries(group).map((entry) => (entry.kind === 'wave' ? `w${entry.wave.number}` : `e${entry.group.epic.number}`))
+      expect(order).toEqual(['w1', 'w2', 'e20', 'w3'])
+    })
+
+    it('stays stable across a merge inside the nested epic', () => {
+      const parent = epicRow(1, [child(2), child(20, { blockers: blockedBy(2) }), child(3, { blockers: blockedBy(20) })])
+      const closedInner = nestedEpic(20, [child(21, { state: 'CLOSED' }), child(22, { blockers: closedBlockedBy(21) })], 1)
+      const group = epicsOf(buildEpicLayout([parent, memberRow(2, 1), closedInner, memberRow(22, 20), memberRow(3, 1)]))[0]!
+      expect(group.epics[0]!.waves.map((w) => w.number)).toEqual([3])
+      expect(group.waves.map((w) => w.number)).toEqual([1, 4])
+    })
+
+    it('accumulates offsets over three levels', () => {
+      const rows = [
+        epicRow(1, [child(2), child(10, { blockers: blockedBy(2) })]),
+        memberRow(2, 1),
+        nestedEpic(10, [child(11), child(20, { blockers: blockedBy(11) })], 1),
+        memberRow(11, 10),
+        nestedEpic(20, [child(21)], 10),
+        memberRow(21, 20),
+      ]
+      const root = epicsOf(buildEpicLayout(rows))[0]!
+      const innermost = root.epics[0]!.epics[0]!
+      expect(innermost.start).toBe(3)
+      expect(innermost.waves.map((w) => w.number)).toEqual([3])
+    })
+
+    it('counts a nested epic once in the parent progress and never offers it to start', () => {
+      const rows = [epicRow(1, [child(2), child(20)]), memberRow(2, 1), nestedEpic(20, [child(21)], 1), memberRow(21, 20)]
+      const summary = summaryOf(epicsOf(buildEpicLayout(rows))[0]!)
+      expect(summary).toMatchObject({ total: 2, open: 2 })
+      expect(summary.canStart.map((c) => c.number)).toEqual([2])
+    })
+
+    it('places a parent-named epic missing from a truncated read after the last wave', () => {
+      const parent = row(1, { subIssueCount: 5, children: { ok: true, children: [child(2)], shown: 1, total: 5 } })
+      const group = epicsOf(buildEpicLayout([parent, memberRow(2, 1), nestedEpic(30, [child(31)], 1), memberRow(31, 30)]))[0]!
+      expect(group.epics[0]!.start).toBe(2)
+    })
+
+    it('places a parent-named epic at 1 when the parent read failed', () => {
+      const parent = row(1, { subIssueCount: 2, children: { ok: false, reason: 'nope' } })
+      const group = epicsOf(buildEpicLayout([parent, nestedEpic(30, [child(31)], 1), memberRow(31, 30)]))[0]!
+      expect(group.epics[0]!.start).toBe(1)
+    })
+
+    it('drops a nested epic with nothing shown and keeps a parent whose only content is a nested epic', () => {
+      const rows = [epicRow(1, [child(2), child(20)]), memberRow(2, 1), nestedEpic(20, [child(21)], 1), memberRow(21, 20)]
+      expect(epicsOf(buildEpicLayout(rows, new Set([2])))[0]!.epics).toEqual([])
+      expect(epicsOf(buildEpicLayout(rows, new Set([21])))[0]!.epics.map((g) => g.epic.number)).toEqual([20])
+    })
+
+    it('terminates on two epics listing each other and builds each once', () => {
+      const rows = [epicRow(1, [child(2)]), epicRow(2, [child(1)])]
+      const epics = epicsOf(buildEpicLayout(rows))
+      const seen = (group: BacklogEpicGroup): number[] => [group.epic.number, ...group.epics.flatMap(seen)]
+      expect(epics.flatMap(seen).sort()).toEqual([1, 2])
+    })
+
+    it('propagates wavesMayShift from a nested epic', () => {
+      const inner = row(20, { subIssueCount: 5, children: { ok: true, children: [child(21)], shown: 1, total: 5 }, parent: { ok: true, parent: { number: 1, title: 'Epic 1', state: 'OPEN' } } })
+      const group = epicsOf(buildEpicLayout([epicRow(1, [child(20)]), inner, memberRow(21, 20)]))[0]!
+      expect(summaryOf(group).wavesMayShift).toBe(true)
+    })
+
+    it('ignores the filter when computing a span', () => {
+      const parent = epicRow(1, [child(20), child(3, { blockers: blockedBy(20) })])
+      const inner = nestedEpic(20, [child(21), child(22, { blockers: blockedBy(21) })], 1)
+      const group = epicsOf(buildEpicLayout([parent, inner, memberRow(21, 20), memberRow(22, 20), memberRow(3, 1)], new Set([22, 3])))[0]!
+      expect(group.waves.map((w) => w.number)).toEqual([3])
+    })
   })
 
   it('summarises done, in-progress, open, total and canStart in children order', () => {
@@ -337,12 +423,11 @@ describe('buildEpicLayout', () => {
   })
 
   describe('shown', () => {
-    it('keeps wave numbers when a member is hidden and counts it as unlisted', () => {
+    it('keeps wave numbers when a member is hidden', () => {
       const children = [child(2), child(3, { blockers: blockedBy(2) })]
       const rows = [epicRow(1, children), memberRow(2, 1), memberRow(3, 1)]
       const group = epicsOf(buildEpicLayout(rows, new Set([1, 3])))[0]!
-      expect(group.waves.map((w) => w.number)).toEqual([1, 2])
-      expect(group.waves[0]).toMatchObject({ rows: [], unlisted: 1, inProgressOnly: false })
+      expect(group.waves.map((w) => w.number)).toEqual([2])
       expect(summaryOf(group).canStart.map((c) => c.number)).toEqual([2])
     })
 

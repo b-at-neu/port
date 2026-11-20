@@ -37,7 +37,7 @@ async function selectedNumber(page: E2EApp['page']): Promise<string | null> {
   return selected.getAttribute('data-row-key')
 }
 
-test('renders the epic as waves with a band, then the flat rows', async () => {
+test('renders the epic as waves, hiding an in-progress-only wave', async () => {
   const { page } = harness
   await page.getByRole('link', { name: 'Backlog', exact: true }).click()
 
@@ -57,9 +57,8 @@ test('renders the epic as waves with a band, then the flat rows', async () => {
   await expect(page.getByRole('tooltip')).toHaveCount(0)
 
   await expect(epic.locator('[data-slot="backlog-wave"][data-wave="1"] [data-slot="backlog-row"]')).toContainText('#201')
-  const band = epic.locator('[data-slot="backlog-wave-band"]')
-  await expect(band).toHaveText('Wave 2 · 1 in progress')
-  await expect(band.locator('[data-slot="backlog-row"]')).toHaveCount(0)
+  await expect(epic.locator('[data-slot="backlog-wave"][data-wave="2"]')).toHaveCount(0)
+  await expect(page.locator('[data-slot="backlog-wave-band"]')).toHaveCount(0)
 
   const waveThree = epic.locator('[data-slot="backlog-wave"][data-wave="3"]')
   await expect(waveThree.locator('[data-slot="backlog-row"]')).toContainText('#203')

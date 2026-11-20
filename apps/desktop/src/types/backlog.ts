@@ -114,17 +114,14 @@ export interface BacklogRowView {
   readonly children: ChildrenRead
 }
 
-// `unlisted` counts open unclaimed members not rendered in `rows`; `inProgressOnly` is true when only claimed members remain.
+// A wave exists only when it lists at least one row.
 export interface BacklogWave {
   readonly number: number
   readonly rows: readonly BacklogRowView[]
-  readonly inProgress: number
-  readonly unlisted: number
-  readonly inProgressOnly: boolean
 }
 
 // Wave numbers come from the whole child graph, closed children included; `wavesMayShift` is set when that graph was read incompletely.
-// `uncertain` members have an order built from incomplete blocker data; `cycles` members block each other.
+// `uncertain` members have an incomplete order and `cycles` members block each other; a child epic counts once and is never in `canStart`.
 export type BacklogEpicSummary =
   | {
       readonly ok: true
@@ -141,12 +138,19 @@ export type BacklogEpicSummary =
   | { readonly ok: false; readonly reason: string }
 
 // `unplaced` rows name the epic as parent but are not in its children read.
+// `start` is the first wave number the epic occupies (1 for a root); `epics` are its nested child epics.
 export interface BacklogEpicGroup {
   readonly epic: BacklogRowView
+  readonly start: number
   readonly waves: readonly BacklogWave[]
+  readonly epics: readonly BacklogEpicGroup[]
   readonly unplaced: readonly BacklogRowView[]
   readonly summary: BacklogEpicSummary
 }
+
+export type BacklogEpicBodyEntry =
+  | { readonly kind: 'wave'; readonly wave: BacklogWave }
+  | { readonly kind: 'epic'; readonly group: BacklogEpicGroup }
 
 export interface BacklogLinkView {
   readonly number: number

@@ -36,7 +36,6 @@ test('starts at Wave 2 when the first wave is closed, and shows no uncertainty n
   await expect(epic).toBeVisible()
 
   await expect(epic.locator('[data-slot="backlog-wave"][data-wave="1"]')).toHaveCount(0)
-  await expect(epic.locator('[data-slot="backlog-wave-band"][data-wave="1"]')).toHaveCount(0)
   await expect(epic.locator('[data-slot="backlog-wave"][data-wave="2"] [data-slot="backlog-row"]')).toContainText('#302')
   await expect(epic.locator('[data-slot="backlog-wave"][data-wave="3"] [data-slot="backlog-row"]')).toContainText('#303')
   await expect(epic.locator('[data-slot="backlog-wave-note"]')).toHaveCount(0)

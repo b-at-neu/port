@@ -16,18 +16,28 @@ function loaded(repoId: RepoId, numbers: readonly number[], layout: BacklogEpicL
   return { kind: 'loaded', repoId, repo: String(repoId), items: numbers.map((n) => row(repoId, n)), totalCount: numbers.length, labelOptions: [], truncatedNote: null, layout }
 }
 
-function wave(number: number, rows: BacklogRowView[], inProgressOnly = false): BacklogWave {
-  return { number, rows, inProgress: inProgressOnly ? 1 : 0, unlisted: 0, inProgressOnly }
+function wave(number: number, rows: BacklogRowView[]): BacklogWave {
+  return { number, rows }
 }
 
-function epic(repoId: RepoId, number: number, waves: BacklogWave[], unplaced: BacklogRowView[] = []): BacklogEpicGroup {
-  return { epic: row(repoId, number), waves, unplaced, summary: { ok: false, reason: 'x' } }
+function epic(repoId: RepoId, number: number, waves: BacklogWave[], unplaced: BacklogRowView[] = [], epics: BacklogEpicGroup[] = [], start = 1): BacklogEpicGroup {
+  return { epic: row(repoId, number), start, waves, epics, unplaced, summary: { ok: false, reason: 'x' } }
 }
 
 const EPIC_LAYOUT: BacklogEpicLayout = {
   entries: [
     { kind: 'row', row: row(A, 120) },
-    { kind: 'epic', group: epic(A, 100, [wave(1, [row(A, 101)]), wave(2, [], true), wave(3, [row(A, 103)])], [row(A, 104)]) },
+    { kind: 'epic', group: epic(A, 100, [wave(1, [row(A, 101)]), wave(3, [row(A, 103)])], [row(A, 104)]) },
+    { kind: 'row', row: row(A, 110) },
+  ],
+}
+
+const NESTED_LAYOUT: BacklogEpicLayout = {
+  entries: [
+    {
+      kind: 'epic',
+      group: epic(A, 100, [wave(1, [row(A, 101)]), wave(4, [row(A, 103)])], [], [epic(A, 200, [wave(2, [row(A, 201)]), wave(3, [row(A, 202)])], [], [], 2)]),
+    },
     { kind: 'row', row: row(A, 110) },
   ],
 }
@@ -88,9 +98,21 @@ describe('navigableRows', () => {
     expect(navigableRows(groups, new Set(), none).map((r) => r.number)).toEqual([9])
   })
 
-  it('walks entries in order, an epic then its wave rows and unplaced rows, skipping band-only waves', () => {
+  it('walks entries in order, an epic then its wave rows and unplaced rows', () => {
     const groups = [loaded(A, [], EPIC_LAYOUT)]
     expect(navigableRows(groups, new Set(), none).map((r) => r.number)).toEqual([120, 100, 101, 103, 104, 110])
+  })
+
+  it('walks a nested epic in body order', () => {
+    expect(navigableRows([loaded(A, [], NESTED_LAYOUT)], new Set(), none).map((r) => r.number)).toEqual([100, 101, 200, 201, 202, 103, 110])
+  })
+
+  it('contributes only the row for a collapsed nested epic', () => {
+    expect(navigableRows([loaded(A, [], NESTED_LAYOUT)], new Set(), new Set([rowKey(A, 200)])).map((r) => r.number)).toEqual([100, 101, 200, 103, 110])
+  })
+
+  it('hides a nested epic with its collapsed parent', () => {
+    expect(navigableRows([loaded(A, [], NESTED_LAYOUT)], new Set(), new Set([rowKey(A, 100)])).map((r) => r.number)).toEqual([100, 110])
   })
 
   it('contributes only the epic row for a collapsed epic, in the middle of the list', () => {

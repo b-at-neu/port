@@ -50,17 +50,61 @@ const CHILD_BLOCKED_BY_39: ChildBlockerRead = {
   total: 1,
 }
 
-// The notification epic's sub-issues: one done, one claimed and blocked by the done one (so it sits in Wave 2), one open and waiting on the claimed one (Wave 3).
+const CHILD_BLOCKED_BY_43: ChildBlockerRead = {
+  ok: true,
+  open: [{ number: 43, title: 'Rate-limit the public search endpoint', url: 'https://github.com/acme/widgets/issues/43', state: 'OPEN' }],
+  closed: [],
+  shown: 1,
+  total: 1,
+}
+
+const CHILD_BLOCKED_BY_49: ChildBlockerRead = {
+  ok: true,
+  open: [{ number: 49, title: 'Batch digest emails by hour', url: 'https://github.com/acme/widgets/issues/49', state: 'OPEN' }],
+  closed: [],
+  shown: 1,
+  total: 1,
+}
+
+// The notification epic's sub-issues: one done, one claimed and blocked by the done one (Wave 2, hidden as it has nothing to list), one open and waiting on the claimed one (Wave 3), and a child epic waiting on that one (Waves 4 and 5).
 const EPIC_41_CHILDREN: ChildrenRead = {
   ok: true,
   children: [
     { number: 38, title: 'Audit the current notification channels', state: 'CLOSED', claimed: false, blockers: CHILD_UNBLOCKED },
     { number: 39, title: 'Migrate stored notification preferences', state: 'OPEN', claimed: true, blockers: CHILD_BLOCKED_BY_CLOSED_38 },
     { number: 43, title: 'Rate-limit the public search endpoint', state: 'OPEN', claimed: false, blockers: CHILD_BLOCKED_BY_39 },
+    { number: 48, title: 'Send notification digests', state: 'OPEN', claimed: false, blockers: CHILD_BLOCKED_BY_43 },
   ],
-  shown: 3,
-  total: 3,
+  shown: 4,
+  total: 4,
 }
+
+const EPIC_48_CHILDREN: ChildrenRead = {
+  ok: true,
+  children: [
+    { number: 49, title: 'Batch digest emails by hour', state: 'OPEN', claimed: false, blockers: CHILD_UNBLOCKED },
+    { number: 50, title: 'Add a digest frequency setting', state: 'OPEN', claimed: false, blockers: CHILD_BLOCKED_BY_49 },
+  ],
+  shown: 2,
+  total: 2,
+}
+
+const BLOCKED_BY_43_ONLY: BlockerRead = {
+  ok: true,
+  open: [{ number: 43, title: 'Rate-limit the public search endpoint', url: 'https://github.com/acme/widgets/issues/43', state: 'OPEN' }],
+  shown: 1,
+  total: 1,
+}
+
+const BLOCKED_BY_49: BlockerRead = {
+  ok: true,
+  open: [{ number: 49, title: 'Batch digest emails by hour', url: 'https://github.com/acme/widgets/issues/49', state: 'OPEN' }],
+  shown: 1,
+  total: 1,
+}
+
+const PARENT_41: ParentRead = { ok: true, parent: { number: 41, title: 'Overhaul the notification settings', state: 'OPEN' } }
+const PARENT_48: ParentRead = { ok: true, parent: { number: 48, title: 'Send notification digests', state: 'OPEN' } }
 
 function offsetHours(now: Date, hours: number): string {
   return new Date(now.getTime() - hours * 60 * 60_000).toISOString()
@@ -99,7 +143,7 @@ export function fixtureBacklog(now: Date, repoId: RepoId): BacklogResponse {
         { name: 'settings', color: 'fbca04' },
         { name: 'needs-triage', color: null },
       ],
-      subIssueCount: 3,
+      subIssueCount: 4,
       blockers: UNBLOCKED,
       blocking: UNBLOCKED,
       parent: NO_PARENT,
@@ -128,9 +172,48 @@ export function fixtureBacklog(now: Date, repoId: RepoId): BacklogResponse {
       subIssueCount: 0,
       blockers: BLOCKED_BY_39,
       blocking: BLOCKING_45,
-      parent: { ok: true, parent: { number: 41, title: 'Overhaul the notification settings', state: 'OPEN' } },
+      parent: PARENT_41,
+      children: NO_CHILDREN,
+    },
+    {
+      number: 48,
+      title: 'Send notification digests',
+      url: 'https://github.com/acme/widgets/issues/48',
+      createdAt: offsetHours(now, 24 * 8),
+      assignees: [],
+      labels: [],
+      subIssueCount: 2,
+      blockers: BLOCKED_BY_43_ONLY,
+      blocking: UNBLOCKED,
+      parent: PARENT_41,
+      children: EPIC_48_CHILDREN,
+    },
+    {
+      number: 49,
+      title: 'Batch digest emails by hour',
+      url: 'https://github.com/acme/widgets/issues/49',
+      createdAt: offsetHours(now, 24 * 7),
+      assignees: [],
+      labels: [],
+      subIssueCount: 0,
+      blockers: UNBLOCKED,
+      blocking: UNBLOCKED,
+      parent: PARENT_48,
+      children: NO_CHILDREN,
+    },
+    {
+      number: 50,
+      title: 'Add a digest frequency setting',
+      url: 'https://github.com/acme/widgets/issues/50',
+      createdAt: offsetHours(now, 24 * 5),
+      assignees: [],
+      labels: [],
+      subIssueCount: 0,
+      blockers: BLOCKED_BY_49,
+      blocking: UNBLOCKED,
+      parent: PARENT_48,
       children: NO_CHILDREN,
     },
   ]
-  return { ok: true, items, scanned: 4, total: 4, viewer: VIEWER, fetchedAt: now.toISOString() }
+  return { ok: true, items, scanned: 7, total: 7, viewer: VIEWER, fetchedAt: now.toISOString() }
 }
