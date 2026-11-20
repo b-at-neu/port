@@ -64,16 +64,16 @@ Where a status colour says what is happening, a phase colour says which pipeline
 
 | Phase | Palette | Label keys | Pill fill / text (light) | Pill fill / text (dark) | Dot (light / dark) |
 | --- | --- | --- | --- | --- | --- |
-| Plan | `plan` | `ready`, `planChangesRequested`, `planning`, `planReview` | `#9333ea` / `#ffffff` | `#9333ea` / `#ffffff` | `#9333ea` / `#a855f7` |
-| Implement | `implement` | `planApproved`, `inProgress` | `#2563eb` / `#ffffff` | `#2563eb` / `#ffffff` | `#2563eb` / `#3b82f6` |
-| Review | `review` | `readyForReview`, `reviewing` | `#facc15` / `#422006` | `#facc15` / `#422006` | `#a68500` / `#facc15` |
-| Revise | `revise` | `needsRevision`, `revising` | `#d61f8a` / `#ffffff` | `#d61f8a` / `#ffffff` | `#d61f8a` / `#ec4899` |
-| Refresh | `refresh` | `refreshBranch`, `refreshing` | `#f4f4f5` / `#3f3f46` | `#2b2f38` / `#d4d4d8` | `#71717a` / `#a1a1aa` |
-| Needs you | `needs-you` | `blocked`, `needsHuman` | `#dc2626` / `#ffffff` | `#dc2626` / `#ffffff` | `#dc2626` / `#ef4444` |
-| Done | `done` | `prOpened`, `approved` | `#22c55e` / `#052e16` | `#22c55e` / `#052e16` | `#16a34a` / `#22c55e` |
+| Plan | `plan` | `planning` | `#9333ea` / `#ffffff` | `#9333ea` / `#ffffff` | `#9333ea` / `#a855f7` |
+| Implement | `implement` | `implementing` | `#2563eb` / `#ffffff` | `#2563eb` / `#ffffff` | `#2563eb` / `#3b82f6` |
+| Review | `review` | `reviewing` | `#facc15` / `#422006` | `#facc15` / `#422006` | `#a68500` / `#facc15` |
+| Revise | `revise` | `revising` | `#d61f8a` / `#ffffff` | `#d61f8a` / `#ffffff` | `#d61f8a` / `#ec4899` |
+| Refresh | `refresh` | — | `#f4f4f5` / `#3f3f46` | `#2b2f38` / `#d4d4d8` | `#71717a` / `#a1a1aa` |
+| Needs you | `needs-you` | `needsYou` | `#dc2626` / `#ffffff` | `#dc2626` / `#ffffff` | `#dc2626` / `#ef4444` |
+| Done | `done` | `approved` | `#22c55e` / `#052e16` | `#22c55e` / `#052e16` | `#16a34a` / `#22c55e` |
 
 - **Queued is a ring, in flight is filled.** A queued trigger label draws its dot as a 1px ring and an in-flight one as a filled dot. The same split holds on GitHub: a trigger is a lighter shade than its in-flight label.
-- **GitHub's in-flight label is the light dot.** Each palette's in-flight label uses exactly its light-theme dot colour, and its triggers sit lighter. Gate and terminal labels sit deeper still. `refresh` is grey, and the markers `claude` and `auto plan` stay neutral off the palette.
+- **GitHub's label is the light dot.** Each palette's one label uses exactly its light-theme dot colour. `refresh` is an app-only phase, so on GitHub a refresh shows as Revising. The `port` marker stays neutral off the palette, in the app's navy accent.
 - **Waiting on you pulses.** A gate that needs the operator (`planReview`, `approved`) pulses in its own phase colour. In the sidebar, a running pipeline session's dot pulses in its phase colour.
 - **`needs-you` overrides.** A gate label, a stalled or interrupted item, and a live stage session waiting on a permission prompt, a question or a `BLOCKED:` hand-back show the `needs-you` palette and pulse, whatever phase they are in. Once the operator answers, the dot goes back to its phase colour.
 - **Blocked is held, not waiting.** A `blocked` ticket keeps the `needs-you` palette but does not pulse on the Board, because it sits in the Blocked section rather than Waiting on you. Only the sidebar dot of a live session with a `BLOCKED:` hand-back still pulses, since that marks the session, not the ticket's place in a queue.

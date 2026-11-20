@@ -5,6 +5,7 @@ import type { GitHubTransport } from '@/types/platform'
 import { readSessionState } from '@/main/sessions/adapter'
 import type { GitRunner } from '@/types/platform'
 import type { RepositoryEntry } from '@/utils/repos'
+import { verifiableVocabularyOf } from '@/utils/labels/display'
 import type { PipelineView } from '@/types/pipeline-state'
 import type { FreshnessEntry, PipelineState, RepositoryState } from '@/types/state'
 import { reconcileRepository } from '@/main/state/reconcile'
@@ -76,7 +77,7 @@ export async function readPipelineState(params: ReadPipelineStateParams): Promis
     const sessions = cache.sessions
     const agents = sessions?.ok ? sessions.agents.filter((a) => a.repoId === entry.id) : []
     const repo = splitRepo(entry.config.repo)
-    await refreshGithub(cache, { repoId: entry.id, repo, vocabulary: entry.config.vocabulary, integration: entry.config.branches.integration, worktreeEntries, agents, github: params.github, now })
+    await refreshGithub(cache, { repoId: entry.id, repo, vocabulary: entry.config.vocabulary, verify: verifiableVocabularyOf(entry.config), integration: entry.config.branches.integration, worktreeEntries, agents, github: params.github, now })
   }
 
   return projectFromCache(cache, params.repositories, now)

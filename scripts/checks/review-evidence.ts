@@ -86,7 +86,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   // --- Refresh is the bounded route for a stale branch: the same-SHA guard, the per-tick and
   // per-pull-request caps, and the review-cycle exemption must stay documented, not merely implemented. ---
   {
-    const labels = readJson('plugins/port/data/labels.json');
+    const labels = readJson('plugins/port/data/labels.legacy.json');
     for (const key of ['refreshBranch', 'refreshing']) {
       const entry = labels.labels.find((l: any) => l.key === key);
       expect(!(!entry || entry.module !== 'core'), 'refresh-bounded', `labels.json's '${key}' entry must be module 'core', got ${JSON.stringify(entry?.module)}`);

@@ -18,7 +18,7 @@ This skill is a **thin wrapper**: it points you at the existing agent definition
 
 ## Read the configuration first
 
-Read `.claude/port.config.json` for `repo` (`<repo>`), `branches.integration` (`<integration>`), the label names (`<labels.X>`), `commands.bootstrap`, `commands.checks`, `docs.engineering`, and `modules.approvalGate`. If it is missing, stop — this repository is not port-managed.
+Read `.claude/port.config.json` for `repo` (`<repo>`), `branches.integration` (`<integration>`), the label names (`<labels.X>`), `commands.bootstrap`, `commands.checks`, `docs.engineering`, and `modules.approvalGate`. If it is missing, stop — this repository is not port-managed. If it sets `appOnly` to `true`, stop too: "`<repo>` uses the port app's labels (`appOnly` in `.claude/port.config.json`). The terminal cockpit only runs the old label set, so it won't run here. Open this repository in the port desktop app instead."
 
 ## 1. Name this session (first output line)
 

@@ -1,5 +1,5 @@
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
-import type { LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { LabelVocabulary, VerifiableVocabulary } from '@/utils/labels/vocabulary'
 import type { LocalRepoRef } from '@/types/github'
 import type { PipelineView, TrackedRef } from '@/types/pipeline-state'
 import type { ListSessionsResult, OpenTailParams, PollTailParams, CloseTailParams, SessionScan } from '@/types/sessions'
@@ -24,6 +24,7 @@ interface GithubParams {
   readonly repoId: RepoId
   readonly repo: { readonly owner: string; readonly name: string }
   readonly vocabulary: LabelVocabulary
+  readonly verify?: VerifiableVocabulary
   readonly integration: string
   /** The store's tracked items; `null` or absent reads by labels as before. */
   readonly tracked?: readonly TrackedRef[] | null

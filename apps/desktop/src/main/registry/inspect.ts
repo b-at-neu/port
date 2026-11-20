@@ -2,7 +2,8 @@
 import { basename } from 'node:path'
 import { pathOps } from '@/main/platform/paths'
 import { statPath } from '@/main/platform/files'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import { resolveDisplayVocabulary } from '@/utils/labels/display'
+import { LABEL_KEYS, resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoDiagnostic, RepoId, RepoProblem, RepositoryEntry, ResolvedRepoConfig, SchemaViolation } from '@/utils/repos'
 import { defaultRefName, permissionsStateOf, readAtDefaultRef, refsCarryingConfig } from '@/main/registry/harness'
 import type { GitRunner } from '@/types/platform'
@@ -37,9 +38,21 @@ function isRepoViolation(violation: SchemaViolation): boolean {
   return violation.path === '/repo' || violation.message.includes("'repo'")
 }
 
+/** Ajv reports each unknown `labels` property as one `/labels` violation without naming it, so the legacy keys are counted rather than matched by path. */
+function foldLegacyLabelViolations(violations: readonly SchemaViolation[], legacyKeyCount: number): readonly SchemaViolation[] {
+  let toDrop = legacyKeyCount
+  return violations.filter((violation) => {
+    if (toDrop === 0 || violation.path !== '/labels' || !violation.message.includes('additional propert')) return true
+    toDrop -= 1
+    return false
+  })
+}
+
 interface LooseConfig {
   readonly repo?: unknown
   readonly labels?: Readonly<Record<string, unknown>>
+  readonly states?: Readonly<Record<string, unknown>>
+  readonly appOnly?: unknown
   readonly branches?: { readonly integration?: unknown; readonly production?: unknown }
   readonly models?: { readonly plan?: unknown; readonly impl?: unknown; readonly review?: unknown; readonly revise?: unknown }
   readonly modules?: {
@@ -138,12 +151,15 @@ export async function inspectRepository(path: string, deps: InspectDeps): Promis
 
   // Folds a root CLAUDE.md's port-overrides block over the port-resolved values above — never a second, hand-rolled resolution.
   const portResolved: PortResolved = { branches, models, modules, reviewCycleCap, concurrency, sessionRequiredPaths }
-  const effective = await resolveEffectiveConfig(read, portResolved, cfg.labels ?? {})
+  const appOnly = !violatedPaths.has('/appOnly') && cfg.appOnly === true
+  const effective = await resolveEffectiveConfig(read, portResolved, cfg.labels ?? {}, cfg.states ?? {}, appOnly)
   if (!effective.ok) {
     return problemEntry(root, effective.problem)
   }
 
-  const vocabulary = resolveVocabulary({ labels: cfg.labels, modules: effective.modules, overrides: effective.labelOverrides })
+  // An app-only repository's `labels` holds display keys, which the stage vocabulary has no use for.
+  const vocabulary = resolveVocabulary({ labels: appOnly ? {} : cfg.labels, modules: effective.modules, overrides: effective.labelOverrides })
+  const displayVocabulary = resolveDisplayVocabulary({ labels: cfg.labels, states: cfg.states, overrides: effective.displayOverrides })
 
   const config: ResolvedRepoConfig = {
     repo,
@@ -154,6 +170,8 @@ export async function inspectRepository(path: string, deps: InspectDeps): Promis
     modules: effective.modules,
     reviewCycleCap: effective.reviewCycleCap,
     vocabulary,
+    appOnly,
+    displayVocabulary,
     commands,
     concurrency: effective.concurrency,
     sessionRequiredPaths: effective.sessionRequiredPaths,
@@ -166,8 +184,11 @@ export async function inspectRepository(path: string, deps: InspectDeps): Promis
   if (permissions === 'missing') diagnostics.push({ kind: 'permissions-missing' })
   else if (permissions === 'empty') diagnostics.push({ kind: 'permissions-empty' })
 
-  if (nonRepoViolations.length > 0) {
-    diagnostics.push({ kind: 'schema-violations', violations: nonRepoViolations })
+  const legacyKeys = appOnly ? [] : Object.keys(cfg.labels ?? {}).filter((key) => (LABEL_KEYS as readonly string[]).includes(key))
+  const reportedViolations = foldLegacyLabelViolations(nonRepoViolations, legacyKeys.length)
+  if (legacyKeys.length > 0) diagnostics.push({ kind: 'legacy-label-overrides', keys: legacyKeys })
+  if (reportedViolations.length > 0) {
+    diagnostics.push({ kind: 'schema-violations', violations: reportedViolations })
   }
 
   for (const refused of effective.refused) {

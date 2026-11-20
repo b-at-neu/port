@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import labels from '@/utils/labels/labels.json'
+import labels from '@/utils/labels/labels.legacy.json'
 import { AGENT_FOR_IN_FLIGHT, AGENT_FOR_TRIGGER, REFRESH_PAIR } from '@/main/tick/routing'
 
 describe('AGENT_FOR_TRIGGER', () => {

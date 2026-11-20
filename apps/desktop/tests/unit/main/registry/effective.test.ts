@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { foldDispositions, fromShape, labelOverridesOf, parseExcusedCheckName, toShape } from '@/main/registry/effective'
+import { displayOverridesOf, foldDispositions, fromShape, labelOverridesOf, parseExcusedCheckName, toShape } from '@/main/registry/effective'
 import type { PortResolved } from '@/types/registry'
 import type { AppliedOverride } from '@/utils/repos'
 
@@ -33,6 +33,31 @@ describe('toShape', () => {
     expect(shape.reviewCycleCap).toBe(5)
     expect(shape.concurrency).toEqual({ sharedFiles: [], overlapThreshold: 2 })
     expect(shape.sessionRequiredPaths).toEqual(['CLAUDE.md', '.claude/**'])
+  })
+})
+
+describe('toShape — app-only', () => {
+  it('splits the display names across labels and states, and drops the legacy keys', () => {
+    const shape = toShape(BASE, { needsYou: 'Needs Attention', ready: 'go' }, { implementing: 'Building', planning: '  ' }, true)
+    expect(shape.labels).toEqual({ port: 'port', needsYou: 'Needs Attention' })
+    expect(shape.states).toEqual({ planning: 'planning', implementing: 'Building', reviewing: 'reviewing', revising: 'revising', approved: 'approved' })
+  })
+
+  it('keeps the legacy labels and no states when not app-only', () => {
+    const shape = toShape(BASE, { ready: 'go' })
+    expect(shape.labels.ready).toBe('go')
+    expect(shape.states).toEqual({})
+  })
+})
+
+describe('displayOverridesOf', () => {
+  it('extracts labels.<key> and states.<key> entries by their display key', () => {
+    const applied = [override('labels.needsYou', 'help'), override('states.approved', 'shipped'), override('reviewCycleCap', 3)]
+    expect(displayOverridesOf(applied)).toEqual({ needsYou: 'help', approved: 'shipped' })
+  })
+
+  it('ignores an entry naming a key outside the display vocabulary', () => {
+    expect(displayOverridesOf([override('labels.ready', 'go'), override('states.inProgress', 'x')])).toEqual({})
   })
 })
 

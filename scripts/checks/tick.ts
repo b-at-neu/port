@@ -144,10 +144,20 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     } else expect(!mutatingGhRe.test(ghText), 'tick-readonly', `${TICK_DIR}/gh.ts appears to call a mutating gh subcommand — its one call must be 'gh api graphql'`);
   }
 
-  // --- Defaults table matches labels.json, both directions --------------------
+  // --- The terminal cockpit refuses an app-only repository, and only that ----
+  // guard: a legacy writer running on a repository whose old labels no longer exist.
+  {
+    const { appOnlyRefusal } = await importEngine(`${TICK_DIR}/config.ts`);
+    const refusal = appOnlyRefusal({ repo: 'o/r', appOnly: true });
+    expect(typeof refusal === 'string' && refusal.includes('port desktop app'), 'tick-app-only', `appOnlyRefusal({appOnly:true}) returned ${JSON.stringify(refusal)}, expected the message naming the port desktop app`);
+    expect(appOnlyRefusal({ repo: 'o/r' }) === null, 'tick-app-only', 'appOnlyRefusal({}) refused a repository that is not app-only');
+    expect(appOnlyRefusal({ repo: 'o/r', appOnly: false }) === null, 'tick-app-only', 'appOnlyRefusal({appOnly:false}) refused a repository that is not app-only');
+  }
+
+  // --- Defaults table matches labels.legacy.json, both directions --------------------
   // guard: the engine's label vocabulary drifting from the template it must resolve against.
   {
-    const labelsJson = readJson('plugins/port/data/labels.json');
+    const labelsJson = readJson('plugins/port/data/labels.legacy.json');
     const { LABEL_DEFAULTS, LABEL_ROLES, LABEL_SURFACE } = await importEngine(`${TICK_DIR}/config.ts`);
     const jsonKeys = new Set(labelsJson.labels.map((l: any) => l.key));
     const engineKeys = new Set(Object.keys(LABEL_DEFAULTS));
@@ -370,7 +380,7 @@ function runCase(fn: string, impl: any, input: any): any {
       return { paths: result.entries.map((e: any) => `${e.path} ${e.op} ${e.rawValue}`), problemReasons: result.problems.map((p: any) => p.reason) };
     }
     case 'applyOverrides': {
-      const result = impl(input.cfg, { entries: input.entries, problems: [] }, { labelKeys: input.labelKeys });
+      const result = impl(input.cfg, { entries: input.entries, problems: [] }, { labelKeys: input.labelKeys, stateKeys: input.stateKeys ?? [] });
       return { appliedPaths: result.applied.map((a: any) => a.path), refusedPaths: result.refused.map((r: any) => r.path) };
     }
     case 'labelsByItem':

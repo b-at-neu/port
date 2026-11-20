@@ -2,7 +2,7 @@
 name: init
 description: Install the port agent pipeline into this repository — detect its toolchain, choose which subsystems to enable, write port.config.json, merge the permission lists into .claude/settings.json, create the label vocabulary, optionally install the CI merge gate, and offer to generate engineering standards from the codebase. Idempotent; nothing is written without confirmation. Manual only. Usage: /port:init
 disable-model-invocation: true
-allowed-tools: Read, Write, Edit, Glob, Grep, AskUserQuestion, Bash(gh label *) Bash(gh api repos/*) Bash(gh repo view *) Bash(git branch *) Bash(git remote *) Bash(git rev-parse *) Bash(node --version) Bash(claude plugin marketplace remove *) Bash(claude plugin marketplace add *) Bash(claude plugin install *)
+allowed-tools: Read, Write, Edit, Glob, Grep, AskUserQuestion, Bash(gh label *) Bash(gh issue list *) Bash(gh issue edit *) Bash(gh pr list *) Bash(gh pr edit *) Bash(gh api repos/*) Bash(gh repo view *) Bash(git branch *) Bash(git remote *) Bash(git rev-parse *) Bash(node --version) Bash(claude plugin marketplace remove *) Bash(claude plugin marketplace add *) Bash(claude plugin install *)
 ---
 
 # Initialize a repository for the port pipeline
@@ -29,19 +29,21 @@ Stop if this is not a git repository, or has no GitHub remote.
 
 **If a `port.config.json` exists at the repository root instead**, it predates the move into `.claude/`. Migrate it with `git mv port.config.json .claude/port.config.json` so history follows the file, say that you did, and continue into the **verify-only** pass below from the migrated config. Nothing reads the root location any more, so leaving it there would silently break every agent.
 
-**If `.claude/port.config.json` already exists, this repository is already configured — run verify-only.** Read-only, writes nothing, and stops unless the operator chooses otherwise. Report four facts:
+**If `.claude/port.config.json` already exists, this repository is already configured — run verify-only.** Read-only, writes nothing, and stops unless the operator chooses otherwise. Report five facts:
 
 - **The committed marketplace entry** — `.claude/settings.json`'s `extraKnownMarketplaces.port`: present, `source.ref` set, `autoUpdate: true`.
 - **The committed `ref` against the newest release** — resolve the newest published tag with step 4's own `gh api repos/b-at-neu/port/releases/latest --jq .tag_name` and its fallback rules, and compare it to the committed `ref`.
 - **This machine against the committed pin** — §9.5's machine facts, read-only; nothing is written from here.
 - **Label colours** — how many pipeline labels still carry a colour listed in their `previousColors`, read once with `gh label list --json name,color --limit 200`, with each label's name resolved from config. A label on any other colour is the repository's own and is not counted.
+- **The label vocabulary** — `appOnly` in the config. `true` reports "Labels: app (7)". Otherwise report "Labels: old set (17). Migrating moves this repository to the 7 app labels and makes it app-only — the terminal cockpit stops working here."
 
 Then ask one `AskUserQuestion` (header `Already configured`):
 
 - **Stop here** *(recommended unless the machine drifted)* — ends the run; nothing is written.
 - **Fix this machine only** *(offered only when the machine disagrees with the committed pin and that pin is `main` or a `v<semver>` tag; recommended whenever offered)* — runs §9.5 against the committed ref and writes nothing in the repository.
 - **Recolour labels** *(offered only when the label-colour count is above zero)* — runs only step 5's recolour branch against the labels on GitHub and writes nothing in the repository.
-- **Reconcile, rewrite settings** — continues into step 1, exactly like today's full run.
+- **Migrate to the new labels** *(offered only on an old-set repository)* — runs §5.5 and stops.
+- **Reconcile, rewrite settings** — continues into step 1, exactly like today's full run. On an old-set repository, §5.5 runs in place of step 5.
 
 Do not silently overwrite an existing configuration — writing anything still needs the explicit **Reconcile** choice.
 
@@ -116,7 +118,7 @@ Import-time reconciliation (#246, `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "
 
 **No repository-root `CLAUDE.md`** (never `~/.claude/CLAUDE.md`) → say so and write nothing. Every overridable category runs on the port default.
 
-**Present** → read it. For each overridable category (`checks`, `labels`, `branches`, `models`, `modules`, `reviewCycleCap`, `concurrency`, `sessionRequiredPaths`) look for a stated convention contradicting the value just written to `.claude/port.config.json` in step 3 — a review-cycle expectation, a renamed branch, a check the repository already treats as informational. For each contradiction found, ask with `AskUserQuestion` (header the category name):
+**Present** → read it. For each overridable category (`checks`, `labels`, `states`, `branches`, `models`, `modules`, `reviewCycleCap`, `concurrency`, `sessionRequiredPaths`) look for a stated convention contradicting the value just written to `.claude/port.config.json` in step 3 — a review-cycle expectation, a renamed branch, a check the repository already treats as informational. For each contradiction found, ask with `AskUserQuestion` (header the category name):
 
 - **Keep your rule** — writes a `port-overrides` entry into `CLAUDE.md`, the reason drawn from the operator's own words, never invented.
 - **Keep the port default** — writes nothing, and states plainly that the repository's own `CLAUDE.md` prose now disagrees with the pipeline until the operator reconciles it by hand.
@@ -198,7 +200,9 @@ A command matches only if it **starts with an allowlisted binary**. `Bash(npm *)
 
 ## 5. Create the labels
 
-Read `${CLAUDE_PLUGIN_ROOT}/data/labels.json` and create the subset whose `module` is `core` or an **enabled** module. Use the configured name from `labels` where the repository overrode it.
+Read `${CLAUDE_PLUGIN_ROOT}/data/labels.json` and create the subset whose `module` is `core` or an **enabled** module. Use the configured name from `labels` (the marker and the gate) or `states` (the five states) where the repository overrode it, used verbatim.
+
+**A repository that already carries the old label set on open items goes through §5.5 instead of this step** — creating the seven beside the old ones would leave every open item on labels that no longer mean anything.
 
 Read the existing colours **once**, up front: `gh label list --json name,color --limit 200`. Then, for each label, matched case-insensitively by its resolved name:
 
@@ -218,6 +222,37 @@ Read the existing colours **once**, up front: `gh label list --json name,color -
 - **Present with any other colour** — the repository coloured it itself. Leave it alone and report `custom colour kept`, with the `gh label edit "<name>" --color "<color>"` line that adopts the palette.
 
 **Never touch a description**, and never recolour a label port did not colour — a repository's own same-named label keeps its colour. Every name comes from the resolved configuration, never a literal. Report created, recoloured, already current, and custom colour kept separately.
+
+## 5.5. Migrate to the new labels
+
+Moves a repository from the old 17-label set to the seven in `${CLAUDE_PLUGIN_ROOT}/data/labels.json`, in place. The old set is in `${CLAUDE_PLUGIN_ROOT}/data/labels.legacy.json`, frozen for this step. It never removes a label from an item, and it deletes no old label until every item is verified. A run that stops before the delete leaves the old labels in place with the successors added, and re-running is safe because adds are idempotent.
+
+1. **Precondition.** Run `git rev-parse --path-format=absolute --git-common-dir` and Read `.agents/cockpit.json` from that directory's parent. `owner` must be `"app"` and `repo` must match the config's. Otherwise stop and write nothing: "Migrating needs the port app to own `<repo>` first, so no ticket loses its stage. Open it in the app, let it finish one poll, then run `/port:init` again." The app must already hold every ticket's stage, because the seven labels cannot be seeded back into 17 stages.
+2. **Resolve names.** The old names are the old defaults with the config's `labels` and the `CLAUDE.md` overrides applied. An old override carries over only to its one-to-one successor: `marker` to `labels.port`, `needsHuman` to `labels.needsYou`, `inProgress` to `states.implementing`, and `planning`, `reviewing`, `revising`, `approved` to the `states` key of the same name. Every other override is dropped, and the report names each one.
+3. **Show the plan and confirm once** with `AskUserQuestion` (header `Migrate labels`): the renames, each old label's open-item count, the deletions, and the config and `CLAUDE.md` edits. Nothing is written before the answer.
+4. **Rename** with `gh label edit "<old>" --name "<new>"` for each one-to-one pair whose old name exists and whose new name does not, so every attachment follows the label. The pairs are the old marker to `port`, `in progress` to `implementing`, and `needs human` to `needs you`. If the new name already exists, treat the pair as an add in step 6.
+5. **Create** whichever of the seven are still missing, by step 5's own `gh label create` form.
+6. **Add successors** to every open issue and pull request, never removing a label:
+
+   | Old label | Successor |
+   | --- | --- |
+   | `ready`, `plan changes requested`, `planning` | `planning` |
+   | `plan review` | `planning` and `needs you` |
+   | `plan approved`, `in progress` | `implementing` |
+   | `blocked` | `implementing` and `needs you` |
+   | `ready for review`, `reviewing` | `reviewing` |
+   | `needs revision`, `revising`, `refresh branch`, `refreshing` | `revising` |
+   | `needs human` | `needs you` |
+   | `approved` | `approved` |
+   | `auto plan`, `pr opened` | none: the app's store holds auto plan, and the pull request's own state is mirrored onto its issue |
+
+   Read each old label's open items with `gh issue list --label "<old>" --state open --json number --limit 500` and the `gh pr list` equivalent. Write one `gh issue edit <numbers> --add-label "<successor>"` per successor, and one `gh pr edit <number> --add-label "<successor>"` per pull request. Every name here is the resolved name from step 2, never a literal.
+7. **Verify.** Re-read every old label's open items and confirm each carries its successors. On any miss, stop before deleting and name the items: "Stopped before deleting any old label: #12, #40 don't carry `implementing` yet. Re-run `/port:init` to retry; nothing was removed."
+8. **Delete** each old label that has no same-name survivor with `gh label delete "<old>" --yes`.
+9. **Recolour** the seven by step 5's `previousColors` branch.
+10. **Config.** Write the carried `labels` and `states`, remove the old keys, and set `appOnly: true`; the result must validate against the schema before it is written. Rewrite the `port-overrides` block's old `labels.<key>` entries to their successor paths, or drop them and report it.
+11. **Workflows.** Re-render an installed `approval-check.yml` and `artifacts.yml` through steps 6 and 7 on the new names.
+12. **Report** what was renamed, what was added per label and item, what was deleted and recoloured, and which overrides were carried and dropped.
 
 ## 6. Install the CI gate
 

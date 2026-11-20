@@ -130,6 +130,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   for (const t of [
     'plugins/port/templates/permissions.base.json',
     'plugins/port/data/labels.json',
+    'plugins/port/data/labels.legacy.json',
     'plugins/port/templates/port.config.json',
     'schema/port.config.schema.json',
     '.claude-plugin/marketplace.json',

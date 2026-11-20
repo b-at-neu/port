@@ -3,6 +3,7 @@
 import type { BoardSnapshot, RepositoryHealth, SourceKind } from '@/types/board'
 import { SOURCE_KINDS } from '@/types/board'
 import type { ModuleFlagName, OverviewModuleFlag } from '@/types/repositories'
+import type { DisplayKey } from '@/utils/labels/display'
 import type { LabelKey, LabelSource, VocabularyProblem, VocabularyVerdict } from '@/utils/labels/vocabulary'
 import type { AppliedOverride, RepoId, ResolvedRepoConfig } from '@/utils/repos'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
@@ -14,13 +15,14 @@ interface OverviewSourceSection {
 
 interface OverviewLabelRow {
   readonly name: string
-  readonly key: LabelKey
+  readonly key: string
   readonly roleDisplay: string
   readonly source: LabelSource
   readonly present: boolean | null
 }
 
 interface OverviewLabels {
+  readonly appOnly: boolean
   readonly verdict: VocabularyVerdict
   readonly unverifiedReason: string | undefined
   readonly problems: readonly VocabularyProblem[]
@@ -47,6 +49,24 @@ function roleDisplayFor(key: LabelKey): string {
   return 'Auto-plan'
 }
 
+const DISPLAY_ROLE_NAMES: Readonly<Record<DisplayKey, string>> = {
+  port: 'Marker',
+  needsYou: 'Needs you',
+  planning: 'Planning',
+  implementing: 'Implementing',
+  reviewing: 'Reviewing',
+  revising: 'Revising',
+  approved: 'Done',
+}
+
+/** An app-only repository lists the seven labels the app shows; any other lists its 17 stage labels. */
+function rowsOf(config: ResolvedRepoConfig): readonly Omit<OverviewLabelRow, 'present'>[] {
+  if (config.appOnly === true && config.displayVocabulary !== undefined) {
+    return config.displayVocabulary.labels.map((label) => ({ name: label.name, key: label.key, roleDisplay: DISPLAY_ROLE_NAMES[label.key], source: label.source }))
+  }
+  return config.vocabulary.labels.map((label) => ({ name: label.name, key: label.key, roleDisplay: roleDisplayFor(label.key), source: label.source }))
+}
+
 export function overviewHealth(config: ResolvedRepoConfig, repoId: RepoId, snapshot: BoardSnapshot | undefined): OverviewHealth {
   const health = snapshot?.health.find((h) => h.repoId === repoId) ?? null
   const state = snapshot?.state.repositories.find((r) => r.ok && r.repoId === repoId) ?? null
@@ -60,15 +80,13 @@ export function overviewHealth(config: ResolvedRepoConfig, repoId: RepoId, snaps
     repoState === null
       ? null
       : {
+          appOnly: config.appOnly === true,
           verdict: repoState.vocabulary.verdict,
           unverifiedReason: repoState.vocabulary.unverifiedReason,
           problems: repoState.vocabulary.problems,
-          rows: config.vocabulary.labels.map((label) => ({
-            name: label.name,
-            key: label.key,
-            roleDisplay: roleDisplayFor(label.key),
-            source: label.source,
-            present: repoState.vocabulary.verdict === 'unverified' ? null : repoState.vocabulary.present.includes(label.name),
+          rows: rowsOf(config).map((row) => ({
+            ...row,
+            present: repoState.vocabulary.verdict === 'unverified' ? null : repoState.vocabulary.present.includes(row.name),
           })),
         }
 

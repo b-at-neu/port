@@ -6,7 +6,7 @@ Read alongside `SKILL.md`, not a standalone component — moved byte-identical o
 
 Run once, before the first tick — never on a wakeup, never acted on beyond what each step says. A refused or stopped preflight schedules no wakeup (see Pacing). **Step 0 — resolve the root, once, before any Read.** `git rev-parse --show-toplevel`, bound to `<root>`. Non-zero exit → not a git repository at all: emit the "nothing carries it" **UX states** message below with `<branch>` rendered as "no git repository here" and stop. **Every Read and Write this skill performs resolves against `<root>`, never against the session's transcript or project directory** — `.temp/` and `.agents/` paths are the one exception, touched only after `<root>` is established.
 
-**Step 1 — config.** Read `<root>/.claude/port.config.json`. Present and parses as JSON → continue to step 2. Absent, or present but unparseable → treat a parse failure identically to absent, with the same hard-stop messages:
+**Step 1 — config.** Read `<root>/.claude/port.config.json`. Present and parses as JSON with `appOnly` set to `true` → emit the **App-only repository** **UX states** message and **stop — no tick, no dispatch, no `ScheduleWakeup`**; this covers the prose path when `commands.tick` is null. Present, parses, and `appOnly` is not `true` → continue to step 2. Absent, or present but unparseable → treat a parse failure identically to absent, with the same hard-stop messages:
 
 ```bash
 git rev-parse --abbrev-ref HEAD
@@ -232,6 +232,10 @@ Exact copy, one message per state, `<…>` substituted:
 - **Config absent or unparseable, nothing carries it** (hard stop; also covers "no git repository here", with `<n>` at `0`):
 
   > ⛔ Not port-managed. `<.claude/port.config.json is absent | .claude/port.config.json fails to parse as JSON>` on `<branch>` and on none of the `<n>` local branches I checked. Run `/port:init` to adopt the pipeline here. Not ticking.
+
+- **App-only repository** (hard stop):
+
+  > ⛔ `<repo>` uses the port app's labels (`appOnly` in `.claude/port.config.json`). The terminal cockpit only runs the old label set, so it won't start here. Open this repository in the port desktop app instead.
 
 - **Permissions missing or empty** (warn, then Stop / Start anyway):
 

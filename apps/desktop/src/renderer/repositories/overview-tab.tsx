@@ -89,7 +89,7 @@ export function OverviewTab({ entry, repoId }: { readonly entry: RepositoryEntry
             <div data-slot="label-verdict">
               <StatusPill
                 status={VERDICT_STATUS[health.labels.verdict]}
-                label={verdictCopy(health.labels.verdict, health.labels.rows.length, health.labels.rows.length - health.labels.rows.filter((r) => r.present === true).length, health.labels.unverifiedReason)}
+                label={verdictCopy(health.labels.verdict, health.labels.rows.length, health.labels.rows.length - health.labels.rows.filter((r) => r.present === true).length, health.labels.unverifiedReason, health.labels.appOnly)}
               />
             </div>
             {health.labels.problems.length > 0 ? (

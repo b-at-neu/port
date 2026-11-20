@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { resolveDisplayVocabulary } from '@/utils/labels/display'
 import { resolveVocabulary, verifyVocabulary } from '@/utils/labels/vocabulary'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { BoardSnapshot, RepositoryHealth } from '@/types/board'
@@ -115,6 +116,25 @@ describe('overviewHealth', () => {
       { name: 'approvalGate', on: true },
       { name: 'release', on: false },
       { name: 'scope', on: true },
+    ])
+  })
+
+  it('lists the seven display labels, checked against the display vocabulary, for an app-only repository', () => {
+    const vocabulary = resolveVocabulary({ modules: { approvalGate: true, release: false, scope: true } })
+    const displayVocabulary = resolveDisplayVocabulary({ states: { implementing: 'Building' } })
+    const verdict = verifyVocabulary(displayVocabulary, { ok: true, names: ['port', 'needs you', 'planning'] })
+    const cfg: ResolvedRepoConfig = { ...config(vocabulary), appOnly: true, displayVocabulary }
+    const result = overviewHealth(cfg, REPO_ID, snapshotWith(readyState(vocabulary, verdict)))
+
+    expect(result.labels?.appOnly).toBe(true)
+    expect(result.labels?.rows.map((r) => [r.name, r.present])).toEqual([
+      ['port', true],
+      ['needs you', true],
+      ['planning', true],
+      ['Building', false],
+      ['reviewing', false],
+      ['revising', false],
+      ['approved', false],
     ])
   })
 

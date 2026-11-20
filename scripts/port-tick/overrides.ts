@@ -11,6 +11,7 @@ const FENCE_END = '```';
 export const OVERRIDABLE = [
   'checks',
   'labels',
+  'states',
   'branches.integration',
   'branches.production',
   'models.plan',
@@ -28,7 +29,7 @@ export const OVERRIDABLE = [
 
 /** Every other top-level `port.config.json` key, refused by default — a schema key added
  *  later and never classified here fails closed rather than silently becoming overridable. */
-export const NEVER_OVERRIDABLE = ['commands', 'extraAllow', 'repo', 'tracker', 'docs', 'release', 'budget', '$schema'];
+export const NEVER_OVERRIDABLE = ['commands', 'extraAllow', 'repo', 'tracker', 'docs', 'release', 'budget', 'appOnly', '$schema'];
 
 /** The two paths free-form prose could otherwise use to expand a dispatched agent's shell authority. */
 export const PERMISSION_SURFACE = new Set(['commands', 'extraAllow']);
@@ -43,6 +44,7 @@ export interface EffectiveConfigShape {
   integration: string;
   production: string | null;
   labels: Record<string, string>;
+  states: Record<string, string>;
   models: { plan: string; impl: string; review: string; revise: string };
   modules: { approvalGate: boolean; release: boolean; scope: boolean };
   reviewCycleCap: number;
@@ -188,6 +190,7 @@ function readPath(cfg: EffectiveConfigShape, path: string): OverrideValue | read
     default:
       if (path.startsWith('checks.')) return 'blocking';
       if (path.startsWith('labels.')) return cfg.labels[path.slice('labels.'.length)];
+      if (path.startsWith('states.')) return cfg.states[path.slice('states.'.length)];
       return undefined;
   }
 }
@@ -227,12 +230,13 @@ function writePath(cfg: EffectiveConfigShape, path: string, value: OverrideValue
       return;
     default:
       if (path.startsWith('labels.') && typeof value === 'string') cfg.labels[path.slice('labels.'.length)] = value;
+      else if (path.startsWith('states.') && typeof value === 'string') cfg.states[path.slice('states.'.length)] = value;
   }
 }
 
 /** Classifies and type-checks one parsed entry against `path`'s category, returning either
- *  the coerced `value` or a refusal `reason`. `labelKeys` backs the one category whose valid values depend on more than the entry itself. */
-function validate(entry: OverrideEntry, labelKeys: readonly string[]): { value: OverrideValue } | { reason: string } {
+ *  the coerced `value` or a refusal `reason`. `labelKeys` and `stateKeys` back the two categories whose valid values depend on more than the entry itself. */
+function validate(entry: OverrideEntry, keys: { labelKeys: readonly string[]; stateKeys: readonly string[] }): { value: OverrideValue } | { reason: string } {
   const { path, op, rawValue } = entry;
 
   const top = path.split('.')[0] ?? path;
@@ -257,7 +261,13 @@ function validate(entry: OverrideEntry, labelKeys: readonly string[]): { value: 
 
   if (path.startsWith('labels.') && path.length > 'labels.'.length) {
     const key = path.slice('labels.'.length);
-    if (!labelKeys.includes(key)) return { reason: `'${key}' is not a key in the label vocabulary` };
+    if (!keys.labelKeys.includes(key)) return { reason: `'${key}' is not a key in the label vocabulary` };
+    return { value: rawValue };
+  }
+
+  if (path.startsWith('states.') && path.length > 'states.'.length) {
+    const key = path.slice('states.'.length);
+    if (!keys.stateKeys.includes(key)) return { reason: `'${key}' is not a key in the state vocabulary` };
     return { value: rawValue };
   }
 
@@ -288,14 +298,14 @@ function validate(entry: OverrideEntry, labelKeys: readonly string[]): { value: 
 export function applyOverrides<C extends EffectiveConfigShape>(
   cfg: C,
   parsed: { entries: readonly OverrideEntry[]; problems: readonly OverrideProblem[] },
-  opts: { labelKeys: readonly string[] },
+  opts: { labelKeys: readonly string[]; stateKeys: readonly string[] },
 ): { cfg: C; applied: AppliedOverride[]; refused: { path: string | null; line: string; reason: string }[] } {
   const out: C = structuredClone(cfg);
   const applied: AppliedOverride[] = [];
   const refused: { path: string | null; line: string; reason: string }[] = parsed.problems.map((p) => ({ path: null, line: p.line, reason: p.reason }));
 
   for (const entry of parsed.entries) {
-    const result = validate(entry, opts.labelKeys);
+    const result = validate(entry, opts);
     if ('reason' in result) {
       refused.push({ path: entry.path, line: entry.line, reason: result.reason });
       continue;

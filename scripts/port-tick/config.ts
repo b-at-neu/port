@@ -6,7 +6,7 @@ import { message } from '#lib/errors.ts';
 import { parseOverrides, applyOverrides } from './overrides.ts';
 import type { Disposition } from './checks.ts';
 
-// Defaults and roles mirror plugins/port/data/labels.json exactly; scripts/checks/tick.ts pins both directions.
+// Defaults and roles mirror plugins/port/data/labels.legacy.json exactly; scripts/checks/tick.ts pins both directions.
 export const LABEL_DEFAULTS = {
   marker: 'claude',
   autoPlan: 'auto plan',
@@ -83,6 +83,13 @@ export function resolveLabels(cfg: any): Record<string, string> {
   return out;
 }
 
+/** The hard-stop message for a repository on the app's label set, or null. A legacy writer on it
+ *  would write labels that no longer exist, so the terminal cockpit fails closed. */
+export function appOnlyRefusal(cfg: any): string | null {
+  if (cfg?.appOnly !== true) return null;
+  return `'${cfg.repo ?? 'this repository'}' uses the port app's labels ('appOnly' in .claude/port.config.json). The terminal cockpit only runs the old label set, so it won't start here. Open this repository in the port desktop app instead.`;
+}
+
 /** Reads and resolves `.claude/port.config.json`. Throws with a named reason on anything the
  *  CLI must report as a hard `exit 1` — missing file, unparseable JSON, or no `repo`. */
 export function loadConfig(repoRoot: string): any {
@@ -100,6 +107,8 @@ export function loadConfig(repoRoot: string): any {
     throw new Error(`'.claude/port.config.json' does not parse as JSON: ${message(e)}`);
   }
   if (!cfg.repo) throw new Error("'.claude/port.config.json' declares no 'repo'");
+  const refusal = appOnlyRefusal(cfg);
+  if (refusal) throw new Error(refusal);
   const [owner, name] = cfg.repo.split('/');
   if (!owner || !name) throw new Error(`'.claude/port.config.json's 'repo' must be 'owner/name', got '${cfg.repo}'`);
 
@@ -112,6 +121,7 @@ export function loadConfig(repoRoot: string): any {
     integration: cfg.branches?.integration ?? 'dev',
     production: hasProduction ? cfg.branches.production : 'main',
     labels: resolveLabels(cfg),
+    states: {},
     models: {
       plan: cfg.models?.plan ?? 'opus',
       impl: cfg.models?.impl ?? 'sonnet',
@@ -146,6 +156,7 @@ export function loadConfig(repoRoot: string): any {
   const parsedOverrides = parseOverrides(claudeMdText);
   const { cfg: effective, applied, refused } = applyOverrides(resolved, parsedOverrides, {
     labelKeys: Object.keys(LABEL_DEFAULTS),
+    stateKeys: [],
   });
 
   // The approval-gate carve-out folds in first, resolved against the effective
