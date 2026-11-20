@@ -79,13 +79,8 @@ describe('heldDetailCopy', () => {
     expect(heldDetailCopy(held)).toBe('#204 would escalate to needs human — cycle 5 reached the cap of 5.')
   })
 
-  it('names the zero-diff fact for a zero-diff hold (#108)', () => {
-    const held: TickHeld = { number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff', reason: 'zero-diff' } }
-    expect(heldDetailCopy(held)).toBe('#157 would escalate to needs human — the latest review already covers the current head.')
-  })
-
-  it('names the two-reviews rule for a sha-cap hold', () => {
-    const held: TickHeld = { number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff', reason: 'sha-cap' } }
+  it('names the two-reviews rule for a zero-diff hold', () => {
+    const held: TickHeld = { number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } }
     expect(heldDetailCopy(held)).toBe('#157 would escalate to needs human — this head has had its two reviews, so only a new head gets another.')
     expect(heldDetailCopy(held, 'app')).toBe('#157 escalating to needs human — this head has had its two reviews, so only a new head gets another.')
   })
@@ -95,12 +90,12 @@ describe('heldDetailCopy', () => {
     expect(heldDetailCopy(capped, 'app')).toBe('#204 escalating to needs human — cycle 5 reached the cap of 5.')
     expect(heldDetailCopy(capped, 'none')).toBe('#204 would escalate to needs human — cycle 5 reached the cap of 5.')
 
-    const zeroDiff: TickHeld = { number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff', reason: 'zero-diff' } }
-    expect(heldDetailCopy(zeroDiff, 'app')).toBe('#157 escalating to needs human — the latest review already covers the current head.')
-    expect(heldDetailCopy(zeroDiff, 'none')).toBe('#157 would escalate to needs human — the latest review already covers the current head.')
+    const zeroDiff: TickHeld = { number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } }
+    expect(heldDetailCopy(zeroDiff, 'app')).toBe('#157 escalating to needs human — this head has had its two reviews, so only a new head gets another.')
+    expect(heldDetailCopy(zeroDiff, 'none')).toBe('#157 would escalate to needs human — this head has had its two reviews, so only a new head gets another.')
   })
 
-  it('names the re-running check for a pending check-hold', () => {
+  it('names the pending check and says it is reviewed again once it finishes', () => {
     const held: TickHeld = {
       number: 594,
       kind: 'pull-request',
@@ -109,9 +104,23 @@ describe('heldDetailCopy', () => {
       contention: null,
       escalation: { kind: 'check-hold', checks: ['run-e2e (macos-latest)'], state: 'pending', escalateAt: null },
     }
-    expect(heldDetailCopy(held)).toBe(
-      "#594 held — waiting for `run-e2e (macos-latest)` to finish its re-run. It's re-reviewed once it passes, or post a `## Gate cleared` comment on the PR to authorise one review now.",
-    )
+    expect(heldDetailCopy(held, 'app')).toBe("#594 held — waiting for `run-e2e (macos-latest)` to finish. It's reviewed again once it does.")
+  })
+
+  it('tells the app owner a red check-hold is reviewed again, with no Gate cleared or needs human', () => {
+    const escalateAt = '2026-01-01T16:20:00.000Z'
+    const time = new Date(escalateAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    const red: TickHeld = {
+      number: 594,
+      kind: 'pull-request',
+      trigger: 'readyForReview',
+      reason: 'check-hold',
+      contention: null,
+      escalation: { kind: 'check-hold', checks: ['a', 'b'], state: 'red', escalateAt },
+    }
+    expect(heldDetailCopy(red, 'app')).toBe(`#594 held — \`a\`, \`b\` are still red on the reviewed head. It's reviewed again once they pass, or at ${time} if they stay red.`)
+    const open: TickHeld = { ...red, escalation: { kind: 'check-hold', checks: ['a'], state: 'red', escalateAt: null } }
+    expect(heldDetailCopy(open, 'app')).toBe("#594 held — `a` is still red on the reviewed head. It's reviewed again once it passes.")
   })
 
   it('names the deadline for a red check-hold, and drops the clause without one', () => {
@@ -262,7 +271,7 @@ describe('heldTagLabel', () => {
     expect(heldTagLabel({ ...base, reason: 'other-operator' })).toBe("Held · someone else's")
     expect(heldTagLabel({ ...base, reason: 'session-required' })).toBe('Held · session required')
     expect(heldTagLabel({ ...base, reason: 'cycle-cap' })).toBe('Held · cycle cap')
-    expect(heldTagLabel({ ...base, reason: 'zero-diff' })).toBe('Held · already reviewed')
+    expect(heldTagLabel({ ...base, reason: 'zero-diff' })).toBe('Held · reviewed twice')
     expect(heldTagLabel({ ...base, reason: 'integration-red' })).toBe('Held · integration red')
     expect(heldTagLabel({ ...base, reason: 'integration-green' })).toBe('Held · refreshing')
     expect(heldTagLabel({ ...base, reason: 'refresh-wins' })).toBe('Held · refresh first')
@@ -314,7 +323,7 @@ describe('observationDetailCopy', () => {
   it('every write-bearing kind has no detail line of its own here — it already has one from held/stalled above', () => {
     expect(observationDetailCopy({ kind: 'liveness-reset', number: 1, itemKind: 'issue', inFlight: 'inProgress', retryKey: 'ready' })).toBeNull()
     expect(observationDetailCopy({ kind: 'cycle-cap', number: 2, itemKind: 'pull-request', count: 5, cap: 5 })).toBeNull()
-    expect(observationDetailCopy({ kind: 'zero-diff', reason: 'zero-diff', number: 3, itemKind: 'pull-request', count: 1, headRefOid: 'abc' })).toBeNull()
+    expect(observationDetailCopy({ kind: 'zero-diff', number: 3, itemKind: 'pull-request', count: 1, headRefOid: 'abc' })).toBeNull()
     expect(observationDetailCopy({ kind: 'integration-red', number: 7, itemKind: 'pull-request', checks: ['test'], headRefOid: 'abc' })).toBeNull()
     expect(observationDetailCopy({ kind: 'refresh', number: 4, itemKind: 'pull-request', sourceLabel: 'readyForReview', headRefOid: 'abc', count: 1, cause: 'conflict' })).toBeNull()
     expect(observationDetailCopy({ kind: 'refresh-stuck', number: 5, itemKind: 'pull-request', sourceLabel: 'readyForReview', reason: 'same-sha', sha: 'abc', count: 2 })).toBeNull()

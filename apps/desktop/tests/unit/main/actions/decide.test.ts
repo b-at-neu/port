@@ -206,6 +206,43 @@ describe('applyItemDecision — comment then swap', () => {
     expect(calls).toEqual(['labels'])
   })
 
+  it('refuses the review route on a sha-cap escalation and writes nothing', async () => {
+    const comments = [{ body: '## Pipeline Escalation\nCycle 2 was the second review of `abc`.\n<!-- port:escalation sha-cap abc -->', createdAt: '2026-01-01T00:00:00Z' }]
+    const snapshot = snapshotOf([repoState([item({ comments })])])
+    const calls: string[] = []
+    const deps = depsWith({
+      postComment: () => {
+        calls.push('comment')
+        return Promise.resolve({ kind: 'applied', argv: [] })
+      },
+      writeState: () => {
+        calls.push('labels')
+        return Promise.resolve({ kind: 'applied', argv: [] })
+      },
+    })
+    const result = await applyItemDecision(
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'review', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch', liveStage: false },
+      deps,
+    )
+    expect(result).toEqual({ ok: false, reason: 'refused', refusal: 'route-unavailable' })
+    expect(calls).toEqual([])
+  })
+
+  it('still applies the review route on a cycle-cap escalation', async () => {
+    const comments = [{ body: '## Pipeline Escalation\n5 review cycles reached the cap of 5 without merging.\n<!-- port:escalation cycle-cap abc -->', createdAt: '2026-01-01T00:00:00Z' }]
+    const snapshot = snapshotOf([repoState([item({ comments })])])
+    const deps = depsWith({
+      postComment: () => Promise.resolve({ kind: 'applied', argv: [] }),
+      writeState: () => Promise.resolve({ kind: 'applied', argv: [] }),
+      fetchItemsByNumber: fetchReturning({ ok: true, resolved: [resolvedItem()], unavailable: [], fetchedAt: NOW().toISOString() }),
+    })
+    const result = await applyItemDecision(
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'review', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch', liveStage: false },
+      deps,
+    )
+    expect(result.ok).toBe(true)
+  })
+
   it('posts a Cycle grant block when clearing a cycle-cap escalation back to revision', async () => {
     const comments = [{ body: '## Pipeline Escalation\n5 review cycles reached the cap of 5 without merging.', createdAt: '2026-01-01T00:00:00Z' }]
     const snapshot = snapshotOf([repoState([item({ comments })])])
@@ -317,11 +354,16 @@ describe('applyItemDecision — rebase decisions', () => {
     ['no picks at all', { picks: null }, 'missing D1'],
     ['an unknown id', { picks: [{ id: 'D1', letter: 'B' }, { id: 'D2', letter: 'C' }, { id: 'D9', letter: 'A' }] }, 'unknown D9'],
     ['an off-menu letter', { picks: [{ id: 'D1', letter: 'C' }, { id: 'D2', letter: 'C' }] }, 'off-menu D1'],
-    ['the review route', { route: 'review' as const }, 'route'],
   ])('refuses %s with picks-invalid and writes nothing', async (_name, overrides, problem) => {
     const snapshot = snapshotOf([repoState([item({ comments })])])
     const result = await applyItemDecision({ request: request(overrides), snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch', liveStage: false }, depsWith({}))
     expect(result).toEqual({ ok: false, reason: 'refused', refusal: 'picks-invalid', problem })
+  })
+
+  it('refuses the review route on an escalation with decisions as route-unavailable', async () => {
+    const snapshot = snapshotOf([repoState([item({ comments })])])
+    const result = await applyItemDecision({ request: request({ route: 'review' as const }), snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch', liveStage: false }, depsWith({}))
+    expect(result).toEqual({ ok: false, reason: 'refused', refusal: 'route-unavailable' })
   })
 
   it('refuses picks on an escalation that carries no decisions', async () => {

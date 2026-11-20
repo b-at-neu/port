@@ -26,6 +26,9 @@ export function unblockConsequence(context: UnblockContext): string {
   if (context.decisions.length > 0) {
     return `Unblocking records your choices on the PR as "## Gate cleared", removes "${labelNameOf('needsHuman')}", and sends it to revision. Revision redoes the rebase with them on the next tick.`
   }
+  if (context.routes.length === 1 && context.routes[0] === 'revision') {
+    return `Unblocking removes "${labelNameOf('needsHuman')}" and sends it to revision. This head has had its two reviews, so it is only reviewed again once revision pushes a new one.`
+  }
   return `Unblocking removes "${labelNameOf('needsHuman')}" and the next tick picks it up. No comment is posted — the label change is the record.`
 }
 
@@ -65,6 +68,7 @@ export function reviseNoteHint(problem: 'empty' | 'too-long' | 'only-sha' | null
 function refusalNote(response: Extract<ItemDecisionResult, { readonly reason: 'refused' }>): string | null {
   if (response.refusal === 'note-invalid') return reviseNoteHint(response.problem as Parameters<typeof reviseNoteHint>[0])
   if (response.refusal === 'picks-invalid') return 'The escalation changed since you opened this. Close and reopen to see the current decisions.'
+  if (response.refusal === 'route-unavailable') return 'The escalation changed since you opened this. Close and reopen to see the current options.'
   return null
 }
 
