@@ -8,6 +8,7 @@ const VOCABULARY = resolveVocabulary({})
 const READY_LABEL = VOCABULARY.labels.find((label) => label.key === 'ready')?.name ?? 'ready'
 const NO_BLOCKERS = { totalCount: 0, nodes: [] }
 const NO_LINKS = { ok: true, open: [], shown: 0, total: 0 }
+const CHILD_NO_LINKS = { ok: true, open: [], closed: [], shown: 0, total: 0 }
 const NO_CHILDREN = { ok: true, children: [], shown: 0, total: 0 }
 
 function epicNode(number: number): Record<string, unknown> {
@@ -287,7 +288,7 @@ describe('fetchBacklog children', () => {
               nodes: [
                 child(38, 'CLOSED'),
                 child(39, 'OPEN', { labels: { nodes: [{ name: READY_LABEL }] } }),
-                child(43, 'OPEN', { blockedBy: { totalCount: 1, nodes: [{ number: 39, title: 'c39', url: 'u39', state: 'OPEN' }] } }),
+                child(43, 'OPEN', { blockedBy: { totalCount: 2, nodes: [{ number: 39, title: 'c39', url: 'u39', state: 'OPEN' }, { number: 38, title: 'c38', url: 'u38', state: 'CLOSED' }] } }),
               ],
             },
           },
@@ -303,9 +304,15 @@ describe('fetchBacklog children', () => {
       shown: 3,
       total: 3,
       children: [
-        { number: 38, title: 'c38', state: 'CLOSED', claimed: false, blockers: NO_LINKS },
-        { number: 39, title: 'c39', state: 'OPEN', claimed: true, blockers: NO_LINKS },
-        { number: 43, title: 'c43', state: 'OPEN', claimed: false, blockers: { ok: true, open: [{ number: 39, title: 'c39', url: 'u39', state: 'OPEN' }], shown: 1, total: 1 } },
+        { number: 38, title: 'c38', state: 'CLOSED', claimed: false, blockers: CHILD_NO_LINKS },
+        { number: 39, title: 'c39', state: 'OPEN', claimed: true, blockers: CHILD_NO_LINKS },
+        {
+          number: 43,
+          title: 'c43',
+          state: 'OPEN',
+          claimed: false,
+          blockers: { ok: true, open: [{ number: 39, title: 'c39', url: 'u39', state: 'OPEN' }], closed: [{ number: 38, title: 'c38', url: 'u38', state: 'CLOSED' }], shown: 2, total: 2 },
+        },
       ],
     })
   })

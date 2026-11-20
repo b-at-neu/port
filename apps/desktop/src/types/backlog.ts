@@ -20,10 +20,15 @@ export type ParentRead =
   | { readonly ok: true; readonly parent: BacklogIssueRef | null }
   | { readonly ok: false; readonly reason: string }
 
+// `closed` holds the `CLOSED` blocker nodes; `shown`/`total` mean the same as in `BlockerRead`.
+export type ChildBlockerRead =
+  | { readonly ok: true; readonly open: readonly ClaimBlocker[]; readonly closed: readonly ClaimBlocker[]; readonly shown: number; readonly total: number }
+  | { readonly ok: false; readonly reason: string }
+
 // `claimed` means the child carries a vocabulary label.
 export interface BacklogChild extends BacklogIssueRef {
   readonly claimed: boolean
-  readonly blockers: BlockerRead
+  readonly blockers: ChildBlockerRead
 }
 
 // `shown`/`total` mean the same as in `BlockerRead`.
@@ -118,10 +123,12 @@ export interface BacklogWave {
   readonly inProgressOnly: boolean
 }
 
+// Wave numbers come from the whole child graph, closed children included; `wavesMayShift` is set when that graph was read incompletely.
 // `uncertain` members have an order built from incomplete blocker data; `cycles` members block each other.
 export type BacklogEpicSummary =
   | {
       readonly ok: true
+      readonly wavesMayShift: boolean
       readonly done: number
       readonly inProgress: number
       readonly open: number

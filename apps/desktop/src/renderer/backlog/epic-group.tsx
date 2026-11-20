@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/u
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { MeterBar } from '@/renderer/components/meter-bar'
 import { epicProgressSegments } from '@/renderer/backlog/epics'
-import { BACKLOG_EPIC_TAG, backlogEpicProgressAria, backlogEpicInfoAria, backlogEpicProgressCopy, backlogEpicProgressTooltip, backlogEpicToggleAria, backlogEpicTruncatedCopy, backlogWaveBandCopy, backlogWaveLabel } from '@/renderer/backlog/copy'
+import { BACKLOG_EPIC_TAG, BACKLOG_WAVES_MAY_SHIFT, backlogEpicProgressAria, backlogEpicInfoAria, backlogEpicProgressCopy, backlogEpicProgressTooltip, backlogEpicToggleAria, backlogEpicTruncatedCopy, backlogWaveBandCopy, backlogWaveLabel } from '@/renderer/backlog/copy'
 import type { BacklogEpicGroup, BacklogEpicSummary, BacklogWave, RenderBacklogRow } from '@/types/backlog'
 
 const FOCUS_RING = 'outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
@@ -86,6 +86,7 @@ function WaveBlock({ wave, first, renderRow }: { readonly wave: BacklogWave; rea
 
 function EpicBody({ group, renderRow }: { readonly group: BacklogEpicGroup; readonly renderRow: RenderBacklogRow }) {
   const waves = group.waves.filter((wave) => wave.rows.length > 0 || wave.inProgressOnly)
+  const note = group.summary.ok && group.summary.wavesMayShift
   return (
     <div className="border-t border-border">
       {!group.summary.ok ? (
@@ -93,8 +94,13 @@ function EpicBody({ group, renderRow }: { readonly group: BacklogEpicGroup; read
           <ErrorBanner message={group.summary.reason} />
         </div>
       ) : null}
+      {note ? (
+        <p data-slot="backlog-wave-note" className="py-1.5 pl-4 pr-4 text-meta text-muted-foreground">
+          {BACKLOG_WAVES_MAY_SHIFT}
+        </p>
+      ) : null}
       {waves.map((wave, index) => (
-        <WaveBlock key={wave.number} wave={wave} first={index === 0} renderRow={renderRow} />
+        <WaveBlock key={wave.number} wave={wave} first={index === 0 && !note} renderRow={renderRow} />
       ))}
       {group.unplaced.length > 0 ? (
         <div data-slot="backlog-unplaced" className={`flex ${waves.length > 0 || !group.summary.ok ? 'border-t border-border' : ''}`}>

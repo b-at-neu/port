@@ -22,7 +22,7 @@ function isUncertain(child: BacklogChild): boolean {
 
 function memberEdges(child: BacklogChild, members: ReadonlySet<number>): number[] {
   if (!child.blockers.ok) return []
-  return child.blockers.open.map((blocker) => blocker.number).filter((number) => members.has(number))
+  return [...child.blockers.open, ...child.blockers.closed].map((blocker) => blocker.number).filter((number) => members.has(number))
 }
 
 // Tarjan emits a component only after every component it depends on, so layers resolve in emission order.
@@ -99,13 +99,17 @@ function buildEpic(
 
   const closed = new Set(read.children.filter((child) => child.state === 'CLOSED').map((child) => child.number))
   const members = read.children.filter((child) => child.state === 'OPEN')
-  const { layerOf, cycles } = placeMembers(members)
+  // Layers come from the whole graph so a merge never renumbers later waves; layers with no open ticket are hidden.
+  const { layerOf, cycles: allCycles } = placeMembers(read.children)
+  const openSet = new Set(members.map((child) => child.number))
+  const cycles = allCycles.filter((number) => openSet.has(number))
   const uncertain = members.filter(isUncertain).map((child) => child.number).sort((a, b) => a - b)
 
   const waves: BacklogWave[] = []
   const lastLayer = Math.max(0, ...layerOf.values())
   for (let number = 1; number <= lastLayer; number++) {
     const inWave = members.filter((child) => layerOf.get(child.number) === number)
+    if (inWave.length === 0) continue
     const claimed = inWave.filter((child) => child.claimed).length
     const waveNumbers = new Set(inWave.filter((child) => !child.claimed).map((child) => child.number))
     const waveRows = rows.filter((row) => {
@@ -138,6 +142,7 @@ function buildEpic(
   )
   const summary: BacklogEpicSummary = {
     ok: true,
+    wavesMayShift: read.shown < read.total || read.children.some(isUncertain),
     done: closed.size,
     inProgress: members.filter((child) => child.claimed).length,
     open: members.filter((child) => !child.claimed).length,

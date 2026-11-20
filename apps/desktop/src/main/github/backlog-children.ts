@@ -5,7 +5,7 @@ import type { BacklogChild, ChildrenRead } from '@/types/backlog'
 import type { GitHubRepoRef, GraphQLErrorEntry } from '@/types/github'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
-import { toBlockerRead } from '@/main/github/blockers'
+import { toChildBlockerRead } from '@/main/github/blockers'
 import { blockedByField } from '@/main/github/query'
 import { repoGraphqlRequest } from '@/main/github/request'
 
@@ -34,7 +34,7 @@ function childOf(node: unknown, errored: boolean, claimedNames: ReadonlySet<stri
     title: typeof raw.title === 'string' ? raw.title : '',
     state: raw.state,
     claimed: fieldListOf(raw.labels, 'name').some((name) => claimedNames.has(name)),
-    blockers: toBlockerRead(raw.blockedBy, errored),
+    blockers: toChildBlockerRead(raw.blockedBy, errored),
   }
 }
 

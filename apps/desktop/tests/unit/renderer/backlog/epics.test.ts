@@ -1,20 +1,25 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
-import type { BacklogChild, BacklogEpicGroup, BacklogRowView, ChildrenRead, ParentRead } from '@/types/backlog'
+import type { BacklogChild, BacklogEpicGroup, BacklogRowView, ChildBlockerRead, ChildrenRead, ParentRead } from '@/types/backlog'
 import type { BlockerRead } from '@/types/github'
 import { buildEpicLayout, epicProgressSegments, isEpic } from '@/renderer/backlog/epics'
 
 const REPO_ID = 'repo-a' as RepoId
 const NO_LINKS: BlockerRead = { ok: true, open: [], shown: 0, total: 0 }
+const CHILD_NO_LINKS: ChildBlockerRead = { ok: true, open: [], closed: [], shown: 0, total: 0 }
 const NO_PARENT: ParentRead = { ok: true, parent: null }
 const NO_CHILDREN: ChildrenRead = { ok: true, children: [], shown: 0, total: 0 }
 
-function blockedBy(...numbers: number[]): BlockerRead {
-  return { ok: true, open: numbers.map((number) => ({ number, title: `#${number}`, url: `u${number}`, state: 'OPEN' })), shown: numbers.length, total: numbers.length }
+function blockedBy(...numbers: number[]): ChildBlockerRead {
+  return { ok: true, open: numbers.map((number) => ({ number, title: `#${number}`, url: `u${number}`, state: 'OPEN' })), closed: [], shown: numbers.length, total: numbers.length }
+}
+
+function closedBlockedBy(...numbers: number[]): ChildBlockerRead {
+  return { ok: true, open: [], closed: numbers.map((number) => ({ number, title: `#${number}`, url: `u${number}`, state: 'CLOSED' })), shown: numbers.length, total: numbers.length }
 }
 
 function child(number: number, overrides: Partial<BacklogChild> = {}): BacklogChild {
-  return { number, title: `Child ${number}`, state: 'OPEN', claimed: false, blockers: NO_LINKS, ...overrides }
+  return { number, title: `Child ${number}`, state: 'OPEN', claimed: false, blockers: CHILD_NO_LINKS, ...overrides }
 }
 
 function row(number: number, overrides: Partial<BacklogRowView> = {}): BacklogRowView {
@@ -147,8 +152,77 @@ describe('buildEpicLayout', () => {
     const rows = [epicRow(1, children), memberRow(3, 1)]
     const group = epicsOf(buildEpicLayout(rows))[0]!
     expect(waveNumbers(group)).toEqual([[3]])
+    expect(group.waves.map((w) => w.number)).toEqual([2])
     expect(summaryOf(group).canStart.map((c) => c.number)).toEqual([3])
     expect(summaryOf(group).done).toBe(1)
+  })
+
+  describe('stable wave numbers', () => {
+    const waveShape = (group: BacklogEpicGroup) => group.waves.map((w) => ({ number: w.number, rows: w.rows.map((r) => r.number) }))
+
+    it('keeps a wave number the same before and after a merge', () => {
+      const rows = [epicRow(1, []), ...[2, 3, 4, 5].map((n) => memberRow(n, 1))]
+      const before = [child(2), child(3, { blockers: blockedBy(2) }), child(4, { blockers: blockedBy(3) }), child(5)]
+      const beforeGroup = epicsOf(buildEpicLayout([{ ...rows[0]!, children: { ok: true, children: before, shown: 4, total: 4 } }, ...rows.slice(1)]))[0]!
+      expect(waveShape(beforeGroup)).toEqual([
+        { number: 1, rows: [2, 5] },
+        { number: 2, rows: [3] },
+        { number: 3, rows: [4] },
+      ])
+
+      const after = [child(2, { state: 'CLOSED' }), child(3, { blockers: closedBlockedBy(2) }), child(4, { blockers: blockedBy(3) }), child(5, { state: 'CLOSED' })]
+      const afterGroup = epicsOf(buildEpicLayout([{ ...rows[0]!, children: { ok: true, children: after, shown: 4, total: 4 } }, ...rows.slice(1)]))[0]!
+      expect(waveShape(afterGroup)).toEqual([
+        { number: 2, rows: [3] },
+        { number: 3, rows: [4] },
+      ])
+    })
+
+    it('leaves a gap for a fully closed first wave', () => {
+      const children = [child(2, { state: 'CLOSED' }), child(3, { blockers: closedBlockedBy(2) })]
+      const group = epicsOf(buildEpicLayout([epicRow(1, children), memberRow(3, 1)]))[0]!
+      expect(group.waves.map((w) => w.number)).toEqual([2])
+    })
+
+    it('lets a chain of closed children push an open dependent down', () => {
+      const children = [child(2, { state: 'CLOSED' }), child(3, { state: 'CLOSED', blockers: closedBlockedBy(2) }), child(4, { blockers: closedBlockedBy(3) })]
+      const group = epicsOf(buildEpicLayout([epicRow(1, children), memberRow(4, 1)]))[0]!
+      expect(group.waves.map((w) => w.number)).toEqual([3])
+      expect(waveNumbers(group)).toEqual([[4]])
+    })
+
+    it('does not report a cycle among closed children', () => {
+      const children = [child(2, { state: 'CLOSED', blockers: closedBlockedBy(3) }), child(3, { state: 'CLOSED', blockers: closedBlockedBy(2) }), child(4)]
+      const group = epicsOf(buildEpicLayout([epicRow(1, children), memberRow(4, 1)]))[0]!
+      expect(summaryOf(group).cycles).toEqual([])
+    })
+
+    it('reports only the open members of a cycle', () => {
+      const children = [child(2, { state: 'CLOSED', blockers: closedBlockedBy(3) }), child(3, { blockers: blockedBy(2) })]
+      const group = epicsOf(buildEpicLayout([epicRow(1, children), memberRow(3, 1)]))[0]!
+      expect(summaryOf(group).cycles).toEqual([3])
+    })
+
+    it('does not flag waves as shifting for a full read', () => {
+      const group = epicsOf(buildEpicLayout([epicRow(1, [child(2)]), memberRow(2, 1)]))[0]!
+      expect(summaryOf(group).wavesMayShift).toBe(false)
+    })
+
+    it('flags waves as shifting when the children read is truncated', () => {
+      const epic = row(1, { subIssueCount: 5, children: { ok: true, children: [child(2)], shown: 1, total: 5 } })
+      const group = epicsOf(buildEpicLayout([epic, memberRow(2, 1)]))[0]!
+      expect(summaryOf(group).wavesMayShift).toBe(true)
+    })
+
+    it('flags waves as shifting for a truncated or failed blocker read on a closed child, without marking it uncertain', () => {
+      const truncated: ChildBlockerRead = { ok: true, open: [], closed: [], shown: 0, total: 3 }
+      const failed: ChildBlockerRead = { ok: false, reason: 'boom' }
+      for (const blockers of [truncated, failed]) {
+        const group = epicsOf(buildEpicLayout([epicRow(1, [child(2, { state: 'CLOSED', blockers }), child(3)]), memberRow(3, 1)]))[0]!
+        expect(summaryOf(group).wavesMayShift).toBe(true)
+        expect(summaryOf(group).uncertain).toEqual([])
+      }
+    })
   })
 
   it('counts a claimed child in its wave and lets it block a later wave', () => {
@@ -200,7 +274,7 @@ describe('buildEpicLayout', () => {
   })
 
   it('marks truncated blockers as uncertain and not startable', () => {
-    const truncated: BlockerRead = { ok: true, open: [], shown: 0, total: 3 }
+    const truncated: ChildBlockerRead = { ok: true, open: [], closed: [], shown: 0, total: 3 }
     const group = epicsOf(buildEpicLayout([epicRow(1, [child(2, { blockers: truncated })]), memberRow(2, 1)]))[0]!
     expect(summaryOf(group).uncertain).toEqual([2])
     expect(summaryOf(group).canStart).toEqual([])
@@ -208,7 +282,7 @@ describe('buildEpicLayout', () => {
   })
 
   it('marks failed blockers as uncertain and not startable', () => {
-    const failed: BlockerRead = { ok: false, reason: 'boom' }
+    const failed: ChildBlockerRead = { ok: false, reason: 'boom' }
     const group = epicsOf(buildEpicLayout([epicRow(1, [child(2, { blockers: failed })]), memberRow(2, 1)]))[0]!
     expect(summaryOf(group).uncertain).toEqual([2])
     expect(summaryOf(group).canStart).toEqual([])
