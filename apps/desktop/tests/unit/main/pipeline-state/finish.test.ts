@@ -91,4 +91,22 @@ describe('retryMirrors', () => {
     await r.retryMirrors(ENTRY)
     expect(r.mirrored).toEqual([])
   })
+
+  it('retries a persisting failure only once per backoff window', async () => {
+    let clock = 1_000
+    const mirrored: MirrorItemParams[] = []
+    const store = { view: () => ({ kind: 'store', items: [stored({ number: 2, mirrorFailure: FAILURE })] }), prune: vi.fn() } as unknown as PipelineStateStore
+    const mirrorItem = (params: MirrorItemParams): Promise<WriteOutcome> => {
+      mirrored.push(params)
+      return Promise.resolve({ kind: 'item-unavailable' })
+    }
+    const finish = createPipelineFinish({ store, mirrorItem, auditDir: '/audit', now: () => clock })
+    await finish.retryMirrors(ENTRY)
+    clock += 60_000
+    await finish.retryMirrors(ENTRY)
+    expect(mirrored).toHaveLength(1)
+    clock += 5 * 60_000
+    await finish.retryMirrors(ENTRY)
+    expect(mirrored).toHaveLength(2)
+  })
 })

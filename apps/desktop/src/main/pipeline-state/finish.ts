@@ -4,11 +4,13 @@ import type { MirrorItemParams, PipelineStateStore, StoredItem } from '@/types/p
 import type { WriteOutcome } from '@/types/writes'
 
 const RETRY_LIMIT = 10
+const RETRY_BACKOFF_MS = 5 * 60 * 1000
 
 interface FinishDeps {
   readonly store: PipelineStateStore
   readonly mirrorItem: (params: MirrorItemParams) => Promise<WriteOutcome>
   readonly auditDir: string
+  readonly now?: () => number
 }
 
 interface FinishedItems {
@@ -22,6 +24,10 @@ export interface PipelineFinish {
 }
 
 export function createPipelineFinish(deps: FinishDeps): PipelineFinish {
+  const now = deps.now ?? Date.now
+  const lastRetry = new Map<string, number>()
+  const retryKey = (entry: ReadyEntry, item: StoredItem): string => `${entry.id}:${item.kind}:${item.number}`
+
   const mirror = (entry: ReadyEntry, item: StoredItem, action: string, mode: 'state' | 'merged'): Promise<WriteOutcome> =>
     deps.mirrorItem({ entry, ref: { kind: item.kind, number: item.number }, action, auditDir: deps.auditDir, mode })
 
@@ -40,10 +46,21 @@ export function createPipelineFinish(deps: FinishDeps): PipelineFinish {
       }
       await deps.store.prune(entry.id, finished.closed)
     },
+    /** Retries each failed item at most once per backoff window, so a failure that persists neither floods the audit log nor re-reads the item on every poll. */
     async retryMirrors(entry) {
       const view = deps.store.view(entry.id)
       if (view.kind !== 'store') return
-      for (const item of view.items.filter((candidate) => candidate.mirrorFailure !== null).slice(0, RETRY_LIMIT)) await mirror(entry, item, 'mirror-retry', 'state')
+      const failed = view.items.filter((candidate) => candidate.mirrorFailure !== null)
+      const failedKeys = new Set(failed.map((item) => retryKey(entry, item)))
+      for (const key of lastRetry.keys()) if (key.startsWith(`${entry.id}:`) && !failedKeys.has(key)) lastRetry.delete(key)
+      const due = failed.filter((item) => {
+        const last = lastRetry.get(retryKey(entry, item))
+        return last === undefined || now() - last >= RETRY_BACKOFF_MS
+      })
+      for (const item of due.slice(0, RETRY_LIMIT)) {
+        lastRetry.set(retryKey(entry, item), now())
+        await mirror(entry, item, 'mirror-retry', 'state')
+      }
     },
   }
 }
