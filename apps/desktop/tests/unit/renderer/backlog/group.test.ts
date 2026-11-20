@@ -156,7 +156,7 @@ describe('buildBacklogGroup layout', () => {
     if (group.kind !== 'loaded') throw new Error('expected loaded')
     const first = group.layout.entries[0]
     if (first?.kind !== 'epic') throw new Error('expected an epic first')
-    expect(first.group.waves.map((wave) => [wave.number, wave.rows.map((row) => row.number)])).toEqual([[1, [42]], [2, []]])
+    expect(first.group.waves.map((wave) => [wave.number, wave.rows.map((row) => row.number)])).toEqual([[1, [42]]])
     expect(first.group.epic.number).toBe(41)
   })
 
