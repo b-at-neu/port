@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { ReconciledItem } from '@/types/state'
-import { bareTicketLabel, prSuffixOf, ticketIndex, ticketLabel, ticketLabelFor } from '@/utils/tickets/ticket'
+import { bareTicketLabel, prSuffixOf, ticketAssignedTo, ticketIndex, ticketLabel, ticketLabelFor } from '@/utils/tickets/ticket'
 
 const LABELLED = { stage: 'trigger', stages: [{ key: 'ready', name: 'ready', role: 'trigger' }] } as const
 
@@ -81,6 +81,23 @@ describe('ticketIndex', () => {
       expect(ticket?.primary.number).toBe(2)
       expect(ticket?.primary.stage).toBeNull()
     })
+  })
+})
+
+describe('ticketAssignedTo', () => {
+  const ticketOf = (...items: ReconciledItem[]) => ticketIndex(items).tickets[0]
+  const assigned = (ticket: ReturnType<typeof ticketOf>) => ticket !== undefined && ticketAssignedTo(ticket, 'op')
+
+  it('is true when the viewer is on the issue only, the pull request only, or both', () => {
+    expect(assigned(ticketOf(issue(1, { assignees: ['op'], linked: 2 }), pullRequest(2, { assignees: [], linked: 1 })))).toBe(true)
+    expect(assigned(ticketOf(issue(1, { assignees: [], linked: 2 }), pullRequest(2, { assignees: ['op'], linked: 1 })))).toBe(true)
+    expect(assigned(ticketOf(issue(1, { assignees: ['op'], linked: 2 }), pullRequest(2, { assignees: ['op'], linked: 1 })))).toBe(true)
+  })
+
+  it('is false for an unassigned ticket, one assigned to someone else, and an unlinked pull request assigned to someone else', () => {
+    expect(assigned(ticketOf(issue(1, { assignees: [] })))).toBe(false)
+    expect(assigned(ticketOf(issue(1, { assignees: ['other'] })))).toBe(false)
+    expect(assigned(ticketOf(pullRequest(2, { assignees: ['other'] })))).toBe(false)
   })
 })
 

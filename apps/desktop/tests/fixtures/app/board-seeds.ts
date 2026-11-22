@@ -153,7 +153,7 @@ const ATTENTION_ITEM_SEEDS: readonly ItemSeed[] = [
     stageKey: 'blocked',
     blockerComments: [{ body: "## Blocker\n\n**Decision needed:** keep closed workspaces 30 or 90 days?\n\nThe retention period isn't in the plan.", offsetMinutes: -11 }],
   },
-  // Unassigned and queued, so planTick's ownership partition holds it with reason 'unowned' — the Board's "Waiting on you" row needs one.
+  // Unassigned and queued: the Board filters it out, while planTick's ownership partition still holds it with reason 'unowned'.
   { kind: 'issue', number: 52, title: 'Add a dark-mode icon for the tray', stageKey: 'ready', assignees: [] },
   // Conflicting against the base branch, so planTick's mergeability gate surfaces it as a Needs-you 'held' item.
   { kind: 'pull-request', number: 53, title: 'Upgrade the PDF renderer', stageKey: 'readyForReview', mergeable: 'CONFLICTING', updatedMinutesAgo: -5 },

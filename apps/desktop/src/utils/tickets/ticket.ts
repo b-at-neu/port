@@ -49,6 +49,11 @@ export function ticketIndex(items: readonly ReconciledItem[]): TicketIndex {
   return { tickets, byNumber }
 }
 
+/** The viewer is among the assignees of the issue or its linked pull request. */
+export function ticketAssignedTo(ticket: Ticket, viewer: string): boolean {
+  return (ticket.issue?.assignees.includes(viewer) ?? false) || (ticket.pullRequest?.assignees.includes(viewer) ?? false)
+}
+
 /** `#<n> <title>`, or `PR#<n> <title>` for a pull request with no ticket. */
 export function ticketLabel(ref: TicketRef): string {
   return `${ref.kind === 'issue' ? '#' : 'PR#'}${String(ref.number)} ${ref.title}`

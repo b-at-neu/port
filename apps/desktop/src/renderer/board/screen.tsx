@@ -195,7 +195,7 @@ export function BoardScreen() {
                 ) : allRows.length === 0 ? (
                   <EmptyState
                     icon={LayoutGrid}
-                    message={repo !== null ? "Nothing in this repository's pipeline." : 'Nothing in the pipeline.'}
+                    message={repo !== null ? "Nothing assigned to you in this repository's pipeline." : 'Nothing assigned to you in the pipeline.'}
                     action={repo !== null ? { label: 'Show all repositories', onClick: () => setSearch({ repo: null }) } : undefined}
                     className="px-4 py-6"
                   />
