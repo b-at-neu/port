@@ -127,7 +127,7 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'sidebar-rail', click: '[aria-label="Hide sidebar"]', ready: '[aria-label="Show sidebar"]', restore: '[aria-label="Show sidebar"]' },
       { name: 'kanban', hash: '#/board?view=board', ready: '[data-slot="ticket-card"]' },
       { name: 'kanban-detail', hash: '#/board?view=board&item=fixture-acme-widgets:38', ready: '[role="complementary"]' },
-      { name: 'kanban-held-detail', hash: '#/board?view=board&item=fixture-acme-widgets:53', ready: '[data-slot="held-tag"]' },
+      { name: 'kanban-held-detail', hash: '#/board?view=board&item=fixture-acme-widgets:58', ready: '[data-slot="held-tag"]' },
       { name: 'kanban-repo', hash: '#/board?view=board&repo=fixture-acme-widgets', ready: '[data-slot="ticket-card"]' },
     ],
   },
