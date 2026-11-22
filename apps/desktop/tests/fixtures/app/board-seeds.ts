@@ -153,15 +153,18 @@ const ATTENTION_ITEM_SEEDS: readonly ItemSeed[] = [
     stageKey: 'blocked',
     blockerComments: [{ body: "## Blocker\n\n**Decision needed:** keep closed workspaces 30 or 90 days?\n\nThe retention period isn't in the plan.", offsetMinutes: -11 }],
   },
-  // Unassigned and queued, so planTick's ownership partition holds it with reason 'unowned' — the Board's "Waiting on you" row needs one.
+  // Unassigned and queued: the Board filters it out, while planTick's ownership partition still holds it with reason 'unowned'.
   { kind: 'issue', number: 52, title: 'Add a dark-mode icon for the tray', stageKey: 'ready', assignees: [] },
   // Conflicting against the base branch, so planTick's mergeability gate surfaces it as a Needs-you 'held' item.
   { kind: 'pull-request', number: 53, title: 'Upgrade the PDF renderer', stageKey: 'readyForReview', mergeable: 'CONFLICTING', updatedMinutesAgo: -5 },
+  // The viewer's ticket whose pull request someone else owns: it stays on the Board while planTick holds the pull request as 'other-operator'.
+  { kind: 'issue', number: 57, title: 'Compress exported PDFs', stageKey: 'prOpened' },
+  { kind: 'pull-request', number: 58, title: 'Compress exported PDFs', stageKey: 'readyForReview', body: 'Closes #57', assignees: ['someone-else'] },
   // No attached agent, so the dispatch ledger's unmatched read reaches the Needs-you 'stalled' classification.
   { kind: 'issue', number: 54, title: 'Migrate session storage to Redis', stageKey: 'inProgress', updatedMinutesAgo: -40 },
 ]
 
-const HEALTHY_NUMBERS: ReadonlySet<number> = new Set([41, 38, 44, 36, 35, 46, 47, 52, 55])
+const HEALTHY_NUMBERS: ReadonlySet<number> = new Set([41, 38, 44, 36, 35, 46, 47, 52, 55, 57, 58])
 
 /** A healthy pipeline: every stage family non-empty, with only routine Needs-you kinds (plan review, ready to merge, a ticket waiting on dependencies). */
 const POPULATED_ITEM_SEEDS: readonly ItemSeed[] = ATTENTION_ITEM_SEEDS.filter((seed) => HEALTHY_NUMBERS.has(seed.number))

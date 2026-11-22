@@ -21,6 +21,7 @@ export interface SandboxPull {
   readonly state?: 'OPEN' | 'CLOSED' | 'MERGED'
   readonly labels: readonly string[]
   readonly assignees?: readonly string[]
+  readonly body?: string
   readonly mergedAt?: string | null
   readonly headRefOid?: string
   readonly mergeable?: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN'
