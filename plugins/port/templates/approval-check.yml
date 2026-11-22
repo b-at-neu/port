@@ -1,17 +1,22 @@
-# Installed by /port:init when modules.approvalGate is enabled.
+# Installed by /port:init when modules.approvalGate is enabled. This file existing is what
+# turns the gate on. `{{markerLabel}}` only marks a pull request the pipeline owns, and the
+# pipeline puts it on every pull request it opens.
 #
-# Gates pull requests into {{integration}} on the `{{approvedLabel}}` label, but ONLY when
-# the pull request carries `{{markerLabel}}`. Everything else — human, dependency bot —
-# gets a skipped check run, which GitHub counts as satisfied, so it merges on its own merits.
+# A pull request into {{integration}} that carries `{{markerLabel}}` merges only once it carries
+# `{{approvedLabel}}` and none of the blocking labels below: a person is needed, or the pull
+# request is mid-pipeline. Everything else (human, dependency bot) gets a skipped check run,
+# which GitHub counts as satisfied. Label names match case-insensitively.
 #
 # NEVER narrow the trigger and never rename the job. A workflow that does not run creates
 # no check run at all, which leaves a required check pending forever — strictly worse than
 # a failing one, because nothing surfaces why.
 #
-# Deliberately FAIL-OPEN: an unlabelled pipeline pull request is indistinguishable in CI
-# from a human one and simply loses its gate. Nothing here can close that. The mitigations
-# live upstream — impl-agent applies the label at creation time so the gate is live on the
-# first event, and the cockpit's ungated sweep reports any tracked pull request missing it.
+# Deliberately FAIL-OPEN: a pipeline pull request without `{{markerLabel}}` looks the same in CI
+# as a human one, so it loses its gate. Nothing here can close that, so the mitigations live
+# upstream. The pipeline writes `{{markerLabel}}` in the same write that gives a new pull
+# request its first stage, so the gate is live on that `labeled` event. The port app rewrites
+# it on every later write and reports a write that failed under Label problems. The terminal
+# cockpit's ungated sweep reports a tracked pull request that is missing it.
 #
 # Scoped to {{integration}} only. In a two-branch repository, release pull requests carry
 # no pipeline labels, so gating them would block every release. In a single-branch
@@ -46,7 +51,7 @@ jobs:
         run: |
           set -uo pipefail
 
-          # One label per line. Any of these means the item is mid-pipeline.
+          # One label per line. Any of these means a person is needed or the pull request is mid-pipeline.
           BLOCKING_LABELS="{{blockingLabels}}"
 
           if ! gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json labels \
@@ -63,20 +68,20 @@ jobs:
 
           while IFS= read -r LABEL; do
             [ -z "$LABEL" ] && continue
-            if grep -Fxq "$LABEL" "$RUNNER_TEMP/labels.txt"; then
+            if grep -Fixq "$LABEL" "$RUNNER_TEMP/labels.txt"; then
               FOUND_BLOCKING="$FOUND_BLOCKING$LABEL, "
             fi
           done <<EOF
           $BLOCKING_LABELS
           EOF
 
-          if ! grep -Fxq "{{approvedLabel}}" "$RUNNER_TEMP/labels.txt"; then
-            echo "::error::Missing the '{{approvedLabel}}' label. This PR carries '{{markerLabel}}', so it is a pipeline PR and merges only once review applies '{{approvedLabel}}'. If it is not a pipeline PR, remove the '{{markerLabel}}' label and this check will skip."
+          if ! grep -Fixq "{{approvedLabel}}" "$RUNNER_TEMP/labels.txt"; then
+            echo "::error::Missing '{{approvedLabel}}'. This PR carries '{{markerLabel}}', so it is a pipeline PR and merges once the pipeline marks it '{{approvedLabel}}'. If it is not a pipeline PR, remove '{{markerLabel}}' and this check will skip."
             FAILED=1
           fi
 
           if [ -n "$FOUND_BLOCKING" ]; then
-            echo "::error::Blocking pipeline label(s): ${FOUND_BLOCKING%, }. The PR is mid-pipeline; wait for it to reach '{{approvedLabel}}'."
+            echo "::error::Blocking pipeline label(s): ${FOUND_BLOCKING%, }. A person is needed or the PR is mid-pipeline; it merges once it carries '{{approvedLabel}}' and none of these."
             FAILED=1
           fi
 

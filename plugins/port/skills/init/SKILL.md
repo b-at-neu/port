@@ -256,9 +256,16 @@ Moves a repository from the old 17-label set to the seven in `${CLAUDE_PLUGIN_RO
 
 ## 6. Install the CI gate
 
-*Only when `approvalGate` is enabled.* Copy `${CLAUDE_PLUGIN_ROOT}/templates/approval-check.yml` to `.github/workflows/approval-check.yml`, substituting the integration branch, the marker and approved label names, and the blocking-label list: the labels whose `role` is `in-flight` or `gate` in `labels.json`, in file order, restricted to enabled modules, using this repository's configured names, one per line. Indent every continuation line to the placeholder's own indentation — the value sits inside a YAML block scalar whose indentation is stripped before the shell ever sees it, so a flush-left continuation line collapses the list into one word.
+*Only when `approvalGate` is enabled.* Copy `${CLAUDE_PLUGIN_ROOT}/templates/approval-check.yml` to `.github/workflows/approval-check.yml`, substituting the integration branch and these names:
+
+- `{{markerLabel}}` is the resolved `labels.port`, and `{{approvedLabel}}` is the resolved `states.approved`.
+- `{{blockingLabels}}` is the `labels.json` entries whose `role` is `in-flight` or `gate`, in file order, using the configured names verbatim, one per line. By default that is `needs you`, `planning`, `implementing`, `reviewing`, `revising`. Indent every continuation line to the placeholder's own indentation — the value sits inside a YAML block scalar whose indentation is stripped before the shell ever sees it, so a flush-left continuation line collapses the list into one word.
+
+The workflow existing is what turns the gate on. `port` goes on every pipeline pull request either way, and on its own it gates nothing.
 
 If the file already exists, diff it rather than overwriting, and ask.
+
+*When `approvalGate` is off* and `.github/workflows/approval-check.yml` already exists, render nothing and report: "`.github/workflows/approval-check.yml` is still installed, so merges are still gated even though `modules.approvalGate` is off. Delete it to turn the gate off." Never delete it yourself.
 
 ## 7. Install the artifact validator
 

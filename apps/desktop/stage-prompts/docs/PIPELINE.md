@@ -361,11 +361,11 @@ A record never expires — no `since` age is ever compared against a clock — b
 
 ### CI merge gate
 
-> **Module: `approvalGate`.** Skip this section when the flag is false. Nothing else changes: `review-agent` still applies `approved` and the cockpit still announces it, but the merge gate is conversational rather than enforced.
+> **Module: `approvalGate`.** Skip this section when the flag is false. Nothing else changes: port still marks the PR `approved` and announces it, but the merge gate is conversational rather than enforced.
 
-A workflow gates pull requests into `<integration>` on the `approved` label, **but only when the pull request carries `claude`** (a job-level condition). Every other pull request — human, dependency bot — gets a skipped check run, which GitHub counts as satisfied, so it merges on its own merits.
+The gate is on because the workflow file exists. It gates a pull request into `<integration>` that carries `port`, a job-level condition, and that pull request merges once it has `approved` and none of `needs you`, `planning`, `implementing`, `reviewing` or `revising`. Names match case-insensitively. Every other pull request — human, dependency bot — gets a skipped check run, which GitHub counts as satisfied, so it merges on its own merits.
 
-This is deliberately **fail-open**: an unlabelled pipeline pull request is indistinguishable in CI from a human one and simply loses its gate. Nothing in the workflow can close that, so the mitigations live upstream — `impl-agent` passes `--label "claude"` at creation time so the gate is live on the first event, and the cockpit's **ungated sweep** reports any tracked pull request missing it. The ungated sweep reads the same unconditional open-pull-request alias the duplicate-pull-request sweep also needs (#220) — only its own filter and report stay module-gated; the alias itself is fetched every tick regardless of `approvalGate`.
+This is deliberately **fail-open**: a pipeline pull request without `port` is indistinguishable in CI from a human one and simply loses its gate. Nothing in the workflow can close that, so the mitigation lives upstream: the app writes `port` from the `pr-opened` hand-back, rewrites it on every mirror write, and reports a failed write under Label problems.
 
 **Never narrow the workflow's trigger to exclude a pull request.** A workflow that never runs creates no check run, leaving a required check pending forever. For the same reason, the workflow is scoped to `<integration>` only — release pull requests into `<production>` carry no pipeline labels and must not be gated. In single-branch mode that carve-out is vacuous: every pull request targets `<integration>`, so every pipeline pull request is gated.
 
