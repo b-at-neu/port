@@ -121,7 +121,7 @@ export type ItemDecisionResult =
   | { readonly ok: false; readonly reason: 'not-owned'; readonly owners: readonly string[] }
   | { readonly ok: false; readonly reason: 'viewer-unknown' }
   | { readonly ok: false; readonly reason: 'repo-unavailable' }
-  | { readonly ok: false; readonly reason: 'refused'; readonly refusal: DecisionRefusal | 'note-invalid' | 'picks-invalid' | 'route-unavailable';readonly problem?: string }
+  | { readonly ok: false; readonly reason: 'refused'; readonly refusal: DecisionRefusal | 'note-invalid' | 'picks-invalid' | 'route-unavailable'; readonly problem?: string }
   | { readonly ok: false; readonly reason: 'verify-failed'; readonly message: string }
   | { readonly ok: false; readonly reason: 'comment-failed'; readonly comment: WriteOutcome }
 
