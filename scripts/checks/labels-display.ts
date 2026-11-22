@@ -6,7 +6,8 @@ import type { Reporter } from '#lib/report.ts';
 const SHIPPED_REL = 'plugins/port/data/labels.json';
 const DESKTOP_REL = 'apps/desktop/src/utils/labels/labels.json';
 const DISPLAY_TS_REL = 'apps/desktop/src/utils/labels/display.ts';
-const SCHEMA_REL = 'schema/port.config.schema.json';
+const GATE_TEMPLATE_REL = 'plugins/port/templates/approval-check.yml';
+const SCHEMA_REL ='schema/port.config.schema.json';
 
 // The seven-label display vocabulary: the data file, its app copy, the schema's two override maps, and display.ts's literal key union.
 export default async function ({ expect, fail, ok }: Reporter) {
@@ -81,6 +82,20 @@ export default async function ({ expect, fail, ok }: Reporter) {
       expect(malformed.length === 0, 'labels-display-previous', `'${l.key}' has malformed previousColors entries ${JSON.stringify(malformed)}, expected six uppercase hex digits`);
       expect(!previous.includes(l.color), 'labels-display-previous', `'${l.key}' lists its own current color '${l.color}' in previousColors`);
     }
+  }
+
+  // pin: the merge gate's blocking set, derived from roles, and the template's case-insensitive matching
+  {
+    const blocking = labels.filter((l) => l.role === 'in-flight' || l.role === 'gate').map((l) => l.key).sort();
+    const want = ['implementing', 'needsYou', 'planning', 'reviewing', 'revising'];
+    expect(blocking.join(',') === want.join(','), 'labels-display-gate', `the in-flight and gate keys are ${JSON.stringify(blocking)}, the merge gate must block on exactly ${JSON.stringify(want)}`);
+    expect(labels.find((l) => l.key === 'approved')?.role === 'terminal', 'labels-display-gate', `'approved' must have role terminal`);
+    expect(labels.find((l) => l.key === 'port')?.role === 'marker', 'labels-display-gate', `'port' must have role marker`);
+
+    const template = readFileSync(join(root, GATE_TEMPLATE_REL), 'utf8');
+    expect(!template.includes('grep -Fxq'), 'labels-display-gate', `${GATE_TEMPLATE_REL} matches a label case-sensitively with 'grep -Fxq' — use 'grep -Fixq'`);
+    expect(template.split('grep -Fixq').length - 1 >= 2, 'labels-display-gate', `${GATE_TEMPLATE_REL} must match both the blocking and approved labels with 'grep -Fixq'`);
+    expect(/^\s*if:.*\{\{markerLabel\}\}/m.test(template), 'labels-display-gate', `${GATE_TEMPLATE_REL}'s job 'if:' must name {{markerLabel}}`);
   }
 
   ok();
