@@ -121,7 +121,7 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'detail', hash: '#/board?item=fixture-acme-widgets:38', ready: '[role="complementary"]' },
       { name: 'detail-sessions', hash: '#/board?item=fixture-acme-widgets:46', ready: '[role="complementary"]' },
       { name: 'gate-review', click: 'text=Review plan', ready: '[data-slot="dialog-content"]' },
-      { name: 'repo-empty', hash: '#/board?repo=fixture-acme-gadgets', ready: "text=Nothing in this repository's pipeline." },
+      { name: 'repo-empty', hash: '#/board?repo=fixture-acme-gadgets', ready: "text=Nothing assigned to you in this repository's pipeline." },
       { name: 'repo-scoped', hash: '#/board?repo=fixture-acme-widgets', ready: 'aside [data-slot="repo-screen"][data-active="true"]' },
       { name: 'sidebar-repo-collapsed', click: 'aside [data-slot="repo-group"] button[aria-label^="Collapse "]', ready: 'aside [data-slot="repo-group"] button[aria-label^="Expand "]', restore: 'aside [data-slot="repo-group"] button[aria-label^="Expand "]' },
       { name: 'sidebar-rail', click: '[aria-label="Hide sidebar"]', ready: '[aria-label="Show sidebar"]', restore: '[aria-label="Show sidebar"]' },
