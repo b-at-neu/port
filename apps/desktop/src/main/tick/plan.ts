@@ -253,9 +253,9 @@ function actionableAndHeld(
       // A null rollup was never selected, so the gate gets no check input and escalates.
       const checks = item.checkRollup === null ? undefined : zeroDiffChecksOf(item.checkRollup, checkDispositions, now.toISOString())
       const gate = zeroDiffGate({ reviews: item.reviews ?? undefined, comments: item.comments ?? undefined, headRefOid: item.headRefOid ?? '', checks, escalatedAt: escalatedAtOf(item) })
-      // Only the per-head review cap escalates; any other zero-diff result gets one more review of the same head.
+      // Only the per-head review cap (a second review of one head) is held; any other zero-diff result gets one more review.
       if (gate.action === 'escalate' && gate.reason === 'sha-cap') {
-        held.push({ number: item.number, kind: item.kind, trigger, reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff', reason: 'sha-cap' } })
+        held.push({ number: item.number, kind: item.kind, trigger, reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } })
         continue
       }
       if (gate.action === 'hold-checks' && gate.facts !== undefined) {

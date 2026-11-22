@@ -50,6 +50,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - never trusts a renderer-supplied `expectedStage` to widen a write, only to refuse
 - `gate.ts` comments before the label swap; `escalate.ts`/`observe.ts` swap first
 - `decide.ts`'s `applyItemDecision` (#312) is the fifth comment-then-swap composition: check → re-read → comment → swap, `gateAnswer`'s own direction — pinned by `desktop-gate`/`desktop-actions`
+- unblock routes come from the escalation's own marker cause (`utils/actions/decide.ts`'s `routes`); a route the escalation can't use is never offered and is refused in `main` as `route-unavailable`
 - `gate.ts`'s `autoApprovePlan` (#313) posts no comment — the click's own label plan, with an `autoPlan`-present, exact-assignee precondition in place of the click's `{ kind: 'any' }`
 
 **`apps/desktop/src/main/channels/<topic>.ts`**

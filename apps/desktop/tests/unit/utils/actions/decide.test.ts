@@ -57,7 +57,17 @@ describe('decisionsFor — unblock', () => {
   it('is available on a pull request whose only role-bearing label is needsHuman', () => {
     const it1 = item({ stages: [stageLabel('needsHuman', 'gate')] })
     const result = decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5, liveStage: false })
-    expect(result.unblock).toEqual({ available: true, context: { target: 'pull-request', reason: null, cyclesUsed: 0, cap: 5, decisions: [] } })
+    expect(result.unblock).toEqual({ available: true, context: { target: 'pull-request', reason: null, cyclesUsed: 0, cap: 5, decisions: [], routes: ['review', 'revision'] } })
+  })
+
+  it.each([
+    ['a sha-cap marker', 'sha-cap', ['revision']],
+    ['a cycle-cap marker', 'cycle-cap', ['review', 'revision']],
+  ])('offers the routes for %s', (_name, cause, routes) => {
+    const comments: readonly PullRequestCommentNode[] = [{ body: `## Pipeline Escalation\nreason\n<!-- port:escalation ${cause} abc -->`, createdAt: '2026-01-01T00:00:00Z' }]
+    const it1 = item({ stages: [stageLabel('needsHuman', 'gate')], comments })
+    const result = decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5, liveStage: false })
+    expect(result.unblock).toMatchObject({ available: true, context: { routes } })
   })
 
   it('carries the newest escalation reason', () => {
@@ -67,7 +77,7 @@ describe('decisionsFor — unblock', () => {
     ]
     const it1 = item({ stages: [stageLabel('needsHuman', 'gate')], comments })
     const result = decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5, liveStage: false })
-    expect(result.unblock).toEqual({ available: true, context: { target: 'pull-request', reason: 'newer reason', cyclesUsed: 0, cap: 5, decisions: [] } })
+    expect(result.unblock).toEqual({ available: true, context: { target: 'pull-request', reason: 'newer reason', cyclesUsed: 0, cap: 5, decisions: [], routes: ['review', 'revision'] } })
   })
 
   it('refuses rebase-decisions when the escalation carries D<n> blocks it cannot parse', () => {
@@ -80,7 +90,7 @@ describe('decisionsFor — unblock', () => {
     const comments: readonly PullRequestCommentNode[] = [{ body: TWO_DECISIONS, createdAt: '2026-01-01T00:00:00Z' }]
     const it1 = item({ stages: [stageLabel('needsHuman', 'gate')], comments })
     const result = decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5, liveStage: false })
-    expect(result.unblock).toMatchObject({ available: true, context: { reason: '3 conflicts — 1 resolved automatically, 2 need a decision' } })
+    expect(result.unblock).toMatchObject({ available: true, context: { reason: '3 conflicts — 1 resolved automatically, 2 need a decision', routes: ['revision'] } })
     if (result.unblock.available && 'decisions' in result.unblock.context) expect(result.unblock.context.decisions.map((d) => d.id)).toEqual(['D1', 'D2'])
   })
 
@@ -90,7 +100,7 @@ describe('decisionsFor — unblock', () => {
     ]
     const it1 = item({ stages: [stageLabel('needsHuman', 'gate')], comments })
     const result = decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5, liveStage: false })
-    expect(result.unblock).toEqual({ available: true, context: { target: 'pull-request', reason: null, cyclesUsed: 0, cap: 6, decisions: [] } })
+    expect(result.unblock).toEqual({ available: true, context: { target: 'pull-request', reason: null, cyclesUsed: 0, cap: 6, decisions: [], routes: ['review', 'revision'] } })
   })
 
   it('is not-applicable on an issue at needsHuman, or with a second role-bearing label present', () => {
@@ -108,7 +118,7 @@ describe('decisionsFor — unblock on a blocked issue', () => {
   it('is available with an issue target when no stage session is live', () => {
     expect(decisionsFor({ item: blocked(), viewer: 'op', reviewCycleCap: 5, liveStage: false }).unblock).toEqual({
       available: true,
-      context: { target: 'issue', reason: null, cyclesUsed: 0, cap: 0, decisions: [] },
+      context: { target: 'issue', reason: null, cyclesUsed: 0, cap: 0, decisions: [], routes: ['implementation'] },
     })
   })
 
@@ -166,8 +176,15 @@ describe('decisionsFor — ownership', () => {
 })
 
 describe('escalationOf', () => {
-  it('returns null reason and no rebaseDecisions with no comments', () => {
-    expect(escalationOf(null)).toEqual({ reason: null, rebaseDecisions: [] })
+  it('returns null reason and cause and no rebaseDecisions with no comments', () => {
+    expect(escalationOf(null)).toEqual({ reason: null, cause: null, rebaseDecisions: [] })
+  })
+
+  it('parses the cause from the marker line, and is null without one', () => {
+    const marked: readonly PullRequestCommentNode[] = [{ body: '## Pipeline Escalation\nreason\n<!-- port:escalation sha-cap abc -->', createdAt: '2026-01-01T00:00:00Z' }]
+    expect(escalationOf(marked).cause).toBe('sha-cap')
+    const bare: readonly PullRequestCommentNode[] = [{ body: '## Pipeline Escalation\nsha-cap in prose', createdAt: '2026-01-01T00:00:00Z' }]
+    expect(escalationOf(bare).cause).toBeNull()
   })
 
   it('reads D<n> blocks from the newest escalation only', () => {
@@ -175,7 +192,7 @@ describe('escalationOf', () => {
       { body: '## Pipeline Escalation\nreason\n### D1 — `a.ts`', createdAt: '2026-01-01T00:00:00Z' },
       { body: '## Pipeline Escalation\nnewer reason', createdAt: '2026-01-02T00:00:00Z' },
     ]
-    expect(escalationOf(comments)).toEqual({ reason: 'newer reason', rebaseDecisions: [] })
+    expect(escalationOf(comments)).toEqual({ reason: 'newer reason', cause: null, rebaseDecisions: [] })
   })
 })
 

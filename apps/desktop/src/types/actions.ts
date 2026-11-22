@@ -94,13 +94,14 @@ export type ItemActionResult =
 /** `cycle-cap`: revise would only escalate straight back. `rebase-decisions`: an escalation whose decision blocks port can't parse. `agent-live`: a stage session is still waiting on this blocked issue, so the answer belongs in that session. */
 export type DecisionRefusal = ActionRefusal | 'cycle-cap' | 'rebase-decisions' | 'agent-live'
 
-/** `null` when no escalation reason was found; the dialog shows the cap warning before a route is picked. `decisions` is empty for a non-rebase escalation. An issue carries neither a reason nor a cap. */
+/** `null` when no escalation reason was found; the dialog shows the cap warning before a route is picked. `decisions` is empty for a non-rebase escalation. An issue carries neither a reason nor a cap. `routes` is every route this escalation offers; main refuses any other. */
 export interface UnblockContext {
   readonly target: 'pull-request' | 'issue'
   readonly reason: string | null
   readonly cyclesUsed: number
   readonly cap: number
   readonly decisions: readonly RebaseDecision[]
+  readonly routes: readonly UnblockRoute[]
 }
 
 export interface ReviseContext {
@@ -120,7 +121,7 @@ export type ItemDecisionResult =
   | { readonly ok: false; readonly reason: 'not-owned'; readonly owners: readonly string[] }
   | { readonly ok: false; readonly reason: 'viewer-unknown' }
   | { readonly ok: false; readonly reason: 'repo-unavailable' }
-  | { readonly ok: false; readonly reason: 'refused'; readonly refusal: DecisionRefusal | 'note-invalid' | 'picks-invalid'; readonly problem?: string }
+  | { readonly ok: false; readonly reason: 'refused'; readonly refusal: DecisionRefusal | 'note-invalid' | 'picks-invalid' | 'route-unavailable'; readonly problem?: string }
   | { readonly ok: false; readonly reason: 'verify-failed'; readonly message: string }
   | { readonly ok: false; readonly reason: 'comment-failed'; readonly comment: WriteOutcome }
 

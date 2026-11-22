@@ -3,7 +3,7 @@ import type { ItemDecisionResult, UnblockContext } from '@/types/actions'
 import { decisionResultCopy, dialogTitle, unblockCapNote, unblockConsequence, unblockReasonLine } from '@/renderer/decision/copy'
 
 function context(overrides: Partial<UnblockContext> = {}): UnblockContext {
-  return { target: 'pull-request', reason: null, cyclesUsed: 0, cap: 5, decisions: [], ...overrides }
+  return { target: 'pull-request', reason: null, cyclesUsed: 0, cap: 5, decisions: [], routes: ['review', 'revision'], ...overrides }
 }
 
 describe('dialogTitle', () => {
@@ -45,6 +45,11 @@ describe('unblockConsequence', () => {
     expect(unblockConsequence(context({ decisions: [decision] }))).toContain('sends it to revision')
     expect(unblockConsequence(context())).toContain('No comment is posted — the label change is the record.')
   })
+
+  it('explains why a sha-cap escalation only goes to revision', () => {
+    const line = unblockConsequence(context({ routes: ['revision'] }))
+    expect(line).toBe('Unblocking removes "needs human" and sends it to revision. This head has had its two reviews, so it is only reviewed again once revision pushes a new one.')
+  })
 })
 
 describe('unblockCapNote', () => {
@@ -75,6 +80,12 @@ describe('decisionResultCopy — implementation route', () => {
   it('uses the issue number in a refusal', () => {
     const copy = decisionResultCopy({ number: 548, decision: 'unblock', route: 'implementation', picks: null, response: { ok: false, reason: 'refused', refusal: 'agent-live' } })
     expect(copy.line).toBe('#548 can no longer be unblocked that way.')
+  })
+
+  it('notes a route the escalation no longer offers', () => {
+    const copy = decisionResultCopy({ number: 548, decision: 'unblock', route: 'review', picks: null, response: { ok: false, reason: 'refused', refusal: 'route-unavailable' } })
+    expect(copy.line).toBe('PR #548 can no longer be unblocked that way.')
+    expect(copy.note).toBe('The escalation changed since you opened this. Close and reopen to see the current options.')
   })
 
   it('tones an applied swap as a success and every other outcome as an error', () => {

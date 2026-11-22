@@ -11,6 +11,8 @@ import { MAX_REVISE_NOTE_CHARS } from '@/types/actions'
 
 export interface Escalation {
   readonly reason: string | null
+  /** The marker's cause, `null` when the newest escalation carries none. */
+  readonly cause: string | null
   readonly rebaseDecisions: readonly RebaseDecision[] | 'unparseable'
 }
 
@@ -65,13 +67,19 @@ export function rebaseDecisionsOf(body: string): readonly RebaseDecision[] | 'un
   return new Set(decisions.map((d) => d.id)).size === decisions.length ? decisions : 'unparseable'
 }
 
-/** The newest escalation comment's reason and rebase decisions — `null`/`[]` when none is present, never guessed. */
+/** The newest escalation comment's reason, marker cause and rebase decisions — `null`/`[]` when none is present, never guessed. */
 export function escalationOf(comments: readonly PullRequestCommentNode[] | null): Escalation {
   const candidates = (comments ?? []).filter((c) => c.body.startsWith(PIPELINE_ESCALATION_HEADING))
-  if (candidates.length === 0) return { reason: null, rebaseDecisions: [] }
+  if (candidates.length === 0) return { reason: null, cause: null, rebaseDecisions: [] }
   const newest = candidates.reduce((a, b) => (Date.parse(b.createdAt) > Date.parse(a.createdAt) ? b : a))
   const reason = newest.body.split('\n').slice(1).find((line) => line.trim() !== '') ?? null
-  return { reason, rebaseDecisions: rebaseDecisionsOf(newest.body) }
+  const cause = /<!-- port:escalation (\S+)/.exec(newest.body)?.[1] ?? null
+  return { reason, cause, rebaseDecisions: rebaseDecisionsOf(newest.body) }
+}
+
+function routesOf(escalation: Escalation): readonly UnblockRoute[] {
+  if (escalation.rebaseDecisions.length > 0 || escalation.cause === 'sha-cap') return ['revision']
+  return ['review', 'revision']
 }
 
 /** One pick per decision that has one, in the escalation's own order. */
@@ -140,7 +148,7 @@ export function decisionsFor(params: DecisionsForParams): Readonly<Record<Operat
 
   let unblock: DecisionAvailability
   if (item.kind === 'issue' && onlyStage(item, 'blocked')) {
-    unblock = liveStage ? refused('agent-live') : { available: true, context: { target: 'issue', reason: null, cyclesUsed: 0, cap: 0, decisions: [] } }
+    unblock = liveStage ? refused('agent-live') : { available: true, context: { target: 'issue', reason: null, cyclesUsed: 0, cap: 0, decisions: [], routes: ['implementation'] } }
   } else if (item.kind !== 'pull-request' || !onlyStage(item, 'needsHuman')) {
     unblock = refused('not-applicable')
   } else {
@@ -148,7 +156,7 @@ export function decisionsFor(params: DecisionsForParams): Readonly<Record<Operat
     unblock =
       escalation.rebaseDecisions === 'unparseable'
         ? refused('rebase-decisions')
-        : { available: true, context: { target: 'pull-request', reason: escalation.reason, cyclesUsed, cap: effectiveCap, decisions: escalation.rebaseDecisions } }
+        : { available: true, context: { target: 'pull-request', reason: escalation.reason, cyclesUsed, cap: effectiveCap, decisions: escalation.rebaseDecisions, routes: routesOf(escalation) } }
   }
 
   let revise: DecisionAvailability
