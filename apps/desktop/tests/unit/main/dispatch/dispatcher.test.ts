@@ -51,7 +51,7 @@ function tickReport(overrides: Partial<TickReport> = {}): TickReport {
 function snapshotWith(tick: readonly TickReport[]): BoardSnapshot {
   return {
     state: {
-      repositories: [{ ok: true, repoId: REPO_ID, repo: 'o/a', displayName: 'o/a', viewer: 'op' } as never],
+      repositories: [{ ok: true, repoId: REPO_ID, repo: 'o/a', displayName: 'o/a', viewer: 'op', items: [], freshness: { github: { at: '2026-01-01T00:00:00Z' } } } as never],
       sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: '2026-01-01T00:00:00Z' },
       readAt: '2026-01-01T00:00:00Z',
     },
@@ -146,7 +146,7 @@ function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispat
     escalate: () => {
       throw new Error('escalate should not be invoked when commands.budget is null')
     },
-    requestRead: () => undefined,
+    requestRead: () => undefined, recordIncident: () => Promise.resolve(),
     dirs: { audit: '/audit', scratch: '/scratch' },
     onChange: vi.fn(),
     now: () => new Date('2026-01-01T00:00:00Z'),

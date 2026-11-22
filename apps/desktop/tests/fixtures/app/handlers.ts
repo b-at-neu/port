@@ -8,6 +8,7 @@ import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'
 import { fixtureStorageReport, fixtureUsageSummary } from './settings'
 import { fixtureBoardSnapshot } from './board'
 import { fixtureAuditRead } from './audit'
+import { fixtureIncidentExport, fixtureIncidentGroups, fixtureIncidentList } from './incidents'
 import { fixtureBacklog } from './backlog'
 import { fixtureBacklogDetail } from './backlog-detail'
 import { fixtureReleaseIssues, fixtureReleaseStatus } from './releases'
@@ -131,6 +132,9 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'backlog:list': (request) => (scenario === 'failing' ? fixtureFailingBacklog(now, request.repoId) : fixtureBacklog(now, request.repoId)),
     'backlog:detail': (request) => fixtureBacklogDetail(now, scenario, request),
     'audit:list': (request) => fixtureAuditRead(now, scenario, request),
+    'incidents:groups': () => fixtureIncidentGroups(now, scenario),
+    'incidents:list': (request) => fixtureIncidentList(now, scenario, request),
+    'incidents:export': () => fixtureIncidentExport(),
     'session:defaults': () => DEFAULT_SESSION_DEFAULTS,
     'session:defaults:set': (request) => request,
     'session:rename': () => ({ ok: false, kind: 'unknown-session' }),

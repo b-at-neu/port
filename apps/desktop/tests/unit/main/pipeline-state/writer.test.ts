@@ -5,6 +5,7 @@ import type { ReadyEntry } from '@/types/actions'
 import type { OwnershipRead } from '@/types/dispatch'
 import type { ResolvedItem } from '@/types/github'
 import type { MirrorFailure, PipelineStateStore, RepoRecord, StoredItem } from '@/types/pipeline-state'
+import type { IncidentDraft, IncidentIntent, RecordIncident } from '@/types/incidents'
 import type { ApplyLabelsParams, AuditEntry, LabelAuditEntry, LabelWriteRequest, WriteOutcome } from '@/types/writes'
 import { resolveDisplayVocabulary, type MirrorVocabulary } from '@/utils/labels/display'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
@@ -50,10 +51,14 @@ interface RigOptions {
   readonly outcomes?: Readonly<Record<number, WriteOutcome>>
   readonly ownership?: OwnershipRead['kind']
   readonly persistFails?: boolean
+  readonly incidentFails?: boolean
+  readonly headRefOid?: string
 }
 
 function rig(options: RigOptions = {}) {
   const audits: AuditEntry[] = []
+  const incidents: IncidentDraft[] = []
+  const recordIncident: RecordIncident = (draft) => (options.incidentFails === true ? Promise.reject(new Error('disk full')) : Promise.resolve(void incidents.push(draft)))
   const writes: ApplyLabelsParams[] = []
   const reads: number[][] = []
   const items = options.items ?? [stored()]
@@ -84,12 +89,14 @@ function rig(options: RigOptions = {}) {
     readOwnership: () => Promise.resolve(ownership),
     fetchItemsByNumber: ({ numbers }) => {
       reads.push([...numbers])
-      return Promise.resolve({ ok: true, resolved: numbers.map((n) => resolved(n, options.kinds?.[n] ?? 'issue', options.githubLabels?.[n] ?? [])), unavailable: [], fetchedAt: 'r' })
+      return Promise.resolve({ ok: true, resolved: numbers.map((n) => resolved(n, options.kinds?.[n] ?? 'issue', options.githubLabels?.[n] ?? [], options.headRefOid === undefined ? {} : { headRefOid: options.headRefOid })), unavailable: [], fetchedAt: 'r' })
     },
     appendAudit: (_dir, entry) => Promise.resolve(void audits.push(entry)),
+    recordIncident,
+    newId: () => 'write-1',
     now: NOW,
   })
-  return { ...writer, store, applyLabels, writes, reads, audits, record: () => record }
+  return { ...writer, store, applyLabels, writes, reads, audits, incidents, record: () => record }
 }
 
 const run = (r: ReturnType<typeof rig>, req: LabelWriteRequest = request()): Promise<WriteOutcome> => r.writeState({ request: req, repoRoot: '/repo', auditDir: '/audit' })
@@ -274,5 +281,57 @@ describe('mirrorItem', () => {
     const r = rig()
     expect(await r.mirrorItem({ entry, ref: { kind: 'issue', number: 99 }, action: 'mirror-retry', auditDir: '/audit', mode: 'state' })).toEqual({ kind: 'item-unavailable' })
     expect(r.applyLabels).not.toHaveBeenCalled()
+  })
+})
+
+const INTENT: IncidentIntent = {
+  bucket: 'duplicate-head',
+  stage: 'needsHuman',
+  condition: 'zero-diff',
+  decision: { action: 'observe-zero-diff', detail: 'zero-diff', intended: null },
+  inputs: { observedHead: 'old-head', snapshotAt: 'tick-1' },
+}
+
+describe('writeState — incidents', () => {
+  it('records the intent as raised when the head read at write time is the one it observed', async () => {
+    const r = rig({ headRefOid: 'old-head' })
+    await run(r, request({ incident: INTENT }))
+    expect(r.incidents).toHaveLength(1)
+    expect(r.incidents[0]).toMatchObject({ bucket: 'duplicate-head', stage: 'needsHuman', condition: 'zero-diff', repo: 'o/a', number: 7, outcome: { kind: 'applied' }, related: { audit: ['write-1'], tick: 'tick-1' } })
+    expect(r.incidents[0]?.inputs).toMatchObject({ observedHead: 'old-head', writeHead: 'old-head' })
+  })
+
+  it('moves the incident to stale-snapshot, carrying both heads, when the head moved since the decision', async () => {
+    const r = rig({ headRefOid: 'new-head' })
+    await run(r, request({ incident: INTENT }))
+    expect(r.incidents[0]).toMatchObject({ bucket: 'stale-snapshot', stage: 'needsHuman', condition: 'head-moved', decision: { action: 'observe-zero-diff', intended: 'duplicate-head' } })
+    expect(r.incidents[0]?.inputs).toMatchObject({ observedHead: 'old-head', writeHead: 'new-head' })
+  })
+
+  it('records a refused write that has no intent of its own', async () => {
+    const r = rig({ ownership: 'terminal' })
+    expect(await run(r)).toMatchObject({ kind: 'terminal-owned' })
+    expect(r.incidents).toHaveLength(1)
+    expect(r.incidents[0]).toMatchObject({ bucket: 'refused-write', stage: 'inProgress', condition: 'terminal-owned', outcome: { kind: 'terminal-owned' } })
+  })
+
+  it('records nothing for a write that landed with no intent', async () => {
+    const r = rig()
+    await run(r)
+    expect(r.incidents).toHaveLength(0)
+  })
+
+  it('stamps the incident and the audit entry with the same write id', async () => {
+    const r = rig({ headRefOid: 'old-head' })
+    await run(r, request({ incident: INTENT }))
+    expect(r.writes[0]?.writeId).toBe('write-1')
+    expect(r.incidents[0]?.related.audit).toEqual(['write-1'])
+  })
+
+  it('leaves every outcome unchanged when recording the incident fails', async () => {
+    const ok = rig({ incidentFails: true })
+    expect(await run(ok, request({ incident: INTENT }))).toMatchObject({ kind: 'applied' })
+    const refused = rig({ incidentFails: true, ownership: 'terminal' })
+    expect(await run(refused)).toMatchObject({ kind: 'terminal-owned' })
   })
 })

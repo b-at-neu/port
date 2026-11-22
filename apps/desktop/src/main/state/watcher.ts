@@ -262,7 +262,9 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       if (report.blind !== null) continue
       const entry = entryById.get(report.repoId)
       if (entry === undefined) continue
-      void recordTickFn(entry.path, buildDesktopTickEvent({ repo: entry.config.repo, report, now }), { git: params.git })
+      const read = state.repositories.find((candidate) => candidate.ok && candidate.repoId === report.repoId)
+      const fetchedAt = read?.ok === true && 'at' in read.freshness.github ? read.freshness.github.at : null
+      void recordTickFn(entry.path, buildDesktopTickEvent({ repo: entry.config.repo, report, fetchedAt, now }), { git: params.git })
     }
 
     const nextWakeupAt = stopped ? null : earliestDueAt().toISOString()

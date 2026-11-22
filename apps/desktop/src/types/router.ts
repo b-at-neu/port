@@ -18,7 +18,7 @@ export interface BoardSearch {
   readonly view?: BoardView | null
 }
 
-export const SETTINGS_SECTIONS = ['general', 'repositories', 'connections', 'pipeline', 'usage', 'audit', 'about'] as const
+export const SETTINGS_SECTIONS = ['general', 'repositories', 'connections', 'pipeline', 'usage', 'audit', 'incidents', 'about'] as const
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]
 
 /** The key is `section`, not `tab`, because `RepoSearch.tab` already owns `tab` with another type across the route tree. `repo` and `number` only mean something with `section: 'audit'`. */

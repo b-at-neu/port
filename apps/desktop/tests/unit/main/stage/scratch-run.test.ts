@@ -386,7 +386,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       },
       refreshMemo, rerunMemo: { get: () => undefined, set: () => undefined }, rerunChecks: () => Promise.resolve('applied'),
       forceDispatch,
-      requestRead: () => undefined,
+      requestRead: () => undefined, recordIncident: () => Promise.resolve(),
       dirs: { audit: '/audit', scratch: '/scratch' },
       onChange: () => undefined,
       now: () => new Date(NOW_ISO),

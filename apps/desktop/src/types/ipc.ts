@@ -17,6 +17,7 @@ import type { GhStatus } from '@/types/gh'
 import type { NotificationPrefs, StorageReport, UsageSummary } from '@/types/settings'
 import type { BacklogDetailResponse, BacklogResponse } from '@/types/backlog'
 import type { AuditRead } from '@/types/writes'
+import type { IncidentExportResult, IncidentGroupsRead, IncidentListRead } from '@/types/incidents'
 import type { StageAllowResult, StageResumeResult, StageRestartResult } from '@/types/stage'
 import type {
   HostedSessionSnapshot,
@@ -250,6 +251,9 @@ export interface IpcMap {
     request: { repoId: RepoId | null; number: number | null }
     response: AuditRead
   }
+  'incidents:groups': { request: { repoId: RepoId | null }; response: IncidentGroupsRead }
+  'incidents:list': { request: { repoId: RepoId | null; signature: string }; response: IncidentListRead }
+  'incidents:export': { request: { repoId: RepoId | null }; response: IncidentExportResult }
   /** The Settings screen's own read of an operator's persisted session defaults. */
   'session:defaults': {
     request: void
@@ -419,6 +423,9 @@ export const IPC_CHANNELS = [
   'backlog:list',
   'backlog:detail',
   'audit:list',
+  'incidents:groups',
+  'incidents:list',
+  'incidents:export',
   'session:defaults',
   'session:defaults:set',
   'session:rename',

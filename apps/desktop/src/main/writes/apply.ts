@@ -47,6 +47,7 @@ interface AuditContext {
   readonly ownership: OwnershipKind
   readonly observed: ObservedItem | null
   readonly call: readonly string[] | null
+  readonly writeId: string | undefined
 }
 
 async function recordLabelAudit(auditDir: string, ctx: AuditContext, outcome: WriteOutcome, now: () => Date): Promise<void> {
@@ -63,6 +64,7 @@ async function recordLabelAudit(auditDir: string, ctx: AuditContext, outcome: Wr
     call: ctx.call,
     commentBytes: null,
     result: outcome,
+    ...(ctx.writeId === undefined ? {} : { writeId: ctx.writeId }),
   }
   await appendAudit(auditDir, entry)
 }
@@ -79,16 +81,16 @@ export async function applyLabels(params: ApplyLabelsParams): Promise<WriteOutco
   const ownership = await readOwnership({ repoRoot: params.repoRoot, repo: params.repo, git: params.git, pathOps, now })
   if (ownership.kind === 'terminal') {
     const outcome: WriteOutcome = { kind: 'terminal-owned', since: ownership.since }
-    await recordLabelAudit(auditDir, { request, ownership: 'terminal', observed, call: null }, outcome, now)
+    await recordLabelAudit(auditDir, { request, ownership: 'terminal', observed, call: null, writeId: params.writeId }, outcome, now)
     return outcome
   }
   if (ownership.kind === 'unreadable') {
     const outcome: WriteOutcome = { kind: 'ownership-unreadable', path: ownership.path, message: ownership.message }
-    await recordLabelAudit(auditDir, { request, ownership: 'unreadable', observed, call: null }, outcome, now)
+    await recordLabelAudit(auditDir, { request, ownership: 'unreadable', observed, call: null, writeId: params.writeId }, outcome, now)
     return outcome
   }
 
-  const ctx: AuditContext = { request, ownership: ownership.kind, observed, call: null }
+  const ctx: AuditContext = { request, ownership: ownership.kind, observed, call: null, writeId: params.writeId }
   if (wouldChangeNothing(params, observed)) {
     const outcome: WriteOutcome = { kind: 'no-op' }
     await recordLabelAudit(auditDir, ctx, outcome, now)

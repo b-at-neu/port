@@ -14,12 +14,15 @@ import {
   mirrorDiff,
 } from '@/main/pipeline-state/mirror'
 import { stateLabelsOf } from '@/main/pipeline-state/labels'
+import { draftOf, refusedWriteIntent } from '@/main/incidents/raise'
+import type { IncidentIntent, RecordIncident } from '@/types/incidents'
 import { resolveKeys } from '@/main/writes/command'
 import { evaluate } from '@/main/writes/scope'
 import type { OwnershipRead, ReadOwnershipParams } from '@/types/dispatch'
 import type { FetchItemsByNumberParams, GitHubRepoRef, ItemsByNumberFetch, PipelineItemKind } from '@/types/github'
 import type { MirrorItemParams, PipelineStateStore, StoredItem } from '@/types/pipeline-state'
-import type { ApplyLabelsParams, AuditEntry, LabelAuditEntry, ObservedItem, OwnershipKind, WriteOutcome, WriteStateParams } from '@/types/writes'
+import type { ApplyLabelsParams, AuditEntry, LabelAuditEntry, LabelWriteRequest, ObservedItem, OwnershipKind, WriteOutcome, WriteStateParams } from '@/types/writes'
+import { stateMoved } from '@/types/writes'
 import { mirrorVocabularyOf, type MirrorVocabulary } from '@/utils/labels/display'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
@@ -30,7 +33,15 @@ interface StateWriterDeps {
   readonly readOwnership: (params: ReadOwnershipParams) => Promise<OwnershipRead>
   readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
   readonly appendAudit: (auditDir: string, entry: AuditEntry) => Promise<unknown>
+  readonly recordIncident: RecordIncident
+  readonly newId: () => string
   readonly now: () => Date
+}
+
+/** What one `writeState` call learned on the way, for the incident it may raise. */
+interface WriteFacts {
+  head: string | null
+  observed: ObservedItem | null
 }
 
 interface StateWriter {
@@ -49,6 +60,7 @@ interface MirrorContext {
   readonly git?: WriteStateParams['git']
   readonly pathOps?: WriteStateParams['pathOps']
   readonly fetchItemsByNumber?: WriteStateParams['fetchItemsByNumber']
+  readonly writeId?: string
 }
 
 const UNSEEDED = "port hasn't loaded this repository's pipeline state yet"
@@ -75,7 +87,7 @@ function counterpartOf(items: readonly StoredItem[], item: StoredItem): StoredIt
 
 export function createStateWriter(deps: StateWriterDeps): StateWriter {
   async function audit(ctx: MirrorContext, target: { readonly kind: PipelineItemKind; readonly number: number }, action: string, ownership: OwnershipKind, precondition: LabelAuditEntry['precondition'], observed: ObservedItem | null, outcome: WriteOutcome): Promise<WriteOutcome> {
-    const entry: LabelAuditEntry = { at: deps.now().toISOString(), repo: ctx.repo, repoId: ctx.repoId, kind: target.kind, number: target.number, action, ownership, precondition, observed, call: null, commentBytes: null, result: outcome }
+    const entry: LabelAuditEntry = { at: deps.now().toISOString(), repo: ctx.repo, repoId: ctx.repoId, kind: target.kind, number: target.number, action, ownership, precondition, observed, call: null, commentBytes: null, result: outcome, ...(ctx.writeId === undefined ? {} : { writeId: ctx.writeId }) }
     await deps.appendAudit(ctx.auditDir, entry)
     return outcome
   }
@@ -106,6 +118,7 @@ export function createStateWriter(deps: StateWriterDeps): StateWriter {
       observed,
       repoRoot: ctx.repoRoot,
       auditDir: ctx.auditDir,
+      writeId: ctx.writeId,
       gh: ctx.gh,
       git: ctx.git,
       fetchItemsByNumber: ctx.fetchItemsByNumber,
@@ -118,9 +131,36 @@ export function createStateWriter(deps: StateWriterDeps): StateWriter {
     await deps.store.recordMirror(ctx.repoId, ref, settled(outcome) ? null : { at: deps.now().toISOString(), outcome })
   }
 
+  /** Records the call's incident once its outcome is known; a failure here never changes the outcome. */
+  async function raiseIncident(request: LabelWriteRequest, writeId: string, outcome: WriteOutcome, seen: WriteFacts): Promise<void> {
+    try {
+      let intent: IncidentIntent | null = request.incident ?? null
+      if (intent !== null) {
+        const observedHead = intent.inputs.observedHead
+        const moved = typeof observedHead === 'string' && seen.head !== null && observedHead !== seen.head
+        intent = { ...intent, ...(moved ? { bucket: 'stale-snapshot' as const, condition: 'head-moved', decision: { ...intent.decision, intended: intent.bucket } } : {}), inputs: { ...intent.inputs, writeHead: seen.head } }
+      } else if (!stateMoved(outcome)) {
+        intent = refusedWriteIntent(request, outcome.kind, seen.observed, { present: request.expect.present, absent: request.expect.absent, assignees: request.expect.assignees })
+      }
+      if (intent === null) return
+      const tick = typeof intent.inputs.snapshotAt === 'string' ? intent.inputs.snapshotAt : null
+      await deps.recordIncident(draftOf(intent, { repo: request.repo, kind: request.kind, number: request.number }, { kind: outcome.kind }, { audit: [writeId], tick }))
+    } catch {
+      // Best-effort by design: a lost incident costs analysis, a failed write costs the pipeline.
+    }
+  }
+
   async function writeState(params: WriteStateParams): Promise<WriteOutcome> {
+    const writeId = deps.newId()
+    const seen: WriteFacts = { head: null, observed: null }
+    const outcome = await attemptWrite(params, writeId, seen)
+    await raiseIncident(params.request, writeId, outcome, seen)
+    return outcome
+  }
+
+  async function attemptWrite(params: WriteStateParams, writeId: string, seen: WriteFacts): Promise<WriteOutcome> {
     const { request } = params
-    const ctx: MirrorContext = { repo: request.repo, repoId: request.repoId, vocabulary: request.vocabulary, mirror: request.mirror, repoRoot: params.repoRoot, auditDir: params.auditDir, gh: params.gh, git: params.git, pathOps: params.pathOps, fetchItemsByNumber: params.fetchItemsByNumber }
+    const ctx: MirrorContext = { repo: request.repo, repoId: request.repoId, vocabulary: request.vocabulary, mirror: request.mirror, repoRoot: params.repoRoot, auditDir: params.auditDir, gh: params.gh, git: params.git, pathOps: params.pathOps, fetchItemsByNumber: params.fetchItemsByNumber, writeId }
     const target = { kind: request.kind, number: request.number }
     const present = resolveKeys(request.vocabulary, request.expect.present)
     const absent = resolveKeys(request.vocabulary, request.expect.absent)
@@ -129,7 +169,10 @@ export function createStateWriter(deps: StateWriterDeps): StateWriter {
     const ownership = await readOwner(ctx)
     if (ownership.kind === 'terminal') return audit(ctx, target, request.action, 'terminal', precondition, null, { kind: 'terminal-owned', since: ownership.since })
     if (ownership.kind === 'unreadable') return audit(ctx, target, request.action, 'unreadable', precondition, null, { kind: 'ownership-unreadable', path: ownership.path, message: ownership.message })
-    const log = (observed: ObservedItem | null, outcome: WriteOutcome): Promise<WriteOutcome> => audit(ctx, target, request.action, ownership.kind, precondition, observed, outcome)
+    const log = (observed: ObservedItem | null, outcome: WriteOutcome): Promise<WriteOutcome> => {
+      seen.observed = observed
+      return audit(ctx, target, request.action, ownership.kind, precondition, observed, outcome)
+    }
 
     const add = resolveKeys(request.vocabulary, request.add)
     const remove = resolveKeys(request.vocabulary, request.remove)
@@ -145,6 +188,7 @@ export function createStateWriter(deps: StateWriterDeps): StateWriter {
     const read = await (params.fetchItemsByNumber ?? deps.fetchItemsByNumber)({ repo: splitRepo(request.repo), numbers })
     if (!read.ok) return log(null, { kind: 'verify-failed', message: read.message })
     const item = read.resolved.find((candidate) => candidate.number === request.number)
+    seen.head = item?.headRefOid ?? null
     const githubSide = observedOf(read, request.number)
     if (item === undefined || githubSide === null) return log(null, { kind: 'item-unavailable' })
 

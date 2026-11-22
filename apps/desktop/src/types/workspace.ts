@@ -114,6 +114,7 @@ export interface CreateStageWorktreeParams {
 /** `branch` is `null` for a detached worktree; `baseLabel` is the branch, or `origin/<ref>` when detached. `reclaimed` is the absolute path of a leftover worktree this call removed, else `null`. */
 export type CreateStageWorktreeResult =
   | { readonly ok: true; readonly path: string; readonly branch: string | null; readonly baseSha: string; readonly baseLabel: string; readonly reclaimed: string | null }
-  | { readonly ok: false; readonly message: string }
+  /** `leftover` is set when a leftover worktree holding the branch refused its reclaim. */
+  | { readonly ok: false; readonly message: string; readonly leftover?: true }
 
 export type ReleaseBranchOutcome = 'deleted' | 'kept'

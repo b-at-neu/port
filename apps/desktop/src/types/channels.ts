@@ -1,6 +1,7 @@
 import type { GatePreflightParams, GateAnswerParams, ApplyItemDecisionParams, ItemDecisionResult, ApplyItemActionParams, ItemActionResult } from '@/types/actions'
 import type { GatePreflightResponse, GateAnswerResponse } from '@/types/gate'
 import type { IpcMap } from '@/types/ipc'
+import type { IncidentLog } from '@/types/incidents'
 import type { BoardSnapshot } from '@/types/board'
 import type { HostedSessionSnapshot, HostedStore, SessionStartTarget, SessionStartMode } from '@/types/hosting'
 import type { ResolveStartTargetDeps, ReleaseBranchOutcome, RemoveSessionWorktreeOutcome, ResolvedStartTarget } from '@/types/workspace'
@@ -29,6 +30,14 @@ import type { ReadWorktreeReportParams, WorktreesReport } from '@/types/reclaime
 export interface BoardRefreshDeps {
   readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
   readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
+}
+
+export interface IncidentChannelDeps {
+  readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
+  readonly log: Pick<IncidentLog, 'read'>
+  readonly chooseSavePath: (defaultName: string) => Promise<string | null>
+  readonly writeJson: (path: string, value: unknown) => Promise<FileResult<void>>
+  readonly now: () => Date
 }
 
 export interface GateChannelDeps {
@@ -136,6 +145,8 @@ export const QUERY_CHANNELS = [
   'backlog:list',
   'backlog:detail',
   'audit:list',
+  'incidents:groups',
+  'incidents:list',
   'session:files',
   'folders:list',
   'session:changes',
@@ -195,6 +206,7 @@ export const MUTATION_CHANNELS = [
   'notify:needs-you',
   'notify:prefs:set',
   'release:run',
+  'incidents:export',
   'update:check',
   'update:download',
   'update:open',

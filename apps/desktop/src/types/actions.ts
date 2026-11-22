@@ -10,6 +10,7 @@ import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 // Renderer-safe contract for the single-label operator actions: pause, resume, retry, stop, gate. No import here may reach a Node builtin.
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { LabelPrecondition, WriteOutcome } from '@/types/writes'
+import type { IncidentIntent } from '@/types/incidents'
 
 /** Recorded verbatim as `AuditEntry.action`; `refresh` needs no comment or operator choice, so it stays out of `OperatorDecision` below. */
 export const OPERATOR_ACTIONS = ['pause', 'resume', 'retry', 'stop', 'gate', 'refresh'] as const
@@ -162,6 +163,8 @@ export interface EscalateToHumanParams {
   /** `null` swaps the labels and posts nothing — the escalation this repeats is already on the item. */
   readonly body: string | null
   readonly action: string
+  /** The anomaly this escalation records. */
+  readonly incident?: IncidentIntent
   readonly auditDir: string
   readonly scratchDir: string
 }
@@ -200,6 +203,8 @@ export interface ApplyObservationParams {
   readonly entry: ReadyEntry
   readonly item: ReconciledItem
   readonly observation: WriteObservation
+  /** The GitHub read instant the observation was computed from. */
+  readonly snapshotAt?: string | null
   readonly auditDir: string
   readonly scratchDir: string
 }

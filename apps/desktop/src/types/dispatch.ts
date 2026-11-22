@@ -9,6 +9,8 @@ import type { ReposListResponse } from '@/types/ipc'
 import type { GitRunner, PathOps, FileFailureKind } from '@/types/platform'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { StateLabelsReader } from '@/types/pipeline-state'
+import type { RecordIncident } from '@/types/incidents'
+import type { ReconciledItem } from '@/types/state'
 
 export type BudgetGateFailure = { readonly ok: false; readonly kind: 'unavailable' | 'failed'; readonly message: string }
 
@@ -287,6 +289,8 @@ export interface CreateDispatcherParams {
   readonly dirs: { readonly audit: string; readonly scratch: string }
   readonly onChange: () => void
   readonly now: () => Date
+  /** Best-effort: never rejects, and no call site depends on it landing. */
+  readonly recordIncident: RecordIncident
   /** Interrupted stage sessions for a repository, read from `main/stage/registry.ts` — `[]` when none is wired (tests, or before the registry loads). */
   readonly interrupted?: (repoId: RepoId) => readonly InterruptedStage[]
 }
@@ -302,7 +306,13 @@ export interface DispatchActions {
 
 export interface StageLabelWrites {
   readonly claim: (params: { readonly entry: ReadyEntry; readonly candidate: Pick<TickActionable, 'number' | 'kind' | 'agent' | 'trigger'>; readonly resolved: ResolvedItem; readonly auditDir: string }) => Promise<StageTransitionResult>
-  readonly transition: (params: { readonly entry: ReadyEntry; readonly record: Pick<TickActionable, 'number' | 'kind' | 'agent' | 'trigger'>; readonly event: StageEvent; readonly auditDir: string; readonly scratchDir: string }) => Promise<StageTransitionResult>
+  readonly transition: (params: { readonly entry: ReadyEntry; readonly record: Pick<TickActionable, 'number' | 'kind' | 'agent' | 'trigger'>; readonly event: StageEvent; readonly auditDir: string; readonly scratchDir: string; readonly snapshot?: StageSnapshot }) => Promise<StageTransitionResult>
+}
+
+/** The tick's own view of a ticket when a hand-back decision was made, kept for the incident it may raise. */
+export interface StageSnapshot {
+  readonly item: ReconciledItem | null
+  readonly at: string | null
 }
 
 export interface HaltDispatchDeps {
@@ -349,8 +359,11 @@ export interface StageLauncher {
   launch(request: StageLaunchRequest): Promise<StageLaunchResult>
 }
 
+/** Which step of a launch failed — the incident log's condition for it. */
+export type StageLaunchFailureCause = 'worktree' | 'leftover-worktree' | 'instructions' | 'start' | 'prompt' | 'resume' | 'threw'
+
 // `ok: true` promises the store holds a non-`ended` handle for `sessionKey`.
-export type StageLaunchResult = { readonly ok: true; readonly sessionKey: SessionKey } | { readonly ok: false; readonly kind: 'at-capacity'; readonly limit: number } | { readonly ok: false; readonly kind: 'failed'; readonly message: string }
+export type StageLaunchResult = { readonly ok: true; readonly sessionKey: SessionKey } | { readonly ok: false; readonly kind: 'at-capacity'; readonly limit: number } | { readonly ok: false; readonly kind: 'failed'; readonly message: string; readonly cause: StageLaunchFailureCause }
 
 export interface StageLaunchRequest {
   readonly entry: ReadyEntry

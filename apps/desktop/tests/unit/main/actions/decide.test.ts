@@ -461,7 +461,7 @@ describe('applyItemDecision — real writers', () => {
     const snapshot = snapshotOf([state])
     const store = createPipelineStateStore({ path: 'pipeline-state.json', readJson: () => Promise.resolve({ ok: false, kind: 'not-found', message: '' }), writeJsonAtomic: () => Promise.resolve({ ok: true, value: undefined }), now: NOW })
     await store.seed(REPO_ID, state)
-    const { writeState } = createStateWriter({ store, applyLabels: (params) => applyLabels({ ...params, gh, git, now: NOW, fetchItemsByNumber }), readOwnership, fetchItemsByNumber, appendAudit, now: NOW })
+    const { writeState } = createStateWriter({ store, applyLabels: (params) => applyLabels({ ...params, gh, git, now: NOW, fetchItemsByNumber }), readOwnership, fetchItemsByNumber, appendAudit, recordIncident: () => Promise.resolve(), newId: () => 'write-1', now: NOW })
     const result = await applyItemDecision(
       {
         request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null },

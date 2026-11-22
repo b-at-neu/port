@@ -106,25 +106,25 @@ describe('createStageWorktree — a leftover stage worktree holding the branch',
 
   it('refuses when it has uncommitted or untracked changes', async () => {
     const { result, calls, path } = await leftover({ status: ok('?? scratch.txt\n') })
-    expect(result).toEqual({ ok: false, message: `Branch ${DERIVED} is checked out in ${path}, which has uncommitted or untracked changes. Commit and push or discard them, then retry — or remove it with: git worktree remove --force "${path}"` })
+    expect(result).toEqual({ ok: false, leftover: true, message: `Branch ${DERIVED} is checked out in ${path}, which has uncommitted or untracked changes. Commit and push or discard them, then retry — or remove it with: git worktree remove --force "${path}"` })
     expect(argvOf(calls, 'worktree', 'remove')).toEqual([])
   })
 
   it('refuses when it holds commits that are not on origin', async () => {
     const { result, calls, path } = await leftover({ ancestorOfOrigin: nonzero(1) })
-    expect(result).toEqual({ ok: false, message: `Branch ${DERIVED} is checked out in ${path} with commits that aren't on origin. Push the branch, then retry.` })
+    expect(result).toEqual({ ok: false, leftover: true, message: `Branch ${DERIVED} is checked out in ${path} with commits that aren't on origin. Push the branch, then retry.` })
     expect(argvOf(calls, 'worktree', 'remove')).toEqual([])
   })
 
   it('refuses when a stage session is still live there', async () => {
     const { result, calls, path } = await leftover({ live: true })
-    expect(result).toEqual({ ok: false, message: `Branch ${DERIVED} is checked out in ${path}, where a stage session is still open. Stop that session, then retry.` })
+    expect(result).toEqual({ ok: false, leftover: true, message: `Branch ${DERIVED} is checked out in ${path}, where a stage session is still open. Stop that session, then retry.` })
     expect(argvOf(calls, 'status')).toEqual([])
   })
 
   it('refuses when the folder name does not match the stage pattern', async () => {
     const { result, calls, path } = await leftover({ folder: 'impl-999' })
-    expect(result).toEqual({ ok: false, message: `Branch ${DERIVED} is checked out in ${path}, which port didn't create. Finish or remove that worktree, then retry.` })
+    expect(result).toEqual({ ok: false, leftover: true, message: `Branch ${DERIVED} is checked out in ${path}, which port didn't create. Finish or remove that worktree, then retry.` })
     expect(argvOf(calls, 'status')).toEqual([])
   })
 
@@ -136,6 +136,6 @@ describe('createStageWorktree — a leftover stage worktree holding the branch',
 
   it('refuses with git’s reason when the removal fails', async () => {
     const { result, path } = await leftover({ remove: nonzero(1, 'locked') })
-    expect(result).toEqual({ ok: false, message: `Couldn't remove the leftover worktree at ${path}: locked.` })
+    expect(result).toEqual({ ok: false, leftover: true, message: `Couldn't remove the leftover worktree at ${path}: locked.` })
   })
 })

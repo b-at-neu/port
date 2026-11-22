@@ -9,6 +9,7 @@ import type { ReconciledItem } from '@/types/state'
 import type { TickActionable } from '@/types/tick'
 import { labelName } from '@/utils/labels/vocabulary'
 import { commentFailureMessage } from '@/main/dispatch/select'
+import { budgetIntent } from '@/main/incidents/raise'
 import { escalationRepeats } from '../../../../../scripts/port-tick/gates'
 
 /** One session log per dispatcher — sharing one log with the cockpit would close rows this
@@ -74,6 +75,7 @@ export async function escalateOverBudget(params: EscalateOverBudgetParams): Prom
     viewer,
     body: repeats ? null : escalationBody(line, sha),
     action: 'budget-escalate',
+    incident: budgetIntent(candidate.trigger, item?.headRefOid ?? null),
     auditDir: dirs.audit,
     scratchDir: dirs.scratch,
   })

@@ -245,7 +245,7 @@ describe('createStageWorktree — a local branch of the same name', () => {
   it('refuses when it is checked out in another worktree', async () => {
     const { git } = recorder(withStart((args) => (args[0] === 'for-each-ref' ? forEachRef(derived, 'aaaa', '/elsewhere/impl-467') : undefined)))
     const result = await createStageWorktree(await params({ git }))
-    expect(result).toEqual({ ok: false, message: `Branch ${derived} is checked out in /elsewhere/impl-467, which port didn't create. Finish or remove that worktree, then retry.` })
+    expect(result).toEqual({ ok: false, leftover: true, message: `Branch ${derived} is checked out in /elsewhere/impl-467, which port didn't create. Finish or remove that worktree, then retry.` })
   })
 
   it('fast-forwards it with -B when its tip is an ancestor of the start', async () => {

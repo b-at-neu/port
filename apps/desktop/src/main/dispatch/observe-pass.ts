@@ -98,7 +98,7 @@ export async function runObservationPass(
         pushObserved(state, { kind: observation.kind, number: observation.number, itemKind: observation.itemKind, at, outcome, comment: 'none' })
         continue
       }
-      const result = await deps.writeObservation({ entry, item, observation: observation as WriteObservation, auditDir: deps.dirs.audit, scratchDir: deps.dirs.scratch })
+      const result = await deps.writeObservation({ entry, item, observation: observation as WriteObservation, snapshotAt: fetchedAt, auditDir: deps.dirs.audit, scratchDir: deps.dirs.scratch })
       state.observedWriteAt.set(observation.number, at)
       if (observationOutcomeOf(result.labels) === 'written') {
         if (observation.kind === 'refresh') deps.refreshMemo.set(entry.id, observation.number, { sha: observation.headRefOid, count: observation.count })

@@ -37,11 +37,12 @@ describe('buildDesktopTickEvent', () => {
       claims: [{ number: 9, kind: 'issue', inFlight: 'inProgress', class: 'matched', retryKey: null }],
     })
 
-    const event = buildDesktopTickEvent({ repo: 'o/r', report, now })
+    const event = buildDesktopTickEvent({ repo: 'o/r', report, fetchedAt: '2026-01-01T00:00:00.000Z', now })
 
     expect(event).toEqual({
       v: 1,
       ts: now().toISOString(),
+      fetchedAt: '2026-01-01T00:00:00.000Z',
       repo: 'o/r',
       repoId: REPO_ID,
       dispatch: [{ item: 42, stage: 'plan-agent', agent: 'plan' }],
@@ -54,7 +55,7 @@ describe('buildDesktopTickEvent', () => {
   it('carries a blind report through unchanged, never folding it into an empty dispatch', () => {
     const report = makeReport({ blind: { reason: 'not-ready' } })
 
-    const event = buildDesktopTickEvent({ repo: 'o/r', report, now })
+    const event = buildDesktopTickEvent({ repo: 'o/r', report, fetchedAt: null, now })
 
     expect(event.blind).toEqual({ reason: 'not-ready' })
     expect(event.dispatch).toEqual([])
@@ -64,7 +65,7 @@ describe('buildDesktopTickEvent', () => {
 describe('recordTick', () => {
   it('appends one JSON line per call, readable back as the same event', async () => {
     const root = await makeTempDir()
-    const event = buildDesktopTickEvent({ repo: 'o/r', report: makeReport(), now })
+    const event = buildDesktopTickEvent({ repo: 'o/r', report: makeReport(), fetchedAt: null, now })
 
     await recordTick(root, event, { git: degradingGit })
     await recordTick(root, { ...event, ts: '2026-01-01T00:05:00.000Z' }, { git: degradingGit })
@@ -81,7 +82,7 @@ describe('recordTick', () => {
     await mkdir(join(root, '.agents'), { recursive: true })
     await writeFile(join(root, '.agents', 'desktop-events.jsonl'), 'x'.repeat(9 * 1024 * 1024))
 
-    const event = buildDesktopTickEvent({ repo: 'o/r', report: makeReport(), now })
+    const event = buildDesktopTickEvent({ repo: 'o/r', report: makeReport(), fetchedAt: null, now })
     await recordTick(root, event, { git: degradingGit })
 
     const prevContent = await readFile(join(root, '.agents', 'desktop-events.prev.jsonl'), 'utf8')
@@ -93,7 +94,7 @@ describe('recordTick', () => {
     const throwingGit: GitRunner = () => {
       throw new Error('boom')
     }
-    const event = buildDesktopTickEvent({ repo: 'o/r', report: makeReport(), now })
+    const event = buildDesktopTickEvent({ repo: 'o/r', report: makeReport(), fetchedAt: null, now })
 
     await expect(recordTick(root, event, { git: throwingGit })).resolves.toBeUndefined()
   })

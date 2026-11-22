@@ -70,13 +70,14 @@ function runtimeDeps(overrides: Partial<Parameters<typeof createDispatchRuntime>
     actions: ACTIONS,
     dirs: { audit: '/audit', scratch: '/scratch' },
     now: () => new Date('2026-01-01T00:00:00Z'),
+    recordIncident: () => Promise.resolve(),
     ...overrides,
   }
 }
 
 const SNAPSHOT = {
   state: {
-    repositories: [{ ok: true, repoId: REPO_ID, repo: 'o/a', displayName: 'o/a', viewer: 'op' }],
+    repositories: [{ ok: true, repoId: REPO_ID, repo: 'o/a', displayName: 'o/a', viewer: 'op', items: [], freshness: { github: { at: '2026-01-01T00:00:00Z' } } }],
     sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: 't' },
     readAt: 't',
   },

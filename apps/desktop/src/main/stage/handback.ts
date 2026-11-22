@@ -15,6 +15,9 @@ export interface ClassifyHandbackParams {
 
 const TRANSIENT_NETWORK = /EAI_AGAIN|ENOTFOUND|ECONNRESET|ECONNREFUSED|ETIMEDOUT|socket hang up|fetch failed|Can't reach the API server/i
 
+/** What a settle that threw reports as its detail, ahead of the error's own message. */
+export const SETTLE_FAILED_DETAIL = 'hand-back settle failed'
+
 /** Whether an error text names a network failure a later attempt can clear. */
 export function isTransientNetworkFailure(text: string | null | undefined): boolean {
   return TRANSIENT_NETWORK.test(text ?? '')

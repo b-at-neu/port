@@ -167,6 +167,7 @@ export async function fetchItemsByNumber(params: FetchItemsByNumberParams): Prom
       labels: fieldListOf(raw.labels, 'name'),
       assignees: fieldListOf(raw.assignees, 'login'),
       headRefName: kind === 'pull-request' && typeof raw.headRefName === 'string' ? raw.headRefName : null,
+      headRefOid: kind === 'pull-request' && typeof raw.headRefOid === 'string' ? raw.headRefOid : null,
       author: kind === 'pull-request' ? authorLoginOf(raw.author) : null,
     })
   }

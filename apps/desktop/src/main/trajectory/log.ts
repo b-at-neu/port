@@ -14,11 +14,12 @@ const ROTATE_AT_BYTES = 8 * 1024 * 1024
 
 /** `repo` is the `owner/name` slug — `report.repoId` alone is not joinable against the cockpit's
  *  own record. */
-export function buildDesktopTickEvent(params: { readonly repo: string; readonly report: TickReport; readonly now: () => Date }): DesktopTickEvent {
-  const { repo, report, now } = params
+export function buildDesktopTickEvent(params: { readonly repo: string; readonly report: TickReport; readonly fetchedAt: string | null; readonly now: () => Date }): DesktopTickEvent {
+  const { repo, report, fetchedAt, now } = params
   return {
     v: 1,
     ts: now().toISOString(),
+    fetchedAt,
     repo,
     repoId: report.repoId,
     dispatch: report.actionable.map((a) => ({ item: a.number, stage: `${a.agent}-agent`, agent: a.agent })),
