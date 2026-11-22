@@ -13,7 +13,7 @@
     },
 
     "tracker": {
-      "description": "Which issue tracker holds pipeline state. Only GitHub is implemented; this field exists so a second backend can be added without a breaking change.",
+      "description": "Which issue tracker the pipeline's tickets live on and the app mirrors state onto. Only GitHub is implemented; this field exists so a second backend can be added without a breaking change.",
       "enum": ["github"],
       "default": "github"
     },
