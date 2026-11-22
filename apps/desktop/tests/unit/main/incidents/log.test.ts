@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createIncidentLog, INCIDENT_LIMITS } from '@/main/incidents/log'
+import { pathOps } from '@/main/platform/paths'
 import type { IncidentDraft, IncidentFiles } from '@/types/incidents'
 import { memory } from './fixtures'
 
@@ -50,7 +51,7 @@ describe('createIncidentLog', () => {
     const { files, store } = memory()
     const log = rig(files, { ms: START })
     expect(await log.read()).toMatchObject({ ok: true, records: [], malformed: 0 })
-    store.set('/data/incidents.jsonl', `${JSON.stringify({ v: 1, at: '2026-11-16T12:00:00.000Z' })}\nnot json\n`)
+    store.set(pathOps.join('/data', 'incidents.jsonl'),`${JSON.stringify({ v: 1, at: '2026-11-16T12:00:00.000Z' })}\nnot json\n`)
     expect(await log.read()).toMatchObject({ ok: true, malformed: 1 })
   })
 

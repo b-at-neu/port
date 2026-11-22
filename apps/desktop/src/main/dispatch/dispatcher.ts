@@ -406,7 +406,6 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     raise(entry.id, candidate, launchFailedIntent(candidate, cause), { kind: 'failed' })
   }
 
-
   /** Undoes a claim whose launch failed; a refused rollback is left to the stall ladder. */
   async function rollback(entry: ReadyEntry, candidate: TickActionable): Promise<void> {
     await deps.stageLabels.transition({ entry, record: candidate, event: { kind: 'rollback' }, auditDir: deps.dirs.audit, scratchDir: deps.dirs.scratch })
