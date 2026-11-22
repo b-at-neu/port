@@ -1,4 +1,4 @@
-// fetchBacklog: every open issue, dropping anything carrying a vocabulary label.
+// fetchBacklog: every open issue, dropping what the store tracks, or under a labels view anything carrying a vocabulary label.
 import { githubHttp } from '@/main/platform/github-http'
 import type { GitHubTransport } from '@/types/platform'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
@@ -82,6 +82,8 @@ function buildBacklogQuery(): string {
 interface FetchBacklogParams {
   readonly repo: GitHubRepoRef
   readonly vocabulary: LabelVocabulary
+  /** The store's tracked issue numbers; `null` is a labels view, where membership falls back to the vocabulary names. */
+  readonly tracked: ReadonlySet<number> | null
   readonly github?: GitHubTransport
   readonly now?: () => Date
 }
@@ -131,9 +133,11 @@ export async function fetchBacklog(params: FetchBacklogParams): Promise<BacklogR
   for (const [index, node] of nodes.entries()) {
     if (typeof node !== 'object' || node === null) continue
     const issue = node as Record<string, unknown>
-    if (fieldListOf(issue.labels, 'name').some((name) => vocabularyNames.has(name))) continue
+    const number = typeof issue.number === 'number' ? issue.number : 0
+    const inPipeline = params.tracked !== null ? params.tracked.has(number) : fieldListOf(issue.labels, 'name').some((name) => vocabularyNames.has(name))
+    if (inPipeline) continue
     items.push({
-      number: typeof issue.number === 'number' ? issue.number : 0,
+      number,
       title: typeof issue.title === 'string' ? issue.title : '',
       url: typeof issue.url === 'string' ? issue.url : '',
       createdAt: typeof issue.createdAt === 'string' ? issue.createdAt : '',
@@ -149,7 +153,7 @@ export async function fetchBacklog(params: FetchBacklogParams): Promise<BacklogR
   const children = await fetchChildren({
     repo: params.repo,
     epics: items.filter((item) => item.subIssueCount > 0).map((item) => item.number),
-    claimedNames: vocabularyNames,
+    claimed: params.tracked !== null ? { kind: 'store', numbers: params.tracked } : { kind: 'labels', names: vocabularyNames },
     github,
   })
 

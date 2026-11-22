@@ -20,7 +20,7 @@ import { bindActions } from '@/main/actions/bound'
 import { createPipelineState } from '@/main/pipeline-state/default'
 import { resolveClaimApply, resolveClaimPreflight } from '@/main/channels/claim'
 import { resolveAuditList } from '@/main/channels/audit'
-import { resolveBacklogDetail, resolveBacklogList } from '@/main/channels/backlog'
+import { defaultBacklogListDeps, resolveBacklogDetail, resolveBacklogList } from '@/main/channels/backlog'
 import { resolveReleaseIssues, resolveReleaseRun, resolveReleaseStatus } from '@/main/channels/release'
 import { resolveWorktreesPurge, resolveWorktreesReclaim, resolveWorktreesReport } from '@/main/channels/worktrees'
 import { resolveGhStatus } from '@/main/channels/gh'
@@ -314,7 +314,7 @@ export function registerIpc(restart: RestartSeams): RegisteredIpc {
 
   handle('claim:apply', (_event, request) => resolveClaimApply(registryDeps, request, app.getPath('userData'), actions.claimDeps))
 
-  handle('backlog:list', (_event, request) => resolveBacklogList(registryDeps, request))
+  handle('backlog:list', (_event, request) => resolveBacklogList(registryDeps, request, { ...defaultBacklogListDeps, trackedRefs: pipelineState.watcherDeps.trackedRefs }))
   handle('backlog:detail', (_event, request) => resolveBacklogDetail(registryDeps, request))
 
   handle('release:status', (_event, request) => resolveReleaseStatus(registryDeps, request))

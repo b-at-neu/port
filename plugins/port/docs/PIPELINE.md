@@ -1,6 +1,6 @@
 # Agent Pipeline
 
-This plugin takes GitHub issues from idea to merge-ready pull request with minimal human intervention. A `/port:pipeline` session is the human's cockpit: it polls GitHub, dispatches background stage subagents, relays their questions, and applies every label. Humans converse; they never run `gh` commands. Each operator runs their own cockpit, and every query is scoped to that operator's assigned items (see "Multi-operator partitioning"). GitHub labels remain the durable state machine, so progress is always visible on GitHub and manual intervention always works.
+This plugin takes GitHub issues from idea to merge-ready pull request with minimal human intervention. A `/port:pipeline` session is the human's cockpit: it polls GitHub, dispatches background stage subagents, relays their questions, and applies every label. Humans converse; they never run `gh` commands. Each operator runs their own cockpit, and every query is scoped to that operator's assigned items (see "Multi-operator partitioning"). For the terminal cockpit, GitHub labels are the durable state machine; the desktop app keeps state in its own store and labels only mirror it (`STATE.md`).
 
 **This document is the single source of truth for the operating rules, label lifecycle, permission model, and output formats.** Every stage agent reads it before working and restates only the rules unique to itself.
 
@@ -11,6 +11,7 @@ Agents and skills reference it as `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md`, whic
 | File | Holds |
 | --- | --- |
 | `FORMATS.md` | Output formats — writing style, the implementation plan, reviews and revisions, approval withdrawn, rebase required, the pull request description, commit messages |
+| `STATE.md` | Pipeline state in the app — the store, the mirror, the seven labels, `labels`/`states`, `appOnly`, which label reads are allowed, the legacy terminal cockpit |
 | `RECOVERY.md` | Escalation, Liveness, the Rebase conflict protocol, Stopping and draining, the Recovery runbook, reading current state without the cockpit |
 
 ## Configuration
@@ -29,7 +30,7 @@ Throughout this document:
 | `<integration>` | `branches.integration` — what feature pull requests target |
 | `<production>` | `branches.production` — what releases promote to; null in a single-branch repository, where there is no release flow |
 
-Label names are written as their defaults (`ready`, `plan review`, …). A repository may rename any of them through `labels`, in which case the renamed string is what agents read and write.
+Label names are written as their defaults (`ready`, `plan review`, …). A repository may rename any of them through `labels` and `states` (an app-only repository: see `STATE.md`), in which case the renamed string is what agents read and write.
 
 **One section is an optional subsystem**, marked at its heading and inert when its flag is false: "CI merge gate" (`modules.approvalGate`). When the module is off, its labels are never created, its queries never run, and the agents carry no instructions about it.
 
@@ -251,6 +252,8 @@ Canonical rules every stage agent follows. A Bash command matches the allowlist 
 - **When denied, stop — do not improvise.** A denied command returns a hook denial with a reason, not a prompt — the guard hook decided, not you. Do not retry or route around it: **emit `BLOCKED: <exact denied command + what you needed>`** so the cockpit surfaces it. Never spawn subagents.
 
 ## Label lifecycle
+
+The terminal cockpit's vocabulary. An app-only repository uses the seven labels in `STATE.md` instead, and the terminal cockpit refuses it.
 
 Rule: **every stage agent's first action is swapping its trigger label for its in-flight label.** Absence of a trigger label means the cockpit skips the item, so a tick can never double-dispatch. **An in-flight label means a stage *claimed* the item, never that an agent is still alive** — a crashed or killed agent leaves the label in place with nothing running. Liveness is a separate question, answered by `TaskList`, not by the label; see "Liveness" under Escalation. Recovery either way is re-applying the trigger label (`retry #N`) — for `impl-agent` specifically, that re-dispatch resumes from the branch the prior attempt pushed rather than re-implementing it, per `RECOVERY.md` → "Resume protocol".
 

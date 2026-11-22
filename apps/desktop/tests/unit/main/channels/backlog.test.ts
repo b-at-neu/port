@@ -53,6 +53,7 @@ function depsWith(overrides: Partial<BacklogListDeps>): BacklogListDeps {
     fetchBacklog: () => {
       throw new Error('fetchBacklog should not be invoked in this case')
     },
+    trackedRefs: () => null,
     ...overrides,
   }
 }
@@ -96,7 +97,23 @@ describe('resolveBacklogList', () => {
     })
     const result = await resolveBacklogList(registryDeps, { repoId: REPO_ID }, deps)
     expect(result).toEqual({ ok: true, items: [], scanned: 0, total: 0, viewer: 'octo-dev', fetchedAt: 't' })
-    expect(received).toEqual({ repo: { owner: 'acme', name: 'widgets' }, vocabulary: READY_ENTRY.config.vocabulary })
+    expect(received).toEqual({ repo: { owner: 'acme', name: 'widgets' }, vocabulary: READY_ENTRY.config.vocabulary, tracked: null })
+  })
+
+  it('passes only the issue numbers of the store tracked refs, and null for a labels view', async () => {
+    const received: unknown[] = []
+    const read = (trackedRefs: BacklogListDeps['trackedRefs']) =>
+      resolveBacklogList(registryDeps, { repoId: REPO_ID }, depsWith({
+        listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
+        fetchBacklog: (params) => {
+          received.push(params.tracked)
+          return Promise.resolve({ ok: true, items: [], scanned: 0, total: 0, viewer: null, fetchedAt: 't' })
+        },
+        trackedRefs,
+      }))
+    await read(() => [{ kind: 'issue', number: 12, keys: [] }, { kind: 'pull-request', number: 40, keys: [] }, { kind: 'issue', number: 13, keys: [] }])
+    await read(() => null)
+    expect(received).toEqual([new Set([12, 13]), null])
   })
 })
 

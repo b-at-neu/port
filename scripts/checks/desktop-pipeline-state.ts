@@ -72,20 +72,4 @@ export default async function ({ expect, fail, ok }: Reporter) {
       expect(!text.includes('precondition-failed'), 'desktop-pipeline-state', `${applyFile} names precondition-failed — the store, never the label write, decides a conflict`);
     }
   }
-
-  // --- Dispatch and tick read an item's labels only through the store reader's fallback. ---
-  {
-    let found = false;
-    for (const f of sources) {
-      const rel = relOf(f);
-      if (!rel.startsWith(`${mainDir}/tick/`) && !rel.startsWith(`${mainDir}/dispatch/`)) continue;
-      for (const line of read(f).split('\n')) {
-        if (/\b(?:resolved\w*|fresh|reread)\.labels\b/.test(line) && !line.includes('stateLabels ??')) {
-          found = true;
-          fail('desktop-pipeline-state', `${rel} reads a ResolvedItem's labels directly (${line.trim()}) — read them through the store's stateLabels, falling back with '??'`);
-        }
-      }
-    }
-    if (!found) ok();
-  }
 }

@@ -22,6 +22,8 @@ This is **this repository's own** standards document, not a template — `plugin
 
 **The trajectory record is write-only from the tick engine's own decision path.** `scripts/port-tick/events.ts` (the emitter) exports no function whose name contains `read` or `parse`, and nothing under `scripts/port-tick/` besides `port-tick.ts` and `report.ts` itself may import `events.ts` or `report.ts` ("Write-only rail", `scripts/checks/tick-events.ts`) — an append-only history that fed a future tick's decision would quietly break `plan`'s own never-persists invariant (#203).
 
+**Pipeline labels are write-only from the app's decision path.** The store is the source of every stage, claim and gate decision; labels are a mirror the app writes after each commit. The sanctioned reads are the merge gate workflow, seeding a repository the store has never seen, a repository a terminal cockpit holds, and the mirror's own diff of what it writes. Every other label read in a decision module is the fallback behind a store read (`stateLabels ?? item.labels`), reachable only under a labels view ("Labels are write-only", `scripts/checks/labels-write-only.ts`). A new label read is added to that check's sources with its reason, never silently.
+
 **A file that an adopting repository copies alone must be self-contained.** `plugins/port/bin/artifacts.mjs`, `bin/worktrees.mjs`, and `bin/budget.mjs` carry no relative imports, because an import resolving only inside this checkout breaks silently for every adopter while passing here — checked directory-wide, not per file ("bin/ holds only self-contained .mjs", `scripts/checks/layout.ts`). Cross-platform behaviour is part of the same contract — these run on an adopter's Windows machine, not just this one, which is why `bin/worktrees.mjs` and `bin/budget.mjs` also carry their own `execSync`/`shell: true` bans in `scripts/checks/cockpit.ts` and `scripts/checks/budget.ts`. This is also why §7's line limit exempts `bin/` instead of splitting it: the runner-plus-modules split every other over-limit file uses would break this same self-containment guarantee (#183).
 
 **`plugins/port/` is one contract per directory (#171).** `templates/` holds only fill-in templates a `/port:init` or `/port:analyze` run substitutes into; `bin/` holds only self-contained executables copied verbatim into a managed repository, some of which this repository also runs in place; `data/` holds only canonical data — currently `labels.json` (the seven app labels) and `labels.legacy.json` (the frozen 17), each of which the desktop app carries a byte-identical copy of under `apps/desktop/src/utils/labels/`, pinned by `labels-display-copy` and `desktop-label-copy`. `scripts/checks/layout.ts` pins all three, plus the absence of any tracked file still naming one of the three moved files under its old `templates/`-relative path.
@@ -267,8 +269,8 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 
 **`apps/desktop/src/renderer/board/`**
 - `blocked-on.ts`'s `blockedOnOf` is the one "held on" derivation; the row tag, the Blocked section and the item pane read `row.blockedOn`, never a second one
-- a ticket is blocked when its stage label is `blocked` or a live stage session's last hand-back is `BLOCKED:`; open `blockedBy` links alone never make it blocked
-- the comment source is the newest comment at or before the latest `blocked` label event, and no such event means no comment, so it fails toward the fallback copy rather than an unrelated comment
+- a ticket is blocked when its stage is `blocked` or a live stage session's last hand-back is `BLOCKED:`; open `blockedBy` links alone never make it blocked
+- the comment source is the newest comment at or before the latest `blocked` stage event, and no such event means no comment, so it fails toward the fallback copy rather than an unrelated comment
 - the comment's reason is its `Decision needed` line when there is one, else its first non-heading line
 - `blocker-answer.tsx` sends into the live session through `session/actions.ts`'s `send` and never writes a label; the app clears the block when the session's next turn starts
 - `columns.ts`'s `boardColumns` is the one kanban projection: a ticket lands in exactly one column, and it reads `row.blockedOn`, never a second "blocked" derivation
@@ -447,6 +449,7 @@ An over-limit file outside these exclusions is split by topic, following the run
 - [ ] Any new failure mode states which direction it fails toward, and why.
 - [ ] An absent signal is not treated as a passing one — no empty rollup, missing conclusion, or exit code read as success.
 - [ ] A derived fact is resolved, not inferred from a path or a label.
+- [ ] No new code takes a pipeline decision from a label; any new label read is a sanctioned source in `labels-write-only`.
 - [ ] A file an adopter copies alone has no relative imports and works on Windows.
 - [ ] No inline `--body "..."` carrying markdown or fences — written under `.temp/` and passed as `--body-file`.
 - [ ] New paths are reflected in `ARCHITECTURE.md`, and shipped files reference only shipped paths.
