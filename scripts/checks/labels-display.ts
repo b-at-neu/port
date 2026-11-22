@@ -7,7 +7,7 @@ const SHIPPED_REL = 'plugins/port/data/labels.json';
 const DESKTOP_REL = 'apps/desktop/src/utils/labels/labels.json';
 const DISPLAY_TS_REL = 'apps/desktop/src/utils/labels/display.ts';
 const GATE_TEMPLATE_REL = 'plugins/port/templates/approval-check.yml';
-const SCHEMA_REL ='schema/port.config.schema.json';
+const SCHEMA_REL = 'schema/port.config.schema.json';
 
 // The seven-label display vocabulary: the data file, its app copy, the schema's two override maps, and display.ts's literal key union.
 export default async function ({ expect, fail, ok }: Reporter) {
