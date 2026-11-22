@@ -5,13 +5,17 @@ import { fetchBacklog } from '@/main/github/backlog'
 import { fetchBacklogDetail } from '@/main/github/backlog-detail'
 import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/registry'
 import type { RegistryDeps } from '@/types/registry'
+import type { TrackedRef } from '@/types/pipeline-state'
+import type { RepoId } from '@/utils/repos'
 
 export interface BacklogListDeps {
   readonly listRepositories: typeof listRepositories
   readonly fetchBacklog: typeof fetchBacklog
+  /** The store's tracked refs for a repository; `null` is a labels view. */
+  readonly trackedRefs: (repoId: RepoId) => readonly TrackedRef[] | null
 }
 
-export const defaultBacklogListDeps: BacklogListDeps = { listRepositories, fetchBacklog }
+export const defaultBacklogListDeps: BacklogListDeps = { listRepositories, fetchBacklog, trackedRefs: () => null }
 
 // `repoId` must name a registered, `ready` repository; the repo ref and vocabulary come from its own config.
 export async function resolveBacklogList(
@@ -22,7 +26,9 @@ export async function resolveBacklogList(
   const repoId = requireRepoId(request?.repoId, "'backlog:list'")
   const entry = await requireReadyRepo(registryDeps, "'backlog:list'", repoId, deps.listRepositories)
 
-  return deps.fetchBacklog({ repo: { owner: entry.config.owner, name: entry.config.name }, vocabulary: entry.config.vocabulary })
+  const refs = deps.trackedRefs(repoId)
+  const tracked = refs === null ? null : new Set(refs.filter((ref) => ref.kind === 'issue').map((ref) => ref.number))
+  return deps.fetchBacklog({ repo: { owner: entry.config.owner, name: entry.config.name }, vocabulary: entry.config.vocabulary, tracked })
 }
 
 export interface BacklogDetailDeps {

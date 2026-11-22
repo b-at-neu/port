@@ -35,10 +35,10 @@ function splitBody(body: string): { readonly ticketMarkdown: string; readonly pl
   return { ticketMarkdown: body.slice(0, idx).trimEnd(), planMarkdown: body.slice(idx) }
 }
 
-function toGatePreflight(fetch: Extract<GatePreflightFetch, { readonly ok: true }>, autoPlanName: string | undefined, labels: readonly string[] | null): GatePreflight | null {
+function toGatePreflight(fetch: Extract<GatePreflightFetch, { readonly ok: true }>, autoPlanName: string | undefined, storedLabels: readonly string[] | null): GatePreflight | null {
   const { item } = fetch
   if (item === null) return null
-  const stateLabels = labels ?? item.labels
+  const labels = storedLabels ?? item.labels
   const { ticketMarkdown, planMarkdown } = splitBody(item.body)
   const reason = item.kind === 'issue' ? sessionRequiredMarkerAt(item.body, 'issue') : null
   return {
@@ -46,24 +46,24 @@ function toGatePreflight(fetch: Extract<GatePreflightFetch, { readonly ok: true 
     title: item.title,
     url: item.url,
     state: item.state,
-    labels: stateLabels,
+    labels,
     assignees: item.assignees,
     viewer: fetch.viewer,
     ticketMarkdown,
     planMarkdown,
     sessionRequired: reason !== null,
     sessionRequiredReason: reason,
-    autoPlan: autoPlanName !== undefined && stateLabels.includes(autoPlanName),
+    autoPlan: autoPlanName !== undefined && labels.includes(autoPlanName),
     readAt: fetch.fetchedAt,
   }
 }
 
-function toClassifyItem(item: Extract<GatePreflightFetch, { readonly ok: true }>['item'], viewer: string, labels: readonly string[] | null): GateClassifyItem | null {
+function toClassifyItem(item: Extract<GatePreflightFetch, { readonly ok: true }>['item'], viewer: string, storedLabels: readonly string[] | null): GateClassifyItem | null {
   if (item === null) return null
-  return { kind: item.kind, number: item.number, labels: labels ?? item.labels, assignees: item.assignees, viewer, noPlanBlock: !item.body.includes(IMPLEMENTATION_PLAN_HEADING) }
+  return { kind: item.kind, number: item.number, labels: storedLabels ?? item.labels, assignees: item.assignees, viewer, noPlanBlock: !item.body.includes(IMPLEMENTATION_PLAN_HEADING) }
 }
 
-function storedLabels(entry: ReadyEntry, item: Extract<GatePreflightFetch, { readonly ok: true }>['item'], deps: Pick<GateDeps, 'stateLabels'>): readonly string[] | null {
+function readStoredLabels(entry: ReadyEntry, item: Extract<GatePreflightFetch, { readonly ok: true }>['item'], deps: Pick<GateDeps, 'stateLabels'>): readonly string[] | null {
   return item === null ? null : deps.stateLabels(entry.id, item.kind, item.number, entry.config.vocabulary)
 }
 
@@ -76,9 +76,9 @@ export async function gatePreflight(params: GatePreflightParams, deps: GateDeps)
   if (!fetch.ok) return { kind: 'failed', message: fetch.message, ownership }
 
   const autoPlanName = labelName(entry.config.vocabulary, 'autoPlan')
-  const labels = storedLabels(entry, fetch.item, deps)
-  const preflight = toGatePreflight(fetch, autoPlanName, labels)
-  const verdict = classifyGate({ item: toClassifyItem(fetch.item, fetch.viewer, labels), vocabulary: entry.config.vocabulary })
+  const storedLabels = readStoredLabels(entry, fetch.item, deps)
+  const preflight = toGatePreflight(fetch, autoPlanName, storedLabels)
+  const verdict = classifyGate({ item: toClassifyItem(fetch.item, fetch.viewer, storedLabels), vocabulary: entry.config.vocabulary })
   if (preflight === null) return { kind: 'unresolved', ownership }
   return { kind: 'resolved', preflight, verdict, ownership }
 }
@@ -106,7 +106,7 @@ export async function gateAnswer(params: GateAnswerParams, deps: GateDeps): Prom
   const fetch = await deps.fetchGatePreflight({ repo: { owner: entry.config.owner, name: entry.config.name }, number: params.number })
   if (!fetch.ok) return { kind: 'preflight-failed', message: fetch.message }
 
-  const verdict = classifyGate({ item: toClassifyItem(fetch.item, fetch.viewer, storedLabels(entry, fetch.item, deps)), vocabulary: entry.config.vocabulary })
+  const verdict = classifyGate({ item: toClassifyItem(fetch.item, fetch.viewer, readStoredLabels(entry, fetch.item, deps)), vocabulary: entry.config.vocabulary })
   if (verdict.kind !== 'answerable') return { kind: 'refused', verdict }
 
   let comment: WriteOutcome | null = null
