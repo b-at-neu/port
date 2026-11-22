@@ -7,6 +7,7 @@ import type { StageEvent, StagePlanFile } from '@/types/stage-labels'
 import type { PostCommentParams, WriteOutcome, WriteStateParams } from '@/types/writes'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
+import { item as reconciled } from '../incidents/fixtures'
 
 const VOCABULARY = resolveVocabulary({})
 
@@ -175,6 +176,34 @@ describe('applyStageTransition — refusals map from the write outcome', () => {
     const result = await applyStageTransition({ entry: entry(), record, event: { kind: 'outcome', outcome: 'interrupted', handback: null, plan: null }, auditDir: '/audit', scratchDir: '/scratch' }, rig.writeDeps)
     expect(result).toEqual({ kind: 'applied' })
     expect(rig.writeState).not.toHaveBeenCalled()
+  })
+})
+
+describe('applyStageTransition — incidents', () => {
+  const blocked: StageEvent = { kind: 'outcome', outcome: 'blocked', handback: null, plan: null }
+  const inProgress = issue(['in progress'])
+  const snapshotItem = reconciled({ kind: 'issue', number: 52, closingPullRequests: [{ number: 80, state: 'OPEN', headRefName: '52-add-thing' }] })
+
+  it('attaches an existing-work incident, with the open pull request as its subject, to a blocked impl hand-back', async () => {
+    const rig = deps([inProgress])
+    await applyStageTransition({ entry: entry(), record: IMPL, event: blocked, auditDir: '/audit', scratchDir: '/scratch', snapshot: { item: snapshotItem, at: 'tick-1' } }, rig.writeDeps)
+    expect(rig.applied[0]?.request.incident).toMatchObject({ bucket: 'existing-work', stage: 'blocked', condition: 'pr-open', subject: { kind: 'pull-request', number: 80 } })
+  })
+
+  it('attaches an escalation incident when the ticket has no open pull request of its own', async () => {
+    const rig = deps([inProgress])
+    await applyStageTransition({ entry: entry(), record: IMPL, event: blocked, auditDir: '/audit', scratchDir: '/scratch', snapshot: { item: null, at: null } }, rig.writeDeps)
+    expect(rig.applied[0]?.request.incident).toMatchObject({ bucket: 'escalation', stage: 'blocked', condition: 'stage-blocked' })
+  })
+
+  it('attaches nothing without a snapshot, and nothing for a write that adds neither gate', async () => {
+    const withoutSnapshot = deps([inProgress])
+    await applyStageTransition({ entry: entry(), record: IMPL, event: blocked, auditDir: '/audit', scratchDir: '/scratch' }, withoutSnapshot.writeDeps)
+    expect(withoutSnapshot.applied[0]?.request.incident).toBeUndefined()
+
+    const claim = deps([])
+    await applyStageClaim({ entry: entry(), candidate: IMPL, resolved: issue(['plan approved']), auditDir: '/audit' }, claim.writeDeps)
+    expect(claim.applied[0]?.request.incident).toBeUndefined()
   })
 })
 

@@ -4,7 +4,7 @@ import { pathOps as defaultPathOps } from '@/main/platform/paths'
 import { boundInputs } from '@/main/incidents/snapshot'
 import { signatureOf } from '@/main/incidents/raise'
 import type { FileFailureKind, PathOps } from '@/types/platform'
-import type { IncidentDraft, IncidentPruned, IncidentRead, IncidentReadFailureKind, IncidentRecord } from '@/types/incidents'
+import type { IncidentDraft, IncidentFiles, IncidentLog, IncidentPruned, IncidentRead, IncidentReadFailureKind, IncidentRecord } from '@/types/incidents'
 
 const LOG_FILE = 'incidents.jsonl'
 const TEMP_FILE = 'incidents.tmp'
@@ -18,16 +18,6 @@ export const INCIDENT_LIMITS = {
   readCapBytes: 40 * 1024 * 1024,
 } as const
 
-export interface IncidentFiles {
-  readonly append: typeof appendTextFile
-  readonly readJson: typeof readJsonFile
-  readonly readLines: typeof readLinesFrom
-  readonly rename: typeof renamePath
-  readonly stat: typeof statPath
-  readonly writeJson: typeof writeJsonFileAtomic
-  readonly writeText: typeof writeTextFile
-}
-
 const defaultFiles: IncidentFiles = { append: appendTextFile, readJson: readJsonFile, readLines: readLinesFrom, rename: renamePath, stat: statPath, writeJson: writeJsonFileAtomic, writeText: writeTextFile }
 
 export interface IncidentLogDeps {
@@ -37,11 +27,6 @@ export interface IncidentLogDeps {
   readonly files?: IncidentFiles
   readonly pathOps?: PathOps
   readonly limits?: typeof INCIDENT_LIMITS
-}
-
-export interface IncidentLog {
-  readonly record: (draft: IncidentDraft) => Promise<void>
-  readonly read: () => Promise<IncidentRead>
 }
 
 interface ParsedLine {

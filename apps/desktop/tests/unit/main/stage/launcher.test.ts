@@ -110,7 +110,7 @@ describe('createStageLauncher.launch', () => {
     deps.loadInstructions.mockResolvedValue({ ok: false, message: "couldn't read /bundle/agents/impl-agent.md: ENOENT" })
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     const result = await launcher.launch(request())
-    expect(result).toEqual({ ok: false, kind: 'failed', message: "Couldn't load the stage instructions from the app's bundled stage prompts: couldn't read /bundle/agents/impl-agent.md: ENOENT" })
+    expect(result).toEqual({ ok: false, kind: 'failed', message: "Couldn't load the stage instructions from the app's bundled stage prompts: couldn't read /bundle/agents/impl-agent.md: ENOENT", cause: 'instructions' })
     expect(deps.start).not.toHaveBeenCalled()
     expect(deps.send).not.toHaveBeenCalled()
     expect(deps.registryMock.recordRunning).not.toHaveBeenCalled()
@@ -132,12 +132,12 @@ describe('createStageLauncher.launch', () => {
     expect(deps.registryMock.recordRunning).toHaveBeenCalledWith(expect.objectContaining({ title: '#52 Add a dark mode icon' }))
   })
 
-  it('removes the worktree and returns failed when the worktree itself cannot be created', async () => {
+  it.each([[undefined, 'worktree'], [true, 'leftover-worktree']] as const)('removes the worktree and returns failed when the worktree itself cannot be created (leftover %s, cause %s)', async (leftover, cause) => {
     const deps = fakeDeps()
-    deps.createWorktree.mockResolvedValue({ ok: false, message: 'git worktree add failed' })
+    deps.createWorktree.mockResolvedValue({ ok: false, message: 'git worktree add failed', leftover })
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     const result = await launcher.launch(request())
-    expect(result.ok).toBe(false)
+    expect(result).toMatchObject({ ok: false, kind: 'failed', cause })
     expect(deps.removeWorktree).not.toHaveBeenCalled()
   })
 
@@ -346,7 +346,7 @@ describe('createStageLauncher.resume', () => {
     deps.readTextFile.mockResolvedValue({ ok: false, kind: 'not-found', message: 'ENOENT' })
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     const result = await launcher.resume(resumeRequest())
-    expect(result).toEqual({ ok: false, kind: 'failed', message: `couldn't read ${pathOps.join('/bundle', 'agents', 'impl-agent.md')}: ENOENT` })
+    expect(result).toEqual({ ok: false, kind: 'failed', message: `couldn't read ${pathOps.join('/bundle', 'agents', 'impl-agent.md')}: ENOENT`, cause: 'resume' })
     expect(deps.start).not.toHaveBeenCalled()
     expect(deps.registryMock.markRunning).not.toHaveBeenCalled()
   })

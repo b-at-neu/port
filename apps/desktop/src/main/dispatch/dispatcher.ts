@@ -28,8 +28,7 @@ import type { StageOutcome } from '@/types/stage-session'
 import { reviewDispatchFacts } from '../../../../../scripts/port-tick/gates'
 import type { ReviewDispatchFacts } from '../../../../../scripts/port-tick/gates'
 import type { Dispatcher, CreateDispatcherParams, StageLaunchFailureCause, StageSnapshot } from '@/types/dispatch'
-import { draftOf, endedIntents, launchFailedIntent, noRelated } from '@/main/incidents/raise'
-import type { IncidentIntent, IncidentOutcome } from '@/types/incidents'
+import { createRaiser, endedIntents, launchFailedIntent, stageSnapshotOf } from '@/main/incidents/raise'
 
 const RECENT_LIMIT = 20
 const NOTE_LIMIT = 20
@@ -82,6 +81,7 @@ function ownerOf(ownership: OwnershipRead): DispatchOwner {
 export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   const repoStates = new Map<RepoId, RepoDispatcherState>()
   const repoNames = new Map<RepoId, string>()
+  const raise = createRaiser(deps.recordIncident, (repoId) => repoNames.get(repoId))
   const inFlight = new Set<RepoId>()
   const pending = new Map<RepoId, ReadyEntry>()
   let stopped = false
@@ -406,10 +406,6 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     raise(entry.id, candidate, launchFailedIntent(candidate, cause), { kind: 'failed' })
   }
 
-  function raise(repoId: RepoId, ref: Pick<StageRecord, 'number' | 'kind'>, intent: IncidentIntent, outcome: IncidentOutcome): void {
-    const repo = repoNames.get(repoId)
-    if (repo !== undefined) void deps.recordIncident(draftOf(intent, { repo, kind: ref.kind, number: ref.number }, outcome, noRelated())).catch(() => undefined)
-  }
 
   /** Undoes a claim whose launch failed; a refused rollback is left to the stall ladder. */
   async function rollback(entry: ReadyEntry, candidate: TickActionable): Promise<void> {
@@ -422,10 +418,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     const found = lastSnapshot?.state.repositories.find((r) => r.ok && r.repoId === repoId)
     return found?.ok ? found : undefined
   }
-  function snapshotOf(repoId: RepoId, number: number): StageSnapshot {
-    const repoState = snapshotRepoState(repoId)
-    return { item: repoState?.items.find((i) => i.number === number) ?? null, at: repoState !== undefined && 'at' in repoState.freshness.github ? repoState.freshness.github.at : null }
-  }
+  const snapshotOf = (repoId: RepoId, number: number): StageSnapshot => stageSnapshotOf(snapshotRepoState(repoId), number)
 
   async function consider(snapshot: BoardSnapshot): Promise<void> {
     if (stopped) return

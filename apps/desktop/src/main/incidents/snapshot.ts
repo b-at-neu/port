@@ -29,9 +29,9 @@ export function boundInputs(inputs: IncidentInputs): IncidentInputs {
     const size = bytesOf(current)
     if (size <= INCIDENT_INPUTS_MAX_BYTES) return current
     const key = longestArrayKey(current)
-    const list = key === null ? undefined : current[key]
+    const list: unknown = key === null ? undefined : current[key]
     if (key === null || !Array.isArray(list) || list.length === 0) return { truncated: true, bytes: size }
-    const kept = list.filter((entry) => !(typeof entry === 'object' && entry !== null && 'dropped' in entry))
+    const kept: readonly unknown[] = (list as readonly unknown[]).filter((entry) => !(typeof entry === 'object' && entry !== null && 'dropped' in entry))
     if (kept.length === 0) return { truncated: true, bytes: size }
     const keep = Math.floor(kept.length / 2)
     dropped.set(key, (dropped.get(key) ?? 0) + kept.length - keep)

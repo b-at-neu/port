@@ -52,7 +52,7 @@ function snapshotCarrying(...numbers: readonly number[]): BoardSnapshot {
   const tick: TickReport = { repoId: REPO_ID, displayName: 'o/a', blind: null, actionable: numbers.map(candidate), held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [], autoApprovals: [], labelRepairs: [] }
   return {
     state: {
-      repositories: [{ ok: true, repoId: REPO_ID, repo: 'o/a', displayName: 'o/a', viewer: 'op' } as never],
+      repositories: [{ ok: true, repoId: REPO_ID, repo: 'o/a', displayName: 'o/a', viewer: 'op', items: [], freshness: { github: { at: '2026-01-01T00:00:00Z' } } } as never],
       sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: '2026-01-01T00:00:00Z' },
       readAt: '2026-01-01T00:00:00Z',
     },
@@ -129,6 +129,7 @@ function harness(overrides: Partial<CreateDispatcherParams> = {}) {
       throw new Error('escalate should not be invoked')
     },
     requestRead,
+    recordIncident: () => Promise.resolve(),
     dirs: { audit: '/audit', scratch: '/scratch' },
     onChange: vi.fn(),
     now: () => new Date('2026-01-01T00:00:00Z'),

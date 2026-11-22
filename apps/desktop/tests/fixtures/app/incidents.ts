@@ -1,4 +1,4 @@
-// Fixture mode's own canned incident log: three groups, one of them the stale-snapshot case #789 and #790 share.
+// Fixture mode's own canned incident log: three groups, one of them a stale-snapshot group two pull requests share.
 import type { IpcMap } from '@/types/ipc'
 import type { FixtureScenario } from '@/types/fixtures'
 import type { IncidentBucket, IncidentExportResult, IncidentGroup, IncidentGroupsRead, IncidentListRead, IncidentRecord } from '@/types/incidents'

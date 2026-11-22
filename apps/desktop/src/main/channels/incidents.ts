@@ -1,21 +1,12 @@
 // The incident channels' composition: validate the request, resolve the repository, then read the log.
 import { exportDocument, groupIncidents } from '@/main/incidents/group'
-import type { IncidentLog } from '@/main/incidents/log'
-import { writeJsonFileAtomic } from '@/main/platform/files'
-import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/registry'
+import { requireReadyRepo, requireRepoId } from '@/main/registry'
+import type { IncidentChannelDeps } from '@/types/channels'
 import type { IpcMap } from '@/types/ipc'
 import { INCIDENT_LIST_LIMIT, type IncidentExportResult, type IncidentGroupsRead, type IncidentListRead, type IncidentRead } from '@/types/incidents'
 import type { RegistryDeps } from '@/types/registry'
 
 const SIGNATURE_MAX = 200
-
-export interface IncidentChannelDeps {
-  readonly listRepositories: typeof listRepositories
-  readonly log: Pick<IncidentLog, 'read'>
-  readonly chooseSavePath: (defaultName: string) => Promise<string | null>
-  readonly writeJson: typeof writeJsonFileAtomic
-  readonly now: () => Date
-}
 
 // A non-null `repoId` must name a registered, `ready` repository; the slug is read from its own config, never the request.
 async function slugOf(registryDeps: RegistryDeps, channel: string, repoId: unknown, deps: IncidentChannelDeps): Promise<string | null> {

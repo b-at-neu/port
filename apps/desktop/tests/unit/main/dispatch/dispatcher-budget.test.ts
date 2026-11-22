@@ -154,6 +154,7 @@ function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispat
       throw new Error('escalate should not be invoked in this case')
     },
     requestRead: () => undefined,
+    recordIncident: () => Promise.resolve(),
     dirs: { audit: '/audit', scratch: '/scratch' },
     onChange: vi.fn(),
     now: () => new Date('2026-01-01T00:00:00Z'),

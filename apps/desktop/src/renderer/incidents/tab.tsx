@@ -13,7 +13,8 @@ import { StatusPill } from '@/renderer/components/status-pill'
 import { useIpcMutation, useIpcQuery } from '@/renderer/data/query'
 import { WIDE_CARD } from '@/renderer/settings/copy'
 import { formatAgo } from '@/renderer/lib/relative-time'
-import { groupRows, recordRow, type IncidentGroupRow } from '@/renderer/incidents/model'
+import { groupRows, recordRow } from '@/renderer/incidents/model'
+import type { IncidentGroupRow } from '@/types/incidents'
 import {
   ALL_REPOSITORIES,
   EMPTY_UNFILTERED,

@@ -5,6 +5,7 @@ import type { BoardSnapshot } from '@/types/board'
 import type { ReadyEntry } from '@/types/actions'
 import type { CreateDispatcherParams, OwnershipRead, StageLabelWrites, StageLaunchResult, StageLauncher } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
+import type { IncidentDraft } from '@/types/incidents'
 import type { StageEvent, StageTransitionResult } from '@/types/stage-labels'
 import type { StageOutcome } from '@/types/stage-session'
 import type { TickReport } from '@/types/tick'
@@ -48,7 +49,7 @@ function entry(): ReadyEntry {
 function snapshotWith(tick: readonly TickReport[]): BoardSnapshot {
   return {
     state: {
-      repositories: [{ ok: true, repoId: REPO_ID, repo: 'o/a', displayName: 'o/a', viewer: 'op' } as never],
+      repositories: [{ ok: true, repoId: REPO_ID, repo: 'o/a', displayName: 'o/a', viewer: 'op', items: [], freshness: { github: { at: '2026-01-01T00:00:00Z' } } } as never],
       sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: '2026-01-01T00:00:00Z' },
       readAt: '2026-01-01T00:00:00Z',
     },
@@ -120,6 +121,7 @@ function rig(overrides: Partial<CreateDispatcherParams> = {}) {
       throw new Error('escalate should not be invoked')
     },
     requestRead: () => undefined,
+    recordIncident: () => Promise.resolve(),
     dirs: { audit: '/audit', scratch: '/scratch' },
     onChange: vi.fn(),
     now: () => new Date('2026-01-01T00:00:00Z'),
@@ -176,7 +178,7 @@ describe('createDispatcher — stage label writes', () => {
   })
 
   it('a launch that fails rolls the claim back, then records the failure', async () => {
-    const { dispatcher, transition } = rig({ launch: launcher(() => Promise.resolve({ ok: false, kind: 'failed', message: 'no worktree' })) })
+    const { dispatcher, transition } = rig({ launch: launcher(() => Promise.resolve({ ok: false, kind: 'failed', message: 'no worktree', cause: 'worktree' })) })
     await consider(dispatcher)
     expect(transition).toHaveBeenCalledTimes(1)
     expect(transition.mock.calls[0]?.[0]).toMatchObject({ entry: { id: REPO_ID }, record: ACTIONABLE[0], event: { kind: 'rollback' }, auditDir: '/audit' })
@@ -198,7 +200,7 @@ describe('createDispatcher — stage label writes', () => {
   })
 
   it('a refused rollback is left to the stall ladder, never thrown', async () => {
-    const { dispatcher } = rig({ launch: launcher(() => Promise.resolve({ ok: false, kind: 'failed', message: 'no worktree' })), stageLabels: { claim: () => Promise.resolve(APPLIED), transition: () => Promise.resolve(refused('moved')) } })
+    const { dispatcher } = rig({ launch: launcher(() => Promise.resolve({ ok: false, kind: 'failed', message: 'no worktree', cause: 'worktree' })), stageLabels: { claim: () => Promise.resolve(APPLIED), transition: () => Promise.resolve(refused('moved')) } })
     await expect(consider(dispatcher)).resolves.toBeUndefined()
     expect(recent(dispatcher)).toMatchObject([{ state: 'failed' }])
   })
@@ -320,5 +322,82 @@ describe('createDispatcher — a resumed session, a superseded outcome and a set
     await dispatcher.consider(snapshotWith([tickReport()]))
     at = new Date(at.getTime() + SETTLE_GRACE_MS * 3)
     expect(dispatcher.stageLiveness(REPO_ID)?.live).toEqual(['impl #52'])
+  })
+})
+
+describe('createDispatcher — incidents', () => {
+  const failing = (cause: Extract<StageLaunchResult, { readonly kind: 'failed' }>['cause']) => launcher(() => Promise.resolve({ ok: false, kind: 'failed', message: 'no worktree', cause }))
+  const outcomeOf = (kind: StageOutcome['kind'], detail: string | null = null): StageOutcome => ({ kind, detail, costUsd: null, resetsAt: null, worktree: 'kept', operatorJoined: false, handback: null })
+
+  function recorded(overrides: Partial<CreateDispatcherParams> = {}) {
+    const incidents: IncidentDraft[] = []
+    const made = rig({ recordIncident: (draft) => Promise.resolve(void incidents.push(draft)), ...overrides })
+    return { ...made, incidents }
+  }
+
+  it('raises launch-failed with the failed step as its condition', async () => {
+    const { dispatcher, incidents } = recorded({ launch: failing('worktree') })
+    await consider(dispatcher)
+    expect(incidents).toMatchObject([{ bucket: 'launch-failed', stage: 'impl', condition: 'worktree', repo: 'o/a', number: 52, kind: 'issue', outcome: { kind: 'failed' } }])
+  })
+
+  it('raises leftover-worktree when a leftover worktree refused its reclaim', async () => {
+    const { dispatcher, incidents } = recorded({ launch: failing('leftover-worktree') })
+    await consider(dispatcher)
+    expect(incidents).toMatchObject([{ bucket: 'leftover-worktree', condition: 'leftover-worktree' }])
+  })
+
+  it('raises launch-failed for a refused claim and for a launch that throws, but nothing for a moved claim', async () => {
+    const refusedClaim = recorded({ stageLabels: { claim: () => Promise.resolve(refused('write-failed', 'boom')), transition: () => Promise.resolve(APPLIED) } })
+    await consider(refusedClaim.dispatcher)
+    expect(refusedClaim.incidents).toMatchObject([{ bucket: 'launch-failed', condition: 'claim-write-failed' }])
+
+    const threw = recorded({ launch: launcher(() => Promise.reject(new Error('boom'))) })
+    await consider(threw.dispatcher)
+    expect(threw.incidents).toMatchObject([{ bucket: 'launch-failed', condition: 'threw' }])
+
+    const moved = recorded({ stageLabels: { claim: () => Promise.resolve(refused('moved')), transition: () => Promise.resolve(APPLIED) } })
+    await consider(moved.dispatcher)
+    expect(moved.incidents).toEqual([])
+  })
+
+  it('raises launch-failed ended-fast for a session that ends within seconds of starting, and nothing later', async () => {
+    let at = new Date('2026-01-01T00:00:00Z')
+    const fast = recorded({ now: () => at })
+    await consider(fast.dispatcher)
+    at = new Date('2026-01-01T00:00:05Z')
+    fast.dispatcher.recordOutcome(REPO_ID, KEY, outcomeOf('completed'), null)
+    expect(fast.incidents).toMatchObject([{ bucket: 'launch-failed', condition: 'ended-fast', number: 52 }])
+
+    const slow = recorded({ now: () => at })
+    at = new Date('2026-01-01T00:00:00Z')
+    await consider(slow.dispatcher)
+    at = new Date('2026-01-01T00:05:00Z')
+    slow.dispatcher.recordOutcome(REPO_ID, KEY, outcomeOf('completed'), null)
+    expect(slow.incidents).toEqual([])
+  })
+
+  it('raises network-interrupt for a transient failure and unknown for any other stop', async () => {
+    let at = new Date('2026-01-01T00:00:00Z')
+    const made = recorded({ now: () => at })
+    await consider(made.dispatcher)
+    at = new Date('2026-01-01T00:10:00Z')
+    made.dispatcher.recordOutcome(REPO_ID, KEY, outcomeOf('interrupted', 'getaddrinfo ENOTFOUND api.anthropic.com'), null)
+    expect(made.incidents).toMatchObject([{ bucket: 'network-interrupt', stage: 'impl', condition: 'network', inputs: { sessionKey: KEY, outcome: 'interrupted' } }])
+    expect(JSON.stringify(made.incidents)).not.toContain('api.anthropic.com')
+  })
+
+  it('never lets a failing recorder change the dispatch', async () => {
+    const { dispatcher } = rig({ launch: failing('worktree'), recordIncident: () => Promise.reject(new Error('disk full')) })
+    await expect(consider(dispatcher)).resolves.toBeUndefined()
+    expect(recent(dispatcher)).toMatchObject([{ state: 'failed', detail: 'no worktree' }])
+  })
+
+  it('hands the hand-back write the tick\'s view of the ticket and its read instant', async () => {
+    const { dispatcher, transition } = rig()
+    await consider(dispatcher)
+    dispatcher.recordOutcome(REPO_ID, KEY, completed({ token: 'pr-opened', arg: '#8' }), null)
+    await settle()
+    expect(transition.mock.calls[0]?.[0]).toMatchObject({ snapshot: { item: null, at: '2026-01-01T00:00:00Z' } })
   })
 })

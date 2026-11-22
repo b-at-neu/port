@@ -1,10 +1,11 @@
 // Pure: the intent each raising site builds from facts it already holds. A signature is bucket, stage and condition, never a number, SHA or time, so a recurrence collapses into one group.
 import { ownBranchPullRequestOf } from '@/main/tick/adopt'
 import { itemInputs } from '@/main/incidents/snapshot'
-import type { StageLaunchFailureCause, WriteObservation } from '@/types/dispatch'
-import type { IncidentBucket, IncidentDraft, IncidentInputs, IncidentIntent, IncidentOutcome, IncidentRelated } from '@/types/incidents'
+import type { StageLaunchFailureCause, StageSnapshot, WriteObservation } from '@/types/dispatch'
+import type { IncidentBucket, IncidentDraft, IncidentInputs, IncidentIntent, IncidentOutcome, IncidentRelated, RecordIncident } from '@/types/incidents'
 import type { PipelineItemKind } from '@/types/github'
-import type { ReconciledItem } from '@/types/state'
+import type { ReconciledItem, RepositoryState } from '@/types/state'
+import type { RepoId } from '@/utils/repos'
 import { isTransientNetworkFailure, SETTLE_FAILED_DETAIL } from '@/main/stage/handback'
 import type { StageHandback, StageOutcome, StageOutcomeKind } from '@/types/stage-session'
 import type { StagePlannedWrite } from '@/types/stage-labels'
@@ -144,4 +145,17 @@ export function draftOf(intent: IncidentIntent, ref: { readonly repo: string; re
 
 export function noRelated(): IncidentRelated {
   return { audit: [], tick: null }
+}
+
+/** Records an intent against a ticket of a repository known by name; never rejects, and records nothing for an unknown repository. */
+export function createRaiser(record: RecordIncident, repoNameOf: (repoId: RepoId) => string | undefined) {
+  return (repoId: RepoId, ref: { readonly number: number; readonly kind: PipelineItemKind }, intent: IncidentIntent, outcome: IncidentOutcome): void => {
+    const repo = repoNameOf(repoId)
+    if (repo !== undefined) void record(draftOf(intent, { repo, kind: ref.kind, number: ref.number }, outcome, noRelated())).catch(() => undefined)
+  }
+}
+
+/** The tick's view of one ticket and the instant GitHub was read, for the incident a hand-back write may raise. */
+export function stageSnapshotOf(repository: Extract<RepositoryState, { readonly ok: true }> | undefined, number: number): StageSnapshot {
+  return { item: repository?.items.find((candidate) => candidate.number === number) ?? null, at: repository !== undefined && 'at' in repository.freshness.github ? repository.freshness.github.at : null }
 }

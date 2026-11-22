@@ -276,6 +276,12 @@ describe('buildItemsByNumberQuery', () => {
     expect(extractFragment(document, 'PullRequest')).toContain('headRefName')
   })
 
+  it('selects headRefOid inside the PullRequest fragment only', () => {
+    const { document } = buildItemsByNumberQuery([1])
+    expect(extractFragment(document, 'Issue')).not.toContain('headRefOid')
+    expect(extractFragment(document, 'PullRequest')).toContain('headRefOid')
+  })
+
   it('selects the author inside the PullRequest fragment only', () => {
     const { document } = buildItemsByNumberQuery([1])
     expect(extractFragment(document, 'Issue')).not.toContain('author')

@@ -118,6 +118,13 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `usage-ledger.ts`'s `createUsageLedger` is `usage-ledger.json`'s only writer, keyed by boot id (a `SessionKey` restarts every launch) with 31-day retention; a missing or malformed file loads empty, so a lost ledger shows no totals rather than a wrong one
 - `session-index.ts`'s `createSessionIndex` is `session-index.json`'s only writer, observing every hosted snapshot. It is history for the Board pane, never a restore set, so it takes no `freeze()`. A missing or malformed file loads empty
 
+**`apps/desktop/src/main/incidents/`**
+- sole writer of `incidents.jsonl` in the app data directory, local-only; `log.ts`'s appends and prunes run through one promise chain, so a prune never loses a concurrent append
+- best-effort: `recordIncident` never rejects, and a failed append never changes the outcome of the write or dispatch it describes; fails toward losing an incident, since a lost one costs analysis and a failed write costs the pipeline
+- never read for a decision; the raising code assigns the bucket, and nothing classifies an incident afterwards
+- `raise.ts` and `snapshot.ts` are pure: a signature is bucket, stage and condition, never a number, SHA or time, and a snapshot holds typed identifier fields only, never a body, comment or transcript text, capped at 4 KB with the dropped count named
+- retention is 90 days or 32 MB, whichever is hit first, oldest dropped first; the read reports that older entries existed, and a read failure is a typed error, never an empty list
+
 **`apps/desktop/src/main/local/`**
 - only reader of worktrees and the denial log
 - no `gh`; no item-state resolution
@@ -286,6 +293,10 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `data/subscriptions.ts` is the only caller of a `window.port.on*` push listener
 - a typed `{ ok: false }` response is data, not an error — only a rejected invoke is
 - `session:status` upserts the `session:list` cache by `sessionKey` when it already holds an entry and nothing is mid-fetch; otherwise it invalidates
+
+**`apps/desktop/src/renderer/incidents/`**
+- reads the incident channels only; the Settings → Incidents tab is read-only and writes nothing but the operator's own export
+- `model.ts` is the one group and record → row mapping
 
 **`apps/desktop/src/renderer/local/inspect.ts`**
 - the app's only aggregation of the denial log; pure, reader-free

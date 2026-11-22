@@ -1,7 +1,7 @@
 // The one incident group/record → row mapping — pure, no DOM.
 import { BUCKET_LABEL } from '@/renderer/incidents/copy'
 import type { PillStatus } from '@/types/components'
-import type { IncidentBucket, IncidentGroup, IncidentRecord } from '@/types/incidents'
+import type { IncidentBucket, IncidentGroup, IncidentGroupRow, IncidentRecord } from '@/types/incidents'
 
 export const BUCKET_TONE: Readonly<Record<IncidentBucket, PillStatus>> = {
   'stale-snapshot': 'danger',
@@ -16,18 +16,7 @@ export const BUCKET_TONE: Readonly<Record<IncidentBucket, PillStatus>> = {
   unknown: 'idle',
 }
 
-export interface IncidentGroupRow {
-  readonly signature: string
-  readonly bucket: string
-  readonly tone: PillStatus
-  readonly condition: string
-  readonly count: number
-  readonly firstAt: string
-  readonly lastAt: string
-  readonly tickets: string
-}
-
-export interface IncidentRecordRow {
+interface IncidentRecordRow {
   readonly key: string
   readonly at: string
   readonly ticket: string
