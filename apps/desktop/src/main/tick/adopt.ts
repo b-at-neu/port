@@ -19,7 +19,7 @@ function newestCodeReview(reviews: readonly ReviewNode[] | null): ReviewNode | n
 }
 
 /** The verdict a `## Code Review — Cycle <n> · <verdict>` title names, or `null` for any other shape. */
-function verdictOf(review: ReviewNode): string | null {
+export function verdictOf(review: ReviewNode): string | null {
   const title = review.body.split('\n')[0] ?? ''
   const at = title.lastIndexOf(VERDICT_SEPARATOR)
   return at === -1 ? null : title.slice(at + VERDICT_SEPARATOR.length).trim()

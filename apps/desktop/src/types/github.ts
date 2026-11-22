@@ -241,6 +241,8 @@ export interface ResolvedItem {
   readonly assignees: readonly string[]
   /** A pull request's head branch; `null` for an issue. */
   readonly headRefName: string | null
+  /** A pull request's head commit as this read saw it; `null` for an issue, absent on a read that never selected it. */
+  readonly headRefOid?: string | null
   /** A pull request's author login; `null` for an issue or a deleted account. */
   readonly author: string | null
 }

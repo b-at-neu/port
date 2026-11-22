@@ -8,6 +8,7 @@ export const SECTION_LABEL: Readonly<Record<SettingsSection, string>> = {
   pipeline: 'Pipeline',
   usage: 'Usage & storage',
   audit: 'Audit log',
+  incidents: 'Incidents',
   about: 'About',
 }
 

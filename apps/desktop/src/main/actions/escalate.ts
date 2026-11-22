@@ -27,6 +27,7 @@ function buildWriteRequest(params: EscalateToHumanParams): LabelWriteRequest {
     removeAssignees: [],
     expect: { present: [params.trigger], absent: ['needsHuman'], assignees: { kind: 'exactly', logins: [params.viewer] } },
     action: params.action,
+    ...(params.incident === undefined ? {} : { incident: params.incident }),
   }
 }
 

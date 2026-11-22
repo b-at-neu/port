@@ -1,6 +1,8 @@
 // Per-repository pending stage label writes: serialized, retried a bounded number of times, and reported rather than guessed.
 import { eventWrites, stageModeFor } from '@/main/dispatch/transitions'
+import { draftOf, handoffRefusalIntent, noRelated } from '@/main/incidents/raise'
 import type { ReadyEntry } from '@/types/actions'
+import type { RecordIncident } from '@/types/incidents'
 import type { SessionKey } from '@/types/hosting'
 import type { StageEvent, StageLabelResult, StagePlanFile, StageTransitionResult } from '@/types/stage-labels'
 import type { StageOutcome } from '@/types/stage-session'
@@ -31,6 +33,7 @@ interface StageHandoffDeps {
   readonly auditDir: string
   readonly scratchDir: string
   readonly onChange: () => void
+  readonly recordIncident: RecordIncident
   /** Asks for one GitHub read of this repository alone, so the next stage sees the label just written. */
   readonly requestRead: (repoId: RepoId) => void
   readonly now: () => Date
@@ -77,6 +80,11 @@ export function createStageHandoff(deps: StageHandoffDeps): StageHandoff {
     const windowOpen = deps.now().getTime() - write.firstAttemptAt < HANDOFF_RETRY_WINDOW_MS
     if (result.kind === 'refused' && result.retryable && (write.attempts < HANDOFF_ATTEMPTS || windowOpen)) return
     pending.delete(id)
+    if (result.kind === 'refused') {
+      const { record } = write
+      const intent = handoffRefusalIntent(record, result.reason, write.attempts, result.retryable)
+      void deps.recordIncident(draftOf(intent, { repo: entry.config.repo, kind: record.kind, number: record.number }, { kind: result.reason }, noRelated())).catch(() => undefined)
+    }
     if (write.resultKey !== null) results.set(write.resultKey, result.kind === 'applied' ? { kind: 'applied' } : { kind: 'refused', reason: result.reason, detail: result.detail })
     if (write.event.kind === 'outcome' && write.event.outcome === 'completed') deps.requestRead(write.repoId)
     deps.onChange()

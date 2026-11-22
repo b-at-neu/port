@@ -27,7 +27,9 @@ import type { StagePlanFile } from '@/types/stage-labels'
 import type { StageOutcome } from '@/types/stage-session'
 import { reviewDispatchFacts } from '../../../../../scripts/port-tick/gates'
 import type { ReviewDispatchFacts } from '../../../../../scripts/port-tick/gates'
-import type { Dispatcher, CreateDispatcherParams } from '@/types/dispatch'
+import type { Dispatcher, CreateDispatcherParams, StageLaunchFailureCause, StageSnapshot } from '@/types/dispatch'
+import { draftOf, endedIntents, launchFailedIntent, noRelated } from '@/main/incidents/raise'
+import type { IncidentIntent, IncidentOutcome } from '@/types/incidents'
 
 const RECENT_LIMIT = 20
 const NOTE_LIMIT = 20
@@ -85,7 +87,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   let stopped = false
   // Serializes every repository's own launch section so two repositories never race for the same free slot.
   let launchQueue: Promise<void> = Promise.resolve()
-  const handoff = createStageHandoff({ write: deps.stageLabels.transition, auditDir: deps.dirs.audit, scratchDir: deps.dirs.scratch, onChange: deps.onChange, requestRead: deps.requestRead, now: deps.now })
+  const handoff = createStageHandoff({ write: (p) => deps.stageLabels.transition({ ...p, snapshot: snapshotOf(p.entry.id, p.record.number) }), auditDir: deps.dirs.audit, scratchDir: deps.dirs.scratch, onChange: deps.onChange, recordIncident: deps.recordIncident, requestRead: deps.requestRead, now: deps.now })
 
   function serialize<T>(fn: () => Promise<T>): Promise<T> {
     const result = launchQueue.then(fn)
@@ -135,6 +137,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     if (existing === undefined) return
     next[idx] = { ...existing, outcome }
     state.records = next
+    for (const intent of endedIntents(existing, outcome, deps.now().getTime())) raise(repoId, existing, intent, { kind: outcome.kind })
     deps.onChange()
     // A newer session on the same ticket owns it now, so this older outcome writes no label.
     if (next.some((r) => r.number === existing.number && r.state === 'started' && r.at > existing.at)) return
@@ -374,14 +377,10 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
             await rollback(entry, candidate)
             waiting += 1
           } else {
-            await rollback(entry, candidate)
-            pushRecord(entry.id, newStageRecord(candidate, 'failed', at, null, result.message))
+            await launchFailed(entry, candidate, result.cause, result.message, true)
           }
         } catch (error) {
-          await rollback(entry, candidate)
-          const at = deps.now().toISOString()
-          const message = error instanceof Error ? error.message : String(error)
-          pushRecord(entry.id, newStageRecord(candidate, 'failed', at, null, message))
+          await launchFailed(entry, candidate, 'threw', error instanceof Error ? error.message : String(error), true)
         }
       }
     })
@@ -396,11 +395,20 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     if (resolved === undefined) return false
     const result = await deps.stageLabels.claim({ entry, candidate, resolved, auditDir: deps.dirs.audit })
     if (result.kind === 'applied') return true
-    if (result.reason !== 'moved') {
-      const detail = `port couldn't move the label before starting: ${result.reason}${result.detail === null ? '' : ` (${result.detail})`}`
-      pushRecord(entry.id, newStageRecord(candidate, 'failed', deps.now().toISOString(), null, detail))
-    }
+    if (result.reason !== 'moved') await launchFailed(entry, candidate, `claim-${result.reason}`, `port couldn't move the label before starting: ${result.reason}${result.detail === null ? '' : ` (${result.detail})`}`, false)
     return false
+  }
+
+  /** A launch that never produced a session: undoes the claim when it made one, records the failure and raises its incident. */
+  async function launchFailed(entry: ReadyEntry, candidate: TickActionable, cause: StageLaunchFailureCause | `claim-${string}`, message: string, undo: boolean): Promise<void> {
+    if (undo) await rollback(entry, candidate)
+    pushRecord(entry.id, newStageRecord(candidate, 'failed', deps.now().toISOString(), null, message))
+    raise(entry.id, candidate, launchFailedIntent(candidate, cause), { kind: 'failed' })
+  }
+
+  function raise(repoId: RepoId, ref: Pick<StageRecord, 'number' | 'kind'>, intent: IncidentIntent, outcome: IncidentOutcome): void {
+    const repo = repoNames.get(repoId)
+    if (repo !== undefined) void deps.recordIncident(draftOf(intent, { repo, kind: ref.kind, number: ref.number }, outcome, noRelated())).catch(() => undefined)
   }
 
   /** Undoes a claim whose launch failed; a refused rollback is left to the stall ladder. */
@@ -413,6 +421,10 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   function snapshotRepoState(repoId: RepoId): Extract<BoardSnapshot['state']['repositories'][number], { readonly ok: true }> | undefined {
     const found = lastSnapshot?.state.repositories.find((r) => r.ok && r.repoId === repoId)
     return found?.ok ? found : undefined
+  }
+  function snapshotOf(repoId: RepoId, number: number): StageSnapshot {
+    const repoState = snapshotRepoState(repoId)
+    return { item: repoState?.items.find((i) => i.number === number) ?? null, at: repoState !== undefined && 'at' in repoState.freshness.github ? repoState.freshness.github.at : null }
   }
 
   async function consider(snapshot: BoardSnapshot): Promise<void> {

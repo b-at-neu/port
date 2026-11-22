@@ -36,6 +36,8 @@ interface DesktopClaimEvent {
 export interface DesktopTickEvent {
   readonly v: 1
   readonly ts: string
+  /** The GitHub read the tick was computed from; an incident's `related.tick` joins on it. */
+  readonly fetchedAt: string | null
   readonly repo: string
   readonly repoId: RepoId
   readonly dispatch: readonly DesktopDispatchEvent[]

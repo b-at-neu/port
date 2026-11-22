@@ -53,7 +53,7 @@ export function boardSearchFromRaw(search: Readonly<Record<string, unknown>>): B
 }
 
 // Exhaustive over `SettingsSection` by type, since this file takes no runtime import of `@/types`.
-const SECTION_IDS: Readonly<Record<SettingsSection, true>> = { general: true, repositories: true, connections: true, pipeline: true, usage: true, audit: true, about: true }
+const SECTION_IDS: Readonly<Record<SettingsSection, true>> = { general: true, repositories: true, connections: true, pipeline: true, usage: true, audit: true, incidents: true, about: true }
 
 /** An unknown or missing `section` reads as `'general'`; `repo` and `number` survive only for `'audit'`. */
 export function settingsSearchFromRaw(search: Readonly<Record<string, unknown>>): SettingsSearch {

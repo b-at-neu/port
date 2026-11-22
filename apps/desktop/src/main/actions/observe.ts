@@ -7,6 +7,7 @@ import type { LabelWriteRequest, WriteOutcome } from '@/types/writes'
 import { stateMoved } from '@/types/writes'
 
 import { observationWrite } from '@/main/dispatch/observation'
+import { observationIntent } from '@/main/incidents/raise'
 import { commentRepeats } from '../../../../../scripts/port-tick/gates'
 
 import type { ApplyObservationResult, ApplyObservationParams } from '@/types/actions'
@@ -18,7 +19,9 @@ interface ApplyObservationDeps {
 
 export async function applyObservation(params: ApplyObservationParams, deps: ApplyObservationDeps): Promise<ApplyObservationResult> {
   const plan = observationWrite(params.observation, params.item, params.entry.config.vocabulary, params.entry.config.branches.integration)
+  const incident = observationIntent(params.observation, params.item, plan, params.snapshotAt ?? null)
   const request: LabelWriteRequest = {
+    ...(incident === null ? {} : { incident }),
     repoId: params.entry.id,
     repo: params.entry.config.repo,
     kind: params.observation.itemKind,

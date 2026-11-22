@@ -3,10 +3,12 @@ import type { IpcMainInvokeEvent } from 'electron'
 import { join } from 'node:path'
 import { IPC_CHANNELS, type IpcChannel, type IpcEvent, type IpcEventMap, type IpcMap } from '@/types/ipc'
 import { resolveBoardRefresh } from '@/main/channels/board'
-import { resolveUpdateCheck, resolveUpdateDownload, resolveUpdateDownloadState, resolveUpdateOpen, resolveUpdateState } from '@/main/channels/update'
+import { registerUpdateChannels } from '@/main/channels/update'
 import { createDefaultUpdate } from '@/main/update/default'
 import type { RestartSeams } from '@/types/update'
-import { chooseDirectory } from '@/main/dialogs'
+import { chooseDirectory, chooseSavePath } from '@/main/dialogs'
+import { createIncidentLog } from '@/main/incidents/log'
+import { resolveIncidentExport, resolveIncidentGroups, resolveIncidentList, type IncidentChannelDeps } from '@/main/channels/incidents'
 import { defaultWorkspaceChannelDeps, resolveFoldersChoose, resolveFoldersList, resolveSessionChanges } from '@/main/channels/workspace'
 import { createRecentsStore } from '@/main/workspace/recents'
 import { createSessionWorktree, removeSessionWorktreeAt } from '@/main/workspace/worktree'
@@ -215,7 +217,8 @@ export function registerIpc(restart: RestartSeams): RegisteredIpc {
   let dispatcherRef: Dispatcher | null = null
 
   // The app's own record of every ticket's stage; every pipeline write goes through its `writeState`.
-  const pipelineState = createPipelineState({ dir: app.getPath('userData'), auditDir: app.getPath('userData'), ownerOf: (repoId) => dispatcherRef?.status().find((status) => status.repoId === repoId)?.owner ?? null })
+  const incidentLog = createIncidentLog({ dir: app.getPath('userData'), now: () => new Date(), newId: () => globalThis.crypto.randomUUID() })
+  const pipelineState = createPipelineState({ dir: app.getPath('userData'), auditDir: app.getPath('userData'), ownerOf: (repoId) => dispatcherRef?.status().find((status) => status.repoId === repoId)?.owner ?? null, recordIncident: incidentLog.record })
   const actions = bindActions(pipelineState)
 
   // stage-sessions.json's sole writer. Loaded once at boot — a `running` entry found then can only
@@ -274,6 +277,7 @@ export function registerIpc(restart: RestartSeams): RegisteredIpc {
     stateLabels: pipelineState.stateLabels,
     dirs: { audit: app.getPath('userData'), scratch: app.getPath('temp') },
     now: () => new Date(),
+    recordIncident: incidentLog.record,
     interrupted: (repoId) => stageRegistry.list().filter((entry) => entry.repoId === repoId),
   })
   dispatcherRef = dispatcher
@@ -324,6 +328,11 @@ export function registerIpc(restart: RestartSeams): RegisteredIpc {
   handle('release:run', (_event, request) => resolveReleaseRun(registryDeps, request, app.getPath('userData'), app.getPath('temp')))
 
   handle('audit:list', (_event, request) => resolveAuditList(registryDeps, request, app.getPath('userData')))
+
+  const incidentDeps: IncidentChannelDeps = { listRepositories, log: incidentLog, chooseSavePath, writeJson: writeJsonFileAtomic, now: () => new Date() }
+  handle('incidents:groups', (_event, request) => resolveIncidentGroups(registryDeps, request, incidentDeps))
+  handle('incidents:list', (_event, request) => resolveIncidentList(registryDeps, request, incidentDeps))
+  handle('incidents:export', (_event, request) => resolveIncidentExport(registryDeps, request, incidentDeps))
 
   handle('gh:status', (_event, request) => resolveGhStatus(request))
 
@@ -477,15 +486,7 @@ export function registerIpc(restart: RestartSeams): RegisteredIpc {
 
   const update = createDefaultUpdate(restart)
 
-  handle('update:state', (_event, request) => resolveUpdateState(request, update.service))
-
-  handle('update:check', (_event, request) => resolveUpdateCheck(request, update.service))
-
-  handle('update:download', (_event, request) => resolveUpdateDownload(request, update.downloader))
-
-  handle('update:download:state', (_event, request) => resolveUpdateDownloadState(request, update.downloader))
-
-  handle('update:open', (_event, request) => resolveUpdateOpen(request, update.downloader))
+  registerUpdateChannels(handle, update)
 
   for (const channel of IPC_CHANNELS) {
     if (!registered.has(channel)) {

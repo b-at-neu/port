@@ -7,6 +7,7 @@ import type { PillStatus } from '@/types/components'
 import type { GhRunner, GitRunner, PathOps } from '@/types/platform'
 import type { FetchItemsByNumberParams, ItemsByNumberFetch } from '@/types/github'
 import type { ReleaseAuditEntry } from '@/types/release'
+import type { IncidentIntent } from '@/types/incidents'
 
 export type AssigneeExpectation = { readonly kind: 'any' } | { readonly kind: 'unassigned' } | { readonly kind: 'exactly'; readonly logins: readonly string[] }
 
@@ -32,6 +33,8 @@ export interface LabelWriteRequest {
   readonly expect: LabelPrecondition
   /** The operator-facing verb, recorded verbatim in the audit log. */
   readonly action: string
+  /** The anomaly this write acts on; `writeState` records it once the outcome is known. */
+  readonly incident?: IncidentIntent
 }
 
 export interface CommentRequest {
@@ -122,6 +125,8 @@ export interface LabelAuditEntry {
   /** `postComment`'s own field — the comment is audited with its byte length and target, never its text. `null` on every label-write entry. */
   readonly commentBytes: number | null
   readonly result: WriteOutcome
+  /** The `writeState` call this entry belongs to, shared with the incident it raised. */
+  readonly writeId?: string
 }
 
 // The worktree-reclaim arm — `removed`/`failed` are each candidate's own
@@ -289,6 +294,7 @@ export interface ApplyLabelsParams {
   readonly observed: ObservedItem
   readonly repoRoot: string
   readonly auditDir: string
+  readonly writeId?: string
   readonly gh?: GhRunner
   readonly git?: GitRunner
   /** The re-read a failed call reports as `reread`. */

@@ -66,7 +66,7 @@ async function planStart(params: CreateStageWorktreeParams): Promise<PlanResult>
   return { ok: true, plan: { branch: name, start, baseLabel: name } }
 }
 
-type BranchCheck = { readonly ok: true; readonly exists: boolean; readonly reclaimed: string | null } | { readonly ok: false; readonly message: string }
+type BranchCheck = { readonly ok: true; readonly exists: boolean; readonly reclaimed: string | null } | { readonly ok: false; readonly message: string; readonly leftover?: true }
 
 /** A folder name narrows the candidates for ownership; it is not proof, so the clean and published checks still gate the removal. */
 function isOwnStageWorktree(ops: PathOps, root: string, number: number, path: string): boolean {
@@ -131,7 +131,7 @@ async function checkLocalBranch(params: CreateStageWorktreeParams, ops: PathOps,
   let reclaimed: string | null = null
   if (checkedOutAt !== '') {
     const outcome = await reclaimWorktree(params, ops, branch, tip, checkedOutAt)
-    if (!outcome.ok) return outcome
+    if (!outcome.ok) return { ...outcome, leftover: true }
     reclaimed = checkedOutAt
   }
 

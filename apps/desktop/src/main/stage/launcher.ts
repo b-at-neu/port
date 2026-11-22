@@ -13,7 +13,7 @@ import type { StageAgent } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
 import type { InterruptedStage, StageDenial, StageInstructionsLoader, StageResumeRequest } from '@/types/stage'
 import { RESUME_PROMPT } from '@/main/stage/recover'
-import { isTransientNetworkFailure } from '@/main/stage/handback'
+import { isTransientNetworkFailure, SETTLE_FAILED_DETAIL } from '@/main/stage/handback'
 import { proposedRule } from '@/main/stage/rule'
 import { loadStageAgentDefinition } from '@/main/stage/bundle'
 import { classifyHandback } from '@/main/stage/handback'
@@ -133,10 +133,10 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
 
   async function startResume(request: StageResumeRequest): Promise<StageLaunchResult> {
     const { entry, root, prompt } = request
-    if (entry.claudeSessionId === null) return { ok: false, kind: 'failed', message: 'the session ended before Claude started it' }
+    if (entry.claudeSessionId === null) return { ok: false, kind: 'failed', message: 'the session ended before Claude started it', cause: 'resume' }
 
     const definition = await loadStageAgentDefinition({ root: params.bundleRoot, agent: entry.agent, ops: params.ops, readTextFile: params.readTextFile })
-    if (!definition.ok) return { ok: false, kind: 'failed', message: definition.message }
+    if (!definition.ok) return { ok: false, kind: 'failed', message: definition.message, cause: 'resume' }
 
     let sessionKey: SessionKey | null = null
     const startResult = await params.store.start({
@@ -160,14 +160,14 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     })
     if (!startResult.ok) {
       if (startResult.kind === 'at-capacity') return { ok: false, kind: 'at-capacity', limit: startResult.limit }
-      return { ok: false, kind: 'failed', message: startFailureMessage(startResult) }
+      return { ok: false, kind: 'failed', message: startFailureMessage(startResult), cause: 'resume' }
     }
 
     sessionKey = startResult.snapshot.sessionKey
     const sendResult = params.store.send(sessionKey, prompt)
     if (!sendResult.ok) {
       await params.store.close(sessionKey)
-      return { ok: false, kind: 'failed', message: `could not send the resume prompt: ${sendResult.kind}` }
+      return { ok: false, kind: 'failed', message: `could not send the resume prompt: ${sendResult.kind}`, cause: 'resume' }
     }
 
     tracked.set(sessionKey, { repoId: entry.repoId, registryId: entry.id, agent: entry.agent, number: entry.number, path: entry.worktree.path, root: root.path, branch: entry.worktree.branch, baseSha: entry.worktree.baseSha, lastSeenResultAt: null, sawSessionId: false, lastOutcome: null, blockedIdle: false })
@@ -200,7 +200,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     }
 
     const wt = await params.createWorktree({ root, git: params.git, agent: request.agent, number: request.number, integration: request.entry.config.branches.integration, target: request.target, liveWorktrees })
-    if (!wt.ok) return { ok: false, kind: 'failed', message: `Couldn't create the stage worktree: ${wt.message}` }
+    if (!wt.ok) return { ok: false, kind: 'failed', message: `Couldn't create the stage worktree: ${wt.message}`, cause: wt.leftover === true ? 'leftover-worktree' : 'worktree' }
 
     const reclaimed = wt.reclaimed
     if (reclaimed !== null) {
@@ -212,7 +212,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     const instructions = await params.loadInstructions(request, wt.path)
     if (!instructions.ok) {
       await removeAndRelease(root, wt.path, wt.branch, wt.baseSha)
-      return { ok: false, kind: 'failed', message: `Couldn't load the stage instructions from the app's bundled stage prompts: ${instructions.message}` }
+      return { ok: false, kind: 'failed', message: `Couldn't load the stage instructions from the app's bundled stage prompts: ${instructions.message}`, cause: 'instructions' }
     }
 
     const registryId = params.newId()
@@ -237,7 +237,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     if (!startResult.ok) {
       await removeAndRelease(root, wt.path, wt.branch, wt.baseSha)
       if (startResult.kind === 'at-capacity') return { ok: false, kind: 'at-capacity', limit: startResult.limit }
-      return { ok: false, kind: 'failed', message: startFailureMessage(startResult) }
+      return { ok: false, kind: 'failed', message: startFailureMessage(startResult), cause: 'start' }
     }
 
     const sessionKey = startResult.snapshot.sessionKey
@@ -246,7 +246,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     if (!sendResult.ok) {
       await params.store.close(sessionKey)
       await removeAndRelease(root, wt.path, wt.branch, wt.baseSha)
-      return { ok: false, kind: 'failed', message: `could not send the stage prompt: ${sendResult.kind}` }
+      return { ok: false, kind: 'failed', message: `could not send the stage prompt: ${sendResult.kind}`, cause: 'prompt' }
     }
 
     tracked.set(sessionKey, { repoId: request.entry.id, registryId, agent: request.agent, number: request.number, path: wt.path, root, branch: wt.branch, baseSha: wt.baseSha, lastSeenResultAt: null, sawSessionId: false, lastOutcome: null, blockedIdle: false })
@@ -347,8 +347,8 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     } catch (error) {
       tracked.delete(sessionKey)
       const message = error instanceof Error ? error.message : String(error)
-      params.registry.markInterrupted(registryId, 'error', `hand-back settle failed: ${message}`, null, outcome.costUsd)
-      params.onOutcome(repoId, sessionKey, { kind: 'error', detail: `hand-back settle failed: ${message}`, costUsd: outcome.costUsd, resetsAt: null, worktree: 'remove-failed', operatorJoined: outcome.operatorJoined, handback: null }, null)
+      params.registry.markInterrupted(registryId, 'error', `${SETTLE_FAILED_DETAIL}: ${message}`, null, outcome.costUsd)
+      params.onOutcome(repoId, sessionKey, { kind: 'error', detail: `${SETTLE_FAILED_DETAIL}: ${message}`, costUsd: outcome.costUsd, resetsAt: null, worktree: 'remove-failed', operatorJoined: outcome.operatorJoined, handback: null }, null)
     }
   }
 
