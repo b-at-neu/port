@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
-import { resolveSessionPinSet } from '@/main/channels/hosting'
+import { resolveSessionPinSet } from '@/main/features/session/resolve'
 
 export const sessionPinSet = defineAction({
   name: 'session.pinSet',

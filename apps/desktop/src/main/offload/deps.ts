@@ -1,7 +1,7 @@
-import type { SearchQueryDeps, SessionsScanDeps, TranscriptTailDeps } from '@/types/channels'
+import type { SearchQueryDeps, SessionsScanDeps, TranscriptTailDeps } from '@/main/app/seams'
 import type { StateEngine } from '@/types/offload'
 import { listRepositories } from '@/main/registry'
-import { resolveSessionsScan } from '@/main/channels/sessions'
+import { resolveSessionsScan } from '@/main/features/history/resolve'
 import { createWorkerEngine } from '@/main/offload/client'
 
 interface OffloadChannelDeps {

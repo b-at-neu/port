@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
-import { resolveSessionCapacitySet } from '@/main/channels/hosting'
+import { resolveSessionCapacitySet } from '@/main/features/session/resolve'
 import { SESSION_LIMIT_CEILING } from '@/main/hosting/persist'
 
 export const sessionCapacitySet = defineAction({

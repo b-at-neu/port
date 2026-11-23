@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { positiveInt, repoId } from '@/main/app/schemas'
-import { resolveGatePreflight } from '@/main/channels/gate'
+import { resolveGatePreflight } from '@/main/features/gate/resolve'
 
 export const gatePreflight = defineAction({
   name: 'gate.preflight',

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
-import { resolveSessionArchiveSet } from '@/main/channels/hosting'
+import { resolveSessionArchiveSet } from '@/main/features/session/resolve'
 
 export const sessionArchiveSet = defineAction({
   name: 'session.archiveSet',

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { sessionKey } from '@/main/app/schemas'
-import { resolveSessionPermissionAnswer } from '@/main/channels/hosting'
+import { resolveSessionPermissionAnswer } from '@/main/features/session/resolve'
 import { PERMISSION_DECISIONS } from '@/types/hosting'
 
 export const sessionPermissionAnswer = defineAction({

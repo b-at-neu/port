@@ -2,7 +2,7 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { repoId } from '@/main/app/schemas'
-import { resolveRuntimeProbe } from '@/main/channels/runtime'
+import { resolveRuntimeProbe } from '@/main/features/runtime/resolve'
 
 export const runtimeProbe = defineAction({
   name: 'runtime.probe',

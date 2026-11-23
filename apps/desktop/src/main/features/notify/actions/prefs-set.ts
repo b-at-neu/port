@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
-import { resolveNotifyPrefsSet } from '@/main/channels/notify'
+import { resolveNotifyPrefsSet } from '@/main/features/notify/resolve'
 
 export const notifyPrefsSet = defineAction({
   name: 'notify.prefsSet',

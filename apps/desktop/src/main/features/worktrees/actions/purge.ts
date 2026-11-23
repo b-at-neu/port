@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { repoId } from '@/main/app/schemas'
-import { resolveWorktreesPurge } from '@/main/channels/worktrees'
+import { resolveWorktreesPurge } from '@/main/features/worktrees/resolve'
 
 export const worktreesPurge = defineAction({
   name: 'worktrees.purge',

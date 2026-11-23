@@ -32,6 +32,7 @@
     "tests/unit/scripts/**/*",
     "tests/unit/utils/**/*",
     "tests/fixtures/**/*",
+    "tests/support/**/*",
     "tests/visual/**/*",
     "tests/smoke/**/*",
     "tests/e2e/**/*"

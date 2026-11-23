@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
-import { resolveSessionRestoreDiscard } from '@/main/channels/hosting'
+import { resolveSessionRestoreDiscard } from '@/main/features/session/resolve'
 
 export const sessionRestoreDiscard = defineAction({
   name: 'session.restoreDiscard',

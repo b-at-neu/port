@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { repoId } from '@/main/app/schemas'
-import { resolveIncidentGroups } from '@/main/channels/incidents'
+import { resolveIncidentGroups } from '@/main/features/incidents/resolve'
 
 export const incidentsGroups = defineAction({
   name: 'incidents.groups',

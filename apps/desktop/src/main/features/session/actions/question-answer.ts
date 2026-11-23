@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { sessionKey } from '@/main/app/schemas'
-import { resolveSessionQuestionAnswer } from '@/main/channels/hosting'
+import { resolveSessionQuestionAnswer } from '@/main/features/session/resolve'
 
 export const sessionQuestionAnswer = defineAction({
   name: 'session.questionAnswer',

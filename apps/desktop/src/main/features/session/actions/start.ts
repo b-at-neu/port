@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
-import { resolveSessionStart } from '@/main/channels/hosting'
+import { resolveSessionStart } from '@/main/features/session/resolve'
 import { startMode, startTarget } from '@/main/features/session/schemas'
 
 export const sessionStart = defineAction({

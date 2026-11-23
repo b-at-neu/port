@@ -1,0 +1,170 @@
+import { describe, expect, it } from 'vitest'
+import type { RepoId } from '@/utils/repos'
+import type { ReposListResponse } from '@/types/ipc'
+import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import { resolveBacklogDetail, resolveBacklogList } from '@/main/features/backlog/resolve'
+import type { BacklogDetailDeps, BacklogListDeps } from '@/main/features/backlog/resolve'
+import type { RegistryDeps } from '@/types/registry'
+
+const REPO_ID = 'repo-1' as unknown as RepoId
+
+const registryDeps: RegistryDeps = {
+  registryDir: '/registry',
+  git: () => {
+    throw new Error('git should not be invoked directly by resolveBacklogList')
+  },
+  chooseDirectory: () => Promise.resolve(null),
+}
+
+const READY_ENTRY = {
+  id: REPO_ID,
+  path: '/repo',
+  displayName: 'widgets',
+  status: 'ready' as const,
+  config: {
+    repo: 'acme/widgets',
+    owner: 'acme',
+    name: 'widgets',
+    branches: { integration: 'dev', production: 'main' },
+    models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
+    modules: { approvalGate: true, release: true, scope: true },
+    reviewCycleCap: 3,
+    vocabulary: resolveVocabulary({}),
+    commands: { worktrees: 'node scripts/worktrees.mjs', budget: null },
+    concurrency: { sharedFiles: [], overlapThreshold: 2 },
+    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
+    checkDispositions: {},
+    overrides: [],
+  },
+  diagnostics: [],
+}
+
+const NOT_READY_ENTRY = {
+  id: REPO_ID,
+  path: '/repo',
+  displayName: 'widgets',
+  problem: { kind: 'directory-missing' as const },
+  diagnostics: [],
+}
+
+function depsWith(overrides: Partial<BacklogListDeps>): BacklogListDeps {
+  return {
+    listRepositories: () => Promise.resolve({ ok: true, repositories: [] } as ReposListResponse),
+    fetchBacklog: () => {
+      throw new Error('fetchBacklog should not be invoked in this case')
+    },
+    trackedRefs: () => null,
+    ...overrides,
+  }
+}
+
+describe('resolveBacklogList', () => {
+  it('rejects a missing repoId', async () => {
+    await expect(resolveBacklogList(registryDeps, { repoId: undefined as unknown as RepoId }, depsWith({}))).rejects.toThrow(
+      "'backlog:list' requires a non-empty 'repoId'",
+    )
+  })
+
+  it('surfaces a registry that could not be listed', async () => {
+    const deps = depsWith({ listRepositories: () => Promise.resolve({ ok: false, kind: 'registry-unreadable', message: 'disk on fire' }) })
+    await expect(resolveBacklogList(registryDeps, { repoId: REPO_ID }, deps)).rejects.toThrow(
+      "'backlog:list' could not list repositories: disk on fire",
+    )
+  })
+
+  it('rejects an id with no matching repository', async () => {
+    const deps = depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [] }) })
+    await expect(resolveBacklogList(registryDeps, { repoId: REPO_ID }, deps)).rejects.toThrow(
+      `'backlog:list' found no repository registered with id '${REPO_ID}'`,
+    )
+  })
+
+  it('rejects a repository that is not ready', async () => {
+    const deps = depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [NOT_READY_ENTRY] }) })
+    await expect(resolveBacklogList(registryDeps, { repoId: REPO_ID }, deps)).rejects.toThrow(
+      "'backlog:list' requires a 'ready' repository, got 'directory-missing'",
+    )
+  })
+
+  it('forwards the ready repository repo to fetchBacklog, with nothing tracked for an unseeded one', async () => {
+    let received: unknown
+    const deps = depsWith({
+      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
+      fetchBacklog: (params) => {
+        received = params
+        return Promise.resolve({ ok: true, items: [], scanned: 0, total: 0, viewer: 'octo-dev', fetchedAt: 't' })
+      },
+    })
+    const result = await resolveBacklogList(registryDeps, { repoId: REPO_ID }, deps)
+    expect(result).toEqual({ ok: true, items: [], scanned: 0, total: 0, viewer: 'octo-dev', fetchedAt: 't' })
+    expect(received).toEqual({ repo: { owner: 'acme', name: 'widgets' }, tracked: new Set() })
+  })
+
+  it('passes only the issue numbers of the store tracked refs, and an empty set for an unseeded repository', async () => {
+    const received: unknown[] = []
+    const read = (trackedRefs: BacklogListDeps['trackedRefs']) =>
+      resolveBacklogList(registryDeps, { repoId: REPO_ID }, depsWith({
+        listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
+        fetchBacklog: (params) => {
+          received.push(params.tracked)
+          return Promise.resolve({ ok: true, items: [], scanned: 0, total: 0, viewer: null, fetchedAt: 't' })
+        },
+        trackedRefs,
+      }))
+    await read(() => [{ kind: 'issue', number: 12, keys: [] }, { kind: 'pull-request', number: 40, keys: [] }, { kind: 'issue', number: 13, keys: [] }])
+    await read(() => null)
+    expect(received).toEqual([new Set([12, 13]), new Set()])
+  })
+})
+
+function detailDepsWith(overrides: Partial<BacklogDetailDeps>): BacklogDetailDeps {
+  return {
+    listRepositories: () => Promise.resolve({ ok: true, repositories: [] } as ReposListResponse),
+    fetchBacklogDetail: () => {
+      throw new Error('fetchBacklogDetail should not be invoked in this case')
+    },
+    ...overrides,
+  }
+}
+
+describe('resolveBacklogDetail', () => {
+  it('rejects a missing repoId', async () => {
+    await expect(resolveBacklogDetail(registryDeps, { repoId: undefined as unknown as RepoId, number: 45 }, detailDepsWith({}))).rejects.toThrow(
+      "'backlog:detail' requires a non-empty 'repoId'",
+    )
+  })
+
+  it.each([0, 1.5, '45'])('rejects a number of %j', async (number) => {
+    await expect(resolveBacklogDetail(registryDeps, { repoId: REPO_ID, number: number as number }, detailDepsWith({}))).rejects.toThrow(
+      "'backlog:detail' requires 'number' to be a positive integer",
+    )
+  })
+
+  it('rejects an id with no matching repository', async () => {
+    const deps = detailDepsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [] }) })
+    await expect(resolveBacklogDetail(registryDeps, { repoId: REPO_ID, number: 45 }, deps)).rejects.toThrow(
+      `'backlog:detail' found no repository registered with id '${REPO_ID}'`,
+    )
+  })
+
+  it('rejects a repository that is not ready', async () => {
+    const deps = detailDepsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [NOT_READY_ENTRY] }) })
+    await expect(resolveBacklogDetail(registryDeps, { repoId: REPO_ID, number: 45 }, deps)).rejects.toThrow(
+      "'backlog:detail' requires a 'ready' repository, got 'directory-missing'",
+    )
+  })
+
+  it('forwards the ready repository ref and the number to fetchBacklogDetail', async () => {
+    let received: unknown
+    const response = { ok: false, kind: 'issue-missing', message: 'gone', fetchedAt: 't' } as const
+    const deps = detailDepsWith({
+      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
+      fetchBacklogDetail: (params) => {
+        received = params
+        return Promise.resolve(response)
+      },
+    })
+    expect(await resolveBacklogDetail(registryDeps, { repoId: REPO_ID, number: 45 }, deps)).toEqual(response)
+    expect(received).toEqual({ repo: { owner: 'acme', name: 'widgets' }, number: 45 })
+  })
+})

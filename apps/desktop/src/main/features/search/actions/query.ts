@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { repoId } from '@/main/app/schemas'
-import { resolveSearchQuery } from '@/main/channels/sessions'
+import { resolveSearchQuery } from '@/main/features/history/resolve'
 
 const scope = z.discriminatedUnion('kind', [z.object({ kind: z.literal('all') }), z.object({ kind: z.literal('repo'), repoId })])
 

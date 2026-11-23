@@ -2,7 +2,7 @@
 // costs one glance, a spurious one trains the operator to ignore them.
 import { BrowserWindow, Notification } from 'electron'
 import type { HostedSessionSnapshot } from '@/types/hosting'
-import type { NeedsYouNotification } from '@/types/channels'
+import type { NeedsYouNotification } from '@/types/settings'
 import type { AppCommand } from '@/utils/shell/commands'
 import type { RegistryDeps } from '@/types/registry'
 import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'

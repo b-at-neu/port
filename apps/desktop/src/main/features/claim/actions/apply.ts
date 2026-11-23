@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { positiveInt, repoId } from '@/main/app/schemas'
-import { resolveClaimApply } from '@/main/channels/claim'
+import { resolveClaimApply } from '@/main/features/claim/resolve'
 import { PLAN_GATE_CHOICES } from '@/types/claim'
 
 export const claimApply = defineAction({

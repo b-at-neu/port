@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { repoId } from '@/main/app/schemas'
-import { resolveReleaseRun } from '@/main/channels/release'
+import { resolveReleaseRun } from '@/main/features/release/resolve'
 
 const MAX_NOTES_CHARS = 125_000
 

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
-import { resolveTranscriptTailOpen } from '@/main/channels/sessions'
+import { resolveTranscriptTailOpen } from '@/main/features/history/resolve'
 
 export const transcriptTailOpen = defineAction({
   name: 'transcript.tailOpen',

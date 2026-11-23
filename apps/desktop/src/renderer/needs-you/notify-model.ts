@@ -1,6 +1,6 @@
 // The only "new item" diff: which visible Needs you items were absent from the last read.
 import type { BoardSnapshot, NeedsYouBaseline, NeedsYouItem } from '@/types/board'
-import type { NeedsYouNotification as Notification } from '@/types/channels'
+import type { NeedsYouNotification as Notification } from '@/types/settings'
 import type { RepoId } from '@/utils/repos'
 import { dismissKeyOf } from '@/renderer/needs-you/dismiss-key'
 import { needsYouLeadCopy } from '@/renderer/needs-you/copy'

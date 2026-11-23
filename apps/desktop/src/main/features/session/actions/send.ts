@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { sessionKey } from '@/main/app/schemas'
-import { resolveSessionSend } from '@/main/channels/hosting'
+import { resolveSessionSend } from '@/main/features/session/resolve'
 import { attachments } from '@/main/features/session/schemas'
 
 export const sessionSend = defineAction({

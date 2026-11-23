@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { repoId } from '@/main/app/schemas'
-import { resolveReleaseIssues } from '@/main/channels/release'
+import { resolveReleaseIssues } from '@/main/features/release/resolve'
 
 const tag = z.string().regex(/^[A-Za-z0-9._+/-]{1,255}$/)
 

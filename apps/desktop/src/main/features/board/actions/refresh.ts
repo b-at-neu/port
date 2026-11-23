@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { repoId } from '@/main/app/schemas'
-import { resolveBoardRefresh } from '@/main/channels/board'
+import { resolveBoardRefresh } from '@/main/features/board/resolve'
 import { listRepositories } from '@/main/registry'
 import { SOURCE_KINDS } from '@/types/board'
 

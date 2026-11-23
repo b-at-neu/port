@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { expectedStage, positiveInt, repoId } from '@/main/app/schemas'
-import { resolveItemAction } from '@/main/channels/items'
+import { resolveItemAction } from '@/main/features/item/resolve'
 import { listRepositories } from '@/main/registry'
 import { OPERATOR_ACTIONS } from '@/types/actions'
 

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { sessionKey } from '@/main/app/schemas'
-import { resolveSessionControlsSet } from '@/main/channels/hosting'
+import { resolveSessionControlsSet } from '@/main/features/session/resolve'
 import { SESSION_PERMISSION_MODES } from '@/types/hosting'
 import { SESSION_EFFORTS } from '@/utils/hosting/controls'
 

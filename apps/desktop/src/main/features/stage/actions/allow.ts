@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { repoId } from '@/main/app/schemas'
-import { resolveStageAllow } from '@/main/channels/stage'
+import { resolveStageAllow } from '@/main/features/stage/resolve'
 
 export const stageAllow = defineAction({
   name: 'stage.allow',

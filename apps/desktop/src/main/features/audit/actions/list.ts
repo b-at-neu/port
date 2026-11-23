@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { positiveInt, repoId } from '@/main/app/schemas'
-import { resolveAuditList } from '@/main/channels/audit'
+import { resolveAuditList } from '@/main/features/audit/resolve'
 
 export const auditList = defineAction({
   name: 'audit.list',

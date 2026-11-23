@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { repoId } from '@/main/app/schemas'
-import { defaultBacklogListDeps, resolveBacklogList } from '@/main/channels/backlog'
+import { defaultBacklogListDeps, resolveBacklogList } from '@/main/features/backlog/resolve'
 
 export const backlogList = defineAction({
   name: 'backlog.list',

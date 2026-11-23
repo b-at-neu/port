@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { positiveInt, repoId } from '@/main/app/schemas'
-import { resolveGateAnswer } from '@/main/channels/gate'
+import { resolveGateAnswer } from '@/main/features/gate/resolve'
 import { GATE_DECISIONS } from '@/types/gate'
 
 export const gateAnswer = defineAction({

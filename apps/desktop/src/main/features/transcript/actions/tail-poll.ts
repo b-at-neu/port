@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
-import { resolveTranscriptTailPoll } from '@/main/channels/sessions'
+import { resolveTranscriptTailPoll } from '@/main/features/history/resolve'
 
 export const transcriptTailPoll = defineAction({
   name: 'transcript.tailPoll',

@@ -1,6 +1,6 @@
 import { defineAction } from '@/main/app/define'
 import { noInput } from '@/main/app/schemas'
-import { resolveNotifyPrefs } from '@/main/channels/notify'
+import { resolveNotifyPrefs } from '@/main/features/notify/resolve'
 
 export const notifyPrefs = defineAction({
   name: 'notify.prefs',

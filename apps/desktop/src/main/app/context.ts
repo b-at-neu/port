@@ -4,22 +4,22 @@ import { join } from 'node:path'
 import type { EventMap, EventName } from '@/main/app/events'
 import { chooseDirectory, chooseSavePath } from '@/main/dialogs'
 import { createIncidentLog } from '@/main/incidents/log'
-import { defaultWorkspaceChannelDeps } from '@/main/channels/workspace'
+import { defaultWorkspaceChannelDeps } from '@/main/features/folders/resolve'
 import { createRecentsStore } from '@/main/workspace/recents'
 import { createSessionWorktree, removeSessionWorktreeAt } from '@/main/workspace/worktree'
 import { releaseStageBranch } from '@/main/workspace/stage-worktree'
 import { createDefaultStageLauncher } from '@/main/stage/default'
 import { createOffload } from '@/main/offload/deps'
 import { statPath, readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
-import { bindActions } from '@/main/actions/bound'
+import { bindOperator } from '@/main/app/operator'
 import { createPipelineState } from '@/main/pipeline-state/default'
-import { defaultHostingChannelDeps } from '@/main/channels/hosting'
+import { defaultHostingChannelDeps } from '@/main/features/session/resolve'
 import { createDispatchRuntime } from '@/main/dispatch/runtime'
 import { createRunStateStore } from '@/main/dispatch/store'
 import { registeredRepoIds } from '@/main/dispatch/resolve'
 import { fetchItemsByNumber } from '@/main/github/adapter'
 import { readOwnership, takeOwnership } from '@/main/dispatch/ownership'
-import type { GateChannelDeps, IncidentChannelDeps, StageChannelDeps } from '@/types/channels'
+import type { GateChannelDeps, HostingChannelDeps, IncidentChannelDeps, StageChannelDeps } from '@/main/app/seams'
 import { defaultGitRunner, git } from '@/main/platform/git'
 import { listRepositories } from '@/main/registry'
 import type { RegistryDeps } from '@/types/registry'
@@ -29,7 +29,7 @@ import { createHostingPersistence } from '@/main/hosting/persist'
 import { createSessionIndex } from '@/main/hosting/session-index'
 import { createAppNotifier } from '@/main/hosting/notify'
 import { createStageRegistry } from '@/main/stage/registry'
-import { createStageSweeper, defaultAllowIo } from '@/main/channels/stage'
+import { createStageSweeper, defaultAllowIo } from '@/main/features/stage/resolve'
 import { createUsageLedger } from '@/main/hosting/usage-ledger'
 import { createSessionMenuRefresher } from '@/main/session-menu'
 import { createDefaultUpdate } from '@/main/update/default'
@@ -43,8 +43,7 @@ import type { StageLauncherHandle, StageRegistry } from '@/types/stage'
 import type { IncidentLog } from '@/types/incidents'
 import type { RecentsStore } from '@/types/workspace'
 import type { UsageLedger, AppInfo } from '@/types/settings'
-import type { WorkspaceChannelDeps } from '@/main/channels/workspace'
-import type { HostingChannelDeps } from '@/types/channels'
+import type { WorkspaceChannelDeps } from '@/main/features/folders/resolve'
 import type { SessionKey } from '@/types/hosting'
 import type { AppCommand } from '@/utils/shell/commands'
 
@@ -76,7 +75,7 @@ export interface AppContext {
     readonly sessionMenu: ReturnType<typeof createSessionMenuRefresher>
     readonly update: ReturnType<typeof createDefaultUpdate>
     readonly forceDispatch: ForceDispatch
-    readonly actions: ReturnType<typeof bindActions>
+    readonly actions: ReturnType<typeof bindOperator>
     readonly stageSweeper: ReturnType<typeof createStageSweeper>
     /** Stops the dispatcher and closes the worker. */
     readonly shutdown: () => void
@@ -119,7 +118,7 @@ export function createAppContext(restart: RestartSeams): AppContext {
 
   const incidentLog = createIncidentLog({ dir: userData, now: () => new Date(), newId: () => globalThis.crypto.randomUUID() })
   const pipelineState = createPipelineState({ dir: userData, auditDir: userData, recordIncident: incidentLog.record })
-  const actions = bindActions(pipelineState)
+  const actions = bindOperator(pipelineState)
 
   // Loaded once at boot: a `running` entry found then can only mean the process died, and promotes to `crash`.
   const stageRegistry = createStageRegistry({ path: join(userData, 'stage-sessions.json'), readJson: readJsonFile, writeJsonAtomic: writeJsonFileAtomic, now: () => new Date() })

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { repoId } from '@/main/app/schemas'
-import { resolveStageDismissDenial } from '@/main/channels/stage'
+import { resolveStageDismissDenial } from '@/main/features/stage/resolve'
 
 export const stageDismissDenial = defineAction({
   name: 'stage.dismissDenial',

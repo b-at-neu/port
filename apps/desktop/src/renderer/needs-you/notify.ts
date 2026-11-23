@@ -6,7 +6,7 @@ import { dismissedKeys, visibleNeedsYouItems } from '@/renderer/needs-you/dismis
 import { diffNeedsYou, displayNamesOf, needsYouNotification, readableRepoIds } from '@/renderer/needs-you/notify-model'
 import type { BoardSnapshot, NeedsYouBaseline } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
-import type { NeedsYouNotification } from '@/types/channels'
+import type { NeedsYouNotification } from '@/types/settings'
 
 const STORAGE_KEY = 'port.needsYouNotified.v1'
 

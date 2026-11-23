@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { positiveInt, repoId } from '@/main/app/schemas'
-import { resolveWorktreesReclaim } from '@/main/channels/worktrees'
+import { resolveWorktreesReclaim } from '@/main/features/worktrees/resolve'
 
 const force = z.strictObject({ path: z.string().min(1), unlock: z.boolean(), forceDirty: z.boolean() }).refine((value) => value.unlock || value.forceDirty, { message: 'must set at least one flag' })
 

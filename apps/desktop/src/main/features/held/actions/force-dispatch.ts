@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { positiveInt, repoId } from '@/main/app/schemas'
-import { resolveForceDispatch } from '@/main/channels/held'
+import { resolveForceDispatch } from '@/main/features/held/resolve'
 
 export const heldForceDispatch = defineAction({
   name: 'held.forceDispatch',

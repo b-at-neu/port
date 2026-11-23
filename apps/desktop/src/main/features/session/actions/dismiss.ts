@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { sessionKey } from '@/main/app/schemas'
-import { resolveSessionDismiss } from '@/main/channels/hosting'
+import { resolveSessionDismiss } from '@/main/features/session/resolve'
 
 export const sessionDismiss = defineAction({
   name: 'session.dismiss',
