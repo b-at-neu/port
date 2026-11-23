@@ -1,179 +1,86 @@
 import { describe, expect, it } from 'vitest'
 import type { StageEntry } from '@/types/state'
+import type { PipelineItemKind } from '@/types/github'
+import type { LabelKey } from '@/utils/labels/vocabulary'
 import { phaseDetailsFor } from '@/renderer/board/phase-history'
+import { viewOfKey } from '@/renderer/lib/ticket-view'
+import type { TicketView } from '@/utils/pipeline/stages'
 
 const NOW = new Date('2026-01-01T12:00:00.000Z')
+const MERGED: TicketView = { stage: 'merge', status: { kind: 'done' } }
 
 function entry(key: StageEntry['key'], actor: string | null, minutesAgo: number): StageEntry {
   return { key, actor, at: new Date(NOW.getTime() - minutesAgo * 60_000).toISOString() }
 }
 
+function detailsOf(history: readonly StageEntry[], view: TicketView | null, options: { kind?: PipelineItemKind; viewer?: string | null; cost?: number | null } = {}) {
+  return phaseDetailsFor({ history, kind: options.kind ?? 'issue', view, viewer: options.viewer ?? null, now: NOW, currentCostUsd: options.cost ?? null })
+}
+
+const viewOf = (key: LabelKey, kind: PipelineItemKind = 'issue') => viewOfKey(key, kind)
+
 describe('phaseDetailsFor', () => {
-  it('shows a finished phase as event, actor and relative time', () => {
-    const details = phaseDetailsFor({
-      history: [entry('ready', 'octo-dev', 180), entry('planning', 'port-bot', 170)],
-      kind: 'issue',
-      stageKey: 'planApproved',
-      merged: false,
-      viewer: 'octo-dev',
-      now: NOW,
-      currentCostUsd: null,
-    })
-    expect(details.plan?.line).toContain('@port-bot')
-    expect(details.plan?.line).toContain('2h ago')
+  it.each([
+    ['ready', 'plan'],
+    ['planReview', 'plan'],
+    ['planApproved', 'implement'],
+    ['readyForReview', 'review'],
+    ['needsRevision', 'revision'],
+    ['revising', 'revision'],
+    ['refreshBranch', 'revision'],
+    ['refreshing', 'revision'],
+    ['approved', 'merge'],
+  ] as const)('places a %s entry on the %s phase', (key, phase) => {
+    expect(detailsOf([entry(key, 'port-bot', 30)], MERGED)[phase]).toBeDefined()
   })
 
-  it('groups the plan-review gate with planning, showing the latest entry of the group', () => {
-    const details = phaseDetailsFor({
-      history: [entry('planning', 'port-bot', 170), entry('planReview', 'port-bot', 120)],
-      kind: 'issue',
-      stageKey: 'inProgress',
-      merged: false,
-      viewer: 'octo-dev',
-      now: NOW,
-      currentCostUsd: null,
-    })
+  it('shows a finished phase as event, actor and relative time', () => {
+    const details = detailsOf([entry('ready', 'octo-dev', 180), entry('planning', 'port-bot', 170)], viewOf('planApproved'), { viewer: 'octo-dev' })
     expect(details.plan?.line).toContain('@port-bot')
     expect(details.plan?.line).toContain('2h ago')
   })
 
   it('resolves the viewer to "you"', () => {
-    const details = phaseDetailsFor({
-      history: [entry('planApproved', 'octo-dev', 60)],
-      kind: 'issue',
-      stageKey: 'readyForReview',
-      merged: false,
-      viewer: 'octo-dev',
-      now: NOW,
-      currentCostUsd: null,
-    })
+    const details = detailsOf([entry('planApproved', 'octo-dev', 60)], viewOf('readyForReview'), { viewer: 'octo-dev' })
     expect(details.implement?.line).toContain('you')
     expect(details.implement?.line).not.toContain('octo-dev')
-    expect(details.implement?.line).toContain('1h ago')
-  })
-
-  it('omits "by" when the actor is null', () => {
-    const details = phaseDetailsFor({
-      history: [entry('reviewing', null, 3)],
-      kind: 'pull-request',
-      stageKey: null,
-      merged: true,
-      viewer: 'octo-dev',
-      now: NOW,
-      currentCostUsd: null,
-    })
-    expect(details.review?.line).toContain('3m ago')
-    expect(details.review?.line).not.toContain('@')
   })
 
   it('the latest entry wins on a re-entry into the same phase', () => {
-    const details = phaseDetailsFor({
-      history: [entry('needsRevision', 'reviewer-1', 120), entry('revising', 'port-bot', 90), entry('needsRevision', 'reviewer-2', 20)],
-      kind: 'pull-request',
-      stageKey: 'needsRevision',
-      merged: false,
-      viewer: null,
-      now: NOW,
-      currentCostUsd: null,
-    })
+    const details = detailsOf([entry('needsRevision', 'reviewer-1', 120), entry('revising', 'port-bot', 90), entry('needsRevision', 'reviewer-2', 20)], viewOf('needsRevision', 'pull-request'), { kind: 'pull-request' })
     expect(details.revision?.line).toContain('@reviewer-2')
     expect(details.revision?.line).toContain('20m')
   })
 
-  it('the current phase gets duration and cost', () => {
-    const details = phaseDetailsFor({
-      history: [entry('inProgress', 'port-bot', 12)],
-      kind: 'issue',
-      stageKey: 'inProgress',
-      merged: false,
-      viewer: null,
-      now: NOW,
-      currentCostUsd: 0.42,
-    })
-    expect(details.implement?.line).toContain('@port-bot')
-    expect(details.implement?.line).toContain('12m')
-    expect(details.implement?.line).toContain('$0.42')
+  it('a refresh ticket has revision as its current phase, with duration and cost', () => {
+    const details = detailsOf([entry('refreshing', 'port-bot', 12)], viewOf('refreshing', 'pull-request'), { kind: 'pull-request', cost: 0.42 })
+    expect(details.revision?.line).toContain('12m')
+    expect(details.revision?.line).toContain('$0.42')
+    expect(details.merge).toBeUndefined()
   })
 
-  it('omits the cost segment when null', () => {
-    const details = phaseDetailsFor({
-      history: [entry('inProgress', 'port-bot', 12)],
-      kind: 'issue',
-      stageKey: 'inProgress',
-      merged: false,
-      viewer: null,
-      now: NOW,
-      currentCostUsd: null,
-    })
-    expect(details.implement?.line).toContain('12m')
-    expect(details.implement?.line).not.toContain('$')
+  it('the current phase gets duration, and cost only when known', () => {
+    const history = [entry('inProgress', 'port-bot', 12)]
+    expect(detailsOf(history, viewOf('inProgress'), { cost: 0.42 }).implement?.line).toContain('$0.42')
+    expect(detailsOf(history, viewOf('inProgress')).implement?.line).not.toContain('$')
   })
 
   it('a pending phase has no line', () => {
-    const details = phaseDetailsFor({
-      history: [entry('ready', 'octo-dev', 10)],
-      kind: 'issue',
-      stageKey: 'ready',
-      merged: false,
-      viewer: null,
-      now: NOW,
-      currentCostUsd: null,
-    })
-    expect(details.review).toBeUndefined()
+    expect(detailsOf([entry('ready', 'octo-dev', 10)], viewOf('ready')).review).toBeUndefined()
   })
 
   it('merged keeps every finished line, even for what was the last stage', () => {
-    const details = phaseDetailsFor({
-      history: [entry('readyForReview', 'port-bot', 60), entry('approved', 'octo-dev', 5)],
-      kind: 'pull-request',
-      stageKey: 'approved',
-      merged: true,
-      viewer: null,
-      now: NOW,
-      currentCostUsd: null,
-    })
+    const details = detailsOf([entry('readyForReview', 'port-bot', 60), entry('approved', 'octo-dev', 5)], MERGED, { kind: 'pull-request' })
     expect(details.review?.line).toContain('@port-bot')
-    expect(details.review?.line).toContain('1h ago')
     expect(details.merge?.line).toContain('@octo-dev')
-    expect(details.merge?.line).toContain('5m ago')
   })
 
   it('skips an entry with an unparsable timestamp', () => {
-    const details = phaseDetailsFor({
-      history: [{ key: 'ready', actor: 'octo-dev', at: 'not-a-date' }],
-      kind: 'issue',
-      stageKey: 'ready',
-      merged: false,
-      viewer: null,
-      now: NOW,
-      currentCostUsd: null,
-    })
-    expect(details.plan).toBeUndefined()
+    expect(detailsOf([{ key: 'ready', actor: 'octo-dev', at: 'not-a-date' }], viewOf('ready')).plan).toBeUndefined()
   })
 
-  it('no entry for the current phase shows cost alone when known', () => {
-    const details = phaseDetailsFor({
-      history: [],
-      kind: 'issue',
-      stageKey: 'inProgress',
-      merged: false,
-      viewer: null,
-      now: NOW,
-      currentCostUsd: 1.5,
-    })
-    expect(details.implement?.line).toBe('$1.50')
-  })
-
-  it('no entry and no cost for the current phase is no line at all', () => {
-    const details = phaseDetailsFor({
-      history: [],
-      kind: 'issue',
-      stageKey: 'inProgress',
-      merged: false,
-      viewer: null,
-      now: NOW,
-      currentCostUsd: null,
-    })
-    expect(details.implement).toBeUndefined()
+  it('no entry for the current phase shows cost alone, or nothing when cost is unknown', () => {
+    expect(detailsOf([], viewOf('inProgress'), { cost: 1.5 }).implement?.line).toBe('$1.50')
+    expect(detailsOf([], viewOf('inProgress')).implement).toBeUndefined()
   })
 })

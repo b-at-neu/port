@@ -33,7 +33,7 @@ function blockedIssue(overrides: Parameters<typeof reconciledItem>[0] = {}) {
 function derive(item: ReturnType<typeof reconciledItem>, stageKey: string | undefined, sessions: Parameters<typeof blockedOnOf>[0]['sessions'] = []) {
   const ticket = ticketIndex([item]).tickets[0]
   if (ticket === undefined) throw new Error('no ticket')
-  return blockedOnOf({ ticket, stageKey, sessions, repoId: REPO })
+  return blockedOnOf({ ticket, blocked: stageKey === 'blocked', sessions, repoId: REPO })
 }
 
 const blockedSession = (text: string, startedAt?: string, key?: string) =>

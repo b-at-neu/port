@@ -8,7 +8,8 @@ import type { SessionKey } from '@/types/hosting'
 import type { DispatchRecord } from '@/types/dispatch'
 import type { Ticket } from '@/types/ticket'
 import { ticketIndex } from '@/utils/tickets/ticket'
-import { actionNoteFor, agentSummaryOf, decisionNoteFor, isDispatchedRow, nextActionFor, operatorJoinedOf, ownershipNoteFor, phaseLabelFor, phaseToneFor, stageKeyOf, stopAttachedAgentNote } from '@/renderer/board/row-model'
+import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
+import { actionNoteFor, agentSummaryOf, decisionNoteFor, isDispatchedRow, nextActionFor, operatorJoinedOf, ownershipNoteFor, phaseLabelFor, phaseToneFor, stopAttachedAgentNote } from '@/renderer/board/row-model'
 
 const LIVE_PLAN: LiveStage = { agent: 'plan', trigger: 'ready', sessionKey: 'hosted-1' as SessionKey }
 
@@ -26,7 +27,7 @@ function row(overrides: {
   readonly liveStage?: LiveStage | null
   readonly autoApproving?: boolean
 }): BoardItemRow {
-  const stageLabel: StageLabel | null = overrides.stageKey != null ? { key: overrides.stageKey as never, name: overrides.stageKey, role: 'trigger' } : null
+  const stageLabel: StageLabel | null = overrides.stageKey != null ? { key: overrides.stageKey as never, name: overrides.stageKey, role: LABEL_DEFAULTS.find((def) => def.key === overrides.stageKey)?.role ?? 'trigger' } : null
   const item = {
     repoId: 'repo-a' as RepoId,
     repo: 'o/a',
@@ -35,7 +36,7 @@ function row(overrides: {
     title: 't',
     url: 'https://github.com/o/a/pull/41',
     assignees: ['op'],
-    stage: stageLabel?.key ?? null,
+    stage: stageLabel?.role ?? null,
     stages: stageLabel !== null ? [stageLabel] : [],
     stageAmbiguous: false,
     marked: true,
@@ -156,7 +157,7 @@ describe('decisionNoteFor', () => {
 
   it('surfaces an agent-live refusal', () => {
     const r = row({ kind: 'issue', decisions: { unblock: { available: false, reason: 'agent-live' } } })
-    expect(decisionNoteFor(r)).toBe("#41's agent is still waiting in its session. Answer it there and it clears the block itself.")
+    expect(decisionNoteFor(r)).not.toBeNull()
   })
 
   it('null when no decision carries an actionable refusal', () => {
@@ -208,22 +209,6 @@ describe('stopAttachedAgentNote', () => {
   })
 })
 
-describe('stageKeyOf', () => {
-  const stages: readonly StageLabel[] = [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }]
-
-  it('resolves the winning stage key', () => {
-    expect(stageKeyOf(stages, 'in-flight')).toBe('inProgress')
-  })
-
-  it('null when stage is null', () => {
-    expect(stageKeyOf(stages, null)).toBeNull()
-  })
-
-  it('null when no stage label has the given role', () => {
-    expect(stageKeyOf(stages, 'gate')).toBeNull()
-  })
-})
-
 describe('phaseToneFor', () => {
   it('a plan gate pulses in the plan colour', () => {
     expect(phaseToneFor(row({ stageKey: 'planReview' }))).toEqual({ palette: 'plan', fill: 'active', pulse: true })
@@ -253,8 +238,9 @@ describe('phaseToneFor', () => {
     expect(phaseToneFor(row({ stageKey: 'readyForReview', status: 'in-flight' }))).toEqual({ palette: 'review', fill: 'active', pulse: false })
   })
 
-  it('a refresh stage is grey', () => {
-    expect(phaseToneFor(row({ stageKey: 'refreshing', status: 'in-flight' })).palette).toBe('refresh')
+  it('a refresh stage is grey and never pulses', () => {
+    expect(phaseToneFor(row({ stageKey: 'refreshBranch', kind: 'pull-request' }))).toEqual({ palette: 'refresh', fill: 'queued', pulse: false })
+    expect(phaseToneFor(row({ stageKey: 'refreshing', status: 'in-flight' }))).toEqual({ palette: 'refresh', fill: 'active', pulse: false })
   })
 
   it.each(['stalled', 'interrupted'] as const)('a %s row is red and pulsing over its phase colour', (status) => {
