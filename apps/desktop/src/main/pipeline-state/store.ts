@@ -29,11 +29,7 @@ export function createPipelineStateStore(params: CreatePipelineStateStoreParams)
 
   async function persist(repoId: RepoId, record: RepoRecord): Promise<FileResult<void>> {
     const result = await params.writeJsonAtomic(params.path, withRecord(repoId, record))
-    if (result.ok) {
-      // A markHeld during the write moved memory ahead of what was written; its own queued write follows.
-      const held = file.repositories[repoId]?.heldBy ?? record.heldBy
-      file = withRecord(repoId, { ...record, heldBy: held })
-    }
+    if (result.ok) file = withRecord(repoId, record)
     return result
   }
 
@@ -65,16 +61,6 @@ export function createPipelineStateStore(params: CreatePipelineStateStoreParams)
         await ready
         await persistBestEffort(repoId, seedFrom(state, params.now().toISOString()))
       }),
-    markHeld: (repoId) => {
-      const record = file.repositories[repoId]
-      if (record === undefined || record.heldBy !== null) return
-      // Memory moves at once so the very next read is already labels; the write follows in order.
-      file = withRecord(repoId, { ...record, heldBy: 'terminal' })
-      void serialize(async () => {
-        const result = await params.writeJsonAtomic(params.path, file)
-        if (!result.ok) console.error(`[pipeline-state] could not write ${params.path}: ${result.message}`)
-      })
-    },
     prune: (repoId, closed) =>
       serialize(async () => {
         await ready

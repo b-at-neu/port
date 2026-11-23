@@ -26,7 +26,7 @@ interface GithubParams {
   readonly vocabulary: LabelVocabulary
   readonly verify?: VerifiableVocabulary
   readonly integration: string
-  /** The store's tracked items; `null` or absent reads by labels as before. */
+  /** The store's tracked items; `null` or absent sweeps GitHub for the seed read. */
   readonly tracked?: readonly TrackedRef[] | null
 }
 

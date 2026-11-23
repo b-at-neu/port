@@ -364,15 +364,13 @@ describe('buildGatePreflightQuery', () => {
     expect(document).toContain('c0: issueOrPullRequest(number: 148)')
   })
 
-  it('requests body, labels, and assignees inside the Issue fragment only — never the PullRequest one', () => {
+  it('requests body and assignees inside the Issue fragment only — never the PullRequest one', () => {
     const { document } = buildGatePreflightQuery(1)
     const issueFragment = extractFragment(document, 'Issue')
     const prFragment = extractFragment(document, 'PullRequest')
     expect(issueFragment).toContain('body')
-    expect(issueFragment).toContain('labels(first:')
     expect(issueFragment).toContain('assignees(first:')
     expect(prFragment).not.toContain('body')
-    expect(prFragment).not.toContain('labels(first:')
     expect(prFragment).not.toContain('assignees(first:')
   })
 

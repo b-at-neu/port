@@ -13,7 +13,7 @@ export function closingReference(body: string): number | null {
   return number > 0 ? number : null
 }
 
-/** Byte-for-byte the rendering PIPELINE.md → "The marker" documents; pinned against that file so the two can never silently diverge. */
+/** The rendering of the SESSION REQUIRED marker. */
 export const SESSION_REQUIRED_PREFIX = '> **SESSION REQUIRED:** '
 
 const SESSION_REQUIRED_LINE = new RegExp(`^${SESSION_REQUIRED_PREFIX.replace(/[*]/g, '\\*')}(.+)$`)

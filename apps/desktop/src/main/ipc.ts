@@ -218,7 +218,7 @@ export function registerIpc(restart: RestartSeams): RegisteredIpc {
 
   // The app's own record of every ticket's stage; every pipeline write goes through its `writeState`.
   const incidentLog = createIncidentLog({ dir: app.getPath('userData'), now: () => new Date(), newId: () => globalThis.crypto.randomUUID() })
-  const pipelineState = createPipelineState({ dir: app.getPath('userData'), auditDir: app.getPath('userData'), ownerOf: (repoId) => dispatcherRef?.status().find((status) => status.repoId === repoId)?.owner ?? null, recordIncident: incidentLog.record })
+  const pipelineState = createPipelineState({ dir: app.getPath('userData'), auditDir: app.getPath('userData'), recordIncident: incidentLog.record })
   const actions = bindActions(pipelineState)
 
   // stage-sessions.json's sole writer. Loaded once at boot — a `running` entry found then can only
@@ -370,7 +370,7 @@ export function registerIpc(restart: RestartSeams): RegisteredIpc {
     } satisfies ItemDecisionDeps),
   )
 
-  // run/drain/pause/take-over, scoped to one repository — all branching in `resolveDispatchControl`.
+  // run/drain/pause, scoped to one repository — all branching in `resolveDispatchControl`.
   handle('dispatch:control', (_event, request) =>
     resolveDispatchControl(registryDeps, request, {
       listRepositories,

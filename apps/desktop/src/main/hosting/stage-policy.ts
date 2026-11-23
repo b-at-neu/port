@@ -2,7 +2,7 @@
 import type { PathOps } from '@/types/platform'
 import type { StagePolicyDecision } from '@/types/hosting'
 
-/** Mirrors `plugins/port/hooks/lib/guard-rules.mjs`'s own `globToRegExp` byte-for-byte — a test asserts both sides agree over a shared case list. `**` → any depth, `*` → one path segment, else escaped. */
+/** `**` is any depth, `*` is one path segment, anything else is escaped. */
 export function globToRegExp(glob: string): RegExp {
   let re = ''
   for (let i = 0; i < glob.length; i++) {

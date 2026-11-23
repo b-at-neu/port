@@ -1,4 +1,4 @@
-// The budget gate, in-process: ports bin/budget.mjs's reset/sweep/dispatch/report over the app's own gh and git. Never throws, and an unreadable ledger holds dispatch rather than proceeding blind.
+// The budget gate: reset, sweep, dispatch and report over the app's own gh and git. Never throws, and an unreadable ledger holds dispatch rather than proceeding blind.
 import { defaultGitRunner } from '@/main/platform/git'
 import { ensureDirectory as defaultEnsureDirectory, readTextFile as defaultReadTextFile, writeTextFile as defaultWriteTextFile } from '@/main/platform/files'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'

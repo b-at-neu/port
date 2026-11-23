@@ -85,15 +85,14 @@ export function displayRunState(snapshot: BoardSnapshot | undefined, repoId: Rep
   return live ? 'draining' : 'stopped'
 }
 
-/** Ownership gates the pill ahead of run state — `terminal`/`unreadable` each have their
- *  own fixed pill, never `dispatching`/`draining`/`stopped`. */
+/** Ownership gates the pill ahead of run state — `unreadable` has its own fixed pill,
+ *  never `dispatching`/`draining`/`stopped`. */
 function pillFor(snapshot: BoardSnapshot | undefined, repoId: RepoId, owner: DispatchOwner, sessions: readonly HostedSessionSnapshot[]): { readonly status: PillStatus; readonly label: string } {
   if (snapshot === undefined) return { status: 'idle', label: 'Stopped' }
   const { store } = snapshot.runStates
   if (store.kind === 'unread') return { status: 'idle', label: 'Stopped' }
   if (store.kind === 'unreadable') return { status: 'danger', label: 'Stopped' }
   if (owner === 'unreadable') return { status: 'danger', label: 'Stopped' }
-  if (owner === 'terminal') return { status: 'idle', label: 'Terminal' }
 
   const display = displayRunState(snapshot, repoId, sessions)
   if (display === 'dispatching') return { status: 'success', label: 'Running' }

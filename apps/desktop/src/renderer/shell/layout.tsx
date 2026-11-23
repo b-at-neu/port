@@ -3,7 +3,6 @@ import { Outlet } from '@tanstack/react-router'
 import { Sidebar } from '@/renderer/shell/sidebar'
 import { CommandPalette } from '@/renderer/shell/palette'
 import { PauseConfirmDialog } from '@/renderer/shell/pause-confirm'
-import { TakeOverConfirmDialog } from '@/renderer/shell/take-over-confirm'
 import { Toaster } from '@/renderer/components/ui/sonner'
 import { GateDialog } from '@/renderer/gate/dialog'
 import { DecisionDialog } from '@/renderer/decision/dialog'
@@ -22,7 +21,6 @@ export function ShellLayout() {
       </main>
       <CommandPalette />
       <PauseConfirmDialog />
-      <TakeOverConfirmDialog />
       <GateDialog />
       <DecisionDialog />
       <PermissionDialog />

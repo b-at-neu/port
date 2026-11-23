@@ -19,9 +19,6 @@ import { planTick } from '@/main/tick/plan'
 import { autoPlanStatusOf } from '@/main/tick/auto-plan'
 
 import type { EndedStage } from '@/types/tick'
-import { buildDesktopTickEvent, recordTick as defaultRecordTick } from '@/main/trajectory/log'
-import type { DesktopTickEvent } from '@/types/trajectory'
-import type { RecordTickDeps } from '@/types/trajectory'
 import { isReady } from '@/main/state/read'
 import { afterFailure, afterSuccess, budgetedIntervalMs, deferredUntil, dueSources, githubSweepGapMs, nextDueAt } from '@/main/state/schedule'
 import { createInProcessEngine } from '@/main/offload/engine'
@@ -33,9 +30,6 @@ const defaultSetTimer: TimerFactory = (callback, ms) => {
   const handle = setTimeout(callback, ms)
   return { clear: () => clearTimeout(handle) }
 }
-
-/** Injected so `watcher.test.ts` never touches a real filesystem for the trajectory record. */
-type RecordTickFn = (repoRoot: string, event: DesktopTickEvent, deps?: RecordTickDeps) => Promise<void>
 
 interface CreatePipelineWatcherParams {
   /** A static list, or a provider re-invoked on the GitHub cadence, so a repository added or removed appears on the board without a restart. */
@@ -53,7 +47,6 @@ interface CreatePipelineWatcherParams {
   readonly claudeHome?: string
   readonly now?: () => Date
   readonly setTimer?: TimerFactory
-  readonly recordTick?: RecordTickFn
   /** Read fresh on every `buildSnapshot()`, never cached. Defaults to every repository reading paused. */
   readonly runStates?: (repoIds: readonly RepoId[]) => RunStatesSnapshot
   /** A dispatcher built after the watcher needs this same ledger/streak memo, never a second instance that would disagree with what the board just reported. */
@@ -69,19 +62,19 @@ interface CreatePipelineWatcherParams {
   readonly startedTasks?: (repoId: RepoId) => readonly string[]
   /** Read fresh inside `buildSnapshot()`, never cached. `undefined` reads as `[]`. */
   readonly dispatchStatus?: () => readonly RepoDispatchStatus[]
-  /** `planTick`'s own `holdSessionRequired` input, read fresh per repository. `undefined` reads as `true` — the terminal-cockpit default, unchanged. */
+  /** `planTick`'s own `holdSessionRequired` input, read fresh per repository. `undefined` reads as `true`. */
   readonly holdSessionRequired?: (repoId: RepoId) => boolean
-  /** `planTick`'s own `stageLiveness` input, read fresh per repository. `undefined` reads as `null` for every repository — byte-identical to today. */
+  /** `planTick`'s own `stageLiveness` input, read fresh per repository. `undefined` reads as `null` for every repository. */
   readonly stageLiveness?: (repoId: RepoId) => { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
-  /** `planTick`'s own `endedStages` input, read fresh per repository. `undefined` reads as `[]` for every repository — byte-identical to today. */
+  /** `planTick`'s own `endedStages` input, read fresh per repository. `undefined` reads as `[]` for every repository. */
   readonly endedStages?: (repoId: RepoId) => readonly EndedStage[]
   /** The auto-planner's refused swaps, read fresh per repository. `undefined` reads as none. */
   readonly autoPlanRefused?: (repoId: RepoId) => ReadonlySet<number>
-  /** Read fresh on every projection. `undefined` reads every repository by labels, byte-identical to today. */
+  /** Read fresh on every projection. `undefined` reads every repository as unseeded. */
   readonly pipelineView?: (repoId: RepoId) => PipelineView
-  /** The store's tracked items for a repository's GitHub read; `null` reads by labels. */
+  /** The store's tracked items for a repository's GitHub read; `null` reads the seed sweep. */
   readonly trackedRefs?: (repoId: RepoId) => readonly TrackedRef[] | null
-  /** Seeds a repository whose view was `labels` from the state just projected. */
+  /** Seeds a repository whose view was unseeded from the state just projected. */
   readonly seedPipelineState?: (repoId: RepoId, state: Extract<RepositoryState, { readonly ok: true }>) => Promise<void>
   /** Writes the terminal state of each merged pull request, then drops the closed items. Undefined keeps today's behaviour: nothing is written or dropped. */
   readonly finishPipelineState?: (entry: Extract<RepositoryEntry, { readonly status: 'ready' }>, finished: { readonly closed: readonly number[]; readonly merged: readonly number[] }) => Promise<void>
@@ -127,8 +120,6 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
   // Same lifetime and restart behaviour as `ledger`/`unknownStreaks` above.
   const refreshMemo = params.refreshMemo ?? createRefreshMemo()
   const startedTasks = params.startedTasks ?? ((): readonly string[] => [])
-  // Injectable the same way `gh`/`git`/`sessionReader` already are, so a test never touches a real filesystem for it.
-  const recordTickFn: RecordTickFn = params.recordTick ?? defaultRecordTick
   const runStatesOf =
     params.runStates ??
     ((repoIds: readonly RepoId[]): RunStatesSnapshot => ({ store: { kind: 'loaded' }, repositories: repoIds.map((repoId) => ({ repoId, state: 'paused', since: null })) }))
@@ -183,7 +174,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     const entries = repositories
     await params.pipelineReady?.()
     const views: Record<string, PipelineView> = {}
-    for (const entry of entries.filter(isReady)) views[entry.id] = params.pipelineView?.(entry.id) ?? { kind: 'labels' }
+    for (const entry of entries.filter(isReady)) views[entry.id] = params.pipelineView?.(entry.id) ?? { kind: 'unseeded' }
     let state: PipelineState
     try {
       state = await engine.project({ repositories: entries, views })
@@ -210,12 +201,11 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     }
   }
 
-  /** Seeding sees the same items the board just showed, so no ticket changes stage. A terminal-held repository is skipped: its labels are the record. */
+  /** Seeding sees the same items the board just showed, so no ticket changes stage. */
   async function seedUnseeded(state: PipelineState, views: Readonly<Record<string, PipelineView>>): Promise<void> {
     if (params.seedPipelineState === undefined) return
-    const terminal = new Set((params.dispatchStatus?.() ?? []).filter((status) => status.owner === 'terminal').map((status) => status.repoId))
     for (const repository of state.repositories) {
-      if (!repository.ok || views[repository.repoId]?.kind !== 'labels' || terminal.has(repository.repoId)) continue
+      if (!repository.ok || views[repository.repoId]?.kind !== 'unseeded') continue
       await params.seedPipelineState(repository.repoId, repository)
     }
   }
@@ -255,17 +245,6 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
           forceDispatch: params.forceDispatch,
         })
       })
-
-    // Fire-and-forget, never part of the BoardSnapshot returned below — a write failure here must not change what the board renders. Skipped for a blind report.
-    const entryById = new Map(readyEntries.map((entry) => [entry.id, entry] as const))
-    for (const report of tick) {
-      if (report.blind !== null) continue
-      const entry = entryById.get(report.repoId)
-      if (entry === undefined) continue
-      const read = state.repositories.find((candidate) => candidate.ok && candidate.repoId === report.repoId)
-      const fetchedAt = read?.ok === true && 'at' in read.freshness.github ? read.freshness.github.at : null
-      void recordTickFn(entry.path, buildDesktopTickEvent({ repo: entry.config.repo, report, fetchedAt, now }), { git: params.git })
-    }
 
     const nextWakeupAt = stopped ? null : earliestDueAt().toISOString()
     const dispatch = params.dispatchStatus?.() ?? []

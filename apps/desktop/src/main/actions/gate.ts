@@ -15,6 +15,7 @@ import { requireReadyRepo } from '@/main/registry'
 import type { RegistryDeps } from '@/types/registry'
 
 import { toOwnershipSummary } from '@/main/dispatch/ownership'
+import { UNSEEDED_MESSAGE } from '@/main/pipeline-state/labels'
 
 import type { AutoApprovePlanParams, GateAnswerParams, GatePreflightParams } from '@/types/actions'
 
@@ -35,10 +36,9 @@ function splitBody(body: string): { readonly ticketMarkdown: string; readonly pl
   return { ticketMarkdown: body.slice(0, idx).trimEnd(), planMarkdown: body.slice(idx) }
 }
 
-function toGatePreflight(fetch: Extract<GatePreflightFetch, { readonly ok: true }>, autoPlanName: string | undefined, storedLabels: readonly string[] | null): GatePreflight | null {
+function toGatePreflight(fetch: Extract<GatePreflightFetch, { readonly ok: true }>, autoPlanName: string | undefined, labels: readonly string[]): GatePreflight | null {
   const { item } = fetch
   if (item === null) return null
-  const labels = storedLabels ?? item.labels
   const { ticketMarkdown, planMarkdown } = splitBody(item.body)
   const reason = item.kind === 'issue' ? sessionRequiredMarkerAt(item.body, 'issue') : null
   return {
@@ -58,16 +58,17 @@ function toGatePreflight(fetch: Extract<GatePreflightFetch, { readonly ok: true 
   }
 }
 
-function toClassifyItem(item: Extract<GatePreflightFetch, { readonly ok: true }>['item'], viewer: string, storedLabels: readonly string[] | null): GateClassifyItem | null {
+function toClassifyItem(item: Extract<GatePreflightFetch, { readonly ok: true }>['item'], viewer: string, labels: readonly string[]): GateClassifyItem | null {
   if (item === null) return null
-  return { kind: item.kind, number: item.number, labels: storedLabels ?? item.labels, assignees: item.assignees, viewer, noPlanBlock: !item.body.includes(IMPLEMENTATION_PLAN_HEADING) }
+  return { kind: item.kind, number: item.number, labels, assignees: item.assignees, viewer, noPlanBlock: !item.body.includes(IMPLEMENTATION_PLAN_HEADING) }
 }
 
+/** The store's labels for the item, `[]` for an absent one, and `null` while the repository is unseeded. */
 function readStoredLabels(entry: ReadyEntry, item: Extract<GatePreflightFetch, { readonly ok: true }>['item'], deps: Pick<GateDeps, 'stateLabels'>): readonly string[] | null {
-  return item === null ? null : deps.stateLabels(entry.id, item.kind, item.number, entry.config.vocabulary)
+  return item === null ? [] : deps.stateLabels(entry.id, item.kind, item.number, entry.config.vocabulary)
 }
 
-// Ownership rides along on every response arm; the dialog disables controls under terminal/unreadable regardless.
+// Ownership rides along on every response arm; the dialog disables controls under unreadable regardless.
 export async function gatePreflight(params: GatePreflightParams, deps: GateDeps): Promise<GatePreflightResponse> {
   const entry = await resolveReadyEntry(params.registryDeps, params.repoId, deps)
   const ownership: OwnershipSummary = toOwnershipSummary(await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now }))
@@ -77,6 +78,7 @@ export async function gatePreflight(params: GatePreflightParams, deps: GateDeps)
 
   const autoPlanName = labelName(entry.config.vocabulary, 'autoPlan')
   const storedLabels = readStoredLabels(entry, fetch.item, deps)
+  if (storedLabels === null) return { kind: 'failed', message: UNSEEDED_MESSAGE, ownership }
   const preflight = toGatePreflight(fetch, autoPlanName, storedLabels)
   const verdict = classifyGate({ item: toClassifyItem(fetch.item, fetch.viewer, storedLabels), vocabulary: entry.config.vocabulary })
   if (preflight === null) return { kind: 'unresolved', ownership }
@@ -106,7 +108,9 @@ export async function gateAnswer(params: GateAnswerParams, deps: GateDeps): Prom
   const fetch = await deps.fetchGatePreflight({ repo: { owner: entry.config.owner, name: entry.config.name }, number: params.number })
   if (!fetch.ok) return { kind: 'preflight-failed', message: fetch.message }
 
-  const verdict = classifyGate({ item: toClassifyItem(fetch.item, fetch.viewer, readStoredLabels(entry, fetch.item, deps)), vocabulary: entry.config.vocabulary })
+  const storedLabels = readStoredLabels(entry, fetch.item, deps)
+  if (storedLabels === null) return { kind: 'answered', comment: null, labels: { kind: 'state-unsaved', message: UNSEEDED_MESSAGE } }
+  const verdict = classifyGate({ item: toClassifyItem(fetch.item, fetch.viewer, storedLabels), vocabulary: entry.config.vocabulary })
   if (verdict.kind !== 'answerable') return { kind: 'refused', verdict }
 
   let comment: WriteOutcome | null = null

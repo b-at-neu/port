@@ -30,11 +30,11 @@ export function selectDispatches(params: SelectDispatchesParams): readonly TickA
 }
 
 /** The re-read survivor test: the trigger's resolved name is still present and the viewer is still an assignee.
- *  `stateLabels` are the store's names; `null` keeps GitHub's. */
-export function survived(resolved: ResolvedItem, candidate: TickActionable, vocabulary: LabelVocabulary, viewer: string, stateLabels: readonly string[] | null = null): boolean {
-  const labels = stateLabels ?? resolved.labels
+ *  `stateLabels` are the store's names; `null` is an unseeded repository, which launches nothing this tick. */
+export function survived(resolved: ResolvedItem, candidate: TickActionable, vocabulary: LabelVocabulary, viewer: string, stateLabels: readonly string[] | null): boolean {
+  if (stateLabels === null) return false
   const triggerLabel = vocabulary.labels.find((l) => l.key === candidate.trigger)
-  if (triggerLabel === undefined || !labels.includes(triggerLabel.name)) return false
+  if (triggerLabel === undefined || !stateLabels.includes(triggerLabel.name)) return false
   return resolved.assignees.includes(viewer)
 }
 

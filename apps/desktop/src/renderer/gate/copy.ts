@@ -10,9 +10,8 @@ import { mirrorReason } from '@/renderer/lib/mirror-reason'
  *  `ownership` is `'app'` or `'absent'`, since Approve/Request changes work
  *  directly then (the app answers the gate without a claim either way). */
 export function gateDisabledReason(ownership: OwnershipSummary): string | null {
-  if (ownership.kind === 'terminal') return 'Your terminal cockpit answers this gate — this app owns nothing here.'
   if (ownership.kind === 'unreadable') {
-    return `${ownership.path} can't be read (${ownership.message}). Until it's valid or removed, this app and a terminal cockpit both stand down from the plan gate — nothing will answer this issue. Fix or delete the file.`
+    return `${ownership.path} can't be read (${ownership.message}). Until it's valid or removed, this app stands down from the plan gate — nothing will answer this issue. Fix or delete the file.`
   }
   return null
 }
@@ -170,7 +169,6 @@ function labelAbortDetail(labels: Extract<GateAnswerResponse, { kind: 'answered'
         : ''
     case 'write-failed':
       return labels.stderr
-    case 'terminal-owned':
     case 'ownership-unreadable':
       return 'This app no longer owns the repository.'
     case 'unresolvable-label':
@@ -199,8 +197,6 @@ function labelOnlyCopy(n: string, labels: Extract<GateAnswerResponse, { kind: 'a
     }
     case 'no-op':
       return { line: `#${n} already carries that label.`, note: 'Nothing was written.', actions: ['dismiss'] }
-    case 'terminal-owned':
-      return { line: 'This app no longer owns the repository.', note: `Your terminal cockpit has owned it since ${labels.since}. Nothing was written.`, actions: ['dismiss'] }
     case 'ownership-unreadable':
       return { line: 'This app no longer owns the repository.', note: `${labels.path} can't be read (${labels.message}). Nothing was written.`, actions: ['dismiss'] }
     case 'write-failed':

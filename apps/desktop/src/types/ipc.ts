@@ -134,9 +134,9 @@ export interface IpcMap {
     request: { repoId: RepoId; number: number; decision: OperatorDecision; expectedStage: LabelKey | null; route: UnblockRoute | null; note: string | null; skipComment: boolean; picks: readonly RebasePick[] | null }
     response: ItemDecisionResult
   }
-  /** Operator control over dispatch. `repoId` is required for every command. `take-over` overwrites a `terminal` ownership record and then runs. */
+  /** Operator control over dispatch. `repoId` is required for every command. */
   'dispatch:control': {
-    request: { command: 'run' | 'drain' | 'pause' | 'take-over'; repoId: RepoId }
+    request: { command: 'run' | 'drain' | 'pause'; repoId: RepoId }
     response: DispatchControlResult
   }
   /** The runtime strip's cheap check — no repository context, no subprocess beyond `claude --version`, no network. There is no failure branch; every failure *is* a diagnosis. */

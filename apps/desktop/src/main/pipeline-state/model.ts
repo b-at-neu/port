@@ -51,7 +51,6 @@ const OUTCOME_KINDS: ReadonlySet<string> = new Set([
   'applied',
   'no-op',
   'precondition-failed',
-  'terminal-owned',
   'ownership-unreadable',
   'unresolvable-label',
   'item-unavailable',
@@ -97,13 +96,13 @@ function itemOf(value: unknown): StoredItem | null {
 
 function recordOf(value: unknown): RepoRecord | null {
   if (!isRecord(value) || typeof value.seededAt !== 'string' || !isRecord(value.items)) return null
-  if (value.heldBy !== null && value.heldBy !== 'terminal') return null
+  if (value.heldBy !== undefined && value.heldBy !== null) return null
   const items: Record<string, StoredItem> = {}
   for (const raw of Object.values(value.items)) {
     const item = itemOf(raw)
     if (item !== null) items[itemKey(item.kind, item.number)] = item
   }
-  return { seededAt: value.seededAt, heldBy: value.heldBy, items }
+  return { seededAt: value.seededAt, items }
 }
 
 /** A missing, malformed or newer-version file is empty; a bad item is dropped, never its repository. */
@@ -137,7 +136,7 @@ export function seedFrom(state: Extract<RepositoryState, { readonly ok: true }>,
       mirrorFailure: null,
     }
   }
-  return { seededAt: at, heldBy: null, items }
+  return { seededAt: at, items }
 }
 
 function holds(item: StoredItem | undefined, key: LabelKey): boolean {
@@ -214,13 +213,13 @@ export function prune(record: RepoRecord, closed: readonly number[]): RepoRecord
   return Object.keys(items).length === Object.keys(record.items).length ? record : { ...record, items }
 }
 
-/** A repository the store does not hold, or one the terminal cockpit holds, reads labels. */
+/** A repository the store does not hold, or one recorded as held by the terminal cockpit, is unseeded and reseeds once from labels. */
 export function viewOf(record: RepoRecord | undefined): PipelineView {
-  if (record === undefined || record.heldBy !== null) return { kind: 'labels' }
+  if (record === undefined) return { kind: 'unseeded' }
   return { kind: 'store', items: Object.values(record.items) }
 }
 
 export function trackedOf(record: RepoRecord | undefined): readonly TrackedRef[] | null {
-  if (record === undefined || record.heldBy !== null) return null
+  if (record === undefined) return null
   return Object.values(record.items).map((item) => ({ kind: item.kind, number: item.number, keys: fullKeysOf(item) }))
 }

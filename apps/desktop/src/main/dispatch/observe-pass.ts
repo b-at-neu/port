@@ -43,7 +43,6 @@ function observationOutcomeOf(outcome: WriteOutcome): ObservationRecord['outcome
     case 'precondition-failed':
     case 'item-unavailable':
       return 'moved'
-    case 'terminal-owned':
     case 'ownership-unreadable':
     case 'unresolvable-label':
       return 'refused'

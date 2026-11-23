@@ -315,7 +315,6 @@ export interface GatePreflightItem {
   readonly url: string
   readonly state: string
   readonly body: string
-  readonly labels: readonly string[]
   readonly assignees: readonly string[]
 }
 

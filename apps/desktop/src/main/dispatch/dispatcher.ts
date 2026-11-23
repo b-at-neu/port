@@ -199,7 +199,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
 
       const owner = ownerOf(ownership)
       const state = stateFor(entry.id)
-      state.ownedSince = ownership.kind === 'app' || ownership.kind === 'terminal' ? ownership.since : null
+      state.ownedSince = ownership.kind === 'app' ? ownership.since : null
       state.unreadableMessage = ownership.kind === 'unreadable' ? ownership.message : null
       state.records = refreshRecords(state.records, (sessionKey) => deps.store.snapshotOf(sessionKey), deps.now().toISOString())
 
@@ -272,7 +272,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       const resolvedByNumber = new Map(reread.resolved.map((r) => [r.number, r] as const))
       const survivors = candidates.filter((c) => {
         const resolved = resolvedByNumber.get(c.number)
-        return resolved !== undefined && !reread.unavailable.includes(c.number) && survived(resolved, c, entry.config.vocabulary, viewer, deps.stateLabels?.(entry.id, c.kind, c.number, entry.config.vocabulary) ?? null)
+        return resolved !== undefined && !reread.unavailable.includes(c.number) && survived(resolved, c, entry.config.vocabulary, viewer, deps.stateLabels(entry.id, c.kind, c.number, entry.config.vocabulary))
       })
       if (survivors.length === 0) {
         report(entry.id, owner, activeOrIdle(entry.id), runState)

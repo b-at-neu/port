@@ -12,7 +12,7 @@ import type { RefreshMemoEntry } from '@/utils/pipeline/gates'
 export type StageAgent = 'plan' | 'impl' | 'review' | 'revise'
 
 /** Why the app's own label write for a stage session was refused or never made — reported on Needs you, never guessed past. */
-export type HandoffRefusal = 'moved' | 'no-handback' | 'unknown-handback' | 'pr-unverified' | 'terminal-owned' | 'write-failed' | 'unresolvable-label' | 'no-plan-file' | 'empty-plan-file'
+export type HandoffRefusal = 'moved' | 'no-handback' | 'unknown-handback' | 'pr-unverified' | 'write-failed' | 'unresolvable-label' | 'no-plan-file' | 'empty-plan-file'
 
 /** One stage session this app's own launcher recorded as ended, projected from `DispatchRecord`s that are not `started` and carry a non-`null` outcome — `main/tick/repair.ts`'s own session-shape evidence, newest per number. */
 export interface EndedStage {

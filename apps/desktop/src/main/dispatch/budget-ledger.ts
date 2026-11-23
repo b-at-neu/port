@@ -1,4 +1,4 @@
-// Pure port of bin/budget.mjs's ledger, session-log, and verdict logic — byte-compatible, since a terminal cockpit and this app can write the same comment. No value imports: the layer 1 parity check loads this file directly under Node.
+// Pure: the budget ledger, session-log and verdict logic.
 import type { CeilingResult, ComputedVerdict, LedgerRow, SessionRow, TicketTotal } from '@/types/budget'
 
 /** Whole seconds since `startedAt`, 0 for an unparseable one, which contributes nothing but is still closed. */
@@ -84,7 +84,7 @@ export function closeRows(
   }
 }
 
-/** The same `Closes #N` grammar `bin/artifacts.mjs`'s `checkPrBody` validates. */
+/** The `Closes #N` grammar a pull-request body carries. */
 export function issueFromPrBody(body: string): number | null {
   const m = /^Closes #(\d+)$/.exec(body.split('\n')[0]?.trim() ?? '')
   return m?.[1] === undefined ? null : Number(m[1])

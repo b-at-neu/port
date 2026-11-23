@@ -48,8 +48,8 @@ export const RUN_TARGET: Readonly<Record<RunCommand, RunState>> = {
   pause: 'paused',
 }
 
-/** `take-over` overwrites a `terminal` ownership record, reached only from the confirmed Take over dialog. There is no `halt` command any more — `HaltReport`/`haltDispatch` still exist, scoped to one repository by `pause`. */
-export const DISPATCH_COMMANDS = [...RUN_COMMANDS, 'take-over'] as const
+/** There is no `halt` command: `HaltReport`/`haltDispatch` are scoped to one repository by `pause`. */
+export const DISPATCH_COMMANDS = RUN_COMMANDS
 export type DispatchCommand = (typeof DISPATCH_COMMANDS)[number]
 
 /** The run-state store's own read status — `unread` before the file has ever been read, so a not-yet-loaded store answers every repository as paused, never silently as open. */
@@ -94,18 +94,16 @@ export type HaltReport =
   | { readonly kind: 'aborted'; readonly reason: 'run-state-unwritable'; readonly message: string; readonly path: string }
   | { readonly kind: 'completed'; readonly items: readonly HaltItemOutcome[] }
 
-/** `'dispatch:control'`'s response. `run`/`drain`/`take-over` take ownership first; `drain`'s own write failure surfaces as `persisted: false`. `pause` is never refused outright — a failed write surfaces inside `report` instead. */
+/** `'dispatch:control'`'s response. `run`/`drain` take ownership first; `drain`'s own write failure surfaces as `persisted: false`. `pause` is never refused outright — a failed write surfaces inside `report` instead. */
 export type DispatchControlResult =
   | { readonly ok: true; readonly command: 'run'; readonly repoId: RepoId; readonly runState: RepoRunState }
-  | { readonly ok: false; readonly command: 'run'; readonly repoId: RepoId; readonly reason: 'terminal-owned' | 'ownership-unreadable' | 'unwritable' | 'unreadable'; readonly message?: string; readonly since?: string; readonly path?: string }
+  | { readonly ok: false; readonly command: 'run'; readonly repoId: RepoId; readonly reason: 'ownership-unreadable' | 'unwritable' | 'unreadable'; readonly message?: string; readonly path?: string }
   | { readonly ok: true; readonly command: 'drain'; readonly repoId: RepoId; readonly runState: RepoRunState; readonly persisted: boolean }
-  | { readonly ok: false; readonly command: 'drain'; readonly repoId: RepoId; readonly reason: 'terminal-owned' | 'ownership-unreadable' | 'unwritable' | 'unreadable'; readonly message?: string; readonly since?: string; readonly path?: string }
+  | { readonly ok: false; readonly command: 'drain'; readonly repoId: RepoId; readonly reason: 'ownership-unreadable' | 'unwritable' | 'unreadable'; readonly message?: string; readonly path?: string }
   | { readonly ok: true; readonly command: 'pause'; readonly repoId: RepoId; readonly runState: RepoRunState; readonly report: HaltReport; readonly released: boolean }
-  | { readonly ok: true; readonly command: 'take-over'; readonly repoId: RepoId; readonly runState: RepoRunState }
-  | { readonly ok: false; readonly command: 'take-over'; readonly repoId: RepoId; readonly reason: 'unwritable'; readonly message: string; readonly path: string }
 
 /** Who runs the pipeline for one ready repository, read fresh off `.agents/cockpit.json` every pass, never cached. `absent` → `none`; `unreadable` stands on its own. */
-export type DispatchOwner = 'app' | 'terminal' | 'none' | 'unreadable'
+export type DispatchOwner = 'app' | 'none' | 'unreadable'
 
 /** One stage-session launch this app's loop attempted, tracked from `started` through `ended` or `failed`. `detail` is set only on `failed`. Bounded to the newest 20 per repository. */
 export interface DispatchRecord {
@@ -167,7 +165,7 @@ export interface RepoDispatchStatus {
   readonly state: DispatcherState
   /** This repository's own persisted run state — the owner line appends " · draining"/" · paused" for the two non-dispatching values. */
   readonly runState: RunState
-  /** The ownership record's own `since` — `null` unless `owner` is `'app'` or `'terminal'`. */
+  /** The ownership record's own `since` — `null` unless `owner` is `'app'`. */
   readonly ownedSince: string | null
   /** Set only while `owner === 'unreadable'` — the read failure, for the "can't be read (<reason>)" copy. */
   readonly unreadableMessage: string | null
@@ -279,8 +277,8 @@ export interface CreateDispatcherParams {
   readonly rerunMemo: RerunMemo
   /** Every label write a stage needs: the claim before launch, and rollback, hand-back and next-turn writes through `transition`. */
   readonly stageLabels: StageLabelWrites
-  /** Where a candidate's labels come from at the survivor test; absent reads GitHub's. */
-  readonly stateLabels?: StateLabelsReader
+  /** Where a candidate's labels come from at the survivor test; `null` for an unseeded repository launches nothing. */
+  readonly stateLabels: StateLabelsReader
   readonly refreshMemo: RefreshMemo
   /** Cleared for `(repoId, candidate.number)` once a forced launch succeeds — `main/tick/plan.ts`'s own consumer of the same memo, never a second instance. */
   readonly forceDispatch: ForceDispatch
@@ -384,12 +382,10 @@ export interface StageLaunchRequest {
 /** Every `TickObservation` kind this module writes — excludes the one report-only kind, `refresh-deferred`. */
 export type WriteObservation = Exclude<TickObservation, { readonly kind: 'refresh-deferred' | 'adopt' | 'rerun-checks' }>
 
-export type TakeOwnershipResult = OwnershipWriteResult | { readonly ok: false; readonly kind: 'refused'; readonly verdict: Extract<OwnershipRead, { kind: 'terminal' | 'unreadable' }>; readonly path: string }
+export type TakeOwnershipResult = OwnershipWriteResult | { readonly ok: false; readonly kind: 'refused'; readonly verdict: Extract<OwnershipRead, { kind: 'unreadable' }>; readonly path: string }
 
 export interface TakeOwnershipParams extends OwnershipDeps {
   readonly repo: string
-  /** Overwrites a `terminal` record — reached only from the confirmed Take over dialog. */
-  readonly force?: boolean
   readonly now?: () => Date
 }
 
@@ -403,7 +399,6 @@ export interface ReadOwnershipParams extends OwnershipDeps {
 export type OwnershipRead =
   | { readonly kind: 'absent'; readonly path: string; readonly readAt: string }
   | { readonly kind: 'app'; readonly since: string; readonly path: string; readonly readAt: string }
-  | { readonly kind: 'terminal'; readonly since: string; readonly path: string; readonly readAt: string }
   | { readonly kind: 'unreadable'; readonly message: string; readonly path: string; readonly readAt: string }
 
 export interface QuitWarningCopy {
