@@ -4,11 +4,13 @@ Every pipeline agent reads this document before working. It defines the quality 
 
 This is **this repository's own** standards document, not a template — `plugins/port/templates/ENGINEERING.template.md` is the skeleton `/port:init` installs elsewhere. Concrete paths like `plugins/port/**` are therefore correct here, and only here.
 
+**§1–§8 cover the plugin, `scripts/` and anything shared; §9 covers `apps/desktop`.** Where the two overlap, §9 wins for desktop code.
+
 **Where things live is not this document's job.** [ARCHITECTURE.md](../ARCHITECTURE.md) is the canonical repository map and the authority on the ship boundary; it carries its own layer 1 pin (`scripts/checks.ts` → "Repository map covers the real tree, both directions"), so restating its table here would create a second copy with nothing pinning it — exactly what §2 forbids. This document covers *how* to write, not *where* to put it.
 
 **Citations name checks and sections, never line numbers.** `scripts/checks.ts` and `docs/PIPELINE.md` are the two most-churned files in the repository, so a line reference in either is stale within days. Every citation below names a `// --- ` check block or a markdown heading, both of which survive edits and file splits.
 
-**Stack:** Markdown agent and skill definitions (the product) · Node.js ESM scripts in TypeScript, type-stripped at load with zero runtime dependencies (static checks, artifact validation, worktree reclamation), at or above `package.json`'s `engines.node` floor · JSON Schema draft 2020-12 · GitHub Actions · `gh` CLI for all GitHub I/O · a pnpm workspace with TypeScript and Electron (`apps/desktop`)
+**Stack:** Markdown agent and skill definitions (the product) · Node.js ESM scripts in TypeScript, type-stripped at load with zero runtime dependencies (static checks, artifact validation, worktree reclamation), at or above `package.json`'s `engines.node` floor · JSON Schema draft 2020-12 · GitHub Actions · `gh` CLI for all GitHub I/O · a pnpm workspace with TypeScript, Electron and zod (`apps/desktop`)
 
 ## 1. Architecture
 
@@ -18,11 +20,9 @@ This is **this repository's own** standards document, not a template — `plugin
 
 **Hook and script code separates pure decision logic from I/O.** `hooks/lib/guard-rules.mjs` exports pure functions unit-tested directly; `hooks/agent-guard.mjs` is the thin stdin/stdout/exit-code wrapper, tested separately by spawning the real script ("Guard hook classifier" and "Guard hook end-to-end wiring"). The same split applies to the worktree reclamation script ("Worktree reclamation classifier"). New logic goes in the library, not the wrapper — the wrapper's tests cannot see a classifier bug and the classifier's tests cannot see a wiring bug.
 
-**Scripts follow one runnable entry point plus a shared library.** `scripts/checks.ts` is a runner that only wires — it discovers and imports every `scripts/checks/<topic>.ts` module from disk, awaits each in turn, then calls `report()`, with no assertions and no hand-maintained module list of its own. Each topic module exports a function taking the reporter, typed `Reporter` (`scripts/lib/report.ts`). A topic module asserts a single condition with `expect(cond, check, detail)`, reaching for `fail`/`ok` only when the logic genuinely branches — an `else if` chain, a loop that fails per item, or a block with a side effect. `scripts/lib/report.ts` is a deliberately dumb collector and printer, shared by layers 1 and 2, which "decides nothing" (its own header); `scripts/lib/files.ts` holds the file-system helpers (`root`, `readJson`, `walk`, `frontmatter`) the topic modules share. A new check goes into the topic module it belongs to, never into the runner — nearly every ticket adds a regression guard, so a runner that reabsorbed assertions directly would recreate the file-contention bottleneck the split exists to remove (`PIPELINE.md:95-114`). Source is type-stripped, never type-checked at runtime: `scripts/lib/errors.ts`'s `message(e: unknown): string` is the one helper every `catch` site imports rather than casting `e` by hand, and JSON read off disk (`readJson`) stays `any` — a port config's shape and defaults come from `schema/port.config.schema.json`, never a hand-transcribed TypeScript interface (§2's own rule, restated for `scripts/` specifically).
+**Scripts follow one runnable entry point plus a shared library.** `scripts/checks.ts` is a runner that only wires — it discovers and imports every `scripts/checks/<topic>.ts` module from disk, awaits each in turn, then calls `report()`, with no assertions and no hand-maintained module list of its own. Each topic module exports a function taking the reporter, typed `Reporter` (`scripts/lib/report.ts`). A topic module asserts a single condition with `expect(cond, check, detail)`, reaching for `fail`/`ok` only when the logic genuinely branches — an `else if` chain, a loop that fails per item, or a block with a side effect. `scripts/lib/report.ts` is a deliberately dumb collector and printer, shared by layers 1 and 2, which "decides nothing" (its own header); `scripts/lib/files.ts` holds the file-system helpers (`root`, `readJson`, `walk`, `frontmatter`) the topic modules share. A new check goes into the topic module it belongs to, never into the runner — nearly every plugin or `scripts/` ticket adds a regression guard, so a runner that reabsorbed assertions directly would recreate the file-contention bottleneck the split exists to remove (`PIPELINE.md:95-114`). Source is type-stripped, never type-checked at runtime: `scripts/lib/errors.ts`'s `message(e: unknown): string` is the one helper every `catch` site imports rather than casting `e` by hand, and JSON read off disk (`readJson`) stays `any` — a port config's shape and defaults come from `schema/port.config.schema.json`, never a hand-transcribed TypeScript interface (§2's own rule, restated for `scripts/` specifically).
 
 **The trajectory record is write-only from the tick engine's own decision path.** `scripts/port-tick/events.ts` (the emitter) exports no function whose name contains `read` or `parse`, and nothing under `scripts/port-tick/` besides `port-tick.ts` and `report.ts` itself may import `events.ts` or `report.ts` ("Write-only rail", `scripts/checks/tick-events.ts`) — an append-only history that fed a future tick's decision would quietly break `plan`'s own never-persists invariant (#203).
-
-**Pipeline labels are write-only from the app's decision path.** The store is the source of every stage, claim and gate decision; labels are a mirror the app writes after each commit. The sanctioned reads are the merge gate workflow, seeding a repository the store has never seen, a repository a terminal cockpit holds, and the mirror's own diff of what it writes. Every other label read in a decision module is the fallback behind a store read (`stateLabels ?? item.labels`), reachable only under a labels view ("Labels are write-only", `scripts/checks/labels-write-only.ts`). A new label read is added to that check's sources with its reason, never silently.
 
 **A file that an adopting repository copies alone must be self-contained.** `plugins/port/bin/artifacts.mjs`, `bin/worktrees.mjs`, and `bin/budget.mjs` carry no relative imports, because an import resolving only inside this checkout breaks silently for every adopter while passing here — checked directory-wide, not per file ("bin/ holds only self-contained .mjs", `scripts/checks/layout.ts`). Cross-platform behaviour is part of the same contract — these run on an adopter's Windows machine, not just this one, which is why `bin/worktrees.mjs` and `bin/budget.mjs` also carry their own `execSync`/`shell: true` bans in `scripts/checks/cockpit.ts` and `scripts/checks/budget.ts`. This is also why §7's line limit exempts `bin/` instead of splitting it: the runner-plus-modules split every other over-limit file uses would break this same self-containment guarantee (#183).
 
@@ -32,313 +32,7 @@ This is **this repository's own** standards document, not a template — `plugin
 
 **Anything shipped may only reference other shipped paths.** A reference from a file under `plugins/port/` to a repository-only doc or script — `docs/USAGE.md`, `CONTRIBUTING.md`, `scripts/checks.ts` — dangles in every adopter's plugin cache, which carries only `plugins/port/` (`scripts/checks.ts` → "Shipped references stay inside plugins/port/").
 
-**Inside `apps/desktop/src`, a cross-folder import uses `@/<top-level>/…`, rooted at `src`** — `@/main/…`, `@/preload/…`, `@/renderer/…`, `@/types/…`, `@/utils/…` — never a per-folder alias and never `@types/` (it collides with npm's `@types/*` scope). A `./` sibling import is fine; a `../` parent import is a `port/no-parent-import` error. An import that leaves `src` (`scripts/port-tick/*`) stays relative, since no alias covers it. `apps/desktop/scripts/alias-imports.mjs` rewrites a directory's imports for you (`--check` reports without writing). A type or interface used by more than one file — under `src/main/` or `src/renderer/` alike — lives under `@/types/<topic>`; one used only in the file that defines it is never exported (#429, #430, `apps/desktop/scripts/type-moves.mjs`, `scripts/checks/desktop-imports.ts`).
-
 **Under the root `scripts/`, a cross-folder import uses the root `package.json`'s `imports` map** — `#lib/…`, `#port-tick/…`, `#plugins/…`, `#desktop/…` — never a `../` relative path; a `./` import within the same folder is fine. `scripts/checks/scripts-imports.ts` enforces it: no `../` left in `scripts/`, every `#` specifier resolves against the `imports` map, `./lib/` stays inside `scripts/lib/` itself, and a `scripts/port-tick/*` module that `apps/desktop/src` imports stays free of `#` aliases.
-
-### Module boundaries
-
-Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
-
-**`apps/desktop/electron-builder.config.mjs`**
-- the packaging boundary, with `apps/desktop/scripts/`
-- `bundle-audit.mjs` is pure — `node:` builtins only, no `node_modules` needed
-- the `publish` block (owner and repo from `.claude/port.config.json` → `repo`) makes `dist` emit `latest*.yml`, the blockmaps and the packaged `app-update.yml` that `electron-updater` reads; nothing is published from `dist`, which passes `--publish never`, and `desktop-release.yml` uploads them; the audit fails a build that is missing them
-- release version read from `release.versionFiles[0]`; `apps/desktop/package.json` is itself a `versionFiles` entry, kept equal to it by the `version-files-agree` check
-
-**`apps/desktop/src/main/actions/`**
-- every pause/resume/retry/gate/refresh/claim/escalate/observe/decide/stage write goes through the injected `writeState`, never `applyLabels`; `bound.ts` binds each action to it once at the composition root
-- `stage.ts`'s `applyStageClaim`/`applyStageTransition` are every label write a stage session needs; `pr-opened` is verified (an open pull request on this issue's `<n>-` branch) before either write, and the pull request is written first; a `plan-written` body is posted before the label write, and only once the table has planned one
-- never trusts a renderer-supplied `expectedStage` to widen a write, only to refuse
-- `gate.ts` comments before the label swap; `escalate.ts`/`observe.ts` swap first
-- `decide.ts`'s `applyItemDecision` (#312) is the fifth comment-then-swap composition: check → re-read → comment → swap, `gateAnswer`'s own direction — pinned by `desktop-gate`/`desktop-actions`
-- unblock routes come from the escalation's own marker cause (`utils/actions/decide.ts`'s `routes`); a route the escalation can't use is never offered and is refused in `main` as `route-unavailable`
-- `gate.ts`'s `autoApprovePlan` (#313) posts no comment — the click's own label plan, with an `autoPlan`-present, exact-assignee precondition in place of the click's `{ kind: 'any' }`
-
-**`apps/desktop/src/main/channels/<topic>.ts`**
-- one topic's IPC validation and composition; `main/ipc.ts` stays the registrar
-- a new channel follows the existing `*Deps` injectable-seam idiom — inject only real I/O (a subprocess, the filesystem, the SDK, a clock a test actually overrides), at the composition root; never a pure function (#350)
-- `items.ts` (#312) holds `item:action` and `item:decide` — moved out of `main/ipc.ts` verbatim, the same split every other topic here already follows
-
-**`apps/desktop/src/main/claim.ts`**
-- Work on's only claim composition root
-- re-runs the preflight on apply; never trusts what the renderer already confirmed
-- no `gh` import — reads via `./github`, writes via `./writes`
-
-**`apps/desktop/src/main/dispatch/`**
-- owns the per-repository run-state store (`Map<RepoId, RepoRunState>`) and the halt composition over it
-- `dispatcher.ts` is the main-process stage-session loop's own composition root; reads `main/dispatch/ownership.ts`'s record for ownership, no hosted Claude session of its own
-- launches go through `launch.ts`'s `StageLauncher` seam (#327 implements it); `launch: null` until then reports `no-launcher` rather than idling silently
-- fires from `main/ipc.ts`'s `onTick:` only — a fresh poll, never `onSnapshot:`'s own republish, which would retrigger the loop off its own state change
-- a pass requested while one is in flight is coalesced into one follow-up on the newest snapshot, never dropped
-- a `completed` hand-back's settled label write or an applied auto-approve requests one github-scoped read through the watcher, never a second clock, and the dispatch still comes from `onTick`
-- `transitions.ts` is the pure (stage, event) → label plan table and `handoff.ts` its per-repository queue: the claim runs before launch, a failed launch rolls it back, a failed write is retried up to `HANDOFF_ATTEMPTS` and then reported, and a missing or unknown `HANDBACK:` token, a moved stage or an unverified pull request is refused and reported, never guessed past
-- capacity comes from the hosted-session store (`launch.ts`'s `freeSlots`); launches across every repository are serialized into one promise chain so two repositories never race for a slot
-- `ledger.record` only after a launch returns `ok`; the budget gate is the last veto before it
-- the budget gate (`budget-gate.ts`) runs in-process and never spawns `commands.budget`, which the app reads only as an on/off switch; `budget-ledger.ts` is pure with no value imports and byte-compatible with `bin/budget.mjs`, which `desktop-dispatch` pins; the ledger comment is read in `main/github/ledger-read.ts` and written in `main/writes/ledger-comment.ts`, which is cost bookkeeping and bypasses `command.ts` and the audit log since it writes no label
-- `quit.ts` is the quit warning's own pure copy and guard; `main/dialogs.ts`'s `confirmQuit` is its one native dialog
-- `auto-plan.ts`'s `createAutoPlanner` (#313, #331) is a snapshot consumer gated on this app owning the repository and on the per-repository run state the same way `dispatchableFrom` is; kept out of `dispatcher.ts`, since the two serve different callers
-- the planner records refused swaps (a non-applied outcome or a throw) and republishes on a change; they fail toward Waiting on you, since a wrongly shown row costs a glance and a wrongly hidden one stalls silently
-- a settling session counts as live: an ended record with no classified outcome inside `SETTLE_GRACE_MS`, or a ticket with a hand-back write still being retried, is in `stageLiveness().live`, so the liveness ladder never resets work whose hand-back is about to land; a retryable write keeps retrying for `HANDOFF_RETRY_WINDOW_MS`
-- an outcome writes no label once a newer `started` record exists for the same ticket, and a resumed session joins the records through `trackResumed`
-
-**`apps/desktop/src/main/github/`**
-- reads go through `platform/github-http`'s injectable `GitHubTransport`, never through `gh`; `request.ts` builds the GraphQL and REST requests, and `envelope.ts` classifies a reply from its status code and body
-- conditional REST reads go through `conditional.ts`'s `conditionalGet`; its per-repo ETag cache is keyed by path and `Accept`, and is forgotten when a repo is added or removed — GraphQL is never conditional
-- `precheck.ts` reads the issues list's ETag (`per_page=1`, sorted by `updated`) as the fast change signal and never parses the body; the first response only primes the cache
-- the pipeline read's detail alias fails the whole read on any error, because a missing review list would read as zero cycles; the one carve-out is an issue alias's own `blockedBy`, `comments` or `closedByPullRequestsReferences` field, which goes into that detail's `erroredFields` and never reaches a pull request alias
-- an errored `blockedBy` becomes `{ ok: false }` and errored comments become `null`, so the Board shows "unknown" or "its reason is on the ticket", never "no blockers"
-- an errored or unselected `closedByPullRequestsReferences` becomes `closingPullRequests: null`, which reads as closed unmerged and keeps the `pr-missing` report; only a positively read `MERGED` closer suppresses it
-- `item-states.ts`'s `readItemStates` reads many items' states in one aliased round trip; an alias named in `errors[].path`, or absent, is `null`, never done
-
-**`apps/desktop/src/main/hosting/`**
-- owns a hosted session's full lifecycle (#98); the renderer only sends intents (nine `session:*` channels) and receives events, never drives the child directly. #326 removes the dispatcher role: no `SessionOptionsRole`, no per-session task tracker, no `allowedTools`
-- `store.ts`'s `start()` refuses `folder-busy` so two sessions never share one working tree; `dismiss` removes a worktree only on the operator's explicit `remove`/`force`
-- `content.ts`'s `buildUserContent` (#324) is the one place text and attachments resolve into the Messages API's `string | ContentBlock[]`, called by `handle.send` and nothing else — `input.ts`'s `push` and `project.ts`'s `recordSend` take its output verbatim, never a second shape
-- `files.ts`'s `listSessionFiles` (#324) is the `@` suggestion list's own read: `git ls-files` when `cwd` is a work tree, a bounded depth-8 walk otherwise, both capped at `MAX_FILES` and reporting `truncated`, never an empty list for a failed read
-- `verify.ts`'s `isBlockedCommand` (#324) is the one place a refused command is recognised — `port:pipeline`/bare `pipeline` always, every port command too in a stage session; `capabilities.ts` reads it to filter the composer's `slashCommands` list and, in a stage session, empties `commands`, and `handle.send`'s own guard reads it through `capabilities.isBlocked` before ever composing a `tool_use`
-- `project.ts`'s `createSessionProjector` (#219) reuses `createDeriver` for the same `TranscriptEntry` shape `main/sessions/` derives on disk, rather than a second `tool_use`/`tool_result` pairing (#123); `session:attach` replays its bounded window so a reload rebuilds from the same state a mid-stream push already describes
-- `project.ts`'s per-parent child derivers (#323) nest a subagent's own frames under its `Task` tool call rather than dropping them: one `createDeriver` and mirror-index map per live `parent_tool_use_id`, stamping every child entry and patch with `parentToolUseId`, deleted once the parent's own tool call pairs
-- `hosting/tasks.ts`'s `createTaskTracker` (#323) is the one background-task reader, observing `system/background_tasks_changed` (REPLACE semantics, `ambient` excluded) and `system/task_started`; `hosting/history.ts`'s `readHistory` (#323) is the one earlier-conversation read for resume/resume-at/fork, run before spawn and kept frozen on the handle
-- `label-guard.ts`'s `labelWriteOf` is pure and import-free; `options.ts` installs it as a stage session's `PreToolUse` hook on Bash, denying any issue or pull request label write with `LABEL_GUARD_MESSAGE`, which is never an Allow item because it is not the allowlist-miss reason; `issueBodyWriteOf` is checked after it and denies an issue-body write with `ISSUE_BODY_GUARD_MESSAGE`
-- `hook-denials.ts`'s `createHookDenialTracker` (#657) is the only reader of guard-hook denials in a stage stream: the hook denies an off-allowlist Bash call before `canUseTool`, so only the paired `tool_result` shows it, and the tracker matches nothing but `guard-marker.ts`'s allowlist-miss reason, pinned against `guard-rules.mjs` by the `desktop-hosting` check
-- streaming input only, always: `input.ts`'s push-driven `AsyncIterable<SDKUserMessage>` keeps `interrupt()`/`setPermissionMode()` available for the handle's whole life — a string prompt would silently disable both
-- `sdk.ts` is the third lazy Agent SDK seam (alongside `sessions/sdk.ts` #78, `runtime/sdk.ts` #97), the only file here naming the package specifier
-- `permissions.ts`'s per-session broker (#99) turns every `canUseTool` call into a pending request on the handle's own snapshot; `grant.ts` narrows the SDK's suggestions to an allowlist of three, and a grant never writes `settings.local.json`/`settings.json`
-- `persist.ts`'s `createHostingPersistence` (#103) is `hosting.json`'s only writer; a missing or malformed file resolves to an empty state rather than refusing to load, and `freeze()` — called before `closeAll()` closes any handle — drops every later save
-- `store.ts`'s `Map<sessionKey, Handle>` is bounded by an operator-settable, persisted session limit; `start()`'s already-open refusal fails closed on a live `sessionId`, since two `claude` processes must never append to one transcript
-- `plugin.ts`'s `resolvePluginRequest` (#101) prefers the repository's own `plugins/port/` over the installed cache, and fails loud — an unreadable manifest still resolves to `repository`, never a silent fallback; it applies to operator sessions only, since a stage session always requests `installed` and never loads a plugin from its own worktree (#550); that `installed` request exists only to keep a local plugin entry out of a stage session's options, because its instructions come from `stage-prompts/` (#641), and the plugin's load and components are neither checked nor shown for it
-- `stage-allow.ts`'s `readStageEditAllow` reads the stage worktree's own `.claude/settings.json` edit rules, narrowed to repository-relative globs; `stagePolicy` pauses an in-worktree edit on that list as protected, never denies it
-- `capabilities.ts`'s per-session tracker races `supportedCommands()`/`supportedAgents()` against a timeout, going `unavailable` rather than ever reading either as an empty list; a stage tracker never reads the plugin's expected components
-- an operator's own session defaults (`options.ts`'s `defaults` param) apply only to an operator-role start — the stage role (#327) always uses `permissionMode: 'default'` and its own `stagePolicy`, reading `agent`/`model` from `main/stage/`'s own request instead of `defaults`, never bypass/dontAsk/auto
-- `usage.ts`'s `readUsage` narrows `assistant`/`result` messages structurally, the same rule as `rate-limit.ts`; the figures are cumulative for this `claude` process, so a resumed session's totals mean "since port opened it," never lifetime cost
-- `notify.ts`'s `notificationFor` decides per manual session and stays silent for a stage session's finish, end, question and protected edit; `createNotifier` fires only when no port window is focused, and a focused transition still updates the baseline so refocusing then blurring never replays a stale one
-- `notify.ts`'s `showNeedsYou` is the one shower for Needs you notifications, behind the same focus rule; a click broadcasts `open-needs-you`
-- `marks.ts`'s pin/archive sets persist only through `persist.ts`; `store.ts` is their one composition point, never a second writer
-- `usage-ledger.ts`'s `createUsageLedger` is `usage-ledger.json`'s only writer, keyed by boot id (a `SessionKey` restarts every launch) with 31-day retention; a missing or malformed file loads empty, so a lost ledger shows no totals rather than a wrong one
-- `session-index.ts`'s `createSessionIndex` is `session-index.json`'s only writer, observing every hosted snapshot. It is history for the Board pane, never a restore set, so it takes no `freeze()`. A missing or malformed file loads empty
-
-**`apps/desktop/src/main/incidents/`**
-- sole writer of `incidents.jsonl` in the app data directory, local-only; `log.ts`'s appends and prunes run through one promise chain, so a prune never loses a concurrent append
-- best-effort: `recordIncident` never rejects, and a failed append never changes the outcome of the write or dispatch it describes; fails toward losing an incident, since a lost one costs analysis and a failed write costs the pipeline
-- never read for a decision; the raising code assigns the bucket, and nothing classifies an incident afterwards
-- `raise.ts` and `snapshot.ts` are pure: a signature is bucket, stage and condition, never a number, SHA or time, and a snapshot holds typed identifier fields only, never a body, comment or transcript text, capped at 4 KB with the dropped count named
-- retention is 90 days or 32 MB, whichever is hit first, oldest dropped first; the read reports that older entries existed, and a read failure is a typed error, never an empty list
-
-**`apps/desktop/src/main/local/`**
-- only reader of worktrees and the denial log
-- no `gh`; no item-state resolution
-
-**`apps/desktop/src/main/menu.ts`**
-- `menuTemplate` is pure — `platform`/`isPackaged` are passed in rather than read from `process`/`app`, so it is testable without Electron running
-- every command item carries `registerAccelerator: false`; `shell/keyboard.ts`'s module-level listener stays the one place a key press actually fires
-
-**`apps/desktop/src/main/offload/`**
-- the state worker owns the source cache and every CPU-bound read; `planTick` and its shared ledgers stay on main
-- `worker.ts` is wiring only; a new op goes into `OFFLOAD_OPS` and `dispatch.ts`
-- `precheckGithub` runs in the worker because the ETag cache lives there; a changed ETag schedules a budget-gated GitHub sweep through the watcher's one clock, and a pre-check failure never touches GitHub health
-- a worker crash fails closed into each op's existing failure value, never an empty result; a failed projection keeps the last good board and still schedules the next tick
-
-**`apps/desktop/src/main/pipeline-state/`**
-- the app's own record of every ticket's stage, claim, gates, review cycles and history, and the source of truth for what the tick, reconcile, repair and dispatch decide; GitHub labels are a one-way display mirror written after it, never read for a decision
-- `store.ts` is the state file's only writer, and `default.ts` is the only place that names the file; a transition awaits its atomic write and reports `persist-failed` without changing memory, so it is never reported as applied until it is on disk
-- `mirror.ts` is pure and imports nothing from `main/platform/`, `main/writes/` or `main/github/`: it maps stored keys to display labels, finds an item's counterpart, and diffs the desired names against the observed ones
-- `writer.ts`'s `writeState` is the only caller of `applyLabels`: it checks `expect.present` against the store, commits the store, then writes the whole label set for the post-transition state, so a label added, removed or edited by hand is overwritten; a failed mirror is `mirror-failed`, is recorded on the stored item and never rolls the store back
-- an app-only repository mirrors the seven display labels; any other repository mirrors the store's own full key set, so a terminal cockpit that takes it over still finds its record
-- a pull request write re-mirrors its ticket in the same call, and a ticket write re-mirrors its pull request, each only when its diff is not empty; a counterpart failure is recorded but never changes the write's outcome
-- a repository the store does not hold is refused as `state-unsaved` ("not loaded yet"), a terminal owner as `terminal-owned`, and an unresolvable key as `unresolvable-label`; nothing is written around the store
-- `finish.ts` writes the terminal state (`approved`) on a merged pull request and its ticket before the store prunes them, and retries up to ten recorded mirror failures each poll, each item at most once per five minutes; neither runs a transition
-- fails toward reseeding: a missing, malformed or newer-version file loads empty and every repository reseeds from its labels on the next projection, never toward refusing to start; a bad item is dropped, never its repository, and a failure with an unknown outcome kind is dropped, never its item
-- `reconcile.ts` overrides `matchedKeys`, `stageHistory` and `reviewCycleCount` from the view, and `reviewCycleCount` is the larger of the stored count and the GitHub reviews, so the cap can only hold earlier
-- a repository the terminal cockpit holds reads labels, because labels are the record there; when the owner leaves, the next view is `labels` once and the watcher reseeds
-
-**`apps/desktop/src/main/platform/`**
-- only importer of `node:child_process` / `node:fs` under `apps/desktop/src/`
-- spawnables a literal union (`KNOWN_COMMANDS`); paths via `pathKey`/`contains`, never `startsWith`
-- `github-http.ts` is the only `fetch` caller under `apps/desktop/src/main/`; its token comes only from `gh auth token` and is held in process memory, re-read once on a `401`, and a failed read is never cached; `githubConditional` shares that token, and a `304` is a `notModified` success only when a validator was sent; `githubPublic` sends no token and reads none, only for the app's own public releases
-- `disk.ts`'s `directorySize` never follows a symlink and is bounded by `maxEntries`; a cut-short or partly unreadable walk reports `truncated`, never an undercount presented as exact
-- `files.ts`'s `removeDirectory` retries a held file and returns the errno code instead of throwing, so a caller can tell a held file from a long path
-- `download.ts` is the only binary download, through Electron's `DownloadItem`; it is no `fetch` caller
-- `native-updater.ts` is the only importer of `electron-updater`, constructed lazily on the first call, and only for an in-place target; its own HTTP is the one network path outside `github-http.ts`, and it reads only the app's own public releases
-- `shell-env.ts` resolves the login shell's PATH once at startup, merges only PATH into `process.env`, and never blocks startup past its timeout
-
-**`apps/desktop/src/main/reclaimer/`**
-- an in-process port of `bin/worktrees.mjs`'s classification, pinned by `classify.cases.json`, which `desktop-reclaimer` runs against the script and `classify.test.ts` runs against `classify.ts`; it spawns nothing
-- enumerates worktrees only through `main/local/`'s `readWorktrees`; `remove.ts` is the one caller of `git worktree remove`, `unlock` and `prune`
-- item states come from `main/github/item-states.ts`; a state it cannot read is never `done`, and a reclaim with GitHub unreadable removes nothing
-- may reclaim, with `unlock`/`forceDirty` only path-scoped to one confirmed worktree, never with an issue; and purge one confirmed orphan path
-- every attempt is audited via `main/writes/audit.ts`'s `appendAudit`, from `main/channels/worktrees.ts` — this directory itself never writes the audit log
-
-**`apps/desktop/src/main/registry/effective.ts`**
-- resolves effective config: `CLAUDE.md` overrides folded over port-resolved values
-- reads `CLAUDE.md` and the approval workflow through an injected ref reader (`harness.ts`'s `readAtDefaultRef`, `origin/HEAD`), the same ref stage agents read — never the checked-out files
-- fails closed (`effective-config-unreadable`) rather than silently running on port defaults
-- imports `scripts/port-tick/overrides.ts` directly — no app-owned copy
-
-**`apps/desktop/src/main/registry/index.ts`**
-- `listRepositories` is the one cached reader of registry inspections: in-flight shared, `REPOSITORY_LIST_TTL_MS`, keyed by the `RegistryDeps` object
-- add/remove invalidate it; only the watcher's explicit refresh passes `fresh`
-- a failed read is never cached
-- callers never add a second cache of their own
-
-**`apps/desktop/src/main/registry/schema.ts`**
-- the only reader of `schema/port.config.schema.json`'s shape and defaults
-- never a hand-transcribed TypeScript interface of the config shape
-
-**`apps/desktop/src/main/relay/`**
-- detects an agent waiting on a human from transcripts; computes, never sends
-- markers anchored at line start, outside code — a quote never misclassifies as pending
-- the one Electron clipboard write; the operator still pastes the reply themselves
-
-**`apps/desktop/src/main/release/`**
-- the Releases screen's own main-process pieces; `config.ts` reads the `release` block at the default ref, never the checked-out file, and fails the read rather than guess
-- `state.ts`'s `resolvePhase` is the one phase derivation, re-run from GitHub on every read and before every `release:run` write, so a half-finished release resumes from wherever it stopped
-- `hook.ts` runs `release.postPublishHook` once through `platform/node`, only when it parses as a plain `node` command, and never retries it — a hook failure is reported beside a publish that already happened
-- fails toward showing less: an unavailable state alias fails the whole status and offers no action, while a failed later page of the merged-PR read only costs older PRs, with a note
-- no Claude session, no timer — the 60s watch while a PR waits is the renderer's own `refetchInterval`
-
-**`apps/desktop/src/main/runtime/`**
-- the SDK runtime adapter's composition root: locate → version → credentials → classify
-- `main/ipc.ts` calls only `runtimePreflight`/`runtimeProbe`, never resolves the registry itself
-
-**`apps/desktop/src/main/stage/`** (#327)
-- implements `main/dispatch/launch.ts`'s `StageLauncher` seam: a session worktree, a hosted session started with an inline `agents:` definition named by `agent:`, the prompt sent, and the hand-back watched
-- `agents.ts`'s `STAGE_AGENT_NAMES` pins each `StageAgent` key to its bundled file's frontmatter `name`, never namespaced; the definition carries the file's tools and the stage's configured model, and its body is the `prompt`
-- the instructions come from the app's own `stage-prompts/` copy, never an installed plugin: `bundle.ts` resolves its root (`resources/` packaged, `apps/desktop/` in development) and loads an agent file into its definition, and `instructions.ts` sends the agent body and the `PIPELINE.md` sections it is told to follow in the first message — never from the worktree and never as a second system prompt; `utils/stage/prompt.ts` composes and parses that message for the launcher and the transcript card
-- the bundle root is passed as the session's `additionalDirectories`, so the agent can read the three docs there; an edit under it still reaches `stagePolicy` and is denied as outside `cwd`
-- the `docs.*` and `commands.*` pointers in that message come from `.claude/port.config.json` at the default branch through `registry/harness.ts`'s `readAtDefaultRef`, never the stage worktree, whose checkout a pull request can edit
-- `default.ts`'s `createDefaultStageLauncher` binds every I/O seam of `createStageLauncher` to its production implementation, so `main/ipc.ts` passes only the store, the registry and the two dispatcher callbacks
-- a load failure fails the launch and removes the worktree — a stage is never dispatched without its instructions
-- a review stage's context also carries `review.cycle` and `review.selfAuthored`, computed by `gates.ts`'s `reviewDispatchFacts` in the dispatcher from the tick's review count and the re-read author; the desktop `review-agent.md` uses them and never re-derives either
-- `handback.ts`'s `classifyHandback` is pure, built on `utils/stage/handback-text.ts`'s `classifyHandbackText`, which also backs `renderer/board/needs-you.ts`; its `QUESTIONS FOR HUMAN:`/`BLOCKED:`/`HANDBACK:` prefixes live there and are pinned against the bundled prompts by `desktop-dispatch`, and `desktop-stage-labels` pins the tokens both ways
-- on a completed `plan-written`, reads `.temp/plan-<N>.md` before removing the worktree and hands it to the dispatcher with the outcome
-- removes a worktree only on `completed`, never forced; every other outcome keeps it. It removes the registry entry only when that removal succeeded — otherwise the entry stays as `cleanup-failed`
-- releases the branch after every worktree removal — launch failure paths, `completed`, and Restart — through `main/workspace/stage-worktree.ts`'s `releaseStageBranch`; a one-time sweep per repository root runs before the first launch and is never a gate on it
-- never writes a label: a stage hands back a `HANDBACK:` line (or `BLOCKED:`/`QUESTIONS FOR HUMAN:`) and `main/dispatch/transitions.ts` maps it; the launcher reports the next turn after a block through `onResumedTurn`
-- "operator joined" is stamped by the hosted handle (`main/hosting/handle.ts`) on the first `session:send` into a stage session carrying `source: 'operator'`; the launcher's own prompt send never counts
-- `launcher.ts`'s `resume` (#554) is the only place an interrupted entry is restarted as a session: it is tracked like a launch, so its hand-back settles the same registry entry, and the entry flips back to `running` in place — never a second entry with the same id
-- `sweep.ts`'s `createInterruptedSweeper` (#554) is the registry's third remover, after a `completed` hand-back and Restart; `stale.ts` holds its pure decisions, and every one fails toward keeping the entry (a blind, partial or too-old read clears nothing)
-- the sweeper removes an entry only after its worktree is gone (or its folder is missing); a failed removal turns the entry into `cleanup-failed`, retried on later passes, and a `cleanup-failed` row never offers Resume or Restart. It removes a worktree only without force, and auto-resumes a usage-limit entry, or a `network` entry past its backoff (`NETWORK_BACKOFF_MS`), only on an app-owned, running repository, through `main/channels/stage.ts`'s `resolveStageResume` so the capacity and root checks exist once; a failed auto-resume becomes an ordinary `error` entry, never a retry loop
-- a `network` entry is retried with backoff and restarted after `NETWORK_RETRY_LIMIT` retries (a dirty worktree becomes an `error` entry, since local work GitHub cannot see is a real decision); a `running` entry no live hosted session holds is marked `crash`, and `launcher.ts` resumes an interrupted entry for the same ticket and agent instead of launching fresh
-- `denials.ts`'s `createStageDenialStore` is `stage-denials.json`'s only writer; a missing or malformed file loads empty and a failed write keeps the in-memory state, so a denial shows this run rather than vanishing; a denial arrives from `stagePolicy` or from a guard-hook allowlist miss (#657), and the hook's `sessionRequiredPaths`, gate, loop and install denials never become Allow items, because no rule lifts them
-- "Allow from now on" never writes the operator's checkout: `allowlist.ts`'s `mergeRule` is pure over two JSON texts, and the result lands as a pull request into integration (`main/writes/allow.ts`)
-
-**`apps/desktop/src/main/tick/`**
-- `RepositoryState` → `TickReport`; computes, never writes
-- imports `scripts/port-tick/`'s own decision modules directly, checked against shared case tables
-- blind read → no actionable, held or claim counts at all
-- `auto-plan.ts`'s `autoApprovalsOf` (#313) ignores `sessionRequired` deliberately — the cockpit's own rule is that the swap still happens; `dispatchable.ts`'s `autoApprovalCandidatesFrom`/`autoApprovableFrom` are the only readers of `.autoApprovals` under `main/`
-- `auto-plan.ts`'s `autoPlanSwapCandidatesOf`/`autoPlanApprovingOf` is the one "will the swap act" predicate; the planner, `BoardSnapshot.autoPlan` and every renderer classification read it, never a second derivation
-- `adopt.ts`'s `adoptionsOf` decides, from GitHub evidence alone, which hand-back a finished stage already implies; an adoption is applied through the hand-back table and its verification, never a label plan of its own, and any missing, partial or ambiguous evidence adopts nothing, so today's reset or dispatch runs unchanged
-- `repair.ts`'s `repairsOf` (#330) detects a half-recorded ticket a crashed stage session left behind; it repairs only `plan-missing` through the observation pass, and reports every other shape on `TickReport.labelRepairs` for a human to resolve; `handback-unlabelled` comes only from the app's own refused hand-back write and carries its reason — it never repairs an `interrupted`/`usage-limit` session, since those wait on the operator's own Resume/Restart
-- the shapes are `handback-unlabelled`, `mirror-failed`, `plan-missing-approved` and `pr-missing`; `mirror-failed` is checked before eligibility, for any open item assigned to the viewer that carries a stored `mirrorFailure`, since it reports what GitHub shows rather than what a stage is doing; there is no contradictory-labels shape, because the store is the one writer and a hand-edited label decides nothing
-
-**`apps/desktop/src/main/trajectory/`**
-- the one write `main/tick/` itself never makes — computes there, writes here
-- appends to `.agents/desktop-events.jsonl`; every failure swallowed, never surfaced
-- called fire-and-forget from the watcher, never awaited
-
-**`apps/desktop/src/main/update/`**
-- startup and on-demand only, no timer
-- gated before I/O: an unpackaged, `-dev` or unparseable-version build never touches the network
-- never throws: every network or response condition is a typed `error` state
-- fails toward showing nothing, since a missed update costs one release cycle and a false "available" costs trust in every launch
-- the release source is the build-time `__PORT_RELEASE_REPO__`, never a renderer-supplied value
-- the downloader takes its release from the service and its asset from `assets.ts`, never from the renderer
-- an asset URL outside `https://github.com/<repo>/releases/download/` is never fetched
-- `start()` sets `downloading` before its first await, joins a download in flight, and never rejects
-- in-place update runs only where `assets.ts`'s `inPlaceSupported` says so — NSIS and AppImage; macOS and `.deb` never construct `electron-updater`
-- any in-place failure, including a version mismatch with the service, falls back to the downloader for that version, and `start()` still never rejects
-- the restart asks the quit guard first, so no installer is spawned before the operator agrees to stop live stage sessions
-
-**`apps/desktop/src/main/workspace/`** (#404)
-- sole creator/remover of session worktrees (`worktree.ts` for interactive sessions, `stage-worktree.ts` for stage sessions); never forces removal without an explicit caller choice
-- `stage-worktree.ts` creates every stage worktree from a fresh `git fetch origin`, never the main checkout's `HEAD`, and is the only place a local branch is deleted: `releaseStageBranch` deletes it only when its tip equals its start commit or is contained in its remote branch, and keeps it on any doubt; `sweepSessionBranches` applies the same predicate once to leftover `session/*` branches
-- `target.ts` is the only place a start target becomes a cwd; it creates a worktree only on an explicit `worktree: true`. `main/stage/launcher.ts` creates its worktrees through `stage-worktree.ts` instead
-- `main/local/` stays the only reader of the worktree list — this directory never reads it back
-- `resolve.ts`'s `resolveWorkspace`/`toFolderEntry` are the only callers of a session's `GitRunner` for workspace identity; `changes.ts` reuses the same `GitRunner` contract for the Changes diff, never a second invocation shape
-- `diff.ts` is pure — no `GitRunner`, no filesystem; `changes.ts` owns every git invocation and hands it parsed output
-- `recents.ts` is `folders.json`'s only writer, the same recoverable-state shape `hosting/persist.ts` already follows
-
-**`apps/desktop/src/main/writes/`**
-- only GitHub writer; only `command.ts` names `--add-label`/`--remove-label`
-- `applyLabels` takes resolved label names and the item as the caller read it, and carries no precondition: it reads ownership, skips an unchanged item as `no-op`, runs `gh`, and audits once; whether a transition may happen is the store's decision, made before it
-- never `merge`, `close`, `--delete-branch`, or `ready`
-- `postIssueBody` is the only issue-body write
-- `rerun.ts` is the one `gh run rerun` caller: failed jobs of one Actions run, audited once per attempt, never a cancel or a re-run of a passing run
-- `release.ts` builds the bump commit with git plumbing in the registered clone under a throwaway `GIT_INDEX_FILE`, signs it with `commit-tree -S` (never an unsigned fallback) and pushes it to a new `bump/v…` branch that is never overwritten, so the operator's checkout and index are never touched; the release tag exists only because `gh release create` made it
-- a release write has no ownership gate — it writes no pipeline label, and terminal ownership is about dispatch — and appends one `ReleaseAuditEntry` per attempt
-- `allow.ts` writes its commit through the Git Data API, from the oid `main/github/allow.ts` read the two files at, and appends one `AllowAuditEntry` per attempt; a stale `allow/…` branch fails with its name rather than being deleted or force-updated
-
-**`apps/desktop/src/renderer/audit/`**
-- reads `audit:list` only; the Settings → Audit log tab is read-only and makes no write
-- `model.ts` is the one `AuditEntry` → row mapping
-
-**`apps/desktop/src/renderer/board/`**
-- `blocked-on.ts`'s `blockedOnOf` is the one "held on" derivation; the row tag, the Blocked section and the item pane read `row.blockedOn`, never a second one
-- a ticket is blocked when its stage is `blocked` or a live stage session's last hand-back is `BLOCKED:`; open `blockedBy` links alone never make it blocked
-- the comment source is the newest comment at or before the latest `blocked` stage event, and no such event means no comment, so it fails toward the fallback copy rather than an unrelated comment
-- the comment's reason is its `Decision needed` line when there is one, else its first non-heading line
-- `blocker-answer.tsx` sends into the live session through `session/actions.ts`'s `send` and never writes a label; the app clears the block when the session's next turn starts
-- `columns.ts`'s `boardColumns` is the one kanban projection: a ticket lands in exactly one column, and it reads `row.blockedOn`, never a second "blocked" derivation
-- `lanes.ts`'s `boardLanes` builds each swimlane from `boardColumns`, never its own column rule; `navigableLaneRows` is the one kanban J/K order
-
-**`apps/desktop/src/renderer/components/conversation-model.ts`/`conversation-list.tsx`**
-- the one `TranscriptEntry` → view-model mapping and the one pin-to-bottom, chunked-reveal list
-- shared by the on-disk transcript view and the live session view, never a second copy
-- no `useEffect`: `conversation-list.tsx`'s scroll-pin and chunking both run from a plain ref callback, given a fresh function identity every render so React re-invokes it on each commit
-
-**`apps/desktop/src/renderer/data/`**
-- the renderer's one TanStack Query composition root
-- `data/subscriptions.ts` is the only caller of a `window.port.on*` push listener
-- a typed `{ ok: false }` response is data, not an error — only a rejected invoke is
-- `session:status` upserts the `session:list` cache by `sessionKey` when it already holds an entry and nothing is mid-fetch; otherwise it invalidates
-
-**`apps/desktop/src/renderer/incidents/`**
-- reads the incident channels only; the Settings → Incidents tab is read-only and writes nothing but the operator's own export
-- `model.ts` is the one group and record → row mapping
-
-**`apps/desktop/src/renderer/local/inspect.ts`**
-- the app's only aggregation of the denial log; pure, reader-free
-- `main/local/` stays the single-source adapter it joins
-
-**`apps/desktop/src/renderer/markdown/`**
-- pure, bounded-subset markdown parser — no `node:` import, nothing from `main/`
-- link scheme allowlist is `http://`/`https://` only; everything else renders as literal text
-- `renderer/components/markdown.tsx` is its only consumer; renders React elements, never `dangerouslySetInnerHTML`
-- `renderer/components/code-block.tsx` (#323) is the highlighted-code renderer `markdown.tsx`'s fenced blocks and `tool-call-detail.tsx`'s Bash body both go through; `highlight.ts`'s fixed-language `lowlight` instance renders React spans only, never partially on a throw or an over-cap input
-
-**`apps/desktop/src/renderer/needs-you/`**
-- the Needs you screen (#315): its own copy (`copy.ts`), action resolution and dispatch (`actions.ts`), and the relay compose form (`relay-form.tsx`), ported out of `board/relay.ts`'s former banner
-- `screen.tsx` reads `board:snapshot` through `renderer/board/needs-you.ts`'s `needsYouItems`, never a second derivation; writes go through the existing `item:action`/`item:decide` channels, or `session:permission:answer` for a `stage-approval` row, no new IPC
-- `components/needs-you-item.tsx` is the shared row (DESIGN §4's `NeedsYouItem`); a screen never builds its own version
-- a `blocked` label is a Needs you `blocked` row with the Unblock decision, and also sits in the Board's Blocked section; `waitsOnYou` stays false for it, so the Board neither pulses nor moves it; a live `BLOCKED:` hand-back on a non-`blocked` stage still produces no Needs you row
-- dismissals (#554) live only in the renderer's `localStorage` (`dismissed.ts`), keyed per event by `dismiss-key.ts` so the same event stays dismissed and a new event on the same ticket shows; a malformed stored value reads as empty, which fails toward showing everything
-- `notify-model.ts` is the only "new item" diff, over `visibleNeedsYouItems`'s items and keyed by `dismissKeyOf`, never a second derivation; `notify.ts` persists its baseline in `localStorage` and a malformed value seeds silently
-- `dismissed.ts`'s `visibleNeedsYouItems` is the one visible-items composition: `use-items.ts`'s `useNeedsYouItems` (the screen, the sidebar count, the palette and the per-repository dots) and `notify.ts`'s notifier both call it, so a dismissed or auto-cleared item can never disagree between them
-
-**`apps/desktop/src/renderer/session/`**
-- `entries-store.ts`'s `createEntriesRegistry` is the per-`sessionKey` attach/re-attach/buffering registry — injectable for its own tests, a thin app-wide singleton for `useSessionEntries`
-- `sequence.ts`'s `accept`/`drainBuffered` apply a `session:entries` delta only in revision order, never papering over a gap
-- `actions.ts` is the one place that writes the `session:list` query cache outside `data/subscriptions.ts`'s own push wiring — `adoptSession` after a start or a restore
-- `drafts.ts` keeps a composer draft per `sessionKey` outside React, so switching sessions and back never loses what was half-typed; `draftAttachmentsFor`/`setDraftAttachments` (#324) do the same for its attachment chips, in their own map
-- `composer-model.ts`/`attachments.ts`/`prompt-history.ts` (#324) are `prompt-input.tsx`'s pure decision logic — trigger detection and ranking, `File` classification and limits, and the per-repository recall cursor — each directly unit-tested; `prompt-input.tsx` itself is the one composition root that wires them to `components/composer.tsx` and `components/suggestion-list.tsx`
-
-**`apps/desktop/src/renderer/shell/`**
-- the one React root: `layout.tsx`'s `ShellLayout` renders the sidebar and the routed `<Outlet/>` directly into the main area — no portal, no legacy container
-- `keyboard.ts` installs one module-level listener, never `useEffect`
-- `prefs.ts` fails toward defaults on a malformed `localStorage` value, never throws
-- `lib/phase.ts`'s `PHASE_NAMES` and `key-bindings.ts`'s `KEY_BINDINGS` are pinned against `docs/DESIGN.md` §6 and §3 by the `desktop-shell` check, both directions
-
-**`apps/desktop/src/renderer/update/`**
-- `use-update-state.ts` is the only `update:state` reader; it polls only while the state is `idle` or `checking`, as the renderer's own `refetchInterval`, so `main/update/` keeps no timer
-- unprompted UI appears for `available` alone; a startup error, `up-to-date` or `checking` shows nothing
-- `startUpdate` is the one seam the update button calls; it downloads through `update:download` and reports the result in a toast
-- `use-update-download.ts` is the only `update:download:state` reader; it polls only while the state is `downloading`
-- `checkForUpdates` writes the `update:state` cache and never invalidates it, since a refetch landing after the result would overwrite it with a stale read, and a failed check never replaces a known `available`
-
-**`apps/desktop/tests/fixtures/app/` is the visual harness's own adapter boundary (#317) — every screen read a fixture run serves comes from here, never from `main/github/`, `main/sessions/`, `main/local/`, or any other real adapter.** It lives under `tests/`, not `src/`, so a release build never bundles it: `main/index.ts` reaches it only through the `#app-fixtures` build-time alias, which `electron.vite.config.mts` points here for the `development`, `fixtures` and `smoke` modes alone (`scripts/fixture-modes.mjs`) and at `src/main/fixtures/absent.ts`'s throwing stub for every other mode, `production` included; `audit-bundle.mjs` proves the release asar carries none. `src/main/fixtures/mode.ts`'s `fixtureMode` is pure — `PORT_FIXTURES` must be exactly `'1'` in an unpackaged build that carries fixtures, a packaged build ignores the flag outright (`ignored`) unless it is the `smoke` copy, and a build that carries no fixtures fails closed to `invalid` rather than falling through to the real app; an absolute `PORT_FIXTURES_USER_DATA` is required (`invalid` otherwise), since a fixture run against the real profile would take the operator's single-instance lock and write their theme preference. `main/index.ts` calls it before `requestSingleInstanceLock()`, and in `whenReady` calls `registerFixtureIpc()` in place of `registerIpc()` — no watcher, no hosted-session store, no drain store ever start. `fixtureMode` also parses `PORT_FIXTURES_SCENARIO` (`populated` by default, or any other `FIXTURE_SCENARIOS` member: `empty`, `unregistered`, `failing`, `registry-error`, `update-available`, `update-downloading`, `update-download-failed`, `update-restart-pending`, `update-restarting`, `attention`), fails closed to `invalid` on anything else, and threads the result through `registerFixtureIpc` → `fixtureHandlers` → `fixtureBoardSnapshot`, so a screen ticket can capture its own empty or error state from the same adapter boundary rather than a second canned path. `populated` is a healthy pipeline; `attention` is where a needs-you or problem capture goes. A scenario models one consistent app state, its failures are typed `ok: false` responses rather than throws, and `SCENARIO_LANDING` classifies each scenario's launch redirect. `handlers.ts`'s `FixtureHandlers` type is exhaustive over `IpcChannel`, so a channel added to `types/ipc.ts` with no fixture fails `pnpm typecheck` here rather than crashing the one process an agent cannot see a stack trace from; every handler is pure, synchronous, and throws nothing, since a rejected invoke renders as an `ErrorBanner` and would misrepresent the screen under test. `board.ts`'s `fixtureBoardSnapshot` passes canned GitHub, session, worktree and denial reads through the real `reconcileRepository` (`main/state/reconcile`, never `main/state/watcher`) and `planTick` (`main/tick/plan`, alongside `main/tick/ledger`'s ledger/refresh-memo constructors), so a screenshot shows exactly what the real derivation produces — the fixtures replace the adapter boundary only, never the decision logic above it. A production file under this directory may import only `electron`, `node:path`, a sibling (`./*`), `types/**`, `utils/**`, `main/registry/schema`, `main/state/reconcile`, `main/tick/ledger`, or `main/tick/plan` — anything else would let fixture mode reach `gh` or `claude`, which the `desktop-visual` layer 1 check pins mechanically, alongside no file under `src/` importing from `tests/`, `main/index.ts` importing `registerFixtureIpc` only from `#app-fixtures` and passing `app.isPackaged` to `fixtureMode(`, every `router.tsx` route path staying one of `ROUTE_IDS.<key>`/`'/'`/`'*'`, and `commands.checks` never naming `screenshots` (that list runs on every dispatched agent, and this command launches Electron).
-
 
 ## 2. Data and integrity
 
@@ -358,7 +52,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 
 **The guard's rails are not subagent-only.** Two apply to any caller including the cockpit's own session, because the cockpit violated them under throughput pressure: no `gh`/`git` inside a shell loop, and no clearing `<labels.needsHuman>` unless a recent operator message names that item. A third denies plugin install or marketplace mutation from inside any worktree, since every scope resolves to the same on-disk `installPath` and would silently repoint every session on the machine.
 
-**`sessionRequiredPaths` is a harness-level boundary no dispatched subagent can cross, and settings cannot grant it back.** A plan writing under those paths routes to `/port:implement` in an operator session; it is never worked around. In the desktop app (#327), a stage session's edit under one of those paths pauses for operator approval instead — `main/hosting/stage-policy.ts`'s own routing, never a second `/port:implement`.
+**`sessionRequiredPaths` is a harness-level boundary no dispatched subagent can cross, and settings cannot grant it back.** A plan writing under those paths routes to `/port:implement` in an operator session; it is never worked around. In the desktop app, a stage session's edit under one of those paths pauses for operator approval instead, never a second `/port:implement`.
 
 **A hook returns immediately outside a port-managed repository.** Installed at user scope the plugin loads in every session, so without that guard, installing it changes behaviour in every unrelated project on the machine.
 
@@ -385,7 +79,7 @@ The users of this system are operators reading GitHub and a terminal, so "user-f
 
 **A denial log's line count is never presented as a denial count, and an unresolvable session id fails toward `unknown-session` rather than a guessed role** — the log's line total conflates real denials with allowlist misses and rail holds, and a wrong attribution is unrecoverable misinformation an operator would act on; both are pinned by the `desktop-local` check. **A capped read's groupings are reconciled against `window` (the analysed entries), never against the whole-file `summary`** — the two describe different line sets whenever the log exceeds `limit`, so comparing a grouping total to `summary` is a scope mismatch, not a counting bug (#333).
 
-**A local transcript's recency is activity, never liveness.** Nothing readable from a file on disk proves a process is running — a crashed agent's transcript looks identical to a live one's, only older. `apps/desktop`'s session adapter therefore reports `lastActivityAt`/`activity`, never a `running`/`alive`/`isLive`-shaped field, and leaves "stalled" to a reconciliation that also holds the labels — the `desktop-sessions` check pins the absence mechanically. That reconciliation (`main/state/`) may report a stall, but a stall is a **report, never a proof** — `TaskList` remains the only real liveness evidence, and a session read that could not run never produces one, since a check that could not run is not a check that found nothing — the `desktop-state` check pins the same absence for the module that consumes it. **A stall is additionally suppressed when the evidence behind it is older than the poll that produced it** (#80 Decision 5): `renderer/board/project.ts`'s `displayStatus` renders `stalled` as `stalled` only when the repository's GitHub source is healthy and its last read is within one poll interval plus a fixed grace window of `now`; otherwise it renders `in-flight`, qualified with the read's age. This fails toward under-reporting — a phantom stall costs one more glance, but training an operator to distrust the one signal this app differentiates on costs the whole feature. Two more suppressions follow the same direction: `statusOf` does not report `no-claimant` until a sessions scan has run at least `CLAIM_SCAN_GRACE_MS` after the in-flight label was added (`awaiting-scan`), and `projectBoard` never renders `stalled` for a ticket with a live hosted stage session. The app holds exactly one clock, in `main/state/watcher.ts` — the `desktop-board` check pins both the suppression's key set and the single-timer rail.
+**A local transcript's recency is activity, never liveness.** Nothing readable from a file on disk proves a process is running — a crashed agent's transcript looks identical to a live one's, only older. A session adapter therefore reports last activity, never a `running`/`alive`/`isLive`-shaped field. A stall is a **report, never a proof**: `TaskList` remains the only real liveness evidence, and a session read that could not run never produces one, since a check that could not run is not a check that found nothing.
 
 **A path is not evidence.** Reporting a derived fact means resolving it, not pattern-matching a string that correlates with it: the running-plugin tell resolves the install record's commit sha rather than printing a cache path, because the path-based version reported "stale" every time under a directory source ("Running-plugin staleness is resolved, not printed from a path").
 
@@ -434,7 +128,7 @@ An over-limit file outside these exclusions is split by topic, following the run
 
 **A check must be able to distinguish the state it exists to detect.** `diff -rq` returned silence while both the cache and the checkout sat 42 commits behind `origin/dev` — a verification that passes in exactly the situation it was written to catch is worse than none, because it converts an unknown into a false assurance. Prefer a check whose failure mode you have observed.
 
-**Every fixed regression leaves a mechanical guard behind, and duplicated content leaves a mechanical pin behind.** Layer 1 pins the literal phrase or contract that constituted the fix, so a future edit quietly reverting the reasoning fails in CI rather than in a live pipeline run. A prose-only fix to a prompt is incomplete. A duplicated copy gets the same treatment: a check that asserts the two sides agree.
+**In the plugin and `scripts/`, every fixed regression leaves a mechanical guard behind, and duplicated content leaves a mechanical pin behind.** Layer 1 pins the literal phrase or contract that constituted the fix, so a future edit quietly reverting the reasoning fails in CI rather than in a live pipeline run. A prose-only fix to a prompt is incomplete. A duplicated copy gets the same treatment: a check that asserts the two sides agree. In `apps/desktop`, a fixed regression in a decision leaves a table case or a scenario test (§9), never a source-text check.
 
 **Rails are checkable preconditions, not bare prohibitions.** "Never do X" prose was violated twice under throughput pressure. A rail is instead shaped as something testable — `unblock #N` before a gate clears, "only when a check on it has gone red" before `approved` is removed — and layer 1 fails if either reverts to prose with nothing to check ("Cockpit rails stay checkable preconditions, not bare prohibitions").
 
@@ -455,12 +149,12 @@ An over-limit file outside these exclusions is split by topic, following the run
 - [ ] If a pinned file changed, its counterpart still agrees — and layer 1 says so, in both directions.
 - [ ] Every new check was made to fail once before being trusted to pass, and can distinguish the state it exists to detect.
 - [ ] A new layer 1 check lives in its topic module under `scripts/checks/`, never in the runner.
-- [ ] A fixed regression leaves a layer 1 guard behind.
+- [ ] In the plugin or `scripts/`, a fixed regression leaves a layer 1 guard behind.
 - [ ] A new rail is a checkable precondition, not "never do X" prose.
 - [ ] Any new failure mode states which direction it fails toward, and why.
 - [ ] An absent signal is not treated as a passing one — no empty rollup, missing conclusion, or exit code read as success.
 - [ ] A derived fact is resolved, not inferred from a path or a label.
-- [ ] No new code takes a pipeline decision from a label; any new label read is a sanctioned source in `labels-write-only`.
+- [ ] No new code takes a pipeline decision from a label.
 - [ ] A file an adopter copies alone has no relative imports and works on Windows.
 - [ ] No inline `--body "..."` carrying markdown or fences — written under `.temp/` and passed as `--body-file`.
 - [ ] New paths are reflected in `ARCHITECTURE.md`, and shipped files reference only shipped paths.
@@ -470,3 +164,91 @@ An over-limit file outside these exclusions is split by topic, following the run
 - [ ] No file under `plugins/port/` carries a `.ts` extension — type stripping needs the Node floor `package.json`'s `engines.node` sets, which an adopter never agreed to.
 - [ ] Commit subjects are `#<issue> <imperative lowercase>`, under 80 characters, no trailing period.
 - [ ] No file crossed the line limit, and no allowlisted file grew.
+
+## 9. Desktop app
+
+These rules apply to everything under `apps/desktop`. Code written before a pattern existed is migrated by the simplification tickets. A change to such code follows the pattern for whatever it touches, and never adds a new instance of the old shape.
+
+### Layout
+
+- Main-process code lives in `main/features/<feature>/`. Platform adapters live in `main/platform/`. The composition root (AppContext construction and the router) lives in `main/app/`.
+- Renderer screens are `renderer/pages/<page>/`. Shared renderer pieces live in `renderer/components/` and `renderer/data/`.
+- Code shared by main and the renderer is pure and lives under `utils/`. `types/` holds only types that have no runtime schema.
+- A cross-folder import uses `@/<top-level>/…`. A `../` import is an error.
+- `apps/desktop/src` imports nothing from `scripts/` or `plugins/`.
+- The renderer imports nothing from `main/`, and one page never imports another page's folder.
+- Each of these rules is an ESLint rule in `apps/desktop/eslint.config.mjs`.
+
+### Patterns
+
+One contract per pattern: its location, its naming, and what it may import.
+
+- **Action.** One file per action, `main/features/<feature>/actions/<verb>.ts`, named `'<feature>.<verb>'` and built with `defineAction({ name, kind: 'query' | 'mutation', input, run(ctx, input) })`.
+  - The input is validated before `run`.
+  - It may import its own feature's modules, `utils/`, `types/` and another feature's public `index.ts`.
+  - It never imports `electron`, `node:*` or `main/platform/`; it reaches I/O only through `ctx`.
+  - The router in `main/app/` derives channel names, request and response types, the preload bridge and validation from the definitions. Adding a call is one action file plus its renderer call site.
+- **AppContext.** One object, built once in `main/app/`.
+  - It holds the platform adapters (gh, git, fs, run, the Agent SDK, the clock, paths), every store and the repository registry.
+  - The platform adapters are the only importers of `node:fs`, `node:child_process`, `fetch`, `electron-updater` and the Agent SDK.
+  - There is no `*Deps` interface outside an adapter, and no factory that only pre-binds dependencies.
+  - Tests build an in-memory AppContext. Fixture mode swaps adapters only.
+- **JsonStore.** `createJsonStore({ file, version, schema, migrate })` is the only JSON persistence.
+  - One file per store, a zod `schema`, a pure `migrate(fromVersion, raw)`, atomic writes through `ctx.fs`.
+  - Each store states what a missing, malformed or newer-version file loads as, and which direction that fails toward (§4).
+- **Transition.** A pure `(ticket, event) → ticket | refusal`, a typed table keyed on status × event, in its feature folder.
+  - The commit compares `rev` and refuses a stale one. A transition is applied only once it is persisted.
+  - It imports only `utils/` and its feature's types.
+- **Domain table.** One `stages.ts` under `utils/` is the single source of stage, phase, column and needs-you kind for both processes.
+  - Every derivation is a function of this table. Nothing outside it re-derives these values.
+  - It imports only zod and `types/`.
+- **Page.** `renderer/pages/<page>/` holds `page.tsx` (composition), `model.ts` (pure, no React and no data hooks), `copy.ts` (every string) and `components/` (local to the page).
+  - It is built on `<Page>`, which owns the loading, error and empty states.
+  - It reads data through the data layer's typed action hooks only.
+- **Operator action.** Every write button goes through `useActionMutation(name, { confirm, toast, invalidates })`.
+  - A confirmation is `<ConfirmDialog>`, never a hand-built dialog.
+  - A typed `{ ok: false }` reply is data, shown to the operator. Only a rejected invoke is an error.
+- **Zod.** Zod is the only schema library: action inputs, stores and the repository config.
+  - Types come from `z.infer` and are never declared a second time.
+  - The published config JSON Schema is generated from zod.
+
+### Split rule
+
+- §7's line limit is hard here as well.
+- A file is split along a pattern boundary (one action, one store, one table, one page component), never by line count.
+- A comment saying a file was split to stay under the limit fails review.
+
+### Tests
+
+- Pure decisions get table-driven tests.
+- Flows get scenario tests through an in-memory AppContext, asserting the final state.
+- Never write a test that pins UI copy, asserts mock call order, or reads source text.
+- A ticket adds a test only when it adds or changes a decision.
+- The guideline is test lines at about 10% of source lines. The enforcement is a branch-coverage gate on the pure pipeline modules.
+
+### Checks
+
+- No new `scripts/checks` module asserts on `apps/desktop` source text. Import, global and layering rules go in `apps/desktop/eslint.config.mjs`.
+- Duplication is removed, not pinned: a shared value has one home that both processes import. A copy that cannot be avoided (bundled data) is pinned by a test or a type.
+- The only checks that may name a desktop path are for the safety properties below.
+
+### Safety properties
+
+- Labels are a display mirror written after the ticket record commits, and no decision reads one.
+- Only the write adapter writes to GitHub, and it never runs merge, close, `--delete-branch` or ready.
+- The GitHub token stays in main-process memory.
+- Main holds exactly one clock.
+- A stall is a report, never proof. It is suppressed when its evidence is older than one poll plus grace.
+- The renderer never sets HTML from text (no `innerHTML`, no `dangerouslySetInnerHTML`), and links are `http(s)` only.
+- The renderer uses no `useEffect` or `useLayoutEffect`.
+- Colour comes only from theme roles.
+- Fixture data replaces adapters only, never the decision logic, and a release build carries none.
+- Stage-session instructions come from the app's own `stage-prompts/` copy, and a stage session never writes a label.
+
+### Desktop self-check
+
+- [ ] Every call, store, transition, table, page and write button uses its pattern above.
+- [ ] No file is over the limit, and none was split by line count.
+- [ ] A test was added only for a decision that was added or changed.
+- [ ] No new check asserts on `apps/desktop` source text.
+- [ ] Every safety property above still holds.

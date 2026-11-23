@@ -316,49 +316,4 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       expect(!(ships !== 'yes' && ships !== 'no'), 'architecture-map', `${rel}: row '${path}' has Ships cell ${JSON.stringify(ships)} — must be exactly 'yes' or 'no'`);
     }
   }
-
-  // --- ENGINEERING.md's Module boundaries stay in ascending path order — every paragraph
-  // opens with a bolded backticked path, so two tickets adding one each land at different offsets for git to merge both. ---
-  {
-    /** Extracts the ordered list of paths each paragraph opens with — the first backticked
-     *  token inside its leading bold span. Pure, so a self-test can exercise it directly. */
-    function boundaryPaths(section: string): string[] {
-      const paragraphs = section.split(/\n\n+/).filter((p) => p.trim().startsWith('**'));
-      const paths: string[] = [];
-      for (const p of paragraphs) {
-        const boldSpan = /^\*\*(.*?)\*\*/s.exec(p.trim());
-        const pathMatch = boldSpan && /`([^`]+)`/.exec(boldSpan[1]);
-        if (pathMatch) paths.push(pathMatch[1]);
-      }
-      return paths;
-    }
-
-    // Self-test first — three paragraphs, deliberately out of order.
-    const fixture = [
-      '**`b/two` does the second thing.**',
-      '**`a/one` does the first thing.**',
-      '**`c/three` does the third thing.**',
-    ].join('\n\n');
-    const fixturePaths = boundaryPaths(fixture);
-    const fixtureSorted = [...fixturePaths].sort();
-    expect(!(fixturePaths.length !== 3 || JSON.stringify(fixturePaths) === JSON.stringify(fixtureSorted)), 'engineering-module-boundaries', 'boundaryPaths self-test: a deliberately out-of-order fixture parsed as already sorted, or lost an entry');
-
-    const rel = 'docs/ENGINEERING.md';
-    const text = readFileSync(join(root, rel), 'utf8');
-    const sectionMatch = /### Module boundaries\n([\s\S]*?)(?=\n## |$)/.exec(text);
-    if (!sectionMatch) {
-      fail('engineering-module-boundaries', `${rel} has no '### Module boundaries' subsection`);
-    } else {
-      const paths = boundaryPaths(sectionMatch[1]);
-      if (paths.length === 0) {
-        fail('engineering-module-boundaries', `${rel}'s '### Module boundaries' subsection parsed 0 paragraphs — the parser or the subsection itself has broken`);
-      } else {
-        note(`engineering-module-boundaries: ${paths.length} paragraphs parsed`);
-        ok();
-        for (let i = 1; i < paths.length; i++) {
-          expect(!(paths[i - 1] > paths[i]), 'engineering-module-boundaries', `${rel}: '### Module boundaries' is out of order — '${paths[i - 1]}' appears before '${paths[i]}'`);
-        }
-      }
-    }
-  }
 }
