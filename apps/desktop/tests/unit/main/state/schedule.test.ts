@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BACKOFF_CEILING_MS, BUDGET_SHARE, SOURCE_BASE_INTERVAL_MS, initialHealth } from '@/types/board'
+import { BACKOFF_CEILING_MS, BUDGET_SHARE, DEFAULT_GRAPHQL_LIMIT, GITHUB_PRECHECK_INTERVAL_MS, SOURCE_BASE_INTERVAL_MS, initialHealth } from '@/types/board'
 import type { SourceHealth } from '@/types/board'
 import { afterFailure, afterSuccess, budgetedIntervalMs, deferredUntil, dueSources, githubSweepGapMs, nextDueAt } from '@/main/state/schedule'
 
@@ -101,6 +101,13 @@ describe('githubSweepGapMs', () => {
   it('low headroom matches budgetedIntervalMs', () => {
     const low = { ...window, remaining: 300 }
     expect(githubSweepGapMs({ costs: [5], rateLimit: low, now: NOW })).toBe(150_000)
+  })
+
+  it('one repository at the fast-check floor fits the GraphQL share and two do not', () => {
+    const share = BUDGET_SHARE * DEFAULT_GRAPHQL_LIMIT
+    const perHour = (repositories: number): number => (repositories * 5 * 3_600_000) / GITHUB_PRECHECK_INTERVAL_MS
+    expect(perHour(1)).toBeLessThanOrEqual(share)
+    expect(perHour(2)).toBeGreaterThan(share)
   })
 
   it.each([[5, 10], [146, 4]])('projected hourly use stays under the share at %i points for 1..%i repositories (below the backoff ceiling)', (cost, repositories) => {

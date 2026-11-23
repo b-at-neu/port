@@ -42,8 +42,7 @@ interface SessionRequiredCopy {
 }
 
 /** The `SESSION REQUIRED` banner — names `/port:implement` and the fact that
- *  no agent picks it up, literally, so `scripts/checks/desktop-gate.ts` can
- *  pin the consequence mechanically. An app-owned repository runs the plan itself and asks per edit. */
+ *  no agent picks it up. An app-owned repository runs the plan itself and asks per edit. */
 export function sessionRequiredCopy(number: number, title: string, reason: string, ownership: OwnershipSummary): SessionRequiredCopy {
   if (ownership.kind === 'app') {
     return {

@@ -18,27 +18,14 @@ import type {
 import { bodyOf, classifyFailure, describeHttp, parseEnvelope } from '@/main/github/envelope'
 import { RAW_ACCEPT, repoGraphqlRequest, restRequest } from '@/main/github/request'
 import { RELEASES_PAGE, STATE_ALIASES, buildStateQuery, stateVariables } from '@/main/github/release-query'
+import { nodesOf, obj, str } from '@/main/github/json'
+import type { Obj } from '@/main/github/json'
 import { readMergedPrs } from '@/main/github/release-prs'
 import { BUMP_BRANCH_DIR, versionOfBumpBranch } from '@/utils/release/format'
 import { resolvePhase } from '@/main/release/state'
 import { normalizeVersion, parseVersion, stripPrerelease } from '@/utils/release/version'
 
 const SAFE_REF = /^[A-Za-z0-9._/-]+$/
-
-export type Obj = Readonly<Record<string, unknown>>
-
-export function obj(value: unknown): Obj | null {
-  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Obj) : null
-}
-
-export function str(value: unknown): string | null {
-  return typeof value === 'string' ? value : null
-}
-
-export function nodesOf(value: unknown): readonly Obj[] {
-  const nodes = obj(value)?.nodes
-  return Array.isArray(nodes) ? nodes.flatMap((node) => (obj(node) === null ? [] : [node as Obj])) : []
-}
 
 function failure(message: string, readAt: string): ReleaseRead {
   return { ok: false, message, readAt }

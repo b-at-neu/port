@@ -1,5 +1,5 @@
 // Pure: one machine-observation write's label plan, precondition, and comment body.
-// Mirrors scripts/port-tick/writes.ts exactly, pinned by scripts/checks/desktop-dispatch.ts.
+// Mirrors scripts/port-tick/writes.ts exactly, pinned by scripts/checks/desktop-parity-engine.ts.
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { ReconciledItem } from '@/types/state'
 import type { TickObservation } from '@/types/tick'
@@ -29,7 +29,7 @@ function precondition(item: ReconciledItem, vocabulary: LabelVocabulary, add: re
 
 const PIPELINE_ESCALATION = '## Pipeline Escalation'
 
-// A literal mirror of gates.ts's `escalationMarker`, pinned by scripts/checks/desktop-dispatch.ts.
+// A literal mirror of gates.ts's `escalationMarker`, pinned by scripts/checks/desktop-parity-engine.ts.
 function escalationMarker(cause: 'sha-cap' | 'cycle-cap' | 'integration-red' | 'refresh-stuck', sha: string | null): string {
   return `\n<!-- port:escalation ${cause} ${sha ?? ''} -->`
 }

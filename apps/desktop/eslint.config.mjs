@@ -1,10 +1,22 @@
+import { readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import js from '@eslint/js'
 import tseslint from 'typescript-eslint'
 import eslintConfigPrettier from 'eslint-config-prettier'
+import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescript'
+import * as importX from 'eslint-plugin-import-x'
 import react from 'eslint-plugin-react'
 import reactHooks from 'eslint-plugin-react-hooks'
+import { RENDERER_PATHS, RENDERER_SYNTAX, boundaryBlocks } from './eslint/boundaries.mjs'
 import { rule as noRawColourRule } from './eslint/no-raw-colour.mjs'
 import { rule as noParentImportRule } from './eslint/no-parent-import.mjs'
+
+/** Every source file the boundaries govern, repo-relative to this directory with forward slashes. */
+const boundedFiles = ['src', 'tests/fixtures/app'].flatMap((dir) =>
+  readdirSync(join(import.meta.dirname, dir), { recursive: true, encoding: 'utf8' })
+    .map((f) => `${dir}/${f.split('\\').join('/')}`)
+    .filter((f) => /\.tsx?$/.test(f) && !f.endsWith('.d.ts'))
+)
 
 // Defined once: ESLint rejects the same plugin key bound to two different objects when two blocks' files globs overlap.
 const portPlugin = { rules: { 'no-raw-colour': noRawColourRule, 'no-parent-import': noParentImportRule } }
@@ -77,34 +89,21 @@ export default tseslint.config(
       // (Redirect = Response & {...}), not an Error — the framework's own
       // documented interrupt-navigation pattern, not a thrown literal.
       '@typescript-eslint/only-throw-error': ['error', { allow: [{ from: 'lib', name: 'Response' }] }],
-      // The useEffect ban is total (ticket's own "Risks" note) — TanStack
-      // Query, useSyncExternalStore, or a ref callback cover every real use.
-      'no-restricted-imports': [
-        'error',
-        {
-          paths: [
-            {
-              name: 'react',
-              importNames: ['useEffect', 'useLayoutEffect'],
-              message: 'useEffect/useLayoutEffect are banned here — use TanStack Query, useSyncExternalStore, or a ref callback instead.'
-            }
-          ]
-        }
-      ],
+      // The useEffect ban is total — TanStack Query, useSyncExternalStore, or a ref callback cover every real use.
+      // src/ files get these lists merged into their boundary block; tests/unit/renderer takes them from here.
+      'no-restricted-imports': ['error', { paths: RENDERER_PATHS }],
+      'no-eval': 'error',
+      'no-new-func': 'error',
       'no-restricted-properties': [
         'error',
         { object: 'React', property: 'useEffect', message: 'useEffect is banned here — use TanStack Query, useSyncExternalStore, or a ref callback instead.' },
         { object: 'React', property: 'useLayoutEffect', message: 'useLayoutEffect is banned here — use TanStack Query, useSyncExternalStore, or a ref callback instead.' },
         { object: 'document', property: 'createElement', message: 'createElement is banned here — render JSX instead.' },
         { object: 'document', property: 'createElementNS', message: 'createElementNS is banned here — render JSX instead.' },
-        { object: 'document', property: 'createTextNode', message: 'createTextNode is banned here — render JSX instead.' }
+        { object: 'document', property: 'createTextNode', message: 'createTextNode is banned here — render JSX instead.' },
+        { object: 'document', property: 'write', message: 'document.write is banned here — render JSX instead.' }
       ],
-      'no-restricted-syntax': [
-        'error',
-        { selector: "AssignmentExpression[left.property.name='innerHTML']", message: 'innerHTML is banned here — a tool result or repository text is untrusted.' },
-        { selector: "AssignmentExpression[left.property.name='outerHTML']", message: 'outerHTML is banned here — a tool result or repository text is untrusted.' },
-        { selector: "CallExpression[callee.property.name='insertAdjacentHTML']", message: 'insertAdjacentHTML is banned here — a tool result or repository text is untrusted.' }
-      ],
+      'no-restricted-syntax': ['error', ...RENDERER_SYNTAX],
       'port/no-raw-colour': 'error'
     }
   },
@@ -118,5 +117,18 @@ export default tseslint.config(
       'no-empty-pattern': 'off'
     }
   },
+  // A runtime import cycle between two source files. Type-only imports are skipped by the rule.
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    plugins: { 'import-x': importX },
+    settings: {
+      ...importX.flatConfigs.typescript.settings,
+      'import-x/resolver-next': [createTypeScriptImportResolver({ project: 'tsconfig.json', references: 'auto' })]
+    },
+    rules: { 'import-x/no-cycle': 'error' }
+  },
+  // The import, global and syntax boundaries — kept after every block above and before the Prettier reset,
+  // since a later block replaces a rule's options rather than merging them.
+  ...boundaryBlocks(boundedFiles),
   eslintConfigPrettier
 )

@@ -13,7 +13,7 @@ import { useIpcQuery, ipcQueryOptions } from '@/renderer/data/query'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { ROUTE_IDS } from '@/renderer/router/routes'
-import { router } from '@/renderer/router/router'
+import { openSession } from '@/renderer/router/navigation'
 import { belongsToRepo, needsYouItems } from '@/renderer/board/needs-you'
 import type { NeedsYouItem as NeedsYouItemModel } from '@/types/board'
 import { registerListNavigator } from '@/renderer/shell/stores'
@@ -108,7 +108,7 @@ function DetailBody({ item }: { readonly item: NeedsYouItemModel }) {
           </p>
           <p>This path is protected by sessionRequiredPaths. Approving lets this one edit through; port asks again for the next one.</p>
         </div>
-        <Button variant="ghost" size="small" onClick={() => void router.navigate({ to: ROUTE_IDS.session, search: { key: item.sessionKey } })}>
+        <Button variant="ghost" size="small" onClick={() => openSession(item.sessionKey)}>
           Open session
         </Button>
       </div>

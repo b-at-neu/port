@@ -16,8 +16,8 @@ export interface SearchQuery {
 export type SearchField = 'text' | 'name' | 'headline' | 'input' | 'result' | 'diff' | 'label'
 
 /** A term shorter than the filter's own n-gram makes the trigram skip silently lossy — these two must stay equal. */
-export const MIN_TERM_CHARS = 3
 export const TRIGRAM_SIZE = 3
+export const MIN_TERM_CHARS = TRIGRAM_SIZE
 export const SIGNATURE_HASHES = 2
 
 /** Caps, all reported on `SearchResult`, never silently applied. */

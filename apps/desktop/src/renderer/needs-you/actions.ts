@@ -20,8 +20,7 @@ import { openDecision } from '@/renderer/decision/controller'
 import { openAllowDialog } from '@/renderer/needs-you/allow-dialog'
 import { openRestartDialog } from '@/renderer/needs-you/restart-dialog'
 import { openForceDispatchDialog } from '@/renderer/needs-you/force-dispatch-dialog'
-import { router } from '@/renderer/router/router'
-import { ROUTE_IDS } from '@/renderer/router/routes'
+import { openSession } from '@/renderer/router/navigation'
 import { invoke } from '@/renderer/data/invoke'
 
 type NeedsYouActionKind = 'review-plan' | 'open' | 'unblock' | 'retry' | 'refresh' | 'answer' | 'approve' | 'allow' | 'resume' | 'resume-all' | 'restart' | 'force' | 'copy-path'
@@ -147,7 +146,7 @@ export function runAction(item: NeedsYouItem, deps: RunActionDeps): void {
     }
     case 'open':
       if (item.kind === 'stage-questions') {
-        void router.navigate({ to: ROUTE_IDS.session, search: { key: item.sessionKey } })
+        openSession(item.sessionKey)
         return
       }
       if (item.url !== null) window.open(item.url, '_blank')

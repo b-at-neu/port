@@ -27,9 +27,7 @@ interface PhaseCopy {
 
 const WORKING_PLACEHOLDER = 'Claude is working — this message runs next.'
 
-/** Every `SessionPhase` member, both directions pinned by the
- *  `desktop-hosting` check the same way `SessionPhase`'s own members are
- *  already pinned against `handle.ts`'s assignments. */
+/** Every `SessionPhase` member, enforced by the `Record` type. */
 export const PHASE_COPY: Readonly<Record<SessionPhase, PhaseCopy>> = {
   starting: { pill: '◌ Starting', stop: 'disabled', close: 'enabled', composerDisabled: false, composerPlaceholder: 'Message Claude…', sendLabel: 'Send' },
   ready: { pill: '○ Idle', stop: 'disabled', close: 'enabled', composerDisabled: false, composerPlaceholder: 'Message Claude…', sendLabel: 'Send' },
