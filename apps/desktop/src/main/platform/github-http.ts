@@ -1,7 +1,9 @@
 // The only `fetch` caller under apps/desktop/src/main/. The token comes only from `gh auth token` and lives in process memory for a short TTL, so a `gh auth logout` is noticed; one transport reads public data with no token at all.
-import { e2eFakePath, runCommand } from '@/main/platform/run'
+import { runCommand } from '@/main/platform/run'
+import { githubClient } from '#app-route'
+import { toConditionalResult, toResult, type Exchange, type HttpFailure } from '@/main/platform/github-wire'
 
-import type { CommandResult, ConditionalHttpResult, ConditionalTransport, GhClassification, GitHubHttpResult, GitHubTransport } from '@/types/platform'
+import type { ConditionalTransport, GitHubClient, GitHubTransport } from '@/types/platform'
 
 export const DEFAULT_ACCEPT = 'application/vnd.github+json'
 const API_BASE = 'https://api.github.com'
@@ -9,8 +11,6 @@ const TIMEOUT_MS = 30_000
 const MAX_BYTES = 32 * 1024 * 1024
 const TOKEN_TIMEOUT_MS = 8_000
 const TOKEN_TTL_MS = 30_000
-
-type HttpFailure = Exclude<GitHubHttpResult, { ok: true }>
 
 type TokenRead = { readonly ok: true; readonly token: string } | HttpFailure
 
@@ -28,37 +28,6 @@ interface TransportOptions {
   readonly apiBase: string
   readonly timeoutMs: number
   readonly maxBytes: number
-}
-
-/** First match wins; a 403 is rate-limited only on an explicit signal, never assumed. */
-export function classifyHttpStatus(status: number, headers: Readonly<Record<string, string>>, body: string): GhClassification | 'ok' {
-  if (status >= 200 && status < 300) return 'ok'
-  if (status === 401) return 'unauthenticated'
-  if (status === 403) {
-    const limited = headers['x-ratelimit-remaining'] === '0' || headers['retry-after'] !== undefined || /rate limit/i.test(body)
-    return limited ? 'rate-limited' : 'forbidden'
-  }
-  if (status === 429) return 'rate-limited'
-  if (status === 404) return 'http-not-found'
-  if (status >= 500 && status < 600) return 'network'
-  return 'unknown'
-}
-
-function messageOf(status: number, body: string): string {
-  try {
-    const parsed: unknown = JSON.parse(body)
-    const message = typeof parsed === 'object' && parsed !== null ? (parsed as { message?: unknown }).message : undefined
-    if (typeof message === 'string' && message !== '') return `GitHub: ${message} (HTTP ${status})`
-  } catch {
-    // a non-JSON body carries no message
-  }
-  return `GitHub: HTTP ${status}`
-}
-
-function toResult(status: number, headers: Readonly<Record<string, string>>, body: string): GitHubHttpResult {
-  const kind = classifyHttpStatus(status, headers, body)
-  if (kind === 'ok') return { ok: true, status, headers, body }
-  return { ok: false, kind, status, body, message: messageOf(status, body) }
 }
 
 function unauthenticated(message: string): HttpFailure {
@@ -79,9 +48,6 @@ async function readGhToken(): Promise<TokenRead> {
   return result
 }
 
-/** A response before classification, so a 304 keeps its headers. */
-type Exchange = { readonly ok: true; readonly status: number; readonly headers: Readonly<Record<string, string>>; readonly body: string } | HttpFailure
-
 interface WireRequest {
   readonly method: 'GET' | 'POST'
   readonly path: string
@@ -90,15 +56,8 @@ interface WireRequest {
   readonly ifNoneMatch?: string
 }
 
-function toConditionalResult(exchange: Exchange, validatorSent: boolean): ConditionalHttpResult {
-  if (!exchange.ok) return exchange
-  if (exchange.status === 304 && validatorSent) return { ok: true, notModified: true, status: 304, headers: exchange.headers }
-  const result = toResult(exchange.status, exchange.headers, exchange.body)
-  return result.ok ? { ok: true, notModified: false, status: result.status, headers: result.headers, body: result.body } : result
-}
-
 /** `request` and `conditional` share one token memo and one 401 re-read-and-retry-once; `public` sends no token at all. */
-export function createGitHubClient(options: TransportOptions): { readonly request: GitHubTransport; readonly conditional: ConditionalTransport; readonly public: GitHubTransport } {
+export function createGitHubClient(options: TransportOptions): GitHubClient {
   let cached: Promise<TokenRead> | null = null
   let readAt = 0
 
@@ -172,36 +131,11 @@ export function createGitHubTransport(options: TransportOptions): GitHubTranspor
   return createGitHubClient(options).request
 }
 
-function fromFake(result: CommandResult): Exchange {
-  if (!result.ok) {
-    if (result.kind !== 'nonzero') return result
-    return { ok: false, kind: 'unknown', status: null, body: '', message: result.stderr.trim() }
-  }
-  try {
-    const reply = JSON.parse(result.stdout) as { status: number; headers: Record<string, string>; body: string }
-    return { ok: true, status: reply.status, headers: reply.headers, body: reply.body }
-  } catch {
-    return { ok: false, kind: 'unknown', status: null, body: '', message: "the e2e fake's reply wasn't JSON" }
-  }
-}
+const client = githubClient(createGitHubClient({ fetch, readToken: readGhToken, now: Date.now, tokenTtlMs: TOKEN_TTL_MS, apiBase: API_BASE, timeoutMs: TIMEOUT_MS, maxBytes: MAX_BYTES }), runCommand)
 
-const real = createGitHubClient({ fetch, readToken: readGhToken, now: Date.now, tokenTtlMs: TOKEN_TTL_MS, apiBase: API_BASE, timeoutMs: TIMEOUT_MS, maxBytes: MAX_BYTES })
+export const githubHttp: GitHubTransport = client.request
 
-/** Under E2E the request goes to the fake instead, so no host `gh` and no network are ever reached. */
-export const githubHttp: GitHubTransport = async (request) => {
-  if (e2eFakePath() === null) return real.request(request)
-  const reply = fromFake(await runCommand('gh', ['e2e-http', JSON.stringify(request)]))
-  return reply.ok ? toResult(reply.status, reply.headers, reply.body) : reply
-}
-
-export const githubConditional: ConditionalTransport = async (request) => {
-  if (e2eFakePath() === null) return real.conditional(request)
-  return toConditionalResult(fromFake(await runCommand('gh', ['e2e-http', JSON.stringify(request)])), request.ifNoneMatch !== undefined)
-}
+export const githubConditional: ConditionalTransport = client.conditional
 
 /** No token, no 401 retry: only for reads of public data such as the app's own releases. */
-export const githubPublic: GitHubTransport = async (request) => {
-  if (e2eFakePath() === null) return real.public(request)
-  const reply = fromFake(await runCommand('gh', ['e2e-http', JSON.stringify(request)]))
-  return reply.ok ? toResult(reply.status, reply.headers, reply.body) : reply
-}
+export const githubPublic: GitHubTransport = client.public

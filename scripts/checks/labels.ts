@@ -7,6 +7,7 @@ import { message } from '#lib/errors.ts';
 const SHIPPED_LABELS_REL = 'plugins/port/data/labels.legacy.json';
 const DESKTOP_LABELS_REL = 'apps/desktop/src/utils/labels/labels.legacy.json';
 
+
 /** Substitutes every `{{name}}` in `text` with `subs[name]`. A multi-line value has its
  *  continuation lines indented to its placeholder's own column. Throws naming any surviving placeholder, so a new one forces the caller's map to grow. */
 export function renderTemplate(text: string, subs: Record<string, string>): string {
@@ -67,32 +68,6 @@ export function normalizeYaml(text: string): string[] {
 }
 
 export default async function ({ expect, fail, note, ok }: Reporter) {
-  // pin: plugins/port/data/labels.legacy.json ↔ apps/desktop/src/utils/labels/labels.legacy.json, byte-identical
-  {
-    const missing = [SHIPPED_LABELS_REL, DESKTOP_LABELS_REL].filter((rel) => !existsSync(join(root, rel)));
-    if (missing.length > 0) {
-      for (const rel of missing) fail('desktop-label-copy', `${rel} is missing`);
-    } else {
-      const shipped = readFileSync(join(root, SHIPPED_LABELS_REL), 'utf8');
-      const desktop = readFileSync(join(root, DESKTOP_LABELS_REL), 'utf8');
-      if (shipped === desktop) {
-        ok();
-      } else {
-        const shippedLines = shipped.split('\n');
-        const desktopLines = desktop.split('\n');
-        const len = Math.max(shippedLines.length, desktopLines.length);
-        let line = 0;
-        while (line < len && shippedLines[line] === desktopLines[line]) line++;
-        fail(
-          'desktop-label-copy',
-          `${SHIPPED_LABELS_REL} and ${DESKTOP_LABELS_REL} differ at line ${line + 1}: ` +
-            `shipped has ${JSON.stringify(shippedLines[line])}, desktop has ${JSON.stringify(desktopLines[line])} — ` +
-            `copy ${SHIPPED_LABELS_REL} over ${DESKTOP_LABELS_REL} (or the reverse) so they are byte-identical`,
-        );
-      }
-    }
-  }
-
   // pin: `pipeline/SKILL.md`'s inline label table ↔ `labels.legacy.json`
   {
     // The inline vocabulary table lives in PREFLIGHT.md — a structural table parse, so this names one file directly rather than the skill union.

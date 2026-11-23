@@ -33,6 +33,14 @@ export function fixtureLeaks(files) {
   return files.filter((file) => file.text.includes(FIXTURE_SENTINEL)).map((file) => file.path)
 }
 
+/** The request word only the E2E route sends to its fake — present in every bundle that carries it. */
+export const E2E_SENTINEL = 'e2e-http'
+
+/** The paths whose text contains the E2E route. */
+export function e2eLeaks(files) {
+  return files.filter((file) => file.text.includes(E2E_SENTINEL)).map((file) => file.path)
+}
+
 /** The unrooted, `separator`-joined path `extractFile` needs, because `@electron/asar` splits it on `path.sep`. */
 export function asarArchivePath(entry, separator) {
   return entry.replace(/^\//, '').split('/').join(separator)

@@ -8,16 +8,16 @@ import type { RepoId } from '@/utils/repos'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/types/board'
 import type { ReconciledItem, RepositoryState } from '@/types/state'
 import type { EndedStage, TickActionable, TickBlind, TickClaim, TickHeld, TickHeldReason, TickObservation, TickReport } from '@/types/tick'
-import type { ClaimedItem, OccupiedEntry } from '../../../../../scripts/port-tick/contention'
-import { gateCandidates } from '../../../../../scripts/port-tick/contention'
-import type { Disposition } from '../../../../../scripts/port-tick/checks'
-import { zeroDiffChecksOf } from '../../../../../scripts/port-tick/checks'
-import { cycleGrantCount, integrationRedGate, mergeabilityRoute, refreshWins, zeroDiffGate } from '../../../../../scripts/port-tick/gates'
+import type { ClaimedItem, OccupiedEntry } from '@/utils/pipeline/contention'
+import { gateCandidates } from '@/utils/pipeline/contention'
+import type { Disposition } from '@/utils/pipeline/checks'
+import { zeroDiffChecksOf } from '@/utils/pipeline/checks'
+import { cycleGrantCount, integrationRedGate, mergeabilityRoute, refreshWins, zeroDiffGate } from '@/utils/pipeline/gates'
 
-import { RETRY_TRIGGER } from '../../../../../scripts/port-tick/liveness'
+import { RETRY_TRIGGER } from '@/utils/pipeline/liveness'
 import { observationsOf } from '@/main/tick/observe'
 import { adoptionsOf, heldVerdictAdoption, openPullRequestAdoption } from '@/main/tick/adopt'
-import { partitionOwnership } from '../../../../../scripts/port-tick/classify'
+import { partitionOwnership } from '@/utils/pipeline/classify'
 import { AGENT_FOR_IN_FLIGHT, AGENT_FOR_TRIGGER } from '@/main/tick/routing'
 import { autoApprovalsOf } from '@/main/tick/auto-plan'
 import { repairsOf } from '@/main/tick/repair'
@@ -40,9 +40,9 @@ interface PlanTickParams {
   readonly refreshMemo: RefreshMemo
   /** Read from config per repository, feeds the approval-withdrawal observation's `rollupVerdict` call. */
   readonly checkDispositions: Readonly<Record<string, Disposition>>
-  /** `false` exactly when this app owns the repository and dispatches stage sessions itself — `SESSION REQUIRED` then holds nothing: `heldReasonOf` skips the `session-required` rung and `claimsOf` skips the `session-required` class. `true` (the terminal-cockpit default) is byte-identical to this field never having existed. */
+  /** `false` exactly when this app owns the repository and dispatches stage sessions itself — `SESSION REQUIRED` then holds nothing: `heldReasonOf` skips the `session-required` rung and `claimsOf` skips the `session-required` class. `true` is the default. */
   readonly holdSessionRequired: boolean
-  /** App-owned repositories only: this repository's own live and interrupted stage sessions, as `${agent} #${number}` descriptions. `null`/`undefined` (terminal-owned or unowned) is byte-identical to today — `item.status`/`startedTasks` still decide. Non-null ignores `item.status` entirely: a `live` claim is `matched`, an `interrupted` one is `interrupted`, anything else goes straight to the ledger ladder. */
+  /** App-owned repositories only: this repository's own live and interrupted stage sessions, as `${agent} #${number}` descriptions. `null`/`undefined` (unowned) leaves `item.status`/`startedTasks` to decide. Non-null ignores `item.status` entirely: a `live` claim is `matched`, an `interrupted` one is `interrupted`, anything else goes straight to the ledger ladder. */
   readonly stageLiveness?: { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
   /** This app's own ended stage-session records for this repository, newest per number — `main/tick/repair.ts`'s session-shape evidence. `undefined`/`[]` is byte-identical: no session shape ever fires. */
   readonly endedStages?: readonly EndedStage[]

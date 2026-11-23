@@ -3,7 +3,7 @@ import type { DirEntry, FileResult, GitHubTransport, GitRunner, PathOps, RemoveD
 import type { CorrelationRung, WorktreeCorrelation, WorktreeEntry, WorktreeProducer } from '@/types/local'
 import type { ItemStateName } from '@/types/github'
 
-/** Byte-for-byte `bin/worktrees.mjs`'s own state vocabulary, pinned by `desktop-reclaimer`. */
+/** The worktree state vocabulary. */
 export const WORKTREE_STATES = ['active', 'done', 'no-work', 'locked', 'dirty', 'outside', 'unresolved'] as const
 
 export type WorktreeState = (typeof WORKTREE_STATES)[number]

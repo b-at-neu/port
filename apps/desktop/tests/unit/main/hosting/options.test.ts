@@ -4,12 +4,9 @@ import { ISSUE_BODY_GUARD_MESSAGE, LABEL_GUARD_MESSAGE } from '@/main/hosting/la
 import { buildSessionOptions } from '@/main/hosting/options'
 import type { CanUseTool } from '@/main/hosting/sdk'
 import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
-import type { PluginRequest } from '@/types/hosting-plugin'
 
 const canUseTool = vi.fn() as unknown as CanUseTool
-const INSTALLED: PluginRequest = { source: 'installed' }
-const REPOSITORY: PluginRequest = { source: 'repository', path: '/repo/plugins/port' }
-const BASE = { cwd: '/repo', executablePath: '/home/operator/.local/bin/claude', canUseTool, plugin: INSTALLED, defaults: DEFAULT_SESSION_DEFAULTS, stage: null }
+const BASE = { cwd: '/repo', executablePath: '/home/operator/.local/bin/claude', canUseTool, defaults: DEFAULT_SESSION_DEFAULTS, stage: null }
 
 describe('buildSessionOptions', () => {
   it('every mode carries the shared constants', () => {
@@ -72,17 +69,9 @@ describe('buildSessionOptions', () => {
     { kind: 'fork' as const, sessionId: 'x' },
   ]
 
-  it('the installed source passes no plugins option, in every start mode', () => {
+  it('never passes a plugins option, in any start mode', () => {
     for (const mode of MODES) {
-      const options = buildSessionOptions({ ...BASE, mode, plugin: INSTALLED })
-      expect(options.plugins).toBeUndefined()
-    }
-  })
-
-  it('the repository source passes one local plugin entry at its own path, in every start mode', () => {
-    for (const mode of MODES) {
-      const options = buildSessionOptions({ ...BASE, mode, plugin: REPOSITORY })
-      expect(options.plugins).toEqual([{ type: 'local', path: '/repo/plugins/port' }])
+      expect(buildSessionOptions({ ...BASE, mode }).plugins).toBeUndefined()
     }
   })
 })

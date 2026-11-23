@@ -143,7 +143,6 @@ const HANDOFF_REFUSAL_COPY: Readonly<Record<HandoffRefusal, string>> = {
   'pr-unverified': "the pull request it named isn't open on its branch",
   moved: 'its stage changed while it ran',
   'write-failed': 'GitHub kept refusing the change',
-  'terminal-owned': 'the terminal pipeline owns this repository now',
   'unresolvable-label': "a label it needs isn't in this repository",
   'no-plan-file': 'it left no plan file to post',
   'empty-plan-file': 'its plan file was empty',

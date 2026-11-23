@@ -62,7 +62,7 @@ function neverCalledGh(): GhRunner {
 }
 
 describe('applyLabels — ownership', () => {
-  it('refuses with terminal-owned when a terminal cockpit owns the repo, even for a convergent write', async () => {
+  it('refuses a record naming the terminal cockpit as unreadable, even for a convergent write', async () => {
     const { repoRoot, auditDir, git } = await makeDirs()
     await mkdir(join(repoRoot, '.agents'), { recursive: true })
     await writeFile(join(repoRoot, '.agents', 'cockpit.json'), JSON.stringify({ repo: 'o/r', owner: 'terminal', since: '2026-01-01T00:00:00Z' }), 'utf8')
@@ -70,13 +70,13 @@ describe('applyLabels — ownership', () => {
     const gh = neverCalledGh()
 
     const outcome = await applyLabels(params({ repoRoot, auditDir, git }, { addNames: ['ready'], removeNames: ['blocked'], gh }))
-    expect(outcome).toEqual({ kind: 'terminal-owned', since: '2026-01-01T00:00:00Z' })
+    expect(outcome.kind).toBe('ownership-unreadable')
 
     const log = await readAuditLog(auditDir)
     if (!log.ok) throw new Error('unreachable')
     expect(log.entries).toHaveLength(1)
-    expect(labelEntry(log.entries[0]).ownership).toBe('terminal')
-    expect(labelEntry(log.entries[0]).result.kind).toBe('terminal-owned')
+    expect(labelEntry(log.entries[0]).ownership).toBe('unreadable')
+    expect(labelEntry(log.entries[0]).result.kind).toBe('ownership-unreadable')
   })
 
   it('refuses with ownership-unreadable for malformed cockpit.json', async () => {
@@ -225,7 +225,7 @@ describe('postComment', () => {
     expect(remaining).toEqual([])
   })
 
-  it('refuses with terminal-owned and writes no scratch file when a terminal cockpit owns the repo', async () => {
+  it('refuses with ownership-unreadable and writes no scratch file when the record names the terminal cockpit', async () => {
     const { repoRoot } = await makeDirs()
     await mkdir(join(repoRoot, '.agents'), { recursive: true })
     await writeFile(join(repoRoot, '.agents', 'cockpit.json'), JSON.stringify({ repo: 'o/r', owner: 'terminal', since: '2026-01-01T00:00:00Z' }), 'utf8')
@@ -234,7 +234,7 @@ describe('postComment', () => {
     const gh = neverCalledGh()
 
     const outcome = await postComment({ request: commentRequest({ scratchDir }), repoRoot, auditDir, gh, now })
-    expect(outcome).toEqual({ kind: 'terminal-owned', since: '2026-01-01T00:00:00Z' })
+    expect(outcome.kind).toBe('ownership-unreadable')
 
     const remaining = await readdir(scratchDir)
     expect(remaining).toEqual([])
@@ -292,7 +292,7 @@ describe('postIssueBody', () => {
     expect(log.entries).toHaveLength(1)
   })
 
-  it('refuses with terminal-owned and writes no scratch file when a terminal cockpit owns the repo', async () => {
+  it('refuses with ownership-unreadable and writes no scratch file when the record names the terminal cockpit', async () => {
     const { repoRoot } = await makeDirs()
     await mkdir(join(repoRoot, '.agents'), { recursive: true })
     await writeFile(join(repoRoot, '.agents', 'cockpit.json'), JSON.stringify({ repo: 'o/r', owner: 'terminal', since: '2026-01-01T00:00:00Z' }), 'utf8')
@@ -300,7 +300,7 @@ describe('postIssueBody', () => {
     const auditDir = await mkdtemp(join(tmpdir(), 'port-writes-body-audit-'))
 
     const outcome = await postIssueBody({ request: commentRequest({ scratchDir }), repoRoot, auditDir, gh: neverCalledGh(), now })
-    expect(outcome).toEqual({ kind: 'terminal-owned', since: '2026-01-01T00:00:00Z' })
+    expect(outcome.kind).toBe('ownership-unreadable')
     expect(await readdir(scratchDir)).toEqual([])
   })
 })

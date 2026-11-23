@@ -31,8 +31,7 @@ const CLOSING_PULL_REQUESTS_FIELD = `closedByPullRequestsReferences(first: ${CLO
 // mergeable is the mergeability precondition mergeabilityRoute reads.
 const PULL_REQUEST_SWEEP_FIELDS = `${ISSUE_SWEEP_FIELDS} mergedAt headRefOid mergeable`
 
-// reviews/comments page sizes match scripts/port-tick/query.ts's own bound, for the cycle cap
-// and zero-diff gate.
+// reviews/comments page sizes bound the cycle cap and zero-diff gate.
 const PULL_REQUEST_DETAIL_FIELDS = `reviews(first: 30) { totalCount nodes { body submittedAt commit { oid } } } comments(last: 20) { totalCount nodes { body createdAt } } ${LABEL_EVENTS_FIELD}`
 
 // The statusCheckRollup selection the approval-withdrawal observation reads. Spread only into
@@ -167,7 +166,7 @@ export function buildItemDetailsQuery(refs: readonly ItemDetailRef[]): ItemDetai
 
 const INTEGRATION_HISTORY_SIZE = 5
 
-/** The integration branch's recent commits with their rollups — the same selection `scripts/port-tick/query.ts` reads, for the integration-red gate. */
+/** The integration branch's recent commits with their rollups, for the integration-red gate. */
 export function buildIntegrationChecksQuery(integration: string): string {
   const contexts = `contexts(first: 50) { nodes { __typename ... on CheckRun { name conclusion status startedAt completedAt detailsUrl } ... on StatusContext { context state createdAt targetUrl } } }`
   const ref = `ref(qualifiedName: ${graphqlStringLiteral(`refs/heads/${integration}`)}) { target { ... on Commit { history(first: ${INTEGRATION_HISTORY_SIZE}) { nodes { oid statusCheckRollup { ${contexts} } } } } } }`
@@ -249,12 +248,11 @@ interface GatePreflightQuery {
   readonly document: string
 }
 
-/** The plan gate's one round trip: the number's identity, labels, assignees, and body, plus the
+/** The plan gate's one round trip: the number's identity, assignees, and body, plus the
  *  signed-in account's login. `body` is requested only inside the `Issue` fragment. */
 export function buildGatePreflightQuery(number: number): GatePreflightQuery {
-  const labelsField = `labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }`
   const assigneesField = `assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }`
-  const issueFields = `number title url body state ${labelsField} ${assigneesField}`
+  const issueFields = `number title url body state ${assigneesField}`
 
   const document = [
     'query($owner: String!, $name: String!) {',

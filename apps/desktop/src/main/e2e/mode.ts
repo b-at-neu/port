@@ -5,12 +5,12 @@ type E2EModeResult =
   | { readonly kind: 'off' }
   | { readonly kind: 'ignored' }
   | { readonly kind: 'invalid'; readonly reason: string }
-  | { readonly kind: 'on'; readonly userData: string; readonly fake: string }
+  | { readonly kind: 'on'; readonly userData: string }
 
-// Fails closed rather than guessing a directory or fake path; E2E and fixture mode never combine.
-export function e2eMode(env: Readonly<Record<string, string | undefined>>, isPackaged: boolean, isAbsolute: (path: string) => boolean): E2EModeResult {
+// Fails closed rather than guessing a directory or fake path; E2E and fixture mode never combine, and only a build compiled with the E2E route honours the flag.
+export function e2eMode(env: Readonly<Record<string, string | undefined>>, isPackaged: boolean, compiled: boolean, isAbsolute: (path: string) => boolean): E2EModeResult {
   if (env[E2E_ENV.flag] !== '1') return { kind: 'off' }
-  if (isPackaged) return { kind: 'ignored' }
+  if (isPackaged || !compiled) return { kind: 'ignored' }
 
   if (env['PORT_FIXTURES'] === '1') {
     return { kind: 'invalid', reason: `${E2E_ENV.flag} and PORT_FIXTURES must never both be set` }
@@ -26,5 +26,5 @@ export function e2eMode(env: Readonly<Record<string, string | undefined>>, isPac
     return { kind: 'invalid', reason: `${E2E_ENV.fake} must be set to an absolute path` }
   }
 
-  return { kind: 'on', userData, fake }
+  return { kind: 'on', userData }
 }

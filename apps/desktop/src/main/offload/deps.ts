@@ -3,7 +3,6 @@ import type { StateEngine } from '@/types/offload'
 import { listRepositories } from '@/main/registry'
 import { resolveSessionsScan } from '@/main/channels/sessions'
 import { createWorkerEngine } from '@/main/offload/client'
-import { e2eFakePath } from '@/main/platform/run'
 
 interface OffloadChannelDeps {
   readonly sessionsScan: SessionsScanDeps
@@ -13,7 +12,7 @@ interface OffloadChannelDeps {
 
 /** The one state worker for the process lifetime, spawned on first use, with the channel deps bound to it. */
 export function createOffload(options: { readonly onRespawn: () => void }): OffloadChannelDeps & { readonly engine: StateEngine; readonly close: () => Promise<void> } {
-  const { close, ...engine } = createWorkerEngine({ e2eFake: e2eFakePath(), onRespawn: options.onRespawn })
+  const { close, ...engine } = createWorkerEngine({ onRespawn: options.onRespawn })
   return { engine, close, ...offloadChannelDeps(engine) }
 }
 

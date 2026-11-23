@@ -236,13 +236,13 @@ describe('createInterruptedSweeper — usage-limit auto-resume', () => {
     expect(deps.onChange).toHaveBeenCalledTimes(1)
   })
 
-  it('leaves entries alone before their reset, and in a paused or terminal-owned repository', async () => {
+  it('leaves entries alone before their reset, and in a paused or unreadable repository', async () => {
     const beforeReset = setup(freshRegistry(), new Date('2026-01-01T04:00:00.000Z'))
     interrupt(beforeReset.registry, {}, 'usage-limit', RESET)
     await beforeReset.sweeper.consider(snapshotWith(inFlight), [status()])
     expect(beforeReset.resume).not.toHaveBeenCalled()
 
-    for (const overrides of [{ runState: 'paused' as const }, { owner: 'terminal' as const }]) {
+    for (const overrides of [{ runState: 'paused' as const }, { owner: 'unreadable' as const }]) {
       const deps = setup()
       interrupt(deps.registry, {}, 'usage-limit', RESET)
       await deps.sweeper.consider(snapshotWith(inFlight), [status(overrides)])

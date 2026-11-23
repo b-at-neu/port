@@ -30,7 +30,7 @@ function snapshot(overrides: Partial<HostedSessionSnapshot>): HostedSessionSnaps
     titled: null,
     title: null,
     pendingPermissions: [],
-    capabilities: { kind: 'unavailable', request: { source: 'installed' }, message: '' },
+    capabilities: { kind: 'unavailable', message: '' },
     rateLimit: null,
     controls: { permissionMode: 'default', model: 'sonnet', effort: null },
     models: { kind: 'unavailable', message: '' },

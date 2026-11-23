@@ -1,17 +1,19 @@
-// Runs zeroDiffGate/cycleCapExceeded/etc over the tick engine's own shared case table; these are
-// the engine's own functions. The table's review shape nests commit.oid, so toReviewNode adapts it.
+// Runs zeroDiffGate/cycleCapExceeded/etc over the case table. The table's review shape nests commit.oid, so toReviewNode adapts it.
 import { describe, expect, it } from 'vitest'
-import { approvedReverify, capRefreshes, codeReviewCount, cycleCapExceeded, mergeabilityRoute, refreshDecision, refreshWins, reviewDispatchFacts, zeroDiffGate } from '../../../../../../scripts/port-tick/gates'
-import type { ReviewNode } from '../../../../../../scripts/port-tick/gates'
-import { zeroDiffChecksOf } from '../../../../../../scripts/port-tick/checks'
-import type { CheckContext, Disposition } from '../../../../../../scripts/port-tick/checks'
-import { toReviewNode } from '../../../../../../scripts/port-tick/wire'
-import cases from '../../../../../../scripts/port-tick/cases/gates.cases.json'
+import { approvedReverify, capRefreshes, codeReviewCount, cycleCapExceeded, mergeabilityRoute, refreshDecision, refreshWins, reviewDispatchFacts, zeroDiffGate } from '@/utils/pipeline/gates'
+import type { ReviewNode } from '@/utils/pipeline/gates'
+import { zeroDiffChecksOf } from '@/utils/pipeline/checks'
+import type { CheckContext, Disposition } from '@/utils/pipeline/checks'
+import cases from './cases/gates.cases.json'
 
 interface RawReview {
   readonly body: string
   readonly submittedAt?: string
   readonly commit?: { readonly oid: string }
+}
+
+function toReviewNode(raw: RawReview): ReviewNode {
+  return { body: raw.body, submittedAt: raw.submittedAt, commitOid: raw.commit?.oid ?? null }
 }
 
 interface ZeroDiffCase {

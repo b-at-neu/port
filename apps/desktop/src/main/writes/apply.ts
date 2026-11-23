@@ -79,11 +79,6 @@ export async function applyLabels(params: ApplyLabelsParams): Promise<WriteOutco
 
   // The writer already read ownership; this is the second line behind it.
   const ownership = await readOwnership({ repoRoot: params.repoRoot, repo: params.repo, git: params.git, pathOps, now })
-  if (ownership.kind === 'terminal') {
-    const outcome: WriteOutcome = { kind: 'terminal-owned', since: ownership.since }
-    await recordLabelAudit(auditDir, { request, ownership: 'terminal', observed, call: null, writeId: params.writeId }, outcome, now)
-    return outcome
-  }
   if (ownership.kind === 'unreadable') {
     const outcome: WriteOutcome = { kind: 'ownership-unreadable', path: ownership.path, message: ownership.message }
     await recordLabelAudit(auditDir, { request, ownership: 'unreadable', observed, call: null, writeId: params.writeId }, outcome, now)
@@ -145,9 +140,6 @@ async function postBodyFile(params: PostCommentParams, argvFor: (scratchPath: st
   }
 
   const ownership = await readOwnership({ repoRoot: params.repoRoot, repo: request.repo, git: params.git, pathOps, now })
-  if (ownership.kind === 'terminal') {
-    return record('terminal', null, { kind: 'terminal-owned', since: ownership.since })
-  }
   if (ownership.kind === 'unreadable') {
     return record('unreadable', null, { kind: 'ownership-unreadable', path: ownership.path, message: ownership.message })
   }

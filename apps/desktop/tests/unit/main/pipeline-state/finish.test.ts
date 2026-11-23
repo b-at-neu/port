@@ -61,8 +61,8 @@ describe('finishPipelineState', () => {
     expect(r.prune).toHaveBeenCalledWith(REPO, [9])
   })
 
-  it('writes nothing under a labels view, and still prunes', async () => {
-    const r = rig({ kind: 'labels' })
+  it('writes nothing for an unseeded repository, and still prunes', async () => {
+    const r = rig({ kind: 'unseeded' })
     await r.finishPipelineState(ENTRY, { closed: [9], merged: [9] })
     expect(r.mirrored).toEqual([])
     expect(r.prune).toHaveBeenCalledTimes(1)
@@ -86,8 +86,8 @@ describe('retryMirrors', () => {
     expect(r.mirrored).toHaveLength(10)
   })
 
-  it('does nothing under a labels view', async () => {
-    const r = rig({ kind: 'labels' })
+  it('does nothing for an unseeded repository', async () => {
+    const r = rig({ kind: 'unseeded' })
     await r.retryMirrors(ENTRY)
     expect(r.mirrored).toEqual([])
   })

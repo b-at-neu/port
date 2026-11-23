@@ -67,10 +67,9 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     expect(!(transcript.sanitize(withControl) !== 'ab'), 'forensics-cases', 'sanitize did not strip a C0 control character (0x07)');
   }
 
-  // --- (1c) The shared record-classification table also passes against scripts/lib/
-  // transcript.ts, so it never silently drifts from the desktop app's own deriver. ---
+  // --- (1c) The record-classification table passes against scripts/lib/transcript.ts. ---
   {
-    const sharedTableRel = 'apps/desktop/src/main/sessions/transcript.cases.json';
+    const sharedTableRel = `${FORENSICS_DIR}/cases/derive.cases.json`;
     const sharedTable = readJson(sharedTableRel);
     for (const c of sharedTable.cases) {
       const records = c.pushes.flat();
@@ -105,29 +104,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  {
-    const original = await importEngine('apps/desktop/src/utils/stage/handback-text.ts');
-    const battery = [
-      'BLOCKED: needed X',
-      'notes\nBLOCKED: needed X',
-      '```\nBLOCKED: quoted\n```\ndone',
-      '```\nBLOCKED: swallowed',
-      'BLOCKED: needed X\n\nQUESTIONS FOR HUMAN: which one?',
-      'see BLOCKED: here',
-      '  BLOCKED: needed X',
-      '',
-      'notes\r\nBLOCKED: needed X\r\n',
-    ];
-    for (const text of battery) {
-      const want = original.classifyHandbackText(text)?.kind ?? null;
-      expect(classify.handbackKindOf(text) === want, 'forensics-handback-rules', `handbackKindOf disagrees between classify.ts and handback-text.ts for ${JSON.stringify(text)}`);
-    }
-    expect(classify.BLOCKED_PREFIX === original.BLOCKED_PREFIX, 'forensics-handback-rules', "BLOCKED_PREFIX differs between classify.ts and handback-text.ts");
-    expect(classify.QUESTIONS_PREFIX === original.QUESTIONS_PREFIX, 'forensics-handback-rules', "QUESTIONS_PREFIX differs between classify.ts and handback-text.ts");
-  }
-
-  // --- (3) STAGE_AGENTS pinned against plugins/port/agents/'s real basenames and apps/
-  // desktop's own PORT_STAGE_AGENTS, both directions, so a finding's stage is never mis-attributed. ---
+  // --- (3) STAGE_AGENTS pinned against plugins/port/agents/'s real basenames, both directions, so a finding's stage is never mis-attributed. ---
   {
     const agentBasenames = new Set(readdirSync(join(root, 'plugins/port/agents')).filter((f) => f.endsWith('.md')).map((f) => basename(f, '.md')));
     const engineSet = new Set<string>(classify.STAGE_AGENTS);
@@ -136,21 +113,6 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
     for (const name of engineSet) {
       expect(agentBasenames.has(name), 'forensics-stages', `classify.ts's STAGE_AGENTS names '${name}', which plugins/port/agents/ does not carry`);
-    }
-
-    const desktopRel = 'apps/desktop/src/main/sessions/classify.ts';
-    const desktopText = readFileSync(join(root, desktopRel), 'utf8');
-    const m = /PORT_STAGE_AGENTS[^=]*=\s*\[([^\]]*)\]/.exec(desktopText);
-    if (!m) {
-      fail('forensics-stages', `${desktopRel} has no 'PORT_STAGE_AGENTS = [...]' to read`);
-    } else {
-      const desktopStages = new Set([...m[1].matchAll(/'([^']+)'/g)].map((mm) => mm[1]));
-      for (const name of engineSet) {
-        expect(desktopStages.has(name), 'forensics-stages', `classify.ts's STAGE_AGENTS names '${name}', which ${desktopRel}'s PORT_STAGE_AGENTS does not`);
-      }
-      for (const name of desktopStages) {
-        expect(engineSet.has(name), 'forensics-stages', `${desktopRel}'s PORT_STAGE_AGENTS names '${name}', which classify.ts's STAGE_AGENTS does not`);
-      }
     }
   }
 

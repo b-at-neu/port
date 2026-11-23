@@ -107,7 +107,7 @@ function snapshotWith(tick: readonly TickReport[], items: readonly ReconciledIte
 }
 
 const OWNED_BY_APP: OwnershipRead = { kind: 'app', since: '2026-01-01T00:00:00Z', path: '/repo/.agents/cockpit.json', readAt: 'r' }
-const OWNED_BY_TERMINAL: OwnershipRead = { kind: 'terminal', since: '2026-01-01T00:00:00Z', path: '/repo/.agents/cockpit.json', readAt: 'r' }
+const UNREADABLE_OWNERSHIP: OwnershipRead = { kind: 'unreadable', message: 'names the terminal cockpit', path: '/repo/.agents/cockpit.json', readAt: 'r' }
 const ABSENT_OWNERSHIP: OwnershipRead = { kind: 'absent', path: '/repo/.agents/cockpit.json', readAt: 'r' }
 const APPLIED: WriteOutcome = { kind: 'applied', argv: [] }
 
@@ -141,9 +141,9 @@ describe('createAutoPlanner', () => {
     expect(called).toBe(false)
   })
 
-  it('writes nothing when a terminal cockpit owns the repository', async () => {
+  it('writes nothing when the ownership record cannot be read', async () => {
     let called = false
-    const planner = createAutoPlanner(deps({ readOwnership: () => Promise.resolve(OWNED_BY_TERMINAL), autoApprove: () => { called = true; return Promise.resolve(APPLIED) } }))
+    const planner = createAutoPlanner(deps({ readOwnership: () => Promise.resolve(UNREADABLE_OWNERSHIP), autoApprove: () => { called = true; return Promise.resolve(APPLIED) } }))
     await planner.consider(snapshotWith([tickReport()], [item()]))
     expect(called).toBe(false)
   })

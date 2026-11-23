@@ -5,6 +5,7 @@ import type { ClaimPreflightFetch } from '@/types/github'
 import { mirrorVocabularyOf } from '@/utils/labels/display'
 import type { RepoId } from '@/utils/repos'
 import type { ReadyEntry } from '@/types/actions'
+import { UNSEEDED_MESSAGE } from '@/main/pipeline-state/labels'
 import { requireReadyRepo } from '@/main/registry'
 import type { RegistryDeps } from '@/types/registry'
 
@@ -20,10 +21,11 @@ function resolveReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, deps: Cla
   )
 }
 
-// `null` passes straight through so `classifyPreflight` reports `not-found` itself. Under a store view the labels are the store's.
-function toClaimPreflight(fetch: Extract<ClaimPreflightFetch, { readonly ok: true }>, entry: ReadyEntry, deps: ClaimDeps): ClaimPreflight | null {
+// `null` passes straight through so `classifyPreflight` reports `not-found` itself; `'unseeded'` means the store holds no labels to read yet.
+function toClaimPreflight(fetch: Extract<ClaimPreflightFetch, { readonly ok: true }>, entry: ReadyEntry, deps: ClaimDeps): ClaimPreflight | null | 'unseeded' {
   if (fetch.item === null) return null
-  const labels = deps.stateLabels(entry.id, fetch.item.kind, fetch.item.number, entry.config.vocabulary) ?? fetch.item.labels
+  const labels = deps.stateLabels(entry.id, fetch.item.kind, fetch.item.number, entry.config.vocabulary)
+  if (labels === null) return 'unseeded'
   return { ...fetch.item, labels, viewer: fetch.viewer, readAt: fetch.fetchedAt }
 }
 
@@ -39,6 +41,7 @@ export async function claimPreflight(params: ClaimPreflightParams, deps: ClaimDe
   if (!fetch.ok) return { kind: 'failed', message: fetch.message }
 
   const preflight = toClaimPreflight(fetch, entry, deps)
+  if (preflight === 'unseeded') return { kind: 'failed', message: UNSEEDED_MESSAGE }
   const verdict = classifyPreflight({ item: preflight, vocabulary: entry.config.vocabulary })
   if (preflight === null) return { kind: 'unresolved' }
   return { kind: 'resolved', preflight, verdict }
@@ -68,6 +71,7 @@ export async function claimApply(params: ClaimApplyParams, deps: ClaimDeps): Pro
   if (!fetch.ok) return { kind: 'preflight-failed', message: fetch.message }
 
   const preflight = toClaimPreflight(fetch, entry, deps)
+  if (preflight === 'unseeded') return { kind: 'write', outcome: { kind: 'state-unsaved', message: UNSEEDED_MESSAGE } }
   const verdict = classifyPreflight({ item: preflight, vocabulary: entry.config.vocabulary })
   if (verdict.kind !== 'claimable') {
     return { kind: 'refused', verdict }

@@ -102,6 +102,7 @@ function harness(overrides: Partial<CreateDispatcherParams> = {}) {
       })
     },
     takeOwnership: () => Promise.resolve({ ok: true, path: 'p' }),
+    stateLabels: () => ['plan approved'],
     fetchItemsByNumber: (params) =>
       Promise.resolve({
         ok: true,

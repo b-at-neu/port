@@ -1,7 +1,6 @@
 import { vi } from 'vitest'
 import type { HostedQuery, createHostedHandle } from '@/main/hosting/handle'
 import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
-import type { PluginRequest } from '@/types/hosting-plugin'
 import type { RepoId } from '@/utils/repos'
 import type { SessionWorkspace } from '@/types/workspace'
 import type { SessionKey } from '@/types/hosting'
@@ -9,7 +8,6 @@ import type { SessionKey } from '@/types/hosting'
 export const SESSION_KEY = 'hosted-1' as SessionKey
 export const REPO_ID = 'repo-1' as RepoId
 export const WORKSPACE: SessionWorkspace = { folder: '/repo', root: '/repo', worktree: null, base: null }
-export const INSTALLED_PLUGIN: PluginRequest = { source: 'installed' }
 
 interface FakeQuery {
   readonly query: HostedQuery
@@ -125,9 +123,6 @@ export function baseParams(
     now: () => 1_000,
     onEvent: vi.fn(),
     onStatus: vi.fn(),
-    plugin: INSTALLED_PLUGIN,
-    readExpectedComponents: () => Promise.resolve(null),
-    samePath: (a: string, b: string) => a === b,
     initialTitle: null,
     defaults: DEFAULT_SESSION_DEFAULTS,
     history: { kind: 'none' as const },

@@ -10,7 +10,6 @@ import type { SessionWorkspace } from '@/types/workspace'
 import type { PendingInteraction, SessionControls, SessionModels } from '@/utils/hosting/controls'
 import type { SessionResult, StageTag } from '@/types/stage-session'
 import type { SessionUsage } from '@/utils/hosting/usage'
-import type { PluginRequest, PluginLoad, ComponentCheck } from '@/types/hosting-plugin'
 import type { StageAgentLaunch } from '@/types/stage'
 
 declare const sessionKeyBrand: unique symbol
@@ -240,17 +239,22 @@ export interface AgentSummary {
   readonly model: string | null
 }
 
-/** The Pipeline strip's own state — `pending` before the capability read settles, `unavailable` on timeout or rejection, `ready` carrying the plugin load, component check, and filtered command/agent lists. */
+/** What actually loaded, read back from the SDK rather than assumed. `unconfirmed` is the state before any `init` has arrived. */
+export type PluginLoad =
+  | { readonly kind: 'unconfirmed' }
+  | { readonly kind: 'loaded'; readonly path: string; readonly version: string | null }
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'duplicate'; readonly paths: readonly string[] }
+
+/** The Pipeline strip's own state — `pending` before the capability read settles, `unavailable` on timeout or rejection, `ready` carrying the plugin load and filtered command/agent lists. */
 export type SessionCapabilities =
-  | { readonly kind: 'pending'; readonly request: PluginRequest }
-  | { readonly kind: 'unavailable'; readonly request: PluginRequest; readonly message: string }
+  | { readonly kind: 'pending' }
+  | { readonly kind: 'unavailable'; readonly message: string }
   | {
       readonly kind: 'ready'
-      readonly request: PluginRequest
       readonly commands: readonly CommandSummary[]
       readonly agents: readonly AgentSummary[]
       readonly plugin: PluginLoad
-      readonly components: ComponentCheck
       /** The composer's own `/` autocomplete source, sorted, pipeline already dropped. */
       readonly slashCommands: readonly SlashCommandSummary[]
     }

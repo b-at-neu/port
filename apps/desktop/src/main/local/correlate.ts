@@ -1,4 +1,4 @@
-// Byte-for-byte the same ladder as the reclaimer's own copy; `correlation.cases.json` pins the two together.
+// Pure: correlates a worktree to its pull request through a four-rung ladder.
 import type { CorrelationRung, WorktreeCorrelation } from '@/types/local'
 
 export interface CorrelationInput {

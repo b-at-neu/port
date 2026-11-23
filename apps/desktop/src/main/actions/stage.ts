@@ -6,6 +6,7 @@ import type { StateLabelsReader } from '@/types/pipeline-state'
 import type { StageEvent, StagePlannedWrite, StageTransition, StageTransitionResult } from '@/types/stage-labels'
 import type { HandoffRefusal, StageAgent, TickActionable } from '@/types/tick'
 import { stageHandbackIntent } from '@/main/incidents/raise'
+import { UNSEEDED_MESSAGE } from '@/main/pipeline-state/labels'
 import type { StageSnapshot } from '@/types/dispatch'
 import type { IncidentIntent } from '@/types/incidents'
 import type { LabelWriteRequest, PostCommentParams, WriteOutcome, WriteStateParams } from '@/types/writes'
@@ -41,11 +42,16 @@ interface ApplyStageTransitionParams {
   readonly snapshot?: StageSnapshot
 }
 
-/** The store's role-bearing keys for the item; GitHub's labels only under a labels view. */
-function roleBearingKeysOf(entry: ReadyEntry, resolved: ResolvedItem, deps: StageWriteDeps): readonly LabelKey[] {
+/** The store's role-bearing keys for the item, or `null` while the repository is unseeded. */
+function roleBearingKeysOf(entry: ReadyEntry, resolved: ResolvedItem, deps: StageWriteDeps): readonly LabelKey[] | null {
   const { vocabulary } = entry.config
-  const labels = deps.stateLabels(entry.id, resolved.kind, resolved.number, vocabulary) ?? resolved.labels
+  const labels = deps.stateLabels(entry.id, resolved.kind, resolved.number, vocabulary)
+  if (labels === null) return null
   return vocabulary.labels.filter((l) => l.role !== 'marker' && labels.includes(l.name)).map((l) => l.key)
+}
+
+function unseeded(): StageTransitionResult {
+  return refused('write-failed', true, UNSEEDED_MESSAGE)
 }
 
 function refused(reason: HandoffRefusal, retryable: boolean, detail: string | null = null): StageTransitionResult {
@@ -57,8 +63,6 @@ function refusalOf(outcome: WriteOutcome): StageTransitionResult {
   switch (outcome.kind) {
     case 'precondition-failed':
       return refused('moved', false)
-    case 'terminal-owned':
-      return refused('terminal-owned', false)
     case 'unresolvable-label':
       return refused('unresolvable-label', false, outcome.keys.join(', '))
     case 'write-failed':
@@ -78,7 +82,7 @@ function refusalOf(outcome: WriteOutcome): StageTransitionResult {
   }
 }
 
-function requestFor(entry: ReadyEntry, planned: StagePlannedWrite, number: number, resolved: ResolvedItem, deps: StageWriteDeps, incident?: IncidentIntent | null): LabelWriteRequest {
+function requestFor(entry: ReadyEntry, planned: StagePlannedWrite, number: number, resolved: ResolvedItem, keys: readonly LabelKey[], incident?: IncidentIntent | null): LabelWriteRequest {
   const { vocabulary } = entry.config
   return {
     ...(incident === null || incident === undefined ? {} : { incident }),
@@ -92,7 +96,7 @@ function requestFor(entry: ReadyEntry, planned: StagePlannedWrite, number: numbe
     remove: planned.remove,
     addAssignees: [],
     removeAssignees: [],
-    expect: expectFor(roleBearingKeysOf(entry, resolved, deps), resolved.assignees),
+    expect: expectFor(keys, resolved.assignees),
     action: planned.action,
   }
 }
@@ -105,8 +109,10 @@ async function applyWrites(entry: ReadyEntry, transition: StageTransition, items
     const number = planned.numberFrom === 'arg' ? prNumber : itemNumber
     const resolved = number === null ? undefined : itemsByNumber.get(number)
     if (number === null || resolved === undefined) return refused('write-failed', true, 'the item could not be read')
+    const keys = roleBearingKeysOf(entry, resolved, deps)
+    if (keys === null) return unseeded()
     const incident = snapshot === undefined ? null : stageHandbackIntent(planned, agent, itemNumber, snapshot.item, snapshot.at)
-    const outcome = await deps.writeState({ request: requestFor(entry, planned, number, resolved, deps, incident), repoRoot: entry.path, auditDir })
+    const outcome = await deps.writeState({ request: requestFor(entry, planned, number, resolved, keys, incident), repoRoot: entry.path, auditDir })
     if (!stateMoved(outcome)) return refusalOf(outcome)
   }
   return { kind: 'applied' }
@@ -116,6 +122,7 @@ async function applyWrites(entry: ReadyEntry, transition: StageTransition, items
 export async function applyStageClaim(params: ApplyStageClaimParams, deps: StageWriteDeps): Promise<StageTransitionResult> {
   const { entry, candidate, resolved } = params
   const observed = roleBearingKeysOf(entry, resolved, deps)
+  if (observed === null) return unseeded()
   const transition = transitionFor({ event: { kind: 'claim' }, mode: stageModeFor(candidate.agent, candidate.trigger), observed, approvalGate: entry.config.modules.approvalGate })
   return applyWrites(entry, transition, new Map([[candidate.number, resolved]]), candidate.number, null, params.auditDir, deps, candidate.agent)
 }
@@ -143,13 +150,11 @@ export async function applyStageTransition(params: ApplyStageTransitionParams, d
   const prResolved = prNumber === null ? undefined : itemsByNumber.get(prNumber)
   if (prNumber !== null && !isOpenPullRequestOn(prResolved, record.number)) return refused('pr-unverified', false)
 
-  const transition = transitionFor({
-    event,
-    mode,
-    observed: roleBearingKeysOf(entry, resolved, deps),
-    prObserved: prResolved === undefined ? undefined : roleBearingKeysOf(entry, prResolved, deps),
-    approvalGate: entry.config.modules.approvalGate,
-  })
+  const observed = roleBearingKeysOf(entry, resolved, deps)
+  const prObserved = prResolved === undefined ? undefined : roleBearingKeysOf(entry, prResolved, deps)
+  if (observed === null || prObserved === null) return unseeded()
+
+  const transition = transitionFor({ event, mode, observed, prObserved, approvalGate: entry.config.modules.approvalGate })
   if (transition.kind === 'write' && event.kind === 'outcome' && event.plan?.kind === 'read') {
     const posted = await deps.postIssueBody({
       request: { repoId: entry.id, repo: entry.config.repo, kind: 'issue', number: record.number, body: event.plan.body, action: 'stage-handback-plan-body', scratchDir: params.scratchDir },

@@ -1,4 +1,4 @@
-// Composition: the store, the writer and the view, bound to userData and to who owns each repository.
+// Composition: the store, the writer and the view, bound to userData.
 import { join } from 'node:path'
 import { createPipelineFinish } from '@/main/pipeline-state/finish'
 import { stateLabelsOf } from '@/main/pipeline-state/labels'
@@ -20,8 +20,6 @@ interface CreatePipelineStateParams {
   readonly dir: string
   /** Where the audit log lives; the mirror writes the store makes on its own are audited there. */
   readonly auditDir: string
-  /** An unknown owner reads as not terminal, the same as an absent record. */
-  readonly ownerOf: (repoId: RepoId) => string | null
   readonly recordIncident: RecordIncident
 }
 
@@ -44,23 +42,12 @@ export function createPipelineState(params: CreatePipelineStateParams): Pipeline
   const { writeState, mirrorItem } = createStateWriter({ store, applyLabels, readOwnership, fetchItemsByNumber, appendAudit, recordIncident: params.recordIncident, newId: () => globalThis.crypto.randomUUID(), now: () => new Date() })
   const { finishPipelineState, retryMirrors } = createPipelineFinish({ store, mirrorItem, auditDir: params.auditDir })
 
-  // The terminal cockpit keeps the labels as its record, so a repository it holds reads labels; once it leaves, the next read is labels once more so the watcher reseeds.
-  function heldByTerminal(repoId: RepoId): boolean {
-    if (params.ownerOf(repoId) !== 'terminal') return false
-    store.markHeld(repoId)
-    return true
-  }
-
-  function view(repoId: RepoId): PipelineView {
-    return heldByTerminal(repoId) ? { kind: 'labels' } : store.view(repoId)
-  }
-
   return {
     writeState,
-    stateLabels: (repoId, kind, number, vocabulary) => stateLabelsOf(view(repoId), kind, number, vocabulary),
+    stateLabels: (repoId, kind, number, vocabulary) => stateLabelsOf(store.view(repoId), kind, number, vocabulary),
     watcherDeps: {
-      pipelineView: view,
-      trackedRefs: (repoId) => (heldByTerminal(repoId) ? null : store.tracked(repoId)),
+      pipelineView: (repoId) => store.view(repoId),
+      trackedRefs: (repoId) => store.tracked(repoId),
       seedPipelineState: (repoId, state) => store.seed(repoId, state),
       finishPipelineState,
       retryMirrors,

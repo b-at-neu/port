@@ -1,4 +1,4 @@
-// Pure decisions, each pinned against the shipped reclamation script by `classify.cases.json`.
+// Pure worktree-reclamation decisions.
 import type { ItemStateName } from '@/types/github'
 import type { CorrelationRung } from '@/types/local'
 import type { OrphanInput, PurgeCause, WorktreeState } from '@/types/reclaimer'

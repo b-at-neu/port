@@ -119,7 +119,7 @@ interface WriterRigOptions {
 /** A real `writeState` over an in-memory store, with every incident it raises collected. */
 export function writerRig(options: WriterRigOptions) {
   const incidents: IncidentDraft[] = []
-  let record: RepoRecord = { seededAt: 't', heldBy: null, items: { [itemKey('pull-request', options.number)]: stored(options.number) } }
+  let record: RepoRecord = { seededAt: 't', items: { [itemKey('pull-request', options.number)]: stored(options.number) } }
   const store = {
     view: () => viewOf(record),
     transition: vi.fn((_id: RepoId, ref: { kind: 'issue' | 'pull-request'; number: number }, input: Parameters<PipelineStateStore['transition']>[2]) => {

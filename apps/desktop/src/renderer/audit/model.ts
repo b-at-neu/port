@@ -49,7 +49,6 @@ function labelOutcome(result: LabelAuditEntry['result']): Outcome {
       return { tone: 'danger', label: 'Not saved' }
     case 'mirror-failed':
       return { tone: 'attention', label: 'Label not updated' }
-    case 'terminal-owned':
     case 'ownership-unreadable':
     case 'unresolvable-label':
     case 'item-unavailable':
@@ -92,8 +91,6 @@ function resultDetail(result: LabelAuditEntry['result']): string | null {
       return `Port couldn't save its pipeline state: ${result.message}`
     case 'mirror-failed':
       return mirrorReason(result.mirror)
-    case 'terminal-owned':
-      return `A terminal cockpit has owned this repository since ${result.since}.`
     case 'ownership-unreadable':
       return `Couldn't read ${result.path}: ${result.message}`
     case 'unresolvable-label':

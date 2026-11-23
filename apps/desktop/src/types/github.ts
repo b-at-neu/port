@@ -3,7 +3,7 @@ import type { GitHubHttpResult, GitHubTransport } from '@/types/platform'
 // Renderer-safe result and item shapes for the GitHub adapter. No import here may reach a Node builtin — only `main/github/` spawns `gh`.
 import type { LabelKey, LabelSource, VocabularyReport } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
-import type { IntegrationStatus } from '../../../../scripts/port-tick/gates'
+import type { IntegrationStatus } from '@/utils/pipeline/gates'
 
 /** The integration branch's latest concluded status by check name, a plain record so it survives the offload worker's structured clone and any JSON hop. */
 export type IntegrationChecks = Readonly<Record<string, IntegrationStatus>>
@@ -315,7 +315,6 @@ export interface GatePreflightItem {
   readonly url: string
   readonly state: string
   readonly body: string
-  readonly labels: readonly string[]
   readonly assignees: readonly string[]
 }
 

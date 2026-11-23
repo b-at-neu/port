@@ -1,7 +1,7 @@
 // The only file under apps/desktop/src/ allowed to import `node:child_process`.
 import { execFile } from 'node:child_process'
 import { stat } from 'node:fs/promises'
-import { which as defaultWhich } from '@/main/platform/which'
+import { resolveCommand } from '#app-route'
 
 import type { RunCommandOptions, CommandResult, KnownCommand, Spawner, RunExecutableOptions } from '@/types/platform'
 
@@ -10,25 +10,6 @@ export const KNOWN_COMMANDS = ['git', 'gh', 'node', 'claude'] as const satisfies
 
 const DEFAULT_TIMEOUT_MS = 30_000
 const DEFAULT_MAX_BYTES = 32 * 1024 * 1024
-
-interface E2ERoute {
-  readonly fake: string
-}
-
-// Module-level, set once from `index.ts` before `registerIpc()` — never re-read from
-// `process.env` per call. `null` means E2E mode is off.
-let e2eRoute: E2ERoute | null = null
-
-/** Called once, from `index.ts`, before `registerIpc()`. Every `runCommand` call after this
- *  routes to the fake instead of resolving the real executable with `which`. */
-export function setE2ERoute(route: E2ERoute | null): void {
-  e2eRoute = route
-}
-
-/** The fake the state worker must be given, since this module's state does not cross the thread boundary. */
-export function e2eFakePath(): string | null {
-  return e2eRoute?.fake ?? null
-}
 
 interface SpawnFailureLike {
   readonly code?: unknown
@@ -133,18 +114,8 @@ export async function runCommand(command: KnownCommand, args: readonly string[],
     return { ok: false, kind: 'cwd-missing', cwd: options.cwd }
   }
 
-  // E2E mode: every known command routes to the fake through Electron's own binary run as Node,
-  // so `which` is never consulted and a host `gh`/`git` can never be reached by accident.
-  if (e2eRoute !== null) {
-    const env = { ...(options.env ?? process.env), ELECTRON_RUN_AS_NODE: '1' }
-    return runExecutable(process.execPath, [e2eRoute.fake, command, ...args], { ...options, env })
-  }
-
-  const envForResolution = options.whichEnv ?? options.env ?? process.env
-  const platform = options.platform ?? process.platform
-  const resolve = options.resolve ?? ((resolveOptions) => defaultWhich(resolveOptions))
-  const resolved = await resolve({ command, env: envForResolution, platform })
+  const resolved = await resolveCommand(command, args, options)
   if (!resolved.ok) return resolved
 
-  return runExecutable(resolved.path, args, options)
+  return runExecutable(resolved.path, resolved.args, { ...options, env: resolved.env })
 }

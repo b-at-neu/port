@@ -92,7 +92,7 @@ export const NETWORK_BACKOFF_MS: readonly number[] = [60_000, 300_000, 900_000]
 /** Retries after which a network entry is restarted instead of resumed. */
 export const NETWORK_RETRY_LIMIT = NETWORK_BACKOFF_MS.length
 
-/** `autoResumable(entries, now, status)` — usage-limit entries past their reset plus network entries past their backoff, whose repository this app owns and is running, oldest interruption first. A paused, draining or terminal-owned repository never launches. */
+/** `autoResumable(entries, now, status)` — usage-limit entries past their reset plus network entries past their backoff, whose repository this app owns and is running, oldest interruption first. A paused, draining, unowned or unreadable repository never launches. */
 export function autoResumable(entries: readonly InterruptedStage[], now: Date, status: readonly RepoDispatchStatus[]): readonly string[] {
   return entries
     .filter((entry) => {

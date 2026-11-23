@@ -21,7 +21,7 @@ export function CommandStrip({ snapshot }: { readonly snapshot: HostedSessionSna
   if (snapshot.phase === 'ended') return null
 
   const { capabilities } = snapshot
-  const chipTitle = capabilities.kind === 'ready' && (capabilities.plugin.kind === 'loaded' || capabilities.plugin.kind === 'shadowed') ? capabilities.plugin.path : undefined
+  const chipTitle = capabilities.kind === 'ready' && capabilities.plugin.kind === 'loaded' ? capabilities.plugin.path : undefined
   const banner = bannerCopy(capabilities)
 
   async function run(sessionKey: SessionKey, name: string, args: string): Promise<void> {

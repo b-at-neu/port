@@ -17,10 +17,9 @@ import { ROUTE_IDS } from '@/renderer/router/routes'
 
 const SCREEN_ROW_CLASS = 'flex h-7 items-center gap-2 rounded-md px-2 text-body text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring'
 
-/** `terminal`/`unreadable` ownership disables Run and Drain outright — the pill itself
- *  never reads `Running`/`Draining` under either verdict. */
+/** `unreadable` ownership disables Run and Drain outright — the pill itself
+ *  never reads `Running`/`Draining` under it. */
 function ownershipDisabledReason(owner: Extract<PipelineRow, { readonly ready: true }>['owner'], unreadableMessage: string | null): string | null {
-  if (owner === 'terminal') return 'Your terminal cockpit runs this repo'
   if (owner === 'unreadable') return `.agents/cockpit.json can't be read (${unreadableMessage ?? 'unknown reason'})`
   return null
 }
@@ -51,9 +50,6 @@ function RunStateMenu({ row }: { readonly row: Extract<PipelineRow, { readonly r
           onSelect: () => runState.drain(row.repoId, row.name),
         },
         { key: 'stop', label: 'Stop', hint: 'stop now', current: row.pill.label === 'Stopped', disabledReason: row.pill.label === 'Stopped' ? 'Already stopped' : null, onSelect: () => runState.requestPause(row.repoId, row.name, row.inFlight) },
-        ...(row.owner === 'terminal'
-          ? [{ key: 'take-over', label: 'Take over…', hint: 'the terminal has stopped', current: false, disabledReason: null, onSelect: () => runState.requestTakeOver(row.repoId, row.name) }]
-          : []),
       ]}
     />
   )

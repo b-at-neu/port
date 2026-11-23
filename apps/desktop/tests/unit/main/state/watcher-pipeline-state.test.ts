@@ -13,7 +13,7 @@ import { reconciledItem, repositoryState } from '../../../fixtures/board-state'
 const now = () => new Date('2026-01-01T00:00:00.000Z')
 const TRACKED: TrackedRef[] = [{ kind: 'issue', number: 1, keys: ['marker', 'ready'] }]
 
-async function rig(options: { readonly view: PipelineView; readonly state?: RepositoryState; readonly closed?: readonly number[]; readonly merged?: readonly number[]; readonly owner?: 'terminal'; readonly retryFails?: boolean }) {
+async function rig(options: { readonly view: PipelineView; readonly state?: RepositoryState; readonly closed?: readonly number[]; readonly merged?: readonly number[]; readonly retryFails?: boolean }) {
   const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
   const inner = createInProcessEngine({ now, git: fakeGit({ worktreeList: 0 }), sessionReader: () => Promise.resolve({ ok: true, sessions: [] }) })
   const log: string[] = []
@@ -42,7 +42,6 @@ async function rig(options: { readonly view: PipelineView; readonly state?: Repo
     now,
     setTimer: makeFakeTimer().factory,
     engine,
-    dispatchStatus: () => (options.owner === undefined ? [] : [{ repoId: 'repo-a', owner: options.owner } as never]),
     pipelineView: () => options.view,
     trackedRefs: () => (options.view.kind === 'store' ? TRACKED : null),
     seedPipelineState: (repoId) => (seeded.push(`${String(repoId)}`), Promise.resolve()),
@@ -58,7 +57,7 @@ async function rig(options: { readonly view: PipelineView; readonly state?: Repo
 
 describe('createPipelineWatcher — pipeline state', () => {
   it('waits for the store to load before its first projection', async () => {
-    const { watcher, log } = await rig({ view: { kind: 'labels' } })
+    const { watcher, log } = await rig({ view: { kind: 'unseeded' } })
     await watcher.refresh()
     watcher.stop()
     expect(log).toEqual(['ready', 'project'])
@@ -73,8 +72,8 @@ describe('createPipelineWatcher — pipeline state', () => {
     expect(github[0]).toMatchObject({ tracked: TRACKED })
   })
 
-  it('seeds a repository read by labels from the state just projected, once it is ok', async () => {
-    const { watcher, seeded } = await rig({ view: { kind: 'labels' } })
+  it('seeds an unseeded repository from the state just projected, once it is ok', async () => {
+    const { watcher, seeded } = await rig({ view: { kind: 'unseeded' } })
     await watcher.refresh()
     watcher.stop()
     expect(seeded).toEqual(['repo-a'])
@@ -89,14 +88,7 @@ describe('createPipelineWatcher — pipeline state', () => {
 
   it('does not seed a repository whose GitHub read failed', async () => {
     const failed: RepositoryState = { ok: false, repoId: 'repo-a' as never, repo: 'o/a', displayName: 'o/a', reason: 'github-unavailable', kind: 'network', message: 'offline', freshness: { github: { unavailable: 'offline' }, itemStates: { unavailable: 'x' }, sessions: { at: 't' }, worktrees: { at: 't' }, denials: { at: 't' } } }
-    const { watcher, seeded } = await rig({ view: { kind: 'labels' }, state: failed })
-    await watcher.refresh()
-    watcher.stop()
-    expect(seeded).toEqual([])
-  })
-
-  it('does not seed a repository the terminal cockpit holds, since its labels are the record', async () => {
-    const { watcher, seeded } = await rig({ view: { kind: 'labels' }, owner: 'terminal' })
+    const { watcher, seeded } = await rig({ view: { kind: 'unseeded' }, state: failed })
     await watcher.refresh()
     watcher.stop()
     expect(seeded).toEqual([])
@@ -130,8 +122,8 @@ describe('createPipelineWatcher — pipeline state', () => {
     expect(retried).toEqual(['repo-a'])
   })
 
-  it('does not retry mirrors for a repository read by labels', async () => {
-    const { watcher, retried } = await rig({ view: { kind: 'labels' } })
+  it('does not retry mirrors for an unseeded repository', async () => {
+    const { watcher, retried } = await rig({ view: { kind: 'unseeded' } })
     await watcher.refresh()
     watcher.stop()
     expect(retried).toEqual([])

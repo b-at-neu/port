@@ -28,8 +28,6 @@ function logins(names: readonly string[]): string {
 export function dispatchLine(repo: string, status: RepoDispatchStatus | undefined): string {
   if (status === undefined) return "Couldn't refresh the board, so it's unclear when planning starts."
   switch (status.owner) {
-    case 'terminal':
-      return `Your terminal cockpit runs ${repo} and plans it on its next tick.`
     case 'none':
       return `Nothing runs ${repo} yet. Run it to start planning.`
     case 'unreadable':
@@ -89,7 +87,7 @@ export function claimedTitle(number: number): string {
   return `#${String(number)} claimed and assigned to you.`
 }
 
-/** One line per `WriteOutcome` arm. `terminal-owned` and `ownership-unreadable` are named for exhaustiveness, though a claim only writes while this app owns the repository. */
+/** One line per `WriteOutcome` arm. `ownership-unreadable` is named for exhaustiveness, though a claim only writes while this app owns the repository. */
 export function writeOutcomeCopy(number: number, outcome: WriteOutcome): { readonly line: string; readonly note: string | null } {
   switch (outcome.kind) {
     case 'applied':
@@ -113,7 +111,6 @@ export function writeOutcomeCopy(number: number, outcome: WriteOutcome): { reado
       return { line: `Couldn't re-read #${String(number)} before writing.`, note: 'The item is no longer available. Nothing was written.' }
     case 'unresolvable-label':
       return { line: "This repository's label vocabulary doesn't resolve.", note: `Check the following keys in .claude/port.config.json's labels: ${outcome.keys.join(', ')}.` }
-    case 'terminal-owned':
     case 'ownership-unreadable':
       return { line: 'Blocked by repository ownership.', note: 'This should be unreachable for Work on — please report it.' }
     case 'state-unsaved':

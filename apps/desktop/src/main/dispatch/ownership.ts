@@ -8,11 +8,9 @@ import type { OwnershipSummary } from '@/types/writes'
 import type { TakeOwnershipResult, TakeOwnershipParams, OwnershipWriteResult, ReadOwnershipParams, OwnershipRead, OwnershipDeps, OwnershipWriteFailureKind } from '@/types/dispatch'
 
 
-type OwnershipOwner = 'app' | 'terminal'
-
 interface OwnershipRecord {
   readonly repo: string
-  readonly owner: OwnershipOwner
+  readonly owner: 'app'
   readonly since: string
 }
 
@@ -39,18 +37,16 @@ export function classifyOwnership(exists: boolean, text: string | null, repo: st
   if (typeof value.repo !== 'string' || value.repo !== repo) return { kind: 'absent' }
   if (typeof value.since !== 'string') return { kind: 'unreadable', message: "cockpit.json is missing 'since'" }
   if (value.owner === 'app') return { kind: 'app', since: value.since }
-  if (value.owner === 'terminal') return { kind: 'terminal', since: value.since }
+  if (value.owner === 'terminal') return { kind: 'unreadable', message: "it names the terminal cockpit as owner — the terminal cockpit can't run a repository this app manages" }
   return { kind: 'unreadable', message: "cockpit.json has an unknown 'owner'" }
 }
 
 type OwnershipVerdict =
   | { readonly kind: 'absent' }
   | { readonly kind: 'app'; readonly since: string }
-  | { readonly kind: 'terminal'; readonly since: string }
   | { readonly kind: 'unreadable'; readonly message: string }
 
-export 
-async function resolveOwnershipPath(deps: OwnershipDeps): Promise<string> {
+export async function resolveOwnershipPath(deps: OwnershipDeps): Promise<string> {
   const pathOps = deps.pathOps ?? defaultPathOps
   const git = deps.git ?? defaultGitRunner()
   const baseRoot = await resolveGitBaseRoot(git, deps.repoRoot, pathOps)
@@ -74,8 +70,6 @@ export async function readOwnership(params: ReadOwnershipParams): Promise<Owners
       return { kind: 'absent', path, readAt }
     case 'app':
       return { kind: 'app', since: verdict.since, path, readAt }
-    case 'terminal':
-      return { kind: 'terminal', since: verdict.since, path, readAt }
     case 'unreadable':
       return { kind: 'unreadable', message: verdict.message, path, readAt }
   }
@@ -88,8 +82,6 @@ export function toOwnershipSummary(read: OwnershipRead): OwnershipSummary {
       return { kind: 'absent' }
     case 'app':
       return { kind: 'app', since: read.since }
-    case 'terminal':
-      return { kind: 'terminal', since: read.since }
     case 'unreadable':
       return { kind: 'unreadable', path: read.path, message: read.message }
   }
@@ -107,7 +99,7 @@ export async function takeOwnership(params: TakeOwnershipParams): Promise<TakeOw
   const path = await resolveOwnershipPath(params)
 
   const current = await readOwnership(params)
-  if (!params.force && (current.kind === 'terminal' || current.kind === 'unreadable')) {
+  if (current.kind === 'unreadable') {
     return { ok: false, kind: 'refused', verdict: current, path }
   }
 
@@ -124,8 +116,7 @@ interface ReleaseOwnershipParams extends OwnershipDeps {
   readonly repo: string
 }
 
-/** Deletes the record only when the verdict is `app` — never a `terminal`/`unreadable` one,
- *  the rail that keeps a release from ever discarding a cockpit it does not own. */
+/** Deletes the record only when the verdict is `app`, never an unreadable one. */
 export async function releaseOwnership(params: ReleaseOwnershipParams): Promise<OwnershipWriteResult> {
   const path = await resolveOwnershipPath(params)
   const current = await readOwnership(params)

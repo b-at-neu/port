@@ -13,8 +13,6 @@ export function mirrorReason(outcome: WriteOutcome): string {
       return 'the item is no longer available'
     case 'precondition-failed':
       return 'the labels on GitHub changed'
-    case 'terminal-owned':
-      return 'a terminal cockpit owns this repository'
     case 'unresolvable-label':
       return `no label is configured for ${outcome.keys.join(', ')}`
     case 'mirror-failed':

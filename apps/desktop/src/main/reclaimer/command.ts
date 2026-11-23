@@ -1,7 +1,7 @@
 // Rejects a shell metacharacter or unbalanced quote outright and accepts only a `node` prefix —
 // reject rather than interpret.
 
-// The prefix `bin/*.mjs`'s `die()` writes to stderr, pinned against `bin/budget.mjs` by layer 1.
+// The prefix a failing script writes to stderr.
 export const SCRIPT_FAIL_PREFIX = 'FAIL  '
 
 const METACHARACTERS = new Set(['|', '&', ';', '<', '>', '$', '`', '(', ')'])

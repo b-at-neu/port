@@ -4,8 +4,8 @@ import type { DispatchOwner, RepoDispatchStatus, RunState } from '@/types/dispat
 import type { ReconciledItem } from '@/types/state'
 import type { TickAutoApproval, TickReport } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
-import { partitionOwnership } from '../../../../../scripts/port-tick/classify'
-import { autoApprovableFrom, autoApprovalCandidatesFrom } from '@/main/tick/dispatchable'
+import { partitionOwnership } from '@/utils/pipeline/classify'
+import { autoApprovableFrom } from '@/main/tick/dispatchable'
 
 /** Qualifies when carrying `autoPlan`, `stages` is exactly one entry at `planReview`, and the viewer is an assignee. */
 export function autoApprovalsOf(items: readonly ReconciledItem[], viewer: string | null): readonly TickAutoApproval[] {
@@ -20,11 +20,9 @@ interface SwapParams {
   readonly runState: RunState
 }
 
-/** The one "will a swap run" predicate: an app owner needs a dispatching run state, a terminal cockpit runs it on its own tick, and an unknown owner runs nothing. */
+/** The one "will a swap run" predicate: an app owner needs a dispatching run state, and any other owner runs nothing. */
 export function autoPlanSwapCandidatesOf({ report, owner, runState }: SwapParams): readonly number[] {
-  if (owner === 'app') return autoApprovableFrom(report, runState).map((approval) => approval.number)
-  if (owner === 'terminal') return autoApprovalCandidatesFrom(report).map((approval) => approval.number)
-  return []
+  return owner === 'app' ? autoApprovableFrom(report, runState).map((approval) => approval.number) : []
 }
 
 /** The swap candidates minus the ones whose last attempt was refused. */

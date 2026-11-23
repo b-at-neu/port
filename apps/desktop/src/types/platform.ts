@@ -156,6 +156,22 @@ export type CommandResult =
   | { readonly ok: false; readonly kind: 'output-too-large'; readonly maxBytes: number }
   | { readonly ok: false; readonly kind: 'spawn-failed'; readonly message: string }
 
+/** The three GitHub transports one client carries; the host's reads GitHub, the E2E build's reads the fake. */
+export interface GitHubClient {
+  readonly request: GitHubTransport
+  readonly conditional: ConditionalTransport
+  readonly public: GitHubTransport
+}
+
+/** What `runCommand` executes, or the failure that stops it before a spawn. */
+export type ResolvedCommand = { readonly ok: true; readonly path: string; readonly args: readonly string[]; readonly env: NodeJS.ProcessEnv | undefined } | Extract<CommandResult, { readonly ok: false }>
+
+/** The one seam between the app and the host: the E2E build swaps it for a route that never reaches a host binary or the network. */
+export interface PlatformRoute {
+  resolveCommand(command: KnownCommand, args: readonly string[], options: RunCommandOptions): Promise<ResolvedCommand>
+  githubClient(real: GitHubClient, run: (command: KnownCommand, args: readonly string[]) => Promise<CommandResult>): GitHubClient
+}
+
 export type WhichResult =
   | { readonly ok: true; readonly path: string }
   | { readonly ok: false; readonly kind: 'not-found'; readonly command: string; readonly searched: readonly string[] }

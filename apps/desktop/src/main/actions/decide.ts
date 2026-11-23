@@ -13,6 +13,7 @@ import { labelName } from '@/utils/labels/vocabulary'
 import type { ReconciledItem } from '@/types/state'
 import type { LabelWriteRequest, ObservedItem, WriteOutcome } from '@/types/writes'
 import { evaluate } from '@/main/writes/scope'
+import { UNSEEDED_MESSAGE } from '@/main/pipeline-state/labels'
 
 import type { ItemsByNumberFetch } from '@/types/github'
 import type { StateLabelsReader } from '@/types/pipeline-state'
@@ -86,7 +87,9 @@ export async function applyItemDecision(params: ApplyItemDecisionParams, deps: A
 
   const presentNames = plan.expect.present.map((key) => labelName(entry.config.vocabulary, key)).filter((name): name is string => name !== undefined)
   const absentNames = plan.expect.absent.map((key) => labelName(entry.config.vocabulary, key)).filter((name): name is string => name !== undefined)
-  const observed: ObservedItem = { labels: deps.stateLabels(entry.id, item.kind, request.number, entry.config.vocabulary) ?? fresh.labels, assignees: fresh.assignees, readAt: fetch.fetchedAt }
+  const storedLabels = deps.stateLabels(entry.id, item.kind, request.number, entry.config.vocabulary)
+  if (storedLabels === null) return { ok: true, comment: null, labels: { kind: 'state-unsaved', message: UNSEEDED_MESSAGE } }
+  const observed: ObservedItem = { labels: storedLabels, assignees: fresh.assignees, readAt: fetch.fetchedAt }
   const verdict = evaluate({ presentNames, absentNames, assignees: plan.expect.assignees }, observed)
   if (!verdict.satisfied) {
     return { ok: false, reason: 'moved', expected: verdict.expected.join(', ') || 'nothing', observed: verdict.observed.join(', ') || 'nothing' }

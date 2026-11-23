@@ -1,0 +1,340 @@
+// Pure: mergeability routing, refresh-sweep bounds, zero-diff, integration-red hold, cycle cap, and approved re-verify.
+
+/** The review-body fields either gate reads. */
+export interface ReviewNode {
+  readonly body: string
+  readonly submittedAt?: string
+  readonly commitOid?: string | null
+}
+
+export interface CommentNode {
+  readonly body: string
+  readonly createdAt: string
+}
+
+const CODE_REVIEW_PREFIX = '## Code Review'
+const GATE_CLEARED_PREFIX = '## Gate cleared'
+const ESCALATION_PREFIX = '## Pipeline Escalation'
+const WITHDRAWN_PREFIX = '## Approval withdrawn'
+
+/** The causes a machine-posted `## Pipeline Escalation` can carry in its closing marker. */
+export const ESCALATION_CAUSES = ['zero-diff', 'sha-cap', 'cycle-cap', 'integration-red', 'refresh-stuck', 'budget', 'checks-pending'] as const
+
+export type EscalationCause = (typeof ESCALATION_CAUSES)[number]
+
+/** The hidden last line of an escalation body: one cause on one head. */
+export function escalationMarker(cause: EscalationCause, sha: string): string {
+  return `<!-- port:escalation ${cause} ${sha} -->`
+}
+
+/** True when the newest `## Pipeline Escalation` already carries this cause on this head. An empty `sha` reads as false: post. */
+export function escalationRepeats({ comments, cause, sha }: { readonly comments: readonly CommentNode[] | undefined; readonly cause: EscalationCause; readonly sha: string }): boolean {
+  if (sha === '') return false
+  const escalations = (comments ?? []).filter((c) => c.body.startsWith(ESCALATION_PREFIX))
+  if (escalations.length === 0) return false
+  const newest = escalations.reduce((a, b) => (a.createdAt > b.createdAt ? a : b))
+  const marker = escalationMarker(cause, sha)
+  return newest.body.split('\n').some((line) => line.trim() === marker)
+}
+
+/** True when an `## Approval withdrawn` comment already names this head SHA. An empty `sha` reads as false: post. */
+export function withdrawalPosted({ comments, sha }: { readonly comments: readonly CommentNode[] | undefined; readonly sha: string }): boolean {
+  if (sha === '') return false
+  return (comments ?? []).some((c) => c.body.startsWith(WITHDRAWN_PREFIX) && c.body.includes(`\`${sha}\``))
+}
+
+const ESCALATION_MARKER_LINE = /^<!-- port:escalation (\S+) (\S+) -->$/
+
+/** Whether posting `body` would repeat what the pull request already shows. */
+export function commentRepeats({ body, comments, headRefOid }: { readonly body: string; readonly comments: readonly CommentNode[] | undefined; readonly headRefOid: string }): boolean {
+  if (body.startsWith(WITHDRAWN_PREFIX)) return withdrawalPosted({ comments, sha: headRefOid })
+  if (!body.startsWith(ESCALATION_PREFIX)) return false
+  for (const line of body.split('\n')) {
+    const m = ESCALATION_MARKER_LINE.exec(line.trim())
+    const cause = ESCALATION_CAUSES.find((c) => c === m?.[1])
+    if (m?.[2] !== undefined && cause !== undefined) return escalationRepeats({ comments, cause, sha: m[2] })
+  }
+  return false
+}
+
+/** A clear is a `## Gate cleared` comment or a `needs human` label event newer than `since`. */
+export function clearedSince({ comments, escalatedAt, since }: { readonly comments: readonly CommentNode[] | undefined; readonly escalatedAt: readonly string[]; readonly since: string }): boolean {
+  return (comments ?? []).some((c) => c.body.startsWith(GATE_CLEARED_PREFIX) && c.createdAt > since) || escalatedAt.some((t) => t > since)
+}
+
+/** The `## Code Review` count a pull request's reviews carry. */
+export function codeReviewCount(reviews: readonly ReviewNode[] | undefined): number {
+  return (reviews ?? []).filter((r) => r.body.startsWith(CODE_REVIEW_PREFIX)).length
+}
+
+const CHECK_ONLY_PREFIX = 'Blocked only by checks:'
+const CHECK_ONLY_LINE = /^Blocked only by checks: `[^`]+`(, `[^`]+`)*$/
+
+/** Minutes a check-only block is held at `ready for review` waiting for a re-run before it escalates. */
+export const ZERO_DIFF_CHECK_HOLD_MINUTES = 120
+
+/** The check names a review body's line 3 marks as its only blockers, or null when the line is absent or malformed. */
+export function checkOnlyNames(body: string): string[] | null {
+  const line = body.split('\n')[2]?.trimEnd()
+  if (line === undefined || !CHECK_ONLY_LINE.test(line)) return null
+  return [...line.slice(CHECK_ONLY_PREFIX.length).matchAll(/`([^`]+)`/g)].flatMap((m) => (m[1] === undefined ? [] : [m[1]]))
+}
+
+/** The original review plus one repeat. */
+export const MAX_REVIEWS_PER_SHA = 2
+
+export type ZeroDiffAction = 'dispatch' | 'dispatch-once' | 'recheck-dispatch' | 'hold-checks' | 'escalate'
+
+export type CheckStatus = 'green' | 'pending' | 'red'
+
+/** The rollup, already reduced: each check's status by name, and whether the whole rollup is clear of red and pending. */
+export interface ZeroDiffChecks {
+  readonly statuses: ReadonlyMap<string, CheckStatus>
+  readonly rollupClear: boolean
+  readonly now: string | null
+}
+
+export interface ZeroDiffFacts {
+  readonly checks: readonly string[]
+  readonly sha: string
+  readonly cycle: number
+  readonly state: 'pending' | 'red'
+  readonly escalateAt?: string
+}
+
+export interface ShaCapFacts {
+  readonly sha: string
+  readonly reviewsOnHead: number
+}
+
+export type ZeroDiffResult =
+  | { readonly action: ZeroDiffAction; readonly reason?: undefined; readonly facts?: ZeroDiffFacts }
+  | { readonly action: 'escalate'; readonly reason: 'sha-cap'; readonly facts: ShaCapFacts }
+
+/** A reviewed head gets no second cycle unless it moved or a newer `## Gate cleared` authorised one, and never past `MAX_REVIEWS_PER_SHA`. */
+export function zeroDiffGate({
+  reviews,
+  comments,
+  headRefOid,
+  checks,
+  escalatedAt = [],
+}: {
+  readonly reviews: readonly ReviewNode[] | undefined
+  readonly comments: readonly CommentNode[] | undefined
+  readonly headRefOid: string
+  readonly checks?: ZeroDiffChecks
+  readonly escalatedAt?: readonly string[]
+}): ZeroDiffResult {
+  const codeReviews = (reviews ?? []).filter((r) => r.body.startsWith(CODE_REVIEW_PREFIX))
+  if (codeReviews.length === 0) return { action: 'dispatch' }
+
+  const newest = codeReviews.reduce((a, b) => ((a.submittedAt ?? '') > (b.submittedAt ?? '') ? a : b))
+  if ((newest.commitOid ?? null) !== headRefOid) return { action: 'dispatch' }
+
+  const reviewsOnHead = codeReviews.filter((r) => (r.commitOid ?? null) === headRefOid).length
+  if (reviewsOnHead >= MAX_REVIEWS_PER_SHA) return { action: 'escalate', reason: 'sha-cap', facts: { sha: headRefOid, reviewsOnHead } }
+
+  if (clearedSince({ comments, escalatedAt, since: newest.submittedAt ?? '' })) return { action: 'dispatch-once' }
+
+  const named = checkOnlyNames(newest.body)
+  if (named === null || checks === undefined) return { action: 'escalate' }
+
+  const present: CheckStatus[] = []
+  for (const n of named) {
+    const status = checks.statuses.get(n)
+    if (status === undefined) return { action: 'escalate' }
+    present.push(status)
+  }
+
+  const cycle = codeReviewCount(reviews)
+  const facts = { checks: named, sha: headRefOid, cycle }
+
+  if (present.every((s) => s === 'green')) {
+    return checks.rollupClear ? { action: 'recheck-dispatch', facts: { ...facts, state: 'pending' } } : { action: 'escalate' }
+  }
+  if (present.some((s) => s === 'pending')) return { action: 'hold-checks', facts: { ...facts, state: 'pending' } }
+
+  const submitted = Date.parse(newest.submittedAt ?? '')
+  const now = checks.now === null ? Number.NaN : Date.parse(checks.now)
+  if (Number.isNaN(submitted) || Number.isNaN(now)) return { action: 'escalate' }
+  const deadline = submitted + ZERO_DIFF_CHECK_HOLD_MINUTES * 60_000
+  if (now >= deadline) return { action: 'escalate' }
+  return { action: 'hold-checks', facts: { ...facts, state: 'red', escalateAt: new Date(deadline).toISOString() } }
+}
+
+const INTEGRATION_RED_PREFIX = '## Integration red'
+const INTEGRATION_RED_HEAD = /^Head `([0-9a-f]{7,40})` ·/
+const INTEGRATION_RED_CHECK = /^- `([^`]+)` — /
+
+/** Hours an `## Integration red` hold waits for the integration branch to turn green before it escalates. */
+export const INTEGRATION_RED_HOLD_HOURS = 24
+
+export type IntegrationStatus = 'green' | 'red'
+
+/** The head SHA and the check names an `## Integration red` comment names, or null when it is not one or is malformed. */
+export function integrationRedNames(body: string): { readonly head: string; readonly checks: readonly string[] } | null {
+  if (!body.startsWith(INTEGRATION_RED_PREFIX)) return null
+  const lines = body.split('\n')
+  if (lines[0]?.trimEnd() !== INTEGRATION_RED_PREFIX) return null
+  const head = INTEGRATION_RED_HEAD.exec(lines[1] ?? '')?.[1]
+  if (head === undefined) return null
+  const checks = lines.slice(2).flatMap((l) => {
+    const name = INTEGRATION_RED_CHECK.exec(l)?.[1]
+    return name === undefined ? [] : [name]
+  })
+  return checks.length === 0 ? null : { head, checks }
+}
+
+export type IntegrationRedAction = 'none' | 'hold' | 'refresh' | 'escalate'
+
+export interface IntegrationRedFacts {
+  readonly checks: readonly string[]
+  readonly sha: string
+  readonly state: 'red' | 'unreadable'
+  readonly escalateAt?: string
+}
+
+/** A head carrying its own `## Integration red` is held until every named check is green on the integration branch, then refreshed. */
+export function integrationRedGate({
+  comments,
+  headRefOid,
+  integration,
+  now,
+  escalatedAt = [],
+}: {
+  readonly comments: readonly CommentNode[] | undefined
+  readonly headRefOid: string
+  readonly integration: ReadonlyMap<string, IntegrationStatus> | null | undefined
+  readonly now: string | null
+  readonly escalatedAt?: readonly string[]
+}): { readonly action: IntegrationRedAction; readonly facts?: IntegrationRedFacts } {
+  const marked = (comments ?? []).flatMap((c) => {
+    const named = integrationRedNames(c.body)
+    return named === null ? [] : [{ named, createdAt: c.createdAt }]
+  })
+  if (marked.length === 0) return { action: 'none' }
+
+  const newest = marked.reduce((a, b) => (a.createdAt > b.createdAt ? a : b))
+  if (!headRefOid.startsWith(newest.named.head)) return { action: 'none' }
+  if (clearedSince({ comments, escalatedAt, since: newest.createdAt })) return { action: 'none' }
+
+  const facts = { checks: newest.named.checks, sha: headRefOid, state: integration == null ? ('unreadable' as const) : ('red' as const) }
+  if (integration != null && newest.named.checks.every((n) => integration.get(n) === 'green')) return { action: 'refresh', facts }
+
+  const created = Date.parse(newest.createdAt)
+  const current = now === null ? Number.NaN : Date.parse(now)
+  if (Number.isNaN(created) || Number.isNaN(current)) return { action: 'escalate', facts }
+  const deadline = created + INTEGRATION_RED_HOLD_HOURS * 3_600_000
+  if (current >= deadline) return { action: 'escalate', facts }
+  return { action: 'hold', facts: { ...facts, escalateAt: new Date(deadline).toISOString() } }
+}
+
+const CYCLE_GRANT_LINE = '### Cycle grant'
+
+/** One grant per `## Gate cleared` comment carrying a `### Cycle grant` line. Undefined comments mean zero grants. */
+export function cycleGrantCount(comments: readonly CommentNode[] | undefined): number {
+  return (comments ?? []).filter((c) => c.body.startsWith(GATE_CLEARED_PREFIX) && c.body.split('\n').some((line) => line.trim() === CYCLE_GRANT_LINE)).length
+}
+
+/** Fires at or above the effective cap whatever the latest review said. */
+export function cycleCapExceeded(reviews: readonly ReviewNode[] | undefined, cap: number, comments?: readonly CommentNode[]): boolean {
+  return codeReviewCount(reviews) >= cap + cycleGrantCount(comments)
+}
+
+export interface ReviewDispatchFacts {
+  readonly cycle: number
+  readonly selfAuthored: boolean
+}
+
+/** An unknown author reads as self-authored, because `COMMENT` is the one review event GitHub accepts either way. */
+export function reviewDispatchFacts({ priorReviews, author, viewer }: { readonly priorReviews: number; readonly author: string | null; readonly viewer: string }): ReviewDispatchFacts {
+  return { cycle: priorReviews + 1, selfAuthored: author === null || author.toLowerCase() === viewer.toLowerCase() }
+}
+
+export type MergeabilityAction = 'dispatch' | 'refresh' | 'hold'
+
+/** `UNKNOWN` holds review dispatch one tick and dispatches on the second consecutive occurrence. */
+export function mergeabilityRoute(mergeable: string, priorUnknownStreak = 0): { readonly action: MergeabilityAction; readonly unknownStreak: number } {
+  if (mergeable === 'MERGEABLE') return { action: 'dispatch', unknownStreak: 0 }
+  if (mergeable === 'CONFLICTING') return { action: 'refresh', unknownStreak: 0 }
+  if (priorUnknownStreak >= 1) return { action: 'dispatch', unknownStreak: 0 }
+  return { action: 'hold', unknownStreak: priorUnknownStreak + 1 }
+}
+
+export type RefreshWinsResult = { readonly action: 'veto'; readonly label: 'refreshBranch' | 'refreshing' } | { readonly action: 'proceed' }
+
+/** A pull request already claimed by or mid-refresh is never also dispatched to review or revision in the same tick. */
+export function refreshWins({
+  number,
+  refreshBranch,
+  refreshing,
+}: {
+  readonly number: number
+  readonly refreshBranch: readonly number[]
+  readonly refreshing: readonly number[]
+}): RefreshWinsResult {
+  if (refreshBranch.includes(number)) return { action: 'veto', label: 'refreshBranch' }
+  if (refreshing.includes(number)) return { action: 'veto', label: 'refreshing' }
+  return { action: 'proceed' }
+}
+
+export interface RefreshMemoEntry {
+  readonly sha: string
+  readonly count: number
+}
+
+export type RefreshDecisionResult =
+  | { readonly action: 'escalate'; readonly reason: 'same-sha' | 'consecutive-cap'; readonly count: number }
+  | { readonly action: 'refresh'; readonly count: number }
+
+/** Same-SHA guard: escalate rather than repeat a no-op. At most 3 consecutive refreshes; a 4th escalates too. */
+export function refreshDecision(memoEntry: RefreshMemoEntry | null | undefined, currentSha: string): RefreshDecisionResult {
+  if (memoEntry != null && memoEntry.sha === currentSha) {
+    return { action: 'escalate', reason: 'same-sha', count: memoEntry.count }
+  }
+  const priorCount = memoEntry?.count ?? 0
+  const nextCount = priorCount + 1
+  if (nextCount >= 4) return { action: 'escalate', reason: 'consecutive-cap', count: nextCount }
+  return { action: 'refresh', count: nextCount }
+}
+
+export interface RefreshCandidate {
+  readonly number: number
+}
+
+/** Caps a tick's refresh candidates at `maxPerTick` (default 5), oldest number first. */
+export function capRefreshes<T extends RefreshCandidate>(candidates: readonly T[], maxPerTick = 5): { readonly toRefresh: readonly T[]; readonly deferred: readonly T[] } {
+  const sorted = [...candidates].sort((a, b) => a.number - b.number)
+  return { toRefresh: sorted.slice(0, maxPerTick), deferred: sorted.slice(maxPerTick) }
+}
+
+export interface ApprovedReverifyVerdict {
+  readonly pending: boolean
+  readonly zeroEvidence?: boolean
+  readonly red: readonly { readonly name: string | null; readonly conclusion: string | null }[]
+  readonly green: readonly (string | null)[]
+}
+
+export type ApprovedReverifyResult =
+  | { readonly action: 'withdraw'; readonly red: ApprovedReverifyVerdict['red'] }
+  | { readonly action: 'escalate'; readonly red: ApprovedReverifyVerdict['red'] }
+  | { readonly action: 'refresh-in-place' }
+  | { readonly action: 'wait' }
+  | { readonly action: 'announce-ready'; readonly green: ApprovedReverifyVerdict['green'] }
+
+/** A red check withdraws approval, or escalates when it is history-derived; `CONFLICTING` only adds the refresh label. */
+export function approvedReverify({
+  verdict,
+  mergeable,
+  historyDerived = [],
+}: {
+  readonly verdict: ApprovedReverifyVerdict
+  readonly mergeable: string | null
+  readonly historyDerived?: readonly string[]
+}): ApprovedReverifyResult {
+  if (verdict.red.some((r) => r.name !== null && historyDerived.includes(r.name))) return { action: 'escalate', red: verdict.red }
+  if (verdict.red.length > 0) return { action: 'withdraw', red: verdict.red }
+  if (mergeable === 'CONFLICTING') return { action: 'refresh-in-place' }
+  if (verdict.pending || mergeable === 'UNKNOWN') return { action: 'wait' }
+  return { action: 'announce-ready', green: verdict.green }
+}

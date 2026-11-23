@@ -1,7 +1,6 @@
-// fetchBacklog: every open issue, dropping what the store tracks, or under a labels view anything carrying a vocabulary label.
+// fetchBacklog: every open issue, dropping what the store tracks.
 import { githubHttp } from '@/main/platform/github-http'
 import type { GitHubTransport } from '@/types/platform'
-import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { BacklogItem, BacklogLabel, BacklogResponse, ParentRead } from '@/types/backlog'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
@@ -81,9 +80,8 @@ function buildBacklogQuery(): string {
 
 interface FetchBacklogParams {
   readonly repo: GitHubRepoRef
-  readonly vocabulary: LabelVocabulary
-  /** The store's tracked issue numbers; `null` is a labels view, where membership falls back to the vocabulary names. */
-  readonly tracked: ReadonlySet<number> | null
+  /** The store's tracked issue numbers; empty for an unseeded repository until the first poll seeds it. */
+  readonly tracked: ReadonlySet<number>
   readonly github?: GitHubTransport
   readonly now?: () => Date
 }
@@ -127,15 +125,12 @@ export async function fetchBacklog(params: FetchBacklogParams): Promise<BacklogR
   const total = typeof raw.totalCount === 'number' ? raw.totalCount : 0
   const nodes = Array.isArray(raw.nodes) ? raw.nodes : []
 
-  const vocabularyNames = new Set(params.vocabulary.labels.map((label) => label.name))
-
   const items: Omit<BacklogItem, 'children'>[] = []
   for (const [index, node] of nodes.entries()) {
     if (typeof node !== 'object' || node === null) continue
     const issue = node as Record<string, unknown>
     const number = typeof issue.number === 'number' ? issue.number : 0
-    const inPipeline = params.tracked !== null ? params.tracked.has(number) : fieldListOf(issue.labels, 'name').some((name) => vocabularyNames.has(name))
-    if (inPipeline) continue
+    if (params.tracked.has(number)) continue
     items.push({
       number,
       title: typeof issue.title === 'string' ? issue.title : '',
@@ -153,7 +148,7 @@ export async function fetchBacklog(params: FetchBacklogParams): Promise<BacklogR
   const children = await fetchChildren({
     repo: params.repo,
     epics: items.filter((item) => item.subIssueCount > 0).map((item) => item.number),
-    claimed: params.tracked !== null ? { kind: 'store', numbers: params.tracked } : { kind: 'labels', names: vocabularyNames },
+    claimed: params.tracked,
     github,
   })
 

@@ -40,6 +40,20 @@ export interface LaunchParams {
   readonly extraRepos?: readonly string[]
 }
 
+/** Until the first poll has seeded every repository's pipeline state, an action on it refuses; gives up quietly after the timeout so the flow itself reports what is missing. */
+async function waitForSeed(userDataDir: string, repositories: number, timeoutMs = 15_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try {
+      const file = JSON.parse(await readFile(join(userDataDir, 'pipeline-state.json'), 'utf8')) as { repositories?: Record<string, unknown> }
+      if (Object.keys(file.repositories ?? {}).length >= repositories) return
+    } catch {
+      // not written yet
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+}
+
 /** Fails fast with the actual remedy, the same contract as the visual harness's own launcher. */
 export async function launchE2EApp(params: LaunchParams): Promise<E2EApp> {
   if (!existsSync(MAIN_ENTRY)) {
@@ -106,6 +120,7 @@ export async function launchE2EApp(params: LaunchParams): Promise<E2EApp> {
     } catch {
       // Already past the wizard — nothing to skip.
     }
+    await waitForSeed(userDataDir, 1 + extraPaths.length)
     return { app, page }
   }
 

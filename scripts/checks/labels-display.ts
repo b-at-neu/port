@@ -4,21 +4,13 @@ import { root, readJson } from '#lib/files.ts';
 import type { Reporter } from '#lib/report.ts';
 
 const SHIPPED_REL = 'plugins/port/data/labels.json';
-const DESKTOP_REL = 'apps/desktop/src/utils/labels/labels.json';
 const GATE_TEMPLATE_REL = 'plugins/port/templates/approval-check.yml';
 const SCHEMA_REL = 'schema/port.config.schema.json';
 
-// The seven-label display vocabulary: the data file, its app copy, and the schema's two override maps.
+// The seven-label display vocabulary: the data file and the schema's two override maps.
 export default async function ({ expect, fail, ok }: Reporter) {
   const labels: { key: string; name: string; color: string; previousColors: string[]; role: string; palette: string | null }[] = readJson(SHIPPED_REL).labels;
   const keys = labels.map((l) => l.key);
-
-  // pin: plugins/port/data/labels.json ↔ apps/desktop/src/utils/labels/labels.json, byte-identical
-  {
-    const shipped = readFileSync(join(root, SHIPPED_REL), 'utf8');
-    const desktop = readFileSync(join(root, DESKTOP_REL), 'utf8');
-    expect(shipped === desktop, 'labels-display-copy', `${SHIPPED_REL} and ${DESKTOP_REL} differ — copy one over the other so they are byte-identical`);
-  }
 
   // pin: the schema's `labels` ∪ `states` keys ↔ `labels.json`'s keys, both directions, with disjoint maps
   {

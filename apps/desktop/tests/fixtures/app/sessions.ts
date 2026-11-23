@@ -50,7 +50,7 @@ const MINUTE = 60_000
  *  so this would pop up over every other screenshot target otherwise. */
 export function fixturePermissionSnapshots(now: Date): readonly HostedSessionSnapshot[] {
   const t = (minutesAgo: number) => new Date(now.getTime() - minutesAgo * MINUTE).toISOString()
-  const capabilities = { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'loaded', path: '/home/you/.claude/plugins/port', version: '0.2.1' }, components: { kind: 'complete' }, slashCommands: [] } as const
+  const capabilities = { kind: 'ready', commands: [], agents: [], plugin: { kind: 'loaded', path: '/home/you/.claude/plugins/port', version: '0.2.1' }, slashCommands: [] } as const
 
   return [
     {
@@ -113,7 +113,7 @@ export function fixtureSessionSnapshots(now: Date, scenario: FixtureScenario = '
     ? { reason: 'exit-nonzero', exitCode: 1, signal: null, message: 'Error: ENOENT, no such file or directory', diagnosis: 'cli-missing' }
     : { reason: 'completed', exitCode: 0, signal: null, message: null, diagnosis: null }
   const t = (minutesAgo: number) => new Date(now.getTime() - minutesAgo * MINUTE).toISOString()
-  const capabilities = { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'loaded', path: '/home/you/.claude/plugins/port', version: '0.2.1' }, components: { kind: 'complete' }, slashCommands: [] } as const
+  const capabilities = { kind: 'ready', commands: [], agents: [], plugin: { kind: 'loaded', path: '/home/you/.claude/plugins/port', version: '0.2.1' }, slashCommands: [] } as const
 
   const stageImpl38: HostedSessionSnapshot = {
     sessionKey: STAGE_IMPL_38_KEY,
@@ -201,7 +201,7 @@ export function fixtureSessionSnapshots(now: Date, scenario: FixtureScenario = '
       end: null,
       titled: null,
       pendingPermissions: [],
-      capabilities: { kind: 'pending', request: { source: 'installed' } },
+      capabilities: { kind: 'pending' },
       title: null,
       rateLimit: null,
       controls: FIXTURE_CONTROLS,

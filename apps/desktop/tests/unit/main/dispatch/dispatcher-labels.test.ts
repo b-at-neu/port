@@ -100,6 +100,7 @@ function rig(overrides: Partial<CreateDispatcherParams> = {}) {
     runState: () => 'dispatching',
     readOwnership: () => Promise.resolve(OWNED_BY_APP),
     takeOwnership: () => Promise.resolve({ ok: true, path: 'p' }),
+    stateLabels: () => ['claude', 'plan approved'],
     fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'], headRefName: null, author: null }], unavailable: [], fetchedAt: 'r' }),
     listRepositories: () => Promise.resolve({ ok: true, repositories: [entry()] }),
     registryDeps: { registryDir: '/registry', git: () => Promise.reject(new Error('unused')), chooseDirectory: () => Promise.resolve(null) },
@@ -158,6 +159,12 @@ describe('createDispatcher — stage label writes', () => {
 
   it('launches nothing for a ticket the store does not track, even when GitHub shows its trigger label', async () => {
     const { dispatcher, calls } = rig({ stateLabels: () => [] })
+    await consider(dispatcher)
+    expect(calls).toEqual([])
+  })
+
+  it('launches nothing for an unseeded repository, even when GitHub shows the trigger label', async () => {
+    const { dispatcher, calls } = rig({ stateLabels: () => null })
     await consider(dispatcher)
     expect(calls).toEqual([])
   })

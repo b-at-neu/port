@@ -71,7 +71,6 @@ export async function fetchGatePreflight(params: FetchGatePreflightParams): Prom
     url: typeof raw.url === 'string' ? raw.url : '',
     state: typeof raw.state === 'string' ? raw.state : '',
     body: kind === 'issue' && typeof raw.body === 'string' ? raw.body : '',
-    labels: kind === 'issue' ? fieldListOf(raw.labels, 'name') : [],
     assignees: kind === 'issue' ? fieldListOf(raw.assignees, 'login') : [],
   }
 

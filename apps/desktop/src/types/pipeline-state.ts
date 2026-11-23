@@ -38,7 +38,6 @@ export interface StoredItem {
 
 export interface RepoRecord {
   readonly seededAt: string
-  readonly heldBy: 'terminal' | null
   /** Keyed `issue:<n>` / `pull-request:<n>`. */
   readonly items: Readonly<Record<string, StoredItem>>
 }
@@ -48,7 +47,7 @@ export interface PipelineStateFile {
   readonly repositories: Readonly<Record<string, RepoRecord>>
 }
 
-/** The store's label names for one item, for a reader that still takes a label list: `null` under a labels view (keep GitHub's), `[]` for an untracked item under a store view. */
+/** The store's label names for one item: `null` for an unseeded repository, `[]` for an untracked item in a seeded one. */
 export type StateLabelsReader = (repoId: RepoId, kind: PipelineItemKind, number: number, vocabulary: LabelVocabulary) => readonly string[] | null
 
 /** Every stored key, markers included. */
@@ -56,8 +55,8 @@ export function fullKeysOf(item: Pick<StoredItem, 'keys' | 'marked' | 'autoPlan'
   return [...(item.marked ? (['marker'] as const) : []), ...(item.autoPlan ? (['autoPlan'] as const) : []), ...item.keys]
 }
 
-/** `labels` means GitHub's labels decide stage, as before; `store` means the stored items do. */
-export type PipelineView = { readonly kind: 'labels' } | { readonly kind: 'store'; readonly items: readonly StoredItem[] }
+/** `unseeded` means the repository has no record yet and reseeds once from labels; `store` means the stored items decide stage. */
+export type PipelineView = { readonly kind: 'unseeded' } | { readonly kind: 'store'; readonly items: readonly StoredItem[] }
 
 /** One mirror write with no transition: `merged` writes the terminal state, `state` whatever the store holds. */
 export interface MirrorItemParams {
@@ -94,7 +93,6 @@ export interface PipelineStateStore {
   readonly view: (repoId: RepoId) => PipelineView
   readonly tracked: (repoId: RepoId) => readonly TrackedRef[] | null
   readonly seed: (repoId: RepoId, state: Extract<RepositoryState, { readonly ok: true }>) => Promise<void>
-  readonly markHeld: (repoId: RepoId) => void
   readonly prune: (repoId: RepoId, closed: readonly number[]) => Promise<void>
   readonly recordMirror: (repoId: RepoId, ref: { readonly kind: PipelineItemKind; readonly number: number }, failure: MirrorFailure | null) => Promise<void>
   readonly transition: (repoId: RepoId, ref: { readonly kind: PipelineItemKind; readonly number: number }, input: TransitionInput) => Promise<StoreTransitionResult>

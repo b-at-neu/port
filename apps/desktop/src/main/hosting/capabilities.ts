@@ -1,12 +1,10 @@
-import type { ExpectedComponents, InitPlugin, PluginRequest } from '@/types/hosting-plugin'
 import type { HostedQuery } from '@/main/hosting/sdk'
 
 // A timeout or rejected read-back must never look like an empty capability list.
 import type { AgentSummary, CommandSummary, SessionCapabilities, SlashCommandSummary } from '@/types/hosting'
 import { isRecord } from '@/main/guards'
 import { sanitize } from '@/main/sessions/transcript-entries'
-import { checkComponents, checkPluginLoad, isBlockedCommand, PLUGIN_NAME } from '@/main/hosting/verify'
-
+import { checkPluginLoad, isBlockedCommand, PLUGIN_NAME, type InitPlugin } from '@/main/hosting/verify'
 
 import type { AgentInfo, SlashCommand } from '@/main/hosting/sdk'
 
@@ -16,11 +14,8 @@ export const CAPABILITIES_TIMEOUT_MS = 30_000
 const QUALIFIER = `${PLUGIN_NAME}:`
 
 interface CreateCapabilityTrackerParams {
-  readonly request: PluginRequest
-  readonly readExpectedComponents: (pluginPath: string) => Promise<ExpectedComponents | null>
-  readonly samePath: (a: string, b: string) => boolean
   readonly onChange: () => void
-  /** A stage session hides and refuses every `port:` command and never checks the plugin's components. */
+  /** A stage session hides and refuses every `port:` command. */
   readonly stage: boolean
   /** Test-only override of `CAPABILITIES_TIMEOUT_MS`. */
   readonly timeoutMs?: number
@@ -47,7 +42,7 @@ function blockContext(raw: readonly SlashCommand[], stage: boolean): Parameters<
   }
 }
 
-/** Every `port:` command except pipeline, whatever the session kind — the component check reads this list. */
+/** Every `port:` command except pipeline, whatever the session kind. */
 function toCommandSummaries(raw: readonly SlashCommand[]): CommandSummary[] {
   const context = blockContext(raw, false)
   return raw
@@ -86,11 +81,7 @@ function initPluginsOf(message: Record<string, unknown>): readonly InitPlugin[] 
 }
 
 export function createCapabilityTracker(params: CreateCapabilityTrackerParams): CapabilityTracker {
-  let state: SessionCapabilities = { kind: 'pending', request: params.request }
-  let expected: ExpectedComponents | null = null
-  let expectedRequested = false
-  /** Settles only once the read actually finishes, distinct from `expectedRequested`. */
-  let expectedSettled = false
+  let state: SessionCapabilities = { kind: 'pending' }
   let rawCommands: readonly SlashCommand[] = []
   let portCommands: CommandSummary[] = []
   let agents: AgentSummary[] = []
@@ -109,33 +100,17 @@ export function createCapabilityTracker(params: CreateCapabilityTrackerParams): 
   }
 
   function recompute(): void {
-    const plugin = checkPluginLoad({ request: params.request, initPlugins, samePath: params.samePath })
-    const components = checkComponents({
-      expected,
-      expectedAttempted: expectedSettled,
-      commandNames: portCommands.map((command) => command.name),
-      agentNames: agents.map((agent) => agent.name),
-    })
-    state = { kind: 'ready', request: params.request, commands: exposedCommands(), agents, plugin, components, slashCommands }
-  }
-
-  async function ensureExpected(pluginPath: string): Promise<void> {
-    if (expectedRequested) return
-    expectedRequested = true
-    expected = await params.readExpectedComponents(pluginPath).catch(() => null)
-    expectedSettled = true
+    state = { kind: 'ready', commands: exposedCommands(), agents, plugin: checkPluginLoad({ initPlugins }), slashCommands }
   }
 
   async function start(query: HostedQuery): Promise<void> {
-    if (!params.stage && params.request.source === 'repository') await ensureExpected(params.request.path)
-
     try {
       const [reportedCommands, reportedAgents] = await Promise.race([Promise.all([query.supportedCommands(), query.supportedAgents()]), timeoutRejection(params.timeoutMs ?? CAPABILITIES_TIMEOUT_MS)])
       adoptCommands(reportedCommands)
       agents = toAgentSummaries(reportedAgents)
       recompute()
     } catch (error) {
-      state = { kind: 'unavailable', request: params.request, message: error instanceof Error ? error.message : String(error) }
+      state = { kind: 'unavailable', message: error instanceof Error ? error.message : String(error) }
     }
     params.onChange()
   }
@@ -145,15 +120,6 @@ export function createCapabilityTracker(params: CreateCapabilityTrackerParams): 
 
     if (message['subtype'] === 'init') {
       initPlugins = initPluginsOf(message)
-      if (!params.stage && params.request.source === 'installed' && initPlugins !== null) {
-        const loaded = initPlugins.find((plugin) => plugin.name === PLUGIN_NAME)
-        if (loaded !== undefined) {
-          void ensureExpected(loaded.path).then(() => {
-            recompute()
-            params.onChange()
-          })
-        }
-      }
       recompute()
       params.onChange()
       return

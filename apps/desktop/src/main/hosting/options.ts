@@ -2,7 +2,6 @@
 import type { CanUseTool, HookCallback, Options } from '@/main/hosting/sdk'
 import { ISSUE_BODY_GUARD_MESSAGE, LABEL_GUARD_MESSAGE, issueBodyWriteOf, labelWriteOf } from '@/main/hosting/label-guard'
 import type { SessionDefaults, SessionStartMode } from '@/types/hosting'
-import type { PluginRequest } from '@/types/hosting-plugin'
 import type { StageAgentLaunch } from '@/types/stage'
 
 /** Explicit, never omitted — `[]` would drop the repository's deny rules, plugins, and `CLAUDE.md`. */
@@ -14,8 +13,6 @@ interface BuildSessionOptionsParams {
   /** Never left to the SDK's own bundled fallback. */
   readonly executablePath: string
   readonly canUseTool: CanUseTool
-  /** `repository` adds a local plugin entry overriding the installed copy; `installed` passes none. */
-  readonly plugin: PluginRequest
   /** `model` is set only when non-null, matching Claude Code's own default. Ignored entirely when `stage` is set. */
   readonly defaults: SessionDefaults
   /** Non-null only for a stage session: the inline agent, its model, and the bundle root it may read; `permissionMode` is always `'default'` — `defaults` is never read. */
@@ -56,7 +53,6 @@ export function buildSessionOptions(params: BuildSessionOptionsParams): Options 
     permissionMode: params.stage !== null ? 'default' : params.defaults.permissionMode,
     canUseTool: params.canUseTool,
     settingSources: [...SETTING_SOURCES],
-    ...(params.plugin.source === 'repository' ? { plugins: [{ type: 'local' as const, path: params.plugin.path }] } : {}),
     ...(params.stage !== null ? stageOptions(params.stage) : params.defaults.model !== null ? { model: params.defaults.model } : {}),
   }
 

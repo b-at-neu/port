@@ -3,7 +3,7 @@ import { fetchGatePreflight } from '@/main/github/gate'
 import { fakeTransport, httpFail, httpOk } from '../../../fixtures/github-http'
 
 describe('fetchGatePreflight', () => {
-  it('resolves an Issue node with its body, labels, assignees, and viewer', async () => {
+  it('resolves an Issue node with its body, assignees, and viewer', async () => {
     const stdout = JSON.stringify({
       data: {
         repository: {
@@ -14,7 +14,6 @@ describe('fetchGatePreflight', () => {
             url: 'u',
             state: 'OPEN',
             body: 'Ticket body.\n\n## Implementation Plan\n\nPlan text.',
-            labels: { nodes: [{ name: 'plan review' }] },
             assignees: { nodes: [{ login: 'alice' }] },
           },
         },
@@ -32,12 +31,11 @@ describe('fetchGatePreflight', () => {
       url: 'u',
       state: 'OPEN',
       body: 'Ticket body.\n\n## Implementation Plan\n\nPlan text.',
-      labels: ['plan review'],
       assignees: ['alice'],
     })
   })
 
-  it('resolves a PullRequest node with identity fields only — never body, labels, or assignees', async () => {
+  it('resolves a PullRequest node with identity fields only — never body or assignees', async () => {
     const stdout = JSON.stringify({
       data: {
         repository: { c0: { __typename: 'PullRequest', number: 5, title: 't', url: 'u', state: 'OPEN' } },
@@ -47,7 +45,7 @@ describe('fetchGatePreflight', () => {
     const result = await fetchGatePreflight({ repo: { owner: 'o', name: 'r' }, number: 5, github: fakeTransport(httpOk(stdout)) })
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(result.item).toEqual({ kind: 'pull-request', number: 5, title: 't', url: 'u', state: 'OPEN', body: '', labels: [], assignees: [] })
+    expect(result.item).toEqual({ kind: 'pull-request', number: 5, title: 't', url: 'u', state: 'OPEN', body: '', assignees: [] })
   })
 
   it('reports item: null for a number that does not resolve, without failing the fetch', async () => {

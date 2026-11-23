@@ -1,11 +1,14 @@
-// Pure: the store's keys as configured label names, for readers that still take a label list.
+// Pure: the store's keys as configured label names, for readers that take a label list.
 import type { PipelineItemKind } from '@/types/github'
 import { fullKeysOf, type PipelineView } from '@/types/pipeline-state'
 import { labelName, type LabelVocabulary } from '@/utils/labels/vocabulary'
 
-/** `null` under a labels view, so the caller keeps GitHub's labels; `[]` for an untracked item under a store view. */
+/** What an action on an unseeded repository tells the operator. */
+export const UNSEEDED_MESSAGE = "port hasn't loaded this repository's pipeline state yet"
+
+/** `null` for an unseeded repository, which has no store to read; `[]` for an untracked item in a seeded one. */
 export function stateLabelsOf(view: PipelineView, kind: PipelineItemKind, number: number, vocabulary: LabelVocabulary): readonly string[] | null {
-  if (view.kind === 'labels') return null
+  if (view.kind === 'unseeded') return null
   const item = view.items.find((candidate) => candidate.kind === kind && candidate.number === number)
   if (item === undefined) return []
   return fullKeysOf(item).flatMap((key) => {

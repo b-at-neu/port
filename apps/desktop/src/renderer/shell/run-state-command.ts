@@ -9,7 +9,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { BoardSnapshot } from '@/types/board'
 import { haltHeadingCopy, haltItemLine } from '@/renderer/board/halt-copy'
 import { runStateResultNote, pauseReportNote, pauseAbortedCopy, undoCommandFor } from '@/renderer/board/run-state'
-import { setPauseRequest, setTakeOverRequest } from '@/renderer/shell/stores'
+import { setPauseRequest } from '@/renderer/shell/stores'
 
 type DispatchCommand = DispatchControlResult['command']
 
@@ -17,10 +17,9 @@ const PENDING: Record<DispatchCommand, (repoName: string) => string> = {
   run: (repoName) => `Starting ${repoName}…`,
   drain: (repoName) => `Draining ${repoName}…`,
   pause: (repoName) => `Stopping ${repoName}…`,
-  'take-over': (repoName) => `Taking over ${repoName}…`,
 }
 
-function applyRunState(client: ReturnType<typeof useQueryClient>, repoId: RepoId, result: Extract<DispatchControlResult, { readonly command: 'run' | 'drain' | 'pause' | 'take-over' }>): void {
+function applyRunState(client: ReturnType<typeof useQueryClient>, repoId: RepoId, result: DispatchControlResult): void {
   if (!result.ok) return
   client.setQueryData(ipcQueryOptions('board:snapshot').queryKey, (snapshot: BoardSnapshot | undefined) => {
     if (snapshot === undefined) return snapshot
@@ -60,9 +59,8 @@ export function useRunStateCommand() {
 
   function toastFor(result: DispatchControlResult, prior: RunState | null, repoName: string, undoable: boolean): ActionToast {
     const plain = { description: null, action: null, cancel: null } as const
-    if (!result.ok) return { ...plain, tone: 'error', title: runStateResultNote(result) ?? `Couldn't ${result.command === 'take-over' ? 'take over' : result.command} ${repoName}.` }
+    if (!result.ok) return { ...plain, tone: 'error', title: runStateResultNote(result) ?? `Couldn't ${result.command} ${repoName}.` }
     if (result.command === 'run') return { ...plain, tone: 'success', title: `${repoName} is running`, action: undoable ? undoActionFor(prior, 'run', result.repoId, repoName) : null }
-    if (result.command === 'take-over') return { ...plain, tone: 'success', title: `${repoName} is running here` }
     if (result.command === 'drain') {
       const note = runStateResultNote(result)
       if (note !== null) return { ...plain, tone: 'error', title: note }
@@ -100,14 +98,6 @@ export function useRunStateCommand() {
     confirmPause(repoId: RepoId, repoName: string): void {
       setPauseRequest(null)
       void send('pause', repoId, repoName)
-    },
-    /** Arms `take-over-confirm.tsx`'s `AlertDialog` — a consequential action, never applied at once. */
-    requestTakeOver(repoId: RepoId, repoName: string): void {
-      setTakeOverRequest({ repoId, name: repoName })
-    },
-    async confirmTakeOver(repoId: RepoId, repoName: string): Promise<void> {
-      setTakeOverRequest(null)
-      await send('take-over', repoId, repoName)
     },
     pending: mutation.isPending,
   }

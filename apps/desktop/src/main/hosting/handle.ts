@@ -1,6 +1,5 @@
 import type { ProjectedDelta, ContentBlock } from '@/types/hosting'
 import type { StageAgentLaunch } from '@/types/stage'
-import type { ExpectedComponents, UsageReading, PluginRequest } from '@/types/hosting-plugin'
 
 // One hosted session: builds options, opens the query, runs the pump loop. The ring
 // exists only so a renderer attaching mid-stream is not blank; the on-disk transcript is the history.
@@ -36,7 +35,7 @@ import { createCapabilityTracker } from '@/main/hosting/capabilities'
 import { createTaskTracker } from '@/main/hosting/tasks'
 import { readRateLimit } from '@/main/hosting/rate-limit'
 import { readResult } from '@/main/hosting/result'
-import { readUsage } from '@/main/hosting/usage'
+import { readUsage, type UsageReading } from '@/main/hosting/usage'
 
 import { promptTitle } from '@/main/hosting/title'
 import { buildUserContent } from '@/main/hosting/content'
@@ -65,10 +64,6 @@ interface CreateHostedHandleParams {
   readonly now: () => number
   readonly onEvent: (envelope: SessionEventEnvelope) => void
   readonly onStatus: (snapshot: HostedSessionSnapshot) => void
-  /** Which plugin path this session asked for, resolved once before spawn. */
-  readonly plugin: PluginRequest
-  readonly readExpectedComponents: (pluginPath: string) => Promise<ExpectedComponents | null>
-  readonly samePath: (a: string, b: string) => boolean
   /** The restore path's own resolved title, `null` otherwise; set once and never overwritten. */
   readonly initialTitle: string | null
   readonly defaults: SessionDefaults
@@ -126,19 +121,12 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     cwd: params.cwd,
     executablePath: params.executablePath,
     canUseTool: broker.canUseTool,
-    plugin: params.plugin,
     defaults: params.defaults,
     stage: params.stage !== null ? { agent: params.stage.agent, instructionsRoot: params.stage.instructionsRoot, model: params.stage.model } : null,
   })
   const startedAt = new Date(params.now()).toISOString()
   const projector = createSessionProjector({ cwd: params.cwd })
-  const capabilities = createCapabilityTracker({
-    request: params.plugin,
-    readExpectedComponents: params.readExpectedComponents,
-    samePath: params.samePath,
-    onChange: () => emitStatus(),
-    stage: params.stage !== null,
-  })
+  const capabilities = createCapabilityTracker({ onChange: () => emitStatus(), stage: params.stage !== null })
   const tasks = createTaskTracker()
   // The guard hook denies an off-allowlist Bash call before `canUseTool`, so only the result in the stream shows it.
   const hookDenials = params.stage?.onDeny !== undefined ? createHookDenialTracker() : null

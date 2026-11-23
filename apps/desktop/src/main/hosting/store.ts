@@ -1,8 +1,7 @@
 import type { HostedHandle, MintedRestorable, SessionMarksTracker } from '@/types/hosting'
 import type { HostedQueryFn, HostedSdk } from '@/main/hosting/sdk'
-import type { WhichEnv, WhichOptions, WhichResult, FileResult, DirEntry } from '@/types/platform'
+import type { WhichEnv, WhichOptions, WhichResult } from '@/types/platform'
 import type { HostingPersistence, SessionHistory } from '@/types/hosting'
-import type { ExpectedComponents, PluginRequest } from '@/types/hosting-plugin'
 import type { RemoveSessionWorktreeOutcome } from '@/types/workspace'
 import type { OpenTranscriptParams, TranscriptCursor } from '@/types/sessions'
 import type { TranscriptRead } from '@/utils/sessions/transcript'
@@ -49,7 +48,6 @@ import { createHostedSdk } from '@/main/hosting/sdk'
 
 import { readHistory } from '@/main/hosting/history'
 import { defaultForkListSessions, titleFork } from '@/main/hosting/fork'
-import { defaultReadExpectedComponentsDeps, readExpectedComponents, resolvePluginRequest } from '@/main/hosting/plugin'
 import { readStageEditAllow } from '@/main/hosting/stage-allow'
 import { resolveStartTitle } from '@/main/hosting/title'
 import { createInMemoryHostingPersistence, DEFAULT_SESSION_LIMIT, SESSION_LIMIT_CEILING } from '@/main/hosting/persist'
@@ -83,9 +81,6 @@ export interface HostedStoreDeps {
   readonly onStatus: (snapshot: HostedSessionSnapshot) => void
   /** Forwarded verbatim to every handle's own `onEntries`. */
   readonly onEntries: (delta: SessionEntriesDelta) => void
-  /** Resolved once per operator `start()`, after the executable and before a key is minted; a stage start always requests the installed plugin and never calls it. */
-  readonly resolvePluginRequest: (repoRoot: string, deps?: { readonly readJsonFile: <T>(path: string) => Promise<FileResult<T>> }) => Promise<PluginRequest>
-  readonly readExpectedComponents: (pluginPath: string, deps?: { readonly listDirectory: (path: string) => Promise<FileResult<readonly DirEntry[]>> }) => Promise<ExpectedComponents | null>
   /** A stage start's own edit-allow globs, read from the stage worktree. */
   readonly readStageEditAllow: (cwd: string) => Promise<readonly string[]>
   readonly samePath: (a: string, b: string) => boolean
@@ -106,8 +101,6 @@ export const defaultHostedStoreDeps: HostedStoreDeps = {
   onEvent: () => undefined,
   onStatus: () => undefined,
   onEntries: () => undefined,
-  resolvePluginRequest,
-  readExpectedComponents: (pluginPath: string) => readExpectedComponents(pluginPath, defaultReadExpectedComponentsDeps),
   readStageEditAllow: (cwd: string) => readStageEditAllow(cwd),
   samePath: (a: string, b: string) => pathOps.samePath(a, b),
   persistence: createInMemoryHostingPersistence(),
@@ -210,9 +203,8 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
 
     const cwd = params.workspace.folder
     const stageParams = params.stage ?? null
-    const pluginRequest: Promise<PluginRequest> = stageParams === null ? deps.resolvePluginRequest(cwd) : Promise.resolve({ source: 'installed' })
     const editAllowRead: Promise<readonly string[]> = stageParams === null ? Promise.resolve([]) : deps.readStageEditAllow(cwd)
-    const [sdk, plugin, history, editAllow] = await Promise.all([deps.getSdk(), pluginRequest, deps.readHistory(params.mode), editAllowRead])
+    const [sdk, history, editAllow] = await Promise.all([deps.getSdk(), deps.readHistory(params.mode), editAllowRead])
     const sessionKey = toSessionKey(nextId)
     nextId += 1
     const mode = params.mode
@@ -250,9 +242,6 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
         onStatus: onHandleStatus,
         onSessionId,
         onEntries: deps.onEntries,
-        plugin,
-        readExpectedComponents: deps.readExpectedComponents,
-        samePath: deps.samePath,
         initialTitle,
         defaults,
         history,

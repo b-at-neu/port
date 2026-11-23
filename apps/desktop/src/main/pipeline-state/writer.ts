@@ -13,7 +13,7 @@ import {
   mergedKeysOf,
   mirrorDiff,
 } from '@/main/pipeline-state/mirror'
-import { stateLabelsOf } from '@/main/pipeline-state/labels'
+import { stateLabelsOf, UNSEEDED_MESSAGE } from '@/main/pipeline-state/labels'
 import { draftOf, refusedWriteIntent } from '@/main/incidents/raise'
 import type { IncidentIntent, RecordIncident } from '@/types/incidents'
 import { resolveKeys } from '@/main/writes/command'
@@ -62,8 +62,6 @@ interface MirrorContext {
   readonly fetchItemsByNumber?: WriteStateParams['fetchItemsByNumber']
   readonly writeId?: string
 }
-
-const UNSEEDED = "port hasn't loaded this repository's pipeline state yet"
 
 function splitRepo(repo: string): GitHubRepoRef {
   const slash = repo.indexOf('/')
@@ -167,7 +165,6 @@ export function createStateWriter(deps: StateWriterDeps): StateWriter {
     const precondition: LabelAuditEntry['precondition'] = { present: present.names, absent: absent.names, assignees: request.expect.assignees }
 
     const ownership = await readOwner(ctx)
-    if (ownership.kind === 'terminal') return audit(ctx, target, request.action, 'terminal', precondition, null, { kind: 'terminal-owned', since: ownership.since })
     if (ownership.kind === 'unreadable') return audit(ctx, target, request.action, 'unreadable', precondition, null, { kind: 'ownership-unreadable', path: ownership.path, message: ownership.message })
     const log = (observed: ObservedItem | null, outcome: WriteOutcome): Promise<WriteOutcome> => {
       seen.observed = observed
@@ -180,7 +177,7 @@ export function createStateWriter(deps: StateWriterDeps): StateWriter {
     if (unresolved.length > 0) return log(null, { kind: 'unresolvable-label', keys: unresolved })
 
     const before = deps.store.view(request.repoId)
-    if (before.kind === 'labels') return log(null, { kind: 'state-unsaved', message: UNSEEDED })
+    if (before.kind === 'unseeded') return log(null, { kind: 'state-unsaved', message: UNSEEDED_MESSAGE })
     const stored = before.items.find((item) => item.kind === request.kind && item.number === request.number)
     const linked = request.kind === 'issue' ? linkedPullRequestOf(before.items, request.number)?.number : stored?.issue
     const numbers = linked === undefined || linked === null ? [request.number] : [request.number, linked]
@@ -217,7 +214,7 @@ export function createStateWriter(deps: StateWriterDeps): StateWriter {
 
     const after = deps.store.view(request.repoId)
     const written = after.kind === 'store' ? after.items.find((candidate) => candidate.kind === request.kind && candidate.number === request.number) : undefined
-    if (after.kind !== 'store' || written === undefined) return { kind: 'mirror-failed', mirror: { kind: 'state-unsaved', message: UNSEEDED } }
+    if (after.kind !== 'store' || written === undefined) return { kind: 'mirror-failed', mirror: { kind: 'state-unsaved', message: UNSEEDED_MESSAGE } }
 
     const names = namesFor(ctx, after.items, written, 'state')
     const outcome = await labelsCall(ctx, written, request.action, mirrorDiff(names.desired, names.all, githubSide.labels), { add: request.addAssignees, remove: request.removeAssignees }, githubSide)
@@ -244,7 +241,6 @@ export function createStateWriter(deps: StateWriterDeps): StateWriter {
     const { entry, ref, action } = params
     const ctx: MirrorContext = { repo: entry.config.repo, repoId: entry.id, vocabulary: entry.config.vocabulary, mirror: mirrorVocabularyOf(entry.config), repoRoot: entry.path, auditDir: params.auditDir }
     const ownership = await readOwner(ctx)
-    if (ownership.kind === 'terminal') return audit(ctx, ref, action, 'terminal', null, null, { kind: 'terminal-owned', since: ownership.since })
     if (ownership.kind === 'unreadable') return audit(ctx, ref, action, 'unreadable', null, null, { kind: 'ownership-unreadable', path: ownership.path, message: ownership.message })
 
     const view = deps.store.view(entry.id)

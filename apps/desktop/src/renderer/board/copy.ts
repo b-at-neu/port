@@ -405,13 +405,6 @@ function preconditionFailedCopy(action: OperatorAction, number: number, conflict
   return `#${n} moved while you were deciding. Nothing was written.`
 }
 
-const ACTION_PAST_TENSE: Readonly<Record<OperatorAction, string>> = { pause: 'paused', resume: 'resumed', retry: 'retried', stop: 'stopped', gate: 'gated', refresh: 'refreshed' }
-
-function terminalOwnedCopy(action: OperatorAction, number: number, since: string): string {
-  const n = String(number)
-  return `#${n} wasn't ${ACTION_PAST_TENSE[action]} — your terminal cockpit has owned this repository since ${since}. Use ${action} #${n} there.`
-}
-
 /** One switch over `WriteOutcome['kind']` (the plan's own **UX states**),
  *  plus the `ok: false` refusal reasons `applyItemAction` can return before
  *  ever calling `applyLabels` — a new variant on either union is a compile
@@ -457,10 +450,8 @@ export function actionResultCopy(params: {
       return `#${n} already reads that way. Nothing was written.`
     case 'precondition-failed':
       return preconditionFailedCopy(action, number, outcome.conflict, now)
-    case 'terminal-owned':
-      return terminalOwnedCopy(action, number, outcome.since)
     case 'ownership-unreadable':
-      return `${outcome.path} can't be read — ${outcome.message}. Until it is valid or removed, this app and a terminal cockpit both stand down here — nothing will act on #${n}. Fix or delete the file.`
+      return `${outcome.path} can't be read — ${outcome.message}. Until it is valid or removed, this app stands down here — nothing will act on #${n}. Fix or delete the file.`
     case 'unresolvable-label':
       return `This repository's label vocabulary doesn't resolve: ${outcome.keys.join(', ')}. Nothing was written.`
     case 'item-unavailable':

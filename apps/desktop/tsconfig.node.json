@@ -6,7 +6,8 @@
     "types": ["node"],
     "paths": {
       "@/*": ["./src/*"],
-      "#app-fixtures": ["./tests/fixtures/app/index.ts"]
+      "#app-fixtures": ["./tests/fixtures/app/index.ts"],
+      "#app-route": ["./src/main/platform/route.ts"]
     }
   },
   "include": [
@@ -33,13 +34,6 @@
     "tests/fixtures/**/*",
     "tests/visual/**/*",
     "tests/smoke/**/*",
-    "tests/e2e/**/*",
-    "../../scripts/port-tick/gates.ts",
-    "../../scripts/port-tick/contention.ts",
-    "../../scripts/port-tick/checks.ts",
-    "../../scripts/port-tick/liveness.ts",
-    "../../scripts/port-tick/classify.ts",
-    "../../scripts/port-tick/overrides.ts",
-    "../../scripts/port-tick/wire.ts"
+    "tests/e2e/**/*"
   ]
 }

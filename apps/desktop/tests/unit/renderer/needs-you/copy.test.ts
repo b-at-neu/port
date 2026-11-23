@@ -121,7 +121,6 @@ describe('needsYouLeadCopy', () => {
     ['pr-unverified', "the pull request it named isn't open on its branch"],
     ['moved', 'its stage changed while it ran'],
     ['write-failed', 'GitHub kept refusing the change'],
-    ['terminal-owned', 'the terminal pipeline owns this repository now'],
     ['unresolvable-label', "a label it needs isn't in this repository"],
   ] as const)('half-labelled — a refused hand-back (%s) names why port could not record the stage', (reason, copy) => {
     const item = {

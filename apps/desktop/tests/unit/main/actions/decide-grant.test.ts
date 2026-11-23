@@ -43,17 +43,18 @@ interface Calls {
 
 function run(options: { readonly item?: ReconciledItem; readonly fetch?: ItemsByNumberFetch; readonly comment?: WriteOutcome; readonly labels?: WriteOutcome; readonly liveStage?: boolean; readonly request?: ItemDecisionRequest }) {
   const calls: Calls = { bodies: [], writes: [] }
+  const read = options.fetch ?? fresh(['needs revision'])
   const deps: Parameters<typeof applyItemDecision>[1] = {
     writeState: (params) => {
       calls.writes.push(params)
       return Promise.resolve(options.labels ?? { kind: 'no-op' })
     },
-    stateLabels: () => null,
+    stateLabels: () => (read.ok ? (read.resolved[0]?.labels ?? []) : []),
     postComment: (params) => {
       calls.bodies.push(params.request.body)
       return Promise.resolve(options.comment ?? APPLIED)
     },
-    fetchItemsByNumber: () => Promise.resolve(options.fetch ?? fresh(['needs revision'])),
+    fetchItemsByNumber: () => Promise.resolve(read),
   }
   const snapshot = snapshotOf([repositoryState([options.item ?? cappedItem()], { repoId: REPO_ID, reviewCycleCap: 5 })])
   const result = applyItemDecision({ request: options.request ?? REQUEST, snapshot, entry: readyEntry({ id: REPO_ID }), auditDir: '/audit', scratchDir: '/scratch', liveStage: options.liveStage ?? false }, deps)

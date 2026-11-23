@@ -66,6 +66,7 @@ export const RESTRICTIONS = [
     paths: [{ name: '@anthropic-ai/claude-agent-sdk', importNames: ['getSessionMessages', 'getSubagentMessages'], message: 'Read transcripts through main/sessions/, never the SDK.' }],
   },
   { id: 'no-tests', patterns: [{ group: ['**/tests/**'], message: TESTING }] },
+  { id: 'no-repo-scripts', patterns: [{ group: ['**/scripts/**', '**/plugins/**'], message: 'apps/desktop/src imports nothing from scripts/ or plugins/ (ENGINEERING §9).' }] },
   {
     id: 'gh',
     except: ['src/main/writes/**', 'src/main/platform/**'],

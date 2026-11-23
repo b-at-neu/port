@@ -78,7 +78,7 @@ function heldAction(item: Extract<NeedsYouItem, { readonly kind: 'held' }>): Nee
     return { label, kind: 'grant', disabledReason, secondaryLabel: 'Open PR', secondaryDisabledReason: null }
   }
   if (item.held.reason === 'contended') {
-    const disabledReason = item.owner === 'app' ? null : 'The terminal cockpit runs this repository. Use `dispatch #N anyway` there.'
+    const disabledReason = item.owner === 'app' ? null : "This app isn't running this repository."
     return { label: 'Dispatch anyway', kind: 'force', disabledReason }
   }
   return { label: 'Open ticket', kind: 'open', disabledReason: null }

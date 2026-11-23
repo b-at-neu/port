@@ -5,14 +5,14 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { StageHandback, StageOutcomeKind } from '@/types/stage-session'
 import type { StageLabelResult } from '@/types/stage-labels'
-import type { LedgerRow, UnmatchedResult } from '../../../../scripts/port-tick/liveness'
-import type { RefreshMemoEntry } from '../../../../scripts/port-tick/gates'
+import type { LedgerRow, UnmatchedResult } from '@/utils/pipeline/liveness'
+import type { RefreshMemoEntry } from '@/utils/pipeline/gates'
 
 /** A bare four-way key, never the session index's hyphenated `PortStageAgent` — this one names *what to dispatch next*, matching `models.<key>`, not *what already ran*. */
 export type StageAgent = 'plan' | 'impl' | 'review' | 'revise'
 
 /** Why the app's own label write for a stage session was refused or never made — reported on Needs you, never guessed past. */
-export type HandoffRefusal = 'moved' | 'no-handback' | 'unknown-handback' | 'pr-unverified' | 'terminal-owned' | 'write-failed' | 'unresolvable-label' | 'no-plan-file' | 'empty-plan-file'
+export type HandoffRefusal = 'moved' | 'no-handback' | 'unknown-handback' | 'pr-unverified' | 'write-failed' | 'unresolvable-label' | 'no-plan-file' | 'empty-plan-file'
 
 /** One stage session this app's own launcher recorded as ended, projected from `DispatchRecord`s that are not `started` and carry a non-`null` outcome — `main/tick/repair.ts`'s own session-shape evidence, newest per number. */
 export interface EndedStage {
