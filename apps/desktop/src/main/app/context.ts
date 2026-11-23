@@ -1,8 +1,8 @@
-// The composition root: everything an action may touch, built once at startup in today's construction order.
+// The composition root: everything an action may touch, built once at startup, one block per service.
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import type { EventMap, EventName } from '@/main/app/events'
-import { chooseDirectory, chooseSavePath } from '@/main/app/shell/dialogs'
+import { chooseDirectory, chooseFolder, chooseSavePath } from '@/main/app/shell/dialogs'
 import { createIncidentLog } from '@/main/pipeline/incidents/log'
 import { defaultWorkspaceChannelDeps } from '@/main/features/folders/resolve'
 import { createRecentsStore } from '@/main/features/folders/recents'
@@ -10,7 +10,6 @@ import { createSessionWorktree, removeSessionWorktreeAt } from '@/main/repos/wor
 import { releaseStageBranch } from '@/main/repos/worktree/stage-worktree'
 import { createDefaultStageLauncher } from '@/main/dispatch/stage/default'
 import { createOffload } from '@/main/worker/deps'
-import { statPath, readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
 import { bindOperator } from '@/main/app/operator'
 import { createPipelineState } from '@/main/pipeline/state/default'
 import { defaultHostingChannelDeps } from '@/main/features/session/resolve'
@@ -20,9 +19,9 @@ import { registeredRepoIds } from '@/main/dispatch/resolve'
 import { fetchItemsByNumber } from '@/main/github/adapter'
 import { readOwnership, takeOwnership } from '@/main/repos/ownership'
 import type { GateChannelDeps, HostingChannelDeps, IncidentChannelDeps, StageChannelDeps } from '@/main/app/seams'
-import { defaultGitRunner, git } from '@/main/platform/git'
-import { listRepositories } from '@/main/repos'
-import type { RegistryDeps } from '@/types/registry'
+import { createPlatform, type Platform } from '@/main/platform'
+import { nativeNotify } from '@/main/platform/notify'
+import { createRepos, listRepositories, type Repos } from '@/main/repos'
 import { createPipelineWatcher } from '@/main/pipeline/board/watcher'
 import { createHostedStore, defaultHostedStoreDeps } from '@/main/sessions/hosting/store'
 import { createHostingPersistence } from '@/main/sessions/hosting/persist'
@@ -42,19 +41,17 @@ import type { SessionIndex } from '@/types/session-index'
 import type { StageLauncherHandle, StageRegistry } from '@/types/stage'
 import type { IncidentLog } from '@/types/incidents'
 import type { RecentsStore } from '@/types/workspace'
-import type { UsageLedger, AppInfo } from '@/types/settings'
+import type { UsageLedger } from '@/types/settings'
 import type { WorkspaceChannelDeps } from '@/main/features/folders/resolve'
 import type { SessionKey } from '@/types/hosting'
 import type { AppCommand } from '@/utils/shell/commands'
 
 type Offload = ReturnType<typeof createOffload>
 
-export interface AppContext {
-  readonly paths: { readonly userData: string; readonly temp: string; readonly logs: string }
-  readonly info: () => AppInfo
+export type AppContext = Platform & {
   /** The one broadcast to every renderer window. */
   readonly emit: <E extends EventName>(event: E, payload: EventMap[E]) => void
-  readonly repos: { readonly deps: RegistryDeps; readonly list: (options?: { readonly fresh?: boolean }) => ReturnType<typeof listRepositories> }
+  readonly repos: Repos
   readonly stores: {
     readonly runStates: RunStateStore
     readonly sessionIndex: SessionIndex
@@ -102,33 +99,41 @@ export function broadcastAppCommand(command: AppCommand): void {
 
 export function createAppContext(restart: RestartSeams): AppContext {
   const userData = app.getPath('userData')
-  const registryDeps: RegistryDeps = { registryDir: userData, git: (args, cwd) => git(args, { cwd }), chooseDirectory }
+  const platform = createPlatform({
+    paths: { userData, temp: app.getPath('temp'), logs: app.getPath('logs') },
+    info: () => ({ app: app.getVersion(), electron: process.versions.electron, node: process.versions.node, chromium: process.versions.chrome, commit: __PORT_BUILD_COMMIT__ }),
+    dialogs: { chooseDirectory, chooseFolder, chooseSavePath },
+    notify: nativeNotify,
+  })
+  const repos = createRepos(platform)
 
   const runStates = createRunStateStore(userData)
-  void runStates.load(() => registeredRepoIds(registryDeps))
-
-  const { engine, close: closeOffload, ...offload } = createOffload({ onRespawn: () => void watcher.refresh() })
+  void runStates.load(() => registeredRepoIds(repos.deps))
 
   const recents = createRecentsStore({ dir: userData })
 
-  const notifier = createAppNotifier({ registryDeps, broadcast: (command) => emit('app.command', command), prefs: () => hostedStore.notificationPrefs() })
+  const incidentLog = createIncidentLog({ dir: userData, now: platform.clock.now, newId: () => globalThis.crypto.randomUUID() })
+
+  const pipelineState = createPipelineState({ dir: userData, auditDir: userData, recordIncident: incidentLog.record })
+
+  // Loaded once at boot: a `running` entry found then can only mean the process died, and promotes to `crash`.
+  const stageRegistry = createStageRegistry({ path: join(userData, 'stage-sessions.json'), readJson: platform.fs.readJson, writeJsonAtomic: platform.fs.writeJsonAtomic, now: platform.clock.now })
+  void stageRegistry.load()
+
+  const sessionIndex = createSessionIndex({ path: join(userData, 'session-index.json'), readJson: platform.fs.readJson, writeJsonAtomic: platform.fs.writeJsonAtomic, now: platform.clock.now })
+  void sessionIndex.load()
+
+  const usageLedger = createUsageLedger({ path: join(userData, 'usage-ledger.json'), readJson: platform.fs.readJson, writeJsonAtomic: platform.fs.writeJsonAtomic, now: platform.clock.now, bootId: globalThis.crypto.randomUUID() })
+  void usageLedger.load()
+
+  const { engine, close: closeOffload, ...offload } = createOffload({ onRespawn: () => void watcher.refresh() })
+
+  const actions = bindOperator(pipelineState)
+
+  const notifier = createAppNotifier({ registryDeps: repos.deps, broadcast: (command) => emit('app.command', command), prefs: () => hostedStore.notificationPrefs() })
 
   // Assigned right after createDispatchRuntime below — stageLauncher's onOutcome closes over it, so construction order stays acyclic.
   let dispatcherRef: Dispatcher | null = null
-
-  const incidentLog = createIncidentLog({ dir: userData, now: () => new Date(), newId: () => globalThis.crypto.randomUUID() })
-  const pipelineState = createPipelineState({ dir: userData, auditDir: userData, recordIncident: incidentLog.record })
-  const actions = bindOperator(pipelineState)
-
-  // Loaded once at boot: a `running` entry found then can only mean the process died, and promotes to `crash`.
-  const stageRegistry = createStageRegistry({ path: join(userData, 'stage-sessions.json'), readJson: readJsonFile, writeJsonAtomic: writeJsonFileAtomic, now: () => new Date() })
-  void stageRegistry.load()
-
-  const sessionIndex = createSessionIndex({ path: join(userData, 'session-index.json'), readJson: readJsonFile, writeJsonAtomic: writeJsonFileAtomic, now: () => new Date() })
-  void sessionIndex.load()
-
-  const usageLedger = createUsageLedger({ path: join(userData, 'usage-ledger.json'), readJson: readJsonFile, writeJsonAtomic: writeJsonFileAtomic, now: () => new Date(), bootId: globalThis.crypto.randomUUID() })
-  void usageLedger.load()
 
   const hostedStore = createHostedStore({
     ...defaultHostedStoreDeps,
@@ -155,9 +160,9 @@ export function createAppContext(restart: RestartSeams): AppContext {
     bundle: { isPackaged: app.isPackaged, mainDir: __dirname, resourcesPath: process.resourcesPath },
   })
   const hosting = defaultHostingChannelDeps(hostedStore, sessionIndex, {
-    git: (args, cwd) => git(args, { cwd }),
+    git: platform.git,
     recents,
-    exists: async (path) => (await statPath(path)).ok,
+    exists: async (path) => (await platform.fs.stat(path)).ok,
     readSessions: () => engine.listSessions(),
     createWorktree: createSessionWorktree,
   })
@@ -170,11 +175,11 @@ export function createAppContext(restart: RestartSeams): AppContext {
     takeOwnership,
     fetchItemsByNumber,
     listRepositories,
-    registryDeps,
+    registryDeps: repos.deps,
     actions,
     stateLabels: pipelineState.stateLabels,
-    dirs: { audit: userData, scratch: app.getPath('temp') },
-    now: () => new Date(),
+    dirs: { audit: userData, scratch: platform.paths.temp },
+    now: platform.clock.now,
     recordIncident: incidentLog.record,
     interrupted: (repoId) => stageRegistry.list().filter((entry) => entry.repoId === repoId),
   })
@@ -184,10 +189,10 @@ export function createAppContext(restart: RestartSeams): AppContext {
   const watcher = createPipelineWatcher({
     engine,
     repositories: async ({ fresh }) => {
-      const list = await listRepositories(registryDeps, { fresh })
+      const list = await repos.list({ fresh })
       return list.ok ? list.repositories : []
     },
-    git: (args, cwd) => git(args, { cwd }),
+    git: platform.git,
     runStates: (repoIds) => runStates.snapshot(repoIds),
     ...watcherDeps,
     ...pipelineState.watcherDeps,
@@ -210,50 +215,47 @@ export function createAppContext(restart: RestartSeams): AppContext {
     dispatcher,
     store: hostedStore,
     launcher: stageLauncher,
-    removeWorktree: (path, force) => removeSessionWorktreeAt({ path, force, git: defaultGitRunner() }),
-    releaseBranch: (root, branch, baseSha) => releaseStageBranch({ root, git: defaultGitRunner(), branch, baseSha }),
+    removeWorktree: (path, force) => removeSessionWorktreeAt({ path, force, git: platform.git }),
+    releaseBranch: (root, branch, baseSha) => releaseStageBranch({ root, git: platform.git, branch, baseSha }),
     applyItemAction: actions.applyItemAction,
     snapshot: watcher.snapshot,
     auditDir: userData,
-    scratchDir: app.getPath('temp'),
+    scratchDir: platform.paths.temp,
     allow: defaultAllowIo,
   }
-  const stageSweeper = createStageSweeper(registryDeps, stage, { fetchItemsByNumber, onChange: () => watcher.republish() })
+  const stageSweeper = createStageSweeper(repos.deps, stage, { fetchItemsByNumber, onChange: () => watcher.republish() })
 
   const update = createDefaultUpdate(restart)
-  void update.service.check('startup')
 
-  return {
-    paths: { userData, temp: app.getPath('temp'), logs: app.getPath('logs') },
-    info: () => ({ app: app.getVersion(), electron: process.versions.electron, node: process.versions.node, chromium: process.versions.chrome, commit: __PORT_BUILD_COMMIT__ }),
-    emit,
-    repos: { deps: registryDeps, list: (options) => listRepositories(registryDeps, options) },
-    stores: { runStates, sessionIndex, usageLedger, stageRegistry, recents, pipelineState, incidentLog },
-    live: {
-      watcher,
-      hostedStore,
-      dispatcher,
-      stageLauncher,
-      offload,
-      engine,
-      notifier,
-      sessionMenu,
-      update,
-      forceDispatch,
-      actions,
-      stageSweeper,
-      shutdown: () => {
-        shutdown()
-        void closeOffload()
-      },
-    },
-    seams: {
-      hosting,
-      workspace: defaultWorkspaceChannelDeps(userData, workspaceOf, recents),
-      stage,
-      incidents: { listRepositories, log: incidentLog, chooseSavePath, writeJson: writeJsonFileAtomic, now: () => new Date() },
-      // `refresh` is the live watcher's method, never a second poll built here.
-      gate: { gatePreflight: actions.gatePreflight, gateAnswer: actions.gateAnswer, refresh: watcher.refresh },
+  const seams: AppContext['seams'] = {
+    hosting,
+    workspace: defaultWorkspaceChannelDeps(userData, workspaceOf, recents),
+    stage,
+    incidents: { listRepositories, log: incidentLog, chooseSavePath: platform.dialogs.chooseSavePath, writeJson: platform.fs.writeJsonAtomic, now: platform.clock.now },
+    // `refresh` is the live watcher's method, never a second poll built here.
+    gate: { gatePreflight: actions.gatePreflight, gateAnswer: actions.gateAnswer, refresh: watcher.refresh },
+  }
+
+  const live: AppContext['live'] = {
+    watcher,
+    hostedStore,
+    dispatcher,
+    stageLauncher,
+    offload,
+    engine,
+    notifier,
+    sessionMenu,
+    update,
+    forceDispatch,
+    actions,
+    stageSweeper,
+    shutdown: () => {
+      shutdown()
+      void closeOffload()
     },
   }
+
+  void update.service.check('startup')
+
+  return { ...platform, emit, repos, stores: { runStates, sessionIndex, usageLedger, stageRegistry, recents, pipelineState, incidentLog }, seams, live }
 }
