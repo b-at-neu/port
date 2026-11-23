@@ -1,6 +1,7 @@
 // The one notification decider. Fires only when no port window is focused — a missing nudge
 // costs one glance, a spurious one trains the operator to ignore them.
 import { BrowserWindow, Notification } from 'electron'
+import { focusFirstWindow } from '@/main/platform/notify'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import type { NeedsYouNotification } from '@/types/settings'
 import type { AppCommand } from '@/utils/shell/commands'
@@ -98,14 +99,6 @@ export function createNotifier(params: CreateNotifierParams): SessionNotifier {
       })
     },
   }
-}
-
-function focusFirstWindow(): void {
-  const [window] = BrowserWindow.getAllWindows()
-  if (window === undefined) return
-  if (window.isMinimized()) window.restore()
-  window.show()
-  window.focus()
 }
 
 interface AppNotifier extends SessionNotifier {

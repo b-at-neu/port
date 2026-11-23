@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { actions } from '@/main/app/router'
-import { callAction } from '../../../support/call-action'
+import { readyEntry } from '../../../fixtures/board-state'
+import { callAction, createTestContext } from '../../../support/context'
 
 const NAME_SHAPE = /^[a-z]+\.[a-zA-Z]+$/
 
@@ -27,6 +28,13 @@ describe('router', () => {
   })
 
   it('fails the call, never reaches run, when the input does not parse', async () => {
-    await expect(callAction({}, 'repos.remove', {} as never)).rejects.toThrow()
+    await expect(callAction(createTestContext(), 'repos.remove', {} as never)).rejects.toThrow()
+  })
+
+  it('runs an action through the in-memory context', async () => {
+    const entry = readyEntry()
+    const ctx = createTestContext({ repositories: [entry] })
+    expect(await callAction(ctx, 'repos.list')).toEqual({ ok: true, repositories: [entry] })
+    expect(await callAction(ctx, 'app.info')).toEqual(ctx.info())
   })
 })

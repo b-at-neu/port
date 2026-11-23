@@ -10,6 +10,10 @@ export interface ReadLinesFromValue {
   readonly filledBudget: boolean
 }
 
+export interface ReadLinesFromOptions {
+  readonly maxBytes: number
+}
+
 export type DirEntryKind = 'file' | 'directory' | 'symlink' | 'other'
 
 export interface DirEntry {
@@ -155,6 +159,47 @@ export type CommandResult =
   | { readonly ok: false; readonly kind: 'timeout'; readonly timeoutMs: number; readonly stderr: string }
   | { readonly ok: false; readonly kind: 'output-too-large'; readonly maxBytes: number }
   | { readonly ok: false; readonly kind: 'spawn-failed'; readonly message: string }
+
+/** Main's one clock; a caller that needs milliseconds calls `now().getTime()`. */
+export interface Clock {
+  readonly now: () => Date
+}
+
+export type CommandRunner = (command: KnownCommand, args: readonly string[], options?: RunCommandOptions) => Promise<CommandResult>
+
+/** Member names match `StoreFs`, so `createJsonStore({ fs: ctx.fs })` needs no adapter. */
+export interface PlatformFs {
+  readonly readJson: <T = unknown>(path: string) => Promise<FileResult<T>>
+  readonly writeJsonAtomic: (path: string, value: unknown) => Promise<FileResult<void>>
+  readonly ensureDir: (path: string) => Promise<FileResult<void>>
+  readonly exists: (path: string) => Promise<boolean>
+  readonly readText: (path: string) => Promise<FileResult<string>>
+  readonly writeText: (path: string, text: string) => Promise<FileResult<void>>
+  readonly appendText: (path: string, text: string) => Promise<FileResult<void>>
+  readonly list: (path: string) => Promise<FileResult<readonly DirEntry[]>>
+  readonly stat: (path: string) => Promise<FileResult<StatInfo>>
+  readonly remove: (path: string) => Promise<FileResult<void>>
+  readonly removeDirectory: (path: string) => Promise<RemoveDirectoryResult>
+  readonly rename: (from: string, to: string) => Promise<FileResult<void>>
+  readonly readLinesFrom: (path: string, start: number, options: ReadLinesFromOptions) => Promise<ReadLinesFromResult>
+}
+
+export interface PlatformPaths {
+  readonly userData: string
+  readonly temp: string
+  readonly logs: string
+}
+
+export interface PlatformDialogs {
+  readonly chooseDirectory: () => Promise<string | null>
+  readonly chooseFolder: () => Promise<string | null>
+  readonly chooseSavePath: (defaultName: string) => Promise<string | null>
+}
+
+export interface NativeNotify {
+  readonly focused: () => boolean
+  readonly show: (notice: { readonly title: string; readonly body: string }, onClick: () => void) => void
+}
 
 /** The three GitHub transports one client carries; the host's reads GitHub, the E2E build's reads the fake. */
 export interface GitHubClient {
