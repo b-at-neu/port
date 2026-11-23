@@ -11,7 +11,7 @@ import type { RepoDispatchStatus } from '@/types/dispatch'
 import { createBudgetGate } from '@/main/dispatch/budget-gate'
 import { createDispatcher } from '@/main/dispatch/dispatcher'
 import { readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
-import { createStageDenialStore } from '@/main/stage/denials'
+import { createStageDenialStore } from '@/main/dispatch/stage/denials'
 import { join } from 'node:path'
 
 import { createAutoPlanner } from '@/main/dispatch/auto-plan'

@@ -5,7 +5,7 @@ import { createJsonStore } from '@/main/platform/json-store'
 import type { InterruptedReason, InterruptedStage } from '@/types/stage'
 import type { FileResult } from '@/types/platform'
 import type { StageRegistry } from '@/types/stage'
-import { NETWORK_BACKOFF_MS } from '@/main/stage/stale'
+import { NETWORK_BACKOFF_MS } from '@/main/dispatch/stage/stale'
 
 const CURRENT_VERSION = 1
 

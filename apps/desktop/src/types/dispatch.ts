@@ -289,7 +289,7 @@ export interface CreateDispatcherParams {
   readonly now: () => Date
   /** Best-effort: never rejects, and no call site depends on it landing. */
   readonly recordIncident: RecordIncident
-  /** Interrupted stage sessions for a repository, read from `main/stage/registry.ts` — `[]` when none is wired (tests, or before the registry loads). */
+  /** Interrupted stage sessions for a repository, read from `main/dispatch/stage/registry.ts` — `[]` when none is wired (tests, or before the registry loads). */
   readonly interrupted?: (repoId: RepoId) => readonly InterruptedStage[]
 }
 

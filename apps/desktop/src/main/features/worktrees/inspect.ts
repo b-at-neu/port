@@ -9,8 +9,8 @@ import type { ItemStateName } from '@/types/github'
 import type { WorktreeEntry } from '@/types/local'
 import type { CommandResult, GitRunner } from '@/types/platform'
 import type { InspectedCandidate, Inspection, ReadWorktreeReportParams, ReclaimerFailureKind, ReclaimerFs, ReclaimerSeams, ResolvedSeams } from '@/types/reclaimer'
-import { classifyCandidate, describeReason } from '@/main/reclaimer/classify'
-import { findOrphanDirs } from '@/main/reclaimer/orphans'
+import { classifyCandidate, describeReason } from '@/main/features/worktrees/classify'
+import { findOrphanDirs } from '@/main/features/worktrees/orphans'
 
 // Fails to compile if a new `CommandResult` failure kind is added without `ReclaimerFailureKind` growing to match.
 type CommandResultFailureKind = Exclude<CommandResult, { ok: true }>['kind']

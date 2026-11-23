@@ -18,7 +18,7 @@ interface CreatePermissionBrokerParams {
   readonly onPlanApproved?: (mode: 'default' | 'acceptEdits') => void
   /** Set only for a stage session. Evaluated before the SDK's own suggestions: `deny` resolves immediately and creates no pending entry; `ask` creates the normal entry with `protectedPath` set, forcing `sessionGrant: null` so "allow for this session" is never offered on a protected edit. */
   readonly policy?: (toolName: string, input: Readonly<Record<string, unknown>>) => StagePolicyDecision
-  /** Fired once per `policy`-denied call, never for a protected-path or interaction `ask` — `main/stage/launcher.ts`'s own seam into `StageDenial` bookkeeping. */
+  /** Fired once per `policy`-denied call, never for a protected-path or interaction `ask` — `main/dispatch/stage/launcher.ts`'s own seam into `StageDenial` bookkeeping. */
   readonly onDeny?: (toolName: string, input: Readonly<Record<string, unknown>>) => void
 }
 

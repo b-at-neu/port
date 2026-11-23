@@ -1,7 +1,7 @@
 // Directories beside a registered worktree that git does not track at all — reported, never deleted by a read.
 import type { PathOps } from '@/types/platform'
 import type { OrphanInput, ReclaimerFs } from '@/types/reclaimer'
-import { orphanVerdict } from '@/main/reclaimer/classify'
+import { orphanVerdict } from '@/main/features/worktrees/classify'
 
 export interface OrphanCandidate {
   readonly path: string

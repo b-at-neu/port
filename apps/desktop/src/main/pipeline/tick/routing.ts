@@ -21,7 +21,7 @@ export const AGENT_FOR_IN_FLIGHT: Readonly<Partial<Record<LabelKey, StageAgent>>
   refreshing: 'revise',
 }
 
-/** The forward direction of `AGENT_FOR_IN_FLIGHT` — `main/stage/launcher.ts`'s own seam for the in-flight key a just-launched stage carries, disambiguating `revise`'s two in-flight keys by `trigger`. */
+/** The forward direction of `AGENT_FOR_IN_FLIGHT` — `main/dispatch/stage/launcher.ts`'s own seam for the in-flight key a just-launched stage carries, disambiguating `revise`'s two in-flight keys by `trigger`. */
 export function inFlightKeyFor(agent: StageAgent, trigger: LabelKey): LabelKey {
   if (trigger === 'refreshBranch') return 'refreshing'
   switch (agent) {

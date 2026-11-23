@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RefRead } from '@/types/registry'
-import { readReleaseConfig } from '@/main/release/config'
+import { readReleaseConfig } from '@/main/features/release/config'
 
 function reader(read: RefRead) {
   return () => Promise.resolve(read)

@@ -2,7 +2,7 @@
 import { node as defaultNode } from '@/main/platform/node'
 import type { CommandResult, NodeRunner } from '@/types/platform'
 import type { HookOutcome } from '@/types/release'
-import { parseNodeCommand } from '@/main/reclaimer/command'
+import { parseNodeCommand } from '@/main/features/worktrees/command'
 
 const HOOK_TIMEOUT_MS = 5 * 60_000
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createUpdateService, type UpdateServiceDeps } from '@/main/update/service'
+import { createUpdateService, type UpdateServiceDeps } from '@/main/features/update/service'
 import type { AppRelease, FetchReleasesResult } from '@/types/update'
 
 const release = (tag: string): AppRelease => ({ tag, notesUrl: `https://example.test/${tag}`, draft: false, prerelease: false, publishedAt: null, assets: [] })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkGate, classifyUpdate, selectLatestRelease } from '@/main/update/select'
+import { checkGate, classifyUpdate, selectLatestRelease } from '@/main/features/update/select'
 import { parseVersion, type ParsedVersion } from '@/utils/release/version'
 import type { AppRelease } from '@/types/update'
 

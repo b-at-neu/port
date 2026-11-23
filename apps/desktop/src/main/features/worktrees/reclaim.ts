@@ -1,7 +1,7 @@
 // runReclaim: the write half of report.ts's read. `--unlock`/`--force-dirty` apply only path-scoped to one confirmed worktree, never with an issue.
 import type { InspectedCandidate, ReclaimedWorktree, RunReclaimParams, WorktreesReclaimResult } from '@/types/reclaimer'
-import { inspectWorktrees, resolveSeams } from '@/main/reclaimer/inspect'
-import { deleteMergedBranch, pruneWorktrees, removeWorktree, unlockWorktree } from '@/main/reclaimer/remove'
+import { inspectWorktrees, resolveSeams } from '@/main/features/worktrees/inspect'
+import { deleteMergedBranch, pruneWorktrees, removeWorktree, unlockWorktree } from '@/main/features/worktrees/remove'
 
 const RECLAIM_MAX = 5
 

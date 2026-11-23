@@ -16,9 +16,9 @@ import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/repos'
 import type { RegistryDeps } from '@/types/registry'
 import { isRecord } from '@/utils/guards'
 import { pathOps } from '@/main/platform/paths'
-import { runPurge } from '@/main/reclaimer/purge'
-import { runReclaim } from '@/main/reclaimer/reclaim'
-import { readWorktreeReport } from '@/main/reclaimer/report'
+import { runPurge } from '@/main/features/worktrees/purge'
+import { runReclaim } from '@/main/features/worktrees/reclaim'
+import { readWorktreeReport } from '@/main/features/worktrees/report'
 
 import { appendAudit } from '@/main/github/writes/audit'
 

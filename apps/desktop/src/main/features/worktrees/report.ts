@@ -1,7 +1,7 @@
 // readWorktreeReport: the read half of worktree hygiene, with item states resolved from GitHub.
 import type { InspectedWorktree, ReadWorktreeReportParams, WorktreeState, WorktreesReport } from '@/types/reclaimer'
 import { isReclaimableState } from '@/types/reclaimer'
-import { inspectWorktrees, resolveSeams } from '@/main/reclaimer/inspect'
+import { inspectWorktrees, resolveSeams } from '@/main/features/worktrees/inspect'
 
 export async function readWorktreeReport(params: ReadWorktreeReportParams): Promise<WorktreesReport> {
   const { pathOps, now } = resolveSeams(params)

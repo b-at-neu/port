@@ -2,7 +2,7 @@
 import { readWorktrees } from '@/main/repos/local/worktrees'
 import type { CommandResult } from '@/types/platform'
 import type { PurgeCause, ResolvedSeams } from '@/types/reclaimer'
-import { classifyRemovalFailure, fallbackDecision } from '@/main/reclaimer/classify'
+import { classifyRemovalFailure, fallbackDecision } from '@/main/features/worktrees/classify'
 
 export interface RemovalOutcome {
   readonly removed: boolean

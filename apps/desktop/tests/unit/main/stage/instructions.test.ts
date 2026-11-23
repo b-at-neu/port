@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { buildStageContext, createStageInstructionsLoader, extractSection, loadStageInstructions, readStageConfigPointers, STAGE_PIPELINE_SECTIONS } from '@/main/stage/instructions'
+import { buildStageContext, createStageInstructionsLoader, extractSection, loadStageInstructions, readStageConfigPointers, STAGE_PIPELINE_SECTIONS } from '@/main/dispatch/stage/instructions'
 import { readTextFile } from '@/main/platform/files'
 import { pathOps } from '@/main/platform/paths'
 import { FIXTURE_REPOSITORIES, WIDGETS_ID } from '../../../fixtures/app/repos'

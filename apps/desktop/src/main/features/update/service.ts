@@ -1,4 +1,4 @@
-import { checkGate, classifyUpdate, selectLatestRelease } from '@/main/update/select'
+import { checkGate, classifyUpdate, selectLatestRelease } from '@/main/features/update/select'
 
 import type { FetchReleasesResult, UpdateService, UpdateState, UpdateTrigger } from '@/types/update'
 import type { ParsedVersion } from '@/utils/release/version'

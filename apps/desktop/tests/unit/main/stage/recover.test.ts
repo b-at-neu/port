@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { resumeStage, restartStage, RESUME_PROMPT } from '@/main/stage/recover'
-import { createStageRegistry } from '@/main/stage/registry'
+import { resumeStage, restartStage, RESUME_PROMPT } from '@/main/dispatch/stage/recover'
+import { createStageRegistry } from '@/main/dispatch/stage/registry'
 import type { FileResult } from '@/types/platform'
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import type { StageLaunchResult } from '@/types/dispatch'

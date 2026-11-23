@@ -5,7 +5,7 @@ import type { RepoDispatchStatus } from '@/types/dispatch'
 import type { FetchItemsByNumberParams, GitHubRepoRef, ItemsByNumberFetch } from '@/types/github'
 import type { InterruptedStage, StageRegistry, StageRestartResult, StageResumeResult } from '@/types/stage'
 import type { RemoveSessionWorktreeOutcome } from '@/types/workspace'
-import { autoResumable, clearedByRecheck, networkGivenUp, orphanedRunning, staleInterrupted } from '@/main/stage/stale'
+import { autoResumable, clearedByRecheck, networkGivenUp, orphanedRunning, staleInterrupted } from '@/main/dispatch/stage/stale'
 
 interface CreateInterruptedSweeperParams {
   readonly registry: Pick<StageRegistry, 'list' | 'running' | 'remove' | 'markInterrupted'>

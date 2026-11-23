@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createStageDenialStore } from '@/main/stage/denials'
+import { createStageDenialStore } from '@/main/dispatch/stage/denials'
 import type { FileResult } from '@/types/platform'
 import type { StageDenial } from '@/types/stage'
 import type { RepoId } from '@/utils/repos'

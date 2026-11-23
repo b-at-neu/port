@@ -161,7 +161,7 @@ export const RESTRICTIONS = [
   },
   {
     id: 'stage',
-    files: ['src/main/stage/**'],
+    files: ['src/main/dispatch/stage/**'],
     syntax: [
       { selector: 'Literal[value=/^--force/]', message: 'A stage hand-back never forces a worktree removal.' },
       { selector: ":matches(CallExpression[callee.name='dismiss'], CallExpression[callee.property.name='dismiss']) > Literal[value='force']", message: 'A stage hand-back never forces a worktree removal.' },

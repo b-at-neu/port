@@ -1,6 +1,6 @@
 // Downloads the available release's installer for this install and hands it to the user.
 import { join } from 'node:path'
-import { openModeOf, pickAsset } from '@/main/update/assets'
+import { openModeOf, pickAsset } from '@/main/features/update/assets'
 import type { AvailableRelease, FileDownload, InstallTarget, ReleaseAsset, UpdateDownloader, UpdateDownloadState } from '@/types/update'
 
 export interface UpdateDownloaderDeps {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createFakeGithub, createFakeRepo, MAIN, WORKTREES } from '../../../fixtures/reclaimer-harness'
 import type { FakeGithubOptions, FakeRepoOptions } from '../../../fixtures/reclaimer-harness'
 import { httpFail, queryOf } from '../../../fixtures/github-http'
-import { readWorktreeReport } from '@/main/reclaimer/report'
+import { readWorktreeReport } from '@/main/features/worktrees/report'
 import type { WorktreesReport } from '@/types/reclaimer'
 
 const MERGED = `${WORKTREES}/impl-36`
