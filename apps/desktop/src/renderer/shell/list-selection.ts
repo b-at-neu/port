@@ -51,10 +51,21 @@ export function clearsOnSurfacePress(zone: PressZone, button: number, selected: 
   return zone === 'blank' && button === 0 && selected !== null
 }
 
-/** A press on a control inside the row, never on the row itself. */
+export interface PressNode {
+  closest(selectors: string): PressNode | null
+  contains(other: PressNode | Node | null): boolean
+}
+
+export function pressedControl(target: PressNode | null, row: PressNode): boolean {
+  if (target === null) return false
+  if (!row.contains(target)) return true
+  const control = target.closest(KEEPS_SELECTION)
+  return control !== null && control !== row
+}
+
+/** A press on a control inside the row, or one that reached the row through a portal, never on the row itself. */
 export function isControlPress(event: MouseEvent): boolean {
-  const control = event.target instanceof Element ? event.target.closest(KEEPS_SELECTION) : null
-  return control !== null && control !== event.currentTarget && event.currentTarget.contains(control)
+  return pressedControl(event.target instanceof Element ? event.target : null, event.currentTarget)
 }
 
 export function pressZone(event: MouseEvent, surface: HTMLElement): PressZone {
