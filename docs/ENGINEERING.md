@@ -63,7 +63,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 **`apps/desktop/src/main/claim.ts`**
 - Work on's only claim composition root
 - re-runs the preflight on apply; never trusts what the renderer already confirmed
-- no `gh` import — reads via `./github`, writes via `./writes`
+- no `gh` import — reads via `./tracker`, writes via `./writes`
 
 **`apps/desktop/src/main/dispatch/`**
 - owns the per-repository run-state store (`Map<RepoId, RepoRunState>`) and the halt composition over it
@@ -75,7 +75,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `transitions.ts` is the pure (stage, event) → label plan table and `handoff.ts` its per-repository queue: the claim runs before launch, a failed launch rolls it back, a failed write is retried up to `HANDOFF_ATTEMPTS` and then reported, and a missing or unknown `HANDBACK:` token, a moved stage or an unverified pull request is refused and reported, never guessed past
 - capacity comes from the hosted-session store (`launch.ts`'s `freeSlots`); launches across every repository are serialized into one promise chain so two repositories never race for a slot
 - `ledger.record` only after a launch returns `ok`; the budget gate is the last veto before it
-- the budget gate (`budget-gate.ts`) runs in-process and never spawns `commands.budget`, which the app reads only as an on/off switch; `budget-ledger.ts` is pure with no value imports and byte-compatible with `bin/budget.mjs`, which `desktop-dispatch` pins; the ledger comment is read in `main/github/ledger-read.ts` and written in `main/writes/ledger-comment.ts`, which is cost bookkeeping and bypasses `command.ts` and the audit log since it writes no label
+- the budget gate (`budget-gate.ts`) runs in-process and never spawns `commands.budget`, which the app reads only as an on/off switch; `budget-ledger.ts` is pure with no value imports and byte-compatible with `bin/budget.mjs`, which `desktop-dispatch` pins; the ledger comment is read by the tracker's `readLedger` and written in `main/writes/ledger-comment.ts`, which is cost bookkeeping and bypasses `command.ts` and the audit log since it writes no label
 - `quit.ts` is the quit warning's own pure copy and guard; `main/dialogs.ts`'s `confirmQuit` is its one native dialog
 - `auto-plan.ts`'s `createAutoPlanner` (#313, #331) is a snapshot consumer gated on this app owning the repository and on the per-repository run state the same way `dispatchableFrom` is; kept out of `dispatcher.ts`, since the two serve different callers
 - the planner records refused swaps (a non-applied outcome or a throw) and republishes on a change; they fail toward Waiting on you, since a wrongly shown row costs a glance and a wrongly hidden one stalls silently
@@ -83,13 +83,20 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - an outcome writes no label once a newer `started` record exists for the same ticket, and a resumed session joins the records through `trackResumed`
 
 **`apps/desktop/src/main/github/`**
+- pull request, review, CI, release and allowlist reads only; no issue query lives here (see `main/github/tracker/`)
 - reads go through `platform/github-http`'s injectable `GitHubTransport`, never through `gh`; `request.ts` builds the GraphQL and REST requests, and `envelope.ts` classifies a reply from its status code and body
 - conditional REST reads go through `conditional.ts`'s `conditionalGet`; its per-repo ETag cache is keyed by path and `Accept`, and is forgotten when a repo is added or removed — GraphQL is never conditional
+- `pipeline.ts`'s `readBoardPullRequests` is the pull-request half of the board read: a one-connection sweep whose first page also reads the integration branch's checks, then a per-number detail read that fails the whole read on any error, because a missing review list would read as zero cycles; an `integrationHistory` alias that errors or is missing is `integrationChecks: null` and never fails the sweep
+
+**`apps/desktop/src/main/github/tracker/`**
+- the only home of an issue query: `desktop-tracker` fails any other file under `src/` that names one, bar `main/writes/`, `label-guard.ts` and `release-query.ts`; only `main/github/`, `main/tracker/` and `main/writes/apply.ts` import it
+- implements `types/tracker.ts`'s `Tracker` over GitHub: `index.ts`'s `createGithubTracker` binds the transport, so no call carries one, and owns the ETag cache behind `precheck` and `forget`
 - `precheck.ts` reads the issues list's ETag (`per_page=1`, sorted by `updated`) as the fast change signal and never parses the body; the first response only primes the cache
-- the pipeline read's detail alias fails the whole read on any error, because a missing review list would read as zero cycles; the one carve-out is an issue alias's own `blockedBy`, `comments` or `closedByPullRequestsReferences` field, which goes into that detail's `erroredFields` and never reaches a pull request alias
+- `board.ts`'s `readBoardIssues` is the issue half of the board read; its detail alias fails the whole read on any error, with one carve-out: an issue alias's own `blockedBy`, `comments` or `closedByPullRequestsReferences` field goes into that detail's `erroredFields` and never reaches a pull request alias
 - an errored `blockedBy` becomes `{ ok: false }` and errored comments become `null`, so the Board shows "unknown" or "its reason is on the ticket", never "no blockers"
 - an errored or unselected `closedByPullRequestsReferences` becomes `closingPullRequests: null`, which reads as closed unmerged and keeps the `pr-missing` report; only a positively read `MERGED` closer suppresses it
-- `item-states.ts`'s `readItemStates` reads many items' states in one aliased round trip; an alias named in `errors[].path`, or absent, is `null`, never done
+- `readItemsByNumber`, `readItemStates` and the preflights resolve a number that may be a pull request, since issues and pull requests share one number space on GitHub; `readItemStates` reads many items' states in one aliased round trip, and an alias named in `errors[].path`, or absent, is `null`, never done
+- `postPlanBody` goes through `main/writes`' `postIssueBody`, so `main/writes/` stays the only `gh` writer
 
 **`apps/desktop/src/main/hosting/`**
 - owns a hosted session's full lifecycle (#98); the renderer only sends intents (nine `session:*` channels) and receives events, never drives the child directly. #326 removes the dispatcher role: no `SessionOptionsRole`, no per-session task tracker, no `allowedTools`
@@ -165,7 +172,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 **`apps/desktop/src/main/reclaimer/`**
 - an in-process port of `bin/worktrees.mjs`'s classification, pinned by `classify.cases.json`, which `desktop-reclaimer` runs against the script and `classify.test.ts` runs against `classify.ts`; it spawns nothing
 - enumerates worktrees only through `main/local/`'s `readWorktrees`; `remove.ts` is the one caller of `git worktree remove`, `unlock` and `prune`
-- item states come from `main/github/item-states.ts`; a state it cannot read is never `done`, and a reclaim with GitHub unreadable removes nothing
+- item states come from the tracker's `readItemStates`; a state it cannot read is never `done`, and a reclaim with GitHub unreadable removes nothing
 - may reclaim, with `unlock`/`forceDirty` only path-scoped to one confirmed worktree, never with an issue; and purge one confirmed orphan path
 - every attempt is audited via `main/writes/audit.ts`'s `appendAudit`, from `main/channels/worktrees.ts` — this directory itself never writes the audit log
 
@@ -232,6 +239,10 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `adopt.ts`'s `adoptionsOf` decides, from GitHub evidence alone, which hand-back a finished stage already implies; an adoption is applied through the hand-back table and its verification, never a label plan of its own, and any missing, partial or ambiguous evidence adopts nothing, so today's reset or dispatch runs unchanged
 - `repair.ts`'s `repairsOf` (#330) detects a half-recorded ticket a crashed stage session left behind; it repairs only `plan-missing` through the observation pass, and reports every other shape on `TickReport.labelRepairs` for a human to resolve; `handback-unlabelled` comes only from the app's own refused hand-back write and carries its reason — it never repairs an `interrupted`/`usage-limit` session, since those wait on the operator's own Resume/Restart
 - the shapes are `handback-unlabelled`, `mirror-failed`, `plan-missing-approved` and `pr-missing`; `mirror-failed` is checked before eligibility, for any open item assigned to the viewer that carries a stored `mirrorFailure`, since it reports what GitHub shows rather than what a stage is doing; there is no contradictory-labels shape, because the store is the one writer and a hand-edited label decides nothing
+
+**`apps/desktop/src/main/tracker/`**
+- the one import point for every issue-side read and write: consumers take `defaultTracker` or `createTracker(transports)`, never `main/github/tracker/`
+- reads no config while the schema's `tracker` enum is `github`, so it always returns the GitHub tracker
 
 **`apps/desktop/src/main/trajectory/`**
 - the one write `main/tick/` itself never makes — computes there, writes here
@@ -408,7 +419,7 @@ Narrow but real, because the pipeline's whole visible state is a set of GitHub l
 
 ## 6. Performance
 
-**Cost is measured, then reduced, then pinned.** The polling tick collapsed from roughly 15 GitHub round trips to one aliased `gh api graphql --include` call, and layer 1 now fails if a per-label poll creeps back under the Tick procedure heading ("Collapsed tick query — one round trip, never a per-label poll"). The desktop app's own poll cost 146 points per read with one per-label connection pair, since GitHub prices a connection at its page size, not at what comes back; a two-connection sweep plus a per-number detail read costs 5, measured live against this repository, and does not grow with the number of enabled labels. GitHub polling runs on two tiers. A 60s full sweep carries everything, CI checks and reviews included; underneath it, a 10s issues-list ETag pre-check triggers an early sweep only when something changed. A `304` costs nothing against either bucket and a changed ETag's `200` costs one `core` point, so one repository's pre-check spends at most 360 `core` points an hour. Every sweep, regular or triggered, is stretched from the reported cost so projected hourly use, across every registered repository, stays under half the reported limit: at 5 points a sweep, one repository at the 10s floor projects at most 1,800 of the 2,500-point share, and from the second repository on the share math, not the floor, sets the gap. Layer 1 recomputes these figures from the constants and fails if they drift ("Fast-check floor — the documented cost relationship").
+**Cost is measured, then reduced, then pinned.** The polling tick collapsed from roughly 15 GitHub round trips to one aliased `gh api graphql --include` call, and layer 1 now fails if a per-label poll creeps back under the Tick procedure heading ("Collapsed tick query — one round trip, never a per-label poll"). The desktop app's own poll cost 146 points per read with one per-label connection pair, since GitHub prices a connection at its page size, not at what comes back; an issue sweep and a pull-request sweep, each with a per-number detail read, costs 5, measured live against this repository, and does not grow with the number of enabled labels. GitHub polling runs on two tiers. A 60s full sweep carries everything, CI checks and reviews included; underneath it, a 10s issues-list ETag pre-check triggers an early sweep only when something changed. A `304` costs nothing against either bucket and a changed ETag's `200` costs one `core` point, so one repository's pre-check spends at most 360 `core` points an hour. Every sweep, regular or triggered, is stretched from the reported cost so projected hourly use, across every registered repository, stays under half the reported limit: at 5 points a sweep, one repository at the 10s floor projects at most 1,800 of the 2,500-point share, and from the second repository on the share math, not the floor, sets the gap. Layer 1 recomputes these figures from the constants and fails if they drift ("Fast-check floor — the documented cost relationship").
 
 **Polling adapts to whether anything can move without a human.** The pacing ladder holds at a 270s floor whenever something will progress on its own, and otherwise backs off one rung per consecutive no-change tick — 270 → 540 → 1080 → 1800 — resetting to the floor on any observed change. The cockpit **never stops scheduling wakeups while it owns the checkout**, since it is the only dispatcher while that holds. The one carve-out (#331): once `.agents/cockpit.json`'s verdict reads `app` or `unreadable`, this cockpit has nothing left to do — no gate to answer, no dispatch to make — so it reports and stops scheduling wakeups entirely, an explicit exception to "never stops" rather than a slower rung of the same ladder. The constants and both preconditions are literal, checkable phrases ("Pacing ladder").
 

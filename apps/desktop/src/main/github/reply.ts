@@ -1,14 +1,12 @@
 // One GraphQL round trip's reply, shared by both halves of the board read: the envelope decides, never the status alone.
 import type { GitHubTransport } from '@/types/platform'
-import type { GitHubRepoRef, GraphQLErrorEntry, PipelineFailureKind, RateLimitInfo } from '@/types/github'
+import type { GitHubRepoRef, GraphQLErrorEntry, RateLimitInfo, ReadFailure } from '@/types/github'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { repoGraphqlRequest } from '@/main/github/request'
 
-export type Failure = { readonly ok: false; readonly kind: PipelineFailureKind; readonly message: string }
-
-export type Reply =
+type Reply =
   | { readonly ok: true; readonly data: Readonly<Record<string, unknown>>; readonly repository: Readonly<Record<string, unknown>>; readonly errors: readonly GraphQLErrorEntry[] | undefined }
-  | Failure
+  | ReadFailure
 
 export function asRecord(value: unknown): Readonly<Record<string, unknown>> | undefined {
   return typeof value === 'object' && value !== null ? (value as Readonly<Record<string, unknown>>) : undefined

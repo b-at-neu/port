@@ -82,17 +82,17 @@ export interface ReadLedgerParams {
  * `readItemsByNumber`, `readItemStates` and the preflights resolve a number that may be a pull request: on GitHub issues and pull requests share one number space, so they stay one round trip until ticket keys separate the two.
  */
 export interface Tracker {
-  readBoardIssues(params: BoardIssuesParams): Promise<BoardIssuesRead>
+  readonly readBoardIssues: (params: BoardIssuesParams) => Promise<BoardIssuesRead>
   /** Whether the tracker's own change signal moved since the last call; the first call only primes it. A failure is a value, never a throw. */
-  precheck(params: { readonly repoId: RepoId; readonly repo: GitHubRepoRef }): Promise<GithubPrecheckOutcome>
+  readonly precheck: (params: { readonly repoId: RepoId; readonly repo: GitHubRepoRef }) => Promise<GithubPrecheckOutcome>
   /** Drops whatever the tracker remembers for a repository, so a re-added one starts from a fresh prime. */
-  forget(repoId: RepoId): void
-  readItemsByNumber(params: Omit<FetchItemsByNumberParams, 'github'>): Promise<ItemsByNumberFetch>
-  readItemStates(params: ReadItemStatesParams): Promise<ItemStatesRead>
-  readClaimPreflight(params: ReadPreflightParams): Promise<ClaimPreflightFetch>
-  readGatePreflight(params: ReadPreflightParams): Promise<GatePreflightFetch>
-  listBacklog(params: ListBacklogParams): Promise<BacklogResponse>
-  readTicket(params: ReadTicketParams): Promise<BacklogDetailResponse>
-  readLedger(params: ReadLedgerParams): Promise<LedgerRead>
-  postPlanBody(params: PostCommentParams): Promise<WriteOutcome>
+  readonly forget: (repoId: RepoId) => void
+  readonly readItemsByNumber: (params: Omit<FetchItemsByNumberParams, 'github'>) => Promise<ItemsByNumberFetch>
+  readonly readItemStates: (params: ReadItemStatesParams) => Promise<ItemStatesRead>
+  readonly readClaimPreflight: (params: ReadPreflightParams) => Promise<ClaimPreflightFetch>
+  readonly readGatePreflight: (params: ReadPreflightParams) => Promise<GatePreflightFetch>
+  readonly listBacklog: (params: ListBacklogParams) => Promise<BacklogResponse>
+  readonly readTicket: (params: ReadTicketParams) => Promise<BacklogDetailResponse>
+  readonly readLedger: (params: ReadLedgerParams) => Promise<LedgerRead>
+  readonly postPlanBody: (params: PostCommentParams) => Promise<WriteOutcome>
 }

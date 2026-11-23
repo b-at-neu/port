@@ -247,6 +247,9 @@ export type ItemsByNumberFetch =
       readonly fetchedAt: string
     }
 
+/** A failed read, as a value: the kind and message `classifyFailure` gave it. */
+export type ReadFailure = { readonly ok: false; readonly kind: PipelineFailureKind; readonly message: string }
+
 /** The pull-request half of the board read. Fails closed like `PipelineFetch`: a failed half is never an empty one. */
 export type BoardPullRequestsRead =
   | {

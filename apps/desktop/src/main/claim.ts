@@ -1,4 +1,4 @@
-// No `gh` import here — the read comes from `./github`, the write from `./actions`.
+// No `gh` import here — the read comes from the tracker, the write from `./actions`.
 import { classifyPreflight, buildClaimRequest } from '@/main/claim/classify'
 import type { ClaimApplyResponse, ClaimPreflight, ClaimPreflightResponse, PlanGateChoice } from '@/types/claim'
 import type { ClaimPreflightFetch } from '@/types/github'

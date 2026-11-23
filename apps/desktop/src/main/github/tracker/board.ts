@@ -3,13 +3,12 @@
 import type { GitHubTransport } from '@/types/platform'
 import { githubHttp } from '@/main/platform/github-http'
 import type { LabelKey, LabelVocabulary, RepoLabels } from '@/utils/labels/vocabulary'
-import type { AliasInfo, GitHubRepoRef, GraphQLErrorEntry, ItemDetail, PipelineItem, RateLimitInfo, SweepAlias, SweepCursor, TruncatedSet, UnavailableAlias } from '@/types/github'
+import type { AliasInfo, GitHubRepoRef, GraphQLErrorEntry, ItemDetail, PipelineItem, RateLimitInfo, ReadFailure, SweepAlias, SweepCursor, TruncatedSet, UnavailableAlias } from '@/types/github'
 import type { TrackedRef } from '@/types/pipeline-state'
 import type { BoardIssuesRead } from '@/types/tracker'
 import { collectUnavailable } from '@/main/github/envelope'
 import { applyItemDetails, keepTracked, mapPipelineItems, mapTrackedItem } from '@/main/github/map'
 import { DETAIL_CHUNK_SIZE, MAX_SWEEP_PAGES, NO_RATE_LIMIT, addRateLimit, asRecord, graphql } from '@/main/github/reply'
-import type { Failure } from '@/main/github/reply'
 import { buildIssueDetailsQuery, buildIssueSweepQuery, buildTrackedIssuesQuery } from '@/main/github/tracker/query'
 
 const ALIAS_INDEX: ReadonlyMap<SweepAlias, AliasInfo> = new Map<SweepAlias, AliasInfo>([['issues', { surface: 'issue' }]])
@@ -51,7 +50,7 @@ interface SweepResult {
   readonly truncated: readonly TruncatedSet[]
 }
 
-async function sweep(github: GitHubTransport, repo: GitHubRepoRef, vocabulary: LabelVocabulary): Promise<SweepResult | Failure> {
+async function sweep(github: GitHubTransport, repo: GitHubRepoRef, vocabulary: LabelVocabulary): Promise<SweepResult | ReadFailure> {
   const nodes: unknown[] = []
   let total = 0
   let unavailable: readonly UnavailableAlias[] = []
@@ -79,7 +78,7 @@ async function sweep(github: GitHubTransport, repo: GitHubRepoRef, vocabulary: L
       unavailable = named.length > 0 ? named : [{ alias: 'issues', surface: 'issue' }]
       break
     }
-    nodes.push(...page)
+    for (const raw of page) nodes.push(raw)
     if (typeof connection.totalCount === 'number') total = connection.totalCount
     const pageInfo = asRecord(connection.pageInfo)
     const next = pageInfo?.hasNextPage === true && typeof pageInfo.endCursor === 'string' ? pageInfo.endCursor : null
@@ -107,7 +106,7 @@ interface DetailsResult {
 
 /** Any other detail alias that errors or comes back null fails the whole read: a missing blocker list would
  *  read as no blockers. */
-async function readDetails(github: GitHubTransport, repo: GitHubRepoRef, items: readonly PipelineItem[], rateLimit: RateLimitInfo): Promise<DetailsResult | Failure> {
+async function readDetails(github: GitHubTransport, repo: GitHubRepoRef, items: readonly PipelineItem[], rateLimit: RateLimitInfo): Promise<DetailsResult | ReadFailure> {
   const refs = items.map((item) => ({
     number: item.number,
     blockerComments: item.matchedKeys.includes('blocked'),
@@ -144,7 +143,7 @@ interface TrackedResult {
 }
 
 /** An alias GitHub reports as not found is gone for good, so it is closed; any other error or a malformed node fails the whole read, the same rule as the detail read. */
-async function readTracked(github: GitHubTransport, repo: GitHubRepoRef, vocabulary: LabelVocabulary, missing: readonly TrackedRef[], rateLimit: RateLimitInfo): Promise<TrackedResult | Failure> {
+async function readTracked(github: GitHubTransport, repo: GitHubRepoRef, vocabulary: LabelVocabulary, missing: readonly TrackedRef[], rateLimit: RateLimitInfo): Promise<TrackedResult | ReadFailure> {
   const items: PipelineItem[] = []
   const closed: number[] = []
   let total = rateLimit

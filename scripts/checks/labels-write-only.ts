@@ -21,11 +21,11 @@ export default async function ({ expect, fail, ok }: Reporter) {
   // --- (a) The files that parse label names off a GitHub node are enumerated, each with the reason it is not a decision. ---
   {
     const SOURCES: Record<string, string> = {
-      [`${mainDir}/github/map.ts`]: "the sweep's candidate index and the seed source; under a store view pipeline.ts replaces its keys with the store's",
-      [`${mainDir}/github/adapter.ts`]: "the fresh read; it feeds the mirror diff's observed set, the assignee precondition and the labels-view fallback",
-      [`${mainDir}/github/gate.ts`]: "the plan gate preflight's labels-view fallback",
-      [`${mainDir}/github/backlog.ts`]: 'Backlog chips (display) and the labels-view membership fallback',
-      [`${mainDir}/github/backlog-children.ts`]: 'the labels-view claimed fallback',
+      [`${mainDir}/github/map.ts`]: "the sweep's candidate index and the seed source; under a store view the tracked path replaces its keys with the store's",
+      [`${mainDir}/github/tracker/items.ts`]: "the fresh read; it feeds the mirror diff's observed set, the assignee precondition and the labels-view fallback",
+      [`${mainDir}/github/tracker/gate.ts`]: "the plan gate preflight's labels-view fallback",
+      [`${mainDir}/github/tracker/backlog.ts`]: 'Backlog chips (display) and the labels-view membership fallback',
+      [`${mainDir}/github/tracker/backlog-children.ts`]: 'the labels-view claimed fallback',
       [`${mainDir}/github/release-prs.ts`]: 'release-note chips; no pipeline label is involved',
       [`${mainDir}/github/release-issues.ts`]: 'release-note chips and dependency grouping; no pipeline label is involved',
     };
@@ -73,7 +73,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(nulls.length === 1 && nulls[0]!.includes("view.kind === 'labels'"), check, `${labelsReader} must have exactly one 'return null', on a line testing view.kind === 'labels' — a store view always answers from the store`);
 
     expect(/view\?\.kind === 'store'\s*\?\s*pipelineFetch\.items\.filter\(/.test(read(`${mainDir}/state/reconcile.ts`)), check, `${mainDir}/state/reconcile.ts must filter pipelineFetch.items to stored items under a store view — otherwise a label-matched item leaks into the table`);
-    expect(/matchedKeys:\s*ref\.keys\b/.test(read(`${mainDir}/github/pipeline.ts`)), check, `${mainDir}/github/pipeline.ts must set matchedKeys from the store's ref.keys on the tracked path`);
+    expect(/matchedKeys:\s*ref\.keys\b/.test(read(`${mainDir}/github/map.ts`)), check, `${mainDir}/github/map.ts must set matchedKeys from the store's ref.keys on the tracked path`);
   }
 
   // --- (d) Workflows: only the merge gate reads a pull request's labels for a verdict. ---

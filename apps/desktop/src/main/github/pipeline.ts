@@ -3,13 +3,12 @@
 import type { GitHubTransport } from '@/types/platform'
 import { githubHttp } from '@/main/platform/github-http'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
-import type { AliasInfo, BoardPullRequestsRead, GitHubRepoRef, IntegrationChecks, ItemDetail, PipelineItem, RateLimitInfo, SweepAlias, SweepCursor, TruncatedSet, UnavailableAlias } from '@/types/github'
+import type { AliasInfo, BoardPullRequestsRead, GitHubRepoRef, IntegrationChecks, ItemDetail, PipelineItem, RateLimitInfo, ReadFailure, SweepAlias, SweepCursor, TruncatedSet, UnavailableAlias } from '@/types/github'
 import type { TrackedRef } from '@/types/pipeline-state'
 import { collectUnavailable } from '@/main/github/envelope'
 import { applyItemDetails, keepTracked, mapPipelineItems, mapTrackedItem, toIntegrationChecks } from '@/main/github/map'
 import { buildPullRequestDetailsQuery, buildPullRequestSweepQuery, buildTrackedPullRequestsQuery } from '@/main/github/query'
 import { DETAIL_CHUNK_SIZE, MAX_SWEEP_PAGES, NO_RATE_LIMIT, addRateLimit, asRecord, graphql } from '@/main/github/reply'
-import type { Failure } from '@/main/github/reply'
 
 const ALIAS_INDEX: ReadonlyMap<SweepAlias, AliasInfo> = new Map<SweepAlias, AliasInfo>([['pullRequests', { surface: 'pull-request' }]])
 
@@ -21,7 +20,7 @@ interface SweepResult {
   readonly truncated: readonly TruncatedSet[]
 }
 
-async function sweep(github: GitHubTransport, repo: GitHubRepoRef, vocabulary: LabelVocabulary, integration: string): Promise<SweepResult | Failure> {
+async function sweep(github: GitHubTransport, repo: GitHubRepoRef, vocabulary: LabelVocabulary, integration: string): Promise<SweepResult | ReadFailure> {
   const nodes: unknown[] = []
   let total = 0
   let unavailable: readonly UnavailableAlias[] = []
@@ -49,7 +48,7 @@ async function sweep(github: GitHubTransport, repo: GitHubRepoRef, vocabulary: L
       unavailable = named.length > 0 ? named : [{ alias: 'pullRequests', surface: 'pull-request' }]
       break
     }
-    nodes.push(...page)
+    for (const raw of page) nodes.push(raw)
     if (typeof connection.totalCount === 'number') total = connection.totalCount
     const pageInfo = asRecord(connection.pageInfo)
     const next = pageInfo?.hasNextPage === true && typeof pageInfo.endCursor === 'string' ? pageInfo.endCursor : null
@@ -71,7 +70,7 @@ interface DetailsResult {
 
 /** Any detail alias that errors or comes back null fails the whole read: a missing review list would
  *  read as zero cycles, and a revise dispatch could go past the cap. */
-async function readDetails(github: GitHubTransport, repo: GitHubRepoRef, items: readonly PipelineItem[], rateLimit: RateLimitInfo): Promise<DetailsResult | Failure> {
+async function readDetails(github: GitHubTransport, repo: GitHubRepoRef, items: readonly PipelineItem[], rateLimit: RateLimitInfo): Promise<DetailsResult | ReadFailure> {
   const refs = items.map((item) => ({ number: item.number, rollup: item.matchedKeys.includes('approved') || item.matchedKeys.includes('readyForReview') }))
   const details: ItemDetail[] = []
   let total = rateLimit
@@ -102,7 +101,7 @@ interface TrackedResult {
 }
 
 /** An alias GitHub reports as not found is gone for good, so it is closed; any other error or a malformed node fails the whole read, the same rule as the detail read. A closed pull request with `mergedAt` is also merged. */
-async function readTracked(github: GitHubTransport, repo: GitHubRepoRef, vocabulary: LabelVocabulary, missing: readonly TrackedRef[], rateLimit: RateLimitInfo): Promise<TrackedResult | Failure> {
+async function readTracked(github: GitHubTransport, repo: GitHubRepoRef, vocabulary: LabelVocabulary, missing: readonly TrackedRef[], rateLimit: RateLimitInfo): Promise<TrackedResult | ReadFailure> {
   const items: PipelineItem[] = []
   const closed: number[] = []
   const merged: number[] = []

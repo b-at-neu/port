@@ -7,8 +7,7 @@ import type { Reporter } from '#lib/report.ts';
 // directories by explicit path, never walk('apps/').
 export default async function ({ expect, fail, ok }: Reporter) {
   const githubDir = 'apps/desktop/src/main/github';
-  const queryFile = `${githubDir}/query.ts`;
-  const adapterFile = `${githubDir}/adapter.ts`;
+  const queryFile = `${githubDir}/tracker/query.ts`;
   const classifyFile = 'apps/desktop/src/main/claim/classify.ts';
   const skillFile = 'plugins/port/skills/pipeline/SKILL.md';
 
@@ -20,8 +19,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     return;
   }
 
-  // --- 'blockedBy(' — a GraphQL field selection, never a second query builder. adapter.ts's
-  // `raw.blockedBy` read does not match this pattern, since it is a reader, not a builder. ---
+  // --- 'blockedBy(' — a GraphQL field selection, never a second query builder. The tracker's
+  // `raw.blockedBy` reads do not match this pattern, since they are readers, not builders. ---
   {
     let found = false;
     let sawQueryFile = false;
