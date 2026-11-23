@@ -1,27 +1,8 @@
 // A session's diff against its recorded base — size-capped, with an `output-too-large` fallback to `--numstat`. Through `GitRunner` only.
-import { git as realGit } from '@/main/platform/git'
-import type { GitRunner } from '@/types/platform'
+import type { Platform } from '@/main/platform'
 import type { SessionChanges } from '@/types/workspace'
 import type { SessionWorkspace } from '@/types/workspace'
 import { parseUnifiedDiff } from '@/main/repos/worktree/diff'
-
-/** Caps the one call whose output scales with the diff itself; every other call here is metadata-sized. */
-const DIFF_MAX_BYTES = 2_000_000
-
-/** The diff call gets the byte cap; every other call keeps the runner's own default. */
-function defaultChangesGit(): GitRunner {
-  return (args, cwd) => {
-    if (args[0] === 'diff' && args.includes('-U3')) return realGit(args, { cwd, maxBytes: DIFF_MAX_BYTES })
-    return realGit(args, { cwd })
-  }
-}
-
-interface SessionChangesDeps {
-  readonly git: GitRunner
-  readonly now?: () => Date
-}
-
-export const defaultSessionChangesDeps: SessionChangesDeps = { git: defaultChangesGit() }
 
 function toLines(stdout: string): readonly string[] {
   const trimmed = stdout.replace(/\r?\n$/, '')
@@ -52,9 +33,9 @@ function parseNumstat(stdout: string): readonly NumstatRow[] {
 
 /** Resolves one session's diff against `workspace.base`. `workspace.root: null` or
  *  `workspace.base: null` are reported without a single git call — there is nothing to diff. */
-export async function computeSessionChanges(workspace: SessionWorkspace, deps: SessionChangesDeps = defaultSessionChangesDeps): Promise<SessionChanges> {
-  const now = deps.now ?? (() => new Date())
-  const readAt = now().toISOString()
+export async function computeSessionChanges(ctx: Pick<Platform, 'git' | 'clock'>, workspace: SessionWorkspace): Promise<SessionChanges> {
+  const { git } = ctx
+  const readAt = ctx.clock.now().toISOString()
 
   if (workspace.root === null) {
     return { ok: false, kind: 'not-git', message: `${workspace.folder} is not inside a git repository` }
@@ -66,20 +47,20 @@ export async function computeSessionChanges(workspace: SessionWorkspace, deps: S
   const cwd = workspace.worktree?.path ?? workspace.root
   const base = workspace.base
 
-  const baseCheck = await deps.git(['cat-file', '-e', `${base.sha}^{commit}`], cwd)
+  const baseCheck = await git(['cat-file', '-e', `${base.sha}^{commit}`], cwd)
   if (!baseCheck.ok) {
     if (baseCheck.kind === 'cwd-missing') return { ok: false, kind: 'folder-missing', message: `${cwd} no longer exists` }
     return { ok: false, kind: 'base-missing', message: `base commit ${base.sha} is not reachable` }
   }
 
-  const untrackedResult = await deps.git(['ls-files', '--others', '--exclude-standard'], cwd)
+  const untrackedResult = await git(['ls-files', '--others', '--exclude-standard'], cwd)
   if (!untrackedResult.ok) {
     if (untrackedResult.kind === 'cwd-missing') return { ok: false, kind: 'folder-missing', message: `${cwd} no longer exists` }
     return { ok: false, kind: 'git-failed', message: `git ls-files failed: ${untrackedResult.kind === 'nonzero' ? untrackedResult.stderr : untrackedResult.kind}` }
   }
   const untracked = toLines(untrackedResult.stdout)
 
-  const diffResult = await deps.git(['diff', '--no-color', '--no-ext-diff', '--no-renames', '-U3', base.sha, '--'], cwd)
+  const diffResult = await git(['diff', '--no-color', '--no-ext-diff', '--no-renames', '-U3', base.sha, '--'], cwd)
 
   if (diffResult.ok) {
     const parsed = parseUnifiedDiff(diffResult.stdout)
@@ -90,7 +71,7 @@ export async function computeSessionChanges(workspace: SessionWorkspace, deps: S
   if (diffResult.kind === 'cwd-missing') return { ok: false, kind: 'folder-missing', message: `${cwd} no longer exists` }
 
   if (diffResult.kind === 'output-too-large') {
-    const numstatResult = await deps.git(['diff', '--numstat', base.sha], cwd)
+    const numstatResult = await git(['diff', '--numstat', base.sha], cwd)
     if (!numstatResult.ok) {
       return { ok: false, kind: 'git-failed', message: `git diff --numstat failed after truncation: ${numstatResult.kind === 'nonzero' ? numstatResult.stderr : numstatResult.kind}` }
     }

@@ -17,7 +17,8 @@ import { listSessionFiles } from '@/main/sessions/hosting/files'
 import { isReadyEntry, listRepositories } from '@/main/repos'
 import type { RegistryDeps } from '@/types/registry'
 import { resolveStartTarget } from '@/main/repos/worktree/target'
-import type { ResolveStartTargetDeps } from '@/types/workspace'
+import type { StartTargetSources } from '@/types/workspace'
+import type { Platform } from '@/main/platform'
 import { removeSessionWorktreeAt } from '@/main/repos/worktree/worktree'
 import { resolveWorkspace } from '@/main/repos/worktree/resolve'
 import type { HostingChannelDeps } from '@/main/app/seams'
@@ -25,17 +26,23 @@ import type { SessionIndex } from '@/types/session-index'
 
 type KeyRequest = { readonly sessionKey: SessionKey }
 
-export function defaultHostingChannelDeps(store: HostedStore, sessionIndex: SessionIndex, targetDeps: Omit<ResolveStartTargetDeps, 'repositories'>): HostingChannelDeps {
+export function defaultHostingChannelDeps(
+  store: HostedStore,
+  sessionIndex: SessionIndex,
+  target: { readonly ctx: Pick<Platform, 'git' | 'fs'> } & Omit<StartTargetSources, 'repositories'>,
+): HostingChannelDeps {
+  const { ctx, ...sources } = target
   return {
     listRepositories,
     store,
     sessionIndex,
     listSessionFiles,
     resolveStartTarget,
-    targetDeps,
+    targetCtx: ctx,
+    targetSources: sources,
     now: () => new Date(),
     removeCreatedWorktree: async (path) => {
-      const outcome = await removeSessionWorktreeAt({ path, force: false, git: targetDeps.git })
+      const outcome = await removeSessionWorktreeAt(ctx, { path, force: false })
       if (outcome.outcome === 'failed') console.error(`[hosting] could not clean up worktree '${path}' after a failed start: ${outcome.message}`)
     },
   }
@@ -92,7 +99,7 @@ export async function resolveSessionStart(registryDeps: RegistryDeps, request: {
 
   const list = await deps.listRepositories(registryDeps)
   const repositories = list.ok ? list.repositories : []
-  const resolved = await deps.resolveStartTarget(request.target, request.mode, { ...deps.targetDeps, repositories })
+  const resolved = await deps.resolveStartTarget(deps.targetCtx, request.target, request.mode, { ...deps.targetSources, repositories })
   if (!resolved.ok) return resolved
 
   const result = await deps.store.start({ repoId: resolved.repoId, mode: request.mode, workspace: resolved.workspace })
@@ -101,7 +108,7 @@ export async function resolveSessionStart(registryDeps: RegistryDeps, request: {
     await deps.removeCreatedWorktree(resolved.createdWorktree.path)
   }
   if (result.ok && resolved.recordPath !== null) {
-    await deps.targetDeps.recents.record(resolved.recordPath, deps.now())
+    await deps.targetSources.recents.record(resolved.recordPath, deps.now())
   }
   return result
 }
@@ -323,7 +330,7 @@ export async function resolveSessionRestoreList(registryDeps: RegistryDeps, requ
   const availability = await Promise.all(
     entries.map(async (entry) =>
       entry.cwd !== undefined
-        ? (await deps.targetDeps.exists(entry.cwd)) ? ({ ok: true } as const) : ({ ok: false, reason: "This session's folder is gone." } as const)
+        ? (await deps.targetCtx.fs.exists(entry.cwd)) ? ({ ok: true } as const) : ({ ok: false, reason: "This session's folder is gone." } as const)
         : availabilityFor(entry.repoId as RepoId, list),
     ),
   )
@@ -352,7 +359,7 @@ export async function resolveSessionRestore(registryDeps: RegistryDeps, request:
   const repositories = list.ok ? list.repositories : []
 
   if (entry.cwd !== undefined) {
-    if (!(await deps.targetDeps.exists(entry.cwd))) return { ok: false, kind: 'folder-missing', path: entry.cwd }
+    if (!(await deps.targetCtx.fs.exists(entry.cwd))) return { ok: false, kind: 'folder-missing', path: entry.cwd }
     const { workspace, repoId } = await resolveWorkspaceForRestore(entry.cwd, deps, repositories)
     return deps.store.restore(request.restoreId, { repoId, workspace })
   }
@@ -367,7 +374,7 @@ export async function resolveSessionRestore(registryDeps: RegistryDeps, request:
 }
 
 async function resolveWorkspaceForRestore(path: string, deps: HostingChannelDeps, repositories: readonly RepositoryEntry[]) {
-  return resolveWorkspace(path, { git: deps.targetDeps.git, repositories })
+  return resolveWorkspace(deps.targetCtx, path, repositories)
 }
 
 /** `restoreId: null` discards every entry, idempotently either way. */

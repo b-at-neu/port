@@ -82,7 +82,7 @@ export const defaultHostedStoreDeps: HostedStoreDeps = {
   readStageEditAllow: (cwd: string) => readStageEditAllow(cwd),
   samePath: (a: string, b: string) => pathOps.samePath(a, b),
   persistence: createInMemoryHostingPersistence(),
-  removeWorktree: (path, force) => removeSessionWorktreeAt({ path, force, git: defaultGitRunner() }),
+  removeWorktree: (path, force) => removeSessionWorktreeAt({ git: defaultGitRunner() }, { path, force }),
   readHistory,
 }
 

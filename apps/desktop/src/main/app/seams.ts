@@ -4,7 +4,8 @@ import type { IncidentLog } from '@/types/incidents'
 import type { BoardSnapshot, SourceKind } from '@/types/board'
 import type { RepoId } from '@/utils/repos'
 import type { HostedSessionSnapshot, HostedStore, SessionStartTarget, SessionStartMode } from '@/types/hosting'
-import type { ResolveStartTargetDeps, ReleaseBranchOutcome, RemoveSessionWorktreeOutcome, ResolvedStartTarget } from '@/types/workspace'
+import type { Platform } from '@/main/platform'
+import type { StartTargetSources, ReleaseBranchOutcome, RemoveSessionWorktreeOutcome, ResolvedStartTarget } from '@/types/workspace'
 import type { DirEntry, FileResult, GitLinesResult, RunCommandOptions } from '@/types/platform'
 
 /** `main/sessions/hosting/files.ts`'s own injectable seam, inlined here since a `types/` file may not import a
@@ -54,8 +55,9 @@ export interface HostingChannelDeps {
   readonly sessionIndex: SessionIndex
   /** Injectable so a test never touches a real `git` subprocess or filesystem. */
   readonly listSessionFiles: (cwd: string, deps?: FileListingDeps) => Promise<FileListingResult>
-  readonly resolveStartTarget: (target: SessionStartTarget, mode: SessionStartMode, deps: ResolveStartTargetDeps) => Promise<ResolvedStartTarget>
-  readonly targetDeps: Omit<ResolveStartTargetDeps, 'repositories'>
+  readonly resolveStartTarget: (ctx: Pick<Platform, 'git' | 'fs'>, target: SessionStartTarget, mode: SessionStartMode, sources: StartTargetSources) => Promise<ResolvedStartTarget>
+  readonly targetCtx: Pick<Platform, 'git' | 'fs'>
+  readonly targetSources: Omit<StartTargetSources, 'repositories'>
   readonly now: () => Date
   /** Best-effort cleanup for a worktree created ahead of a start that then failed — logged, never surfaced over the start result. */
   readonly removeCreatedWorktree: (path: string) => Promise<void>

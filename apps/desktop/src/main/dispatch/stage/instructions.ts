@@ -101,7 +101,7 @@ function parseStageConfig(text: string): StageConfigFile | null {
 
 /** `commands.*` stays schema-only: it is read from the default branch's config, never from the stage worktree, whose checkout a pull request can edit. */
 export async function readStageConfigPointers(root: string, git: GitRunner): Promise<StageConfigPointers> {
-  const read = await readAtDefaultRef(git, root, CONFIG_PATH)
+  const read = await readAtDefaultRef({ git }, root, CONFIG_PATH)
   if (!read.ok) return { ok: false, message: `couldn't read ${CONFIG_PATH} on the default branch: ${read.message}` }
   const config = parseStageConfig(read.text)
   if (config === null) return { ok: false, message: `${CONFIG_PATH} on the default branch is not a JSON object` }

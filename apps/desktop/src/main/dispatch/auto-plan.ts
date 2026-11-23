@@ -47,7 +47,7 @@ export function createAutoPlanner(deps: AutoPlannerDeps): AutoPlanner {
         }
       }
 
-      const ownership = await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
+      const ownership = await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo })
       if (ownership.kind !== 'app') return
 
       if (tick === undefined) return

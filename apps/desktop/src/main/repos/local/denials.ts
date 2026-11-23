@@ -1,22 +1,15 @@
 // Both the current four-field form and the legacy three-field form coexist in a real log, so both are parsed.
-import { defaultGitRunner, resolveGitBaseRoot } from '@/main/platform/git'
-import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import { readTextFile } from '@/main/platform/files'
+import type { Platform } from '@/main/platform'
+import { resolveGitBaseRoot } from '@/main/platform/git'
+import { pathOps } from '@/main/platform/paths'
 import type { FileFailureKind } from '@/types/platform'
-import type { GitRunner } from '@/types/platform'
-import type { PathOps } from '@/types/platform'
 import type { AssertEqual } from '@/types/assert-type'
 import { summarizeDenials } from '@/utils/local/summary'
 import type { DenialActor, DenialDecision, DenialEntry, DenialsFailureKind, DenialsRead } from '@/types/local'
 
-
-interface ReadDenialsParams {
-  readonly repoRoot: string
-  readonly git?: GitRunner
+interface ReadDenialsOptions {
   /** The newest N lines kept in `entries`; `summary` always counts the whole file. Defaults to 500. */
   readonly limit?: number
-  readonly now?: () => Date
-  readonly pathOps?: PathOps
 }
 
 const DEFAULT_LIMIT = 500
@@ -72,17 +65,14 @@ function parseLine(raw: string): DenialEntry {
 }
 
 /** An absent log is a distinct healthy state, never an error or an empty `entries` list. */
-export async function readDenials(params: ReadDenialsParams): Promise<DenialsRead> {
-  const git = params.git ?? defaultGitRunner()
-  const pathOps = params.pathOps ?? defaultPathOps
-  const now = params.now ?? (() => new Date())
-  const limit = params.limit ?? DEFAULT_LIMIT
-  const readAt = now().toISOString()
+export async function readDenials(ctx: Pick<Platform, 'git' | 'fs' | 'clock'>, repoRoot: string, options: ReadDenialsOptions = {}): Promise<DenialsRead> {
+  const limit = options.limit ?? DEFAULT_LIMIT
+  const readAt = ctx.clock.now().toISOString()
 
-  const baseRoot = await resolveGitBaseRoot(git, params.repoRoot, pathOps)
+  const baseRoot = await resolveGitBaseRoot(ctx.git, repoRoot, pathOps)
   const path = pathOps.join(baseRoot, '.agents', 'denials.log')
 
-  const fileResult = await readTextFile(path)
+  const fileResult = await ctx.fs.readText(path)
   if (!fileResult.ok) {
     if (fileResult.kind === 'not-found') {
       return { ok: true, present: false, path, readAt }

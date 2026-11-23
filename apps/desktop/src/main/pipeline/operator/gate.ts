@@ -71,7 +71,7 @@ function readStoredLabels(entry: ReadyEntry, item: Extract<GatePreflightFetch, {
 // Ownership rides along on every response arm; the dialog disables controls under unreadable regardless.
 export async function gatePreflight(params: GatePreflightParams, deps: GateDeps): Promise<GatePreflightResponse> {
   const entry = await resolveReadyEntry(params.registryDeps, params.repoId, deps)
-  const ownership: OwnershipSummary = toOwnershipSummary(await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now }))
+  const ownership: OwnershipSummary = toOwnershipSummary(await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo }))
 
   const fetch = await deps.fetchGatePreflight({ repo: { owner: entry.config.owner, name: entry.config.name }, number: params.number })
   if (!fetch.ok) return { kind: 'failed', message: fetch.message, ownership }

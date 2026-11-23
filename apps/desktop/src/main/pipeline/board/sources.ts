@@ -7,6 +7,8 @@ import { collectOrphanNumbers } from '@/main/pipeline/board/attach'
 import { readDenials } from '@/main/repos/local/denials'
 import { readWorktrees } from '@/main/repos/local/worktrees'
 import type { GitRunner } from '@/types/platform'
+import { hostFs } from '@/main/platform'
+import { defaultGitRunner } from '@/main/platform/git'
 import { readSessionState } from '@/main/sessions/adapter'
 import type { RepoId } from '@/utils/repos'
 import type { LabelVocabulary, VerifiableVocabulary } from '@/utils/labels/vocabulary'
@@ -63,7 +65,9 @@ interface RefreshWorktreesParams {
 }
 
 export async function refreshWorktrees(cache: SourceCache, params: RefreshWorktreesParams): Promise<RefreshOutcome> {
-  const read = await readWorktrees({ repoRoot: params.repoRoot, git: params.git, now: params.now })
+  const git = params.git ?? defaultGitRunner()
+  const now = params.now ?? (() => new Date())
+  const read = await readWorktrees({ git, clock: { now } }, params.repoRoot)
   const previous = cache.worktrees.get(params.repoId) ?? null
   cache.worktrees.set(params.repoId, projectOk(previous, read))
   return read.ok ? { ok: true, at: read.readAt } : { ok: false, at: read.readAt, error: read.message }
@@ -77,7 +81,9 @@ interface RefreshDenialsParams {
 }
 
 export async function refreshDenials(cache: SourceCache, params: RefreshDenialsParams): Promise<RefreshOutcome> {
-  const read = await readDenials({ repoRoot: params.repoRoot, git: params.git, now: params.now })
+  const git = params.git ?? defaultGitRunner()
+  const now = params.now ?? (() => new Date())
+  const read = await readDenials({ git, fs: hostFs, clock: { now } }, params.repoRoot)
   const previous = cache.denials.get(params.repoId) ?? null
   cache.denials.set(params.repoId, projectOk(previous, read))
   return read.ok ? { ok: true, at: read.readAt } : { ok: false, at: read.readAt, error: read.message }

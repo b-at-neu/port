@@ -105,7 +105,7 @@ async function inspectEntry(entry: WorktreeEntry, isOutside: boolean, facts: Fac
 export async function inspectWorktrees(params: InspectParams): Promise<Inspection> {
   const { git, fs, pathOps, now } = resolveSeams(params)
 
-  const read = await readWorktrees({ repoRoot: params.repoRoot, git, pathOps, now })
+  const read = await readWorktrees({ git, clock: { now } }, params.repoRoot)
   if (!read.ok) return { ok: false, kind: read.kind, message: read.message }
   const mainPath = read.mainPath
 

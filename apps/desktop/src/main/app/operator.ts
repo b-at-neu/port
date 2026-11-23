@@ -6,7 +6,6 @@ import { autoApprovePlan, gateAnswer, gatePreflight } from '@/main/pipeline/oper
 import { applyObservation } from '@/main/pipeline/operator/observe'
 import { recoverPausedTrigger } from '@/main/pipeline/operator/resume'
 import { applyStageClaim, applyStageTransition } from '@/main/pipeline/operator/stage'
-import { readOwnership } from '@/main/repos/ownership'
 import { fetchClaimPreflight, fetchItemsByNumber } from '@/main/github/adapter'
 import { fetchGatePreflight } from '@/main/github/gate'
 import { listRepositories } from '@/main/repos'
@@ -14,12 +13,12 @@ import { postComment, postIssueBody } from '@/main/github/writes/apply'
 import { rerunChecks } from '@/main/pipeline/operator/rerun'
 import type { ApplyItemActionParams, ApplyItemDecisionParams, ApplyObservationParams, AutoApprovePlanParams, EscalateToHumanParams, GateAnswerParams, GatePreflightParams, RerunChecksParams } from '@/types/actions'
 import type { ClaimDeps } from '@/types/claim'
-import type { StageLabelWrites } from '@/types/dispatch'
+import type { OwnershipParams, OwnershipRead, StageLabelWrites } from '@/types/dispatch'
 import type { GateDeps } from '@/types/gate'
 import type { StateLabelsReader } from '@/types/pipeline-state'
 import type { WriteState } from '@/types/writes'
 
-export function bindOperator(state: { readonly writeState: WriteState; readonly stateLabels: StateLabelsReader }) {
+export function bindOperator(state: { readonly writeState: WriteState; readonly stateLabels: StateLabelsReader }, readOwnership: (params: OwnershipParams) => Promise<OwnershipRead>) {
   const { writeState, stateLabels } = state
   const gateDeps: GateDeps = { listRepositories, fetchGatePreflight, readOwnership, writeState, stateLabels, postComment, now: () => new Date() }
   const stageDeps = { writeState, postIssueBody, stateLabels, fetchItemsByNumber }

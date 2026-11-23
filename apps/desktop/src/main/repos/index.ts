@@ -1,16 +1,18 @@
 // The registry module's only public surface: list/add/remove orchestration. Every later adapter takes its config from the entries this returns, rather than reading a config itself.
 import { pathOps } from '@/main/platform/paths'
-import type { Platform } from '@/main/platform'
+import { hostFs, type Platform } from '@/main/platform'
 import type { ReposAddResponse, ReposListResponse, ReposRemoveResponse } from '@/types/ipc'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import type { ReadyEntry } from '@/types/actions'
-import type { GitRunner } from '@/types/platform'
 import { inspectRepository, resolveGitRoot } from '@/main/repos/inspect'
 import { readRegistry, writeRegistry } from '@/main/repos/registry-store'
 import type { RegistryDeps } from '@/types/registry'
 
-async function inspectAll(paths: readonly string[], git: GitRunner) {
-  return Promise.all(paths.map((path) => inspectRepository(path, { git })))
+const ctxOf = (deps: RegistryDeps): Pick<Platform, 'git' | 'fs'> => ({ git: deps.git, fs: deps.fs ?? hostFs })
+
+async function inspectAll(paths: readonly string[], deps: RegistryDeps) {
+  const ctx = ctxOf(deps)
+  return Promise.all(paths.map((path) => inspectRepository(ctx, path)))
 }
 
 export const REPOSITORY_LIST_TTL_MS = 5_000
@@ -34,9 +36,9 @@ function cacheOf(deps: RegistryDeps): ListCache {
 const clockOf = (deps: RegistryDeps): number => (deps.now ?? Date.now)()
 
 async function readAndInspect(deps: RegistryDeps): Promise<ReposListResponse> {
-  const registry = await readRegistry(deps.registryDir)
+  const registry = await readRegistry(ctxOf(deps), deps.registryDir)
   if (!registry.ok) return { ok: false, kind: registry.kind, message: registry.message }
-  const repositories = await inspectAll(registry.repositories, deps.git)
+  const repositories = await inspectAll(registry.repositories, deps)
   return { ok: true, repositories }
 }
 
@@ -74,19 +76,19 @@ export function listRepositories(deps: RegistryDeps, options?: { readonly fresh?
 }
 
 export async function addRepository(deps: RegistryDeps): Promise<ReposAddResponse> {
-  const registry = await readRegistry(deps.registryDir)
+  const registry = await readRegistry(ctxOf(deps), deps.registryDir)
   if (!registry.ok) return { ok: false, kind: registry.kind, message: registry.message }
 
   const picked = await deps.chooseDirectory()
   if (picked === null) return { ok: true, outcome: 'cancelled' }
 
   // Resolve to the git root before the duplicate check, so a subdirectory of an already-registered repository is not registered a second time.
-  const rootResult = await resolveGitRoot(deps.git, picked)
+  const rootResult = await resolveGitRoot(ctxOf(deps), picked)
   const effectivePath = rootResult.ok ? rootResult.root : picked
 
   const existingIndex = registry.repositories.findIndex((existing) => pathOps.samePath(existing, effectivePath))
   if (existingIndex !== -1) {
-    const repositories = await inspectAll(registry.repositories, deps.git)
+    const repositories = await inspectAll(registry.repositories, deps)
     const existing = repositories[existingIndex]
     return {
       ok: true,
@@ -97,11 +99,11 @@ export async function addRepository(deps: RegistryDeps): Promise<ReposAddRespons
   }
 
   const newPaths = [...registry.repositories, effectivePath]
-  const written = await writeRegistry(deps.registryDir, newPaths)
+  const written = await writeRegistry(ctxOf(deps), deps.registryDir, newPaths)
   if (!written.ok) return { ok: false, kind: written.kind, message: written.message }
 
   const readAt = clockOf(deps)
-  const repositories = await inspectAll(newPaths, deps.git)
+  const repositories = await inspectAll(newPaths, deps)
   replaceCache(deps, readAt, repositories)
   const added = repositories.find((entry) => pathOps.samePath(entry.path, effectivePath))
   return { ok: true, outcome: 'added', added: added?.id ?? (pathOps.pathKey(effectivePath) as unknown as RepoId), repositories }
@@ -156,9 +158,9 @@ export interface Repos {
   readonly deps: RegistryDeps
 }
 
-export function createRepos(platform: Pick<Platform, 'paths' | 'git' | 'dialogs' | 'clock'>): Repos {
-  const { paths, git, dialogs, clock } = platform
-  const deps: RegistryDeps = { registryDir: paths.userData, git, chooseDirectory: dialogs.chooseDirectory, now: () => clock.now().getTime() }
+export function createRepos(platform: Pick<Platform, 'paths' | 'git' | 'fs' | 'dialogs' | 'clock'>): Repos {
+  const { paths, git, fs, dialogs, clock } = platform
+  const deps: RegistryDeps = { registryDir: paths.userData, git, fs, chooseDirectory: dialogs.chooseDirectory, now: () => clock.now().getTime() }
   return {
     list: (options) => listRepositories(deps, options),
     add: () => addRepository(deps),
@@ -169,7 +171,7 @@ export function createRepos(platform: Pick<Platform, 'paths' | 'git' | 'dialogs'
 }
 
 export async function removeRepository(deps: RegistryDeps, id: RepoId): Promise<ReposRemoveResponse> {
-  const registry = await readRegistry(deps.registryDir)
+  const registry = await readRegistry(ctxOf(deps), deps.registryDir)
   if (!registry.ok) return { ok: false, kind: 'registry-unwritable', message: registry.message }
 
   const remaining = registry.repositories.filter((path) => (pathOps.pathKey(path) as unknown as RepoId) !== id)
@@ -177,11 +179,11 @@ export async function removeRepository(deps: RegistryDeps, id: RepoId): Promise<
     return { ok: false, kind: 'not-registered', message: `no repository is registered with id '${id}'` }
   }
 
-  const written = await writeRegistry(deps.registryDir, remaining)
+  const written = await writeRegistry(ctxOf(deps), deps.registryDir, remaining)
   if (!written.ok) return { ok: false, kind: 'registry-unwritable', message: written.message }
 
   const readAt = clockOf(deps)
-  const repositories = await inspectAll(remaining, deps.git)
+  const repositories = await inspectAll(remaining, deps)
   replaceCache(deps, readAt, repositories)
   return { ok: true, repositories }
 }

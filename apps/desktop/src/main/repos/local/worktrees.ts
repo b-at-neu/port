@@ -1,22 +1,12 @@
 // Local-only: no `gh` call, no item state, no removal. Three batched `git` invocations per repository,
 // independent of worktree count.
-import { git as defaultGit, parsePorcelainStanzas } from '@/main/platform/git'
-import { pathOps as defaultPathOps } from '@/main/platform/paths'
+import type { Platform } from '@/main/platform'
+import { parsePorcelainStanzas } from '@/main/platform/git'
+import { pathOps } from '@/main/platform/paths'
 import type { CommandResult } from '@/types/platform'
-import type { GitRunner } from '@/types/platform'
-import type { PathOps } from '@/types/platform'
 import type { AssertEqual } from '@/types/assert-type'
 import type { LocalFailureKind, WorktreeEntry, WorktreeProducer, WorktreesRead } from '@/types/local'
 import { correlate } from '@/main/repos/local/correlate'
-
-
-interface ReadWorktreesParams {
-  readonly repoRoot: string
-  readonly git?: GitRunner
-  readonly now?: () => Date
-  /** Injectable so a win32-flavoured case is exercised on any host. */
-  readonly pathOps?: PathOps
-}
 
 /** Fails to compile if a new `CommandResult` failure kind is added without `LocalFailureKind` growing to match. */
 type CommandResultFailureKind = Exclude<CommandResult, { ok: true }>['kind']
@@ -98,7 +88,7 @@ function stringOrNull(value: string | true | undefined): string | null {
   return typeof value === 'string' ? value : null
 }
 
-function parseRawEntries(stdout: string, pathOps: PathOps): readonly RawEntry[] {
+function parseRawEntries(stdout: string): readonly RawEntry[] {
   return parsePorcelainStanzas(stdout).map((stanza) => {
     const branchRef = stringOrNull(stanza.get('branch'))
     return {
@@ -116,23 +106,21 @@ function parseRawEntries(stdout: string, pathOps: PathOps): readonly RawEntry[] 
 }
 
 /** Local facts only — no `gh`, no item state, no removal decision. */
-export async function readWorktrees(params: ReadWorktreesParams): Promise<WorktreesRead> {
-  const git = params.git ?? ((args, cwd) => defaultGit(args, { cwd }))
-  const now = params.now ?? (() => new Date())
-  const pathOps = params.pathOps ?? defaultPathOps
-  const readAt = now().toISOString()
+export async function readWorktrees(ctx: Pick<Platform, 'git' | 'clock'>, repoRoot: string): Promise<WorktreesRead> {
+  const { git } = ctx
+  const readAt = ctx.clock.now().toISOString()
 
-  const listResult = await git(['worktree', 'list', '--porcelain'], params.repoRoot)
+  const listResult = await git(['worktree', 'list', '--porcelain'], repoRoot)
   if (!listResult.ok) {
     const { kind, message } = describeFailure(listResult)
     return { ok: false, kind, message, readAt }
   }
 
-  const rawEntries = parseRawEntries(listResult.stdout, pathOps)
-  const mainPath = rawEntries[0]?.path ?? params.repoRoot
+  const rawEntries = parseRawEntries(listResult.stdout)
+  const mainPath = rawEntries[0]?.path ?? repoRoot
 
   // Exit 1 means an empty upstream set, never a failure of the whole read.
-  const upstreamResult = await git(['config', '--get-regexp', '^branch\\..*\\.merge'], params.repoRoot)
+  const upstreamResult = await git(['config', '--get-regexp', '^branch\\..*\\.merge'], repoRoot)
   let upstreamMap: ReadonlyMap<string, string>
   if (upstreamResult.ok) {
     upstreamMap = parseUpstreamMap(toLines(upstreamResult.stdout))
@@ -148,7 +136,7 @@ export async function readWorktrees(params: ReadWorktreesParams): Promise<Worktr
   let subjectMap: ReadonlyMap<string, string> = new Map()
   let subjectsAvailable = true
   if (heads.length > 0) {
-    const logResult = await git(['log', '--no-walk=unsorted', '--format=%H %s', ...heads], params.repoRoot)
+    const logResult = await git(['log', '--no-walk=unsorted', '--format=%H %s', ...heads], repoRoot)
     if (logResult.ok) {
       subjectMap = parseSubjectMap(toLines(logResult.stdout))
     } else {

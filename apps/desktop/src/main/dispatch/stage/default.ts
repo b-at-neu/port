@@ -1,3 +1,4 @@
+import { hostFs } from '@/main/platform'
 import { pathExists, readTextFile } from '@/main/platform/files'
 import { defaultGitRunner } from '@/main/platform/git'
 import { pathOps } from '@/main/platform/paths'
@@ -15,14 +16,15 @@ type DefaultStageLauncherParams = Pick<StageLauncherParams, 'store' | 'registry'
 /** The app's real launcher: every I/O seam bound to its production implementation. */
 export function createDefaultStageLauncher({ bundle, ...params }: DefaultStageLauncherParams): StageLauncherHandle {
   const git = defaultGitRunner()
+  const ctx = { git, fs: hostFs }
   const bundleRoot = stageBundleRoot(bundle)
   return createStageLauncher({
     ...params,
     git,
-    createWorktree: createStageWorktree,
-    removeWorktree: (path, force) => removeSessionWorktreeAt({ path, force, git }),
-    releaseBranch: (root, branch, baseSha) => releaseStageBranch({ root, git, branch, baseSha }),
-    sweepBranches: (root) => sweepSessionBranches({ root, git }),
+    createWorktree: (p) => createStageWorktree(ctx, p),
+    removeWorktree: (path, force) => removeSessionWorktreeAt(ctx, { path, force }),
+    releaseBranch: (root, branch, baseSha) => releaseStageBranch(ctx, { root, branch, baseSha }),
+    sweepBranches: (root) => sweepSessionBranches(ctx, root),
     now: () => new Date(),
     newId: () => globalThis.crypto.randomUUID(),
     loadInstructions: defaultStageInstructionsLoader(bundleRoot),

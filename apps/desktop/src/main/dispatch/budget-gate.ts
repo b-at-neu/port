@@ -76,7 +76,7 @@ export function createBudgetGate(deps: BudgetGateDeps): BudgetGate {
 
   /** From the default ref, the same ref every other `commands.*` and config read resolves from. */
   async function resolveCeiling(entry: ReadyEntry): Promise<Ceiling> {
-    const read = await readAtDefaultRef(git, entry.path, CONFIG_PATH)
+    const read = await readAtDefaultRef({ git }, entry.path, CONFIG_PATH)
     if (!read.ok) return unavailable(read.message)
     let cfg: unknown
     try {
