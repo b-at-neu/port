@@ -6,7 +6,8 @@
     "types": ["node"],
     "paths": {
       "@/*": ["./src/*"],
-      "#app-fixtures": ["./tests/fixtures/app/index.ts"]
+      "#app-fixtures": ["./tests/fixtures/app/index.ts"],
+      "#app-route": ["./src/main/platform/route.ts"]
     }
   },
   "include": [

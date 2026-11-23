@@ -12,7 +12,7 @@
     "dist:smoke": "node scripts/icon.mjs && electron-vite build --mode smoke && electron-builder --config electron-builder.config.mjs --dir --publish never -c.directories.output=dist/smoke",
     "screenshots": "node scripts/icon.mjs && electron-vite build --mode fixtures && node scripts/screenshots.mjs",
     "smoke:packaged": "node scripts/screenshots.mjs --config playwright.packaged.config.mts",
-    "e2e": "electron-vite build && node scripts/screenshots.mjs --config playwright.e2e.config.mts",
+    "e2e": "electron-vite build --mode e2e && node scripts/screenshots.mjs --config playwright.e2e.config.mts",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "pnpm typecheck:node && pnpm typecheck:web",

@@ -12,7 +12,6 @@ interface OffloadWorker {
 }
 
 interface WorkerEngineOptions {
-  readonly e2eFake?: string | null
   readonly spawn?: () => OffloadWorker
   readonly now?: () => Date
   readonly onRespawn?: () => void
@@ -27,15 +26,15 @@ function reasonOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function spawnStateWorker(e2eFake: string | null): OffloadWorker {
-  const worker = new Worker(join(__dirname, 'state-worker.js'), { workerData: { e2eFake } })
+function spawnStateWorker(): OffloadWorker {
+  const worker = new Worker(join(__dirname, 'state-worker.js'))
   worker.unref()
   return worker
 }
 
 /** Spawned lazily, so the worker's copy of `process.env` carries the login-shell PATH. A crash fails every pending request and the next call respawns it. */
 export function createWorkerEngine(options: WorkerEngineOptions = {}): StateEngine & { readonly close: () => Promise<void> } {
-  const spawn = options.spawn ?? (() => spawnStateWorker(options.e2eFake ?? null))
+  const spawn = options.spawn ?? spawnStateWorker
   const now = options.now ?? (() => new Date())
   const pending = new Map<number, Pending>()
   let worker: OffloadWorker | null = null

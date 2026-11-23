@@ -5,7 +5,6 @@ import { registerIpc, broadcastAppCommand } from '@/main/ipc'
 import { registerFixtureIpc } from '#app-fixtures'
 import { fixtureMode } from '@/main/fixtures/mode'
 import { e2eMode } from '@/main/e2e/mode'
-import { setE2ERoute } from '@/main/platform/run'
 import { applyLoginShellPath } from '@/main/platform/shell-env'
 import { statOwnerMode, pathExists } from '@/main/platform/files'
 import type { PipelineWatcher } from '@/types/state'
@@ -54,7 +53,7 @@ app.setPath('userData', defaultUserDataPath)
 // An `on` result relocates `userData` before the single-instance lock is ever requested, so a
 // fixture run never contends for the operator's own lock or touches their real profile.
 const fixture = fixtureMode(process.env, app.isPackaged, { compiled: __PORT_FIXTURES__, packaged: __PORT_PACKAGED_FIXTURES__ }, isAbsolute)
-const e2e = e2eMode(process.env, app.isPackaged, isAbsolute)
+const e2e = e2eMode(process.env, app.isPackaged, __PORT_E2E__, isAbsolute)
 
 if (fixture.kind === 'invalid') {
   console.error(`[fixtures] ${fixture.reason}`)
@@ -70,11 +69,10 @@ if (fixture.kind === 'invalid') {
     app.setPath('userData', fixture.userData)
   }
   if (e2e.kind === 'ignored') {
-    console.warn('[e2e] PORT_E2E is set but ignored in a packaged build')
+    console.warn('[e2e] PORT_E2E is set but ignored: this build has no E2E route')
   }
   if (e2e.kind === 'on') {
     app.setPath('userData', e2e.userData)
-    setE2ERoute({ fake: e2e.fake })
   }
 
   const presentation = windowPresentation({ fixture: fixture.kind, e2e: e2e.kind, platform: process.platform })

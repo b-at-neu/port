@@ -1,24 +1,7 @@
-// #101: every string the Pipeline strip renders — pure copy, keyed
-// exhaustively over `PluginLoad`/`ComponentCheck`/invoke-failure so a
-// variant added to either union fails typecheck until its own copy exists
-// here, the same `Record`-exhaustiveness rule `session/copy.ts` already
-// establishes for `SessionPhase`/`SessionEndReason`.
+// Every string the Pipeline strip renders — pure copy, keyed exhaustively over
+// `PluginLoad` and invoke-failure so a new variant fails typecheck until its own copy exists.
 import type { SessionCapabilities, SessionInvokeResult } from '@/types/hosting'
-import type { ComponentCheck, PluginRequest } from '@/types/hosting-plugin'
 import { SEND_FAILED_UNKNOWN_SESSION } from '@/renderer/session/copy'
-
-const SOURCE_LABEL: Readonly<Record<PluginRequest['source'], string>> = {
-  repository: 'repository copy',
-  installed: 'installed copy',
-}
-
-function sourceLabelFor(request: PluginRequest): string {
-  return SOURCE_LABEL[request.source]
-}
-
-function requestedPathFor(request: PluginRequest): string {
-  return request.source === 'repository' ? request.path : 'the installed copy'
-}
 
 /** `a and b`, `a, b, and c`, … — an Oxford-comma list rather than
  *  `paths.join(' and ')`, which reads as `a and b and c` for three or more
@@ -35,44 +18,17 @@ export function chipCopy(capabilities: SessionCapabilities): string {
   if (capabilities.kind === 'pending') return '◌ Pipeline · loading commands…'
   if (capabilities.kind === 'unavailable') return '⚠ Pipeline commands unavailable'
 
-  const { plugin, components, request } = capabilities
-  const sourceLabel = sourceLabelFor(request)
+  const { plugin } = capabilities
 
   switch (plugin.kind) {
     case 'unconfirmed':
-      return `◌ port · ${sourceLabel} · confirmed on the first turn`
+      return '◌ port · confirmed on the first turn'
     case 'missing':
       return "⚠ port didn't load"
-    case 'shadowed':
-      return '⚠ port loaded from another copy'
     case 'duplicate':
       return '⚠ Two port plugins loaded'
-    case 'loaded': {
-      const versionSuffix = plugin.version === null ? '' : ` ${plugin.version}`
-      return `${componentGlyph(components)} port${versionSuffix}${componentSuffix(components, sourceLabel)}`
-    }
-  }
-}
-
-function componentGlyph(components: ComponentCheck): string {
-  switch (components.kind) {
-    case 'complete':
-      return '✓'
-    case 'unchecked':
-      return '◐'
-    case 'incomplete':
-      return '⚠'
-  }
-}
-
-function componentSuffix(components: ComponentCheck, sourceLabel: string): string {
-  switch (components.kind) {
-    case 'complete':
-      return ` · ${sourceLabel}`
-    case 'unchecked':
-      return ' · components not checked'
-    case 'incomplete':
-      return ` · ${components.missingSkills.length + components.missingAgents.length} missing`
+    case 'loaded':
+      return plugin.version === null ? '✓ port' : `✓ port ${plugin.version}`
   }
 }
 
@@ -82,43 +38,19 @@ interface CapabilitiesBanner {
   readonly detail: string | null
 }
 
-/** The banner under the chip (`aria-live="polite"`) — `null` when there is
- *  nothing to say (`pending`, `unconfirmed`, `loaded` + `complete`, or
- *  `loaded` + `unchecked` with no plugin path yet to report on — the
- *  two-stage check is still settling and the chip's `◐` already says so). */
+/** The banner under the chip (`aria-live="polite"`) — `null` when there is nothing to say. */
 export function bannerCopy(capabilities: SessionCapabilities): CapabilitiesBanner | null {
   if (capabilities.kind === 'pending') return null
   if (capabilities.kind === 'unavailable') return { text: "Claude Code didn't return this session's commands.", detail: capabilities.message }
 
-  const { plugin, components, request } = capabilities
+  const { plugin } = capabilities
 
   if (plugin.kind === 'missing') {
-    return request.source === 'repository'
-      ? {
-          text: `Port passed ${request.path} to Claude Code, but this session has no port plugin. An invalid \`.claude-plugin/plugin.json\`, or a managed policy that blocks \`--plugin-dir\`, stops it loading.`,
-          detail: null,
-        }
-      : { text: "This session has no port plugin. The repository's `.claude/settings.json` enables `port@port` — check the install with `/plugin` in a terminal session.", detail: null }
-  }
-
-  if (plugin.kind === 'shadowed') {
-    return { text: `Port asked for ${requestedPathFor(request)}, but Claude Code loaded ${plugin.path}. Commands run from the loaded copy.`, detail: null }
+    return { text: "This session has no port plugin. The repository's `.claude/settings.json` enables `port@port` — check the install with `/plugin` in a terminal session.", detail: null }
   }
 
   if (plugin.kind === 'duplicate') {
     return { text: `Claude Code loaded port from ${joinWithAnd(plugin.paths)}. A command may resolve to either copy.`, detail: null }
-  }
-
-  if (plugin.kind === 'loaded') {
-    if (components.kind === 'unchecked') {
-      if (components.reason === 'no-plugin-path') return null
-      const path = request.source === 'repository' ? request.path : plugin.path
-      return { text: `Port couldn't read ${path} to check which skills and agents should be there.`, detail: null }
-    }
-    if (components.kind === 'incomplete') {
-      const parts = [...components.missingSkills.map((skill) => `skill \`${skill}\``), ...components.missingAgents.map((agent) => `agent \`${agent}\``)]
-      return { text: `These didn't load: ${parts.join(', ')}. Claude Code silently drops a skill or agent with malformed frontmatter — check that file's \`name\` and \`description\`.`, detail: null }
-    }
   }
 
   return null

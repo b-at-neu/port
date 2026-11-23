@@ -1,6 +1,12 @@
 // Narrows assistant/result messages structurally, the same rule as rate-limit.ts. Cumulative
 // for this claude process: a resumed session's totals mean "since port opened it."
-import type { UsageReading } from '@/types/hosting-plugin'
+import type { SessionUsage } from '@/utils/hosting/usage'
+
+/** `previous` carries the last-seen model (for `contextWindow` lookup on the next `result`) alongside the reading itself. */
+export interface UsageReading {
+  readonly usage: SessionUsage
+  readonly model: string | null
+}
 
 function numberOrNull(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
