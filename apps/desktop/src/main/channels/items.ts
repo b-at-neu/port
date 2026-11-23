@@ -6,24 +6,26 @@ import { OPERATOR_ACTIONS, OPERATOR_DECISIONS, UNBLOCK_ROUTES } from '@/types/ac
 import type { ItemActionResult, ItemDecisionResult, OperatorDecision, UnblockRoute } from '@/types/actions'
 import { MAX_REVISE_NOTE_CHARS } from '@/types/actions'
 import type { BoardSnapshot } from '@/types/board'
-import type { IpcMap } from '@/types/ipc'
+import type { RepoId } from '@/utils/repos'
+import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { OperatorAction, RebasePick } from '@/types/actions'
 import type { RegistryDeps } from '@/types/registry'
 import { isLiveStageSession } from '@/utils/stage/live'
 import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/registry'
 
 
-import type { ItemDecisionDeps } from '@/types/channels'
+import type { ItemDecisionDeps, RefreshRequest } from '@/types/channels'
 
 export interface ItemActionDeps {
   readonly listRepositories: typeof listRepositories
   readonly applyItemAction: (params: ApplyItemActionParams) => Promise<ItemActionResult>
   readonly snapshot: () => BoardSnapshot
-  readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
+  readonly refresh: (request: RefreshRequest) => Promise<BoardSnapshot>
 }
 
 /** Validates the request, then forces one refresh after an applied outcome
  *  so the row updates immediately rather than after the next poll. */
-export async function resolveItemAction(registryDeps: RegistryDeps, request: IpcMap['item:action']['request'], auditDir: string, deps: ItemActionDeps): Promise<ItemActionResult> {
+export async function resolveItemAction(registryDeps: RegistryDeps, request: { readonly repoId: RepoId; readonly kind: 'issue' | 'pull-request'; readonly number: number; readonly action: OperatorAction; readonly expectedStage: LabelKey | null }, auditDir: string, deps: ItemActionDeps): Promise<ItemActionResult> {
   const repoId = requireRepoId(request?.repoId, "'item:action'")
   if (request.kind !== 'issue' && request.kind !== 'pull-request') {
     throw new Error("'item:action' requires 'kind' to be 'issue' or 'pull-request'")
@@ -82,7 +84,16 @@ function isPicksShape(value: unknown): boolean {
 
 // Validates the request and its route/note pair, then forces one refresh
 // on an applied label outcome, the same rule `resolveItemAction` follows.
-export async function resolveItemDecision(registryDeps: RegistryDeps, request: IpcMap['item:decide']['request'], auditDir: string, scratchDir: string, deps: ItemDecisionDeps): Promise<ItemDecisionResult> {
+export async function resolveItemDecision(registryDeps: RegistryDeps, request: {
+    readonly repoId: RepoId
+    readonly number: number
+    readonly decision: OperatorDecision
+    readonly expectedStage: LabelKey | null
+    readonly route: UnblockRoute | null
+    readonly note: string | null
+    readonly skipComment: boolean
+    readonly picks: readonly RebasePick[] | null
+  }, auditDir: string, scratchDir: string, deps: ItemDecisionDeps): Promise<ItemDecisionResult> {
   const repoId = requireRepoId(request?.repoId, "'item:decide'")
   if (!Number.isInteger(request.number) || request.number <= 0) {
     throw new Error("'item:decide' requires 'number' to be a positive integer")

@@ -3,7 +3,7 @@ import type { RepositoryEntry } from '@/utils/repos'
 import type { SessionScan } from '@/types/sessions'
 import type { TranscriptTailOpen, TranscriptTailPoll } from '@/utils/sessions/transcript'
 import type { SearchResult, SearchScope } from '@/types/search'
-import type { IpcMap } from '@/types/ipc'
+import type { SearchQuery } from '@/types/search'
 import type { RegistryDeps } from '@/types/registry'
 
 import type { LocalRepoRef } from '@/types/github'
@@ -22,7 +22,7 @@ export async function resolveSessionsScan(registryDeps: RegistryDeps, deps: Sess
 }
 
 export async function resolveTranscriptTailOpen(
-  request: IpcMap['transcript:tail:open']['request'],
+  request: { readonly sessionId: string; readonly agentId: string | null },
   deps: TranscriptTailDeps,
 ): Promise<TranscriptTailOpen> {
   if (typeof request?.sessionId !== 'string' || request.sessionId === '') {
@@ -35,7 +35,7 @@ export async function resolveTranscriptTailOpen(
 }
 
 export async function resolveTranscriptTailPoll(
-  request: IpcMap['transcript:tail:poll']['request'],
+  request: { readonly tailId: string },
   deps: TranscriptTailDeps,
 ): Promise<TranscriptTailPoll> {
   if (typeof request?.tailId !== 'string' || request.tailId === '') {
@@ -45,7 +45,7 @@ export async function resolveTranscriptTailPoll(
 }
 
 export function resolveTranscriptTailClose(
-  request: IpcMap['transcript:tail:close']['request'],
+  request: { readonly tailId: string },
   deps: TranscriptTailDeps,
 ): void {
   if (typeof request?.tailId !== 'string' || request.tailId === '') {
@@ -65,7 +65,7 @@ function isValidScope(scope: unknown): scope is SearchScope {
  *  a value rather than a thrown error. */
 export async function resolveSearchQuery(
   registryDeps: RegistryDeps,
-  request: IpcMap['search:query']['request'],
+  request: SearchQuery,
   indexDir: string,
   deps: SearchQueryDeps,
 ): Promise<SearchResult> {

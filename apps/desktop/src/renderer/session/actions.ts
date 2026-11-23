@@ -23,11 +23,11 @@ export function setSessionsQueryClient(client: QueryClient): void {
 }
 
 function sessionListKey() {
-  return ipcQueryOptions('session:list').queryKey
+  return ipcQueryOptions('session.list').queryKey
 }
 
 function sessionMarksKey() {
-  return ipcQueryOptions('session:marks').queryKey
+  return ipcQueryOptions('session.marks').queryKey
 }
 
 /** Adopts a snapshot into the `session:list` cache — the restore banner's own resumes use this too. */
@@ -74,7 +74,7 @@ type StartInFolderOutcome = { readonly kind: 'started' } | { readonly kind: 'fai
 /** The New session dialog's own start — stays open on failure so the dialog can show the inline banner. */
 export async function startInFolder(folderId: FolderId, worktree: boolean): Promise<StartInFolderOutcome> {
   try {
-    const result = await invoke('session:start', { target: { kind: 'folder', folderId, worktree }, mode: { kind: 'fresh' } })
+    const result = await invoke('session.start', { target: { kind: 'folder', folderId, worktree }, mode: { kind: 'fresh' } })
     if (result.ok || result.kind === 'already-open') {
       handleStartResult(result)
       return { kind: 'started' }
@@ -100,7 +100,7 @@ interface SendOutcome {
 
 export async function send(key: SessionKey, text: string, attachments: readonly ComposerAttachment[] = []): Promise<SendOutcome> {
   try {
-    const result = await invoke('session:send', { sessionKey: key, text, attachments })
+    const result = await invoke('session.send', { sessionKey: key, text, attachments })
     if (result.ok) return { ok: true, error: null, blockedCommandName: null }
     if (result.kind === 'blocked-command') return { ok: false, error: 'blocked-command', blockedCommandName: result.name }
     return { ok: false, error: 'unknown-session', blockedCommandName: null }
@@ -112,7 +112,7 @@ export async function send(key: SessionKey, text: string, attachments: readonly 
 
 export async function stop(key: SessionKey): Promise<number | null | 'unreachable'> {
   try {
-    const result = await invoke('session:interrupt', { sessionKey: key })
+    const result = await invoke('session.interrupt', { sessionKey: key })
     return result.ok ? result.queuedAfterInterrupt : null
   } catch (error) {
     console.error('Failed to reach the main process interrupting a session', error)
@@ -121,13 +121,13 @@ export async function stop(key: SessionKey): Promise<number | null | 'unreachabl
 }
 
 export async function close(key: SessionKey): Promise<SessionCloseResult> {
-  return invoke('session:close', { sessionKey: key })
+  return invoke('session.close', { sessionKey: key })
 }
 
 // Dismisses with the given worktree choice; clears local state only on `ok`.
 export async function dismiss(key: SessionKey, choice: WorktreeChoice): Promise<SessionDismissResult | 'unreachable'> {
   try {
-    const result = await invoke('session:dismiss', { sessionKey: key, worktree: choice })
+    const result = await invoke('session.dismiss', { sessionKey: key, worktree: choice })
     if (result.ok) {
       removeSession(key)
       forgetSessionEntries(key)
@@ -143,24 +143,24 @@ export async function dismiss(key: SessionKey, choice: WorktreeChoice): Promise<
 
 // Lets a rejected call reach the caller directly, rather than swallowing it the way send/stop/close do.
 export async function setControls(sessionKey: SessionKey, patch: { readonly permissionMode?: SessionControls['permissionMode']; readonly model?: string; readonly effort?: SessionEffort | null }): Promise<SetControlsResult> {
-  return invoke('session:controls:set', { sessionKey, ...patch })
+  return invoke('session.controlsSet', { sessionKey, ...patch })
 }
 
 export async function answerQuestion(sessionKey: SessionKey, permissionId: string, answers: Record<string, string>): Promise<QuestionAnswerResult> {
-  return invoke('session:question:answer', { sessionKey, permissionId, answers })
+  return invoke('session.questionAnswer', { sessionKey, permissionId, answers })
 }
 
 export async function answerPlan(sessionKey: SessionKey, permissionId: string, decision: PlanDecision): Promise<PlanAnswerResult> {
-  return invoke('session:plan:answer', { sessionKey, permissionId, decision })
+  return invoke('session.planAnswer', { sessionKey, permissionId, decision })
 }
 
 export async function stopTask(sessionKey: SessionKey, taskId: string): Promise<SessionTaskStopResult> {
-  return invoke('session:task:stop', { sessionKey, taskId })
+  return invoke('session.taskStop', { sessionKey, taskId })
 }
 
 export async function startFromTranscript(repoId: RepoId, sessionId: string, kind: 'resume' | 'fork'): Promise<void> {
   try {
-    const result = await invoke('session:start', { target: { kind: 'transcript' }, mode: { kind, sessionId } })
+    const result = await invoke('session.start', { target: { kind: 'transcript' }, mode: { kind, sessionId } })
     if (!result.ok && result.kind === 'folder-missing') {
       toast(folderMissingToast(result.path))
       return

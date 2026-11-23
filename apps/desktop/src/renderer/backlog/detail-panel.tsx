@@ -43,7 +43,7 @@ import type { BacklogDetail, BacklogEpicGroup, BacklogLinkListView, BacklogRowVi
 const FOCUS_RING = 'outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
 
 function useBacklogDetail(row: BacklogRowView) {
-  return useIpcQuery('backlog:detail', { repoId: row.repoId, number: row.number })
+  return useIpcQuery('backlog.detail', { repoId: row.repoId, number: row.number })
 }
 
 type DetailQuery = ReturnType<typeof useBacklogDetail>

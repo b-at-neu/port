@@ -20,9 +20,9 @@ function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { st
 export function CommandPalette() {
   const { open } = usePaletteState()
   const navigate = useNavigate()
-  const snapshot = useIpcQuery('board:snapshot')
-  const sessions = useIpcQuery('session:list')
-  const repos = useIpcQuery('repos:list')
+  const snapshot = useIpcQuery('board.snapshot')
+  const sessions = useIpcQuery('session.list')
+  const repos = useIpcQuery('repos.list')
   const [, setThemePreference] = useThemePreference()
   const runState = useRunStateCommand()
 

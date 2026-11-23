@@ -6,7 +6,7 @@ import { defaultGitRunner } from '@/main/platform/git'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
 import type { PathOps } from '@/types/platform'
 import { statPath } from '@/main/platform/files'
-import type { IpcMap } from '@/types/ipc'
+import type { SessionKey } from '@/types/hosting'
 import type { FolderEntry } from '@/types/workspace'
 import type { SessionChanges, SessionWorkspace } from '@/types/workspace'
 import { isReadyEntry, listRepositories } from '@/main/registry'
@@ -49,7 +49,7 @@ export function defaultWorkspaceChannelDeps(userDataDir: string, workspaceOf: Wo
   }
 }
 
-export async function resolveFoldersList(registryDeps: RegistryDeps, request: IpcMap['folders:list']['request'], deps: WorkspaceChannelDeps): Promise<IpcMap['folders:list']['response']> {
+export async function resolveFoldersList(registryDeps: RegistryDeps, request: undefined, deps: WorkspaceChannelDeps): Promise<{ readonly folders: readonly FolderEntry[] }> {
   if (request !== undefined) throw new Error("'folders:list' takes no payload")
   const ops = deps.pathOps ?? defaultPathOps
 
@@ -69,7 +69,11 @@ export async function resolveFoldersList(registryDeps: RegistryDeps, request: Ip
   return { folders }
 }
 
-export async function resolveFoldersChoose(registryDeps: RegistryDeps, request: IpcMap['folders:choose']['request'], deps: WorkspaceChannelDeps): Promise<IpcMap['folders:choose']['response']> {
+export async function resolveFoldersChoose(
+  registryDeps: RegistryDeps,
+  request: undefined,
+  deps: WorkspaceChannelDeps,
+): Promise<{ readonly outcome: 'chosen'; readonly folder: FolderEntry } | { readonly outcome: 'cancelled' }> {
   if (request !== undefined) throw new Error("'folders:choose' takes no payload")
 
   const picked = await deps.chooseFolder()
@@ -84,7 +88,7 @@ export async function resolveFoldersChoose(registryDeps: RegistryDeps, request: 
   return { outcome: 'chosen', folder }
 }
 
-export async function resolveSessionChanges(request: IpcMap['session:changes']['request'], deps: WorkspaceChannelDeps): Promise<SessionChanges> {
+export async function resolveSessionChanges(request: { readonly sessionKey: SessionKey }, deps: WorkspaceChannelDeps): Promise<SessionChanges> {
   if (typeof request?.sessionKey !== 'string' || request.sessionKey === '') {
     throw new Error("'session:changes' requires a non-empty 'sessionKey'")
   }

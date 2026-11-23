@@ -18,7 +18,7 @@ import type { SidebarSelection } from '@/types/shell'
 export function LiveSessionEntry({ session, marks, selected, meta }: { readonly session: HostedSessionSnapshot; readonly marks: SessionMarks | undefined; readonly selected: boolean; readonly meta?: string }) {
   const navigate = useNavigate()
   const renaming = useRenaming()
-  const rename = useIpcMutation('session:rename')
+  const rename = useIpcMutation('session.rename')
   const [draft, setDraft] = useState(() => sessionTitle(session))
   const dot = dotFor(session)
   const isRenaming = renaming === session.sessionKey

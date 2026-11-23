@@ -34,9 +34,9 @@ function slugFor(repos: readonly RepositoryEntry[] | undefined, folder: FolderEn
 }
 
 function NewSessionDialogContent({ preselect }: { readonly preselect: Parameters<typeof initialFolderId>[1] }) {
-  const folders = useIpcQuery('folders:list')
-  const sessions = useIpcQuery('session:list')
-  const repos = useIpcQuery('repos:list')
+  const folders = useIpcQuery('folders.list')
+  const sessions = useIpcQuery('session.list')
+  const repos = useIpcQuery('repos.list')
   const list = folders.data?.folders ?? []
   const { repos: repoFolders, recents } = orderFolders(list)
 
@@ -60,7 +60,7 @@ function NewSessionDialogContent({ preselect }: { readonly preselect: Parameters
   }
 
   async function chooseFolder(): Promise<void> {
-    const result = await invoke('folders:choose')
+    const result = await invoke('folders.choose')
     if (result.outcome === 'chosen') {
       void folders.refetch()
       selectFolder(result.folder.id)

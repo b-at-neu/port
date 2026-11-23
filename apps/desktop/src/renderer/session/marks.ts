@@ -12,13 +12,13 @@ import { ARCHIVING_PENDING } from '@/renderer/session/copy'
 import { markFailureToast, markSuccessToast } from '@/renderer/session/marks-copy'
 
 export function useSessionMarks() {
-  return useIpcQuery('session:marks')
+  return useIpcQuery('session.marks')
 }
 
 type MarkKind = 'pinned' | 'archived'
 
 async function invokeSet(kind: MarkKind, sessionId: string, on: boolean): Promise<SessionMarkResult> {
-  return kind === 'pinned' ? invoke('session:pin:set', { sessionId, pinned: on }) : invoke('session:archive:set', { sessionId, archived: on })
+  return kind === 'pinned' ? invoke('session.pinSet', { sessionId, pinned: on }) : invoke('session.archiveSet', { sessionId, archived: on })
 }
 
 function failure(title: string): ActionToast {
@@ -36,7 +36,7 @@ export async function setSessionMark(queryClient: QueryClient, kind: MarkKind, s
       showActionToast(id, failure(markFailureToast(kind, result)))
       return
     }
-    queryClient.setQueryData<SessionMarks>(ipcQueryOptions('session:marks').queryKey, result.marks)
+    queryClient.setQueryData<SessionMarks>(ipcQueryOptions('session.marks').queryKey, result.marks)
     const closed = closing && (await close(closeKey).then(
       (closeResult) => closeResult.ok,
       (error: unknown) => {

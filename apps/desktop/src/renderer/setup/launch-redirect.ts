@@ -7,9 +7,9 @@ import { setupModel } from '@/renderer/setup/model'
 export async function shouldRedirectToSetup(queryClient: QueryClient): Promise<boolean> {
   try {
     const [preflight, gh, repos] = await Promise.all([
-      queryClient.fetchQuery(ipcQueryOptions('runtime:preflight')),
-      queryClient.fetchQuery(ipcQueryOptions('gh:status')),
-      queryClient.fetchQuery(ipcQueryOptions('repos:list')),
+      queryClient.fetchQuery(ipcQueryOptions('runtime.preflight')),
+      queryClient.fetchQuery(ipcQueryOptions('gh.status')),
+      queryClient.fetchQuery(ipcQueryOptions('repos.list')),
     ])
     const model = setupModel({ status: 'success', data: preflight }, null, { status: 'success', data: gh }, { status: 'success', data: repos })
     return !model.complete

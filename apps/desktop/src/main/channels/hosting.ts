@@ -2,12 +2,12 @@ import type { HostedStore } from '@/types/hosting'
 
 // Everything a stale renderer could get wrong throws here, never a value `main/hosting/store.ts`
 // has to defend against.
-import type { IpcMap, ReposListResponse } from '@/types/ipc'
+import type { ReposListResponse } from '@/types/ipc'
 import type { RepoId, RepoProblem, RepositoryEntry } from '@/utils/repos'
 import { PERMISSION_DECISIONS, SESSION_MODELS, SESSION_PERMISSION_MODES, SESSION_TITLE_MAX } from '@/types/hosting'
-import type { RestorableSession, SessionFilesResult, SessionKey, SessionModel, SessionPermissionMode, SessionStartMode, SessionStartTarget, WorktreeChoice } from '@/types/hosting'
+import type { PermissionDecision, RestorableSession, SessionDefaults, SessionFilesResult, SessionKey, SessionModel, SessionPermissionMode, SessionStartMode, SessionStartTarget, WorktreeChoice } from '@/types/hosting'
 import { SESSION_EFFORTS } from '@/utils/hosting/controls'
-import type { PlanDecision } from '@/utils/hosting/controls'
+import type { PlanDecision, SessionControls } from '@/utils/hosting/controls'
 import { isRecord } from '@/main/guards'
 import { IMAGE_MEDIA_TYPES, MAX_ATTACHMENT_NAME_LENGTH, MAX_ATTACHMENTS, MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_TEXT_BYTES, MAX_TOTAL_BYTES } from '@/utils/hosting/attachments'
 import type { ComposerAttachment } from '@/utils/hosting/attachments'
@@ -22,6 +22,8 @@ import { removeSessionWorktreeAt } from '@/main/workspace/worktree'
 import { resolveWorkspace } from '@/main/workspace/resolve'
 import type { HostingChannelDeps } from '@/types/channels'
 import type { SessionIndex } from '@/types/session-index'
+
+type KeyRequest = { readonly sessionKey: SessionKey }
 
 export function defaultHostingChannelDeps(store: HostedStore, sessionIndex: SessionIndex, targetDeps: Omit<ResolveStartTargetDeps, 'repositories'>): HostingChannelDeps {
   return {
@@ -78,7 +80,7 @@ function isValidStartTarget(value: unknown, mode: SessionStartMode): value is Se
   return typeof target['folderId'] === 'string' && target['folderId'] !== '' && typeof target['worktree'] === 'boolean'
 }
 
-export async function resolveSessionStart(registryDeps: RegistryDeps, request: IpcMap['session:start']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['start']> {
+export async function resolveSessionStart(registryDeps: RegistryDeps, request: { readonly target: SessionStartTarget; readonly mode: SessionStartMode }, deps: HostingChannelDeps): ReturnType<HostedStore['start']> {
   if (!isValidStartMode(request?.mode)) {
     throw new Error(
       "'session:start' requires 'mode.kind' to be one of fresh | resume | resume-at | fork, with a non-empty 'sessionId' for the latter three and a non-empty 'messageUuid' for resume-at",
@@ -176,7 +178,7 @@ function requireAttachments(value: unknown): ComposerAttachment[] {
   return attachments
 }
 
-export function resolveSessionSend(request: IpcMap['session:send']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['send']> {
+export function resolveSessionSend(request: { readonly sessionKey: SessionKey; readonly text: string; readonly attachments?: readonly ComposerAttachment[] }, deps: HostingChannelDeps): ReturnType<HostedStore['send']> {
   const sessionKey = requireSessionKey(request?.sessionKey, 'session:send')
   const attachments = request?.attachments === undefined ? [] : requireAttachments(request.attachments)
   if (typeof request.text !== 'string') throw new Error("'session:send' requires 'text' to be a string")
@@ -186,7 +188,7 @@ export function resolveSessionSend(request: IpcMap['session:send']['request'], d
 
 /** The `@` suggestion list's own file source — `sessionKey` resolves only to
  *  its own handle's `cwd`, so the renderer never names a path directly. */
-export async function resolveSessionFiles(request: IpcMap['session:files']['request'], deps: HostingChannelDeps): Promise<SessionFilesResult> {
+export async function resolveSessionFiles(request: KeyRequest, deps: HostingChannelDeps): Promise<SessionFilesResult> {
   const sessionKey = requireSessionKey(request?.sessionKey, 'session:files')
   const cwd = deps.store.cwdOf(sessionKey)
   if (cwd === null) return { ok: false, kind: 'unknown-session' }
@@ -195,24 +197,24 @@ export async function resolveSessionFiles(request: IpcMap['session:files']['requ
   return { ok: true, files: result.files, truncated: result.truncated }
 }
 
-export function resolveSessionInterrupt(request: IpcMap['session:interrupt']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['interrupt']> {
+export function resolveSessionInterrupt(request: KeyRequest, deps: HostingChannelDeps): ReturnType<HostedStore['interrupt']> {
   return deps.store.interrupt(requireSessionKey(request?.sessionKey, 'session:interrupt'))
 }
 
-export function resolveSessionClose(request: IpcMap['session:close']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['close']> {
+export function resolveSessionClose(request: KeyRequest, deps: HostingChannelDeps): ReturnType<HostedStore['close']> {
   return deps.store.close(requireSessionKey(request?.sessionKey, 'session:close'))
 }
 
-export function resolveSessionAttach(request: IpcMap['session:attach']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['attach']> {
+export function resolveSessionAttach(request: KeyRequest, deps: HostingChannelDeps): ReturnType<HostedStore['attach']> {
   return deps.store.attach(requireSessionKey(request?.sessionKey, 'session:attach'))
 }
 
-export function resolveSessionList(request: IpcMap['session:list']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['list']> {
+export function resolveSessionList(request: undefined, deps: HostingChannelDeps): ReturnType<HostedStore['list']> {
   if (request !== undefined) throw new Error("'session:list' takes no payload")
   return deps.store.list()
 }
 
-export function resolveSessionIndex(request: IpcMap['session:index']['request'], deps: HostingChannelDeps): IpcMap['session:index']['response'] {
+export function resolveSessionIndex(request: undefined, deps: HostingChannelDeps): ReturnType<SessionIndex['list']> {
   if (request !== undefined) throw new Error("'session:index' takes no payload")
   return deps.sessionIndex.list()
 }
@@ -221,7 +223,7 @@ export function resolveSessionIndex(request: IpcMap['session:index']['request'],
  *  `HostedStore.invoke` (`invalid-command`/`unknown-command`). */
 export const MAX_INVOKE_ARGS_CHARS = 8_000
 
-export function resolveSessionInvoke(request: IpcMap['session:invoke']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['invoke']> {
+export function resolveSessionInvoke(request: { readonly sessionKey: SessionKey; readonly name: string; readonly args: string }, deps: HostingChannelDeps): ReturnType<HostedStore['invoke']> {
   const sessionKey = requireSessionKey(request?.sessionKey, 'session:invoke')
   if (typeof request.name !== 'string' || request.name === '') throw new Error("'session:invoke' requires a non-empty 'name'")
   if (typeof request.args !== 'string' || request.args.length > MAX_INVOKE_ARGS_CHARS) throw new Error(`'session:invoke' requires 'args' to be a string of at most ${MAX_INVOKE_ARGS_CHARS} characters`)
@@ -229,7 +231,7 @@ export function resolveSessionInvoke(request: IpcMap['session:invoke']['request'
 }
 
 export function resolveSessionPermissionAnswer(
-  request: IpcMap['session:permission:answer']['request'],
+  request: { readonly sessionKey: SessionKey; readonly permissionId: string; readonly decision: PermissionDecision; readonly message: string | null },
   deps: HostingChannelDeps,
 ): ReturnType<HostedStore['answerPermission']> {
   const sessionKey = requireSessionKey(request?.sessionKey, 'session:permission:answer')
@@ -249,7 +251,7 @@ export function resolveSessionPermissionAnswer(
 
 const WORKTREE_CHOICES: readonly WorktreeChoice[] = ['keep', 'remove', 'force']
 
-export function resolveSessionDismiss(request: IpcMap['session:dismiss']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['dismiss']> {
+export function resolveSessionDismiss(request: { readonly sessionKey: SessionKey; readonly worktree: WorktreeChoice }, deps: HostingChannelDeps): ReturnType<HostedStore['dismiss']> {
   const sessionKey = requireSessionKey(request?.sessionKey, 'session:dismiss')
   if (!(WORKTREE_CHOICES as readonly string[]).includes(request?.worktree)) {
     throw new Error(`'session:dismiss' requires 'worktree' to be one of ${WORKTREE_CHOICES.join(', ')}`)
@@ -261,7 +263,7 @@ export function resolveSessionDismiss(request: IpcMap['session:dismiss']['reques
   return deps.store.dismiss(sessionKey, request.worktree)
 }
 
-export function resolveSessionCapacity(request: IpcMap['session:capacity']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['capacity']> {
+export function resolveSessionCapacity(request: undefined, deps: HostingChannelDeps): ReturnType<HostedStore['capacity']> {
   if (request !== undefined) throw new Error("'session:capacity' takes no payload")
   return deps.store.capacity()
 }
@@ -269,7 +271,7 @@ export function resolveSessionCapacity(request: IpcMap['session:capacity']['requ
 /** `taskId` is scoped by `HostedStore.stopTask`/`HostedHandle.stopTask` to this session's own `backgroundTasks` — a malformed id throws here, an id from another session is `unknown-task`, never forwarded. */
 export const MAX_TASK_ID_CHARS = 128
 
-export function resolveSessionTaskStop(request: IpcMap['session:task:stop']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['stopTask']> {
+export function resolveSessionTaskStop(request: { readonly sessionKey: SessionKey; readonly taskId: string }, deps: HostingChannelDeps): ReturnType<HostedStore['stopTask']> {
   const sessionKey = requireSessionKey(request?.sessionKey, 'session:task:stop')
   if (typeof request.taskId !== 'string' || request.taskId === '' || request.taskId.length > MAX_TASK_ID_CHARS) {
     throw new Error(`'session:task:stop' requires 'taskId' to be a non-empty string of at most ${MAX_TASK_ID_CHARS} characters`)
@@ -277,7 +279,7 @@ export function resolveSessionTaskStop(request: IpcMap['session:task:stop']['req
   return deps.store.stopTask(sessionKey, request.taskId)
 }
 
-export function resolveSessionCapacitySet(request: IpcMap['session:capacity:set']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['setLimit']> {
+export function resolveSessionCapacitySet(request: { readonly limit: number }, deps: HostingChannelDeps): ReturnType<HostedStore['setLimit']> {
   if (typeof request?.limit !== 'number' || !Number.isInteger(request.limit) || request.limit < 1 || request.limit > SESSION_LIMIT_CEILING) {
     throw new Error(`'session:capacity:set' requires 'limit' to be an integer from 1 to ${String(SESSION_LIMIT_CEILING)}`)
   }
@@ -315,7 +317,7 @@ function availabilityFor(repoId: RepoId, list: ReposListResponse): RestorableSes
 
 /** A listing failure marks every registry-backed entry unavailable with its message, never an empty
  *  list. An entry carrying `cwd` restores by folder instead — its availability is just `exists(cwd)`. */
-export async function resolveSessionRestoreList(registryDeps: RegistryDeps, request: IpcMap['session:restore:list']['request'], deps: HostingChannelDeps): Promise<IpcMap['session:restore:list']['response']> {
+export async function resolveSessionRestoreList(registryDeps: RegistryDeps, request: undefined, deps: HostingChannelDeps): Promise<{ readonly entries: readonly RestorableSession[] }> {
   if (request !== undefined) throw new Error("'session:restore:list' takes no payload")
   const [entries, list] = await Promise.all([deps.store.restorable(), deps.listRepositories(registryDeps)])
   const availability = await Promise.all(
@@ -339,7 +341,7 @@ export async function resolveSessionRestoreList(registryDeps: RegistryDeps, requ
 }
 
 /** Returns `repo-unavailable`/`folder-missing` as values rather than throwing — an operator can hit either in normal use. */
-export async function resolveSessionRestore(registryDeps: RegistryDeps, request: IpcMap['session:restore']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['restore']> {
+export async function resolveSessionRestore(registryDeps: RegistryDeps, request: { readonly restoreId: string }, deps: HostingChannelDeps): ReturnType<HostedStore['restore']> {
   if (typeof request?.restoreId !== 'string' || request.restoreId === '') throw new Error("'session:restore' requires a non-empty 'restoreId'")
 
   const entries = await deps.store.restorable()
@@ -369,7 +371,7 @@ async function resolveWorkspaceForRestore(path: string, deps: HostingChannelDeps
 }
 
 /** `restoreId: null` discards every entry, idempotently either way. */
-export function resolveSessionRestoreDiscard(request: IpcMap['session:restore:discard']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['discardRestorable']> {
+export function resolveSessionRestoreDiscard(request: { readonly restoreId: string | null }, deps: HostingChannelDeps): ReturnType<HostedStore['discardRestorable']> {
   if (request === undefined || (request.restoreId !== null && (typeof request.restoreId !== 'string' || request.restoreId === ''))) {
     throw new Error("'session:restore:discard' requires 'restoreId' to be null or a non-empty string")
   }
@@ -377,14 +379,14 @@ export function resolveSessionRestoreDiscard(request: IpcMap['session:restore:di
 }
 
 /** The Settings screen's own read of an operator's persisted session defaults. */
-export function resolveSessionDefaults(request: IpcMap['session:defaults']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['defaults']> {
+export function resolveSessionDefaults(request: undefined, deps: HostingChannelDeps): ReturnType<HostedStore['defaults']> {
   if (request !== undefined) throw new Error("'session:defaults' takes no payload")
   return deps.store.defaults()
 }
 
 /** The Settings screen's own write — each field must name an allowlisted
  *  value, `model` or `null`, before it ever reaches the store. */
-export function resolveSessionDefaultsSet(request: IpcMap['session:defaults:set']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['setDefaults']> {
+export function resolveSessionDefaultsSet(request: SessionDefaults, deps: HostingChannelDeps): ReturnType<HostedStore['setDefaults']> {
   const model: unknown = request?.model
   if (model !== null && (typeof model !== 'string' || !(SESSION_MODELS as readonly string[]).includes(model))) {
     throw new Error(`'session:defaults:set' requires 'model' to be null or one of ${SESSION_MODELS.join(', ')}`)
@@ -398,7 +400,7 @@ export function resolveSessionDefaultsSet(request: IpcMap['session:defaults:set'
 
 /** The rename dialog's own write — `sessionKey` non-empty, `title` non-empty
  *  and at most `SESSION_TITLE_MAX` once trimmed. */
-export function resolveSessionRename(request: IpcMap['session:rename']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['rename']> {
+export function resolveSessionRename(request: { readonly sessionKey: SessionKey; readonly title: string }, deps: HostingChannelDeps): ReturnType<HostedStore['rename']> {
   const sessionKey = requireSessionKey(request?.sessionKey, 'session:rename')
   const title = typeof request.title === 'string' ? request.title.trim() : ''
   if (title === '' || title.length > SESSION_TITLE_MAX) {
@@ -408,7 +410,7 @@ export function resolveSessionRename(request: IpcMap['session:rename']['request'
 }
 
 // At least one of permissionMode/model/effort must be present, each an allowlisted value.
-export function resolveSessionControlsSet(request: IpcMap['session:controls:set']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['setControls']> {
+export function resolveSessionControlsSet(request: { readonly sessionKey: SessionKey; readonly permissionMode?: SessionControls['permissionMode']; readonly model?: string; readonly effort?: SessionControls['effort'] }, deps: HostingChannelDeps): ReturnType<HostedStore['setControls']> {
   const sessionKey = requireSessionKey(request?.sessionKey, 'session:controls:set')
   const { permissionMode, model, effort } = request
   if (permissionMode === undefined && model === undefined && effort === undefined) {
@@ -427,7 +429,7 @@ export function resolveSessionControlsSet(request: IpcMap['session:controls:set'
 }
 
 // answers must be a plain object of strings up to 2000 characters; membership is the broker's own job.
-export function resolveSessionQuestionAnswer(request: IpcMap['session:question:answer']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['answerQuestion']> {
+export function resolveSessionQuestionAnswer(request: { readonly sessionKey: SessionKey; readonly permissionId: string; readonly answers: Record<string, string> }, deps: HostingChannelDeps): ReturnType<HostedStore['answerQuestion']> {
   const sessionKey = requireSessionKey(request?.sessionKey, 'session:question:answer')
   if (typeof request.permissionId !== 'string' || request.permissionId === '') throw new Error("'session:question:answer' requires a non-empty 'permissionId'")
   const answers = request.answers
@@ -439,7 +441,7 @@ export function resolveSessionQuestionAnswer(request: IpcMap['session:question:a
 }
 
 // feedback is 1-2000 characters; approving into 'plan' itself is refused here, never reaching the store.
-export function resolveSessionPlanAnswer(request: IpcMap['session:plan:answer']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['answerPlan']> {
+export function resolveSessionPlanAnswer(request: { readonly sessionKey: SessionKey; readonly permissionId: string; readonly decision: PlanDecision }, deps: HostingChannelDeps): ReturnType<HostedStore['answerPlan']> {
   const sessionKey = requireSessionKey(request?.sessionKey, 'session:plan:answer')
   if (typeof request.permissionId !== 'string' || request.permissionId === '') throw new Error("'session:plan:answer' requires a non-empty 'permissionId'")
   const decision: unknown = request.decision
@@ -460,7 +462,7 @@ export function resolveSessionPlanAnswer(request: IpcMap['session:plan:answer'][
   throw new Error("'session:plan:answer' requires 'decision.kind' to be 'approve' or 'keep-planning'")
 }
 
-export function resolveSessionMarks(request: IpcMap['session:marks']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['marks']> {
+export function resolveSessionMarks(request: undefined, deps: HostingChannelDeps): ReturnType<HostedStore['marks']> {
   if (request !== undefined) throw new Error("'session:marks' takes no payload")
   return deps.store.marks()
 }
@@ -470,13 +472,13 @@ function requireSessionId(sessionId: unknown, channel: string): string {
   return sessionId
 }
 
-export function resolveSessionPinSet(request: IpcMap['session:pin:set']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['setMark']> {
+export function resolveSessionPinSet(request: { readonly sessionId: string; readonly pinned: boolean }, deps: HostingChannelDeps): ReturnType<HostedStore['setMark']> {
   const sessionId = requireSessionId(request?.sessionId, 'session:pin:set')
   if (typeof request?.pinned !== 'boolean') throw new Error("'session:pin:set' requires 'pinned' to be a boolean")
   return deps.store.setMark('pinned', sessionId, request.pinned)
 }
 
-export function resolveSessionArchiveSet(request: IpcMap['session:archive:set']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['setMark']> {
+export function resolveSessionArchiveSet(request: { readonly sessionId: string; readonly archived: boolean }, deps: HostingChannelDeps): ReturnType<HostedStore['setMark']> {
   const sessionId = requireSessionId(request?.sessionId, 'session:archive:set')
   if (typeof request?.archived !== 'boolean') throw new Error("'session:archive:set' requires 'archived' to be a boolean")
   return deps.store.setMark('archived', sessionId, request.archived)

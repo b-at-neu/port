@@ -41,8 +41,8 @@ export function AuditTab() {
   const navigate = useNavigate()
   const repoId = search.repo ?? null
   const number = search.number ?? null
-  const audit = useIpcQuery('audit:list', { repoId, number })
-  const repos = useIpcQuery('repos:list')
+  const audit = useIpcQuery('audit.list', { repoId, number })
+  const repos = useIpcQuery('repos.list')
   const readyRepos = repos.data?.ok === true ? repos.data.repositories.filter(isReady) : []
   const repoName = readyRepos.find((repo) => repo.id === repoId)?.config.repo ?? repoId ?? ''
   const filtered = repoId !== null

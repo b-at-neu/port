@@ -37,8 +37,8 @@ function repoTagFor(repos: readonly RepositoryEntry[] | undefined, repoId: RepoI
 export function HistoryScreen() {
   const search = useSearch({ from: ROUTE_IDS.history })
   const navigate = useNavigate()
-  const scan = useIpcQuery('sessions:scan')
-  const repos = useIpcQuery('repos:list')
+  const scan = useIpcQuery('history.scan')
+  const repos = useIpcQuery('repos.list')
   const marks = useSessionMarks()
   const readyRepos = repos.data?.ok === true ? repos.data.repositories.filter(isReady) : []
   const showArchived = search.archived ?? false

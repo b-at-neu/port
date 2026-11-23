@@ -1,6 +1,5 @@
 // `'backlog:list'`'s composition: registry lookup, then the list read and per-epic children read `fetchBacklog` makes.
 import type { BacklogDetailResponse, BacklogResponse } from '@/types/backlog'
-import type { IpcMap } from '@/types/ipc'
 import { fetchBacklog } from '@/main/github/backlog'
 import { fetchBacklogDetail } from '@/main/github/backlog-detail'
 import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/registry'
@@ -20,7 +19,7 @@ export const defaultBacklogListDeps: BacklogListDeps = { listRepositories, fetch
 // `repoId` must name a registered, `ready` repository; the repo ref comes from its own config.
 export async function resolveBacklogList(
   registryDeps: RegistryDeps,
-  request: IpcMap['backlog:list']['request'],
+  request: { readonly repoId: RepoId },
   deps: BacklogListDeps = defaultBacklogListDeps,
 ): Promise<BacklogResponse> {
   const repoId = requireRepoId(request?.repoId, "'backlog:list'")
@@ -41,7 +40,7 @@ export const defaultBacklogDetailDeps: BacklogDetailDeps = { listRepositories, f
 // A malformed request or unusable repository throws; every GitHub-side outcome is a typed value.
 export async function resolveBacklogDetail(
   registryDeps: RegistryDeps,
-  request: IpcMap['backlog:detail']['request'],
+  request: { readonly repoId: RepoId; readonly number: number },
   deps: BacklogDetailDeps = defaultBacklogDetailDeps,
 ): Promise<BacklogDetailResponse> {
   const repoId = requireRepoId(request?.repoId, "'backlog:detail'")

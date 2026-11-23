@@ -28,9 +28,9 @@ function firstReadyRepo(result: ReposListResponse | undefined): ReadyRepo | null
 }
 
 export function RuntimeSection() {
-  const preflightQuery = useIpcQuery('runtime:preflight')
-  const reposQuery = useIpcQuery('repos:list')
-  const probeMutation = useIpcMutation('runtime:probe')
+  const preflightQuery = useIpcQuery('runtime.preflight')
+  const reposQuery = useIpcQuery('repos.list')
+  const probeMutation = useIpcMutation('runtime.probe')
   const [probe, setProbe] = useState<RuntimeProbe | null>(null)
   const [probeError, setProbeError] = useState(false)
 

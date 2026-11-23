@@ -198,7 +198,7 @@ function ReleaseRow({ release, repoId, now, rowProps }: { readonly release: Rele
 }
 
 export function ReleasesScreen() {
-  const reposQuery = useIpcQuery('repos:list')
+  const reposQuery = useIpcQuery('repos.list')
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [cutting, setCutting] = useState<RepoId | null>(null)
@@ -213,7 +213,7 @@ export function ReleasesScreen() {
   const scopedEntry = entries.find((entry) => entry.id === scopedRepo)
   const scopedLabel = scopedEntry === undefined ? '' : 'config' in scopedEntry ? scopedEntry.config.repo : scopedEntry.displayName
   const queries = useQueries({
-    queries: readyRepos.map((repo) => ({ ...ipcQueryOptions('release:status', { repoId: repo.id }), refetchInterval: refetchIntervalFor })),
+    queries: readyRepos.map((repo) => ({ ...ipcQueryOptions('release.status', { repoId: repo.id }), refetchInterval: refetchIntervalFor })),
   })
   const likes = queries.map((query) => ({ status: query.status, data: query.data, isError: query.isError, errorMessage: query.error?.message ?? null, dataUpdatedAt: query.dataUpdatedAt }))
   const groups: ReleaseGroupView[] = readyRepos.map((repo, index) => buildReleaseGroup(repo.id, repo.repo, likes[index] ?? { status: 'pending', data: undefined, isError: false, errorMessage: null, dataUpdatedAt: 0 }))
@@ -236,7 +236,7 @@ export function ReleasesScreen() {
     const result = await runInBackground({
       id: `release:${repoId}`,
       pending: request.step === 'open' ? OPENING_PENDING : publishingPending(request.version),
-      run: () => invoke('release:run', { repoId, ...request } as ReleaseRunRequest),
+      run: () => invoke('release.run', { repoId, ...request } as ReleaseRunRequest),
       toToast: (outcome) => releaseToast(request.version, outcome),
       unreachable: { tone: 'error', title: "Couldn't reach the main process to run that release step.", description: null, action: null, cancel: null },
     })
@@ -244,7 +244,7 @@ export function ReleasesScreen() {
       const notice: HookNotice = { version: request.version, command, outcome: result.hook }
       setNotices((previous) => new Map(previous).set(repoId, notice))
     }
-    await queryClient.invalidateQueries({ queryKey: ['release:status'] })
+    await queryClient.invalidateQueries({ queryKey: ['release.status'] })
     setRepoPending(repoId, false)
   }
 

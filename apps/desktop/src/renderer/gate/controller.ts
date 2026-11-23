@@ -45,7 +45,7 @@ export function openReviewDialog(repoId: RepoId, number: number): void {
 
 async function loadPreflight(repoId: RepoId, number: number): Promise<void> {
   try {
-    const response = await invoke('gate:preflight', { repoId, number })
+    const response = await invoke('gate.preflight', { repoId, number })
     if (getState().step !== 'loading') return
     if (response.kind === 'failed') {
       setState({ step: 'preflight-failed', repoId, number, message: response.message })
@@ -116,10 +116,10 @@ async function runAnswer(run: GateAnswerRun): Promise<void> {
   const response = await runInBackground({
     id: `gate:${repoId}:${String(number)}`,
     pending: decision === 'approve' ? `Approving #${String(number)}…` : `Requesting changes on #${String(number)}…`,
-    run: () => invoke('gate:answer', { repoId, number, decision, feedback, skipComment }),
+    run: () => invoke('gate.answer', { repoId, number, decision, feedback, skipComment }),
     toToast: (result) => toastFor(run, result),
   })
-  if (response !== 'unreachable' && response.kind === 'answered' && response.labels.kind === 'applied') void invoke('board:refresh', { repoId, source: 'github' })
+  if (response !== 'unreachable' && response.kind === 'answered' && response.labels.kind === 'applied') void invoke('board.refresh', { repoId, source: 'github' })
 }
 
 export function submitApprove(): void {

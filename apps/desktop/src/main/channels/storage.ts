@@ -1,6 +1,5 @@
 // `storage:report` and `usage:summary` — the Usage & storage tab's two reads. Neither takes a payload,
 // and every path comes from main: the renderer never sends one.
-import type { IpcMap } from '@/types/ipc'
 import type { DirectorySizeResult } from '@/types/platform'
 import type { RegistryDeps } from '@/types/registry'
 import type { SizeRead, StorageEntry, StorageReport, UsageLedger, UsageSummary } from '@/types/settings'
@@ -27,7 +26,7 @@ async function entryOf(deps: StorageReportDeps, label: string, path: string): Pr
   return { label, path, size: await readSize(deps, path) }
 }
 
-export async function resolveStorageReport(registryDeps: RegistryDeps, request: IpcMap['storage:report']['request'], deps: StorageReportDeps): Promise<StorageReport> {
+export async function resolveStorageReport(registryDeps: RegistryDeps, request: undefined, deps: StorageReportDeps): Promise<StorageReport> {
   if (request !== undefined) throw new Error("'storage:report' takes no payload")
   const list = await deps.listRepositories(registryDeps)
   const ready = list.ok ? list.repositories.filter(isReadyEntry) : []
@@ -44,7 +43,7 @@ export async function resolveStorageReport(registryDeps: RegistryDeps, request: 
   return { appData, pluginCache, worktrees }
 }
 
-export function resolveUsageSummary(request: IpcMap['usage:summary']['request'], ledger: UsageLedger): UsageSummary {
+export function resolveUsageSummary(request: undefined, ledger: UsageLedger): UsageSummary {
   if (request !== undefined) throw new Error("'usage:summary' takes no payload")
   return ledger.summary()
 }

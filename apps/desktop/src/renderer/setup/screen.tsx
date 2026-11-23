@@ -65,11 +65,11 @@ function StepRow({ label, step, loading, pending, onAction }: { readonly label: 
 export function SetupScreen() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const preflightQuery = useIpcQuery('runtime:preflight')
-  const ghQuery = useIpcQuery('gh:status')
-  const reposQuery = useIpcQuery('repos:list')
-  const probeMutation = useIpcMutation('runtime:probe')
-  const addRepoMutation = useIpcMutation('repos:add')
+  const preflightQuery = useIpcQuery('runtime.preflight')
+  const ghQuery = useIpcQuery('gh.status')
+  const reposQuery = useIpcQuery('repos.list')
+  const probeMutation = useIpcMutation('runtime.probe')
+  const addRepoMutation = useIpcMutation('repos.add')
   const [probe, setProbe] = useState<RuntimeProbe | null>(null)
   const [probeError, setProbeError] = useState(false)
   const [repoError, setRepoError] = useState<string | null>(null)
@@ -99,7 +99,7 @@ export function SetupScreen() {
       const result = await addRepoMutation.mutateAsync(undefined)
       if (result.ok && (result.outcome === 'added' || result.outcome === 'already-registered')) {
         const repositories = result.repositories
-        queryClient.setQueryData(ipcQueryOptions('repos:list').queryKey, (): ReposListResponse => ({ ok: true, repositories }))
+        queryClient.setQueryData(ipcQueryOptions('repos.list').queryKey, (): ReposListResponse => ({ ok: true, repositories }))
       } else if (!result.ok) {
         setRepoError(result.message)
       }

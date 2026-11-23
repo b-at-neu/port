@@ -10,7 +10,7 @@ import { formatAgo } from '@/renderer/lib/relative-time'
 import { ghStatusModel } from '@/renderer/settings/gh-model'
 
 export function GhSection() {
-  const query = useIpcQuery('gh:status')
+  const query = useIpcQuery('gh.status')
 
   if (query.status === 'pending') {
     return (

@@ -41,7 +41,7 @@ function repoLabelFor(repos: readonly RepositoryEntry[] | undefined, repoId: str
 export function PermissionDialog() {
   const state = usePermissionState()
   const selectedKey = useSelectedSession()
-  const repos = useIpcQuery('repos:list')
+  const repos = useIpcQuery('repos.list')
   const now = new Date()
 
   if (state.current === null) return <AlertDialog open={false} />

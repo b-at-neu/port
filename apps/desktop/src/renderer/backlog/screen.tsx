@@ -146,7 +146,7 @@ function GroupBody({
 }
 
 export function BacklogScreen() {
-  const reposQuery = useIpcQuery('repos:list')
+  const reposQuery = useIpcQuery('repos.list')
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [menuOpenKey, setMenuOpenKey] = useState<string | null>(null)
@@ -171,7 +171,7 @@ export function BacklogScreen() {
 
   const shownRepos = scopedRepo !== null ? readyRepos.filter((r) => r.id === scopedRepo) : visibleRepos(readyRepos, hidden)
   const queries = useQueries({
-    queries: shownRepos.map((r) => ipcQueryOptions('backlog:list', { repoId: r.id })),
+    queries: shownRepos.map((r) => ipcQueryOptions('backlog.list', { repoId: r.id })),
   })
 
   function toggleCollapsed(repoId: RepoId): void {
@@ -243,7 +243,7 @@ export function BacklogScreen() {
       repo: row.repo,
       number: row.number,
       planGate,
-      onClaimed: () => void queryClient.invalidateQueries({ queryKey: ['backlog:list'] }),
+      onClaimed: () => void queryClient.invalidateQueries({ queryKey: ['backlog.list'] }),
     }).finally(() => setPending(key, false))
   }
 
@@ -312,7 +312,7 @@ export function BacklogScreen() {
 
   function refreshAll(): void {
     for (const q of queries) void q.refetch()
-    void queryClient.invalidateQueries({ queryKey: ['backlog:detail'] })
+    void queryClient.invalidateQueries({ queryKey: ['backlog.detail'] })
   }
 
   const stale = staleSinceAt(

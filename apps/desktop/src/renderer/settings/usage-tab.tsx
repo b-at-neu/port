@@ -29,8 +29,8 @@ function SizeCell({ entry }: { readonly entry: StorageEntry }) {
 }
 
 function SpendCard() {
-  const usage = useIpcQuery('usage:summary')
-  const repos = useIpcQuery('repos:list')
+  const usage = useIpcQuery('usage.summary')
+  const repos = useIpcQuery('repos.list')
   const names: Record<string, string> = {}
   if (repos.data?.ok === true) {
     for (const entry of repos.data.repositories) names[entry.id] = 'config' in entry ? entry.config.repo : entry.displayName
@@ -74,7 +74,7 @@ function SpendCard() {
 }
 
 function StorageCard() {
-  const storage = useIpcQuery('storage:report')
+  const storage = useIpcQuery('storage.report')
   const navigate = useNavigate()
 
   const recalculate = (

@@ -1,5 +1,5 @@
 // Fixture mode's own canned incident log: three groups, one of them a stale-snapshot group two pull requests share.
-import type { IpcMap } from '@/types/ipc'
+import type { ActionInput } from '@/types/ipc'
 import type { FixtureScenario } from '@/types/fixtures'
 import type { IncidentBucket, IncidentExportResult, IncidentGroup, IncidentGroupsRead, IncidentListRead, IncidentRecord } from '@/types/incidents'
 
@@ -57,7 +57,7 @@ export function fixtureIncidentGroups(now: Date, scenario: FixtureScenario): Inc
   return { ok: true, groups: scenario === 'empty' || scenario === 'unregistered' ? [] : cannedGroups(now), malformed: 0, pruned: null, readAt: now.toISOString() }
 }
 
-export function fixtureIncidentList(now: Date, scenario: FixtureScenario, request: IpcMap['incidents:list']['request']): IncidentListRead {
+export function fixtureIncidentList(now: Date, scenario: FixtureScenario, request: ActionInput<'incidents.list'>): IncidentListRead {
   if (scenario === 'failing') return { ...FAILURE, readAt: now.toISOString() }
   return { ok: true, records: recordsFor(now, scenario).filter((entry) => entry.signature === request.signature).reverse(), readAt: now.toISOString() }
 }

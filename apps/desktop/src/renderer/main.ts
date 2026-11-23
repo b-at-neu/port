@@ -60,7 +60,7 @@ const actionDeps: KeyboardDeps = {
 }
 
 installKeyboardMap(actionDeps)
-sharedSubscriptions().subscribe('app:command', (command) => runAppCommand(command, actionDeps))
+sharedSubscriptions().subscribe('app.command', (command) => runAppCommand(command, actionDeps))
 
 async function boot(): Promise<void> {
   router.subscribe('onResolved', () => {
@@ -75,6 +75,6 @@ async function boot(): Promise<void> {
   await router.load()
   if (await shouldRedirectToSetup(queryClient)) await router.navigate({ to: ROUTE_IDS.setup })
   // Seeds the `repos:list` cache once; `repositories/screen.tsx`'s own query keeps it current from here on.
-  void queryClient.fetchQuery(ipcQueryOptions('repos:list'))
+  void queryClient.fetchQuery(ipcQueryOptions('repos.list'))
 }
 void boot()

@@ -106,7 +106,8 @@ export const RESTRICTIONS = [
     globals: TIMERS.map((name) => ({ name, message: 'Main holds exactly one clock — only main/state/watcher.ts names a timer.' })),
   },
   { id: 'renderer', files: ['src/renderer/**'], paths: RENDERER_PATHS, syntax: RENDERER_SYNTAX },
-  { id: 'pure', files: ['src/renderer/**', 'src/utils/**', 'src/types/**'], patterns: [NO_MAIN, NODE_BUILTIN] },
+  // `types/ipc.ts` is the one place the renderer's types reach `main/`: a type-only read of the router's inferred action map.
+  { id: 'pure', files: ['src/renderer/**', 'src/utils/**', 'src/types/**'], except: ['src/types/ipc.ts'], patterns: [NO_MAIN, NODE_BUILTIN] },
   {
     id: 'tick',
     files: ['src/main/tick/**'],

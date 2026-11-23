@@ -20,7 +20,7 @@ function sortedFiles(files: readonly FileDiff[]): readonly FileDiff[] {
 
 export function ChangesPane({ snapshot, onClose }: { readonly snapshot: HostedSessionSnapshot; readonly onClose: () => void }) {
   const sessionKey: SessionKey = snapshot.sessionKey
-  const query = useIpcQuery('session:changes', { sessionKey }, { refetchInterval: 5000 })
+  const query = useIpcQuery('session.changes', { sessionKey }, { refetchInterval: 5000 })
   const data = query.data
   const baseSha = snapshot.workspace.base?.sha ?? null
   const header = data?.ok === true ? changesHeader(data.base ?? { sha: '' }, snapshot.workspace.worktree?.branch ?? null) : null

@@ -205,7 +205,7 @@ export function runSecondaryAction(item: NeedsYouItem, deps: RunActionDeps): voi
 
 async function answerProtectedEdit(item: Extract<NeedsYouItem, { readonly kind: 'stage-approval' }>, decision: 'allow-once' | 'deny', deps: RunActionDeps): Promise<void> {
   try {
-    const result = await invoke('session:permission:answer', { sessionKey: item.sessionKey, permissionId: item.permissionId, decision, message: decision === 'deny' ? PROTECTED_EDIT_DENY_MESSAGE : null })
+    const result = await invoke('session.permissionAnswer', { sessionKey: item.sessionKey, permissionId: item.permissionId, decision, message: decision === 'deny' ? PROTECTED_EDIT_DENY_MESSAGE : null })
     if (!result.ok) deps.onToast(APPROVAL_GONE_TOAST)
     else deps.onToast(decision === 'deny' ? deniedEditToast(item.path) : approvedEditToast(item.path))
   } catch (error) {
@@ -227,7 +227,7 @@ async function copyWorktreePath(item: Extract<NeedsYouItem, { readonly kind: 'st
 
 async function runStageResume(id: string, number: number, deps: RunActionDeps): Promise<void> {
   try {
-    const result = await invoke('stage:resume', { id })
+    const result = await invoke('stage.resume', { id })
     switch (result.kind) {
       case 'ok':
         deps.onToast(`Resumed #${String(number)}.`)
@@ -260,7 +260,7 @@ async function runResumeAll(entries: readonly InterruptedStage[], deps: RunActio
   let attempted = 0
   try {
     for (const entry of entries) {
-      const result = await invoke('stage:resume', { id: entry.id })
+      const result = await invoke('stage.resume', { id: entry.id })
       if (result.kind === 'unknown-stage') continue
       attempted += 1
       if (result.kind === 'ok') {
@@ -287,7 +287,7 @@ async function runLabelAction(item: NeedsYouItem, action: 'retry' | 'refresh', d
   const expectedStage = item.matchedRow?.stageLabel?.key ?? null
   const shown = String(item.ticket?.number ?? item.number)
   try {
-    const result = await window.port.itemAction({ repoId: item.repoId, kind, number: item.number, action, expectedStage })
+    const result = await window.port.invoke('item.action', { repoId: item.repoId, kind, number: item.number, action, expectedStage })
     deps.onToast(result.ok ? `${action === 'retry' ? 'Retried' : 'Refreshed'} #${shown}.` : `Couldn't ${action} #${shown}: ${result.reason}.`)
   } catch (error) {
     console.error(`Failed to reach the main process while applying ${action}`, error)

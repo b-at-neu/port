@@ -17,9 +17,9 @@ import { CAPACITY_SET_FAILED } from '@/renderer/session/rail-copy'
 import type { RepositoryEntry } from '@/utils/repos'
 
 function SessionLimitCard() {
-  const capacity = useIpcQuery('session:capacity')
-  const sessions = useIpcQuery('session:list')
-  const setCapacity = useIpcMutation('session:capacity:set')
+  const capacity = useIpcQuery('session.capacity')
+  const sessions = useIpcQuery('session.list')
+  const setCapacity = useIpcMutation('session.capacitySet')
   const client = useQueryClient()
 
   if (capacity.status === 'pending') {
@@ -43,7 +43,7 @@ function SessionLimitCard() {
   async function setLimit(next: number): Promise<void> {
     try {
       const saved = await setCapacity.mutateAsync({ limit: next })
-      client.setQueryData(ipcQueryOptions('session:capacity').queryKey, saved)
+      client.setQueryData(ipcQueryOptions('session.capacity').queryKey, saved)
     } catch {
       toast(CAPACITY_SET_FAILED)
     }
@@ -92,7 +92,7 @@ function RepoConfigBlock({ entry }: { readonly entry: Extract<RepositoryEntry, {
 }
 
 function RepositoryConfigCard() {
-  const repos = useIpcQuery('repos:list')
+  const repos = useIpcQuery('repos.list')
   const navigate = useNavigate()
   const ready = repos.data?.ok === true ? repos.data.repositories.filter((entry): entry is Extract<RepositoryEntry, { status: 'ready' }> => 'config' in entry) : []
 

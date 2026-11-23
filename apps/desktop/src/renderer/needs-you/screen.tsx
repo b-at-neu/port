@@ -126,7 +126,7 @@ function StageQuestionCard({ item }: { readonly item: Extract<NeedsYouItemModel,
     setSending(true)
     setError(null)
     try {
-      const result = await invoke('session:question:answer', { sessionKey: item.sessionKey, permissionId: item.permissionId, answers })
+      const result = await invoke('session.questionAnswer', { sessionKey: item.sessionKey, permissionId: item.permissionId, answers })
       if (!result.ok) setError(result.kind)
     } catch (err) {
       console.error('Failed to reach the main process while answering a stage question', err)
@@ -137,7 +137,7 @@ function StageQuestionCard({ item }: { readonly item: Extract<NeedsYouItemModel,
   }
 
   async function skip(): Promise<void> {
-    await invoke('session:permission:answer', { sessionKey: item.sessionKey, permissionId: item.permissionId, decision: 'deny', message: QUESTION_SKIPPED_MESSAGE })
+    await invoke('session.permissionAnswer', { sessionKey: item.sessionKey, permissionId: item.permissionId, decision: 'deny', message: QUESTION_SKIPPED_MESSAGE })
   }
 
   return <QuestionCard questions={item.questions} sending={sending} error={error} onSend={(answers) => void send(answers)} onSkip={() => void skip()} />
@@ -146,19 +146,19 @@ function StageQuestionCard({ item }: { readonly item: Extract<NeedsYouItemModel,
 export function NeedsYouScreen() {
   const search = useSearch({ from: ROUTE_IDS.needsYou })
   const navigate = useNavigate()
-  const snapshotQuery = useIpcQuery('board:snapshot')
+  const snapshotQuery = useIpcQuery('board.snapshot')
   const queryClient = useQueryClient()
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
   const [pendingKey, setPendingKey] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [showDismissed, setShowDismissed] = useState(false)
-  const sessionListKey = ipcQueryOptions('session:list').queryKey
+  const sessionListKey = ipcQueryOptions('session.list').queryKey
   const now = new Date()
 
   const scopedRepo = search.repo ?? null
   const allItems = useNeedsYouItems()
   const items = scopedRepo === null ? allItems : allItems.filter((item) => belongsToRepo(item, scopedRepo))
-  const reposQuery = useIpcQuery('repos:list')
+  const reposQuery = useIpcQuery('repos.list')
   const scopedName = (reposQuery.data?.ok === true ? reposQuery.data.repositories.find((entry) => entry.id === scopedRepo) : undefined)
   const scopedLabel = scopedName === undefined ? (scopedRepo ?? '') : 'config' in scopedName ? scopedName.config.repo : scopedName.displayName
   const allDismissed = useDismissedNeedsYouItems()
@@ -195,8 +195,8 @@ export function NeedsYouScreen() {
   async function refresh({ announce }: { readonly announce: boolean }): Promise<void> {
     setRefreshing(true)
     try {
-      const fresh = await invoke('board:refresh', {})
-      queryClient.setQueryData(ipcQueryOptions('board:snapshot').queryKey, fresh)
+      const fresh = await invoke('board.refresh', {})
+      queryClient.setQueryData(ipcQueryOptions('board.snapshot').queryKey, fresh)
       await queryClient.refetchQueries({ queryKey: sessionListKey })
       if (announce) {
         const sessions = queryClient.getQueryData<readonly HostedSessionSnapshot[]>(sessionListKey) ?? []

@@ -31,7 +31,7 @@ const SNAPSHOT = { dispatch: [{ repoId: REPO_ID, owner: 'app', state: { kind: 'i
 
 function route(routes: Routes): void {
   vi.mocked(invoke).mockImplementation(((channel: string) => {
-    const result = channel === 'claim:preflight' ? routes.preflight : channel === 'claim:apply' ? routes.apply : routes.refresh
+    const result = channel === 'claim.preflight' ? routes.preflight : channel === 'claim.apply' ? routes.apply : routes.refresh
     return result instanceof Error ? Promise.reject(result) : Promise.resolve(result)
   }) as never)
 }
@@ -67,9 +67,9 @@ describe('workOn', () => {
     const args = params()
     await workOn(args)
 
-    expect(channels()).toEqual(['claim:preflight', 'claim:apply', 'board:refresh'])
-    expect(invoke).toHaveBeenNthCalledWith(2, 'claim:apply', { repoId: REPO_ID, number: 101, planGate: 'auto', confirmedAssignees: [] })
-    expect(invoke).toHaveBeenNthCalledWith(3, 'board:refresh', { repoId: REPO_ID, source: 'github' })
+    expect(channels()).toEqual(['claim.preflight', 'claim.apply', 'board.refresh'])
+    expect(invoke).toHaveBeenNthCalledWith(2, 'claim.apply', { repoId: REPO_ID, number: 101, planGate: 'auto', confirmedAssignees: [] })
+    expect(invoke).toHaveBeenNthCalledWith(3, 'board.refresh', { repoId: REPO_ID, source: 'github' })
     expect(toast.success).toHaveBeenCalledTimes(1)
     expect(vi.mocked(toast.success).mock.calls[0]?.[0]).toBe('#101 claimed and assigned to you.')
     expect(vi.mocked(toast.success).mock.calls[0]?.[1]).toMatchObject({ id: ID, description: 'Planning starts now.' })
@@ -80,7 +80,7 @@ describe('workOn', () => {
   it('claims an issue already assigned to the viewer with the viewer as the confirmed assignee', async () => {
     route({ preflight: preflight('mine', ['octocat']), apply: APPLIED, refresh: SNAPSHOT })
     await workOn(params())
-    expect(invoke).toHaveBeenNthCalledWith(2, 'claim:apply', { repoId: REPO_ID, number: 101, planGate: 'auto', confirmedAssignees: ['octocat'] })
+    expect(invoke).toHaveBeenNthCalledWith(2, 'claim.apply', { repoId: REPO_ID, number: 101, planGate: 'auto', confirmedAssignees: ['octocat'] })
   })
 
   it('writes nothing for an issue assigned to someone else until Take over is clicked', async () => {
@@ -88,7 +88,7 @@ describe('workOn', () => {
     const args = params()
     await workOn(args)
 
-    expect(channels()).toEqual(['claim:preflight'])
+    expect(channels()).toEqual(['claim.preflight'])
     expect(vi.mocked(toast.info).mock.calls[0]?.[0]).toBe('#101 is assigned to @alice.')
     expect(vi.mocked(toast.info).mock.calls[0]?.[1]).toMatchObject({ id: ID, duration: Infinity })
 
@@ -97,8 +97,8 @@ describe('workOn', () => {
     await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1))
 
     expect(preventDefault).toHaveBeenCalledTimes(1)
-    expect(channels().filter((channel) => channel === 'claim:apply')).toHaveLength(1)
-    expect(invoke).toHaveBeenCalledWith('claim:apply', { repoId: REPO_ID, number: 101, planGate: 'auto', confirmedAssignees: ['alice'] })
+    expect(channels().filter((channel) => channel === 'claim.apply')).toHaveLength(1)
+    expect(invoke).toHaveBeenCalledWith('claim.apply', { repoId: REPO_ID, number: 101, planGate: 'auto', confirmedAssignees: ['alice'] })
     expect(toast.loading).toHaveBeenCalledWith('Taking over #101…', expect.objectContaining({ id: ID }))
     expect(args.onClaimed).toHaveBeenCalledTimes(1)
   })
@@ -107,7 +107,7 @@ describe('workOn', () => {
     route({ preflight: preflight('others', ['alice']), apply: APPLIED, refresh: SNAPSHOT })
     await workOn(params())
     promptButtons().cancel.onClick()
-    expect(channels()).toEqual(['claim:preflight'])
+    expect(channels()).toEqual(['claim.preflight'])
   })
 
   it.each([
@@ -119,7 +119,7 @@ describe('workOn', () => {
     const args = params()
     await workOn(args)
 
-    expect(channels()).toEqual(['claim:preflight'])
+    expect(channels()).toEqual(['claim.preflight'])
     expect(toast.error).toHaveBeenCalledTimes(1)
     expect(args.onClaimed).not.toHaveBeenCalled()
   })
@@ -136,7 +136,7 @@ describe('workOn', () => {
     expect(toast.error).toHaveBeenCalledTimes(1)
     expect(toast.success).not.toHaveBeenCalled()
     expect(args.onClaimed).not.toHaveBeenCalled()
-    expect(channels()).not.toContain('board:refresh')
+    expect(channels()).not.toContain('board.refresh')
   })
 
   it('reports a no-op write as a success without a dispatch line', async () => {
@@ -163,7 +163,7 @@ describe('workOn', () => {
     await workOn(params())
 
     expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toBe("Couldn't reach the main process.")
-    expect(channels()).toEqual(['claim:preflight'])
+    expect(channels()).toEqual(['claim.preflight'])
   })
 
   it('shows the main-process toast when the apply invoke rejects', async () => {

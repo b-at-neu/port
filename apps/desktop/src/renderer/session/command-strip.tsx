@@ -26,7 +26,7 @@ export function CommandStrip({ snapshot }: { readonly snapshot: HostedSessionSna
 
   async function run(sessionKey: SessionKey, name: string, args: string): Promise<void> {
     try {
-      const result = await invoke('session:invoke', { sessionKey, name, args })
+      const result = await invoke('session.invoke', { sessionKey, name, args })
       if (!result.ok) {
         setInvokeFailure(invokeFailureCopy(name, result))
       } else {

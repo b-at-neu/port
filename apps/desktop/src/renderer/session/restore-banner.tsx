@@ -21,10 +21,10 @@ function labelFor(repos: readonly RepositoryEntry[] | undefined, entry: Restorab
 }
 
 export function RestoreBanner() {
-  const query = useIpcQuery('session:restore:list')
-  const repos = useIpcQuery('repos:list')
-  const restoreOne = useIpcMutation('session:restore')
-  const discard = useIpcMutation('session:restore:discard')
+  const query = useIpcQuery('session.restoreList')
+  const repos = useIpcQuery('repos.list')
+  const restoreOne = useIpcMutation('session.restore')
+  const discard = useIpcMutation('session.restoreDiscard')
   const [reviewing, setReviewing] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
 

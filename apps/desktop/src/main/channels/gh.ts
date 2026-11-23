@@ -1,7 +1,6 @@
 // `'gh:status'`'s composition — the footer's status dot. This file never
 // throws for a gh failure itself; every outcome is a value.
 import type { GhStatus } from '@/types/gh'
-import type { IpcMap } from '@/types/ipc'
 import { ghAuthStatus } from '@/main/platform/gh'
 import type { GhAuthStatusResult } from '@/types/platform'
 
@@ -63,7 +62,7 @@ export function parseGhAuthStatus(output: string): ParsedGhAuth {
   return { account: block.account, scopes }
 }
 
-export async function resolveGhStatus(request: IpcMap['gh:status']['request'], deps: GhStatusDeps = defaultGhStatusDeps): Promise<GhStatus> {
+export async function resolveGhStatus(request: undefined, deps: GhStatusDeps = defaultGhStatusDeps): Promise<GhStatus> {
   if (request !== undefined) throw new Error("'gh:status' takes no payload")
   const checkedAt = new Date(deps.now()).toISOString()
   const result = await deps.ghAuthStatus({ timeoutMs: 8_000 })

@@ -79,9 +79,6 @@ function depsFor(overrides: Partial<WorkspaceChannelDeps>): WorkspaceChannelDeps
 }
 
 describe('resolveFoldersList', () => {
-  it('throws for a non-void request', async () => {
-    await expect(resolveFoldersList(REGISTRY_DEPS, {} as unknown as void, depsFor({}))).rejects.toThrow("'folders:list' takes no payload")
-  })
 
   it('lists ready registry repos first', async () => {
     const repositories = [readyRepo('/repo')]

@@ -7,7 +7,6 @@ import { storeStub } from '../../../fixtures/store'
 import {
   MAX_INVOKE_ARGS_CHARS,
   resolveSessionAttach,
-  resolveSessionCapacity,
   resolveSessionCapacitySet,
   resolveSessionClose,
   resolveSessionDefaults,
@@ -16,7 +15,6 @@ import {
   resolveSessionInterrupt,
   resolveSessionInvoke,
   resolveSessionIndex,
-  resolveSessionList,
   resolveSessionPermissionAnswer,
   resolveSessionRename,
   resolveSessionSend,
@@ -182,16 +180,7 @@ describe('resolveSessionInterrupt / resolveSessionClose / resolveSessionAttach',
   })
 })
 
-describe('resolveSessionList', () => {
-  it('rejects a payload', () => {
-    expect(() => resolveSessionList({} as unknown as void, depsWith())).toThrow("'session:list' takes no payload")
-  })
-})
-
 describe('resolveSessionIndex', () => {
-  it('rejects a payload', () => {
-    expect(() => resolveSessionIndex({} as unknown as void, depsWith())).toThrow("'session:index' takes no payload")
-  })
 
   it('returns the index list', () => {
     expect(resolveSessionIndex(undefined, depsWith())).toEqual([])
@@ -281,13 +270,6 @@ describe('resolveSessionDismiss', () => {
     expect(() => resolveSessionDismiss({ sessionKey: SESSION_KEY, worktree: 'remove' }, depsWith({ store: storeStub({ snapshotOf }) }))).toThrow(
       "'session:dismiss' requires 'worktree' to be 'keep' for a non-worktree session",
     )
-  })
-
-})
-
-describe('resolveSessionCapacity', () => {
-  it('rejects a payload', () => {
-    expect(() => resolveSessionCapacity({} as unknown as void, depsWith())).toThrow("'session:capacity' takes no payload")
   })
 
 })

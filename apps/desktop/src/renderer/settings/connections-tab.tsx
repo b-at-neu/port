@@ -15,7 +15,7 @@ const TONE_PILL: Readonly<Record<'success' | 'attention' | 'danger' | 'idle', Pi
 
 export function ConnectionsTab() {
   const { lines, snapshot } = useConnectionOverview()
-  const refresh = useIpcMutation('board:refresh')
+  const refresh = useIpcMutation('board.refresh')
   const github = lines.find((line) => line.key === 'github')
   const repositoryLines = lines.filter((line) => line.key.startsWith('repo:'))
 

@@ -1,11 +1,10 @@
 import { SOURCE_KINDS, type BoardSnapshot } from '@/types/board'
-import type { BoardRefreshDeps } from '@/types/channels'
-import type { IpcMap } from '@/types/ipc'
+import type { BoardRefreshDeps, RefreshRequest } from '@/types/channels'
 import type { RegistryDeps } from '@/types/registry'
 
 export async function resolveBoardRefresh(
   registryDeps: RegistryDeps,
-  request: IpcMap['board:refresh']['request'],
+  request: RefreshRequest,
   deps: BoardRefreshDeps,
 ): Promise<BoardSnapshot> {
   if (request?.repoId !== undefined) {

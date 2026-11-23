@@ -21,7 +21,7 @@ const PENDING: Record<DispatchCommand, (repoName: string) => string> = {
 
 function applyRunState(client: ReturnType<typeof useQueryClient>, repoId: RepoId, result: DispatchControlResult): void {
   if (!result.ok) return
-  client.setQueryData(ipcQueryOptions('board:snapshot').queryKey, (snapshot: BoardSnapshot | undefined) => {
+  client.setQueryData(ipcQueryOptions('board.snapshot').queryKey, (snapshot: BoardSnapshot | undefined) => {
     if (snapshot === undefined) return snapshot
     const repositories = snapshot.runStates.repositories.map((entry) => (entry.repoId === repoId ? result.runState : entry))
     return { ...snapshot, runStates: { ...snapshot.runStates, repositories } }
@@ -29,16 +29,16 @@ function applyRunState(client: ReturnType<typeof useQueryClient>, repoId: RepoId
 }
 
 export function useRunStateCommand() {
-  const mutation = useIpcMutation('dispatch:control')
+  const mutation = useIpcMutation('dispatch.control')
   const client = useQueryClient()
 
   function priorState(repoId: RepoId): RunState | null {
-    const snapshot = client.getQueryData(ipcQueryOptions('board:snapshot').queryKey)
+    const snapshot = client.getQueryData(ipcQueryOptions('board.snapshot').queryKey)
     return snapshot?.runStates.repositories.find((entry) => entry.repoId === repoId)?.state ?? null
   }
 
   function inFlightOf(repoId: RepoId): number {
-    const snapshot = client.getQueryData(ipcQueryOptions('board:snapshot').queryKey)
+    const snapshot = client.getQueryData(ipcQueryOptions('board.snapshot').queryKey)
     return snapshot?.tick.find((entry) => entry.repoId === repoId)?.claims.length ?? 0
   }
 

@@ -2,7 +2,6 @@ import type { ResolvedStageRoot, RecoverDeps } from '@/types/stage'
 
 // `stage:allow`, `stage:dismiss-denial`, `stage:resume`, `stage:restart` — the renderer's own
 // seam into `main/stage/`'s allow/resume/restart compositions. Nothing else may call these.
-import type { IpcMap } from '@/types/ipc'
 import type { StageAllowIo, StageAllowResult, StageDenial, StageResumeResult, StageRestartResult } from '@/types/stage'
 import type { RegistryDeps } from '@/types/registry'
 import { requireReadyRepo } from '@/main/registry'
@@ -27,7 +26,7 @@ function findDenial(dispatcher: StageChannelDeps['dispatcher'], repoId: RepoId, 
   return status?.denials.find((d) => d.id === denialId) ?? null
 }
 
-export async function resolveStageAllow(registryDeps: RegistryDeps, request: IpcMap['stage:allow']['request'], deps: StageChannelDeps): Promise<StageAllowResult> {
+export async function resolveStageAllow(registryDeps: RegistryDeps, request: { readonly repoId: RepoId; readonly denialId: string; readonly rule: string }, deps: StageChannelDeps): Promise<StageAllowResult> {
   if (typeof request?.repoId !== 'string' || request.repoId === '') throw new Error("'stage:allow' requires a non-empty 'repoId'")
   if (typeof request.denialId !== 'string' || request.denialId === '') throw new Error("'stage:allow' requires a non-empty 'denialId'")
   if (typeof request.rule !== 'string' || request.rule.length === 0 || request.rule.length > 300) {
@@ -67,7 +66,7 @@ export async function resolveStageAllow(registryDeps: RegistryDeps, request: Ipc
   return { kind: 'proposed', number: proposed.number, url: proposed.url }
 }
 
-export function resolveStageDismissDenial(request: IpcMap['stage:dismiss-denial']['request'], deps: Pick<StageChannelDeps, 'dispatcher'>): void {
+export function resolveStageDismissDenial(request: { readonly repoId: RepoId; readonly denialId: string }, deps: Pick<StageChannelDeps, 'dispatcher'>): void {
   if (typeof request?.repoId !== 'string' || request.repoId === '') throw new Error("'stage:dismiss-denial' requires a non-empty 'repoId'")
   if (typeof request.denialId !== 'string' || request.denialId === '') throw new Error("'stage:dismiss-denial' requires a non-empty 'denialId'")
   deps.dispatcher.dismissDenial(request.repoId, request.denialId)
@@ -107,7 +106,7 @@ function recoverDepsOf(registryDeps: RegistryDeps, roots: ReadonlyMap<RepoId, Re
   }
 }
 
-export async function resolveStageResume(registryDeps: RegistryDeps, request: IpcMap['stage:resume']['request'], deps: StageChannelDeps): Promise<StageResumeResult> {
+export async function resolveStageResume(registryDeps: RegistryDeps, request: { readonly id: string }, deps: StageChannelDeps): Promise<StageResumeResult> {
   if (typeof request?.id !== 'string' || request.id === '') throw new Error("'stage:resume' requires a non-empty 'id'")
   const roots = await readyRootsOf(registryDeps, deps)
   return resumeStage(recoverDepsOf(registryDeps, roots, deps), request.id)
@@ -128,7 +127,7 @@ export function createStageSweeper(registryDeps: RegistryDeps, deps: StageChanne
   })
 }
 
-export async function resolveStageRestart(registryDeps: RegistryDeps, request: IpcMap['stage:restart']['request'], deps: StageChannelDeps): Promise<StageRestartResult> {
+export async function resolveStageRestart(registryDeps: RegistryDeps, request: { readonly id: string }, deps: StageChannelDeps): Promise<StageRestartResult> {
   if (typeof request?.id !== 'string' || request.id === '') throw new Error("'stage:restart' requires a non-empty 'id'")
   const roots = await readyRootsOf(registryDeps, deps)
   return restartStage(recoverDepsOf(registryDeps, roots, deps), request.id)

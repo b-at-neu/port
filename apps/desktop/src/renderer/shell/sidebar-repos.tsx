@@ -20,9 +20,9 @@ import type { RepoId } from '@/utils/repos'
 const LOAD_ERROR = "Couldn't load repositories. Restart port to try again."
 
 export function SidebarRepos() {
-  const repos = useIpcQuery('repos:list')
-  const snapshot = useIpcQuery('board:snapshot')
-  const sessions = useIpcQuery('session:list')
+  const repos = useIpcQuery('repos.list')
+  const snapshot = useIpcQuery('board.snapshot')
+  const sessions = useIpcQuery('session.list')
   const needsYou = useNeedsYouItems()
   const marks = useSessionMarks()
   const navigate = useNavigate()

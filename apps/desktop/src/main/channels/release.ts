@@ -1,8 +1,8 @@
 // `'release:status'`, `'release:issues'` and `'release:run'`'s composition. Every run reads the phase again here and trusts nothing the renderer says beyond the version and the notes.
 import type { GitRunner } from '@/types/platform'
-import type { IpcMap } from '@/types/ipc'
+import type { RepoId } from '@/utils/repos'
 import type { RegistryDeps } from '@/types/registry'
-import type { HookOutcome, ReleaseConfig, ReleaseConfigRead, ReleaseIssuesResponse, ReleaseRead, ReleaseRunResult, ReleaseStatus, ReleaseStatusResponse, ReleaseWriteContext, ReleaseWriteResult, VersionFileWrite } from '@/types/release'
+import type { HookOutcome, ReleaseIssuesRequest, ReleaseRunRequest, ReleaseConfig, ReleaseConfigRead, ReleaseIssuesResponse, ReleaseRead, ReleaseRunResult, ReleaseStatus, ReleaseStatusResponse, ReleaseWriteContext, ReleaseWriteResult, VersionFileWrite } from '@/types/release'
 import { fetchReleaseStatus, readFileAtRef } from '@/main/github/release'
 import { fetchReleaseIssues } from '@/main/github/release-issues'
 import { readAtDefaultRef } from '@/main/registry/harness'
@@ -63,7 +63,7 @@ async function readState(registryDeps: RegistryDeps, entry: ReadyEntry, deps: Re
   return { read, config: config.config }
 }
 
-export async function resolveReleaseStatus(registryDeps: RegistryDeps, request: IpcMap['release:status']['request'], deps: ReleaseChannelDeps = defaultReleaseChannelDeps): Promise<ReleaseStatusResponse> {
+export async function resolveReleaseStatus(registryDeps: RegistryDeps, request: { readonly repoId: RepoId }, deps: ReleaseChannelDeps = defaultReleaseChannelDeps): Promise<ReleaseStatusResponse> {
   const repoId = requireRepoId(request?.repoId, "'release:status'")
   const entry = await requireReadyRepo(registryDeps, "'release:status'", repoId, deps.listRepositories)
   const { read } = await readState(registryDeps, entry, deps)
@@ -72,7 +72,7 @@ export async function resolveReleaseStatus(registryDeps: RegistryDeps, request: 
 
 const TAG_PATTERN = /^[A-Za-z0-9._+/-]{1,255}$/
 
-export async function resolveReleaseIssues(registryDeps: RegistryDeps, request: IpcMap['release:issues']['request'], deps: ReleaseChannelDeps = defaultReleaseChannelDeps): Promise<ReleaseIssuesResponse> {
+export async function resolveReleaseIssues(registryDeps: RegistryDeps, request: ReleaseIssuesRequest, deps: ReleaseChannelDeps = defaultReleaseChannelDeps): Promise<ReleaseIssuesResponse> {
   const repoId = requireRepoId(request?.repoId, "'release:issues'")
   if (typeof request.tag !== 'string' || !TAG_PATTERN.test(request.tag)) throw new Error("'release:issues' requires a 'tag' of 1 to 255 tag characters")
   if (request.previousTag !== null && (typeof request.previousTag !== 'string' || !TAG_PATTERN.test(request.previousTag))) {
@@ -187,7 +187,7 @@ async function runPublish(ctx: RunContext, version: string, notes: string): Prom
 
 export async function resolveReleaseRun(
   registryDeps: RegistryDeps,
-  request: IpcMap['release:run']['request'],
+  request: ReleaseRunRequest,
   auditDir: string,
   scratchDir: string,
   deps: ReleaseChannelDeps = defaultReleaseChannelDeps,

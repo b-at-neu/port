@@ -1,6 +1,6 @@
 // The worktrees channels: `'worktrees:report'`'s read, and the `'worktrees:reclaim'` and
 // `'worktrees:purge'` compositions — registry lookup, the run, then exactly one `appendAudit` call.
-import type { IpcMap } from '@/types/ipc'
+import type { RepoId } from '@/utils/repos'
 import type { PurgeAuditEntry, ReclaimAuditEntry } from '@/types/writes'
 import type {
   ForcedReclaim,
@@ -27,7 +27,7 @@ const defaultWorktreesReportDeps: WorktreesReportDeps = { listRepositories, read
 // The renderer sends only the opaque id, never a path.
 export async function resolveWorktreesReport(
   registryDeps: RegistryDeps,
-  request: IpcMap['worktrees:report']['request'],
+  request: { readonly id: RepoId },
   deps: WorktreesReportDeps = defaultWorktreesReportDeps,
 ): Promise<WorktreesReport> {
   if (typeof request?.id !== 'string' || request.id === '') {
@@ -77,7 +77,7 @@ function readForce(raw: unknown): ForcedReclaim | null {
 // failure never changes the already-computed result.
 export async function resolveWorktreesReclaim(
   registryDeps: RegistryDeps,
-  request: IpcMap['worktrees:reclaim']['request'],
+  request: { readonly id: RepoId; readonly issue: number | null; readonly force: ForcedReclaim | null },
   auditDir: string,
   deps: WorktreesReclaimDeps = defaultWorktreesReclaimDeps,
 ): Promise<WorktreesReclaimResult> {
@@ -138,7 +138,7 @@ export const defaultWorktreesPurgeDeps: WorktreesPurgeDeps = { listRepositories,
 // `path` must sit inside the registered repository; the purge refuses anything that is not an orphan.
 export async function resolveWorktreesPurge(
   registryDeps: RegistryDeps,
-  request: IpcMap['worktrees:purge']['request'],
+  request: { readonly id: RepoId; readonly path: string },
   auditDir: string,
   deps: WorktreesPurgeDeps = defaultWorktreesPurgeDeps,
 ): Promise<WorktreesPurgeResult> {

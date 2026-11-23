@@ -33,7 +33,7 @@ import type { DispatchRecord } from '@/types/dispatch'
 // Registered once from main.ts's boot — never a useEffect inside the
 // component.
 export function connectItemActionPruning(client: QueryClient): () => void {
-  return observeIpcQuery(client, 'board:snapshot', undefined, (result) => {
+  return observeIpcQuery(client, 'board.snapshot', undefined, (result) => {
     if (result.status === 'success') pruneItemActionStates(result.data)
   })
 }
@@ -47,8 +47,8 @@ export function BoardScreen() {
   const search = useSearch({ from: ROUTE_IDS.board })
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const query = useIpcQuery('board:snapshot')
-  const sessions = useIpcQuery('session:list')
+  const query = useIpcQuery('board.snapshot')
+  const sessions = useIpcQuery('session.list')
   const [refreshing, setRefreshing] = useState(false)
   const [collapsedLanes, setCollapsedLanes] = useState<ReadonlySet<RepoId>>(() => readBoardCollapsedLanes())
   const now = new Date()
@@ -66,8 +66,8 @@ export function BoardScreen() {
   async function handleRefresh(): Promise<void> {
     setRefreshing(true)
     try {
-      const fresh = await invoke('board:refresh', {})
-      queryClient.setQueryData(ipcQueryOptions('board:snapshot').queryKey, fresh)
+      const fresh = await invoke('board.refresh', {})
+      queryClient.setQueryData(ipcQueryOptions('board.snapshot').queryKey, fresh)
     } catch (error) {
       console.error('Failed to refresh the board', error)
     }

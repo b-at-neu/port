@@ -2,12 +2,12 @@
 // logged so it can never mask the write's own success.
 import { GATE_DECISIONS } from '@/types/gate'
 import type { GateAnswerResponse, GateDecision, GatePreflightResponse } from '@/types/gate'
-import type { IpcMap } from '@/types/ipc'
+import type { RepoId } from '@/utils/repos'
 import type { RegistryDeps } from '@/types/registry'
 import { requireRepoId } from '@/main/registry'
 import type { GateChannelDeps } from '@/types/channels'
 
-export async function resolveGatePreflight(registryDeps: RegistryDeps, request: IpcMap['gate:preflight']['request'], deps: GateChannelDeps): Promise<GatePreflightResponse> {
+export async function resolveGatePreflight(registryDeps: RegistryDeps, request: { readonly repoId: RepoId; readonly number: number }, deps: GateChannelDeps): Promise<GatePreflightResponse> {
   const repoId = requireRepoId(request?.repoId, "'gate:preflight'")
   if (!Number.isInteger(request.number) || request.number <= 0) {
     throw new Error("'gate:preflight' requires 'number' to be a positive integer")
@@ -21,7 +21,7 @@ function isGateDecision(value: unknown): value is GateDecision {
 
 export async function resolveGateAnswer(
   registryDeps: RegistryDeps,
-  request: IpcMap['gate:answer']['request'],
+  request: { readonly repoId: RepoId; readonly number: number; readonly decision: GateDecision; readonly feedback: string | null; readonly skipComment: boolean },
   auditDir: string,
   scratchDir: string,
   deps: GateChannelDeps,

@@ -1,5 +1,5 @@
 // Fixture mode's own canned audit log: one entry per row shape the Audit screen renders.
-import type { IpcMap } from '@/types/ipc'
+import type { ActionInput } from '@/types/ipc'
 import type { FixtureScenario } from '@/types/fixtures'
 import type { AuditEntry, AuditRead, LabelAuditEntry } from '@/types/writes'
 import { isLabelAuditEntry } from '@/types/writes'
@@ -60,7 +60,7 @@ function cannedEntries(now: Date, attention: boolean): readonly AuditEntry[] {
   ]
 }
 
-export function fixtureAuditRead(now: Date, scenario: FixtureScenario, request: IpcMap['audit:list']['request']): AuditRead {
+export function fixtureAuditRead(now: Date, scenario: FixtureScenario, request: ActionInput<'audit.list'>): AuditRead {
   if (scenario === 'empty') return { ok: true, entries: [], malformed: 0, previousPath: null, readAt: now.toISOString() }
 
   const attention = scenario === 'attention'

@@ -181,11 +181,11 @@ let pushAttached = false
 
 function sharedRegistry(subscriptions: Subscriptions): EntriesRegistry {
   shared ??= createEntriesRegistry({
-    sessionAttach: (sessionKey) => window.port.sessionAttach({ sessionKey }),
+    sessionAttach: (sessionKey) => window.port.invoke('session.attach', { sessionKey }),
   })
   if (!pushAttached) {
     pushAttached = true
-    subscriptions.subscribe('session:entries', (delta) => shared?.handlePush(delta))
+    subscriptions.subscribe('session.entries', (delta) => shared?.handlePush(delta))
   }
   return shared
 }

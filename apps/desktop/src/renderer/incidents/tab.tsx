@@ -40,9 +40,9 @@ function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { st
 
 export function IncidentsTab() {
   const [repoId, setRepoId] = useState<RepoId | null>(null)
-  const incidents = useIpcQuery('incidents:groups', { repoId })
-  const repos = useIpcQuery('repos:list')
-  const exportMutation = useIpcMutation('incidents:export')
+  const incidents = useIpcQuery('incidents.groups', { repoId })
+  const repos = useIpcQuery('repos.list')
+  const exportMutation = useIpcMutation('incidents.export')
   const readyRepos = repos.data?.ok === true ? repos.data.repositories.filter(isReady) : []
   const repoName = readyRepos.find((repo) => repo.id === repoId)?.config.repo ?? repoId ?? ''
   const readAt = incidents.data?.readAt ?? ''
@@ -152,7 +152,7 @@ function GroupRow({ row, repoId, readAt }: { readonly row: IncidentGroupRow; rea
 }
 
 function GroupRecords({ signature, repoId, readAt }: { readonly signature: string; readonly repoId: RepoId | null; readonly readAt: string }) {
-  const list = useIpcQuery('incidents:list', { repoId, signature })
+  const list = useIpcQuery('incidents.list', { repoId, signature })
   if (list.status === 'pending') {
     return (
       <div className="flex flex-col gap-1 pb-2">

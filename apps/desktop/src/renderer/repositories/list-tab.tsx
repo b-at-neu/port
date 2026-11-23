@@ -41,8 +41,8 @@ function RepoRow({
 
 export function RepositoriesTab() {
   const navigate = useNavigate()
-  const reposQuery = useIpcQuery('repos:list')
-  const addMutation = useIpcMutation('repos:add')
+  const reposQuery = useIpcQuery('repos.list')
+  const addMutation = useIpcMutation('repos.add')
   const repositories = reposQuery.data?.ok === true ? reposQuery.data.repositories : []
   const selection = useListSelection(repositories.map((r) => r.id))
 

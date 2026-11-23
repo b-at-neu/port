@@ -190,9 +190,9 @@ let shared: TailStore | null = null
 
 function sharedStore(): TailStore {
   shared ??= createTailStore({
-    tailOpen: (sessionId, agentId) => invoke('transcript:tail:open', { sessionId, agentId }),
-    tailPoll: (tailId) => invoke('transcript:tail:poll', { tailId }),
-    tailClose: (tailId) => invoke('transcript:tail:close', { tailId }),
+    tailOpen: (sessionId, agentId) => invoke('transcript.tailOpen', { sessionId, agentId }),
+    tailPoll: (tailId) => invoke('transcript.tailPoll', { tailId }),
+    tailClose: (tailId) => invoke('transcript.tailClose', { tailId }),
     isHidden: () => document.hidden,
     onVisibilityChange: (listener) => {
       document.addEventListener('visibilitychange', listener)

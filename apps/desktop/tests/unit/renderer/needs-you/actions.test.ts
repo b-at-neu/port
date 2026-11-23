@@ -247,7 +247,7 @@ describe('stage-approval answers', () => {
     const toasts: string[] = []
     runAction(stageApproval(), { onToast: (m) => toasts.push(m) })
     await vi.waitFor(() => expect(toasts).toEqual(['Approved the edit to .claude/settings.json.']))
-    expect(invokeMock).toHaveBeenCalledWith('session:permission:answer', { sessionKey: 'hosted-466', permissionId: 'perm-1', decision: 'allow-once', message: null })
+    expect(invokeMock).toHaveBeenCalledWith('session.permissionAnswer', { sessionKey: 'hosted-466', permissionId: 'perm-1', decision: 'allow-once', message: null })
   })
 
   it('Deny sends the deny message and toasts', async () => {
@@ -255,7 +255,7 @@ describe('stage-approval answers', () => {
     const toasts: string[] = []
     runSecondaryAction(stageApproval(), { onToast: (m) => toasts.push(m) })
     await vi.waitFor(() => expect(toasts).toEqual(['Denied the edit to .claude/settings.json.']))
-    expect(invokeMock).toHaveBeenCalledWith('session:permission:answer', {
+    expect(invokeMock).toHaveBeenCalledWith('session.permissionAnswer', {
       sessionKey: 'hosted-466',
       permissionId: 'perm-1',
       decision: 'deny',

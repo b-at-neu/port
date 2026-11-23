@@ -23,7 +23,7 @@ const VERDICT_STATUS: Readonly<Record<VocabularyVerdict, PillStatus>> = {
 
 export function OverviewTab({ entry, repoId }: { readonly entry: RepositoryEntry; readonly repoId: RepoId }) {
   const queryClient = useQueryClient()
-  const snapshotQuery = useIpcQuery('board:snapshot')
+  const snapshotQuery = useIpcQuery('board.snapshot')
   const [pending, setPending] = useState<string | null>(null)
 
   if (!('config' in entry)) {
@@ -36,8 +36,8 @@ export function OverviewTab({ entry, repoId }: { readonly entry: RepositoryEntry
   async function refresh(source?: 'github' | 'sessions' | 'worktrees' | 'denials'): Promise<void> {
     setPending(source ?? 'all')
     try {
-      const fresh = await invoke('board:refresh', { repoId, source })
-      queryClient.setQueryData(ipcQueryOptions('board:snapshot').queryKey, fresh)
+      const fresh = await invoke('board.refresh', { repoId, source })
+      queryClient.setQueryData(ipcQueryOptions('board.snapshot').queryKey, fresh)
     } catch (error) {
       console.error('Failed to refresh this repository', error)
     }

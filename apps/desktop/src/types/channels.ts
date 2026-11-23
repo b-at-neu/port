@@ -1,8 +1,8 @@
 import type { GatePreflightParams, GateAnswerParams, ApplyItemDecisionParams, ItemDecisionResult, ApplyItemActionParams, ItemActionResult } from '@/types/actions'
 import type { GatePreflightResponse, GateAnswerResponse } from '@/types/gate'
-import type { IpcMap } from '@/types/ipc'
 import type { IncidentLog } from '@/types/incidents'
-import type { BoardSnapshot } from '@/types/board'
+import type { BoardSnapshot, SourceKind } from '@/types/board'
+import type { RepoId } from '@/utils/repos'
 import type { HostedSessionSnapshot, HostedStore, SessionStartTarget, SessionStartMode } from '@/types/hosting'
 import type { ResolveStartTargetDeps, ReleaseBranchOutcome, RemoveSessionWorktreeOutcome, ResolvedStartTarget } from '@/types/workspace'
 import type { DirEntry, FileResult, GitLinesResult, RunCommandOptions } from '@/types/platform'
@@ -21,15 +21,24 @@ import type { RunSearchParams, SearchResult } from '@/types/search'
 import type { StageAllowIo, StageLauncherHandle, StageRegistry } from '@/types/stage'
 import type { Dispatcher, RepoDispatchStatus } from '@/types/dispatch'
 import type { ForceDispatch } from '@/types/tick'
-import type { IpcChannel, ReposListResponse } from '@/types/ipc'
-import type { AssertEqual } from '@/types/assert-type'
+import type { ReposListResponse } from '@/types/ipc'
 import type { NotificationPrefs } from '@/types/settings'
 import type { ReadWorktreeReportParams, WorktreesReport } from '@/types/reclaimer'
 
-/** The seam `'board:refresh'` composes through. */
+/** Omitting either field widens the force to every repository or every source. */
+export type RefreshRequest = { readonly repoId?: RepoId; readonly source?: SourceKind } | undefined
+
+/** What a Needs-you notification carries. */
+export interface NeedsYouNotification {
+  readonly title: string
+  readonly body: string
+  readonly focus: string | null
+}
+
+/** The seam `'board.refresh'` composes through. */
 export interface BoardRefreshDeps {
   readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
-  readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
+  readonly refresh: (request: RefreshRequest) => Promise<BoardSnapshot>
 }
 
 export interface IncidentChannelDeps {
@@ -43,7 +52,7 @@ export interface IncidentChannelDeps {
 export interface GateChannelDeps {
   readonly gatePreflight: (params: GatePreflightParams) => Promise<GatePreflightResponse>
   readonly gateAnswer: (params: GateAnswerParams) => Promise<GateAnswerResponse>
-  readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
+  readonly refresh: (request: RefreshRequest) => Promise<BoardSnapshot>
 }
 
 export interface HostingChannelDeps {
@@ -59,13 +68,13 @@ export interface HostingChannelDeps {
   readonly removeCreatedWorktree: (path: string) => Promise<void>
 }
 
-/** The seam `'item:decide'` composes through. */
+/** The seam `'item.decide'` composes through. */
 export interface ItemDecisionDeps {
   readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
   readonly applyItemDecision: (params: ApplyItemDecisionParams) => Promise<ItemDecisionResult>
   readonly sessions: () => readonly HostedSessionSnapshot[]
   readonly snapshot: () => BoardSnapshot
-  readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
+  readonly refresh: (request: RefreshRequest) => Promise<BoardSnapshot>
 }
 
 export interface TranscriptTailDeps {
@@ -99,7 +108,7 @@ export interface StageChannelDeps {
   readonly allow: StageAllowIo
 }
 
-/** The seam `'held:force-dispatch'` composes through. `dispatcherStatus` reads the same `RepoDispatchStatus.owner` the board already renders, never a second ownership read. */
+/** The seam `'held.forceDispatch'` composes through. `dispatcherStatus` reads the same `RepoDispatchStatus.owner` the board already renders, never a second ownership read. */
 export interface HeldChannelDeps {
   readonly snapshot: () => BoardSnapshot
   readonly dispatcherStatus: () => readonly RepoDispatchStatus[]
@@ -108,113 +117,19 @@ export interface HeldChannelDeps {
   readonly republish: () => void
 }
 
-/** The seam `'notify:needs-you'` composes through — `show` owns the focus rule and the Electron notification. */
+/** The seam `'notify.needsYou'` composes through — `show` owns the focus rule and the Electron notification. */
 export interface NotifyChannelDeps {
-  readonly show: (notification: IpcMap['notify:needs-you']['request']) => void
+  readonly show: (notification: NeedsYouNotification) => void
 }
 
-/** The seam `'notify:prefs'`/`'notify:prefs:set'` compose through — the hosted store's persisted preferences. */
+/** The seam `'notify.prefs'`/`'notify.prefsSet'` compose through — the hosted store's persisted preferences. */
 export interface NotifyPrefsDeps {
   readonly prefs: () => Promise<NotificationPrefs>
   readonly setPrefs: (next: NotificationPrefs) => Promise<NotificationPrefs>
 }
 
-/** The seam `'worktrees:report'` composes through. */
+/** The seam `'worktrees.report'` composes through. */
 export interface WorktreesReportDeps {
   readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
   readonly readWorktreeReport: (params: ReadWorktreeReportParams) => Promise<WorktreesReport>
 }
-
-// The read/write partition over IpcChannel — hand-maintained, never derived from IPC_CHANNELS.
-export const QUERY_CHANNELS = [
-  'app:info',
-  'repos:list',
-  'worktrees:report',
-  'sessions:scan',
-  'search:query',
-  'board:snapshot',
-  'claim:preflight',
-  'runtime:preflight',
-  'gate:preflight',
-  'session:list',
-  'session:index',
-  'session:capacity',
-  'session:restore:list',
-  'gh:status',
-  'session:defaults',
-  'backlog:list',
-  'backlog:detail',
-  'audit:list',
-  'incidents:groups',
-  'incidents:list',
-  'session:files',
-  'folders:list',
-  'session:changes',
-  'session:marks',
-  'notify:prefs',
-  'storage:report',
-  'usage:summary',
-  'release:status',
-  'release:issues',
-  'update:state',
-  'update:download:state',
-] as const
-
-export type QueryChannel = (typeof QUERY_CHANNELS)[number]
-
-// Every other channel, including the ones that move state in the main process.
-export const MUTATION_CHANNELS = [
-  'repos:add',
-  'repos:remove',
-  'transcript:tail:open',
-  'transcript:tail:poll',
-  'transcript:tail:close',
-  'board:refresh',
-  'worktrees:reclaim',
-  'worktrees:purge',
-  'claim:apply',
-  'item:action',
-  'item:decide',
-  'dispatch:control',
-  'runtime:probe',
-  'gate:answer',
-  'session:start',
-  'session:send',
-  'session:interrupt',
-  'session:close',
-  'session:attach',
-  'session:permission:answer',
-  'session:invoke',
-  'session:dismiss',
-  'session:capacity:set',
-  'session:restore',
-  'session:restore:discard',
-  'session:defaults:set',
-  'session:rename',
-  'session:controls:set',
-  'session:question:answer',
-  'session:plan:answer',
-  'session:task:stop',
-  'folders:choose',
-  'session:pin:set',
-  'session:archive:set',
-  'stage:allow',
-  'stage:dismiss-denial',
-  'stage:resume',
-  'stage:restart',
-  'held:force-dispatch',
-  'notify:needs-you',
-  'notify:prefs:set',
-  'release:run',
-  'incidents:export',
-  'update:check',
-  'update:download',
-  'update:open',
-] as const
-
-export type MutationChannel = (typeof MUTATION_CHANNELS)[number]
-
-// Fails to compile when a channel is unclassified, misclassified into both
-// lists, or either list drifts from IpcMap's own keys.
-export const _queryAndMutationCoverIpcChannel: AssertEqual<QueryChannel | MutationChannel, IpcChannel> = true
-export const _queryAndMutationNeverOverlap: AssertEqual<QueryChannel & MutationChannel, never> = true

@@ -1,10 +1,10 @@
 // `held:force-dispatch` — the Needs-you "Dispatch anyway" write. Re-reads the watcher's latest
 // snapshot and this repository's own dispatch status, never trusting what the renderer already saw.
-import type { IpcMap } from '@/types/ipc'
+import type { RepoId } from '@/utils/repos'
 import type { HeldForceDispatchResult } from '@/types/dispatch'
 import type { HeldChannelDeps } from '@/types/channels'
 
-export function resolveForceDispatch(request: IpcMap['held:force-dispatch']['request'], deps: HeldChannelDeps): HeldForceDispatchResult {
+export function resolveForceDispatch(request: { readonly repoId: RepoId; readonly number: number }, deps: HeldChannelDeps): HeldForceDispatchResult {
   if (typeof request?.repoId !== 'string' || request.repoId === '') throw new Error("'held:force-dispatch' requires a non-empty 'repoId'")
   if (!Number.isInteger(request.number) || request.number <= 0) {
     throw new Error("'held:force-dispatch' requires 'number' to be a positive integer")

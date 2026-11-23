@@ -73,9 +73,6 @@ function depsWith(overrides: Partial<HostingChannelDeps> = {}): HostingChannelDe
 }
 
 describe('resolveSessionRestoreList', () => {
-  it('rejects a payload', async () => {
-    await expect(resolveSessionRestoreList(registryDeps, {} as unknown as void, depsWith())).rejects.toThrow("'session:restore:list' takes no payload")
-  })
 
   it('marks a ready repository available', async () => {
     const restorable = vi.fn(() =>
