@@ -4,7 +4,7 @@ import type { BranchHead } from '@/types/release'
 import type { AllowBaseRead, ReadAllowBaseParams } from '@/types/stage'
 import { describeHttp } from '@/main/github/envelope'
 import { RAW_ACCEPT, restRequest } from '@/main/github/request'
-import { CONFIG_PATH, SETTINGS_PATH } from '@/main/dispatch/stage/allowlist'
+import { CONFIG_PATH, SETTINGS_PATH } from '@/main/repos/config/paths'
 
 const SAFE_REF = /^[A-Za-z0-9._/-]+$/
 

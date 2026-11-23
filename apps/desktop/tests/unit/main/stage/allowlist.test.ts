@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { CONFIG_PATH, SETTINGS_PATH, mergeRule } from '@/main/dispatch/stage/allowlist'
+import { mergeRule } from '@/main/dispatch/stage/allowlist'
+import { CONFIG_PATH, SETTINGS_PATH } from '@/main/repos/config/paths'
 
 const settings = (allow: string[], extra: Record<string, unknown> = {}) => JSON.stringify({ ...extra, permissions: { deny: ['x'], allow } })
 const config = (extraAllow: string[]) => JSON.stringify({ repo: 'o/r', extraAllow })

@@ -1,6 +1,7 @@
 // What a registered repository looks like to the harness that would actually dispatch agents in it: the default branch at origin/HEAD, never the checked-out files. Every step degrades to a diagnostic rather than a failure.
 import type { CommandResult, GitRunner } from '@/types/platform'
 import type { RefRead } from '@/types/registry'
+import { CONFIG_PATH } from '@/main/repos/config/paths'
 
 const DEFAULT_REF = 'refs/remotes/origin/HEAD'
 
@@ -47,10 +48,9 @@ type RefsCarryingConfig = { readonly ok: true; readonly refs: readonly string[] 
 
 /** Capped at 20 candidates, each confirmed with `ls-tree` so a branch that later deleted the config is excluded. Git pathspecs use a literal `/`, never `pathOps.join`. */
 const MAX_CANDIDATES = 20
-const CONFIG_PATHSPEC = '.claude/port.config.json'
 
 export async function refsCarryingConfig(git: GitRunner, cwd: string): Promise<RefsCarryingConfig> {
-  const revList = await git(['rev-list', '--all', '--max-count=1', '--', CONFIG_PATHSPEC], cwd)
+  const revList = await git(['rev-list', '--all', '--max-count=1', '--', CONFIG_PATH], cwd)
   if (!revList.ok) return { ok: false }
   const sha = revList.stdout.trim()
   if (sha === '') return { ok: true, refs: [] }
@@ -65,7 +65,7 @@ export async function refsCarryingConfig(git: GitRunner, cwd: string): Promise<R
 
   const confirmed: string[] = []
   for (const ref of candidates) {
-    const lsTree = await git(['ls-tree', '--name-only', ref, '--', CONFIG_PATHSPEC], cwd)
+    const lsTree = await git(['ls-tree', '--name-only', ref, '--', CONFIG_PATH], cwd)
     if (lsTree.ok && lsTree.stdout.trim() !== '') confirmed.push(ref)
   }
   return { ok: true, refs: confirmed }

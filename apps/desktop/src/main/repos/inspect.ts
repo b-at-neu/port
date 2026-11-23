@@ -9,13 +9,12 @@ import { defaultRefName, permissionsStateOf, readAtDefaultRef, refsCarryingConfi
 import type { GitRunner } from '@/types/platform'
 import { resolveEffectiveConfig } from '@/main/repos/config/effective'
 import type { PortResolved, RefReader } from '@/types/registry'
+import { CONFIG_PATH, SETTINGS_PATH } from '@/main/repos/config/paths'
 import { CONFIG_DEFAULTS, validateConfig } from '@/main/repos/config/schema'
 
 interface InspectDeps {
   readonly git: GitRunner
 }
-
-const CONFIG_RELATIVE_PATH = '.claude/port.config.json'
 
 function toRepoId(root: string): RepoId {
   // Documented cast: main is the only place either brand is minted from a real path.
@@ -89,7 +88,7 @@ export async function inspectRepository(path: string, deps: InspectDeps): Promis
   const root = rootResult.root
 
   const read: RefReader = (relPath) => readAtDefaultRef(deps.git, root, relPath)
-  const configRead = await read(CONFIG_RELATIVE_PATH)
+  const configRead = await read(CONFIG_PATH)
 
   if (!configRead.ok) {
     if (configRead.kind === 'ref-unreadable') return problemEntry(root, { kind: 'config-ref-unreadable', message: configRead.message })
@@ -180,7 +179,7 @@ export async function inspectRepository(path: string, deps: InspectDeps): Promis
   }
 
   const diagnostics: RepoDiagnostic[] = []
-  const permissions = permissionsStateOf(await read('.claude/settings.json'))
+  const permissions = permissionsStateOf(await read(SETTINGS_PATH))
   if (permissions === 'missing') diagnostics.push({ kind: 'permissions-missing' })
   else if (permissions === 'empty') diagnostics.push({ kind: 'permissions-empty' })
 

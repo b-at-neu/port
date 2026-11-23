@@ -1,9 +1,7 @@
 // "Allow from now on": the pure merge of a stage denial's proposed rule into the texts of
 // `.claude/settings.json` and `.claude/port.config.json`. No I/O — the caller reads and writes.
+import { CONFIG_PATH, SETTINGS_PATH } from '@/main/repos/config/paths'
 import { validateRule } from '@/main/dispatch/stage/rule'
-
-export const SETTINGS_PATH = '.claude/settings.json'
-export const CONFIG_PATH = '.claude/port.config.json'
 
 interface MergeRuleParams {
   /** `null` when the file doesn't exist at the ref — treated as an empty allowlist. */

@@ -2,6 +2,7 @@ import { readTextFile } from '@/main/platform/files'
 import { defaultGitRunner } from '@/main/platform/git'
 import { pathOps } from '@/main/platform/paths'
 import { readAtDefaultRef } from '@/main/repos/config/harness'
+import { CONFIG_PATH } from '@/main/repos/config/paths'
 import { loadStageAgentDefinition } from '@/main/dispatch/stage/bundle'
 import type { StageLaunchRequest } from '@/types/dispatch'
 import type { FileResult, GitRunner, PathOps } from '@/types/platform'
@@ -88,7 +89,6 @@ export type StageConfigPointers =
   | { readonly ok: true; readonly docs: Readonly<Record<'engineering' | 'design', string | null>>; readonly commands: Readonly<Record<string, string>> }
   | { readonly ok: false; readonly message: string }
 
-const STAGE_CONFIG_PATH = '.claude/port.config.json'
 
 function parseStageConfig(text: string): StageConfigFile | null {
   try {
@@ -101,10 +101,10 @@ function parseStageConfig(text: string): StageConfigFile | null {
 
 /** `commands.*` stays schema-only: it is read from the default branch's config, never from the stage worktree, whose checkout a pull request can edit. */
 export async function readStageConfigPointers(root: string, git: GitRunner): Promise<StageConfigPointers> {
-  const read = await readAtDefaultRef(git, root, STAGE_CONFIG_PATH)
-  if (!read.ok) return { ok: false, message: `couldn't read ${STAGE_CONFIG_PATH} on the default branch: ${read.message}` }
+  const read = await readAtDefaultRef(git, root, CONFIG_PATH)
+  if (!read.ok) return { ok: false, message: `couldn't read ${CONFIG_PATH} on the default branch: ${read.message}` }
   const config = parseStageConfig(read.text)
-  if (config === null) return { ok: false, message: `${STAGE_CONFIG_PATH} on the default branch is not a JSON object` }
+  if (config === null) return { ok: false, message: `${CONFIG_PATH} on the default branch is not a JSON object` }
   const commands: Record<string, string> = {}
   for (const [key, value] of Object.entries(config.commands ?? {})) {
     if (value === null || value === undefined) continue
