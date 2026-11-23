@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { LabelKey, LabelVocabulary, ResolvedLabel } from '@/utils/labels/vocabulary'
 import type { ReconciledItem } from '@/types/state'
 import type { TickObservation } from '@/types/tick'
-import { observationWrite } from '@/main/dispatch/observation'
+import { observationWrite } from '@/main/pipeline/observation'
 import type { WriteObservation } from '@/types/dispatch'
 
 const REPO_ID = 'repo-a' as ReconciledItem['repoId']

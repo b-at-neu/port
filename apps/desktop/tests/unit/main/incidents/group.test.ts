@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { exportDocument, groupIncidents } from '@/main/incidents/group'
+import { exportDocument, groupIncidents } from '@/main/pipeline/incidents/group'
 import { INCIDENT_GROUP_ITEMS_LIMIT, type IncidentRecord } from '@/types/incidents'
 
 function record(overrides: Partial<IncidentRecord>): IncidentRecord {

@@ -51,7 +51,7 @@ export function settlingDescriptions(records: readonly StageRecord[], pendingNum
   return out
 }
 
-// This repository's own ended stage-session records, newest per number — `main/tick/repair.ts`'s session-shape evidence, projected here rather than in `dispatcher.ts` to keep that file under its line limit.
+// This repository's own ended stage-session records, newest per number — `main/pipeline/tick/repair.ts`'s session-shape evidence, projected here rather than in `dispatcher.ts` to keep that file under its line limit.
 export function endedStagesOf(records: readonly StageRecord[], resultFor: (sessionKey: SessionKey) => StageLabelResult | null): readonly EndedStage[] {
   const newestByNumber = new Map<number, EndedStage>()
   for (const record of records) {

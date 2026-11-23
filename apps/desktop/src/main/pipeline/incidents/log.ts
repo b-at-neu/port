@@ -1,8 +1,8 @@
 // Append-only `incidents.jsonl`: one serialized writer per process, best-effort, never read for a decision.
 import { appendTextFile, readJsonFile, readLinesFrom, renamePath, statPath, writeJsonFileAtomic, writeTextFile } from '@/main/platform/files'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import { boundInputs } from '@/main/incidents/snapshot'
-import { signatureOf } from '@/main/incidents/raise'
+import { boundInputs } from '@/main/pipeline/incidents/snapshot'
+import { signatureOf } from '@/main/pipeline/incidents/raise'
 import type { FileFailureKind, PathOps } from '@/types/platform'
 import type { IncidentDraft, IncidentFiles, IncidentLog, IncidentPruned, IncidentRead, IncidentReadFailureKind, IncidentRecord } from '@/types/incidents'
 

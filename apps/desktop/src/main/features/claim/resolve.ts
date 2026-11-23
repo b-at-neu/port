@@ -5,7 +5,7 @@ import type { ClaimDeps } from '@/types/claim'
 import { PLAN_GATE_CHOICES } from '@/types/claim'
 import type { RepoId } from '@/utils/repos'
 import type { PlanGateChoice } from '@/types/claim'
-import { claimApply, claimPreflight } from '@/main/claim'
+import { claimApply, claimPreflight } from '@/main/pipeline/claim'
 
 import type { RegistryDeps } from '@/types/registry'
 import { requireRepoId } from '@/main/repos'

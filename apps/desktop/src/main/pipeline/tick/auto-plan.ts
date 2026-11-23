@@ -5,7 +5,7 @@ import type { ReconciledItem } from '@/types/state'
 import type { TickAutoApproval, TickReport } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
 import { partitionOwnership } from '@/utils/pipeline/classify'
-import { autoApprovableFrom } from '@/main/tick/dispatchable'
+import { autoApprovableFrom } from '@/main/pipeline/tick/dispatchable'
 
 /** Qualifies when carrying `autoPlan`, `stages` is exactly one entry at `planReview`, and the viewer is an assignee. */
 export function autoApprovalsOf(items: readonly ReconciledItem[], viewer: string | null): readonly TickAutoApproval[] {

@@ -2,8 +2,8 @@
 // and refresh-wins/mergeability gate coverage, which shares no state with the rest of that file.
 import { describe, expect, it } from 'vitest'
 import type { ReconciledItem, RepositoryState } from '@/types/state'
-import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
-import { planTick } from '@/main/tick/plan'
+import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
+import { planTick } from '@/main/pipeline/tick/plan'
 import { reconciledItem as item, repositoryState } from '../../../fixtures/board-state'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')

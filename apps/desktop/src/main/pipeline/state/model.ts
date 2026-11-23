@@ -1,5 +1,5 @@
 // Pure: no I/O. The store file's validation, seeding, transitions and views.
-import { HANDBACK_TOKENS } from '@/main/dispatch/transitions'
+import { HANDBACK_TOKENS } from '@/main/pipeline/transitions'
 import type { PipelineItemKind } from '@/types/github'
 import { fullKeysOf, type MirrorFailure, type PipelineStateFile, type PipelineView, type RepoRecord, type StoredHistoryRow, type StoredItem, type TrackedRef, type TransitionInput, type TransitionResult } from '@/types/pipeline-state'
 import type { RepositoryState } from '@/types/state'

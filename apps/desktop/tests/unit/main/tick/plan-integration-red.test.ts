@@ -2,8 +2,8 @@
 import { describe, expect, it } from 'vitest'
 import type { IntegrationChecks } from '@/types/github'
 import type { ReconciledItem } from '@/types/state'
-import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
-import { planTick } from '@/main/tick/plan'
+import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
+import { planTick } from '@/main/pipeline/tick/plan'
 import { reconciledItem as item, repositoryState } from '../../../fixtures/board-state'
 
 const COMMENT_AT = '2026-01-01T00:00:00Z'

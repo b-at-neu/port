@@ -4,7 +4,7 @@ import type { SourceHealth } from '@/types/board'
 import type { StateEngine } from '@/types/offload'
 import type { GithubPrecheckOutcome } from '@/types/state'
 import type { RepoId } from '@/utils/repos'
-import { afterFailure, nextDueAt as healthDueAt } from '@/main/state/schedule'
+import { afterFailure, nextDueAt as healthDueAt } from '@/main/pipeline/board/schedule'
 
 interface PrecheckState {
   readonly health: SourceHealth

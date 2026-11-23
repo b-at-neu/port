@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { BACKOFF_CEILING_MS, BUDGET_SHARE, DEFAULT_GRAPHQL_LIMIT, GITHUB_PRECHECK_INTERVAL_MS, SOURCE_BASE_INTERVAL_MS, initialHealth } from '@/types/board'
 import type { SourceHealth } from '@/types/board'
-import { afterFailure, afterSuccess, budgetedIntervalMs, deferredUntil, dueSources, githubSweepGapMs, nextDueAt } from '@/main/state/schedule'
+import { afterFailure, afterSuccess, budgetedIntervalMs, deferredUntil, dueSources, githubSweepGapMs, nextDueAt } from '@/main/pipeline/board/schedule'
 
 const NOW = new Date('2026-01-01T00:10:00.000Z')
 

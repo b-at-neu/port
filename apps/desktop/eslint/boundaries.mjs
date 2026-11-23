@@ -84,7 +84,7 @@ export const RESTRICTIONS = [
   },
   {
     id: 'apply-labels',
-    except: ['src/main/pipeline-state/default.ts', 'src/main/github/writes/**'],
+    except: ['src/main/pipeline/state/default.ts', 'src/main/github/writes/**'],
     paths: [{ name: '@/main/github/writes/apply', importNames: ['applyLabels'], message: 'Only the pipeline-state composition applies labels, so no transition bypasses the store.' }],
   },
   {
@@ -102,21 +102,21 @@ export const RESTRICTIONS = [
   {
     id: 'one-clock',
     files: ['src/main/**'],
-    except: ['src/main/state/watcher.ts'],
-    globals: TIMERS.map((name) => ({ name, message: 'Main holds exactly one clock — only main/state/watcher.ts names a timer.' })),
+    except: ['src/main/pipeline/board/watcher.ts'],
+    globals: TIMERS.map((name) => ({ name, message: 'Main holds exactly one clock — only main/pipeline/board/watcher.ts names a timer.' })),
   },
   { id: 'renderer', files: ['src/renderer/**'], paths: RENDERER_PATHS, syntax: RENDERER_SYNTAX },
   // `types/ipc.ts` is the one place the renderer's types reach `main/`: a type-only read of the router's inferred action map.
   { id: 'pure', files: ['src/renderer/**', 'src/utils/**', 'src/types/**'], except: ['src/types/ipc.ts'], patterns: [NO_MAIN, NODE_BUILTIN] },
   {
     id: 'tick',
-    files: ['src/main/tick/**'],
-    patterns: [{ group: ['@/main/platform/**'], message: 'main/tick/ decides over an already-built state, it never reaches I/O.' }, NODE_BUILTIN],
+    files: ['src/main/pipeline/tick/**'],
+    patterns: [{ group: ['@/main/platform/**'], message: 'main/pipeline/tick/ decides over an already-built state, it never reaches I/O.' }, NODE_BUILTIN],
   },
   {
     id: 'state',
-    files: ['src/main/state/**'],
-    paths: ['@/main/platform/gh', '@/main/platform/run'].map((name) => ({ name, message: 'main/state/ composes already-fetched results, it never spawns a command.' })),
+    files: ['src/main/pipeline/board/**'],
+    paths: ['@/main/platform/gh', '@/main/platform/run'].map((name) => ({ name, message: 'main/pipeline/board/ composes already-fetched results, it never spawns a command.' })),
   },
   {
     id: 'local',
@@ -131,7 +131,7 @@ export const RESTRICTIONS = [
   },
   {
     id: 'mirror',
-    files: ['src/main/pipeline-state/mirror.ts'],
+    files: ['src/main/pipeline/state/mirror.ts'],
     patterns: [{ group: ['@/main/platform/**', '@/main/github/**'], message: 'The label mapping stays pure, with no I/O.' }],
   },
   {
@@ -172,7 +172,7 @@ export const RESTRICTIONS = [
     files: ['tests/fixtures/app/**'],
     patterns: [
       {
-        regex: '^(?!(?:electron|node:path|\\./[\\w-]+|@/types/.+|@/utils/.+|@/main/repos/config/schema|@/main/state/reconcile|@/main/tick/ledger|@/main/tick/plan)$)',
+        regex: '^(?!(?:electron|node:path|\\./[\\w-]+|@/types/.+|@/utils/.+|@/main/repos/config/schema|@/main/pipeline/board/reconcile|@/main/pipeline/tick/ledger|@/main/pipeline/tick/plan)$)',
         message: 'Fixture mode may import only these modules — it must never reach gh or claude.',
       },
     ],

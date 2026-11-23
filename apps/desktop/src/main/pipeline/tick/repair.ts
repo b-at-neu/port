@@ -2,7 +2,7 @@
 import type { ReconciledItem } from '@/types/state'
 import type { EndedStage, TickLabelRepair, TickObservation } from '@/types/tick'
 import type { LabelKey } from '@/utils/labels/vocabulary'
-import { AGENT_FOR_IN_FLIGHT } from '@/main/tick/routing'
+import { AGENT_FOR_IN_FLIGHT } from '@/main/pipeline/tick/routing'
 
 interface RepairsOfParams {
   readonly items: readonly ReconciledItem[]

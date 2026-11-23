@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
-import { buildClaimRequest, classifyPreflight } from '@/main/claim/classify'
+import { buildClaimRequest, classifyPreflight } from '@/main/pipeline/claim/classify'
 import type { ClaimPreflight, ClaimVerdict } from '@/types/claim'
 
 const VOCABULARY = resolveVocabulary({})

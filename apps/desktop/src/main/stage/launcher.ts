@@ -13,14 +13,14 @@ import type { StageAgent } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
 import type { InterruptedStage, StageDenial, StageInstructionsLoader, StageResumeRequest } from '@/types/stage'
 import { RESUME_PROMPT } from '@/main/stage/recover'
-import { isTransientNetworkFailure, SETTLE_FAILED_DETAIL } from '@/main/stage/handback'
+import { isTransientNetworkFailure, SETTLE_FAILED_DETAIL } from '@/main/pipeline/handback'
 import { proposedRule } from '@/main/stage/rule'
 import { loadStageAgentDefinition } from '@/main/stage/bundle'
-import { classifyHandback } from '@/main/stage/handback'
+import { classifyHandback } from '@/main/pipeline/handback'
 import { stageTitle } from '@/main/sessions/hosting/title'
 import { bareTicketLabel } from '@/utils/tickets/ticket'
 
-import { inFlightKeyFor } from '@/main/tick/routing'
+import { inFlightKeyFor } from '@/main/pipeline/tick/routing'
 import type { StageLauncherHandle } from '@/types/stage'
 
 const DENIAL_INPUT_SUMMARY_CAP = 200

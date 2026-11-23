@@ -1,11 +1,11 @@
 // No `gh` import here — the read comes from `./github`, the write from `./actions`.
-import { classifyPreflight, buildClaimRequest } from '@/main/claim/classify'
+import { classifyPreflight, buildClaimRequest } from '@/main/pipeline/claim/classify'
 import type { ClaimApplyResponse, ClaimPreflight, ClaimPreflightResponse, PlanGateChoice } from '@/types/claim'
 import type { ClaimPreflightFetch } from '@/types/github'
 import { mirrorVocabularyOf } from '@/utils/labels/display'
 import type { RepoId } from '@/utils/repos'
 import type { ReadyEntry } from '@/types/actions'
-import { UNSEEDED_MESSAGE } from '@/main/pipeline-state/labels'
+import { UNSEEDED_MESSAGE } from '@/main/pipeline/state/labels'
 import { requireReadyRepo } from '@/main/repos'
 import type { RegistryDeps } from '@/types/registry'
 

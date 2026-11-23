@@ -8,9 +8,9 @@ import type { RepositoryEntry } from '@/utils/repos'
 import { verifiableVocabularyOf } from '@/utils/labels/display'
 import type { PipelineView } from '@/types/pipeline-state'
 import type { FreshnessEntry, PipelineState, RepositoryState } from '@/types/state'
-import { reconcileRepository } from '@/main/state/reconcile'
+import { reconcileRepository } from '@/main/pipeline/board/reconcile'
 
-import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/state/sources'
+import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/pipeline/board/sources'
 
 
 interface ReadPipelineStateParams {

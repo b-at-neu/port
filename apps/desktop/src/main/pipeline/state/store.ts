@@ -1,7 +1,7 @@
 // The pipeline state file's only writer. A transition is never reported as applied until it is on disk.
 import { z } from 'zod'
 import { createJsonStore } from '@/main/platform/json-store'
-import { FILE_VERSION, emptyFile, parseFile, prune, recordMirror, seedFrom, transition, trackedOf, viewOf, withItem } from '@/main/pipeline-state/model'
+import { FILE_VERSION, emptyFile, parseFile, prune, recordMirror, seedFrom, transition, trackedOf, viewOf, withItem } from '@/main/pipeline/state/model'
 import type { PipelineStateFile, PipelineStateStore, RepoRecord, StoreTransitionResult } from '@/types/pipeline-state'
 import type { FileResult } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'

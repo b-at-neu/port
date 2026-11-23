@@ -14,7 +14,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     .map((f) => relOf(f));
 
   // --- Vacuity guard: the directories the rules scan exist and hold sources. ---
-  for (const dir of ['github', 'tick', 'dispatch', 'operator', 'state', 'stage', 'pipeline-state']) {
+  for (const dir of ['github', 'pipeline/tick', 'dispatch', 'pipeline/operator', 'pipeline/board', 'stage', 'pipeline/state']) {
     expect(sources.some((f) => f.startsWith(`${mainDir}/${dir}/`)), check, `${mainDir}/${dir}/ holds no sources — the label-read rules cannot pass vacuously`);
   }
 
@@ -39,8 +39,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
 
   // --- (b) No decision module reads an item's GitHub labels; the store is the only source. ---
   {
-    const decisionDirs = ['tick', 'dispatch', 'operator', 'state', 'stage'].map((d) => `${mainDir}/${d}/`);
-    const decision = sources.filter((f) => f === `${mainDir}/claim.ts` || decisionDirs.some((d) => f.startsWith(d)));
+    const decisionDirs = ['pipeline/tick', 'dispatch', 'pipeline/operator', 'pipeline/board', 'stage'].map((d) => `${mainDir}/${d}/`);
+    const decision = sources.filter((f) => f === `${mainDir}/pipeline/claim/index.ts` || decisionDirs.some((d) => f.startsWith(d)));
     const readShape = /\b(?:resolved\w*|fresh|reread|item|fetch\.item)\.labels\b/;
     for (const f of decision) {
       for (const line of read(f).split('\n')) {

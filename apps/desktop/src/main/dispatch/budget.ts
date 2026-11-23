@@ -9,7 +9,7 @@ import type { ReconciledItem } from '@/types/state'
 import type { TickActionable } from '@/types/tick'
 import { labelName } from '@/utils/labels/vocabulary'
 import { commentFailureMessage } from '@/main/dispatch/select'
-import { budgetIntent } from '@/main/incidents/raise'
+import { budgetIntent } from '@/main/pipeline/incidents/raise'
 import { escalationRepeats } from '@/utils/pipeline/gates'
 
 /** One session log per dispatcher — sharing one log with the cockpit would close rows this

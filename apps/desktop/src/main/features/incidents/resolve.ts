@@ -1,5 +1,5 @@
 // The incident channels' composition: validate the request, resolve the repository, then read the log.
-import { exportDocument, groupIncidents } from '@/main/incidents/group'
+import { exportDocument, groupIncidents } from '@/main/pipeline/incidents/group'
 import { requireReadyRepo, requireRepoId } from '@/main/repos'
 import type { IncidentChannelDeps } from '@/main/app/seams'
 import type { RepoId } from '@/utils/repos'

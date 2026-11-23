@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createPipelineFinish } from '@/main/pipeline-state/finish'
+import { createPipelineFinish } from '@/main/pipeline/state/finish'
 import type { ReadyEntry } from '@/types/actions'
 import type { MirrorItemParams, PipelineStateStore, PipelineView, StoredItem } from '@/types/pipeline-state'
 import type { WriteOutcome } from '@/types/writes'

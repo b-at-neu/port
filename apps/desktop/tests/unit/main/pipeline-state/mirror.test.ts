@@ -11,7 +11,7 @@ import {
   mergedKeysOf,
   mirrorDiff,
   needsYouOf,
-} from '@/main/pipeline-state/mirror'
+} from '@/main/pipeline/state/mirror'
 import type { StoredHistoryRow, StoredItem } from '@/types/pipeline-state'
 import { resolveDisplayVocabulary } from '@/utils/labels/display'
 import type { LabelKey } from '@/utils/labels/vocabulary'

@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { DISPATCH_PROMPT, REFRESH_PROMPT } from '@/main/dispatch/dispatcher'
-import { HANDBACK_TOKENS } from '@/main/dispatch/transitions'
+import { HANDBACK_TOKENS } from '@/main/pipeline/transitions'
 import { STAGE_AGENT_NAMES } from '@/main/stage/agents'
 import { BLOCKED_PREFIX, HANDBACK_PREFIX, QUESTIONS_PREFIX } from '@/utils/stage/handback-text'
 

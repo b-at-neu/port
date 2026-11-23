@@ -12,9 +12,9 @@ import {
   mergedDisplayKeys,
   mergedKeysOf,
   mirrorDiff,
-} from '@/main/pipeline-state/mirror'
-import { stateLabelsOf, UNSEEDED_MESSAGE } from '@/main/pipeline-state/labels'
-import { draftOf, refusedWriteIntent } from '@/main/incidents/raise'
+} from '@/main/pipeline/state/mirror'
+import { stateLabelsOf, UNSEEDED_MESSAGE } from '@/main/pipeline/state/labels'
+import { draftOf, refusedWriteIntent } from '@/main/pipeline/incidents/raise'
 import type { IncidentIntent, RecordIncident } from '@/types/incidents'
 import { resolveKeys } from '@/main/github/writes/command'
 import { evaluate } from '@/main/github/writes/scope'

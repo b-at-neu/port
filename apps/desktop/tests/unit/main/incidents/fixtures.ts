@@ -1,7 +1,7 @@
 // Shared rigs for the incident tests: a reconciled item and a real state writer over an in-memory store.
 import { vi } from 'vitest'
-import { itemKey, recordMirror, transition, viewOf, withItem } from '@/main/pipeline-state/model'
-import { createStateWriter } from '@/main/pipeline-state/writer'
+import { itemKey, recordMirror, transition, viewOf, withItem } from '@/main/pipeline/state/model'
+import { createStateWriter } from '@/main/pipeline/state/writer'
 import type { FileResult } from '@/types/platform'
 import type { ReadyEntry } from '@/types/actions'
 import type { IncidentDraft, IncidentFiles } from '@/types/incidents'

@@ -1,9 +1,9 @@
 // Replays of the cases that motivated the log, through the real raising code and the real writer.
 import { describe, expect, it } from 'vitest'
-import { applyObservation } from '@/main/operator/observe'
-import { groupIncidents } from '@/main/incidents/group'
-import { createIncidentLog } from '@/main/incidents/log'
-import { draftOf, noRelated, observationIntent, stageHandbackIntent } from '@/main/incidents/raise'
+import { applyObservation } from '@/main/pipeline/operator/observe'
+import { groupIncidents } from '@/main/pipeline/incidents/group'
+import { createIncidentLog } from '@/main/pipeline/incidents/log'
+import { draftOf, noRelated, observationIntent, stageHandbackIntent } from '@/main/pipeline/incidents/raise'
 import type { WriteObservation } from '@/types/dispatch'
 import type { IncidentDraft } from '@/types/incidents'
 import { ENTRY, item, memory, writerRig } from './fixtures'

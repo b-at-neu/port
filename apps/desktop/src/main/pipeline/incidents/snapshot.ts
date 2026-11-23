@@ -1,5 +1,5 @@
 // Pure: the bounded facts an incident carries. Typed fields only — never a body, a comment or transcript text.
-import { verdictOf } from '@/main/tick/adopt'
+import { verdictOf } from '@/main/pipeline/tick/adopt'
 import { INCIDENT_INPUTS_MAX_BYTES, type IncidentInputs } from '@/types/incidents'
 import type { ReconciledItem } from '@/types/state'
 

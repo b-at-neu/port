@@ -1,6 +1,6 @@
 import type { WriteStateParams } from '@/types/writes'
 
-// Renderer-safe contract for Work on's claim (the "work on #N" flow). No import here may reach a Node builtin — only `main/claim.ts` resolves a repository, spawns `gh`, or writes a label.
+// Renderer-safe contract for Work on's claim (the "work on #N" flow). No import here may reach a Node builtin — only `main/pipeline/claim/index.ts` resolves a repository, spawns `gh`, or writes a label.
 import type { BlockerRead, ClaimPreflightFetch, GitHubRepoRef, PipelineItemKind } from '@/types/github'
 import type { WriteOutcome } from '@/types/writes'
 import type { GitHubTransport } from '@/types/platform'

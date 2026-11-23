@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HANDBACK_TOKENS, eventWrites, expectFor, handbackRefusal, itemKindFor, pullRequestNumberOf, stageModeFor, transitionFor } from '@/main/dispatch/transitions'
+import { HANDBACK_TOKENS, eventWrites, expectFor, handbackRefusal, itemKindFor, pullRequestNumberOf, stageModeFor, transitionFor } from '@/main/pipeline/transitions'
 import type { StageEvent, StageMode, StagePlanFile } from '@/types/stage-labels'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'

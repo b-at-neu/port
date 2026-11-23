@@ -35,7 +35,7 @@ export type ConditionalGetResult =
 
 export type PipelineItemKind = 'issue' | 'pull-request'
 
-/** One `reviews` connection node — `commitOid` is flattened at read time so nothing under `main/tick/` ever reaches into a nested GraphQL shape. */
+/** One `reviews` connection node — `commitOid` is flattened at read time so nothing under `main/pipeline/tick/` ever reaches into a nested GraphQL shape. */
 export interface ReviewNode {
   readonly body: string
   readonly submittedAt: string

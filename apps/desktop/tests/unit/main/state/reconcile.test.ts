@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { reconcileRepository } from '@/main/state/reconcile'
+import { reconcileRepository } from '@/main/pipeline/board/reconcile'
 import { agent, denialsOf, entry, fetchOf, item, reconcile, session, sessionsOf, worktreeEntry, worktreesOf } from './reconcile-fixtures'
 
 describe('reconcileRepository — status table', () => {

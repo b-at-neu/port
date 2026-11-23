@@ -13,11 +13,11 @@ import { labelName } from '@/utils/labels/vocabulary'
 import type { ReconciledItem } from '@/types/state'
 import type { LabelWriteRequest, ObservedItem, WriteOutcome } from '@/types/writes'
 import { evaluate } from '@/main/github/writes/scope'
-import { UNSEEDED_MESSAGE } from '@/main/pipeline-state/labels'
+import { UNSEEDED_MESSAGE } from '@/main/pipeline/state/labels'
 
 import type { ItemsByNumberFetch } from '@/types/github'
 import type { StateLabelsReader } from '@/types/pipeline-state'
-import { findRepoState, movedResult } from '@/main/operator/apply'
+import { findRepoState, movedResult } from '@/main/pipeline/operator/apply'
 
 import type { ApplyItemDecisionParams } from '@/types/actions'
 

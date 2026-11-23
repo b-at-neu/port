@@ -11,7 +11,7 @@ import type { RepoId } from '@/utils/repos'
 import type { SessionKey } from '@/types/hosting'
 import type { ReadyEntry } from '@/types/actions'
 
-import { dispatchableFrom, observableFrom } from '@/main/tick/dispatchable'
+import { dispatchableFrom, observableFrom } from '@/main/pipeline/tick/dispatchable'
 import { KIND_PROMPT_NAMES, STAGE_PROMPT_NAMES } from '@/utils/stage/prompt'
 import { ticketIndex, ticketLabelFor } from '@/utils/tickets/ticket'
 import { runObservationPass } from '@/main/dispatch/observe-pass'
@@ -28,7 +28,7 @@ import type { StageOutcome } from '@/types/stage-session'
 import { reviewDispatchFacts } from '@/utils/pipeline/gates'
 import type { ReviewDispatchFacts } from '@/utils/pipeline/gates'
 import type { Dispatcher, CreateDispatcherParams, StageLaunchFailureCause, StageSnapshot } from '@/types/dispatch'
-import { createRaiser, endedIntents, launchFailedIntent, stageSnapshotOf } from '@/main/incidents/raise'
+import { createRaiser, endedIntents, launchFailedIntent, stageSnapshotOf } from '@/main/pipeline/incidents/raise'
 
 const RECENT_LIMIT = 20
 const NOTE_LIMIT = 20

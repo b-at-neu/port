@@ -2,7 +2,7 @@ import type { GateClassifyItem, GateDeps, GatePlan } from '@/types/gate'
 import type { ReadyEntry } from '@/types/actions'
 
 // No `gh` import here — the read comes from `../github`, the write from `../writes`.
-import { buildAutoApprovePlan, buildGatePlan, classifyGate } from '@/main/gate/classify'
+import { buildAutoApprovePlan, buildGatePlan, classifyGate } from '@/main/pipeline/gate/classify'
 
 import type { GateAction, GateAnswerResponse, GatePreflight, GatePreflightResponse } from '@/types/gate'
 import type { GatePreflightFetch } from '@/types/github'
@@ -10,12 +10,12 @@ import { mirrorVocabularyOf } from '@/utils/labels/display'
 import { labelName } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { LabelWriteRequest, OwnershipSummary, WriteOutcome } from '@/types/writes'
-import { IMPLEMENTATION_PLAN_HEADING, sessionRequiredMarkerAt } from '@/main/state/link'
+import { IMPLEMENTATION_PLAN_HEADING, sessionRequiredMarkerAt } from '@/main/pipeline/board/link'
 import { requireReadyRepo } from '@/main/repos'
 import type { RegistryDeps } from '@/types/registry'
 
 import { toOwnershipSummary } from '@/main/repos/ownership'
-import { UNSEEDED_MESSAGE } from '@/main/pipeline-state/labels'
+import { UNSEEDED_MESSAGE } from '@/main/pipeline/state/labels'
 
 import type { AutoApprovePlanParams, GateAnswerParams, GatePreflightParams } from '@/types/actions'
 

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { applyStageClaim, applyStageTransition } from '@/main/operator/stage'
-import type { StageWriteDeps } from '@/main/operator/stage'
+import { applyStageClaim, applyStageTransition } from '@/main/pipeline/operator/stage'
+import type { StageWriteDeps } from '@/main/pipeline/operator/stage'
 import type { ReadyEntry } from '@/types/actions'
 import type { ResolvedItem } from '@/types/github'
 import type { StageEvent, StagePlanFile } from '@/types/stage-labels'

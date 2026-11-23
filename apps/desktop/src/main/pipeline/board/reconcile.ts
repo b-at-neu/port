@@ -1,4 +1,4 @@
-// No I/O, no `gh`, no `git`, no filesystem — main/state/read.ts is the thin orchestrator that does the fetching this function composes.
+// No I/O, no `gh`, no `git`, no filesystem — main/pipeline/board/read.ts is the thin orchestrator that does the fetching this function composes.
 import type { LabelRole } from '@/utils/labels/defaults'
 import type { RepoSessionSlice } from '@/types/state'
 import type {
@@ -24,9 +24,9 @@ import type {
 import type { LabelEventNode } from '@/types/github'
 import { fullKeysOf, type PipelineView, type StoredItem } from '@/types/pipeline-state'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
-import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers, indexWorkSessions, workSessionsFor } from '@/main/state/attach'
-import { closingReference, IMPLEMENTATION_PLAN_HEADING, sessionRequiredAt } from '@/main/state/link'
-import { stageOf } from '@/main/state/stage'
+import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers, indexWorkSessions, workSessionsFor } from '@/main/pipeline/board/attach'
+import { closingReference, IMPLEMENTATION_PLAN_HEADING, sessionRequiredAt } from '@/main/pipeline/board/link'
+import { stageOf } from '@/main/pipeline/board/stage'
 import { CLAIM_SCAN_GRACE_MS } from '@/types/board'
 import { codeReviewCount } from '@/utils/pipeline/gates'
 import { parseFilesBlock } from '@/utils/pipeline/contention'

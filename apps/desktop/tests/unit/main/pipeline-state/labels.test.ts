@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { stateLabelsOf } from '@/main/pipeline-state/labels'
+import { stateLabelsOf } from '@/main/pipeline/state/labels'
 import type { PipelineView } from '@/types/pipeline-state'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 

@@ -1,9 +1,9 @@
 // Composition: the store, the writer and the view, bound to userData.
 import { join } from 'node:path'
-import { createPipelineFinish } from '@/main/pipeline-state/finish'
-import { stateLabelsOf } from '@/main/pipeline-state/labels'
-import { createPipelineStateStore } from '@/main/pipeline-state/store'
-import { createStateWriter } from '@/main/pipeline-state/writer'
+import { createPipelineFinish } from '@/main/pipeline/state/finish'
+import { stateLabelsOf } from '@/main/pipeline/state/labels'
+import { createPipelineStateStore } from '@/main/pipeline/state/store'
+import { createStateWriter } from '@/main/pipeline/state/writer'
 import { readOwnership } from '@/main/repos/ownership'
 import { fetchItemsByNumber } from '@/main/github/adapter'
 import { readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'

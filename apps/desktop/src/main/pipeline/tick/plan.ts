@@ -15,12 +15,12 @@ import { zeroDiffChecksOf } from '@/utils/pipeline/checks'
 import { cycleGrantCount, integrationRedGate, mergeabilityRoute, refreshWins, zeroDiffGate } from '@/utils/pipeline/gates'
 
 import { RETRY_TRIGGER } from '@/utils/pipeline/liveness'
-import { observationsOf } from '@/main/tick/observe'
-import { adoptionsOf, heldVerdictAdoption, openPullRequestAdoption } from '@/main/tick/adopt'
+import { observationsOf } from '@/main/pipeline/tick/observe'
+import { adoptionsOf, heldVerdictAdoption, openPullRequestAdoption } from '@/main/pipeline/tick/adopt'
 import { partitionOwnership } from '@/utils/pipeline/classify'
-import { AGENT_FOR_IN_FLIGHT, AGENT_FOR_TRIGGER } from '@/main/tick/routing'
-import { autoApprovalsOf } from '@/main/tick/auto-plan'
-import { repairsOf } from '@/main/tick/repair'
+import { AGENT_FOR_IN_FLIGHT, AGENT_FOR_TRIGGER } from '@/main/pipeline/tick/routing'
+import { autoApprovalsOf } from '@/main/pipeline/tick/auto-plan'
+import { repairsOf } from '@/main/pipeline/tick/repair'
 
 interface PlanTickParams {
   readonly repository: RepositoryState
@@ -44,7 +44,7 @@ interface PlanTickParams {
   readonly holdSessionRequired: boolean
   /** App-owned repositories only: this repository's own live and interrupted stage sessions, as `${agent} #${number}` descriptions. `null`/`undefined` (unowned) leaves `item.status`/`startedTasks` to decide. Non-null ignores `item.status` entirely: a `live` claim is `matched`, an `interrupted` one is `interrupted`, anything else goes straight to the ledger ladder. */
   readonly stageLiveness?: { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
-  /** This app's own ended stage-session records for this repository, newest per number — `main/tick/repair.ts`'s session-shape evidence. `undefined`/`[]` is byte-identical: no session shape ever fires. */
+  /** This app's own ended stage-session records for this repository, newest per number — `main/pipeline/tick/repair.ts`'s session-shape evidence. `undefined`/`[]` is byte-identical: no session shape ever fires. */
   readonly endedStages?: readonly EndedStage[]
   /** The Needs-you "Dispatch anyway" override. `undefined` behaves exactly as today: no candidate ever bypasses the contention gate. */
   readonly forceDispatch?: ForceDispatch
