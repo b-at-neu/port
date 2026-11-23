@@ -10,11 +10,8 @@ import type { EventListener, SubscribableEvent, SubscriptionBridge, Subscription
 import { ipcQueryOptions } from '@/renderer/data/query'
 
 /** The one place `window.port.onBoardUpdate`/`onSessionStatus`/
- *  `onSessionEntries` are named (`scripts/checks/desktop-react.ts` pins
- *  their absence everywhere else under `renderer/`) — an explicit switch
- *  rather than the generic `bridgeListenerName` derivation, since there are
- *  only three subscribable events and a literal name here is what the check
- *  actually has something to find. */
+ *  `onSessionEntries` are named — an explicit switch rather than the generic
+ *  `bridgeListenerName` derivation, since there are only three subscribable events. */
 function attachTo<E extends SubscribableEvent>(bridge: SubscriptionBridge, event: E, onPayload: (payload: IpcEventMap[E]) => void): () => void {
   if (event === 'board:update') return bridge.onBoardUpdate(onPayload as EventListener<'board:update'>)
   if (event === 'session:status') return bridge.onSessionStatus(onPayload as EventListener<'session:status'>)

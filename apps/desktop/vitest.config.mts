@@ -10,6 +10,11 @@ export default defineConfig({
   define: { __PORT_BUILD_COMMIT__: 'null', __PORT_RELEASE_REPO__: JSON.stringify('octo/port') },
   test: {
     environment: 'node',
-    include: ['tests/unit/**/*.test.ts']
+    include: ['tests/unit/**/*.test.ts'],
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{ts,tsx}'],
+      reporter: ['text-summary']
+    }
   }
 })

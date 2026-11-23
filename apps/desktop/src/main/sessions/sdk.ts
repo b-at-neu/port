@@ -1,4 +1,4 @@
-// The only file under apps/desktop/src/ that may reference `@anthropic-ai/claude-agent-sdk` — pinned mechanically by the `desktop-sessions` layer 1 check.
+// The only file under apps/desktop/src/ that may reference `@anthropic-ai/claude-agent-sdk` — enforced by the ESLint boundaries.
 import type { SDKSessionInfo } from '@anthropic-ai/claude-agent-sdk'
 import type { SessionReader, RawSession } from '@/types/sessions'
 

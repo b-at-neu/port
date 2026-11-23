@@ -6,13 +6,12 @@ import type { FixtureScenario } from '../../src/types/fixtures'
 // copy of `router/routes.ts`'s own `ROUTE_IDS` keys, never an import of it —
 // `tsconfig.node.json`'s own project (`composite: true`) cannot admit a file
 // outside its `include` list, and `router/routes.ts` belongs to the
-// renderer's web project, not this one. `scripts/checks/desktop-visual.ts`
+// renderer's web project, not this one. `tests/unit/scripts/targets.test.ts`
 // pins the two key sets against each other, both directions.
 export const ROUTE_KEYS = ['board', 'repos', 'repo', 'settingsRepo', 'history', 'search', 'transcript', 'session', 'settings', 'backlog', 'releases', 'audit', 'needsYou', 'setup', 'about'] as const
 
 // Resolved against `process.cwd()` at the point of use (`screens.spec.mts`),
-// never here — this stays the bare, pinned literal `scripts/checks/
-// desktop-visual.ts` and `docs/DESIGN.md` §7 both check against. A packaged
+// never here — this stays the bare literal. A packaged
 // run writes to its own directory so it never collides with a local
 // `pnpm screenshots` run's output.
 export const SCREENSHOT_DIR = process.env['PORT_VISUAL_PACKAGED'] === '1' ? 'out/screenshots-packaged' : 'out/screenshots'

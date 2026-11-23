@@ -244,8 +244,7 @@ export function openPrLinkLabel(number: number | null): string {
   return number === null ? openPrButtonLabel() : `${openPrButtonLabel()} #${String(number)}`
 }
 
-/** #313: the row tag for an `autoPlan` issue, at any phase — `docs/DESIGN.md`
- *  §6's own "Auto-plan" tag sentence, pinned by `scripts/checks/desktop-board.ts`. */
+/** The row tag for an `autoPlan` issue, at any phase — `docs/DESIGN.md` §6's own "Auto-plan" tag sentence. */
 export function autoPlanTagLabel(): string {
   return 'Auto-plan'
 }
@@ -259,7 +258,7 @@ export function autoApprovingPhaseLabel(): string {
   return 'Plan auto-approving'
 }
 
-/** The tag on a pull request that closes no ticket — `docs/DESIGN.md` §6's own "No ticket" tag sentence, pinned by `scripts/checks/desktop-board.ts`. */
+/** The tag on a pull request that closes no ticket — `docs/DESIGN.md` §6's own "No ticket" tag sentence. */
 export function noTicketTagLabel(): string {
   return 'No ticket'
 }
