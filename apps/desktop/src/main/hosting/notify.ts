@@ -2,7 +2,8 @@
 // costs one glance, a spurious one trains the operator to ignore them.
 import { BrowserWindow, Notification } from 'electron'
 import type { HostedSessionSnapshot } from '@/types/hosting'
-import type { IpcEventMap, IpcMap } from '@/types/ipc'
+import type { NeedsYouNotification } from '@/types/settings'
+import type { AppCommand } from '@/utils/shell/commands'
 import type { RegistryDeps } from '@/types/registry'
 import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'
 import type { NotificationPrefs } from '@/types/settings'
@@ -109,14 +110,14 @@ function focusFirstWindow(): void {
 
 interface AppNotifier extends SessionNotifier {
   /** Shows nothing while a port window is focused. A click opens Needs you with `focus` selected. */
-  showNeedsYou(notification: IpcMap['notify:needs-you']['request']): void
+  showNeedsYou(notification: NeedsYouNotification): void
 }
 
 /** The real notifier wired to Electron and the repo registry, kept out of `ipc.ts` for its size.
  *  A click focuses (and restores) the first window and asks it to open the session. */
 export function createAppNotifier(params: {
   readonly registryDeps: RegistryDeps
-  readonly broadcast: (command: IpcEventMap['app:command']) => void
+  readonly broadcast: (command: AppCommand) => void
   readonly prefs: () => Promise<NotificationPrefs>
 }): AppNotifier {
   const isAppFocused = (): boolean => BrowserWindow.getFocusedWindow() !== null

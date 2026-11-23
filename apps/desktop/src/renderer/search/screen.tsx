@@ -21,7 +21,7 @@ export function SearchScreen() {
   const [query, setQuery] = useState('')
   const [submitted, setSubmitted] = useState<{ readonly query: string; readonly scope: SearchScope } | null>(null)
 
-  const result = useIpcQuery('search:query', submitted !== null ? { query: submitted.query, scope: submitted.scope } : undefined)
+  const result = useIpcQuery('search.query', submitted !== null ? { query: submitted.query, scope: submitted.scope } : undefined)
 
   function submit(): void {
     const trimmed = query.trim()

@@ -10,7 +10,7 @@ import { WIDE_CARD } from '@/renderer/settings/copy'
 import { UpdateStatus } from '@/renderer/update/status'
 
 function VersionLines() {
-  const query = useIpcQuery('app:info')
+  const query = useIpcQuery('app.info')
   if (query.status === 'pending') return <Skeleton className="h-4 w-40" />
   if (query.status === 'error') return <p className="font-mono text-small text-muted-foreground">Version unavailable</p>
   const { app, commit, electron, chromium, node } = query.data

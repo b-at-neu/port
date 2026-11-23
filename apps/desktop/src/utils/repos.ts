@@ -9,7 +9,7 @@ declare const repoIdBrand: unique symbol
 /** Branded string minted only by main — a raw path cannot be passed where an id is expected, so importing this type asserts "this came from the registry". */
 export type RepoId = string & { readonly [repoIdBrand]: true }
 
-/** One violation ajv reported, in a shape an operator can read without knowing JSON Schema. */
+/** One violation the config schema reported, in a shape an operator can read without knowing JSON Schema. */
 export interface SchemaViolation {
   readonly path: string
   readonly message: string

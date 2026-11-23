@@ -6,7 +6,7 @@ import type { QuestionAnswerResult, PlanAnswerResult, PlanDecision } from '@/uti
 import type { PendingPermission, PermissionDecision, SessionPermissionAnswerResult } from '@/types/hosting'
 import { narrowSessionGrant } from '@/main/hosting/grant'
 import { answersMatch, narrowInteraction, planApproveResult, planKeepResult, questionResult } from '@/main/hosting/interactions'
-import type { CanUseTool, PermissionResult, PermissionUpdate } from '@/main/hosting/sdk'
+import type { CanUseTool, PermissionResult, PermissionUpdate } from '@/main/platform/sdk'
 
 
 export const DEFAULT_DENY_MESSAGE = 'The operator denied this tool call.'

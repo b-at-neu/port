@@ -6,7 +6,7 @@ import { dismissedKeys, visibleNeedsYouItems } from '@/renderer/needs-you/dismis
 import { diffNeedsYou, displayNamesOf, needsYouNotification, readableRepoIds } from '@/renderer/needs-you/notify-model'
 import type { BoardSnapshot, NeedsYouBaseline } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
-import type { IpcMap } from '@/types/ipc'
+import type { NeedsYouNotification } from '@/types/settings'
 
 const STORAGE_KEY = 'port.needsYouNotified.v1'
 
@@ -14,7 +14,7 @@ type KeyValueStore = Pick<Storage, 'getItem' | 'setItem'>
 
 interface NeedsYouNotifierDeps {
   readonly storage: KeyValueStore
-  readonly send: (request: IpcMap['notify:needs-you']['request']) => Promise<void>
+  readonly send: (request: NeedsYouNotification) => Promise<void>
   readonly dismissed: () => ReadonlySet<string>
   readonly now: () => Date
 }
@@ -59,22 +59,22 @@ export function createNeedsYouNotifier(deps: NeedsYouNotifierDeps): { readonly e
 export function connectNeedsYouNotifications(client: QueryClient): () => void {
   const notifier = createNeedsYouNotifier({
     storage: window.localStorage,
-    send: (request) => invoke('notify:needs-you', request),
+    send: (request) => invoke('notify.needsYou', request),
     dismissed: dismissedKeys,
     now: () => new Date(),
   })
 
   function evaluate(): void {
-    const snapshot = client.getQueryData(ipcQueryOptions('board:snapshot').queryKey)
-    const sessions = client.getQueryData(ipcQueryOptions('session:list').queryKey)
+    const snapshot = client.getQueryData(ipcQueryOptions('board.snapshot').queryKey)
+    const sessions = client.getQueryData(ipcQueryOptions('session.list').queryKey)
     if (snapshot !== undefined && sessions !== undefined) notifier.evaluate(snapshot, sessions)
   }
 
   const stops = [
-    observeIpcQuery(client, 'board:snapshot', undefined, (result) => {
+    observeIpcQuery(client, 'board.snapshot', undefined, (result) => {
       if (result.status === 'success') evaluate()
     }),
-    observeIpcQuery(client, 'session:list', undefined, (result) => {
+    observeIpcQuery(client, 'session.list', undefined, (result) => {
       if (result.status === 'success') evaluate()
     }),
   ]

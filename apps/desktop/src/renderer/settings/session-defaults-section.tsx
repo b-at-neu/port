@@ -31,8 +31,8 @@ const MODE_HELPER: Readonly<Record<SessionPermissionMode, string>> = {
 }
 
 export function SessionDefaultsSection() {
-  const query = useIpcQuery('session:defaults')
-  const mutation = useIpcMutation('session:defaults:set')
+  const query = useIpcQuery('session.defaults')
+  const mutation = useIpcMutation('session.defaultsSet')
   const client = useQueryClient()
 
   if (query.status === 'pending') {
@@ -57,10 +57,10 @@ export function SessionDefaultsSection() {
   async function set(next: SessionDefaults): Promise<void> {
     try {
       const saved = await mutation.mutateAsync(next)
-      client.setQueryData(ipcQueryOptions('session:defaults').queryKey, saved)
+      client.setQueryData(ipcQueryOptions('session.defaults').queryKey, saved)
     } catch {
       toast.error("Couldn't save session defaults.")
-      await client.invalidateQueries({ queryKey: ipcQueryOptions('session:defaults').queryKey })
+      await client.invalidateQueries({ queryKey: ipcQueryOptions('session.defaults').queryKey })
     }
   }
 

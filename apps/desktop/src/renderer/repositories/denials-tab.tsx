@@ -106,7 +106,7 @@ function ActorDetailPane({ group, onClose }: { readonly group: ActorGroup; reado
 }
 
 export function DenialsTab({ repoId, group, onGroupChange }: { readonly repoId: RepoId; readonly group: DenialsGroup; readonly onGroupChange: (next: DenialsGroup) => void }) {
-  const query = useIpcQuery('board:snapshot')
+  const query = useIpcQuery('board.snapshot')
   const now = new Date()
 
   if (query.data === undefined) {

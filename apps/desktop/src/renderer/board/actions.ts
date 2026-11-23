@@ -79,7 +79,7 @@ export async function runItemAction(params: RunItemActionParams): Promise<void> 
   states.set(key, { kind: 'pending', action })
   notify()
   try {
-    const result = await window.port.itemAction({ repoId, kind, number, action, expectedStage })
+    const result = await window.port.invoke('item.action', { repoId, kind, number, action, expectedStage })
     states.set(key, { kind: 'result', action, result })
   } catch (error) {
     console.error('Failed to reach the main process while applying an item action', error)

@@ -164,9 +164,9 @@ let shared: PermissionStore | null = null
 
 function sharedStore(): PermissionStore {
   shared ??= createPermissionStore({
-    answerPermission: (params) => invoke('session:permission:answer', params),
-    sessionList: () => window.port.sessionList(),
-    subscribeSessionStatus: (listener) => sharedSubscriptions().subscribe('session:status', listener),
+    answerPermission: (params) => invoke('session.permissionAnswer', params),
+    sessionList: () => window.port.invoke('session.list'),
+    subscribeSessionStatus: (listener) => sharedSubscriptions().subscribe('session.status', listener),
     now: () => Date.now(),
     setDocumentTitle: (title) => {
       document.title = title

@@ -171,9 +171,9 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
   const [confirmIssue, setConfirmIssue] = useState<number | 'all' | null>(null)
   const [pendingForced, setPendingForced] = useState<PendingForced | null>(null)
   const [pendingPurge, setPendingPurge] = useState<string | null>(null)
-  const snapshotQuery = useIpcQuery('board:snapshot')
+  const snapshotQuery = useIpcQuery('board.snapshot')
   const worktreesLastSuccessAt = snapshotQuery.data?.health.find((h) => h.repoId === repoId)?.worktrees.lastSuccessAt ?? null
-  const query = useQuery(ipcQueryOptions('worktrees:report', { id: repoId }, [worktreesLastSuccessAt]))
+  const query = useQuery(ipcQueryOptions('worktrees.report', { id: repoId }, [worktreesLastSuccessAt]))
   const worktreePaths = query.data?.ok === true ? query.data.worktrees.map((w) => w.path) : []
   const selection = useListSelection(worktreePaths)
 
@@ -212,7 +212,7 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
     await runInBackground({
       id: `worktrees:${repoId}:reclaim:${issue === null ? 'all' : String(issue)}`,
       pending: name === null ? 'Reclaiming worktrees…' : `Reclaiming ${name}…`,
-      run: () => invoke('worktrees:reclaim', { id: repoId, issue, force: null }),
+      run: () => invoke('worktrees.reclaim', { id: repoId, issue, force: null }),
       toToast: (result) => (result.ok ? outcomeToast('success', reclaimResultToast(result)) : outcomeToast('error', reclaimFailureToast(result))),
     })
     await query.refetch()
@@ -225,7 +225,7 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
     await runInBackground({
       id: `worktrees:${repoId}:forced:${worktree.path}`,
       pending: `Reclaiming ${worktree.pathBasename}…`,
-      run: () => invoke('worktrees:reclaim', { id: repoId, issue: null, force: { path: worktree.path, ...flags } }),
+      run: () => invoke('worktrees.reclaim', { id: repoId, issue: null, force: { path: worktree.path, ...flags } }),
       toToast: (result) => (result.ok ? outcomeToast('success', forcedReclaimToast(worktree.pathBasename, result)) : outcomeToast('error', reclaimFailureToast(result))),
     })
     await query.refetch()
@@ -237,7 +237,7 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
     await runInBackground({
       id: `worktrees:${repoId}:purge:${path}`,
       pending: `Deleting ${orphanName(path)}…`,
-      run: () => invoke('worktrees:purge', { id: repoId, path }),
+      run: () => invoke('worktrees.purge', { id: repoId, path }),
       toToast: (result) => (result.ok ? outcomeToast('success', purgeResultToast(result)) : outcomeToast('error', reclaimFailureToast(result))),
     })
     await query.refetch()

@@ -6,7 +6,7 @@ import { readCredentialsTell } from '@/main/runtime/credentials'
 import { resolveClaudeExecutable } from '@/main/runtime/locate'
 import { readClaudeVersion } from '@/main/runtime/version'
 import { classifyPreflight } from '@/main/runtime/classify'
-import { createRuntimeProbe } from '@/main/runtime/sdk'
+import { createRuntimeProbe } from '@/main/runtime/probe'
 
 import type { RuntimePreflight, RuntimeProbe } from '@/types/runtime'
 import { listRepositories, requireReadyRepo } from '@/main/registry'

@@ -1,6 +1,6 @@
 // Replays of the cases that motivated the log, through the real raising code and the real writer.
 import { describe, expect, it } from 'vitest'
-import { applyObservation } from '@/main/actions/observe'
+import { applyObservation } from '@/main/operator/observe'
 import { groupIncidents } from '@/main/incidents/group'
 import { createIncidentLog } from '@/main/incidents/log'
 import { draftOf, noRelated, observationIntent, stageHandbackIntent } from '@/main/incidents/raise'

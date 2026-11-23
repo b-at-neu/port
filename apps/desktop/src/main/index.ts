@@ -1,7 +1,8 @@
 import { app, BrowserWindow, Menu } from 'electron'
 import { isAbsolute, join } from 'node:path'
 import { devDockIconPath, windowIconPath } from '@/main/icon'
-import { registerIpc, broadcastAppCommand } from '@/main/ipc'
+import { createAppContext, broadcastAppCommand } from '@/main/app/context'
+import { registerActions } from '@/main/app/ipc'
 import { registerFixtureIpc } from '#app-fixtures'
 import { fixtureMode } from '@/main/fixtures/mode'
 import { e2eMode } from '@/main/e2e/mode'
@@ -173,13 +174,14 @@ if (fixture.kind === 'invalid') {
       } else {
         // Bounded by its own timeout; a failure or skip leaves `claude` resolution unaffected.
         await applyLoginShellPath({ platform: process.platform, env: process.env, isE2E: e2e.kind === 'on' })
-        // registerIpc builds the real initial menu itself, from the hosted store it just created.
-        const registered = registerIpc({ confirm: () => quitGuard.prepare(), cancel: () => quitGuard.cancelPrepared() })
-        watcher = registered.watcher
-        hostedStore = registered.hostedStore
-        dispatcher = registered.dispatcher
-        shutdownDispatch = registered.shutdownDispatch
-        stageRegistry = registered.stageRegistry
+        // The context builds the real initial menu itself, from the hosted store it just created.
+        const ctx = createAppContext({ confirm: () => quitGuard.prepare(), cancel: () => quitGuard.cancelPrepared() })
+        registerActions(ctx)
+        watcher = ctx.live.watcher
+        hostedStore = ctx.live.hostedStore
+        dispatcher = ctx.live.dispatcher
+        shutdownDispatch = ctx.live.shutdown
+        stageRegistry = ctx.stores.stageRegistry
       }
       Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform, app.isPackaged, [], broadcastAppCommand)))
       void createWindow()

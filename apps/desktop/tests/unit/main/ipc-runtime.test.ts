@@ -2,7 +2,7 @@
 // with no room left.
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
-import { resolveRuntimeProbe } from '@/main/channels/runtime'
+import { resolveRuntimeProbe } from '@/main/features/runtime/resolve'
 import type { RegistryDeps } from '@/types/registry'
 
 const REPO_ID = 'repo-1' as unknown as RepoId

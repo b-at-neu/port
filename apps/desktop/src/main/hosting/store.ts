@@ -1,5 +1,5 @@
 import type { HostedHandle, MintedRestorable, SessionMarksTracker } from '@/types/hosting'
-import type { HostedQueryFn, HostedSdk } from '@/main/hosting/sdk'
+import { defaultSdk, type HostedQueryFn, type HostedSdk } from '@/main/platform/sdk'
 import type { WhichEnv, WhichOptions, WhichResult } from '@/types/platform'
 import type { HostingPersistence, SessionHistory } from '@/types/hosting'
 import type { RemoveSessionWorktreeOutcome } from '@/types/workspace'
@@ -42,9 +42,6 @@ import type {
 } from '@/types/hosting'
 import { createHostedHandle } from '@/main/hosting/handle'
 import { createSessionMarks } from '@/main/hosting/marks'
-
-
-import { createHostedSdk } from '@/main/hosting/sdk'
 
 import { readHistory } from '@/main/hosting/history'
 import { defaultForkListSessions, titleFork } from '@/main/hosting/fork'
@@ -92,7 +89,7 @@ export interface HostedStoreDeps {
 }
 
 export const defaultHostedStoreDeps: HostedStoreDeps = {
-  getSdk: createHostedSdk(),
+  getSdk: defaultSdk.load,
   resolveClaudeExecutable,
   listSessionsForFork: defaultForkListSessions,
   env: process.env,

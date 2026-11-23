@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyObservation } from '@/main/actions/observe'
+import { applyObservation } from '@/main/operator/observe'
 import { endedIntents, fastEndIntent, FAST_END_MS, handoffRefusalIntent, launchFailedIntent, observationIntent, signatureOf, stageHandbackIntent } from '@/main/incidents/raise'
 import type { WriteObservation } from '@/types/dispatch'
 import { INCIDENT_BUCKETS, type IncidentBucket } from '@/types/incidents'

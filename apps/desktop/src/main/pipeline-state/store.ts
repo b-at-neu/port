@@ -1,5 +1,7 @@
 // The pipeline state file's only writer. A transition is never reported as applied until it is on disk.
-import { emptyFile, parseFile, prune, recordMirror, seedFrom, transition, trackedOf, viewOf, withItem } from '@/main/pipeline-state/model'
+import { z } from 'zod'
+import { createJsonStore } from '@/main/platform/json-store'
+import { FILE_VERSION, emptyFile, parseFile, prune, recordMirror, seedFrom, transition, trackedOf, viewOf, withItem } from '@/main/pipeline-state/model'
 import type { PipelineStateFile, PipelineStateStore, RepoRecord, StoreTransitionResult } from '@/types/pipeline-state'
 import type { FileResult } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
@@ -12,7 +14,18 @@ interface CreatePipelineStateStoreParams {
   readonly now: () => Date
 }
 
+// `reset`: a missing, malformed or newer-version file is empty and the next write replaces it; a bad item is dropped by `parseFile`, never its repository.
+const fileSchema = z.object({ version: z.literal(FILE_VERSION), repositories: z.record(z.string(), z.unknown()) })
+
 export function createPipelineStateStore(params: CreatePipelineStateStoreParams): PipelineStateStore {
+  const store = createJsonStore({
+    file: params.path,
+    version: FILE_VERSION,
+    schema: fileSchema,
+    initial: emptyFile(),
+    unreadable: 'reset',
+    fs: { readJson: params.readJson, writeJsonAtomic: params.writeJsonAtomic },
+  })
   let file: PipelineStateFile = emptyFile()
   // One serialized chain, so two transitions never interleave their check and commit.
   let chain: Promise<unknown> = Promise.resolve()
@@ -28,18 +41,19 @@ export function createPipelineStateStore(params: CreatePipelineStateStoreParams)
   }
 
   async function persist(repoId: RepoId, record: RepoRecord): Promise<FileResult<void>> {
-    const result = await params.writeJsonAtomic(params.path, withRecord(repoId, record))
+    const result = await store.write(withRecord(repoId, record))
     if (result.ok) file = withRecord(repoId, record)
-    return result
+    return result.ok ? { ok: true, value: undefined } : { ok: false, kind: 'io', message: result.message }
   }
 
   async function load(): Promise<void> {
-    const result = await params.readJson<unknown>(params.path)
-    if (!result.ok) {
-      if (result.kind !== 'not-found') console.error(`[pipeline-state] could not read ${params.path}: ${result.message}`)
+    await store.load()
+    const status = store.status()
+    if (status.kind === 'unreadable') {
+      console.error(`[pipeline-state] could not read ${params.path}: ${status.message}`)
       return
     }
-    file = parseFile(result.value)
+    file = parseFile(store.value())
   }
 
   const ready = load()
@@ -48,7 +62,7 @@ export function createPipelineStateStore(params: CreatePipelineStateStoreParams)
   async function persistBestEffort(repoId: RepoId, record: RepoRecord): Promise<void> {
     const next = withRecord(repoId, record)
     file = next
-    const result = await params.writeJsonAtomic(params.path, next)
+    const result = await store.write(next)
     if (!result.ok) console.error(`[pipeline-state] could not write ${params.path}: ${result.message}`)
   }
 

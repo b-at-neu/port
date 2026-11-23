@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { GUARD_ALLOWLIST_MISS_MARKER } from '@/main/hosting/guard-marker'
 import { ISSUE_BODY_GUARD_MESSAGE, LABEL_GUARD_MESSAGE } from '@/main/hosting/label-guard'
 import { buildSessionOptions } from '@/main/hosting/options'
-import type { CanUseTool } from '@/main/hosting/sdk'
+import type { CanUseTool } from '@/main/platform/sdk'
 import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
 
 const canUseTool = vi.fn() as unknown as CanUseTool

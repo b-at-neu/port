@@ -21,7 +21,7 @@ export interface GateDeps {
   readonly now: () => Date
 }
 
-/** The two decisions the dialog's Reviewing step offers — validated at `main/channels/gate.ts` against this exact list. */
+/** The two decisions the dialog's Reviewing step offers — validated by the `gate.answer` action against this exact list. */
 export const GATE_DECISIONS = ['approve', 'request-changes'] as const
 export type GateDecision = (typeof GATE_DECISIONS)[number]
 

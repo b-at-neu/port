@@ -15,8 +15,8 @@ const ROWS: readonly { readonly key: keyof NotificationPrefs; readonly label: st
 ]
 
 export function NotificationsSection() {
-  const query = useIpcQuery('notify:prefs')
-  const mutation = useIpcMutation('notify:prefs:set')
+  const query = useIpcQuery('notify.prefs')
+  const mutation = useIpcMutation('notify.prefsSet')
   const client = useQueryClient()
 
   if (query.status === 'pending') {
@@ -41,10 +41,10 @@ export function NotificationsSection() {
   async function set(next: NotificationPrefs): Promise<void> {
     try {
       const saved = await mutation.mutateAsync(next)
-      client.setQueryData(ipcQueryOptions('notify:prefs').queryKey, saved)
+      client.setQueryData(ipcQueryOptions('notify.prefs').queryKey, saved)
     } catch {
       toast.error("Couldn't save notification preferences.")
-      await client.invalidateQueries({ queryKey: ipcQueryOptions('notify:prefs').queryKey })
+      await client.invalidateQueries({ queryKey: ipcQueryOptions('notify.prefs').queryKey })
     }
   }
 

@@ -51,8 +51,8 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
   const availableDecisions = OPERATOR_DECISIONS.filter((decision) => row.decisions[decision].available)
   const agentSummary = agentSummaryOf(item.agents, item.sessions)
 
-  const liveSessions = useIpcQuery('session:list')
-  const sessionIndex = useIpcQuery('session:index')
+  const liveSessions = useIpcQuery('session.list')
+  const sessionIndex = useIpcQuery('session.index')
   const now = new Date()
   const ticketSessions = ticketSessionsFor({
     repoId: item.repoId,

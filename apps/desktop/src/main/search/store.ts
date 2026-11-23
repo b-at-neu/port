@@ -1,5 +1,7 @@
 // Takes its directory as a parameter so nothing here imports Electron; every test passes a `mkdtemp`.
-import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
+// `reset`: a bad index file is discarded and replaced by the next write — it holds nothing an operator authored, so the cost of losing it is one slow search.
+import { z } from 'zod'
+import { createJsonStore, nodeStoreFs } from '@/main/platform/json-store'
 import { pathOps } from '@/main/platform/paths'
 import type { SignatureIndexEntry } from '@/types/search'
 
@@ -8,34 +10,27 @@ const CURRENT_VERSION = 1
 
 type SignatureIndex = ReadonlyMap<string, SignatureIndexEntry>
 
-interface SignatureIndexFileShape {
-  readonly version: number
-  readonly entries: Record<string, SignatureIndexEntry>
+const indexSchema = z.object({ version: z.literal(CURRENT_VERSION), entries: z.record(z.string(), z.unknown()) })
+const entrySchema = z.object({ path: z.string(), sizeBytes: z.number(), modifiedAt: z.string(), bits: z.number(), signature: z.string() })
+
+function indexStore(dir: string) {
+  return createJsonStore({
+    file: pathOps.join(dir, SEARCH_INDEX_FILE),
+    version: CURRENT_VERSION,
+    schema: indexSchema,
+    initial: { version: CURRENT_VERSION, entries: {} },
+    unreadable: 'reset',
+    fs: nodeStoreFs,
+  })
 }
 
-function indexPath(dir: string): string {
-  return pathOps.join(dir, SEARCH_INDEX_FILE)
-}
-
-function isValidEntry(value: unknown): value is SignatureIndexEntry {
-  if (typeof value !== 'object' || value === null) return false
-  const v = value as Record<string, unknown>
-  return typeof v['path'] === 'string' && typeof v['sizeBytes'] === 'number' && typeof v['modifiedAt'] === 'string' && typeof v['bits'] === 'number' && typeof v['signature'] === 'string'
-}
-
-// Unlike the registry, a bad index file is **discarded, not refused** — it holds nothing an
-// operator authored, so the cost of losing it is one slow search.
 export async function readSignatureIndex(dir: string): Promise<SignatureIndex> {
-  const result = await readJsonFile<SignatureIndexFileShape>(indexPath(dir))
-  if (!result.ok) return new Map()
-
-  const value = result.value
-  if (typeof value !== 'object' || value === null || typeof value.entries !== 'object' || value.entries === null) return new Map()
-  if (typeof value.version !== 'number' || value.version > CURRENT_VERSION) return new Map()
-
+  const store = indexStore(dir)
+  await store.load()
   const index = new Map<string, SignatureIndexEntry>()
-  for (const [key, entry] of Object.entries(value.entries)) {
-    if (isValidEntry(entry)) index.set(key, entry)
+  for (const [key, value] of Object.entries(store.value().entries)) {
+    const entry = entrySchema.safeParse(value)
+    if (entry.success) index.set(key, entry.data)
   }
   return index
 }
@@ -43,13 +38,6 @@ export async function readSignatureIndex(dir: string): Promise<SignatureIndex> {
 type WriteSignatureIndexResult = { readonly ok: true } | { readonly ok: false; readonly message: string }
 
 export async function writeSignatureIndex(dir: string, index: SignatureIndex): Promise<WriteSignatureIndexResult> {
-  const ensured = await ensureDirectory(dir)
-  if (!ensured.ok) return { ok: false, message: ensured.message }
-
-  const entries: Record<string, SignatureIndexEntry> = {}
-  for (const [key, entry] of index) entries[key] = entry
-  const value: SignatureIndexFileShape = { version: CURRENT_VERSION, entries }
-  const written = await writeJsonFileAtomic(indexPath(dir), value)
-  if (!written.ok) return { ok: false, message: written.message }
-  return { ok: true }
+  const written = await indexStore(dir).write({ version: CURRENT_VERSION, entries: Object.fromEntries(index) })
+  return written.ok ? { ok: true } : { ok: false, message: written.message }
 }

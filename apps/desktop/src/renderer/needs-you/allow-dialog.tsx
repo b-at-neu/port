@@ -74,10 +74,10 @@ export function AllowDialog() {
     await runInBackground({
       id: `allow:${repoId}:${denial.id}`,
       pending: 'Opening the allow PR…',
-      run: () => invoke('stage:allow', { repoId, denialId: denial.id, rule: displayRule }),
+      run: () => invoke('stage.allow', { repoId, denialId: denial.id, rule: displayRule }),
       toToast: (result) => resultToast(displayRule, result),
     })
-    void queryClient.invalidateQueries({ queryKey: ipcQueryOptions('board:snapshot').queryKey })
+    void queryClient.invalidateQueries({ queryKey: ipcQueryOptions('board.snapshot').queryKey })
   }
 
   async function dismiss(): Promise<void> {
@@ -88,7 +88,7 @@ export function AllowDialog() {
     await runInBackground({
       id: `allow-dismiss:${repoId}:${denial.id}`,
       pending: 'Dismissing the denial…',
-      run: () => invoke('stage:dismiss-denial', { repoId, denialId: denial.id }),
+      run: () => invoke('stage.dismissDenial', { repoId, denialId: denial.id }),
       toToast: () => ({ tone: 'success', title: 'Dismissed the denial.', description: null, action: null, cancel: null }),
     })
   }

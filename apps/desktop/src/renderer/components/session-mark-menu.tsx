@@ -27,7 +27,7 @@ export function useSessionMarkMenu({ sessionId, marks, onRename }: { readonly se
   const queryClient = useQueryClient()
   const pinned = sessionId !== null && (marks?.pinned.includes(sessionId) ?? false)
   const archived = sessionId !== null && (marks?.archived.includes(sessionId) ?? false)
-  const sessions = useIpcQuery('session:list')
+  const sessions = useIpcQuery('session.list')
   const [confirmKey, setConfirmKey] = useState<SessionKey | null>(null)
 
   function handleArchiveSelect(): void {

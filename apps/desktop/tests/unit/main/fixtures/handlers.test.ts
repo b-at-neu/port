@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { IPC_CHANNELS } from '@/types/ipc'
-import type { IpcChannel } from '@/types/ipc'
 import { FIXTURE_SCENARIOS } from '@/types/fixtures'
 import { needsYouItems } from '@/renderer/board/needs-you'
 import { projectBoard } from '@/renderer/board/project'
@@ -10,48 +8,47 @@ import { RESUMED_KEY, STREAMING_KEY } from '../../../fixtures/app/sessions'
 
 const WIDGETS = 'fixture-acme-widgets' as RepoId
 
-// A representative request for every channel whose request is not `void` —
-// fixture handlers never validate, so any well-typed shape exercises them.
-const SAMPLE_REQUESTS: Partial<Record<IpcChannel, unknown>> = {
-  'repos:remove': { id: 'fixture-acme-widgets' },
-  'worktrees:report': { id: 'fixture-acme-widgets' },
-  'worktrees:reclaim': { id: 'fixture-acme-widgets', issue: null, force: null },
-  'worktrees:purge': { id: 'fixture-acme-widgets', path: '/home/you/src/widgets/.claude/worktrees/impl-29-stale' },
-  'transcript:tail:open': { sessionId: 'fixture-session', agentId: null },
-  'transcript:tail:poll': { tailId: 'fixture-tail' },
-  'transcript:tail:close': { tailId: 'fixture-tail' },
-  'search:query': { query: 'reports', scope: { kind: 'all' } },
-  'board:refresh': {},
-  'claim:preflight': { repoId: 'fixture-acme-widgets', number: 41 },
-  'claim:apply': { repoId: 'fixture-acme-widgets', number: 41, planGate: 'review', confirmedAssignees: [] },
-  'item:action': { repoId: 'fixture-acme-widgets', kind: 'issue', number: 44, action: 'retry', expectedStage: null },
-  'dispatch:control': { command: 'drain' },
-  'runtime:probe': { repoId: 'fixture-acme-widgets' },
-  'gate:preflight': { repoId: 'fixture-acme-widgets', number: 41 },
-  'gate:answer': { repoId: 'fixture-acme-widgets', number: 41, decision: 'approve', feedback: null, skipComment: false },
-  'session:start': { target: { kind: 'folder', folderId: 'fixture-folder-1', worktree: false }, mode: { kind: 'fresh' } },
-  'session:send': { sessionKey: 'hosted-1', text: 'hello' },
-  'session:interrupt': { sessionKey: 'hosted-1' },
-  'session:close': { sessionKey: 'hosted-1' },
-  'session:attach': { sessionKey: 'hosted-1' },
-  'session:permission:answer': { sessionKey: 'hosted-1', permissionId: 'p1', decision: 'deny', message: null },
-  'session:invoke': { sessionKey: 'hosted-1', name: 'pipeline', args: '' },
-  'session:dismiss': { sessionKey: 'hosted-1', worktree: 'keep' },
-  'session:capacity:set': { limit: 4 },
-  'session:restore': { restoreId: 'r1' },
-  'session:restore:discard': { restoreId: null },
-  'backlog:list': { repoId: 'fixture-acme-widgets' },
-  'backlog:detail': { repoId: 'fixture-acme-widgets', number: 45 },
-  'release:status': { repoId: 'fixture-acme-widgets' },
-  'release:run': { repoId: 'fixture-acme-widgets', step: 'open', version: '0.3.0' },
-  'release:issues': { repoId: 'fixture-acme-widgets', tag: 'v0.2.0', previousTag: 'v0.1.1' },
-  'audit:list': { repoId: 'fixture-acme-widgets', number: 38 },
-  'incidents:groups': { repoId: 'fixture-acme-widgets' },
-  'incidents:list': { repoId: 'fixture-acme-widgets', signature: 'stale-snapshot:needsHuman:head-moved' },
-  'incidents:export': { repoId: null },
-  'session:changes': { sessionKey: STREAMING_KEY },
-  'session:pin:set': { sessionId: 'fixture-claude-1', pinned: true },
-  'session:archive:set': { sessionId: 'fixture-claude-1', archived: true },
+// A representative request for every action that takes a payload — fixture handlers never validate, so any well-typed shape exercises them.
+const SAMPLE_REQUESTS: Readonly<Record<string, unknown>> = {
+  'repos.remove': { id: 'fixture-acme-widgets' },
+  'worktrees.report': { id: 'fixture-acme-widgets' },
+  'worktrees.reclaim': { id: 'fixture-acme-widgets', issue: null, force: null },
+  'worktrees.purge': { id: 'fixture-acme-widgets', path: '/home/you/src/widgets/.claude/worktrees/impl-29-stale' },
+  'transcript.tailOpen': { sessionId: 'fixture-session', agentId: null },
+  'transcript.tailPoll': { tailId: 'fixture-tail' },
+  'transcript.tailClose': { tailId: 'fixture-tail' },
+  'search.query': { query: 'reports', scope: { kind: 'all' } },
+  'board.refresh': {},
+  'claim.preflight': { repoId: 'fixture-acme-widgets', number: 41 },
+  'claim.apply': { repoId: 'fixture-acme-widgets', number: 41, planGate: 'review', confirmedAssignees: [] },
+  'item.action': { repoId: 'fixture-acme-widgets', kind: 'issue', number: 44, action: 'retry', expectedStage: null },
+  'dispatch.control': { command: 'drain' },
+  'runtime.probe': { repoId: 'fixture-acme-widgets' },
+  'gate.preflight': { repoId: 'fixture-acme-widgets', number: 41 },
+  'gate.answer': { repoId: 'fixture-acme-widgets', number: 41, decision: 'approve', feedback: null, skipComment: false },
+  'session.start': { target: { kind: 'folder', folderId: 'fixture-folder-1', worktree: false }, mode: { kind: 'fresh' } },
+  'session.send': { sessionKey: 'hosted-1', text: 'hello' },
+  'session.interrupt': { sessionKey: 'hosted-1' },
+  'session.close': { sessionKey: 'hosted-1' },
+  'session.attach': { sessionKey: 'hosted-1' },
+  'session.permissionAnswer': { sessionKey: 'hosted-1', permissionId: 'p1', decision: 'deny', message: null },
+  'session.invoke': { sessionKey: 'hosted-1', name: 'pipeline', args: '' },
+  'session.dismiss': { sessionKey: 'hosted-1', worktree: 'keep' },
+  'session.capacitySet': { limit: 4 },
+  'session.restore': { restoreId: 'r1' },
+  'session.restoreDiscard': { restoreId: null },
+  'backlog.list': { repoId: 'fixture-acme-widgets' },
+  'backlog.detail': { repoId: 'fixture-acme-widgets', number: 45 },
+  'release.status': { repoId: 'fixture-acme-widgets' },
+  'release.run': { repoId: 'fixture-acme-widgets', step: 'open', version: '0.3.0' },
+  'release.issues': { repoId: 'fixture-acme-widgets', tag: 'v0.2.0', previousTag: 'v0.1.1' },
+  'audit.list': { repoId: 'fixture-acme-widgets', number: 38 },
+  'incidents.groups': { repoId: 'fixture-acme-widgets' },
+  'incidents.list': { repoId: 'fixture-acme-widgets', signature: 'stale-snapshot:needsHuman:head-moved' },
+  'incidents.export': { repoId: null },
+  'session.changes': { sessionKey: STREAMING_KEY },
+  'session.pinSet': { sessionId: 'fixture-claude-1', pinned: true },
+  'session.archiveSet': { sessionId: 'fixture-claude-1', archived: true },
 }
 
 const NOW = new Date('2026-09-05T14:00:00.000Z')
@@ -59,16 +56,10 @@ const NOW = new Date('2026-09-05T14:00:00.000Z')
 describe.each(FIXTURE_SCENARIOS)('fixtureHandlers coverage (%s scenario)', (scenario) => {
   const handlers = fixtureHandlers(NOW, scenario)
 
-  it('has a handler for every IPC channel', () => {
-    for (const channel of IPC_CHANNELS) {
-      expect(typeof handlers[channel]).toBe('function')
-    }
-  })
-
-  it('returns without throwing for every channel, called with a representative request', () => {
-    for (const channel of IPC_CHANNELS) {
-      const request = SAMPLE_REQUESTS[channel]
-      expect(() => (handlers[channel] as (req: unknown) => unknown)(request)).not.toThrow()
+  it('returns without throwing for every action, called with a representative request', () => {
+    for (const [name, handler] of Object.entries(handlers) as [string, (req: unknown) => unknown][]) {
+      expect(typeof handler).toBe('function')
+      expect(() => handler(SAMPLE_REQUESTS[name])).not.toThrow()
     }
   })
 })
@@ -77,21 +68,21 @@ describe('fixtureHandlers (unregistered scenario)', () => {
   const handlers = fixtureHandlers(NOW, 'unregistered')
 
   it('reports an empty registry, board, session scan and session list', () => {
-    expect(handlers['repos:list'](undefined)).toEqual({ ok: true, repositories: [] })
-    const board = handlers['board:snapshot'](undefined)
+    expect(handlers['repos.list'](undefined)).toEqual({ ok: true, repositories: [] })
+    const board = handlers['board.snapshot'](undefined)
     expect(board.state.repositories).toHaveLength(0)
     expect(board.tick).toHaveLength(0)
     expect(board.dispatch).toHaveLength(0)
-    const scan = handlers['sessions:scan'](undefined)
-    if (!scan.ok) throw new Error('fixture sessions:scan unexpectedly failed')
+    const scan = handlers['history.scan'](undefined)
+    if (!scan.ok) throw new Error('fixture history.scan unexpectedly failed')
     expect(scan.sessions).toHaveLength(0)
-    expect(handlers['session:list'](undefined)).toEqual([])
+    expect(handlers['session.list'](undefined)).toEqual([])
   })
 })
 
 describe('fixtureHandlers (failing scenario)', () => {
   const handlers = fixtureHandlers(NOW, 'failing')
-  const snapshot = handlers['board:snapshot'](undefined)
+  const snapshot = handlers['board.snapshot'](undefined)
 
   it('derives one github-unavailable, one not-ready and one ok repository, with no board rows', () => {
     const repositories = snapshot.state.repositories
@@ -107,20 +98,20 @@ describe('fixtureHandlers (failing scenario)', () => {
     expect(snapshot.runStates.store.kind).toBe('unreadable')
   })
 
-  it('fails backlog:list with a rate limit for widgets and a network error elsewhere', () => {
-    expect(handlers['backlog:list']({ repoId: WIDGETS })).toMatchObject({ ok: false, kind: 'rate-limited' })
-    expect(handlers['backlog:list']({ repoId: 'fixture-acme-gadgets' as RepoId })).toMatchObject({ ok: false, kind: 'network' })
+  it('fails backlog.list with a rate limit for widgets and a network error elsewhere', () => {
+    expect(handlers['backlog.list']({ repoId: WIDGETS })).toMatchObject({ ok: false, kind: 'rate-limited' })
+    expect(handlers['backlog.list']({ repoId: 'fixture-acme-gadgets' as RepoId })).toMatchObject({ ok: false, kind: 'network' })
   })
 
-  it('fails backlog:detail with a rate limit for widgets and a network error elsewhere', () => {
-    expect(handlers['backlog:detail']({ repoId: WIDGETS, number: 45 })).toMatchObject({ ok: false, kind: 'rate-limited' })
-    expect(handlers['backlog:detail']({ repoId: 'fixture-acme-gadgets' as RepoId, number: 45 })).toMatchObject({ ok: false, kind: 'network' })
+  it('fails backlog.detail with a rate limit for widgets and a network error elsewhere', () => {
+    expect(handlers['backlog.detail']({ repoId: WIDGETS, number: 45 })).toMatchObject({ ok: false, kind: 'rate-limited' })
+    expect(handlers['backlog.detail']({ repoId: 'fixture-acme-gadgets' as RepoId, number: 45 })).toMatchObject({ ok: false, kind: 'network' })
   })
 
-  it('fails sessions:scan as projects-unreadable and still lists three repositories', () => {
-    expect(handlers['sessions:scan'](undefined)).toMatchObject({ ok: false, kind: 'projects-unreadable' })
-    const repos = handlers['repos:list'](undefined)
-    if (!repos.ok) throw new Error('fixture repos:list unexpectedly failed')
+  it('fails history.scan as projects-unreadable and still lists three repositories', () => {
+    expect(handlers['history.scan'](undefined)).toMatchObject({ ok: false, kind: 'projects-unreadable' })
+    const repos = handlers['repos.list'](undefined)
+    if (!repos.ok) throw new Error('fixture repos.list unexpectedly failed')
     expect(repos.repositories).toHaveLength(3)
   })
 })
@@ -128,20 +119,20 @@ describe('fixtureHandlers (failing scenario)', () => {
 describe('fixtureHandlers (registry-error scenario)', () => {
   const handlers = fixtureHandlers(NOW, 'registry-error')
 
-  it('fails repos:list as registry-malformed and leaves the board as populated', () => {
-    expect(handlers['repos:list'](undefined)).toMatchObject({ ok: false, kind: 'registry-malformed' })
-    expect(handlers['board:snapshot'](undefined)).toEqual(fixtureHandlers(NOW, 'populated')['board:snapshot'](undefined))
+  it('fails repos.list as registry-malformed and leaves the board as populated', () => {
+    expect(handlers['repos.list'](undefined)).toMatchObject({ ok: false, kind: 'registry-malformed' })
+    expect(handlers['board.snapshot'](undefined)).toEqual(fixtureHandlers(NOW, 'populated')['board.snapshot'](undefined))
   })
 })
 
 describe('fixtureHandlers (attention scenario)', () => {
   const handlers = fixtureHandlers(NOW, 'attention')
-  const snapshot = handlers['board:snapshot'](undefined)
-  const sessions = handlers['session:list'](undefined)
+  const snapshot = handlers['board.snapshot'](undefined)
+  const sessions = handlers['session.list'](undefined)
 
-  it('reports repos:list with two ready entries and the not-ready legacy-site', () => {
-    const result = handlers['repos:list'](undefined)
-    if (!result.ok) throw new Error('fixture repos:list unexpectedly failed')
+  it('reports repos.list with two ready entries and the not-ready legacy-site', () => {
+    const result = handlers['repos.list'](undefined)
+    if (!result.ok) throw new Error('fixture repos.list unexpectedly failed')
     expect(result.repositories).toHaveLength(3)
     expect(result.repositories.filter((r) => !('config' in r))).toHaveLength(1)
     expect(snapshot.state.repositories.filter((r) => !r.ok)).toHaveLength(1)
@@ -167,7 +158,7 @@ describe('fixtureHandlers (attention scenario)', () => {
     })
   })
 
-  it('reports session:list with nine snapshots, a crashed ended one, and three stage sessions', () => {
+  it('reports session.list with nine snapshots, a crashed ended one, and three stage sessions', () => {
     expect(sessions).toHaveLength(9)
     expect(sessions.find((s) => s.phase === 'ended')?.end?.diagnosis).not.toBeNull()
     expect(sessions.filter((s) => s.stage !== null).map((s) => s.stage?.number).sort()).toEqual([38, 44, 51])
@@ -185,7 +176,7 @@ describe('fixtureHandlers (attention scenario)', () => {
   })
 })
 
-describe('fixtureHandlers update channels', () => {
+describe('fixtureHandlers update actions', () => {
   it.each([
     ['populated', 'up-to-date'],
     ['empty', 'up-to-date'],
@@ -199,14 +190,14 @@ describe('fixtureHandlers update channels', () => {
     ['registry-error', 'checking'],
   ] as const)('serves %s as %s', (scenario, kind) => {
     const handlers = fixtureHandlers(NOW, scenario)
-    expect(handlers['update:state'](undefined).kind).toBe(kind)
-    expect(handlers['update:check'](undefined).kind).toBe(kind)
+    expect(handlers['update.state'](undefined).kind).toBe(kind)
+    expect(handlers['update.check'](undefined).kind).toBe(kind)
   })
 
   it('marks the startup read and the manual check by trigger', () => {
     const handlers = fixtureHandlers(NOW, 'update-available')
-    expect(handlers['update:state'](undefined)).toMatchObject({ trigger: 'startup', release: { version: '0.2.0' } })
-    expect(handlers['update:check'](undefined)).toMatchObject({ trigger: 'manual' })
+    expect(handlers['update.state'](undefined)).toMatchObject({ trigger: 'startup', release: { version: '0.2.0' } })
+    expect(handlers['update.check'](undefined)).toMatchObject({ trigger: 'manual' })
   })
 
   it.each([
@@ -216,16 +207,16 @@ describe('fixtureHandlers update channels', () => {
     ['update-download-failed', 'failed'],
     ['update-restart-pending', 'restart-pending'],
     ['update-restarting', 'restarting'],
-  ] as const)('serves the %s download as %s on all three download channels', (scenario, kind) => {
+  ] as const)('serves the %s download as %s on all three download actions', (scenario, kind) => {
     const handlers = fixtureHandlers(NOW, scenario)
-    expect(handlers['update:download:state'](undefined).kind).toBe(kind)
-    expect(handlers['update:download'](undefined).kind).toBe(kind)
-    expect(handlers['update:open']({ reveal: true }).kind).toBe(kind)
+    expect(handlers['update.downloadState'](undefined).kind).toBe(kind)
+    expect(handlers['update.download'](undefined).kind).toBe(kind)
+    expect(handlers['update.open']({ reveal: true }).kind).toBe(kind)
   })
 
   it('serves a download for the release the update state offers', () => {
     const handlers = fixtureHandlers(NOW, 'update-downloading')
-    expect(handlers['update:download:state'](undefined)).toMatchObject({ version: '0.2.0', receivedBytes: 54 * 1024 * 1024, totalBytes: 120 * 1024 * 1024 })
+    expect(handlers['update.downloadState'](undefined)).toMatchObject({ version: '0.2.0', receivedBytes: 54 * 1024 * 1024, totalBytes: 120 * 1024 * 1024 })
   })
 })
 
@@ -233,19 +224,19 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
   const now = NOW
   const handlers = fixtureHandlers(now, scenario)
 
-  it('reports repos:list with two ready entries and no not-ready one', () => {
-    const result = handlers['repos:list'](undefined)
-    if (!result.ok) throw new Error('fixture repos:list unexpectedly failed')
+  it('reports repos.list with two ready entries and no not-ready one', () => {
+    const result = handlers['repos.list'](undefined)
+    if (!result.ok) throw new Error('fixture repos.list unexpectedly failed')
     expect(result.repositories).toHaveLength(2)
     expect(result.repositories.filter((r) => 'config' in r)).toHaveLength(2)
   })
 
-  it('reports runtime:preflight as unverified', () => {
-    expect(handlers['runtime:preflight'](undefined).diagnosis).toBe('unverified')
+  it('reports runtime.preflight as unverified', () => {
+    expect(handlers['runtime.preflight'](undefined).diagnosis).toBe('unverified')
   })
 
-  describe('board:snapshot', () => {
-    const snapshot = handlers['board:snapshot'](undefined)
+  describe('board.snapshot', () => {
+    const snapshot = handlers['board.snapshot'](undefined)
 
     it('has two ok repositories and no not-ready repository', () => {
       expect(snapshot.state.repositories).toHaveLength(2)
@@ -267,7 +258,7 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     })
 
     it.runIf(scenario === 'populated')('produces a Needs you list of only plan-review, ready-to-merge and blocked items, with nothing interrupted', () => {
-      const sessions = handlers['session:list'](undefined)
+      const sessions = handlers['session.list'](undefined)
       const kinds = new Set(needsYouItems(snapshot, now, sessions).map((i) => i.kind))
       expect([...kinds].sort()).toEqual(['blocked', 'plan-review', 'ready-to-merge'])
       expect(snapshot.dispatch.every((d) => d.interrupted.length === 0 && d.budget?.notes.length === 0)).toBe(true)
@@ -289,12 +280,11 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
       const report = snapshot.tick.find((r) => r.held.some((h) => h.number === 52))
       expect(report?.held.find((h) => h.number === 52)?.reason).toBe('unowned')
     })
-
   })
 
-  it('reports gate:preflight as answerable, with a plan body carrying a heading, list, code, table and link', () => {
-    const response = handlers['gate:preflight']({ repoId: WIDGETS, number: 41 })
-    if (response.kind !== 'resolved') throw new Error('fixture gate:preflight did not resolve')
+  it('reports gate.preflight as answerable, with a plan body carrying a heading, list, code, table and link', () => {
+    const response = handlers['gate.preflight']({ repoId: WIDGETS, number: 41 })
+    if (response.kind !== 'resolved') throw new Error('fixture gate.preflight did not resolve')
     expect(response.verdict.kind).toBe('answerable')
     const plan = response.preflight.planMarkdown ?? ''
     expect(plan).toContain('## Overview')
@@ -304,43 +294,43 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     expect(plan).toContain('[the report spec]')
   })
 
-  it('reports claim:preflight as claimable', () => {
-    const response = handlers['claim:preflight']({ repoId: WIDGETS, number: 44 })
-    if (response.kind !== 'resolved') throw new Error('fixture claim:preflight did not resolve')
+  it('reports claim.preflight as claimable', () => {
+    const response = handlers['claim.preflight']({ repoId: WIDGETS, number: 44 })
+    if (response.kind !== 'resolved') throw new Error('fixture claim.preflight did not resolve')
     expect(response.verdict.kind).toBe('claimable')
   })
 
-  it('reports worktrees:report with an active, a done, a dirty and two locked rows, plus one orphan dir', () => {
-    const report = handlers['worktrees:report']({ id: WIDGETS })
-    if (!report.ok) throw new Error('fixture worktrees:report unexpectedly failed')
+  it('reports worktrees.report with an active, a done, a dirty and two locked rows, plus one orphan dir', () => {
+    const report = handlers['worktrees.report']({ id: WIDGETS })
+    if (!report.ok) throw new Error('fixture worktrees.report unexpectedly failed')
     const states = report.worktrees.map((w) => w.state).sort()
     expect(states).toEqual(['active', 'dirty', 'done', 'locked', 'locked'])
     expect(report.orphanDirs).toHaveLength(1)
   })
 
   it('offers forced reclaim on the finished locked row and the dirty row, never on the active locked one', () => {
-    const report = handlers['worktrees:report']({ id: WIDGETS })
-    if (!report.ok) throw new Error('fixture worktrees:report unexpectedly failed')
+    const report = handlers['worktrees.report']({ id: WIDGETS })
+    if (!report.ok) throw new Error('fixture worktrees.report unexpectedly failed')
     const reclaimable = (name: string) => report.worktrees.find((w) => w.pathBasename === name)?.otherwiseReclaimable
     expect(reclaimable('impl-51')).toBe(true)
     expect(reclaimable('impl-50')).toBe(true)
     expect(reclaimable('impl-52')).toBe(false)
   })
 
-  it('reports a forced worktrees:reclaim for the confirmed path, and worktrees:purge as deleted', () => {
+  it('reports a forced worktrees.reclaim for the confirmed path, and worktrees.purge as deleted', () => {
     const force = { path: '/home/you/src/widgets/.claude/worktrees/impl-51', unlock: true, forceDirty: false }
-    const reclaim = handlers['worktrees:reclaim']({ id: WIDGETS, issue: null, force })
-    if (!reclaim.ok) throw new Error('fixture worktrees:reclaim unexpectedly failed')
+    const reclaim = handlers['worktrees.reclaim']({ id: WIDGETS, issue: null, force })
+    if (!reclaim.ok) throw new Error('fixture worktrees.reclaim unexpectedly failed')
     expect(reclaim.results.map((r) => r.pathBasename)).toEqual(['impl-51'])
     expect(reclaim.call).toContain('--unlock')
-    const purge = handlers['worktrees:purge']({ id: WIDGETS, path: '/home/you/src/widgets/.claude/worktrees/impl-29-stale' })
-    if (!purge.ok) throw new Error('fixture worktrees:purge unexpectedly failed')
+    const purge = handlers['worktrees.purge']({ id: WIDGETS, path: '/home/you/src/widgets/.claude/worktrees/impl-29-stale' })
+    if (!purge.ok) throw new Error('fixture worktrees.purge unexpectedly failed')
     expect(purge.outcome).toBe('deleted')
     expect(purge.pathBasename).toBe('impl-29-stale')
   })
 
-  it.runIf(scenario === 'populated')('reports session:list with eight snapshots, a cleanly ended one, and two stage sessions', () => {
-    const snapshots = handlers['session:list'](undefined)
+  it.runIf(scenario === 'populated')('reports session.list with eight snapshots, a cleanly ended one, and two stage sessions', () => {
+    const snapshots = handlers['session.list'](undefined)
     expect(snapshots.map((s) => s.phase).sort()).toEqual(['ended', 'ready', 'starting', 'streaming', 'streaming', 'streaming', 'streaming', 'streaming'])
     expect(snapshots.find((s) => s.phase === 'ended')?.end?.reason).toBe('completed')
     expect(snapshots.filter((s) => s.pendingPermissions.some((p) => p.interaction?.kind === 'question'))).toHaveLength(1)
@@ -349,16 +339,16 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
   })
 
   it.runIf(scenario === 'populated')('lists only #55 as blocked on Needs you, held on its two open dependencies', () => {
-    const snapshot = handlers['board:snapshot'](undefined)
-    const sessions = handlers['session:list'](undefined)
+    const snapshot = handlers['board.snapshot'](undefined)
+    const sessions = handlers['session.list'](undefined)
     expect(needsYouItems(snapshot, now, sessions).filter((i) => i.kind === 'blocked').map((i) => i.number)).toEqual([55])
     const rows = projectBoard({ snapshot, now, sessions }).rows
     expect(rows.find((r) => r.item.number === 55)?.blockedOn?.dependencies).toMatchObject({ ok: true, open: [{ number: 49 }, { number: 48 }] })
   })
 
   it.runIf(scenario === 'populated')('dispatches #44 on the Board: in flight, with a live plan stage, before its label moves', () => {
-    const snapshot = handlers['board:snapshot'](undefined)
-    const rows = projectBoard({ snapshot, now, sessions: handlers['session:list'](undefined) }).rows
+    const snapshot = handlers['board.snapshot'](undefined)
+    const rows = projectBoard({ snapshot, now, sessions: handlers['session.list'](undefined) }).rows
     const row = rows.find((r) => r.item.number === 44)
     expect(row?.liveStage).toMatchObject({ agent: 'plan', trigger: 'ready' })
     expect(row?.displayStatus.status).toBe('in-flight')
@@ -366,82 +356,82 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
   })
 
   // The permission dialog is app-wide, so its one fixture session is kept out of the
-  // populated scenario's own session:list — see sessions.ts's own note on fixturePermissionSnapshots.
-  it.runIf(scenario === 'empty')('reports session:list with the one pending-permission snapshot', () => {
-    const snapshots = handlers['session:list'](undefined)
+  // populated scenario's own session.list — see sessions.ts's own note on fixturePermissionSnapshots.
+  it.runIf(scenario === 'empty')('reports session.list with the one pending-permission snapshot', () => {
+    const snapshots = handlers['session.list'](undefined)
     expect(snapshots.map((s) => s.phase)).toEqual(['ready'])
     expect(snapshots[0]?.pendingPermissions).toHaveLength(1)
   })
 
-  it('reports session:attach for the streaming fixture with tool cards and a nested subagent', () => {
-    const result = handlers['session:attach']({ sessionKey: STREAMING_KEY })
-    if (!result.ok) throw new Error('fixture session:attach unexpectedly failed')
+  it('reports session.attach for the streaming fixture with tool cards and a nested subagent', () => {
+    const result = handlers['session.attach']({ sessionKey: STREAMING_KEY })
+    if (!result.ok) throw new Error('fixture session.attach unexpectedly failed')
     expect(result.entries[0]?.type).toBe('user-text')
     expect(result.entries.filter((e) => e.type === 'tool-call')).not.toHaveLength(0)
     expect(result.entries.some((e) => e.parentToolUseId !== undefined)).toBe(true)
     expect(result.history).toEqual({ kind: 'none' })
   })
 
-  it('reports session:attach for the resumed fixture with loaded history', () => {
-    const result = handlers['session:attach']({ sessionKey: RESUMED_KEY })
-    if (!result.ok) throw new Error('fixture session:attach unexpectedly failed')
+  it('reports session.attach for the resumed fixture with loaded history', () => {
+    const result = handlers['session.attach']({ sessionKey: RESUMED_KEY })
+    if (!result.ok) throw new Error('fixture session.attach unexpectedly failed')
     expect(result.history.kind).toBe('loaded')
   })
 
-  it('reports sessions:scan with at least one session and one agent', () => {
-    const scan = handlers['sessions:scan'](undefined)
-    if (!scan.ok) throw new Error('fixture sessions:scan unexpectedly failed')
+  it('reports history.scan with at least one session and one agent', () => {
+    const scan = handlers['history.scan'](undefined)
+    if (!scan.ok) throw new Error('fixture history.scan unexpectedly failed')
     expect(scan.sessions.length).toBeGreaterThan(0)
     expect(scan.agents.length).toBeGreaterThan(0)
   })
 
-  it('reports search:query with at least one group and hit', () => {
-    const result = handlers['search:query']({ query: 'widgets', scope: { kind: 'all' } })
-    if (!result.ok) throw new Error('fixture search:query unexpectedly failed')
+  it('reports search.query with at least one group and hit', () => {
+    const result = handlers['search.query']({ query: 'widgets', scope: { kind: 'all' } })
+    if (!result.ok) throw new Error('fixture search.query unexpectedly failed')
     expect(result.groups.length).toBeGreaterThan(0)
     expect(result.groups[0]?.hits.length).toBeGreaterThan(0)
   })
 
-  it('reports folders:list with one port repo and one plain folder', () => {
-    const result = handlers['folders:list'](undefined)
+  it('reports folders.list with one port repo and one plain folder', () => {
+    const result = handlers['folders.list'](undefined)
     expect(result.folders).toHaveLength(2)
     expect(result.folders.filter((folder) => folder.git !== null)).toHaveLength(1)
     expect(result.folders.filter((folder) => folder.git === null)).toHaveLength(1)
   })
 
-  it('reports folders:choose as cancelled', () => {
-    expect(handlers['folders:choose'](undefined)).toEqual({ outcome: 'cancelled' })
+  it('reports folders.choose as cancelled', () => {
+    expect(handlers['folders.choose'](undefined)).toEqual({ outcome: 'cancelled' })
   })
 
-  it('reports session:changes with a two-file diff for the streaming session', () => {
-    const result = handlers['session:changes']({ sessionKey: STREAMING_KEY })
-    if (!result.ok) throw new Error('fixture session:changes unexpectedly failed')
+  it('reports session.changes with a two-file diff for the streaming session', () => {
+    const result = handlers['session.changes']({ sessionKey: STREAMING_KEY })
+    if (!result.ok) throw new Error('fixture session.changes unexpectedly failed')
     expect(result.files).toHaveLength(2)
   })
 
-  it('reports session:changes as unknown-session for any other key', () => {
-    const result = handlers['session:changes']({ sessionKey: 'hosted-999' as typeof STREAMING_KEY })
+  it('reports session.changes as unknown-session for any other key', () => {
+    const result = handlers['session.changes']({ sessionKey: 'hosted-999' as typeof STREAMING_KEY })
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.kind).toBe('unknown-session')
   })
 
-  it('reports release:status with an upcoming release and three published ones for acme/widgets only in the populated scenario', () => {
-    const result = handlers['release:status']({ repoId: WIDGETS })
-    if (!result.ok) throw new Error('fixture release:status unexpectedly failed')
+  it('reports release.status with an upcoming release and three published ones for acme/widgets only in the populated scenario', () => {
+    const result = handlers['release.status']({ repoId: WIDGETS })
+    if (!result.ok) throw new Error('fixture release.status unexpectedly failed')
     expect(result.status.releases).toHaveLength(scenario === 'populated' ? 3 : 0)
     expect(result.status.phase.kind).toBe(scenario === 'populated' ? 'idle' : 'nothing-to-release')
   })
 
   it('serves twelve tickets for v0.2.0, none for v0.1.1 and three for v0.1.0 in the populated scenario only', () => {
     const issuesOf = (tag: string, previousTag: string | null) => {
-      const result = handlers['release:issues']({ repoId: WIDGETS, tag, previousTag })
-      if (!result.ok) throw new Error('fixture release:issues unexpectedly failed')
+      const result = handlers['release.issues']({ repoId: WIDGETS, tag, previousTag })
+      if (!result.ok) throw new Error('fixture release.issues unexpectedly failed')
       return result.issues.length
     }
     expect([issuesOf('v0.2.0', 'v0.1.1'), issuesOf('v0.1.1', 'v0.1.0'), issuesOf('v0.1.0', null)]).toEqual(scenario === 'populated' ? [12, 0, 3] : [0, 0, 0])
   })
 
-  it('refuses release:run as unsupported, never a side effect', () => {
-    expect(handlers['release:run']({ repoId: WIDGETS, step: 'open', version: '0.3.0' })).toMatchObject({ kind: 'refused', reason: 'unsupported' })
+  it('refuses release.run as unsupported, never a side effect', () => {
+    expect(handlers['release.run']({ repoId: WIDGETS, step: 'open', version: '0.3.0' })).toMatchObject({ kind: 'refused', reason: 'unsupported' })
   })
 })

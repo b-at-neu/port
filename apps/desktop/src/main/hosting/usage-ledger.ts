@@ -1,5 +1,7 @@
 // usage-ledger.json's only writer: 31 days of cumulative per-handle spend, keyed by boot id, for Settings → Usage & storage.
 // A missing or malformed file loads empty, so a lost ledger shows no totals rather than a wrong one.
+import { z } from 'zod'
+import { createJsonStore } from '@/main/platform/json-store'
 import type { FileResult } from '@/types/platform'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import type { UsageLedger, UsageRecord, UsageRow, UsageSummary } from '@/types/settings'
@@ -12,10 +14,7 @@ const LEDGER_RETENTION_DAYS = 31
 const WEEK_DAYS = 7
 const MONTH_DAYS = 30
 
-interface LedgerFileShape {
-  readonly version: number
-  readonly records: readonly unknown[]
-}
+const ledgerFileSchema = z.object({ version: z.literal(CURRENT_VERSION), records: z.array(z.unknown()) })
 
 interface CreateUsageLedgerParams {
   readonly path: string
@@ -85,7 +84,16 @@ export function summarizeUsage(records: readonly UsageRecord[], now: Date): Usag
   return { rows, since: oldest ?? null }
 }
 
+/** A file that cannot be read for an I/O reason is left untouched for the launch; a malformed or newer-version one starts empty and is replaced. */
 export function createUsageLedger(params: CreateUsageLedgerParams): UsageLedger {
+  const store = createJsonStore({
+    file: params.path,
+    version: CURRENT_VERSION,
+    schema: ledgerFileSchema,
+    initial: { version: CURRENT_VERSION, records: [] },
+    unreadable: 'reset',
+    fs: { readJson: params.readJson, writeJsonAtomic: params.writeJsonAtomic },
+  })
   let records = new Map<string, UsageRecord>()
   let writing = false
   let loading = false
@@ -100,7 +108,7 @@ export function createUsageLedger(params: CreateUsageLedgerParams): UsageLedger 
       return
     }
     if (readFailed) return
-    const document = { version: CURRENT_VERSION, records: retained(records.values(), params.now()) }
+    const document: z.infer<typeof ledgerFileSchema> = { version: CURRENT_VERSION, records: retained(records.values(), params.now()) }
     const json = JSON.stringify(document)
     if (json === lastWritten) return
     if (writing) {
@@ -108,7 +116,7 @@ export function createUsageLedger(params: CreateUsageLedgerParams): UsageLedger 
       return
     }
     writing = true
-    void params.writeJsonAtomic(params.path, document).then((result) => {
+    void store.write(document).then((result) => {
       if (result.ok) lastWritten = json
       else console.error(`[hosting] could not write ${params.path}: ${result.message}`)
       writing = false
@@ -120,21 +128,19 @@ export function createUsageLedger(params: CreateUsageLedgerParams): UsageLedger 
   }
 
   async function readFile(): Promise<void> {
-    const result = await params.readJson<LedgerFileShape>(params.path)
-    if (!result.ok) {
-      if (result.kind !== 'not-found') {
+    await store.load()
+    const status = store.status()
+    if (status.kind === 'unreadable') {
+      if (status.reason === 'io') {
         readFailed = true
-        console.error(`[hosting] could not read ${params.path}: ${result.message} — leaving it untouched this launch`)
+        console.error(`[hosting] could not read ${params.path}: ${status.message} — leaving it untouched this launch`)
+      } else {
+        console.error(`[hosting] ${params.path} is malformed or was written by a newer version of Port — starting empty`)
       }
       return
     }
-    const value = result.value
-    if (typeof value !== 'object' || value === null || typeof value.version !== 'number' || value.version > CURRENT_VERSION || !Array.isArray(value.records)) {
-      console.error(`[hosting] ${params.path} is malformed or was written by a newer version of Port — starting empty`)
-      return
-    }
     const loaded = new Map<string, UsageRecord>()
-    for (const record of retained(value.records.filter(isRecord), params.now())) loaded.set(record.id, record)
+    for (const record of retained(store.value().records.filter(isRecord), params.now())) loaded.set(record.id, record)
     // Anything observed before the load settled is newer than the file.
     for (const [id, record] of records) loaded.set(id, record)
     records = loaded

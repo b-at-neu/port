@@ -81,11 +81,11 @@ async function runDecision(run: DecisionRun): Promise<void> {
   const response = await runInBackground({
     id: `decision:${repoId}:${String(number)}`,
     pending: pendingLine(decision, route, number),
-    run: () => invoke('item:decide', { repoId, number, decision, expectedStage, route, note, skipComment, picks }),
+    run: () => invoke('item.decide', { repoId, number, decision, expectedStage, route, note, skipComment, picks }),
     toToast: (result) => toastFor(run, result),
     unreachable: toastFor(run, { ok: false, reason: 'repo-unavailable' }),
   })
-  if (response !== 'unreachable' && response.ok && (response.labels.kind === 'applied' || response.labels.kind === 'no-op')) void invoke('board:refresh', { repoId, source: 'github' })
+  if (response !== 'unreachable' && response.ok && (response.labels.kind === 'applied' || response.labels.kind === 'no-op')) void invoke('board.refresh', { repoId, source: 'github' })
 }
 
 export function setPick(id: string, letter: string): void {

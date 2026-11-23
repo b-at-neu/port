@@ -83,7 +83,7 @@ export function PromptInput({ sessionKey, repoId, snapshot, disabled, placeholde
   const [notice, setNotice] = useState<string | null>(null)
 
   const trigger = activeTrigger(draft, caret)
-  const filesQuery = useIpcQuery('session:files', { sessionKey }, { enabled: trigger?.kind === 'file' })
+  const filesQuery = useIpcQuery('session.files', { sessionKey }, { enabled: trigger?.kind === 'file' })
 
   const capabilities = snapshot.capabilities
 

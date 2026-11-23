@@ -1,5 +1,5 @@
 // Pure mapping from SessionStartMode to Options. sessionId is deliberately never passed; init stays the single source.
-import type { CanUseTool, HookCallback, Options } from '@/main/hosting/sdk'
+import type { CanUseTool, HookCallback, Options } from '@/main/platform/sdk'
 import { ISSUE_BODY_GUARD_MESSAGE, LABEL_GUARD_MESSAGE, issueBodyWriteOf, labelWriteOf } from '@/main/hosting/label-guard'
 import type { SessionDefaults, SessionStartMode } from '@/types/hosting'
 import type { StageAgentLaunch } from '@/types/stage'

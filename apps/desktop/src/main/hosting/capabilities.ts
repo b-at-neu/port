@@ -1,12 +1,10 @@
-import type { HostedQuery } from '@/main/hosting/sdk'
+import type { AgentInfo, HostedQuery, SlashCommand } from '@/main/platform/sdk'
 
 // A timeout or rejected read-back must never look like an empty capability list.
 import type { AgentSummary, CommandSummary, SessionCapabilities, SlashCommandSummary } from '@/types/hosting'
 import { isRecord } from '@/main/guards'
 import { sanitize } from '@/main/sessions/transcript-entries'
 import { checkPluginLoad, isBlockedCommand, PLUGIN_NAME, type InitPlugin } from '@/main/hosting/verify'
-
-import type { AgentInfo, SlashCommand } from '@/main/hosting/sdk'
 
 /** Control requests answered before the first turn, costing no tokens. */
 export const CAPABILITIES_TIMEOUT_MS = 30_000

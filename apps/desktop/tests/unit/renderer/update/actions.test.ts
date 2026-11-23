@@ -8,8 +8,8 @@ import { ipcQueryOptions } from '@/renderer/data/query'
 import { checkForUpdates, openDownloaded, runDownloadAction, startUpdate } from '@/renderer/update/actions'
 import type { UpdateDownloadState, UpdateState } from '@/types/update'
 
-const KEY = ipcQueryOptions('update:state').queryKey
-const DOWNLOAD_KEY = ipcQueryOptions('update:download:state').queryKey
+const KEY = ipcQueryOptions('update.state').queryKey
+const DOWNLOAD_KEY = ipcQueryOptions('update.downloadState').queryKey
 const BEFORE: UpdateState = { kind: 'idle', current: '0.1.0' }
 const UP_TO_DATE: UpdateState = { kind: 'up-to-date', current: '0.1.0', latest: '0.1.0', trigger: 'manual', checkedAt: '2026-05-01T11:58:00Z' }
 
@@ -40,7 +40,7 @@ describe('checkForUpdates', () => {
 
     await checkForUpdates(client, run)
 
-    expect(run).toHaveBeenCalledWith('update:check')
+    expect(run).toHaveBeenCalledWith('update.check')
     expect(client.getQueryData(KEY)).toEqual(UP_TO_DATE)
     expect(toast.loading).toHaveBeenCalledWith('Checking for updates…', expect.objectContaining({ id: 'update-check' }))
     expect(toast.success).toHaveBeenCalledWith('port is up to date', expect.objectContaining({ id: 'update-check', description: '0.1.0 is the latest release.' }))
@@ -112,7 +112,7 @@ describe('startUpdate', () => {
 
     await startUpdate(client, run)
 
-    expect(run).toHaveBeenCalledWith('update:download')
+    expect(run).toHaveBeenCalledWith('update.download')
     expect(client.getQueryData(DOWNLOAD_KEY)).toEqual(READY)
     expect(toast.loading).not.toHaveBeenCalled()
     expect(toast.success).toHaveBeenCalledWith('port 0.2.0 downloaded', expect.objectContaining({ id: 'update-download' }))
@@ -174,7 +174,7 @@ describe('openDownloaded', () => {
 
     await openDownloaded(client, reveal, run)
 
-    expect(run).toHaveBeenCalledWith('update:open', { reveal })
+    expect(run).toHaveBeenCalledWith('update.open', { reveal })
     expect(client.getQueryData(DOWNLOAD_KEY)).toEqual(READY)
   })
 

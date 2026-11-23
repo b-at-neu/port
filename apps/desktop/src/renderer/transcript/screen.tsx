@@ -19,7 +19,7 @@ import { retryTail, toggleFollow, useTranscriptTail } from '@/renderer/transcrip
 import { subtitleFor, tailBannerCopy, TRUNCATED_NOTE } from '@/renderer/transcript/copy'
 
 function TicketAside({ repoId, number }: { readonly repoId: RepoId; readonly number: number }) {
-  const snapshot = useIpcQuery('board:snapshot')
+  const snapshot = useIpcQuery('board.snapshot')
 
   if (snapshot.status === 'pending') {
     return (

@@ -59,10 +59,10 @@ export function RestartDialog() {
     await runInBackground({
       id: `restart:${id}`,
       pending: `Restarting #${String(number)}…`,
-      run: () => invoke('stage:restart', { id }),
+      run: () => invoke('stage.restart', { id }),
       toToast: (result) => resultToast(number, result),
     })
-    void queryClient.invalidateQueries({ queryKey: ipcQueryOptions('board:snapshot').queryKey })
+    void queryClient.invalidateQueries({ queryKey: ipcQueryOptions('board.snapshot').queryKey })
   }
 
   return (

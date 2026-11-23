@@ -23,9 +23,9 @@ import {
 import type { SessionUsage } from '@/utils/hosting/usage'
 
 export function CapacityMenu({ usage, onDismiss, showDismiss }: { readonly usage: SessionUsage | null; readonly onDismiss: () => void; readonly showDismiss: boolean }) {
-  const sessions = useIpcQuery('session:list')
-  const capacity = useIpcQuery('session:capacity')
-  const setCapacity = useIpcMutation('session:capacity:set')
+  const sessions = useIpcQuery('session.list')
+  const capacity = useIpcQuery('session.capacity')
+  const setCapacity = useIpcMutation('session.capacitySet')
   const client = useQueryClient()
 
   const open = (sessions.data ?? []).filter((s) => s.phase !== 'ended').length
@@ -37,7 +37,7 @@ export function CapacityMenu({ usage, onDismiss, showDismiss }: { readonly usage
   async function setLimit(next: number): Promise<void> {
     try {
       const saved = await setCapacity.mutateAsync({ limit: Math.max(1, Math.min(ceiling, next)) })
-      client.setQueryData(ipcQueryOptions('session:capacity').queryKey, saved)
+      client.setQueryData(ipcQueryOptions('session.capacity').queryKey, saved)
     } catch {
       toast(CAPACITY_SET_FAILED)
     }

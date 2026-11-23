@@ -2,7 +2,7 @@
 // generic dialog, and builds the PermissionResults their answers send back.
 import { isRecord } from '@/main/guards'
 import type { AskQuestion, AskQuestionOption, PendingInteraction } from '@/utils/hosting/controls'
-import type { PermissionResult, PermissionUpdate } from '@/main/hosting/sdk'
+import type { PermissionResult, PermissionUpdate } from '@/main/platform/sdk'
 
 function narrowOption(value: unknown): AskQuestionOption | null {
   if (!isRecord(value) || typeof value['label'] !== 'string' || value['label'] === '') return null

@@ -50,8 +50,8 @@ function repoLabelFor(repos: readonly RepositoryEntry[] | undefined, snapshot: H
 
 export function SessionScreen() {
   const search = useSearch({ from: ROUTE_IDS.session })
-  const sessions = useIpcQuery('session:list')
-  const repos = useIpcQuery('repos:list')
+  const sessions = useIpcQuery('session.list')
+  const repos = useIpcQuery('repos.list')
   const key = (search.key ?? null) as SessionKey | null
 
   setSelectedSession(key)
@@ -184,7 +184,7 @@ function SessionLive({ snapshot, repoLabel, paneOpen }: { readonly snapshot: Hos
 
   async function handleQuestionSkip(): Promise<void> {
     if (interactionEntry === null) return
-    await invoke('session:permission:answer', { sessionKey: key, permissionId: interactionEntry.permissionId, decision: 'deny', message: QUESTION_SKIPPED_MESSAGE })
+    await invoke('session.permissionAnswer', { sessionKey: key, permissionId: interactionEntry.permissionId, decision: 'deny', message: QUESTION_SKIPPED_MESSAGE })
   }
 
   async function handlePlanApprove(mode: 'default' | 'acceptEdits'): Promise<void> {

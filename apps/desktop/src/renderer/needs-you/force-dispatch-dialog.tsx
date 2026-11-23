@@ -65,10 +65,10 @@ export function ForceDispatchDialog() {
     await runInBackground({
       id: `force-dispatch:${repoId}:${String(number)}`,
       pending: `Dispatching #${String(number)}…`,
-      run: () => invoke('held:force-dispatch', { repoId, number }),
+      run: () => invoke('held.forceDispatch', { repoId, number }),
       toToast: (result) => resultToast(number, result),
     })
-    void queryClient.invalidateQueries({ queryKey: ipcQueryOptions('board:snapshot').queryKey })
+    void queryClient.invalidateQueries({ queryKey: ipcQueryOptions('board.snapshot').queryKey })
   }
 
   return (

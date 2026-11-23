@@ -29,8 +29,8 @@ function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { st
 
 /** The repository the rail's four icons point at, and its display name. */
 function useRailRepo(): { readonly repoId: RepoId; readonly name: string } | null {
-  const repos = useIpcQuery('repos:list')
-  const sessions = useIpcQuery('session:list')
+  const repos = useIpcQuery('repos.list')
+  const sessions = useIpcQuery('session.list')
   const location = useLocation()
   const selection = useSidebarSelection()
   const ready = repos.data?.ok === true ? repos.data.repositories.filter(isReady) : []

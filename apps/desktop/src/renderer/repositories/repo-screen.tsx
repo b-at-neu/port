@@ -30,8 +30,8 @@ export function RepoScreen() {
   const search = useSearch({ from: ROUTE_IDS.settingsRepo })
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const reposQuery = useIpcQuery('repos:list')
-  const removeMutation = useIpcMutation('repos:remove')
+  const reposQuery = useIpcQuery('repos.list')
+  const removeMutation = useIpcMutation('repos.remove')
   const [removeOpen, setRemoveOpen] = useState(false)
 
   const entry = reposQuery.data?.ok === true ? reposQuery.data.repositories.find((r) => r.id === repoId) : undefined
@@ -72,7 +72,7 @@ export function RepoScreen() {
           : { tone: 'error', title: `Couldn't remove ${name}: ${outcome.message}`, description: null, action: null, cancel: null },
     })
     if (result === 'unreachable' || !result.ok) return
-    queryClient.setQueryData(ipcQueryOptions('repos:list').queryKey, (): ReposListResponse => ({ ok: true, repositories: result.repositories }))
+    queryClient.setQueryData(ipcQueryOptions('repos.list').queryKey, (): ReposListResponse => ({ ok: true, repositories: result.repositories }))
     void navigate({ to: ROUTE_IDS.settings, search: { section: 'repositories' } })
   }
 

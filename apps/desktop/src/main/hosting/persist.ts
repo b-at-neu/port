@@ -4,7 +4,8 @@ import { DEFAULT_SESSION_DEFAULTS, SESSION_MODELS, SESSION_PERMISSION_MODES } fr
 import type { SessionDefaults, SessionMarks, SessionModel, SessionPermissionMode } from '@/types/hosting'
 import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'
 import type { NotificationPrefs } from '@/types/settings'
-import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
+import { z } from 'zod'
+import { createJsonStore, nodeStoreFs } from '@/main/platform/json-store'
 import { pathOps } from '@/main/platform/paths'
 import type { HostingPersistedState, HostingPersistence, PersistedOpenEntry } from '@/types/hosting'
 
@@ -15,10 +16,12 @@ const CURRENT_VERSION = 1
 export const DEFAULT_SESSION_LIMIT = 4
 export const SESSION_LIMIT_CEILING = 8
 
+// Every field below the version resolves on its own, so a malformed one never drops a valid sibling.
+const hostingFileSchema = z.looseObject({ version: z.literal(CURRENT_VERSION) })
+
 interface HostingFileShape {
-  readonly version: number
-  readonly limit: number
-  readonly open: readonly unknown[]
+  readonly limit?: unknown
+  readonly open?: unknown
   readonly defaults?: unknown
   readonly marks?: unknown
   readonly notifications?: unknown
@@ -108,23 +111,27 @@ interface CreateHostingPersistenceParams {
 /** Missing, unparseable, wrong-shaped, or newer-versioned all resolve to `emptyState()`, logged once. */
 export function createHostingPersistence(params: CreateHostingPersistenceParams): HostingPersistence {
   const filePath = pathOps.join(params.dir, HOSTING_FILE)
+  const store = createJsonStore({
+    file: filePath,
+    version: CURRENT_VERSION,
+    schema: hostingFileSchema,
+    initial: { version: CURRENT_VERSION },
+    unreadable: 'reset',
+    fs: nodeStoreFs,
+  })
   let frozen = false
   let writing: Promise<void> | null = null
   let pending: HostingPersistedState | null = null
   let lastWrittenJson: string | null = null
 
   async function load(): Promise<HostingPersistedState> {
-    await ensureDirectory(params.dir)
-    const result = await readJsonFile<HostingFileShape>(filePath)
-    if (!result.ok) {
-      if (result.kind !== 'not-found') console.error(`[hosting] could not read ${filePath}: ${result.message}`)
+    await store.load()
+    const status = store.status()
+    if (status.kind === 'unreadable') {
+      console.error(`[hosting] could not read ${filePath}: ${status.message} — starting empty`)
       return emptyState()
     }
-    const value = result.value
-    if (typeof value !== 'object' || value === null || typeof value.version !== 'number' || value.version > CURRENT_VERSION) {
-      console.error(`[hosting] ${filePath} is malformed or was written by a newer version of Port — starting empty`)
-      return emptyState()
-    }
+    const value = store.value() as HostingFileShape
     const limit = isValidLimit(value.limit) ? value.limit : DEFAULT_SESSION_LIMIT
     const open = Array.isArray(value.open) ? value.open.filter(isValidOpenEntry) : []
     const defaults = resolveDefaults(value.defaults)
@@ -135,7 +142,7 @@ export function createHostingPersistence(params: CreateHostingPersistenceParams)
 
   function startWrite(state: HostingPersistedState, json: string): void {
     writing = (async () => {
-      const result = await writeJsonFileAtomic(filePath, { version: CURRENT_VERSION, ...state })
+      const result = await store.write({ version: CURRENT_VERSION, ...state })
       if (!result.ok) {
         console.error(`[hosting] could not write ${filePath}: ${result.message}`)
       } else {

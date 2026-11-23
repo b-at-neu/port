@@ -32,7 +32,7 @@ function show(id: string, result: ClaimToast): void {
 
 async function dispatchStatusOf(repoId: RepoId): Promise<RepoDispatchStatus | undefined> {
   try {
-    const snapshot = await invoke('board:refresh', { repoId, source: 'github' })
+    const snapshot = await invoke('board.refresh', { repoId, source: 'github' })
     return snapshot.dispatch.find((row) => row.repoId === repoId)
   } catch (error) {
     console.error('Failed to refresh the board after a claim', error)
@@ -46,7 +46,7 @@ async function apply(params: ApplyParams): Promise<void> {
   if (takeOver) toast.loading(`Taking over #${String(number)}…`, { ...FRESH, id, description: undefined })
   let response: ClaimApplyResponse
   try {
-    response = await invoke('claim:apply', { repoId, number, planGate, confirmedAssignees })
+    response = await invoke('claim.apply', { repoId, number, planGate, confirmedAssignees })
   } catch (error) {
     console.error('Failed to reach the main process while applying a claim', error)
     show(id, unreachableToast())
@@ -68,7 +68,7 @@ export async function workOn(params: WorkOnParams): Promise<void> {
   toast.loading(`Claiming #${String(number)}…`, { ...FRESH, id, description: undefined })
   let response: ClaimPreflightResponse
   try {
-    response = await invoke('claim:preflight', { repoId, number })
+    response = await invoke('claim.preflight', { repoId, number })
   } catch (error) {
     console.error('Failed to reach the main process while reading a claim preflight', error)
     show(id, unreachableToast())

@@ -1,25 +1,13 @@
-// The mirror of `main/ipc.ts`'s `registerIpc`, over the canned `FixtureHandlers` table instead of a live adapter chain.
+// The mirror of `main/app/ipc.ts`'s `registerActions`, over the canned `FixtureHandlers` table instead of a live adapter chain.
 import { ipcMain } from 'electron'
-import { IPC_CHANNELS } from '@/types/ipc'
-import type { IpcChannel } from '@/types/ipc'
 import type { FixtureScenario } from '@/types/fixtures'
 import { fixtureHandlers } from './handlers'
 
 export function registerFixtureIpc(scenario: FixtureScenario): void {
   const handlers = fixtureHandlers(new Date(), scenario)
-  const registered = new Set<IpcChannel>()
 
-  for (const channel of IPC_CHANNELS) {
-    registered.add(channel)
-    // The one cast this file needs: the loop erases `handlers[channel]`'s per-key type to the union `IpcChannel`.
-    const handler = handlers[channel] as (request: unknown) => unknown
-    ipcMain.handle(channel, (_event, request: unknown) => handler(request))
-  }
-
-  for (const channel of IPC_CHANNELS) {
-    if (!registered.has(channel)) {
-      throw new Error(`IPC channel '${channel}' is declared but has no fixture handler`)
-    }
+  for (const [name, handler] of Object.entries(handlers) as [string, (request: unknown) => unknown][]) {
+    ipcMain.handle(name, (_event, request: unknown) => handler(request))
   }
 
   console.log('[fixtures] serving canned IPC data — no gh or claude calls')

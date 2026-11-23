@@ -449,7 +449,7 @@ export type StagePolicyDecision = { readonly kind: 'ask'; readonly protectedPath
 
 export interface HostedStore {
   start(params: StartSessionParams): Promise<SessionStartResult>
-  /** `options.source` defaults to `'app'` so an unmarked caller never fakes an operator join — `main/channels/hosting.ts`'s `resolveSessionSend` is the only `'operator'` caller. */
+  /** `options.source` defaults to `'app'` so an unmarked caller never fakes an operator join — `resolveSessionSend` in `main/features/session/resolve.ts` is the only `'operator'` caller. */
   send(sessionKey: SessionKey, text: string, attachments?: readonly ComposerAttachment[], options?: { readonly source: 'operator' | 'app' }): SessionSendResult
   interrupt(sessionKey: SessionKey): Promise<SessionInterruptResult>
   close(sessionKey: SessionKey): Promise<SessionCloseResult>

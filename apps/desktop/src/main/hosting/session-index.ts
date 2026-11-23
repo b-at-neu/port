@@ -1,15 +1,14 @@
 // session-index.json's only writer: durable history of every app-hosted session, for the Board pane. Never a restore set.
+import { z } from 'zod'
 import type { FileResult } from '@/types/platform'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import type { SessionIndex, SessionIndexEntry } from '@/types/session-index'
+import { createJsonStore } from '@/main/platform/json-store'
 
 const CURRENT_VERSION = 1
 export const SESSION_INDEX_CAP = 500
 
-interface IndexFileShape {
-  readonly version: number
-  readonly entries: readonly unknown[]
-}
+const indexFileSchema = z.object({ version: z.literal(CURRENT_VERSION), entries: z.array(z.unknown()) })
 
 interface CreateSessionIndexParams {
   readonly path: string
@@ -52,8 +51,16 @@ function capped(entries: readonly SessionIndexEntry[]): SessionIndexEntry[] {
   return [...entries].sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, SESSION_INDEX_CAP)
 }
 
-/** `createSessionIndex({ path, readJson, writeJsonAtomic, now })` — a missing or malformed file loads empty and a write failure keeps the in-memory state, both failing toward fewer past links. */
+/** A missing or malformed file loads empty (`reset`) and a write failure keeps the in-memory state, both failing toward fewer past links. */
 export function createSessionIndex(params: CreateSessionIndexParams): SessionIndex {
+  const store = createJsonStore({
+    file: params.path,
+    version: CURRENT_VERSION,
+    schema: indexFileSchema,
+    initial: { version: CURRENT_VERSION, entries: [] },
+    unreadable: 'reset',
+    fs: { readJson: params.readJson, writeJsonAtomic: params.writeJsonAtomic },
+  })
   let entries = new Map<string, SessionIndexEntry>()
   const costBases = new Map<string, number>()
   let writing = false
@@ -67,7 +74,7 @@ export function createSessionIndex(params: CreateSessionIndexParams): SessionInd
       deferred = true
       return
     }
-    const document = { version: CURRENT_VERSION, entries: capped([...entries.values()]) }
+    const document: z.infer<typeof indexFileSchema> = { version: CURRENT_VERSION, entries: capped([...entries.values()]) }
     const json = JSON.stringify(document)
     if (json === lastWritten) return
     if (writing) {
@@ -75,7 +82,7 @@ export function createSessionIndex(params: CreateSessionIndexParams): SessionInd
       return
     }
     writing = true
-    void params.writeJsonAtomic(params.path, document).then((result) => {
+    void store.write(document).then((result) => {
       if (result.ok) lastWritten = json
       else console.error(`[hosting] could not write ${params.path}: ${result.message}`)
       writing = false
@@ -101,18 +108,14 @@ export function createSessionIndex(params: CreateSessionIndexParams): SessionInd
   }
 
   async function readFile(): Promise<void> {
-    const result = await params.readJson<IndexFileShape>(params.path)
-    if (!result.ok) {
-      if (result.kind !== 'not-found') console.error(`[hosting] could not read ${params.path}: ${result.message}`)
-      return
-    }
-    const value = result.value
-    if (typeof value !== 'object' || value === null || typeof value.version !== 'number' || value.version > CURRENT_VERSION || !Array.isArray(value.entries)) {
-      console.error(`[hosting] ${params.path} is malformed or was written by a newer version of Port — starting empty`)
+    await store.load()
+    const status = store.status()
+    if (status.kind === 'unreadable') {
+      console.error(`[hosting] could not read ${params.path}: ${status.message} — starting empty`)
       return
     }
     const loaded = new Map<string, SessionIndexEntry>()
-    for (const entry of value.entries.filter(isEntry)) loaded.set(entry.claudeSessionId, entry)
+    for (const entry of store.value().entries.filter(isEntry)) loaded.set(entry.claudeSessionId, entry)
     // Anything observed before the load settled is newer than the file.
     for (const [id, entry] of entries) loaded.set(id, entry)
     entries = loaded
