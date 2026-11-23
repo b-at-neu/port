@@ -1,238 +1,43 @@
 import { describe, expect, it } from 'vitest'
 import { argumentRequired, bannerCopy, chipCopy, invokeFailureCopy } from '@/renderer/session/commands-copy'
-import type { SessionCapabilities, SessionInvokeResult } from '@/types/hosting'
+import type { PluginLoad, SessionCapabilities, SessionInvokeResult } from '@/types/hosting'
 
-const INSTALLED_REQUEST = { source: 'installed' as const }
-const REPO_REQUEST = { source: 'repository' as const, path: '/repo/plugins/port' }
+function ready(plugin: PluginLoad): SessionCapabilities {
+  return { kind: 'ready', commands: [], agents: [], slashCommands: [], plugin }
+}
 
 describe('chipCopy', () => {
-  it('pending', () => {
-    expect(chipCopy({ kind: 'pending', request: INSTALLED_REQUEST })).toBe('◌ Pipeline · loading commands…')
-  })
-
-  it('unavailable', () => {
-    expect(chipCopy({ kind: 'unavailable', request: INSTALLED_REQUEST, message: 'x' })).toBe('⚠ Pipeline commands unavailable')
-  })
-
-  it('ready + unconfirmed, repository copy', () => {
-    const capabilities: SessionCapabilities = {
-      kind: 'ready',
-      request: REPO_REQUEST,
-      commands: [],
-      agents: [],
-      slashCommands: [],
-      plugin: { kind: 'unconfirmed' },
-      components: { kind: 'unchecked', reason: 'no-plugin-path' },
-    }
-    expect(chipCopy(capabilities)).toBe('◌ port · repository copy · confirmed on the first turn')
-  })
-
-  it('loaded + complete, with version, installed copy', () => {
-    const capabilities: SessionCapabilities = {
-      kind: 'ready',
-      request: INSTALLED_REQUEST,
-      commands: [],
-      agents: [],
-      slashCommands: [],
-      plugin: { kind: 'loaded', path: '/x', version: '0.3.1' },
-      components: { kind: 'complete' },
-    }
-    expect(chipCopy(capabilities)).toBe('✓ port 0.3.1 · installed copy')
-  })
-
-  it('loaded + complete, version omitted when null', () => {
-    const capabilities: SessionCapabilities = {
-      kind: 'ready',
-      request: INSTALLED_REQUEST,
-      commands: [],
-      agents: [],
-      slashCommands: [],
-      plugin: { kind: 'loaded', path: '/x', version: null },
-      components: { kind: 'complete' },
-    }
-    expect(chipCopy(capabilities)).toBe('✓ port · installed copy')
-  })
-
-  it('loaded + unchecked', () => {
-    const capabilities: SessionCapabilities = {
-      kind: 'ready',
-      request: REPO_REQUEST,
-      commands: [],
-      agents: [],
-      slashCommands: [],
-      plugin: { kind: 'loaded', path: '/x', version: '0.3.1' },
-      components: { kind: 'unchecked', reason: 'unreadable' },
-    }
-    expect(chipCopy(capabilities)).toBe('◐ port 0.3.1 · components not checked')
-  })
-
-  it('loaded + incomplete counts every missing skill and agent', () => {
-    const capabilities: SessionCapabilities = {
-      kind: 'ready',
-      request: REPO_REQUEST,
-      commands: [],
-      agents: [],
-      slashCommands: [],
-      plugin: { kind: 'loaded', path: '/x', version: '0.3.1' },
-      components: { kind: 'incomplete', missingSkills: ['scope'], missingAgents: ['plan-agent'] },
-    }
-    expect(chipCopy(capabilities)).toBe('⚠ port 0.3.1 · 2 missing')
-  })
-
-  it('missing', () => {
-    const capabilities: SessionCapabilities = {
-      kind: 'ready',
-      request: REPO_REQUEST,
-      commands: [],
-      agents: [],
-      slashCommands: [],
-      plugin: { kind: 'missing' },
-      components: { kind: 'unchecked', reason: 'no-plugin-path' },
-    }
-    expect(chipCopy(capabilities)).toBe("⚠ port didn't load")
-  })
-
-  it('shadowed', () => {
-    const capabilities: SessionCapabilities = {
-      kind: 'ready',
-      request: REPO_REQUEST,
-      commands: [],
-      agents: [],
-      slashCommands: [],
-      plugin: { kind: 'shadowed', path: '/other', version: null },
-      components: { kind: 'unchecked', reason: 'no-plugin-path' },
-    }
-    expect(chipCopy(capabilities)).toBe('⚠ port loaded from another copy')
-  })
-
-  it('duplicate', () => {
-    const capabilities: SessionCapabilities = {
-      kind: 'ready',
-      request: INSTALLED_REQUEST,
-      commands: [],
-      agents: [],
-      slashCommands: [],
-      plugin: { kind: 'duplicate', paths: ['/a', '/b'] },
-      components: { kind: 'unchecked', reason: 'no-plugin-path' },
-    }
-    expect(chipCopy(capabilities)).toBe('⚠ Two port plugins loaded')
+  it.each([
+    [{ kind: 'pending' }, '◌ Pipeline · loading commands…'],
+    [{ kind: 'unavailable', message: 'x' }, '⚠ Pipeline commands unavailable'],
+    [ready({ kind: 'unconfirmed' }), '◌ port · confirmed on the first turn'],
+    [ready({ kind: 'loaded', path: '/x', version: '1.5.3' }), '✓ port 1.5.3'],
+    [ready({ kind: 'loaded', path: '/x', version: null }), '✓ port'],
+    [ready({ kind: 'missing' }), "⚠ port didn't load"],
+    [ready({ kind: 'duplicate', paths: ['/a', '/b'] }), '⚠ Two port plugins loaded'],
+  ] as const satisfies readonly (readonly [SessionCapabilities, string])[])('%j', (capabilities, expected) => {
+    expect(chipCopy(capabilities)).toBe(expected)
   })
 })
 
 describe('bannerCopy', () => {
-  it('null while pending', () => {
-    expect(bannerCopy({ kind: 'pending', request: INSTALLED_REQUEST })).toBeNull()
+  it('says nothing while pending, unconfirmed or loaded', () => {
+    expect(bannerCopy({ kind: 'pending' })).toBeNull()
+    expect(bannerCopy(ready({ kind: 'unconfirmed' }))).toBeNull()
+    expect(bannerCopy(ready({ kind: 'loaded', path: '/x', version: null }))).toBeNull()
   })
 
   it('unavailable carries the SDK message verbatim as detail', () => {
-    expect(bannerCopy({ kind: 'unavailable', request: INSTALLED_REQUEST, message: 'boom' })).toEqual({
-      text: "Claude Code didn't return this session's commands.",
-      detail: 'boom',
-    })
+    expect(bannerCopy({ kind: 'unavailable', message: 'boom' })).toEqual({ text: "Claude Code didn't return this session's commands.", detail: 'boom' })
   })
 
-  it('null once loaded and complete', () => {
-    const capabilities: SessionCapabilities = {
-      kind: 'ready',
-      request: INSTALLED_REQUEST,
-      commands: [],
-      agents: [],
-      slashCommands: [],
-      plugin: { kind: 'loaded', path: '/x', version: null },
-      components: { kind: 'complete' },
-    }
-    expect(bannerCopy(capabilities)).toBeNull()
+  it('missing names the settings file', () => {
+    expect(bannerCopy(ready({ kind: 'missing' }))?.text).toContain('.claude/settings.json')
   })
 
-  it('null while loaded but the component check has no plugin path yet — still settling', () => {
-    const capabilities: SessionCapabilities = {
-      kind: 'ready',
-      request: INSTALLED_REQUEST,
-      commands: [],
-      agents: [],
-      slashCommands: [],
-      plugin: { kind: 'loaded', path: '/x', version: null },
-      components: { kind: 'unchecked', reason: 'no-plugin-path' },
-    }
-    expect(bannerCopy(capabilities)).toBeNull()
-  })
-
-  it('loaded but unreadable names the path that could not be read', () => {
-    const capabilities: SessionCapabilities = {
-      kind: 'ready',
-      request: REPO_REQUEST,
-      commands: [],
-      agents: [],
-      slashCommands: [],
-      plugin: { kind: 'loaded', path: '/x', version: null },
-      components: { kind: 'unchecked', reason: 'unreadable' },
-    }
-    expect(bannerCopy(capabilities)?.text).toContain('/repo/plugins/port')
-  })
-
-  it('missing, repository copy, names the path', () => {
-    const capabilities: SessionCapabilities = {
-      kind: 'ready',
-      request: REPO_REQUEST,
-      commands: [],
-      agents: [],
-      slashCommands: [],
-      plugin: { kind: 'missing' },
-      components: { kind: 'unchecked', reason: 'no-plugin-path' },
-    }
-    expect(bannerCopy(capabilities)?.text).toContain('/repo/plugins/port')
-  })
-
-  it('missing, installed copy, names the settings file', () => {
-    const capabilities: SessionCapabilities = {
-      kind: 'ready',
-      request: INSTALLED_REQUEST,
-      commands: [],
-      agents: [],
-      slashCommands: [],
-      plugin: { kind: 'missing' },
-      components: { kind: 'unchecked', reason: 'no-plugin-path' },
-    }
-    expect(bannerCopy(capabilities)?.text).toContain('.claude/settings.json')
-  })
-
-  it('incomplete names each missing skill and agent', () => {
-    const capabilities: SessionCapabilities = {
-      kind: 'ready',
-      request: REPO_REQUEST,
-      commands: [],
-      agents: [],
-      slashCommands: [],
-      plugin: { kind: 'loaded', path: '/x', version: null },
-      components: { kind: 'incomplete', missingSkills: ['release'], missingAgents: [] },
-    }
-    expect(bannerCopy(capabilities)?.text).toContain('skill `release`')
-  })
-
-  it('duplicate names both paths', () => {
-    const capabilities: SessionCapabilities = {
-      kind: 'ready',
-      request: INSTALLED_REQUEST,
-      commands: [],
-      agents: [],
-      slashCommands: [],
-      plugin: { kind: 'duplicate', paths: ['/a', '/b'] },
-      components: { kind: 'unchecked', reason: 'no-plugin-path' },
-    }
-    expect(bannerCopy(capabilities)?.text).toBe('Claude Code loaded port from /a and /b. A command may resolve to either copy.')
-  })
-
-  it('duplicate with three or more paths reads as a comma list with "and" before the last', () => {
-    const capabilities: SessionCapabilities = {
-      kind: 'ready',
-      request: INSTALLED_REQUEST,
-      commands: [],
-      agents: [],
-      slashCommands: [],
-      plugin: { kind: 'duplicate', paths: ['/a', '/b', '/c'] },
-      components: { kind: 'unchecked', reason: 'no-plugin-path' },
-    }
-    expect(bannerCopy(capabilities)?.text).toBe('Claude Code loaded port from /a, /b, and /c. A command may resolve to either copy.')
+  it('duplicate lists every path, with "and" before the last', () => {
+    expect(bannerCopy(ready({ kind: 'duplicate', paths: ['/a', '/b'] }))?.text).toContain('/a and /b')
+    expect(bannerCopy(ready({ kind: 'duplicate', paths: ['/a', '/b', '/c'] }))?.text).toContain('/a, /b, and /c')
   })
 })
 

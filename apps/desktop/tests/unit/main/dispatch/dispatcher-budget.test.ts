@@ -93,7 +93,7 @@ function sessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): Hosted
     end: null,
     titled: null,
     pendingPermissions: [],
-    capabilities: { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'loaded', path: 'p', version: null }, components: { kind: 'complete' }, slashCommands: [] },
+    capabilities: { kind: 'ready', commands: [], agents: [], plugin: { kind: 'loaded', path: 'p', version: null }, slashCommands: [] },
     title: null,
     rateLimit: null,
     controls: TEST_CONTROLS,
@@ -146,6 +146,7 @@ function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispat
     runState: () => 'dispatching',
     readOwnership: () => Promise.resolve(OWNED_BY_APP),
     takeOwnership: () => Promise.resolve({ ok: true, path: 'p' }),
+    stateLabels: () => ['plan approved'],
     fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: 'r' }),
     listRepositories: () => Promise.resolve({ ok: true, repositories: [entry()] }),
     registryDeps: { registryDir: '/registry', git: () => Promise.reject(new Error('unused')), chooseDirectory: () => Promise.resolve(null) },
@@ -291,11 +292,11 @@ describe('createDispatcher — the budget gate itself', () => {
 
   it('escalation-failed carries the outcome, for the renderer to classify', async () => {
     const budget = fakeBudget({ check: () => Promise.resolve({ ok: true, verdict: 'exceeded', line: 'over budget' }) })
-    const escalate: CreateDispatcherParams['escalate'] = () => Promise.resolve({ labels: { kind: 'terminal-owned', since: '2026-01-01T00:00:00Z' }, comment: null })
+    const escalate: CreateDispatcherParams['escalate'] = () => Promise.resolve({ labels: { kind: 'ownership-unreadable', path: '/repo/.agents/cockpit.json', message: 'bad' }, comment: null })
     const { dispatcher } = readyToDispatch({ budget, escalate })
     await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })]))
     const notes = dispatcher.status()[0]?.budget?.notes
-    expect(notes).toEqual([{ kind: 'escalation-failed', number: 52, needsHumanLabel: 'needs human', triggerLabel: 'plan approved', outcome: { kind: 'terminal-owned', since: '2026-01-01T00:00:00Z' } }])
+    expect(notes).toEqual([{ kind: 'escalation-failed', number: 52, needsHumanLabel: 'needs human', triggerLabel: 'plan approved', outcome: { kind: 'ownership-unreadable', path: '/repo/.agents/cockpit.json', message: 'bad' } }])
   })
 
   it('a failed gate check drops the candidate — gate-failed note, never a launch', async () => {

@@ -45,7 +45,7 @@ function request(overrides: Partial<LabelWriteRequest> = {}): LabelWriteRequest 
 
 interface RigOptions {
   readonly items?: readonly StoredItem[]
-  readonly view?: 'labels' | 'store'
+  readonly view?: 'unseeded' | 'store'
   readonly githubLabels?: Readonly<Record<number, readonly string[]>>
   readonly kinds?: Readonly<Record<number, 'issue' | 'pull-request'>>
   readonly outcomes?: Readonly<Record<number, WriteOutcome>>
@@ -62,9 +62,9 @@ function rig(options: RigOptions = {}) {
   const writes: ApplyLabelsParams[] = []
   const reads: number[][] = []
   const items = options.items ?? [stored()]
-  let record: RepoRecord = { seededAt: 't', heldBy: null, items: Object.fromEntries(items.map((item) => [itemKey(item.kind, item.number), item])) }
+  let record: RepoRecord = { seededAt: 't', items: Object.fromEntries(items.map((item) => [itemKey(item.kind, item.number), item])) }
   const store = {
-    view: () => (options.view === 'labels' ? { kind: 'labels' as const } : viewOf(record)),
+    view: () => (options.view === 'unseeded' ? { kind: 'unseeded' as const } : viewOf(record)),
     transition: vi.fn((_id: RepoId, ref: { kind: 'issue' | 'pull-request'; number: number }, input: Parameters<PipelineStateStore['transition']>[2]) => {
       if (options.persistFails === true) return Promise.resolve({ ok: false as const, reason: 'persist-failed' as const, message: 'disk full' })
       const next = transition(record, ref, input)
@@ -81,8 +81,7 @@ function rig(options: RigOptions = {}) {
     writes.push(params)
     return Promise.resolve(options.outcomes?.[params.number] ?? { kind: 'applied', argv: ['edit', String(params.number)] })
   })
-  const ownership: OwnershipRead =
-    options.ownership === 'terminal' ? { kind: 'terminal', since: 's', path: 'p', readAt: 'r' } : options.ownership === 'unreadable' ? { kind: 'unreadable', message: 'bad', path: 'p', readAt: 'r' } : { kind: 'app', since: 's', path: 'p', readAt: 'r' }
+  const ownership: OwnershipRead = options.ownership === 'unreadable' ? { kind: 'unreadable', message: 'bad', path: 'p', readAt: 'r' } : { kind: 'app', since: 's', path: 'p', readAt: 'r' }
   const writer = createStateWriter({
     store: store as unknown as PipelineStateStore,
     applyLabels,
@@ -181,15 +180,15 @@ describe('writeState — outcomes', () => {
   })
 
   it('refuses a repository whose state is not loaded yet, with no write and no store change', async () => {
-    const r = rig({ view: 'labels' })
+    const r = rig({ view: 'unseeded' })
     expect(await run(r)).toEqual({ kind: 'state-unsaved', message: "port hasn't loaded this repository's pipeline state yet" })
     expect(r.store.transition).not.toHaveBeenCalled()
     expect(r.applyLabels).not.toHaveBeenCalled()
   })
 
-  it.each(['terminal', 'unreadable'] as const)('refuses %s ownership, audited, with no store change and no label write', async (ownership) => {
-    const r = rig({ ownership })
-    expect((await run(r)).kind).toBe(ownership === 'terminal' ? 'terminal-owned' : 'ownership-unreadable')
+  it('refuses unreadable ownership, audited, with no store change and no label write', async () => {
+    const r = rig({ ownership: 'unreadable' })
+    expect((await run(r)).kind).toBe('ownership-unreadable')
     expect(r.store.transition).not.toHaveBeenCalled()
     expect(r.applyLabels).not.toHaveBeenCalled()
     expect(r.audits).toHaveLength(1)
@@ -309,10 +308,10 @@ describe('writeState — incidents', () => {
   })
 
   it('records a refused write that has no intent of its own', async () => {
-    const r = rig({ ownership: 'terminal' })
-    expect(await run(r)).toMatchObject({ kind: 'terminal-owned' })
+    const r = rig({ ownership: 'unreadable' })
+    expect(await run(r)).toMatchObject({ kind: 'ownership-unreadable' })
     expect(r.incidents).toHaveLength(1)
-    expect(r.incidents[0]).toMatchObject({ bucket: 'refused-write', stage: 'inProgress', condition: 'terminal-owned', outcome: { kind: 'terminal-owned' } })
+    expect(r.incidents[0]).toMatchObject({ bucket: 'refused-write', stage: 'inProgress', condition: 'ownership-unreadable', outcome: { kind: 'ownership-unreadable' } })
   })
 
   it('records nothing for a write that landed with no intent', async () => {
@@ -331,7 +330,7 @@ describe('writeState — incidents', () => {
   it('leaves every outcome unchanged when recording the incident fails', async () => {
     const ok = rig({ incidentFails: true })
     expect(await run(ok, request({ incident: INTENT }))).toMatchObject({ kind: 'applied' })
-    const refused = rig({ incidentFails: true, ownership: 'terminal' })
-    expect(await run(refused)).toMatchObject({ kind: 'terminal-owned' })
+    const refused = rig({ incidentFails: true, ownership: 'unreadable' })
+    expect(await run(refused)).toMatchObject({ kind: 'ownership-unreadable' })
   })
 })

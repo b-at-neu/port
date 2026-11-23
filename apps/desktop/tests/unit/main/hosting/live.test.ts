@@ -150,7 +150,6 @@ describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1
       expect(loaded.plugin.path).toBe(join(cwd, 'plugins', 'port'))
       expect(typeof loaded.plugin.version).toBe('string')
     }
-    expect(loaded.components).toEqual({ kind: 'complete' })
 
     await store.close(sessionKey)
     await store.closeAll()

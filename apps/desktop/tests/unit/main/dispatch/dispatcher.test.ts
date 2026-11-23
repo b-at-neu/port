@@ -86,7 +86,7 @@ function sessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): Hosted
     end: null,
     titled: null,
     pendingPermissions: [],
-    capabilities: { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'loaded', path: 'p', version: null }, components: { kind: 'complete' }, slashCommands: [] },
+    capabilities: { kind: 'ready', commands: [], agents: [], plugin: { kind: 'loaded', path: 'p', version: null }, slashCommands: [] },
     title: null,
     rateLimit: null,
     controls: TEST_CONTROLS,
@@ -126,6 +126,7 @@ function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispat
     readOwnership: () => Promise.resolve(ABSENT_OWNERSHIP),
     // Harmless by default — readOwnership above stays `absent`, so this never changes outcomes.
     takeOwnership: () => Promise.resolve({ ok: true, path: 'p' }),
+    stateLabels: () => ['plan approved'],
     fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: 'r' }),
     listRepositories: () => Promise.resolve({ ok: true, repositories: [entry()] }),
     registryDeps: { registryDir: '/registry', git: () => Promise.reject(new Error('unused')), chooseDirectory: () => Promise.resolve(null) },
@@ -171,12 +172,6 @@ describe('createDispatcher — ownership', () => {
     expect(dispatcher.status()).toEqual([
       { repoId: REPO_ID, owner: 'unreadable', state: { kind: 'idle' }, runState: 'dispatching', ownedSince: null, unreadableMessage: 'bad', budget: null, observed: [], denials: [], interrupted: [] },
     ])
-  })
-
-  it('reports terminal for a record owned by the terminal cockpit', async () => {
-    const dispatcher = createDispatcher(baseDeps({ readOwnership: () => Promise.resolve({ kind: 'terminal', since: '2026-01-01T00:00:00Z', path: '/repo/.agents/cockpit.json', readAt: 'r' }) }))
-    await dispatcher.consider(snapshotWith([tickReport()]))
-    expect(dispatcher.status()[0]).toMatchObject({ owner: 'terminal', ownedSince: '2026-01-01T00:00:00Z' })
   })
 
   it('reports app for a record owned by this app', async () => {
@@ -271,10 +266,16 @@ describe('createDispatcher — launching', () => {
   }
 
   it('a candidate that moved (label no longer present) is dropped — nothing launches', async () => {
-    const { dispatcher, launched } = readyToDispatch({ fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['in progress'], assignees: ['op'], headRefName: null, author: null }], unavailable: [], fetchedAt: 'r' }) })
+    const { dispatcher, launched } = readyToDispatch({ stateLabels: () => ['in progress'], fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['in progress'], assignees: ['op'], headRefName: null, author: null }], unavailable: [], fetchedAt: 'r' }) })
     await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
     expect(launched).toHaveLength(0)
     expect(dispatcher.status()[0]?.state).toEqual({ kind: 'idle' })
+  })
+
+  it('an unseeded repository launches nothing, even when GitHub shows the trigger label', async () => {
+    const { dispatcher, launched } = readyToDispatch({ stateLabels: () => null })
+    await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
+    expect(launched).toHaveLength(0)
   })
 
   it('launches a surviving candidate, recording it as started', async () => {
@@ -299,6 +300,7 @@ describe('createDispatcher — launching', () => {
   it("builds a pull request launch's worktree target from the re-read head branch", async () => {
     const review = [{ number: 47, kind: 'pull-request' as const, trigger: 'readyForReview' as const, agent: 'review' as const, unchecked: false, cycle: { count: 2, cap: 5 } }]
     const { dispatcher, launched } = readyToDispatch({
+      stateLabels: () => ['ready for review'],
       fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 47, kind: 'pull-request', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['ready for review'], assignees: ['op'], headRefName: '46-sync-time', author: 'someone' }], unavailable: [], fetchedAt: 'r' }),
     })
     await dispatcher.consider(snapshotWith([tickReport({ actionable: review })]))
@@ -309,13 +311,13 @@ describe('createDispatcher — launching', () => {
   const reviewOf = (cycle: { count: number; cap: number } | null) => [{ number: 47, kind: 'pull-request' as const, trigger: 'readyForReview' as const, agent: 'review' as const, unchecked: false, cycle }]
 
   it.each([['op', 2, 3, true], ['someone', 2, 3, false], [null, 0, 1, true]])('hands a review launch its cycle and self-authorship (author %s)', async (author, count, cycle, selfAuthored) => {
-    const { dispatcher, launched } = readyToDispatch({ fetchItemsByNumber: reviewRead(author) })
+    const { dispatcher, launched } = readyToDispatch({ stateLabels: () => ['ready for review'], fetchItemsByNumber: reviewRead(author) })
     await dispatcher.consider(snapshotWith([tickReport({ actionable: reviewOf({ count, cap: 5 }) })]))
     expect(launched[0]?.review).toEqual({ cycle, selfAuthored })
   })
 
   it('records a failed launch for a review with no cycle count, without launching', async () => {
-    const { dispatcher, launched } = readyToDispatch({ fetchItemsByNumber: reviewRead('op') })
+    const { dispatcher, launched } = readyToDispatch({ stateLabels: () => ['ready for review'], fetchItemsByNumber: reviewRead('op') })
     await dispatcher.consider(snapshotWith([tickReport({ actionable: reviewOf(null) })]))
     expect(launched).toHaveLength(0)
     const state = dispatcher.status()[0]?.state
@@ -339,6 +341,7 @@ describe('createDispatcher — launching', () => {
     const snapshot = snapshotWith([tickReport({ actionable: review })])
     const withItems = { ...snapshot, state: { ...snapshot.state, repositories: [{ ok: true, repoId: REPO_ID, repo: 'o/a', displayName: 'o/a', viewer: 'op', items } as never] } }
     const { dispatcher, launched } = readyToDispatch({
+      stateLabels: () => ['ready for review'],
       fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 47, kind: 'pull-request', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['ready for review'], assignees: ['op'], headRefName: null, author: null }], unavailable: [], fetchedAt: 'r' }),
     })
     await dispatcher.consider(withItems)

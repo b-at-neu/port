@@ -44,7 +44,8 @@ function pr(number: number, overrides: Partial<ResolvedItem> = {}): ResolvedItem
   return { number, kind: 'pull-request', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: [], assignees: ['op'], headRefName: '52-add-thing', author: 'op', ...overrides }
 }
 
-function deps(items: readonly ResolvedItem[], outcomes: readonly WriteOutcome[] = [], stored: readonly string[] | null = null, bodyOutcomes: readonly WriteOutcome[] = []) {
+/** `stored` is the store's labels for every item; `null` reads each item's own labels, and `'unseeded'` is a repository the store does not hold yet. */
+function deps(items: readonly ResolvedItem[], outcomes: readonly WriteOutcome[] = [], stored: readonly string[] | 'unseeded' | null = null, bodyOutcomes: readonly WriteOutcome[] = []) {
   const queue = [...outcomes]
   const applied: WriteStateParams[] = []
   const writeState = vi.fn((params: WriteStateParams): Promise<WriteOutcome> => {
@@ -55,7 +56,7 @@ function deps(items: readonly ResolvedItem[], outcomes: readonly WriteOutcome[] 
     const wanted = new Set(params.numbers)
     return Promise.resolve({ ok: true as const, resolved: items.filter((i) => wanted.has(i.number)), unavailable: params.numbers.filter((n) => !items.some((i) => i.number === n)), fetchedAt: 'r' })
   })
-  const stateLabels = vi.fn((): readonly string[] | null => stored)
+  const stateLabels = vi.fn((_repoId: unknown, _kind: unknown, number: number): readonly string[] | null => (stored === 'unseeded' ? null : (stored ?? items.find((item) => item.number === number)?.labels ?? [])))
   const bodies: PostCommentParams[] = []
   const bodyQueue = [...bodyOutcomes]
   const postIssueBody = vi.fn((params: PostCommentParams): Promise<WriteOutcome> => {
@@ -71,7 +72,7 @@ const PR_OPENED: StageEvent = { kind: 'outcome', outcome: 'completed', handback:
 
 describe('applyStageClaim', () => {
   it('writes once, from the re-read item, with the exact precondition', async () => {
-    const rig = deps([])
+    const rig = deps([issue(['claude', 'plan approved'])])
     const result = await applyStageClaim({ entry: entry(), candidate: IMPL, resolved: issue(['claude', 'plan approved']), auditDir: '/audit' }, rig.writeDeps)
     expect(result).toEqual({ kind: 'applied' })
     expect(rig.fetchItemsByNumber).not.toHaveBeenCalled()
@@ -86,7 +87,7 @@ describe('applyStageClaim', () => {
   })
 
   it('is moved, with no write, when a second role-bearing label is present', async () => {
-    const rig = deps([])
+    const rig = deps([issue(['plan approved', 'blocked'])])
     const result = await applyStageClaim({ entry: entry(), candidate: IMPL, resolved: issue(['plan approved', 'blocked']), auditDir: '/audit' }, rig.writeDeps)
     expect(result).toEqual({ kind: 'refused', reason: 'moved', retryable: false, detail: null })
     expect(rig.writeState).not.toHaveBeenCalled()
@@ -94,9 +95,16 @@ describe('applyStageClaim', () => {
 
   it('maps a failed precondition at the chokepoint to moved, never retryable', async () => {
     const outcome: WriteOutcome = { kind: 'precondition-failed', conflict: { kind: 'precondition-failed', expected: [], observed: [], readAt: 'r' } }
-    const rig = deps([], [outcome])
+    const rig = deps([issue(['plan approved'])], [outcome])
     const result = await applyStageClaim({ entry: entry(), candidate: IMPL, resolved: issue(['plan approved']), auditDir: '/audit' }, rig.writeDeps)
     expect(result).toEqual({ kind: 'refused', reason: 'moved', retryable: false, detail: null })
+  })
+
+  it('refuses retryably, with no write, while the repository is unseeded', async () => {
+    const rig = deps([issue(['plan approved'])], [], 'unseeded')
+    const result = await applyStageClaim({ entry: entry(), candidate: IMPL, resolved: issue(['plan approved']), auditDir: '/audit' }, rig.writeDeps)
+    expect(result).toMatchObject({ kind: 'refused', reason: 'write-failed', retryable: true })
+    expect(rig.writeState).not.toHaveBeenCalled()
   })
 })
 
@@ -106,7 +114,6 @@ describe('applyStageTransition — refusals map from the write outcome', () => {
   const planning = issue(['planning'])
 
   it.each<[WriteOutcome, string, boolean]>([
-    [{ kind: 'terminal-owned', since: 's' }, 'terminal-owned', false],
     [{ kind: 'unresolvable-label', keys: ['planReview'] }, 'unresolvable-label', false],
     [{ kind: 'write-failed', classification: 'network', stderr: 'boom', reread: null }, 'write-failed', true],
     [{ kind: 'verify-failed', message: 'no net' }, 'write-failed', true],
@@ -201,7 +208,7 @@ describe('applyStageTransition — incidents', () => {
     await applyStageTransition({ entry: entry(), record: IMPL, event: blocked, auditDir: '/audit', scratchDir: '/scratch' }, withoutSnapshot.writeDeps)
     expect(withoutSnapshot.applied[0]?.request.incident).toBeUndefined()
 
-    const claim = deps([])
+    const claim = deps([issue(['plan approved'])])
     await applyStageClaim({ entry: entry(), candidate: IMPL, resolved: issue(['plan approved']), auditDir: '/audit' }, claim.writeDeps)
     expect(claim.applied[0]?.request.incident).toBeUndefined()
   })
@@ -253,9 +260,10 @@ describe('applyStageTransition — plan-written body', () => {
     expect(rig.writeState).not.toHaveBeenCalled()
   })
 
-  it('a terminal-owned body post is not retryable', async () => {
-    const rig = deps([issue(['planning'])], [], null, [{ kind: 'terminal-owned', since: 's' }])
-    expect(await applyStageTransition(params(read), rig.writeDeps)).toMatchObject({ kind: 'refused', reason: 'terminal-owned', retryable: false })
+  it('an unseeded repository posts no body and writes no label', async () => {
+    const rig = deps([issue(['planning'])], [], 'unseeded')
+    expect(await applyStageTransition(params(read), rig.writeDeps)).toMatchObject({ kind: 'refused', reason: 'write-failed', retryable: true })
+    expect(rig.postIssueBody).not.toHaveBeenCalled()
     expect(rig.writeState).not.toHaveBeenCalled()
   })
 

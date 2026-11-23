@@ -55,8 +55,14 @@ function resolvedItem(overrides: Partial<ResolvedItem> = {}): ResolvedItem {
   return { number: 300, kind: 'pull-request', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['needs human'], assignees: ['op'], headRefName: null, author: null, ...overrides }
 }
 
+// The store's labels for the item default to what the last read of it returned.
+let storedLabels: readonly string[] = []
+
 function fetchReturning(fetch: ItemsByNumberFetch): ApplyItemDecisionDeps['fetchItemsByNumber'] {
-  return () => Promise.resolve(fetch)
+  return () => {
+    if (fetch.ok) storedLabels = fetch.resolved[0]?.labels ?? []
+    return Promise.resolve(fetch)
+  }
 }
 
 function depsWith(overrides: Partial<ApplyItemDecisionDeps>): ApplyItemDecisionDeps {
@@ -64,7 +70,7 @@ function depsWith(overrides: Partial<ApplyItemDecisionDeps>): ApplyItemDecisionD
     writeState: () => {
       throw new Error('applyLabels should not be invoked in this case')
     },
-    stateLabels: () => null,
+    stateLabels: () => storedLabels,
     postComment: () => {
       throw new Error('postComment should not be invoked in this case')
     },
@@ -473,7 +479,7 @@ describe('applyItemDecision — real writers', () => {
       },
       {
         writeState: (params) => writeState({ ...params, git, now: NOW }),
-        stateLabels: () => null,
+        stateLabels: () => resolvedItem().labels,
         postComment: (params) => postComment({ ...params, gh, now: NOW }),
         fetchItemsByNumber,
       },

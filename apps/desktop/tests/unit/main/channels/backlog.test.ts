@@ -86,7 +86,7 @@ describe('resolveBacklogList', () => {
     )
   })
 
-  it('forwards the ready repository repo and vocabulary to fetchBacklog', async () => {
+  it('forwards the ready repository repo to fetchBacklog, with nothing tracked for an unseeded one', async () => {
     let received: unknown
     const deps = depsWith({
       listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
@@ -97,10 +97,10 @@ describe('resolveBacklogList', () => {
     })
     const result = await resolveBacklogList(registryDeps, { repoId: REPO_ID }, deps)
     expect(result).toEqual({ ok: true, items: [], scanned: 0, total: 0, viewer: 'octo-dev', fetchedAt: 't' })
-    expect(received).toEqual({ repo: { owner: 'acme', name: 'widgets' }, vocabulary: READY_ENTRY.config.vocabulary, tracked: null })
+    expect(received).toEqual({ repo: { owner: 'acme', name: 'widgets' }, tracked: new Set() })
   })
 
-  it('passes only the issue numbers of the store tracked refs, and null for a labels view', async () => {
+  it('passes only the issue numbers of the store tracked refs, and an empty set for an unseeded repository', async () => {
     const received: unknown[] = []
     const read = (trackedRefs: BacklogListDeps['trackedRefs']) =>
       resolveBacklogList(registryDeps, { repoId: REPO_ID }, depsWith({
@@ -113,7 +113,7 @@ describe('resolveBacklogList', () => {
       }))
     await read(() => [{ kind: 'issue', number: 12, keys: [] }, { kind: 'pull-request', number: 40, keys: [] }, { kind: 'issue', number: 13, keys: [] }])
     await read(() => null)
-    expect(received).toEqual([new Set([12, 13]), null])
+    expect(received).toEqual([new Set([12, 13]), new Set()])
   })
 })
 

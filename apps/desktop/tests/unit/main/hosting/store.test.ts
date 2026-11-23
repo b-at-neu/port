@@ -66,46 +66,29 @@ describe('createHostedStore', () => {
     expect(store.answerPlan(key, 'perm-1', { kind: 'keep-planning', feedback: 'x' })).toEqual({ ok: false, kind: 'unknown-session' })
   })
 
-  it('start() resolves the plugin request for the installed source and passes no plugins to buildSessionOptions', async () => {
-    const resolvePluginRequest = vi.fn(() => Promise.resolve({ source: 'installed' as const }))
+  it('start() passes no plugins option, so a session loads only the installed plugins', async () => {
     let capturedOptions: { plugins?: unknown } | undefined
     const query = (queryParams: { options?: { plugins?: unknown } }): HostedQuery => {
       capturedOptions = queryParams.options
       return idleQuery()
     }
-    const store = createHostedStore(baseDeps({ resolvePluginRequest, getSdk: () => Promise.resolve({ query, renameSession: vi.fn(() => Promise.resolve(undefined)) }) }))
+    const store = createHostedStore(baseDeps({ getSdk: () => Promise.resolve({ query, renameSession: vi.fn(() => Promise.resolve(undefined)) }) }))
     await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
-    expect(resolvePluginRequest).toHaveBeenCalledWith('/repo')
     expect(capturedOptions?.plugins).toBeUndefined()
   })
 
-  it('start() resolves the plugin request for the repository source and passes it to buildSessionOptions', async () => {
-    const resolvePluginRequest = vi.fn(() => Promise.resolve({ source: 'repository' as const, path: '/repo/plugins/port' }))
-    let capturedOptions: { plugins?: unknown } | undefined
-    const query = (queryParams: { options?: { plugins?: unknown } }): HostedQuery => {
-      capturedOptions = queryParams.options
-      return idleQuery()
-    }
-    const store = createHostedStore(baseDeps({ resolvePluginRequest, getSdk: () => Promise.resolve({ query, renameSession: vi.fn(() => Promise.resolve(undefined)) }) }))
-    await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
-    expect(capturedOptions?.plugins).toEqual([{ type: 'local', path: '/repo/plugins/port' }])
-  })
-
-  it('a stage start requests the installed plugin and never resolves a repository one from its own worktree', async () => {
-    const resolvePluginRequest = vi.fn(() => Promise.resolve({ source: 'repository' as const, path: '/repo/plugins/port' }))
+  it('a stage start reads the edit allowlist from its own worktree and passes no plugins', async () => {
     const readStageEditAllow = vi.fn(() => Promise.resolve(['**']))
     let capturedOptions: { plugins?: unknown } | undefined
     const query = (queryParams: { options?: { plugins?: unknown } }): HostedQuery => {
       capturedOptions = queryParams.options
       return idleQuery()
     }
-    const store = createHostedStore(baseDeps({ resolvePluginRequest, readStageEditAllow, getSdk: () => Promise.resolve({ query, renameSession: vi.fn(() => Promise.resolve(undefined)) }) }))
+    const store = createHostedStore(baseDeps({ readStageEditAllow, getSdk: () => Promise.resolve({ query, renameSession: vi.fn(() => Promise.resolve(undefined)) }) }))
     const stage = { tag: { agent: 'impl', number: 550, kind: 'issue', trigger: 'planApproved' }, agent: { name: 'impl-agent', definition: { description: 'impl', prompt: 'body' } }, instructionsRoot: '/bundle', model: 'sonnet', sessionRequiredPaths: [] } as const
     const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE, stage })
     if (!started.ok) throw new Error('unreachable')
-    expect(resolvePluginRequest).not.toHaveBeenCalled()
     expect(capturedOptions?.plugins).toBeUndefined()
-    expect(started.snapshot.capabilities.request).toEqual({ source: 'installed' })
     expect(readStageEditAllow).toHaveBeenCalledWith('/repo')
   })
 

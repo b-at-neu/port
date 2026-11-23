@@ -288,7 +288,11 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       labelWrites.push({ action: request.action, number: request.number })
       return Promise.resolve({ kind: 'applied', argv: [] })
     }
-    const writeDeps = { writeState: applyLabels, postIssueBody, stateLabels: () => null, fetchItemsByNumber }
+    const stateLabels = (_repoId: unknown, kind: 'issue' | 'pull-request', number: number): readonly string[] => {
+      const set = kind === 'issue' ? labels.get(number) : prs.get(number)?.labels
+      return set === undefined ? [] : namesOf(VOCABULARY, set)
+    }
+    const writeDeps = { writeState: applyLabels, postIssueBody, stateLabels, fetchItemsByNumber }
 
     // Late-binding, the same construction order `main/ipc.ts` uses: onStatus closes over stageLauncher,
     // stageLauncher's onOutcome/onDenial close over dispatcherRef — both assigned right after.
@@ -307,8 +311,6 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
         stageLauncher.observe(snapshot)
       },
       onEntries: () => undefined,
-      resolvePluginRequest: () => Promise.resolve({ source: 'installed' }),
-      readExpectedComponents: () => Promise.resolve(null),
       readStageEditAllow: () => Promise.resolve([]),
       samePath: (a, b) => a === b,
       persistence: createInMemoryHostingPersistence(),
@@ -356,6 +358,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       runState: () => 'dispatching',
       readOwnership: () => Promise.resolve({ kind: 'app', since: NOW_ISO, path: '/repo/.agents/cockpit.json', readAt: NOW_ISO }),
       takeOwnership: () => Promise.resolve({ ok: true, path: '/repo/.agents/cockpit.json' }),
+      stateLabels,
       fetchItemsByNumber,
       listRepositories: () => Promise.resolve({ ok: true, repositories: [entry] }),
       registryDeps: { registryDir: '/registry', git: () => Promise.reject(new Error('unused')), chooseDirectory: () => Promise.resolve(null) },

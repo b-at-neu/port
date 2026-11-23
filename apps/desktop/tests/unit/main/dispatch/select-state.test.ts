@@ -12,9 +12,8 @@ function resolved(labels: readonly string[], assignees: readonly string[] = ['op
 }
 
 describe('survived — store labels', () => {
-  it('reads the labels GitHub returned when the store has none to offer', () => {
-    expect(survived(resolved(['claude', 'plan approved']), CANDIDATE, VOCABULARY, 'op')).toBe(true)
-    expect(survived(resolved([]), CANDIDATE, VOCABULARY, 'op')).toBe(false)
+  it('does not survive an unseeded repository, even when GitHub shows the trigger', () => {
+    expect(survived(resolved(['claude', 'plan approved']), CANDIDATE, VOCABULARY, 'op', null)).toBe(false)
   })
 
   it('survives on the store\'s stage even when every label was removed on GitHub', () => {
@@ -30,7 +29,7 @@ describe('survived — store labels', () => {
   })
 
   it('applies no single-label rule: another stage label beside the trigger changes nothing', () => {
-    expect(survived(resolved(['plan approved', 'in progress']), CANDIDATE, VOCABULARY, 'op')).toBe(true)
+    expect(survived(resolved([]), CANDIDATE, VOCABULARY, 'op', ['plan approved', 'in progress'])).toBe(true)
   })
 
   it('still takes the assignees from GitHub', () => {

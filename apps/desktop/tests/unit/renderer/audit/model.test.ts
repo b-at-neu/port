@@ -59,7 +59,6 @@ describe('outcomeOf', () => {
     [{ kind: 'precondition-failed', conflict: { kind: 'precondition-failed', expected: [], observed: [], readAt: 't' } }, 'danger', 'Conflict'],
     [{ kind: 'write-failed', classification: 'network', stderr: '', reread: null }, 'danger', 'Failed'],
     [{ kind: 'verify-failed', message: 'm' }, 'danger', 'Failed'],
-    [{ kind: 'terminal-owned', since: 't' }, 'attention', 'Refused'],
     [{ kind: 'ownership-unreadable', path: 'p', message: 'm' }, 'attention', 'Refused'],
     [{ kind: 'unresolvable-label', keys: ['planApproved'] }, 'attention', 'Refused'],
     [{ kind: 'item-unavailable' }, 'attention', 'Refused'],
@@ -105,7 +104,6 @@ describe('detailOf', () => {
   })
 
   it.each([
-    [{ kind: 'terminal-owned', since: '2026-01-01' }, 'A terminal cockpit has owned this repository since 2026-01-01.'],
     [{ kind: 'ownership-unreadable', path: '.agents/cockpit.json', message: 'EACCES' }, "Couldn't read .agents/cockpit.json: EACCES"],
     [{ kind: 'unresolvable-label', keys: ['planApproved', 'approved'] }, 'No label is configured for planApproved, approved.'],
     [{ kind: 'item-unavailable' }, "The item couldn't be read."],

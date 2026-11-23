@@ -16,7 +16,6 @@ describe('mirrorReason', () => {
     [MIRROR, 'dial tcp: offline'],
     [{ kind: 'verify-failed', message: 'offline' }, 'offline'],
     [{ kind: 'item-unavailable' }, 'the item is no longer available'],
-    [{ kind: 'terminal-owned', since: 't' }, 'a terminal cockpit owns this repository'],
     [{ kind: 'unresolvable-label', keys: ['marker', 'ready'] }, 'no label is configured for marker, ready'],
     [MIRROR_FAILED, 'dial tcp: offline'],
   ] as const)('explains %j', (outcome, reason) => {

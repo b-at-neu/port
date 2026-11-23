@@ -3,7 +3,7 @@ import { runCommand } from '@/main/platform/run'
 import { githubClient } from '#app-route'
 import { toConditionalResult, toResult, type Exchange, type HttpFailure } from '@/main/platform/github-wire'
 
-import type { ConditionalTransport, GitHubClient, GitHubHttpResult, GitHubTransport } from '@/types/platform'
+import type { ConditionalTransport, GitHubClient, GitHubTransport } from '@/types/platform'
 
 export const DEFAULT_ACCEPT = 'application/vnd.github+json'
 const API_BASE = 'https://api.github.com'

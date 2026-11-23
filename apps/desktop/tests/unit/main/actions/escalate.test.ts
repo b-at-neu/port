@@ -88,7 +88,7 @@ describe('escalateToHuman', () => {
   it('never comments when the label swap does not apply', async () => {
     let commentCalled = false
     const deps: EscalateToHumanDeps = {
-      writeState: () => Promise.resolve({ kind: 'terminal-owned', since: '2026-01-01T00:00:00Z' } satisfies WriteOutcome),
+      writeState: () => Promise.resolve({ kind: 'ownership-unreadable', path: '/repo/.agents/cockpit.json', message: 'bad' } satisfies WriteOutcome),
       postComment: () => {
         commentCalled = true
         return Promise.resolve({ kind: 'applied', argv: [] } satisfies WriteOutcome)
@@ -97,7 +97,7 @@ describe('escalateToHuman', () => {
     const result = await escalateToHuman(params(), deps)
     expect(commentCalled).toBe(false)
     expect(result.comment).toBeNull()
-    expect(result.labels.kind).toBe('terminal-owned')
+    expect(result.labels.kind).toBe('ownership-unreadable')
   })
 
   it('swaps the label and posts nothing when the body is null', async () => {

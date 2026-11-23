@@ -1,15 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createCapabilityTracker as createTracker } from '@/main/hosting/capabilities'
-import type { PluginRequest } from '@/types/hosting-plugin'
 import type { HostedQuery } from '@/main/hosting/sdk'
 
 function createCapabilityTracker(params: Omit<Parameters<typeof createTracker>[0], 'stage'> & { readonly stage?: boolean }): ReturnType<typeof createTracker> {
   return createTracker({ stage: false, ...params })
 }
-
-const INSTALLED: PluginRequest = { source: 'installed' }
-const REPOSITORY: PluginRequest = { source: 'repository', path: '/repo/plugins/port' }
-const samePath = (a: string, b: string) => a === b
 
 function fakeQuery(commands: unknown[], agents: unknown[]): HostedQuery {
   return {
@@ -30,14 +25,13 @@ const UNQUALIFIED_PIPELINE = { name: 'pipeline', description: "The repository's 
 const PLAN_AGENT = { name: 'port:plan-agent', description: 'Plans', model: 'opus' }
 
 describe('createCapabilityTracker', () => {
-  it('starts pending, naming the request', () => {
-    const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents: () => Promise.resolve(null), samePath, onChange: vi.fn() })
-    expect(tracker.current()).toEqual({ kind: 'pending', request: INSTALLED })
+  it('starts pending', () => {
+    expect(createCapabilityTracker({ onChange: vi.fn() }).current()).toEqual({ kind: 'pending' })
   })
 
   it('reaches ready with only port: commands and agents, sorted by name and sanitized — pipeline dropped from both command lists', async () => {
     const onChange = vi.fn()
-    const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents: () => Promise.resolve(null), samePath, onChange })
+    const tracker = createCapabilityTracker({ onChange })
     await tracker.start(fakeQuery([SCOPE_COMMAND, PIPELINE_COMMAND, NON_PORT_COMMAND], [PLAN_AGENT]))
 
     const state = tracker.current()
@@ -46,11 +40,12 @@ describe('createCapabilityTracker', () => {
     expect(state.commands.map((c) => c.name)).toEqual(['scope'])
     expect(state.commands.find((c) => c.name === 'scope')?.description).toBe('Scope a feature')
     expect(state.agents).toEqual([{ name: 'plan-agent', description: 'Plans', model: 'opus' }])
+    expect(state.plugin).toEqual({ kind: 'unconfirmed' })
     expect(onChange).toHaveBeenCalled()
   })
 
   it('slashCommands carries every reported command, namespace intact, with pipeline dropped', async () => {
-    const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents: () => Promise.resolve(null), samePath, onChange: vi.fn() })
+    const tracker = createCapabilityTracker({ onChange: vi.fn() })
     await tracker.start(fakeQuery([SCOPE_COMMAND, PIPELINE_COMMAND, NON_PORT_COMMAND], []))
 
     const state = tracker.current()
@@ -60,7 +55,7 @@ describe('createCapabilityTracker', () => {
   })
 
   it('slashCommands keeps a bare pipeline command when the session reports it as its own, unqualified', async () => {
-    const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents: () => Promise.resolve(null), samePath, onChange: vi.fn() })
+    const tracker = createCapabilityTracker({ onChange: vi.fn() })
     await tracker.start(fakeQuery([UNQUALIFIED_PIPELINE, PIPELINE_COMMAND], []))
 
     const state = tracker.current()
@@ -70,7 +65,7 @@ describe('createCapabilityTracker', () => {
   })
 
   it('has() reports membership by the namespace-stripped name, never true for pipeline', async () => {
-    const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents: () => Promise.resolve(null), samePath, onChange: vi.fn() })
+    const tracker = createCapabilityTracker({ onChange: vi.fn() })
     await tracker.start(fakeQuery([SCOPE_COMMAND, PIPELINE_COMMAND], []))
     expect(tracker.has('scope')).toBe(true)
     expect(tracker.has('pipeline')).toBe(false)
@@ -87,9 +82,9 @@ describe('createCapabilityTracker', () => {
         return { next: () => new Promise<IteratorResult<unknown>>(() => undefined) }
       },
     } as unknown as HostedQuery
-    const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents: () => Promise.resolve(null), samePath, onChange: vi.fn() })
+    const tracker = createCapabilityTracker({ onChange: vi.fn() })
     await tracker.start(query)
-    expect(tracker.current()).toEqual({ kind: 'unavailable', request: INSTALLED, message: 'the CLI hung up' })
+    expect(tracker.current()).toEqual({ kind: 'unavailable', message: 'the CLI hung up' })
   })
 
   it('goes unavailable on a timeout, never a silently empty list', async () => {
@@ -102,67 +97,29 @@ describe('createCapabilityTracker', () => {
         return { next: () => new Promise<IteratorResult<unknown>>(() => undefined) }
       },
     } as unknown as HostedQuery
-    const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents: () => Promise.resolve(null), samePath, onChange: vi.fn(), timeoutMs: 10 })
+    const tracker = createCapabilityTracker({ onChange: vi.fn(), timeoutMs: 10 })
     await tracker.start(hangingQuery)
     expect(tracker.current().kind).toBe('unavailable')
   })
 
-  it('for the repository source, reads expected components from request.path at start, and reports incomplete', async () => {
-    const readExpectedComponents = vi.fn(() => Promise.resolve({ skills: ['scope', 'plan-agent-skill'], agents: ['plan-agent'] }))
-    const tracker = createCapabilityTracker({ request: REPOSITORY, readExpectedComponents, samePath, onChange: vi.fn() })
-    await tracker.start(fakeQuery([SCOPE_COMMAND], []))
-    expect(readExpectedComponents).toHaveBeenCalledWith('/repo/plugins/port')
-    const state = tracker.current()
-    expect(state.kind).toBe('ready')
-    if (state.kind !== 'ready') return
-    expect(state.components).toEqual({ kind: 'incomplete', missingSkills: ['plan-agent-skill'], missingAgents: ['plan-agent'] })
-  })
-
-  it('observe(init) resolves the plugin load and recomputes components', async () => {
+  it('observe(init) resolves the plugin load', async () => {
     const onChange = vi.fn()
-    const tracker = createCapabilityTracker({
-      request: REPOSITORY,
-      readExpectedComponents: () => Promise.resolve({ skills: ['scope'], agents: [] }),
-      samePath,
-      onChange,
-    })
+    const tracker = createCapabilityTracker({ onChange })
     await tracker.start(fakeQuery([SCOPE_COMMAND], []))
     onChange.mockClear()
 
-    tracker.observe({ type: 'system', subtype: 'init', plugins: [{ name: 'port', path: '/repo/plugins/port', version: '0.3.1' }] })
+    tracker.observe({ type: 'system', subtype: 'init', plugins: [{ name: 'port', path: '/home/op/.claude/plugins/cache/port', version: '0.3.1' }] })
 
     const state = tracker.current()
     expect(state.kind).toBe('ready')
     if (state.kind !== 'ready') return
-    expect(state.plugin).toEqual({ kind: 'loaded', path: '/repo/plugins/port', version: '0.3.1' })
-    expect(state.components).toEqual({ kind: 'complete' })
+    expect(state.plugin).toEqual({ kind: 'loaded', path: '/home/op/.claude/plugins/cache/port', version: '0.3.1' })
     expect(onChange).toHaveBeenCalled()
   })
 
-  it('for the installed source, reads expected components from the first loaded path reported by init', async () => {
-    const readExpectedComponents = vi.fn(() => Promise.resolve({ skills: ['scope'], agents: [] }))
-    const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents, samePath, onChange: vi.fn() })
-    await tracker.start(fakeQuery([SCOPE_COMMAND], []))
-    expect(readExpectedComponents).not.toHaveBeenCalled()
-
-    tracker.observe({ type: 'system', subtype: 'init', plugins: [{ name: 'port', path: '/home/op/.claude/plugins/cache/port', version: '0.3.1' }] })
-    await Promise.resolve()
-    await Promise.resolve()
-
-    expect(readExpectedComponents).toHaveBeenCalledWith('/home/op/.claude/plugins/cache/port')
-  })
-
-  it('observe(commands_changed) replaces the command list and re-runs the component check', async () => {
-    const tracker = createCapabilityTracker({
-      request: REPOSITORY,
-      readExpectedComponents: () => Promise.resolve({ skills: ['scope'], agents: [] }),
-      samePath,
-      onChange: vi.fn(),
-    })
+  it('observe(commands_changed) replaces the command list', async () => {
+    const tracker = createCapabilityTracker({ onChange: vi.fn() })
     await tracker.start(fakeQuery([], []))
-    const before = tracker.current()
-    expect(before.kind).toBe('ready')
-    if (before.kind === 'ready') expect(before.components.kind).toBe('incomplete')
 
     tracker.observe({ type: 'system', subtype: 'commands_changed', commands: [SCOPE_COMMAND] })
 
@@ -170,41 +127,13 @@ describe('createCapabilityTracker', () => {
     expect(state.kind).toBe('ready')
     if (state.kind !== 'ready') return
     expect(state.commands.map((c) => c.name)).toEqual(['scope'])
-    expect(state.components).toEqual({ kind: 'complete' })
-  })
-
-  it('installed source, before init: unchecked with no-plugin-path, never unreadable', async () => {
-    const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents: () => Promise.resolve(null), samePath, onChange: vi.fn() })
-    await tracker.start(fakeQuery([SCOPE_COMMAND], []))
-    const state = tracker.current()
-    expect(state.kind).toBe('ready')
-    if (state.kind !== 'ready') return
-    expect(state.components).toEqual({ kind: 'unchecked', reason: 'no-plugin-path' })
-  })
-
-  it('reports unreadable once a read of a known plugin path has actually failed', async () => {
-    const onChange = vi.fn()
-    const tracker = createCapabilityTracker({
-      request: REPOSITORY,
-      readExpectedComponents: () => Promise.resolve(null),
-      samePath,
-      onChange,
-    })
-    await tracker.start(fakeQuery([SCOPE_COMMAND], []))
-    const state = tracker.current()
-    expect(state.kind).toBe('ready')
-    if (state.kind !== 'ready') return
-    expect(state.components).toEqual({ kind: 'unchecked', reason: 'unreadable' })
   })
 
   describe('in a stage session', () => {
     const RELEASE_COMMAND = { name: 'port:release', description: 'Release', argumentHint: '' }
 
-    const readExpectedComponents = vi.fn(() => Promise.resolve({ skills: ['scope', 'release'], agents: [] }))
-
-    function stageTracker(request: PluginRequest = REPOSITORY) {
-      readExpectedComponents.mockClear()
-      return createCapabilityTracker({ request, readExpectedComponents, samePath, onChange: vi.fn(), stage: true })
+    function stageTracker() {
+      return createCapabilityTracker({ onChange: vi.fn(), stage: true })
     }
 
     it('exposes no commands, no port: autocomplete entries, and refuses has()', async () => {
@@ -218,24 +147,6 @@ describe('createCapabilityTracker', () => {
       expect(tracker.has('scope')).toBe(false)
     })
 
-    it("never reads the plugin's expected components", async () => {
-      const tracker = stageTracker()
-      await tracker.start(fakeQuery([SCOPE_COMMAND, RELEASE_COMMAND], []))
-      expect(readExpectedComponents).not.toHaveBeenCalled()
-
-      const installed = stageTracker(INSTALLED)
-      await installed.start(fakeQuery([SCOPE_COMMAND], []))
-      installed.observe({ type: 'system', subtype: 'init', plugins: [{ name: 'port', path: '/home/op/.claude/plugins/cache/port', version: '0.3.1' }] })
-      await Promise.resolve()
-      await Promise.resolve()
-      expect(readExpectedComponents).not.toHaveBeenCalled()
-
-      const state = installed.current()
-      expect(state.kind).toBe('ready')
-      if (state.kind !== 'ready') return
-      expect(state.components).toEqual({ kind: 'unchecked', reason: 'no-plugin-path' })
-    })
-
     it('holds all of it after commands_changed', async () => {
       const tracker = stageTracker()
       await tracker.start(fakeQuery([], []))
@@ -245,7 +156,6 @@ describe('createCapabilityTracker', () => {
       if (state.kind !== 'ready') return
       expect(state.commands).toEqual([])
       expect(state.slashCommands.map((c) => c.name)).toEqual(['other:cmd'])
-      expect(state.components.kind).toBe('unchecked')
       expect(tracker.has('scope')).toBe(false)
     })
 
@@ -259,7 +169,7 @@ describe('createCapabilityTracker', () => {
   })
 
   it('isBlocked in an interactive session refuses only pipeline', async () => {
-    const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents: () => Promise.resolve(null), samePath, onChange: vi.fn() })
+    const tracker = createCapabilityTracker({ onChange: vi.fn() })
     await tracker.start(fakeQuery([SCOPE_COMMAND, PIPELINE_COMMAND], []))
     expect(tracker.isBlocked('port:pipeline')).toBe(true)
     expect(tracker.isBlocked('pipeline')).toBe(true)
@@ -268,7 +178,7 @@ describe('createCapabilityTracker', () => {
   })
 
   it('isBlocked lets a bare pipeline through when the session reports one of its own', async () => {
-    const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents: () => Promise.resolve(null), samePath, onChange: vi.fn() })
+    const tracker = createCapabilityTracker({ onChange: vi.fn() })
     await tracker.start(fakeQuery([UNQUALIFIED_PIPELINE, PIPELINE_COMMAND], []))
     expect(tracker.isBlocked('pipeline')).toBe(false)
     expect(tracker.isBlocked('port:pipeline')).toBe(true)
@@ -276,7 +186,7 @@ describe('createCapabilityTracker', () => {
 
   it('observe() ignores anything but system/init and system/commands_changed', async () => {
     const onChange = vi.fn()
-    const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents: () => Promise.resolve(null), samePath, onChange })
+    const tracker = createCapabilityTracker({ onChange })
     await tracker.start(fakeQuery([], []))
     onChange.mockClear()
     tracker.observe({ type: 'assistant', message: {} })

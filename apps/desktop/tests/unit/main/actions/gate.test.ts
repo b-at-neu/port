@@ -38,7 +38,7 @@ function depsWith(overrides: Partial<GateDeps>): GateDeps {
     writeState: () => {
       throw new Error('applyLabels should not be invoked in this case')
     },
-    stateLabels: () => null,
+    stateLabels: () => ['plan review'],
     postComment: () => {
       throw new Error('postComment should not be invoked in this case')
     },
@@ -59,7 +59,6 @@ function preflightFetch(overrides: Partial<Extract<GatePreflightFetch, { ok: tru
       url: 'u',
       state: 'OPEN',
       body: 'Ticket body.\n\n## Implementation Plan\n\nPlan text.',
-      labels: ['plan review'],
       assignees: [],
     },
     ...overrides,
@@ -100,6 +99,12 @@ describe('gatePreflight', () => {
     expect(result.ownership).toEqual({ kind: 'app', since: '2026-01-01T00:00:00.000Z' })
   })
 
+  it('fails with the unseeded message while the store holds no state for the repository', async () => {
+    const deps = depsWith({ fetchGatePreflight: () => Promise.resolve(preflightFetch()), stateLabels: () => null })
+    const result = await gatePreflight({ registryDeps, repoId: REPO_ID, number: 148 }, deps)
+    expect(result).toEqual({ kind: 'failed', message: "port hasn't loaded this repository's pipeline state yet", ownership: ABSENT_OWNERSHIP_SUMMARY })
+  })
+
   it('reports noPlanBlock when the body carries no Implementation Plan heading', async () => {
     const deps = depsWith({ fetchGatePreflight: () => Promise.resolve(preflightFetch({ item: { ...preflightFetch().item!, body: 'Just a ticket body.' } })) })
     const result = await gatePreflight({ registryDeps, repoId: REPO_ID, number: 148 }, deps)
@@ -112,7 +117,7 @@ describe('gatePreflight', () => {
 
 describe('gateAnswer', () => {
   it('refuses without any write when the fresh verdict is no longer answerable', async () => {
-    const deps = depsWith({ fetchGatePreflight: () => Promise.resolve(preflightFetch({ item: { ...preflightFetch().item!, labels: ['plan approved'] } })) })
+    const deps = depsWith({ fetchGatePreflight: () => Promise.resolve(preflightFetch()), stateLabels: () => ['plan approved'] })
     const result = await gateAnswer(
       { registryDeps, repoId: REPO_ID, number: 148, decision: 'approve', feedback: null, skipComment: false, auditDir: '/audit', scratchDir: '/scratch' },
       deps,

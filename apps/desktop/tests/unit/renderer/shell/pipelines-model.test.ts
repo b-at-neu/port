@@ -319,7 +319,7 @@ describe('pipelinesModel', () => {
       end: null,
       titled: null,
       pendingPermissions: [],
-      capabilities: { kind: 'pending', request: { source: 'installed' } },
+      capabilities: { kind: 'pending' },
       title: null,
       rateLimit: null,
       controls: { permissionMode: 'default', model: null, effort: null },

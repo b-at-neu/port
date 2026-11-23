@@ -37,7 +37,7 @@ function snapshotWith(permissionIds: readonly string[]): HostedSessionSnapshot {
       sessionGrant: null,
       interaction: null,
     })),
-    capabilities: { kind: 'pending', request: { source: 'installed' } },
+    capabilities: { kind: 'pending' },
     title: null,
     rateLimit: null,
     controls: TEST_CONTROLS,

@@ -69,7 +69,6 @@ describe('dispatchLine', () => {
   })
 
   it('reads the owner before the run state', () => {
-    expect(dispatchLine(REPO, status({ owner: 'terminal', runState: 'paused' }))).toBe('Your terminal cockpit runs acme/widgets and plans it on its next tick.')
     expect(dispatchLine(REPO, status({ owner: 'none', runState: 'paused' }))).toBe('Nothing runs acme/widgets yet. Run it to start planning.')
   })
 
@@ -162,7 +161,6 @@ describe('applyResponseToast', () => {
     [{ kind: 'applied', argv: [] }, 'success'],
     [{ kind: 'no-op' }, 'success'],
     [{ kind: 'precondition-failed', conflict: { kind: 'precondition-failed', expected: ['a'], observed: [], readAt: 't' } }, 'error'],
-    [{ kind: 'terminal-owned', since: 't' }, 'error'],
     [{ kind: 'ownership-unreadable', path: 'p', message: 'm' }, 'error'],
     [{ kind: 'unresolvable-label', keys: ['marker'] }, 'error'],
     [{ kind: 'item-unavailable' }, 'error'],

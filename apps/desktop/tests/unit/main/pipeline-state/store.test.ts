@@ -33,12 +33,12 @@ describe('createPipelineStateStore', () => {
     for (const file of [undefined, { ok: true as const, value: '{' }, { ok: true as const, value: { version: 9, repositories: {} } }, { ok: false as const, kind: 'io' as const, message: 'denied' }]) {
       const { store } = rig({ file })
       await store.ready
-      expect(store.view(REPO)).toEqual({ kind: 'labels' })
+      expect(store.view(REPO)).toEqual({ kind: 'unseeded' })
     }
     error.mockRestore()
   })
 
-  it('reads labels until a repository is seeded, then the store, which survives a restart', async () => {
+  it('is unseeded until a repository is seeded, then the store, which survives a restart', async () => {
     const first = rig()
     await first.store.seed(REPO, READY)
     expect(first.store.view(REPO)).toMatchObject({ kind: 'store', items: [{ number: 7, keys: ['ready'] }] })
@@ -103,12 +103,10 @@ describe('createPipelineStateStore', () => {
     expect(store.tracked(REPO)?.map((ref) => ref.number)).toEqual([2])
   })
 
-  it('stops reading and tracking a terminal-held repository, until it is seeded again', async () => {
+  it('views and tracks nothing for a repository it was never seeded with', async () => {
     const { store } = rig()
-    await store.seed(REPO, READY)
-    store.markHeld(REPO)
     await store.ready
-    expect(store.view(REPO)).toEqual({ kind: 'labels' })
+    expect(store.view(REPO)).toEqual({ kind: 'unseeded' })
     expect(store.tracked(REPO)).toBeNull()
     await store.seed(REPO, READY)
     expect(store.view(REPO).kind).toBe('store')

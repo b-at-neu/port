@@ -10,7 +10,7 @@ function stored(overrides: Partial<StoredItem> = {}): StoredItem {
 }
 
 function recordOf(...items: StoredItem[]): RepoRecord {
-  return items.reduce((record, item) => withItem(record, item), { seededAt: AT, heldBy: null, items: {} } as RepoRecord)
+  return items.reduce((record, item) => withItem(record, item), { seededAt: AT, items: {} } as RepoRecord)
 }
 
 function input(overrides: Partial<TransitionInput> = {}): TransitionInput {
@@ -75,7 +75,6 @@ describe('seedFrom', () => {
       reconciledItem({ number: 6, kind: 'pull-request', matchedKeys: ['approved'], reviewCycleCount: 3 }),
     ])
     const record = seedFrom(state, AT)
-    expect(record.heldBy).toBeNull()
     expect(record.items['issue:5']).toMatchObject({ keys: ['inProgress'], marked: true, autoPlan: true, claimedAt: '2026-01-02T00:00:00Z', reviewCycles: 0 })
     expect(record.items['issue:5']?.history.map((row) => row.add)).toEqual([['ready'], ['inProgress']])
     expect(record.items['pull-request:6']).toMatchObject({ keys: ['approved'], marked: false, reviewCycles: 3 })
@@ -191,12 +190,24 @@ describe('prune, view and tracked', () => {
     expect(Object.keys(prune(record, [1]).items)).toEqual(['issue:2'])
   })
 
-  it('reads labels for an unseeded or terminal-held repository, the store otherwise', () => {
+  it('views a repository the store does not hold as unseeded, the store otherwise', () => {
     const record = recordOf(stored())
-    expect(viewOf(undefined)).toEqual({ kind: 'labels' })
-    expect(viewOf({ ...record, heldBy: 'terminal' })).toEqual({ kind: 'labels' })
+    expect(viewOf(undefined)).toEqual({ kind: 'unseeded' })
     expect(viewOf(record)).toEqual({ kind: 'store', items: [stored()] })
-    expect(trackedOf({ ...record, heldBy: 'terminal' })).toBeNull()
+    expect(trackedOf(undefined)).toBeNull()
     expect(trackedOf(record)).toEqual([{ kind: 'issue', number: 7, keys: ['marker', 'ready'] }])
+  })
+})
+
+describe('parseFile — a record the terminal cockpit held', () => {
+  const file = (heldBy: unknown) => ({ version: 1, repositories: { 'repo-1': { seededAt: AT, heldBy, items: {} } } })
+
+  it('drops a record held by the terminal, so the repository reseeds once from labels', () => {
+    expect(parseFile(file('terminal')).repositories).toEqual({})
+  })
+
+  it('keeps a record whose heldBy is null or absent, without carrying the field', () => {
+    expect(parseFile(file(null)).repositories['repo-1']).toEqual({ seededAt: AT, items: {} })
+    expect(parseFile({ version: 1, repositories: { 'repo-1': { seededAt: AT, items: {} } } }).repositories['repo-1']).toEqual({ seededAt: AT, items: {} })
   })
 })

@@ -196,7 +196,6 @@ describe('autoResumable', () => {
   it.each([
     ['paused', { runState: 'paused' as const }],
     ['draining', { runState: 'draining' as const }],
-    ['terminal-owned', { owner: 'terminal' as const }],
     ['unowned', { owner: 'none' as const }],
     ['unreadable', { owner: 'unreadable' as const }],
   ])('never launches into a %s repository', (_name, overrides) => {

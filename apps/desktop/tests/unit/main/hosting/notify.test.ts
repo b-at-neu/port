@@ -26,7 +26,7 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     end: null,
     titled: null,
     pendingPermissions: [],
-    capabilities: { kind: 'pending', request: { source: 'installed' } },
+    capabilities: { kind: 'pending' },
     title: 'Fix the thing',
     rateLimit: null,
     controls: TEST_CONTROLS,

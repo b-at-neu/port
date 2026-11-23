@@ -9,10 +9,6 @@ describe('gateDisabledReason', () => {
     expect(gateDisabledReason({ kind: 'absent' })).toBeNull()
   })
 
-  it('names the terminal cockpit when it owns the repository', () => {
-    expect(gateDisabledReason({ kind: 'terminal', since: 't' })).toContain('terminal cockpit')
-  })
-
   it('names the path and message when ownership is unreadable', () => {
     const reason = gateDisabledReason({ kind: 'unreadable', path: '.agents/cockpit.json', message: 'invalid JSON' })
     expect(reason).toContain('.agents/cockpit.json')
@@ -22,11 +18,10 @@ describe('gateDisabledReason', () => {
 
 const APP: OwnershipSummary = { kind: 'app', since: 't' }
 const ABSENT: OwnershipSummary = { kind: 'absent' }
-const TERMINAL: OwnershipSummary = { kind: 'terminal', since: 't' }
 const UNREADABLE: OwnershipSummary = { kind: 'unreadable', path: 'p', message: 'bad' }
 
 describe('sessionRequiredCopy', () => {
-  it.each([ABSENT, TERMINAL, UNREADABLE])('names /port:implement and that no agent picks it up (%j)', (ownership) => {
+  it.each([ABSENT, UNREADABLE])('names /port:implement and that no agent picks it up (%j)', (ownership) => {
     const copy = sessionRequiredCopy(148, 'E3 · Plan review gate', 'touches `.claude/**`', ownership)
     expect(copy.note).toContain('/port:implement 148')
     expect(copy.note).toContain('no agent will ever pick it up')
@@ -46,7 +41,7 @@ describe('primaryApproveLabel', () => {
   it('changes only for session-required outside app ownership', () => {
     expect(primaryApproveLabel(false, ABSENT)).toBe('Approve')
     expect(primaryApproveLabel(true, ABSENT)).toBe("Approve — I'll run it myself")
-    expect(primaryApproveLabel(true, TERMINAL)).toBe("Approve — I'll run it myself")
+    expect(primaryApproveLabel(true, UNREADABLE)).toBe("Approve — I'll run it myself")
     expect(primaryApproveLabel(true, APP)).toBe('Approve')
   })
 })
@@ -59,11 +54,6 @@ describe('autoPlanNoteCopy', () => {
 
   it('absent: the cockpit approves it on its next tick', () => {
     const ownership: OwnershipSummary = { kind: 'absent' }
-    expect(autoPlanNoteCopy(ownership)).toContain('cockpit approves it on its next tick')
-  })
-
-  it('terminal: the cockpit approves it on its next tick', () => {
-    const ownership: OwnershipSummary = { kind: 'terminal', since: 't' }
     expect(autoPlanNoteCopy(ownership)).toContain('cockpit approves it on its next tick')
   })
 
@@ -114,9 +104,8 @@ describe('resultCopy', () => {
     expect(copy.note).toBe('port dispatches implementation on its next poll and asks you in Needs you before each protected edit.')
   })
 
-  it('approve + applied, session-required keeps the announce copy for terminal and unreadable ownership', () => {
+  it('approve + applied, session-required keeps the announce copy for unreadable ownership', () => {
     const response: GateAnswerResponse = { kind: 'answered', comment: null, labels: { kind: 'applied', argv: [] } }
-    expect(resultCopy({ number: 148, decision: 'approve', response, sessionRequired: true, ownership: TERMINAL }).note).toContain('/port:implement')
     expect(resultCopy({ number: 148, decision: 'approve', response, sessionRequired: true, ownership: UNREADABLE }).note).toContain('/port:implement')
   })
 
@@ -159,12 +148,6 @@ describe('resultCopy', () => {
     const response: GateAnswerResponse = { kind: 'answered', comment: null, labels: { kind: 'no-op' } }
     const copy = resultCopy({ number: 148, decision: 'approve', response, sessionRequired: false, ownership: ABSENT })
     expect(copy.line).toBe('#148 already carries that label.')
-  })
-
-  it('labels terminal-owned', () => {
-    const response: GateAnswerResponse = { kind: 'answered', comment: null, labels: { kind: 'terminal-owned', since: 't' } }
-    const copy = resultCopy({ number: 148, decision: 'approve', response, sessionRequired: false, ownership: ABSENT })
-    expect(copy.actions).toEqual(['dismiss'])
   })
 
   it('labels ownership-unreadable', () => {

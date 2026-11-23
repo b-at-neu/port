@@ -49,32 +49,11 @@ describe('classifyOwnership', () => {
     expect(classifyOwnership(true, text, 'o/r')).toEqual({ kind: 'app', since: '2026-01-01T00:00:00Z' })
   })
 
-  it('is terminal when owner is terminal', () => {
+  it('is unreadable, naming the terminal cockpit, when owner is terminal', () => {
     const text = JSON.stringify({ repo: 'o/r', owner: 'terminal', since: '2026-01-01T00:00:00Z' })
-    expect(classifyOwnership(true, text, 'o/r')).toEqual({ kind: 'terminal', since: '2026-01-01T00:00:00Z' })
-  })
-
-  // The guard hook's own classifier mirrors this one field for field; a plain .mjs file with
-  // no imports of its own, so a dynamic import of it resolves fine here.
-  it('agrees with the guard hook\'s own classifier on a shared fixture set', async () => {
-    // @ts-expect-error — plain .mjs with no declaration file, never part of this program's own module graph
-    const hookModule = (await import('../../../../../../plugins/port/hooks/lib/ownership-rules.mjs')) as {
-      readonly classifyOwnership: (exists: boolean, text: string | null, repo: string) => unknown
-    }
-    const hookClassify = hookModule.classifyOwnership
-    const fixtures: ReadonlyArray<{ readonly exists: boolean; readonly text: string | null; readonly repo: string }> = [
-      { exists: false, text: null, repo: 'o/r' },
-      { exists: true, text: JSON.stringify({ repo: 'o/r', owner: 'app', since: '2026-01-01T00:00:00Z' }), repo: 'o/r' },
-      { exists: true, text: JSON.stringify({ repo: 'o/r', owner: 'terminal', since: '2026-01-01T00:00:00Z' }), repo: 'o/r' },
-      { exists: true, text: JSON.stringify({ repo: 'someone/else', owner: 'app', since: '2026-01-01T00:00:00Z' }), repo: 'o/r' },
-      { exists: true, text: '{not json', repo: 'o/r' },
-      { exists: true, text: '"just a string"', repo: 'o/r' },
-      { exists: true, text: JSON.stringify({ repo: 'o/r', owner: 'app' }), repo: 'o/r' },
-      { exists: true, text: JSON.stringify({ repo: 'o/r', owner: 'someone-else', since: '2026-01-01T00:00:00Z' }), repo: 'o/r' },
-    ]
-    for (const f of fixtures) {
-      expect(hookClassify(f.exists, f.text, f.repo)).toEqual(classifyOwnership(f.exists, f.text, f.repo))
-    }
+    const result = classifyOwnership(true, text, 'o/r')
+    expect(result.kind).toBe('unreadable')
+    if (result.kind === 'unreadable') expect(result.message).toContain('terminal cockpit')
   })
 })
 
@@ -93,12 +72,12 @@ describe('readOwnership', () => {
     expect(result).toEqual({ kind: 'app', since: '2026-01-01T00:00:00Z', path: join(root, '.agents', 'cockpit.json'), readAt: now().toISOString() })
   })
 
-  it('reports terminal for a matching record owned by the terminal cockpit', async () => {
+  it('reports unreadable for a record owned by the terminal cockpit', async () => {
     const { root, git } = await makeRepo()
     await mkdir(join(root, '.agents'), { recursive: true })
     await writeFile(join(root, '.agents', 'cockpit.json'), JSON.stringify({ repo: 'o/r', owner: 'terminal', since: '2026-01-01T00:00:00Z' }), 'utf8')
     const result = await readOwnership({ repoRoot: root, repo: 'o/r', git, now })
-    expect(result.kind).toBe('terminal')
+    expect(result.kind).toBe('unreadable')
   })
 })
 
@@ -119,7 +98,7 @@ describe('takeOwnership / releaseOwnership', () => {
     expect(JSON.parse(text)).toEqual({ repo: 'o/r', owner: 'app', since: now().toISOString() })
   })
 
-  it('refuses a terminal record without force', async () => {
+  it('refuses a terminal record and leaves it in place', async () => {
     const { root, git } = await makeRepo()
     await mkdir(join(root, '.agents'), { recursive: true })
     await writeFile(join(root, '.agents', 'cockpit.json'), JSON.stringify({ repo: 'o/r', owner: 'terminal', since: '2026-01-01T00:00:00Z' }), 'utf8')
@@ -130,10 +109,10 @@ describe('takeOwnership / releaseOwnership', () => {
     expect(result.kind).toBe('refused')
 
     const read = await readOwnership({ repoRoot: root, repo: 'o/r', git, now })
-    expect(read.kind).toBe('terminal')
+    expect(read.kind).toBe('unreadable')
   })
 
-  it('refuses an unreadable record without force', async () => {
+  it('refuses an unreadable record', async () => {
     const { root, git } = await makeRepo()
     await mkdir(join(root, '.agents'), { recursive: true })
     await writeFile(join(root, '.agents', 'cockpit.json'), '{not json', 'utf8')
@@ -142,18 +121,6 @@ describe('takeOwnership / releaseOwnership', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.kind).toBe('refused')
-  })
-
-  it('force overwrites a terminal record', async () => {
-    const { root, git } = await makeRepo()
-    await mkdir(join(root, '.agents'), { recursive: true })
-    await writeFile(join(root, '.agents', 'cockpit.json'), JSON.stringify({ repo: 'o/r', owner: 'terminal', since: '2026-01-01T00:00:00Z' }), 'utf8')
-
-    const result = await takeOwnership({ repoRoot: root, repo: 'o/r', force: true, git, now })
-    expect(result.ok).toBe(true)
-
-    const read = await readOwnership({ repoRoot: root, repo: 'o/r', git, now })
-    expect(read).toEqual({ kind: 'app', since: now().toISOString(), path: join(root, '.agents', 'cockpit.json'), readAt: now().toISOString() })
   })
 
   it('release deletes an app record, and a second release is still ok', async () => {
@@ -178,6 +145,6 @@ describe('takeOwnership / releaseOwnership', () => {
     expect(released.ok).toBe(true)
 
     const read = await readOwnership({ repoRoot: root, repo: 'o/r', git, now })
-    expect(read.kind).toBe('terminal')
+    expect(read.kind).toBe('unreadable')
   })
 })
