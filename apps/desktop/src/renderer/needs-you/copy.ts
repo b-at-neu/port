@@ -3,9 +3,9 @@
 import type { NeedsYouGroupKey, NeedsYouItem } from '@/types/board'
 import { mirrorReason } from '@/renderer/lib/mirror-reason'
 import type { InterruptedStage } from '@/types/stage'
-import type { HandoffRefusal, StageAgent } from '@/types/tick'
+import type { HandoffRefusal } from '@/types/tick'
+import { agentStageName } from '@/utils/pipeline/stages'
 
-const STAGE_PHASE_NAME: Readonly<Record<StageAgent, string>> = { plan: 'Planning', impl: 'Implementing', review: 'Reviewing', revise: 'Revising' }
 
 export const GROUP_NAMES: Readonly<Record<NeedsYouGroupKey, string>> = {
   'plan-review': 'Plan reviews',
@@ -51,7 +51,7 @@ function usageLimitCopy(item: Extract<NeedsYouItem, { readonly kind: 'usage-limi
 /** One expanded line per waiting session: its number, phase and repository. */
 export function usageLimitEntryLine(item: Extract<NeedsYouItem, { readonly kind: 'usage-limit' }>, entry: InterruptedStage): string {
   const repo = item.repoNames.get(entry.repoId)
-  return `#${String(entry.number)} ${STAGE_PHASE_NAME[entry.agent]}${repo !== undefined ? ` · ${repo}` : ''}`
+  return `#${String(entry.number)} ${agentStageName(entry.agent)}${repo !== undefined ? ` · ${repo}` : ''}`
 }
 
 export function resumeAllDisabledReason(resetsAt: string): string {
@@ -110,7 +110,7 @@ function blockedReason(item: Extract<NeedsYouItem, { readonly kind: 'blocked' }>
 
 function interruptedCopy(item: Extract<NeedsYouItem, { readonly kind: 'stage-interrupted' }>, label: string): string {
   const i = item.interrupted
-  const phase = STAGE_PHASE_NAME[i.agent]
+  const phase = agentStageName(i.agent)
   switch (i.reason) {
     case 'quit':
       return `${phase} ${label} was interrupted when port quit`
@@ -152,8 +152,8 @@ function halfLabelledCopy(item: Extract<NeedsYouItem, { readonly kind: 'half-lab
   switch (item.repair.shape) {
     case 'handback-unlabelled': {
       const agent = item.repair.agent
-      const agentName = agent !== null ? STAGE_PHASE_NAME[agent].toLowerCase() : 'stage'
-      const phase = agent !== null ? STAGE_PHASE_NAME[agent] : 'its current stage'
+      const agentName = agent !== null ? agentStageName(agent).toLowerCase() : 'stage'
+      const phase = agent !== null ? agentStageName(agent) : 'its current stage'
       const reason = item.repair.reason === null ? '' : `: ${HANDOFF_REFUSAL_COPY[item.repair.reason]}`
       return `${label}'s ${agentName} session finished, but port couldn't record its next stage${reason}. It stays at ${phase} until port retries it.`
     }
@@ -203,11 +203,11 @@ export function needsYouLeadCopy(item: NeedsYouItem, now: Date = new Date()): st
     case 'stage-question':
       return `${label} is asking: ${item.questions[0]?.header ?? 'a question'}`
     case 'stage-approval':
-      return `${STAGE_PHASE_NAME[item.agent]} ${label} wants to edit ${item.path}`
+      return `${agentStageName(item.agent)} ${label} wants to edit ${item.path}`
     case 'stage-questions':
       return `${label} has questions for you — open its session to answer`
     case 'stage-denial':
-      return `${STAGE_PHASE_NAME[item.denial.agent]} ${label} was denied ${item.denial.rule}`
+      return `${agentStageName(item.denial.agent)} ${label} was denied ${item.denial.rule}`
     case 'stage-interrupted':
       return interruptedCopy(item, label)
     case 'usage-limit':
@@ -215,7 +215,7 @@ export function needsYouLeadCopy(item: NeedsYouItem, now: Date = new Date()): st
     case 'half-labelled':
       return halfLabelledCopy(item, label)
     case 'dispatch-failed':
-      return `${STAGE_PHASE_NAME[item.record.agent]} ${label} couldn't start${item.attempts > 1 ? ` · ${String(item.attempts)} attempts` : ''}`
+      return `${agentStageName(item.record.agent)} ${label} couldn't start${item.attempts > 1 ? ` · ${String(item.attempts)} attempts` : ''}`
   }
 }
 

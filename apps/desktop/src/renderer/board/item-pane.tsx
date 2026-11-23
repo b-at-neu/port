@@ -28,7 +28,8 @@ import { yourSessionsLabel } from '@/renderer/board/session-copy'
 import { actionNoteFor, agentSummaryOf, decisionNoteFor, phaseLabelFor, phaseToneFor, stageTargetsOf } from '@/renderer/board/row-model'
 import { itemDetailLines } from '@/renderer/board/tick'
 import { phaseDetailsFor } from '@/renderer/board/phase-history'
-import { currentPhaseFor } from '@/renderer/board/phase-model'
+import { ticketViewOf } from '@/renderer/lib/ticket-view'
+import { needsYouKindOf, phaseOf } from '@/utils/pipeline/stages'
 import { ticketSessionsFor } from '@/renderer/board/ticket-sessions'
 import { useIpcQuery } from '@/renderer/data/query'
 import { prSuffixOf } from '@/utils/tickets/ticket'
@@ -62,13 +63,13 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
     issue: ticket.issue,
     pullRequest: ticket.pullRequest,
   })
-  const currentPhase = currentPhaseFor({ stageKey: row.stageLabel?.key ?? null, kind: item.kind })
+  const view = ticketViewOf(item)
+  const currentPhase = phaseOf(view)
   const liveStageLink = currentPhase === null ? undefined : (ticketSessions.byPhase[currentPhase] ?? []).findLast((link) => link.state === 'live' && link.who.kind === 'stage')
   const phaseDetails = phaseDetailsFor({
     history: item.stageHistory,
     kind: item.kind,
-    stageKey: row.stageLabel?.key ?? null,
-    merged: item.mergedAt !== null,
+    view,
     viewer: row.viewer,
     now,
     currentCostUsd: liveStageLink?.costUsd ?? null,
@@ -166,7 +167,7 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
               </Button>
             )
           })}
-          {item.kind === 'issue' && row.stageLabel?.key === 'planReview' ? (
+          {item.kind === 'issue' && needsYouKindOf(view, false) === 'plan-review' ? (
             <Button variant="outline" size="small" onClick={() => openReviewDialog(item.repoId, item.number)}>
               {reviewPlanButtonLabel()}
             </Button>
@@ -177,9 +178,7 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
       </div>
       {row.blockedOn !== null ? <BlockedOnDetail blockedOn={row.blockedOn} number={ticket.ref.number} /> : null}
       <PhaseList
-        stageKey={row.stageLabel?.key ?? null}
-        kind={item.kind}
-        merged={item.mergedAt !== null}
+        view={view}
         details={phaseDetails}
         extraCurrentLine={agentSummary}
         sessions={ticketSessions.byPhase}

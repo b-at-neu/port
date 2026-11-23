@@ -6,7 +6,7 @@ import type { ModuleFlagName, OverviewModuleFlag } from '@/types/repositories'
 import type { DisplayKey } from '@/utils/labels/display'
 import type { LabelKey, LabelSource, VocabularyProblem, VocabularyVerdict } from '@/utils/labels/vocabulary'
 import type { AppliedOverride, RepoId, ResolvedRepoConfig } from '@/utils/repos'
-import { PHASE_NAMES } from '@/renderer/lib/phase'
+import { stageNameOfKey } from '@/renderer/lib/ticket-view'
 
 interface OverviewSourceSection {
   readonly kind: SourceKind
@@ -42,7 +42,7 @@ interface OverviewHealth {
 const MODULE_FLAG_NAMES: readonly ModuleFlagName[] = ['approvalGate', 'release', 'scope']
 
 function roleDisplayFor(key: LabelKey): string {
-  const name = PHASE_NAMES[key]
+  const name = stageNameOfKey(key)
   if (name !== null) return name
   if (key === 'marker') return 'Marker'
   if (key === 'prOpened') return 'PR opened'

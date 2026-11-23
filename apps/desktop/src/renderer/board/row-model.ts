@@ -6,26 +6,20 @@ import { waitsOnYou } from '@/renderer/board/needs-you'
 import type { BoardItemRow } from '@/types/board'
 import { operatorJoinedOf as operatorJoinedOfRecords } from '@/renderer/board/stage-links'
 import type { DispatchRecord } from '@/types/dispatch'
-import type { AttachedAgent, AttachedSession, StageLabel } from '@/types/state'
-import type { LabelKey } from '@/utils/labels/vocabulary'
-import type { LabelRole } from '@/utils/labels/defaults'
+import type { AttachedAgent, AttachedSession } from '@/types/state'
 import type { PhaseTone } from '@/types/components'
 import { phaseTone } from '@/renderer/lib/phase-tone'
+import { ticketViewOf } from '@/renderer/lib/ticket-view'
+import { needsYouKindOf, stageNameOf } from '@/utils/pipeline/stages'
 import type { ItemActionState, StageLinkTarget } from '@/types/board'
-import { PHASE_NAMES } from '@/renderer/lib/phase'
 import { actionRefusalNote, actionResultCopy, autoApprovingPhaseLabel, decisionButtonLabel, decisionRefusalNote, openPrButtonLabel, reviewPlanButtonLabel, stageAgentPhaseName, statusWord } from '@/renderer/board/copy'
-
-/** The current winning stage's own `LabelKey`, or `null` when `stage` resolves to nothing — the one place an item's `stages`/`stage` pair becomes a single phase key. */
-export function stageKeyOf(stages: readonly StageLabel[], stage: LabelRole | null): LabelKey | null {
-  return stages.find((label) => label.role === stage)?.key ?? null
-}
 
 // `waitingOnYou` mirrors board/sections.ts's own waiting-on-you predicate, so a row's
 // section and its pulse can never disagree.
 export function phaseToneFor(row: BoardItemRow): PhaseTone {
   const status = row.displayStatus.status
   return phaseTone({
-    stageKey: row.stageLabel?.key ?? null,
+    view: ticketViewOf(row.item),
     active: status === 'in-flight',
     waitingOnYou: waitsOnYou(row),
     operatorNeeded: status === 'interrupted' || status === 'stalled',
@@ -42,7 +36,7 @@ export function phaseLabelFor(row: BoardItemRow): string {
   if (status === 'interrupted' || status === 'stalled') return statusWord(status)
   if (row.autoApproving) return autoApprovingPhaseLabel()
   if (row.liveStage !== null && isDispatchedRow(row)) return stageAgentPhaseName(row.liveStage.agent)
-  return row.stageLabel !== null ? (PHASE_NAMES[row.stageLabel.key] ?? row.stageLabel.key) : 'Unstaged'
+  return stageNameOf(ticketViewOf(row.item))
 }
 
 /** Every (number, kind) the row's ticket answers to — its issue and its pull request. */
@@ -131,10 +125,11 @@ type NextAction =
 // First hit wins: review the plan, open a ready-to-merge pull request, then
 // the first available decision.
 export function nextActionFor(row: BoardItemRow): NextAction | null {
-  if (row.item.kind === 'issue' && row.stageLabel?.key === 'planReview' && !row.autoApproving) {
+  const kind = needsYouKindOf(ticketViewOf(row.item), false)
+  if (row.item.kind === 'issue' && kind === 'plan-review' && !row.autoApproving) {
     return { kind: 'review-plan', label: reviewPlanButtonLabel() }
   }
-  if (row.stageLabel?.key === 'approved') {
+  if (kind === 'ready-to-merge') {
     return { kind: 'open-pr', label: openPrButtonLabel(), url: row.item.url }
   }
   for (const decision of OPERATOR_DECISIONS) {

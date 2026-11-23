@@ -1,9 +1,10 @@
 // Pure "who and when" model for the detail pane's PhaseList, from a ReconciledItem's stageHistory.
-import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { PipelineItemKind } from '@/types/github'
 import type { StageEntry } from '@/types/state'
 import type { PhaseDetail, PhaseKey } from '@/types/board'
-import { currentPhaseFor, phaseOfStage } from '@/renderer/board/phase-model'
+import { phaseOf } from '@/utils/pipeline/stages'
+import type { TicketView } from '@/utils/pipeline/stages'
+import { viewOfKey } from '@/renderer/lib/ticket-view'
 import { actorName, phaseEventVerb } from '@/renderer/board/copy'
 import { formatAgo, formatDuration } from '@/renderer/lib/time'
 import { formatCost } from '@/utils/hosting/usage'
@@ -11,18 +12,21 @@ import { formatCost } from '@/utils/hosting/usage'
 interface PhaseDetailsParams {
   readonly history: readonly StageEntry[]
   readonly kind: PipelineItemKind
-  readonly stageKey: LabelKey | null
-  readonly merged: boolean
+  readonly view: TicketView | null
   readonly viewer: string | null
   readonly now: Date
   readonly currentCostUsd: number | null
+}
+
+function phaseOfEntry(entry: StageEntry, kind: PipelineItemKind): PhaseKey | null {
+  return phaseOf(viewOfKey(entry.key, kind))
 }
 
 /** The latest valid-timestamp entry mapping to `phase` — a re-entry (a second revision cycle) shows the newest, never the first. An unparsable `at` is skipped rather than thrown on. */
 function latestEntryFor(history: readonly StageEntry[], phase: PhaseKey, kind: PipelineItemKind): StageEntry | null {
   let latest: StageEntry | null = null
   for (const entry of history) {
-    if (phaseOfStage(entry.key, kind) !== phase) continue
+    if (phaseOfEntry(entry, kind) !== phase) continue
     const at = Date.parse(entry.at)
     if (Number.isNaN(at)) continue
     if (latest === null || at >= Date.parse(latest.at)) latest = entry
@@ -47,12 +51,12 @@ function currentLine(entry: StageEntry | null, viewer: string | null, now: Date,
 
 /** One `PhaseDetail` per phase that has something to show: a finished phase with at least one history entry, and the current phase (time and cost, or cost alone, or nothing). A pending phase, or one with no entry, is absent from the result — `PhaseList` renders its name only. Merged drops the notion of "current" entirely, so every phase with an entry keeps its finished line. */
 export function phaseDetailsFor(params: PhaseDetailsParams): Partial<Record<PhaseKey, PhaseDetail>> {
-  const { history, kind, stageKey, merged, viewer, now, currentCostUsd } = params
-  const current = merged ? null : currentPhaseFor({ stageKey, kind })
+  const { history, kind, view, viewer, now, currentCostUsd } = params
+  const current = view?.status.kind === 'done' ? null : phaseOf(view)
 
   const phases = new Set<PhaseKey>()
   for (const entry of history) {
-    const phase = phaseOfStage(entry.key, kind)
+    const phase = phaseOfEntry(entry, kind)
     if (phase !== null) phases.add(phase)
   }
   if (current !== null) phases.add(current)
