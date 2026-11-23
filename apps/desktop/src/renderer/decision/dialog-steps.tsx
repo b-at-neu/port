@@ -5,8 +5,10 @@ import { DialogFooter, DialogHeader, DialogTitle } from '@/renderer/components/u
 import { Textarea } from '@/renderer/components/ui/textarea'
 import type { RebaseDecision } from '@/types/actions'
 import type { DecisionState } from '@/types/decision'
-import { closeDecisionDialog, setPick, setReviseText, submitRevise, submitUnblock } from '@/renderer/decision/controller'
-import { dialogTitle, picksHint, rebaseLegend, rebaseOptionLabel, reviseConsequence, reviseNoteHint, unblockCapNote, unblockConsequence, unblockReasonLine } from '@/renderer/decision/copy'
+import { AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/renderer/components/ui/alert-dialog'
+import { decisionButtonLabel } from '@/renderer/board/copy'
+import { closeDecisionDialog, setPick, setReviseText, submitGrant, submitRevise, submitUnblock } from '@/renderer/decision/controller'
+import { dialogTitle, grantConsequence, picksHint, rebaseLegend, rebaseOptionLabel, reviseConsequence, reviseNoteHint, unblockCapNote, unblockConsequence, unblockReasonLine } from '@/renderer/decision/copy'
 
 function RebaseDecisionFields({ decisions, picks }: { readonly decisions: readonly RebaseDecision[]; readonly picks: Readonly<Record<string, string>> }) {
   if (decisions.length === 0) return null
@@ -71,6 +73,21 @@ export function ConfirmUnblockStep({ state }: { readonly state: Extract<Decision
         )}
       </DialogFooter>
     </>
+  )
+}
+
+export function ConfirmGrantStep({ state }: { readonly state: Extract<DecisionState, { readonly step: 'confirm-grant' }> }) {
+  return (
+    <AlertDialogContent>
+      <AlertDialogHeader>
+        <AlertDialogTitle>{dialogTitle('grant', state.number)}</AlertDialogTitle>
+        <AlertDialogDescription>{grantConsequence(state.context, state.number)}</AlertDialogDescription>
+      </AlertDialogHeader>
+      <AlertDialogFooter>
+        <AlertDialogCancel>Cancel</AlertDialogCancel>
+        <AlertDialogAction onClick={submitGrant}>{decisionButtonLabel('grant')}</AlertDialogAction>
+      </AlertDialogFooter>
+    </AlertDialogContent>
   )
 }
 

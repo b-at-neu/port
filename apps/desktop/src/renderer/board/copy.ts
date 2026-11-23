@@ -271,7 +271,14 @@ export function noTicketTagTitle(): string {
 // --- The operator decisions --------------------------------------------
 
 export function decisionButtonLabel(decision: OperatorDecision): string {
-  return decision === 'unblock' ? 'Unblock' : 'Request changes'
+  switch (decision) {
+    case 'unblock':
+      return 'Unblock'
+    case 'revise':
+      return 'Request changes'
+    case 'grant':
+      return 'Grant one more cycle'
+  }
 }
 
 /** The row's own note for a `cycle-cap`/`rebase-decisions`/`agent-live` refusal — every

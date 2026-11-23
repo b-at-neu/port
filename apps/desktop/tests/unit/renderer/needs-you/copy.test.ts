@@ -92,13 +92,13 @@ describe('needsYouLeadCopy', () => {
     expect(needsYouLeadCopy(item)).toBe('#47 waits on #38: both change 2 files')
   })
 
-  it('held — cycle-cap names the count and cap', () => {
+  it('held — cycle-cap names the cap and the way forward', () => {
     const item = {
       ...base({ number: 35 }),
       kind: 'held',
       held: { number: 35, kind: 'pull-request', trigger: 'readyForReview', reason: 'cycle-cap', contention: null, escalation: { kind: 'cycle-cap', count: 5, cap: 5 } },
     } as unknown as NeedsYouItem
-    expect(needsYouLeadCopy(item)).toBe('#35 hit the review cycle cap (5 of 5). Decide how to continue.')
+    expect(needsYouLeadCopy(item)).toBe('#35 used all 5 review cycles. Grant one more, or merge it and open a follow-up.')
   })
 
   it('stalled', () => {

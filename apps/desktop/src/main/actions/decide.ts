@@ -3,7 +3,7 @@ import { mirrorVocabularyOf } from '@/utils/labels/display'
 import type { FetchItemsByNumberParams } from '@/types/github'
 import type { ReadyEntry, RebaseDecision, RebasePick } from '@/types/actions'
 
-// applyItemDecision — unblock and revise, the comment-then-swap write
+// applyItemDecision — unblock, revise and grant, the comment-then-swap write
 // `main/actions/gate.ts`'s own `gateAnswer` already establishes.
 import { decisionPlan, decisionsFor, isCycleCapEscalation, picksProblem, reviseNoteProblem } from '@/utils/actions/decide'
 import { changesRequestedBody, gateClearedBody } from '@/utils/actions/bodies'
@@ -94,11 +94,7 @@ export async function applyItemDecision(params: ApplyItemDecisionParams, deps: A
 
   let comment: WriteOutcome | null = null
   if (!request.skipComment) {
-    const cycleGrant = request.decision === 'unblock' && request.route === 'revision' && isCycleCapEscalation(item.comments)
-    const body =
-      request.decision === 'unblock'
-        ? gateClearedBody(request.route ?? 'review', { cycleGrant, rebaseDecisions: chosenOptions(decisions, picks) })
-        : changesRequestedBody(headRefOid ?? '', request.note ?? '')
+    const body = commentBody(request, item, decisions, picks, headRefOid)
     if (body !== null) {
       comment = await deps.postComment({
         request: { repoId: entry.id, repo: entry.config.repo, kind: item.kind, number: request.number, body, action: request.decision, scratchDir },
@@ -115,6 +111,15 @@ export async function applyItemDecision(params: ApplyItemDecisionParams, deps: A
     auditDir,
   })
   return { ok: true, comment, labels }
+}
+
+function commentBody(request: ApplyItemDecisionParams['request'], item: ReconciledItem, decisions: readonly RebaseDecision[], picks: readonly RebasePick[], headRefOid: string | null): string | null {
+  if (request.decision === 'grant') return gateClearedBody('revision', { cycleGrant: true })
+  if (request.decision === 'unblock') {
+    const cycleGrant = request.route === 'revision' && isCycleCapEscalation(item.comments)
+    return gateClearedBody(request.route ?? 'review', { cycleGrant, rebaseDecisions: chosenOptions(decisions, picks) })
+  }
+  return changesRequestedBody(headRefOid ?? '', request.note ?? '')
 }
 
 function picksRefusal(decisions: readonly RebaseDecision[], picks: readonly RebasePick[]): string | null {

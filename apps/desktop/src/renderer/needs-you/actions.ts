@@ -24,7 +24,7 @@ import { router } from '@/renderer/router/router'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { invoke } from '@/renderer/data/invoke'
 
-type NeedsYouActionKind = 'review-plan' | 'open' | 'unblock' | 'retry' | 'refresh' | 'answer' | 'approve' | 'allow' | 'resume' | 'resume-all' | 'restart' | 'force' | 'copy-path'
+type NeedsYouActionKind = 'review-plan' | 'open' | 'unblock' | 'grant' | 'retry' | 'refresh' | 'answer' | 'approve' | 'allow' | 'resume' | 'resume-all' | 'restart' | 'force' | 'copy-path'
 
 interface NeedsYouAction {
   readonly label: string
@@ -73,9 +73,10 @@ function unblockAction(item: Extract<NeedsYouItem, { readonly kind: 'needs-human
 function heldAction(item: Extract<NeedsYouItem, { readonly kind: 'held' }>): NeedsYouAction {
   if (item.held.reason === 'conflicting') return { label: 'Refresh', kind: 'refresh', disabledReason: null }
   if (item.held.reason === 'cycle-cap') {
-    const decision = item.matchedRow?.decisions.unblock
-    if (decision?.available === true) return { label: 'Unblock', kind: 'unblock', disabledReason: null }
-    return { label: 'Open PR', kind: 'open', disabledReason: null }
+    const label = decisionButtonLabel('grant')
+    const decision = item.matchedRow?.decisions.grant
+    const disabledReason = decision === undefined ? "Can't read this item's current state." : decision.available ? null : disabledReasonCopy(decision.reason)
+    return { label, kind: 'grant', disabledReason, secondaryLabel: 'Open PR', secondaryDisabledReason: null }
   }
   if (item.held.reason === 'contended') {
     const disabledReason = item.owner === 'app' ? null : 'The terminal cockpit runs this repository. Use `dispatch #N anyway` there.'
@@ -145,6 +146,13 @@ export function runAction(item: NeedsYouItem, deps: RunActionDeps): void {
       openDecision({ repoId: item.repoId, number: item.number, decision: 'unblock', expectedStage: item.matchedRow.stageLabel?.key ?? null, context: decision.context })
       return
     }
+    case 'grant': {
+      if (item.matchedRow === null || item.repoId === null || item.number === null) return
+      const decision = item.matchedRow.decisions.grant
+      if (!decision.available) return
+      openDecision({ repoId: item.repoId, number: item.number, decision: 'grant', expectedStage: item.matchedRow.stageLabel?.key ?? null, context: decision.context })
+      return
+    }
     case 'open':
       if (item.kind === 'stage-questions') {
         void router.navigate({ to: ROUTE_IDS.session, search: { key: item.sessionKey } })
@@ -188,6 +196,7 @@ export function runSecondaryAction(item: NeedsYouItem, deps: RunActionDeps): voi
   const action = actionFor(item)
   if (action.kind === 'resume' && item.kind === 'stage-interrupted') openRestartDialog(item.interrupted)
   if (action.kind === 'approve' && item.kind === 'stage-approval') void answerProtectedEdit(item, 'deny', deps)
+  if (action.kind === 'grant' && item.kind === 'held' && item.url !== null) window.open(item.url, '_blank')
   if (item.kind === 'ready-to-merge' && item.repoId !== null && item.number !== null) {
     const revise = item.row.decisions.revise
     if (!revise.available) return

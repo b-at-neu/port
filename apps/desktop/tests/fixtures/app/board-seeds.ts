@@ -26,6 +26,8 @@ export interface ItemSeed {
   readonly updatedMinutesAgo?: number
   // A pull request's mergeability — defaults to 'MERGEABLE'; ignored for issues.
   readonly mergeable?: 'MERGEABLE' | 'CONFLICTING'
+  // How many `## Code Review` reviews a pull request carries — defaults to none; ignored for issues.
+  readonly reviewCount?: number
   // A pull request's comments — defaults to none; ignored for issues.
   readonly comments?: readonly { readonly body: string; readonly offsetMinutes: number }[]
   // An issue's open blocked-by links — defaults to none; ignored for pull requests.
@@ -110,6 +112,8 @@ const ATTENTION_ITEM_SEEDS: readonly ItemSeed[] = [
     ],
   },
   { kind: 'pull-request', number: 35, title: 'Cache avatar thumbnails', stageKey: 'needsRevision' },
+  // At the fixture's cycle cap, so the real tick holds it and Needs you shows the cycle-cap row.
+  { kind: 'pull-request', number: 59, title: 'Debounce the search box', stageKey: 'needsRevision', reviewCount: 5 },
   // An issue and the pull request that closes it, so the Board folds them into one row; the unlabelled-body pull request above stays the one with no ticket.
   {
     kind: 'issue',

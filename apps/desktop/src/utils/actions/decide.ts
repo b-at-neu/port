@@ -140,8 +140,8 @@ export interface DecisionsForParams {
  *  unassigned exception for these two consequential writes. */
 export function decisionsFor(params: DecisionsForParams): Readonly<Record<OperatorDecision, DecisionAvailability>> {
   const { item, viewer, reviewCycleCap, liveStage } = params
-  if (viewer === null) return { unblock: refused('viewer-unknown'), revise: refused('viewer-unknown') }
-  if (!(item.assignees.length === 1 && item.assignees[0] === viewer)) return { unblock: refused('not-owned'), revise: refused('not-owned') }
+  if (viewer === null) return { unblock: refused('viewer-unknown'), revise: refused('viewer-unknown'), grant: refused('viewer-unknown') }
+  if (!(item.assignees.length === 1 && item.assignees[0] === viewer)) return { unblock: refused('not-owned'), revise: refused('not-owned'), grant: refused('not-owned') }
 
   const cyclesUsed = item.reviewCycleCount ?? 0
   const effectiveCap = reviewCycleCap + cycleGrantCount(item.comments ?? undefined)
@@ -166,7 +166,14 @@ export function decisionsFor(params: DecisionsForParams): Readonly<Record<Operat
     revise = cyclesUsed >= effectiveCap ? refused('cycle-cap') : { available: true, context: { headRefOid: item.headRefOid, cyclesUsed, cap: effectiveCap } }
   }
 
-  return { unblock, revise }
+  let grant: DecisionAvailability
+  if (item.kind !== 'pull-request' || !onlyStage(item, 'needsRevision') || cyclesUsed < effectiveCap) {
+    grant = refused('not-applicable')
+  } else {
+    grant = liveStage ? refused('agent-live') : { available: true, context: { cyclesUsed, cap: effectiveCap } }
+  }
+
+  return { unblock, revise, grant }
 }
 
 export interface DecisionPlan {
@@ -188,6 +195,9 @@ export function decisionPlan(decision: OperatorDecision, item: ReconciledItem, r
     }
     const add: LabelKey = route === 'revision' ? 'needsRevision' : 'readyForReview'
     return { add: [add], remove: ['needsHuman'], expect: { present: ['needsHuman'], absent: [], assignees: exactAssignees(viewer) }, action: 'unblock' }
+  }
+  if (decision === 'grant') {
+    return { add: ['needsRevision'], remove: [], expect: { present: ['needsRevision'], absent: ['needsHuman', 'refreshBranch', 'refreshing'], assignees: exactAssignees(viewer) }, action: 'grant' }
   }
   return { add: ['needsRevision'], remove: ['approved'], expect: { present: ['approved'], absent: [], assignees: exactAssignees(viewer) }, action: 'revise' }
 }

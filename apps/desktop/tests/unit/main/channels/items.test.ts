@@ -188,7 +188,24 @@ describe('resolveItemDecision', () => {
         '/scratch',
         itemDecisionDepsWith({}),
       ),
-    ).rejects.toThrow("'item:decide' requires 'decision' to be one of unblock, revise")
+    ).rejects.toThrow("'item:decide' requires 'decision' to be one of unblock, revise, grant")
+  })
+
+  it.each([
+    ['a route', { route: 'revision' as const }, "'route' to be null for 'grant'"],
+    ['a note', { note: 'hi' }, "'note' to be null for 'grant'"],
+    ['picks', { picks: [{ id: 'D1', letter: 'A' }] }, "'picks' to be null for 'grant'"],
+    ['skipComment', { skipComment: true }, "'skipComment' to be false for 'grant'"],
+  ])('rejects grant carrying %s', async (_name, extra, message) => {
+    await expect(
+      resolveItemDecision(
+        registryDeps,
+        { repoId: REPO_ID, number: 1, decision: 'grant', expectedStage: null, route: null, note: null, skipComment: false, picks: null, ...extra },
+        '/audit',
+        '/scratch',
+        itemDecisionDepsWith({}),
+      ),
+    ).rejects.toThrow(message)
   })
 
   it('rejects unblock with a route outside UNBLOCK_ROUTES', async () => {

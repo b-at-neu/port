@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ItemDecisionResult, UnblockContext } from '@/types/actions'
-import { decisionResultCopy, dialogTitle, unblockCapNote, unblockConsequence, unblockReasonLine } from '@/renderer/decision/copy'
+import { decisionResultCopy, dialogTitle, grantConsequence, unblockCapNote, unblockConsequence, unblockReasonLine } from '@/renderer/decision/copy'
 
 function context(overrides: Partial<UnblockContext> = {}): UnblockContext {
   return { target: 'pull-request', reason: null, cyclesUsed: 0, cap: 5, decisions: [], routes: ['review', 'revision'], ...overrides }
@@ -60,6 +60,25 @@ describe('unblockCapNote', () => {
   it('notes the cap only once a pull request has used every cycle', () => {
     expect(unblockCapNote(context({ cyclesUsed: 4 }))).toBeNull()
     expect(unblockCapNote(context({ cyclesUsed: 5 }))).toContain('all 5 review cycles')
+  })
+})
+
+describe('grant copy', () => {
+  const grantParams = { number: 35, decision: 'grant' as const, route: null, picks: null, cap: 5 }
+
+  it('titles and describes the grant, naming the cap that stays', () => {
+    expect(dialogTitle('grant', 35)).toBe('Grant PR #35 one more review cycle?')
+    expect(grantConsequence({ cyclesUsed: 5, cap: 5 }, 35)).toBe('PR #35 has used all 5 review cycles. This posts "## Gate cleared" with a cycle grant, and the next tick sends it to revision. Only this PR changes; reviewCycleCap stays 5.')
+  })
+
+  it('reports the new cycle count on a no-op label write as a success', () => {
+    const copy = decisionResultCopy({ ...grantParams, response: { ok: true, comment: { kind: 'applied' } as never, labels: { kind: 'no-op' } as never } })
+    expect(copy).toMatchObject({ tone: 'success', line: 'PR #35 has one more review cycle (6). The next tick sends it to revision.' })
+  })
+
+  it('says nothing changed when the comment could not be posted', () => {
+    const copy = decisionResultCopy({ ...grantParams, response: { ok: false, reason: 'comment-failed', comment: { kind: 'write-failed' } as never } })
+    expect(copy).toMatchObject({ tone: 'error', line: "Couldn't post the cycle grant on PR #35, so nothing changed." })
   })
 })
 

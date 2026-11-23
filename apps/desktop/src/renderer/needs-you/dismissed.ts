@@ -113,6 +113,16 @@ export function visibleItems(items: readonly NeedsYouItem[], dismissed: Readonly
   return items.filter((item) => !dismissed.has(dismissKeyOf(item)))
 }
 
+/** The complement of `visibleItems`: items whose event key is dismissed. */
+export function dismissedItems(items: readonly NeedsYouItem[], dismissed: ReadonlySet<string>): readonly NeedsYouItem[] {
+  return items.filter((item) => dismissed.has(dismissKeyOf(item)))
+}
+
+/** Dismissed items that still derive from the snapshot — a stale key with no current event has nothing to restore, so it never shows. */
+export function dismissedNeedsYouItems(snapshot: BoardSnapshot, now: Date, sessions: readonly HostedSessionSnapshot[], dismissed: ReadonlySet<string>): readonly NeedsYouItem[] {
+  return dismissedItems(needsYouItems(snapshot, now, sessions), dismissed)
+}
+
 /** The one composition of derived items and dismissals, shared by the hook and the notifier. */
 export function visibleNeedsYouItems(snapshot: BoardSnapshot, now: Date, sessions: readonly HostedSessionSnapshot[], dismissed: ReadonlySet<string>): readonly NeedsYouItem[] {
   return visibleItems(needsYouItems(snapshot, now, sessions), dismissed)

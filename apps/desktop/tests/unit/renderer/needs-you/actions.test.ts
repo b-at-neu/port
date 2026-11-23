@@ -83,6 +83,42 @@ describe('ready-to-merge Request changes', () => {
   })
 })
 
+describe('held cycle-cap row', () => {
+  const heldCap = (grant: object | undefined): NeedsYouItem =>
+    ({ kind: 'held', repoId: 'repo-a' as RepoId, repo: 'o/a', number: 35, title: 't', url: 'https://github.com/o/a/pull/35', ticket: null, at: null, matchedRow: grant === undefined ? null : { decisions: { grant }, stageLabel: { key: 'needsRevision' } }, held: { reason: 'cycle-cap' } }) as unknown as NeedsYouItem
+  const context = { cyclesUsed: 5, cap: 5 }
+
+  beforeEach(() => {
+    vi.mocked(openDecision).mockReset()
+  })
+
+  it('offers Grant one more cycle with Open PR beside it', () => {
+    expect(actionFor(heldCap({ available: true, context }))).toEqual({ label: 'Grant one more cycle', kind: 'grant', disabledReason: null, secondaryLabel: 'Open PR', secondaryDisabledReason: null })
+  })
+
+  it('keeps Grant disabled with the refusal reason, never swapping to another action', () => {
+    expect(actionFor(heldCap({ available: false, reason: 'not-owned' }))).toMatchObject({ label: 'Grant one more cycle', kind: 'grant', disabledReason: 'Someone else owns this item. Take it over in the cockpit before acting on it here.' })
+    expect(actionFor(heldCap({ available: false, reason: 'agent-live' }))).toMatchObject({ label: 'Grant one more cycle', kind: 'grant' })
+  })
+
+  it('says it cannot read the item when no row matched', () => {
+    expect(actionFor(heldCap(undefined))).toMatchObject({ kind: 'grant', disabledReason: "Can't read this item's current state." })
+  })
+
+  it('opens the grant dialog from the primary action', () => {
+    runAction(heldCap({ available: true, context }), { onToast: vi.fn() })
+    expect(openDecision).toHaveBeenCalledWith({ repoId: 'repo-a', number: 35, decision: 'grant', expectedStage: 'needsRevision', context })
+  })
+
+  it('opens the PR from the secondary action', () => {
+    const open = vi.fn()
+    vi.stubGlobal('window', { open })
+    runSecondaryAction(heldCap({ available: true, context }), { onToast: vi.fn() })
+    expect(open).toHaveBeenCalledWith('https://github.com/o/a/pull/35', '_blank')
+    vi.unstubAllGlobals()
+  })
+})
+
 function stageInterrupted(reason: string): NeedsYouItem {
   const interrupted = { id: 'e1', agent: 'revise', reason, claudeSessionId: 'c1', worktree: { path: '/wt/revise-593', branch: 'b', baseSha: 's' } }
   return { kind: 'stage-interrupted', repoId: 'repo-a' as RepoId, repo: 'o/a', number: 593, title: 't', url: null, ticket: null, at: null, matchedRow: null, interrupted } as unknown as NeedsYouItem
