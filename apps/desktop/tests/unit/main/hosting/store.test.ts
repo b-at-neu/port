@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createHostedStore, DEFAULT_SESSION_LIMIT, ENDED_RETAIN_LIMIT } from '@/main/sessions/hosting/store'
-import { createInMemoryHostingPersistence } from '@/main/sessions/hosting/persist'
+import { createHostedStore } from '@/main/sessions/hosting/store'
+import { ENDED_RETAIN_LIMIT } from '@/main/sessions/hosting/handles'
+import { createInMemoryHostingPersistence, DEFAULT_SESSION_LIMIT } from '@/main/sessions/hosting/persist'
 import type { HostedQuery } from '@/main/sessions/hosting/handle'
 import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
 import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'
@@ -461,6 +462,4 @@ describe('createHostedStore', () => {
     await expect(store.notificationPrefs()).resolves.toEqual({ needsYou: false, sessions: true })
     await expect(persistence.load()).resolves.toMatchObject({ notifications: { needsYou: false, sessions: true }, defaults: DEFAULT_SESSION_DEFAULTS })
   })
-
-  // `rename()` behaviour has its own file, store-rename.test.ts, to stay under the line limit.
 })

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createDispatcher } from '@/main/dispatch/dispatcher'
-import { SETTLE_GRACE_MS } from '@/main/dispatch/launch'
+import { SETTLE_GRACE_MS } from '@/main/dispatch/records'
 import type { BoardSnapshot } from '@/types/board'
 import type { ReadyEntry } from '@/types/actions'
 import type { CreateDispatcherParams, OwnershipRead, StageLabelWrites, StageLaunchResult, StageLauncher } from '@/types/dispatch'

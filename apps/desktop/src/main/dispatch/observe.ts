@@ -1,7 +1,7 @@
 import type { RefreshMemo, RerunMemo } from '@/types/tick'
 import type { WriteObservation } from '@/types/dispatch'
 
-// The observation pass, split out of dispatcher.ts to keep it under the file-size limit. A throw
+// The observation pass: one write per observation, its outcome mapped onto the record the Board shows. A throw
 // from the write becomes `outcome: 'failed'`, never a pass that stops partway through.
 import type { ReadyEntry } from '@/types/actions'
 import type { ApplyObservationParams, ApplyObservationResult, RerunChecksParams } from '@/types/actions'

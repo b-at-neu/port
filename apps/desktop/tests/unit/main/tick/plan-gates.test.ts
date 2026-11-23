@@ -1,5 +1,4 @@
-// Split out of plan.test.ts to keep that file under the file-size limit: the cycle-cap/zero-diff
-// and refresh-wins/mergeability gate coverage, which shares no state with the rest of that file.
+// The cycle-cap/zero-diff and refresh-wins/mergeability gate coverage.
 import { describe, expect, it } from 'vitest'
 import type { ReconciledItem, RepositoryState } from '@/types/state'
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'

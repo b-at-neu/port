@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findAlreadyOpen, findFolderBusy } from '@/main/sessions/hosting/occupancy'
+import { createHandleRegistry } from '@/main/sessions/hosting/handles'
 
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import type { SessionWorkspace } from '@/types/workspace'
@@ -8,9 +8,10 @@ import type { HostedHandle } from '@/types/hosting'
 const NON_WORKTREE: SessionWorkspace = { folder: '/repo', root: '/repo', worktree: null, base: null }
 const WORKTREE: SessionWorkspace = { folder: '/repo/.claude/worktrees/session-a', root: '/repo', worktree: { path: '/repo/.claude/worktrees/session-a', branch: 'session/a' }, base: null }
 
-function fakeHandle(overrides: { readonly sessionKey: string; readonly cwd: string; readonly phase?: HostedSessionSnapshot['phase']; readonly workspace?: SessionWorkspace }): HostedHandle {
+function fakeHandle(overrides: { readonly sessionKey: string; readonly cwd: string; readonly phase?: HostedSessionSnapshot['phase']; readonly workspace?: SessionWorkspace; readonly claudeSessionId?: string }): HostedHandle {
   const snapshot = {
     sessionKey: overrides.sessionKey as SessionKey,
+    claudeSessionId: overrides.claudeSessionId ?? null,
     phase: overrides.phase ?? 'ready',
     workspace: overrides.workspace ?? NON_WORKTREE,
   } as HostedSessionSnapshot
@@ -22,44 +23,42 @@ function fakeHandle(overrides: { readonly sessionKey: string; readonly cwd: stri
   } as unknown as HostedHandle
 }
 
+function registryOf(...handles: HostedHandle[]) {
+  const registry = createHandleRegistry()
+  for (const handle of handles) registry.set(handle.sessionKey, handle)
+  return registry
+}
+
 const samePath = (a: string, b: string): boolean => a === b
 
 describe('findAlreadyOpen', () => {
   it('finds a live handle by claudeSessionId', () => {
-    const handle = { ...fakeHandle({ sessionKey: 'hosted-1', cwd: '/repo' }), snapshot: () => ({ claudeSessionId: 'abc', phase: 'ready' }) } as HostedHandle
-    const handles = new Map([['hosted-1' as SessionKey, handle]])
-    expect(findAlreadyOpen(handles, 'abc')).toBe(handle)
+    const handle = fakeHandle({ sessionKey: 'hosted-1', cwd: '/repo', claudeSessionId: 'abc' })
+    expect(registryOf(handle).findAlreadyOpen('abc')).toBe(handle)
   })
 
   it('ignores an ended handle', () => {
-    const handle = { ...fakeHandle({ sessionKey: 'hosted-1', cwd: '/repo' }), snapshot: () => ({ claudeSessionId: 'abc', phase: 'ended' }) } as HostedHandle
-    const handles = new Map([['hosted-1' as SessionKey, handle]])
-    expect(findAlreadyOpen(handles, 'abc')).toBeNull()
+    const handle = fakeHandle({ sessionKey: 'hosted-1', cwd: '/repo', claudeSessionId: 'abc', phase: 'ended' })
+    expect(registryOf(handle).findAlreadyOpen('abc')).toBeNull()
   })
 })
 
 describe('findFolderBusy', () => {
   it('finds a live, non-worktree handle in the same folder', () => {
     const handle = fakeHandle({ sessionKey: 'hosted-1', cwd: '/repo' })
-    const handles = new Map([['hosted-1' as SessionKey, handle]])
-    expect(findFolderBusy(handles, '/repo', samePath)).toBe(handle)
+    expect(registryOf(handle).findFolderBusy('/repo', samePath)).toBe(handle)
   })
 
   it('allows a different folder', () => {
-    const handle = fakeHandle({ sessionKey: 'hosted-1', cwd: '/other' })
-    const handles = new Map([['hosted-1' as SessionKey, handle]])
-    expect(findFolderBusy(handles, '/repo', samePath)).toBeNull()
+    expect(registryOf(fakeHandle({ sessionKey: 'hosted-1', cwd: '/other' })).findFolderBusy('/repo', samePath)).toBeNull()
   })
 
   it('allows a worktree session in the same repository root', () => {
     const handle = fakeHandle({ sessionKey: 'hosted-1', cwd: '/repo/.claude/worktrees/session-a', workspace: WORKTREE })
-    const handles = new Map([['hosted-1' as SessionKey, handle]])
-    expect(findFolderBusy(handles, '/repo', samePath)).toBeNull()
+    expect(registryOf(handle).findFolderBusy('/repo', samePath)).toBeNull()
   })
 
   it('allows an ended handle in the same folder', () => {
-    const handle = fakeHandle({ sessionKey: 'hosted-1', cwd: '/repo', phase: 'ended' })
-    const handles = new Map([['hosted-1' as SessionKey, handle]])
-    expect(findFolderBusy(handles, '/repo', samePath)).toBeNull()
+    expect(registryOf(fakeHandle({ sessionKey: 'hosted-1', cwd: '/repo', phase: 'ended' })).findFolderBusy('/repo', samePath)).toBeNull()
   })
 })

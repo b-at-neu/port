@@ -12,7 +12,7 @@ import { isRecord } from '@/utils/guards'
 import { IMAGE_MEDIA_TYPES, MAX_ATTACHMENT_NAME_LENGTH, MAX_ATTACHMENTS, MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_TEXT_BYTES, MAX_TOTAL_BYTES } from '@/utils/hosting/attachments'
 import type { ComposerAttachment } from '@/utils/hosting/attachments'
 
-import { SESSION_LIMIT_CEILING } from '@/main/sessions/hosting/store'
+import { SESSION_LIMIT_CEILING } from '@/main/sessions/hosting/persist'
 import { listSessionFiles } from '@/main/sessions/hosting/files'
 import { isReadyEntry, listRepositories } from '@/main/repos'
 import type { RegistryDeps } from '@/types/registry'

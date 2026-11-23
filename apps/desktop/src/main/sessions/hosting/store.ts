@@ -1,69 +1,50 @@
-import type { HostedHandle, MintedRestorable, SessionMarksTracker } from '@/types/hosting'
+// The process-lifetime hosted-session store main/ipc.ts binds: the session lifecycle over the live handle registry and the persisted settings.
+// A start past the current limit returns at-capacity, counted against live handles only.
 import { defaultSdk, type HostedQueryFn, type HostedSdk } from '@/main/platform/sdk'
 import type { WhichEnv, WhichOptions, WhichResult } from '@/types/platform'
-import type { HostingPersistence, SessionHistory } from '@/types/hosting'
-import type { RemoveSessionWorktreeOutcome } from '@/types/workspace'
-import type { OpenTranscriptParams, TranscriptCursor } from '@/types/sessions'
+import type { RemoveSessionWorktreeOutcome, SessionWorkspace } from '@/types/workspace'
+import type { OpenTranscriptParams, SessionReader, TranscriptCursor } from '@/types/sessions'
 import type { TranscriptRead } from '@/utils/sessions/transcript'
-
-// Map<sessionKey, Handle>, the process-lifetime instance main/ipc.ts binds, plus closeAll().
-// A start past the current limit returns at-capacity, counted against live handles only.
 import type { RepoId } from '@/utils/repos'
 import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SetControlsResult } from '@/utils/hosting/controls'
 import type { ComposerAttachment } from '@/utils/hosting/attachments'
-import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
-import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'
-import type { NotificationPrefs } from '@/types/settings'
-import type { HostedStore, StartSessionParams } from '@/types/hosting'
 import type {
+  HostedStore,
+  HostingPersistence,
   HostedSessionSnapshot,
-  HostingCapacity,
+  MintedRestorable,
   PermissionDecision,
   SessionAttachResult,
   SessionCloseResult,
-  SessionDefaults,
   SessionDismissResult,
   SessionEntriesDelta,
   SessionEventEnvelope,
+  SessionHistory,
   SessionInterruptResult,
   SessionInvokeResult,
   SessionKey,
-  SessionMarkResult,
-  SessionMarks,
   SessionPermissionAnswerResult,
   SessionRenameResult,
-  SessionRestoreDiscardResult,
   SessionRestoreResult,
   SessionSendResult,
   SessionStartMode,
   SessionStartResult,
   SessionTaskStopResult,
+  StartSessionParams,
   WorktreeChoice,
 } from '@/types/hosting'
 import { createHostedHandle } from '@/main/sessions/hosting/handle'
-import { createSessionMarks } from '@/main/sessions/hosting/marks'
-
+import { createHandleRegistry } from '@/main/sessions/hosting/handles'
+import { createHostingSettings } from '@/main/sessions/hosting/settings'
 import { readHistory } from '@/main/sessions/hosting/history'
 import { defaultForkListSessions, titleFork } from '@/main/sessions/hosting/fork'
 import { readStageEditAllow } from '@/main/sessions/hosting/stage-allow'
 import { resolveStartTitle } from '@/main/sessions/hosting/title'
-import { createInMemoryHostingPersistence, DEFAULT_SESSION_LIMIT, SESSION_LIMIT_CEILING } from '@/main/sessions/hosting/persist'
-
-import { dropAdopted, mintRestorable, nextPersisted, persistedOpen } from '@/main/sessions/hosting/restore'
-
-import { findAlreadyOpen, findFolderBusy } from '@/main/sessions/hosting/occupancy'
-import type { SessionReader } from '@/types/sessions'
+import { createInMemoryHostingPersistence } from '@/main/sessions/hosting/persist'
 import { resolveClaudeExecutable } from '@/main/sessions/runtime/locate'
 import { pathOps } from '@/main/platform/paths'
 import { defaultGitRunner } from '@/main/platform/git'
 import { removeSessionWorktreeAt } from '@/main/repos/worktree/worktree'
-
-import type { SessionWorkspace } from '@/types/workspace'
-
-export { DEFAULT_SESSION_LIMIT, SESSION_LIMIT_CEILING } from '@/main/sessions/hosting/persist'
-
-/** Ended handles retained up to this many; the oldest-ended is evicted on the next `end`. */
-export const ENDED_RETAIN_LIMIT = 20
 
 export interface HostedStoreDeps {
   readonly getSdk: () => Promise<HostedSdk>
@@ -110,81 +91,31 @@ function toSessionKey(n: number): SessionKey {
 }
 
 export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps): HostedStore {
-  const handles = new Map<SessionKey, HostedHandle>()
+  const handles = createHandleRegistry()
+  const settings = createHostingSettings(deps.persistence, handles.list)
   let nextId = 1
-  let limit = DEFAULT_SESSION_LIMIT
-  let defaults: SessionDefaults = DEFAULT_SESSION_DEFAULTS
-  let notifications: NotificationPrefs = DEFAULT_NOTIFICATION_PREFS
-  let restorable: readonly MintedRestorable[] = []
-  const endedOrder: SessionKey[] = []
-  const endedSeen = new Set<SessionKey>()
-  let loaded: Promise<void> | null = null
-  let marksTracker: SessionMarksTracker = createSessionMarks({ pinned: [], archived: [] })
-
-  function ensureLoaded(): Promise<void> {
-    if (loaded === null) {
-      loaded = deps.persistence.load().then((state) => {
-        limit = state.limit
-        restorable = mintRestorable(state.open)
-        defaults = state.defaults
-        notifications = state.notifications
-        marksTracker = createSessionMarks(state.marks)
-      })
-    }
-    return loaded
-  }
-
-  function liveCount(): number {
-    let count = 0
-    for (const handle of handles.values()) {
-      if (handle.snapshot().phase !== 'ended') count += 1
-    }
-    return count
-  }
-
-  function list(): readonly HostedSessionSnapshot[] {
-    return [...handles.values()].map((handle) => handle.snapshot())
-  }
-
-  function persistSave(): void {
-    const live = persistedOpen(list())
-    deps.persistence.save({ ...nextPersisted({ limit, live, restorable }), defaults, marks: marksTracker.current(), notifications })
-  }
-
-  function forgetHandle(sessionKey: SessionKey): void {
-    handles.delete(sessionKey)
-    endedSeen.delete(sessionKey)
-    const index = endedOrder.indexOf(sessionKey)
-    if (index !== -1) endedOrder.splice(index, 1)
-  }
 
   function onHandleStatus(snapshot: HostedSessionSnapshot): void {
     deps.onStatus(snapshot)
-    if (snapshot.phase === 'ended' && !endedSeen.has(snapshot.sessionKey)) {
-      endedSeen.add(snapshot.sessionKey)
-      endedOrder.push(snapshot.sessionKey)
-      while (endedOrder.length > ENDED_RETAIN_LIMIT) {
-        const evicted = endedOrder.shift()
-        if (evicted !== undefined) forgetHandle(evicted)
-      }
-    }
-    persistSave()
+    handles.noteStatus(snapshot)
+    settings.save()
   }
 
   async function start(params: StartSessionParams): Promise<SessionStartResult> {
-    await ensureLoaded()
+    await settings.ensureLoaded()
 
     if (params.mode.kind === 'resume' || params.mode.kind === 'resume-at') {
-      const existing = findAlreadyOpen(handles, params.mode.sessionId)
+      const existing = handles.findAlreadyOpen(params.mode.sessionId)
       if (existing !== null) return { ok: false, kind: 'already-open', sessionKey: existing.sessionKey }
     }
 
     if (params.workspace.worktree === null) {
-      const busy = findFolderBusy(handles, params.workspace.folder, deps.samePath)
+      const busy = handles.findFolderBusy(params.workspace.folder, deps.samePath)
       if (busy !== null) return { ok: false, kind: 'folder-busy', sessionKey: busy.sessionKey }
     }
 
-    if (liveCount() >= limit) {
+    const limit = settings.limit()
+    if (handles.liveCount() >= limit) {
       return { ok: false, kind: 'at-capacity', limit }
     }
 
@@ -210,7 +141,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     const stage = stageParams === null ? null : { ...stageParams, editAllow }
 
     function onSessionId(claudeSessionId: string): void {
-      restorable = dropAdopted(restorable, claudeSessionId)
+      settings.dropAdopted(claudeSessionId)
       if (mode.kind === 'fork') {
         void titleFork(
           { parentSessionId: mode.sessionId, forkedSessionId: claudeSessionId, cwd },
@@ -223,7 +154,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
           () => handles.get(sessionKey)?.setTitled(false),
         )
       }
-      persistSave()
+      settings.save()
     }
 
     const handle = createHostedHandle(
@@ -240,14 +171,14 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
         onSessionId,
         onEntries: deps.onEntries,
         initialTitle,
-        defaults,
+        defaults: settings.sessionDefaults(),
         history,
         stage,
       },
       queryFn,
     )
     handles.set(sessionKey, handle)
-    persistSave()
+    settings.save()
 
     if (initialTitle === null && mode.kind !== 'fresh') {
       void resolveStartTitle(mode, deps.listSessionsForFork).then((title) => {
@@ -297,7 +228,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
   async function closeAll(): Promise<void> {
     // Freezing first keeps the 'closing' phase quitting causes from erasing the persisted set.
     deps.persistence.freeze()
-    await Promise.all([...handles.values()].map((handle) => handle.close()))
+    await Promise.all(handles.all().map((handle) => handle.close()))
   }
 
   function answerPermission(sessionKey: SessionKey, permissionId: string, decision: PermissionDecision, message: string | null): SessionPermissionAnswerResult {
@@ -342,53 +273,9 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
       if (outcome.outcome === 'failed') return { ok: false, kind: 'worktree-remove-failed', message: outcome.message }
     }
 
-    forgetHandle(sessionKey)
-    persistSave()
+    handles.forget(sessionKey)
+    settings.save()
     return { ok: true }
-  }
-
-  function snapshotOf(sessionKey: SessionKey): HostedSessionSnapshot | null {
-    return handles.get(sessionKey)?.snapshot() ?? null
-  }
-
-  function cwdOf(sessionKey: SessionKey): string | null {
-    return handles.get(sessionKey)?.cwd ?? null
-  }
-
-  async function capacity(): Promise<HostingCapacity> {
-    await ensureLoaded()
-    return { limit, ceiling: SESSION_LIMIT_CEILING }
-  }
-
-  async function setLimit(next: number): Promise<HostingCapacity> {
-    await ensureLoaded()
-    limit = next
-    persistSave()
-    return { limit, ceiling: SESSION_LIMIT_CEILING }
-  }
-
-  async function getDefaults(): Promise<SessionDefaults> {
-    await ensureLoaded()
-    return defaults
-  }
-
-  async function setDefaults(next: SessionDefaults): Promise<SessionDefaults> {
-    await ensureLoaded()
-    defaults = next
-    persistSave()
-    return defaults
-  }
-
-  async function getNotificationPrefs(): Promise<NotificationPrefs> {
-    await ensureLoaded()
-    return notifications
-  }
-
-  async function setNotificationPrefs(next: NotificationPrefs): Promise<NotificationPrefs> {
-    await ensureLoaded()
-    notifications = next
-    persistSave()
-    return notifications
   }
 
   async function rename(sessionKey: SessionKey, title: string): Promise<SessionRenameResult> {
@@ -406,41 +293,13 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     }
   }
 
-  async function restorableList(): Promise<readonly MintedRestorable[]> {
-    await ensureLoaded()
-    return restorable
-  }
-
   async function restore(restoreId: string, resolved: { readonly repoId: RepoId | null; readonly workspace: SessionWorkspace }): Promise<SessionRestoreResult> {
-    await ensureLoaded()
-    const entry = restorable.find((candidate) => candidate.restoreId === restoreId)
+    await settings.ensureLoaded()
+    const entry: MintedRestorable | undefined = settings.findRestorable(restoreId)
     if (entry === undefined) return { ok: false, kind: 'unknown-restore' }
     const result = await start({ repoId: resolved.repoId, mode: { kind: 'resume', sessionId: entry.claudeSessionId }, workspace: resolved.workspace, initialTitle: entry.title })
-    if (result.ok || result.kind === 'already-open') {
-      restorable = restorable.filter((candidate) => candidate.restoreId !== restoreId)
-      persistSave()
-    }
+    if (result.ok || result.kind === 'already-open') settings.removeRestorable(restoreId)
     return result
-  }
-
-  async function discardRestorable(restoreId: string | null): Promise<SessionRestoreDiscardResult> {
-    await ensureLoaded()
-    restorable = restoreId === null ? [] : restorable.filter((candidate) => candidate.restoreId !== restoreId)
-    persistSave()
-    return { ok: true }
-  }
-
-  async function marks(): Promise<SessionMarks> {
-    await ensureLoaded()
-    return marksTracker.current()
-  }
-
-  async function setMark(kind: 'pinned' | 'archived', sessionId: string, on: boolean): Promise<SessionMarkResult> {
-    await ensureLoaded()
-    if (sessionId === '' || sessionId.length > 200) return { ok: false, kind: 'invalid-session-id' }
-    const result = marksTracker.set(kind, sessionId, on)
-    persistSave()
-    return { ok: true, marks: result }
   }
 
   return {
@@ -449,7 +308,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     interrupt,
     close,
     attach,
-    list,
+    list: handles.list,
     closeAll,
     answerPermission,
     invoke,
@@ -457,20 +316,20 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     answerQuestion,
     answerPlan,
     dismiss,
-    snapshotOf,
-    cwdOf,
-    capacity,
-    setLimit,
-    defaults: getDefaults,
-    setDefaults,
-    notificationPrefs: getNotificationPrefs,
-    setNotificationPrefs,
+    snapshotOf: (sessionKey) => handles.get(sessionKey)?.snapshot() ?? null,
+    cwdOf: (sessionKey) => handles.get(sessionKey)?.cwd ?? null,
+    capacity: settings.capacity,
+    setLimit: settings.setLimit,
+    defaults: settings.defaults,
+    setDefaults: settings.setDefaults,
+    notificationPrefs: settings.notificationPrefs,
+    setNotificationPrefs: settings.setNotificationPrefs,
     rename,
-    restorable: restorableList,
+    restorable: settings.restorableList,
     restore,
-    discardRestorable,
-    marks,
-    setMark,
+    discardRestorable: settings.discardRestorable,
+    marks: settings.marks,
+    setMark: settings.setMark,
     stopTask,
   }
 }

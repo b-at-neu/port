@@ -5,9 +5,9 @@ import { createJsonStore } from '@/main/platform/json-store'
 import type { StageDenial, StageDenialStore } from '@/types/stage'
 import type { FileResult } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
-import { withDenial, withoutDenialId, withoutDenialRule } from '@/main/dispatch/attention'
 
 const CURRENT_VERSION = 1
+const DENIAL_LIMIT = 20
 
 const denialsFileSchema = z.object({ version: z.literal(CURRENT_VERSION), entries: z.array(z.unknown()) })
 
@@ -32,6 +32,12 @@ function isStageDenial(value: unknown): value is StageDenial {
     typeof d.at === 'string' &&
     (d.sessionKey === null || typeof d.sessionKey === 'string')
   )
+}
+
+/** A new denial for an already-proposed rule replaces the old one rather than piling up a second row for the same prompt. Bounded to `DENIAL_LIMIT`, dropping the oldest first. */
+function withDenial(denials: readonly StageDenial[], denial: StageDenial): readonly StageDenial[] {
+  const next = [...denials.filter((d) => d.rule !== denial.rule), denial]
+  return next.length > DENIAL_LIMIT ? next.slice(next.length - DENIAL_LIMIT) : next
 }
 
 /** `createStageDenialStore({ path, readJson, writeJsonAtomic })` — a write failure is logged and the in-memory state is kept, which fails toward showing the item this run. */
@@ -76,8 +82,8 @@ export function createStageDenialStore(params: CreateStageDenialStoreParams): St
   return {
     load,
     record: (denial) => set(denial.repoId, withDenial(list(denial.repoId), denial)),
-    dismiss: (repoId, id) => set(repoId, withoutDenialId(list(repoId), id)),
-    clearRule: (repoId, rule) => set(repoId, withoutDenialRule(list(repoId), rule)),
+    dismiss: (repoId, id) => set(repoId, list(repoId).filter((d) => d.id !== id)),
+    clearRule: (repoId, rule) => set(repoId, list(repoId).filter((d) => d.rule !== rule)),
     list,
   }
 }

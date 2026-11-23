@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { promptFor } from '@/main/dispatch/dispatcher'
+import { promptFor } from '@/main/dispatch/launch'
 import { composeStagePrompt, parseStagePrompt } from '@/utils/stage/prompt'
 import type { PipelineItemKind } from '@/types/github'
 import type { StageAgent } from '@/types/tick'
