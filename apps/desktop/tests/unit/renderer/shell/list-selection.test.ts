@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { clearsOnPress, clearsOnSurfacePress, nextKey, prevKey, reconcile } from '@/renderer/shell/list-selection'
+import { clearsOnPress, clearsOnSurfacePress, nextKey, pressedControl, prevKey, reconcile } from '@/renderer/shell/list-selection'
+import type { PressNode } from '@/renderer/shell/list-selection'
 
 const KEYS = ['a', 'b', 'c']
 
@@ -63,6 +64,59 @@ describe('clearsOnPress', () => {
 
   it('keeps the selection when the press lands on a control inside the row', () => {
     expect(clearsOnPress('b', 'b', 0, true)).toBe(false)
+  })
+})
+
+interface FakeNode extends PressNode {
+  readonly parent: FakeNode | null
+  readonly matches: boolean
+}
+
+function fakeNode(parent: FakeNode | null, matches = false): FakeNode {
+  const node: FakeNode = {
+    parent,
+    matches,
+    closest(): FakeNode | null {
+      for (let current: FakeNode | null = node; current !== null; current = current.parent) {
+        if (current.matches) return current
+      }
+      return null
+    },
+    contains(other): boolean {
+      for (let current = other as FakeNode | null; current !== null; current = current.parent) {
+        if (current === node) return true
+      }
+      return false
+    },
+  }
+  return node
+}
+
+describe('pressedControl', () => {
+  const row = fakeNode(null, true)
+
+  it('treats a target outside the row as a control, whatever it matches', () => {
+    expect(pressedControl(fakeNode(null, true), row)).toBe(true)
+    expect(pressedControl(fakeNode(null), row)).toBe(true)
+  })
+
+  it('treats a control inside the row, or a descendant of one, as a control', () => {
+    const button = fakeNode(row, true)
+    expect(pressedControl(button, row)).toBe(true)
+    expect(pressedControl(fakeNode(button), row)).toBe(true)
+  })
+
+  it('does not treat plain row content as a control', () => {
+    const plainRow = fakeNode(null)
+    expect(pressedControl(fakeNode(plainRow), plainRow)).toBe(false)
+  })
+
+  it('does not treat the row itself as a control', () => {
+    expect(pressedControl(row, row)).toBe(false)
+  })
+
+  it('does not treat a missing target as a control', () => {
+    expect(pressedControl(null, row)).toBe(false)
   })
 })
 
