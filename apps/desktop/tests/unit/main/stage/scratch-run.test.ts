@@ -1,5 +1,4 @@
-import type { HostedQuery } from '@/main/hosting/sdk'
-import type { HostedSdk } from '@/main/hosting/sdk'
+import type { HostedQuery, HostedSdk, Options } from '@/main/platform/sdk'
 import type { StageLauncherHandle } from '@/types/stage'
 
 // A scratch-repo run takes one ticket from `ready` to an opened PR entirely through stage sessions, against a fake SDK; only the outer edges (SDK, git, worktrees, GitHub, ownership, the stage registry, the budget gate) are faked.
@@ -12,7 +11,6 @@ import { memoryDenialStore } from '../../../fixtures/denials'
 import { DEFAULT_POLL_POLICY } from '@/types/board'
 import type { BoardSnapshot } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
-import type { Options } from '@/main/hosting/sdk'
 import { createHostedStore } from '@/main/hosting/store'
 import { createInMemoryHostingPersistence } from '@/main/hosting/persist'
 import { pathOps } from '@/main/platform/paths'

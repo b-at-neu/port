@@ -4,7 +4,7 @@ import type { StageAgentLaunch } from '@/types/stage'
 // One hosted session: builds options, opens the query, runs the pump loop. The ring
 // exists only so a renderer attaching mid-stream is not blank; the on-disk transcript is the history.
 import type { HostedHandle } from '@/types/hosting'
-import type { HostedQueryFn } from '@/main/hosting/sdk'
+import type { HostedQueryFn, SDKMessage } from '@/main/platform/sdk'
 import type {
   HostedSessionSnapshot,
   SessionDefaults,
@@ -42,10 +42,9 @@ import { buildUserContent } from '@/main/hosting/content'
 
 import { composeInvocation, validateCommandName } from '@/main/hosting/verify'
 
-import type { SDKMessage } from '@/main/hosting/sdk'
 import { pathOps } from '@/main/platform/paths'
 
-export type { HostedQuery } from '@/main/hosting/sdk'
+export type { HostedQuery } from '@/main/platform/sdk'
 
 /** The bounded replay ring's size — never a growing per-session array. */
 export const REPLAY_LIMIT = 500

@@ -1,5 +1,5 @@
 // One `query()` turn, fixed short prompt, `maxTurns: 1`, always with `pathToClaudeCodeExecutable` set so the probe never falls back to the SDK's bundled binary. `ANTHROPIC_API_KEY` is never stripped, only reported.
-import type { Options } from '@anthropic-ai/claude-agent-sdk'
+import { defaultSdk, type Options, type SdkSource } from '@/main/platform/sdk'
 import type { RuntimeProbeFn } from '@/types/runtime'
 import { classifyProbeFailure } from '@/main/runtime/classify'
 
@@ -11,8 +11,6 @@ interface ProbeMessage {
   readonly result?: string
   readonly errors?: readonly string[]
 }
-
-type SdkQuery = (params: { prompt: string; options?: Options }) => AsyncIterable<ProbeMessage>
 
 const PROBE_PROMPT = 'Reply with only the word "ok" and stop.'
 
@@ -29,12 +27,15 @@ function resultText(message: ProbeMessage): string {
   return (message.errors ?? []).join('; ')
 }
 
-/** A factory, not a bare export, so a test can inject a fake `importSdk`; the default is a lazy dynamic `import()`, never at module load. */
-export function createRuntimeProbe(importSdk: () => Promise<{ query: SdkQuery }> = () => import('@anthropic-ai/claude-agent-sdk')): RuntimeProbeFn {
+function isProbeMessage(value: unknown): value is ProbeMessage {
+  return typeof value === 'object' && value !== null && typeof (value as { type?: unknown }).type === 'string'
+}
+
+export function createRuntimeProbe(source: SdkSource<'query'> = defaultSdk): RuntimeProbeFn {
   return async (params) => {
-    let sdk: { query: SdkQuery }
+    let sdk: Awaited<ReturnType<typeof source.load>>
     try {
-      sdk = await importSdk()
+      sdk = await source.load()
     } catch (error) {
       const text = messageOf(error)
       return { diagnosis: classifyProbeFailure({ text }), detail: text }
@@ -52,7 +53,7 @@ export function createRuntimeProbe(importSdk: () => Promise<{ query: SdkQuery }>
 
       let last: ProbeMessage | null = null
       for await (const message of stream) {
-        if (message.type === 'result') last = message
+        if (isProbeMessage(message) && message.type === 'result') last = message
       }
 
       if (last === null) {

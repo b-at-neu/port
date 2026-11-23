@@ -4,7 +4,7 @@ import { isRecord } from '@/main/guards'
 import type { SessionControls, SessionEffort, SessionModelOption, SessionModels } from '@/utils/hosting/controls'
 import { SESSION_EFFORTS } from '@/utils/hosting/controls'
 import type { SessionDefaults } from '@/types/hosting'
-import type { ModelInfo, HostedQuery } from '@/main/hosting/sdk'
+import type { ModelInfo, HostedQuery } from '@/main/platform/sdk'
 
 export interface ControlsTracker {
   start(query: HostedQuery): Promise<void>

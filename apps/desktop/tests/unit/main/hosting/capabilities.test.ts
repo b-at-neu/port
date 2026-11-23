@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createCapabilityTracker as createTracker } from '@/main/hosting/capabilities'
-import type { HostedQuery } from '@/main/hosting/sdk'
+import type { HostedQuery } from '@/main/platform/sdk'
 
 function createCapabilityTracker(params: Omit<Parameters<typeof createTracker>[0], 'stage'> & { readonly stage?: boolean }): ReturnType<typeof createTracker> {
   return createTracker({ stage: false, ...params })

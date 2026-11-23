@@ -1,6 +1,6 @@
 // Streaming input mode, always, so interrupt()/setPermissionMode() stay available for the handle's whole life.
 // end() closes the iterator, the SDK's own graceful-shutdown trigger — never process.kill or a signal.
-import type { SDKUserMessage } from '@/main/hosting/sdk'
+import type { SDKUserMessage } from '@/main/platform/sdk'
 import type { ContentBlock } from '@/types/hosting'
 
 interface PushResult {

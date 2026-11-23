@@ -1,5 +1,5 @@
 // A structural read of the SDK's final `result` message — narrows without a type import from the SDK's own result union, the same rule `readRateLimit`/`readUsage` already follow.
-import type { SDKMessage } from '@/main/hosting/sdk'
+import type { SDKMessage } from '@/main/platform/sdk'
 import type { SessionResult } from '@/types/stage-session'
 import { SESSION_RESULT_TEXT_CAP } from '@/types/stage-session'
 

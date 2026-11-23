@@ -6,7 +6,7 @@ const FS_SYNC_NAMES = [
   'readFileSync', 'writeFileSync', 'appendFileSync', 'mkdirSync', 'rmdirSync', 'rmSync', 'unlinkSync', 'existsSync', 'statSync', 'lstatSync',
   'readdirSync', 'renameSync', 'copyFileSync', 'accessSync', 'realpathSync', 'chmodSync', 'symlinkSync', 'readlinkSync',
 ]
-const SDK_SEAMS = ['src/main/sessions/sdk.ts', 'src/main/runtime/sdk.ts', 'src/main/hosting/sdk.ts']
+const SDK_SEAMS = ['src/main/platform/sdk.ts']
 const TIMERS = ['setTimeout', 'setInterval', 'setImmediate']
 const NODE_BUILTIN = { group: ['node:*'], message: 'A node: builtin is not available here — this code compiles without Node types.' }
 const NO_MAIN = { group: ['@/main/**'], message: 'The renderer and shared code never import main/ — reach it over IPC.' }
@@ -58,7 +58,7 @@ export const RESTRICTIONS = [
   {
     id: 'sdk',
     except: SDK_SEAMS,
-    paths: [{ name: '@anthropic-ai/claude-agent-sdk', message: 'Only the three sdk.ts seams reference the Agent SDK.' }],
+    paths: [{ name: '@anthropic-ai/claude-agent-sdk', message: 'Only main/platform/sdk.ts references the Agent SDK.' }],
   },
   {
     id: 'sdk-names',
