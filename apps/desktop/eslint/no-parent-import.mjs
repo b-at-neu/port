@@ -28,7 +28,7 @@ export const CASES = [
   { file: '/repo/apps/desktop/src/renderer/local/inspect.ts', spec: './shape', flagged: false },
   { file: '/repo/apps/desktop/src/shared/ipc.ts', spec: '@/repos', flagged: false },
   { file: '/repo/apps/desktop/src/shared/labels/defaults.ts', spec: '../../../../../plugins/port/data/labels.json', flagged: false },
-  { file: '/repo/apps/desktop/tests/unit/main/hosting/store.test.ts', spec: '../../../../src/main/hosting/store', flagged: true },
+  { file: '/repo/apps/desktop/tests/unit/main/hosting/store.test.ts', spec: '../../../../src/main/sessions/hosting/store', flagged: true },
   { file: '/repo/apps/desktop/tests/unit/main/hosting/store.test.ts', spec: '../../fixtures/store-fixture', flagged: false },
   { file: '/repo/apps/desktop/tests/unit/main/hosting/store.test.ts', spec: './helpers', flagged: false },
 ]

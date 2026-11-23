@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createRuntimeProbe } from '@/main/runtime/probe'
+import { createRuntimeProbe } from '@/main/sessions/runtime/probe'
 import type { HostedQueryFn, SdkSource } from '@/main/platform/sdk'
 
 /** Mirrors the probe's own message shape, so this fixture stays faithful without pulling in every field of the real `SDKResultMessage` union. */

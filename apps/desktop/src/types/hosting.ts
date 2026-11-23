@@ -1,7 +1,7 @@
 import type { ImageMediaType, ComposerAttachment } from '@/utils/hosting/attachments'
 import type { QuestionAnswerResult, PlanDecision, PlanAnswerResult, SetControlsResult } from '@/utils/hosting/controls'
 
-// Renderer-safe contract for a hosted session. No import here may reach a Node builtin — only `main/hosting/` spawns a `claude` child or holds a `Query`. `message: unknown` on the event envelope is deliberate: narrowing it is the renderer's own job, never a second guess at the SDK's union here.
+// Renderer-safe contract for a hosted session. No import here may reach a Node builtin — only `main/sessions/hosting/` spawns a `claude` child or holds a `Query`. `message: unknown` on the event envelope is deliberate: narrowing it is the renderer's own job, never a second guess at the SDK's union here.
 import type { RepoId } from '@/utils/repos'
 import type { RuntimeDiagnosis } from '@/types/runtime'
 import type { NotificationPrefs } from '@/types/settings'

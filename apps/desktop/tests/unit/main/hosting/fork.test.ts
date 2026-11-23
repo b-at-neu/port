@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { forkTitle, titleFork } from '@/main/hosting/fork'
-import type { TitleForkDeps } from '@/main/hosting/fork'
+import { forkTitle, titleFork } from '@/main/sessions/hosting/fork'
+import type { TitleForkDeps } from '@/main/sessions/hosting/fork'
 import type { RawSession } from '@/types/sessions'
 
 function session(overrides: Partial<RawSession>): RawSession {

@@ -7,7 +7,7 @@ import type { HostedSessionSnapshot, HostedStore, SessionStartTarget, SessionSta
 import type { ResolveStartTargetDeps, ReleaseBranchOutcome, RemoveSessionWorktreeOutcome, ResolvedStartTarget } from '@/types/workspace'
 import type { DirEntry, FileResult, GitLinesResult, RunCommandOptions } from '@/types/platform'
 
-/** `main/hosting/files.ts`'s own injectable seam, inlined here since a `types/` file may not import a
+/** `main/sessions/hosting/files.ts`'s own injectable seam, inlined here since a `types/` file may not import a
  *  value from `main/` — this is the whole real shape, not an approximation. */
 type FileListingDeps = {
   readonly gitLines: (args: readonly string[], options: Omit<RunCommandOptions, 'whichEnv' | 'platform'>) => Promise<GitLinesResult>

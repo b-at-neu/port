@@ -1,7 +1,7 @@
 // Pure over a `TranscriptEntry[]` already parsed by `main/sessions/` -- no filesystem, no signature.
 import type { SearchField, SearchHit, SearchSnippet } from '@/types/search'
 import type { FileDiff, TranscriptEntry } from '@/utils/sessions/transcript'
-import { foldCase, indexOfFolded } from '@/main/search/terms'
+import { foldCase, indexOfFolded } from '@/main/sessions/search/terms'
 
 // Either side of a match, in the original (unfolded) text.
 const SNIPPET_CONTEXT_CHARS = 60

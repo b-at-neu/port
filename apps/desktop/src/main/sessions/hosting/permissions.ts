@@ -4,8 +4,8 @@ import type { StagePolicyDecision } from '@/types/hosting'
 // an operator answer or by the SDK's own AbortSignal, never by a timer of its own.
 import type { QuestionAnswerResult, PlanAnswerResult, PlanDecision } from '@/utils/hosting/controls'
 import type { PendingPermission, PermissionDecision, SessionPermissionAnswerResult } from '@/types/hosting'
-import { narrowSessionGrant } from '@/main/hosting/grant'
-import { answersMatch, narrowInteraction, planApproveResult, planKeepResult, questionResult } from '@/main/hosting/interactions'
+import { narrowSessionGrant } from '@/main/sessions/hosting/grant'
+import { answersMatch, narrowInteraction, planApproveResult, planKeepResult, questionResult } from '@/main/sessions/hosting/interactions'
 import type { CanUseTool, PermissionResult, PermissionUpdate } from '@/main/platform/sdk'
 
 

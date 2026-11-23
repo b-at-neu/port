@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { narrowSessionGrant } from '@/main/hosting/grant'
+import { narrowSessionGrant } from '@/main/sessions/hosting/grant'
 import type { PermissionUpdate } from '@/main/platform/sdk'
 
 describe('narrowSessionGrant', () => {

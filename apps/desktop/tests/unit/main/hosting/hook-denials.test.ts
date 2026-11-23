@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { GUARD_ALLOWLIST_MISS_MARKER } from '@/main/hosting/guard-marker'
-import { createHookDenialTracker } from '@/main/hosting/hook-denials'
-import { STAGE_DENY_MESSAGE } from '@/main/hosting/stage-policy'
+import { GUARD_ALLOWLIST_MISS_MARKER } from '@/main/sessions/hosting/guard-marker'
+import { createHookDenialTracker } from '@/main/sessions/hosting/hook-denials'
+import { STAGE_DENY_MESSAGE } from '@/main/sessions/hosting/stage-policy'
 
 function call(id: string, command: string): unknown {
   return { type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Bash', input: { command } }] } }

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createHostedHandle, REPLAY_LIMIT } from '@/main/hosting/handle'
-import { GUARD_ALLOWLIST_MISS_MARKER } from '@/main/hosting/guard-marker'
+import { createHostedHandle, REPLAY_LIMIT } from '@/main/sessions/hosting/handle'
+import { GUARD_ALLOWLIST_MISS_MARKER } from '@/main/sessions/hosting/guard-marker'
 import type { SessionEntriesDelta, SessionEventEnvelope } from '@/types/hosting'
 import { SESSION_KEY, baseParams, fakeQuery, flush } from '../../../fixtures/hosting/handle'
 

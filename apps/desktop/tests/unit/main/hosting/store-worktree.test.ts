@@ -1,6 +1,6 @@
 // folder-busy and the worktree dismiss outcomes — split out of store.test.ts to stay under the file size limit.
 import { describe, expect, it, vi } from 'vitest'
-import { createHostedStore } from '@/main/hosting/store'
+import { createHostedStore } from '@/main/sessions/hosting/store'
 import type { SessionWorkspace } from '@/types/workspace'
 import { REPO_ID, baseDeps, endedQuery, flush } from '../../../fixtures/hosting/store'
 

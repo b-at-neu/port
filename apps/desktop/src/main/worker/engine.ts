@@ -5,7 +5,7 @@ import type { SessionReader } from '@/types/sessions'
 import { readSessionState } from '@/main/sessions/adapter'
 import { createSdkSessionReader } from '@/main/sessions/reader'
 import { createTailStore } from '@/main/sessions/tail'
-import { runSearch } from '@/main/search/query'
+import { runSearch } from '@/main/sessions/search/query'
 import { projectFromCache } from '@/main/state/read'
 import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/state/sources'
 

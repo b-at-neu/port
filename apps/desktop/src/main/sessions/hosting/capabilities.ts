@@ -4,7 +4,7 @@ import type { AgentInfo, HostedQuery, SlashCommand } from '@/main/platform/sdk'
 import type { AgentSummary, CommandSummary, SessionCapabilities, SlashCommandSummary } from '@/types/hosting'
 import { isRecord } from '@/utils/guards'
 import { sanitize } from '@/main/sessions/transcript-entries'
-import { checkPluginLoad, isBlockedCommand, PLUGIN_NAME, type InitPlugin } from '@/main/hosting/verify'
+import { checkPluginLoad, isBlockedCommand, PLUGIN_NAME, type InitPlugin } from '@/main/sessions/hosting/verify'
 
 /** Control requests answered before the first turn, costing no tokens. */
 export const CAPABILITIES_TIMEOUT_MS = 30_000

@@ -126,8 +126,8 @@ export const RESTRICTIONS = [
   },
   {
     id: 'search',
-    files: ['src/main/search/**'],
-    patterns: [{ group: ['@/main/sessions/*', '!@/main/sessions/locate', '!@/main/sessions/transcript'], message: 'main/search/ imports only sessions/locate and sessions/transcript.' }],
+    files: ['src/main/sessions/search/**'],
+    patterns: [{ regex: '^@/main/sessions/(?!(?:locate|transcript|search/[\\w-]+)$)', message: 'main/sessions/search/ imports only sessions/locate and sessions/transcript.' }],
   },
   {
     id: 'mirror',
@@ -136,7 +136,7 @@ export const RESTRICTIONS = [
   },
   {
     id: 'hosting-permissions',
-    files: ['src/main/hosting/**', 'src/utils/hosting/**', 'src/types/hosting.ts'],
+    files: ['src/main/sessions/hosting/**', 'src/utils/hosting/**', 'src/types/hosting.ts'],
     syntax: [
       { selector: "Literal[value='bypassPermissions']", message: "Never bypass the operator's own permission prompt." },
       { selector: "Literal[value='dontAsk']", message: "Never bypass the operator's own permission prompt." },
@@ -145,7 +145,7 @@ export const RESTRICTIONS = [
   },
   {
     id: 'hosting-options',
-    files: ['src/main/hosting/**'],
+    files: ['src/main/sessions/hosting/**'],
     syntax: [
       { selector: "Property[key.name='tools'][shorthand=false]", message: "A tools: key restricts the whole session's built-in set — use allowedTools." },
       { selector: "Property[key.name='skills'][shorthand=false]", message: 'Commands run as typed slash commands, never through the Skill-tool filter.' },

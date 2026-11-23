@@ -40,27 +40,27 @@ import type {
   SessionTaskStopResult,
   WorktreeChoice,
 } from '@/types/hosting'
-import { createHostedHandle } from '@/main/hosting/handle'
-import { createSessionMarks } from '@/main/hosting/marks'
+import { createHostedHandle } from '@/main/sessions/hosting/handle'
+import { createSessionMarks } from '@/main/sessions/hosting/marks'
 
-import { readHistory } from '@/main/hosting/history'
-import { defaultForkListSessions, titleFork } from '@/main/hosting/fork'
-import { readStageEditAllow } from '@/main/hosting/stage-allow'
-import { resolveStartTitle } from '@/main/hosting/title'
-import { createInMemoryHostingPersistence, DEFAULT_SESSION_LIMIT, SESSION_LIMIT_CEILING } from '@/main/hosting/persist'
+import { readHistory } from '@/main/sessions/hosting/history'
+import { defaultForkListSessions, titleFork } from '@/main/sessions/hosting/fork'
+import { readStageEditAllow } from '@/main/sessions/hosting/stage-allow'
+import { resolveStartTitle } from '@/main/sessions/hosting/title'
+import { createInMemoryHostingPersistence, DEFAULT_SESSION_LIMIT, SESSION_LIMIT_CEILING } from '@/main/sessions/hosting/persist'
 
-import { dropAdopted, mintRestorable, nextPersisted, persistedOpen } from '@/main/hosting/restore'
+import { dropAdopted, mintRestorable, nextPersisted, persistedOpen } from '@/main/sessions/hosting/restore'
 
-import { findAlreadyOpen, findFolderBusy } from '@/main/hosting/occupancy'
+import { findAlreadyOpen, findFolderBusy } from '@/main/sessions/hosting/occupancy'
 import type { SessionReader } from '@/types/sessions'
-import { resolveClaudeExecutable } from '@/main/runtime/locate'
+import { resolveClaudeExecutable } from '@/main/sessions/runtime/locate'
 import { pathOps } from '@/main/platform/paths'
 import { defaultGitRunner } from '@/main/platform/git'
 import { removeSessionWorktreeAt } from '@/main/repos/worktree/worktree'
 
 import type { SessionWorkspace } from '@/types/workspace'
 
-export { DEFAULT_SESSION_LIMIT, SESSION_LIMIT_CEILING } from '@/main/hosting/persist'
+export { DEFAULT_SESSION_LIMIT, SESSION_LIMIT_CEILING } from '@/main/sessions/hosting/persist'
 
 /** Ended handles retained up to this many; the oldest-ended is evicted on the next `end`. */
 export const ENDED_RETAIN_LIMIT = 20

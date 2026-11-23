@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createPathOps } from '@/main/platform/paths'
-import { bundledSdkPackageDir, resolveClaudeExecutable } from '@/main/runtime/locate'
+import { bundledSdkPackageDir, resolveClaudeExecutable } from '@/main/sessions/runtime/locate'
 
 const posixOps = createPathOps('posix', { home: '/home/operator' })
 const win32Ops = createPathOps('win32', { home: 'C:\\Users\\operator' })

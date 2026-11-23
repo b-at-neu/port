@@ -1,6 +1,6 @@
 // Pairs a `tool_use` with the guard hook's allowlist-miss `tool_result`, so a Bash call the hook denied before `canUseTool` ever ran still reaches a stage session's `onDeny`.
 
-import { GUARD_ALLOWLIST_MISS_MARKER } from '@/main/hosting/guard-marker'
+import { GUARD_ALLOWLIST_MISS_MARKER } from '@/main/sessions/hosting/guard-marker'
 import { TOOL_USE_ID_FIELD } from '@/main/sessions/transcript-entries'
 
 export interface HookDeniedCall {

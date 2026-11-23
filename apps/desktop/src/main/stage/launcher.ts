@@ -17,7 +17,7 @@ import { isTransientNetworkFailure, SETTLE_FAILED_DETAIL } from '@/main/stage/ha
 import { proposedRule } from '@/main/stage/rule'
 import { loadStageAgentDefinition } from '@/main/stage/bundle'
 import { classifyHandback } from '@/main/stage/handback'
-import { stageTitle } from '@/main/hosting/title'
+import { stageTitle } from '@/main/sessions/hosting/title'
 import { bareTicketLabel } from '@/utils/tickets/ticket'
 
 import { inFlightKeyFor } from '@/main/tick/routing'

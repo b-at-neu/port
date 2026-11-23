@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createPermissionBroker, DEFAULT_DENY_MESSAGE } from '@/main/hosting/permissions'
+import { createPermissionBroker, DEFAULT_DENY_MESSAGE } from '@/main/sessions/hosting/permissions'
 import type { PermissionUpdate } from '@/main/platform/sdk'
 
 function baseOptions(overrides: Record<string, unknown> = {}) {

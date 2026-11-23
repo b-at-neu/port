@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createSessionIndex, SESSION_INDEX_CAP } from '@/main/hosting/session-index'
+import { createSessionIndex, SESSION_INDEX_CAP } from '@/main/sessions/hosting/session-index'
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import type { StageTag } from '@/types/stage-session'
 import type { FileResult } from '@/types/platform'

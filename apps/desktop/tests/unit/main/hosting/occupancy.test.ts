@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findAlreadyOpen, findFolderBusy } from '@/main/hosting/occupancy'
+import { findAlreadyOpen, findFolderBusy } from '@/main/sessions/hosting/occupancy'
 
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import type { SessionWorkspace } from '@/types/workspace'

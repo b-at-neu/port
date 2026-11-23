@@ -13,10 +13,10 @@ import { MAX_HITS_PER_TRANSCRIPT, MAX_TOTAL_HITS, SCAN_BUDGET_MS } from '@/types
 import type { RepoId } from '@/utils/repos'
 import type { SearchGroup, SearchHit, SearchResult, SearchScope } from '@/types/search'
 import type { TranscriptEntry } from '@/utils/sessions/transcript'
-import { parseQuery } from '@/main/search/terms'
-import { buildSignature, decodeSignature, encodeSignature, mightContain } from '@/main/search/signature'
-import { hitsFor, searchableFields } from '@/main/search/match'
-import { readSignatureIndex, writeSignatureIndex } from '@/main/search/store'
+import { parseQuery } from '@/main/sessions/search/terms'
+import { buildSignature, decodeSignature, encodeSignature, mightContain } from '@/main/sessions/search/signature'
+import { hitsFor, searchableFields } from '@/main/sessions/search/match'
+import { readSignatureIndex, writeSignatureIndex } from '@/main/sessions/search/store'
 
 import type { RunSearchParams } from '@/types/search'
 

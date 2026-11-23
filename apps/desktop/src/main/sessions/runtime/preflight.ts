@@ -2,11 +2,11 @@ import type { RuntimeProbeFn } from '@/types/runtime'
 
 // The two composition roots `main/ipc.ts` calls, which only ever validates the request shape and delegates. Neither strips `ANTHROPIC_API_KEY`; both only report whether it is present.
 import { ensureDirectory } from '@/main/platform/files'
-import { readCredentialsTell } from '@/main/runtime/credentials'
-import { resolveClaudeExecutable } from '@/main/runtime/locate'
-import { readClaudeVersion } from '@/main/runtime/version'
-import { classifyPreflight } from '@/main/runtime/classify'
-import { createRuntimeProbe } from '@/main/runtime/probe'
+import { readCredentialsTell } from '@/main/sessions/runtime/credentials'
+import { resolveClaudeExecutable } from '@/main/sessions/runtime/locate'
+import { readClaudeVersion } from '@/main/sessions/runtime/version'
+import { classifyPreflight } from '@/main/sessions/runtime/classify'
+import { createRuntimeProbe } from '@/main/sessions/runtime/probe'
 
 import type { RuntimePreflight, RuntimeProbe } from '@/types/runtime'
 import { listRepositories, requireReadyRepo } from '@/main/repos'

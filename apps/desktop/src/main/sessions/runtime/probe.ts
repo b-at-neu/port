@@ -1,7 +1,7 @@
 // One `query()` turn, fixed short prompt, `maxTurns: 1`, always with `pathToClaudeCodeExecutable` set so the probe never falls back to the SDK's bundled binary. `ANTHROPIC_API_KEY` is never stripped, only reported.
 import { defaultSdk, type Options, type SdkSource } from '@/main/platform/sdk'
 import type { RuntimeProbeFn } from '@/types/runtime'
-import { classifyProbeFailure } from '@/main/runtime/classify'
+import { classifyProbeFailure } from '@/main/sessions/runtime/classify'
 
 /** Only the fields this probe reads off a result message, so `sdk.test.ts` builds plain fixtures rather than every field of the real `SDKResultMessage` union. */
 interface ProbeMessage {

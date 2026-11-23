@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createHostedStore } from '@/main/hosting/store'
-import type { HostedQuery } from '@/main/hosting/handle'
+import { createHostedStore } from '@/main/sessions/hosting/store'
+import type { HostedQuery } from '@/main/sessions/hosting/handle'
 import type { SessionWorkspace } from '@/types/workspace'
 import { REPO_ID, baseDeps, flush } from '../../../fixtures/hosting/store'
 
