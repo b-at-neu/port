@@ -21,7 +21,7 @@ import { autoPlanStatusOf } from '@/main/tick/auto-plan'
 import type { EndedStage } from '@/types/tick'
 import { isReady } from '@/main/state/read'
 import { afterFailure, afterSuccess, budgetedIntervalMs, deferredUntil, dueSources, githubSweepGapMs, nextDueAt } from '@/main/state/schedule'
-import { createInProcessEngine } from '@/main/offload/engine'
+import { createInProcessEngine } from '@/main/worker/engine'
 import { createGithubPrecheck } from '@/main/state/precheck'
 
 import type { PipelineWatcher, RefreshRequest, TimerFactory, TimerHandle } from '@/types/state'

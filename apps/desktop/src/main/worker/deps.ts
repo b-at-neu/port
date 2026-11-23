@@ -2,7 +2,7 @@ import type { SearchQueryDeps, SessionsScanDeps, TranscriptTailDeps } from '@/ma
 import type { StateEngine } from '@/types/offload'
 import { listRepositories } from '@/main/registry'
 import { resolveSessionsScan } from '@/main/features/history/resolve'
-import { createWorkerEngine } from '@/main/offload/client'
+import { createWorkerEngine } from '@/main/worker/client'
 
 interface OffloadChannelDeps {
   readonly sessionsScan: SessionsScanDeps

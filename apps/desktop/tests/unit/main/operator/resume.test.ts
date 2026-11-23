@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { AuditEntry, AuditRead, LabelAuditEntry } from '@/types/writes'
 import type { RepoId } from '@/utils/repos'
-import { recoverPausedTrigger } from '@/main/actions/resume'
+import { recoverPausedTrigger } from '@/main/operator/resume'
 
 const VOCABULARY = resolveVocabulary({})
 

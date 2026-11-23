@@ -17,7 +17,7 @@ import { UNSEEDED_MESSAGE } from '@/main/pipeline-state/labels'
 
 import type { ItemsByNumberFetch } from '@/types/github'
 import type { StateLabelsReader } from '@/types/pipeline-state'
-import { findRepoState, movedResult } from '@/main/actions/apply'
+import { findRepoState, movedResult } from '@/main/operator/apply'
 
 import type { ApplyItemDecisionParams } from '@/types/actions'
 

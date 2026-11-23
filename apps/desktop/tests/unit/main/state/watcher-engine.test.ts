@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type { StateEngine } from '@/types/offload'
-import { createInProcessEngine } from '@/main/offload/engine'
+import { createInProcessEngine } from '@/main/worker/engine'
 import { createPipelineWatcher } from '@/main/state/watcher'
 import { fakeGit, makeFakeTimer, readyEntry } from '../../../fixtures/watcher-harness'
 

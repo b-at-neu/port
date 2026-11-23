@@ -4,7 +4,7 @@ import type { RepoId } from '@/utils/repos'
 import type { ReconciledItem } from '@/types/state'
 import type { WriteOutcome } from '@/types/writes'
 import type { ApplyObservationParams, ReadyEntry } from '@/types/actions'
-import { applyObservation } from '@/main/actions/observe'
+import { applyObservation } from '@/main/operator/observe'
 import type { PostCommentParams } from '@/types/writes'
 
 const REPO_ID = 'repo-1' as unknown as RepoId

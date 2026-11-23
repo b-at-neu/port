@@ -12,9 +12,9 @@ import { createPipelineStateStore } from '@/main/pipeline-state/store'
 import { createStateWriter } from '@/main/pipeline-state/writer'
 import { appendAudit, readAuditLog } from '@/main/writes/audit'
 import type { GhRunner, GitRunner } from '@/types/platform'
-import { applyItemDecision } from '@/main/actions/decide'
+import { applyItemDecision } from '@/main/operator/decide'
 import { applyLabels, postComment } from '@/main/writes/apply'
-import type { ApplyItemDecisionDeps } from '@/main/actions/decide'
+import type { ApplyItemDecisionDeps } from '@/main/operator/decide'
 import { boardSnapshot as snapshotOf, readyEntry, reconciledItem, repositoryState } from '../../../fixtures/board-state'
 
 const REPO_ID = 'repo-1' as unknown as RepoId

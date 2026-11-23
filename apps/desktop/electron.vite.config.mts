@@ -61,7 +61,7 @@ export default defineConfig(({ mode }) => {
         rollupOptions: {
           input: {
             index: fileURLToPath(new URL('./src/main/index.ts', import.meta.url)),
-            'state-worker': fileURLToPath(new URL('./src/main/offload/worker.ts', import.meta.url))
+            'state-worker': fileURLToPath(new URL('./src/main/worker/worker.ts', import.meta.url))
           }
         }
       }

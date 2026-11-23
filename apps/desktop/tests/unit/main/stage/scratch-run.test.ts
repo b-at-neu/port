@@ -25,7 +25,7 @@ import { planTick } from '@/main/tick/plan'
 import { reconcileRepository } from '@/main/state/reconcile'
 import type { ReadyEntry } from '@/types/actions'
 import type { PostCommentParams, WriteOutcome, WriteStateParams } from '@/types/writes'
-import { applyStageClaim, applyStageTransition } from '@/main/actions/stage'
+import { applyStageClaim, applyStageTransition } from '@/main/operator/stage'
 import type { CreateStageWorktreeResult, RemoveSessionWorktreeOutcome } from '@/types/workspace'
 
 const REPO_ID = 'repo-scratch' as RepoId

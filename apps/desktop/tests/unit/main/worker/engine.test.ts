@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { mkdir, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createInProcessEngine } from '@/main/offload/engine'
+import { createInProcessEngine } from '@/main/worker/engine'
 import type { RepoId } from '@/utils/repos'
 import { fakeGit, scriptedConditional } from '../../../fixtures/watcher-harness'
 

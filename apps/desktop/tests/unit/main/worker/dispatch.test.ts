@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { OFFLOAD_OPS } from '@/types/offload'
 import type { StateEngine } from '@/types/offload'
-import { createInProcessEngine } from '@/main/offload/engine'
-import { handleRequest } from '@/main/offload/dispatch'
+import { createInProcessEngine } from '@/main/worker/engine'
+import { handleRequest } from '@/main/worker/dispatch'
 import { fakeGit, readyEntry } from '../../../fixtures/watcher-harness'
 
 const reader = () => Promise.resolve({ ok: true as const, sessions: [] })

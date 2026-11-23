@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { OffloadRequest, OffloadResponse } from '@/types/offload'
-import { createWorkerEngine } from '@/main/offload/client'
+import { createWorkerEngine } from '@/main/worker/client'
 
 type Listener = (value: never) => void
 

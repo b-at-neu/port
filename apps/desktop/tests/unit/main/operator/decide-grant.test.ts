@@ -4,7 +4,7 @@ import type { ReconciledItem, StageLabel } from '@/types/state'
 import type { ItemsByNumberFetch } from '@/types/github'
 import type { ItemDecisionRequest } from '@/types/actions'
 import type { WriteOutcome, WriteStateParams } from '@/types/writes'
-import { applyItemDecision } from '@/main/actions/decide'
+import { applyItemDecision } from '@/main/operator/decide'
 import { boardSnapshot as snapshotOf, readyEntry, reconciledItem, repositoryState } from '../../../fixtures/board-state'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
