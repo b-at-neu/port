@@ -3,6 +3,7 @@ import type { SessionKey } from '@/types/hosting'
 import { resolveSessionFiles, resolveSessionSend } from '@/main/features/session/resolve'
 import type { HostingChannelDeps } from '@/main/app/seams'
 import { storeStub } from '../../../fixtures/store'
+import { createFakeFs, fakeGit } from '../../../support/fake-platform'
 
 const SESSION_KEY = 'hosted-1' as SessionKey
 
@@ -17,15 +18,8 @@ function depsWith(overrides: Partial<HostingChannelDeps> = {}): HostingChannelDe
     resolveStartTarget: () => {
       throw new Error('resolveStartTarget should not be invoked in this case')
     },
-    targetDeps: {
-      git: () => {
-        throw new Error('git should not be invoked in this case')
-      },
-      recents: { load: () => Promise.resolve([]), record: () => Promise.resolve() },
-      exists: () => Promise.resolve(true),
-      readSessions: () => Promise.resolve({ ok: true, sessions: [] }),
-      createWorktree: () => Promise.resolve({ ok: false, message: 'should not be called' }),
-    },
+    targetCtx: { git: fakeGit(), fs: createFakeFs() },
+    targetSources: { recents: { load: () => Promise.resolve([]), record: () => Promise.resolve() }, readSessions: () => Promise.resolve({ ok: true, sessions: [] }) },
     now: () => new Date('2026-01-01T00:00:00.000Z'),
     removeCreatedWorktree: () => Promise.resolve(),
     ...overrides,

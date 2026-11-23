@@ -1,10 +1,9 @@
-import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { CommandResult, GitRunner } from '@/types/platform'
 import type { CreateStageWorktreeParams } from '@/types/workspace'
 import { createStageWorktree } from '@/main/repos/worktree/stage-worktree'
-import { makeTempDir } from '../../../fixtures/fs'
+import { createFakeFs } from '../../../support/fake-platform'
 
 const START_SHA = 'cafe0001'
 const DERIVED = '467-stage-worktrees-use-the-issue-branch'
@@ -37,9 +36,10 @@ function forEachRef(tip: string, worktreePath: string): CommandResult {
   return ok(`refs/heads/${DERIVED}\t${tip}\t${worktreePath}\n`)
 }
 
-async function params(overrides: Partial<CreateStageWorktreeParams> & { readonly git: GitRunner }): Promise<CreateStageWorktreeParams> {
-  const root = await makeTempDir()
-  return { root, agent: 'impl', number: 467, integration: 'dev', target: { kind: 'issue', title: 'Stage worktrees use the issue branch' }, liveWorktrees: new Set(), random: () => 'abcdef0123', ...overrides }
+const ROOT = '/repo'
+
+function params(overrides: Partial<CreateStageWorktreeParams>): CreateStageWorktreeParams {
+  return { root: ROOT, agent: 'impl', number: 467, integration: 'dev', target: { kind: 'issue', title: 'Stage worktrees use the issue branch' }, liveWorktrees: new Set(), random: () => 'abcdef0123', ...overrides }
 }
 
 interface LeftoverOptions {
@@ -52,9 +52,9 @@ interface LeftoverOptions {
 }
 
 async function leftover(options: LeftoverOptions = {}) {
-  const root = await makeTempDir()
-  const path = join(root, '.claude', 'worktrees', options.folder ?? 'impl-467')
-  if (options.create !== false) await mkdir(path, { recursive: true })
+  const fs = createFakeFs()
+  const path = join(ROOT, '.claude', 'worktrees', options.folder ?? 'impl-467')
+  if (options.create !== false) await fs.ensureDir(path)
   const { git, calls } = recorder((args) => {
     if (args[0] === 'for-each-ref') return forEachRef('aaaa', path)
     if (args[0] === 'status') return options.status ?? ok()
@@ -63,8 +63,8 @@ async function leftover(options: LeftoverOptions = {}) {
     if (args[0] === 'worktree' && args[1] === 'remove') return options.remove ?? ok()
     return undefined
   })
-  const p = await params({ git, root, liveWorktrees: new Set(options.live === true ? [path] : []) })
-  return { result: await createStageWorktree(p), calls, path }
+  const p = params({ liveWorktrees: new Set(options.live === true ? [path] : []) })
+  return { result: await createStageWorktree({ git, fs }, p), calls, path }
 }
 
 describe('createStageWorktree — a leftover stage worktree holding the branch', () => {
@@ -83,15 +83,15 @@ describe('createStageWorktree — a leftover stage worktree holding the branch',
   })
 
   it('counts a tip equal to portBase as published when origin has no such branch', async () => {
-    const root = await makeTempDir()
-    const path = join(root, '.claude', 'worktrees', 'impl-467')
-    await mkdir(path, { recursive: true })
+    const fs = createFakeFs()
+    const path = join(ROOT, '.claude', 'worktrees', 'impl-467')
+    await fs.ensureDir(path)
     const { git, calls } = recorder((args) => {
       if (args[0] === 'for-each-ref') return forEachRef('aaaa', path)
       if (args[0] === 'config' && args[1] === '--get') return ok('aaaa\n')
       return undefined
     })
-    const result = await createStageWorktree(await params({ git, root }))
+    const result = await createStageWorktree({ git, fs }, params({}))
     expect(result).toMatchObject({ ok: true, reclaimed: path })
     expect(argvOf(calls, 'worktree', 'remove')).toEqual([['worktree', 'remove', path]])
   })

@@ -1,13 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { CommandResult } from '@/types/platform'
 import type { GitRunner } from '@/types/platform'
-import { createPathOps } from '@/main/platform/paths'
-import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import { resolveWorkspace, toFolderEntry } from '@/main/repos/worktree/resolve'
-
-// Fixed posix flavour, never the host-bound default: these fixtures are posix-shaped paths, and
-// `defaultPathOps` silently switches to win32 on a Windows runner, which no posix fixture matches.
-const pathOps = createPathOps('posix', { home: '/home/u' })
+import type { RepoId } from '@/utils/repos'
+import { readyEntry } from '../../../support/repo-config'
 
 function ok(stdout: string): CommandResult {
   return { ok: true, stdout, stderr: '' }
@@ -15,131 +11,74 @@ function ok(stdout: string): CommandResult {
 
 const NOT_A_REPO: CommandResult = { ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'not a git repository' }
 
-function fakeGit(overrides: Partial<Record<string, (args: readonly string[], cwd: string) => CommandResult>>): GitRunner {
-  return (args, cwd) => {
+function fakeGit(overrides: Partial<Record<string, () => CommandResult>>): GitRunner {
+  return (args) => {
     const key = args[0] === 'rev-parse' && args.includes('--show-toplevel') ? 'root' : args.join(' ')
     for (const [pattern, handler] of Object.entries(overrides)) {
-      if ((key === pattern || key.startsWith(pattern)) && handler) return Promise.resolve(handler(args, cwd))
+      if ((key === pattern || key.startsWith(pattern)) && handler) return Promise.resolve(handler())
     }
     return Promise.resolve(NOT_A_REPO)
   }
 }
 
-function readyRepo(path: string): RepositoryEntry {
-  return {
-    id: path as RepoId,
-    path,
-    displayName: path,
-    status: 'ready',
-    config: {
-      repo: 'acme/widgets',
-      owner: 'acme',
-      name: 'widgets',
-      branches: { integration: 'dev', production: 'main' },
-      models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
-      modules: { approvalGate: true, release: true, scope: true },
-      reviewCycleCap: 5,
-      vocabulary: { labels: [], disabled: [], problems: [] },
-      commands: { worktrees: null, budget: null },
-      concurrency: { sharedFiles: [], overlapThreshold: 2 },
-      sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
-      checkDispositions: {},
-      overrides: [],
-    },
-    diagnostics: [],
-  }
+const WORKTREE = '/repo/.claude/worktrees/session-abc123'
+const LINKED = {
+  root: () => ok(`${WORKTREE}\n`),
+  'rev-parse --git-dir': () => ok('/repo/.git/worktrees/session-abc123\n'),
+  'rev-parse --git-common-dir': () => ok('/repo/.git\n'),
+  'rev-parse --abbrev-ref': () => ok('session/abc123\n'),
 }
+const MAIN_CHECKOUT = {
+  root: () => ok('/repo\n'),
+  'rev-parse --git-dir': () => ok('.git\n'),
+  'rev-parse --git-common-dir': () => ok('.git\n'),
+  'rev-parse --abbrev-ref': () => ok('main\n'),
+  'rev-parse HEAD': () => ok('abc123\n'),
+}
+const DETACHED = { ...MAIN_CHECKOUT, 'rev-parse --abbrev-ref': () => ok('HEAD\n') }
+
+const readyRepo = (path: string) => readyEntry({ id: path as RepoId, path, displayName: path })
 
 describe('resolveWorkspace', () => {
-  it('resolves root: null for a non-git folder, with no worktree or base', async () => {
-    const git = fakeGit({})
-    const { workspace, repoId } = await resolveWorkspace('/tmp/not-a-repo', { git, repositories: [], pathOps })
-    expect(workspace).toEqual({ folder: '/tmp/not-a-repo', root: null, worktree: null, base: null })
-    expect(repoId).toBeNull()
-  })
-
-  it('resolves a non-worktree folder to a HEAD-sha base and no worktree', async () => {
-    const git = fakeGit({
-      root: () => ok('/repo\n'),
-      'rev-parse --git-dir': () => ok('.git\n'),
-      'rev-parse --git-common-dir': () => ok('.git\n'),
-      'rev-parse --abbrev-ref': () => ok('main\n'),
-      'rev-parse HEAD': () => ok('abc123\n'),
-    })
-    const { workspace, repoId } = await resolveWorkspace('/repo', { git, repositories: [], pathOps })
-    expect(workspace.root).toBe('/repo')
-    expect(workspace.worktree).toBeNull()
-    expect(workspace.base).toEqual({ sha: 'abc123', label: 'main' })
-    expect(repoId).toBeNull()
-  })
-
-  it('resolves a linked worktree with its recorded portBase', async () => {
-    const git = fakeGit({
-      root: () => ok('/repo/.claude/worktrees/session-abc123\n'),
-      'rev-parse --git-dir': () => ok('/repo/.git/worktrees/session-abc123\n'),
-      'rev-parse --git-common-dir': () => ok('/repo/.git\n'),
-      'rev-parse --abbrev-ref': () => ok('session/abc123\n'),
-      'config branch.session/abc123.portBase': () => ok('def456\n'),
-    })
-    const { workspace } = await resolveWorkspace('/repo/.claude/worktrees/session-abc123', { git, repositories: [], pathOps })
-    expect(workspace.worktree).toEqual({ path: '/repo/.claude/worktrees/session-abc123', branch: 'session/abc123' })
-    expect(workspace.base).toEqual({ sha: 'def456', label: 'session/abc123' })
-  })
-
-  it('reports base: null for a linked worktree with no recorded portBase', async () => {
-    const git = fakeGit({
-      root: () => ok('/repo/.claude/worktrees/session-abc123\n'),
-      'rev-parse --git-dir': () => ok('/repo/.git/worktrees/session-abc123\n'),
-      'rev-parse --git-common-dir': () => ok('/repo/.git\n'),
-      'rev-parse --abbrev-ref': () => ok('session/abc123\n'),
-      'config branch.session/abc123.portBase': () => NOT_A_REPO,
-    })
-    const { workspace } = await resolveWorkspace('/repo/.claude/worktrees/session-abc123', { git, repositories: [], pathOps })
-    expect(workspace.base).toBeNull()
-  })
-
-  it('resolves repoId to the ready registry entry whose path matches the git base root', async () => {
-    const git = fakeGit({
-      root: () => ok('/repo\n'),
-      'rev-parse --git-dir': () => ok('.git\n'),
-      'rev-parse --git-common-dir': () => ok('.git\n'),
-      'rev-parse --abbrev-ref': () => ok('main\n'),
-      'rev-parse HEAD': () => ok('abc123\n'),
-    })
-    const repositories = [readyRepo('/repo')]
-    const { repoId } = await resolveWorkspace('/repo', { git, repositories, pathOps })
-    expect(repoId).toBe('/repo')
+  it.each([
+    { name: 'a non-git folder', folder: '/tmp/not-a-repo', git: {}, workspace: { folder: '/tmp/not-a-repo', root: null, worktree: null, base: null }, repoId: null },
+    {
+      name: 'a linked worktree with its recorded portBase',
+      folder: WORKTREE,
+      git: { ...LINKED, 'config branch.session/abc123.portBase': () => ok('def456\n') },
+      workspace: { folder: WORKTREE, root: WORKTREE, worktree: { path: WORKTREE, branch: 'session/abc123' }, base: { sha: 'def456', label: 'session/abc123' } },
+      repoId: null,
+    },
+    {
+      name: 'a linked worktree with no recorded portBase',
+      folder: WORKTREE,
+      git: LINKED,
+      workspace: { folder: WORKTREE, root: WORKTREE, worktree: { path: WORKTREE, branch: 'session/abc123' }, base: null },
+      repoId: null,
+    },
+    { name: 'the main checkout', folder: '/repo', git: MAIN_CHECKOUT, workspace: { folder: '/repo', root: '/repo', worktree: null, base: { sha: 'abc123', label: 'main' } }, repoId: null },
+    { name: 'a detached HEAD', folder: '/repo', git: DETACHED, workspace: { folder: '/repo', root: '/repo', worktree: null, base: { sha: 'abc123', label: 'abc123' } }, repoId: null },
+    { name: 'a registered repository', folder: '/repo', git: MAIN_CHECKOUT, repositories: [readyRepo('/repo')], workspace: { folder: '/repo', root: '/repo', worktree: null, base: { sha: 'abc123', label: 'main' } }, repoId: '/repo' },
+  ])('resolves $name', async ({ folder, git, repositories, workspace, repoId }) => {
+    const resolved = await resolveWorkspace({ git: fakeGit(git) }, folder, repositories ?? [])
+    expect(resolved).toEqual({ workspace, repoId })
   })
 })
 
 describe('toFolderEntry', () => {
   it('returns git: null for a non-git folder', async () => {
-    const git = fakeGit({})
-    const entry = await toFolderEntry('/tmp/plain', { git, repositories: [], lastUsedAt: null, pathOps })
-    expect(entry.git).toBeNull()
-    expect(entry.repoId).toBeNull()
-    expect(entry.path).toBe('/tmp/plain')
+    const entry = await toFolderEntry({ git: fakeGit({}) }, '/tmp/plain', [], null)
+    expect(entry).toMatchObject({ git: null, repoId: null, path: '/tmp/plain' })
     expect(entry.id.startsWith('folder-')).toBe(true)
   })
 
   it('returns git head/branch and repoId for a registered git repo', async () => {
-    const git = fakeGit({
-      root: () => ok('/repo\n'),
-      'rev-parse HEAD': () => ok('abc123\n'),
-      'rev-parse --abbrev-ref': () => ok('main\n'),
-      'rev-parse --git-common-dir': () => ok('.git\n'),
-    })
-    const repositories = [readyRepo('/repo')]
-    const entry = await toFolderEntry('/repo', { git, repositories, lastUsedAt: '2026-01-01T00:00:00.000Z', pathOps })
-    expect(entry.git).toEqual({ root: '/repo', head: { sha: 'abc123', branch: 'main' } })
-    expect(entry.repoId).toBe('/repo')
-    expect(entry.lastUsedAt).toBe('2026-01-01T00:00:00.000Z')
+    const entry = await toFolderEntry({ git: fakeGit(MAIN_CHECKOUT) }, '/repo', [readyRepo('/repo')], '2026-01-01T00:00:00.000Z')
+    expect(entry).toMatchObject({ git: { root: '/repo', head: { sha: 'abc123', branch: 'main' } }, repoId: '/repo', lastUsedAt: '2026-01-01T00:00:00.000Z' })
   })
 
   it('produces a stable id for the same path', async () => {
-    const git = fakeGit({})
-    const first = await toFolderEntry('/tmp/same', { git, repositories: [], lastUsedAt: null, pathOps })
-    const second = await toFolderEntry('/tmp/same', { git, repositories: [], lastUsedAt: null, pathOps })
-    expect(first.id).toBe(second.id)
+    const ctx = { git: fakeGit({}) }
+    expect((await toFolderEntry(ctx, '/tmp/same', [], null)).id).toBe((await toFolderEntry(ctx, '/tmp/same', [], null)).id)
   })
 })

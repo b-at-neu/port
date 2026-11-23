@@ -163,7 +163,7 @@ describe('createStageLauncher.launch', () => {
     const git = vi.fn() as never
     const launcher = createStageLauncher({ ...deps, git, now: () => new Date() })
     await launcher.launch(request())
-    expect(deps.createWorktree).toHaveBeenCalledWith({ root: ENTRY.path, git, agent: 'impl', number: 52, integration: ENTRY.config.branches.integration, target: { kind: 'issue', title: 'Add a dark-mode icon for the tray' }, liveWorktrees: new Set() })
+    expect(deps.createWorktree).toHaveBeenCalledWith({ root: ENTRY.path, agent: 'impl', number: 52, integration: ENTRY.config.branches.integration, target: { kind: 'issue', title: 'Add a dark-mode icon for the tray' }, liveWorktrees: new Set() })
   })
 
   it('passes only open session worktrees as live — a registry running entry whose session died never blocks the reclaim', async () => {

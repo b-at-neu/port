@@ -1,150 +1,92 @@
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { CommandResult } from '@/types/platform'
 import { classifyOwnership, readOwnership, releaseOwnership, takeOwnership } from '@/main/repos/ownership'
-import type { GitRunner } from '@/types/platform'
+import { createFakeFs, createFakeClock, fakeGit } from '../../../support/fake-platform'
 
+const SINCE = '2026-01-01T00:00:00Z'
+const ROOT = '/repo'
+const FILE = `${ROOT}/.agents/cockpit.json`
 const NOT_A_REPO: CommandResult = { ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'fatal: not a git repository' }
-const now = () => new Date('2026-01-01T00:00:00.000Z')
-
-async function makeRepo(): Promise<{ readonly root: string; readonly git: GitRunner }> {
-  const root = await mkdtemp(join(tmpdir(), 'port-ownership-'))
-  const git: GitRunner = () => Promise.resolve(NOT_A_REPO) // degrades to repoRoot itself
-  return { root, git }
-}
 
 describe('classifyOwnership', () => {
-  it('is absent when the file does not exist', () => {
-    expect(classifyOwnership(false, null, 'o/r')).toEqual({ kind: 'absent' })
+  it.each([
+    { name: 'a missing file', raw: undefined, expected: { kind: 'absent' } },
+    { name: 'a repo mismatch, never unreadable', raw: { repo: 'someone/else', owner: 'app', since: SINCE }, expected: { kind: 'absent' } },
+    { name: 'a value that is not an object', raw: 'just a string', expected: { kind: 'unreadable', message: 'cockpit.json is not a JSON object' } },
+    { name: 'a missing since', raw: { repo: 'o/r', owner: 'app' }, expected: { kind: 'unreadable', message: "cockpit.json is missing 'since'" } },
+    { name: 'an unknown owner', raw: { repo: 'o/r', owner: 'someone-else', since: SINCE }, expected: { kind: 'unreadable', message: "cockpit.json has an unknown 'owner'" } },
+    { name: 'owner app', raw: { repo: 'o/r', owner: 'app', since: SINCE }, expected: { kind: 'app', since: SINCE } },
+  ])('classifies $name', ({ raw, expected }) => {
+    expect(classifyOwnership(raw, 'o/r')).toEqual(expected)
   })
 
-  it('is absent for a repo mismatch, never unreadable', () => {
-    const text = JSON.stringify({ repo: 'someone/else', owner: 'app', since: '2026-01-01T00:00:00Z' })
-    expect(classifyOwnership(true, text, 'o/r')).toEqual({ kind: 'absent' })
-  })
-
-  it('is unreadable for malformed JSON', () => {
-    const result = classifyOwnership(true, '{not json', 'o/r')
-    expect(result.kind).toBe('unreadable')
-  })
-
-  it('is unreadable for a JSON value that is not an object', () => {
-    expect(classifyOwnership(true, '"just a string"', 'o/r').kind).toBe('unreadable')
-  })
-
-  it('is unreadable when since is missing', () => {
-    const text = JSON.stringify({ repo: 'o/r', owner: 'app' })
-    expect(classifyOwnership(true, text, 'o/r').kind).toBe('unreadable')
-  })
-
-  it('is unreadable for an unknown owner', () => {
-    const text = JSON.stringify({ repo: 'o/r', owner: 'someone-else', since: '2026-01-01T00:00:00Z' })
-    expect(classifyOwnership(true, text, 'o/r').kind).toBe('unreadable')
-  })
-
-  it('is app when owner is app', () => {
-    const text = JSON.stringify({ repo: 'o/r', owner: 'app', since: '2026-01-01T00:00:00Z' })
-    expect(classifyOwnership(true, text, 'o/r')).toEqual({ kind: 'app', since: '2026-01-01T00:00:00Z' })
-  })
-
-  it('is unreadable, naming the terminal cockpit, when owner is terminal', () => {
-    const text = JSON.stringify({ repo: 'o/r', owner: 'terminal', since: '2026-01-01T00:00:00Z' })
-    const result = classifyOwnership(true, text, 'o/r')
-    expect(result.kind).toBe('unreadable')
-    if (result.kind === 'unreadable') expect(result.message).toContain('terminal cockpit')
+  it('names the terminal cockpit when owner is terminal', () => {
+    const result = classifyOwnership({ repo: 'o/r', owner: 'terminal', since: SINCE }, 'o/r')
+    expect(result.kind === 'unreadable' && result.message).toContain('terminal cockpit')
   })
 })
+
+function setup(file?: string) {
+  const clock = createFakeClock('2026-01-01T00:00:00.000Z')
+  const fs = createFakeFs(clock)
+  const ctx = { git: fakeGit(() => Promise.resolve(NOT_A_REPO)), fs, clock }
+  const ready = file === undefined ? Promise.resolve() : fs.writeText(FILE, file).then(() => undefined)
+  return { ctx, fs, ready, params: { repoRoot: ROOT, repo: 'o/r' } }
+}
+
+const record = (owner: string): string => JSON.stringify({ repo: 'o/r', owner, since: SINCE })
 
 describe('readOwnership', () => {
-  it('reports absent for a missing record', async () => {
-    const { root, git } = await makeRepo()
-    const result = await readOwnership({ repoRoot: root, repo: 'o/r', git, now })
-    expect(result).toEqual({ kind: 'absent', path: join(root, '.agents', 'cockpit.json'), readAt: now().toISOString() })
-  })
-
-  it('reports app for a matching, well-formed record', async () => {
-    const { root, git } = await makeRepo()
-    await mkdir(join(root, '.agents'), { recursive: true })
-    await writeFile(join(root, '.agents', 'cockpit.json'), JSON.stringify({ repo: 'o/r', owner: 'app', since: '2026-01-01T00:00:00Z' }), 'utf8')
-    const result = await readOwnership({ repoRoot: root, repo: 'o/r', git, now })
-    expect(result).toEqual({ kind: 'app', since: '2026-01-01T00:00:00Z', path: join(root, '.agents', 'cockpit.json'), readAt: now().toISOString() })
-  })
-
-  it('reports unreadable for a record owned by the terminal cockpit', async () => {
-    const { root, git } = await makeRepo()
-    await mkdir(join(root, '.agents'), { recursive: true })
-    await writeFile(join(root, '.agents', 'cockpit.json'), JSON.stringify({ repo: 'o/r', owner: 'terminal', since: '2026-01-01T00:00:00Z' }), 'utf8')
-    const result = await readOwnership({ repoRoot: root, repo: 'o/r', git, now })
-    expect(result.kind).toBe('unreadable')
+  it.each([
+    { name: 'absent for a missing record', file: undefined, expected: { kind: 'absent' } },
+    { name: 'app for a matching record', file: record('app'), expected: { kind: 'app', since: SINCE } },
+    { name: 'unreadable for a terminal record', file: record('terminal'), expected: { kind: 'unreadable' } },
+    { name: 'unreadable for malformed JSON', file: '{not json', expected: { kind: 'unreadable' } },
+  ])('reports $name', async ({ file, expected }) => {
+    const { ctx, ready, params } = setup(file)
+    await ready
+    expect(await readOwnership(ctx, params)).toMatchObject({ ...expected, path: FILE, readAt: '2026-01-01T00:00:00.000Z' })
   })
 })
 
-describe('takeOwnership / releaseOwnership', () => {
-  it('take writes owner app then reads back as app', async () => {
-    const { root, git } = await makeRepo()
-    const taken = await takeOwnership({ repoRoot: root, repo: 'o/r', git, now })
-    expect(taken.ok).toBe(true)
+describe('takeOwnership', () => {
+  it('writes exactly the documented shape, with no version key, then reads back as app', async () => {
+    const { ctx, fs, params } = setup()
+    expect((await takeOwnership(ctx, params)).ok).toBe(true)
 
-    const read = await readOwnership({ repoRoot: root, repo: 'o/r', git, now })
-    expect(read).toEqual({ kind: 'app', since: now().toISOString(), path: join(root, '.agents', 'cockpit.json'), readAt: now().toISOString() })
+    const text = await fs.readText(FILE)
+    expect(text.ok && JSON.parse(text.value)).toEqual({ repo: 'o/r', owner: 'app', since: '2026-01-01T00:00:00.000Z' })
+    expect(await readOwnership(ctx, params)).toMatchObject({ kind: 'app', since: '2026-01-01T00:00:00.000Z' })
   })
 
-  it('the record round-trips exactly the documented shape', async () => {
-    const { root, git } = await makeRepo()
-    await takeOwnership({ repoRoot: root, repo: 'o/r', git, now })
-    const text = await readFile(join(root, '.agents', 'cockpit.json'), 'utf8')
-    expect(JSON.parse(text)).toEqual({ repo: 'o/r', owner: 'app', since: now().toISOString() })
+  it.each([
+    { name: 'a terminal record', file: record('terminal') },
+    { name: 'an unparseable record', file: '{not json' },
+  ])('refuses $name and leaves it unchanged', async ({ file }) => {
+    const { ctx, fs, ready, params } = setup(file)
+    await ready
+
+    const result = await takeOwnership(ctx, params)
+    expect(result.ok === false && result.kind).toBe('refused')
+    expect(await fs.readText(FILE)).toEqual({ ok: true, value: file })
+  })
+})
+
+describe('releaseOwnership', () => {
+  it('deletes an app record, and a second release is still ok', async () => {
+    const { ctx, fs, ready, params } = setup(record('app'))
+    await ready
+
+    expect((await releaseOwnership(ctx, params)).ok).toBe(true)
+    expect(await fs.exists(FILE)).toBe(false)
+    expect((await releaseOwnership(ctx, params)).ok).toBe(true)
   })
 
-  it('refuses a terminal record and leaves it in place', async () => {
-    const { root, git } = await makeRepo()
-    await mkdir(join(root, '.agents'), { recursive: true })
-    await writeFile(join(root, '.agents', 'cockpit.json'), JSON.stringify({ repo: 'o/r', owner: 'terminal', since: '2026-01-01T00:00:00Z' }), 'utf8')
+  it('never deletes a terminal record', async () => {
+    const { ctx, fs, ready, params } = setup(record('terminal'))
+    await ready
 
-    const result = await takeOwnership({ repoRoot: root, repo: 'o/r', git, now })
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.kind).toBe('refused')
-
-    const read = await readOwnership({ repoRoot: root, repo: 'o/r', git, now })
-    expect(read.kind).toBe('unreadable')
-  })
-
-  it('refuses an unreadable record', async () => {
-    const { root, git } = await makeRepo()
-    await mkdir(join(root, '.agents'), { recursive: true })
-    await writeFile(join(root, '.agents', 'cockpit.json'), '{not json', 'utf8')
-
-    const result = await takeOwnership({ repoRoot: root, repo: 'o/r', git, now })
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.kind).toBe('refused')
-  })
-
-  it('release deletes an app record, and a second release is still ok', async () => {
-    const { root, git } = await makeRepo()
-    await takeOwnership({ repoRoot: root, repo: 'o/r', git, now })
-    const released = await releaseOwnership({ repoRoot: root, repo: 'o/r', git })
-    expect(released.ok).toBe(true)
-
-    const read = await readOwnership({ repoRoot: root, repo: 'o/r', git, now })
-    expect(read.kind).toBe('absent')
-
-    const releasedAgain = await releaseOwnership({ repoRoot: root, repo: 'o/r', git })
-    expect(releasedAgain.ok).toBe(true)
-  })
-
-  it('release never deletes a terminal record', async () => {
-    const { root, git } = await makeRepo()
-    await mkdir(join(root, '.agents'), { recursive: true })
-    await writeFile(join(root, '.agents', 'cockpit.json'), JSON.stringify({ repo: 'o/r', owner: 'terminal', since: '2026-01-01T00:00:00Z' }), 'utf8')
-
-    const released = await releaseOwnership({ repoRoot: root, repo: 'o/r', git })
-    expect(released.ok).toBe(true)
-
-    const read = await readOwnership({ repoRoot: root, repo: 'o/r', git, now })
-    expect(read.kind).toBe('unreadable')
+    expect((await releaseOwnership(ctx, params)).ok).toBe(true)
+    expect(await fs.exists(FILE)).toBe(true)
   })
 })

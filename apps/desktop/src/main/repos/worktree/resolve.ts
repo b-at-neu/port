@@ -52,9 +52,7 @@ async function portBaseOf(git: GitRunner, cwd: string, branch: string | null): P
   return sha === '' ? null : { sha, label: branch }
 }
 
-/** Resolves one folder (a session's cwd) into its `SessionWorkspace` and `repoId`. Non-git folders
- *  resolve to `root: null`, no worktree, no `repoId`. `repositories` is a snapshot the caller
- *  already has, never a second registry read inside this resolver. */
+/** A non-git folder resolves to `root: null`; `repositories` is the caller's snapshot, never a second registry read. */
 export async function resolveWorkspace(
   ctx: Pick<Platform, 'git'>,
   folder: string,

@@ -6,14 +6,14 @@ import type { RepoId } from '@/utils/repos'
 import type { ReconciledItem, RepositoryState, StageLabel } from '@/types/state'
 import type { ItemsByNumberFetch, ResolvedItem } from '@/types/github'
 import { isLabelAuditEntry, type AuditEntry, type LabelAuditEntry, type WriteOutcome } from '@/types/writes'
+import { hostFs } from '@/main/platform'
 import { readOwnership } from '@/main/repos/ownership'
 import { createPipelineStateStore } from '@/main/pipeline/state/store'
 import { createStateWriter } from '@/main/pipeline/state/writer'
 import { appendAudit, readAuditLog } from '@/main/github/writes/audit'
 import type { GhRunner, GitRunner } from '@/types/platform'
-import { applyItemDecision } from '@/main/pipeline/operator/decide'
+import { applyItemDecision, type ApplyItemDecisionDeps } from '@/main/pipeline/operator/decide'
 import { applyLabels, postComment } from '@/main/github/writes/apply'
-import type { ApplyItemDecisionDeps } from '@/main/pipeline/operator/decide'
 import { boardSnapshot as snapshotOf, reconciledItem, repositoryState } from '../../../support/board-snapshot'
 import { readyEntry } from '../../../support/repo-config'
 
@@ -464,7 +464,7 @@ describe('applyItemDecision — real writers', () => {
     const snapshot = snapshotOf([state])
     const store = createPipelineStateStore({ path: 'pipeline-state.json', readJson: () => Promise.resolve({ ok: false, kind: 'not-found', message: '' }), writeJsonAtomic: () => Promise.resolve({ ok: true, value: undefined }), now: NOW })
     await store.seed(REPO_ID, state)
-    const { writeState } = createStateWriter({ store, applyLabels: (params) => applyLabels({ ...params, gh, git, now: NOW, fetchItemsByNumber }), readOwnership, fetchItemsByNumber, appendAudit, recordIncident: () => Promise.resolve(), newId: () => 'write-1', now: NOW })
+    const { writeState } = createStateWriter({ store, applyLabels: (params) => applyLabels({ ...params, gh, git, now: NOW, fetchItemsByNumber }), readOwnership: (p) => readOwnership({ git, fs: hostFs, clock: { now: NOW } }, p), fetchItemsByNumber, appendAudit, recordIncident: () => Promise.resolve(), newId: () => 'write-1', now: NOW })
     const result = await applyItemDecision(
       {
         request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null },

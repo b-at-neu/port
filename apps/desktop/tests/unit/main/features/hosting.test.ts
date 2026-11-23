@@ -2,8 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { SessionKey } from '@/types/hosting'
 import type { RegistryDeps } from '@/types/registry'
-import type { ResolveStartTargetDeps, ResolvedStartTarget } from '@/types/workspace'
+import type { StartTargetSources, ResolvedStartTarget } from '@/types/workspace'
 import { storeStub } from '../../../fixtures/store'
+import { createFakeFs, fakeGit } from '../../../support/fake-platform'
 import {
   MAX_INVOKE_ARGS_CHARS,
   resolveSessionAttach,
@@ -59,15 +60,10 @@ const READY_ENTRY = {
 const WORKSPACE = { folder: '/repo', root: '/repo', worktree: null, base: null }
 const FOLDER_TARGET = { kind: 'folder' as const, folderId: 'folder-1', worktree: false }
 
-function targetDepsStub(overrides: Partial<ResolveStartTargetDeps> = {}): Omit<ResolveStartTargetDeps, 'repositories'> {
+function targetSourcesStub(overrides: Partial<StartTargetSources> = {}): Omit<StartTargetSources, 'repositories'> {
   return {
-    git: () => {
-      throw new Error('git should not be invoked directly in this case')
-    },
     recents: { load: () => Promise.resolve([]), record: () => Promise.resolve() },
-    exists: () => Promise.resolve(true),
     readSessions: () => Promise.resolve({ ok: true, sessions: [] }),
-    createWorktree: () => Promise.resolve({ ok: false, message: 'should not be called' }),
     ...overrides,
   }
 }
@@ -81,7 +77,8 @@ function depsWith(overrides: Partial<HostingChannelDeps> = {}): HostingChannelDe
       throw new Error('listSessionFiles should not be invoked in this case')
     },
     resolveStartTarget: () => Promise.resolve({ ok: true, cwd: '/repo', workspace: WORKSPACE, repoId: REPO_ID, createdWorktree: null, recordPath: '/repo' } satisfies ResolvedStartTarget),
-    targetDeps: targetDepsStub(),
+    targetCtx: { git: fakeGit(), fs: createFakeFs() },
+    targetSources: targetSourcesStub(),
     now: () => new Date('2026-01-01T00:00:00.000Z'),
     removeCreatedWorktree: () => Promise.resolve(),
     ...overrides,
@@ -129,7 +126,7 @@ describe('resolveSessionStart', () => {
   it('records recents on a successful start with a non-null recordPath', async () => {
     const start = vi.fn(() => Promise.resolve({ ok: true as const, snapshot: {} as never }))
     const record = vi.fn(() => Promise.resolve())
-    const deps = depsWith({ store: storeStub({ start }), targetDeps: targetDepsStub({ recents: { load: () => Promise.resolve([]), record } }) })
+    const deps = depsWith({ store: storeStub({ start }), targetSources: targetSourcesStub({ recents: { load: () => Promise.resolve([]), record } }) })
     await resolveSessionStart(registryDeps, { target: FOLDER_TARGET, mode: { kind: 'fresh' } }, deps)
     expect(record).toHaveBeenCalledWith('/repo', expect.any(Date))
   })

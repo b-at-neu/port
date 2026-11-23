@@ -280,7 +280,7 @@ describe('resolveDispatchControl — pause', () => {
     const result = await resolveDispatchControl(
       registryDeps,
       { command: 'pause', repoId: REPO_ID },
-      depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [entry] }), releaseOwnership: () => Promise.resolve({ ok: false, kind: 'permission-denied', message: 'nope', path: 'p' }) }),
+      depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [entry] }), releaseOwnership: () => Promise.resolve({ ok: false, kind: 'io', message: 'nope', path: 'p' }) }),
     )
     expect(result).toMatchObject({ ok: true, command: 'pause', released: false })
   })
