@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { CommandResult } from '@/types/platform'
+import { pathOps } from '@/main/platform/paths'
 import { readDenials } from '@/main/repos/local/denials'
 import { createFakeClock, createFakeFs, fakeGit } from '../../../support/fake-platform'
 
 const NOT_A_REPO: CommandResult = { ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'fatal: not a git repository' }
-const ROOT = '/repo'
-const LOG = `${ROOT}/.agents/denials.log`
+const ROOT = pathOps.toNative('/repo')
+const LOG = pathOps.join(ROOT, '.agents', 'denials.log')
 const NOW = '2026-01-01T00:00:00.000Z'
 
 /** The git runner fails, so the base root degrades to the repo root itself. */

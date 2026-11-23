@@ -2,8 +2,8 @@
 // independent of worktree count.
 import type { Platform } from '@/main/platform'
 import { parsePorcelainStanzas } from '@/main/platform/git'
-import { pathOps } from '@/main/platform/paths'
-import type { CommandResult } from '@/types/platform'
+import { pathOps as hostPathOps } from '@/main/platform/paths'
+import type { CommandResult, PathOps } from '@/types/platform'
 import type { AssertEqual } from '@/types/assert-type'
 import type { LocalFailureKind, WorktreeEntry, WorktreeProducer, WorktreesRead } from '@/types/local'
 import { correlate } from '@/main/repos/local/correlate'
@@ -88,7 +88,7 @@ function stringOrNull(value: string | true | undefined): string | null {
   return typeof value === 'string' ? value : null
 }
 
-function parseRawEntries(stdout: string): readonly RawEntry[] {
+function parseRawEntries(stdout: string, pathOps: PathOps): readonly RawEntry[] {
   return parsePorcelainStanzas(stdout).map((stanza) => {
     const branchRef = stringOrNull(stanza.get('branch'))
     return {
@@ -106,8 +106,9 @@ function parseRawEntries(stdout: string): readonly RawEntry[] {
 }
 
 /** Local facts only — no `gh`, no item state, no removal decision. */
-export async function readWorktrees(ctx: Pick<Platform, 'git' | 'clock'>, repoRoot: string): Promise<WorktreesRead> {
+export async function readWorktrees(ctx: Pick<Platform, 'git' | 'clock'> & { readonly pathOps?: PathOps }, repoRoot: string): Promise<WorktreesRead> {
   const { git } = ctx
+  const pathOps = ctx.pathOps ?? hostPathOps
   const readAt = ctx.clock.now().toISOString()
 
   const listResult = await git(['worktree', 'list', '--porcelain'], repoRoot)
@@ -116,7 +117,7 @@ export async function readWorktrees(ctx: Pick<Platform, 'git' | 'clock'>, repoRo
     return { ok: false, kind, message, readAt }
   }
 
-  const rawEntries = parseRawEntries(listResult.stdout)
+  const rawEntries = parseRawEntries(listResult.stdout, pathOps)
   const mainPath = rawEntries[0]?.path ?? repoRoot
 
   // Exit 1 means an empty upstream set, never a failure of the whole read.

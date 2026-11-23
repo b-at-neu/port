@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CommandResult } from '@/types/platform'
 import { readWorktrees } from '@/main/repos/local/worktrees'
+import { createPathOps } from '@/main/platform/paths'
 import type { GitRunner } from '@/types/platform'
 import { createFakeClock } from '../../../support/fake-platform'
 
@@ -34,7 +35,7 @@ function routedGit(router: Router, calls: string[][]): GitRunner {
 }
 
 function read(router: Router, calls: string[][] = []) {
-  return readWorktrees({ git: routedGit(router, calls), clock: createFakeClock() }, '/repo')
+  return readWorktrees({ git: routedGit(router, calls), clock: createFakeClock(), pathOps: createPathOps('posix', { home: '/home/u' }) }, '/repo')
 }
 
 function stanzas(...entries: readonly (readonly string[])[]): CommandResult {

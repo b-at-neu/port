@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { CommandResult } from '@/types/platform'
 import { inspectDenials } from '@/renderer/local/inspect'
+import { pathOps } from '@/main/platform/paths'
 import { readDenials } from '@/main/repos/local/denials'
 import { createFakeClock, createFakeFs, fakeGit } from '../../../support/fake-platform'
 
@@ -18,9 +19,10 @@ describe('inspectDenials — capped real-shaped fixture', () => {
 
     const clock = createFakeClock('2026-01-01T00:00:00.000Z')
     const fs = createFakeFs(clock)
-    await fs.writeText('/repo/.agents/denials.log', logText)
+    const root = pathOps.toNative('/repo')
+    await fs.writeText(pathOps.join(root, '.agents', 'denials.log'), logText)
 
-    const read = await readDenials({ git: fakeGit(() => Promise.resolve(NOT_A_REPO)), fs, clock }, '/repo', { limit: 5 })
+    const read = await readDenials({ git: fakeGit(() => Promise.resolve(NOT_A_REPO)), fs, clock }, root, { limit: 5 })
     if (!read.ok || !read.present) throw new Error('expected present')
     expect(read.capped).toBe(true)
 
