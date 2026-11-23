@@ -4,7 +4,7 @@ import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { AuditEntry, LabelAuditEntry } from '@/types/writes'
 import { isLabelAuditEntry } from '@/types/writes'
-import { readAuditLog } from '@/main/writes/audit'
+import { readAuditLog } from '@/main/github/writes/audit'
 import type { RecoverPausedTriggerParams, RecoverPausedTriggerResult } from '@/types/actions'
 
 function isAppliedPauseOrStop(entry: AuditEntry): entry is LabelAuditEntry {

@@ -5,7 +5,7 @@ import { pathOps as defaultPathOps } from '@/main/platform/paths'
 import { readAtDefaultRef } from '@/main/repos/config/harness'
 import { BUDGET_SESSION } from '@/main/dispatch/budget'
 import { createLedgerReader } from '@/main/github/ledger-read'
-import { createLedgerWriter } from '@/main/writes/ledger-comment'
+import { createLedgerWriter } from '@/main/github/writes/ledger-comment'
 import {
   allowLine,
   ceilingSecondsFrom,
@@ -20,7 +20,7 @@ import {
   sessionLogName,
   sessionTotals,
   verdict,
-} from '@/main/dispatch/budget-ledger'
+} from '@/main/github/budget-ledger'
 import type { LedgerRow, SessionRow, TicketTotal } from '@/types/budget'
 import type { ReadyEntry } from '@/types/actions'
 import type { BudgetCheckResult, BudgetGate, BudgetGateFailure, BudgetReportResult, BudgetResetResult, BudgetSweepResult } from '@/types/dispatch'

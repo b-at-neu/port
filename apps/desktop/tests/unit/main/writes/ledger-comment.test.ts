@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { pathOps } from '@/main/platform/paths'
-import { createLedgerWriter } from '@/main/writes/ledger-comment'
+import { createLedgerWriter } from '@/main/github/writes/ledger-comment'
 import type { FileResult, GhResult, GhRunner } from '@/types/platform'
 
 const okFile = (): Promise<FileResult<void>> => Promise.resolve({ ok: true, value: undefined })

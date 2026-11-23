@@ -4,7 +4,7 @@
 
 ## The decision
 
-**One ownership record decides who runs a checkout, full stop.** Every write either cockpit makes — a human decision or a machine observation alike — is made only by whichever side the record names, `app` or `terminal`; the other side makes no GitHub write at all while that holds. There is no more per-scope split and no more "either — convergent" category: the write chokepoint (`main/writes/apply.ts`'s `applyLabels`/`postComment`) reads the one record before every write, uniformly, and refuses outright when a terminal cockpit holds it. An **absent** record — nobody has run this checkout yet — refuses nothing: either side may act, the same as before any claim existed.
+**One ownership record decides who runs a checkout, full stop.** Every write either cockpit makes — a human decision or a machine observation alike — is made only by whichever side the record names, `app` or `terminal`; the other side makes no GitHub write at all while that holds. There is no more per-scope split and no more "either — convergent" category: the write chokepoint (`main/github/writes/apply.ts`'s `applyLabels`/`postComment`) reads the one record before every write, uniformly, and refuses outright when a terminal cockpit holds it. An **absent** record — nobody has run this checkout yet — refuses nothing: either side may act, the same as before any claim existed.
 
 Ownership decides who writes, the app's store decides what stage a ticket is at, and labels decide neither: they are a mirror the app writes (`plugins/port/docs/STATE.md`).
 

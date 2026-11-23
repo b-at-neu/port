@@ -69,8 +69,8 @@ export const RESTRICTIONS = [
   { id: 'no-repo-scripts', patterns: [{ group: ['**/scripts/**', '**/plugins/**'], message: 'apps/desktop/src imports nothing from scripts/ or plugins/ (ENGINEERING §9).' }] },
   {
     id: 'gh',
-    except: ['src/main/writes/**', 'src/main/platform/**'],
-    paths: [{ name: '@/main/platform/gh', importNames: ['gh', 'ghJson'], message: 'Only main/writes/ calls gh; reads go through platform/github-http.' }],
+    except: ['src/main/github/writes/**', 'src/main/platform/**'],
+    paths: [{ name: '@/main/platform/gh', importNames: ['gh', 'ghJson'], message: 'Only main/github/writes/ calls gh; reads go through platform/github-http.' }],
   },
   {
     id: 'github-http',
@@ -84,8 +84,8 @@ export const RESTRICTIONS = [
   },
   {
     id: 'apply-labels',
-    except: ['src/main/pipeline-state/default.ts', 'src/main/writes/**'],
-    paths: [{ name: '@/main/writes/apply', importNames: ['applyLabels'], message: 'Only the pipeline-state composition applies labels, so no transition bypasses the store.' }],
+    except: ['src/main/pipeline-state/default.ts', 'src/main/github/writes/**'],
+    paths: [{ name: '@/main/github/writes/apply', importNames: ['applyLabels'], message: 'Only the pipeline-state composition applies labels, so no transition bypasses the store.' }],
   },
   {
     id: 'fetch',
@@ -132,7 +132,7 @@ export const RESTRICTIONS = [
   {
     id: 'mirror',
     files: ['src/main/pipeline-state/mirror.ts'],
-    patterns: [{ group: ['@/main/platform/**', '@/main/writes/**', '@/main/github/**'], message: 'The label mapping stays pure, with no I/O.' }],
+    patterns: [{ group: ['@/main/platform/**', '@/main/github/**'], message: 'The label mapping stays pure, with no I/O.' }],
   },
   {
     id: 'hosting-permissions',
@@ -156,7 +156,7 @@ export const RESTRICTIONS = [
   },
   {
     id: 'writes',
-    files: ['src/main/writes/**'],
+    files: ['src/main/github/writes/**'],
     syntax: [{ selector: 'Literal[value=/^(?:merge|close|--delete-branch|ready)$/]', message: 'Merging and closing stay human actions.' }],
   },
   {

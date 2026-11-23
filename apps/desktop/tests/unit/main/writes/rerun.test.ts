@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { rerunFailedJobs } from '@/main/writes/rerun'
+import { rerunFailedJobs } from '@/main/github/writes/rerun'
 import type { GhResult } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
 import { mkdtemp, readFile } from 'node:fs/promises'

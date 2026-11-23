@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
-import { buildCommand, resolveKeys } from '@/main/writes/command'
+import { buildCommand, resolveKeys } from '@/main/github/writes/command'
 
 const base = { kind: 'issue', number: 42, repo: 'o/r', addNames: [], removeNames: [], addAssignees: [], removeAssignees: [] } as const
 

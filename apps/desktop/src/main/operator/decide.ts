@@ -12,7 +12,7 @@ import { stageKeyOf } from '@/utils/actions/plan'
 import { labelName } from '@/utils/labels/vocabulary'
 import type { ReconciledItem } from '@/types/state'
 import type { LabelWriteRequest, ObservedItem, WriteOutcome } from '@/types/writes'
-import { evaluate } from '@/main/writes/scope'
+import { evaluate } from '@/main/github/writes/scope'
 import { UNSEEDED_MESSAGE } from '@/main/pipeline-state/labels'
 
 import type { ItemsByNumberFetch } from '@/types/github'

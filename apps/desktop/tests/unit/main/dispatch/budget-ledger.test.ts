@@ -17,7 +17,7 @@ import {
   sessionLogName,
   sessionTotals,
   verdict,
-} from '@/main/dispatch/budget-ledger'
+} from '@/main/github/budget-ledger'
 import type { LedgerRow, SessionRow } from '@/types/budget'
 
 const ROW: LedgerRow = { stage: 'impl', model: 'sonnet', startedAt: '2026-09-05T14:00:00.000Z', seconds: 120, outcome: 'completed' }

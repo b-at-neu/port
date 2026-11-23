@@ -10,10 +10,10 @@ import { fetchItemsByNumber } from '@/main/github/adapter'
 import type { GitHubRepoRef } from '@/types/github'
 import type { AssertEqual } from '@/types/assert-type'
 import type { GhWriteFailureKind, LabelAuditEntry, LabelWriteRequest, ObservedItem, OwnershipKind, WriteOutcome } from '@/types/writes'
-import { appendAudit } from '@/main/writes/audit'
-import { buildCommand } from '@/main/writes/command'
+import { appendAudit } from '@/main/github/writes/audit'
+import { buildCommand } from '@/main/github/writes/command'
 import { readOwnership } from '@/main/repos/ownership'
-import { wouldChangeNothing } from '@/main/writes/scope'
+import { wouldChangeNothing } from '@/main/github/writes/scope'
 import type { PostCommentParams, ApplyLabelsParams } from '@/types/writes'
 
 // Fails to compile if `GhResult` grows a failure kind without `GhWriteFailureKind` growing to match.

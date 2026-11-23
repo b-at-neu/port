@@ -1,5 +1,5 @@
 // Re-runs the failed jobs of a held review's red Actions checks, one audited write per run.
-import { rerunFailedJobs } from '@/main/writes/rerun'
+import { rerunFailedJobs } from '@/main/github/writes/rerun'
 import type { RerunChecksParams } from '@/types/actions'
 
 export async function rerunChecks(params: RerunChecksParams): Promise<'applied' | 'failed'> {

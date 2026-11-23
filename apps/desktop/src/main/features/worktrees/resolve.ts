@@ -20,7 +20,7 @@ import { runPurge } from '@/main/reclaimer/purge'
 import { runReclaim } from '@/main/reclaimer/reclaim'
 import { readWorktreeReport } from '@/main/reclaimer/report'
 
-import { appendAudit } from '@/main/writes/audit'
+import { appendAudit } from '@/main/github/writes/audit'
 
 const defaultWorktreesReportDeps: WorktreesReportDeps = { listRepositories, readWorktreeReport }
 

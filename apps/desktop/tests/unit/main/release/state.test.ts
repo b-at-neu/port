@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PhaseInput } from '@/types/release'
 import { BUMP_BRANCH_DIR, bumpBranchName, bumpSubject, releasePrTitle, versionOfBumpBranch, versionOfReleaseTitle } from '@/utils/release/format'
-import { resolvePhase } from '@/main/release/state'
+import { resolvePhase } from '@/main/github/release-phase'
 
 const BASE: PhaseInput = {
   moduleEnabled: true,

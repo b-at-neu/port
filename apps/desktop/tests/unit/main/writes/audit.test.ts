@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { AuditEntry, LabelAuditEntry } from '@/types/writes'
 import { isLabelAuditEntry } from '@/types/writes'
-import { appendAudit, readAuditLog } from '@/main/writes/audit'
+import { appendAudit, readAuditLog } from '@/main/github/writes/audit'
 import { makeTempDir } from '../../../fixtures/fs'
 
 const REPO_ID = 'repo-1' as unknown as RepoId

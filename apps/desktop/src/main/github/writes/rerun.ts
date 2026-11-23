@@ -1,7 +1,7 @@
 // The one `gh run rerun` caller: re-runs only the failed jobs of one Actions run, audited once per attempt. Never cancels, deletes or re-runs a run that passed.
 import { describe } from '@/main/github/release'
 import { gh as defaultGh } from '@/main/platform/gh'
-import { appendAudit } from '@/main/writes/audit'
+import { appendAudit } from '@/main/github/writes/audit'
 import type { RerunAuditEntry, RerunContext } from '@/types/writes'
 
 type RerunResult = { readonly kind: 'applied' } | { readonly kind: 'write-failed'; readonly message: string }
