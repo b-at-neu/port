@@ -57,12 +57,9 @@ function resolvedItem(overrides: Partial<ResolvedItem> = {}): ResolvedItem {
 
 // The store's labels for the item default to what the last read of it returned.
 let storedLabels: readonly string[] = []
-
-function fetchReturning(fetch: ItemsByNumberFetch): ApplyItemDecisionDeps['fetchItemsByNumber'] {
-  return () => {
-    if (fetch.ok) storedLabels = fetch.resolved[0]?.labels ?? []
-    return Promise.resolve(fetch)
-  }
+const fetchReturning = (fetch: ItemsByNumberFetch): ApplyItemDecisionDeps['fetchItemsByNumber'] => () => {
+  if (fetch.ok) storedLabels = fetch.resolved[0]?.labels ?? []
+  return Promise.resolve(fetch)
 }
 
 function depsWith(overrides: Partial<ApplyItemDecisionDeps>): ApplyItemDecisionDeps {

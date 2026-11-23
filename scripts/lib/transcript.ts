@@ -1,5 +1,5 @@
 // Dependency-free JSONL parsing and record classification — scripts/'s only reader of a
-// transcript. Pure, pinned against apps/desktop's `createDeriver` via a shared case table.
+// transcript. Pure, and covered by `scripts/port-forensics/cases/derive.cases.json`.
 
 const CONTROL_RANGES = [
   [0x00, 0x08],
@@ -59,8 +59,8 @@ function isPlainObject(value: unknown): boolean {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** One already-parsed JSONL record -> zero or more generic events, in apps/desktop's own
- *  `TranscriptEntry` vocabulary. Unrecognizable content is skipped, never thrown on. */
+/** One already-parsed JSONL record -> zero or more generic events.
+ *  Unrecognizable content is skipped, never thrown on. */
 export function classifyRecord(raw: any): any[] {
   if (!isPlainObject(raw)) return [];
   const { uuid, timestamp } = raw;

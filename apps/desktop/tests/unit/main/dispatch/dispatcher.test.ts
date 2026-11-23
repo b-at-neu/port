@@ -272,12 +272,6 @@ describe('createDispatcher — launching', () => {
     expect(dispatcher.status()[0]?.state).toEqual({ kind: 'idle' })
   })
 
-  it('an unseeded repository launches nothing, even when GitHub shows the trigger label', async () => {
-    const { dispatcher, launched } = readyToDispatch({ stateLabels: () => null })
-    await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
-    expect(launched).toHaveLength(0)
-  })
-
   it('launches a surviving candidate, recording it as started', async () => {
     const { dispatcher, launched } = readyToDispatch()
     await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))

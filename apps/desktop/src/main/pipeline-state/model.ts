@@ -96,7 +96,8 @@ function itemOf(value: unknown): StoredItem | null {
 
 function recordOf(value: unknown): RepoRecord | null {
   if (!isRecord(value) || typeof value.seededAt !== 'string' || !isRecord(value.items)) return null
-  if (value.heldBy !== undefined && value.heldBy !== null) return null
+  // A record carrying any other non-null field was frozen while the terminal cockpit held it, so it reseeds once from labels.
+  if (Object.entries(value).some(([key, field]) => key !== 'seededAt' && key !== 'items' && field !== null)) return null
   const items: Record<string, StoredItem> = {}
   for (const raw of Object.values(value.items)) {
     const item = itemOf(raw)

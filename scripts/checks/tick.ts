@@ -13,8 +13,7 @@ async function importEngine(rel: string): Promise<any> {
 }
 
 export default async function ({ expect, fail, note, ok }: Reporter) {
-  // --- Every decision case resolves, and the table covers all fourteen families
-  // guard: apps/desktop's own port of the engine silently diverging from its recorded behaviour.
+  // --- Every decision case resolves, and the table covers all fourteen families.
   {
     const families: Record<string, string> = {
       'envelope.cases.json': 'envelope.ts',

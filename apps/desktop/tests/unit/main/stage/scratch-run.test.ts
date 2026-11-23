@@ -288,10 +288,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       labelWrites.push({ action: request.action, number: request.number })
       return Promise.resolve({ kind: 'applied', argv: [] })
     }
-    const stateLabels = (_repoId: unknown, kind: 'issue' | 'pull-request', number: number): readonly string[] => {
-      const set = kind === 'issue' ? labels.get(number) : prs.get(number)?.labels
-      return set === undefined ? [] : namesOf(VOCABULARY, set)
-    }
+    const stateLabels = (_repoId: unknown, kind: 'issue' | 'pull-request', number: number): readonly string[] => namesOf(VOCABULARY, (kind === 'issue' ? labels.get(number) : prs.get(number)?.labels) ?? new Set<LabelKey>())
     const writeDeps = { writeState: applyLabels, postIssueBody, stateLabels, fetchItemsByNumber }
 
     // Late-binding, the same construction order `main/ipc.ts` uses: onStatus closes over stageLauncher,

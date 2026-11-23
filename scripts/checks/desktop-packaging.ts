@@ -43,6 +43,10 @@ export default async function ({ expect }: Reporter) {
     expect(audit.fixtureLeaks([{ path: '/out/main/index.js', text: `x ${audit.FIXTURE_SENTINEL} y` }]).length === 1, 'desktop-packaging', 'fixtureLeaks did not flag a text containing the fixture sentinel');
     expect(audit.fixtureLeaks([{ path: '/out/main/index.js', text: 'const real = 1' }]).length === 0, 'desktop-packaging', 'fixtureLeaks flagged a text without the fixture sentinel');
     expect(read('apps/desktop/tests/fixtures/app/repos.ts').includes(audit.FIXTURE_SENTINEL), 'desktop-packaging', 'tests/fixtures/app/repos.ts no longer contains the fixture sentinel — the bundle audit would pass vacuously');
+    expect(audit.e2eLeaks([{ path: '/out/main/index.js', text: `x ${audit.E2E_SENTINEL} y` }]).length === 1, 'desktop-packaging', 'e2eLeaks did not flag a text containing the E2E sentinel');
+    expect(audit.e2eLeaks([{ path: '/out/main/index.js', text: 'const real = 1' }]).length === 0, 'desktop-packaging', 'e2eLeaks flagged a text without the E2E sentinel');
+    expect(read('apps/desktop/tests/e2e/route.ts').includes(audit.E2E_SENTINEL), 'desktop-packaging', 'tests/e2e/route.ts no longer contains the E2E sentinel — the bundle audit would pass vacuously');
+    expect(!read('apps/desktop/src/main/platform/route.ts').includes(audit.E2E_SENTINEL), 'desktop-packaging', 'src/main/platform/route.ts, the production route, contains the E2E sentinel');
 
     for (const [entry, separator, expected] of [['/out/main/chunks/engine.js', '\\', 'out\\main\\chunks\\engine.js'], ['/out/main/index.js', '/', 'out/main/index.js']]) {
       const got = audit.asarArchivePath(entry, separator);

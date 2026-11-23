@@ -40,9 +40,9 @@ interface PlanTickParams {
   readonly refreshMemo: RefreshMemo
   /** Read from config per repository, feeds the approval-withdrawal observation's `rollupVerdict` call. */
   readonly checkDispositions: Readonly<Record<string, Disposition>>
-  /** `false` exactly when this app owns the repository and dispatches stage sessions itself — `SESSION REQUIRED` then holds nothing: `heldReasonOf` skips the `session-required` rung and `claimsOf` skips the `session-required` class. `true` (the terminal-cockpit default) is byte-identical to this field never having existed. */
+  /** `false` exactly when this app owns the repository and dispatches stage sessions itself — `SESSION REQUIRED` then holds nothing: `heldReasonOf` skips the `session-required` rung and `claimsOf` skips the `session-required` class. `true` is the default. */
   readonly holdSessionRequired: boolean
-  /** App-owned repositories only: this repository's own live and interrupted stage sessions, as `${agent} #${number}` descriptions. `null`/`undefined` (terminal-owned or unowned) is byte-identical to today — `item.status`/`startedTasks` still decide. Non-null ignores `item.status` entirely: a `live` claim is `matched`, an `interrupted` one is `interrupted`, anything else goes straight to the ledger ladder. */
+  /** App-owned repositories only: this repository's own live and interrupted stage sessions, as `${agent} #${number}` descriptions. `null`/`undefined` (unowned) leaves `item.status`/`startedTasks` to decide. Non-null ignores `item.status` entirely: a `live` claim is `matched`, an `interrupted` one is `interrupted`, anything else goes straight to the ledger ladder. */
   readonly stageLiveness?: { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
   /** This app's own ended stage-session records for this repository, newest per number — `main/tick/repair.ts`'s session-shape evidence. `undefined`/`[]` is byte-identical: no session shape ever fires. */
   readonly endedStages?: readonly EndedStage[]

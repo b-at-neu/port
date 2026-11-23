@@ -64,6 +64,16 @@ describe('bundled stage agents', () => {
     for (const needle of LABEL_WRITING_NEEDLES) expect(text).not.toContain(needle)
   })
 
+  it('every agent carries impl-agent\'s "Dispatched with a stage context" paragraph', async () => {
+    const paragraphOf = (text: string): string | null => {
+      const start = text.indexOf('**Dispatched with a stage context.**')
+      return start === -1 ? null : text.slice(start, text.indexOf('\n', start))
+    }
+    const canonical = paragraphOf(await textOf('impl'))
+    expect(canonical).not.toBeNull()
+    for (const stage of STAGES) expect(paragraphOf(await textOf(stage))).toBe(canonical)
+  })
+
   it('names the questions and blocked prefixes somewhere across the four', async () => {
     const all = (await Promise.all(STAGES.map(textOf))).join('\n')
     expect(all).toContain(QUESTIONS_PREFIX)
