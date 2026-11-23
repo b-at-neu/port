@@ -32,7 +32,7 @@ import type { StageOutcome } from '@/types/stage-session'
 import type { SessionKey } from '@/types/hosting'
 import type { InterruptedStage, StageDenial, StageDenialStore } from '@/types/stage'
 import type { StageWorktreeTarget } from '@/types/workspace'
-import type { ReviewDispatchFacts } from '../../../../scripts/port-tick/gates'
+import type { ReviewDispatchFacts } from '@/utils/pipeline/gates'
 
 /** `dispatch.json`'s own per-repository run state — `dispatching`, `draining` (scoped to one repository), or `paused` (the hard stop: the transition into it also stops every in-flight agent). */
 export const RUN_STATES = ['dispatching', 'draining', 'paused'] as const

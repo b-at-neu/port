@@ -1,6 +1,6 @@
 // Nodes → PipelineItem. matchedKeys is bucketed here, client-side, against the resolved vocabulary.
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
-import { integrationChecksOf } from '../../../../../scripts/port-tick/checks'
+import { integrationChecksOf } from '@/utils/pipeline/checks'
 import type { CheckContext, ClosingPullRequest, IntegrationChecks, IssueCommentNode, ItemDetail, ItemState, LabelEventNode, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, ReviewNode } from '@/types/github'
 import { toBlockerRead } from '@/main/github/blockers'
 

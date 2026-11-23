@@ -28,8 +28,8 @@ import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers, in
 import { closingReference, IMPLEMENTATION_PLAN_HEADING, sessionRequiredAt } from '@/main/state/link'
 import { stageOf } from '@/main/state/stage'
 import { CLAIM_SCAN_GRACE_MS } from '@/types/board'
-import { codeReviewCount } from '../../../../../scripts/port-tick/gates'
-import { parseFilesBlock } from '../../../../../scripts/port-tick/contention'
+import { codeReviewCount } from '@/utils/pipeline/gates'
+import { parseFilesBlock } from '@/utils/pipeline/contention'
 
 interface ReconcileRepositoryInput {
   readonly entry: Extract<RepositoryEntry, { status: 'ready' }>

@@ -1,7 +1,7 @@
 // The types every process shares for the repo registry — the renderer never manipulates a path, only displays what main resolved and hands `id` back verbatim. Types only: inspection and persistence live in src/main/registry/.
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { DisplayVocabulary } from '@/utils/labels/display'
-import type { AppliedOverride, OverrideValue } from '../../../../scripts/port-tick/overrides'
+import type { AppliedOverride, OverrideValue } from '@/utils/pipeline/overrides'
 export type { AppliedOverride, OverrideValue }
 
 declare const repoIdBrand: unique symbol

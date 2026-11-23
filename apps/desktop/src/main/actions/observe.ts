@@ -8,7 +8,7 @@ import { stateMoved } from '@/types/writes'
 
 import { observationWrite } from '@/main/dispatch/observation'
 import { observationIntent } from '@/main/incidents/raise'
-import { commentRepeats } from '../../../../../scripts/port-tick/gates'
+import { commentRepeats } from '@/utils/pipeline/gates'
 
 import type { ApplyObservationResult, ApplyObservationParams } from '@/types/actions'
 

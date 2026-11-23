@@ -10,7 +10,7 @@ import type { TickActionable } from '@/types/tick'
 import { labelName } from '@/utils/labels/vocabulary'
 import { commentFailureMessage } from '@/main/dispatch/select'
 import { budgetIntent } from '@/main/incidents/raise'
-import { escalationRepeats } from '../../../../../scripts/port-tick/gates'
+import { escalationRepeats } from '@/utils/pipeline/gates'
 
 /** One session log per dispatcher — sharing one log with the cockpit would close rows this
  *  app's own agents are still working through. */

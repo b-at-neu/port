@@ -5,8 +5,8 @@ import type { DisplayKey } from '@/utils/labels/display'
 import { LABEL_KEYS } from '@/utils/labels/vocabulary'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { AppliedOverride, CheckDisposition, RepoProblem } from '@/utils/repos'
-import { applyOverrides, parseOverrides } from '../../../../../scripts/port-tick/overrides'
-import type { EffectiveConfigShape } from '../../../../../scripts/port-tick/overrides'
+import { applyOverrides, parseOverrides } from '@/utils/pipeline/overrides'
+import type { EffectiveConfigShape } from '@/utils/pipeline/overrides'
 import type { PortResolved, RefReader } from '@/types/registry'
 
 type EffectiveConfigResult =

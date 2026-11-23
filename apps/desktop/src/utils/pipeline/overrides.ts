@@ -1,0 +1,308 @@
+// Pure: the `port-overrides` parser and resolver. The caller reads CLAUDE.md and hands this module the text.
+
+export const BEGIN = '<!-- port-overrides:begin -->'
+export const END = '<!-- port-overrides:end -->'
+const FENCE_START = '```port-overrides'
+const FENCE_END = '```'
+
+/** The overridable path prefixes. `checks.<name>` is synthetic: no config field backs it. */
+export const OVERRIDABLE = [
+  'checks',
+  'labels',
+  'states',
+  'branches.integration',
+  'branches.production',
+  'models.plan',
+  'models.impl',
+  'models.review',
+  'models.revise',
+  'modules.approvalGate',
+  'modules.release',
+  'modules.scope',
+  'reviewCycleCap',
+  'concurrency.overlapThreshold',
+  'concurrency.sharedFiles',
+  'sessionRequiredPaths',
+]
+
+/** Every other top-level config key is refused, so a key added later and never classified fails closed. */
+export const NEVER_OVERRIDABLE = ['commands', 'extraAllow', 'repo', 'tracker', 'docs', 'release', 'budget', 'appOnly', '$schema']
+
+/** The two paths free-form prose could otherwise use to expand a dispatched agent's shell authority. */
+export const PERMISSION_SURFACE = new Set(['commands', 'extraAllow'])
+
+/** Only these two accept `+=`, and only ever append. */
+const APPEND_ONLY = new Set(['sessionRequiredPaths', 'concurrency.sharedFiles'])
+
+/** The effective-config shape every dotted path resolves against. */
+export interface EffectiveConfigShape {
+  integration: string
+  production: string | null
+  labels: Record<string, string>
+  states: Record<string, string>
+  models: { plan: string; impl: string; review: string; revise: string }
+  modules: { approvalGate: boolean; release: boolean; scope: boolean }
+  reviewCycleCap: number
+  concurrency: { sharedFiles: readonly string[]; overlapThreshold: number }
+  sessionRequiredPaths: readonly string[]
+}
+
+export type OverrideValue = string | number | boolean | null
+
+export interface AppliedOverride {
+  readonly path: string
+  readonly value: OverrideValue
+  readonly reason: string
+  readonly portDefault: OverrideValue | readonly string[] | undefined
+  readonly source: 'CLAUDE.md'
+}
+
+export interface OverrideEntry {
+  path: string
+  op: '=' | '+='
+  rawValue: string
+  reason: string
+  line: string
+}
+
+export interface OverrideProblem {
+  line: string
+  reason: string
+}
+
+/** Splits on the first ` = ` or ` += `, never on whitespace alone, so a check name can carry spaces unquoted. */
+function splitOperator(line: string): { path: string; op: '=' | '+='; rest: string } | null {
+  const m = / (\+=|=) /.exec(line)
+  if (!m) return null
+  return { path: line.slice(0, m.index).trim(), op: m[1] as '=' | '+=', rest: line.slice(m.index + m[0].length) }
+}
+
+/** An absent block is `{ entries: [], problems: [] }`, not a refusal. At most one block per file. */
+export function parseOverrides(text: string): { entries: OverrideEntry[]; problems: OverrideProblem[] } {
+  const entries: OverrideEntry[] = []
+  const problems: OverrideProblem[] = []
+
+  const beginIdx = text.indexOf(BEGIN)
+  if (beginIdx === -1) return { entries, problems }
+
+  const endIdx = text.indexOf(END, beginIdx + BEGIN.length)
+  if (endIdx === -1) {
+    problems.push({ line: BEGIN, reason: `'${BEGIN}' has no matching '${END}'` })
+    return { entries, problems }
+  }
+
+  const secondBeginIdx = text.indexOf(BEGIN, endIdx + END.length)
+  if (secondBeginIdx !== -1) {
+    problems.push({ line: BEGIN, reason: 'a second port-overrides block was found — only the first is read, never merged' })
+  }
+
+  const block = text.slice(beginIdx + BEGIN.length, endIdx)
+  const fenceStart = block.indexOf(FENCE_START)
+  if (fenceStart === -1) {
+    problems.push({ line: BEGIN, reason: `the block carries no '${FENCE_START}' fence` })
+    return { entries, problems }
+  }
+  const afterFenceStart = fenceStart + FENCE_START.length
+  const fenceEnd = block.indexOf(FENCE_END, afterFenceStart)
+  if (fenceEnd === -1) {
+    problems.push({ line: FENCE_START, reason: 'the port-overrides fence never closes' })
+    return { entries, problems }
+  }
+
+  const body = block.slice(afterFenceStart, fenceEnd)
+  for (const raw of body.split('\n')) {
+    const line = raw.trim()
+    if (line === '') continue
+
+    const split = splitOperator(line)
+    if (!split) {
+      problems.push({ line, reason: "no ' = ' or ' += ' operator found" })
+      continue
+    }
+    const { path, op, rest } = split
+    if (path === '') {
+      problems.push({ line, reason: 'empty path before the operator' })
+      continue
+    }
+    if (/[*?]/.test(path)) {
+      problems.push({ line, reason: 'no globs on the left-hand side' })
+      continue
+    }
+
+    const hashIdx = rest.indexOf(' # ')
+    if (hashIdx === -1) {
+      problems.push({ line, reason: "missing required reason (no ' # ' comment)" })
+      continue
+    }
+    const rawValue = rest.slice(0, hashIdx).trim()
+    const reason = rest.slice(hashIdx + ' # '.length).trim()
+    if (reason === '') {
+      problems.push({ line, reason: 'a reason is required — an undocumented override is what this mechanism forbids' })
+      continue
+    }
+    if (rawValue === '') {
+      problems.push({ line, reason: 'empty value before the reason' })
+      continue
+    }
+
+    entries.push({ path, op, rawValue, reason, line })
+  }
+
+  return { entries, problems }
+}
+
+/** Reads `path` off the flattened effective config. `checks.<name>` is `'blocking'`, the default every unlisted check carries. */
+function readPath(cfg: EffectiveConfigShape, path: string): OverrideValue | readonly string[] | undefined {
+  switch (path) {
+    case 'branches.integration':
+      return cfg.integration
+    case 'branches.production':
+      return cfg.production
+    case 'models.plan':
+    case 'models.impl':
+    case 'models.review':
+    case 'models.revise': {
+      const key = path.slice('models.'.length) as keyof EffectiveConfigShape['models']
+      return cfg.models[key]
+    }
+    case 'modules.approvalGate':
+    case 'modules.release':
+    case 'modules.scope': {
+      const key = path.slice('modules.'.length) as keyof EffectiveConfigShape['modules']
+      return cfg.modules[key]
+    }
+    case 'reviewCycleCap':
+      return cfg.reviewCycleCap
+    case 'concurrency.overlapThreshold':
+      return cfg.concurrency.overlapThreshold
+    case 'concurrency.sharedFiles':
+      return cfg.concurrency.sharedFiles
+    case 'sessionRequiredPaths':
+      return cfg.sessionRequiredPaths
+    default:
+      if (path.startsWith('checks.')) return 'blocking'
+      if (path.startsWith('labels.')) return cfg.labels[path.slice('labels.'.length)]
+      if (path.startsWith('states.')) return cfg.states[path.slice('states.'.length)]
+      return undefined
+  }
+}
+
+/** The mirror of `readPath`, appending rather than assigning for the two `+=`-only paths. */
+function writePath(cfg: EffectiveConfigShape, path: string, value: OverrideValue): void {
+  switch (path) {
+    case 'branches.integration':
+      if (typeof value === 'string') cfg.integration = value
+      return
+    case 'branches.production':
+      if (typeof value === 'string' || value === null) cfg.production = value
+      return
+    case 'models.plan':
+    case 'models.impl':
+    case 'models.review':
+    case 'models.revise':
+      if (typeof value === 'string') cfg.models[path.slice('models.'.length) as keyof EffectiveConfigShape['models']] = value
+      return
+    case 'modules.approvalGate':
+    case 'modules.release':
+    case 'modules.scope':
+      if (typeof value === 'boolean') cfg.modules[path.slice('modules.'.length) as keyof EffectiveConfigShape['modules']] = value
+      return
+    case 'reviewCycleCap':
+      if (typeof value === 'number') cfg.reviewCycleCap = value
+      return
+    case 'concurrency.overlapThreshold':
+      if (typeof value === 'number') cfg.concurrency.overlapThreshold = value
+      return
+    case 'concurrency.sharedFiles':
+      if (typeof value === 'string') cfg.concurrency.sharedFiles = [...cfg.concurrency.sharedFiles, value]
+      return
+    case 'sessionRequiredPaths':
+      if (typeof value === 'string') cfg.sessionRequiredPaths = [...cfg.sessionRequiredPaths, value]
+      return
+    default:
+      if (path.startsWith('labels.') && typeof value === 'string') cfg.labels[path.slice('labels.'.length)] = value
+      else if (path.startsWith('states.') && typeof value === 'string') cfg.states[path.slice('states.'.length)] = value
+  }
+}
+
+/** Type-checks one parsed entry against its category, returning the coerced value or a refusal reason. */
+function validate(entry: OverrideEntry, keys: { labelKeys: readonly string[]; stateKeys: readonly string[] }): { value: OverrideValue } | { reason: string } {
+  const { path, op, rawValue } = entry
+
+  const top = path.split('.')[0] ?? path
+  if (NEVER_OVERRIDABLE.includes(top) || NEVER_OVERRIDABLE.includes(path)) {
+    return {
+      reason: PERMISSION_SURFACE.has(top)
+        ? `'${path}' is the permission surface the guard hook allowlists from — never overridable, no exception`
+        : `'${path}' is not overridable`,
+    }
+  }
+
+  const appendOnly = APPEND_ONLY.has(path)
+  if (appendOnly && op !== '+=') return { reason: `'${path}' only ever appends — use '+=', never '='` }
+  if (!appendOnly && op === '+=') return { reason: `'${path}' is not append-only — use '=', never '+='` }
+
+  if (path.startsWith('checks.') && path.length > 'checks.'.length) {
+    if (rawValue !== 'blocking' && rawValue !== 'infrastructure') {
+      return { reason: `'${path}' must be 'blocking' or 'infrastructure', got '${rawValue}'` }
+    }
+    return { value: rawValue }
+  }
+
+  if (path.startsWith('labels.') && path.length > 'labels.'.length) {
+    const key = path.slice('labels.'.length)
+    if (!keys.labelKeys.includes(key)) return { reason: `'${key}' is not a key in the label vocabulary` }
+    return { value: rawValue }
+  }
+
+  if (path.startsWith('states.') && path.length > 'states.'.length) {
+    const key = path.slice('states.'.length)
+    if (!keys.stateKeys.includes(key)) return { reason: `'${key}' is not a key in the state vocabulary` }
+    return { value: rawValue }
+  }
+
+  if (path === 'branches.production') return { value: rawValue === 'null' ? null : rawValue }
+  if (path === 'branches.integration') return { value: rawValue }
+  if (path.startsWith('models.')) return { value: rawValue }
+
+  if (path.startsWith('modules.')) {
+    if (rawValue !== 'true' && rawValue !== 'false') return { reason: `'${path}' must be 'true' or 'false', got '${rawValue}'` }
+    return { value: rawValue === 'true' }
+  }
+
+  if (path === 'reviewCycleCap' || path === 'concurrency.overlapThreshold') {
+    const n = Number(rawValue)
+    if (!Number.isInteger(n) || n < 1) return { reason: `'${path}' must be an integer ≥ 1, got '${rawValue}'` }
+    return { value: n }
+  }
+
+  if (path === 'concurrency.sharedFiles' || path === 'sessionRequiredPaths') {
+    return { value: rawValue }
+  }
+
+  return { reason: `'${path}' is not a recognized overridable path` }
+}
+
+/** Fails closed on the entry, open on the run: a refused entry leaves the port value standing, reported. `cfg` is never mutated. */
+export function applyOverrides<C extends EffectiveConfigShape>(
+  cfg: C,
+  parsed: { entries: readonly OverrideEntry[]; problems: readonly OverrideProblem[] },
+  opts: { labelKeys: readonly string[]; stateKeys: readonly string[] },
+): { cfg: C; applied: AppliedOverride[]; refused: { path: string | null; line: string; reason: string }[] } {
+  const out: C = structuredClone(cfg)
+  const applied: AppliedOverride[] = []
+  const refused: { path: string | null; line: string; reason: string }[] = parsed.problems.map((p) => ({ path: null, line: p.line, reason: p.reason }))
+
+  for (const entry of parsed.entries) {
+    const result = validate(entry, opts)
+    if ('reason' in result) {
+      refused.push({ path: entry.path, line: entry.line, reason: result.reason })
+      continue
+    }
+    const portDefault = readPath(out, entry.path)
+    writePath(out, entry.path, result.value)
+    applied.push({ path: entry.path, value: result.value, reason: entry.reason, portDefault, source: 'CLAUDE.md' })
+  }
+
+  return { cfg: out, applied, refused }
+}

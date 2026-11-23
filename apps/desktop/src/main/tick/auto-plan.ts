@@ -4,7 +4,7 @@ import type { DispatchOwner, RepoDispatchStatus, RunState } from '@/types/dispat
 import type { ReconciledItem } from '@/types/state'
 import type { TickAutoApproval, TickReport } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
-import { partitionOwnership } from '../../../../../scripts/port-tick/classify'
+import { partitionOwnership } from '@/utils/pipeline/classify'
 import { autoApprovableFrom, autoApprovalCandidatesFrom } from '@/main/tick/dispatchable'
 
 /** Qualifies when carrying `autoPlan`, `stages` is exactly one entry at `planReview`, and the viewer is an assignee. */

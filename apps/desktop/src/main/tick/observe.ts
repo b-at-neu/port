@@ -6,10 +6,10 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { ReconciledItem } from '@/types/state'
 import type { TickClaim, TickHeld, TickObservation } from '@/types/tick'
-import { approvedReverify, capRefreshes, refreshDecision } from '../../../../../scripts/port-tick/gates'
+import { approvedReverify, capRefreshes, refreshDecision } from '@/utils/pipeline/gates'
 
-import { actionsJobOf, historyDerivedChecks, rollupVerdict } from '../../../../../scripts/port-tick/checks'
-import type { Disposition } from '../../../../../scripts/port-tick/checks'
+import { actionsJobOf, historyDerivedChecks, rollupVerdict } from '@/utils/pipeline/checks'
+import type { Disposition } from '@/utils/pipeline/checks'
 
 interface ObservationsOfParams {
   readonly repoId: RepoId

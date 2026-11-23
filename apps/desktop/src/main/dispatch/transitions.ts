@@ -5,7 +5,7 @@ import type { StageHandback } from '@/types/stage-session'
 import type { HandoffRefusal, StageAgent } from '@/types/tick'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import { inFlightKeyFor } from '@/main/tick/routing'
-import { RETRY_TRIGGER } from '../../../../../scripts/port-tick/liveness'
+import { RETRY_TRIGGER } from '@/utils/pipeline/liveness'
 
 /** The closed vocabulary of `HANDBACK:` tokens each mode may end with — pinned both directions against the bundled agents by `desktop-stage-labels`. */
 export const HANDBACK_TOKENS: Readonly<Record<StageMode, readonly string[]>> = {

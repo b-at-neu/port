@@ -5,8 +5,8 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { StageHandback, StageOutcomeKind } from '@/types/stage-session'
 import type { StageLabelResult } from '@/types/stage-labels'
-import type { LedgerRow, UnmatchedResult } from '../../../../scripts/port-tick/liveness'
-import type { RefreshMemoEntry } from '../../../../scripts/port-tick/gates'
+import type { LedgerRow, UnmatchedResult } from '@/utils/pipeline/liveness'
+import type { RefreshMemoEntry } from '@/utils/pipeline/gates'
 
 /** A bare four-way key, never the session index's hyphenated `PortStageAgent` — this one names *what to dispatch next*, matching `models.<key>`, not *what already ran*. */
 export type StageAgent = 'plan' | 'impl' | 'review' | 'revise'
