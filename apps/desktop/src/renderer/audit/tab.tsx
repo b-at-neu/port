@@ -13,7 +13,7 @@ import { StatusPill } from '@/renderer/components/status-pill'
 import { useIpcQuery } from '@/renderer/data/query'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { WIDE_CARD } from '@/renderer/settings/copy'
-import { formatAgo } from '@/renderer/lib/relative-time'
+import { formatAgo } from '@/renderer/lib/time'
 import { auditRows } from '@/renderer/audit/model'
 import {
   ACTOR_LABEL,

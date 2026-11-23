@@ -17,7 +17,7 @@ import { StatusPill } from '@/renderer/components/status-pill'
 import { invoke } from '@/renderer/data/invoke'
 import { runInBackground } from '@/renderer/lib/background-action'
 import { ipcQueryOptions, useIpcQuery } from '@/renderer/data/query'
-import { exactTime, relativeAge } from '@/renderer/backlog/group'
+import { exactTime, formatAgoSince } from '@/renderer/lib/time'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { useListSelection } from '@/renderer/shell/list-selection'
 import type { HookOutcome, ReleaseGroupView, ReleaseInfo, ReleaseRunRequest, ReleaseRunResult, ReleaseStatus } from '@/types/release'
@@ -185,7 +185,7 @@ function ReleaseRow({ release, repoId, now, rowProps }: { readonly release: Rele
       {release.publishedAt !== null ? (
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="shrink-0 text-meta text-muted-foreground">{relativeAge(release.publishedAt, now)}</span>
+            <span className="shrink-0 text-meta text-muted-foreground">{formatAgoSince(release.publishedAt, now)}</span>
           </TooltipTrigger>
           <TooltipContent>{exactTime(release.publishedAt)}</TooltipContent>
         </Tooltip>
@@ -263,7 +263,7 @@ export function ReleasesScreen() {
         <ScreenHeader className="justify-between">
           <span>{RELEASES_TITLE}</span>
           <div className="flex items-center gap-2">
-            {stale !== null ? <span className="text-meta font-normal text-attention-dot">Updated {relativeAge(new Date(stale).toISOString(), now)}</span> : null}
+            {stale !== null ? <span className="text-meta font-normal text-attention-dot">Updated {formatAgoSince(new Date(stale).toISOString(), now)}</span> : null}
             <Button variant="ghost" size="small" onClick={refreshAll} disabled={isFetching}>
               <RefreshCw aria-hidden="true" className={isFetching ? 'size-3.5 animate-spin' : 'size-3.5'} />
               Refresh

@@ -7,25 +7,18 @@ import { connectItemActionPruning } from '@/renderer/board/screen'
 import { connectNeedsYouNotifications } from '@/renderer/needs-you/notify'
 import { mountReact } from '@/renderer/react/mount'
 import { themeStore } from '@/renderer/theme/store'
-import { initSidebarCollapsed, listNavigatorFor, openNewSessionDialog, openPalette, setRenaming, toggleSidebarCollapsed } from '@/renderer/shell/stores'
+import { initSidebarCollapsed, openNewSessionDialog, openPalette, setRenaming, toggleSidebarCollapsed } from '@/renderer/shell/stores'
 import { isRepoScreenRoute, restoreHashOf, setLastRepo, shellPrefs, setSidebarCollapsed, trackLastRoute } from '@/renderer/shell/prefs'
 import { installKeyboardMap, runAppCommand } from '@/renderer/shell/keyboard'
 import type { KeyboardDeps } from '@/types/shell'
 import { liveSessionKeys, selectSession, setSessionsQueryClient } from '@/renderer/session/actions'
-import { selectedSession } from '@/renderer/session/selection'
+import { currentListNavigator } from '@/renderer/shell/list-navigator'
+import { sessionKeyOf } from '@/renderer/router/session-key'
 import { shouldRedirectToSetup } from '@/renderer/setup/launch-redirect'
 import { sharedSubscriptions } from '@/renderer/data/subscriptions'
 import { checkForUpdates } from '@/renderer/update/actions'
 
 const app = document.querySelector<HTMLDivElement>('#app')
-
-function currentListScreen(): 'board' | 'backlog' | 'needsYou' | null {
-  const pathname = router.state.location.pathname
-  if (pathname === ROUTE_IDS.board) return 'board'
-  if (pathname === ROUTE_IDS.backlog) return 'backlog'
-  if (pathname === ROUTE_IDS.needsYou) return 'needsYou'
-  return null
-}
 
 // Boot order: theme, query client, push-cache wiring, React mount, keyboard map.
 themeStore().apply()
@@ -42,21 +35,18 @@ const actionDeps: KeyboardDeps = {
   openPalette,
   openNewSessionDialog,
   liveSessionKeys,
-  currentSessionKey: () => selectedSession(),
+  currentSessionKey: () => sessionKeyOf(router.state.location),
   selectSession,
   openNeedsYou: (focus) => void router.navigate({ to: ROUTE_IDS.needsYou, search: { focus } }),
   toggleSidebar: () => setSidebarCollapsed(toggleSidebarCollapsed()),
   startRename: () => {
-    const key = selectedSession()
+    const key = sessionKeyOf(router.state.location)
     if (key === null) return
     if (shellPrefs().sidebarCollapsed) setSidebarCollapsed(toggleSidebarCollapsed())
     setRenaming(key)
   },
   checkForUpdates: () => void checkForUpdates(queryClient),
-  currentListNavigator: () => {
-    const screen = currentListScreen()
-    return screen !== null ? listNavigatorFor(screen) : undefined
-  },
+  currentListNavigator: () => currentListNavigator() ?? undefined,
 }
 
 installKeyboardMap(actionDeps)

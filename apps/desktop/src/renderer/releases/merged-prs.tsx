@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Button } from '@/renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { LabelChip } from '@/renderer/components/label-chip'
-import { exactTime, relativeAge } from '@/renderer/backlog/group'
+import { exactTime, formatAgoSince } from '@/renderer/lib/time'
 import type { ReleaseEntry, ReleaseStatus } from '@/types/release'
 import { CUT_RELEASE, mergedSinceCopy, showMoreIssues } from '@/renderer/releases/copy'
 import { visibleIssues } from '@/renderer/releases/model'
@@ -24,7 +24,7 @@ function PrRow({ entry, now }: { readonly entry: ReleaseEntry; readonly now: Dat
       </div>
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="w-10 shrink-0 text-right text-meta text-muted-foreground">{relativeAge(entry.mergedAt, now)}</span>
+          <span className="w-10 shrink-0 text-right text-meta text-muted-foreground">{formatAgoSince(entry.mergedAt, now)}</span>
         </TooltipTrigger>
         <TooltipContent>{exactTime(entry.mergedAt)}</TooltipContent>
       </Tooltip>

@@ -10,7 +10,7 @@ import { Markdown } from '@/renderer/components/markdown'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { useIpcQuery } from '@/renderer/data/query'
-import { exactTime, relativeAge } from '@/renderer/backlog/group'
+import { exactTime, formatAgoSince } from '@/renderer/lib/time'
 import { assigneeView, epicSummaryView, linkListView } from '@/renderer/backlog/detail'
 import {
   BACKLOG_DETAIL_CLOSE,
@@ -167,7 +167,7 @@ function TicketMetaItems({ detail, now }: { readonly detail: BacklogDetail; read
         </MetaItem>
       ) : null}
       <MetaItem icon={Clock} name={BACKLOG_META_UPDATED} field="updated" tooltip={`${BACKLOG_META_UPDATED} · ${exactTime(detail.updatedAt)}`}>
-        <span>{relativeAge(detail.updatedAt, now)}</span>
+        <span>{formatAgoSince(detail.updatedAt, now)}</span>
       </MetaItem>
       <MetaItem icon={assignee.kind === 'unassigned' ? UserX : User} name={BACKLOG_META_ASSIGNEE} field="assignee">
         <span>{assignee.kind === 'unassigned' ? BACKLOG_DETAIL_UNASSIGNED : assignee.text}</span>
@@ -223,7 +223,7 @@ function EpicDetailItems({ query, now }: { readonly query: DetailQuery; readonly
       ) : null}
       {createdAt !== null ? (
         <MetaItem icon={Clock} name={BACKLOG_META_OPENED} field="age" tooltip={`${BACKLOG_META_OPENED} · ${exactTime(createdAt)}`}>
-          <span>{relativeAge(createdAt, now)}</span>
+          <span>{formatAgoSince(createdAt, now)}</span>
         </MetaItem>
       ) : null}
     </>

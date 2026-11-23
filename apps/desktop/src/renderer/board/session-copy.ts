@@ -1,7 +1,7 @@
 // Copy for the item pane's session links. Pure string functions; no DOM here.
 import type { TicketSessionLink } from '@/types/board'
 import type { StageAgent } from '@/types/tick'
-import { formatAgo } from '@/renderer/lib/relative-time'
+import { formatAgo } from '@/renderer/lib/time'
 import { formatCost } from '@/utils/hosting/usage'
 
 const SESSION_LINK_NAME: Readonly<Record<StageAgent, string>> = { plan: 'Plan agent', impl: 'Implement agent', review: 'Review agent', revise: 'Revise agent' }

@@ -5,7 +5,7 @@ import type { StageEntry } from '@/types/state'
 import type { PhaseDetail, PhaseKey } from '@/types/board'
 import { currentPhaseFor, phaseOfStage } from '@/renderer/board/phase-model'
 import { actorName, phaseEventVerb } from '@/renderer/board/copy'
-import { formatAgo, formatDuration } from '@/renderer/lib/relative-time'
+import { formatAgo, formatDuration } from '@/renderer/lib/time'
 import { formatCost } from '@/utils/hosting/usage'
 
 interface PhaseDetailsParams {

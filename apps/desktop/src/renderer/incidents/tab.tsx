@@ -12,7 +12,7 @@ import { SettingsCard } from '@/renderer/components/settings-card'
 import { StatusPill } from '@/renderer/components/status-pill'
 import { useIpcMutation, useIpcQuery } from '@/renderer/data/query'
 import { WIDE_CARD } from '@/renderer/settings/copy'
-import { formatAgo } from '@/renderer/lib/relative-time'
+import { formatAgo } from '@/renderer/lib/time'
 import { groupRows, recordRow } from '@/renderer/incidents/model'
 import type { IncidentGroupRow } from '@/types/incidents'
 import {

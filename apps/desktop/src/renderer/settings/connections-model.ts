@@ -6,7 +6,7 @@ import { RATE_LIMIT_FLOOR } from '@/types/board'
 import type { GhStatus } from '@/types/gh'
 import type { RuntimePreflight } from '@/types/runtime'
 import type { ConnectionLine } from '@/types/settings'
-import { formatAgo } from '@/renderer/lib/relative-time'
+import { formatAgo } from '@/renderer/lib/time'
 
 type QueryLike<T> = Pick<QueryObserverResult<T>, 'status' | 'data'>
 

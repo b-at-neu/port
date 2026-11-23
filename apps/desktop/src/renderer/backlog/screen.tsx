@@ -14,10 +14,11 @@ import { EmptyState } from '@/renderer/components/empty-state'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { ipcQueryOptions, useIpcQuery } from '@/renderer/data/query'
 import { workOn } from '@/renderer/claim/work-on'
-import { registerListNavigator } from '@/renderer/shell/stores'
+import { listNavigatorRef } from '@/renderer/shell/list-navigator'
 import { isControlPress, pressZone, useListSelection } from '@/renderer/shell/list-selection'
 import { ROUTE_IDS } from '@/renderer/router/routes'
-import { buildBacklogGroup, relativeAge, staleSinceAt } from '@/renderer/backlog/group'
+import { buildBacklogGroup, staleSinceAt } from '@/renderer/backlog/group'
+import { formatAgoSince } from '@/renderer/lib/time'
 import type { BacklogGroupView, BacklogLabelFilter, BacklogRowView, RenderBacklogRow } from '@/types/backlog'
 import type { PlanGateChoice } from '@/types/claim'
 import { BACKLOG_ALL_HIDDEN, BACKLOG_FILTER_CLEAR, BACKLOG_REPO_FILTER_SHOW_ALL, backlogCountCopy, backlogEmptyGroupCopy, backlogFilteredEmptyCopy, backlogGroupToggleAria, backlogNotReadyCopy } from '@/renderer/backlog/copy'
@@ -300,7 +301,7 @@ export function BacklogScreen() {
     if (event.button === 0 && pressZone(event, event.currentTarget) === 'blank') closeDetailAndClear()
   }
 
-  registerListNavigator('backlog', {
+  const navigatorRef = listNavigatorRef({
     next: () => selection.next(),
     prev: () => selection.prev(),
     close: () => setDetailKey(null),
@@ -324,12 +325,13 @@ export function BacklogScreen() {
 
   return (
     <Screen
+      ref={navigatorRef}
       onMouseDown={onSurfaceMouseDown}
       header={
         <ScreenHeader className="justify-between">
           <span>Backlog</span>
           <div className="flex items-center gap-2">
-            {stale !== null ? <span className="text-meta font-normal text-attention-dot">Updated {relativeAge(new Date(stale).toISOString(), now)}</span> : null}
+            {stale !== null ? <span className="text-meta font-normal text-attention-dot">Updated {formatAgoSince(new Date(stale).toISOString(), now)}</span> : null}
             {scopedRepo === null && readyRepos.length > 1 ? <RepoFilterMenu repos={readyRepos} hidden={hidden} onToggle={(id) => changeHidden(toggleHiddenRepo(hidden, id))} onShowAll={() => changeHidden(new Set())} /> : null}
             <Button variant="ghost" size="small" onClick={refreshAll} disabled={isFetching}>
               <RefreshCw aria-hidden="true" className={isFetching ? 'size-3.5 animate-spin' : 'size-3.5'} />

@@ -1,6 +1,6 @@
 // DESIGN §1/§3 — the layout every screen is built from: a 44px ScreenHeader,
 // then one body variant. A screen never sets its own outer padding.
-import type { MouseEventHandler, ReactNode } from 'react'
+import type { MouseEventHandler, ReactNode, Ref } from 'react'
 import { cn } from '@/renderer/lib/utils'
 
 interface ScreenProps {
@@ -8,13 +8,14 @@ interface ScreenProps {
   readonly children: ReactNode
   readonly className?: string
   readonly onMouseDown?: MouseEventHandler<HTMLElement>
+  readonly ref?: Ref<HTMLDivElement>
 }
 
-export function Screen({ header, children, className, onMouseDown }: ScreenProps) {
-  return <div onMouseDown={onMouseDown} className={cn('flex h-full min-h-0 flex-col', className)}>{header}{children}</div>
+export function Screen({ header, children, className, onMouseDown, ref }: ScreenProps) {
+  return <div ref={ref} onMouseDown={onMouseDown} className={cn('flex h-full min-h-0 flex-col', className)}>{header}{children}</div>
 }
 
-type ScreenBodyVariant = 'list' | 'page' | 'form' | 'conversation'
+export type ScreenBodyVariant = 'list' | 'page' | 'form' | 'conversation'
 
 const BODY_CLASS: Readonly<Record<ScreenBodyVariant, string>> = {
   list: 'min-h-0 flex-1 overflow-y-auto',

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { BacklogResponse } from '@/types/backlog'
-import { buildBacklogGroup, exactTime, relativeAge, staleSinceAt } from '@/renderer/backlog/group'
+import { buildBacklogGroup, staleSinceAt } from '@/renderer/backlog/group'
 import type { BacklogQueryLike } from '@/types/backlog'
 
 const REPO_ID = 'repo-a' as RepoId
@@ -192,21 +192,5 @@ describe('staleSinceAt', () => {
   it('is the earliest dataUpdatedAt among errored-but-retained queries', () => {
     const groups = [{ query: query({ data: OK_RESPONSE, isError: true, dataUpdatedAt: 200 }) }, { query: query({ data: OK_RESPONSE, isError: true, dataUpdatedAt: 100 }) }]
     expect(staleSinceAt(groups)).toBe(100)
-  })
-})
-
-describe('relativeAge/exactTime', () => {
-  const now = new Date('2026-01-01T12:00:00Z')
-
-  it('renders a recent age in minutes', () => {
-    expect(relativeAge(new Date(now.getTime() - 5 * 60_000).toISOString(), now)).toBe('5m ago')
-  })
-
-  it('renders a day-scale age in days', () => {
-    expect(relativeAge(new Date(now.getTime() - 50 * 60 * 60_000).toISOString(), now)).toBe('2d ago')
-  })
-
-  it('exactTime renders a locale string, not the raw ISO', () => {
-    expect(exactTime('2026-01-01T12:00:00Z')).not.toBe('2026-01-01T12:00:00Z')
   })
 })

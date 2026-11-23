@@ -50,20 +50,3 @@ export function staleSinceAt(groups: readonly { readonly query: BacklogQueryLike
   }
   return earliest
 }
-
-const MINUTE = 60_000
-const HOUR = 60 * MINUTE
-const DAY = 24 * HOUR
-
-// "3h ago"-shaped text, coarse on purpose — `exactTime` is what a tooltip is for.
-export function relativeAge(iso: string, now: Date): string {
-  const deltaMs = now.getTime() - new Date(iso).getTime()
-  if (deltaMs < MINUTE) return 'just now'
-  if (deltaMs < HOUR) return `${String(Math.floor(deltaMs / MINUTE))}m ago`
-  if (deltaMs < DAY) return `${String(Math.floor(deltaMs / HOUR))}h ago`
-  return `${String(Math.floor(deltaMs / DAY))}d ago`
-}
-
-export function exactTime(iso: string): string {
-  return new Date(iso).toLocaleString()
-}

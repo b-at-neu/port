@@ -5,9 +5,10 @@ import { Button } from '@/renderer/components/ui/button'
 import { Textarea } from '@/renderer/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { usePermissionState, answer, setMessage } from '@/renderer/permission/store'
-import { useSelectedSession } from '@/renderer/session/selection'
+import { useSelectedSessionKey } from '@/renderer/router/session-key'
 import { useIpcQuery } from '@/renderer/data/query'
-import { sessionDisplayLabel, startedClock } from '@/utils/hosting/label'
+import { formatClock } from '@/renderer/lib/time'
+import { sessionDisplayLabel } from '@/utils/hosting/label'
 import { folderLabel } from '@/utils/workspace/label'
 import type { RepositoryEntry } from '@/utils/repos'
 import {
@@ -40,7 +41,7 @@ function repoLabelFor(repos: readonly RepositoryEntry[] | undefined, repoId: str
 
 export function PermissionDialog() {
   const state = usePermissionState()
-  const selectedKey = useSelectedSession()
+  const selectedKey = useSelectedSessionKey()
   const repos = useIpcQuery('repos.list')
   const now = new Date()
 
@@ -52,7 +53,7 @@ export function PermissionDialog() {
   const otherSession = selectedKey !== null && selectedKey !== current.sessionKey
   const repoLabel = current.repoId !== null ? repoLabelFor(repos.data?.ok === true ? repos.data.repositories : undefined, current.repoId) : folderLabel(current.folder)
   const sessionLabel = sessionDisplayLabel({ title: current.title, origin: current.origin }, repoLabel)
-  const started = startedClock(current.startedAt, now)
+  const started = formatClock(current.startedAt, now)
   const formatted = formatInput(permission.input)
 
   function deny(): void {
