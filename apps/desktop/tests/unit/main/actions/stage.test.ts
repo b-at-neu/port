@@ -62,7 +62,7 @@ function deps(items: readonly ResolvedItem[], outcomes: readonly WriteOutcome[] 
     bodies.push(params)
     return Promise.resolve(bodyQueue.shift() ?? { kind: 'applied', argv: [] })
   })
-  const writeDeps: StageWriteDeps = { writeState, postIssueBody, stateLabels, fetchItemsByNumber }
+  const writeDeps: StageWriteDeps = { writeState, postPlanBody: postIssueBody, stateLabels, fetchItemsByNumber }
   return { writeDeps, applied, bodies, writeState, postIssueBody, fetchItemsByNumber, stateLabels }
 }
 

@@ -1,5 +1,4 @@
 // The one composition report, reclaim and purge share: enumerate, gather facts, resolve item states, classify.
-import { readItemStates } from '@/main/github/item-states'
 import { readWorktrees } from '@/main/local/worktrees'
 import { listDirectory, pathExists, readTextFile, removeDirectory, statPath } from '@/main/platform/files'
 import { defaultGitRunner } from '@/main/platform/git'
@@ -11,6 +10,7 @@ import type { CommandResult, GitRunner } from '@/types/platform'
 import type { InspectedCandidate, Inspection, ReadWorktreeReportParams, ReclaimerFailureKind, ReclaimerFs, ReclaimerSeams, ResolvedSeams } from '@/types/reclaimer'
 import { classifyCandidate, describeReason } from '@/main/reclaimer/classify'
 import { findOrphanDirs } from '@/main/reclaimer/orphans'
+import { createTracker } from '@/main/tracker'
 
 // Fails to compile if a new `CommandResult` failure kind is added without `ReclaimerFailureKind` growing to match.
 type CommandResultFailureKind = Exclude<CommandResult, { ok: true }>['kind']
@@ -119,7 +119,7 @@ export async function inspectWorktrees(params: InspectParams): Promise<Inspectio
 
   const numbers = [...new Set(linked.flatMap(({ entry, isOutside }) => (isOutside || entry.correlation === null ? [] : [entry.correlation.number])))]
   const [owner = '', name = ''] = params.repo.split('/')
-  const stateRead = await readItemStates({ repo: { owner, name }, numbers, github: params.github })
+  const stateRead = await createTracker({ github: params.github }).readItemStates({ repo: { owner, name }, numbers })
   const states: ReadonlyMap<number, ItemStateName | null> = stateRead.ok ? stateRead.states : new Map()
   const githubError = stateRead.ok ? null : stateRead.message
 

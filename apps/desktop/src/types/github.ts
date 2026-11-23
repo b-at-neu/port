@@ -8,7 +8,7 @@ import type { IntegrationStatus } from '../../../../scripts/port-tick/gates'
 /** The integration branch's latest concluded status by check name, a plain record so it survives the offload worker's structured clone and any JSON hop. */
 export type IntegrationChecks = Readonly<Record<string, IntegrationStatus>>
 
-/** A remote GitHub locator — `github/adapter.ts`'s original `RepoRef` shape. */
+/** A remote GitHub locator. */
 export interface GitHubRepoRef {
   readonly owner: string
   readonly name: string
@@ -120,13 +120,8 @@ export interface QueriedLabel {
 /** The two connections the pipeline sweep reads. */
 export type SweepAlias = 'issues' | 'pullRequests'
 
-/** Which sweep connections a page requests and where each resumes; a later page asks only for the surface still paging. */
-export interface SweepPage {
-  readonly issues: boolean
-  readonly pulls: boolean
-  readonly issuesAfter: string | null
-  readonly pullsAfter: string | null
-}
+/** Where one surface's sweep resumes: `null` is its first page, which alone carries the page-one extras. */
+export type SweepCursor = string | null
 
 /** One detail-read alias's reply node, keyed by the item it was asked about. */
 export interface ItemDetail {
@@ -170,16 +165,6 @@ export interface RateLimitInfo {
 export interface ItemRef {
   readonly kind: PipelineItemKind
   readonly number: number
-}
-
-/** `fetchItemStates`'s per-item result — the open-only sweep above cannot see a merged pull request, and this is the primitive that re-checks. */
-export interface ItemState {
-  readonly kind: PipelineItemKind
-  readonly number: number
-  readonly state: string
-  readonly mergedAt: string | null
-  readonly closedAt: string | null
-  readonly url: string
 }
 
 /** Every failure kind these fetches can report — hand-maintained, pinned against the real platform-layer type so a new kind there breaks `pnpm typecheck` here rather than landing in `unknown`. */
@@ -262,20 +247,23 @@ export type ItemsByNumberFetch =
       readonly fetchedAt: string
     }
 
-/** `fetchItemStates`'s result — a vanished number is reported in `unavailable`, never inferred as "still open". */
-export type ItemStatesFetch =
+/** The pull-request half of the board read. Fails closed like `PipelineFetch`: a failed half is never an empty one. */
+export type BoardPullRequestsRead =
   | {
       readonly ok: true
-      readonly states: readonly ItemState[]
-      readonly unavailable: readonly ItemRef[]
-      readonly fetchedAt: string
+      /** Swept pull requests, detail-read, in sweep order; only the store's own when the read is by tracked refs. */
+      readonly swept: readonly PipelineItem[]
+      /** Tracked pull requests the sweep did not return, read by number, in ref order. */
+      readonly tracked: readonly PipelineItem[]
+      readonly closed: readonly number[]
+      readonly merged: readonly number[]
+      /** `null`, never an empty record, when the integration branch's history could not be read. */
+      readonly integrationChecks: IntegrationChecks | null
+      readonly unavailable: readonly UnavailableAlias[]
+      readonly truncated: readonly TruncatedSet[]
+      readonly rateLimit: RateLimitInfo
     }
-  | {
-      readonly ok: false
-      readonly kind: PipelineFailureKind
-      readonly message: string
-      readonly fetchedAt: string
-    }
+  | { readonly ok: false; readonly kind: PipelineFailureKind; readonly message: string }
 
 /** One open-or-closed node off a `blockedBy` connection — the claim dialog reports every one it fetched; `classifyPreflight` filters to the open ones, so the adapter never decides what counts as "still blocking". */
 export interface ClaimBlocker {
@@ -343,7 +331,7 @@ export interface AliasInfo {
 }
 
 /** The failure kinds this classifier can add on top of `gh`'s own, independent of
- *  `PipelineFailureKind` so `adapter.ts`'s assertion actually pins one against the other. */
+ *  `PipelineFailureKind` so `envelope.ts`'s assertion actually pins one against the other. */
 export type EnvelopeFailureKind = 'unparseable' | 'no-data' | 'repo-not-found' | 'rate-limited'
 
 export interface GraphQLErrorEntry {

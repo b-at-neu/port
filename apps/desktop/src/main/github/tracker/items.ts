@@ -1,35 +1,21 @@
-import type { EnvelopeFailureKind, GraphQLErrorEntry } from '@/types/github'
-
-// The public logic behind fetchItemStates and the other point reads: building the document, calling
-// the injected transport, then composing envelope.ts and map.ts. The pipeline sweep lives in pipeline.ts.
-import type { GitHubHttpResult, GitHubTransport } from '@/types/platform'
+// Point reads of one or many issues by number: the re-check primitive and the claim dialog's preflight. A number may be an issue or a pull request; the kind is read off each node.
+import type { GitHubTransport } from '@/types/platform'
 import { githubHttp } from '@/main/platform/github-http'
-import type { FetchItemsByNumberParams } from '@/types/github'
-
-import type { AssertEqual } from '@/types/assert-type'
 import type {
   ClaimPreflightFetch,
   ClaimPreflightItem,
-  ItemRef,
-  ItemsByNumberFetch,
-  ItemState,
-  ItemStatesFetch,
-  PipelineFailureKind,
-  PipelineItemKind,
+  FetchItemsByNumberParams,
   GitHubRepoRef,
+  GraphQLErrorEntry,
+  ItemsByNumberFetch,
+  PipelineItemKind,
   ResolvedItem,
 } from '@/types/github'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
-import { toBlockerRead } from '@/main/github/blockers'
-
-import { applyItemStates, fieldListOf } from '@/main/github/map'
-import { buildClaimPreflightQuery, buildItemStatesQuery, buildItemsByNumberQuery } from '@/main/github/query'
+import { toBlockerRead } from '@/main/github/tracker/blockers'
+import { fieldListOf } from '@/main/github/map'
+import { buildClaimPreflightQuery, buildItemsByNumberQuery } from '@/main/github/tracker/query'
 import { repoGraphqlRequest } from '@/main/github/request'
-
-/** Fails to compile if a failure kind is added to the platform layer or `envelope.ts` without the
- *  hand-maintained, renderer-safe `PipelineFailureKind` growing to match. */
-type GitHubHttpFailureKind = Exclude<GitHubHttpResult, { ok: true }>['kind']
-export const _kindsCoverGitHubHttp: AssertEqual<PipelineFailureKind, GitHubHttpFailureKind | EnvelopeFailureKind> = true
 
 /** Every `errors[].path` entry beside `"repository"`, as the set of unusable alias names. */
 function unavailableAliasNames(errors: readonly GraphQLErrorEntry[] | undefined): ReadonlySet<string> {
@@ -41,70 +27,6 @@ function unavailableAliasNames(errors: readonly GraphQLErrorEntry[] | undefined)
   return names
 }
 
-interface FetchItemStatesParams {
-  readonly repo: GitHubRepoRef
-  readonly items: readonly ItemRef[]
-  readonly github?: GitHubTransport
-  readonly now?: () => Date
-}
-
-/** The reconciliation primitive: never infer "still awaiting merge" from a cached open-sweep
- *  list, re-check state. A vanished number comes back in `unavailable`, never silently dropped. */
-export async function fetchItemStates(params: FetchItemStatesParams): Promise<ItemStatesFetch> {
-  const now = params.now ?? (() => new Date())
-  const fetchedAt = now().toISOString()
-
-  if (params.items.length === 0) {
-    return { ok: true, states: [], unavailable: [], fetchedAt }
-  }
-
-  const github = params.github ?? githubHttp
-  const { document, aliases } = buildItemStatesQuery(params.items)
-  const result = await github(repoGraphqlRequest(document, params.repo))
-
-  const text = bodyOf(result)
-  const parsed = text !== undefined ? parseEnvelope(text) : undefined
-  const verdict = classifyFailure(result, parsed)
-
-  if (verdict.kind !== 'ok') {
-    return { ok: false, kind: verdict.kind, message: verdict.message, fetchedAt }
-  }
-  if (parsed === undefined || !parsed.ok) {
-    return { ok: false, kind: 'no-data', message: 'internal: an ok verdict without a parsed envelope', fetchedAt }
-  }
-  const body = parsed.value
-  if (body.data === undefined || body.data === null || body.data.repository === undefined || body.data.repository === null) {
-    return { ok: false, kind: 'no-data', message: 'internal: an ok verdict without usable repository data', fetchedAt }
-  }
-  const repository = body.data.repository as Readonly<Record<string, unknown>>
-  const errorAliases = unavailableAliasNames(body.errors)
-
-  const states: ItemState[] = []
-  const unavailable: ItemRef[] = []
-  for (const alias of aliases) {
-    if (errorAliases.has(alias.alias)) {
-      unavailable.push({ kind: alias.kind, number: alias.number })
-      continue
-    }
-    const node = repository[alias.alias]
-    if (typeof node !== 'object' || node === null) {
-      unavailable.push({ kind: alias.kind, number: alias.number })
-      continue
-    }
-    const raw = node as Record<string, unknown>
-    states.push({
-      kind: alias.kind,
-      number: alias.number,
-      state: typeof raw.state === 'string' ? raw.state : '',
-      mergedAt: typeof raw.mergedAt === 'string' ? raw.mergedAt : null,
-      closedAt: typeof raw.closedAt === 'string' ? raw.closedAt : null,
-      url: typeof raw.url === 'string' ? raw.url : '',
-    })
-  }
-
-  return { ok: true, states, unavailable, fetchedAt }
-}
-
 function kindOfTypename(typename: unknown): PipelineItemKind | undefined {
   if (typename === 'Issue') return 'issue'
   if (typename === 'PullRequest') return 'pull-request'
@@ -113,7 +35,7 @@ function kindOfTypename(typename: unknown): PipelineItemKind | undefined {
 
 /** The re-check primitive for a number a worktree or agent record merely names. The kind is read
  *  off each node's own `__typename`. An empty `numbers` short-circuits with no round trip. */
-export async function fetchItemsByNumber(params: FetchItemsByNumberParams): Promise<ItemsByNumberFetch> {
+export async function readItemsByNumber(params: FetchItemsByNumberParams): Promise<ItemsByNumberFetch> {
   const now = params.now ?? (() => new Date())
   const fetchedAt = now().toISOString()
 
@@ -181,7 +103,7 @@ function authorLoginOf(author: unknown): string | null {
   return typeof login === 'string' ? login : null
 }
 
-interface FetchClaimPreflightParams {
+interface ReadClaimPreflightParams {
   readonly repo: GitHubRepoRef
   readonly number: number
   readonly github?: GitHubTransport
@@ -190,7 +112,7 @@ interface FetchClaimPreflightParams {
 
 /** The claim dialog's one round trip: one item's identity, labels, assignees, open blockers, and
  *  the signed-in login. `item: null` covers "does not exist" or "alias errored", neither a failure. */
-export async function fetchClaimPreflight(params: FetchClaimPreflightParams): Promise<ClaimPreflightFetch> {
+export async function readClaimPreflight(params: ReadClaimPreflightParams): Promise<ClaimPreflightFetch> {
   const github = params.github ?? githubHttp
   const now = params.now ?? (() => new Date())
   const fetchedAt = now().toISOString()
@@ -244,5 +166,3 @@ export async function fetchClaimPreflight(params: FetchClaimPreflightParams): Pr
 
   return { ok: true, item, viewer: viewerLogin, fetchedAt }
 }
-
-export { applyItemStates }

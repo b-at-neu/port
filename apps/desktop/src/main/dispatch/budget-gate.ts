@@ -4,7 +4,8 @@ import { ensureDirectory as defaultEnsureDirectory, readTextFile as defaultReadT
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
 import { readAtDefaultRef } from '@/main/registry/harness'
 import { BUDGET_SESSION } from '@/main/dispatch/budget'
-import { createLedgerReader } from '@/main/github/ledger-read'
+import { createPullRequestBodyReader } from '@/main/github/ledger-read'
+import { createTracker } from '@/main/tracker'
 import { createLedgerWriter } from '@/main/writes/ledger-comment'
 import {
   allowLine,
@@ -21,7 +22,7 @@ import {
   sessionTotals,
   verdict,
 } from '@/main/dispatch/budget-ledger'
-import type { LedgerRow, SessionRow, TicketTotal } from '@/types/budget'
+import type { LedgerReader, LedgerRow, SessionRow, TicketTotal } from '@/types/budget'
 import type { ReadyEntry } from '@/types/actions'
 import type { BudgetCheckResult, BudgetGate, BudgetGateFailure, BudgetReportResult, BudgetResetResult, BudgetSweepResult } from '@/types/dispatch'
 import type { FileResult, GhRunner, GitHubTransport, GitRunner, PathOps } from '@/types/platform'
@@ -63,7 +64,7 @@ export function createBudgetGate(deps: BudgetGateDeps): BudgetGate {
   const ensureDirectory = deps.ensureDirectory ?? defaultEnsureDirectory
   const pathOps = deps.pathOps ?? defaultPathOps
   const now = deps.now ?? ((): Date => new Date())
-  const reader = createLedgerReader({ github: deps.github })
+  const reader: LedgerReader = { readLedger: createTracker({ github: deps.github }).readLedger, ...createPullRequestBodyReader({ github: deps.github }) }
   const writeLedger = createLedgerWriter({ gh: deps.gh, writeTextFile, removeFile: deps.removeFile, scratchDir: deps.scratchDir, randomUUID: deps.randomUUID })
 
   /** Reads first, so a concurrent write never clobbers rows not just produced. `null` on an unreadable or unwritable ledger. */

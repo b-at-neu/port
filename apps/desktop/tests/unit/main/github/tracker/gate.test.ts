@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { fetchGatePreflight } from '@/main/github/gate'
-import { fakeTransport, httpFail, httpOk } from '../../../fixtures/github-http'
+import { fetchGatePreflight } from '@/main/github/tracker/gate'
+import { fakeTransport, httpFail, httpOk } from '../../../../fixtures/github-http'
 
 describe('fetchGatePreflight', () => {
   it('resolves an Issue node with its body, labels, assignees, and viewer', async () => {

@@ -1,185 +1,67 @@
-// The pipeline read: a paged two-connection sweep for the light fields, then a per-number detail
-// read for the heavy ones. Cost stays flat in the number of enabled labels.
+// The pull-request half of the board read: a paged one-connection sweep (page one also reads the integration branch's
+// checks), then a per-number detail read. PRs are GitHub on every vendor, so this stays in the adapter.
 import type { GitHubTransport } from '@/types/platform'
 import { githubHttp } from '@/main/platform/github-http'
-import { verifyVocabulary } from '@/utils/labels/vocabulary'
-import type { LabelKey, LabelVocabulary, RepoLabels, VerifiableVocabulary } from '@/utils/labels/vocabulary'
-import type {
-  AliasInfo,
-  GitHubRepoRef,
-  GraphQLErrorEntry,
-  IntegrationChecks,
-  ItemDetail,
-  PipelineFailureKind,
-  PipelineFetch,
-  PipelineItem,
-  PipelineItemKind,
-  QueriedLabel,
-  RateLimitInfo,
-  SweepAlias,
-  SweepPage,
-  TruncatedSet,
-  UnavailableAlias,
-} from '@/types/github'
-import { bodyOf, classifyFailure, collectUnavailable, parseEnvelope } from '@/main/github/envelope'
-import { applyItemDetails, mapPipelineItems, mapTrackedItem, toIntegrationChecks } from '@/main/github/map'
-import { FIRST_SWEEP_PAGE, buildIntegrationChecksQuery, buildItemDetailsQuery, buildPipelineQuery, buildTrackedItemsQuery } from '@/main/github/query'
+import type { LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { AliasInfo, BoardPullRequestsRead, GitHubRepoRef, IntegrationChecks, ItemDetail, PipelineItem, RateLimitInfo, SweepAlias, SweepCursor, TruncatedSet, UnavailableAlias } from '@/types/github'
 import type { TrackedRef } from '@/types/pipeline-state'
-import { repoGraphqlRequest } from '@/main/github/request'
+import { collectUnavailable } from '@/main/github/envelope'
+import { applyItemDetails, keepTracked, mapPipelineItems, mapTrackedItem, toIntegrationChecks } from '@/main/github/map'
+import { buildPullRequestDetailsQuery, buildPullRequestSweepQuery, buildTrackedPullRequestsQuery } from '@/main/github/query'
+import { DETAIL_CHUNK_SIZE, MAX_SWEEP_PAGES, NO_RATE_LIMIT, addRateLimit, asRecord, graphql } from '@/main/github/reply'
+import type { Failure } from '@/main/github/reply'
 
-const MAX_SWEEP_PAGES = 10
-const DETAIL_CHUNK_SIZE = 100
-
-const ALIAS_INDEX: ReadonlyMap<SweepAlias, AliasInfo> = new Map<SweepAlias, AliasInfo>([
-  ['issues', { surface: 'issue' }],
-  ['pullRequests', { surface: 'pull-request' }],
-])
-
-type Failure = { readonly ok: false; readonly kind: PipelineFailureKind; readonly message: string }
-
-type Reply =
-  | { readonly ok: true; readonly data: Readonly<Record<string, unknown>>; readonly repository: Readonly<Record<string, unknown>>; readonly errors: readonly GraphQLErrorEntry[] | undefined }
-  | Failure
-
-function asRecord(value: unknown): Readonly<Record<string, unknown>> | undefined {
-  return typeof value === 'object' && value !== null ? (value as Readonly<Record<string, unknown>>) : undefined
-}
-
-/** `undefined`, never zeros, when the reply carried no `rateLimit` at all. */
-function readRateLimit(value: unknown): RateLimitInfo | undefined {
-  const raw = asRecord(value)
-  if (raw === undefined) return undefined
-  return {
-    cost: typeof raw.cost === 'number' ? raw.cost : 0,
-    remaining: typeof raw.remaining === 'number' ? raw.remaining : 0,
-    resetAt: typeof raw.resetAt === 'string' ? raw.resetAt : '',
-    limit: typeof raw.limit === 'number' ? raw.limit : 0,
-  }
-}
-
-/** `cost` sums every round trip; the other fields come from the last reply that carried them. */
-function addRateLimit(total: RateLimitInfo, reply: unknown): RateLimitInfo {
-  const read = readRateLimit(reply)
-  if (read === undefined) return total
-  return { ...read, cost: total.cost + read.cost }
-}
-
-/** `null`, never a guess, when the alias is absent, malformed, or named in `errors[].path`.
- *  Unlike `fetchClaimPreflight`'s `viewerLogin`, this never fails the whole fetch. */
-function toViewer(value: unknown, errors: readonly GraphQLErrorEntry[] | undefined): string | null {
-  if ((errors ?? []).some((error) => error.path?.[0] === 'viewer')) return null
-  const login = asRecord(value)?.login
-  return typeof login === 'string' && login !== '' ? login : null
-}
-
-/** `repoLabels` truncation is reported as `unverified`, never as a confidently-short list. */
-function toRepoLabels(value: unknown): RepoLabels {
-  const connection = asRecord(value)
-  if (connection === undefined) return { ok: false, reason: 'repoLabels alias missing from the response' }
-  const totalCount = connection.totalCount
-  const nodes = connection.nodes
-  if (typeof totalCount !== 'number' || !Array.isArray(nodes)) {
-    return { ok: false, reason: 'repoLabels alias malformed' }
-  }
-  if (totalCount > nodes.length) {
-    return { ok: false, reason: `label list truncated at ${nodes.length} of ${totalCount}` }
-  }
-  const names: string[] = []
-  for (const node of nodes) {
-    const name = asRecord(node)?.name
-    if (typeof name === 'string') names.push(name)
-  }
-  return { ok: true, names }
-}
-
-async function graphql(github: GitHubTransport, repo: GitHubRepoRef, document: string): Promise<Reply> {
-  const result = await github(repoGraphqlRequest(document, repo))
-  const text = bodyOf(result)
-  const parsed = text !== undefined ? parseEnvelope(text) : undefined
-  const verdict = classifyFailure(result, parsed)
-
-  if (verdict.kind !== 'ok') return { ok: false, kind: verdict.kind, message: verdict.message }
-  // Re-checked here rather than asserted, so a contract violation is a reported value, never thrown.
-  if (parsed === undefined || !parsed.ok) return { ok: false, kind: 'no-data', message: 'internal: an ok verdict without a parsed envelope' }
-  const body = parsed.value
-  const repository = asRecord(body.data?.repository)
-  if (body.data === undefined || body.data === null || repository === undefined) {
-    return { ok: false, kind: 'no-data', message: 'internal: an ok verdict without usable repository data' }
-  }
-  return { ok: true, data: body.data, repository, errors: body.errors }
-}
-
-interface SweepState {
-  readonly nodes: Record<SweepAlias, unknown[]>
-  readonly totals: Record<SweepAlias, number>
-  readonly unavailable: Map<SweepAlias, UnavailableAlias>
-}
-
-const SWEEP_ALIASES: readonly SweepAlias[] = ['issues', 'pullRequests']
-
-function surfaceOf(alias: SweepAlias): PipelineItemKind {
-  return alias === 'issues' ? 'issue' : 'pull-request'
-}
-
-/** Folds one reply's connections into `state`, returning the cursor each still-open surface resumes at. */
-function absorbSweepPage(reply: Extract<Reply, { ok: true }>, requested: ReadonlySet<SweepAlias>, state: SweepState): Readonly<Record<SweepAlias, string | null>> {
-  const unavailable = collectUnavailable(reply.errors, ALIAS_INDEX)
-  const next: Record<SweepAlias, string | null> = { issues: null, pullRequests: null }
-  for (const alias of SWEEP_ALIASES) {
-    if (!requested.has(alias)) continue
-    const named = unavailable.find((entry) => entry.alias === alias)
-    const connection = asRecord(reply.repository[alias])
-    const nodes = connection?.nodes
-    if (named !== undefined || connection === undefined || !Array.isArray(nodes)) {
-      state.unavailable.set(alias, named ?? { alias, surface: surfaceOf(alias) })
-      continue
-    }
-    for (const raw of nodes) state.nodes[alias].push(raw)
-    if (typeof connection.totalCount === 'number') state.totals[alias] = connection.totalCount
-    const pageInfo = asRecord(connection.pageInfo)
-    if (pageInfo?.hasNextPage === true && typeof pageInfo.endCursor === 'string') next[alias] = pageInfo.endCursor
-  }
-  return next
-}
+const ALIAS_INDEX: ReadonlyMap<SweepAlias, AliasInfo> = new Map<SweepAlias, AliasInfo>([['pullRequests', { surface: 'pull-request' }]])
 
 interface SweepResult {
-  readonly state: SweepState
+  readonly nodes: readonly unknown[]
   readonly rateLimit: RateLimitInfo
-  readonly viewer: string | null
-  readonly repoLabels: RepoLabels
+  readonly integrationChecks: IntegrationChecks | null
+  readonly unavailable: readonly UnavailableAlias[]
   readonly truncated: readonly TruncatedSet[]
 }
 
-async function sweep(github: GitHubTransport, repo: GitHubRepoRef, vocabulary: LabelVocabulary): Promise<SweepResult | Failure> {
-  const state: SweepState = { nodes: { issues: [], pullRequests: [] }, totals: { issues: 0, pullRequests: 0 }, unavailable: new Map() }
-  // An empty `labels:` list filters nothing, so with no enabled label the connections are not asked at all.
-  const hasLabels = vocabulary.labels.length > 0
-  let page: SweepPage = hasLabels ? FIRST_SWEEP_PAGE : { ...FIRST_SWEEP_PAGE, issues: false, pulls: false }
-  let rateLimit: RateLimitInfo = { cost: 0, remaining: 0, resetAt: '', limit: 0 }
-  let viewer: string | null = null
-  let repoLabels: RepoLabels = { ok: false, reason: 'repoLabels alias missing from the response' }
+async function sweep(github: GitHubTransport, repo: GitHubRepoRef, vocabulary: LabelVocabulary, integration: string): Promise<SweepResult | Failure> {
+  const nodes: unknown[] = []
+  let total = 0
+  let unavailable: readonly UnavailableAlias[] = []
+  let rateLimit = NO_RATE_LIMIT
+  let integrationChecks: IntegrationChecks | null = null
   let truncated: readonly TruncatedSet[] = []
+  let after: SweepCursor = null
 
   for (let fetched = 1; ; fetched++) {
-    const reply = await graphql(github, repo, buildPipelineQuery(vocabulary, page))
+    const reply = await graphql(github, repo, buildPullRequestSweepQuery(vocabulary, after, integration))
     if (!reply.ok) return reply
     rateLimit = addRateLimit(rateLimit, reply.data.rateLimit)
     if (fetched === 1) {
-      viewer = toViewer(reply.data.viewer, reply.errors)
-      repoLabels = toRepoLabels(reply.repository.repoLabels)
+      // A missing branch, an errored alias or a missing alias is `null` (unreadable), never an empty record, and never fails the board.
+      const errored = (reply.errors ?? []).some((error) => error.path?.[1] === 'integrationHistory')
+      integrationChecks = errored ? null : toIntegrationChecks(reply.repository.integrationHistory)
     }
+    // With no enabled label the connection is not asked at all, so page one carries only the integration history.
+    if (vocabulary.labels.length === 0) break
 
-    const requested = new Set<SweepAlias>([...(page.issues ? (['issues'] as const) : []), ...(page.pulls ? (['pullRequests'] as const) : [])])
-    const next = absorbSweepPage(reply, requested, state)
-    page = { issues: next.issues !== null, pulls: next.pullRequests !== null, issuesAfter: next.issues, pullsAfter: next.pullRequests }
-    if (!page.issues && !page.pulls) break
-    if (fetched >= MAX_SWEEP_PAGES) {
-      truncated = SWEEP_ALIASES.filter((alias) => next[alias] !== null).map((alias) => ({ alias, surface: surfaceOf(alias), totalCount: state.totals[alias], received: state.nodes[alias].length }))
+    const named = collectUnavailable(reply.errors, ALIAS_INDEX)
+    const connection = asRecord(reply.repository.pullRequests)
+    const page = connection?.nodes
+    if (named.length > 0 || connection === undefined || !Array.isArray(page)) {
+      unavailable = named.length > 0 ? named : [{ alias: 'pullRequests', surface: 'pull-request' }]
       break
     }
+    nodes.push(...page)
+    if (typeof connection.totalCount === 'number') total = connection.totalCount
+    const pageInfo = asRecord(connection.pageInfo)
+    const next = pageInfo?.hasNextPage === true && typeof pageInfo.endCursor === 'string' ? pageInfo.endCursor : null
+    if (next === null) break
+    if (fetched >= MAX_SWEEP_PAGES) {
+      truncated = [{ alias: 'pullRequests', surface: 'pull-request', totalCount: total, received: nodes.length }]
+      break
+    }
+    after = next
   }
 
-  return { state, rateLimit, viewer, repoLabels, truncated }
+  return { nodes, rateLimit, integrationChecks, unavailable, truncated }
 }
 
 interface DetailsResult {
@@ -187,40 +69,25 @@ interface DetailsResult {
   readonly rateLimit: RateLimitInfo
 }
 
-// Only an issue alias's own blockedBy/comments/closedByPullRequestsReferences error is per-field: it costs a tag, never the board.
-const PER_FIELD_ERRORS: ReadonlySet<unknown> = new Set(['blockedBy', 'comments', 'closedByPullRequestsReferences'])
-
-/** The issue stages whose closing pull requests are read: one that already opened its pull request can be adopted instead of re-dispatched. */
-const CLOSING_READ_KEYS: readonly LabelKey[] = ['planApproved', 'inProgress', 'blocked', 'prOpened']
-
-/** Any other detail alias that errors or comes back null fails the whole read: a missing review list would
+/** Any detail alias that errors or comes back null fails the whole read: a missing review list would
  *  read as zero cycles, and a revise dispatch could go past the cap. */
 async function readDetails(github: GitHubTransport, repo: GitHubRepoRef, items: readonly PipelineItem[], rateLimit: RateLimitInfo): Promise<DetailsResult | Failure> {
-  const refs = items.map((item) => ({
-    kind: item.kind,
-    number: item.number,
-    rollup: item.kind === 'pull-request' && (item.matchedKeys.includes('approved') || item.matchedKeys.includes('readyForReview')),
-    blockerComments: item.kind === 'issue' && item.matchedKeys.includes('blocked'),
-    closingPullRequests: item.kind === 'issue' && CLOSING_READ_KEYS.some((key) => item.matchedKeys.includes(key)),
-  }))
+  const refs = items.map((item) => ({ number: item.number, rollup: item.matchedKeys.includes('approved') || item.matchedKeys.includes('readyForReview') }))
   const details: ItemDetail[] = []
   let total = rateLimit
 
   for (let start = 0; start < refs.length; start += DETAIL_CHUNK_SIZE) {
-    const { document, aliases } = buildItemDetailsQuery(refs.slice(start, start + DETAIL_CHUNK_SIZE))
+    const { document, aliases } = buildPullRequestDetailsQuery(refs.slice(start, start + DETAIL_CHUNK_SIZE))
     const reply = await graphql(github, repo, document)
     if (!reply.ok) return reply
     total = addRateLimit(total, reply.data.rateLimit)
     const errors = reply.errors ?? []
     for (const alias of aliases) {
       const node = reply.repository[alias.alias]
-      const own = errors.filter((error) => error.path?.[1] === alias.alias)
-      const perField = alias.kind === 'issue' ? own.filter((error) => PER_FIELD_ERRORS.has(error.path?.[2])) : []
-      if (own.length > perField.length || asRecord(node) === undefined) {
-        return { ok: false, kind: 'no-data', message: `the detail read for ${alias.kind} #${alias.number} came back empty` }
+      if (errors.some((error) => error.path?.[1] === alias.alias) || asRecord(node) === undefined) {
+        return { ok: false, kind: 'no-data', message: `the detail read for pull-request #${alias.number} came back empty` }
       }
-      const erroredFields = perField.map((error) => String(error.path?.[2]))
-      details.push({ kind: alias.kind, number: alias.number, node, erroredFields })
+      details.push({ kind: 'pull-request', number: alias.number, node, erroredFields: [] })
     }
   }
 
@@ -242,7 +109,7 @@ async function readTracked(github: GitHubTransport, repo: GitHubRepoRef, vocabul
   let total = rateLimit
   for (let start = 0; start < missing.length; start += DETAIL_CHUNK_SIZE) {
     const chunk = missing.slice(start, start + DETAIL_CHUNK_SIZE)
-    const { document, aliases } = buildTrackedItemsQuery(chunk)
+    const { document, aliases } = buildTrackedPullRequestsQuery(chunk)
     const reply = await graphql(github, repo, document)
     if (!reply.ok) return reply
     total = addRateLimit(total, reply.data.rateLimit)
@@ -254,98 +121,62 @@ async function readTracked(github: GitHubTransport, repo: GitHubRepoRef, vocabul
         closed.push(alias.number)
         continue
       }
-      const item = node === undefined || own.length > 0 ? undefined : mapTrackedItem(node, alias.kind, vocabulary, `${repo.owner}/${repo.name}`, chunk[idx]?.keys ?? [])
-      if (item === undefined) return { ok: false, kind: 'no-data', message: `the read of tracked ${alias.kind} #${alias.number} came back empty` }
+      const item = node === undefined || own.length > 0 ? undefined : mapTrackedItem(node, 'pull-request', vocabulary, `${repo.owner}/${repo.name}`, chunk[idx]?.keys ?? [])
+      if (item === undefined) return { ok: false, kind: 'no-data', message: `the read of tracked pull-request #${alias.number} came back empty` }
       if (item.state === 'OPEN') {
         items.push(item)
         continue
       }
       closed.push(alias.number)
-      if (item.kind === 'pull-request' && item.mergedAt !== null) merged.push(alias.number)
+      if (item.mergedAt !== null) merged.push(alias.number)
     }
   }
   return { items, closed, merged, rateLimit: total }
 }
 
-interface IntegrationResult {
-  readonly checks: IntegrationChecks | null
-  readonly rateLimit: RateLimitInfo
-}
-
-/** A failed read, an errored alias or a missing branch is `null` (unreadable), never an empty record, and never fails the board. */
-async function readIntegrationChecks(github: GitHubTransport, repo: GitHubRepoRef, integration: string, rateLimit: RateLimitInfo): Promise<IntegrationResult> {
-  const reply = await graphql(github, repo, buildIntegrationChecksQuery(integration))
-  if (!reply.ok) return { checks: null, rateLimit }
-  const total = addRateLimit(rateLimit, reply.data.rateLimit)
-  const errored = (reply.errors ?? []).some((error) => error.path?.[1] === 'integrationHistory')
-  return { checks: errored ? null : toIntegrationChecks(reply.repository.integrationHistory), rateLimit: total }
-}
-
-interface FetchPipelineItemsParams {
+interface ReadBoardPullRequestsParams {
   readonly repo: GitHubRepoRef
   readonly vocabulary: LabelVocabulary
-  /** What the repository's label list is checked against: the display vocabulary on an app-only repository. Absent means `vocabulary`. */
-  readonly verify?: VerifiableVocabulary
+  /** The store's pull-request refs: non-null makes them, not the swept labels, the set of pull requests read. `null` is the label path. */
+  readonly tracked: readonly TrackedRef[] | null
+  /** `branches.integration`, whose recent check history the integration-red gate compares against. */
   readonly integration: string
-  /** The store's items: non-null makes them, not the swept labels, the set of items read. `null` is the label path. */
-  readonly tracked?: readonly TrackedRef[] | null
   readonly github?: GitHubTransport
-  readonly now?: () => Date
 }
 
-function queriedLabelsOf(vocabulary: LabelVocabulary): readonly QueriedLabel[] {
-  return vocabulary.labels.map((label) => ({ key: label.key, name: label.name, source: label.source }))
-}
-
-/** Every pipeline item, the repository's real label list, and the rate-limit cost together. Never
- *  filters the reply server-side, and no path returns an empty list for a read that did not succeed. */
-export async function fetchPipelineItems(params: FetchPipelineItemsParams): Promise<PipelineFetch> {
+/** Every pull request the board shows, detail-read, with the integration branch's checks. Never filters the reply
+ *  server-side, and no path returns an empty list for a read that did not succeed. */
+export async function readBoardPullRequests(params: ReadBoardPullRequestsParams): Promise<BoardPullRequestsRead> {
   const github = params.github ?? githubHttp
-  const now = params.now ?? (() => new Date())
-  const fetchedAt = now().toISOString()
   const repo = `${params.repo.owner}/${params.repo.name}`
 
-  const swept = await sweep(github, params.repo, params.vocabulary)
-  if ('ok' in swept) return { ...swept, fetchedAt }
+  const swept = await sweep(github, params.repo, params.vocabulary, params.integration)
+  if ('ok' in swept) return swept
 
-  const sweptItems = SWEEP_ALIASES.flatMap((alias) => mapPipelineItems(swept.state.nodes[alias], surfaceOf(alias), params.vocabulary, repo))
-  let light = sweptItems
-  let closed: readonly number[] = []
-  let merged: readonly number[] = []
-  let rateLimit = swept.rateLimit
-  const trackedRefs = params.tracked ?? null
-  if (trackedRefs !== null) {
-    const tracked = new Map(trackedRefs.map((ref) => [`${ref.kind}:${String(ref.number)}`, ref]))
-    const kept = sweptItems.flatMap((item) => {
-      const ref = tracked.get(`${item.kind}:${String(item.number)}`)
-      return ref === undefined ? [] : [{ ...item, matchedKeys: ref.keys }]
-    })
-    const seen = new Set(kept.map((item) => `${item.kind}:${String(item.number)}`))
-    const missing = trackedRefs.filter((ref) => !seen.has(`${ref.kind}:${String(ref.number)}`))
-    const read = await readTracked(github, params.repo, params.vocabulary, missing, rateLimit)
-    if ('ok' in read) return { ...read, fetchedAt }
-    light = [...kept, ...read.items]
-    closed = read.closed
-    merged = read.merged
-    rateLimit = read.rateLimit
+  const sweptItems = mapPipelineItems(swept.nodes, 'pull-request', params.vocabulary, repo)
+  let kept = sweptItems
+  let read: TrackedResult = { items: [], closed: [], merged: [], rateLimit: swept.rateLimit }
+  if (params.tracked !== null) {
+    const split = keepTracked(sweptItems, params.tracked)
+    kept = split.kept
+    const tracked = await readTracked(github, params.repo, params.vocabulary, split.missing, swept.rateLimit)
+    if ('ok' in tracked) return tracked
+    read = tracked
   }
-  const detailed = await readDetails(github, params.repo, light, rateLimit)
-  if ('ok' in detailed) return { ...detailed, fetchedAt }
-  const integration = await readIntegrationChecks(github, params.repo, params.integration, detailed.rateLimit)
+
+  const detailed = await readDetails(github, params.repo, [...kept, ...read.items], read.rateLimit)
+  if ('ok' in detailed) return detailed
+  const items = applyItemDetails([...kept, ...read.items], detailed.details)
 
   return {
     ok: true,
-    items: applyItemDetails(light, detailed.details),
-    closed,
-    merged,
-    queried: queriedLabelsOf(params.vocabulary),
-    disabled: params.vocabulary.disabled,
-    vocabulary: verifyVocabulary(params.verify ?? params.vocabulary, swept.repoLabels),
-    unavailable: [...swept.state.unavailable.values()],
+    swept: items.slice(0, kept.length),
+    tracked: items.slice(kept.length),
+    closed: read.closed,
+    merged: read.merged,
+    integrationChecks: swept.integrationChecks,
+    unavailable: swept.unavailable,
     truncated: swept.truncated,
-    rateLimit: integration.rateLimit,
-    viewer: swept.viewer,
-    integrationChecks: integration.checks,
-    fetchedAt,
+    rateLimit: detailed.rateLimit,
   }
 }

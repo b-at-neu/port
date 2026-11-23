@@ -2,35 +2,20 @@
 import { githubHttp } from '@/main/platform/github-http'
 import type { GitHubTransport } from '@/types/platform'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
-import type { BacklogItem, BacklogLabel, BacklogResponse, ParentRead } from '@/types/backlog'
+import type { BacklogItem, BacklogResponse, ParentRead } from '@/types/backlog'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
-import { fieldListOf } from '@/main/github/map'
-import { toBlockerRead } from '@/main/github/blockers'
-import { EMPTY_CHILDREN, fetchChildren } from '@/main/github/backlog-children'
-import { blockedByField, blockingField } from '@/main/github/query'
+import { fieldListOf, labelsOf } from '@/main/github/map'
+import { toBlockerRead } from '@/main/github/tracker/blockers'
+import { EMPTY_CHILDREN, fetchChildren } from '@/main/github/tracker/backlog-children'
+import { blockedByField, blockingField } from '@/main/github/tracker/query'
 import { repoGraphqlRequest } from '@/main/github/request'
 import type { GitHubRepoRef, GraphQLErrorEntry } from '@/types/github'
-import { isHexColor } from '@/utils/hex-color'
-
 
 const PAGE_SIZE = 100
 const ASSIGNEE_PAGE_SIZE = 10
 const ITEM_LABEL_PAGE_SIZE = 20
 const BLOCKER_PAGE_SIZE = 10
 const BLOCKING_PAGE_SIZE = 10
-
-export function labelsOf(value: unknown): readonly BacklogLabel[] {
-  const nodes = (value as { nodes?: unknown } | null | undefined)?.nodes
-  if (!Array.isArray(nodes)) return []
-  const out: BacklogLabel[] = []
-  for (const node of nodes) {
-    if (typeof node !== 'object' || node === null) continue
-    const { name, color } = node as Record<string, unknown>
-    if (typeof name !== 'string') continue
-    out.push({ name, color: typeof color === 'string' && isHexColor(color) ? color.toLowerCase() : null })
-  }
-  return out
-}
 
 function subIssueCountOf(value: unknown): number {
   const total = (value as { totalCount?: unknown } | null | undefined)?.totalCount

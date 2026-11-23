@@ -4,7 +4,7 @@ import type { GitHubTransport } from '@/types/platform'
 import type { BacklogDetailResponse, BacklogLinkList, BacklogParentRead } from '@/types/backlog'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
-import { blockedByField } from '@/main/github/query'
+import { blockedByField } from '@/main/github/tracker/query'
 import { repoGraphqlRequest } from '@/main/github/request'
 import type { ClaimBlocker, GitHubRepoRef } from '@/types/github'
 

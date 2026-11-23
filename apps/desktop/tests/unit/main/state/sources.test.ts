@@ -3,9 +3,10 @@ import { chmod, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { CommandResult } from '@/types/platform'
-import type { GitHubHttpResult } from '@/types/platform'
+import type { GitHubHttpResult, GitHubTransport } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
 import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/state/sources'
+import { createTracker } from '@/main/tracker'
 import { httpFail, httpOk, queryOf } from '../../../fixtures/github-http'
 import { EMPTY_PIPELINE_BODY } from '../../../fixtures/pipeline-reply'
 
@@ -39,42 +40,40 @@ const REPO = { owner: 'o', name: 'r' }
 const VOCAB = { labels: [], disabled: [], problems: [] }
 
 describe('createSourceCache', () => {
-  it('carries an empty etag cache', () => {
+  it('starts empty', () => {
     const cache = createSourceCache()
-    expect(cache.etags.lookup(REPO_1, 'GET repos/o/r')).toEqual({ etag: null, generation: 0 })
+    expect(cache.github.size).toBe(0)
+    expect(cache.itemStates.size).toBe(0)
+    expect(cache.sessions).toBeNull()
   })
 })
+
+function refresh(cache: ReturnType<typeof createSourceCache>, github: GitHubTransport) {
+  return refreshGithub(cache, { tracker: createTracker({ github }), repoId: REPO_1, repo: REPO, vocabulary: VOCAB, integration: 'dev', worktreeEntries: [], agents: [], github })
+}
 
 describe('refreshGithub — Decision 4', () => {
   it('a failing attempt keeps the previous good fetch in the cache', async () => {
     const cache = createSourceCache()
-    await refreshGithub(cache, { repoId: REPO_1, repo: REPO, vocabulary: VOCAB, integration: 'dev', worktreeEntries: [], agents: [], github: () => Promise.resolve(okGh()) })
-    const outcome = await refreshGithub(cache, { repoId: REPO_1, repo: REPO, vocabulary: VOCAB, integration: 'dev', worktreeEntries: [], agents: [], github: () => Promise.resolve(failGh()) })
+    await refresh(cache, () => Promise.resolve(okGh()))
+    const outcome = await refresh(cache, () => Promise.resolve(failGh()))
     expect(outcome.ok).toBe(false)
     expect(cache.github.get(REPO_1)?.ok).toBe(true)
   })
 
   it('a never-succeeded source projects its own failure, never an empty read', async () => {
     const cache = createSourceCache()
-    await refreshGithub(cache, { repoId: REPO_1, repo: REPO, vocabulary: VOCAB, integration: 'dev', worktreeEntries: [], agents: [], github: () => Promise.resolve(failGh()) })
+    await refresh(cache, () => Promise.resolve(failGh()))
     expect(cache.github.get(REPO_1)?.ok).toBe(false)
   })
 
-  it('fetchItemsByNumber is not called when the orphan set is empty', async () => {
+  it('readItemsByNumber is not called when the orphan set is empty', async () => {
     const cache = createSourceCache()
     let sawItemsByNumberCall = false
-    await refreshGithub(cache, {
-      repoId: REPO_1,
-      repo: REPO,
-      vocabulary: VOCAB,
-      integration: 'dev',
-      worktreeEntries: [],
-      agents: [],
-      github: (request) => {
-        const document = queryOf(request)
-        if (document.includes('issueOrPullRequest')) sawItemsByNumberCall = true
-        return Promise.resolve(okGh())
-      },
+    await refresh(cache, (request) => {
+      const document = queryOf(request)
+      if (document.includes('issueOrPullRequest')) sawItemsByNumberCall = true
+      return Promise.resolve(okGh())
     })
     expect(sawItemsByNumberCall).toBe(false)
     expect(cache.itemStates.get(REPO_1)).toBeNull()

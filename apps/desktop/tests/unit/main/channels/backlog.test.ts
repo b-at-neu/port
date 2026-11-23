@@ -50,8 +50,8 @@ const NOT_READY_ENTRY = {
 function depsWith(overrides: Partial<BacklogListDeps>): BacklogListDeps {
   return {
     listRepositories: () => Promise.resolve({ ok: true, repositories: [] } as ReposListResponse),
-    fetchBacklog: () => {
-      throw new Error('fetchBacklog should not be invoked in this case')
+    listBacklog: () => {
+      throw new Error('listBacklog should not be invoked in this case')
     },
     trackedRefs: () => null,
     ...overrides,
@@ -86,11 +86,11 @@ describe('resolveBacklogList', () => {
     )
   })
 
-  it('forwards the ready repository repo and vocabulary to fetchBacklog', async () => {
+  it('forwards the ready repository repo and vocabulary to listBacklog', async () => {
     let received: unknown
     const deps = depsWith({
       listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      fetchBacklog: (params) => {
+      listBacklog: (params) => {
         received = params
         return Promise.resolve({ ok: true, items: [], scanned: 0, total: 0, viewer: 'octo-dev', fetchedAt: 't' })
       },
@@ -105,7 +105,7 @@ describe('resolveBacklogList', () => {
     const read = (trackedRefs: BacklogListDeps['trackedRefs']) =>
       resolveBacklogList(registryDeps, { repoId: REPO_ID }, depsWith({
         listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-        fetchBacklog: (params) => {
+        listBacklog: (params) => {
           received.push(params.tracked)
           return Promise.resolve({ ok: true, items: [], scanned: 0, total: 0, viewer: null, fetchedAt: 't' })
         },
@@ -120,8 +120,8 @@ describe('resolveBacklogList', () => {
 function detailDepsWith(overrides: Partial<BacklogDetailDeps>): BacklogDetailDeps {
   return {
     listRepositories: () => Promise.resolve({ ok: true, repositories: [] } as ReposListResponse),
-    fetchBacklogDetail: () => {
-      throw new Error('fetchBacklogDetail should not be invoked in this case')
+    readTicket: () => {
+      throw new Error('readTicket should not be invoked in this case')
     },
     ...overrides,
   }
@@ -154,12 +154,12 @@ describe('resolveBacklogDetail', () => {
     )
   })
 
-  it('forwards the ready repository ref and the number to fetchBacklogDetail', async () => {
+  it('forwards the ready repository ref and the number to readTicket', async () => {
     let received: unknown
     const response = { ok: false, kind: 'issue-missing', message: 'gone', fetchedAt: 't' } as const
     const deps = detailDepsWith({
       listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      fetchBacklogDetail: (params) => {
+      readTicket: (params) => {
         received = params
         return Promise.resolve(response)
       },

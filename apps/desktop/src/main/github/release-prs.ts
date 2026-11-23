@@ -2,7 +2,7 @@
 import type { GitHubTransport } from '@/types/platform'
 import type { GitHubRepoRef } from '@/types/github'
 import type { ReleaseEntry } from '@/types/release'
-import { labelsOf } from '@/main/github/backlog'
+import { labelsOf } from '@/main/github/map'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { MERGED_PRS_PAGE, buildMergedPrsQuery } from '@/main/github/release-query'
 import { nodesOf, obj, str } from '@/main/github/release'

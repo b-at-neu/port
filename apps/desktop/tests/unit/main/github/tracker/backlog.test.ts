@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { GitHubHttpResult } from '@/types/platform'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
-import { fetchBacklog } from '@/main/github/backlog'
-import { fakeTransport, httpFail, httpOk, queryOf, recordingTransport } from '../../../fixtures/github-http'
+import { fetchBacklog } from '@/main/github/tracker/backlog'
+import { fakeTransport, httpFail, httpOk, queryOf, recordingTransport } from '../../../../fixtures/github-http'
 
 const VOCABULARY = resolveVocabulary({})
 const READY_LABEL = VOCABULARY.labels.find((label) => label.key === 'ready')?.name ?? 'ready'

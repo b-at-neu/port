@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { readItemStates } from '@/main/github/item-states'
-import { fakeTransport, graphqlBodyOf, httpFail, httpOk, queryOf } from '../../../fixtures/github-http'
-import { createFakeGithub } from '../../../fixtures/reclaimer-harness'
+import { readItemStates } from '@/main/github/tracker/item-states'
+import { fakeTransport, graphqlBodyOf, httpFail, httpOk, queryOf } from '../../../../fixtures/github-http'
+import { createFakeGithub } from '../../../../fixtures/reclaimer-harness'
 
 const repo = { owner: 'acme', name: 'widgets' }
 

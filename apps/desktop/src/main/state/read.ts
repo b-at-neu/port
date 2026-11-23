@@ -11,6 +11,7 @@ import type { FreshnessEntry, PipelineState, RepositoryState } from '@/types/sta
 import { reconcileRepository } from '@/main/state/reconcile'
 
 import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/state/sources'
+import { createTracker } from '@/main/tracker'
 
 
 interface ReadPipelineStateParams {
@@ -64,6 +65,7 @@ export function projectFromCache(cache: SourceCache, repositories: readonly Repo
 export async function readPipelineState(params: ReadPipelineStateParams): Promise<PipelineState> {
   const now = params.now ?? (() => new Date())
   const cache = createSourceCache()
+  const tracker = createTracker({ github: params.github, now: params.now })
   const readyEntries = params.repositories.filter(isReady)
 
   await refreshSessions(cache, { repos: readyEntries.map((entry) => ({ id: entry.id, root: entry.path })), reader: params.sessionReader, claudeHome: params.claudeHome, now })
@@ -77,7 +79,7 @@ export async function readPipelineState(params: ReadPipelineStateParams): Promis
     const sessions = cache.sessions
     const agents = sessions?.ok ? sessions.agents.filter((a) => a.repoId === entry.id) : []
     const repo = splitRepo(entry.config.repo)
-    await refreshGithub(cache, { repoId: entry.id, repo, vocabulary: entry.config.vocabulary, verify: verifiableVocabularyOf(entry.config), integration: entry.config.branches.integration, worktreeEntries, agents, github: params.github, now })
+    await refreshGithub(cache, { tracker, repoId: entry.id, repo, vocabulary: entry.config.vocabulary, verify: verifiableVocabularyOf(entry.config), integration: entry.config.branches.integration, worktreeEntries, agents, github: params.github, now })
   }
 
   return projectFromCache(cache, params.repositories, now)

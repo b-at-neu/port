@@ -1,8 +1,11 @@
 // Nodes → PipelineItem. matchedKeys is bucketed here, client-side, against the resolved vocabulary.
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import { integrationChecksOf } from '../../../../../scripts/port-tick/checks'
-import type { CheckContext, ClosingPullRequest, IntegrationChecks, IssueCommentNode, ItemDetail, ItemState, LabelEventNode, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, ReviewNode } from '@/types/github'
-import { toBlockerRead } from '@/main/github/blockers'
+import type { BacklogLabel } from '@/types/backlog'
+import type { CheckContext, ClosingPullRequest, IntegrationChecks, IssueCommentNode, ItemDetail, LabelEventNode, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, ReviewNode } from '@/types/github'
+import type { TrackedRef } from '@/types/pipeline-state'
+import { toBlockerRead } from '@/main/github/tracker/blockers'
+import { isHexColor } from '@/utils/hex-color'
 
 interface ConnectionLike {
   readonly totalCount?: unknown
@@ -278,13 +281,26 @@ export function applyItemDetails(items: readonly PipelineItem[], details: readon
   })
 }
 
-/** Overlays `fetchItemStates` results onto an already-mapped item list. An item with no matching
- *  state is returned unchanged; a state with no matching item is ignored. */
-export function applyItemStates(items: readonly PipelineItem[], states: readonly ItemState[]): readonly PipelineItem[] {
-  const byKey = new Map(states.map((state) => [`${state.kind}:${state.number}`, state]))
-  return items.map((item) => {
-    const state = byKey.get(`${item.kind}:${item.number}`)
-    if (!state) return item
-    return { ...item, state: state.state, mergedAt: state.mergedAt }
+/** Swept items the store tracks, carrying its own keys, and the tracked refs the sweep did not return. */
+export function keepTracked(swept: readonly PipelineItem[], refs: readonly TrackedRef[]): { readonly kept: readonly PipelineItem[]; readonly missing: readonly TrackedRef[] } {
+  const tracked = new Map(refs.map((ref) => [`${ref.kind}:${String(ref.number)}`, ref]))
+  const kept = swept.flatMap((item) => {
+    const ref = tracked.get(`${item.kind}:${String(item.number)}`)
+    return ref === undefined ? [] : [{ ...item, matchedKeys: ref.keys }]
   })
+  const seen = new Set(kept.map((item) => `${item.kind}:${String(item.number)}`))
+  return { kept, missing: refs.filter((ref) => !seen.has(`${ref.kind}:${String(ref.number)}`)) }
+}
+
+export function labelsOf(value: unknown): readonly BacklogLabel[] {
+  const nodes = (value as { nodes?: unknown } | null | undefined)?.nodes
+  if (!Array.isArray(nodes)) return []
+  const out: BacklogLabel[] = []
+  for (const node of nodes) {
+    if (typeof node !== 'object' || node === null) continue
+    const { name, color } = node as Record<string, unknown>
+    if (typeof name !== 'string') continue
+    out.push({ name, color: typeof color === 'string' && isHexColor(color) ? color.toLowerCase() : null })
+  }
+  return out
 }

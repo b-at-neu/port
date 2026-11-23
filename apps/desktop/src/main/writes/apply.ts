@@ -5,7 +5,7 @@ import { gh as defaultGh } from '@/main/platform/gh'
 import type { GhResult } from '@/types/platform'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
 import { removeFile, writeTextFile } from '@/main/platform/files'
-import { fetchItemsByNumber } from '@/main/github/adapter'
+import { readItemsByNumber } from '@/main/github/tracker/items'
 
 import type { GitHubRepoRef } from '@/types/github'
 import type { AssertEqual } from '@/types/assert-type'
@@ -102,7 +102,7 @@ export async function applyLabels(params: ApplyLabelsParams): Promise<WriteOutco
   const ctxWithCall: AuditContext = { ...ctx, call: argv }
 
   if (!result.ok) {
-    const reread = await (params.fetchItemsByNumber ?? fetchItemsByNumber)({ repo: splitRepo(params.repo), numbers: [params.number] })
+    const reread = await (params.fetchItemsByNumber ?? readItemsByNumber)({ repo: splitRepo(params.repo), numbers: [params.number] })
     const rereadItem = reread.ok ? reread.resolved.find((item) => item.number === params.number) : undefined
     const rereadObserved: ObservedItem | null = rereadItem ? { labels: rereadItem.labels, assignees: rereadItem.assignees, readAt: reread.fetchedAt } : null
     const outcome: WriteOutcome = { kind: 'write-failed', classification: result.kind, stderr: describeGhFailure(result), reread: rereadObserved }

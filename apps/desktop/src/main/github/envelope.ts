@@ -1,7 +1,13 @@
 // Pure envelope parse and failure classification — no I/O. A GraphQL reply can carry errors beside
 // usable data, so the envelope itself decides, never the status alone.
 import type { GitHubHttpResult } from '@/types/platform'
-import type { AliasInfo, EnvelopeFailureKind, GraphQLErrorEntry, SweepAlias, UnavailableAlias } from '@/types/github'
+import type { AssertEqual } from '@/types/assert-type'
+import type { AliasInfo, EnvelopeFailureKind, GraphQLErrorEntry, PipelineFailureKind, SweepAlias, UnavailableAlias } from '@/types/github'
+
+/** Fails to compile if a failure kind is added to the platform layer or this file without the
+ *  hand-maintained, renderer-safe `PipelineFailureKind` growing to match. */
+type GitHubHttpFailureKind = Exclude<GitHubHttpResult, { ok: true }>['kind']
+export const _kindsCoverGitHubHttp: AssertEqual<PipelineFailureKind, GitHubHttpFailureKind | EnvelopeFailureKind> = true
 
 export interface GraphQLEnvelope {
   readonly data?: Readonly<Record<string, unknown>> | null

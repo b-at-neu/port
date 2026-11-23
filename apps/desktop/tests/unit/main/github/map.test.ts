@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyItemDetails, applyItemStates, mapPipelineItems } from '@/main/github/map'
+import { applyItemDetails, keepTracked, mapPipelineItems } from '@/main/github/map'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 
 const VOCABULARY = resolveVocabulary({})
@@ -210,18 +210,14 @@ describe('applyItemDetails', () => {
   })
 })
 
-describe('applyItemStates', () => {
-  it('mergedAt is null on the open sweep and populated from a fetchItemStates node', () => {
-    const items = mapPulls([pullNode()])
-    expect(items[0]?.mergedAt).toBeNull()
-
-    const updated = applyItemStates(items, [{ kind: 'pull-request', number: 5, state: 'MERGED', mergedAt: '2026-01-01T00:00:00Z', closedAt: '2026-01-01T00:00:00Z', url: 'u' }])
-    expect(updated[0]?.mergedAt).toBe('2026-01-01T00:00:00Z')
-    expect(updated[0]?.state).toBe('MERGED')
-  })
-
-  it('leaves an item unchanged when no matching state was returned', () => {
-    const items = mapIssues([issueNode({ title: '' })])
-    expect(applyItemStates(items, [])).toEqual(items)
+describe('keepTracked', () => {
+  it('keeps the swept items the store tracks under its own keys, and reports the refs the sweep missed', () => {
+    const swept = mapIssues([issueNode({ number: 1 }), issueNode({ number: 2 })])
+    const { kept, missing } = keepTracked(swept, [
+      { kind: 'issue', number: 2, keys: ['inProgress'] },
+      { kind: 'issue', number: 9, keys: ['planApproved'] },
+    ])
+    expect(kept.map((item) => [item.number, item.matchedKeys])).toEqual([[2, ['inProgress']]])
+    expect(missing).toEqual([{ kind: 'issue', number: 9, keys: ['planApproved'] }])
   })
 })

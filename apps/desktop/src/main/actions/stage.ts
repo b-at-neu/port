@@ -15,7 +15,7 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 
 export interface StageWriteDeps {
   readonly writeState: (params: WriteStateParams) => Promise<WriteOutcome>
-  readonly postIssueBody: (params: PostCommentParams) => Promise<WriteOutcome>
+  readonly postPlanBody: (params: PostCommentParams) => Promise<WriteOutcome>
   readonly stateLabels: StateLabelsReader
   readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
 }
@@ -151,7 +151,7 @@ export async function applyStageTransition(params: ApplyStageTransitionParams, d
     approvalGate: entry.config.modules.approvalGate,
   })
   if (transition.kind === 'write' && event.kind === 'outcome' && event.plan?.kind === 'read') {
-    const posted = await deps.postIssueBody({
+    const posted = await deps.postPlanBody({
       request: { repoId: entry.id, repo: entry.config.repo, kind: 'issue', number: record.number, body: event.plan.body, action: 'stage-handback-plan-body', scratchDir: params.scratchDir },
       repoRoot: entry.path,
       auditDir: params.auditDir,

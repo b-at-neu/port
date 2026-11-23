@@ -5,7 +5,7 @@ import { stateLabelsOf } from '@/main/pipeline-state/labels'
 import { createPipelineStateStore } from '@/main/pipeline-state/store'
 import { createStateWriter } from '@/main/pipeline-state/writer'
 import { readOwnership } from '@/main/dispatch/ownership'
-import { fetchItemsByNumber } from '@/main/github/adapter'
+import { defaultTracker } from '@/main/tracker'
 import { readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
 import { applyLabels } from '@/main/writes/apply'
 import { appendAudit } from '@/main/writes/audit'
@@ -41,7 +41,7 @@ interface PipelineState {
 
 export function createPipelineState(params: CreatePipelineStateParams): PipelineState {
   const store = createPipelineStateStore({ path: join(params.dir, 'pipeline-state.json'), readJson: readJsonFile, writeJsonAtomic: writeJsonFileAtomic, now: () => new Date() })
-  const { writeState, mirrorItem } = createStateWriter({ store, applyLabels, readOwnership, fetchItemsByNumber, appendAudit, recordIncident: params.recordIncident, newId: () => globalThis.crypto.randomUUID(), now: () => new Date() })
+  const { writeState, mirrorItem } = createStateWriter({ store, applyLabels, readOwnership, fetchItemsByNumber: defaultTracker.readItemsByNumber, appendAudit, recordIncident: params.recordIncident, newId: () => globalThis.crypto.randomUUID(), now: () => new Date() })
   const { finishPipelineState, retryMirrors } = createPipelineFinish({ store, mirrorItem, auditDir: params.auditDir })
 
   // The terminal cockpit keeps the labels as its record, so a repository it holds reads labels; once it leaves, the next read is labels once more so the watcher reseeds.

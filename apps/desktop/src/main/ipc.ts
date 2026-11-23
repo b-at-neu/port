@@ -31,7 +31,7 @@ import { createRunStateStore } from '@/main/dispatch/store'
 import { haltDispatch } from '@/main/dispatch/halt'
 import { registeredRepoIds, resolveDispatchControl } from '@/main/dispatch/resolve'
 import type { Dispatcher } from '@/types/dispatch'
-import { fetchItemsByNumber } from '@/main/github/adapter'
+import { defaultTracker } from '@/main/tracker'
 import { readOwnership, releaseOwnership, takeOwnership } from '@/main/dispatch/ownership'
 import { resolveGateAnswer, resolveGatePreflight } from '@/main/channels/gate'
 import type { GateChannelDeps, IncidentChannelDeps, ItemDecisionDeps, NotifyPrefsDeps, StageChannelDeps } from '@/types/channels'
@@ -270,7 +270,7 @@ export function registerIpc(restart: RestartSeams): RegisteredIpc {
     runState: (repoId) => runStates.current(repoId).state,
     readOwnership,
     takeOwnership,
-    fetchItemsByNumber,
+    fetchItemsByNumber: defaultTracker.readItemsByNumber,
     listRepositories,
     registryDeps,
     actions,
@@ -458,7 +458,7 @@ export function registerIpc(restart: RestartSeams): RegisteredIpc {
     scratchDir: app.getPath('temp'),
     allow: defaultAllowIo,
   }
-  const stageSweeper = createStageSweeper(registryDeps, stageChannelDeps, { fetchItemsByNumber, onChange: () => watcher.republish() })
+  const stageSweeper = createStageSweeper(registryDeps, stageChannelDeps, { fetchItemsByNumber: defaultTracker.readItemsByNumber, onChange: () => watcher.republish() })
 
   handle('stage:allow', (_event, request) => resolveStageAllow(registryDeps, request, stageChannelDeps))
 

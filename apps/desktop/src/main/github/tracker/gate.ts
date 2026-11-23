@@ -5,7 +5,7 @@ import type { GitHubTransport } from '@/types/platform'
 import type { GatePreflightFetch, GatePreflightItem } from '@/types/github'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
-import { buildGatePreflightQuery } from '@/main/github/query'
+import { buildGatePreflightQuery } from '@/main/github/tracker/query'
 import { repoGraphqlRequest } from '@/main/github/request'
 import type { GitHubRepoRef } from '@/types/github'
 
