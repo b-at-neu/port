@@ -16,7 +16,7 @@ import { ROUTE_IDS } from '@/renderer/router/routes'
 import { openSession } from '@/renderer/router/navigation'
 import { belongsToRepo, needsYouItems } from '@/renderer/board/needs-you'
 import type { NeedsYouItem as NeedsYouItemModel } from '@/types/board'
-import { registerListNavigator } from '@/renderer/shell/stores'
+import { listNavigatorRef } from '@/renderer/shell/list-navigator'
 import { useListSelection } from '@/renderer/shell/list-selection'
 import { SHOW_ALL_REPOSITORIES, UNDO_LABEL } from '@/renderer/lib/copy'
 import { CLEANUP_FAILED_HELP, ENDED_DENIAL_LINE, LAUNCH_FAILED_HELP, LAUNCH_FAILED_NO_DETAIL, REFRESH_FAILED_TOAST, dismissedToast, needsYouLeadCopy, nothingInRepoCopy, refreshedToast, restoredToast, showDismissedAction, showDismissedLabel, usageLimitEntryLine } from '@/renderer/needs-you/copy'
@@ -172,7 +172,7 @@ export function NeedsYouScreen() {
     onChange: (focus) => void navigate({ to: ROUTE_IDS.needsYou, search: { focus, repo: scopedRepo }, replace: true }),
   })
 
-  registerListNavigator('needsYou', {
+  const navigatorRef = listNavigatorRef({
     next: () => selection.next(),
     prev: () => selection.prev(),
     open: () => {
@@ -228,6 +228,7 @@ export function NeedsYouScreen() {
 
   return (
     <Screen
+      ref={navigatorRef}
       onMouseDown={selection.surfaceProps().onMouseDown}
       header={
         <ScreenHeader className="justify-between">

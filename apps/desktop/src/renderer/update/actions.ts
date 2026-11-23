@@ -1,11 +1,10 @@
 // The on-demand check and the update button's one seam.
-import { useSyncExternalStore } from 'react'
 import type { QueryClient } from '@tanstack/react-query'
 import type { UpdateDownloadAction, UpdateDownloadState, UpdateState } from '@/types/update'
 import { invoke } from '@/renderer/data/invoke'
 import { ipcQueryOptions } from '@/renderer/data/query'
 import { runInBackground, showActionToast, UNREACHABLE } from '@/renderer/lib/background-action'
-import { createStore } from '@/renderer/shell/stores'
+import { createStore, useStore } from '@/renderer/lib/store'
 import { UPDATE_CHECKING } from '@/renderer/update/copy'
 import { checkToastOf, downloadToastOf } from '@/renderer/update/model'
 
@@ -14,7 +13,7 @@ const TOAST_ID = 'update-check'
 const pending = createStore(false)
 
 export function useUpdateCheckPending(): boolean {
-  return useSyncExternalStore(pending.subscribe, pending.get)
+  return useStore(pending)
 }
 
 const DOWNLOAD_TOAST_ID = 'update-download'

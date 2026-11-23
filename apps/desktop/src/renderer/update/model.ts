@@ -1,7 +1,7 @@
 // Pure projections of an `UpdateState` into the notice, the About status line and the check toast.
 import type { ActionToast } from '@/types/toast'
 import type { AvailableRelease, UpdateDownloadButton, UpdateDownloadState, UpdateDownloadView, UpdateNoticeView, UpdateState, UpdateStatusView } from '@/types/update'
-import { formatAgo } from '@/renderer/lib/relative-time'
+import { formatAgo } from '@/renderer/lib/time'
 import { formatBytes } from '@/renderer/settings/usage-model'
 import {
   UPDATE_CHECKING,

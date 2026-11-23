@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { sessionDisplayLabel, startedClock } from '@/utils/hosting/label'
+import { sessionDisplayLabel } from '@/utils/hosting/label'
 
 describe('sessionDisplayLabel', () => {
   it('uses the title when set', () => {
@@ -16,19 +16,5 @@ describe('sessionDisplayLabel', () => {
 
   it('falls back to "Fork of <first 8>" for a forked session with no title', () => {
     expect(sessionDisplayLabel({ title: null, origin: { kind: 'forked', from: 'abcdefgh1234', atMessageUuid: null } }, 'port')).toBe('port · Fork of abcdefgh')
-  })
-})
-
-describe('startedClock', () => {
-  it('renders just the time for the same calendar day', () => {
-    const now = new Date(2026, 0, 5, 20, 0)
-    const startedAt = new Date(2026, 0, 5, 14, 2).toISOString()
-    expect(startedClock(startedAt, now)).not.toMatch(/[A-Za-z]{3}\s/)
-  })
-
-  it('renders a weekday prefix for a different calendar day', () => {
-    const now = new Date(2026, 0, 6, 9, 0)
-    const startedAt = new Date(2026, 0, 5, 14, 2).toISOString()
-    expect(startedClock(startedAt, now)).toMatch(/^[A-Za-z]{3}\s/)
   })
 })

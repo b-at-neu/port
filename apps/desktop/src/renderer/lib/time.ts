@@ -1,5 +1,6 @@
-// One `N minutes/hours/days ago` formatter — replaces the copy duplicated
-// across the old sessions.ts and search.ts screens.
+const MINUTE = 60_000
+
+/** `N minutes/hours/days ago`, spelled out. */
 export function relativeTime(idleMs: number): string {
   const seconds = Math.max(0, Math.round(idleMs / 1000))
   if (seconds < 60) return 'just now'
@@ -23,9 +24,18 @@ export function formatAgo(ms: number): string {
   return `${String(days)}d ago`
 }
 
+/** `formatAgo` for an ISO timestamp read against `now`. */
+export function formatAgoSince(iso: string, now: Date): string {
+  return formatAgo(now.getTime() - new Date(iso).getTime())
+}
+
+export function exactTime(iso: string): string {
+  return new Date(iso).toLocaleString()
+}
+
 /** DESIGN §6's compact duration — `<1m`, `12m`, `1h 4m`, `2d 3h`. */
 export function formatDuration(ms: number): string {
-  const totalMinutes = Math.floor(Math.max(0, ms) / 60_000)
+  const totalMinutes = Math.floor(Math.max(0, ms) / MINUTE)
   if (totalMinutes < 1) return '<1m'
   const days = Math.floor(totalMinutes / (24 * 60))
   const hours = Math.floor((totalMinutes % (24 * 60)) / 60)
@@ -33,4 +43,14 @@ export function formatDuration(ms: number): string {
   if (days > 0) return `${String(days)}d ${String(hours)}h`
   if (hours > 0) return `${String(hours)}h ${String(minutes)}m`
   return `${String(minutes)}m`
+}
+
+/** `14:02` same calendar day, else `Mon 14:02`; always `h23` so a mixed 12-/24-hour rail never reads as two different clocks. */
+export function formatClock(iso: string, now: Date): string {
+  const started = new Date(iso)
+  const sameDay = started.getFullYear() === now.getFullYear() && started.getMonth() === now.getMonth() && started.getDate() === now.getDate()
+  const time = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', hourCycle: 'h23' }).format(started)
+  if (sameDay) return time
+  const weekday = new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(started)
+  return `${weekday} ${time}`
 }

@@ -20,7 +20,6 @@ import type { ComposerAttachment } from '@/utils/hosting/attachments'
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import { folderLabel } from '@/utils/workspace/label'
 import { openNewSessionDialog } from '@/renderer/shell/stores'
-import { setSelectedSession } from '@/renderer/session/selection'
 import { useSessionEntries } from '@/renderer/session/entries-store'
 import { setDraft, clearDraftAttachments } from '@/renderer/session/drafts'
 import { answerPlan, answerQuestion, close, dismiss, send, setControls, stop } from '@/renderer/session/actions'
@@ -53,8 +52,6 @@ export function SessionScreen() {
   const sessions = useIpcQuery('session.list')
   const repos = useIpcQuery('repos.list')
   const key = (search.key ?? null) as SessionKey | null
-
-  setSelectedSession(key)
 
   const snapshot = key !== null ? (sessions.data ?? []).find((candidate) => candidate.sessionKey === key) ?? null : null
 

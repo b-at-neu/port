@@ -8,7 +8,7 @@ import { IconButton } from '@/renderer/components/icon-button'
 import { PhaseDot } from '@/renderer/components/phase-dot'
 import { NEEDS_YOU_TONE } from '@/renderer/lib/phase-tone'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
-import { exactTime, relativeAge } from '@/renderer/backlog/group'
+import { exactTime, formatAgoSince } from '@/renderer/lib/time'
 
 interface NeedsYouItemProps {
   readonly leadCopy: string
@@ -62,7 +62,7 @@ export function NeedsYouItem({
         {at !== null ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="shrink-0 text-meta tabular-nums text-muted-foreground">{relativeAge(at, now)}</span>
+              <span className="shrink-0 text-meta tabular-nums text-muted-foreground">{formatAgoSince(at, now)}</span>
             </TooltipTrigger>
             <TooltipContent>{exactTime(at)}</TooltipContent>
           </Tooltip>

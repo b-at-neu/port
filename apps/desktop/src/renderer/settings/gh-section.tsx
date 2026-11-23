@@ -6,7 +6,7 @@ import { SettingsCard } from '@/renderer/components/settings-card'
 import { useIpcQuery } from '@/renderer/data/query'
 import { StatusPill } from '@/renderer/components/status-pill'
 import { ErrorBanner } from '@/renderer/components/error-banner'
-import { formatAgo } from '@/renderer/lib/relative-time'
+import { formatAgo } from '@/renderer/lib/time'
 import { ghStatusModel } from '@/renderer/settings/gh-model'
 
 export function GhSection() {

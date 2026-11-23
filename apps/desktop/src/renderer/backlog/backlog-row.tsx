@@ -6,7 +6,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { LabelChip } from '@/renderer/components/label-chip'
 import { PLAN_GATE_OPTIONS } from '@/renderer/claim/copy'
 import type { useListSelection } from '@/renderer/shell/list-selection'
-import { exactTime, relativeAge } from '@/renderer/backlog/group'
+import { exactTime, formatAgoSince } from '@/renderer/lib/time'
 import { BlockedTag } from '@/renderer/backlog/blocked-tag'
 import { isEpic } from '@/renderer/backlog/epics'
 import type { BacklogRowExtras, BacklogRowView } from '@/types/backlog'
@@ -108,7 +108,7 @@ export function BacklogRow({ row, rowProps, menuOpen, pending, onMenuOpenChange,
       {row.assignee !== null ? <span className="shrink-0 text-meta text-muted-foreground">{row.assignee}</span> : null}
       <Tooltip>
         <TooltipTrigger asChild>
-          <span data-slot="backlog-age" className="shrink-0 text-meta text-muted-foreground">{relativeAge(row.createdAt, now)}</span>
+          <span data-slot="backlog-age" className="shrink-0 text-meta text-muted-foreground">{formatAgoSince(row.createdAt, now)}</span>
         </TooltipTrigger>
         <TooltipContent>{exactTime(row.createdAt)}</TooltipContent>
       </Tooltip>

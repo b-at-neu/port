@@ -1,10 +1,10 @@
 // #103: every string the rail and the restore banner render — pure, no DOM.
-// Window names and the reset clock reuse `startedClock` (`utils/hosting/
-// label.ts`), the same "14:02 today, else Mon 14:02" rule the rail's own row
+// Window names and the reset clock reuse `formatClock` (`lib/time.ts`),
+// the same "14:02 today, else Mon 14:02" rule the rail's own row
 // meta line and the restore banner's "opened" line both need too.
 import type { SessionRateLimit } from '@/types/hosting'
 import type { UsageNotice } from '@/types/session'
-import { startedClock } from '@/utils/hosting/label'
+import { formatClock } from '@/renderer/lib/time'
 import { contextPercent, formatCost, formatTokens, type SessionUsage, type UsageTotals } from '@/utils/hosting/usage'
 
 export const LIMIT_STEPPER_TITLE = "Each session is its own Claude Code process. They all share your subscription's usage limit."
@@ -30,7 +30,7 @@ function capitalize(text: string): string {
 }
 
 function resetsSuffix(resetsAt: string | null, now: Date): string {
-  return resetsAt === null ? '' : ` · resets ${startedClock(resetsAt, now)}`
+  return resetsAt === null ? '' : ` · resets ${formatClock(resetsAt, now)}`
 }
 
 interface UsageNoticeLines {
@@ -66,7 +66,7 @@ export function restoreUnavailableLine(reason: string): string {
 }
 
 export function restoreOpenedLine(startedAt: string, now: Date): string {
-  return `opened ${startedClock(startedAt, now)}`
+  return `opened ${formatClock(startedAt, now)}`
 }
 
 export function restorePartialLine(resumed: number, total: number, limit: number): string {

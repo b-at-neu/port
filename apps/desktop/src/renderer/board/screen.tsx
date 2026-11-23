@@ -15,7 +15,7 @@ import type { BoardItemRef, BoardSearch, BoardView } from '@/types/router'
 import { projectBoard } from '@/renderer/board/project'
 import type { BoardItemRow } from '@/types/board'
 import type { RepoId } from '@/utils/repos'
-import { registerListNavigator } from '@/renderer/shell/stores'
+import { listNavigatorRef } from '@/renderer/shell/list-navigator'
 import { useListSelection } from '@/renderer/shell/list-selection'
 import { pruneItemActionStates } from '@/renderer/board/actions'
 import { BoardBanners } from '@/renderer/board/banners'
@@ -114,7 +114,7 @@ export function BoardScreen() {
     onChange: (key) => selectRow(key !== null ? (flatRows.find((row) => rowKey(row) === key) ?? null) : null),
   })
 
-  registerListNavigator('board', {
+  const navigatorRef = listNavigatorRef({
     next: () => selection.next(),
     prev: () => selection.prev(),
     // J/K already opens the pane on every move (above); Enter on an
@@ -156,6 +156,7 @@ export function BoardScreen() {
 
   return (
     <Screen
+      ref={navigatorRef}
       onMouseDown={selection.surfaceProps().onMouseDown}
       header={
         <BoardHeader

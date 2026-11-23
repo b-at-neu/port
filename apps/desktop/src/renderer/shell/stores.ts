@@ -1,29 +1,8 @@
 // Small `useSyncExternalStore` stores for shell-wide UI state. No `useEffect`
 // anywhere: every writer calls `set` directly from an event handler.
-import { useSyncExternalStore } from 'react'
 import type { RepoId } from '@/utils/repos'
 import type { NewSessionPreselect } from '@/types/session'
-
-export function createStore<T>(initial: T) {
-  let value = initial
-  const listeners = new Set<() => void>()
-  function notify(): void {
-    for (const listener of listeners) listener()
-  }
-  return {
-    get(this: void): T {
-      return value
-    },
-    set(next: T): void {
-      value = next
-      notify()
-    },
-    subscribe(this: void, listener: () => void): () => void {
-      listeners.add(listener)
-      return () => listeners.delete(listener)
-    },
-  }
-}
+import { createStore, useStore } from '@/renderer/lib/store'
 
 type PalettePage = 'root'
 
@@ -51,7 +30,7 @@ export function setPaletteOpen(open: boolean): void {
 }
 
 export function usePaletteState(): PaletteState {
-  return useSyncExternalStore(paletteStore.subscribe, paletteStore.get)
+  return useStore(paletteStore)
 }
 
 interface NewSessionDialogState {
@@ -70,7 +49,7 @@ export function closeNewSessionDialog(): void {
 }
 
 export function useNewSessionDialog(): NewSessionDialogState {
-  return useSyncExternalStore(newSessionDialogStore.subscribe, newSessionDialogStore.get)
+  return useStore(newSessionDialogStore)
 }
 
 interface PauseRequest {
@@ -86,7 +65,7 @@ export function setPauseRequest(request: PauseRequest | null): void {
 }
 
 export function usePauseRequest(): PauseRequest | null {
-  return useSyncExternalStore(pauseRequestStore.subscribe, pauseRequestStore.get)
+  return useStore(pauseRequestStore)
 }
 
 const renamingStore = createStore<string | null>(null)
@@ -96,7 +75,7 @@ export function setRenaming(sessionKey: string | null): void {
 }
 
 export function useRenaming(): string | null {
-  return useSyncExternalStore(renamingStore.subscribe, renamingStore.get)
+  return useStore(renamingStore)
 }
 
 /** A shared store, not a local `useState` — the palette and the keyboard
@@ -114,25 +93,5 @@ export function toggleSidebarCollapsed(): boolean {
 }
 
 export function useSidebarCollapsed(): boolean {
-  return useSyncExternalStore(sidebarCollapsedStore.subscribe, sidebarCollapsedStore.get)
-}
-
-interface ListNavigator {
-  next(): void
-  prev(): void
-  open(): void
-  close?(): void
-}
-
-type ScreenKey = 'board' | 'backlog' | 'needsYou'
-
-const navigators = new Map<ScreenKey, ListNavigator>()
-
-export function registerListNavigator(screen: ScreenKey, navigator: ListNavigator | null): void {
-  if (navigator === null) navigators.delete(screen)
-  else navigators.set(screen, navigator)
-}
-
-export function listNavigatorFor(screen: ScreenKey): ListNavigator | undefined {
-  return navigators.get(screen)
+  return useStore(sidebarCollapsedStore)
 }
