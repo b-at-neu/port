@@ -97,12 +97,17 @@ describe('held cycle-cap row', () => {
   })
 
   it('keeps Grant disabled with a refusal reason, never swapping to another action', () => {
-    expect(actionFor(heldCap({ available: false, reason: 'not-owned' }))).toMatchObject({ kind: 'grant', disabledReason: expect.any(String) })
-    expect(actionFor(heldCap({ available: false, reason: 'agent-live' }))).toMatchObject({ kind: 'grant', disabledReason: expect.any(String) })
+    for (const reason of ['not-owned', 'agent-live']) {
+      const action = actionFor(heldCap({ available: false, reason }))
+      expect(action.kind).toBe('grant')
+      expect(action.disabledReason).not.toBeNull()
+    }
   })
 
   it('disables Grant when no row matched', () => {
-    expect(actionFor(heldCap(undefined))).toMatchObject({ kind: 'grant', disabledReason: expect.any(String) })
+    const action = actionFor(heldCap(undefined))
+    expect(action.kind).toBe('grant')
+    expect(action.disabledReason).not.toBeNull()
   })
 
   it('opens the grant dialog from the primary action', () => {
