@@ -9,10 +9,11 @@ import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import { createFakeFs, createFakePlatform } from '../../../support/fake-platform'
 import { readyEntry } from '../../../support/repo-config'
 
-const REGISTRY_DIR = '/registry'
-const REPO_DIR = '/repos/widgets'
-const SUB_DIR = '/repos/widgets/apps/desktop'
-const PLAIN_DIR = '/repos/not-a-repo'
+const REGISTRY_DIR = pathOps.toNative('/registry')
+const REPO_DIR = pathOps.toNative('/repos/widgets')
+const SUB_DIR = pathOps.join(REPO_DIR, 'apps', 'desktop')
+const PLAIN_DIR = pathOps.toNative('/repos/not-a-repo')
+const REGISTRY_FILE = pathOps.join(REGISTRY_DIR, 'registry.json')
 
 async function makeFs(): Promise<PlatformFs> {
   const fs = createFakeFs()
@@ -172,10 +173,10 @@ describe('listRepositories cache', () => {
   it('does not cache a failed read', async () => {
     let clock = 0
     const { deps, fs } = await registeredDeps({ now: () => clock })
-    await fs.writeText(`${REGISTRY_DIR}/registry.json`, '{ not json')
+    await fs.writeText(REGISTRY_FILE, '{ not json')
     const failed = await listRepositories(deps, { fresh: true })
     expect(failed.ok).toBe(false)
-    await fs.writeText(`${REGISTRY_DIR}/registry.json`, JSON.stringify({ version: 1, repositories: [] }))
+    await fs.writeText(REGISTRY_FILE, JSON.stringify({ version: 1, repositories: [] }))
     clock += REPOSITORY_LIST_TTL_MS
     expect(await listRepositories(deps)).toEqual({ ok: true, repositories: [] })
   })

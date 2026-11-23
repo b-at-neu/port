@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { createPathOps } from '@/main/platform/paths'
+import { createPathOps, pathOps } from '@/main/platform/paths'
 import { dedupePaths, readRegistry, writeRegistry } from '@/main/repos/registry-store'
 import { createFakeFs } from '../../../support/fake-platform'
 
-const DIR = '/userData'
-const FILE = `${DIR}/registry.json`
+const DIR = pathOps.toNative('/userData')
+const FILE = pathOps.join(DIR, 'registry.json')
+const A = pathOps.toNative('/a')
+const B = pathOps.toNative('/b')
 
 const READ_CASES: readonly { readonly name: string; readonly file: string | null; readonly expected: unknown; readonly untouched: boolean }[] = [
   { name: 'a missing file reads as empty', file: null, expected: { ok: true, repositories: [] }, untouched: false },
-  { name: 'a valid file lists its paths, deduped', file: JSON.stringify({ version: 1, repositories: [{ path: '/a' }, { path: '/a/' }, { path: '/b' }] }), expected: { ok: true, repositories: ['/a', '/b'] }, untouched: false },
+  { name: 'a valid file lists its paths, deduped', file: JSON.stringify({ version: 1, repositories: [{ path: '/a' }, { path: '/a/' }, { path: '/b' }] }), expected: { ok: true, repositories: [A, B] }, untouched: false },
   { name: 'invalid JSON is malformed and never overwritten', file: '{not json', expected: { ok: false, kind: 'registry-malformed' }, untouched: true },
   { name: 'a newer version is unsupported and never overwritten', file: JSON.stringify({ version: 2, repositories: [{ path: '/a' }] }), expected: { ok: false, kind: 'registry-unsupported-version' }, untouched: true },
 ]
@@ -27,7 +29,7 @@ describe('writeRegistry', () => {
   it('round-trips and dedupes what it writes', async () => {
     const fs = createFakeFs()
     expect((await writeRegistry({ fs }, DIR, ['/a', '/a/', '/b'])).ok).toBe(true)
-    expect(await readRegistry({ fs }, DIR)).toEqual({ ok: true, repositories: ['/a', '/b'] })
+    expect(await readRegistry({ fs }, DIR)).toEqual({ ok: true, repositories: [A, B] })
   })
 })
 

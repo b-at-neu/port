@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CommandResult } from '@/types/platform'
 import type { GitRunner } from '@/types/platform'
+import { pathOps } from '@/main/platform/paths'
 import { resolveWorkspace, toFolderEntry } from '@/main/repos/worktree/resolve'
 import type { RepoId } from '@/utils/repos'
 import { readyEntry } from '../../../support/repo-config'
@@ -21,7 +22,9 @@ function fakeGit(overrides: Partial<Record<string, () => CommandResult>>): GitRu
   }
 }
 
-const WORKTREE = '/repo/.claude/worktrees/session-abc123'
+const REPO = pathOps.toNative('/repo')
+const PLAIN = pathOps.toNative('/tmp/not-a-repo')
+const WORKTREE = pathOps.join(REPO, '.claude', 'worktrees', 'session-abc123')
 const LINKED = {
   root: () => ok(`${WORKTREE}\n`),
   'rev-parse --git-dir': () => ok('/repo/.git/worktrees/session-abc123\n'),
@@ -29,7 +32,7 @@ const LINKED = {
   'rev-parse --abbrev-ref': () => ok('session/abc123\n'),
 }
 const MAIN_CHECKOUT = {
-  root: () => ok('/repo\n'),
+  root: () => ok(`${REPO}\n`),
   'rev-parse --git-dir': () => ok('.git\n'),
   'rev-parse --git-common-dir': () => ok('.git\n'),
   'rev-parse --abbrev-ref': () => ok('main\n'),
@@ -41,7 +44,7 @@ const readyRepo = (path: string) => readyEntry({ id: path as RepoId, path, displ
 
 describe('resolveWorkspace', () => {
   it.each([
-    { name: 'a non-git folder', folder: '/tmp/not-a-repo', git: {}, workspace: { folder: '/tmp/not-a-repo', root: null, worktree: null, base: null }, repoId: null },
+    { name: 'a non-git folder', folder: PLAIN, git: {}, workspace: { folder: PLAIN, root: null, worktree: null, base: null }, repoId: null },
     {
       name: 'a linked worktree with its recorded portBase',
       folder: WORKTREE,
@@ -56,9 +59,9 @@ describe('resolveWorkspace', () => {
       workspace: { folder: WORKTREE, root: WORKTREE, worktree: { path: WORKTREE, branch: 'session/abc123' }, base: null },
       repoId: null,
     },
-    { name: 'the main checkout', folder: '/repo', git: MAIN_CHECKOUT, workspace: { folder: '/repo', root: '/repo', worktree: null, base: { sha: 'abc123', label: 'main' } }, repoId: null },
-    { name: 'a detached HEAD', folder: '/repo', git: DETACHED, workspace: { folder: '/repo', root: '/repo', worktree: null, base: { sha: 'abc123', label: 'abc123' } }, repoId: null },
-    { name: 'a registered repository', folder: '/repo', git: MAIN_CHECKOUT, repositories: [readyRepo('/repo')], workspace: { folder: '/repo', root: '/repo', worktree: null, base: { sha: 'abc123', label: 'main' } }, repoId: '/repo' },
+    { name: 'the main checkout', folder: REPO, git: MAIN_CHECKOUT, workspace: { folder: REPO, root: REPO, worktree: null, base: { sha: 'abc123', label: 'main' } }, repoId: null },
+    { name: 'a detached HEAD', folder: REPO, git: DETACHED, workspace: { folder: REPO, root: REPO, worktree: null, base: { sha: 'abc123', label: 'abc123' } }, repoId: null },
+    { name: 'a registered repository', folder: REPO, git: MAIN_CHECKOUT, repositories: [readyRepo(REPO)], workspace: { folder: REPO, root: REPO, worktree: null, base: { sha: 'abc123', label: 'main' } }, repoId: REPO },
   ])('resolves $name', async ({ folder, git, repositories, workspace, repoId }) => {
     const resolved = await resolveWorkspace({ git: fakeGit(git) }, folder, repositories ?? [])
     expect(resolved).toEqual({ workspace, repoId })
@@ -67,18 +70,20 @@ describe('resolveWorkspace', () => {
 
 describe('toFolderEntry', () => {
   it('returns git: null for a non-git folder', async () => {
-    const entry = await toFolderEntry({ git: fakeGit({}) }, '/tmp/plain', [], null)
-    expect(entry).toMatchObject({ git: null, repoId: null, path: '/tmp/plain' })
+    const plain = pathOps.toNative('/tmp/plain')
+    const entry = await toFolderEntry({ git: fakeGit({}) }, plain, [], null)
+    expect(entry).toMatchObject({ git: null, repoId: null, path: plain })
     expect(entry.id.startsWith('folder-')).toBe(true)
   })
 
   it('returns git head/branch and repoId for a registered git repo', async () => {
-    const entry = await toFolderEntry({ git: fakeGit(MAIN_CHECKOUT) }, '/repo', [readyRepo('/repo')], '2026-01-01T00:00:00.000Z')
-    expect(entry).toMatchObject({ git: { root: '/repo', head: { sha: 'abc123', branch: 'main' } }, repoId: '/repo', lastUsedAt: '2026-01-01T00:00:00.000Z' })
+    const entry = await toFolderEntry({ git: fakeGit(MAIN_CHECKOUT) }, REPO, [readyRepo(REPO)], '2026-01-01T00:00:00.000Z')
+    expect(entry).toMatchObject({ git: { root: REPO, head: { sha: 'abc123', branch: 'main' } }, repoId: REPO, lastUsedAt: '2026-01-01T00:00:00.000Z' })
   })
 
   it('produces a stable id for the same path', async () => {
     const ctx = { git: fakeGit({}) }
-    expect((await toFolderEntry(ctx, '/tmp/same', [], null)).id).toBe((await toFolderEntry(ctx, '/tmp/same', [], null)).id)
+    const same = pathOps.toNative('/tmp/same')
+    expect((await toFolderEntry(ctx, same, [], null)).id).toBe((await toFolderEntry(ctx, same, [], null)).id)
   })
 })
