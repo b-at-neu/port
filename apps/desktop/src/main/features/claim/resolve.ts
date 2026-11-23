@@ -8,7 +8,7 @@ import type { PlanGateChoice } from '@/types/claim'
 import { claimApply, claimPreflight } from '@/main/claim'
 
 import type { RegistryDeps } from '@/types/registry'
-import { requireRepoId } from '@/main/registry'
+import { requireRepoId } from '@/main/repos'
 
 // `repoId` must name a currently registered repository, `number` a positive integer.
 export async function resolveClaimPreflight(

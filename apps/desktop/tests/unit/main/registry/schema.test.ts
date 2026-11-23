@@ -12,7 +12,7 @@ import invalidCheckMissingRun from '../../../../../../schema/fixtures/invalid.ch
 import invalidMissingRepo from '../../../../../../schema/fixtures/invalid.missing-repo.json'
 import invalidUnknownKey from '../../../../../../schema/fixtures/invalid.unknown-key.json'
 import invalidUnknownTracker from '../../../../../../schema/fixtures/invalid.unknown-tracker.json'
-import { CONFIG_DEFAULTS, validateConfig } from '@/main/registry/schema'
+import { CONFIG_DEFAULTS, validateConfig } from '@/main/repos/config/schema'
 
 describe('validateConfig', () => {
   it('validates this repository own .claude/port.config.json clean', () => {

@@ -3,7 +3,7 @@
 import type { DirectorySizeResult } from '@/types/platform'
 import type { RegistryDeps } from '@/types/registry'
 import type { SizeRead, StorageEntry, StorageReport, UsageLedger, UsageSummary } from '@/types/settings'
-import { isReadyEntry, listRepositories } from '@/main/registry'
+import { isReadyEntry, listRepositories } from '@/main/repos'
 import { pathOps } from '@/main/platform/paths'
 
 export interface StorageReportDeps {

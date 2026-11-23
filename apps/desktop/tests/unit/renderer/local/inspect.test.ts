@@ -3,7 +3,7 @@ import type { SessionRecord, SessionScan } from '@/types/sessions'
 import { actorKeyOf, BURST_MIN_COUNT, BURST_WINDOW_MS, inspectDenials, shapeOf } from '@/renderer/local/inspect'
 import type { DenialActor, DenialDecision, DenialEntry, DenialsRead, DenialSummary } from '@/types/local'
 
-// The real-repository-log case lives in `main/local/inspect.test.ts` — this file must import nothing from `src/main/`, the same purity `inspect.ts` rests on.
+// The real-repository-log case lives in `main/repos/local/inspect.test.ts` — this file must import nothing from `src/main/`, the same purity `inspect.ts` rests on.
 
 // --- Fixture builders: each builds the minimum shape `inspectDenials` needs ---
 

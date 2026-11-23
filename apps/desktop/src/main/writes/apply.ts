@@ -12,7 +12,7 @@ import type { AssertEqual } from '@/types/assert-type'
 import type { GhWriteFailureKind, LabelAuditEntry, LabelWriteRequest, ObservedItem, OwnershipKind, WriteOutcome } from '@/types/writes'
 import { appendAudit } from '@/main/writes/audit'
 import { buildCommand } from '@/main/writes/command'
-import { readOwnership } from '@/main/dispatch/ownership'
+import { readOwnership } from '@/main/repos/ownership'
 import { wouldChangeNothing } from '@/main/writes/scope'
 import type { PostCommentParams, ApplyLabelsParams } from '@/types/writes'
 

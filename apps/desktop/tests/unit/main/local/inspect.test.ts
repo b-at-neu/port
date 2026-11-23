@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { CommandResult } from '@/types/platform'
 import { inspectDenials } from '@/renderer/local/inspect'
-import { readDenials } from '@/main/local/denials'
+import { readDenials } from '@/main/repos/local/denials'
 import type { GitRunner } from '@/types/platform'
 
 const realRead = await readDenials({ repoRoot: process.cwd() })

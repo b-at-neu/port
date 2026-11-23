@@ -3,10 +3,10 @@
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
 import type { PathOps } from '@/types/platform'
 import type { SessionStartMode, SessionStartTarget } from '@/types/hosting'
-import { isReadyEntry } from '@/main/registry'
+import { isReadyEntry } from '@/main/repos'
 
 
-import { resolveWorkspace, toFolderId } from '@/main/workspace/resolve'
+import { resolveWorkspace, toFolderId } from '@/main/repos/worktree/resolve'
 import type { ResolveStartTargetDeps, ResolvedStartTarget } from '@/types/workspace'
 
 function sessionIdOf(mode: SessionStartMode): string | null {

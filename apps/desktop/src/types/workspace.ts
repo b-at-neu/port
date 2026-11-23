@@ -3,7 +3,7 @@ import type { SessionReader } from '@/types/sessions'
 import type { SessionStartResult } from '@/types/hosting'
 import type { RepositoryEntry } from '@/utils/repos'
 
-// Renderer-safe workspace shapes — folders, session worktrees, and the Changes diff. No Node import here; `main/workspace/` derives these from real git state.
+// Renderer-safe workspace shapes — folders, session worktrees, and the Changes diff. No Node import here; `main/repos/worktree/` derives these from real git state.
 import type { RepoId } from '@/utils/repos'
 import type { StageAgent } from '@/types/tick'
 import type { FileDiff } from '@/utils/sessions/transcript'

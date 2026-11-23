@@ -2,7 +2,7 @@
 import { defaultGitRunner } from '@/main/platform/git'
 import { ensureDirectory as defaultEnsureDirectory, readTextFile as defaultReadTextFile, writeTextFile as defaultWriteTextFile } from '@/main/platform/files'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import { readAtDefaultRef } from '@/main/registry/harness'
+import { readAtDefaultRef } from '@/main/repos/config/harness'
 import { BUDGET_SESSION } from '@/main/dispatch/budget'
 import { createLedgerReader } from '@/main/github/ledger-read'
 import { createLedgerWriter } from '@/main/writes/ledger-comment'

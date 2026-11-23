@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { repoId } from '@/main/app/schemas'
 import { forgetRepoState } from '@/main/features/repos/forget'
-import { removeRepository } from '@/main/registry'
+import { removeRepository } from '@/main/repos'
 
 export const reposRemove = defineAction({
   name: 'repos.remove',

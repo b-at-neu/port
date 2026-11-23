@@ -4,7 +4,7 @@ import type { ResolvedStageRoot, RecoverDeps } from '@/types/stage'
 // seam into `main/stage/`'s allow/resume/restart compositions. Nothing else may call these.
 import type { StageAllowIo, StageAllowResult, StageDenial, StageResumeResult, StageRestartResult } from '@/types/stage'
 import type { RegistryDeps } from '@/types/registry'
-import { requireReadyRepo } from '@/main/registry'
+import { requireReadyRepo } from '@/main/repos'
 import { readAllowBase } from '@/main/github/allow'
 import { mergeRule } from '@/main/stage/allowlist'
 import { validateRule } from '@/main/stage/rule'

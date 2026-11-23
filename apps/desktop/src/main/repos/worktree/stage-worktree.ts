@@ -3,7 +3,7 @@ import type { CommandResult, GitRunner, PathOps } from '@/types/platform'
 import type { CreateStageWorktreeParams, CreateStageWorktreeResult, ReleaseBranchOutcome } from '@/types/workspace'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
 import { pathExists } from '@/main/platform/files'
-import { defaultRandom, ensureIgnored, hex6 } from '@/main/workspace/worktree'
+import { defaultRandom, ensureIgnored, hex6 } from '@/main/repos/worktree/worktree'
 
 const SLUG_LIMIT = 40
 const SWEEP_MARKER = 'port.sessionBranchSweep'

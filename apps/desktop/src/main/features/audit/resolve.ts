@@ -3,7 +3,7 @@ import type { RepoId } from '@/utils/repos'
 import type { AuditRead } from '@/types/writes'
 import { AUDIT_LIST_LIMIT } from '@/types/writes'
 import { readAuditLog } from '@/main/writes/audit'
-import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/registry'
+import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/repos'
 import type { RegistryDeps } from '@/types/registry'
 
 export interface AuditListDeps {

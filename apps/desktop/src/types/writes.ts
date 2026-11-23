@@ -61,7 +61,7 @@ export type Conflict =
   | { readonly kind: 'unattributed-transition'; readonly from: readonly string[]; readonly to: readonly string[]; readonly observedAt: string; readonly lastLocalWriteAt: string | null }
   | { readonly kind: 'dispatch-overtook-pause'; readonly agent: string; readonly pausedAt: string; readonly dispatchedAt: string }
 
-/** The renderer-safe shape of `main/dispatch/ownership.ts`'s `OwnershipRead`, shared by the gate dialog and the dispatch owner line. */
+/** The renderer-safe shape of `main/repos/ownership.ts`'s `OwnershipRead`, shared by the gate dialog and the dispatch owner line. */
 export type OwnershipSummary =
   | { readonly kind: 'absent' }
   | { readonly kind: 'app'; readonly since: string }

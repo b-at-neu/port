@@ -1,5 +1,5 @@
 // runPurge: deletes one confirmed orphan directory, and only when it is a member of this run's own orphan set.
-import { readWorktrees } from '@/main/local/worktrees'
+import { readWorktrees } from '@/main/repos/local/worktrees'
 import type { RunPurgeParams, WorktreesPurgeResult } from '@/types/reclaimer'
 import { classifyRemovalFailure } from '@/main/reclaimer/classify'
 import { resolveSeams } from '@/main/reclaimer/inspect'

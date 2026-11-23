@@ -117,7 +117,7 @@ export type SessionStartTarget = { readonly kind: 'folder'; readonly folderId: s
 /** `'keep'`/`'remove'`/`'force'` — a worktree session's dismiss choice. Never forces without the caller's explicit `'force'`. */
 export type WorktreeChoice = 'keep' | 'remove' | 'force'
 
-/** `'session:start'`'s response — `at-capacity` names the limit rather than a bare refusal; `runtime` carries the existing `RuntimeDiagnosis`/`detail`, never a new error vocabulary. The four workspace-resolution kinds are the operator-reachable half of `main/workspace/target.ts`'s own contract — a malformed target throws instead. */
+/** `'session:start'`'s response — `at-capacity` names the limit rather than a bare refusal; `runtime` carries the existing `RuntimeDiagnosis`/`detail`, never a new error vocabulary. The four workspace-resolution kinds are the operator-reachable half of `main/repos/worktree/target.ts`'s own contract — a malformed target throws instead. */
 export type SessionStartResult =
   | { readonly ok: true; readonly snapshot: HostedSessionSnapshot }
   | { readonly ok: false; readonly kind: 'at-capacity'; readonly limit: number }

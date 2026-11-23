@@ -3,7 +3,7 @@ import { git as realGit } from '@/main/platform/git'
 import type { GitRunner } from '@/types/platform'
 import type { SessionChanges } from '@/types/workspace'
 import type { SessionWorkspace } from '@/types/workspace'
-import { parseUnifiedDiff } from '@/main/workspace/diff'
+import { parseUnifiedDiff } from '@/main/repos/worktree/diff'
 
 /** Caps the one call whose output scales with the diff itself; every other call here is metadata-sized. */
 const DIFF_MAX_BYTES = 2_000_000

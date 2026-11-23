@@ -6,7 +6,7 @@ import { mirrorVocabularyOf } from '@/utils/labels/display'
 import type { RepoId } from '@/utils/repos'
 import type { ReadyEntry } from '@/types/actions'
 import { UNSEEDED_MESSAGE } from '@/main/pipeline-state/labels'
-import { requireReadyRepo } from '@/main/registry'
+import { requireReadyRepo } from '@/main/repos'
 import type { RegistryDeps } from '@/types/registry'
 
 import type { ClaimDeps } from '@/types/claim'

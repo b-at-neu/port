@@ -1,6 +1,6 @@
 // The one composition report, reclaim and purge share: enumerate, gather facts, resolve item states, classify.
 import { readItemStates } from '@/main/github/item-states'
-import { readWorktrees } from '@/main/local/worktrees'
+import { readWorktrees } from '@/main/repos/local/worktrees'
 import { listDirectory, pathExists, readTextFile, removeDirectory, statPath } from '@/main/platform/files'
 import { defaultGitRunner } from '@/main/platform/git'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'

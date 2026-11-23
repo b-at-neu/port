@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { createPathOps } from '@/main/platform/paths'
-import { dedupePaths, readRegistry, writeRegistry } from '@/main/registry/store'
+import { dedupePaths, readRegistry, writeRegistry } from '@/main/repos/registry-store'
 import { makeTempDir } from '../../../fixtures/fs'
 
 describe('readRegistry', () => {

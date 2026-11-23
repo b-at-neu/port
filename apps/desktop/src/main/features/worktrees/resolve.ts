@@ -12,7 +12,7 @@ import type {
   WorktreesReport,
 } from '@/types/reclaimer'
 import type { WorktreesReportDeps } from '@/main/app/seams'
-import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/registry'
+import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/repos'
 import type { RegistryDeps } from '@/types/registry'
 import { isRecord } from '@/utils/guards'
 import { pathOps } from '@/main/platform/paths'

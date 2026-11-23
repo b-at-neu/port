@@ -2,7 +2,7 @@ import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { makeTempDir } from '../../../fixtures/fs'
-import { createRecentsStore, pruneMissing, RECENTS_CAP } from '@/main/workspace/recents'
+import { createRecentsStore, pruneMissing, RECENTS_CAP } from '@/main/features/folders/recents'
 
 describe('createRecentsStore', () => {
   it('load() returns an empty list when the file is absent', async () => {

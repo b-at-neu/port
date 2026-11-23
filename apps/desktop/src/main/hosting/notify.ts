@@ -7,7 +7,7 @@ import type { AppCommand } from '@/utils/shell/commands'
 import type { RegistryDeps } from '@/types/registry'
 import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'
 import type { NotificationPrefs } from '@/types/settings'
-import { listRepositories } from '@/main/registry'
+import { listRepositories } from '@/main/repos'
 import { sessionDisplayLabel } from '@/utils/hosting/label'
 import { folderLabel, repoDisplayLabel } from '@/utils/workspace/label'
 

@@ -4,8 +4,8 @@ import { pathOps } from '@/main/platform/paths'
 import { stageBundleRoot } from '@/main/stage/bundle'
 import { createStageLauncher } from '@/main/stage/launcher'
 import { defaultStageInstructionsLoader } from '@/main/stage/instructions'
-import { createStageWorktree, releaseStageBranch, sweepSessionBranches } from '@/main/workspace/stage-worktree'
-import { removeSessionWorktreeAt } from '@/main/workspace/worktree'
+import { createStageWorktree, releaseStageBranch, sweepSessionBranches } from '@/main/repos/worktree/stage-worktree'
+import { removeSessionWorktreeAt } from '@/main/repos/worktree/worktree'
 import type { StageBundleRootInput, StageLauncherHandle } from '@/types/stage'
 
 type StageLauncherParams = Parameters<typeof createStageLauncher>[0]

@@ -56,7 +56,7 @@ import type { SessionReader } from '@/types/sessions'
 import { resolveClaudeExecutable } from '@/main/runtime/locate'
 import { pathOps } from '@/main/platform/paths'
 import { defaultGitRunner } from '@/main/platform/git'
-import { removeSessionWorktreeAt } from '@/main/workspace/worktree'
+import { removeSessionWorktreeAt } from '@/main/repos/worktree/worktree'
 
 import type { SessionWorkspace } from '@/types/workspace'
 

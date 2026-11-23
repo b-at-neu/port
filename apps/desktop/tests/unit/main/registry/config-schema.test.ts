@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { buildConfigJsonSchema, validateConfig } from '@/main/registry/schema'
+import { buildConfigJsonSchema, validateConfig } from '@/main/repos/config/schema'
 
 const ROOT = join(__dirname, '../../../../../..')
 const SCHEMA_PATH = join(ROOT, 'schema/port.config.schema.json')

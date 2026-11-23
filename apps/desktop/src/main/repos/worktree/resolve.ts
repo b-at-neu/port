@@ -7,7 +7,7 @@ import { pathOps as defaultPathOps } from '@/main/platform/paths'
 import type { PathOps } from '@/types/platform'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import type { FolderEntry, FolderId, SessionWorkspace } from '@/types/workspace'
-import { isReadyEntry } from '@/main/registry'
+import { isReadyEntry } from '@/main/repos'
 
 function toFolderId(pathKey: string): FolderId {
   return `folder-${createHash('sha1').update(pathKey).digest('hex')}` as FolderId

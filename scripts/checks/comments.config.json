@@ -9,7 +9,7 @@
     { "path": "apps/desktop/src/main/state/", "citations": 0, "longBlocks": 0 },
     { "path": "apps/desktop/src/main/app/modes/", "citations": 0, "longBlocks": 0 },
     { "path": "apps/desktop/src/main/runtime/", "citations": 0, "longBlocks": 0 },
-    { "path": "apps/desktop/src/main/registry/", "citations": 0, "longBlocks": 0 },
+    { "path": "apps/desktop/src/main/repos/", "citations": 0, "longBlocks": 0 },
     { "path": "apps/desktop/src/main/", "citations": 0, "longBlocks": 0 },
     { "path": "apps/desktop/src/renderer/", "citations": 33, "longBlocks": 85 },
     { "path": "apps/desktop/src/types/", "citations": 0, "longBlocks": 0 },

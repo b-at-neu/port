@@ -11,7 +11,7 @@ import type { ItemsByNumberFetch, ResolvedItem } from '@/types/github'
 import { applyLabels, postComment, postIssueBody } from '@/main/writes/apply'
 import type { GhRunner, GitRunner } from '@/types/platform'
 import { readAuditLog } from '@/main/writes/audit'
-import { takeOwnership } from '@/main/dispatch/ownership'
+import { takeOwnership } from '@/main/repos/ownership'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 const NOT_A_REPO: CommandResult = { ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'fatal: not a git repository' }

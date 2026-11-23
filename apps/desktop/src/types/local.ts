@@ -36,7 +36,7 @@ export interface WorktreeEntry {
   readonly unresolved: UnresolvedReason | null
 }
 
-/** Every failure kind `readWorktrees` can report — hand-maintained, pinned in `main/local/worktrees.ts`. */
+/** Every failure kind `readWorktrees` can report — hand-maintained, pinned in `main/repos/local/worktrees.ts`. */
 export type LocalFailureKind =
   | 'not-found'
   | 'cwd-missing'
@@ -105,7 +105,7 @@ export interface DenialSummary {
   readonly total: number
 }
 
-/** Every failure kind `readDenials` can report — `not-found` becomes `present: false`, so both it and `unparseable` are excluded here. Pinned in `main/local/denials.ts`. */
+/** Every failure kind `readDenials` can report — `not-found` becomes `present: false`, so both it and `unparseable` are excluded here. Pinned in `main/repos/local/denials.ts`. */
 export type DenialsFailureKind = 'not-a-file' | 'permission-denied' | 'too-large' | 'io'
 
 /** An absent log is a distinct healthy state (`present: false`), never an

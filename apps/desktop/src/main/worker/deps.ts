@@ -1,6 +1,6 @@
 import type { SearchQueryDeps, SessionsScanDeps, TranscriptTailDeps } from '@/main/app/seams'
 import type { StateEngine } from '@/types/offload'
-import { listRepositories } from '@/main/registry'
+import { listRepositories } from '@/main/repos'
 import { resolveSessionsScan } from '@/main/features/history/resolve'
 import { createWorkerEngine } from '@/main/worker/client'
 

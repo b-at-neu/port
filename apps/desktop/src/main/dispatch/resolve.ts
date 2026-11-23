@@ -7,9 +7,9 @@ import type { DispatchCommand, DispatchControlResult, HaltReport } from '@/types
 import type { BoardSnapshot } from '@/types/board'
 import type { RefreshRequest } from '@/types/state'
 import type { RepoId } from '@/utils/repos'
-import { isReadyEntry, listRepositories } from '@/main/registry'
+import { isReadyEntry, listRepositories } from '@/main/repos'
 import type { RegistryDeps } from '@/types/registry'
-import { releaseOwnership, takeOwnership } from '@/main/dispatch/ownership'
+import { releaseOwnership, takeOwnership } from '@/main/repos/ownership'
 
 
 

@@ -120,9 +120,9 @@ export const RESTRICTIONS = [
   },
   {
     id: 'local',
-    files: ['src/main/local/**'],
-    paths: [{ name: '@/main/platform/gh', message: 'main/local/ is local-only, never a second GitHub caller.' }],
-    patterns: [{ group: ['@/main/github/**'], message: 'main/local/ is local-only, never a second GitHub caller.' }],
+    files: ['src/main/repos/local/**'],
+    paths: [{ name: '@/main/platform/gh', message: 'main/repos/local/ is local-only, never a second GitHub caller.' }],
+    patterns: [{ group: ['@/main/github/**'], message: 'main/repos/local/ is local-only, never a second GitHub caller.' }],
   },
   {
     id: 'search',
@@ -172,7 +172,7 @@ export const RESTRICTIONS = [
     files: ['tests/fixtures/app/**'],
     patterns: [
       {
-        regex: '^(?!(?:electron|node:path|\\./[\\w-]+|@/types/.+|@/utils/.+|@/main/registry/schema|@/main/state/reconcile|@/main/tick/ledger|@/main/tick/plan)$)',
+        regex: '^(?!(?:electron|node:path|\\./[\\w-]+|@/types/.+|@/utils/.+|@/main/repos/config/schema|@/main/state/reconcile|@/main/tick/ledger|@/main/tick/plan)$)',
         message: 'Fixture mode may import only these modules — it must never reach gh or claude.',
       },
     ],

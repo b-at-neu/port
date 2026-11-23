@@ -1,5 +1,5 @@
-// Built the same way `main/registry/inspect.ts` resolves a real one, never a hand-retyped config shape. `acme/widgets` is `ready`; `acme/legacy-site` is `config-invalid`.
-import { CONFIG_DEFAULTS } from '@/main/registry/schema'
+// Built the same way `main/repos/inspect.ts` resolves a real one, never a hand-retyped config shape. `acme/widgets` is `ready`; `acme/legacy-site` is `config-invalid`.
+import { CONFIG_DEFAULTS } from '@/main/repos/config/schema'
 import { resolveVocabulary, verifyVocabulary } from '@/utils/labels/vocabulary'
 import type { VocabularyReport } from '@/utils/labels/vocabulary'
 import type { RepoId, RepositoryEntry, ResolvedRepoConfig } from '@/utils/repos'

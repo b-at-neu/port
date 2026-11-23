@@ -2,7 +2,7 @@
 import type { BacklogDetailResponse, BacklogResponse } from '@/types/backlog'
 import { fetchBacklog } from '@/main/github/backlog'
 import { fetchBacklogDetail } from '@/main/github/backlog-detail'
-import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/registry'
+import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/repos'
 import type { RegistryDeps } from '@/types/registry'
 import type { TrackedRef } from '@/types/pipeline-state'
 import type { RepoId } from '@/utils/repos'

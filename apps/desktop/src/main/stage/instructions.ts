@@ -1,7 +1,7 @@
 import { readTextFile } from '@/main/platform/files'
 import { defaultGitRunner } from '@/main/platform/git'
 import { pathOps } from '@/main/platform/paths'
-import { readAtDefaultRef } from '@/main/registry/harness'
+import { readAtDefaultRef } from '@/main/repos/config/harness'
 import { loadStageAgentDefinition } from '@/main/stage/bundle'
 import type { StageLaunchRequest } from '@/types/dispatch'
 import type { FileResult, GitRunner, PathOps } from '@/types/platform'

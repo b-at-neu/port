@@ -11,10 +11,10 @@ import { labelName } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { LabelWriteRequest, OwnershipSummary, WriteOutcome } from '@/types/writes'
 import { IMPLEMENTATION_PLAN_HEADING, sessionRequiredMarkerAt } from '@/main/state/link'
-import { requireReadyRepo } from '@/main/registry'
+import { requireReadyRepo } from '@/main/repos'
 import type { RegistryDeps } from '@/types/registry'
 
-import { toOwnershipSummary } from '@/main/dispatch/ownership'
+import { toOwnershipSummary } from '@/main/repos/ownership'
 import { UNSEEDED_MESSAGE } from '@/main/pipeline-state/labels'
 
 import type { AutoApprovePlanParams, GateAnswerParams, GatePreflightParams } from '@/types/actions'

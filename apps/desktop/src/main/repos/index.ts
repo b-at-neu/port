@@ -4,8 +4,8 @@ import type { ReposAddResponse, ReposListResponse, ReposRemoveResponse } from '@
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import type { ReadyEntry } from '@/types/actions'
 import type { GitRunner } from '@/types/platform'
-import { inspectRepository, resolveGitRoot } from '@/main/registry/inspect'
-import { readRegistry, writeRegistry } from '@/main/registry/store'
+import { inspectRepository, resolveGitRoot } from '@/main/repos/inspect'
+import { readRegistry, writeRegistry } from '@/main/repos/registry-store'
 import type { RegistryDeps } from '@/types/registry'
 
 async function inspectAll(paths: readonly string[], git: GitRunner) {

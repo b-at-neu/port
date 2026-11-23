@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { defaultGitRunner } from '@/main/platform/git'
-import { createSessionWorktree, removeSessionWorktree, removeSessionWorktreeAt } from '@/main/workspace/worktree'
+import { createSessionWorktree, removeSessionWorktree, removeSessionWorktreeAt } from '@/main/repos/worktree/worktree'
 
 const git = defaultGitRunner()
 

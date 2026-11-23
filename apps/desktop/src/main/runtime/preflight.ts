@@ -9,7 +9,7 @@ import { classifyPreflight } from '@/main/runtime/classify'
 import { createRuntimeProbe } from '@/main/runtime/probe'
 
 import type { RuntimePreflight, RuntimeProbe } from '@/types/runtime'
-import { listRepositories, requireReadyRepo } from '@/main/registry'
+import { listRepositories, requireReadyRepo } from '@/main/repos'
 import type { RegistryDeps } from '@/types/registry'
 import type { RepoId } from '@/utils/repos'
 

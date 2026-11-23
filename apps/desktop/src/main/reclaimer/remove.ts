@@ -1,5 +1,5 @@
 // The only file here that names `git worktree remove`, `unlock` or `prune`.
-import { readWorktrees } from '@/main/local/worktrees'
+import { readWorktrees } from '@/main/repos/local/worktrees'
 import type { CommandResult } from '@/types/platform'
 import type { PurgeCause, ResolvedSeams } from '@/types/reclaimer'
 import { classifyRemovalFailure, fallbackDecision } from '@/main/reclaimer/classify'
