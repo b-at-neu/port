@@ -21,7 +21,6 @@
     "src/preload/index.d.ts",
     "tests/unit/renderer/**/*",
     "tests/unit/utils/**/*",
-    "tests/fixtures/stage-session.ts",
-    "tests/fixtures/board-state.ts"
+    "tests/support/**/*"
   ]
 }

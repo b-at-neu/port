@@ -3,7 +3,7 @@ import { createPipelineStateStore } from '@/main/pipeline/state/store'
 import type { TransitionInput } from '@/types/pipeline-state'
 import type { FileResult } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
-import { reconciledItem, repositoryState } from '../../../fixtures/board-state'
+import { reconciledItem, repositoryState } from '../../../support/board-snapshot'
 
 const REPO = 'repo-a' as RepoId
 const AT = '2026-01-01T00:00:00.000Z'

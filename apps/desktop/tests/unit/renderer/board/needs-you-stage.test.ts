@@ -6,8 +6,8 @@ import type { PendingPermission, SessionKey } from '@/types/hosting'
 import type { InterruptedStage, StageDenial } from '@/types/stage'
 import type { RepositoryState } from '@/types/state'
 import { needsYouItems } from '@/renderer/board/needs-you'
-import { boardSnapshot, repositoryState } from '../../../fixtures/board-state'
-import { stageSession } from '../../../fixtures/stage-session'
+import { boardSnapshot, repositoryState } from '../../../support/board-snapshot'
+import { stageSession } from '../../../support/session-snapshot'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 const REPO_A = 'repo-a' as RepoId

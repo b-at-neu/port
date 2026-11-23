@@ -1,9 +1,8 @@
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
 import type { ReconciledItem, RepositoryState } from '@/types/state'
-import type { ReadyEntry } from '@/types/actions'
 
+/** Board-side fixtures at their idle defaults; override only what a test reads. */
 export function reconciledItem(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
   return {
     repoId: 'repo-a' as RepoId,
@@ -86,7 +85,11 @@ export function repositoryState(
   }
 }
 
-export function boardSnapshot(repositories: readonly RepositoryState[] = [], at = '2026-01-01T00:00:00Z'): BoardSnapshot {
+export function boardSnapshot(
+  repositories: readonly RepositoryState[] = [],
+  at = '2026-01-01T00:00:00Z',
+  overrides: Partial<BoardSnapshot> = {},
+): BoardSnapshot {
   return {
     state: { repositories, sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: at }, readAt: at },
     health: [],
@@ -97,32 +100,6 @@ export function boardSnapshot(repositories: readonly RepositoryState[] = [], at 
     emittedAt: at,
     dispatch: [],
     autoPlan: [],
-  }
-}
-
-export function readyEntry(overrides: Partial<ReadyEntry> = {}, config: Partial<ReadyEntry['config']> = {}): ReadyEntry {
-  return {
-    id: 'repo-a' as RepoId,
-    path: '/repo',
-    displayName: 'o/a',
-    status: 'ready',
-    config: {
-      repo: 'o/a',
-      owner: 'o',
-      name: 'a',
-      branches: { integration: 'dev', production: 'main' },
-      commands: { worktrees: null, budget: null },
-      concurrency: { sharedFiles: [], overlapThreshold: 2 },
-      sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
-      checkDispositions: {},
-      overrides: [],
-      models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
-      modules: { approvalGate: true, release: true, scope: true },
-      reviewCycleCap: 5,
-      vocabulary: resolveVocabulary({}),
-      ...config,
-    },
-    diagnostics: [],
     ...overrides,
   }
 }

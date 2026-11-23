@@ -6,7 +6,7 @@ import type { ReposListResponse } from '@/types/ipc'
 import { claimApply, claimPreflight } from '@/main/pipeline/claim'
 import type { ClaimDeps } from '@/types/claim'
 import type { RegistryDeps } from '@/types/registry'
-import { readyEntry } from '../../fixtures/board-state'
+import { readyEntry } from '../../support/repo-config'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 

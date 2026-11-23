@@ -5,7 +5,7 @@ import { pathOps } from '@/main/platform/paths'
 import type { DirectorySizeResult } from '@/types/platform'
 import type { RegistryDeps } from '@/types/registry'
 import type { UsageLedger } from '@/types/settings'
-import { readyEntry } from '../../../fixtures/board-state'
+import { readyEntry } from '../../../support/repo-config'
 
 const registryDeps = {} as RegistryDeps
 const CLAUDE_HOME = '/home/.claude'

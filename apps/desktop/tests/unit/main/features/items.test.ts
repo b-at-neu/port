@@ -6,7 +6,7 @@ import { resolveItemAction, resolveItemDecision } from '@/main/features/item/res
 import type { ItemActionDeps } from '@/main/features/item/resolve'
 import type { ItemDecisionDeps } from '@/main/app/seams'
 import type { RegistryDeps } from '@/types/registry'
-import { stageSession } from '../../../fixtures/stage-session'
+import { stageSession } from '../../../support/session-snapshot'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 

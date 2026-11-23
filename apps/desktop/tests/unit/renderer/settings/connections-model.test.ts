@@ -5,7 +5,7 @@ import { initialHealth } from '@/types/board'
 import type { GhStatus } from '@/types/gh'
 import type { RuntimePreflight } from '@/types/runtime'
 import type { RepoId } from '@/utils/repos'
-import { boardSnapshot, repositoryState } from '../../../fixtures/board-state'
+import { boardSnapshot, repositoryState } from '../../../support/board-snapshot'
 
 const NOW = new Date('2026-01-01T12:00:00Z')
 const AGO_2M = '2026-01-01T11:58:00Z'

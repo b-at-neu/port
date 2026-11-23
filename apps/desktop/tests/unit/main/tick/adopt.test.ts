@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ReconciledItem } from '@/types/state'
 import type { TickClaim } from '@/types/tick'
 import { adoptionsOf, heldVerdictOf, openPullRequestAdoption } from '@/main/pipeline/tick/adopt'
-import { reconciledItem as item } from '../../../fixtures/board-state'
+import { reconciledItem as item } from '../../../support/board-snapshot'
 
 const CLAIMED_AT = '2026-01-01T00:10:00.000Z'
 const BEFORE_CLAIM = '2026-01-01T00:05:00.000Z'

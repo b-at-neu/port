@@ -8,7 +8,8 @@ import { applyItemAction } from '@/main/pipeline/operator/apply'
 import type { ApplyItemActionDeps } from '@/main/pipeline/operator/apply'
 import type { ItemActionRequest } from '@/types/actions'
 import type { WriteStateParams } from '@/types/writes'
-import { boardSnapshot as snapshotOf, readyEntry as entry, reconciledItem, repositoryState as repoState } from '../../../fixtures/board-state'
+import { boardSnapshot as snapshotOf, reconciledItem, repositoryState as repoState } from '../../../support/board-snapshot'
+import { readyEntry as entry } from '../../../support/repo-config'
 
 const REPO_ID = 'repo-a' as RepoId
 

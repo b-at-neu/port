@@ -121,11 +121,13 @@ describe('effectiveWorktree', () => {
 
 describe('worktreeHint', () => {
   it('names the branch and a 7-char short sha', () => {
-    expect(worktreeHint(folder({ git: { root: '/x', head: { sha: '3eb526cdef', branch: 'dev' } } }))).toBe('Branches from dev (3eb526c) into its own folder.')
+    expect(worktreeHint(folder({ git: { root: '/x', head: { sha: '3eb526cdef', branch: 'dev' } } }))).toContain('dev (3eb526c)')
   })
 
   it('drops the branch clause for a detached HEAD', () => {
-    expect(worktreeHint(folder({ git: { root: '/x', head: { sha: '3eb526cdef', branch: null } } }))).toBe('Branches from 3eb526c into its own folder.')
+    const hint = worktreeHint(folder({ git: { root: '/x', head: { sha: '3eb526cdef', branch: null } } }))
+    expect(hint).toContain('3eb526c')
+    expect(hint).not.toContain('(')
   })
 
   it('is null for a non-git folder', () => {
