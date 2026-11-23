@@ -361,13 +361,13 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   }
 
   // --- Desktop app never retypes a resolved label name it should import — every string where
-  // `key !== name` must come from LABEL_DEFAULTS. `main/platform/`/`main/runtime/`/`types/platform.ts` excluded: their `'claude'` hits are the CLI binary name. ---
+  // `key !== name` must come from LABEL_DEFAULTS. `main/platform/`/`main/sessions/runtime/`/`types/platform.ts` excluded: their `'claude'` hits are the CLI binary name. ---
   {
     const mismatched = readJson(DESKTOP_LABELS_REL)
       .labels.filter((l: any) => l.key !== l.name)
       .map((l: any) => l.name);
     const dir = join(root, 'apps/desktop/src');
-    const labelFreeDirs = [join(dir, 'main/platform'), join(dir, 'main/runtime')];
+    const labelFreeDirs = [join(dir, 'main/platform'), join(dir, 'main/sessions/runtime')];
     const labelFreeFiles = [join(dir, 'types/platform.ts')];
     for (const f of walk(dir).filter((p) => p.endsWith('.ts') && !p.endsWith('.test.ts') && !labelFreeDirs.some((d) => p === d || p.startsWith(`${d}${sep}`)) && !labelFreeFiles.includes(p))) {
       const rel = relOf(f);

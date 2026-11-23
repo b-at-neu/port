@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { CommandResult, GitRunner } from '@/types/platform'
 import type { CreateStageWorktreeParams } from '@/types/workspace'
-import { createStageWorktree } from '@/main/workspace/stage-worktree'
+import { createStageWorktree } from '@/main/repos/worktree/stage-worktree'
 import { makeTempDir } from '../../../fixtures/fs'
 
 const START_SHA = 'cafe0001'

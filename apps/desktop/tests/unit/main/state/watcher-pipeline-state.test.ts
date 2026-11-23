@@ -6,7 +6,7 @@ import type { PipelineView, TrackedRef } from '@/types/pipeline-state'
 import type { StateEngine } from '@/types/offload'
 import type { PipelineState, RepositoryState } from '@/types/state'
 import { createInProcessEngine } from '@/main/worker/engine'
-import { createPipelineWatcher } from '@/main/state/watcher'
+import { createPipelineWatcher } from '@/main/pipeline/board/watcher'
 import { fakeGit, makeFakeTimer, readyEntry } from '../../../fixtures/watcher-harness'
 import { reconciledItem, repositoryState } from '../../../fixtures/board-state'
 

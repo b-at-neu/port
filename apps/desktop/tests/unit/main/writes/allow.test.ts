@@ -6,8 +6,8 @@ import type { GhResult, GhRunner } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
 import type { StageDenial } from '@/types/stage'
 import type { AllowWriteContext } from '@/types/writes'
-import { readAuditLog } from '@/main/writes/audit'
-import { allowBranchName, proposeAllowRule } from '@/main/writes/allow'
+import { readAuditLog } from '@/main/github/writes/audit'
+import { allowBranchName, proposeAllowRule } from '@/main/github/writes/allow'
 
 const OK = (stdout: string): GhResult => ({ ok: true, stdout, stderr: '' })
 

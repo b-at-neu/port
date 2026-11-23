@@ -1,7 +1,7 @@
 // The same case table `desktop-reclaimer` runs against `bin/worktrees.mjs`, so the two classifiers cannot silently disagree.
 import { describe, expect, it } from 'vitest'
-import { classifyCandidate, classifyRemovalFailure, describeReason, fallbackDecision, orphanVerdict } from '@/main/reclaimer/classify'
-import type { ClassifyInput, FallbackInput, ReasonInput } from '@/main/reclaimer/classify'
+import { classifyCandidate, classifyRemovalFailure, describeReason, fallbackDecision, orphanVerdict } from '@/main/features/worktrees/classify'
+import type { ClassifyInput, FallbackInput, ReasonInput } from '@/main/features/worktrees/classify'
 import type { OrphanInput } from '@/types/reclaimer'
 import { WORKTREE_STATES } from '@/types/reclaimer'
 import cases from './classify.cases.json'

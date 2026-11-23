@@ -2,9 +2,9 @@ import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { repoId } from '@/main/app/schemas'
 import { haltDispatch } from '@/main/dispatch/halt'
-import { releaseOwnership, takeOwnership } from '@/main/dispatch/ownership'
+import { releaseOwnership, takeOwnership } from '@/main/repos/ownership'
 import { resolveDispatchControl } from '@/main/dispatch/resolve'
-import { listRepositories } from '@/main/registry'
+import { listRepositories } from '@/main/repos'
 
 /** Run, drain or pause, scoped to one repository. */
 export const dispatchControl = defineAction({

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { editAllowGlobs, readStageEditAllow } from '@/main/hosting/stage-allow'
+import { editAllowGlobs, readStageEditAllow } from '@/main/sessions/hosting/stage-allow'
 import { pathOps } from '@/main/platform/paths'
 
 describe('editAllowGlobs', () => {

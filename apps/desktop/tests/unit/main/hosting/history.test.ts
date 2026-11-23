@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { HISTORY_LIMIT, readHistory } from '@/main/hosting/history'
-import type { ReadHistoryDeps } from '@/main/hosting/history'
+import { HISTORY_LIMIT, readHistory } from '@/main/sessions/hosting/history'
+import type { ReadHistoryDeps } from '@/main/sessions/hosting/history'
 import type { TranscriptEntry } from '@/utils/sessions/transcript'
 
 function entry(uuid: string): TranscriptEntry {

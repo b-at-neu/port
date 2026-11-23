@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { inPlaceSupported, installTargetOf, openModeOf, pickAsset } from '@/main/update/assets'
+import { inPlaceSupported, installTargetOf, openModeOf, pickAsset } from '@/main/features/update/assets'
 import type { AvailableRelease, InstallTarget, ReleaseAsset } from '@/types/update'
 
 const REPO = 'acme/port'

@@ -36,7 +36,7 @@ This is **this repository's own** standards document, not a template — `plugin
 
 ## 2. Data and integrity
 
-`.claude/port.config.json` validates against `schema/port.config.schema.json` (draft 2020-12). That file is generated from `apps/desktop/src/main/registry/schema.ts` by `pnpm --filter @port/desktop schema:config` and is never edited by hand. Fixtures come in pairs — `schema/fixtures/valid.*.json` must validate and `invalid.*.json` must be rejected — and both directions are asserted, because a fixture set that only proves acceptance proves nothing ("Schema fixtures still discriminate", plus the `run-schema-fixtures` CI job which does the full validation layer 1 deliberately cannot).
+`.claude/port.config.json` validates against `schema/port.config.schema.json` (draft 2020-12). That file is generated from `apps/desktop/src/main/repos/config/schema.ts` by `pnpm --filter @port/desktop schema:config` and is never edited by hand. Fixtures come in pairs — `schema/fixtures/valid.*.json` must validate and `invalid.*.json` must be rejected — and both directions are asserted, because a fixture set that only proves acceptance proves nothing ("Schema fixtures still discriminate", plus the `run-schema-fixtures` CI job which does the full validation layer 1 deliberately cannot).
 
 **Any content duplicated across files gets a mechanical assertion pinning the copies together, in both directions — never a "keep in sync" comment.** This is the repository's most consistently applied rule.
 

@@ -1,5 +1,4 @@
-// fetchGatePreflight — the plan gate's own one round trip. A new file to stay clear of the
-// file-size ratchet; reuses envelope.ts's parsing rather than hand-rolling a second reader.
+// fetchGatePreflight — the plan gate's own one round trip; reuses envelope.ts's parsing rather than hand-rolling a second reader.
 import { githubHttp } from '@/main/platform/github-http'
 import type { GitHubTransport } from '@/types/platform'
 import type { GatePreflightFetch, GatePreflightItem } from '@/types/github'

@@ -3,7 +3,7 @@ import { chmod, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { CommandResult } from '@/types/platform'
-import { readDenials } from '@/main/local/denials'
+import { readDenials } from '@/main/repos/local/denials'
 import type { GitRunner } from '@/types/platform'
 
 const NOT_A_REPO: CommandResult = { ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'fatal: not a git repository' }

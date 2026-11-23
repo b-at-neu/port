@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createStageRegistry } from '@/main/stage/registry'
+import { createStageRegistry } from '@/main/dispatch/stage/registry'
 import type { FileResult } from '@/types/platform'
 import type { InterruptedStage } from '@/types/stage'
 import type { RepoId } from '@/utils/repos'

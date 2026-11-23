@@ -1,4 +1,4 @@
-// Renderer-safe contract for the runtime strip. No import here may reach a Node builtin — only `main/runtime/` resolves a path, spawns `claude`, or reads a credentials file.
+// Renderer-safe contract for the runtime strip. No import here may reach a Node builtin — only `main/sessions/runtime/` resolves a path, spawns `claude`, or reads a credentials file.
 
 /** The minimum Claude Code CLI version this app expects. Advisory only — `version.ts` never blocks on it, only sets `belowMinimum`, turning an opaque probe failure into a legible note. */
 export const MINIMUM_CLAUDE_CODE_VERSION = '2.0.0'

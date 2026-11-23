@@ -1,16 +1,16 @@
 import type { ResolvedStageRoot, RecoverDeps } from '@/types/stage'
 
 // `stage:allow`, `stage:dismiss-denial`, `stage:resume`, `stage:restart` — the renderer's own
-// seam into `main/stage/`'s allow/resume/restart compositions. Nothing else may call these.
+// seam into `main/dispatch/stage/`'s allow/resume/restart compositions. Nothing else may call these.
 import type { StageAllowIo, StageAllowResult, StageDenial, StageResumeResult, StageRestartResult } from '@/types/stage'
 import type { RegistryDeps } from '@/types/registry'
-import { requireReadyRepo } from '@/main/registry'
+import { requireReadyRepo } from '@/main/repos'
 import { readAllowBase } from '@/main/github/allow'
-import { mergeRule } from '@/main/stage/allowlist'
-import { validateRule } from '@/main/stage/rule'
-import { allowBranchName, proposeAllowRule } from '@/main/writes/allow'
-import { resumeStage, restartStage } from '@/main/stage/recover'
-import { createInterruptedSweeper } from '@/main/stage/sweep'
+import { mergeRule } from '@/main/dispatch/stage/allowlist'
+import { validateRule } from '@/main/dispatch/stage/rule'
+import { allowBranchName, proposeAllowRule } from '@/main/github/writes/allow'
+import { resumeStage, restartStage } from '@/main/dispatch/stage/recover'
+import { createInterruptedSweeper } from '@/main/dispatch/stage/sweep'
 import { pathExists } from '@/main/platform/files'
 import { pathOps } from '@/main/platform/paths'
 

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { menuTemplate } from '@/main/menu'
-import type { MenuSessionEntry } from '@/main/menu'
+import { menuTemplate } from '@/main/app/shell/menu'
+import type { MenuSessionEntry } from '@/main/app/shell/menu'
 import type { SessionKey } from '@/types/hosting'
 
 function labelsOf(submenu: unknown): string[] {

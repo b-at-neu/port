@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chromeSandboxPath, isSandboxHelperConfigured, needsNoSandbox } from '@/main/sandbox'
+import { chromeSandboxPath, isSandboxHelperConfigured, needsNoSandbox } from '@/main/app/shell/sandbox'
 
 describe('isSandboxHelperConfigured', () => {
   it('is true only for uid 0 and mode 4755', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createInterruptedSweeper } from '@/main/stage/sweep'
-import { createStageRegistry } from '@/main/stage/registry'
+import { createInterruptedSweeper } from '@/main/dispatch/stage/sweep'
+import { createStageRegistry } from '@/main/dispatch/stage/registry'
 import type { BoardSnapshot } from '@/types/board'
 import type { DispatchRecord, RepoDispatchStatus } from '@/types/dispatch'
 import type { ItemsByNumberFetch } from '@/types/github'

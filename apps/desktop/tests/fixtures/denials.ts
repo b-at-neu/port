@@ -1,4 +1,4 @@
-import { createStageDenialStore } from '@/main/stage/denials'
+import { createStageDenialStore } from '@/main/dispatch/stage/denials'
 import type { StageDenialStore } from '@/types/stage'
 
 /** A real denial store over an in-memory file, so a dispatcher test needs no disk. */

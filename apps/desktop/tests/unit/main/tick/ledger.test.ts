@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
-import { createDispatchLedger, createForceDispatch, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
+import { createDispatchLedger, createForceDispatch, createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
 import { classifyUnmatched } from '@/utils/pipeline/liveness'
 
 const REPO = 'repo-1' as RepoId

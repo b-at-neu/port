@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createNotifier, notificationFor } from '@/main/hosting/notify'
+import { createNotifier, notificationFor } from '@/main/sessions/hosting/notify'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'
 import type { NotificationPrefs } from '@/types/settings'

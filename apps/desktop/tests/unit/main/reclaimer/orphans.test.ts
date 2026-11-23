@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { createFakeRepo, MAIN, WORKTREES } from '../../../fixtures/reclaimer-harness'
 import type { FakeRepoOptions } from '../../../fixtures/reclaimer-harness'
 import { createPathOps } from '@/main/platform/paths'
-import { findOrphanDirs } from '@/main/reclaimer/orphans'
-import type { OrphanCandidate } from '@/main/reclaimer/orphans'
+import { findOrphanDirs } from '@/main/features/worktrees/orphans'
+import type { OrphanCandidate } from '@/main/features/worktrees/orphans'
 import type { ReclaimerFs } from '@/types/reclaimer'
 
 const pathOps = createPathOps('posix', { home: '/home/u' })

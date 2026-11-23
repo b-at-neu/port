@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createInPlaceUpdater } from '@/main/update/in-place'
+import { createInPlaceUpdater } from '@/main/features/update/in-place'
 import type { AvailableRelease, NativeUpdateInfo, NativeUpdater, UpdateDownloader, UpdateDownloadState } from '@/types/update'
 
 const RELEASE: AvailableRelease = { version: '0.2.0', tag: 'v0.2.0', notesUrl: 'https://example.test/notes', publishedAt: null, assets: [] }

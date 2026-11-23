@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { GUARD_ALLOWLIST_MISS_MARKER } from '@/main/hosting/guard-marker'
-import { ISSUE_BODY_GUARD_MESSAGE, LABEL_GUARD_MESSAGE } from '@/main/hosting/label-guard'
-import { buildSessionOptions } from '@/main/hosting/options'
+import { GUARD_ALLOWLIST_MISS_MARKER } from '@/main/sessions/hosting/guard-marker'
+import { ISSUE_BODY_GUARD_MESSAGE, LABEL_GUARD_MESSAGE } from '@/main/sessions/hosting/label-guard'
+import { buildSessionOptions } from '@/main/sessions/hosting/options'
 import type { CanUseTool } from '@/main/platform/sdk'
 import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
 

@@ -1,7 +1,7 @@
 // A stage session that ends on a network error is interrupted with the `network` reason, so its label stays and the sweeper retries it.
 import { describe, expect, it, vi } from 'vitest'
 import { pathOps } from '@/main/platform/paths'
-import { createStageLauncher } from '@/main/stage/launcher'
+import { createStageLauncher } from '@/main/dispatch/stage/launcher'
 import type { ReadyEntry } from '@/types/actions'
 import type { StageLaunchRequest } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'

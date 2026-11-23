@@ -20,7 +20,7 @@ export function isReclaimableState(state: WorktreeState): state is ReclaimableSt
 /** One worktree row. `prunable`/`producer` are `null` only when the local read's join failed. */
 export interface InspectedWorktree {
   readonly path: string
-  /** Computed in `main/reclaimer/report.ts` — the renderer never manipulates a path itself, only displays the native string main resolved. */
+  /** Computed in `main/features/worktrees/report.ts` — the renderer never manipulates a path itself, only displays the native string main resolved. */
   readonly pathBasename: string
   readonly branch: string | null
   readonly head: string | null

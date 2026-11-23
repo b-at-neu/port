@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { TickActionable, TickAutoApproval, TickObservation, TickReport } from '@/types/tick'
-import { autoApprovableFrom, autoApprovalCandidatesFrom, dispatchableFrom, observableFrom } from '@/main/tick/dispatchable'
+import { autoApprovableFrom, autoApprovalCandidatesFrom, dispatchableFrom, observableFrom } from '@/main/pipeline/tick/dispatchable'
 
 const ACTIONABLE: TickActionable = { number: 1, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null }
 const WRITE_OBSERVATION: TickObservation = { kind: 'zero-diff', number: 2, itemKind: 'pull-request', count: 3, headRefOid: 'abc123' }

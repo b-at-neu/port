@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readCredentialsTell } from '@/main/runtime/credentials'
+import { readCredentialsTell } from '@/main/sessions/runtime/credentials'
 import { makeClaudeHome } from '../../../fixtures/fs'
 
 describe('readCredentialsTell', () => {

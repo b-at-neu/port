@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createStageDenialStore } from '@/main/stage/denials'
+import { createStageDenialStore } from '@/main/dispatch/stage/denials'
 import type { FileResult } from '@/types/platform'
 import type { StageDenial } from '@/types/stage'
 import type { RepoId } from '@/utils/repos'
@@ -72,6 +72,15 @@ describe('createStageDenialStore', () => {
     expect(store.list(REPO).map((d) => d.id)).toEqual(['b'])
     store.clearRule(REPO, 'Bash(b *)')
     expect(store.list(REPO)).toEqual([])
+  })
+
+  it('bounds a repository to 20 denials, dropping the oldest', () => {
+    const { store } = storeOver({ ok: false })
+    for (let i = 0; i <= 20; i++) store.record(denial(`d${String(i)}`))
+    const ids = store.list(REPO).map((d) => d.id)
+    expect(ids).toHaveLength(20)
+    expect(ids).not.toContain('d0')
+    expect(ids).toContain('d20')
   })
 
   it('keeps the in-memory state when a write fails', async () => {

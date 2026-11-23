@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { reconcileRepository } from '@/main/state/reconcile'
+import { reconcileRepository } from '@/main/pipeline/board/reconcile'
 import type { PipelineView, StoredItem } from '@/types/pipeline-state'
 import { denialsOf, entry, fetchOf, item, sessionsOf, worktreesOf } from './reconcile-fixtures'
 

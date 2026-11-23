@@ -1,7 +1,7 @@
 import { vi } from 'vitest'
-import type { HostedStoreDeps } from '@/main/hosting/store'
-import { createInMemoryHostingPersistence } from '@/main/hosting/persist'
-import type { HostedQuery } from '@/main/hosting/handle'
+import type { HostedStoreDeps } from '@/main/sessions/hosting/store'
+import { createInMemoryHostingPersistence } from '@/main/sessions/hosting/persist'
+import type { HostedQuery } from '@/main/sessions/hosting/handle'
 import type { RepoId } from '@/utils/repos'
 
 export const REPO_ID = 'repo-1' as RepoId

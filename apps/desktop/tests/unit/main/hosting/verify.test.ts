@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkPluginLoad, composeInvocation, isBlockedCommand, validateCommandName, type InitPlugin } from '@/main/hosting/verify'
+import { checkPluginLoad, composeInvocation, isBlockedCommand, validateCommandName, type InitPlugin } from '@/main/sessions/hosting/verify'
 
 describe('checkPluginLoad', () => {
   it.each([

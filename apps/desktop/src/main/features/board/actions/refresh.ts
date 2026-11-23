@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { repoId } from '@/main/app/schemas'
 import { resolveBoardRefresh } from '@/main/features/board/resolve'
-import { listRepositories } from '@/main/registry'
+import { listRepositories } from '@/main/repos'
 import { SOURCE_KINDS } from '@/types/board'
 
 export const boardRefresh = defineAction({

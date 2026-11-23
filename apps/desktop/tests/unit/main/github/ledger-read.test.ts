@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createLedgerReader } from '@/main/github/ledger-read'
-import { renderLedger } from '@/main/dispatch/budget-ledger'
+import { renderLedger } from '@/main/github/budget-ledger'
 import type { LedgerRow } from '@/types/budget'
 import type { GitHubHttpResult, GitHubRequest } from '@/types/platform'
 

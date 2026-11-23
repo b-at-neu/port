@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { labelName } from '@/utils/labels/vocabulary'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { CommandResult } from '@/types/platform'
-import { inspectRepository } from '@/main/registry/inspect'
+import { inspectRepository } from '@/main/repos/inspect'
 import type { GitRunner } from '@/types/platform'
 
 type OriginHead = 'present' | 'missing' | 'restorable'

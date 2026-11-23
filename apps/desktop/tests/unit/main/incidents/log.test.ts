@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createIncidentLog, INCIDENT_LIMITS } from '@/main/incidents/log'
+import { createIncidentLog, INCIDENT_LIMITS } from '@/main/pipeline/incidents/log'
 import { pathOps } from '@/main/platform/paths'
 import type { IncidentDraft, IncidentFiles } from '@/types/incidents'
 import { memory } from './fixtures'

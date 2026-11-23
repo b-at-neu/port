@@ -2,7 +2,7 @@
 import { githubHttp } from '@/main/platform/github-http'
 import { bodyOf, describeHttp, parseEnvelope } from '@/main/github/envelope'
 import { graphqlRequest, restRequest } from '@/main/github/request'
-import { issueFromPrBody, parseLedger } from '@/main/dispatch/budget-ledger'
+import { issueFromPrBody, parseLedger } from '@/main/github/budget-ledger'
 import type { GraphQLErrorEntry } from '@/types/github'
 import type { IssueForPr, LedgerRead, LedgerReader } from '@/types/budget'
 import type { GitHubTransport } from '@/types/platform'

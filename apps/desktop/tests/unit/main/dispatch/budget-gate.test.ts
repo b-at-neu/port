@@ -5,7 +5,7 @@ import type { RepoId } from '@/utils/repos'
 import type { CommandResult, FileResult, GhResult, GhRunner, GitHubHttpResult, GitHubRequest, GitHubTransport, GitRunner } from '@/types/platform'
 import type { ReadyEntry } from '@/types/actions'
 import { createBudgetGate } from '@/main/dispatch/budget-gate'
-import { renderLedger } from '@/main/dispatch/budget-ledger'
+import { renderLedger } from '@/main/github/budget-ledger'
 import type { LedgerRow } from '@/types/budget'
 
 const NOW = new Date('2026-09-05T14:02:00.000Z')

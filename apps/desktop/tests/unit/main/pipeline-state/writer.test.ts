@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { itemKey, recordMirror, transition, viewOf, withItem } from '@/main/pipeline-state/model'
-import { createStateWriter } from '@/main/pipeline-state/writer'
+import { itemKey, recordMirror, transition, viewOf, withItem } from '@/main/pipeline/state/model'
+import { createStateWriter } from '@/main/pipeline/state/writer'
 import type { ReadyEntry } from '@/types/actions'
 import type { OwnershipRead } from '@/types/dispatch'
 import type { ResolvedItem } from '@/types/github'

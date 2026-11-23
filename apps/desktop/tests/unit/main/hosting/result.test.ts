@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readResult } from '@/main/hosting/result'
+import { readResult } from '@/main/sessions/hosting/result'
 import type { SDKMessage } from '@/main/platform/sdk'
 
 const AT = '2026-01-01T00:00:00.000Z'

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildUserContent } from '@/main/hosting/content'
+import { buildUserContent } from '@/main/sessions/hosting/content'
 import type { ComposerAttachment } from '@/utils/hosting/attachments'
 
 describe('buildUserContent', () => {

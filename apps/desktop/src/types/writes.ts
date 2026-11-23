@@ -55,13 +55,13 @@ export interface ObservedItem {
   readonly readAt: string
 }
 
-/** Only `precondition-failed` is produced by `main/writes/` — the other two belong to the reconciler and the UI. */
+/** Only `precondition-failed` is produced by `main/github/writes/` — the other two belong to the reconciler and the UI. */
 export type Conflict =
   | { readonly kind: 'precondition-failed'; readonly expected: readonly string[]; readonly observed: readonly string[]; readonly readAt: string }
   | { readonly kind: 'unattributed-transition'; readonly from: readonly string[]; readonly to: readonly string[]; readonly observedAt: string; readonly lastLocalWriteAt: string | null }
   | { readonly kind: 'dispatch-overtook-pause'; readonly agent: string; readonly pausedAt: string; readonly dispatchedAt: string }
 
-/** The renderer-safe shape of `main/dispatch/ownership.ts`'s `OwnershipRead`, shared by the gate dialog and the dispatch owner line. */
+/** The renderer-safe shape of `main/repos/ownership.ts`'s `OwnershipRead`, shared by the gate dialog and the dispatch owner line. */
 export type OwnershipSummary =
   | { readonly kind: 'absent' }
   | { readonly kind: 'app'; readonly since: string }

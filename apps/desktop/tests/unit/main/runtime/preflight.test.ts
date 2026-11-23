@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { runtimePreflight, runtimeProbe } from '@/main/runtime/preflight'
-import type { RuntimeProbeDeps } from '@/main/runtime/preflight'
+import { runtimePreflight, runtimeProbe } from '@/main/sessions/runtime/preflight'
+import type { RuntimeProbeDeps } from '@/main/sessions/runtime/preflight'
 import type { RegistryDeps } from '@/types/registry'
 import type { RepoId } from '@/utils/repos'
 

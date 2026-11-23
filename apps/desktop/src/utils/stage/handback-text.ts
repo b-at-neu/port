@@ -1,4 +1,4 @@
-// Pure hand-back text rules, shared by `main/stage/handback.ts` and `renderer/board/needs-you.ts`
+// Pure hand-back text rules, shared by `main/pipeline/handback.ts` and `renderer/board/needs-you.ts`
 // so the two can no longer classify the same text two different ways.
 
 /** The three line prefixes a stage session's final message can end with. */

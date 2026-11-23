@@ -2,10 +2,11 @@
 import { defaultGitRunner } from '@/main/platform/git'
 import { ensureDirectory as defaultEnsureDirectory, readTextFile as defaultReadTextFile, writeTextFile as defaultWriteTextFile } from '@/main/platform/files'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import { readAtDefaultRef } from '@/main/registry/harness'
+import { readAtDefaultRef } from '@/main/repos/config/harness'
+import { CONFIG_PATH } from '@/main/repos/config/paths'
 import { BUDGET_SESSION } from '@/main/dispatch/budget'
 import { createLedgerReader } from '@/main/github/ledger-read'
-import { createLedgerWriter } from '@/main/writes/ledger-comment'
+import { createLedgerWriter } from '@/main/github/writes/ledger-comment'
 import {
   allowLine,
   ceilingSecondsFrom,
@@ -20,7 +21,7 @@ import {
   sessionLogName,
   sessionTotals,
   verdict,
-} from '@/main/dispatch/budget-ledger'
+} from '@/main/github/budget-ledger'
 import type { LedgerRow, SessionRow, TicketTotal } from '@/types/budget'
 import type { ReadyEntry } from '@/types/actions'
 import type { BudgetCheckResult, BudgetGate, BudgetGateFailure, BudgetReportResult, BudgetResetResult, BudgetSweepResult } from '@/types/dispatch'
@@ -43,8 +44,6 @@ interface BudgetGateDeps {
 type Ceiling = { readonly ok: true; readonly ceilingSeconds: number | null } | BudgetGateFailure
 type SessionLog = { readonly ok: true; readonly rows: readonly SessionRow[] } | BudgetGateFailure
 type Flush = { readonly rows: readonly SessionRow[]; readonly tickets: readonly TicketTotal[]; readonly failures: readonly string[] }
-
-const CONFIG_PATH = '.claude/port.config.json'
 
 const failed = (message: string): BudgetGateFailure => ({ ok: false, kind: 'failed', message })
 

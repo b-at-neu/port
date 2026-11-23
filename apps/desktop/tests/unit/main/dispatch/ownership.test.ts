@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { CommandResult } from '@/types/platform'
-import { classifyOwnership, readOwnership, releaseOwnership, takeOwnership } from '@/main/dispatch/ownership'
+import { classifyOwnership, readOwnership, releaseOwnership, takeOwnership } from '@/main/repos/ownership'
 import type { GitRunner } from '@/types/platform'
 
 const NOT_A_REPO: CommandResult = { ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'fatal: not a git repository' }

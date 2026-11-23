@@ -1,8 +1,8 @@
 // Adoption in the planner: a finished stage is adopted instead of reset, dispatched again or escalated.
 import { describe, expect, it } from 'vitest'
 import type { ReconciledItem } from '@/types/state'
-import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
-import { planTick } from '@/main/tick/plan'
+import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
+import { planTick } from '@/main/pipeline/tick/plan'
 import { reconciledItem as item, repositoryState } from '../../../fixtures/board-state'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')

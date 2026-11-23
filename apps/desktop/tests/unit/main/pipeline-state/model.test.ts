@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HISTORY_CAP, emptyFile, parseFile, prune, recordMirror, seedFrom, trackedOf, transition, viewOf, withItem } from '@/main/pipeline-state/model'
+import { HISTORY_CAP, emptyFile, parseFile, prune, recordMirror, seedFrom, trackedOf, transition, viewOf, withItem } from '@/main/pipeline/state/model'
 import type { MirrorFailure, RepoRecord, StoredItem, TransitionInput } from '@/types/pipeline-state'
 import { reconciledItem, repositoryState } from '../../../fixtures/board-state'
 

@@ -1,7 +1,7 @@
 import type { ImageMediaType, ComposerAttachment } from '@/utils/hosting/attachments'
 import type { QuestionAnswerResult, PlanDecision, PlanAnswerResult, SetControlsResult } from '@/utils/hosting/controls'
 
-// Renderer-safe contract for a hosted session. No import here may reach a Node builtin — only `main/hosting/` spawns a `claude` child or holds a `Query`. `message: unknown` on the event envelope is deliberate: narrowing it is the renderer's own job, never a second guess at the SDK's union here.
+// Renderer-safe contract for a hosted session. No import here may reach a Node builtin — only `main/sessions/hosting/` spawns a `claude` child or holds a `Query`. `message: unknown` on the event envelope is deliberate: narrowing it is the renderer's own job, never a second guess at the SDK's union here.
 import type { RepoId } from '@/utils/repos'
 import type { RuntimeDiagnosis } from '@/types/runtime'
 import type { NotificationPrefs } from '@/types/settings'
@@ -117,7 +117,7 @@ export type SessionStartTarget = { readonly kind: 'folder'; readonly folderId: s
 /** `'keep'`/`'remove'`/`'force'` — a worktree session's dismiss choice. Never forces without the caller's explicit `'force'`. */
 export type WorktreeChoice = 'keep' | 'remove' | 'force'
 
-/** `'session:start'`'s response — `at-capacity` names the limit rather than a bare refusal; `runtime` carries the existing `RuntimeDiagnosis`/`detail`, never a new error vocabulary. The four workspace-resolution kinds are the operator-reachable half of `main/workspace/target.ts`'s own contract — a malformed target throws instead. */
+/** `'session:start'`'s response — `at-capacity` names the limit rather than a bare refusal; `runtime` carries the existing `RuntimeDiagnosis`/`detail`, never a new error vocabulary. The four workspace-resolution kinds are the operator-reachable half of `main/repos/worktree/target.ts`'s own contract — a malformed target throws instead. */
 export type SessionStartResult =
   | { readonly ok: true; readonly snapshot: HostedSessionSnapshot }
   | { readonly ok: false; readonly kind: 'at-capacity'; readonly limit: number }
@@ -492,6 +492,6 @@ export interface StartSessionParams {
   readonly workspace: SessionWorkspace
   /** The restore path's own resolved title, or a stage launch's ticket title — omitted for every other start path. */
   readonly initialTitle?: string | null
-  /** Non-null only for a stage launch — passed straight through to the handle; `main/stage/` is the only caller that sets it. `onDeny` fires once per denied tool call, never for a protected-path or interaction `ask`. */
+  /** Non-null only for a stage launch — passed straight through to the handle; `main/dispatch/stage/` is the only caller that sets it. `onDeny` fires once per denied tool call, never for a protected-path or interaction `ask`. */
   readonly stage?: { readonly tag: StageTag; readonly agent: StageAgentLaunch; readonly instructionsRoot: string; readonly model: string; readonly sessionRequiredPaths: readonly string[]; readonly onDeny?: (toolName: string, input: Readonly<Record<string, unknown>>) => void } | null
 }

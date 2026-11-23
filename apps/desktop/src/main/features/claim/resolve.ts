@@ -5,10 +5,10 @@ import type { ClaimDeps } from '@/types/claim'
 import { PLAN_GATE_CHOICES } from '@/types/claim'
 import type { RepoId } from '@/utils/repos'
 import type { PlanGateChoice } from '@/types/claim'
-import { claimApply, claimPreflight } from '@/main/claim'
+import { claimApply, claimPreflight } from '@/main/pipeline/claim'
 
 import type { RegistryDeps } from '@/types/registry'
-import { requireRepoId } from '@/main/registry'
+import { requireRepoId } from '@/main/repos'
 
 // `repoId` must name a currently registered repository, `number` a positive integer.
 export async function resolveClaimPreflight(

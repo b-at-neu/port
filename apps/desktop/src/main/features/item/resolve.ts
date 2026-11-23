@@ -11,7 +11,7 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { OperatorAction, RebasePick } from '@/types/actions'
 import type { RegistryDeps } from '@/types/registry'
 import { isLiveStageSession } from '@/utils/stage/live'
-import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/registry'
+import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/repos'
 
 
 import type { ItemDecisionDeps, RefreshRequest } from '@/main/app/seams'

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CommandResult } from '@/types/platform'
-import { defaultRefName, permissionsStateOf, readAtDefaultRef, refsCarryingConfig } from '@/main/registry/harness'
+import { defaultRefName, permissionsStateOf, readAtDefaultRef, refsCarryingConfig } from '@/main/repos/config/harness'
 import type { GitRunner } from '@/types/platform'
 
 function ok(stdout: string): CommandResult {

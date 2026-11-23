@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { pathOps } from '@/main/platform/paths'
-import { createStageLauncher } from '@/main/stage/launcher'
+import { createStageLauncher } from '@/main/dispatch/stage/launcher'
 import type { FileResult } from '@/types/platform'
 import type { StageLaunchRequest } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '@/types/hosting'

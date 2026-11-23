@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ISSUE_BODY_GUARD_MESSAGE, LABEL_GUARD_MESSAGE, issueBodyWriteOf, labelWriteOf } from '@/main/hosting/label-guard'
+import { ISSUE_BODY_GUARD_MESSAGE, LABEL_GUARD_MESSAGE, issueBodyWriteOf, labelWriteOf } from '@/main/sessions/hosting/label-guard'
 
 describe('labelWriteOf', () => {
   it.each([

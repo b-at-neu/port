@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { classifyHandback, isTransientNetworkFailure } from '@/main/stage/handback'
-import type { ClassifyHandbackParams } from '@/main/stage/handback'
+import { classifyHandback, isTransientNetworkFailure } from '@/main/pipeline/handback'
+import type { ClassifyHandbackParams } from '@/main/pipeline/handback'
 
 const BASE: ClassifyHandbackParams = { lastResult: null, end: null, rateLimit: null, usage: null, phase: 'streaming', operatorJoinedAt: null }
 

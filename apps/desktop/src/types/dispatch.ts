@@ -232,9 +232,9 @@ export interface Dispatcher {
   /** Closes every remaining live stage session in a repository. */
   standDown(repoId: RepoId): Promise<boolean>
   liveStages(repoId: RepoId): readonly string[]
-  /** `null` unless this app owns `repoId` — `main/tick/plan.ts`'s own `stageLiveness` input. */
+  /** `null` unless this app owns `repoId` — `main/pipeline/tick/plan.ts`'s own `stageLiveness` input. */
   stageLiveness(repoId: RepoId): { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
-  /** This repository's own ended stage-session records — `main/tick/plan.ts`'s own `endedStages` input. */
+  /** This repository's own ended stage-session records — `main/pipeline/tick/plan.ts`'s own `endedStages` input. */
   endedStages(repoId: RepoId): readonly EndedStage[]
   /** Every live stage session across every repository, for the quit guard. */
   liveStageSessions(): readonly StageSessionSummary[]
@@ -280,7 +280,7 @@ export interface CreateDispatcherParams {
   /** Where a candidate's labels come from at the survivor test; `null` for an unseeded repository launches nothing. */
   readonly stateLabels: StateLabelsReader
   readonly refreshMemo: RefreshMemo
-  /** Cleared for `(repoId, candidate.number)` once a forced launch succeeds — `main/tick/plan.ts`'s own consumer of the same memo, never a second instance. */
+  /** Cleared for `(repoId, candidate.number)` once a forced launch succeeds — `main/pipeline/tick/plan.ts`'s own consumer of the same memo, never a second instance. */
   readonly forceDispatch: ForceDispatch
   /** Asks for one GitHub read of this repository alone — never another source, never another repository. Fired once a hand-back's label write has settled. */
   readonly requestRead: (repoId: RepoId) => void
@@ -289,7 +289,7 @@ export interface CreateDispatcherParams {
   readonly now: () => Date
   /** Best-effort: never rejects, and no call site depends on it landing. */
   readonly recordIncident: RecordIncident
-  /** Interrupted stage sessions for a repository, read from `main/stage/registry.ts` — `[]` when none is wired (tests, or before the registry loads). */
+  /** Interrupted stage sessions for a repository, read from `main/dispatch/stage/registry.ts` — `[]` when none is wired (tests, or before the registry loads). */
   readonly interrupted?: (repoId: RepoId) => readonly InterruptedStage[]
 }
 

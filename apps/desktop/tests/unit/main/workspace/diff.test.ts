@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseUnifiedDiff } from '@/main/workspace/diff'
+import { parseUnifiedDiff } from '@/main/repos/worktree/diff'
 
 describe('parseUnifiedDiff', () => {
   it('parses a simple modification into one file with context, add, and del lines', () => {

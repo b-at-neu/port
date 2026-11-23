@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { DISPATCH_PROMPT, REFRESH_PROMPT } from '@/main/dispatch/dispatcher'
-import { HANDBACK_TOKENS } from '@/main/dispatch/transitions'
-import { STAGE_AGENT_NAMES } from '@/main/stage/agents'
+import { DISPATCH_PROMPT, REFRESH_PROMPT } from '@/main/dispatch/launch'
+import { HANDBACK_TOKENS } from '@/main/pipeline/transitions'
+import { STAGE_AGENT_NAMES } from '@/main/dispatch/stage/agents'
 import { BLOCKED_PREFIX, HANDBACK_PREFIX, QUESTIONS_PREFIX } from '@/utils/stage/handback-text'
 
 const BUNDLE_ROOT = join(__dirname, '../../../../stage-prompts')

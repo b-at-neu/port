@@ -1,5 +1,5 @@
 import type { RuntimeProbe } from '@/types/runtime'
-import { runtimeProbe } from '@/main/runtime/preflight'
+import { runtimeProbe } from '@/main/sessions/runtime/preflight'
 import type { RegistryDeps } from '@/types/registry'
 import type { RepoId } from '@/utils/repos'
 

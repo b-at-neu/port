@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AUTO_RESUME_GRACE_MS, NETWORK_BACKOFF_MS, NETWORK_RETRY_LIMIT, autoResumable, clearedByRecheck, networkGivenUp, orphanedRunning, staleInterrupted } from '@/main/stage/stale'
+import { AUTO_RESUME_GRACE_MS, NETWORK_BACKOFF_MS, NETWORK_RETRY_LIMIT, autoResumable, clearedByRecheck, networkGivenUp, orphanedRunning, staleInterrupted } from '@/main/dispatch/stage/stale'
 import type { DispatchRecord, RepoDispatchStatus } from '@/types/dispatch'
 import type { ItemsByNumberFetch, ResolvedItem } from '@/types/github'
 import type { InterruptedStage } from '@/types/stage'

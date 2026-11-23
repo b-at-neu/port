@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { shouldOpenExternally } from '@/main/navigation'
+import { shouldOpenExternally } from '@/main/app/shell/navigation'
 
 describe('shouldOpenExternally', () => {
   it('allows https URLs', () => {

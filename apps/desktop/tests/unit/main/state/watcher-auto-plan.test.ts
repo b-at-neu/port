@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { RepoDispatchStatus } from '@/types/dispatch'
 import type { BoardSnapshot } from '@/types/board'
-import { createPipelineWatcher } from '@/main/state/watcher'
+import { createPipelineWatcher } from '@/main/pipeline/board/watcher'
 import { RATE_LIMIT_REPLY } from '../../../fixtures/pipeline-reply'
 import { fakeGit, makeFakeTimer, readyEntry, readyItemTransport } from '../../../fixtures/watcher-harness'
 

@@ -4,8 +4,8 @@ import type { CheckContext } from '@/types/github'
 import type { ReconciledItem } from '@/types/state'
 import type { RerunMemo } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
-import { createDispatchLedger, createRefreshMemo, createRerunMemo, createUnknownStreaks } from '@/main/tick/ledger'
-import { planTick } from '@/main/tick/plan'
+import { createDispatchLedger, createRefreshMemo, createRerunMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
+import { planTick } from '@/main/pipeline/tick/plan'
 import { reconciledItem as item, repositoryState } from '../../../fixtures/board-state'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ReconciledItem } from '@/types/state'
 import type { EndedStage } from '@/types/tick'
-import { repairsOf } from '@/main/tick/repair'
+import { repairsOf } from '@/main/pipeline/tick/repair'
 import { reconciledItem } from '../../../fixtures/board-state'
 
 const VIEWER = 'op'

@@ -1,4 +1,4 @@
-// Split out of ipc.test.ts once that file crossed the 500-line limit.
+// The search action over the router.
 import { describe, expect, it } from 'vitest'
 import type { SearchResult } from '@/types/search'
 import { resolveSearchQuery } from '@/main/features/history/resolve'

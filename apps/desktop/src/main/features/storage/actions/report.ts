@@ -3,7 +3,7 @@ import { noInput } from '@/main/app/schemas'
 import { resolveStorageReport } from '@/main/features/storage/resolve'
 import { directorySize } from '@/main/platform/disk'
 import { defaultClaudeHome } from '@/main/sessions/locate'
-import { listRepositories } from '@/main/registry'
+import { listRepositories } from '@/main/repos'
 
 export const storageReport = defineAction({
   name: 'storage.report',

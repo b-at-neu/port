@@ -4,7 +4,7 @@ import { GATE_DECISIONS } from '@/types/gate'
 import type { GateAnswerResponse, GateDecision, GatePreflightResponse } from '@/types/gate'
 import type { RepoId } from '@/utils/repos'
 import type { RegistryDeps } from '@/types/registry'
-import { requireRepoId } from '@/main/registry'
+import { requireRepoId } from '@/main/repos'
 import type { GateChannelDeps } from '@/main/app/seams'
 
 export async function resolveGatePreflight(registryDeps: RegistryDeps, request: { readonly repoId: RepoId; readonly number: number }, deps: GateChannelDeps): Promise<GatePreflightResponse> {

@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { BACKOFF_CEILING_MS, GITHUB_PRECHECK_INTERVAL_MS, initialHealth } from '@/types/board'
 import type { SourceHealth } from '@/types/board'
 import type { RepoId } from '@/utils/repos'
-import { afterSuccess } from '@/main/state/schedule'
-import { createGithubPrecheck, pendingSweepAt, precheckDueAt } from '@/main/state/precheck'
+import { afterSuccess } from '@/main/pipeline/board/schedule'
+import { createGithubPrecheck, pendingSweepAt, precheckDueAt } from '@/main/pipeline/board/precheck'
 
 const T0 = Date.parse('2026-01-01T00:00:00.000Z')
 const repoId = 'repo-1' as RepoId

@@ -389,7 +389,7 @@ function appliedCopy(action: OperatorAction, number: number, plan: ActionPlan | 
 }
 
 /** `pause`'s own absent-key guard reads back as `not <name>` in the
- *  conflict's `expected` list (`main/writes/scope.ts`'s `absentLabelName`)
+ *  conflict's `expected` list (`main/github/writes/scope.ts`'s `absentLabelName`)
  *  — detected here rather than duplicated, so the two can never drift. */
 function preconditionFailedCopy(action: OperatorAction, number: number, conflict: Conflict, now: Date): string {
   const n = String(number)

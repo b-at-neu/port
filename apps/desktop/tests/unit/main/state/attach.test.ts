@@ -3,7 +3,7 @@ import type { AgentRecord, SessionRecord } from '@/types/sessions'
 import type { WorktreeEntry } from '@/types/local'
 import type { PathOps } from '@/types/platform'
 import { createPathOps } from '@/main/platform/paths'
-import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers, indexWorkSessions, workSessionsFor } from '@/main/state/attach'
+import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers, indexWorkSessions, workSessionsFor } from '@/main/pipeline/board/attach'
 
 function agent(overrides: Partial<AgentRecord> = {}): AgentRecord {
   return {

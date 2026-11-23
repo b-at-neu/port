@@ -3,7 +3,7 @@ import type { ReconciledItem } from '@/types/state'
 import type { RepoDispatchStatus } from '@/types/dispatch'
 import type { TickReport } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
-import { autoApprovalsOf, autoPlanApprovingOf, autoPlanStatusOf, autoPlanSwapCandidatesOf } from '@/main/tick/auto-plan'
+import { autoApprovalsOf, autoPlanApprovingOf, autoPlanStatusOf, autoPlanSwapCandidatesOf } from '@/main/pipeline/tick/auto-plan'
 import { reconciledItem } from '../../../fixtures/board-state'
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { applyObservation } from '@/main/operator/observe'
-import { endedIntents, fastEndIntent, FAST_END_MS, handoffRefusalIntent, launchFailedIntent, observationIntent, signatureOf, stageHandbackIntent } from '@/main/incidents/raise'
+import { applyObservation } from '@/main/pipeline/operator/observe'
+import { endedIntents, fastEndIntent, FAST_END_MS, handoffRefusalIntent, launchFailedIntent, observationIntent, signatureOf, stageHandbackIntent } from '@/main/pipeline/incidents/raise'
 import type { WriteObservation } from '@/types/dispatch'
 import { INCIDENT_BUCKETS, type IncidentBucket } from '@/types/incidents'
 import type { StageOutcome } from '@/types/stage-session'

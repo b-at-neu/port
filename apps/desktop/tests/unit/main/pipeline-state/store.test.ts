@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createPipelineStateStore } from '@/main/pipeline-state/store'
+import { createPipelineStateStore } from '@/main/pipeline/state/store'
 import type { TransitionInput } from '@/types/pipeline-state'
 import type { FileResult } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'

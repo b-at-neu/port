@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { CommandResult, GitRunner } from '@/types/platform'
 import type { CreateStageWorktreeParams } from '@/types/workspace'
-import { branchSlug, createStageWorktree, releaseStageBranch, sweepSessionBranches } from '@/main/workspace/stage-worktree'
+import { branchSlug, createStageWorktree, releaseStageBranch, sweepSessionBranches } from '@/main/repos/worktree/stage-worktree'
 import { makeTempDir } from '../../../fixtures/fs'
 
 function ok(stdout = ''): CommandResult {

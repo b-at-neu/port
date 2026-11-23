@@ -26,7 +26,7 @@ The script reports full schema validation as **skipped**, because a draft 2020-1
 
 ## Desktop app unit tests
 
-- Unit tests mirror `src/` under `apps/desktop/tests/unit/`: `src/main/hosting/store.ts` → `tests/unit/main/hosting/store.test.ts`.
+- Unit tests mirror `src/` under `apps/desktop/tests/unit/`: `src/main/sessions/reader.ts` → `tests/unit/main/sessions/reader.test.ts`.
 - Shared data, fakes and helpers used by more than one test live in `apps/desktop/tests/fixtures/`. A helper used by one test stays in that test.
 - Tests import source with `@/…`, never `../`. vitest reads tests only from `tests/unit/`.
 

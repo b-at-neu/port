@@ -199,7 +199,7 @@ const ADOPTED_PHASE: Readonly<Record<string, string>> = {
 
 /** #292: hover detail for the one report-only observation kind —
  *  `refresh-deferred` — which never becomes an `ObservationRecord` write
- *  (`main/tick/dispatchable.ts`'s `observableFrom` excludes it), so this is
+ *  (`main/pipeline/tick/dispatchable.ts`'s `observableFrom` excludes it), so this is
  *  the only place it is ever rendered. `null` for every write-bearing kind,
  *  which already has its own held/stalled detail line above; the switch
  *  stays exhaustive so a new `TickObservationKind` member is a compile error

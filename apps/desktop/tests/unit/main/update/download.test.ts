@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createUpdateDownloader } from '@/main/update/download'
-import type { UpdateDownloaderDeps } from '@/main/update/download'
+import { createUpdateDownloader } from '@/main/features/update/download'
+import type { UpdateDownloaderDeps } from '@/main/features/update/download'
 import type { AvailableRelease, FileDownloadRequest, FileDownloadResult, InstallTarget } from '@/types/update'
 
 const REPO = 'acme/port'

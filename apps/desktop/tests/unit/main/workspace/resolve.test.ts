@@ -3,7 +3,7 @@ import type { CommandResult } from '@/types/platform'
 import type { GitRunner } from '@/types/platform'
 import { createPathOps } from '@/main/platform/paths'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
-import { resolveWorkspace, toFolderEntry } from '@/main/workspace/resolve'
+import { resolveWorkspace, toFolderEntry } from '@/main/repos/worktree/resolve'
 
 // Fixed posix flavour, never the host-bound default: these fixtures are posix-shaped paths, and
 // `defaultPathOps` silently switches to win32 on a Windows runner, which no posix fixture matches.

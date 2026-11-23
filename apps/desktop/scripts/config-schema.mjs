@@ -1,7 +1,7 @@
 // Writes schema/port.config.schema.json from the zod source. Run as `pnpm --filter @port/desktop schema:config`.
 import { writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { buildConfigJsonSchema } from '../src/main/registry/schema.ts'
+import { buildConfigJsonSchema } from '../src/main/repos/config/schema.ts'
 
 const PRIMITIVE = String.raw`(?:"(?:[^"\\\n]|\\.)*"|true|false|null|-?\d+)`
 const SHORT_ARRAY = new RegExp(String.raw`\[\n\s+(${PRIMITIVE}(?:,\n\s+${PRIMITIVE})*)\n\s*\]`, 'g')

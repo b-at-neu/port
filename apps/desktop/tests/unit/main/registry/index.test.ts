@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest'
 import type { CommandResult } from '@/types/platform'
 import { pathOps } from '@/main/platform/paths'
 import type { GitRunner } from '@/types/platform'
-import { REPOSITORY_LIST_TTL_MS, addRepository, listRepositories, removeRepository } from '@/main/registry/index'
-import { readRegistry } from '@/main/registry/store'
+import { REPOSITORY_LIST_TTL_MS, addRepository, listRepositories, removeRepository } from '@/main/repos/index'
+import { readRegistry } from '@/main/repos/registry-store'
 import { makeTempDir } from '../../../fixtures/fs'
 
 async function makeRepo(root: string, repo = 'acme/widgets'): Promise<void> {

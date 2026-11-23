@@ -22,7 +22,7 @@ import { nodesOf, obj, str } from '@/main/github/json'
 import type { Obj } from '@/main/github/json'
 import { readMergedPrs } from '@/main/github/release-prs'
 import { BUMP_BRANCH_DIR, versionOfBumpBranch } from '@/utils/release/format'
-import { resolvePhase } from '@/main/release/state'
+import { resolvePhase } from '@/main/github/release-phase'
 import { normalizeVersion, parseVersion, stripPrerelease } from '@/utils/release/version'
 
 const SAFE_REF = /^[A-Za-z0-9._/-]+$/

@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import type { CommandResult } from '@/types/platform'
 import type { GitHubHttpResult } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
-import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/state/sources'
+import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/pipeline/board/sources'
 import { httpFail, httpOk, queryOf } from '../../../fixtures/github-http'
 import { EMPTY_PIPELINE_BODY } from '../../../fixtures/pipeline-reply'
 

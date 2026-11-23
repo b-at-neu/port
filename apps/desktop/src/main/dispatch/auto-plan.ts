@@ -3,8 +3,8 @@ import type { BoardSnapshot } from '@/types/board'
 import type { RepoId } from '@/utils/repos'
 import type { ReadyEntry } from '@/types/actions'
 import { stateMoved } from '@/types/writes'
-import { autoApprovalCandidatesFrom } from '@/main/tick/dispatchable'
-import { autoPlanSwapCandidatesOf } from '@/main/tick/auto-plan'
+import { autoApprovalCandidatesFrom } from '@/main/pipeline/tick/dispatchable'
+import { autoPlanSwapCandidatesOf } from '@/main/pipeline/tick/auto-plan'
 
 import type { AutoPlanner, AutoPlannerDeps } from '@/types/dispatch'
 

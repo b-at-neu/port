@@ -1,6 +1,6 @@
 import type { HostedStore } from '@/types/hosting'
 
-// Everything a stale renderer could get wrong throws here, never a value `main/hosting/store.ts`
+// Everything a stale renderer could get wrong throws here, never a value `main/sessions/hosting/store.ts`
 // has to defend against.
 import type { ReposListResponse } from '@/types/ipc'
 import type { RepoId, RepoProblem, RepositoryEntry } from '@/utils/repos'
@@ -8,18 +8,18 @@ import { PERMISSION_DECISIONS, SESSION_MODELS, SESSION_PERMISSION_MODES, SESSION
 import type { PermissionDecision, RestorableSession, SessionDefaults, SessionFilesResult, SessionKey, SessionModel, SessionPermissionMode, SessionStartMode, SessionStartTarget, WorktreeChoice } from '@/types/hosting'
 import { SESSION_EFFORTS } from '@/utils/hosting/controls'
 import type { PlanDecision, SessionControls } from '@/utils/hosting/controls'
-import { isRecord } from '@/main/guards'
+import { isRecord } from '@/utils/guards'
 import { IMAGE_MEDIA_TYPES, MAX_ATTACHMENT_NAME_LENGTH, MAX_ATTACHMENTS, MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_TEXT_BYTES, MAX_TOTAL_BYTES } from '@/utils/hosting/attachments'
 import type { ComposerAttachment } from '@/utils/hosting/attachments'
 
-import { SESSION_LIMIT_CEILING } from '@/main/hosting/store'
-import { listSessionFiles } from '@/main/hosting/files'
-import { isReadyEntry, listRepositories } from '@/main/registry'
+import { SESSION_LIMIT_CEILING } from '@/main/sessions/hosting/persist'
+import { listSessionFiles } from '@/main/sessions/hosting/files'
+import { isReadyEntry, listRepositories } from '@/main/repos'
 import type { RegistryDeps } from '@/types/registry'
-import { resolveStartTarget } from '@/main/workspace/target'
+import { resolveStartTarget } from '@/main/repos/worktree/target'
 import type { ResolveStartTargetDeps } from '@/types/workspace'
-import { removeSessionWorktreeAt } from '@/main/workspace/worktree'
-import { resolveWorkspace } from '@/main/workspace/resolve'
+import { removeSessionWorktreeAt } from '@/main/repos/worktree/worktree'
+import { resolveWorkspace } from '@/main/repos/worktree/resolve'
 import type { HostingChannelDeps } from '@/main/app/seams'
 import type { SessionIndex } from '@/types/session-index'
 

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type { StateEngine } from '@/types/offload'
 import { createInProcessEngine } from '@/main/worker/engine'
-import { createPipelineWatcher } from '@/main/state/watcher'
+import { createPipelineWatcher } from '@/main/pipeline/board/watcher'
 import { fakeGit, makeFakeTimer, readyEntry } from '../../../fixtures/watcher-harness'
 
 const now = () => new Date('2026-01-01T00:00:00.000Z')

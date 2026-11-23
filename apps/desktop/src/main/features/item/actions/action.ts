@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { expectedStage, positiveInt, repoId } from '@/main/app/schemas'
 import { resolveItemAction } from '@/main/features/item/resolve'
-import { listRepositories } from '@/main/registry'
+import { listRepositories } from '@/main/repos'
 import { OPERATOR_ACTIONS } from '@/types/actions'
 
 export const itemAction = defineAction({

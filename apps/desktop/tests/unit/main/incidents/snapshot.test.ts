@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { boundInputs, itemInputs } from '@/main/incidents/snapshot'
+import { boundInputs, itemInputs } from '@/main/pipeline/incidents/snapshot'
 import { INCIDENT_INPUTS_MAX_BYTES } from '@/types/incidents'
 import { item } from './fixtures'
 
