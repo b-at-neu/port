@@ -11,7 +11,7 @@ import type { FolderEntry } from '@/types/workspace'
 import type { SessionChanges, SessionWorkspace } from '@/types/workspace'
 import { isReadyEntry, listRepositories } from '@/main/registry'
 import type { RegistryDeps } from '@/types/registry'
-import { chooseFolder as defaultChooseFolder } from '@/main/dialogs'
+import { chooseFolder as defaultChooseFolder } from '@/main/app/shell/dialogs'
 import { toFolderEntry } from '@/main/workspace/resolve'
 import { computeSessionChanges as defaultComputeSessionChanges } from '@/main/workspace/changes'
 

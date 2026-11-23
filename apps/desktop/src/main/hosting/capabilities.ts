@@ -2,7 +2,7 @@ import type { AgentInfo, HostedQuery, SlashCommand } from '@/main/platform/sdk'
 
 // A timeout or rejected read-back must never look like an empty capability list.
 import type { AgentSummary, CommandSummary, SessionCapabilities, SlashCommandSummary } from '@/types/hosting'
-import { isRecord } from '@/main/guards'
+import { isRecord } from '@/utils/guards'
 import { sanitize } from '@/main/sessions/transcript-entries'
 import { checkPluginLoad, isBlockedCommand, PLUGIN_NAME, type InitPlugin } from '@/main/hosting/verify'
 

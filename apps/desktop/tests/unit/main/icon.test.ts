@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { devDockIconPath, windowIconPath } from '@/main/icon'
+import { devDockIconPath, windowIconPath } from '@/main/app/shell/icon'
 import { join } from 'node:path'
 
 const base = { mainDir: '/app/out/main', resourcesPath: '/app/resources' }

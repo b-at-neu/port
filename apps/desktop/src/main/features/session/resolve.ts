@@ -8,7 +8,7 @@ import { PERMISSION_DECISIONS, SESSION_MODELS, SESSION_PERMISSION_MODES, SESSION
 import type { PermissionDecision, RestorableSession, SessionDefaults, SessionFilesResult, SessionKey, SessionModel, SessionPermissionMode, SessionStartMode, SessionStartTarget, WorktreeChoice } from '@/types/hosting'
 import { SESSION_EFFORTS } from '@/utils/hosting/controls'
 import type { PlanDecision, SessionControls } from '@/utils/hosting/controls'
-import { isRecord } from '@/main/guards'
+import { isRecord } from '@/utils/guards'
 import { IMAGE_MEDIA_TYPES, MAX_ATTACHMENT_NAME_LENGTH, MAX_ATTACHMENTS, MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_TEXT_BYTES, MAX_TOTAL_BYTES } from '@/utils/hosting/attachments'
 import type { ComposerAttachment } from '@/utils/hosting/attachments'
 

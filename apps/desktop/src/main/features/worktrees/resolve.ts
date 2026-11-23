@@ -14,7 +14,7 @@ import type {
 import type { WorktreesReportDeps } from '@/main/app/seams'
 import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/registry'
 import type { RegistryDeps } from '@/types/registry'
-import { isRecord } from '@/main/guards'
+import { isRecord } from '@/utils/guards'
 import { pathOps } from '@/main/platform/paths'
 import { runPurge } from '@/main/reclaimer/purge'
 import { runReclaim } from '@/main/reclaimer/reclaim'

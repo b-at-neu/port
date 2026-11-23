@@ -1,6 +1,6 @@
 // The per-session controls tracker — live mode/model/effort state, changed
 // only once its SDK call actually resolves.
-import { isRecord } from '@/main/guards'
+import { isRecord } from '@/utils/guards'
 import type { SessionControls, SessionEffort, SessionModelOption, SessionModels } from '@/utils/hosting/controls'
 import { SESSION_EFFORTS } from '@/utils/hosting/controls'
 import type { SessionDefaults } from '@/types/hosting'

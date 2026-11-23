@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { E2E_ENV, e2eMode } from '@/main/e2e/mode'
+import { E2E_ENV, e2eMode } from '@/main/app/modes/e2e-mode'
 
 const isAbsolutePosix = (path: string): boolean => path.startsWith('/')
 const ON = { [E2E_ENV.flag]: '1', [E2E_ENV.userData]: '/tmp/e2e', [E2E_ENV.fake]: '/tmp/fake.mjs' }

@@ -45,7 +45,7 @@ export default defineConfig(({ mode }) => {
       resolve: {
         alias: {
           ...alias,
-          '#app-fixtures': fileURLToPath(new URL(fixtures.compiled ? './tests/fixtures/app/index.ts' : './src/main/fixtures/absent.ts', import.meta.url)),
+          '#app-fixtures': fileURLToPath(new URL(fixtures.compiled ? './tests/fixtures/app/index.ts' : './src/main/app/modes/absent.ts', import.meta.url)),
           '#app-route': fileURLToPath(new URL(e2e ? './tests/e2e/route.ts' : './src/main/platform/route.ts', import.meta.url))
         }
       },

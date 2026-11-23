@@ -7,7 +7,7 @@
     { "path": "apps/desktop/src/main/github/", "citations": 0, "longBlocks": 0 },
     { "path": "apps/desktop/src/main/sessions/", "citations": 0, "longBlocks": 0 },
     { "path": "apps/desktop/src/main/state/", "citations": 0, "longBlocks": 0 },
-    { "path": "apps/desktop/src/main/fixtures/", "citations": 0, "longBlocks": 0 },
+    { "path": "apps/desktop/src/main/app/modes/", "citations": 0, "longBlocks": 0 },
     { "path": "apps/desktop/src/main/runtime/", "citations": 0, "longBlocks": 0 },
     { "path": "apps/desktop/src/main/registry/", "citations": 0, "longBlocks": 0 },
     { "path": "apps/desktop/src/main/", "citations": 0, "longBlocks": 0 },

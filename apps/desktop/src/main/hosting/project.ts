@@ -4,7 +4,7 @@ import type { ContentBlock } from '@/types/hosting'
 // already derived from a session's on-disk .jsonl. Never throws: an unrecognized message is skipped.
 import type { EntryPatch, MetaEntry, TranscriptEntry } from '@/utils/sessions/transcript'
 import { MAX_PAYLOAD_CHARS } from '@/utils/sessions/transcript'
-import { isRecord } from '@/main/guards'
+import { isRecord } from '@/utils/guards'
 import { createDeriver, sanitize } from '@/main/sessions/transcript-entries'
 import type { LiveBlock, LiveBlockKind, PartialUpdate } from '@/types/hosting'
 

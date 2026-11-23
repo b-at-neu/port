@@ -3,7 +3,7 @@
 import { Menu } from 'electron'
 import type { HostedStore } from '@/types/hosting'
 import type { AppCommand } from '@/utils/shell/commands'
-import { menuTemplate } from '@/main/menu'
+import { menuTemplate } from '@/main/app/shell/menu'
 import { orderSessions } from '@/utils/shell/session-order'
 import { sessionTitle } from '@/utils/hosting/label'
 

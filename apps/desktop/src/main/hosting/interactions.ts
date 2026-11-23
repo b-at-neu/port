@@ -1,6 +1,6 @@
 // Narrows `AskUserQuestion`/`ExitPlanMode` canUseTool calls away from the
 // generic dialog, and builds the PermissionResults their answers send back.
-import { isRecord } from '@/main/guards'
+import { isRecord } from '@/utils/guards'
 import type { AskQuestion, AskQuestionOption, PendingInteraction } from '@/utils/hosting/controls'
 import type { PermissionResult, PermissionUpdate } from '@/main/platform/sdk'
 

@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { _electron } from 'playwright-core'
 import type { ElectronApplication, Page } from 'playwright-core'
-import { E2E_ENV } from '../../../src/main/e2e/mode'
+import { E2E_ENV } from '../../../src/main/app/modes/e2e-mode'
 import type { SandboxState } from '../fake/state.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
