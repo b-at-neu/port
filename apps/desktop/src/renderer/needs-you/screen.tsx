@@ -13,17 +13,18 @@ import { useIpcQuery, ipcQueryOptions } from '@/renderer/data/query'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { ROUTE_IDS } from '@/renderer/router/routes'
-import { router } from '@/renderer/router/router'
+import { openSession } from '@/renderer/router/navigation'
 import { belongsToRepo, needsYouItems } from '@/renderer/board/needs-you'
 import type { NeedsYouItem as NeedsYouItemModel } from '@/types/board'
 import { registerListNavigator } from '@/renderer/shell/stores'
 import { useListSelection } from '@/renderer/shell/list-selection'
 import { SHOW_ALL_REPOSITORIES, UNDO_LABEL } from '@/renderer/lib/copy'
-import { CLEANUP_FAILED_HELP, ENDED_DENIAL_LINE, LAUNCH_FAILED_HELP, LAUNCH_FAILED_NO_DETAIL, REFRESH_FAILED_TOAST, dismissedToast, needsYouLeadCopy, nothingInRepoCopy, refreshedToast, usageLimitEntryLine } from '@/renderer/needs-you/copy'
+import { CLEANUP_FAILED_HELP, ENDED_DENIAL_LINE, LAUNCH_FAILED_HELP, LAUNCH_FAILED_NO_DETAIL, REFRESH_FAILED_TOAST, dismissedToast, needsYouLeadCopy, nothingInRepoCopy, refreshedToast, restoredToast, showDismissedAction, showDismissedLabel, usageLimitEntryLine } from '@/renderer/needs-you/copy'
+import { DismissedSection } from '@/renderer/needs-you/dismissed-section'
 import { dismiss, dismissedKeys, undismiss, visibleItems } from '@/renderer/needs-you/dismissed'
 import { dismissKeyOf } from '@/renderer/needs-you/dismiss-key'
 import { groupNeedsYou } from '@/renderer/needs-you/groups'
-import { useNeedsYouItems } from '@/renderer/needs-you/use-items'
+import { useDismissedNeedsYouItems, useNeedsYouItems } from '@/renderer/needs-you/use-items'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import { actionFor, runAction, runSecondaryAction } from '@/renderer/needs-you/actions'
 import { toast } from 'sonner'
@@ -108,7 +109,7 @@ function DetailBody({ item }: { readonly item: NeedsYouItemModel }) {
           </p>
           <p>This path is protected by sessionRequiredPaths. Approving lets this one edit through; port asks again for the next one.</p>
         </div>
-        <Button variant="ghost" size="small" onClick={() => void router.navigate({ to: ROUTE_IDS.session, search: { key: item.sessionKey } })}>
+        <Button variant="ghost" size="small" onClick={() => openSession(item.sessionKey)}>
           Open session
         </Button>
       </div>
@@ -150,6 +151,7 @@ export function NeedsYouScreen() {
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
   const [pendingKey, setPendingKey] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [showDismissed, setShowDismissed] = useState(false)
   const sessionListKey = ipcQueryOptions('session:list').queryKey
   const now = new Date()
 
@@ -159,6 +161,9 @@ export function NeedsYouScreen() {
   const reposQuery = useIpcQuery('repos:list')
   const scopedName = (reposQuery.data?.ok === true ? reposQuery.data.repositories.find((entry) => entry.id === scopedRepo) : undefined)
   const scopedLabel = scopedName === undefined ? (scopedRepo ?? '') : 'config' in scopedName ? scopedName.config.repo : scopedName.displayName
+  const allDismissed = useDismissedNeedsYouItems()
+  const dismissedList = scopedRepo === null ? allDismissed : allDismissed.filter((item) => belongsToRepo(item, scopedRepo))
+  const dismissedShown = showDismissed && dismissedList.length > 0
   const groups = groupNeedsYou(items)
   // Keyboard navigation walks the rows in the order they render.
   const ordered = groups.flatMap((group) => group.items)
@@ -180,6 +185,11 @@ export function NeedsYouScreen() {
     const keys = dismissing.map(dismissKeyOf)
     dismiss(keys)
     toast(dismissedToast(dismissing), { action: { label: UNDO_LABEL, onClick: () => undismiss(keys) } })
+  }
+
+  function restoreItems(restoring: readonly NeedsYouItemModel[]): void {
+    undismiss(restoring.map(dismissKeyOf))
+    toast(restoredToast(restoring))
   }
 
   async function refresh({ announce }: { readonly announce: boolean }): Promise<void> {
@@ -224,6 +234,11 @@ export function NeedsYouScreen() {
           <span>Needs you</span>
           <div className="flex items-center gap-2">
             {isStale ? <span className="text-meta font-normal text-attention-dot">Updated {Math.round((now.getTime() - snapshotQuery.dataUpdatedAt) / 60_000)}m ago</span> : null}
+            {dismissedList.length > 0 ? (
+              <Button variant="ghost" size="small" onClick={() => setShowDismissed((open) => !open)}>
+                {showDismissedLabel(dismissedList.length, dismissedShown)}
+              </Button>
+            ) : null}
             <button
               type="button"
               onClick={() => void refresh({ announce: true })}
@@ -252,7 +267,15 @@ export function NeedsYouScreen() {
           ) : (
             <>
               {items.length === 0 ? (
-                scopedRepo === null ? (
+                dismissedList.length > 0 && !dismissedShown ? (
+                  <EmptyState
+                    icon={Inbox}
+                    message={scopedRepo === null ? 'Nothing needs you right now.' : nothingInRepoCopy(scopedLabel)}
+                    action={{ label: showDismissedAction(dismissedList.length), onClick: () => setShowDismissed(true) }}
+                    className="px-4 py-6"
+                    data-slot="needs-you-empty"
+                  />
+                ) : scopedRepo === null ? (
                   <EmptyState icon={Inbox} message="Nothing needs you right now." className="px-4 py-6" data-slot="needs-you-empty" />
                 ) : (
                   <EmptyState
@@ -301,6 +324,7 @@ export function NeedsYouScreen() {
                   </section>
                 ))
               )}
+              {dismissedShown ? <DismissedSection items={dismissedList} now={now} onRestore={restoreItems} /> : null}
             </>
           )}
         </div>

@@ -1,6 +1,6 @@
 {
   "name": "@port/desktop",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "private": true,
   "description": "Desktop cockpit for the port pipeline. Runs your own installed Claude Code under your own account.",
   "main": "out/main/index.js",
@@ -17,7 +17,8 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "pnpm typecheck:node && pnpm typecheck:web",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
     "@electron/asar": "^4.3.1",
@@ -41,6 +42,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.2.0",
+    "@vitest/coverage-v8": "^4.1.11",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "electron": "^44.0.0",
@@ -48,6 +50,8 @@
     "electron-vite": "^5.0.0",
     "eslint": "^10.9.1",
     "eslint-config-prettier": "^10.1.8",
+    "eslint-import-resolver-typescript": "^4.4.5",
+    "eslint-plugin-import-x": "^4.18.1",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",
     "highlight.js": "^11.11.2",

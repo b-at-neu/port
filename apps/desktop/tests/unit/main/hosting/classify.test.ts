@@ -1,4 +1,4 @@
-// Runs classifyEnd over the shared case table also read by scripts/checks/desktop-hosting.ts.
+// Runs classifyEnd over its case table.
 import { describe, expect, it } from 'vitest'
 import { classifyEnd } from '@/main/hosting/classify'
 import type { ClassifyEndInput, ClassifyEndResult } from '@/main/hosting/classify'

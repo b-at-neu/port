@@ -152,6 +152,11 @@ jobs:
       - name: Lint
         run: pnpm lint
       - name: Test
+        if: runner.os != 'Linux'
         run: pnpm test
+      # Runs the same tests as above and prints a report-only v8 summary; no threshold gates it.
+      - name: Test with coverage summary
+        if: runner.os == 'Linux'
+        run: pnpm --filter @port/desktop test:coverage
       - name: Build
         run: pnpm build

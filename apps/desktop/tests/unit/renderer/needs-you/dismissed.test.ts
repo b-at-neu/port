@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { NeedsYouItem } from '@/types/board'
-import { MAX_DISMISSED, createDismissedStore, parseDismissed, visibleItems } from '@/renderer/needs-you/dismissed'
+import { MAX_DISMISSED, createDismissedStore, dismissedItems, parseDismissed, visibleItems } from '@/renderer/needs-you/dismissed'
 import { dismissKeyOf } from '@/renderer/needs-you/dismiss-key'
 
 const NOW = () => new Date('2026-01-01T00:00:00.000Z')
@@ -97,6 +97,24 @@ describe('createDismissedStore', () => {
 
   it('starts empty over a corrupt stored value', () => {
     expect(createDismissedStore(memoryStorage('{oops'), NOW).get().size).toBe(0)
+  })
+})
+
+describe('dismissedItems', () => {
+  it('is the complement of visibleItems', () => {
+    const first = denialItem('d1')
+    const second = denialItem('d2')
+    const dismissed = new Set([dismissKeyOf(first)])
+    expect(dismissedItems([first, second], dismissed)).toEqual([first])
+    expect(visibleItems([first, second], dismissed)).toEqual([second])
+  })
+
+  it('shows nothing for a stale key whose event no longer derives an item', () => {
+    expect(dismissedItems([denialItem('d2')], new Set(['gone-key']))).toEqual([])
+  })
+
+  it('is empty when nothing is dismissed', () => {
+    expect(dismissedItems([denialItem('d1')], new Set())).toEqual([])
   })
 })
 

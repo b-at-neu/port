@@ -74,7 +74,7 @@ Posted at `unblock #N` **only** when the clear carries a `### Cycle grant` or `#
 One extra review cycle for this PR only; reviewCycleCap is unchanged.
 ```
 
-A `### Cycle grant` block appears **only** when the escalation being cleared was the cycle cap and the operator picked **Grant one more cycle** — never on a rebase, zero-diff, or budget clear, and never inferred from anything but that explicit pick. `gates.ts`'s `cycleGrantCount` counts exactly these comments (body starting `## Gate cleared`, containing a line equal to `### Cycle grant`) off the `needsRevision` alias's `comments(last: 20)` to compute the effective cap (`PIPELINE.md` → "Raising `reviewCycleCap` vs. granting one ticket an extra cycle"). A rebase clear instead carries the `### Rebase decisions` block `SKILL.md` → "Gate clear" already describes; the two never appear in the same comment.
+A `### Cycle grant` block appears **only** when the escalation being cleared was the cycle cap and the operator picked **Grant one more cycle** — or when the desktop app's **Grant one more cycle** on a PR held at the cap before it escalated posts it with no label change — never on a rebase, zero-diff, or budget clear, and never inferred from anything but that explicit pick. `gates.ts`'s `cycleGrantCount` counts exactly these comments (body starting `## Gate cleared`, containing a line equal to `### Cycle grant`) off the `needsRevision` alias's `comments(last: 20)` to compute the effective cap (`PIPELINE.md` → "Raising `reviewCycleCap` vs. granting one ticket an extra cycle"). A rebase clear instead carries the `### Rebase decisions` block `SKILL.md` → "Gate clear" already describes; the two never appear in the same comment.
 
 ### Changes requested (cockpit writes it via `--body-file`)
 

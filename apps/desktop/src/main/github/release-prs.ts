@@ -5,7 +5,7 @@ import type { ReleaseEntry } from '@/types/release'
 import { labelsOf } from '@/main/github/backlog'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { MERGED_PRS_PAGE, buildMergedPrsQuery } from '@/main/github/release-query'
-import { nodesOf, obj, str } from '@/main/github/release'
+import { nodesOf, obj, str } from '@/main/github/json'
 import { repoGraphqlRequest } from '@/main/github/request'
 import { cleanTitle } from '@/utils/release/changelog'
 

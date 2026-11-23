@@ -1,5 +1,5 @@
 // Pure `TranscriptEntry` → view-model mapping, shared by the live session
-// view and the on-disk transcript view. `buildRow`'s exact signature is pinned by `scripts/checks/desktop-renderer.ts`.
+// view and the on-disk transcript view.
 import type { DiffHunk, FileDiff, Payload, TranscriptEntry } from '@/utils/sessions/transcript'
 import type { GroupedNode, PayloadView, RowView, ToolResultView } from '@/types/components'
 import { STAGE_PROMPT_NAMES, parseStagePrompt } from '@/utils/stage/prompt'

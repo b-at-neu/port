@@ -88,6 +88,13 @@ describe('planTick — cycle-cap and zero-diff gates (#108)', () => {
     ])
   })
 
+  it('a lone refreshBranch PR at the cap is actionable, never held on the cycle cap', () => {
+    const repo = readyRepo([reviseItem({ stages: [{ key: 'refreshBranch', name: 'refresh branch', role: 'trigger' }], reviewCycleCount: 5 })])
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    expect(report.actionable).toEqual([{ number: 204, kind: 'pull-request', trigger: 'refreshBranch', agent: 'revise', unchecked: false, cycle: null }])
+    expect(report.held).toEqual([])
+  })
+
   it('a review candidate with no prior Code Review dispatches, cycle null (no reviews yet)', () => {
     const repo = readyRepo([reviewItem()])
     const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })

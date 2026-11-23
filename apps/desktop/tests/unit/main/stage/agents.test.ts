@@ -1,7 +1,10 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { DISPATCH_PROMPT, REFRESH_PROMPT } from '@/main/dispatch/dispatcher'
+import { HANDBACK_TOKENS } from '@/main/dispatch/transitions'
 import { STAGE_AGENT_NAMES } from '@/main/stage/agents'
+import { BLOCKED_PREFIX, HANDBACK_PREFIX, QUESTIONS_PREFIX } from '@/utils/stage/handback-text'
 
 const BUNDLE_ROOT = join(__dirname, '../../../../stage-prompts')
 
@@ -27,5 +30,43 @@ describe('STAGE_AGENT_NAMES', () => {
 
   it('names exactly the four stage agents, nothing more', () => {
     expect(Object.keys(STAGE_AGENT_NAMES).sort()).toEqual(['impl', 'plan', 'review', 'revise'])
+  })
+})
+
+const STAGES = ['plan', 'impl', 'review', 'revise'] as const
+const LABEL_WRITING_NEEDLES = ['--add-label', '--remove-label', 'label-cas', '<labels.', '--label', 'gh issue edit']
+
+describe('bundled stage agents', () => {
+  const textOf = (stage: string): Promise<string> => readFile(join(BUNDLE_ROOT, 'agents', `${stage}-agent.md`), 'utf8')
+  const handbackTokensIn = (text: string): Set<string> => new Set([...text.matchAll(/HANDBACK:\s+([a-z][a-z-]*)/g)].map((m) => m[1] ?? ''))
+
+  it.each(STAGES)('%s agent has every step DISPATCH_PROMPT names, and no label swap', async (stage) => {
+    const steps = /Follow your (.+?) steps exactly/.exec(DISPATCH_PROMPT)?.[1]?.split(/,\s*(?:and\s+)?/) ?? []
+    const text = await textOf(stage)
+    expect(steps.length).toBeGreaterThan(0)
+    for (const step of steps) expect(text).toMatch(new RegExp(`^## ${step}\\b`, 'm'))
+    expect(text).not.toMatch(/^## Label swap/m)
+  })
+
+  it('revise agent has the refresh section REFRESH_PROMPT names', async () => {
+    expect(REFRESH_PROMPT).toContain('refresh mode')
+    expect(await textOf('revise')).toMatch(/^## Refresh mode$/m)
+  })
+
+  it.each(STAGES)('%s agent names exactly the HANDBACK tokens the transition table accepts', async (stage) => {
+    const accepted = stage === 'revise' ? new Set([...HANDBACK_TOKENS.revise, ...HANDBACK_TOKENS.refresh]) : new Set(HANDBACK_TOKENS[stage])
+    expect(handbackTokensIn(await textOf(stage))).toEqual(accepted)
+  })
+
+  it.each(STAGES)('%s agent names HANDBACK, and none writes a label', async (stage) => {
+    const text = await textOf(stage)
+    expect(text).toContain(HANDBACK_PREFIX)
+    for (const needle of LABEL_WRITING_NEEDLES) expect(text).not.toContain(needle)
+  })
+
+  it('names the questions and blocked prefixes somewhere across the four', async () => {
+    const all = (await Promise.all(STAGES.map(textOf))).join('\n')
+    expect(all).toContain(QUESTIONS_PREFIX)
+    expect(all).toContain(BLOCKED_PREFIX)
   })
 })

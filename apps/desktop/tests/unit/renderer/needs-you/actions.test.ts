@@ -5,7 +5,7 @@ import type { SessionKey } from '@/types/hosting'
 
 const navigate = vi.hoisted(() => vi.fn())
 
-vi.mock('@/renderer/router/router', () => ({ router: { navigate } }))
+vi.mock('@/renderer/router/navigation', () => ({ openSession: navigate }))
 vi.mock('@/renderer/gate/controller', () => ({ openReviewDialog: vi.fn() }))
 vi.mock('@/renderer/decision/controller', () => ({ openDecision: vi.fn() }))
 vi.mock('@/renderer/needs-you/allow-dialog', () => ({ openAllowDialog: vi.fn() }))
@@ -80,6 +80,47 @@ describe('ready-to-merge Request changes', () => {
   it('does nothing from the secondary action when revise is unavailable', () => {
     runSecondaryAction(readyToMerge({ available: false, reason: 'cycle-cap' }), { onToast: vi.fn() })
     expect(openDecision).not.toHaveBeenCalled()
+  })
+})
+
+describe('held cycle-cap row', () => {
+  const heldCap = (grant: object | undefined): NeedsYouItem =>
+    ({ kind: 'held', repoId: 'repo-a' as RepoId, repo: 'o/a', number: 35, title: 't', url: 'https://github.com/o/a/pull/35', ticket: null, at: null, matchedRow: grant === undefined ? null : { decisions: { grant }, stageLabel: { key: 'needsRevision' } }, held: { reason: 'cycle-cap' } }) as unknown as NeedsYouItem
+  const context = { cyclesUsed: 5, cap: 5 }
+
+  beforeEach(() => {
+    vi.mocked(openDecision).mockReset()
+  })
+
+  it('offers Grant one more cycle with Open PR beside it', () => {
+    expect(actionFor(heldCap({ available: true, context }))).toMatchObject({ kind: 'grant', disabledReason: null, secondaryDisabledReason: null })
+  })
+
+  it('keeps Grant disabled with a refusal reason, never swapping to another action', () => {
+    for (const reason of ['not-owned', 'agent-live']) {
+      const action = actionFor(heldCap({ available: false, reason }))
+      expect(action.kind).toBe('grant')
+      expect(action.disabledReason).not.toBeNull()
+    }
+  })
+
+  it('disables Grant when no row matched', () => {
+    const action = actionFor(heldCap(undefined))
+    expect(action.kind).toBe('grant')
+    expect(action.disabledReason).not.toBeNull()
+  })
+
+  it('opens the grant dialog from the primary action', () => {
+    runAction(heldCap({ available: true, context }), { onToast: vi.fn() })
+    expect(openDecision).toHaveBeenCalledWith({ repoId: 'repo-a', number: 35, decision: 'grant', expectedStage: 'needsRevision', context })
+  })
+
+  it('opens the PR from the secondary action', () => {
+    const open = vi.fn()
+    vi.stubGlobal('window', { open })
+    runSecondaryAction(heldCap({ available: true, context }), { onToast: vi.fn() })
+    expect(open).toHaveBeenCalledWith('https://github.com/o/a/pull/35', '_blank')
+    vi.unstubAllGlobals()
   })
 })
 

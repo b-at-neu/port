@@ -1,5 +1,5 @@
 // hosting.json's only writer: recoverable app state, so a missing or malformed file resolves to
-// an empty state rather than refusing to load. Pinned as the sole writer by desktop-hosting.ts.
+// an empty state rather than refusing to load.
 import { DEFAULT_SESSION_DEFAULTS, SESSION_MODELS, SESSION_PERMISSION_MODES } from '@/types/hosting'
 import type { SessionDefaults, SessionMarks, SessionModel, SessionPermissionMode } from '@/types/hosting'
 import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'

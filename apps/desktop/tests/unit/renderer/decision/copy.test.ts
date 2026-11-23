@@ -63,6 +63,21 @@ describe('unblockCapNote', () => {
   })
 })
 
+describe('grant copy', () => {
+  const grantParams = { number: 35, decision: 'grant' as const, route: null, picks: null, cap: 5 }
+
+  it('reports the new cycle count on a no-op label write as a success', () => {
+    const copy = decisionResultCopy({ ...grantParams, response: { ok: true, comment: { kind: 'applied' } as never, labels: { kind: 'no-op' } as never } })
+    expect(copy.tone).toBe('success')
+    expect(copy.line).toContain('(6)')
+  })
+
+  it('tones a failed comment post as an error', () => {
+    const copy = decisionResultCopy({ ...grantParams, response: { ok: false, reason: 'comment-failed', comment: { kind: 'write-failed' } as never } })
+    expect(copy.tone).toBe('error')
+  })
+})
+
 describe('decisionResultCopy — implementation route', () => {
   const applied: ItemDecisionResult = { ok: true, comment: { kind: 'applied' } as never, labels: { kind: 'applied' } as never }
 

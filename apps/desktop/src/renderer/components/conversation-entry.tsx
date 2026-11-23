@@ -64,7 +64,13 @@ function EntryBody({ node }: { readonly node: GroupedNode }) {
     case 'thinking':
       return <ThinkingRow row={row} />
     case 'tool-call':
-      return <ToolCallRow row={row} childNodes={node.children} />
+      return (
+        <ToolCallRow row={row} childCount={node.children.length}>
+          {node.children.map((child) => (
+            <ConversationEntry key={child.entry.uuid} node={child} />
+          ))}
+        </ToolCallRow>
+      )
     case 'meta':
       return <div className="text-meta text-muted-foreground">System · {row.label}</div>
   }

@@ -1,14 +1,13 @@
 // The local port/no-raw-colour rule (#316) — DESIGN.md §1: "components use
 // roles, never values." No imports (ENGINEERING §1's self-contained-file
 // rule, applied here even though this file is never copied alone, so a
-// dynamic import from scripts/checks/desktop-react.ts stays dependency-free).
+// dynamic import from scripts/checks/desktop-safety.ts stays dependency-free).
 //
 // COLOUR_PATTERNS is what this ESLint rule tests string Literal and
 // TemplateElement values against. CSS_COLOUR_PATTERNS is the sibling set
-// scripts/checks/desktop-react.ts uses to scan .css file text directly —
+// scripts/checks/desktop-safety.ts uses to scan .css file text directly —
 // neither this rule nor that check is a parser, both are regex heuristics
-// broken deliberately once (ENGINEERING §7) against each pattern's own
-// `good`/`bad` pair.
+// tested against each pattern's own `good`/`bad` pair.
 
 /**
  * A whole-literal hex colour — anchored to the *entire* string, and

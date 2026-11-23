@@ -1,4 +1,4 @@
-import type { ReviseContext, UnblockContext } from '@/types/actions'
+import type { GrantContext, ReviseContext, UnblockContext } from '@/types/actions'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 
@@ -14,3 +14,4 @@ export type DecisionState =
       readonly picks: Readonly<Record<string, string>>
     }
   | { readonly step: 'confirm-revise'; readonly repoId: RepoId; readonly number: number; readonly expectedStage: LabelKey | null; readonly context: ReviseContext; readonly text: string }
+  | { readonly step: 'confirm-grant'; readonly repoId: RepoId; readonly number: number; readonly expectedStage: LabelKey | null; readonly context: GrantContext }

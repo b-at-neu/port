@@ -101,6 +101,11 @@ export async function resolveItemDecision(registryDeps: RegistryDeps, request: I
     if (!isUnblockRoute(request.route)) throw new Error(`'item:decide' requires 'route' to be one of ${UNBLOCK_ROUTES.join(', ')} for 'unblock'`)
     if (request.note !== null) throw new Error("'item:decide' requires 'note' to be null for 'unblock'")
     if (!isPicksShape(request.picks)) throw new Error(`'item:decide' requires 'picks' to be null or at most ${String(MAX_REBASE_PICKS)} { id: 'D<n>', letter: 'A'-'Z' } entries for 'unblock'`)
+  } else if (request.decision === 'grant') {
+    if (request.picks !== null) throw new Error("'item:decide' requires 'picks' to be null for 'grant'")
+    if (request.route !== null) throw new Error("'item:decide' requires 'route' to be null for 'grant'")
+    if (request.note !== null) throw new Error("'item:decide' requires 'note' to be null for 'grant'")
+    if (request.skipComment) throw new Error("'item:decide' requires 'skipComment' to be false for 'grant'")
   } else {
     if (request.picks !== null) throw new Error("'item:decide' requires 'picks' to be null for 'revise'")
     if (request.route !== null) throw new Error("'item:decide' requires 'route' to be null for 'revise'")

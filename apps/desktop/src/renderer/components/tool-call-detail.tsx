@@ -2,8 +2,8 @@
 import { CircleDot, Square, SquareCheck } from 'lucide-react'
 import { CodeBlock } from '@/renderer/components/code-block'
 import { Markdown } from '@/renderer/components/markdown'
-import type { GroupedNode, RowView } from '@/types/components'
-import { ConversationEntry } from '@/renderer/components/conversation-entry'
+import type { ReactNode } from 'react'
+import type { RowView } from '@/types/components'
 
 export function BashBody({ row }: { readonly row: Extract<RowView, { readonly kind: 'tool-call' }> }) {
   return (
@@ -44,16 +44,11 @@ export function TodoBody({ row }: { readonly row: Extract<RowView, { readonly ki
   )
 }
 
-export function TaskBody({ row, childNodes }: { readonly row: Extract<RowView, { readonly kind: 'tool-call' }>; readonly childNodes: readonly GroupedNode[] }) {
+/** `children` are the subagent's already-rendered entries — the caller renders them, so this module never imports the entry renderer back. */
+export function TaskBody({ row, childCount, children }: { readonly row: Extract<RowView, { readonly kind: 'tool-call' }>; readonly childCount: number; readonly children: ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
-      {childNodes.length > 0 ? (
-        <div className="flex flex-col gap-2 border-l border-border pl-3">
-          {childNodes.map((child) => (
-            <ConversationEntry key={child.entry.uuid} node={child} />
-          ))}
-        </div>
-      ) : null}
+      {childCount > 0 ? <div className="flex flex-col gap-2 border-l border-border pl-3">{children}</div> : null}
       {row.result.kind !== 'none' ? <Markdown source={row.result.payload.text} /> : null}
     </div>
   )

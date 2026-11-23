@@ -6,7 +6,8 @@ import type { ReleaseIssue, ReleaseIssuesResponse } from '@/types/release'
 import { labelsOf } from '@/main/github/backlog'
 import { bodyOf, classifyFailure, describeHttp, parseEnvelope } from '@/main/github/envelope'
 import { buildIncludedIssuesQuery } from '@/main/github/release-query'
-import { nodesOf, obj, parseBody, str } from '@/main/github/release'
+import { nodesOf, obj, str } from '@/main/github/json'
+import { parseBody } from '@/main/github/release'
 import { repoGraphqlRequest, restRequest } from '@/main/github/request'
 
 const COMMIT_PAGE = 100

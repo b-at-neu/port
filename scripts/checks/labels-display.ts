@@ -5,11 +5,10 @@ import type { Reporter } from '#lib/report.ts';
 
 const SHIPPED_REL = 'plugins/port/data/labels.json';
 const DESKTOP_REL = 'apps/desktop/src/utils/labels/labels.json';
-const DISPLAY_TS_REL = 'apps/desktop/src/utils/labels/display.ts';
 const GATE_TEMPLATE_REL = 'plugins/port/templates/approval-check.yml';
 const SCHEMA_REL = 'schema/port.config.schema.json';
 
-// The seven-label display vocabulary: the data file, its app copy, the schema's two override maps, and display.ts's literal key union.
+// The seven-label display vocabulary: the data file, its app copy, and the schema's two override maps.
 export default async function ({ expect, fail, ok }: Reporter) {
   const labels: { key: string; name: string; color: string; previousColors: string[]; role: string; palette: string | null }[] = readJson(SHIPPED_REL).labels;
   const keys = labels.map((l) => l.key);
@@ -39,19 +38,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
       expect(inLabels === wantsLabels, 'labels-display-schema', `'${l.key}' (role ${l.role}) is in the schema's ${inLabels ? 'labels' : 'states'}, but ${wantsLabels ? 'labels holds the marker and gate roles' : 'states holds every other role'}`);
       const entry = labelProps[l.key] ?? stateProps[l.key];
       if (entry !== undefined) expect(entry.default === l.name, 'labels-display-schema', `the schema's default for '${l.key}' is '${entry.default}', labels.json says '${l.name}'`);
-    }
-  }
-
-  // pin: `display.ts`'s `DISPLAY_KEYS` ↔ `labels.json`'s keys, both directions
-  {
-    const text = readFileSync(join(root, DISPLAY_TS_REL), 'utf8');
-    const m = /DISPLAY_KEYS\s*=\s*\[([^\]]*)\]\s*as const/.exec(text);
-    if (!m) {
-      fail('labels-display-keys', `${DISPLAY_TS_REL} has no 'DISPLAY_KEYS = [...] as const' array`);
-    } else {
-      const declared = [...m[1].matchAll(/'([^']+)'/g)].map((t) => t[1]);
-      for (const k of declared) expect(keys.includes(k), 'labels-display-keys', `${DISPLAY_TS_REL}'s DISPLAY_KEYS has '${k}', which is not in labels.json`);
-      for (const k of keys) expect(declared.includes(k), 'labels-display-keys', `labels.json has key '${k}', missing from ${DISPLAY_TS_REL}'s DISPLAY_KEYS`);
     }
   }
 

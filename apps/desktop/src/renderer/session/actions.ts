@@ -1,8 +1,7 @@
 // Session start/send/stop/close/dismiss, plus the cross-screen entry points the sidebar, palette and keyboard map call directly.
 import { toast } from 'sonner'
 import type { QueryClient } from '@tanstack/react-query'
-import { router } from '@/renderer/router/router'
-import { ROUTE_IDS } from '@/renderer/router/routes'
+import { openSession } from '@/renderer/router/navigation'
 import { ipcQueryOptions } from '@/renderer/data/query'
 import { invoke } from '@/renderer/data/invoke'
 import type { RepoId } from '@/utils/repos'
@@ -64,10 +63,10 @@ export function liveSessionKeys(): readonly SessionKey[] {
 function handleStartResult(result: SessionStartResult): void {
   if (result.ok) {
     adoptSession(result.snapshot)
-    void router.navigate({ to: ROUTE_IDS.session, search: { key: result.snapshot.sessionKey } })
+    openSession(result.snapshot.sessionKey)
     return
   }
-  if (result.kind === 'already-open') void router.navigate({ to: ROUTE_IDS.session, search: { key: result.sessionKey } })
+  if (result.kind === 'already-open') openSession(result.sessionKey)
 }
 
 type StartInFolderOutcome = { readonly kind: 'started' } | { readonly kind: 'failed'; readonly copy: StartFailureCopy; readonly result: RenderableStartFailure | null }
@@ -89,7 +88,7 @@ export async function startInFolder(folderId: FolderId, worktree: boolean): Prom
 
 /** The sidebar's own session row click, and the keyboard map's jump/next. */
 export function selectSession(key: SessionKey): void {
-  void router.navigate({ to: ROUTE_IDS.session, search: { key } })
+  openSession(key)
 }
 
 interface SendOutcome {
