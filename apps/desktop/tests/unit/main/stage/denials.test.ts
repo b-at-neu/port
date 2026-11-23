@@ -55,10 +55,11 @@ describe('createStageDenialStore', () => {
     expect(writes.at(-1)).toEqual({ version: 1, entries: [denial('a'), denial('c', 'Bash(x *)')] })
   })
 
-  it('dedupes by rule and persists every change', () => {
+  it('dedupes by rule and persists every change', async () => {
     const { store, writes } = storeOver({ ok: false })
     store.record(denial('a', 'Bash(x *)'))
     store.record(denial('b', 'Bash(x *)'))
+    await new Promise((resolve) => setTimeout(resolve, 0))
     expect(store.list(REPO).map((d) => d.id)).toEqual(['b'])
     expect(writes.at(-1)).toEqual({ version: 1, entries: [denial('b', 'Bash(x *)')] })
   })

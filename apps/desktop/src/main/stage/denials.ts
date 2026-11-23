@@ -1,5 +1,7 @@
 // stage-denials.json's only writer: pending "Allow from now on" items survive a relaunch here. A
 // missing or malformed file loads as empty, the same recoverable-state shape as registry.ts.
+import { z } from 'zod'
+import { createJsonStore } from '@/main/platform/json-store'
 import type { StageDenial, StageDenialStore } from '@/types/stage'
 import type { FileResult } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
@@ -7,10 +9,7 @@ import { withDenial, withoutDenialId, withoutDenialRule } from '@/main/dispatch/
 
 const CURRENT_VERSION = 1
 
-interface DenialsFileShape {
-  readonly version: number
-  readonly entries: readonly unknown[]
-}
+const denialsFileSchema = z.object({ version: z.literal(CURRENT_VERSION), entries: z.array(z.unknown()) })
 
 interface CreateStageDenialStoreParams {
   readonly path: string
@@ -37,11 +36,19 @@ function isStageDenial(value: unknown): value is StageDenial {
 
 /** `createStageDenialStore({ path, readJson, writeJsonAtomic })` — a write failure is logged and the in-memory state is kept, which fails toward showing the item this run. */
 export function createStageDenialStore(params: CreateStageDenialStoreParams): StageDenialStore {
+  const store = createJsonStore({
+    file: params.path,
+    version: CURRENT_VERSION,
+    schema: denialsFileSchema,
+    initial: { version: CURRENT_VERSION, entries: [] },
+    unreadable: 'reset',
+    fs: { readJson: params.readJson, writeJsonAtomic: params.writeJsonAtomic },
+  })
   let byRepo = new Map<RepoId, readonly StageDenial[]>()
 
   function persist(): void {
     const entries = [...byRepo.values()].flat()
-    void params.writeJsonAtomic(params.path, { version: CURRENT_VERSION, entries }).then((result) => {
+    void store.write({ version: CURRENT_VERSION, entries }).then((result) => {
       if (!result.ok) console.error(`[stage] could not write ${params.path}: ${result.message}`)
     })
   }
@@ -52,11 +59,10 @@ export function createStageDenialStore(params: CreateStageDenialStoreParams): St
   }
 
   async function load(): Promise<void> {
-    const result = await params.readJson<DenialsFileShape>(params.path)
-    const value = result.ok ? result.value : null
-    if (typeof value !== 'object' || value === null || !Array.isArray(value.entries)) return
+    await store.load()
+    if (store.status().kind === 'unreadable') return
     let loaded = new Map<RepoId, readonly StageDenial[]>()
-    for (const entry of value.entries.filter(isStageDenial)) loaded = new Map(loaded).set(entry.repoId, withDenial(loaded.get(entry.repoId) ?? [], entry))
+    for (const entry of store.value().entries.filter(isStageDenial)) loaded = new Map(loaded).set(entry.repoId, withDenial(loaded.get(entry.repoId) ?? [], entry))
     const recorded = [...byRepo.values()].flat()
     for (const entry of recorded) loaded = new Map(loaded).set(entry.repoId, withDenial(loaded.get(entry.repoId) ?? [], entry))
     byRepo = loaded

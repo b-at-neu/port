@@ -1,5 +1,7 @@
 // stage-sessions.json's only writer: interrupted stage sessions survive a relaunch here. A
 // missing or malformed file loads as empty, the same recoverable-state shape as hosting/persist.ts.
+import { z } from 'zod'
+import { createJsonStore } from '@/main/platform/json-store'
 import type { InterruptedReason, InterruptedStage } from '@/types/stage'
 import type { FileResult } from '@/types/platform'
 import type { StageRegistry } from '@/types/stage'
@@ -16,10 +18,7 @@ interface StoredEntry extends InterruptedStage {
 /** An old file's entry carries no `interruptedAt` or `networkRetries`. */
 type RawEntry = Omit<StoredEntry, 'interruptedAt' | 'networkRetries'> & { readonly interruptedAt?: string; readonly networkRetries?: number }
 
-interface RegistryFileShape {
-  readonly version: number
-  readonly entries: readonly unknown[]
-}
+const registryFileSchema = z.object({ version: z.literal(CURRENT_VERSION), entries: z.array(z.unknown()) })
 
 function isRawEntry(value: unknown): value is RawEntry {
   if (typeof value !== 'object' || value === null) return false
@@ -82,28 +81,31 @@ function toInterrupted(entries: readonly StoredEntry[]): readonly InterruptedSta
 
 /** `createStageRegistry({ path, readJson, writeJsonAtomic, now })` — a write failure is logged and the in-memory state is kept, which fails toward showing the item this run. */
 export function createStageRegistry(params: CreateStageRegistryParams): StageRegistry {
+  const store = createJsonStore({
+    file: params.path,
+    version: CURRENT_VERSION,
+    schema: registryFileSchema,
+    initial: { version: CURRENT_VERSION, entries: [] },
+    unreadable: 'reset',
+    fs: { readJson: params.readJson, writeJsonAtomic: params.writeJsonAtomic },
+  })
   let entries: StoredEntry[] = []
 
   function persist(): Promise<void> {
-    return params.writeJsonAtomic(params.path, { version: CURRENT_VERSION, entries }).then((result) => {
+    return store.write({ version: CURRENT_VERSION, entries }).then((result) => {
       if (!result.ok) console.error(`[stage] could not write ${params.path}: ${result.message}`)
     })
   }
 
   async function load(): Promise<readonly InterruptedStage[]> {
-    const result = await params.readJson<RegistryFileShape>(params.path)
-    if (!result.ok) {
-      entries = []
-      return []
-    }
-    const value = result.value
-    if (typeof value !== 'object' || value === null || !Array.isArray(value.entries)) {
+    await store.load()
+    if (store.status().kind === 'unreadable') {
       entries = []
       return []
     }
     const loadedAt = params.now().toISOString()
     // Every `running` entry at boot means the process died before it could mark itself otherwise.
-    entries = dedupedById(value.entries.filter(isRawEntry)).map((e): StoredEntry => {
+    entries = dedupedById(store.value().entries.filter(isRawEntry)).map((e): StoredEntry => {
       const { title, ...rest } = e
       const stamped = { ...rest, ...(typeof title === 'string' ? { title } : {}), interruptedAt: e.interruptedAt ?? loadedAt, networkRetries: typeof e.networkRetries === 'number' ? e.networkRetries : 0 }
       return e.state === 'running' ? { ...stamped, state: 'interrupted', reason: 'crash', detail: null } : stamped
