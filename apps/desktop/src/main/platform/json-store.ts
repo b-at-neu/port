@@ -6,7 +6,8 @@ import type { FileResult } from '@/types/platform'
 export interface StoreFs {
   readonly readJson: (path: string) => Promise<FileResult<unknown>>
   readonly writeJsonAtomic: (path: string, value: unknown) => Promise<FileResult<void>>
-  readonly ensureDir: (path: string) => Promise<FileResult<void>>
+  /** Omitted when the directory is known to exist. */
+  readonly ensureDir?: (path: string) => Promise<FileResult<void>>
 }
 
 export const nodeStoreFs: StoreFs = { readJson: readJsonFile<unknown>, writeJsonAtomic: writeJsonFileAtomic, ensureDir: ensureDirectory }
@@ -51,7 +52,7 @@ export function createJsonStore<T, Env = void>(options: JsonStoreOptions<T, Env>
   const fs = options.fs ?? nodeStoreFs
   let current = options.initial
   let state: StoreStatus = { kind: 'loaded' }
-  let queue: Promise<unknown> = Promise.resolve()
+  let tail: Promise<void> | null = null
 
   function unreadable(reason: UnreadableReason, message: string): void {
     current = options.initial
@@ -62,8 +63,10 @@ export function createJsonStore<T, Env = void>(options: JsonStoreOptions<T, Env>
     if (state.kind === 'unreadable' && options.unreadable === 'read-only') {
       return { ok: false, kind: 'refused', message: `${options.file} could not be read, so it is never overwritten: ${state.message}` }
     }
-    const ensured = await fs.ensureDir(pathOps.dirname(options.file))
-    if (!ensured.ok) return { ok: false, kind: 'io', message: ensured.message }
+    if (fs.ensureDir !== undefined) {
+      const ensured = await fs.ensureDir(pathOps.dirname(options.file))
+      if (!ensured.ok) return { ok: false, kind: 'io', message: ensured.message }
+    }
     const written = await fs.writeJsonAtomic(options.file, next)
     if (!written.ok) return { ok: false, kind: 'io', message: written.message }
     current = next
@@ -72,8 +75,15 @@ export function createJsonStore<T, Env = void>(options: JsonStoreOptions<T, Env>
   }
 
   function serialized<R>(task: () => Promise<R>): Promise<R> {
-    const run = queue.then(task, task)
-    queue = run.catch(() => undefined)
+    const run = tail === null ? task() : tail.then(task)
+    const settled = run.then(
+      () => undefined,
+      () => undefined,
+    )
+    tail = settled
+    void settled.then(() => {
+      if (tail === settled) tail = null
+    })
     return run
   }
 
