@@ -5,7 +5,7 @@ import type { SessionKey } from '@/types/hosting'
 
 const navigate = vi.hoisted(() => vi.fn())
 
-vi.mock('@/renderer/router/router', () => ({ router: { navigate } }))
+vi.mock('@/renderer/router/navigation', () => ({ openSession: navigate }))
 vi.mock('@/renderer/gate/controller', () => ({ openReviewDialog: vi.fn() }))
 vi.mock('@/renderer/decision/controller', () => ({ openDecision: vi.fn() }))
 vi.mock('@/renderer/needs-you/allow-dialog', () => ({ openAllowDialog: vi.fn() }))

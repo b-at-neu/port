@@ -3,6 +3,7 @@
 import { createHashHistory, createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router'
 import { ROUTE_IDS, auditSearchFromRaw, backlogSearchFromRaw, boardSearchFromRaw, historySearchFromRaw, needsYouSearchFromRaw, releasesSearchFromRaw, repoSearchFromRaw, searchSearchFromRaw, sessionSearchFromRaw, settingsSearchFromRaw, transcriptSearchFromRaw } from '@/renderer/router/routes'
 import type { AuditSearch, BacklogSearch, BoardSearch, HistorySearch, NeedsYouSearch, ReleasesSearch, RepoSearch, SearchSearch, SessionSearch, SettingsSearch, TranscriptSearch } from '@/types/router'
+import { bindRouter } from '@/renderer/router/navigation'
 import { SettingsScreen } from '@/renderer/settings/screen'
 import { BacklogScreen } from '@/renderer/backlog/screen'
 import { ReleasesScreen } from '@/renderer/releases/screen'
@@ -152,6 +153,7 @@ const routeTree = rootRoute.addChildren([
 ])
 
 export const router = createRouter({ routeTree, history: createHashHistory() })
+bindRouter(router)
 
 declare module '@tanstack/react-router' {
   interface Register {

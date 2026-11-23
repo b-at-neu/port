@@ -1,6 +1,4 @@
-// Import, global and syntax boundaries as plain config data, with no imports (same layout as no-raw-colour.mjs).
-// Flat config replaces a rule's options when two blocks match one file, so `boundaryBlocks` lists every file's
-// restrictions together: each file gets one block carrying all the restrictions that apply to it.
+// Import, global and syntax boundaries as import-free data; flat config replaces options per rule, so each file gets one block with all its restrictions.
 
 const SRC = ['src/**']
 const TESTING = 'Tests and fixtures are never imported from src/.'

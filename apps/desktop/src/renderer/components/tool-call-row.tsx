@@ -5,7 +5,8 @@ import { cn } from '@/renderer/lib/utils'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/renderer/components/ui/collapsible'
 import { DiffView } from '@/renderer/components/diff-view'
 import { defaultOpen, toolSummary } from '@/renderer/components/conversation-model'
-import type { GroupedNode, RowView } from '@/types/components'
+import type { ReactNode } from 'react'
+import type { RowView } from '@/types/components'
 import { BashBody, LookupBody, TaskBody, TodoBody } from '@/renderer/components/tool-call-detail'
 
 function ToolIcon({ name, className }: { readonly name: string; readonly className: string }) {
@@ -36,9 +37,10 @@ function ToolIcon({ name, className }: { readonly name: string; readonly classNa
   }
 }
 
-export function ToolCallRow({ row, childNodes }: { readonly row: Extract<RowView, { readonly kind: 'tool-call' }>; readonly childNodes: readonly GroupedNode[] }) {
+/** `children` are a subagent's already-rendered entries, supplied by the caller that owns entry rendering. */
+export function ToolCallRow({ row, childCount, children }: { readonly row: Extract<RowView, { readonly kind: 'tool-call' }>; readonly childCount: number; readonly children: ReactNode }) {
   const [open, setOpen] = useState(() => defaultOpen(row))
-  const summary = toolSummary(row, childNodes.length)
+  const summary = toolSummary(row, childCount)
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} data-slot="tool-call-row">
@@ -58,7 +60,9 @@ export function ToolCallRow({ row, childNodes }: { readonly row: Extract<RowView
         ) : row.detail?.kind === 'todos' ? (
           <TodoBody row={row} />
         ) : row.detail?.kind === 'task' ? (
-          <TaskBody row={row} childNodes={childNodes} />
+          <TaskBody row={row} childCount={childCount}>
+            {children}
+          </TaskBody>
         ) : row.detail?.kind === 'lookup' ? (
           <LookupBody row={row} />
         ) : (
