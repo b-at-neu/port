@@ -32,8 +32,7 @@ export type Status = z.infer<typeof statusSchema>
 export type StatusKind = Status['kind']
 
 const STATUS_KINDS = ['queued', 'held', 'running', 'waiting-on-you', 'blocked', 'done'] as const
-const _statusKindPin: AssertEqual<(typeof STATUS_KINDS)[number], StatusKind> = true
-void _statusKindPin
+export const _statusKindsCoverStatus: AssertEqual<(typeof STATUS_KINDS)[number], StatusKind> = true
 
 const WRITE_OUTCOME_KINDS = [
   'applied',
@@ -47,8 +46,7 @@ const WRITE_OUTCOME_KINDS = [
   'state-unsaved',
   'mirror-failed',
 ] as const
-const _writeOutcomePin: AssertEqual<(typeof WRITE_OUTCOME_KINDS)[number], WriteOutcome['kind']> = true
-void _writeOutcomePin
+export const _writeOutcomeKindsCoverWriteOutcome: AssertEqual<(typeof WRITE_OUTCOME_KINDS)[number], WriteOutcome['kind']> = true
 
 export const mirrorFailureSchema = z.object({
   at: timestamp,
