@@ -1,6 +1,4 @@
 const MINUTE = 60_000
-const HOUR = 60 * MINUTE
-const DAY = 24 * HOUR
 
 /** `N minutes/hours/days ago`, spelled out. */
 export function relativeTime(idleMs: number): string {
@@ -28,11 +26,7 @@ export function formatAgo(ms: number): string {
 
 /** `formatAgo` for an ISO timestamp read against `now`. */
 export function formatAgoSince(iso: string, now: Date): string {
-  const deltaMs = now.getTime() - new Date(iso).getTime()
-  if (deltaMs < MINUTE) return 'just now'
-  if (deltaMs < HOUR) return `${String(Math.floor(deltaMs / MINUTE))}m ago`
-  if (deltaMs < DAY) return `${String(Math.floor(deltaMs / HOUR))}h ago`
-  return `${String(Math.floor(deltaMs / DAY))}d ago`
+  return formatAgo(now.getTime() - new Date(iso).getTime())
 }
 
 export function exactTime(iso: string): string {
