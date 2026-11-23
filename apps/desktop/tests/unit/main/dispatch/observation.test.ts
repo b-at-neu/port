@@ -53,6 +53,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     planPresent: false,
     blockers: null,
     blockerComments: null,
+    closingPullRequests: null,
     ...overrides,
   }
 }
@@ -101,31 +102,22 @@ describe('observationWrite — withdraw-approval route', () => {
   })
 })
 
-describe('observationWrite — zero-diff reason', () => {
+describe('observationWrite — zero-diff observation', () => {
   const vocabulary = customVocabulary({})
   const pr = item({ kind: 'pull-request', stage: 'trigger', stages: [{ key: 'readyForReview', name: 'readyForReview', role: 'trigger' }], matchedKeys: ['readyForReview'] })
 
   it('a sha-cap escalation names the head and that a new head is the way past it', () => {
-    const observation: TickObservation = { kind: 'zero-diff', reason: 'sha-cap', number: 52, itemKind: 'pull-request', count: 3, headRefOid: 'abc1234' }
+    const observation: TickObservation = { kind: 'zero-diff', number: 52, itemKind: 'pull-request', count: 3, headRefOid: 'abc1234' }
     const plan = observationWrite(observation, pr, vocabulary, 'dev')
     expect(plan.add).toEqual(['needsHuman'])
     expect(plan.remove).toEqual(['readyForReview'])
     expect(plan.comment).toContain('Cycle 3 was the second review of `abc1234`, the most one head gets. A new head is the way past it.')
   })
 
-  it('a plain zero-diff escalation keeps its own comment', () => {
-    const observation: TickObservation = { kind: 'zero-diff', reason: 'zero-diff', number: 52, itemKind: 'pull-request', count: 3, headRefOid: 'abc1234' }
-    const plan = observationWrite(observation, pr, vocabulary, 'dev')
-    expect(plan.comment).toContain('the head has not moved')
-  })
-
-  it('ends each escalation with the marker for its cause and head', () => {
-    const sha = (reason: 'zero-diff' | 'sha-cap'): string | null => {
-      const observation: TickObservation = { kind: 'zero-diff', reason, number: 52, itemKind: 'pull-request', count: 3, headRefOid: 'abc1234' }
-      return observationWrite(observation, pr, vocabulary, 'dev').comment
-    }
-    expect(sha('zero-diff')?.endsWith('\n<!-- port:escalation zero-diff abc1234 -->')).toBe(true)
-    expect(sha('sha-cap')?.endsWith('\n<!-- port:escalation sha-cap abc1234 -->')).toBe(true)
+  it('ends the escalation with the sha-cap marker and head', () => {
+    const observation: TickObservation = { kind: 'zero-diff', number: 52, itemKind: 'pull-request', count: 3, headRefOid: 'abc1234' }
+    const comment = observationWrite(observation, pr, vocabulary, 'dev').comment
+    expect(comment?.endsWith('\n<!-- port:escalation sha-cap abc1234 -->')).toBe(true)
   })
 })
 

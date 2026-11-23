@@ -94,14 +94,14 @@ describe('reconcileRepository — linking', () => {
   })
 
   it('a pr opened issue whose closing pull request merged reports counterpart-merged, still unlinked', () => {
-    const state = reconcile([item({ matchedKeys: ['prOpened'], closingPullRequests: [{ number: 669, state: 'MERGED' }] })])
+    const state = reconcile([item({ matchedKeys: ['prOpened'], closingPullRequests: [{ number: 669, state: 'MERGED', headRefName: null }] })])
     if (!state.ok) throw new Error('unreachable')
     expect(state.items[0]?.linked).toBeNull()
     expect(state.items[0]?.linkReason).toBe('counterpart-merged')
   })
 
   it('a closed-unmerged, unread or empty closing pull request list stays counterpart-not-open', () => {
-    for (const closingPullRequests of [[{ number: 669, state: 'CLOSED' as const }], null, []]) {
+    for (const closingPullRequests of [[{ number: 669, state: 'CLOSED' as const, headRefName: null }], null, []]) {
       const state = reconcile([item({ matchedKeys: ['prOpened'], closingPullRequests })])
       if (!state.ok) throw new Error('unreachable')
       expect(state.items[0]?.linkReason).toBe('counterpart-not-open')
@@ -110,7 +110,7 @@ describe('reconcileRepository — linking', () => {
 
   it('an open linked pull request in the sweep wins over a merged closing reference', () => {
     const state = reconcile([
-      item({ number: 79, matchedKeys: ['prOpened'], closingPullRequests: [{ number: 150, state: 'MERGED' }] }),
+      item({ number: 79, matchedKeys: ['prOpened'], closingPullRequests: [{ number: 150, state: 'MERGED', headRefName: null }] }),
       item({ kind: 'pull-request', number: 196, matchedKeys: ['readyForReview'], body: 'Closes #79' }),
     ])
     if (!state.ok) throw new Error('unreachable')

@@ -1,14 +1,16 @@
 import type { BoardSnapshot } from '@/types/board'
 import type { RegistryDeps } from '@/types/registry'
-import type { AutoApprovePlanParams, ReadyEntry, EscalateToHumanParams, EscalateToHumanResult, ApplyObservationParams, ApplyObservationResult, ApplyItemActionParams } from '@/types/actions'
-import type { TickActionable, EndedStage, DispatchLedger, RefreshMemo, TickObservation, ForceDispatch } from '@/types/tick'
+import type { AutoApprovePlanParams, ReadyEntry, EscalateToHumanParams, EscalateToHumanResult, ApplyObservationParams, ApplyObservationResult, ApplyItemActionParams, RerunChecksParams } from '@/types/actions'
+import type { TickActionable, EndedStage, DispatchLedger, RefreshMemo, RerunMemo, TickObservation, ForceDispatch } from '@/types/tick'
 import type { HostedStore } from '@/types/hosting'
 import type { FetchItemsByNumberParams, ItemsByNumberFetch, ResolvedItem } from '@/types/github'
-import type { StageEvent, StageTransitionResult } from '@/types/stage-labels'
+import type { StageEvent, StagePlanFile, StageTransitionResult } from '@/types/stage-labels'
 import type { ReposListResponse } from '@/types/ipc'
 import type { GitRunner, PathOps, FileFailureKind } from '@/types/platform'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { StateLabelsReader } from '@/types/pipeline-state'
+import type { RecordIncident } from '@/types/incidents'
+import type { ReconciledItem } from '@/types/state'
 
 export type BudgetGateFailure = { readonly ok: false; readonly kind: 'unavailable' | 'failed'; readonly message: string }
 
@@ -241,9 +243,11 @@ export interface Dispatcher {
   /** Stops new launches — called before `closeAll()` on quit. */
   shutdown(): void
   /** Records a stage launcher's hand-back classification against its matching record, by session key, and plans the label move it implies. A no-op if the key is not tracked. */
-  recordOutcome(repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome): void
+  recordOutcome(repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome, plan: StagePlanFile | null): void
   /** A blocked stage session's next turn began — the app clears the block. A no-op if the key is not tracked. */
   recordResumedTurn(repoId: RepoId, sessionKey: SessionKey): void
+  /** An interrupted entry was resumed as a session: its hand-back now settles labels. */
+  trackResumed(repoId: RepoId, sessionKey: SessionKey, entry: InterruptedStage): void
   /** `true` unless this app currently owns `repoId` — an unread repository (`'none'`) holds, the fail direction for `SESSION REQUIRED`. */
   holdsSessionRequired(repoId: RepoId): boolean
   /** Stage-denial bookkeeping: record (deduped by rule, bounded to 20), dismiss by id (operator's own Dismiss), or clear every denial proposing a given rule (once Allow succeeds or reports `already-allowed`). */
@@ -270,6 +274,9 @@ export interface CreateDispatcherParams {
   readonly budget: BudgetGate
   readonly escalate: (params: EscalateToHumanParams) => Promise<EscalateToHumanResult>
   readonly writeObservation: (params: ApplyObservationParams) => Promise<ApplyObservationResult>
+  readonly rerunChecks: (params: RerunChecksParams) => Promise<'applied' | 'failed'>
+  /** Shared with the tick's own `rerun-checks` observation, never a second instance that would disagree on which head was re-run. */
+  readonly rerunMemo: RerunMemo
   /** Every label write a stage needs: the claim before launch, and rollback, hand-back and next-turn writes through `transition`. */
   readonly stageLabels: StageLabelWrites
   /** Where a candidate's labels come from at the survivor test; absent reads GitHub's. */
@@ -282,6 +289,8 @@ export interface CreateDispatcherParams {
   readonly dirs: { readonly audit: string; readonly scratch: string }
   readonly onChange: () => void
   readonly now: () => Date
+  /** Best-effort: never rejects, and no call site depends on it landing. */
+  readonly recordIncident: RecordIncident
   /** Interrupted stage sessions for a repository, read from `main/stage/registry.ts` — `[]` when none is wired (tests, or before the registry loads). */
   readonly interrupted?: (repoId: RepoId) => readonly InterruptedStage[]
 }
@@ -291,12 +300,19 @@ export interface DispatchActions {
   readonly stageLabels: StageLabelWrites
   readonly escalateToHuman: (params: EscalateToHumanParams) => Promise<EscalateToHumanResult>
   readonly applyObservation: (params: ApplyObservationParams) => Promise<ApplyObservationResult>
+  readonly rerunChecks: (params: RerunChecksParams) => Promise<'applied' | 'failed'>
   readonly autoApprovePlan: (params: AutoApprovePlanParams) => Promise<WriteOutcome>
 }
 
 export interface StageLabelWrites {
   readonly claim: (params: { readonly entry: ReadyEntry; readonly candidate: Pick<TickActionable, 'number' | 'kind' | 'agent' | 'trigger'>; readonly resolved: ResolvedItem; readonly auditDir: string }) => Promise<StageTransitionResult>
-  readonly transition: (params: { readonly entry: ReadyEntry; readonly record: Pick<TickActionable, 'number' | 'kind' | 'agent' | 'trigger'>; readonly event: StageEvent; readonly auditDir: string }) => Promise<StageTransitionResult>
+  readonly transition: (params: { readonly entry: ReadyEntry; readonly record: Pick<TickActionable, 'number' | 'kind' | 'agent' | 'trigger'>; readonly event: StageEvent; readonly auditDir: string; readonly scratchDir: string; readonly snapshot?: StageSnapshot }) => Promise<StageTransitionResult>
+}
+
+/** The tick's own view of a ticket when a hand-back decision was made, kept for the incident it may raise. */
+export interface StageSnapshot {
+  readonly item: ReconciledItem | null
+  readonly at: string | null
 }
 
 export interface HaltDispatchDeps {
@@ -330,6 +346,8 @@ export interface StageRecord {
   readonly trigger: LabelKey
   readonly state: 'started' | 'ended' | 'failed'
   readonly at: string
+  /** The first refresh that saw the session ended — `null` while started and for a `failed` record. */
+  readonly endedAt: string | null
   readonly detail: string | null
   /** `null` until the launcher classifies a hand-back for this record's session; never set for a `failed` record. */
   readonly outcome: StageOutcome | null
@@ -341,8 +359,11 @@ export interface StageLauncher {
   launch(request: StageLaunchRequest): Promise<StageLaunchResult>
 }
 
+/** Which step of a launch failed — the incident log's condition for it. */
+export type StageLaunchFailureCause = 'worktree' | 'leftover-worktree' | 'instructions' | 'start' | 'prompt' | 'resume' | 'threw'
+
 // `ok: true` promises the store holds a non-`ended` handle for `sessionKey`.
-export type StageLaunchResult = { readonly ok: true; readonly sessionKey: SessionKey } | { readonly ok: false; readonly kind: 'at-capacity'; readonly limit: number } | { readonly ok: false; readonly kind: 'failed'; readonly message: string }
+export type StageLaunchResult = { readonly ok: true; readonly sessionKey: SessionKey } | { readonly ok: false; readonly kind: 'at-capacity'; readonly limit: number } | { readonly ok: false; readonly kind: 'failed'; readonly message: string; readonly cause: StageLaunchFailureCause }
 
 export interface StageLaunchRequest {
   readonly entry: ReadyEntry
@@ -361,7 +382,7 @@ export interface StageLaunchRequest {
 }
 
 /** Every `TickObservation` kind this module writes — excludes the one report-only kind, `refresh-deferred`. */
-export type WriteObservation = Exclude<TickObservation, { readonly kind: 'refresh-deferred' }>
+export type WriteObservation = Exclude<TickObservation, { readonly kind: 'refresh-deferred' | 'adopt' | 'rerun-checks' }>
 
 export type TakeOwnershipResult = OwnershipWriteResult | { readonly ok: false; readonly kind: 'refused'; readonly verdict: Extract<OwnershipRead, { kind: 'terminal' | 'unreadable' }>; readonly path: string }
 

@@ -9,7 +9,7 @@ import { readWorktrees } from '@/main/local/worktrees'
 import type { GitRunner } from '@/types/platform'
 import { readSessionState } from '@/main/sessions/adapter'
 import type { RepoId } from '@/utils/repos'
-import type { LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { LabelVocabulary, VerifiableVocabulary } from '@/utils/labels/vocabulary'
 import type { WorktreeEntry } from '@/types/local'
 import type { AgentRecord } from '@/types/sessions'
 import type { RefreshOutcome, SourceCache } from '@/types/state'
@@ -27,6 +27,7 @@ interface RefreshGithubParams {
   readonly repoId: RepoId
   readonly repo: { readonly owner: string; readonly name: string }
   readonly vocabulary: LabelVocabulary
+  readonly verify?: VerifiableVocabulary
   /** `branches.integration`, whose recent check history the integration-red gate compares against. */
   readonly integration: string
   readonly tracked?: readonly TrackedRef[] | null
@@ -40,7 +41,7 @@ interface RefreshGithubParams {
 /** Fires the conditional `fetchItemsByNumber` re-check itself whenever the fresh sweep leaves orphan numbers, so `itemStates` stays dependent on a GitHub refresh. */
 export async function refreshGithub(cache: SourceCache, params: RefreshGithubParams): Promise<RefreshOutcome> {
   const now = params.now ?? (() => new Date())
-  const fetch = await fetchPipelineItems({ repo: params.repo, vocabulary: params.vocabulary, integration: params.integration, tracked: params.tracked, github: params.github, now })
+  const fetch = await fetchPipelineItems({ repo: params.repo, vocabulary: params.vocabulary, verify: params.verify, integration: params.integration, tracked: params.tracked, github: params.github, now })
   const previous = cache.github.get(params.repoId) ?? null
   cache.github.set(params.repoId, projectOk(previous, fetch))
 
@@ -50,7 +51,7 @@ export async function refreshGithub(cache: SourceCache, params: RefreshGithubPar
   }
 
   return fetch.ok
-    ? { ok: true, at: fetch.fetchedAt, rateLimit: fetch.rateLimit, closed: fetch.closed }
+    ? { ok: true, at: fetch.fetchedAt, rateLimit: fetch.rateLimit, closed: fetch.closed, merged: fetch.merged }
     : { ok: false, at: fetch.fetchedAt, error: fetch.message, failureKind: fetch.kind }
 }
 

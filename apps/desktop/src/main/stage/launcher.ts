@@ -8,8 +8,12 @@ import type { StageLaunchRequest, StageLaunchResult } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionDismissResult, SessionKey, SessionStartResult } from '@/types/hosting'
 
 import type { StageOutcome, StageOutcomeKind } from '@/types/stage-session'
+import type { StagePlanFile } from '@/types/stage-labels'
+import type { StageAgent } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
-import type { StageDenial, StageInstructionsLoader, StageResumeRequest } from '@/types/stage'
+import type { InterruptedStage, StageDenial, StageInstructionsLoader, StageResumeRequest } from '@/types/stage'
+import { RESUME_PROMPT } from '@/main/stage/recover'
+import { isTransientNetworkFailure, SETTLE_FAILED_DETAIL } from '@/main/stage/handback'
 import { proposedRule } from '@/main/stage/rule'
 import { loadStageAgentDefinition } from '@/main/stage/bundle'
 import { classifyHandback } from '@/main/stage/handback'
@@ -35,7 +39,8 @@ interface CreateStageLauncherParams {
   /** Runs once per repository root per process, never awaited as a gate. */
   readonly sweepBranches: (root: string) => Promise<unknown>
   readonly now: () => Date
-  readonly onOutcome: (repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome) => void
+  /** `plan` is non-null only for a completed `plan-written` hand-back. */
+  readonly onOutcome: (repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome, plan: StagePlanFile | null) => void
   /** Fired once when a session that handed back `blocked` starts its next turn. */
   readonly onResumedTurn: (repoId: RepoId, sessionKey: SessionKey) => void
   /** `stage-sessions.json`'s sole writer — every launch records `running` here, every hand-back clears or marks it. */
@@ -48,6 +53,9 @@ interface CreateStageLauncherParams {
   /** The app's own `stage-prompts` folder, which a stage session may read. */
   readonly bundleRoot: string
   readonly readTextFile: (path: string) => Promise<FileResult<string>>
+  readonly pathExists: (path: string) => Promise<boolean>
+  /** Fired when `resume` starts an interrupted entry as a session, so its hand-back settles labels. */
+  readonly onResumed: (repoId: RepoId, sessionKey: SessionKey, entry: InterruptedStage) => void
   readonly ops: Pick<PathOps, 'join' | 'samePath'>
 }
 
@@ -84,7 +92,7 @@ function cleanupFailureDetail(result: Exclude<SessionDismissResult, { readonly o
 }
 
 export function createStageLauncher(params: CreateStageLauncherParams): StageLauncherHandle {
-  const tracked = new Map<SessionKey, { readonly repoId: RepoId; readonly registryId: string; readonly root: string; readonly branch: string | null; readonly baseSha: string; lastSeenResultAt: string | null; sawSessionId: boolean; lastOutcome: StageOutcomeKind | null; blockedIdle: boolean }>()
+  const tracked = new Map<SessionKey, { readonly repoId: RepoId; readonly registryId: string; readonly agent: StageAgent; readonly number: number; readonly path: string; readonly root: string; readonly branch: string | null; readonly baseSha: string; lastSeenResultAt: string | null; sawSessionId: boolean; lastOutcome: StageOutcomeKind | null; blockedIdle: boolean }>()
   const swept = new Set<string>()
 
   async function removeAndRelease(root: string, path: string, branch: string | null, baseSha: string): Promise<RemoveSessionWorktreeOutcome> {
@@ -116,12 +124,19 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     }
   }
 
+  /** An operator's or the sweeper's resume: the same session start, then the dispatcher is told so its hand-back settles labels. */
   async function resume(request: StageResumeRequest): Promise<StageLaunchResult> {
+    const result = await startResume(request)
+    if (result.ok) params.onResumed(request.entry.repoId, result.sessionKey, request.entry)
+    return result
+  }
+
+  async function startResume(request: StageResumeRequest): Promise<StageLaunchResult> {
     const { entry, root, prompt } = request
-    if (entry.claudeSessionId === null) return { ok: false, kind: 'failed', message: 'the session ended before Claude started it' }
+    if (entry.claudeSessionId === null) return { ok: false, kind: 'failed', message: 'the session ended before Claude started it', cause: 'resume' }
 
     const definition = await loadStageAgentDefinition({ root: params.bundleRoot, agent: entry.agent, ops: params.ops, readTextFile: params.readTextFile })
-    if (!definition.ok) return { ok: false, kind: 'failed', message: definition.message }
+    if (!definition.ok) return { ok: false, kind: 'failed', message: definition.message, cause: 'resume' }
 
     let sessionKey: SessionKey | null = null
     const startResult = await params.store.start({
@@ -145,19 +160,27 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     })
     if (!startResult.ok) {
       if (startResult.kind === 'at-capacity') return { ok: false, kind: 'at-capacity', limit: startResult.limit }
-      return { ok: false, kind: 'failed', message: startFailureMessage(startResult) }
+      return { ok: false, kind: 'failed', message: startFailureMessage(startResult), cause: 'resume' }
     }
 
     sessionKey = startResult.snapshot.sessionKey
     const sendResult = params.store.send(sessionKey, prompt)
     if (!sendResult.ok) {
       await params.store.close(sessionKey)
-      return { ok: false, kind: 'failed', message: `could not send the resume prompt: ${sendResult.kind}` }
+      return { ok: false, kind: 'failed', message: `could not send the resume prompt: ${sendResult.kind}`, cause: 'resume' }
     }
 
-    tracked.set(sessionKey, { repoId: entry.repoId, registryId: entry.id, root: root.path, branch: entry.worktree.branch, baseSha: entry.worktree.baseSha, lastSeenResultAt: null, sawSessionId: false, lastOutcome: null, blockedIdle: false })
+    tracked.set(sessionKey, { repoId: entry.repoId, registryId: entry.id, agent: entry.agent, number: entry.number, path: entry.worktree.path, root: root.path, branch: entry.worktree.branch, baseSha: entry.worktree.baseSha, lastSeenResultAt: null, sawSessionId: false, lastOutcome: null, blockedIdle: false })
     params.registry.markRunning(entry.id)
     return { ok: true, sessionKey }
+  }
+
+  /** An interrupted entry for this ticket and agent, with its session and worktree intact and no reset still pending, is resumed instead of launched fresh — its work is kept. `null` falls through to a fresh launch. */
+  async function resumeInterrupted(request: StageLaunchRequest): Promise<StageLaunchResult | null> {
+    const entry = params.registry.list().find((e) => e.repoId === request.entry.id && e.number === request.number && e.agent === request.agent && e.claudeSessionId !== null && (e.resetsAt === null || Date.parse(e.resetsAt) <= params.now().getTime()))
+    if (entry === undefined || !(await params.pathExists(entry.worktree.path))) return null
+    const result = await startResume({ entry, root: { path: request.entry.path, sessionRequiredPaths: request.entry.config.sessionRequiredPaths }, prompt: RESUME_PROMPT.replace('<n>', String(entry.number)) })
+    return result.ok ? result : null
   }
 
   async function launch(request: StageLaunchRequest): Promise<StageLaunchResult> {
@@ -167,13 +190,17 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       void params.sweepBranches(root).catch(() => undefined)
     }
 
-    const liveWorktrees = new Set<string>(params.registry.runningWorktreePaths())
+    const resumed = await resumeInterrupted(request)
+    if (resumed !== null) return resumed
+
+    // Only a live hosted session holds a worktree: a registry `running` entry whose session died must not block the reclaim.
+    const liveWorktrees = new Set<string>()
     for (const snapshot of params.store.list()) {
       if (snapshot.phase !== 'ended' && snapshot.workspace.worktree !== null) liveWorktrees.add(snapshot.workspace.worktree.path)
     }
 
     const wt = await params.createWorktree({ root, git: params.git, agent: request.agent, number: request.number, integration: request.entry.config.branches.integration, target: request.target, liveWorktrees })
-    if (!wt.ok) return { ok: false, kind: 'failed', message: `Couldn't create the stage worktree: ${wt.message}` }
+    if (!wt.ok) return { ok: false, kind: 'failed', message: `Couldn't create the stage worktree: ${wt.message}`, cause: wt.leftover === true ? 'leftover-worktree' : 'worktree' }
 
     const reclaimed = wt.reclaimed
     if (reclaimed !== null) {
@@ -185,7 +212,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     const instructions = await params.loadInstructions(request, wt.path)
     if (!instructions.ok) {
       await removeAndRelease(root, wt.path, wt.branch, wt.baseSha)
-      return { ok: false, kind: 'failed', message: `Couldn't load the stage instructions from the app's bundled stage prompts: ${instructions.message}` }
+      return { ok: false, kind: 'failed', message: `Couldn't load the stage instructions from the app's bundled stage prompts: ${instructions.message}`, cause: 'instructions' }
     }
 
     const registryId = params.newId()
@@ -210,7 +237,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     if (!startResult.ok) {
       await removeAndRelease(root, wt.path, wt.branch, wt.baseSha)
       if (startResult.kind === 'at-capacity') return { ok: false, kind: 'at-capacity', limit: startResult.limit }
-      return { ok: false, kind: 'failed', message: startFailureMessage(startResult) }
+      return { ok: false, kind: 'failed', message: startFailureMessage(startResult), cause: 'start' }
     }
 
     const sessionKey = startResult.snapshot.sessionKey
@@ -219,10 +246,10 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     if (!sendResult.ok) {
       await params.store.close(sessionKey)
       await removeAndRelease(root, wt.path, wt.branch, wt.baseSha)
-      return { ok: false, kind: 'failed', message: `could not send the stage prompt: ${sendResult.kind}` }
+      return { ok: false, kind: 'failed', message: `could not send the stage prompt: ${sendResult.kind}`, cause: 'prompt' }
     }
 
-    tracked.set(sessionKey, { repoId: request.entry.id, registryId, root, branch: wt.branch, baseSha: wt.baseSha, lastSeenResultAt: null, sawSessionId: false, lastOutcome: null, blockedIdle: false })
+    tracked.set(sessionKey, { repoId: request.entry.id, registryId, agent: request.agent, number: request.number, path: wt.path, root, branch: wt.branch, baseSha: wt.baseSha, lastSeenResultAt: null, sawSessionId: false, lastOutcome: null, blockedIdle: false })
     params.registry.recordRunning({
       id: registryId,
       repoId: request.entry.id,
@@ -279,16 +306,26 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     serialize(() => settle(snapshot.sessionKey, entry.repoId, entry.registryId, outcome))
   }
 
+  /** Read before the worktree is removed; only a completed `plan-written` hand-back carries a plan. */
+  async function readPlanFile(sessionKey: SessionKey, outcome: StageOutcome): Promise<StagePlanFile | null> {
+    const held = tracked.get(sessionKey)
+    if (held === undefined || held.agent !== 'plan' || outcome.handback?.token !== 'plan-written') return null
+    const read = await params.readTextFile(params.ops.join(held.path, '.temp', `plan-${String(held.number)}.md`))
+    if (!read.ok) return { kind: 'missing', detail: read.kind === 'not-found' ? null : read.message }
+    return read.value.trim() === '' ? { kind: 'empty' } : { kind: 'read', body: read.value }
+  }
+
   async function settle(sessionKey: SessionKey, repoId: RepoId, registryId: string, outcome: StageOutcome): Promise<void> {
     try {
       if (outcome.kind === 'questions' || outcome.kind === 'blocked') {
         // The session is still open — the registry entry stays `running`.
-        params.onOutcome(repoId, sessionKey, outcome)
+        params.onOutcome(repoId, sessionKey, outcome, null)
         return
       }
 
       if (outcome.kind === 'completed') {
         await params.store.close(sessionKey)
+        const plan = await readPlanFile(sessionKey, outcome)
         const dismissResult = await params.store.dismiss(sessionKey, 'remove')
         const held = tracked.get(sessionKey)
         if (dismissResult.ok && held !== undefined && held.branch !== null) await params.releaseBranch(held.root, held.branch, held.baseSha)
@@ -296,22 +333,22 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
         tracked.delete(sessionKey)
         if (dismissResult.ok) params.registry.remove(registryId)
         else params.registry.markInterrupted(registryId, 'cleanup-failed', cleanupFailureDetail(dismissResult), null, outcome.costUsd)
-        params.onOutcome(repoId, sessionKey, { ...outcome, worktree })
+        params.onOutcome(repoId, sessionKey, { ...outcome, worktree }, plan)
         return
       }
 
       // error, usage-limit, interrupted: close the session where needed, keep the worktree, and mark it.
-      if (outcome.kind === 'error' || outcome.kind === 'usage-limit') await params.store.close(sessionKey)
+      if (outcome.kind === 'error' || outcome.kind === 'usage-limit' || outcome.kind === 'interrupted') await params.store.close(sessionKey)
       tracked.delete(sessionKey)
       // `crash`/`quit` are reserved for a boot-time find and the quit path's own `markAllQuit`.
-      const reason = outcome.kind === 'usage-limit' ? 'usage-limit' : 'error'
+      const reason = outcome.kind === 'usage-limit' ? 'usage-limit' : outcome.kind === 'interrupted' && isTransientNetworkFailure(outcome.detail) ? 'network' : 'error'
       params.registry.markInterrupted(registryId, reason, outcome.detail, outcome.resetsAt, outcome.costUsd)
-      params.onOutcome(repoId, sessionKey, outcome)
+      params.onOutcome(repoId, sessionKey, outcome, null)
     } catch (error) {
       tracked.delete(sessionKey)
       const message = error instanceof Error ? error.message : String(error)
-      params.registry.markInterrupted(registryId, 'error', `hand-back settle failed: ${message}`, null, outcome.costUsd)
-      params.onOutcome(repoId, sessionKey, { kind: 'error', detail: `hand-back settle failed: ${message}`, costUsd: outcome.costUsd, resetsAt: null, worktree: 'remove-failed', operatorJoined: outcome.operatorJoined, handback: null })
+      params.registry.markInterrupted(registryId, 'error', `${SETTLE_FAILED_DETAIL}: ${message}`, null, outcome.costUsd)
+      params.onOutcome(repoId, sessionKey, { kind: 'error', detail: `${SETTLE_FAILED_DETAIL}: ${message}`, costUsd: outcome.costUsd, resetsAt: null, worktree: 'remove-failed', operatorJoined: outcome.operatorJoined, handback: null }, null)
     }
   }
 

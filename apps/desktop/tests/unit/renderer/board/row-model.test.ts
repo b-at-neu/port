@@ -64,6 +64,7 @@ function row(overrides: {
     planPresent: null,
     blockers: null,
     blockerComments: null,
+    closingPullRequests: null,
   } as unknown as ReconciledItem
   return {
     item,
@@ -288,7 +289,7 @@ describe('nextActionFor', () => {
   })
 
   it('the decision label when a decision is available', () => {
-    const r = row({ stageKey: 'needsHuman', decisions: { unblock: { available: true, context: { target: 'pull-request', reason: null, cyclesUsed: 1, cap: 5, decisions: [] } } } })
+    const r = row({ stageKey: 'needsHuman', decisions: { unblock: { available: true, context: { target: 'pull-request', reason: null, cyclesUsed: 1, cap: 5, decisions: [], routes: ['review', 'revision'] } } } })
     expect(nextActionFor(r)).toEqual({ kind: 'decision', label: 'Unblock', decision: 'unblock' })
   })
 

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { HISTORY_CAP, emptyFile, parseFile, prune, seedFrom, trackedOf, transition, viewOf, withItem } from '@/main/pipeline-state/model'
-import type { RepoRecord, StoredItem, TransitionInput } from '@/types/pipeline-state'
+import { HISTORY_CAP, emptyFile, parseFile, prune, recordMirror, seedFrom, trackedOf, transition, viewOf, withItem } from '@/main/pipeline-state/model'
+import type { MirrorFailure, RepoRecord, StoredItem, TransitionInput } from '@/types/pipeline-state'
 import { reconciledItem, repositoryState } from '../../../fixtures/board-state'
 
 const AT = '2026-01-01T00:00:00.000Z'
 
 function stored(overrides: Partial<StoredItem> = {}): StoredItem {
-  return { kind: 'issue', number: 7, keys: ['ready'], marked: true, autoPlan: false, claimedAt: null, reviewCycles: 0, history: [], updatedAt: AT, ...overrides }
+  return { kind: 'issue', number: 7, keys: ['ready'], marked: true, autoPlan: false, claimedAt: null, reviewCycles: 0, history: [], updatedAt: AT, issue: null, mirrorFailure: null, ...overrides }
 }
 
 function recordOf(...items: StoredItem[]): RepoRecord {
@@ -14,7 +14,7 @@ function recordOf(...items: StoredItem[]): RepoRecord {
 }
 
 function input(overrides: Partial<TransitionInput> = {}): TransitionInput {
-  return { add: [], remove: [], expect: { present: [], absent: [] }, action: 'test', at: AT, actor: null, ...overrides }
+  return { add: [], remove: [], expect: { present: [], absent: [] }, action: 'test', at: AT, actor: null, issue: null, ...overrides }
 }
 
 describe('parseFile', () => {
@@ -33,6 +33,31 @@ describe('parseFile', () => {
     })
     expect(Object.keys(file.repositories)).toEqual(['repo-a'])
     expect(Object.keys(file.repositories['repo-a']?.items ?? {})).toEqual(['issue:7'])
+  })
+
+  it('reads a file written before the mirror fields existed, with both as null', () => {
+    const { issue, mirrorFailure, ...legacy } = stored()
+    expect(issue).toBeNull()
+    expect(mirrorFailure).toBeNull()
+    const file = parseFile({ version: 1, repositories: { 'repo-a': { seededAt: AT, heldBy: null, items: { 'issue:7': legacy } } } })
+    expect(file.repositories['repo-a']?.items['issue:7']).toMatchObject({ issue: null, mirrorFailure: null })
+  })
+
+  it('keeps a stored failure and the ticket link, and drops a failure whose outcome kind is unknown, never the item', () => {
+    const failure: MirrorFailure = { at: AT, outcome: { kind: 'write-failed', classification: 'unknown', stderr: 'no label', reread: null } }
+    const file = parseFile({
+      version: 1,
+      repositories: {
+        'repo-a': {
+          seededAt: AT,
+          heldBy: null,
+          items: { 'pull-request:7': stored({ kind: 'pull-request', issue: 3, mirrorFailure: failure }), 'issue:8': { ...stored({ number: 8 }), mirrorFailure: { at: AT, outcome: { kind: 'from-the-future' } } } },
+        },
+      },
+    })
+    const items = file.repositories['repo-a']?.items ?? {}
+    expect(items['pull-request:7']).toMatchObject({ issue: 3, mirrorFailure: failure })
+    expect(items['issue:8']).toMatchObject({ number: 8, mirrorFailure: null })
   })
 })
 
@@ -54,6 +79,13 @@ describe('seedFrom', () => {
     expect(record.items['issue:5']).toMatchObject({ keys: ['inProgress'], marked: true, autoPlan: true, claimedAt: '2026-01-02T00:00:00Z', reviewCycles: 0 })
     expect(record.items['issue:5']?.history.map((row) => row.add)).toEqual([['ready'], ['inProgress']])
     expect(record.items['pull-request:6']).toMatchObject({ keys: ['approved'], marked: false, reviewCycles: 3 })
+  })
+
+  it('takes a pull request\'s ticket from its linked issue, and an issue has none', () => {
+    const state = repositoryState([reconciledItem({ number: 5, linked: 6 }), reconciledItem({ number: 6, kind: 'pull-request', linked: 5, matchedKeys: ['readyForReview'] })])
+    const record = seedFrom(state, AT)
+    expect(record.items['issue:5']?.issue).toBeNull()
+    expect(record.items['pull-request:6']).toMatchObject({ issue: 5, mirrorFailure: null })
   })
 })
 
@@ -95,6 +127,26 @@ describe('transition', () => {
     expect(record.items['issue:7']?.history).toHaveLength(HISTORY_CAP)
   })
 
+  it('sets a pull request\'s ticket once, and never moves it afterwards', () => {
+    const pr = stored({ kind: 'pull-request', keys: [] })
+    const first = transition(recordOf(pr), { kind: 'pull-request', number: 7 }, input({ add: ['readyForReview'], issue: 3 }))
+    expect(first).toMatchObject({ ok: true, item: { issue: 3 } })
+    if (!first.ok) return
+    const second = transition(recordOf(first.item), { kind: 'pull-request', number: 7 }, input({ add: ['reviewing'], remove: ['readyForReview'], issue: 4 }))
+    expect(second).toMatchObject({ ok: true, item: { issue: 3 } })
+  })
+
+  it('learns the ticket even when no key moves, and never gives an issue one', () => {
+    const pr = stored({ kind: 'pull-request', keys: ['readyForReview'] })
+    expect(transition(recordOf(pr), { kind: 'pull-request', number: 7 }, input({ add: ['readyForReview'], issue: 3 }))).toMatchObject({ ok: true, changed: true, item: { issue: 3 } })
+    expect(transition(recordOf(stored()), { kind: 'issue', number: 7 }, input({ add: ['planning'], remove: ['ready'], issue: 3 }))).toMatchObject({ ok: true, item: { issue: null } })
+  })
+
+  it('keeps a recorded mirror failure across a transition', () => {
+    const failure: MirrorFailure = { at: AT, outcome: { kind: 'item-unavailable' } }
+    expect(transition(recordOf(stored({ mirrorFailure: failure })), { kind: 'issue', number: 7 }, input({ add: ['planning'], remove: ['ready'] }))).toMatchObject({ ok: true, item: { mirrorFailure: failure } })
+  })
+
   it.each([
     ['stage-handback-approved', 1],
     ['stage-handback-needs-revision', 1],
@@ -106,6 +158,29 @@ describe('transition', () => {
     const record = recordOf(stored({ kind: 'pull-request', keys: ['reviewing'], reviewCycles: 2 }))
     const result = transition(record, { kind: 'pull-request', number: 7 }, input({ add: ['approved'], remove: ['reviewing'], action }))
     expect(result).toMatchObject({ ok: true, item: { reviewCycles: 2 + cycles } })
+  })
+})
+
+describe('recordMirror', () => {
+  const ref = { kind: 'issue' as const, number: 7 }
+  const failure = (at: string, stderr = 'no label'): MirrorFailure => ({ at, outcome: { kind: 'write-failed', classification: 'unknown', stderr, reread: null } })
+
+  it('sets and clears a failure', () => {
+    const set = recordMirror(recordOf(stored()), ref, failure(AT))
+    expect(set.items['issue:7']?.mirrorFailure).toEqual(failure(AT))
+    expect(recordMirror(set, ref, null).items['issue:7']?.mirrorFailure).toBeNull()
+  })
+
+  it('returns the record unchanged for a missing item, a repeated clear, or the same failure again', () => {
+    const record = recordOf(stored({ mirrorFailure: failure(AT) }))
+    expect(recordMirror(record, { kind: 'issue', number: 99 }, failure(AT))).toBe(record)
+    expect(recordMirror(recordOf(stored()), ref, null)).toEqual(recordOf(stored()))
+    expect(recordMirror(record, ref, failure('2026-02-02T00:00:00.000Z'))).toBe(record)
+  })
+
+  it('replaces a failure that is a different one', () => {
+    const record = recordOf(stored({ mirrorFailure: failure(AT) }))
+    expect(recordMirror(record, ref, failure('2026-02-02T00:00:00.000Z', 'rate limited')).items['issue:7']?.mirrorFailure?.at).toBe('2026-02-02T00:00:00.000Z')
   })
 })
 

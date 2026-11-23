@@ -125,6 +125,39 @@
         "labelKeys": ["ready"]
       },
       "expected": { "appliedPaths": [], "refusedPaths": ["labels.notARealKey"] }
+    },
+    {
+      "function": "applyOverrides",
+      "name": "a states.<key> naming a real state is applied",
+      "input": {
+        "cfg": { "integration": "dev", "production": "main", "labels": {}, "states": { "implementing": "implementing" }, "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" }, "modules": { "approvalGate": true, "release": true, "scope": true }, "reviewCycleCap": 5, "concurrency": { "sharedFiles": [], "overlapThreshold": 2 }, "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"] },
+        "entries": [{ "path": "states.implementing", "op": "=", "rawValue": "building", "reason": "this repo already used that word", "line": "states.implementing = building  # this repo already used that word" }],
+        "labelKeys": [],
+        "stateKeys": ["implementing"]
+      },
+      "expected": { "appliedPaths": ["states.implementing"], "refusedPaths": [] }
+    },
+    {
+      "function": "applyOverrides",
+      "name": "an unknown states.<key> is refused",
+      "input": {
+        "cfg": { "integration": "dev", "production": "main", "labels": {}, "states": { "implementing": "implementing" }, "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" }, "modules": { "approvalGate": true, "release": true, "scope": true }, "reviewCycleCap": 5, "concurrency": { "sharedFiles": [], "overlapThreshold": 2 }, "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"] },
+        "entries": [{ "path": "states.inProgress", "op": "=", "rawValue": "building", "reason": "old key", "line": "states.inProgress = building  # old key" }],
+        "labelKeys": [],
+        "stateKeys": ["implementing"]
+      },
+      "expected": { "appliedPaths": [], "refusedPaths": ["states.inProgress"] }
+    },
+    {
+      "function": "applyOverrides",
+      "name": "states.<key> is refused where the repository has no state keys",
+      "input": {
+        "cfg": { "integration": "dev", "production": "main", "labels": {}, "states": {}, "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" }, "modules": { "approvalGate": true, "release": true, "scope": true }, "reviewCycleCap": 5, "concurrency": { "sharedFiles": [], "overlapThreshold": 2 }, "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"] },
+        "entries": [{ "path": "states.implementing", "op": "=", "rawValue": "building", "reason": "not app-only", "line": "states.implementing = building  # not app-only" }],
+        "labelKeys": ["ready"],
+        "stateKeys": []
+      },
+      "expected": { "appliedPaths": [], "refusedPaths": ["states.implementing"] }
     }
   ]
 }

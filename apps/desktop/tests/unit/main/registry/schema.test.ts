@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import ownConfig from '../../../../../../.claude/port.config.json'
 import validAplio from '../../../../../../schema/fixtures/valid.aplio.json'
+import validAppOnly from '../../../../../../schema/fixtures/valid.app-only.json'
+import invalidBadAppOnly from '../../../../../../schema/fixtures/invalid.bad-app-only.json'
+import invalidLegacyLabelKey from '../../../../../../schema/fixtures/invalid.legacy-label-key.json'
+import invalidUnknownStateKey from '../../../../../../schema/fixtures/invalid.unknown-state-key.json'
 import validMinimal from '../../../../../../schema/fixtures/valid.minimal.json'
 import validPortfolio from '../../../../../../schema/fixtures/valid.portfolio.json'
 import invalidBadRepo from '../../../../../../schema/fixtures/invalid.bad-repo.json'
@@ -17,6 +21,7 @@ describe('validateConfig', () => {
 
   for (const [name, fixture] of [
     ['valid.aplio.json', validAplio],
+    ['valid.app-only.json', validAppOnly],
     ['valid.minimal.json', validMinimal],
     ['valid.portfolio.json', validPortfolio],
   ] as const) {
@@ -26,10 +31,13 @@ describe('validateConfig', () => {
   }
 
   for (const [name, fixture] of [
+    ['invalid.bad-app-only.json', invalidBadAppOnly],
     ['invalid.bad-repo.json', invalidBadRepo],
     ['invalid.check-missing-run.json', invalidCheckMissingRun],
+    ['invalid.legacy-label-key.json', invalidLegacyLabelKey],
     ['invalid.missing-repo.json', invalidMissingRepo],
     ['invalid.unknown-key.json', invalidUnknownKey],
+    ['invalid.unknown-state-key.json', invalidUnknownStateKey],
     ['invalid.unknown-tracker.json', invalidUnknownTracker],
   ] as const) {
     it(`reports at least one violation with a non-empty path for ${name}`, () => {

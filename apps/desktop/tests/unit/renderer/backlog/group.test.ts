@@ -13,6 +13,7 @@ function query(overrides: Partial<BacklogQueryLike> = {}): BacklogQueryLike {
 const NO_LINKS = { ok: true, open: [], shown: 0, total: 0 } as const
 const NO_PARENT = { ok: true, parent: null } as const
 const NO_CHILDREN = { ok: true, children: [], shown: 0, total: 0 } as const
+const CHILD_NO_LINKS = { ok: true, open: [], closed: [], shown: 0, total: 0 } as const
 
 const OK_RESPONSE: Extract<BacklogResponse, { ok: true }> = {
   ok: true,
@@ -29,7 +30,7 @@ const OK_RESPONSE: Extract<BacklogResponse, { ok: true }> = {
       blockers: { ok: true, open: [{ number: 43, title: 'Rate-limit search', url: 'u43', state: 'OPEN' }], shown: 1, total: 1 },
       blocking: { ok: true, open: [{ number: 50, title: 'Ship it', url: 'u50', state: 'OPEN' }], shown: 1, total: 1 },
       parent: { ok: true, parent: { number: 41, title: 'Epic', state: 'OPEN' } },
-      children: { ok: true, children: [{ number: 46, title: 'Child', state: 'OPEN', claimed: false, blockers: NO_LINKS }], shown: 1, total: 1 },
+      children: { ok: true, children: [{ number: 46, title: 'Child', state: 'OPEN', claimed: false, blockers: CHILD_NO_LINKS }], shown: 1, total: 1 },
     },
   ],
   scanned: 2,
@@ -122,8 +123,8 @@ function epicResponse(): Extract<BacklogResponse, { ok: true }> {
     blockers: { ok: true, open: blockedBy.map((n) => ({ number: n, title: `T${String(n)}`, url: '', state: 'OPEN' as const })), shown: blockedBy.length, total: blockedBy.length } as const,
   })
   const members = [
-    { number: 42, title: 'A', state: 'OPEN' as const, claimed: false, blockers: NO_LINKS },
-    { number: 43, title: 'B', state: 'OPEN' as const, claimed: false, blockers: { ok: true, open: [{ number: 42, title: 'A', url: '', state: 'OPEN' as const }], shown: 1, total: 1 } as const },
+    { number: 42, title: 'A', state: 'OPEN' as const, claimed: false, blockers: CHILD_NO_LINKS },
+    { number: 43, title: 'B', state: 'OPEN' as const, claimed: false, blockers: { ok: true, open: [{ number: 42, title: 'A', url: '', state: 'OPEN' as const }], closed: [], shown: 1, total: 1 } as const },
   ]
   return {
     ...OK_RESPONSE,
@@ -155,7 +156,7 @@ describe('buildBacklogGroup layout', () => {
     if (group.kind !== 'loaded') throw new Error('expected loaded')
     const first = group.layout.entries[0]
     if (first?.kind !== 'epic') throw new Error('expected an epic first')
-    expect(first.group.waves.map((wave) => [wave.number, wave.rows.map((row) => row.number)])).toEqual([[1, [42]], [2, []]])
+    expect(first.group.waves.map((wave) => [wave.number, wave.rows.map((row) => row.number)])).toEqual([[1, [42]]])
     expect(first.group.epic.number).toBe(41)
   })
 

@@ -13,6 +13,7 @@ import { allowBranchName, proposeAllowRule } from '@/main/writes/allow'
 import { resumeStage, restartStage } from '@/main/stage/recover'
 import { createInterruptedSweeper } from '@/main/stage/sweep'
 import { pathExists } from '@/main/platform/files'
+import { pathOps } from '@/main/platform/paths'
 
 
 
@@ -119,6 +120,9 @@ export function createStageSweeper(registryDeps: RegistryDeps, deps: StageChanne
     removeWorktree: deps.removeWorktree,
     pathExists,
     resume: (id) => resolveStageResume(registryDeps, { id }, deps),
+    restart: (id) => resolveStageRestart(registryDeps, { id }, deps),
+    liveWorktreePaths: () => deps.store.list().flatMap((snapshot) => (snapshot.phase !== 'ended' && snapshot.workspace.worktree !== null ? [snapshot.workspace.worktree.path] : [])),
+    samePath: (a, b) => pathOps.samePath(a, b),
     now: () => new Date(),
     ...hooks,
   })

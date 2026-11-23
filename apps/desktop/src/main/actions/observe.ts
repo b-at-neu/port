@@ -1,4 +1,5 @@
-import type { ApplyLabelsParams, PostCommentParams } from '@/types/writes'
+import type { PostCommentParams, WriteStateParams } from '@/types/writes'
+import { mirrorVocabularyOf } from '@/utils/labels/display'
 
 // State-first, then (only once the state moved, and only when the plan carries one) the comment —
 // a failed comment must still leave the state write standing.
@@ -6,23 +7,27 @@ import type { LabelWriteRequest, WriteOutcome } from '@/types/writes'
 import { stateMoved } from '@/types/writes'
 
 import { observationWrite } from '@/main/dispatch/observation'
+import { observationIntent } from '@/main/incidents/raise'
 import { commentRepeats } from '../../../../../scripts/port-tick/gates'
 
 import type { ApplyObservationResult, ApplyObservationParams } from '@/types/actions'
 
 interface ApplyObservationDeps {
-  readonly writeState: (params: ApplyLabelsParams) => Promise<WriteOutcome>
+  readonly writeState: (params: WriteStateParams) => Promise<WriteOutcome>
   readonly postComment: (params: PostCommentParams) => Promise<WriteOutcome>
 }
 
 export async function applyObservation(params: ApplyObservationParams, deps: ApplyObservationDeps): Promise<ApplyObservationResult> {
   const plan = observationWrite(params.observation, params.item, params.entry.config.vocabulary, params.entry.config.branches.integration)
+  const incident = observationIntent(params.observation, params.item, plan, params.snapshotAt ?? null)
   const request: LabelWriteRequest = {
+    ...(incident === null ? {} : { incident }),
     repoId: params.entry.id,
     repo: params.entry.config.repo,
     kind: params.observation.itemKind,
     number: params.observation.number,
     vocabulary: params.entry.config.vocabulary,
+    mirror: mirrorVocabularyOf(params.entry.config),
     add: plan.add,
     remove: plan.remove,
     addAssignees: [],

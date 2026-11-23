@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyHandback } from '@/main/stage/handback'
+import { classifyHandback, isTransientNetworkFailure } from '@/main/stage/handback'
 import type { ClassifyHandbackParams } from '@/main/stage/handback'
 
 const BASE: ClassifyHandbackParams = { lastResult: null, end: null, rateLimit: null, usage: null, phase: 'streaming', operatorJoinedAt: null }
@@ -58,6 +58,21 @@ describe('classifyHandback', () => {
   it('classifies error on any other error result, naming the subtype and first line', () => {
     const result = classifyHandback({ ...BASE, lastResult: { subtype: 'error_max_turns', isError: true, text: 'ran out of turns\nmore detail', at: 'now' } })
     expect(result).toEqual({ kind: 'error', detail: 'error_max_turns: ran out of turns', costUsd: null, resetsAt: null, worktree: 'kept', operatorJoined: false, handback: null })
+  })
+
+  it.each(['getaddrinfo EAI_AGAIN api.anthropic.com', "API Error: Can't reach the API server (EAI_AGAIN)", 'read ECONNRESET', 'connect ETIMEDOUT 1.2.3.4:443', 'fetch failed', 'socket hang up', 'getaddrinfo ENOTFOUND x', 'connect ECONNREFUSED 127.0.0.1:1'])(
+    'classifies a network error result (%s) as interrupted, so no label is written',
+    (text) => {
+      const result = classifyHandback({ ...BASE, lastResult: { subtype: 'error_during_execution', isError: true, text, at: 'now' } })
+      expect(result).toMatchObject({ kind: 'interrupted', handback: null, worktree: 'kept' })
+      expect(isTransientNetworkFailure(result?.detail)).toBe(true)
+    },
+  )
+
+  it('matches network text case-insensitively and nothing else', () => {
+    expect(isTransientNetworkFailure('Fetch Failed')).toBe(true)
+    expect(isTransientNetworkFailure('ran out of turns')).toBe(false)
+    expect(isTransientNetworkFailure(null)).toBe(false)
   })
 
   it('classifies interrupted when the phase ended with no lastResult at all', () => {

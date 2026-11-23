@@ -10,7 +10,7 @@ const AT = '2026-01-01T00:00:00.000Z'
 const READY = repositoryState([reconciledItem({ number: 7, matchedKeys: ['marker', 'ready'] })])
 
 function input(overrides: Partial<TransitionInput> = {}): TransitionInput {
-  return { add: ['planning'], remove: ['ready'], expect: { present: ['ready'], absent: [] }, action: 'stage-claim', at: AT, actor: null, ...overrides }
+  return { add: ['planning'], remove: ['ready'], expect: { present: ['ready'], absent: [] }, action: 'stage-claim', at: AT, actor: null, issue: null, ...overrides }
 }
 
 function rig(options: { readonly file?: FileResult<unknown>; readonly write?: () => Promise<FileResult<void>> } = {}) {
@@ -79,6 +79,21 @@ describe('createPipelineStateStore', () => {
   it('refuses a transition on a repository it does not hold', async () => {
     const { store } = rig()
     expect(await store.transition(REPO, { kind: 'issue', number: 7 }, input())).toEqual({ ok: false, reason: 'precondition-failed' })
+  })
+
+  it('records a mirror failure on the item and persists it, and ignores a missing item', async () => {
+    const { store, writes } = rig()
+    await store.seed(REPO, READY)
+    const failure = { at: AT, outcome: { kind: 'item-unavailable' as const } }
+    writes.length = 0
+    await store.recordMirror(REPO, { kind: 'issue', number: 7 }, failure)
+    expect(store.view(REPO)).toMatchObject({ items: [{ mirrorFailure: failure }] })
+    expect(writes).toHaveLength(1)
+    await store.recordMirror(REPO, { kind: 'issue', number: 7 }, failure)
+    await store.recordMirror(REPO, { kind: 'issue', number: 99 }, failure)
+    expect(writes).toHaveLength(1)
+    await store.recordMirror(REPO, { kind: 'issue', number: 7 }, null)
+    expect(store.view(REPO)).toMatchObject({ items: [{ mirrorFailure: null }] })
   })
 
   it('prunes closed items and tracks the rest', async () => {

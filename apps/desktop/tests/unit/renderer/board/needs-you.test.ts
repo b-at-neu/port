@@ -50,6 +50,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     planPresent: null,
     blockers: null,
     blockerComments: null,
+    closingPullRequests: null,
     ...overrides,
   }
 }
@@ -201,7 +202,7 @@ describe('needsYouItems', () => {
   })
 
   it('surfaces every reported labelRepair as a half-labelled item', () => {
-    const labelRepairs = [{ number: 9, kind: 'issue' as const, shape: 'contradictory' as const, labels: ['planning' as const, 'planReview' as const], agent: null, reason: null }]
+    const labelRepairs = [{ number: 9, kind: 'issue' as const, shape: 'plan-missing-approved' as const, labels: ['planApproved' as const], agent: null, reason: null, mirror: null }]
     const items = needsYouItems(snapshotOf([], { tick: [tickReport({ labelRepairs })] }), NOW)
     expect(items).toHaveLength(1)
     expect(items[0]).toMatchObject({ kind: 'half-labelled', number: 9 })
@@ -244,6 +245,7 @@ describe('needsYouItems', () => {
       detail: null,
       resetsAt: null,
       costUsd: null,
+      networkRetries: 0,
     }
     const items = needsYouItems(snapshotOf([], { dispatch: [dispatchStatus({ interrupted: [interrupted] })] }), NOW)
     expect(items).toHaveLength(1)

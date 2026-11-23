@@ -6,6 +6,8 @@
 
 **One ownership record decides who runs a checkout, full stop.** Every write either cockpit makes — a human decision or a machine observation alike — is made only by whichever side the record names, `app` or `terminal`; the other side makes no GitHub write at all while that holds. There is no more per-scope split and no more "either — convergent" category: the write chokepoint (`main/writes/apply.ts`'s `applyLabels`/`postComment`) reads the one record before every write, uniformly, and refuses outright when a terminal cockpit holds it. An **absent** record — nobody has run this checkout yet — refuses nothing: either side may act, the same as before any claim existed.
 
+Ownership decides who writes, the app's store decides what stage a ticket is at, and labels decide neither: they are a mirror the app writes (`plugins/port/docs/STATE.md`).
+
 This replaces the two gate-claim scopes (`plan-gate`, `dispatch`) #92/#265/#292 built up over time. Splitting authority by *what kind of write* turned out to be more machinery than the actual question needed: the operator never wants the app and a terminal cockpit answering the same repository's gates and dispatching its stage agents at once, for any reason. One record, one verdict, answers that directly.
 
 ## The ownership record
@@ -35,7 +37,7 @@ This replaces the two gate-claim scopes (`plan-gate`, `dispatch`) #92/#265/#292 
 | `terminal` | same, `owner: "terminal"` | refuses Run/Drain and every write; read-only board | proceeds — re-entrant, so a crashed earlier session reads the same record and carries on |
 | `unreadable` | unparseable, not an object, unknown `owner`, or missing `since` | refuses as `terminal` does | refuses |
 
-**Lifecycle.** The app takes ownership when the operator runs or drains a repository, and gives it up on pause and quit. A terminal cockpit takes ownership at its own preflight, the moment it starts on an `absent` record, and never gives it up on its own — there is no expiry and no automatic release, because an idle terminal looks identical to a crashed one and this app cannot tell the two apart. The operator clears a stale `terminal` record from inside the app, through **Take over**: a confirmed, explicit action that overwrites the record with `owner: "app"` and starts running. **Neither side ever edits the record to merely report state** — writing it always means taking or releasing ownership, nothing short of that.
+**Lifecycle.** The app takes ownership when the operator runs or drains a repository, and gives it up on pause and quit. A terminal cockpit takes ownership at its own preflight, the moment it starts on an `absent` record, and never gives it up on its own — there is no expiry and no automatic release, because an idle terminal looks identical to a crashed one and this app cannot tell the two apart. The operator clears a stale `terminal` record from inside the app, through **Take over**: a confirmed, explicit action that overwrites the record with `owner: "app"` and starts running. **Neither side ever edits the record to merely report state** — writing it always means taking or releasing ownership, nothing short of that. A repository with `appOnly` set is refused by the terminal cockpit at preflight whatever the record says, so the record's `terminal` verdict only ever arises on a legacy repository.
 
 **Implemented.** `main/dispatch/ownership.ts` is the app's own reader and writer (`readOwnership`, `takeOwnership`, `releaseOwnership`), and `plugins/port/hooks/lib/ownership-rules.mjs`'s `classifyOwnership` is its pure-JS mirror, pinned field-for-field by `scripts/checks/cockpit-ownership.ts` against a shared fixture set. The guard hook's two rules — `dispatchDenial` (the `Agent`-call arm) and `cockpitWriteDenial` (the write-tool arm) — live in the same file; the cockpit's own stand-down is the prose half of the same rail, in `PIPELINE.md` and `pipeline/PREFLIGHT.md`/`SKILL.md`.
 
@@ -70,6 +72,8 @@ Three rules govern every one of them: **abort, never resolve** · **show both re
 
   > **#148 moved while you were deciding.** You approved a plan for an issue at `plan review`; GitHub has it at `plan approved`, read 2s ago. Nothing was written.
   > **[Show me the current state]** · **[Dismiss]**
+
+  Since #748 the observed side is the store's stage for the ticket, not GitHub's labels.
 
 - **`unattributed-transition`** (the poll saw a change this app did not make). The honest limit is stated in the copy itself, because GitHub's timeline attributes both writers to the same account:
 

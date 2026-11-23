@@ -1,7 +1,30 @@
-import type { BacklogAssigneeView, BacklogEpicSummary, BacklogEpicSummaryView, BacklogLinkList, BacklogLinkListView } from '@/types/backlog'
+import type { BacklogAssigneeView, BacklogEpicGroup, BacklogEpicSummary, BacklogEpicSummaryView, BacklogGroupView, BacklogLinkList, BacklogLinkListView } from '@/types/backlog'
+import type { RepoId } from '@/utils/repos'
 
-export function detailPanelId(key: string): string {
-  return `backlog-detail-${key.replace(/[^A-Za-z0-9_-]/g, '-')}`
+export type BacklogRowPress = 'select' | 'open' | 'close'
+
+/** A control or non-primary press only selects; a primary press on the shown row closes it, any other opens. */
+export function backlogRowPress({ key, detailKey, button, onControl }: { readonly key: string; readonly detailKey: string | null; readonly button: number; readonly onControl: boolean }): BacklogRowPress {
+  if (onControl || button !== 0) return 'select'
+  return key === detailKey ? 'close' : 'open'
+}
+
+function searchEpics(epics: readonly BacklogEpicGroup[], number: number): BacklogEpicGroup | null {
+  for (const epic of epics) {
+    if (epic.epic.number === number) return epic
+    const nested = searchEpics(epic.epics, number)
+    if (nested) return nested
+  }
+  return null
+}
+
+export function findEpicGroup(groups: readonly BacklogGroupView[], repoId: RepoId, number: number): BacklogEpicGroup | null {
+  for (const group of groups) {
+    if (group.kind !== 'loaded' || group.repoId !== repoId) continue
+    const found = searchEpics(group.layout.entries.flatMap((entry) => (entry.kind === 'epic' ? [entry.group] : [])), number)
+    if (found) return found
+  }
+  return null
 }
 
 export function linkListView(list: BacklogLinkList): BacklogLinkListView {

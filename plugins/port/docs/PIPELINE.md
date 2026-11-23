@@ -1,6 +1,6 @@
 # Agent Pipeline
 
-This plugin takes GitHub issues from idea to merge-ready pull request with minimal human intervention. A `/port:pipeline` session is the human's cockpit: it polls GitHub, dispatches background stage subagents, relays their questions, and applies every label. Humans converse; they never run `gh` commands. Each operator runs their own cockpit, and every query is scoped to that operator's assigned items (see "Multi-operator partitioning"). GitHub labels remain the durable state machine, so progress is always visible on GitHub and manual intervention always works.
+This plugin takes GitHub issues from idea to merge-ready pull request with minimal human intervention. A `/port:pipeline` session is the human's cockpit: it polls GitHub, dispatches background stage subagents, relays their questions, and applies every label. Humans converse; they never run `gh` commands. Each operator runs their own cockpit, and every query is scoped to that operator's assigned items (see "Multi-operator partitioning"). For the terminal cockpit, GitHub labels are the durable state machine; the desktop app keeps state in its own store and labels only mirror it (`STATE.md`).
 
 **This document is the single source of truth for the operating rules, label lifecycle, permission model, and output formats.** Every stage agent reads it before working and restates only the rules unique to itself.
 
@@ -11,6 +11,7 @@ Agents and skills reference it as `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md`, whic
 | File | Holds |
 | --- | --- |
 | `FORMATS.md` | Output formats — writing style, the implementation plan, reviews and revisions, approval withdrawn, rebase required, the pull request description, commit messages |
+| `STATE.md` | Pipeline state in the app — the store, the mirror, the seven labels, `labels`/`states`, `appOnly`, which label reads are allowed, the legacy terminal cockpit |
 | `RECOVERY.md` | Escalation, Liveness, the Rebase conflict protocol, Stopping and draining, the Recovery runbook, reading current state without the cockpit |
 
 ## Configuration
@@ -29,7 +30,7 @@ Throughout this document:
 | `<integration>` | `branches.integration` — what feature pull requests target |
 | `<production>` | `branches.production` — what releases promote to; null in a single-branch repository, where there is no release flow |
 
-Label names are written as their defaults (`ready`, `plan review`, …). A repository may rename any of them through `labels`, in which case the renamed string is what agents read and write.
+Label names are written as their defaults (`ready`, `plan review`, …). A repository may rename any of them through `labels` and `states` (an app-only repository: see `STATE.md`), in which case the renamed string is what agents read and write.
 
 **One section is an optional subsystem**, marked at its heading and inert when its flag is false: "CI merge gate" (`modules.approvalGate`). When the module is off, its labels are never created, its queries never run, and the agents carry no instructions about it.
 
@@ -51,7 +52,7 @@ sessionRequiredPaths += infra/**        # terraform is operator-only here
 
 **Grammar**, one entry per non-blank line: split on the first ` = ` or ` += `; everything left is the dotted path, trimmed, everything right is the value then the reason after the first ` # `. **A reason is required** — an undocumented override is what this mechanism forbids. `+=` is legal only for `sessionRequiredPaths` and `concurrency.sharedFiles`, and only ever appends; neither can be narrowed. No globs on the left-hand side.
 
-**Categories**: `checks.<rollup check name>` (`blocking`, the default, or `infrastructure`) · `labels.<key>` · `branches.integration`/`branches.production` · `models.<plan|impl|review|revise>` · `modules.<approvalGate|release|scope>` · `reviewCycleCap` · `concurrency.overlapThreshold` · `concurrency.sharedFiles` (`+=` only) · `sessionRequiredPaths` (`+=` only). **`commands.*` and `extraAllow` are the sole non-overridable exception**, refused by name; every other schema key (`repo`, `tracker`, `docs.*`, `release.*`, `budget.*`) is refused as simply not overridable. Coding and quality standards stay prose, governed by `standards-precedence` — not enumerable, so no parsed entry.
+**Categories**: `checks.<rollup check name>` (`blocking`, the default, or `infrastructure`) · `labels.<key>` · `states.<key>` · `branches.integration`/`branches.production` · `models.<plan|impl|review|revise>` · `modules.<approvalGate|release|scope>` · `reviewCycleCap` · `concurrency.overlapThreshold` · `concurrency.sharedFiles` (`+=` only) · `sessionRequiredPaths` (`+=` only). **`commands.*` and `extraAllow` are the sole non-overridable exception**, refused by name; every other schema key (`repo`, `tracker`, `docs.*`, `release.*`, `budget.*`) is refused as simply not overridable. An app-only repository (`appOnly` in its config) takes `labels.port|needsYou` and `states.*`; every other repository takes the legacy `labels.*` keys and refuses `states.*`. Coding and quality standards stay prose, governed by `standards-precedence` — not enumerable, so no parsed entry.
 
 **Fails closed on the entry, open on the run.** A line that fails to parse, names a non-overridable or unknown path, carries a bad value type, uses `+=` where it is not allowed, or omits its reason is refused: the port value stands for that one entry, the refusal is reported, and nothing else in the block is affected. An absent block reports nothing at all — every category behaves byte-identically to today.
 
@@ -252,6 +253,8 @@ Canonical rules every stage agent follows. A Bash command matches the allowlist 
 
 ## Label lifecycle
 
+The terminal cockpit's vocabulary. An app-only repository uses the seven labels in `STATE.md` instead, and the terminal cockpit refuses it.
+
 Rule: **every stage agent's first action is swapping its trigger label for its in-flight label.** Absence of a trigger label means the cockpit skips the item, so a tick can never double-dispatch. **An in-flight label means a stage *claimed* the item, never that an agent is still alive** — a crashed or killed agent leaves the label in place with nothing running. Liveness is a separate question, answered by `TaskList`, not by the label; see "Liveness" under Escalation. Recovery either way is re-applying the trigger label (`retry #N`) — for `impl-agent` specifically, that re-dispatch resumes from the branch the prior attempt pushed rather than re-implementing it, per `RECOVERY.md` → "Resume protocol".
 
 **The `<labels.X>` placeholder is a config lookup, never a label name.** `X` is a `.claude/port.config.json` `labels` key from the `Config key` column below; the resolved name a `gh` call actually uses is `labels[key] ?? default` — the repository's override when `labels` sets one, otherwise the `Label` column's default. So `<labels.planApproved>` resolves to `plan approved` in a repository with no override, never to the literal string `planApproved`. Because `gh issue list --label <unknown>` returns `[]` with exit code 0, a component that types the key instead of the resolved name gets a silently empty result, never an error — resolve every name from this table (or the live config) before issuing a `--label` argument.
@@ -363,9 +366,9 @@ A record never expires — no `since` age is ever compared against a clock — b
 
 > **Module: `approvalGate`.** Skip this section when the flag is false. Nothing else changes: `review-agent` still applies `approved` and the cockpit still announces it, but the merge gate is conversational rather than enforced.
 
-A workflow gates pull requests into `<integration>` on the `approved` label, **but only when the pull request carries `claude`** (a job-level condition). Every other pull request — human, dependency bot — gets a skipped check run, which GitHub counts as satisfied, so it merges on its own merits.
+The gate is on because the workflow file exists. It gates a pull request into `<integration>` that carries the marker (`port`, or `claude` on a legacy repository), a job-level condition. On an app-only repository that pull request merges once it has `approved` and none of `needs you` or the four non-terminal states (`planning`, `implementing`, `reviewing`, `revising`). A legacy repository blocks on its in-flight and gate labels. Names match case-insensitively. Every other pull request — human, dependency bot — gets a skipped check run, which GitHub counts as satisfied, so it merges on its own merits.
 
-This is deliberately **fail-open**: an unlabelled pipeline pull request is indistinguishable in CI from a human one and simply loses its gate. Nothing in the workflow can close that, so the mitigations live upstream — `impl-agent` passes `--label "claude"` at creation time so the gate is live on the first event, and the cockpit's **ungated sweep** reports any tracked pull request missing it. The ungated sweep reads the same unconditional open-pull-request alias the duplicate-pull-request sweep also needs (#220) — only its own filter and report stay module-gated; the alias itself is fetched every tick regardless of `approvalGate`.
+This is deliberately **fail-open**: a pipeline pull request without the marker is indistinguishable in CI from a human one and simply loses its gate. Nothing in the workflow can close that, so the mitigations live upstream, one per writer. The terminal `impl-agent` passes `--label "<labels.marker>"` at creation and the **ungated sweep** reports a tracked pull request missing it. The app writes `port` from the `pr-opened` hand-back, rewrites it on every mirror write, and reports a failed write under Label problems. The ungated sweep reads the same unconditional open-pull-request alias the duplicate-pull-request sweep also needs (#220) — only its own filter and report stay module-gated; the alias itself is fetched every tick regardless of `approvalGate`.
 
 **Never narrow the workflow's trigger to exclude a pull request.** A workflow that never runs creates no check run, leaving a required check pending forever. For the same reason, the workflow is scoped to `<integration>` only — release pull requests into `<production>` carry no pipeline labels and must not be gated. In single-branch mode that carve-out is vacuous: every pull request targets `<integration>`, so every pipeline pull request is gated.
 

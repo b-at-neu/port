@@ -6,7 +6,7 @@ import { resolveVocabulary } from '@/utils/labels/vocabulary'
 const VOCABULARY = resolveVocabulary({})
 const STORE: PipelineView = {
   kind: 'store',
-  items: [{ kind: 'issue', number: 7, keys: ['planApproved'], marked: true, autoPlan: true, claimedAt: null, reviewCycles: 0, history: [], updatedAt: 't' }],
+  items: [{ kind: 'issue', number: 7, keys: ['planApproved'], marked: true, autoPlan: true, claimedAt: null, reviewCycles: 0, history: [], updatedAt: 't', issue: null, mirrorFailure: null }],
 }
 
 describe('stateLabelsOf', () => {

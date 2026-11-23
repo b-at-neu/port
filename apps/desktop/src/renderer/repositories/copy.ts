@@ -66,6 +66,8 @@ export function diagnosticCopy(diagnostic: RepoDiagnostic): string {
     }
     case 'git-unavailable':
       return "Couldn't run git, so branch checks were skipped."
+    case 'legacy-label-overrides':
+      return `Old label names in config. .claude/port.config.json renames labels from the old set (${diagnostic.keys.join(', ')}). They still apply here. Run /port:init to move this repository to the new labels.`
     case 'override-refused':
       return `CLAUDE.md override refused: ${diagnostic.line} — ${diagnostic.reason}. The port value stands.`
   }
@@ -98,7 +100,7 @@ export function moduleSummary(modules: ResolvedRepoConfig['modules']): string {
 // branch alone, never 'dev → null'.
 export function summaryParts(config: ResolvedRepoConfig): readonly string[] {
   const branchSummary = config.branches.production === null ? config.branches.integration : `${config.branches.integration} → ${config.branches.production}`
-  const labelCount = config.vocabulary.labels.length
+  const labelCount = config.appOnly === true && config.displayVocabulary !== undefined ? config.displayVocabulary.labels.length : config.vocabulary.labels.length
   return [branchSummary, `${labelCount} pipeline labels`, moduleSummary(config.modules)].filter((part) => part !== '')
 }
 
@@ -117,14 +119,18 @@ export function registryBannerCopy(banner: RegistryBanner): string {
 // --- Overview → Labels -------------------------------------------------
 
 // The verdict line's own sentence, by `VocabularyVerdict`.
-export function verdictCopy(verdict: VocabularyVerdict, total: number, missing: number, unverifiedReason: string | undefined): string {
+export function verdictCopy(verdict: VocabularyVerdict, total: number, missing: number, unverifiedReason: string | undefined, appOnly = false): string {
   switch (verdict) {
     case 'verified':
       return `All ${String(total)} labels exist on GitHub.`
     case 'partial':
-      return `${String(missing)} of ${String(total)} labels are missing on GitHub. Items carrying them won't show.`
+      return appOnly
+        ? `${String(missing)} of ${String(total)} labels are missing on GitHub. Run /port:init to create the missing labels.`
+        : `${String(missing)} of ${String(total)} labels are missing on GitHub. Items carrying them won't show.`
     case 'mis-resolved':
-      return `None of the ${String(total)} labels this config resolves exist on GitHub. Check \`labels\` in .claude/port.config.json and the CLAUDE.md overrides.`
+      return appOnly
+        ? `None of the ${String(total)} labels this config resolves exist on GitHub. Run /port:init to create them, or check \`labels\` and \`states\` in .claude/port.config.json and the CLAUDE.md overrides.`
+        : `None of the ${String(total)} labels this config resolves exist on GitHub. Check \`labels\` in .claude/port.config.json and the CLAUDE.md overrides.`
     case 'unverified':
       return `Couldn't check labels on GitHub — ${unverifiedReason ?? 'unknown reason'}.`
   }
@@ -138,9 +144,9 @@ export function labelSourceCopy(source: LabelSource): string {
 export function vocabularyProblemCopy(problem: VocabularyProblem): string {
   switch (problem.kind) {
     case 'unknown-key':
-      return `'${problem.key}' in labels isn't a known label key.`
+      return `'${problem.key}' in the config isn't a known label key.`
     case 'invalid-override':
-      return `labels.${problem.key} is ${JSON.stringify(problem.value)}, not a non-empty string — the default name stands.`
+      return `${problem.key} is ${JSON.stringify(problem.value)}, not a non-empty string — the default name stands.`
     case 'collision':
       return `${problem.keys.join(', ')} all resolve to the name '${problem.name}' — only one can match on GitHub.`
     case 'case-mismatch':

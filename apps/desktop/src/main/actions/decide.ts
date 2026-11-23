@@ -1,6 +1,7 @@
-import type { ApplyLabelsParams, PostCommentParams } from '@/types/writes'
+import type { PostCommentParams, WriteStateParams } from '@/types/writes'
+import { mirrorVocabularyOf } from '@/utils/labels/display'
 import type { FetchItemsByNumberParams } from '@/types/github'
-import type { ReadyEntry, RebaseDecision, RebasePick, UnblockRoute } from '@/types/actions'
+import type { ReadyEntry, RebaseDecision, RebasePick } from '@/types/actions'
 
 // applyItemDecision — unblock and revise, the comment-then-swap write
 // `main/actions/gate.ts`'s own `gateAnswer` already establishes.
@@ -20,7 +21,7 @@ import { findRepoState, movedResult } from '@/main/actions/apply'
 import type { ApplyItemDecisionParams } from '@/types/actions'
 
 export interface ApplyItemDecisionDeps {
-  readonly writeState: (params: ApplyLabelsParams) => Promise<WriteOutcome>
+  readonly writeState: (params: WriteStateParams) => Promise<WriteOutcome>
   readonly stateLabels: StateLabelsReader
   readonly postComment: (params: PostCommentParams) => Promise<WriteOutcome>
   readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
@@ -57,6 +58,10 @@ export async function applyItemDecision(params: ApplyItemDecisionParams, deps: A
     throw new Error(`unblock route '${String(request.route)}' does not fit ${item.kind} #${String(request.number)}`)
   }
 
+  if (request.decision === 'unblock' && 'routes' in availability.context && (request.route === null || !availability.context.routes.includes(request.route))) {
+    return { ok: false, reason: 'refused', refusal: 'route-unavailable' }
+  }
+
   const headRefOid = 'headRefOid' in availability.context ? availability.context.headRefOid : null
   if (request.decision === 'revise') {
     if (request.note === null || headRefOid === null) throw new Error(`'revise' requires a note and a head SHA for #${String(request.number)}`)
@@ -66,7 +71,7 @@ export async function applyItemDecision(params: ApplyItemDecisionParams, deps: A
 
   const decisions = 'decisions' in availability.context ? availability.context.decisions : []
   const picks = request.picks ?? []
-  const picksIssue = picksRefusal(decisions, picks, request.route)
+  const picksIssue = picksRefusal(decisions, picks)
   if (picksIssue !== null) return { ok: false, reason: 'refused', refusal: 'picks-invalid', problem: picksIssue }
 
   const viewer = repoState.viewer
@@ -112,10 +117,8 @@ export async function applyItemDecision(params: ApplyItemDecisionParams, deps: A
   return { ok: true, comment, labels }
 }
 
-// Rebase decisions only ever go back to revision, the one stage that applies them.
-function picksRefusal(decisions: readonly RebaseDecision[], picks: readonly RebasePick[], route: UnblockRoute | null): string | null {
+function picksRefusal(decisions: readonly RebaseDecision[], picks: readonly RebasePick[]): string | null {
   if (decisions.length === 0) return picks.length === 0 ? null : 'unexpected'
-  if (route !== 'revision') return 'route'
   return picksProblem(decisions, picks)
 }
 
@@ -134,6 +137,7 @@ function buildWriteRequest(entry: ReadyEntry, kind: ReconciledItem['kind'], numb
     kind,
     number,
     vocabulary: entry.config.vocabulary,
+    mirror: mirrorVocabularyOf(entry.config),
     add: plan.add,
     remove: plan.remove,
     addAssignees: [],

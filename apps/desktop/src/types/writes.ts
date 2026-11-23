@@ -1,4 +1,5 @@
 // Renderer-safe contract for the write chokepoint: every mutation the app makes to GitHub is expressed in `LabelKey` values and a stated precondition, never a raw argv or a bypassing `gh` call. No import here may reach a Node builtin.
+import type { MirrorVocabulary } from '@/utils/labels/display'
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { ReclaimerFailureKind } from '@/types/reclaimer'
@@ -6,6 +7,7 @@ import type { PillStatus } from '@/types/components'
 import type { GhRunner, GitRunner, PathOps } from '@/types/platform'
 import type { FetchItemsByNumberParams, ItemsByNumberFetch } from '@/types/github'
 import type { ReleaseAuditEntry } from '@/types/release'
+import type { IncidentIntent } from '@/types/incidents'
 
 export type AssigneeExpectation = { readonly kind: 'any' } | { readonly kind: 'unassigned' } | { readonly kind: 'exactly'; readonly logins: readonly string[] }
 
@@ -22,6 +24,8 @@ export interface LabelWriteRequest {
   readonly kind: 'issue' | 'pull-request'
   readonly number: number
   readonly vocabulary: LabelVocabulary
+  /** Which label set the post-transition state is mirrored as; required so no builder defaults to legacy by accident. */
+  readonly mirror: MirrorVocabulary
   readonly add: readonly LabelKey[]
   readonly remove: readonly LabelKey[]
   readonly addAssignees: readonly string[]
@@ -29,6 +33,8 @@ export interface LabelWriteRequest {
   readonly expect: LabelPrecondition
   /** The operator-facing verb, recorded verbatim in the audit log. */
   readonly action: string
+  /** The anomaly this write acts on; `writeState` records it once the outcome is known. */
+  readonly incident?: IncidentIntent
 }
 
 export interface CommentRequest {
@@ -119,6 +125,8 @@ export interface LabelAuditEntry {
   /** `postComment`'s own field — the comment is audited with its byte length and target, never its text. `null` on every label-write entry. */
   readonly commentBytes: number | null
   readonly result: WriteOutcome
+  /** The `writeState` call this entry belongs to, shared with the incident it raised. */
+  readonly writeId?: string
 }
 
 // The worktree-reclaim arm — `removed`/`failed` are each candidate's own
@@ -162,6 +170,28 @@ export interface AllowAuditEntry {
   readonly failure: string | null
 }
 
+/** One failed-jobs re-run of an Actions run, written once per attempt. */
+export interface RerunAuditEntry {
+  readonly at: string
+  readonly repo: string
+  readonly repoId: RepoId
+  readonly action: 'observe-rerun-checks'
+  readonly number: number
+  readonly check: string
+  readonly runId: string
+  readonly call: readonly string[] | null
+  readonly result: 'applied' | 'failed'
+  readonly failure: string | null
+}
+
+export interface RerunContext {
+  readonly repo: string
+  readonly repoId: RepoId
+  readonly auditDir: string
+  readonly gh?: GhRunner
+  readonly now?: () => Date
+}
+
 export interface AllowWriteContext {
   readonly repo: string
   readonly repoId: RepoId
@@ -174,13 +204,17 @@ export interface AllowWriteContext {
 
 export type AllowWriteResult = { readonly ok: true; readonly number: number; readonly url: string } | { readonly ok: false; readonly step: 'commit' | 'pr'; readonly message: string }
 
-export type AuditEntry = LabelAuditEntry | ReclaimAuditEntry | PurgeAuditEntry | ReleaseAuditEntry | AllowAuditEntry
+export type AuditEntry = LabelAuditEntry | ReclaimAuditEntry | PurgeAuditEntry | ReleaseAuditEntry | AllowAuditEntry | RerunAuditEntry
 
 const RELEASE_ACTIONS: readonly string[] = ['release-bump', 'release-pr', 'release-publish', 'release-hook']
 
-// The worktree, release and allow actions are the only `action` values `LabelAuditEntry` never takes.
+// The worktree, release, allow and re-run actions are the only `action` values `LabelAuditEntry` never takes.
 export function isLabelAuditEntry(entry: AuditEntry): entry is LabelAuditEntry {
-  return entry.action !== 'worktree-reclaim' && entry.action !== 'worktree-purge' && entry.action !== 'allow-propose' && !RELEASE_ACTIONS.includes(entry.action)
+  return entry.action !== 'worktree-reclaim' && entry.action !== 'worktree-purge' && entry.action !== 'allow-propose' && entry.action !== 'observe-rerun-checks' && !RELEASE_ACTIONS.includes(entry.action)
+}
+
+export function isRerunAuditEntry(entry: AuditEntry): entry is RerunAuditEntry {
+  return entry.action === 'observe-rerun-checks'
 }
 
 export function isAllowAuditEntry(entry: AuditEntry): entry is AllowAuditEntry {
@@ -235,7 +269,7 @@ export interface PostCommentParams {
   readonly pathOps?: PathOps
 }
 
-export interface ApplyLabelsParams {
+export interface WriteStateParams {
   readonly request: LabelWriteRequest
   readonly repoRoot: string
   readonly auditDir: string
@@ -246,5 +280,28 @@ export interface ApplyLabelsParams {
   readonly pathOps?: PathOps
 }
 
-/** Every pipeline write goes through this: the store precondition, the store commit, then the label mirror. */
-export type WriteState = (params: ApplyLabelsParams) => Promise<WriteOutcome>
+/** One label write on resolved names: the mirror call. `observed` is the read the diff was computed from. */
+export interface ApplyLabelsParams {
+  readonly repo: string
+  readonly repoId: RepoId
+  readonly kind: 'issue' | 'pull-request'
+  readonly number: number
+  readonly action: string
+  readonly addNames: readonly string[]
+  readonly removeNames: readonly string[]
+  readonly addAssignees: readonly string[]
+  readonly removeAssignees: readonly string[]
+  readonly observed: ObservedItem
+  readonly repoRoot: string
+  readonly auditDir: string
+  readonly writeId?: string
+  readonly gh?: GhRunner
+  readonly git?: GitRunner
+  /** The re-read a failed call reports as `reread`. */
+  readonly fetchItemsByNumber?: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
+  readonly now?: () => Date
+  readonly pathOps?: PathOps
+}
+
+/** Every pipeline write goes through this: the store precondition, the store commit, then the full-state label mirror. */
+export type WriteState = (params: WriteStateParams) => Promise<WriteOutcome>

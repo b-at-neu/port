@@ -1,14 +1,19 @@
 // Per-repository pending stage label writes: serialized, retried a bounded number of times, and reported rather than guessed.
 import { eventWrites, stageModeFor } from '@/main/dispatch/transitions'
+import { draftOf, handoffRefusalIntent, noRelated } from '@/main/incidents/raise'
 import type { ReadyEntry } from '@/types/actions'
+import type { RecordIncident } from '@/types/incidents'
 import type { SessionKey } from '@/types/hosting'
-import type { StageEvent, StageLabelResult, StageTransitionResult } from '@/types/stage-labels'
+import type { StageEvent, StageLabelResult, StagePlanFile, StageTransitionResult } from '@/types/stage-labels'
 import type { StageOutcome } from '@/types/stage-session'
 import type { TickActionable } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
 
 /** Total attempts for one hand-back write, the first included. */
 export const HANDOFF_ATTEMPTS = 3
+
+/** A retryable refusal keeps retrying this long after its first attempt, so a write that fails while DNS comes back after a wake still lands. */
+export const HANDOFF_RETRY_WINDOW_MS = 600_000
 
 type HandoffRecord = Pick<TickActionable, 'number' | 'kind' | 'agent' | 'trigger'> & { readonly sessionKey: SessionKey }
 
@@ -19,27 +24,34 @@ interface PendingWrite {
   /** `null` for a write nobody reads a result for, such as the next turn after a block. */
   readonly resultKey: SessionKey | null
   attempts: number
+  /** Epoch milliseconds of the first attempt, `null` before it. */
+  firstAttemptAt: number | null
 }
 
 interface StageHandoffDeps {
-  readonly write: (params: { readonly entry: ReadyEntry; readonly record: HandoffRecord; readonly event: StageEvent; readonly auditDir: string }) => Promise<StageTransitionResult>
+  readonly write: (params: { readonly entry: ReadyEntry; readonly record: HandoffRecord; readonly event: StageEvent; readonly auditDir: string; readonly scratchDir: string }) => Promise<StageTransitionResult>
   readonly auditDir: string
+  readonly scratchDir: string
   readonly onChange: () => void
+  readonly recordIncident: RecordIncident
   /** Asks for one GitHub read of this repository alone, so the next stage sees the label just written. */
   readonly requestRead: (repoId: RepoId) => void
+  readonly now: () => Date
 }
 
 export interface StageHandoff {
   /** Called once per pass, so a retry has the repository's current entry. */
   remember(entry: ReadyEntry): void
-  /** Fire-and-forget: plans and writes this outcome's label move, serialized per repository. */
-  settle(repoId: RepoId, record: HandoffRecord, outcome: StageOutcome): void
+  /** Fire-and-forget: plans and writes this outcome's label move, serialized per repository. `plan` is captured once and replayed on every retry, since the worktree is gone by then. */
+  settle(repoId: RepoId, record: HandoffRecord, outcome: StageOutcome, plan: StagePlanFile | null): void
   /** The session's next turn began after a block. */
   resumedTurn(repoId: RepoId, record: HandoffRecord): void
   /** Retries every pending write for the repository; resolves once each has been attempted. */
   retryPending(repoId: RepoId): Promise<void>
   /** `null` means pending, or that this outcome writes nothing. */
   resultFor(sessionKey: SessionKey): StageLabelResult | null
+  /** The tickets with a write still being attempted for the repository — their session is settling, not dead. */
+  pendingNumbers(repoId: RepoId): ReadonlySet<number>
 }
 
 export function createStageHandoff(deps: StageHandoffDeps): StageHandoff {
@@ -58,14 +70,21 @@ export function createStageHandoff(deps: StageHandoffDeps): StageHandoff {
     const entry = entries.get(write.repoId)
     if (entry === undefined || pending.get(id) !== write) return
     write.attempts += 1
+    write.firstAttemptAt ??= deps.now().getTime()
     let result: StageTransitionResult
     try {
-      result = await deps.write({ entry, record: write.record, event: write.event, auditDir: deps.auditDir })
+      result = await deps.write({ entry, record: write.record, event: write.event, auditDir: deps.auditDir, scratchDir: deps.scratchDir })
     } catch (error) {
       result = { kind: 'refused', reason: 'write-failed', retryable: true, detail: error instanceof Error ? error.message : String(error) }
     }
-    if (result.kind === 'refused' && result.retryable && write.attempts < HANDOFF_ATTEMPTS) return
+    const windowOpen = deps.now().getTime() - write.firstAttemptAt < HANDOFF_RETRY_WINDOW_MS
+    if (result.kind === 'refused' && result.retryable && (write.attempts < HANDOFF_ATTEMPTS || windowOpen)) return
     pending.delete(id)
+    if (result.kind === 'refused') {
+      const { record } = write
+      const intent = handoffRefusalIntent(record, result.reason, write.attempts, result.retryable)
+      void deps.recordIncident(draftOf(intent, { repo: entry.config.repo, kind: record.kind, number: record.number }, { kind: result.reason }, noRelated())).catch(() => undefined)
+    }
     if (write.resultKey !== null) results.set(write.resultKey, result.kind === 'applied' ? { kind: 'applied' } : { kind: 'refused', reason: result.reason, detail: result.detail })
     if (write.event.kind === 'outcome' && write.event.outcome === 'completed') deps.requestRead(write.repoId)
     deps.onChange()
@@ -80,19 +99,20 @@ export function createStageHandoff(deps: StageHandoffDeps): StageHandoff {
     remember(entry) {
       entries.set(entry.id, entry)
     },
-    settle(repoId, record, outcome) {
-      const event: StageEvent = { kind: 'outcome', outcome: outcome.kind, handback: outcome.handback }
+    settle(repoId, record, outcome, plan) {
+      const event: StageEvent = { kind: 'outcome', outcome: outcome.kind, handback: outcome.handback, plan }
       if (!eventWrites(event, stageModeFor(record.agent, record.trigger))) return
       results.delete(record.sessionKey)
-      enqueue(record.sessionKey, { repoId, record, event, resultKey: record.sessionKey, attempts: 0 })
+      enqueue(record.sessionKey, { repoId, record, event, resultKey: record.sessionKey, attempts: 0, firstAttemptAt: null })
     },
     resumedTurn(repoId, record) {
-      enqueue(`resumed:${record.sessionKey}`, { repoId, record, event: { kind: 'resumed-turn' }, resultKey: null, attempts: 0 })
+      enqueue(`resumed:${record.sessionKey}`, { repoId, record, event: { kind: 'resumed-turn' }, resultKey: null, attempts: 0, firstAttemptAt: null })
     },
     async retryPending(repoId) {
       const due = [...pending.entries()].filter(([, write]) => write.repoId === repoId)
       await Promise.all(due.map(([id, write]) => serialize(repoId, () => attempt(id, write))))
     },
     resultFor: (sessionKey) => results.get(sessionKey) ?? null,
+    pendingNumbers: (repoId) => new Set([...pending.values()].filter((write) => write.repoId === repoId && write.event.kind === 'outcome').map((write) => write.record.number)),
   }
 }

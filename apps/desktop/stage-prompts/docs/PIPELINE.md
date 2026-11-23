@@ -1,6 +1,6 @@
 # Agent Pipeline
 
-This plugin takes GitHub issues from idea to merge-ready pull request with minimal human intervention. A `/port:pipeline` session is the human's cockpit: it polls GitHub, dispatches background stage subagents, relays their questions, and applies every label. Humans converse; they never run `gh` commands. Each operator runs their own cockpit, and every query is scoped to that operator's assigned items (see "Multi-operator partitioning"). GitHub labels remain the durable state machine, so progress is always visible on GitHub and manual intervention always works.
+This plugin takes GitHub issues from idea to merge-ready pull request with minimal human intervention. A `/port:pipeline` session is the human's cockpit: it polls GitHub, dispatches background stage subagents, relays their questions, and applies every label. Humans converse; they never run `gh` commands. Each operator runs their own cockpit, and every query is scoped to that operator's assigned items (see "Multi-operator partitioning"). port keeps pipeline state in its own store; labels are a display it writes, and a stage never reads one to decide anything.
 
 **This document is the single source of truth for the operating rules, label lifecycle, permission model, and output formats.** Every stage agent reads it before working and restates only the rules unique to itself.
 
@@ -247,6 +247,7 @@ port moves the ticket's labels, never a stage session. Your stage context alread
 - **Grammar.** `HANDBACK: <token>[ <arg>]` — the **last non-blank line** of your final message, **outside a code fence**, one per message. The token is the first word after the prefix and is case-sensitive; your agent file lists the tokens that are yours.
 - **Three endings.** `QUESTIONS FOR HUMAN:` and `BLOCKED:` pause: the session stays open and port waits for the human's answer. `HANDBACK:` finishes the stage, and the session closes.
 - **Never edit a label.** No label change through `gh issue edit` or `gh pr edit`, no label on `gh pr create`, no `gh api` call to an `issues/<n>/labels` path. A Bash call that tries is denied.
+- **Never edit an issue body.** No `gh issue edit --body`/`--body-file`, and no `gh api` PATCH of an issue. A Bash call that tries is denied. The plan reaches the issue through port.
 - **A line port cannot use leaves the ticket for a human.** A finished stage with no `HANDBACK:` line, or one whose token is not in your agent file's list, moves nothing, and port reports the ticket as needing a person. Never guess a token.
 
 ## Label lifecycle
@@ -360,11 +361,11 @@ A record never expires — no `since` age is ever compared against a clock — b
 
 ### CI merge gate
 
-> **Module: `approvalGate`.** Skip this section when the flag is false. Nothing else changes: `review-agent` still applies `approved` and the cockpit still announces it, but the merge gate is conversational rather than enforced.
+> **Module: `approvalGate`.** Skip this section when the flag is false. Nothing else changes: port still marks the PR `approved` and announces it, but the merge gate is conversational rather than enforced.
 
-A workflow gates pull requests into `<integration>` on the `approved` label, **but only when the pull request carries `claude`** (a job-level condition). Every other pull request — human, dependency bot — gets a skipped check run, which GitHub counts as satisfied, so it merges on its own merits.
+The gate is on because the workflow file exists. It gates a pull request into `<integration>` that carries `port`, a job-level condition, and that pull request merges once it has `approved` and none of `needs you`, `planning`, `implementing`, `reviewing` or `revising`. Names match case-insensitively. Every other pull request — human, dependency bot — gets a skipped check run, which GitHub counts as satisfied, so it merges on its own merits.
 
-This is deliberately **fail-open**: an unlabelled pipeline pull request is indistinguishable in CI from a human one and simply loses its gate. Nothing in the workflow can close that, so the mitigations live upstream — `impl-agent` passes `--label "claude"` at creation time so the gate is live on the first event, and the cockpit's **ungated sweep** reports any tracked pull request missing it. The ungated sweep reads the same unconditional open-pull-request alias the duplicate-pull-request sweep also needs (#220) — only its own filter and report stay module-gated; the alias itself is fetched every tick regardless of `approvalGate`.
+This is deliberately **fail-open**: a pipeline pull request without `port` is indistinguishable in CI from a human one and simply loses its gate. Nothing in the workflow can close that, so the mitigation lives upstream: the app writes `port` from the `pr-opened` hand-back, rewrites it on every mirror write, and reports a failed write under Label problems.
 
 **Never narrow the workflow's trigger to exclude a pull request.** A workflow that never runs creates no check run, leaving a required check pending forever. For the same reason, the workflow is scoped to `<integration>` only — release pull requests into `<production>` carry no pipeline labels and must not be gated. In single-branch mode that carve-out is vacuous: every pull request targets `<integration>`, so every pipeline pull request is gated.
 

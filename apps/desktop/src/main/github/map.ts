@@ -173,7 +173,7 @@ function closingPullRequestsOf(value: unknown, errored: boolean): readonly Closi
     if (typeof node !== 'object' || node === null) continue
     const raw = node as Record<string, unknown>
     if (typeof raw.number !== 'number' || (raw.state !== 'OPEN' && raw.state !== 'CLOSED' && raw.state !== 'MERGED')) continue
-    out.push({ number: raw.number, state: raw.state })
+    out.push({ number: raw.number, state: raw.state, headRefName: typeof raw.headRefName === 'string' ? raw.headRefName : null })
   }
   return out
 }

@@ -17,6 +17,7 @@ function record(overrides: Partial<StageRecord> = {}): StageRecord {
     trigger: 'planApproved',
     state: 'started',
     at: '2026-09-05T14:00:00.000Z',
+    endedAt: null,
     detail: null,
     outcome: null,
     claudeSessionId: null,

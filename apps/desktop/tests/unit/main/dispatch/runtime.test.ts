@@ -16,6 +16,7 @@ const ACTIONS: DispatchActions = {
   stageLabels: { claim: () => Promise.resolve({ kind: 'applied' }), transition: () => Promise.resolve({ kind: 'applied' }) },
   escalateToHuman: () => Promise.reject(new Error('unused')),
   applyObservation: () => Promise.reject(new Error('unused')),
+  rerunChecks: () => Promise.reject(new Error('unused')),
   autoApprovePlan: () => Promise.reject(new Error('unused')),
 }
 
@@ -69,13 +70,14 @@ function runtimeDeps(overrides: Partial<Parameters<typeof createDispatchRuntime>
     actions: ACTIONS,
     dirs: { audit: '/audit', scratch: '/scratch' },
     now: () => new Date('2026-01-01T00:00:00Z'),
+    recordIncident: () => Promise.resolve(),
     ...overrides,
   }
 }
 
 const SNAPSHOT = {
   state: {
-    repositories: [{ ok: true, repoId: REPO_ID, repo: 'o/a', displayName: 'o/a', viewer: 'op' }],
+    repositories: [{ ok: true, repoId: REPO_ID, repo: 'o/a', displayName: 'o/a', viewer: 'op', items: [], freshness: { github: { at: '2026-01-01T00:00:00Z' } } }],
     sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: 't' },
     readAt: 't',
   },
@@ -115,7 +117,7 @@ describe('createDispatchRuntime', () => {
     await runtime.dispatcher.consider(SNAPSHOT)
     expect(refreshes).toEqual([])
 
-    runtime.dispatcher.recordOutcome(REPO_ID, SESSION_KEY, COMPLETED)
+    runtime.dispatcher.recordOutcome(REPO_ID, SESSION_KEY, COMPLETED, null)
     await flush()
     expect(refreshes).toEqual([{ repoId: REPO_ID, source: 'github' }])
   })
@@ -123,6 +125,6 @@ describe('createDispatchRuntime', () => {
   it('a hand-back before the watcher is bound requests nothing and throws nothing', async () => {
     const runtime = createDispatchRuntime(runtimeDeps())
     await runtime.dispatcher.consider(SNAPSHOT)
-    expect(() => runtime.dispatcher.recordOutcome(REPO_ID, SESSION_KEY, COMPLETED)).not.toThrow()
+    expect(() => runtime.dispatcher.recordOutcome(REPO_ID, SESSION_KEY, COMPLETED, null)).not.toThrow()
   })
 })

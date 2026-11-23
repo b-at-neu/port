@@ -1,4 +1,4 @@
-import type { DispatchLedger, UnknownStreaks, RefreshMemo, ForceDispatch } from '@/types/tick'
+import type { DispatchLedger, UnknownStreaks, RefreshMemo, RerunMemo, ForceDispatch } from '@/types/tick'
 
 // planTick — one RepositoryState to one TickReport. Pure: no gh, no timer, no write. This app
 // computes the decision and the report; it never writes the escalation itself.
@@ -16,6 +16,7 @@ import { cycleGrantCount, integrationRedGate, mergeabilityRoute, refreshWins, ze
 
 import { RETRY_TRIGGER } from '../../../../../scripts/port-tick/liveness'
 import { observationsOf } from '@/main/tick/observe'
+import { adoptionsOf, heldVerdictAdoption, openPullRequestAdoption } from '@/main/tick/adopt'
 import { partitionOwnership } from '../../../../../scripts/port-tick/classify'
 import { AGENT_FOR_IN_FLIGHT, AGENT_FOR_TRIGGER } from '@/main/tick/routing'
 import { autoApprovalsOf } from '@/main/tick/auto-plan'
@@ -47,6 +48,8 @@ interface PlanTickParams {
   readonly endedStages?: readonly EndedStage[]
   /** The Needs-you "Dispatch anyway" override. `undefined` behaves exactly as today: no candidate ever bypasses the contention gate. */
   readonly forceDispatch?: ForceDispatch
+  /** The head each pull request's failed checks were last re-run on. `undefined` never re-runs a check. */
+  readonly rerunMemo?: RerunMemo
 }
 
 function emptyReport(repoId: RepoId, displayName: string, blind: TickBlind): TickReport {
@@ -153,8 +156,9 @@ function actionableAndHeld(
   checkDispositions: Readonly<Record<string, Disposition>>,
   now: Date,
   integrationChecks: IntegrationChecks | null,
-): { readonly actionable: readonly TickActionable[]; readonly held: readonly TickHeld[] } {
+): { readonly actionable: readonly TickActionable[]; readonly held: readonly TickHeld[]; readonly adoptions: readonly TickObservation[] } {
   const held: TickHeld[] = []
+  const adoptions: TickObservation[] = []
   const refreshBranchNumbers = numbersCarrying(items, 'refreshBranch')
   const refreshingNumbers = numbersCarrying(items, 'refreshing')
 
@@ -236,18 +240,36 @@ function actionableAndHeld(
         continue
       }
     }
+    // A head that already has an approving verdict adopts it: neither held nor reviewed again.
+    if (agent === 'review') {
+      const adoption = heldVerdictAdoption(item)
+      if (adoption !== null) {
+        adoptions.push(adoption)
+        continue
+      }
+    }
     // The zero-diff gate: the one-time re-review permission is inherent in the label state itself.
     if (agent === 'review') {
       // A null rollup was never selected, so the gate gets no check input and escalates.
       const checks = item.checkRollup === null ? undefined : zeroDiffChecksOf(item.checkRollup, checkDispositions, now.toISOString())
       const gate = zeroDiffGate({ reviews: item.reviews ?? undefined, comments: item.comments ?? undefined, headRefOid: item.headRefOid ?? '', checks, escalatedAt: escalatedAtOf(item) })
-      if (gate.action === 'escalate') {
-        held.push({ number: item.number, kind: item.kind, trigger, reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff', reason: gate.reason ?? 'zero-diff' } })
+      // Only the per-head review cap (a second review of one head) is held; any other zero-diff result gets one more review.
+      if (gate.action === 'escalate' && gate.reason === 'sha-cap') {
+        held.push({ number: item.number, kind: item.kind, trigger, reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } })
         continue
       }
       if (gate.action === 'hold-checks' && gate.facts !== undefined) {
         const escalation = { kind: 'check-hold', checks: gate.facts.checks, state: gate.facts.state, escalateAt: gate.facts.escalateAt ?? null } as const
         held.push({ number: item.number, kind: item.kind, trigger, reason: 'check-hold', contention: null, escalation })
+        continue
+      }
+    }
+
+    // An issue whose pull request is already open on its own branch is adopted, never dispatched a second time.
+    if (agent === 'impl') {
+      const adoption = openPullRequestAdoption(item)
+      if (adoption !== null) {
+        adoptions.push(adoption)
         continue
       }
     }
@@ -296,7 +318,7 @@ function actionableAndHeld(
 
   forceDispatch?.prune(repoId, new Set(structuredCandidates.map((c) => c.item)))
 
-  return { actionable: [...ungated, ...forcedActionable, ...gatedActionable], held }
+  return { actionable: [...ungated, ...forcedActionable, ...gatedActionable], held, adoptions }
 }
 
 function claimsOf(
@@ -376,8 +398,10 @@ export function planTick(params: PlanTickParams): TickReport {
     }
   }
 
-  const { actionable, held } = actionableAndHeld(repository.items, repository.viewer, repository.concurrency, reviewCycleCap, repository.repoId, unknownStreaks, holdSessionRequired, params.forceDispatch, checkDispositions, now(), repository.integrationChecks)
+  const { actionable, held, adoptions: triggerAdoptions } = actionableAndHeld(repository.items, repository.viewer, repository.concurrency, reviewCycleCap, repository.repoId, unknownStreaks, holdSessionRequired, params.forceDispatch, checkDispositions, now(), repository.integrationChecks)
   const claims = claimsOf(repository.items, repository.repoId, ledger, startedTasks, readAt, holdSessionRequired, stageLiveness)
+  const claimAdoptions = adoptionsOf({ items: repository.items, claims, viewer: repository.viewer })
+  const adopted = new Set(claimAdoptions.map((adoption) => adoption.number))
 
   const liveNumbers = new Set(startedTasks.map((description) => Number(description.split('#')[1])).filter((n) => !Number.isNaN(n)))
   const { observations: repairObservations, reports: labelRepairs } = repairsOf({
@@ -389,6 +413,8 @@ export function planTick(params: PlanTickParams): TickReport {
   })
 
   const observations: readonly TickObservation[] = [
+    ...claimAdoptions,
+    ...triggerAdoptions,
     ...repairObservations,
     ...observationsOf({
       repoId: repository.repoId,
@@ -398,6 +424,8 @@ export function planTick(params: PlanTickParams): TickReport {
       viewer: repository.viewer,
       refreshMemo,
       checkDispositions,
+      adopted,
+      rerunMemo: params.rerunMemo,
     }),
   ]
 

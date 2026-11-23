@@ -7,10 +7,17 @@ interface DetailPaneProps {
   readonly onClose: () => void
   readonly children: ReactNode
   readonly className?: string
+  readonly 'aria-label'?: string
   readonly 'data-slot'?: string
+  readonly 'data-ticket'?: number
 }
 
-export function DetailPane({ onClose, children, className, 'data-slot': dataSlot }: DetailPaneProps) {
+// Module-level so its identity is stable and React calls it only on attach.
+function focusOnMount(el: HTMLDivElement | null): void {
+  el?.focus()
+}
+
+export function DetailPane({ onClose, children, className, 'aria-label': ariaLabel, 'data-slot': dataSlot, 'data-ticket': dataTicket }: DetailPaneProps) {
   function handleKeyDown(event: KeyboardEvent): void {
     if (event.key === 'Escape') {
       event.stopPropagation()
@@ -20,9 +27,11 @@ export function DetailPane({ onClose, children, className, 'data-slot': dataSlot
 
   return (
     <div
-      ref={(el) => el?.focus()}
+      ref={focusOnMount}
       role="complementary"
+      aria-label={ariaLabel}
       data-slot={dataSlot}
+      data-ticket={dataTicket}
       data-keeps-selection
       tabIndex={-1}
       onKeyDown={handleKeyDown}

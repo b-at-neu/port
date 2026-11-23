@@ -136,6 +136,8 @@ function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispat
     launch: null,
     ledger: { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined, observeUnmatched: () => ({ class: 'no-record' }) },
     refreshMemo: { get: () => undefined, set: vi.fn(), clear: vi.fn() },
+    rerunMemo: { get: () => undefined, set: vi.fn() },
+    rerunChecks: () => Promise.resolve('applied'),
     forceDispatch: { has: () => false, set: vi.fn(), clear: vi.fn(), prune: vi.fn() },
     writeObservation: () => {
       throw new Error('writeObservation should not be invoked unless a test wires its own')
@@ -152,6 +154,7 @@ function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispat
       throw new Error('escalate should not be invoked in this case')
     },
     requestRead: () => undefined,
+    recordIncident: () => Promise.resolve(),
     dirs: { audit: '/audit', scratch: '/scratch' },
     onChange: vi.fn(),
     now: () => new Date('2026-01-01T00:00:00Z'),

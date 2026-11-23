@@ -64,16 +64,16 @@ Where a status colour says what is happening, a phase colour says which pipeline
 
 | Phase | Palette | Label keys | Pill fill / text (light) | Pill fill / text (dark) | Dot (light / dark) |
 | --- | --- | --- | --- | --- | --- |
-| Plan | `plan` | `ready`, `planChangesRequested`, `planning`, `planReview` | `#9333ea` / `#ffffff` | `#9333ea` / `#ffffff` | `#9333ea` / `#a855f7` |
-| Implement | `implement` | `planApproved`, `inProgress` | `#2563eb` / `#ffffff` | `#2563eb` / `#ffffff` | `#2563eb` / `#3b82f6` |
-| Review | `review` | `readyForReview`, `reviewing` | `#facc15` / `#422006` | `#facc15` / `#422006` | `#a68500` / `#facc15` |
-| Revise | `revise` | `needsRevision`, `revising` | `#d61f8a` / `#ffffff` | `#d61f8a` / `#ffffff` | `#d61f8a` / `#ec4899` |
-| Refresh | `refresh` | `refreshBranch`, `refreshing` | `#f4f4f5` / `#3f3f46` | `#2b2f38` / `#d4d4d8` | `#71717a` / `#a1a1aa` |
-| Needs you | `needs-you` | `blocked`, `needsHuman` | `#dc2626` / `#ffffff` | `#dc2626` / `#ffffff` | `#dc2626` / `#ef4444` |
-| Done | `done` | `prOpened`, `approved` | `#22c55e` / `#052e16` | `#22c55e` / `#052e16` | `#16a34a` / `#22c55e` |
+| Plan | `plan` | `planning` | `#9333ea` / `#ffffff` | `#9333ea` / `#ffffff` | `#9333ea` / `#a855f7` |
+| Implement | `implement` | `implementing` | `#2563eb` / `#ffffff` | `#2563eb` / `#ffffff` | `#2563eb` / `#3b82f6` |
+| Review | `review` | `reviewing` | `#facc15` / `#422006` | `#facc15` / `#422006` | `#a68500` / `#facc15` |
+| Revise | `revise` | `revising` | `#d61f8a` / `#ffffff` | `#d61f8a` / `#ffffff` | `#d61f8a` / `#ec4899` |
+| Refresh | `refresh` | — | `#f4f4f5` / `#3f3f46` | `#2b2f38` / `#d4d4d8` | `#71717a` / `#a1a1aa` |
+| Needs you | `needs-you` | `needsYou` | `#dc2626` / `#ffffff` | `#dc2626` / `#ffffff` | `#dc2626` / `#ef4444` |
+| Done | `done` | `approved` | `#22c55e` / `#052e16` | `#22c55e` / `#052e16` | `#16a34a` / `#22c55e` |
 
 - **Queued is a ring, in flight is filled.** A queued trigger label draws its dot as a 1px ring and an in-flight one as a filled dot. The same split holds on GitHub: a trigger is a lighter shade than its in-flight label.
-- **GitHub's in-flight label is the light dot.** Each palette's in-flight label uses exactly its light-theme dot colour, and its triggers sit lighter. Gate and terminal labels sit deeper still. `refresh` is grey, and the markers `claude` and `auto plan` stay neutral off the palette.
+- **GitHub's label is the light dot.** Each palette's one label uses exactly its light-theme dot colour. `refresh` is an app-only phase, so on GitHub a refresh shows as Revising. The `port` marker stays neutral off the palette, in the app's navy accent.
 - **Waiting on you pulses.** A gate that needs the operator (`planReview`, `approved`) pulses in its own phase colour. In the sidebar, a running pipeline session's dot pulses in its phase colour.
 - **`needs-you` overrides.** A gate label, a stalled or interrupted item, and a live stage session waiting on a permission prompt, a question or a `BLOCKED:` hand-back show the `needs-you` palette and pulse, whatever phase they are in. Once the operator answers, the dot goes back to its phase colour.
 - **Blocked is held, not waiting.** A `blocked` ticket keeps the `needs-you` palette but does not pulse on the Board, because it sits in the Blocked section rather than Waiting on you. Only the sidebar dot of a live session with a `BLOCKED:` hand-back still pulses, since that marks the session, not the ticket's place in a queue.
@@ -176,15 +176,15 @@ Dark surface lightness (CIE L*): sidebar 6.3 · background 10.7 · card 15.2 · 
 | --- | --- |
 | Needs you | Everything waiting on the operator, newest first, each with its action inline: plan reviews, PRs ready to merge, questions from stage sessions, needs-human escalations, blocked tickets with the decision they wait on |
 | Board | Grouped list: **Waiting on you**, **In progress**, **Blocked**, **Queued**, each grouped by phase, plus a repo filter; or a read-only kanban (List/Board toggle, `?view=`, remembered): Queued, Plan, Implement, Review, Revise, Needs you, with one collapsible swimlane per repository when several are visible |
-| Backlog | Open tickets not yet in a pipeline, with **Work on**: interactive plan review or auto-plan |
+| Backlog | Open tickets not yet in a pipeline, with **Work on**: interactive plan review or auto-plan. Epics have no **Work on**; their sub-tickets do. Child epics nest inside their parent, indented, and wave numbers run on through them |
 | Releases | Per repo, the upcoming release (the PRs merged since the last release) with the one action its phase allows (**Cut release**, **Open PR**, **Publish**), then every previous release, whose notes open in the detail pane |
 | Session | Conversation and composer. **Changes** opens the session's diff in the detail pane |
 | History | Past sessions and transcripts, with search |
-| Settings | Full width, with seven tabs of cards in a responsive grid, chosen by `?section=`: General (theme, notifications, keyboard shortcuts), Repositories (the repository list, and one page per repo with tabs Overview, Worktrees, Denials), Connections (Claude Code, `gh`, the GitHub rate limit, each repository's last read), Pipeline (session limit, new-session defaults, a read-only view of each repository's config), Usage & storage (spend by repository and period, disk use), Audit log (every write port made to GitHub, newest first, filterable by repo and ticket), About (version, update status, runtime versions, setup checklist, notices). The old `/repositories`, `/audit` and `/about` routes redirect here |
+| Settings | Full width, with eight tabs of cards in a responsive grid, chosen by `?section=`: General (theme, notifications, keyboard shortcuts), Repositories (the repository list, and one page per repo with tabs Overview, Worktrees, Denials), Connections (Claude Code, `gh`, the GitHub rate limit, each repository's last read), Pipeline (session limit, new-session defaults, a read-only view of each repository's config), Usage & storage (spend by repository and period, disk use), Audit log (every write port made to GitHub, newest first, filterable by repo and ticket), Incidents (every anomaly port recorded, grouped by signature with a count and the tickets it touched, expandable to its records, filterable by repo and exportable as one JSON file), About (version, update status, runtime versions, setup checklist, notices). The old `/repositories`, `/audit` and `/about` routes redirect here |
 
 Scoping epics and analytics are out of scope for the first release.
 
-**Detail pane rule.** Selecting an item in a list (a ticket, worktree, denial or release) opens it in the right-hand pane instead of navigating away. Esc closes it. Clicking the selected row again, or empty space on the page, deselects it and closes the pane; clicks on a control, inside the pane, or in a menu or dialog do not. Full-page navigation is only for screens and sessions. The Backlog is the exception: a ticket's details expand inline under its row, so they read alongside its wave.
+**Detail pane rule.** Selecting an item in a list (a ticket, worktree, denial or release) opens it in the right-hand pane instead of navigating away. Esc closes it. Clicking the selected row again, or empty space on the page, deselects it and closes the pane; clicks on a control, inside the pane, or in a menu or dialog do not. Full-page navigation is only for screens and sessions. On the Backlog, J / K move the selection without opening the pane, since each open reads GitHub; a click or Space opens it.
 
 **Board row anatomy, left to right:**
 - ticket number (`muted-foreground`, tabular);
@@ -230,7 +230,7 @@ Scoping epics and analytics are out of scope for the first release.
 | ↑ / ↓ | Previous / next sent prompt when the composer is empty |
 | Esc | Close suggestions, else stop Claude's turn when the composer is focused; otherwise close the pane or dialog |
 | J / K, then Enter | Move through Board and Backlog rows, open the selected one |
-| Space | Show or hide the selected Backlog row's details |
+| Space | Open the selected Backlog row in the detail pane |
 
 ## 4. Component treatments
 
@@ -253,6 +253,7 @@ Scoping epics and analytics are out of scope for the first release.
 | `TicketRow`, `RepoGroup`, `SessionRow`, `NeedsYouItem` | The list rows (§3) |
 | `CollapsibleGroupHeader` | A 32px `sidebar` group header with a chevron toggle, a `Name · N` label and an optional trailing control; the Backlog's repository groups and the Board's kanban lanes |
 | `TicketCard` | The Board kanban's card (§3): `card` surface, 1px `border`, 8px radius, 8px padding, a 4px left edge in its own phase dot. Hover is `accent`, selected is the list row's `selection` and `ring`. A kanban column header is a `PhaseDot` plus a 2px rule in the same dot colour |
+| `MeterBar` | A 56×4px `border` track holding one or more flat segments, clipped by the track's full radius. `ContextMeter` fills it with `primary-text`. The Backlog epic bar fills done with `success`, then in progress with the `review` phase dot (the palette's only yellow; `attention` is caution-only), with the counts in text, aria label and tooltip |
 | `ToolCallRow`, `DiffView`, `Markdown`, `CodeBlock`, `Composer`, `ContextMeter` | Session pieces. `ContextMeter` is a `Context` label, a 56×4px bar and a percentage, with token counts in its tooltip. `ToolCallRow` carries a per-tool one-line summary and default-open rule (edits with a diff, TodoWrite, a running subagent, a failed Bash); its body delegates to `ToolCallDetail`'s Bash/TodoWrite/Task/lookup views. A subagent's children nest recursively under its row, indented with a `border-l` rule; an orphaned child (its parent row evicted from the window) carries the label "Subagent · parent call not shown" |
 | `BackgroundTasksPanel` | A `border` card between the command strip and composer, hidden when empty. Header `Background tasks · N`; each 36px row shows a type icon, a truncating description with a tooltip, a mono type tag, and a `Stop` ghost button that opens a confirm dialog |
 | `SettingsCard` | The one card every Settings tab is built from: `border`, `card` fill, 16px padding, an `h2` title in `muted-foreground`, an optional description, and right-aligned actions in the header row. A card that needs width spans two or three columns |

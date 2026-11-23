@@ -28,5 +28,11 @@ Any draft 2020-12 validator works; the fixtures carry no tool-specific content. 
 | `invalid.release-with-null-production.json` | A null `production` alongside `modules.release: true` is rejected |
 | `invalid.null-production-default-release.json` | A null `production` with `modules` omitted is rejected — `release` defaults to true |
 | `invalid.bad-post-publish-hook.json` | `release.postPublishHook` must be a string or null, not a number |
+| `valid.app-only.json` | `appOnly` with `labels` and `states` overrides validates |
+| `invalid.legacy-label-key.json` | A legacy label key under `labels` is rejected |
+| `invalid.unknown-state-key.json` | An unknown key under `states` is rejected |
+| `invalid.bad-app-only.json` | `appOnly` must be a boolean |
+
+**Labels and states.** Two override maps rename the seven app labels: `labels` for `port` and `needsYou`, `states` for the five states. The casing is used verbatim and matching is case-insensitive. `appOnly` marks a repository the terminal cockpit must refuse. See `plugins/port/docs/STATE.md`.
 
 **What the schema cannot express.** Draft 2020-12 has no way to compare two sibling values, so "`production` must differ from `integration`" is not a schema rule — `/port:init`'s pre-write validation and layer 1's coherence check (`scripts/checks/config.ts`), which compare resolved defaults, enforce it instead.

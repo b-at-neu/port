@@ -8,7 +8,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   // --- Artifact validator's LABELS table matches labels.json: must agree on keys, names, and modules, both directions.
   {
     const { LABELS }: { LABELS: Record<string, any> } = await import(pathToFileURL(join(root, 'plugins/port/bin/artifacts.mjs')).href);
-    const canonical = new Map<string, any>(readJson('plugins/port/data/labels.json').labels.map((l: any) => [l.key, l]));
+    const canonical = new Map<string, any>(readJson('plugins/port/data/labels.legacy.json').labels.map((l: any) => [l.key, l]));
     for (const [key, entry] of Object.entries(LABELS)) {
       const c = canonical.get(key);
       if (!c) {
@@ -278,7 +278,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
       expect(prUnion.has(key), 'artifacts-stage-keys', `labels.json marks '${key}' as a non-marker pr-surface key, which artifacts.mjs's PR_STAGE_KEYS/PR_REFRESH_KEYS omits`);
     }
 
-    const issueLabel = (key: string) => readJson('plugins/port/data/labels.json').labels.find((l: any) => l.key === key)?.name;
+    const issueLabel = (key: string) => readJson('plugins/port/data/labels.legacy.json').labels.find((l: any) => l.key === key)?.name;
     const flagged = stageViolation([issueLabel('planApproved'), issueLabel('prOpened')], []);
     expect(!(flagged == null || !flagged.includes(issueLabel('planApproved')) || !flagged.includes(issueLabel('prOpened'))), 'artifacts-stage-keys', `stageViolation(['plan approved', 'pr opened'], []) must name both offending labels — got ${JSON.stringify(flagged)}`);
     const legal = stageViolation([issueLabel('prOpened')], []);

@@ -4,7 +4,7 @@ import type { RepoId } from '@/utils/repos'
 import type { LedgerRow, LedgerState, UnmatchedResult } from '../../../../../scripts/port-tick/liveness'
 import { classifyUnmatched } from '../../../../../scripts/port-tick/liveness'
 import type { RefreshMemoEntry } from '../../../../../scripts/port-tick/gates'
-import type { RefreshMemo, UnknownStreaks, DispatchLedger, ForceDispatch } from '@/types/tick'
+import type { RefreshMemo, RerunMemo, UnknownStreaks, DispatchLedger, ForceDispatch } from '@/types/tick'
 
 export function createDispatchLedger(): DispatchLedger {
   const rows = new Map<RepoId, Map<number, LedgerRow>>()
@@ -101,6 +101,28 @@ export function createRefreshMemo(): RefreshMemo {
     },
     clear(repoId, number) {
       bucket(repoId).delete(number)
+    },
+  }
+}
+
+/** The head a pull request's failed checks were last re-run on — a process-scoped map, same restart behaviour as `createRefreshMemo`. */
+export function createRerunMemo(): RerunMemo {
+  const rows = new Map<RepoId, Map<number, string>>()
+
+  function bucket(repoId: RepoId): Map<number, string> {
+    const existing = rows.get(repoId)
+    if (existing) return existing
+    const created = new Map<number, string>()
+    rows.set(repoId, created)
+    return created
+  }
+
+  return {
+    get(repoId, number) {
+      return bucket(repoId).get(number)
+    },
+    set(repoId, number, headRefOid) {
+      bucket(repoId).set(number, headRefOid)
     },
   }
 }

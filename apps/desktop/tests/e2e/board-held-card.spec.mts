@@ -11,7 +11,8 @@ test.beforeEach(async () => {
     state: sandboxState({
       viewer: 'octocat',
       repo: 'acme/widgets',
-      pulls: [{ number: 301, title: 'Tune the cache', labels: ['claude', 'ready for review'], assignees: ['someone-else'] }],
+      issues: [{ number: 300, title: 'Tune the cache', labels: ['claude', 'in progress'], assignees: ['octocat'] }],
+      pulls: [{ number: 301, title: 'Tune the cache', labels: ['claude', 'ready for review'], assignees: ['someone-else'], body: 'Closes #300' }],
     }),
   })
 })

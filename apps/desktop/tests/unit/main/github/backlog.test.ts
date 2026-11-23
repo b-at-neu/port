@@ -8,6 +8,7 @@ const VOCABULARY = resolveVocabulary({})
 const READY_LABEL = VOCABULARY.labels.find((label) => label.key === 'ready')?.name ?? 'ready'
 const NO_BLOCKERS = { totalCount: 0, nodes: [] }
 const NO_LINKS = { ok: true, open: [], shown: 0, total: 0 }
+const CHILD_NO_LINKS = { ok: true, open: [], closed: [], shown: 0, total: 0 }
 const NO_CHILDREN = { ok: true, children: [], shown: 0, total: 0 }
 
 function epicNode(number: number): Record<string, unknown> {
@@ -22,7 +23,7 @@ function child(number: number, state: string, extra: Record<string, unknown> = {
 async function fetchWithChildren(listNodes: readonly Record<string, unknown>[], childrenReply: unknown) {
   const list = JSON.stringify({ data: { repository: { issues: { totalCount: listNodes.length, nodes: listNodes } }, viewer: { login: 'octo-dev' } } })
   const recording = recordingTransport((_request, index) => (index === 0 ? list : typeof childrenReply === 'string' ? childrenReply : JSON.stringify(childrenReply)))
-  const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, github: recording.transport })
+  const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, tracked: null, github: recording.transport })
   if (!result.ok) throw new Error('expected an ok read')
   return { result, requests: recording.requests }
 }
@@ -33,7 +34,7 @@ function issueNode(number: number, extra: Record<string, unknown>): Record<strin
 
 async function fetchNodes(nodes: readonly Record<string, unknown>[], errors?: readonly unknown[]) {
   const stdout = JSON.stringify({ data: { repository: { issues: { totalCount: nodes.length, nodes } }, viewer: { login: 'octo-dev' } }, ...(errors === undefined ? {} : { errors }) })
-  const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, github: fakeTransport(httpOk(stdout)) })
+  const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, tracked: null, github: fakeTransport(httpOk(stdout)) })
   if (!result.ok) throw new Error('expected an ok read')
   return result
 }
@@ -54,7 +55,7 @@ describe('fetchBacklog', () => {
         viewer: { login: 'octo-dev' },
       },
     })
-    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, github: fakeTransport(httpOk(stdout)) })
+    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, tracked: null, github: fakeTransport(httpOk(stdout)) })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.items).toEqual([
@@ -65,9 +66,43 @@ describe('fetchBacklog', () => {
     expect(result.viewer).toBe('octo-dev')
   })
 
+  it('under a store view, drops exactly the tracked issues whatever their labels say', async () => {
+    const stdout = JSON.stringify({
+      data: {
+        repository: {
+          issues: {
+            totalCount: 2,
+            nodes: [
+              { number: 12, title: 't12', url: 'u12', createdAt: 'x', labels: { nodes: [] }, assignees: { nodes: [] }, blockedBy: NO_BLOCKERS, blocking: NO_BLOCKERS, parent: null },
+              { number: 13, title: 't13', url: 'u13', createdAt: 'x', labels: { nodes: [{ name: READY_LABEL }] }, assignees: { nodes: [] }, blockedBy: NO_BLOCKERS, blocking: NO_BLOCKERS, parent: null },
+            ],
+          },
+        },
+        viewer: { login: 'octo-dev' },
+      },
+    })
+    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, tracked: new Set([12]), github: fakeTransport(httpOk(stdout)) })
+    if (!result.ok) throw new Error('expected an ok read')
+    expect(result.items.map((item) => item.number)).toEqual([13])
+  })
+
+  it("decides a child's claimed from the store's numbers under a store view and from labels otherwise", async () => {
+    const reply = { data: { repository: { e0: { subIssues: { totalCount: 2, nodes: [child(5, 'OPEN', { labels: { nodes: [{ name: READY_LABEL }] } }), child(6, 'OPEN')] } } } } }
+    const list = JSON.stringify({ data: { repository: { issues: { totalCount: 1, nodes: [epicNode(1)] } }, viewer: { login: 'octo-dev' } } })
+    const read = async (tracked: ReadonlySet<number> | null) => {
+      const recording = recordingTransport((_request, index) => (index === 0 ? list : JSON.stringify(reply)))
+      const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, tracked, github: recording.transport })
+      if (!result.ok) throw new Error('expected an ok read')
+      const children = result.items[0]?.children
+      return children?.ok === true ? children.children.map((c) => c.claimed) : []
+    }
+    expect(await read(new Set([6]))).toEqual([false, true])
+    expect(await read(null)).toEqual([true, false])
+  })
+
   it('queries open issues newest-created first, selecting createdAt and never updatedAt', async () => {
     const recording = recordingTransport(() => JSON.stringify({ data: { repository: { issues: { totalCount: 0, nodes: [] } }, viewer: { login: 'octo-dev' } } }))
-    await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, github: recording.transport })
+    await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, tracked: null, github: recording.transport })
     const document = queryOf(recording.requests[0])
     expect(document).toContain('orderBy: {field: CREATED_AT, direction: DESC}')
     expect(document).toContain('createdAt')
@@ -105,7 +140,7 @@ describe('fetchBacklog', () => {
         viewer: { login: 'octo-dev' },
       },
     })
-    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, github: fakeTransport(httpOk(stdout)) })
+    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, tracked: null, github: fakeTransport(httpOk(stdout)) })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.items[0]?.labels).toEqual([
@@ -165,7 +200,7 @@ describe('fetchBacklog', () => {
         viewer: { login: 'octo-dev' },
       },
     })
-    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, github: fakeTransport(httpOk(stdout)) })
+    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, tracked: null, github: fakeTransport(httpOk(stdout)) })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.scanned).toBe(1)
@@ -177,7 +212,7 @@ describe('fetchBacklog', () => {
       data: { repository: { issues: { totalCount: 0, nodes: [] } }, viewer: null },
       errors: [{ path: ['viewer'], message: 'boom' }],
     })
-    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, github: fakeTransport(httpOk(stdout)) })
+    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, tracked: null, github: fakeTransport(httpOk(stdout)) })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.viewer).toBeNull()
@@ -191,7 +226,7 @@ describe('fetchBacklog', () => {
     ['forbidden', httpFail('forbidden', 403)],
     ['http-not-found', httpFail('http-not-found', 404)],
   ])('maps a %s failure through the shared envelope classifier', async (kind, failure) => {
-    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, github: fakeTransport(failure) })
+    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, tracked: null, github: fakeTransport(failure) })
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.kind).toBe(kind)
@@ -199,14 +234,14 @@ describe('fetchBacklog', () => {
 
   it('maps a repository the envelope reports as absent to repo-not-found', async () => {
     const stdout = JSON.stringify({ data: { repository: null } })
-    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, github: fakeTransport(httpOk(stdout)) })
+    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, tracked: null, github: fakeTransport(httpOk(stdout)) })
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.kind).toBe('repo-not-found')
   })
 
   it('maps any other unclassified failure to unknown', async () => {
-    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, github: fakeTransport(httpOk('not json')) })
+    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, tracked: null, github: fakeTransport(httpOk('not json')) })
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.kind).toBe('unparseable')
@@ -287,7 +322,7 @@ describe('fetchBacklog children', () => {
               nodes: [
                 child(38, 'CLOSED'),
                 child(39, 'OPEN', { labels: { nodes: [{ name: READY_LABEL }] } }),
-                child(43, 'OPEN', { blockedBy: { totalCount: 1, nodes: [{ number: 39, title: 'c39', url: 'u39', state: 'OPEN' }] } }),
+                child(43, 'OPEN', { blockedBy: { totalCount: 2, nodes: [{ number: 39, title: 'c39', url: 'u39', state: 'OPEN' }, { number: 38, title: 'c38', url: 'u38', state: 'CLOSED' }] } }),
               ],
             },
           },
@@ -303,9 +338,15 @@ describe('fetchBacklog children', () => {
       shown: 3,
       total: 3,
       children: [
-        { number: 38, title: 'c38', state: 'CLOSED', claimed: false, blockers: NO_LINKS },
-        { number: 39, title: 'c39', state: 'OPEN', claimed: true, blockers: NO_LINKS },
-        { number: 43, title: 'c43', state: 'OPEN', claimed: false, blockers: { ok: true, open: [{ number: 39, title: 'c39', url: 'u39', state: 'OPEN' }], shown: 1, total: 1 } },
+        { number: 38, title: 'c38', state: 'CLOSED', claimed: false, blockers: CHILD_NO_LINKS },
+        { number: 39, title: 'c39', state: 'OPEN', claimed: true, blockers: CHILD_NO_LINKS },
+        {
+          number: 43,
+          title: 'c43',
+          state: 'OPEN',
+          claimed: false,
+          blockers: { ok: true, open: [{ number: 39, title: 'c39', url: 'u39', state: 'OPEN' }], closed: [{ number: 38, title: 'c38', url: 'u38', state: 'CLOSED' }], shown: 2, total: 2 },
+        },
       ],
     })
   })

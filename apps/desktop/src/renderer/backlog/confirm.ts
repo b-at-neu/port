@@ -14,6 +14,6 @@ export function truncationOf(row: Pick<BacklogRowView, 'blockers'>): WorkOnReaso
 
 export function workOnReasons(row: BacklogRowView): WorkOnReasons | null {
   const blockers = openBlockersOf(row)
-  if (blockers.length === 0 && row.subIssueCount === 0) return null
-  return { blockers, truncation: truncationOf(row), subIssueCount: row.subIssueCount }
+  if (blockers.length === 0) return null
+  return { blockers, truncation: truncationOf(row) }
 }

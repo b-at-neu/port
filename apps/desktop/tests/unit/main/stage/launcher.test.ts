@@ -57,7 +57,7 @@ function fakeDeps(overrides: Partial<{ start: SessionStartResult }> = {}) {
   const sweepBranches = vi.fn().mockResolvedValue({ done: true, deleted: [] })
   const onOutcome = vi.fn()
   const onResumedTurn = vi.fn()
-  const registryMock = { recordRunning: vi.fn(), markRunning: vi.fn(), setSessionId: vi.fn(), markInterrupted: vi.fn(), markAllQuit: vi.fn(), remove: vi.fn(), list: vi.fn((): readonly InterruptedStage[] => []), runningWorktreePaths: vi.fn((): readonly string[] => []), load: vi.fn() }
+  const registryMock = { recordRunning: vi.fn(), markRunning: vi.fn(), setSessionId: vi.fn(), markInterrupted: vi.fn(), markAllQuit: vi.fn(), remove: vi.fn(), list: vi.fn((): readonly InterruptedStage[] => []), running: vi.fn((): readonly InterruptedStage[] => []), load: vi.fn() }
   const registry = registryMock as unknown as Parameters<typeof createStageLauncher>[0]['registry']
   const onDenial = vi.fn()
   let nextId = 0
@@ -70,7 +70,12 @@ function fakeDeps(overrides: Partial<{ start: SessionStartResult }> = {}) {
     }),
   )
   const readTextFile = vi.fn((path: string) => Promise.resolve<FileResult<string>>(path === pathOps.join('/bundle', 'agents', 'impl-agent.md') ? { ok: true, value: '---\nname: impl-agent\ndescription: impl\ndisallowedTools: Agent\n---\nbody\n' } : { ok: false, kind: 'not-found', message: `ENOENT ${path}` }))
-  return { store, storeList: list, removeWorktree, createWorktree, releaseBranch, sweepBranches, onOutcome, onResumedTurn, close, dismiss, send, start, registry, registryMock, onDenial, newId, loadInstructions, bundleRoot: '/bundle', ops: pathOps, readTextFile }
+  const pathExists = vi.fn((path: string) => {
+    void path
+    return Promise.resolve(true)
+  })
+  const onResumed = vi.fn()
+  return { store, storeList: list, removeWorktree, createWorktree, releaseBranch, sweepBranches, onOutcome, onResumedTurn, onResumed, pathExists, close, dismiss, send, start, registry, registryMock, onDenial, newId, loadInstructions, bundleRoot: '/bundle', ops: pathOps, readTextFile }
 }
 
 describe('createStageLauncher.launch', () => {
@@ -105,7 +110,7 @@ describe('createStageLauncher.launch', () => {
     deps.loadInstructions.mockResolvedValue({ ok: false, message: "couldn't read /bundle/agents/impl-agent.md: ENOENT" })
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     const result = await launcher.launch(request())
-    expect(result).toEqual({ ok: false, kind: 'failed', message: "Couldn't load the stage instructions from the app's bundled stage prompts: couldn't read /bundle/agents/impl-agent.md: ENOENT" })
+    expect(result).toEqual({ ok: false, kind: 'failed', message: "Couldn't load the stage instructions from the app's bundled stage prompts: couldn't read /bundle/agents/impl-agent.md: ENOENT", cause: 'instructions' })
     expect(deps.start).not.toHaveBeenCalled()
     expect(deps.send).not.toHaveBeenCalled()
     expect(deps.registryMock.recordRunning).not.toHaveBeenCalled()
@@ -127,12 +132,12 @@ describe('createStageLauncher.launch', () => {
     expect(deps.registryMock.recordRunning).toHaveBeenCalledWith(expect.objectContaining({ title: '#52 Add a dark mode icon' }))
   })
 
-  it('removes the worktree and returns failed when the worktree itself cannot be created', async () => {
+  it.each([[undefined, 'worktree'], [true, 'leftover-worktree']] as const)('removes the worktree and returns failed when the worktree itself cannot be created (leftover %s, cause %s)', async (leftover, cause) => {
     const deps = fakeDeps()
-    deps.createWorktree.mockResolvedValue({ ok: false, message: 'git worktree add failed' })
+    deps.createWorktree.mockResolvedValue({ ok: false, message: 'git worktree add failed', leftover })
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     const result = await launcher.launch(request())
-    expect(result.ok).toBe(false)
+    expect(result).toMatchObject({ ok: false, kind: 'failed', cause })
     expect(deps.removeWorktree).not.toHaveBeenCalled()
   })
 
@@ -161,9 +166,9 @@ describe('createStageLauncher.launch', () => {
     expect(deps.createWorktree).toHaveBeenCalledWith({ root: ENTRY.path, git, agent: 'impl', number: 52, integration: ENTRY.config.branches.integration, target: { kind: 'issue', title: 'Add a dark-mode icon for the tray' }, liveWorktrees: new Set() })
   })
 
-  it('passes every running registry path and every open session worktree as live', async () => {
+  it('passes only open session worktrees as live — a registry running entry whose session died never blocks the reclaim', async () => {
     const deps = fakeDeps()
-    deps.registryMock.runningWorktreePaths.mockReturnValue(['/repo/.claude/worktrees/impl-9'])
+    deps.registryMock.running.mockReturnValue([{ ...INTERRUPTED, worktree: { path: '/repo/.claude/worktrees/impl-9', branch: null, baseSha: 'abc' } }])
     deps.storeList.mockReturnValue([
       baseSnapshot({ workspace: { folder: '/repo/.claude/worktrees/impl-8', root: '/repo', worktree: { path: '/repo/.claude/worktrees/impl-8', branch: null }, base: null } }),
       baseSnapshot({ phase: 'ended', workspace: { folder: '/repo/.claude/worktrees/impl-7', root: '/repo', worktree: { path: '/repo/.claude/worktrees/impl-7', branch: null }, base: null } }),
@@ -171,7 +176,39 @@ describe('createStageLauncher.launch', () => {
     ])
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     await launcher.launch(request())
-    expect(deps.createWorktree).toHaveBeenCalledWith(expect.objectContaining({ liveWorktrees: new Set(['/repo/.claude/worktrees/impl-9', '/repo/.claude/worktrees/impl-8']) }))
+    expect(deps.createWorktree).toHaveBeenCalledWith(expect.objectContaining({ liveWorktrees: new Set(['/repo/.claude/worktrees/impl-8']) }))
+  })
+
+  describe('an interrupted entry for the same ticket and agent', () => {
+    const resumable = { ...INTERRUPTED, resetsAt: null, reason: 'error' as const }
+
+    it('is resumed in its kept worktree rather than launched fresh, with no second worktree and no onResumed callback', async () => {
+      const deps = fakeDeps()
+      deps.registryMock.list.mockReturnValue([resumable])
+      const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date('2026-01-01T06:00:00Z') })
+      const result = await launcher.launch(request())
+      expect(result).toEqual({ ok: true, sessionKey: 'hosted-1' })
+      expect(deps.createWorktree).not.toHaveBeenCalled()
+      expect(deps.start).toHaveBeenCalledWith(expect.objectContaining({ mode: { kind: 'resume', sessionId: 'sdk-1' } }))
+      expect(deps.registryMock.markRunning).toHaveBeenCalledWith('reg-1')
+      expect(deps.onResumed).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['has no session id', { claudeSessionId: null }, true],
+      ['is still waiting out a reset', { resetsAt: '2026-01-01T09:00:00.000Z' }, true],
+      ['belongs to another ticket', { number: 60 }, true],
+      ['belongs to another agent', { agent: 'plan' as const }, true],
+      ['has a worktree folder that is gone', {}, false],
+    ])('falls through to a fresh launch when it %s', async (_name, overrides, folderExists) => {
+      const deps = fakeDeps()
+      deps.pathExists.mockResolvedValue(folderExists)
+      deps.registryMock.list.mockReturnValue([{ ...resumable, ...overrides }])
+      const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date('2026-01-01T06:00:00Z') })
+      await launcher.launch(request())
+      expect(deps.createWorktree).toHaveBeenCalled()
+    })
+
   })
 
   it('drops every registry entry pointing at a reclaimed worktree before recording the new run', async () => {
@@ -179,9 +216,9 @@ describe('createStageLauncher.launch', () => {
     const reclaimed = '/repo/.claude/worktrees/impl-52'
     deps.createWorktree.mockResolvedValue({ ok: true, path: reclaimed, branch: '52-add-a-dark-mode-icon', baseSha: 'abc', baseLabel: '52-add-a-dark-mode-icon', reclaimed })
     deps.registryMock.list.mockReturnValue([
-      { ...INTERRUPTED, id: 'old-1', worktree: { path: reclaimed, branch: null, baseSha: 'abc' } },
-      { ...INTERRUPTED, id: 'old-2', worktree: { path: reclaimed, branch: null, baseSha: 'abc' } },
-      { ...INTERRUPTED, id: 'other', worktree: { path: '/repo/.claude/worktrees/impl-60', branch: null, baseSha: 'abc' } },
+      { ...INTERRUPTED, id: 'old-1', number: 61, worktree: { path: reclaimed, branch: null, baseSha: 'abc' } },
+      { ...INTERRUPTED, id: 'old-2', number: 62, worktree: { path: reclaimed, branch: null, baseSha: 'abc' } },
+      { ...INTERRUPTED, id: 'other', number: 63, worktree: { path: '/repo/.claude/worktrees/impl-60', branch: null, baseSha: 'abc' } },
     ])
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     await launcher.launch(request())
@@ -263,6 +300,7 @@ const INTERRUPTED: InterruptedStage = {
   detail: null,
   resetsAt: '2026-01-01T05:00:00.000Z',
   costUsd: 1,
+  networkRetries: 0,
 }
 
 function resumeRequest(overrides: Partial<StageResumeRequest> = {}): StageResumeRequest {
@@ -308,7 +346,7 @@ describe('createStageLauncher.resume', () => {
     deps.readTextFile.mockResolvedValue({ ok: false, kind: 'not-found', message: 'ENOENT' })
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     const result = await launcher.resume(resumeRequest())
-    expect(result).toEqual({ ok: false, kind: 'failed', message: `couldn't read ${pathOps.join('/bundle', 'agents', 'impl-agent.md')}: ENOENT` })
+    expect(result).toEqual({ ok: false, kind: 'failed', message: `couldn't read ${pathOps.join('/bundle', 'agents', 'impl-agent.md')}: ENOENT`, cause: 'resume' })
     expect(deps.start).not.toHaveBeenCalled()
     expect(deps.registryMock.markRunning).not.toHaveBeenCalled()
   })
@@ -373,7 +411,7 @@ describe('createStageLauncher.observe', () => {
     await vi.waitFor(() => expect(deps.onOutcome).toHaveBeenCalled())
     expect(deps.close).toHaveBeenCalledWith('hosted-1')
     expect(deps.dismiss).toHaveBeenCalledWith('hosted-1', 'remove')
-    expect(deps.onOutcome).toHaveBeenCalledWith(WIDGETS_ID, 'hosted-1', expect.objectContaining({ kind: 'completed', worktree: 'removed' }))
+    expect(deps.onOutcome).toHaveBeenCalledWith(WIDGETS_ID, 'hosted-1', expect.objectContaining({ kind: 'completed', worktree: 'removed' }), null)
     expect(deps.releaseBranch).toHaveBeenCalledWith(ENTRY.path, '52-add-a-dark-mode-icon', 'abc')
     expect(deps.registryMock.remove).toHaveBeenCalledWith('id-1')
     expect(deps.registryMock.markInterrupted).not.toHaveBeenCalled()
@@ -402,7 +440,7 @@ describe('createStageLauncher.observe', () => {
     await launcher.launch(request())
     launcher.observe(baseSnapshot({ lastResult: { subtype: 'success', isError: false, text: 'all done', at: 't1' } }))
     await vi.waitFor(() => expect(deps.onOutcome).toHaveBeenCalled())
-    expect(deps.onOutcome).toHaveBeenCalledWith(WIDGETS_ID, 'hosted-1', expect.objectContaining({ worktree: 'kept-dirty' }))
+    expect(deps.onOutcome).toHaveBeenCalledWith(WIDGETS_ID, 'hosted-1', expect.objectContaining({ worktree: 'kept-dirty' }), null)
     expect(deps.releaseBranch).not.toHaveBeenCalled()
   })
 

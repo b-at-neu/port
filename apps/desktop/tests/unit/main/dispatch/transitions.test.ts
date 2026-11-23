@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { HANDBACK_TOKENS, eventWrites, expectFor, handbackRefusal, itemKindFor, pullRequestNumberOf, stageModeFor, transitionFor } from '@/main/dispatch/transitions'
-import type { StageEvent, StageMode } from '@/types/stage-labels'
+import type { StageEvent, StageMode, StagePlanFile } from '@/types/stage-labels'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 
 function handback(mode: StageMode, observed: readonly LabelKey[], token: string, arg: string | null = null, extra: { prObserved?: readonly LabelKey[]; approvalGate?: boolean } = {}) {
-  const event: StageEvent = { kind: 'outcome', outcome: 'completed', handback: { token, arg } }
+  const event: StageEvent = { kind: 'outcome', outcome: 'completed', handback: { token, arg }, plan: { kind: 'read', body: '## Implementation Plan' } }
   return transitionFor({ event, mode, observed, approvalGate: extra.approvalGate ?? true, prObserved: extra.prObserved })
 }
 
@@ -85,19 +85,19 @@ describe('rollback and error', () => {
   })
 
   it('an error outcome resets under its own action', () => {
-    const result = transitionFor({ event: { kind: 'outcome', outcome: 'error', handback: null }, mode: 'impl', observed: ['inProgress'], approvalGate: true })
+    const result = transitionFor({ event: { kind: 'outcome', outcome: 'error', handback: null, plan: null }, mode: 'impl', observed: ['inProgress'], approvalGate: true })
     expect(onlyWrite(result)[0]).toMatchObject({ add: ['planApproved'], remove: ['inProgress'], action: 'stage-error-reset' })
   })
 })
 
 describe('blocked and the next turn', () => {
   it('impl moves inProgress to blocked', () => {
-    const result = transitionFor({ event: { kind: 'outcome', outcome: 'blocked', handback: null }, mode: 'impl', observed: ['inProgress'], approvalGate: true })
+    const result = transitionFor({ event: { kind: 'outcome', outcome: 'blocked', handback: null, plan: null }, mode: 'impl', observed: ['inProgress'], approvalGate: true })
     expect(onlyWrite(result)).toEqual([{ itemKind: 'issue', numberFrom: 'item', add: ['blocked'], remove: ['inProgress'], action: 'stage-blocked' }])
   })
 
   it.each(['plan', 'review', 'revise', 'refresh'] as const)('%s writes nothing on blocked', (mode) => {
-    expect(transitionFor({ event: { kind: 'outcome', outcome: 'blocked', handback: null }, mode, observed: [], approvalGate: true })).toEqual({ kind: 'none' })
+    expect(transitionFor({ event: { kind: 'outcome', outcome: 'blocked', handback: null, plan: null }, mode, observed: [], approvalGate: true })).toEqual({ kind: 'none' })
   })
 
   it('impl moves blocked back to inProgress on the next turn', () => {
@@ -110,7 +110,7 @@ describe('blocked and the next turn', () => {
   })
 
   it.each(['questions', 'interrupted', 'usage-limit'] as const)('%s writes nothing', (outcome) => {
-    expect(transitionFor({ event: { kind: 'outcome', outcome, handback: null }, mode: 'impl', observed: ['inProgress'], approvalGate: true })).toEqual({ kind: 'none' })
+    expect(transitionFor({ event: { kind: 'outcome', outcome, handback: null, plan: null }, mode: 'impl', observed: ['inProgress'], approvalGate: true })).toEqual({ kind: 'none' })
   })
 })
 
@@ -161,6 +161,61 @@ describe('hand-back tokens', () => {
   })
 })
 
+describe('a hand-back that lands after a liveness reset', () => {
+  it('review approved applies from readyForReview, the trigger the reset put back, and removes that label', () => {
+    expect(onlyWrite(handback('review', ['readyForReview'], 'approved'))).toEqual([{ itemKind: 'pull-request', numberFrom: 'item', add: ['approved'], remove: ['readyForReview'], action: 'stage-handback-approved' }])
+  })
+
+  it.each([
+    ['plan', 'plan-written', ['ready'], 'planReview', 'ready'],
+    ['revise', 'revised', ['needsRevision'], 'readyForReview', 'needsRevision'],
+    ['revise', 'escalated', ['needsRevision'], 'needsHuman', 'needsRevision'],
+  ] as const)('%s %s applies from the reset trigger %s', (mode, token, observed, target, source) => {
+    expect(onlyWrite(handback(mode, observed, token))[0]).toMatchObject({ add: [target], remove: [source] })
+  })
+
+  it('a refresh hand-back applies from refreshBranch', () => {
+    expect(onlyWrite(handback('refresh', ['refreshBranch'], 'refreshed', 'resolved'))[0]).toMatchObject({ add: ['readyForReview'], remove: ['refreshBranch'] })
+  })
+
+  it('pr-opened applies from planApproved, removing it', () => {
+    const writes = onlyWrite(handback('impl', ['planApproved'], 'pr-opened', '#8'))
+    expect(writes[1]).toMatchObject({ add: ['prOpened'], remove: ['planApproved'] })
+  })
+
+  it('a head-moved hand-back onto a label that is already there writes nothing', () => {
+    expect(handback('review', ['readyForReview'], 'head-moved')).toEqual({ kind: 'none' })
+  })
+
+  it('still tolerates nothing else: both the in-flight label and its trigger present is moved', () => {
+    expect(handback('review', ['reviewing', 'readyForReview'], 'approved')).toEqual({ kind: 'refused', reason: 'moved' })
+    expect(handback('review', ['needsRevision'], 'approved')).toEqual({ kind: 'refused', reason: 'moved' })
+  })
+})
+
+describe('adopt', () => {
+  const adopt = (mode: StageMode, observed: readonly LabelKey[], token: string, arg: string | null = null, prObserved: readonly LabelKey[] = []) =>
+    transitionFor({ event: { kind: 'adopt', handback: { token, arg } }, mode, observed, prObserved, approvalGate: true })
+
+  it('plans the same rows as a completed hand-back, under its own action name', () => {
+    expect(onlyWrite(adopt('review', ['reviewing'], 'approved'))).toEqual([{ itemKind: 'pull-request', numberFrom: 'item', add: ['approved'], remove: ['reviewing'], action: 'stage-adopt-approved' }])
+    expect(onlyWrite(adopt('impl', ['planApproved'], 'pr-opened', '#780'))[1]).toMatchObject({ add: ['prOpened'], remove: ['planApproved'], action: 'stage-adopt-pr-opened' })
+  })
+
+  it('needs no plan file, since an adopted plan is already in the issue body', () => {
+    expect(onlyWrite(adopt('plan', ['planning'], 'plan-written'))[0]).toMatchObject({ add: ['planReview'], remove: ['planning'] })
+  })
+
+  it('refuses an unknown token and an impl adoption with no pull request', () => {
+    expect(adopt('review', ['reviewing'], 'nonsense')).toEqual({ kind: 'refused', reason: 'unknown-handback' })
+    expect(adopt('impl', ['planApproved'], 'pr-opened', null)).toEqual({ kind: 'refused', reason: 'unknown-handback' })
+  })
+
+  it('is moved when the labels are not exactly a source', () => {
+    expect(adopt('review', ['approved'], 'approved')).toEqual({ kind: 'refused', reason: 'moved' })
+  })
+})
+
 describe('pr-opened', () => {
   it('writes the pull request first, then the issue', () => {
     const writes = onlyWrite(handback('impl', ['inProgress'], 'pr-opened', '#8'))
@@ -191,7 +246,24 @@ describe('pr-opened', () => {
 
 describe('unusable hand-backs', () => {
   it('completed with no hand-back line is no-handback', () => {
-    expect(transitionFor({ event: { kind: 'outcome', outcome: 'completed', handback: null }, mode: 'plan', observed: ['planning'], approvalGate: true })).toEqual({ kind: 'refused', reason: 'no-handback' })
+    expect(transitionFor({ event: { kind: 'outcome', outcome: 'completed', handback: null, plan: null }, mode: 'plan', observed: ['planning'], approvalGate: true })).toEqual({ kind: 'refused', reason: 'no-handback' })
+  })
+
+  const planWritten = (plan: StagePlanFile | null): StageEvent => ({ kind: 'outcome', outcome: 'completed', handback: { token: 'plan-written', arg: null }, plan })
+
+  it('plan-written with no plan file is no-plan-file', () => {
+    expect(handbackRefusal(planWritten(null), 'plan')).toBe('no-plan-file')
+    expect(handbackRefusal(planWritten({ kind: 'missing', detail: null }), 'plan')).toBe('no-plan-file')
+    expect(transitionFor({ event: planWritten({ kind: 'missing', detail: 'EACCES' }), mode: 'plan', observed: ['planning'], approvalGate: true })).toEqual({ kind: 'refused', reason: 'no-plan-file' })
+  })
+
+  it('plan-written with an empty plan file is empty-plan-file', () => {
+    expect(transitionFor({ event: planWritten({ kind: 'empty' }), mode: 'plan', observed: ['planning'], approvalGate: true })).toEqual({ kind: 'refused', reason: 'empty-plan-file' })
+  })
+
+  it('plan-written with a read plan plans the planning to planReview swap unchanged', () => {
+    const result = transitionFor({ event: planWritten({ kind: 'read', body: 'body' }), mode: 'plan', observed: ['planning'], approvalGate: true })
+    expect(onlyWrite(result)[0]).toMatchObject({ add: ['planReview'], remove: ['planning'], action: 'stage-handback-plan-written' })
   })
 
   it('a token outside the stage vocabulary is unknown-handback', () => {
@@ -214,8 +286,8 @@ describe('unusable hand-backs', () => {
   })
 
   it('handbackRefusal reads no labels, so it can run before any read', () => {
-    expect(handbackRefusal({ kind: 'outcome', outcome: 'completed', handback: null }, 'impl')).toBe('no-handback')
-    expect(handbackRefusal({ kind: 'outcome', outcome: 'completed', handback: { token: 'pr-opened', arg: '#8' } }, 'impl')).toBeNull()
+    expect(handbackRefusal({ kind: 'outcome', outcome: 'completed', handback: null, plan: null }, 'impl')).toBe('no-handback')
+    expect(handbackRefusal({ kind: 'outcome', outcome: 'completed', handback: { token: 'pr-opened', arg: '#8' }, plan: null }, 'impl')).toBeNull()
     expect(handbackRefusal({ kind: 'claim' }, 'impl')).toBeNull()
   })
 })
@@ -245,34 +317,22 @@ describe('helpers', () => {
   })
 
   it('eventWrites skips the outcomes that wait for the session or for Resume', () => {
-    expect(eventWrites({ kind: 'outcome', outcome: 'questions', handback: null }, 'impl')).toBe(false)
-    expect(eventWrites({ kind: 'outcome', outcome: 'interrupted', handback: null }, 'impl')).toBe(false)
-    expect(eventWrites({ kind: 'outcome', outcome: 'usage-limit', handback: null }, 'impl')).toBe(false)
-    expect(eventWrites({ kind: 'outcome', outcome: 'blocked', handback: null }, 'review')).toBe(false)
-    expect(eventWrites({ kind: 'outcome', outcome: 'blocked', handback: null }, 'impl')).toBe(true)
-    expect(eventWrites({ kind: 'outcome', outcome: 'completed', handback: null }, 'plan')).toBe(true)
-    expect(eventWrites({ kind: 'outcome', outcome: 'error', handback: null }, 'plan')).toBe(true)
+    expect(eventWrites({ kind: 'outcome', outcome: 'questions', handback: null, plan: null }, 'impl')).toBe(false)
+    expect(eventWrites({ kind: 'outcome', outcome: 'interrupted', handback: null, plan: null }, 'impl')).toBe(false)
+    expect(eventWrites({ kind: 'outcome', outcome: 'usage-limit', handback: null, plan: null }, 'impl')).toBe(false)
+    expect(eventWrites({ kind: 'outcome', outcome: 'blocked', handback: null, plan: null }, 'review')).toBe(false)
+    expect(eventWrites({ kind: 'outcome', outcome: 'blocked', handback: null, plan: null }, 'impl')).toBe(true)
+    expect(eventWrites({ kind: 'outcome', outcome: 'completed', handback: null, plan: null }, 'plan')).toBe(true)
+    expect(eventWrites({ kind: 'outcome', outcome: 'error', handback: null, plan: null }, 'plan')).toBe(true)
   })
 })
 
 describe('expectFor', () => {
-  const vocabulary = resolveVocabulary({})
-
-  it('names the exact observed set present and every other role-bearing key absent', () => {
-    const expected = expectFor(['inProgress'], vocabulary, ['prOpened'], ['op'])
+  it('names the exact observed set present, no absent keys, and the assignees exactly', () => {
+    const expected = expectFor(['inProgress'], ['op'])
     expect(expected.present).toEqual(['inProgress'])
-    expect(expected.absent).toContain('planApproved')
-    expect(expected.absent).not.toContain('inProgress')
-    expect(expected.absent).not.toContain('prOpened')
-    expect(expected.absent).not.toContain('marker')
+    expect(expected.absent).toEqual([])
     expect(expected.assignees).toEqual({ kind: 'exactly', logins: ['op'] })
-  })
-
-  it('works over a renamed vocabulary, since it only ever names keys', () => {
-    const renamed = resolveVocabulary({ labels: { inProgress: 'wip', planApproved: 'go' } })
-    const expected = expectFor(['inProgress'], renamed, ['blocked'], ['op'])
-    expect(expected.present).toEqual(['inProgress'])
-    expect(expected.absent).toContain('planApproved')
   })
 })
 

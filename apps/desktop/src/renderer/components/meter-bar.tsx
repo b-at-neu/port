@@ -1,9 +1,18 @@
-const FILL = { primary: 'bg-primary-text', success: 'bg-success-dot' } as const
+const FILL = { primary: 'bg-primary-text', success: 'bg-success-dot', progress: 'bg-phase-review-dot' } as const
 
-export function MeterBar({ percent, fill }: { readonly percent: number | null; readonly fill: keyof typeof FILL }) {
+export interface MeterSegment {
+  readonly percent: number
+  readonly fill: keyof typeof FILL
+}
+
+export function MeterBar({ segments }: { readonly segments: readonly MeterSegment[] }) {
   return (
-    <span className="h-1 w-14 shrink-0 overflow-hidden rounded-full bg-border">
-      {percent !== null ? <span aria-hidden="true" className={`block h-full rounded-full ${FILL[fill]}`} style={{ width: `${String(percent)}%` }} /> : null}
+    <span className="flex h-1 w-14 shrink-0 overflow-hidden rounded-full bg-border">
+      {segments
+        .filter((segment) => segment.percent > 0)
+        .map((segment) => (
+          <span key={segment.fill} aria-hidden="true" data-slot="meter-segment" data-fill={segment.fill} className={`h-full ${FILL[segment.fill]}`} style={{ width: `${String(segment.percent)}%` }} />
+        ))}
     </span>
   )
 }

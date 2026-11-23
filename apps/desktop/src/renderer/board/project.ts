@@ -4,7 +4,7 @@ import { inspectDenials } from '@/renderer/local/inspect'
 import { actionsFor } from '@/utils/actions/plan'
 import { decisionsFor } from '@/utils/actions/decide'
 import type { RepoId } from '@/utils/repos'
-import { ticketIndex } from '@/utils/tickets/ticket'
+import { ticketAssignedTo, ticketIndex } from '@/utils/tickets/ticket'
 import type { ReconciledItem, RepositoryFreshness, RepositoryState, StageLabel } from '@/types/state'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/types/board'
 import type { BoardItemRow, BoardProjection, BoardRepositorySummary, BoardSnapshot, DisplayStatus, LiveStage, RepositoryHealth, RowHeld, SourceHealth, SourceKind } from '@/types/board'
@@ -146,6 +146,7 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
     const health = healthByRepo.get(repo.repoId)
     for (const ticket of ticketIndex(repo.items).tickets) {
       if (ticket.pullRequest === null && ticket.issue?.linkReason === 'counterpart-merged') continue
+      if (repo.viewer !== null && !ticketAssignedTo(ticket, repo.viewer)) continue
       const item = ticket.primary
       const members = [ticket.issue, ticket.pullRequest].filter((member): member is ReconciledItem => member !== null)
       const actions = actionsFor({ item, viewer: repo.viewer, approvalGate: repo.approvalGate })

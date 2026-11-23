@@ -39,7 +39,7 @@ export interface StageDenialStore {
   list(repoId: RepoId): readonly StageDenial[]
 }
 
-export const INTERRUPTED_REASONS = ['quit', 'crash', 'usage-limit', 'error', 'cleanup-failed'] as const
+export const INTERRUPTED_REASONS = ['quit', 'crash', 'usage-limit', 'error', 'cleanup-failed', 'network'] as const
 export type InterruptedReason = (typeof INTERRUPTED_REASONS)[number]
 
 /** A stage session that ended without reaching a `completed`/`questions`/`blocked` hand-back — tracked in `stage-sessions.json` until it is resumed, restarted, or the operator clears its label by hand. Also kept, as `cleanup-failed`, when a `completed` session's worktree could not be removed. */
@@ -63,8 +63,11 @@ export interface InterruptedStage {
   readonly interruptedAt: string
   readonly reason: InterruptedReason
   readonly detail: string | null
+  /** The instant a `usage-limit` clears or the next automatic retry of a `network` entry is due. */
   readonly resetsAt: string | null
   readonly costUsd: number | null
+  /** How many times this entry was resumed after a network failure — `0` for any other reason, and for an entry written before the field existed. */
+  readonly networkRetries: number
 }
 
 export type StageAllowResult =
@@ -175,16 +178,17 @@ export interface StageRegistry {
   /** Loads the file, promoting every `running` entry found to `crash` — a `running` record at boot can only mean the process died before it marked itself otherwise. Missing/malformed loads as empty. */
   load(): Promise<readonly InterruptedStage[]>
   /** Replaces any entry already holding the same `id`, never appends a second one. */
-  recordRunning(entry: Omit<InterruptedStage, 'reason' | 'detail' | 'resetsAt' | 'costUsd' | 'interruptedAt'>): void
-  /** Flips an interrupted entry back to `running` in place — a no-op for an unknown id. */
+  recordRunning(entry: Omit<InterruptedStage, 'reason' | 'detail' | 'resetsAt' | 'costUsd' | 'interruptedAt' | 'networkRetries'>): void
+  /** Flips an interrupted entry back to `running` in place — a no-op for an unknown id. Resuming a `network` entry counts one retry. */
   markRunning(id: string): void
   setSessionId(id: string, claudeSessionId: string): void
+  /** A `network` reason sets `resetsAt` to the next backoff instant itself and keeps the retry count; any other reason resets the count. */
   markInterrupted(id: string, reason: InterruptedReason, detail: string | null, resetsAt: string | null, costUsd: number | null): void
   /** Marks every currently-`running` entry `quit` — called on the quit path before `closeAll()`. */
   /** Awaited at the quit path, with a timeout the caller applies — a hung write must never block quitting. */
   markAllQuit(): Promise<void>
   remove(id: string): void
   list(): readonly InterruptedStage[]
-  /** The worktree path of every `running` entry — `list()` only ever returns interrupted ones. */
-  runningWorktreePaths(): readonly string[]
+  /** Every `running` entry — `list()` only ever returns interrupted ones. */
+  running(): readonly InterruptedStage[]
 }

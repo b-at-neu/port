@@ -2,6 +2,7 @@
 import { labelName } from '@/utils/labels/vocabulary'
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { LabelWriteRequest } from '@/types/writes'
+import type { MirrorVocabulary } from '@/utils/labels/display'
 import type { RepoId } from '@/utils/repos'
 import type { ClaimPreflight, ClaimVerdict, PlanGateChoice } from '@/types/claim'
 
@@ -31,11 +32,12 @@ export function buildClaimRequest(params: {
   readonly preflight: ClaimPreflight
   readonly verdict: Extract<ClaimVerdict, { kind: 'claimable' }>
   readonly vocabulary: LabelVocabulary
+  readonly mirror: MirrorVocabulary
   readonly repoId: RepoId
   readonly repo: string
   readonly planGate: PlanGateChoice
 }): LabelWriteRequest {
-  const { preflight, verdict, vocabulary, repoId, repo, planGate } = params
+  const { preflight, verdict, vocabulary, mirror, repoId, repo, planGate } = params
   const add: LabelKey[] = planGate === 'auto' ? [...CLAIM_LABEL_KEYS, AUTO_PLAN_KEY] : [...CLAIM_LABEL_KEYS]
   const viewer = preflight.viewer
   const addAssignees = preflight.assignees.includes(viewer) ? [] : [viewer]
@@ -48,6 +50,7 @@ export function buildClaimRequest(params: {
     kind: 'issue',
     number: preflight.number,
     vocabulary,
+    mirror,
     add,
     remove: [],
     addAssignees,

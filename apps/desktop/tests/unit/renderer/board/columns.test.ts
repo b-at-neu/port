@@ -58,6 +58,7 @@ function row(overrides: {
     planPresent: null,
     blockers: null,
     blockerComments: null,
+    closingPullRequests: null,
   } as unknown as ReconciledItem
   return {
     item,

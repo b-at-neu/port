@@ -2,7 +2,9 @@
 import { describe, expect, it } from 'vitest'
 import type { CheckContext } from '@/types/github'
 import type { ReconciledItem } from '@/types/state'
-import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
+import type { RerunMemo } from '@/types/tick'
+import type { RepoId } from '@/utils/repos'
+import { createDispatchLedger, createRefreshMemo, createRerunMemo, createUnknownStreaks } from '@/main/tick/ledger'
 import { planTick } from '@/main/tick/plan'
 import { reconciledItem as item, repositoryState } from '../../../fixtures/board-state'
 
@@ -27,7 +29,7 @@ function reviewItem(overrides: Partial<ReconciledItem>): ReconciledItem {
   })
 }
 
-function plan(reviewed: ReconciledItem) {
+function plan(reviewed: ReconciledItem, rerunMemo: RerunMemo = createRerunMemo()) {
   return planTick({
     repository: repositoryState([reviewed], {}, NOW.toISOString()),
     ledger: createDispatchLedger(),
@@ -37,6 +39,7 @@ function plan(reviewed: ReconciledItem) {
     reviewCycleCap: 5,
     startedTasks: [],
     refreshMemo: createRefreshMemo(),
+    rerunMemo,
     checkDispositions: {},
     holdSessionRequired: true,
   })
@@ -70,13 +73,44 @@ describe('planTick — check-hold on the zero-diff gate', () => {
     expect(report.actionable).toEqual([{ number: 594, kind: 'pull-request', trigger: 'readyForReview', agent: 'review', unchecked: false, cycle: { count: 1, cap: 5 } }])
   })
 
-  it('escalates as zero-diff when the review carries no marker', () => {
+  it('dispatches one more review, never escalating, when the review carries no marker', () => {
     const report = plan(reviewItem({ checkRollup: [run('FAILURE')], reviews: [{ body: '## Code Review — Cycle 1 · needs revision\n1 🔴 Critical\nBlocked by code findings.', submittedAt: '2026-01-01T00:30:00Z', commitOid: 'sha1' }] }))
-    expect(report.held[0]?.reason).toBe('zero-diff')
+    expect(report.held).toEqual([])
+    expect(report.actionable).toHaveLength(1)
   })
 
-  it('escalates as zero-diff when the rollup was never selected', () => {
+  it('dispatches one more review, never escalating, when the rollup was never selected', () => {
     const report = plan(reviewItem({ checkRollup: null }))
-    expect(report.held[0]?.reason).toBe('zero-diff')
+    expect(report.held).toEqual([])
+    expect(report.actionable).toHaveLength(1)
+  })
+})
+
+describe('planTick — re-running a red check-hold once per head', () => {
+  const ACTIONS_URL = 'https://github.com/o/r/actions/runs/777/job/9'
+  const red = (): CheckContext => ({ ...run('FAILURE'), url: ACTIONS_URL })
+
+  it('asks for one failed-jobs re-run of the Actions run behind the red check', () => {
+    const report = plan(reviewItem({ checkRollup: [red()] }))
+    expect(report.observations).toEqual([{ kind: 'rerun-checks', number: 594, itemKind: 'pull-request', runs: [{ check: 'run-e2e', runId: '777' }], headRefOid: 'sha1' }])
+  })
+
+  it('asks for nothing once that head was re-run, and again when the head moves', () => {
+    const memo = createRerunMemo()
+    memo.set('repo-a' as RepoId, 594, 'sha1')
+    expect(plan(reviewItem({ checkRollup: [red()] }), memo).observations).toEqual([])
+    const moved = plan(reviewItem({ checkRollup: [red()], headRefOid: 'sha2', reviews: [{ body: MARKER_BODY, submittedAt: '2026-01-01T00:30:00Z', commitOid: 'sha2' }] }), memo)
+    expect(moved.observations).toHaveLength(1)
+  })
+
+  it('never re-runs a check outside Actions, and holds as before', () => {
+    const report = plan(reviewItem({ checkRollup: [{ ...run('FAILURE'), url: 'https://ci.example.com/build/1' }] }))
+    expect(report.observations).toEqual([])
+    expect(report.held[0]?.reason).toBe('check-hold')
+  })
+
+  it('never re-runs a check that is only pending', () => {
+    const report = plan(reviewItem({ checkRollup: [{ ...run(null, 'IN_PROGRESS'), url: ACTIONS_URL }] }))
+    expect(report.observations).toEqual([])
   })
 })

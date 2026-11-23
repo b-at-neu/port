@@ -19,14 +19,16 @@ import { selectDispatches, survived } from '@/main/dispatch/select'
 import { budgetLiveSets, budgetRoute, escalateOverBudget, sumCostUsd } from '@/main/dispatch/budget'
 import { createStageHandoff } from '@/main/dispatch/handoff'
 import type { StageDenial } from '@/types/stage'
-import { boundRecords, endedStagesOf, freeSlots, refreshRecords } from '@/main/dispatch/launch'
-import type { PipelineItemKind, ResolvedItem } from '@/types/github'
-import type { StageWorktreeTarget } from '@/types/workspace'
+import { boundRecords, endedStagesOf, freeSlots, newStageRecord, refreshRecords, settlingDescriptions, targetOf } from '@/main/dispatch/launch'
+import type { ResolvedItem } from '@/types/github'
 import type { EndedStage, TickActionable } from '@/types/tick'
+import type { InterruptedStage } from '@/types/stage'
+import type { StagePlanFile } from '@/types/stage-labels'
 import type { StageOutcome } from '@/types/stage-session'
 import { reviewDispatchFacts } from '../../../../../scripts/port-tick/gates'
 import type { ReviewDispatchFacts } from '../../../../../scripts/port-tick/gates'
-import type { Dispatcher, CreateDispatcherParams } from '@/types/dispatch'
+import type { Dispatcher, CreateDispatcherParams, StageLaunchFailureCause, StageSnapshot } from '@/types/dispatch'
+import { createRaiser, endedIntents, launchFailedIntent, stageSnapshotOf } from '@/main/incidents/raise'
 
 const RECENT_LIMIT = 20
 const NOTE_LIMIT = 20
@@ -72,15 +74,6 @@ function emptyRepoState(): RepoDispatcherState {
   }
 }
 
-function targetOf(kind: PipelineItemKind, resolved: ResolvedItem | undefined): StageWorktreeTarget {
-  if (kind === 'pull-request') return { kind: 'pr', headRefName: resolved?.headRefName ?? null }
-  return { kind: 'issue', title: resolved?.title ?? '' }
-}
-
-function newStageRecord(candidate: TickActionable, state: 'started' | 'failed', at: string, sessionKey: SessionKey | null, detail: string | null): StageRecord {
-  return { sessionKey, agent: candidate.agent, number: candidate.number, kind: candidate.kind, trigger: candidate.trigger, state, at, detail, outcome: null, claudeSessionId: null, operatorJoinedAt: null }
-}
-
 function ownerOf(ownership: OwnershipRead): DispatchOwner {
   return ownership.kind === 'absent' ? 'none' : ownership.kind
 }
@@ -88,12 +81,13 @@ function ownerOf(ownership: OwnershipRead): DispatchOwner {
 export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   const repoStates = new Map<RepoId, RepoDispatcherState>()
   const repoNames = new Map<RepoId, string>()
+  const raise = createRaiser(deps.recordIncident, (repoId) => repoNames.get(repoId))
   const inFlight = new Set<RepoId>()
   const pending = new Map<RepoId, ReadyEntry>()
   let stopped = false
   // Serializes every repository's own launch section so two repositories never race for the same free slot.
   let launchQueue: Promise<void> = Promise.resolve()
-  const handoff = createStageHandoff({ write: deps.stageLabels.transition, auditDir: deps.dirs.audit, onChange: deps.onChange, requestRead: deps.requestRead })
+  const handoff = createStageHandoff({ write: (p) => deps.stageLabels.transition({ ...p, snapshot: snapshotOf(p.entry.id, p.record.number) }), auditDir: deps.dirs.audit, scratchDir: deps.dirs.scratch, onChange: deps.onChange, recordIncident: deps.recordIncident, requestRead: deps.requestRead, now: deps.now })
 
   function serialize<T>(fn: () => Promise<T>): Promise<T> {
     const result = launchQueue.then(fn)
@@ -132,7 +126,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       : { kind: 'idle' }
   }
 
-  function recordOutcome(repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome): void {
+  function recordOutcome(repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome, plan: StagePlanFile | null): void {
     const state = repoStates.get(repoId)
     if (state === undefined) return
     const idx = state.records.findIndex((r) => r.sessionKey === sessionKey)
@@ -143,8 +137,15 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     if (existing === undefined) return
     next[idx] = { ...existing, outcome }
     state.records = next
+    for (const intent of endedIntents(existing, outcome, deps.now().getTime())) raise(repoId, existing, intent, { kind: outcome.kind })
     deps.onChange()
-    handoff.settle(repoId, { ...existing, sessionKey }, outcome)
+    // A newer session on the same ticket owns it now, so this older outcome writes no label.
+    if (next.some((r) => r.number === existing.number && r.state === 'started' && r.at > existing.at)) return
+    handoff.settle(repoId, { ...existing, sessionKey }, outcome, plan)
+  }
+  /** A resumed session settles labels like a launched one; it joins the records as `started`. */
+  function trackResumed(repoId: RepoId, sessionKey: SessionKey, entry: InterruptedStage): void {
+    pushRecord(repoId, newStageRecord(entry, 'started', deps.now().toISOString(), sessionKey, null))
   }
   function recordResumedTurn(repoId: RepoId, sessionKey: SessionKey): void {
     const record = repoStates.get(repoId)?.records.find((r) => r.sessionKey === sessionKey)
@@ -200,7 +201,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       const state = stateFor(entry.id)
       state.ownedSince = ownership.kind === 'app' || ownership.kind === 'terminal' ? ownership.since : null
       state.unreadableMessage = ownership.kind === 'unreadable' ? ownership.message : null
-      state.records = refreshRecords(state.records, (sessionKey) => deps.store.snapshotOf(sessionKey))
+      state.records = refreshRecords(state.records, (sessionKey) => deps.store.snapshotOf(sessionKey), deps.now().toISOString())
 
       const anyLive = state.records.some((r) => r.state === 'started')
       if (entry.config.commands.budget !== null && (owner === 'app' || anyLive)) {
@@ -240,6 +241,9 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
         if (repoState !== undefined) {
           await runObservationPass(entry, observable, repoState, state, {
             writeObservation: deps.writeObservation,
+            transition: deps.stageLabels.transition,
+            rerunChecks: deps.rerunChecks,
+            rerunMemo: deps.rerunMemo,
             refreshMemo: deps.refreshMemo,
             dirs: deps.dirs,
             now: deps.now,
@@ -373,14 +377,10 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
             await rollback(entry, candidate)
             waiting += 1
           } else {
-            await rollback(entry, candidate)
-            pushRecord(entry.id, newStageRecord(candidate, 'failed', at, null, result.message))
+            await launchFailed(entry, candidate, result.cause, result.message, true)
           }
         } catch (error) {
-          await rollback(entry, candidate)
-          const at = deps.now().toISOString()
-          const message = error instanceof Error ? error.message : String(error)
-          pushRecord(entry.id, newStageRecord(candidate, 'failed', at, null, message))
+          await launchFailed(entry, candidate, 'threw', error instanceof Error ? error.message : String(error), true)
         }
       }
     })
@@ -395,16 +395,20 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     if (resolved === undefined) return false
     const result = await deps.stageLabels.claim({ entry, candidate, resolved, auditDir: deps.dirs.audit })
     if (result.kind === 'applied') return true
-    if (result.reason !== 'moved') {
-      const detail = `port couldn't move the label before starting: ${result.reason}${result.detail === null ? '' : ` (${result.detail})`}`
-      pushRecord(entry.id, newStageRecord(candidate, 'failed', deps.now().toISOString(), null, detail))
-    }
+    if (result.reason !== 'moved') await launchFailed(entry, candidate, `claim-${result.reason}`, `port couldn't move the label before starting: ${result.reason}${result.detail === null ? '' : ` (${result.detail})`}`, false)
     return false
+  }
+
+  /** A launch that never produced a session: undoes the claim when it made one, records the failure and raises its incident. */
+  async function launchFailed(entry: ReadyEntry, candidate: TickActionable, cause: StageLaunchFailureCause | `claim-${string}`, message: string, undo: boolean): Promise<void> {
+    if (undo) await rollback(entry, candidate)
+    pushRecord(entry.id, newStageRecord(candidate, 'failed', deps.now().toISOString(), null, message))
+    raise(entry.id, candidate, launchFailedIntent(candidate, cause), { kind: 'failed' })
   }
 
   /** Undoes a claim whose launch failed; a refused rollback is left to the stall ladder. */
   async function rollback(entry: ReadyEntry, candidate: TickActionable): Promise<void> {
-    await deps.stageLabels.transition({ entry, record: candidate, event: { kind: 'rollback' }, auditDir: deps.dirs.audit })
+    await deps.stageLabels.transition({ entry, record: candidate, event: { kind: 'rollback' }, auditDir: deps.dirs.audit, scratchDir: deps.dirs.scratch })
   }
 
   // The most recent consider() call's own snapshot, the one a pass reads when it starts.
@@ -413,6 +417,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     const found = lastSnapshot?.state.repositories.find((r) => r.ok && r.repoId === repoId)
     return found?.ok ? found : undefined
   }
+  const snapshotOf = (repoId: RepoId, number: number): StageSnapshot => stageSnapshotOf(snapshotRepoState(repoId), number)
 
   async function consider(snapshot: BoardSnapshot): Promise<void> {
     if (stopped) return
@@ -445,7 +450,8 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   }
   function stageLiveness(repoId: RepoId): { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null {
     if (stateFor(repoId).owner !== 'app') return null
-    return { live: liveStages(repoId), interrupted: (deps.interrupted?.(repoId) ?? []).map((i) => `${i.agent} #${String(i.number)}`) }
+    const settling = settlingDescriptions(repoStates.get(repoId)?.records ?? [], handoff.pendingNumbers(repoId), deps.now())
+    return { live: [...liveStages(repoId), ...settling], interrupted: (deps.interrupted?.(repoId) ?? []).map((i) => `${i.agent} #${String(i.number)}`) }
   }
   function endedStages(repoId: RepoId): readonly EndedStage[] {
     return endedStagesOf(repoStates.get(repoId)?.records ?? [], (sessionKey) => handoff.resultFor(sessionKey))
@@ -488,5 +494,5 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     stopped = true
   }
 
-  return { consider, status, stopFor, standDown, liveStages, stageLiveness, endedStages, liveStageSessions, shutdown, recordOutcome, recordResumedTurn, holdsSessionRequired, recordDenial, dismissDenial, clearDenialsFor }
+  return { consider, status, stopFor, standDown, liveStages, stageLiveness, endedStages, liveStageSessions, shutdown, recordOutcome, recordResumedTurn, trackResumed, holdsSessionRequired, recordDenial, dismissDenial, clearDenialsFor }
 }

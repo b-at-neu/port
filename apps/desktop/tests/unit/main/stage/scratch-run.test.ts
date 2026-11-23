@@ -26,7 +26,7 @@ import { createDispatchLedger, createForceDispatch, createRefreshMemo, createUnk
 import { planTick } from '@/main/tick/plan'
 import { reconcileRepository } from '@/main/state/reconcile'
 import type { ReadyEntry } from '@/types/actions'
-import type { ApplyLabelsParams, WriteOutcome } from '@/types/writes'
+import type { PostCommentParams, WriteOutcome, WriteStateParams } from '@/types/writes'
 import { applyStageClaim, applyStageTransition } from '@/main/actions/stage'
 import type { CreateStageWorktreeResult, RemoveSessionWorktreeOutcome } from '@/types/workspace'
 
@@ -138,7 +138,7 @@ function buildPipelineFetch(vocabulary: LabelVocabulary, labels: LabelMap, prs: 
   return {
     ok: true,
     items: pipelineItemsFor(vocabulary, labels, prs),
-    closed: [],
+    closed: [], merged: [],
     queried: queriedLabelsFor(vocabulary),
     disabled: vocabulary.disabled,
     vocabulary: verifyVocabulary(vocabulary, { ok: true, names: vocabulary.labels.map((label) => label.name) }),
@@ -272,7 +272,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
 
     // The fake "GitHub" write: refuses a stale precondition the way the real chokepoint does, and records every label write the app makes.
     const labelWrites: { readonly action: string; readonly number: number }[] = []
-    function applyLabels(params: ApplyLabelsParams): Promise<WriteOutcome> {
+    function applyLabels(params: WriteStateParams): Promise<WriteOutcome> {
       const { request } = params
       const set = request.kind === 'issue' ? labels.get(request.number) : prs.get(request.number)?.labels
       if (set === undefined) return Promise.resolve({ kind: 'item-unavailable' })
@@ -284,7 +284,11 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       labelWrites.push({ action: request.action, number: request.number })
       return Promise.resolve({ kind: 'applied', argv: [] })
     }
-    const writeDeps = { writeState: applyLabels, stateLabels: () => null, fetchItemsByNumber }
+    const postIssueBody = ({ request }: PostCommentParams): Promise<WriteOutcome> => {
+      labelWrites.push({ action: request.action, number: request.number })
+      return Promise.resolve({ kind: 'applied', argv: [] })
+    }
+    const writeDeps = { writeState: applyLabels, postIssueBody, stateLabels: () => null, fetchItemsByNumber }
 
     // Late-binding, the same construction order `main/ipc.ts` uses: onStatus closes over stageLauncher,
     // stageLauncher's onOutcome/onDenial close over dispatcherRef — both assigned right after.
@@ -328,15 +332,15 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       releaseBranch: () => Promise.resolve('deleted'),
       sweepBranches: () => Promise.resolve(undefined),
       now: () => new Date(NOW_ISO),
-      onOutcome: (repoId, sessionKey, outcome) => dispatcherRef?.recordOutcome(repoId, sessionKey, outcome),
-      onResumedTurn: (repoId, sessionKey) => dispatcherRef?.recordResumedTurn(repoId, sessionKey),
+      onOutcome: (repoId, sessionKey, outcome, plan) => dispatcherRef?.recordOutcome(repoId, sessionKey, outcome, plan),
+      onResumedTurn: (repoId, sessionKey) => dispatcherRef?.recordResumedTurn(repoId, sessionKey), onResumed: (repoId, sessionKey, resumedEntry) => dispatcherRef?.trackResumed(repoId, sessionKey, resumedEntry), pathExists: () => Promise.resolve(false),
       registry: stageRegistry,
       onDenial: (repoId, denial: StageDenial) => dispatcherRef?.recordDenial(repoId, denial),
       newId: () => `id-${String(Math.random())}`,
       loadInstructions: (launchRequest) => Promise.resolve({ ok: true, text: launchRequest.prompt, agent: { name: `${launchRequest.agent}-agent`, definition: { description: launchRequest.agent, prompt: 'body' } } }),
       bundleRoot: '/bundle',
       ops: pathOps,
-      readTextFile: () => Promise.resolve({ ok: false, kind: 'not-found', message: 'unused' }),
+      readTextFile: (path) => Promise.resolve(path.endsWith('plan-7.md') ? { ok: true, value: '## Implementation Plan' } : { ok: false, kind: 'not-found', message: 'unused' }),
     })
 
     const ledger = createDispatchLedger()
@@ -380,9 +384,9 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
         claim: (claimParams) => (claimParams.candidate.agent === 'review' ? Promise.resolve({ kind: 'refused', reason: 'moved', retryable: false, detail: null }) : applyStageClaim(claimParams, writeDeps)),
         transition: (transitionParams) => applyStageTransition(transitionParams, writeDeps),
       },
-      refreshMemo,
+      refreshMemo, rerunMemo: { get: () => undefined, set: () => undefined }, rerunChecks: () => Promise.resolve('applied'),
       forceDispatch,
-      requestRead: () => undefined,
+      requestRead: () => undefined, recordIncident: () => Promise.resolve(),
       dirs: { audit: '/audit', scratch: '/scratch' },
       onChange: () => undefined,
       now: () => new Date(NOW_ISO),
@@ -473,6 +477,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
     expect([...(prs.get(8)?.labels ?? [])]).toEqual(expect.arrayContaining(['readyForReview', 'marker']))
     expect(labelWrites).toEqual([
       { action: 'stage-claim', number: 7 },
+      { action: 'stage-handback-plan-body', number: 7 },
       { action: 'stage-handback-plan-written', number: 7 },
       { action: 'stage-claim', number: 7 },
       { action: 'stage-handback-pr-opened', number: 8 },

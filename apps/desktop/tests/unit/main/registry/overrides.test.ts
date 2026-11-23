@@ -14,7 +14,7 @@ interface ParseCase {
 interface ApplyCase {
   readonly function: 'applyOverrides'
   readonly name: string
-  readonly input: { readonly cfg: EffectiveConfigShape; readonly entries: readonly OverrideEntry[]; readonly labelKeys: readonly string[] }
+  readonly input: { readonly cfg: EffectiveConfigShape; readonly entries: readonly OverrideEntry[]; readonly labelKeys: readonly string[]; readonly stateKeys?: readonly string[] }
   readonly expected: { readonly appliedPaths: readonly string[]; readonly refusedPaths: readonly (string | null)[] }
 }
 
@@ -36,7 +36,7 @@ describe('overrides — shared case table', () => {
         expect(got).toEqual(row.expected)
         return
       }
-      const result = applyOverrides(row.input.cfg, { entries: row.input.entries, problems: [] }, { labelKeys: row.input.labelKeys })
+      const result = applyOverrides(row.input.cfg, { entries: row.input.entries, problems: [] }, { labelKeys: row.input.labelKeys, stateKeys: row.input.stateKeys ?? [] })
       const got = { appliedPaths: result.applied.map((a) => a.path), refusedPaths: result.refused.map((r) => r.path) }
       expect(got).toEqual(row.expected)
     })
@@ -49,6 +49,7 @@ describe('overrides — self-test trio', () => {
     integration: 'dev',
     production: 'main',
     labels: {},
+    states: {},
     models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
     modules: { approvalGate: true, release: true, scope: true },
     reviewCycleCap: 5,
@@ -73,7 +74,7 @@ describe('overrides — self-test trio', () => {
     const result = applyOverrides(
       baseCfg,
       { entries: [{ path: 'commands.checks', op: '=', rawValue: 'node x.ts', reason: 'refused', line: '' }], problems: [] },
-      { labelKeys: [] },
+      { labelKeys: [], stateKeys: [] },
     )
     expect(result.applied).toEqual([])
     expect(result.refused).toHaveLength(1)

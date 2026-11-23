@@ -26,6 +26,12 @@ export async function chooseFolder(): Promise<string | null> {
   return result.filePaths[0] ?? null
 }
 
+/** The export's save dialog; `null` on cancel. */
+export async function chooseSavePath(defaultName: string): Promise<string | null> {
+  const result = await dialog.showSaveDialog({ title: 'Export incidents', defaultPath: defaultName, filters: [{ name: 'JSON', extensions: ['json'] }] })
+  return result.canceled || result.filePath === '' ? null : result.filePath
+}
+
 /** `defaultId`/`cancelId` both point at Cancel, so Enter and Esc both land on the safe choice. */
 export async function confirmQuit(window: BrowserWindow | null, copy: QuitWarningCopy): Promise<boolean> {
   const options = {

@@ -1,16 +1,16 @@
 // The deliberate single point of contact with the vocabulary file: every other file under labels/ reads LABEL_DEFAULTS below, never this import directly.
-import template from './labels.json'
+import template from './labels.legacy.json'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 
 /** Modules a label default can be gated behind, plus the `core` sentinel for a label always created regardless of config. */
 export const LABEL_MODULES = ['core', 'approvalGate', 'release', 'scope'] as const
 export type LabelModule = (typeof LABEL_MODULES)[number]
 
-/** `labels.json`'s own machine-readable authority on what kind of label each one is. */
+/** `labels.legacy.json`'s own machine-readable authority on what kind of label each one is. */
 export const LABEL_ROLES = ['marker', 'trigger', 'in-flight', 'gate', 'terminal'] as const
 export type LabelRole = (typeof LABEL_ROLES)[number]
 
-/** The pipeline phase a label belongs to; `labels.json`'s `palette` field. A marker has none. */
+/** The pipeline phase a label belongs to; `labels.legacy.json`'s `palette` field. A marker has none. */
 export const LABEL_PALETTES = ['plan', 'implement', 'review', 'revise', 'refresh', 'needs-you', 'done'] as const
 export type LabelPalette = (typeof LABEL_PALETTES)[number]
 

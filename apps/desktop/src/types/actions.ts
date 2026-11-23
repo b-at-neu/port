@@ -10,6 +10,7 @@ import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 // Renderer-safe contract for the single-label operator actions: pause, resume, retry, stop, gate. No import here may reach a Node builtin.
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { LabelPrecondition, WriteOutcome } from '@/types/writes'
+import type { IncidentIntent } from '@/types/incidents'
 
 /** Recorded verbatim as `AuditEntry.action`; `refresh` needs no comment or operator choice, so it stays out of `OperatorDecision` below. */
 export const OPERATOR_ACTIONS = ['pause', 'resume', 'retry', 'stop', 'gate', 'refresh'] as const
@@ -94,13 +95,14 @@ export type ItemActionResult =
 /** `cycle-cap`: revise would only escalate straight back. `rebase-decisions`: an escalation whose decision blocks port can't parse. `agent-live`: a stage session is still waiting on this blocked issue, so the answer belongs in that session. */
 export type DecisionRefusal = ActionRefusal | 'cycle-cap' | 'rebase-decisions' | 'agent-live'
 
-/** `null` when no escalation reason was found; the dialog shows the cap warning before a route is picked. `decisions` is empty for a non-rebase escalation. An issue carries neither a reason nor a cap. */
+/** `null` when no escalation reason was found; the dialog shows the cap warning before a route is picked. `decisions` is empty for a non-rebase escalation. An issue carries neither a reason nor a cap. `routes` is every route this escalation offers; main refuses any other. */
 export interface UnblockContext {
   readonly target: 'pull-request' | 'issue'
   readonly reason: string | null
   readonly cyclesUsed: number
   readonly cap: number
   readonly decisions: readonly RebaseDecision[]
+  readonly routes: readonly UnblockRoute[]
 }
 
 export interface ReviseContext {
@@ -120,7 +122,7 @@ export type ItemDecisionResult =
   | { readonly ok: false; readonly reason: 'not-owned'; readonly owners: readonly string[] }
   | { readonly ok: false; readonly reason: 'viewer-unknown' }
   | { readonly ok: false; readonly reason: 'repo-unavailable' }
-  | { readonly ok: false; readonly reason: 'refused'; readonly refusal: DecisionRefusal | 'note-invalid' | 'picks-invalid'; readonly problem?: string }
+  | { readonly ok: false; readonly reason: 'refused'; readonly refusal: DecisionRefusal | 'note-invalid' | 'picks-invalid' | 'route-unavailable'; readonly problem?: string }
   | { readonly ok: false; readonly reason: 'verify-failed'; readonly message: string }
   | { readonly ok: false; readonly reason: 'comment-failed'; readonly comment: WriteOutcome }
 
@@ -161,6 +163,8 @@ export interface EscalateToHumanParams {
   /** `null` swaps the labels and posts nothing — the escalation this repeats is already on the item. */
   readonly body: string | null
   readonly action: string
+  /** The anomaly this escalation records. */
+  readonly incident?: IncidentIntent
   readonly auditDir: string
   readonly scratchDir: string
 }
@@ -199,8 +203,18 @@ export interface ApplyObservationParams {
   readonly entry: ReadyEntry
   readonly item: ReconciledItem
   readonly observation: WriteObservation
+  /** The GitHub read instant the observation was computed from. */
+  readonly snapshotAt?: string | null
   readonly auditDir: string
   readonly scratchDir: string
+}
+
+/** Re-runs the failed jobs of each named Actions run; `failed` when any one re-run did not start. */
+export interface RerunChecksParams {
+  readonly entry: ReadyEntry
+  readonly number: number
+  readonly runs: readonly { readonly check: string; readonly runId: string }[]
+  readonly auditDir: string
 }
 
 export interface RecoverPausedTriggerParams {

@@ -1,6 +1,6 @@
-// Work on's confirmation for a blocked ticket or an epic — lists every reason that applies.
+// Work on's confirmation for a blocked ticket — lists its open blockers.
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/renderer/components/ui/alert-dialog'
-import { BACKLOG_START_ANYWAY, backlogBlockedReasonCopy, backlogBlockerLine, backlogBlockerTruncatedCopy, backlogEpicReasonCopy, backlogStartAnywayTitle } from '@/renderer/backlog/copy'
+import { BACKLOG_START_ANYWAY, backlogBlockedReasonCopy, backlogBlockerLine, backlogBlockerTruncatedCopy, backlogStartAnywayTitle } from '@/renderer/backlog/copy'
 import type { WorkOnReasons } from '@/types/backlog'
 
 interface WorkOnConfirmProps {
@@ -35,7 +35,6 @@ export function WorkOnConfirm({ open, number, reasons, onCancel, onConfirm }: Wo
                     {reasons.truncation !== null ? <p>{backlogBlockerTruncatedCopy(reasons.truncation.shown, reasons.truncation.total)}</p> : null}
                   </div>
                 ) : null}
-                {reasons.subIssueCount > 0 ? <p>{backlogEpicReasonCopy(reasons.subIssueCount)}</p> : null}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>

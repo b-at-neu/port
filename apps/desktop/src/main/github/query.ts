@@ -26,7 +26,7 @@ const ISSUE_SWEEP_FIELDS = `number title url body state updatedAt assignees(firs
 
 const BLOCKER_COMMENTS_FIELD = `comments(last: ${BLOCKER_COMMENT_PAGE_SIZE}) { nodes { body createdAt url } }`
 const CLOSING_PULL_REQUEST_PAGE_SIZE = 5
-const CLOSING_PULL_REQUESTS_FIELD = `closedByPullRequestsReferences(first: ${CLOSING_PULL_REQUEST_PAGE_SIZE}, includeClosedPrs: true) { nodes { number state } }`
+const CLOSING_PULL_REQUESTS_FIELD = `closedByPullRequestsReferences(first: ${CLOSING_PULL_REQUEST_PAGE_SIZE}, includeClosedPrs: true) { nodes { number state headRefName } }`
 
 // mergeable is the mergeability precondition mergeabilityRoute reads.
 const PULL_REQUEST_SWEEP_FIELDS = `${ISSUE_SWEEP_FIELDS} mergedAt headRefOid mergeable`
@@ -195,7 +195,7 @@ export function buildItemsByNumberQuery(numbers: readonly number[]): ItemsByNumb
     const labelsField = `labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }`
     const assigneesField = `assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }`
     fields.push(
-      `  ${alias}: issueOrPullRequest(number: ${number}) { __typename ... on Issue { number title url state closedAt ${assigneesField} ${labelsField} } ... on PullRequest { number title url state mergedAt closedAt headRefName author { login } ${assigneesField} ${labelsField} } }`,
+      `  ${alias}: issueOrPullRequest(number: ${number}) { __typename ... on Issue { number title url state closedAt ${assigneesField} ${labelsField} } ... on PullRequest { number title url state mergedAt closedAt headRefName headRefOid author { login } ${assigneesField} ${labelsField} } }`,
     )
     aliases.push({ alias, number })
   })

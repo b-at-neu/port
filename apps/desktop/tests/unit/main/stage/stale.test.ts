@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AUTO_RESUME_GRACE_MS, autoResumable, clearedByRecheck, staleInterrupted } from '@/main/stage/stale'
+import { AUTO_RESUME_GRACE_MS, NETWORK_BACKOFF_MS, NETWORK_RETRY_LIMIT, autoResumable, clearedByRecheck, networkGivenUp, orphanedRunning, staleInterrupted } from '@/main/stage/stale'
 import type { DispatchRecord, RepoDispatchStatus } from '@/types/dispatch'
 import type { ItemsByNumberFetch, ResolvedItem } from '@/types/github'
 import type { InterruptedStage } from '@/types/stage'
@@ -30,6 +30,7 @@ function entry(overrides: Partial<InterruptedStage> = {}): InterruptedStage {
     detail: null,
     resetsAt: null,
     costUsd: null,
+    networkRetries: 0,
     ...overrides,
   }
 }
@@ -209,5 +210,42 @@ describe('autoResumable', () => {
   it('orders the oldest interruption first', () => {
     const entries = [limited({ id: 'late', interruptedAt: INTERRUPTED_AT }), limited({ id: 'early', interruptedAt: BEFORE })]
     expect(autoResumable(entries, AFTER_RESET, [running()])).toEqual(['early', 'late'])
+  })
+
+  it('resumes a network entry the moment its backoff passes, with no extra grace', () => {
+    const network = entry({ reason: 'network', resetsAt: RESET, networkRetries: 1 })
+    expect(autoResumable([network], new Date(RESET), [running()])).toEqual(['e1'])
+    expect(autoResumable([network], new Date(Date.parse(RESET) - 1), [running()])).toEqual([])
+  })
+
+  it('stops resuming a network entry that used up its retries', () => {
+    expect(autoResumable([entry({ reason: 'network', resetsAt: RESET, networkRetries: NETWORK_RETRY_LIMIT })], AFTER_RESET, [running()])).toEqual([])
+  })
+})
+
+describe('networkGivenUp', () => {
+  const status = (overrides: Partial<RepoDispatchStatus> = {}): RepoDispatchStatus => ({ repoId: REPO, owner: 'app', state: { kind: 'idle' }, runState: 'dispatching', ownedSince: null, unreadableMessage: null, budget: null, observed: [], denials: [], interrupted: [], ...overrides })
+
+  it('gives up a network entry at three retries, and one with no session to resume', () => {
+    expect(NETWORK_BACKOFF_MS).toEqual([60_000, 300_000, 900_000])
+    const spent = entry({ id: 'spent', reason: 'network', networkRetries: 3 })
+    const fresh = entry({ id: 'fresh', reason: 'network', networkRetries: 2 })
+    const noSession = entry({ id: 'none', reason: 'network', networkRetries: 0, claudeSessionId: null })
+    expect(networkGivenUp([spent, fresh, noSession], [status()])).toEqual(['spent', 'none'])
+  })
+
+  it('never gives up another reason, or into a repository this app is not running', () => {
+    expect(networkGivenUp([entry({ reason: 'error', networkRetries: 3 })], [status()])).toEqual([])
+    expect(networkGivenUp([entry({ reason: 'network', networkRetries: 3 })], [status({ runState: 'paused' })])).toEqual([])
+  })
+})
+
+describe('orphanedRunning', () => {
+  const same = (a: string, b: string): boolean => a === b
+
+  it('returns running entries whose worktree no live session holds', () => {
+    const held = entry({ id: 'held', worktree: { path: '/wt/a', branch: 'b', baseSha: 's' } })
+    const dead = entry({ id: 'dead', worktree: { path: '/wt/b', branch: 'b', baseSha: 's' } })
+    expect(orphanedRunning([held, dead], ['/wt/a'], same)).toEqual(['dead'])
   })
 })

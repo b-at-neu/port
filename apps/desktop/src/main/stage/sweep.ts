@@ -3,12 +3,16 @@
 import type { BoardSnapshot } from '@/types/board'
 import type { RepoDispatchStatus } from '@/types/dispatch'
 import type { FetchItemsByNumberParams, GitHubRepoRef, ItemsByNumberFetch } from '@/types/github'
-import type { InterruptedStage, StageRegistry, StageResumeResult } from '@/types/stage'
+import type { InterruptedStage, StageRegistry, StageRestartResult, StageResumeResult } from '@/types/stage'
 import type { RemoveSessionWorktreeOutcome } from '@/types/workspace'
-import { autoResumable, clearedByRecheck, staleInterrupted } from '@/main/stage/stale'
+import { autoResumable, clearedByRecheck, networkGivenUp, orphanedRunning, staleInterrupted } from '@/main/stage/stale'
 
 interface CreateInterruptedSweeperParams {
-  readonly registry: Pick<StageRegistry, 'list' | 'remove' | 'markInterrupted'>
+  readonly registry: Pick<StageRegistry, 'list' | 'running' | 'remove' | 'markInterrupted'>
+  /** The worktree of every hosted session that has not ended. */
+  readonly liveWorktreePaths: () => readonly string[]
+  readonly samePath: (a: string, b: string) => boolean
+  readonly restart: (id: string) => Promise<StageRestartResult>
   readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
   readonly removeWorktree: (path: string, force: boolean) => Promise<RemoveSessionWorktreeOutcome>
   readonly pathExists: (path: string) => Promise<boolean>
@@ -35,6 +39,17 @@ function resumeFailure(result: Exclude<StageResumeResult, { readonly kind: 'ok' 
       return 'the session ended before Claude started it'
     case 'start-failed':
       return result.message
+    case 'unknown-stage':
+      return 'it is no longer tracked'
+  }
+}
+
+function restartFailure(result: Exclude<StageRestartResult, { readonly kind: 'ok' | 'worktree-dirty' }>): string {
+  switch (result.kind) {
+    case 'worktree-remove-failed':
+      return result.message
+    case 'label-refused':
+      return result.reason
     case 'unknown-stage':
       return 'it is no longer tracked'
   }
@@ -102,11 +117,38 @@ export function createInterruptedSweeper(params: CreateInterruptedSweeperParams)
     return changed
   }
 
+  /** A running entry no live session holds died without a hand-back; marking it makes it clearable and resumable. */
+  function markOrphans(): boolean {
+    const ids = orphanedRunning(params.registry.running(), params.liveWorktreePaths(), params.samePath)
+    for (const id of ids) params.registry.markInterrupted(id, 'crash', 'the session ended without a hand-back', null, null)
+    return ids.length > 0
+  }
+
+  /** Restarts a network entry that used up its retries. Local work GitHub cannot see is a real decision, so a dirty worktree becomes an error entry. */
+  async function restartGivenUp(status: readonly RepoDispatchStatus[]): Promise<boolean> {
+    let changed = false
+    for (const id of networkGivenUp(params.registry.list(), status)) {
+      const entry = params.registry.list().find((e) => e.id === id)
+      if (entry === undefined) continue
+      const result = await params.restart(id)
+      if (result.kind === 'ok') {
+        changed = true
+        continue
+      }
+      const detail = result.kind === 'worktree-dirty' ? 'the network stayed down after 3 retries, and its worktree has uncommitted changes' : `the network stayed down after 3 retries, and it could not be restarted: ${restartFailure(result)}`
+      params.registry.markInterrupted(id, 'error', detail, null, entry.costUsd)
+      changed = true
+    }
+    return changed
+  }
+
   async function pass(snapshot: BoardSnapshot, status: readonly RepoDispatchStatus[]): Promise<void> {
     try {
+      const marked = markOrphans()
       const cleared = await clearStale(snapshot, status)
       const resumed = await resumeDue(status)
-      if (cleared || resumed) params.onChange()
+      const restarted = await restartGivenUp(status)
+      if (marked || cleared || resumed || restarted) params.onChange()
     } catch (error) {
       console.error('[stage] the interrupted-entry sweep failed:', error)
     }

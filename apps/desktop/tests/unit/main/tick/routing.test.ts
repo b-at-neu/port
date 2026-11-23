@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import labels from '@/utils/labels/labels.json'
-import { AGENT_FOR_IN_FLIGHT, AGENT_FOR_TRIGGER, REFRESH_PAIR } from '@/main/tick/routing'
+import labels from '@/utils/labels/labels.legacy.json'
+import { AGENT_FOR_IN_FLIGHT, AGENT_FOR_TRIGGER } from '@/main/tick/routing'
 
 describe('AGENT_FOR_TRIGGER', () => {
   it('has exactly one entry per trigger-role label key, both directions', () => {
@@ -30,11 +30,5 @@ describe('AGENT_FOR_IN_FLIGHT', () => {
     expect(AGENT_FOR_IN_FLIGHT.reviewing).toBe('review')
     expect(AGENT_FOR_IN_FLIGHT.revising).toBe('revise')
     expect(AGENT_FOR_IN_FLIGHT.refreshing).toBe('revise')
-  })
-})
-
-describe('REFRESH_PAIR', () => {
-  it('names exactly refreshBranch and refreshing', () => {
-    expect([...REFRESH_PAIR].sort()).toEqual(['refreshBranch', 'refreshing'])
   })
 })

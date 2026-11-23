@@ -51,7 +51,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     const routingFile = `${mainDir}/routing.ts`;
     const routingText = readFileSync(join(root, routingFile), 'utf8');
     const routingMatch = /const AGENT_FOR_TRIGGER[^{]*\{([^}]*)\}/.exec(routingText);
-    const labelsJson = readJson('apps/desktop/src/utils/labels/labels.json');
+    const labelsJson = readJson('apps/desktop/src/utils/labels/labels.legacy.json');
     const triggerKeys = new Set<string>(labelsJson.labels.filter((l: any) => l.role === 'trigger').map((l: any) => l.key));
 
     if (!routingMatch) {
@@ -118,7 +118,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
       fail('desktop-tick', `${planFile} has no 'occupiedSetOf' function to check`);
     } else {
       const keys = new Set([...fnMatch[1].matchAll(/'(\w+)'/g)].map((m) => m[1]));
-      const labelsJson = readJson('apps/desktop/src/utils/labels/labels.json');
+      const labelsJson = readJson('apps/desktop/src/utils/labels/labels.legacy.json');
       const roleByKey = new Map(labelsJson.labels.map((l: any) => [l.key, l.role]));
       const expected = { inProgress: 'in-flight', prOpened: 'terminal' };
       let violated = false;
@@ -175,25 +175,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
       const allKeys = new Set([...appPairs.keys(), ...enginePairs.keys()]);
       const mismatches = [...allKeys].filter((key) => appPairs.get(key) !== enginePairs.get(key));
       expect(!(mismatches.length > 0), 'desktop-tick', `${routingFile}'s AGENT_FOR_IN_FLIGHT and scripts/port-tick/liveness.ts's buildLivenessExpected disagree on: ${mismatches.join(', ')}`);
-    }
-  }
-
-  // pin: `main/tick/routing.ts`'s `REFRESH_PAIR` ↔ `scripts/port-tick/reconcile.ts`'s own `REFRESH_PAIR`, both directions
-  {
-    const routingFile = `${mainDir}/routing.ts`;
-    const routingText = readFileSync(join(root, routingFile), 'utf8');
-    const appMatch = /const REFRESH_PAIR[^=]*=\s*\[([^\]]*)\]/.exec(routingText);
-    const engineText = readFileSync(join(root, 'scripts/port-tick/reconcile.ts'), 'utf8');
-    const engineMatch = /const REFRESH_PAIR\s*=\s*\[([^\]]*)\]/.exec(engineText);
-
-    if (!appMatch) {
-      fail('desktop-tick', `${routingFile} has no 'REFRESH_PAIR = [...]' array to compare`);
-    } else if (!engineMatch) {
-      fail('desktop-tick', `scripts/port-tick/reconcile.ts has no 'REFRESH_PAIR = [...]' array to compare`);
-    } else {
-      const appKeys = [...appMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
-      const engineKeys = [...engineMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
-      expect(!(appKeys.length !== engineKeys.length || appKeys.some((k, i) => k !== engineKeys[i])), 'desktop-tick', `${routingFile}'s REFRESH_PAIR (${appKeys.join(', ')}) and scripts/port-tick/reconcile.ts's (${engineKeys.join(', ')}) disagree`);
     }
   }
 

@@ -165,6 +165,56 @@ describe('inspectRepository', () => {
     expect(readyLabel).toEqual({ key: 'ready', name: 'go', source: 'config', module: 'core', role: 'trigger' })
   })
 
+  it('keeps a legacy labels override working and reports it as one legacy-label-overrides diagnostic, not a schema violation', async () => {
+    const repo = await makeRepo()
+    writeConfig(repo, JSON.stringify({ repo: 'o/n', labels: { ready: 'go', blocked: 'stuck' } }))
+    const entry = await readyEntry(repo)
+    expect(entry.config.appOnly).toBe(false)
+    expect(entry.config.vocabulary.labels.find((l) => l.key === 'ready')?.name).toBe('go')
+    expect(entry.diagnostics).toContainEqual({ kind: 'legacy-label-overrides', keys: ['ready', 'blocked'] })
+    expect(entry.diagnostics.some((d) => d.kind === 'schema-violations')).toBe(false)
+  })
+
+  it('still reports an unknown labels key beside the legacy ones as a schema violation', async () => {
+    const repo = await makeRepo()
+    writeConfig(repo, JSON.stringify({ repo: 'o/n', labels: { ready: 'go', bogus: 'x' } }))
+    const entry = await readyEntry(repo)
+    expect(entry.diagnostics).toContainEqual({ kind: 'legacy-label-overrides', keys: ['ready'] })
+    expect(entry.diagnostics.filter((d) => d.kind === 'schema-violations')).toHaveLength(1)
+  })
+
+  it('resolves an app-only repository to the seven display labels, leaving the stage vocabulary on defaults', async () => {
+    const repo = await makeRepo()
+    writeConfig(repo, JSON.stringify({ repo: 'o/n', appOnly: true, labels: { needsYou: 'Needs Attention' }, states: { implementing: 'Building' } }))
+    const entry = await readyEntry(repo)
+    expect(entry.config.appOnly).toBe(true)
+    expect(entry.config.displayVocabulary?.labels.map((l) => l.name)).toEqual(['port', 'Needs Attention', 'planning', 'Building', 'reviewing', 'revising', 'approved'])
+    expect(entry.config.vocabulary.labels.find((l) => l.key === 'inProgress')?.name).toBe('in progress')
+    expect(entry.config.vocabulary.problems).toEqual([])
+    expect(entry.diagnostics.some((d) => d.kind === 'legacy-label-overrides' || d.kind === 'schema-violations')).toBe(false)
+  })
+
+  it('applies an app-only states.<key> CLAUDE.md override with source CLAUDE.md, and refuses a legacy key', async () => {
+    const repo = await makeRepo()
+    writeConfig(repo, JSON.stringify({ repo: 'o/n', appOnly: true }))
+    writeClaudeMd(
+      repo,
+      '<!-- port-overrides:begin -->\n```port-overrides\nstates.approved = shipped  # we call it shipped\nlabels.ready = go  # legacy key\n```\n<!-- port-overrides:end -->\n',
+    )
+    const entry = await readyEntry(repo)
+    expect(entry.config.displayVocabulary?.labels.find((l) => l.key === 'approved')).toMatchObject({ name: 'shipped', source: 'CLAUDE.md' })
+    expect(entry.diagnostics.filter((d) => d.kind === 'override-refused')).toHaveLength(1)
+  })
+
+  it('a non-app-only repository refuses a states.<key> CLAUDE.md override', async () => {
+    const repo = await makeRepo()
+    writeConfig(repo, JSON.stringify({ repo: 'o/n' }))
+    writeClaudeMd(repo, '<!-- port-overrides:begin -->\n```port-overrides\nstates.approved = shipped  # not app-only\n```\n<!-- port-overrides:end -->\n')
+    const entry = await readyEntry(repo)
+    expect(entry.config.overrides).toEqual([])
+    expect(entry.diagnostics.filter((d) => d.kind === 'override-refused')).toHaveLength(1)
+  })
+
   it('reports config-malformed for invalid JSON', async () => {
     const repo = await makeRepo()
     writeConfig(repo, '{not json')

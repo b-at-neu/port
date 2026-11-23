@@ -30,28 +30,20 @@ function blockedBy(open: readonly (typeof BLOCKER)[], shown = open.length, total
 }
 
 describe('workOnReasons', () => {
-  it('is null for an unblocked row with no sub-issues', () => {
+  it('is null for an unblocked row', () => {
     expect(workOnReasons(row())).toBeNull()
   })
 
   it('lists the open blockers for a blocked row', () => {
-    expect(workOnReasons(row({ blockers: blockedBy([BLOCKER]) }))).toEqual({ blockers: [BLOCKER], truncation: null, subIssueCount: 0 })
+    expect(workOnReasons(row({ blockers: blockedBy([BLOCKER]) }))).toEqual({ blockers: [BLOCKER], truncation: null })
   })
 
-  it('reports the sub-issue count for an epic', () => {
-    expect(workOnReasons(row({ subIssueCount: 21 }))).toEqual({ blockers: [], truncation: null, subIssueCount: 21 })
+  it('is null for a row with sub-issues and no blockers', () => {
+    expect(workOnReasons(row({ subIssueCount: 3 }))).toBeNull()
   })
 
-  it('carries both reasons when a row is blocked and an epic', () => {
-    expect(workOnReasons(row({ blockers: blockedBy([BLOCKER]), subIssueCount: 3 }))).toEqual({ blockers: [BLOCKER], truncation: null, subIssueCount: 3 })
-  })
-
-  it('is null for an unreadable blocker read with no sub-issues, since blocked is advisory', () => {
+  it('is null for an unreadable blocker read, since blocked is advisory', () => {
     expect(workOnReasons(row({ blockers: { ok: false, reason: 'blockedBy is malformed' } }))).toBeNull()
-  })
-
-  it('still reports the epic reason when the blocker read is unreadable', () => {
-    expect(workOnReasons(row({ blockers: { ok: false, reason: 'x' }, subIssueCount: 2 }))).toEqual({ blockers: [], truncation: null, subIssueCount: 2 })
   })
 
   it('is null when every blocker is closed, even if some were fetched', () => {

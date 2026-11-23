@@ -5,7 +5,7 @@ import type { BacklogChild, ChildrenRead } from '@/types/backlog'
 import type { GitHubRepoRef, GraphQLErrorEntry } from '@/types/github'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
-import { toBlockerRead } from '@/main/github/blockers'
+import { toChildBlockerRead } from '@/main/github/blockers'
 import { blockedByField } from '@/main/github/query'
 import { repoGraphqlRequest } from '@/main/github/request'
 
@@ -25,7 +25,10 @@ function failedAll(numbers: readonly number[], reason: string): ReadonlyMap<numb
   return new Map(numbers.map((number) => [number, { ok: false, reason } satisfies ChildrenRead]))
 }
 
-function childOf(node: unknown, errored: boolean, claimedNames: ReadonlySet<string>): BacklogChild | null {
+/** `store`: the store's tracked issue numbers. `labels`: the vocabulary names, for a repository the store does not hold. */
+type ClaimedSource = { readonly kind: 'store'; readonly numbers: ReadonlySet<number> } | { readonly kind: 'labels'; readonly names: ReadonlySet<string> }
+
+function childOf(node: unknown, errored: boolean, claimed: ClaimedSource): BacklogChild | null {
   if (typeof node !== 'object' || node === null) return null
   const raw = node as Record<string, unknown>
   if (typeof raw.number !== 'number' || (raw.state !== 'OPEN' && raw.state !== 'CLOSED')) return null
@@ -33,12 +36,12 @@ function childOf(node: unknown, errored: boolean, claimedNames: ReadonlySet<stri
     number: raw.number,
     title: typeof raw.title === 'string' ? raw.title : '',
     state: raw.state,
-    claimed: fieldListOf(raw.labels, 'name').some((name) => claimedNames.has(name)),
-    blockers: toBlockerRead(raw.blockedBy, errored),
+    claimed: claimed.kind === 'store' ? claimed.numbers.has(raw.number) : fieldListOf(raw.labels, 'name').some((name) => claimed.names.has(name)),
+    blockers: toChildBlockerRead(raw.blockedBy, errored),
   }
 }
 
-function epicRead(value: unknown, errors: readonly GraphQLErrorEntry[], alias: string, claimedNames: ReadonlySet<string>): ChildrenRead {
+function epicRead(value: unknown, errors: readonly GraphQLErrorEntry[], alias: string, claimed: ClaimedSource): ChildrenRead {
   const own = errors.filter((error) => error.path?.[0] === 'repository' && error.path[1] === alias)
   const isChildBlockedBy = (path: readonly (string | number)[]): boolean => path.length === 6 && path[2] === 'subIssues' && path[3] === 'nodes' && typeof path[4] === 'number' && path[5] === 'blockedBy'
   const blockerErrored = (index: number): boolean => own.some((error) => isChildBlockedBy(error.path ?? []) && error.path?.[4] === index)
@@ -51,7 +54,7 @@ function epicRead(value: unknown, errors: readonly GraphQLErrorEntry[], alias: s
 
   const children: BacklogChild[] = []
   for (const [index, node] of nodes.entries()) {
-    const child = childOf(node, blockerErrored(index), claimedNames)
+    const child = childOf(node, blockerErrored(index), claimed)
     if (child !== null) children.push(child)
   }
   return { ok: true, children, shown: nodes.length, total: totalCount }
@@ -60,7 +63,7 @@ function epicRead(value: unknown, errors: readonly GraphQLErrorEntry[], alias: s
 interface ChildrenParams {
   readonly repo: GitHubRepoRef
   readonly epics: readonly number[]
-  readonly claimedNames: ReadonlySet<string>
+  readonly claimed: ClaimedSource
   readonly github?: GitHubTransport
 }
 
@@ -80,5 +83,5 @@ export async function fetchChildren(params: ChildrenParams): Promise<ReadonlyMap
   const repository = parsed.value.data?.repository as Readonly<Record<string, unknown>> | null | undefined
   if (repository === undefined || repository === null) return failedAll(epics, "Couldn't read this epic's sub-issues: no repository data")
   const errors = parsed.value.errors ?? []
-  return new Map(epics.map((number, idx) => [number, epicRead(repository[`e${String(idx)}`], errors, `e${String(idx)}`, params.claimedNames)]))
+  return new Map(epics.map((number, idx) => [number, epicRead(repository[`e${String(idx)}`], errors, `e${String(idx)}`, params.claimed)]))
 }

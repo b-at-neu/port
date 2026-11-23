@@ -32,20 +32,26 @@ export interface ResolvedLabel {
   readonly name: string
   readonly source: LabelSource
   readonly module: LabelModule
-  /** Off `labels.json`'s own `role` field. An overridden name never changes the role; it is a property of the key, not of what an operator calls it. */
+  /** Off `labels.legacy.json`'s own `role` field. An overridden name never changes the role; it is a property of the key, not of what an operator calls it. */
   readonly role: LabelRole
 }
 
 /** A config-authoring mistake, never a thrown error. */
 export type VocabularyProblem =
   | { readonly kind: 'unknown-key'; readonly key: string }
-  | { readonly kind: 'invalid-override'; readonly key: LabelKey; readonly value: unknown }
-  | { readonly kind: 'collision'; readonly name: string; readonly keys: readonly LabelKey[] }
-  | { readonly kind: 'case-mismatch'; readonly key: LabelKey; readonly resolved: string; readonly actual: string }
+  | { readonly kind: 'invalid-override'; readonly key: string; readonly value: unknown }
+  | { readonly kind: 'collision'; readonly name: string; readonly keys: readonly string[] }
+  | { readonly kind: 'case-mismatch'; readonly key: string; readonly resolved: string; readonly actual: string }
 
 export interface LabelVocabulary {
   readonly labels: readonly ResolvedLabel[]
   readonly disabled: readonly LabelKey[]
+  readonly problems: readonly VocabularyProblem[]
+}
+
+/** The part of a vocabulary verification reads: any vocabulary, legacy or display, that names its labels. */
+export interface VerifiableVocabulary {
+  readonly labels: readonly { readonly key: string; readonly name: string }[]
   readonly problems: readonly VocabularyProblem[]
 }
 
@@ -133,7 +139,7 @@ export function labelName(vocabulary: LabelVocabulary, key: LabelKey): string | 
 }
 
 /** Compares names with `toLowerCase()`, not `toLocaleLowerCase` (which maps dotted/dotless `I` under a Turkish locale), since GitHub matches case-insensitively. */
-export function verifyVocabulary(vocabulary: LabelVocabulary, repoLabels: RepoLabels): VocabularyReport {
+export function verifyVocabulary(vocabulary: VerifiableVocabulary, repoLabels: RepoLabels): VocabularyReport {
   if (!repoLabels.ok) {
     return {
       verdict: 'unverified',

@@ -1,16 +1,15 @@
-import type { RefreshMemo } from '@/types/tick'
+import type { RefreshMemo, RerunMemo } from '@/types/tick'
 
 // Pure: turns the report pieces planTick already computed into the four machine-observation write
-// families. Every observation needs the viewer among the item's assignees and a non-contradictory label set.
+// families. Every observation needs the viewer among the item's assignees.
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { ReconciledItem } from '@/types/state'
 import type { TickClaim, TickHeld, TickObservation } from '@/types/tick'
 import { approvedReverify, capRefreshes, refreshDecision } from '../../../../../scripts/port-tick/gates'
 
-import { historyDerivedChecks, rollupVerdict } from '../../../../../scripts/port-tick/checks'
+import { actionsJobOf, historyDerivedChecks, rollupVerdict } from '../../../../../scripts/port-tick/checks'
 import type { Disposition } from '../../../../../scripts/port-tick/checks'
-import { REFRESH_PAIR } from '@/main/tick/routing'
 
 interface ObservationsOfParams {
   readonly repoId: RepoId
@@ -21,18 +20,14 @@ interface ObservationsOfParams {
   readonly refreshMemo: RefreshMemo
   /** The cockpit's own disposition map, passed directly to `rollupVerdict`. */
   readonly checkDispositions: Readonly<Record<string, Disposition>>
+  /** Numbers `adopt.ts` already adopted this tick — their claim is settled, so it is never reset. */
+  readonly adopted: ReadonlySet<number>
+  /** `undefined` never re-runs a check, which fails toward the existing hold. */
+  readonly rerunMemo?: RerunMemo
 }
 
-/** At most one role-bearing key outside `REFRESH_PAIR`, or both at once. */
-export function isContradictory(item: Pick<ReconciledItem, 'stages'>): boolean {
-  const roleBearing = item.stages.filter((s) => s.role !== 'marker').map((s) => s.key)
-  const nonRefresh = roleBearing.filter((k) => !REFRESH_PAIR.includes(k))
-  const bothRefresh = REFRESH_PAIR.every((k) => roleBearing.includes(k))
-  return nonRefresh.length >= 2 || bothRefresh
-}
-
-function eligible(item: Pick<ReconciledItem, 'assignees' | 'stages'>, viewer: string): boolean {
-  return item.assignees.includes(viewer) && !isContradictory(item)
+function eligible(item: Pick<ReconciledItem, 'assignees'>, viewer: string): boolean {
+  return item.assignees.includes(viewer)
 }
 
 function carries(item: ReconciledItem, key: LabelKey): boolean {
@@ -43,10 +38,11 @@ function livenessResetObservations(
   claims: readonly TickClaim[],
   itemByNumber: ReadonlyMap<number, ReconciledItem>,
   viewer: string,
+  adopted: ReadonlySet<number>,
 ): readonly TickObservation[] {
   const out: TickObservation[] = []
   for (const claim of claims) {
-    if (claim.class !== 'stalled-confirmed' || claim.retryKey === null) continue
+    if (claim.class !== 'stalled-confirmed' || claim.retryKey === null || adopted.has(claim.number)) continue
     const item = itemByNumber.get(claim.number)
     if (item === undefined || !eligible(item, viewer)) continue
     out.push({ kind: 'liveness-reset', number: claim.number, itemKind: claim.kind, inFlight: claim.inFlight, retryKey: claim.retryKey })
@@ -69,9 +65,28 @@ function escalationObservations(held: readonly TickHeld[], itemByNumber: Readonl
       const cap = h.escalation?.kind === 'cycle-cap' ? h.escalation.cap : 0
       out.push({ kind: 'cycle-cap', number: h.number, itemKind: h.kind, count, cap })
     } else if (item.headRefOid !== null) {
-      const reason = h.escalation?.kind === 'zero-diff' ? h.escalation.reason : 'zero-diff'
-      out.push({ kind: 'zero-diff', number: h.number, itemKind: h.kind, reason, count: item.reviewCycleCount ?? 0, headRefOid: item.headRefOid })
+      out.push({ kind: 'zero-diff', number: h.number, itemKind: h.kind, count: item.reviewCycleCount ?? 0, headRefOid: item.headRefOid })
     }
+  }
+  return out
+}
+
+/** One failed-jobs re-run per head for a review held on red checks — only for checks that ran in Actions. */
+function rerunObservations(held: readonly TickHeld[], itemByNumber: ReadonlyMap<number, ReconciledItem>, viewer: string, repoId: RepoId, rerunMemo: RerunMemo | undefined): readonly TickObservation[] {
+  const out: TickObservation[] = []
+  if (rerunMemo === undefined) return out
+  for (const h of held) {
+    if (h.reason !== 'check-hold' || h.escalation?.kind !== 'check-hold' || h.escalation.state !== 'red') continue
+    const item = itemByNumber.get(h.number)
+    if (item === undefined || !eligible(item, viewer) || item.headRefOid === null) continue
+    if (rerunMemo.get(repoId, h.number) === item.headRefOid) continue
+    const runs: { check: string; runId: string }[] = []
+    for (const check of h.escalation.checks) {
+      const url = (item.checkRollup ?? []).find((c) => c.name === check)?.url
+      const job = actionsJobOf(url)
+      if (job !== null && !runs.some((r) => r.runId === job.runId)) runs.push({ check, runId: job.runId })
+    }
+    if (runs.length > 0) out.push({ kind: 'rerun-checks', number: h.number, itemKind: h.kind, runs, headRefOid: item.headRefOid })
   }
   return out
 }
@@ -164,13 +179,14 @@ function clearResolvedRefreshMemos(items: readonly ReconciledItem[], repoId: Rep
 }
 
 export function observationsOf(params: ObservationsOfParams): readonly TickObservation[] {
-  const { repoId, items, claims, held, viewer, refreshMemo, checkDispositions } = params
+  const { repoId, items, claims, held, viewer, refreshMemo, checkDispositions, adopted, rerunMemo } = params
   const itemByNumber = new Map(items.map((item) => [item.number, item] as const))
 
   clearResolvedRefreshMemos(items, repoId, refreshMemo)
 
   return [
-    ...livenessResetObservations(claims, itemByNumber, viewer),
+    ...livenessResetObservations(claims, itemByNumber, viewer, adopted),
+    ...rerunObservations(held, itemByNumber, viewer, repoId, rerunMemo),
     ...escalationObservations(held, itemByNumber, viewer),
     ...refreshObservations(held, items, viewer, repoId, refreshMemo, checkDispositions),
     ...withdrawApprovalObservations(items, viewer, checkDispositions),

@@ -1,8 +1,9 @@
 // Renderer-safe shapes for the tick engine — what one repository's tick would dispatch, what it holds back and why, and what each in-flight claim resolves to. No import here may reach a Node builtin — only `main/tick/` computes these.
 import type { PipelineItemKind } from '@/types/github'
+import type { MirrorFailure } from '@/types/pipeline-state'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
-import type { StageOutcomeKind } from '@/types/stage-session'
+import type { StageHandback, StageOutcomeKind } from '@/types/stage-session'
 import type { StageLabelResult } from '@/types/stage-labels'
 import type { LedgerRow, UnmatchedResult } from '../../../../scripts/port-tick/liveness'
 import type { RefreshMemoEntry } from '../../../../scripts/port-tick/gates'
@@ -11,7 +12,7 @@ import type { RefreshMemoEntry } from '../../../../scripts/port-tick/gates'
 export type StageAgent = 'plan' | 'impl' | 'review' | 'revise'
 
 /** Why the app's own label write for a stage session was refused or never made — reported on Needs you, never guessed past. */
-export type HandoffRefusal = 'moved' | 'no-handback' | 'unknown-handback' | 'pr-unverified' | 'terminal-owned' | 'write-failed' | 'unresolvable-label'
+export type HandoffRefusal = 'moved' | 'no-handback' | 'unknown-handback' | 'pr-unverified' | 'terminal-owned' | 'write-failed' | 'unresolvable-label' | 'no-plan-file' | 'empty-plan-file'
 
 /** One stage session this app's own launcher recorded as ended, projected from `DispatchRecord`s that are not `started` and carry a non-`null` outcome — `main/tick/repair.ts`'s own session-shape evidence, newest per number. */
 export interface EndedStage {
@@ -41,7 +42,7 @@ export type TickHeldReason =
 /** `TickHeld.escalation`'s own shape — `null` for every reason except `cycle-cap`/`zero-diff`/`check-hold`/`integration-red`, which carry the count and cap, or the held checks and their deadline, without re-deriving either from raw review data. */
 export type TickEscalation =
   | { readonly kind: 'cycle-cap'; readonly count: number; readonly cap: number }
-  | { readonly kind: 'zero-diff'; readonly reason: 'zero-diff' | 'sha-cap' }
+  | { readonly kind: 'zero-diff' }
   | { readonly kind: 'check-hold'; readonly checks: readonly string[]; readonly state: 'pending' | 'red'; readonly escalateAt: string | null }
   /** `expired` is the hold window running out, which is what `observe.ts` escalates; until then it is a plain hold with `escalateAt` as its deadline. */
   | { readonly kind: 'integration-red'; readonly checks: readonly string[]; readonly state: 'red' | 'unreadable'; readonly escalateAt: string | null; readonly expired: boolean }
@@ -96,7 +97,10 @@ export type TickBlind =
   | { readonly reason: 'stale-read'; readonly ageMs: number }
 
 /** The machine-observation write families this app ports from the cockpit's cadence, plus one report-only kind (`refresh-deferred`) that authorises no write of its own. `observe.ts`'s `observationsOf` is the only producer, except for `plan-missing`, which `main/tick/repair.ts`'s `repairsOf` produces. */
-export type TickObservationKind = 'liveness-reset' | 'cycle-cap' | 'zero-diff' | 'integration-red' | 'refresh' | 'refresh-stuck' | 'refresh-deferred' | 'withdraw-approval' | 'plan-missing'
+export type TickObservationKind = 'liveness-reset' | 'cycle-cap' | 'zero-diff' | 'integration-red' | 'refresh' | 'refresh-stuck' | 'refresh-deferred' | 'withdraw-approval' | 'plan-missing' | 'adopt' | 'rerun-checks'
+
+/** Which GitHub fact an adoption was read from. */
+export type AdoptionEvidence = 'plan' | 'pr' | 'review' | 'head-moved' | 'held-verdict'
 
 interface TickObservationBase {
   readonly number: number
@@ -106,7 +110,7 @@ interface TickObservationBase {
 export type TickObservation =
   | (TickObservationBase & { readonly kind: 'liveness-reset'; readonly inFlight: LabelKey; readonly retryKey: LabelKey })
   | (TickObservationBase & { readonly kind: 'cycle-cap'; readonly count: number; readonly cap: number })
-  | (TickObservationBase & { readonly kind: 'zero-diff'; readonly reason: 'zero-diff' | 'sha-cap'; readonly count: number; readonly headRefOid: string })
+  | (TickObservationBase & { readonly kind: 'zero-diff'; readonly count: number; readonly headRefOid: string })
   | (TickObservationBase & { readonly kind: 'integration-red'; readonly checks: readonly string[]; readonly headRefOid: string })
   | (TickObservationBase & {
       readonly kind: 'refresh'
@@ -132,6 +136,9 @@ export type TickObservation =
       readonly headRefOid: string
     })
   | (TickObservationBase & { readonly kind: 'plan-missing' })
+  /** `trigger` is the stage's own trigger label, which with `agent` names the hand-back table row `main/dispatch/transitions.ts` applies. */
+  | (TickObservationBase & { readonly kind: 'adopt'; readonly agent: StageAgent; readonly trigger: LabelKey; readonly handback: StageHandback; readonly evidence: AdoptionEvidence })
+  | (TickObservationBase & { readonly kind: 'rerun-checks'; readonly runs: readonly { readonly check: string; readonly runId: string }[]; readonly headRefOid: string })
 
 /** One `autoPlan` issue at `planReview` alone, assigned to the viewer — the app's own auto-plan swap acts on this set while it owns the repository. */
 export interface TickAutoApproval {
@@ -139,7 +146,7 @@ export interface TickAutoApproval {
 }
 
 /** `main/tick/repair.ts`'s own report-only shapes — a human decision is needed, since repairing any of these would be a guess. */
-export type TickLabelRepairShape = 'handback-unlabelled' | 'contradictory' | 'plan-missing-approved' | 'pr-missing'
+export type TickLabelRepairShape = 'handback-unlabelled' | 'mirror-failed' | 'plan-missing-approved' | 'pr-missing'
 
 export interface TickLabelRepair {
   readonly number: number
@@ -149,6 +156,8 @@ export interface TickLabelRepair {
   readonly agent: StageAgent | null
   /** Why the app's own hand-back write was refused — `null` for every shape that does not come from one. */
   readonly reason: HandoffRefusal | null
+  /** The label mirror write that failed — `null` for every shape but `mirror-failed`. */
+  readonly mirror: MirrorFailure | null
 }
 
 /** One repository's own tick — `planTick`'s whole result. `disabledStages` is always `[]` on a blind repository. */
@@ -175,6 +184,12 @@ export interface RefreshMemo {
   readonly get: (repoId: RepoId, number: number) => RefreshMemoEntry | undefined
   readonly set: (repoId: RepoId, number: number, entry: RefreshMemoEntry) => void
   readonly clear: (repoId: RepoId, number: number) => void
+}
+
+/** The head each pull request's failed checks were last re-run on, so one head is re-run once. Same per-process, restart-forgets lifetime as `RefreshMemo`. */
+export interface RerunMemo {
+  readonly get: (repoId: RepoId, number: number) => string | undefined
+  readonly set: (repoId: RepoId, number: number, headRefOid: string) => void
 }
 
 export interface UnknownStreaks {

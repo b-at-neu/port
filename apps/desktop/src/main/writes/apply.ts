@@ -8,13 +8,12 @@ import { removeFile, writeTextFile } from '@/main/platform/files'
 import { fetchItemsByNumber } from '@/main/github/adapter'
 
 import type { GitHubRepoRef } from '@/types/github'
-import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { AssertEqual } from '@/types/assert-type'
 import type { GhWriteFailureKind, LabelAuditEntry, LabelWriteRequest, ObservedItem, OwnershipKind, WriteOutcome } from '@/types/writes'
 import { appendAudit } from '@/main/writes/audit'
-import { buildCommand, resolveKeys } from '@/main/writes/command'
+import { buildCommand } from '@/main/writes/command'
 import { readOwnership } from '@/main/dispatch/ownership'
-import { evaluate, wouldChangeNothing } from '@/main/writes/scope'
+import { wouldChangeNothing } from '@/main/writes/scope'
 import type { PostCommentParams, ApplyLabelsParams } from '@/types/writes'
 
 // Fails to compile if `GhResult` grows a failure kind without `GhWriteFailureKind` growing to match.
@@ -25,10 +24,6 @@ function splitRepo(repo: string): GitHubRepoRef {
   const slash = repo.indexOf('/')
   if (slash === -1) return { owner: repo, name: '' }
   return { owner: repo.slice(0, slash), name: repo.slice(slash + 1) }
-}
-
-function dedupeKeys(keys: readonly LabelKey[]): readonly LabelKey[] {
-  return [...new Set(keys)]
 }
 
 // Four kinds carry no `stderr` at all — described from their own fields instead.
@@ -48,11 +43,11 @@ function describeGhFailure(result: Exclude<GhResult, { ok: true }>): string {
 }
 
 interface AuditContext {
-  readonly request: LabelWriteRequest
+  readonly request: Pick<LabelWriteRequest, 'repo' | 'repoId' | 'kind' | 'number' | 'action'>
   readonly ownership: OwnershipKind
-  readonly precondition: LabelAuditEntry['precondition']
   readonly observed: ObservedItem | null
   readonly call: readonly string[] | null
+  readonly writeId: string | undefined
 }
 
 async function recordLabelAudit(auditDir: string, ctx: AuditContext, outcome: WriteOutcome, now: () => Date): Promise<void> {
@@ -64,11 +59,12 @@ async function recordLabelAudit(auditDir: string, ctx: AuditContext, outcome: Wr
     number: ctx.request.number,
     action: ctx.request.action,
     ownership: ctx.ownership,
-    precondition: ctx.precondition,
+    precondition: null,
     observed: ctx.observed,
     call: ctx.call,
     commentBytes: null,
     result: outcome,
+    ...(ctx.writeId === undefined ? {} : { writeId: ctx.writeId }),
   }
   await appendAudit(auditDir, entry)
 }
@@ -78,102 +74,54 @@ export async function applyLabels(params: ApplyLabelsParams): Promise<WriteOutco
   const now = params.now ?? (() => new Date())
   const pathOps = params.pathOps ?? defaultPathOps
   const gh = params.gh ?? defaultGh
-  const doFetchItemsByNumber = params.fetchItemsByNumber ?? fetchItemsByNumber
-  const { request, auditDir } = params
+  const { auditDir, observed } = params
+  const request = { repo: params.repo, repoId: params.repoId, kind: params.kind, number: params.number, action: params.action }
 
-  // --- Resolve every LabelKey the request carries -----------------------
-  const command = buildCommand(request)
-  const expectPresent = resolveKeys(request.vocabulary, request.expect.present)
-  const expectAbsent = resolveKeys(request.vocabulary, request.expect.absent)
-  const unresolved = dedupeKeys([...(command.ok ? [] : command.unresolved), ...expectPresent.unresolved, ...expectAbsent.unresolved])
-
-  const baseCtx: AuditContext = { request, ownership: 'absent', precondition: null, observed: null, call: null }
-
-  if (unresolved.length > 0 || !command.ok) {
-    const outcome: WriteOutcome = { kind: 'unresolvable-label', keys: unresolved }
-    await recordLabelAudit(auditDir, baseCtx, outcome, now)
-    return outcome
-  }
-
-  const precondition: LabelAuditEntry['precondition'] = { present: expectPresent.names, absent: expectAbsent.names, assignees: request.expect.assignees }
-
-  // --- Every write needs this app to own the repository, full stop — never
-  // a per-label scope the way the old claim file derived one.
-  const ownership = await readOwnership({ repoRoot: params.repoRoot, repo: request.repo, git: params.git, pathOps, now })
+  // The writer already read ownership; this is the second line behind it.
+  const ownership = await readOwnership({ repoRoot: params.repoRoot, repo: params.repo, git: params.git, pathOps, now })
   if (ownership.kind === 'terminal') {
     const outcome: WriteOutcome = { kind: 'terminal-owned', since: ownership.since }
-    await recordLabelAudit(auditDir, { ...baseCtx, ownership: 'terminal', precondition }, outcome, now)
+    await recordLabelAudit(auditDir, { request, ownership: 'terminal', observed, call: null, writeId: params.writeId }, outcome, now)
     return outcome
   }
   if (ownership.kind === 'unreadable') {
     const outcome: WriteOutcome = { kind: 'ownership-unreadable', path: ownership.path, message: ownership.message }
-    await recordLabelAudit(auditDir, { ...baseCtx, ownership: 'unreadable', precondition }, outcome, now)
+    await recordLabelAudit(auditDir, { request, ownership: 'unreadable', observed, call: null, writeId: params.writeId }, outcome, now)
     return outcome
   }
 
-  // --- The authoritative read, never a cached list ----------------------
-  const verify = await doFetchItemsByNumber({ repo: splitRepo(request.repo), numbers: [request.number] })
-  const ctxAfterOwnership: AuditContext = { request, ownership: ownership.kind, precondition, observed: null, call: null }
-
-  if (!verify.ok) {
-    const outcome: WriteOutcome = { kind: 'verify-failed', message: verify.message }
-    await recordLabelAudit(auditDir, ctxAfterOwnership, outcome, now)
-    return outcome
-  }
-  const resolvedItem = verify.resolved.find((item) => item.number === request.number)
-  if (!resolvedItem || verify.unavailable.includes(request.number)) {
-    const outcome: WriteOutcome = { kind: 'item-unavailable' }
-    await recordLabelAudit(auditDir, ctxAfterOwnership, outcome, now)
-    return outcome
-  }
-
-  const observed: ObservedItem = { labels: resolvedItem.labels, assignees: resolvedItem.assignees, readAt: verify.fetchedAt }
-  const ctxWithObserved: AuditContext = { ...ctxAfterOwnership, observed }
-
-  // --- Evaluate the precondition -----------------------------------------
-  const verdict = evaluate({ presentNames: expectPresent.names, absentNames: expectAbsent.names, assignees: request.expect.assignees }, observed)
-  if (!verdict.satisfied) {
-    const outcome: WriteOutcome = {
-      kind: 'precondition-failed',
-      conflict: { kind: 'precondition-failed', expected: verdict.expected, observed: verdict.observed, readAt: observed.readAt },
-    }
-    await recordLabelAudit(auditDir, ctxWithObserved, outcome, now)
-    return outcome
-  }
-
-  // --- The no-op arm: no gh call at all -----------------------------------
-  if (wouldChangeNothing({ addNames: command.addNames, removeNames: command.removeNames, addAssignees: request.addAssignees, removeAssignees: request.removeAssignees }, observed)) {
+  const ctx: AuditContext = { request, ownership: ownership.kind, observed, call: null, writeId: params.writeId }
+  if (wouldChangeNothing(params, observed)) {
     const outcome: WriteOutcome = { kind: 'no-op' }
-    await recordLabelAudit(auditDir, ctxWithObserved, outcome, now)
+    await recordLabelAudit(auditDir, ctx, outcome, now)
     return outcome
   }
 
-  // --- The write itself ----------------------------------------------------
-  const result = await gh(command.argv)
-  const ctxWithCall: AuditContext = { ...ctxWithObserved, call: command.argv }
+  const argv = buildCommand(params)
+  const result = await gh(argv)
+  const ctxWithCall: AuditContext = { ...ctx, call: argv }
 
   if (!result.ok) {
-    const reread = await doFetchItemsByNumber({ repo: splitRepo(request.repo), numbers: [request.number] })
-    const rereadItem = reread.ok ? reread.resolved.find((item) => item.number === request.number) : undefined
+    const reread = await (params.fetchItemsByNumber ?? fetchItemsByNumber)({ repo: splitRepo(params.repo), numbers: [params.number] })
+    const rereadItem = reread.ok ? reread.resolved.find((item) => item.number === params.number) : undefined
     const rereadObserved: ObservedItem | null = rereadItem ? { labels: rereadItem.labels, assignees: rereadItem.assignees, readAt: reread.fetchedAt } : null
     const outcome: WriteOutcome = { kind: 'write-failed', classification: result.kind, stderr: describeGhFailure(result), reread: rereadObserved }
     await recordLabelAudit(auditDir, ctxWithCall, outcome, now)
     return outcome
   }
 
-  const outcome: WriteOutcome = { kind: 'applied', argv: command.argv }
+  const outcome: WriteOutcome = { kind: 'applied', argv }
   await recordLabelAudit(auditDir, ctxWithCall, outcome, now)
   return outcome
 }
 
 /** Passes `--body-file` from a scratch file, deleted in a `finally` — argv-length limits on Windows
  *  are the reason, not shell quoting. Audited with byte length, never the text. */
-export async function postComment(params: PostCommentParams): Promise<WriteOutcome> {
+async function postBodyFile(params: PostCommentParams, argvFor: (scratchPath: string) => readonly string[], refusal: string | null): Promise<WriteOutcome> {
   const now = params.now ?? (() => new Date())
   const pathOps = params.pathOps ?? defaultPathOps
   const gh = params.gh ?? defaultGh
   const { request, auditDir } = params
-  const subcommand = request.kind === 'pull-request' ? 'pr' : 'issue'
   const scratchPath = pathOps.join(request.scratchDir, `write-comment-${request.kind}-${request.number}-${randomUUID()}.md`)
   const bodyBytes = Buffer.byteLength(request.body, 'utf8')
 
@@ -203,6 +151,9 @@ export async function postComment(params: PostCommentParams): Promise<WriteOutco
   if (ownership.kind === 'unreadable') {
     return record('unreadable', null, { kind: 'ownership-unreadable', path: ownership.path, message: ownership.message })
   }
+  if (refusal !== null) {
+    return record(ownership.kind, null, { kind: 'write-failed', classification: 'unknown', stderr: refusal, reread: null })
+  }
 
   const written = await writeTextFile(scratchPath, request.body)
   if (!written.ok) {
@@ -210,7 +161,7 @@ export async function postComment(params: PostCommentParams): Promise<WriteOutco
   }
 
   try {
-    const argv = [subcommand, 'comment', String(request.number), '--repo', request.repo, '--body-file', scratchPath]
+    const argv = argvFor(scratchPath)
     const result = await gh(argv)
     if (!result.ok) {
       return await record(ownership.kind, argv, { kind: 'write-failed', classification: result.kind, stderr: describeGhFailure(result), reread: null })
@@ -219,4 +170,17 @@ export async function postComment(params: PostCommentParams): Promise<WriteOutco
   } finally {
     await removeFile(scratchPath)
   }
+}
+
+export async function postComment(params: PostCommentParams): Promise<WriteOutcome> {
+  const { request } = params
+  const subcommand = request.kind === 'pull-request' ? 'pr' : 'issue'
+  return postBodyFile(params, (scratchPath) => [subcommand, 'comment', String(request.number), '--repo', request.repo, '--body-file', scratchPath], null)
+}
+
+/** The only issue-body write: replaces the issue's whole body from a scratch file. Never edits a pull request. */
+export async function postIssueBody(params: PostCommentParams): Promise<WriteOutcome> {
+  const { request } = params
+  const refusal = request.kind === 'pull-request' ? 'an issue body write never edits a pull request' : null
+  return postBodyFile(params, (scratchPath) => ['issue', 'edit', String(request.number), '--repo', request.repo, '--body-file', scratchPath], refusal)
 }

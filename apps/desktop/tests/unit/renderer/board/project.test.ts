@@ -50,6 +50,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     planPresent: null,
     blockers: null,
     blockerComments: null,
+    closingPullRequests: null,
     ...overrides,
   }
 }
@@ -188,6 +189,39 @@ describe('projectBoard — rows', () => {
     const notReady: RepositoryState = { ok: false, repoId: 'repo-bad' as RepoId, displayName: 'o/bad', reason: 'not-ready', problem: { kind: 'not-a-git-repository' } }
     const projection = projectBoard({ snapshot: snapshotOf([notReady], []), now: NOW })
     expect(projection.notReady).toHaveLength(1)
+  })
+})
+
+describe('projectBoard — ownership filter', () => {
+  const items = [
+    item({ number: 1, assignees: ['op'] }),
+    item({ number: 2, assignees: ['someone-else'] }),
+    item({ number: 3, assignees: [] }),
+    item({ number: 4, assignees: ['op', 'other'] }),
+    item({ number: 5, assignees: ['op'], linked: 6 }),
+    item({ number: 6, kind: 'pull-request', assignees: ['other'], linked: 5 }),
+  ]
+  const project = (viewer: string | null) => projectBoard({ snapshot: snapshotOf([readyRepo({ items, viewer })], [health()]), now: NOW })
+
+  it("keeps only tickets with the viewer among an issue's or pull request's assignees", () => {
+    const projection = project('op')
+    expect(projection.rows.map((row) => row.ticket.ref.number)).toEqual([1, 4, 5])
+    expect(projection.totalItems).toBe(3)
+    expect(projection.ungated.every((row) => [1, 4, 5].includes(row.ticket.ref.number))).toBe(true)
+    const summary = projection.repositorySummaries[0]
+    expect((summary?.waiting ?? 0) + (summary?.inFlight ?? 0) + (summary?.stalled ?? 0)).toBe(3)
+  })
+
+  it('shows a ticket whose only the pull request is the viewer’s', () => {
+    const projection = projectBoard({
+      snapshot: snapshotOf([readyRepo({ items: [item({ number: 7, assignees: ['other'], linked: 8 }), item({ number: 8, kind: 'pull-request', assignees: ['op'], linked: 7 })] })], [health()]),
+      now: NOW,
+    })
+    expect(projection.rows.map((row) => row.ticket.ref.number)).toEqual([7])
+  })
+
+  it('shows every ticket when the viewer is unknown', () => {
+    expect(project(null).rows.map((row) => row.ticket.ref.number)).toEqual([1, 2, 3, 4, 5])
   })
 })
 

@@ -181,7 +181,7 @@ describe('buildItemDetailsQuery', () => {
       { kind: 'pull-request', number: 9, rollup: false, blockerComments: false, closingPullRequests: true },
     ])
     const lineOf = (alias: string) => document.split('\n').find((line) => line.includes(`${alias}:`)) ?? ''
-    expect(lineOf('d0')).toContain('closedByPullRequestsReferences(first: 5, includeClosedPrs: true) { nodes { number state } }')
+    expect(lineOf('d0')).toContain('closedByPullRequestsReferences(first: 5, includeClosedPrs: true) { nodes { number state headRefName } }')
     expect(lineOf('d1')).not.toContain('closedByPullRequestsReferences')
     expect(lineOf('d2')).not.toContain('closedByPullRequestsReferences')
   })
@@ -274,6 +274,12 @@ describe('buildItemsByNumberQuery', () => {
     const { document } = buildItemsByNumberQuery([1])
     expect(extractFragment(document, 'Issue')).not.toContain('headRefName')
     expect(extractFragment(document, 'PullRequest')).toContain('headRefName')
+  })
+
+  it('selects headRefOid inside the PullRequest fragment only', () => {
+    const { document } = buildItemsByNumberQuery([1])
+    expect(extractFragment(document, 'Issue')).not.toContain('headRefOid')
+    expect(extractFragment(document, 'PullRequest')).toContain('headRefOid')
   })
 
   it('selects the author inside the PullRequest fragment only', () => {

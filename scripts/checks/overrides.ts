@@ -42,14 +42,15 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- labels.<key> resolves against data/labels.json — an override naming a nonexistent key must never apply anyway. ---
+  // --- labels.<key> resolves against data/labels.legacy.json — an override naming a nonexistent key must never apply anyway. ---
   {
-    const labelsJson = readJson('plugins/port/data/labels.json');
+    const labelsJson = readJson('plugins/port/data/labels.legacy.json');
     const labelKeys = labelsJson.labels.map((l: any) => l.key);
     const baseCfg = {
       integration: 'dev',
       production: 'main',
       labels: Object.fromEntries(labelKeys.map((k: string) => [k, k])),
+      states: {},
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
       modules: { approvalGate: true, release: true, scope: true },
       reviewCycleCap: 5,
@@ -59,12 +60,35 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
 
     const realKey = labelKeys[0];
     const goodEntry = { path: `labels.${realKey}`, op: '=' as const, rawValue: 'renamed', reason: 'this repo already used this word', line: '' };
-    const goodResult = applyOverrides(baseCfg, { entries: [goodEntry], problems: [] }, { labelKeys });
+    const goodResult = applyOverrides(baseCfg, { entries: [goodEntry], problems: [] }, { labelKeys, stateKeys: [] });
     expect(!(goodResult.refused.length !== 0 || goodResult.applied.length !== 1), 'overrides-labels', `applyOverrides refused a labels.${realKey} override naming a real label key`);
 
     const badEntry = { path: 'labels.notARealKey', op: '=' as const, rawValue: 'x', reason: 'typo', line: '' };
-    const badResult = applyOverrides(baseCfg, { entries: [badEntry], problems: [] }, { labelKeys });
+    const badResult = applyOverrides(baseCfg, { entries: [badEntry], problems: [] }, { labelKeys, stateKeys: [] });
     expect(!(badResult.applied.length !== 0 || badResult.refused.length !== 1), 'overrides-labels', 'applyOverrides applied labels.notARealKey — the label key set was never checked');
+  }
+
+  // --- states.<key> resolves against the stateKeys the caller passes — a refused key must never apply, an accepted one must. ---
+  {
+    const stateKeys = ['implementing'];
+    const baseCfg = {
+      integration: 'dev',
+      production: 'main',
+      labels: {},
+      states: { implementing: 'implementing' },
+      models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
+      modules: { approvalGate: true, release: true, scope: true },
+      reviewCycleCap: 5,
+      concurrency: { sharedFiles: [], overlapThreshold: 2 },
+      sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
+    };
+    const goodEntry = { path: 'states.implementing', op: '=' as const, rawValue: 'building', reason: 'this repo already used this word', line: '' };
+    const goodResult = applyOverrides(baseCfg, { entries: [goodEntry], problems: [] }, { labelKeys: [], stateKeys });
+    expect(!(goodResult.refused.length !== 0 || goodResult.applied.length !== 1 || goodResult.cfg.states.implementing !== 'building'), 'overrides-states', 'applyOverrides refused or mis-wrote a states.implementing override naming a real state key');
+
+    const badEntry = { path: 'states.inProgress', op: '=' as const, rawValue: 'x', reason: 'old key', line: '' };
+    const badResult = applyOverrides(baseCfg, { entries: [badEntry], problems: [] }, { labelKeys: [], stateKeys });
+    expect(!(badResult.applied.length !== 0 || badResult.refused.length !== 1), 'overrides-states', 'applyOverrides applied states.inProgress — the state key set was never checked');
   }
 
   // pin: `plugins/port/docs/PIPELINE.md`'s "CLAUDE.md overrides" category table ↔ `scripts/port-tick/overrides.ts`'s `OVERRIDABLE`/`NEVER_OVERRIDABLE`/`BEGIN`/`END`
@@ -112,6 +136,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       integration: 'dev',
       production: 'main',
       labels: {},
+      states: {},
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
       modules: { approvalGate: true, release: true, scope: true },
       reviewCycleCap: 5,
@@ -121,7 +146,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     const permissionResult = applyOverrides(
       baseCfg,
       { entries: [{ path: 'commands.checks', op: '=', rawValue: 'node x.ts', reason: 'refused', line: '' }], problems: [] },
-      { labelKeys: [] },
+      { labelKeys: [], stateKeys: [] },
     );
     expect(!(permissionResult.applied.length !== 0), 'overrides-selftest', 'applyOverrides applied an override to commands.checks — the permission surface must never be overridable');
     note(`overrides: ${OVERRIDABLE.length} overridable paths, ${NEVER_OVERRIDABLE.length} never-overridable top-level keys`);

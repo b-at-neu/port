@@ -89,26 +89,25 @@ export function backlogBlockedReasonCopy(count: number): string {
   return count === 1 ? "It's blocked by 1 open ticket:" : `It's blocked by ${String(count)} open tickets:`
 }
 
-export function backlogEpicReasonCopy(subIssueCount: number): string {
-  return subIssueCount === 1 ? 'It has 1 sub-issue. Work on it happens in its sub-issue.' : `It has ${String(subIssueCount)} sub-issues. Work on it happens in its sub-issues.`
-}
-
 export const BACKLOG_EPIC_TAG = 'Epic'
+export const BACKLOG_WAVES_MAY_SHIFT = 'Wave numbers may change. Not every dependency could be read.'
 
 export function backlogWaveLabel(number: number): string {
   return `Wave ${String(number)}`
 }
 
-export function backlogWaveBandCopy(number: number, inProgress: number): string {
-  return `${backlogWaveLabel(number)} · ${String(inProgress)} in progress`
+export function backlogEpicProgressCopy(done: number, total: number, inProgress: number): string {
+  const base = `${String(done)}/${String(total)}`
+  return inProgress > 0 ? `${base} · ${String(inProgress)} in progress` : base
 }
 
-export function backlogEpicProgressCopy(done: number, total: number): string {
-  return `${String(done)}/${String(total)}`
+export function backlogEpicProgressAria(done: number, total: number, inProgress: number): string {
+  const base = `${String(done)} of ${String(total)} sub-issues done`
+  return inProgress > 0 ? `${base}, ${String(inProgress)} in progress` : base
 }
 
-export function backlogEpicProgressAria(done: number, total: number): string {
-  return `${String(done)} of ${String(total)} sub-issues done`
+export function backlogEpicProgressTooltip(done: number, inProgress: number, total: number): string {
+  return `${String(done)} done · ${String(inProgress)} in progress · ${String(Math.max(0, total - done - inProgress))} not started`
 }
 
 export function backlogEpicTruncatedCopy(shown: number, total: number): string {
@@ -119,13 +118,7 @@ export function backlogEpicToggleAria(number: number, collapsed: boolean): strin
   return `${collapsed ? 'Expand' : 'Collapse'} #${String(number)}`
 }
 
-export function backlogDetailToggleAria(number: number, open: boolean): string {
-  return `${open ? 'Hide' : 'Show'} details for #${String(number)}`
-}
-
-export function backlogEpicInfoAria(number: number, open: boolean): string {
-  return `${open ? 'Hide' : 'Show'} info for #${String(number)}`
-}
+export const BACKLOG_DETAIL_CLOSE = 'Close details'
 
 export function backlogDetailRegionAria(number: number): string {
   return `Details for #${String(number)}`

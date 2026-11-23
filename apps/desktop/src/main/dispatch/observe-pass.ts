@@ -1,11 +1,11 @@
-import type { RefreshMemo } from '@/types/tick'
+import type { RefreshMemo, RerunMemo } from '@/types/tick'
 import type { WriteObservation } from '@/types/dispatch'
 
 // The observation pass, split out of dispatcher.ts to keep it under the file-size limit. A throw
 // from the write becomes `outcome: 'failed'`, never a pass that stops partway through.
 import type { ReadyEntry } from '@/types/actions'
-import type { ApplyObservationParams, ApplyObservationResult } from '@/types/actions'
-import type { ObservationRecord } from '@/types/dispatch'
+import type { ApplyObservationParams, ApplyObservationResult, RerunChecksParams } from '@/types/actions'
+import type { ObservationRecord, StageLabelWrites } from '@/types/dispatch'
 
 import type { RepositoryState } from '@/types/state'
 import type { TickObservation } from '@/types/tick'
@@ -16,6 +16,10 @@ const OBSERVED_LIMIT = 20
 
 interface ObservationPassDeps {
   readonly writeObservation: (params: ApplyObservationParams) => Promise<ApplyObservationResult>
+  /** Where an `adopt` observation is applied: the same hand-back table and verification a session's own hand-back goes through. */
+  readonly transition: StageLabelWrites['transition']
+  readonly rerunChecks: (params: RerunChecksParams) => Promise<'applied' | 'failed'>
+  readonly rerunMemo: RerunMemo
   readonly refreshMemo: RefreshMemo
   readonly dirs: { readonly audit: string; readonly scratch: string }
   readonly now: () => Date
@@ -55,6 +59,20 @@ function pushObserved(state: ObservationPassState, record: ObservationRecord): v
   state.observed = next.length > OBSERVED_LIMIT ? next.slice(next.length - OBSERVED_LIMIT) : next
 }
 
+/** An adoption goes through the hand-back table and its verification, never a label plan of its own; a re-run is remembered per head whether or not it started, so one head is never re-run twice. */
+async function applyOwnWrite(entry: ReadyEntry, observation: Extract<TickObservation, { readonly kind: 'adopt' | 'rerun-checks' }>, deps: ObservationPassDeps): Promise<ObservationRecord['outcome']> {
+  if (observation.kind === 'rerun-checks') {
+    const result = await deps.rerunChecks({ entry, number: observation.number, runs: observation.runs, auditDir: deps.dirs.audit })
+    deps.rerunMemo.set(entry.id, observation.number, observation.headRefOid)
+    return result === 'applied' ? 'written' : 'failed'
+  }
+  const record = { number: observation.number, kind: observation.itemKind, agent: observation.agent, trigger: observation.trigger }
+  const result = await deps.transition({ entry, record, event: { kind: 'adopt', handback: observation.handback }, auditDir: deps.dirs.audit, scratchDir: deps.dirs.scratch })
+  if (result.kind === 'applied') return 'written'
+  if (result.reason === 'moved') return 'moved'
+  return result.retryable ? 'failed' : 'refused'
+}
+
 export async function runObservationPass(
   entry: ReadyEntry,
   observable: readonly TickObservation[],
@@ -74,7 +92,13 @@ export async function runObservationPass(
 
     const at = deps.now().toISOString()
     try {
-      const result = await deps.writeObservation({ entry, item, observation: observation as WriteObservation, auditDir: deps.dirs.audit, scratchDir: deps.dirs.scratch })
+      if (observation.kind === 'adopt' || observation.kind === 'rerun-checks') {
+        const outcome = await applyOwnWrite(entry, observation, deps)
+        state.observedWriteAt.set(observation.number, at)
+        pushObserved(state, { kind: observation.kind, number: observation.number, itemKind: observation.itemKind, at, outcome, comment: 'none' })
+        continue
+      }
+      const result = await deps.writeObservation({ entry, item, observation: observation as WriteObservation, snapshotAt: fetchedAt, auditDir: deps.dirs.audit, scratchDir: deps.dirs.scratch })
       state.observedWriteAt.set(observation.number, at)
       if (observationOutcomeOf(result.labels) === 'written') {
         if (observation.kind === 'refresh') deps.refreshMemo.set(entry.id, observation.number, { sha: observation.headRefOid, count: observation.count })

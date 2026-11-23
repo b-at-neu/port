@@ -58,19 +58,23 @@ export function heldDetailCopy(held: TickHeld, owner: DispatchOwner = 'none'): s
     }
     case 'zero-diff': {
       const verb = byApp ? 'escalating' : 'would escalate'
-      if (held.escalation?.kind === 'zero-diff' && held.escalation.reason === 'sha-cap') return `#${n} ${verb} to needs human — this head has had its two reviews, so only a new head gets another.`
-      return `#${n} ${verb} to needs human — the latest review already covers the current head.`
+      return `#${n} ${verb} to needs human — this head has had its two reviews, so only a new head gets another.`
     }
     case 'check-hold': {
       const e = held.escalation
       // Defensive: `planTick` never emits `reason: 'check-hold'` without a populated `escalation` of the same kind.
       if (e === null || e.kind !== 'check-hold') return `#${n} held — waiting on a check.`
       const names = e.checks.map((name) => `\`${name}\``).join(', ')
-      if (e.state === 'pending') return `#${n} held — waiting for ${names} to finish its re-run. It's re-reviewed once it passes, or post a \`## Gate cleared\` comment on the PR to authorise one review now.`
+      if (e.state === 'pending') return `#${n} held — waiting for ${names} to finish. It's reviewed again once it does.`
       const at = e.escalateAt === null ? null : new Date(e.escalateAt)
       const many = e.checks.length > 1
+      const time = at === null || Number.isNaN(at.getTime()) ? null : at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      if (byApp) {
+        const later = time === null ? '' : `, or at ${time} if ${many ? 'they stay' : 'it stays'} red`
+        return `#${n} held — ${names} ${many ? 'are' : 'is'} still red on the reviewed head. It's reviewed again once ${many ? 'they pass' : 'it passes'}${later}.`
+      }
       const rerun = `Re-run ${many ? 'them' : 'it'} on GitHub, or post a \`## Gate cleared\` comment on the PR to authorise one review.`
-      const escalation = at === null || Number.isNaN(at.getTime()) ? '' : ` It escalates to needs human at ${at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} if ${many ? 'they stay' : 'it stays'} red.`
+      const escalation = time === null ? '' : ` It escalates to needs human at ${time} if ${many ? 'they stay' : 'it stays'} red.`
       return `#${n} held — ${names} ${many ? 'are' : 'is'} still red on the reviewed head. ${rerun}${escalation}`
     }
     case 'integration-red': {
@@ -115,7 +119,7 @@ export function heldTagLabel(held: TickHeld): string {
     case 'cycle-cap':
       return 'Held · cycle cap'
     case 'zero-diff':
-      return 'Held · already reviewed'
+      return 'Held · reviewed twice'
     case 'integration-red':
       return 'Held · integration red'
     case 'integration-green':
@@ -184,6 +188,15 @@ export function stalledDetailCopy(claim: TickClaim, owner: DispatchOwner = 'none
   }
 }
 
+/** The phase an adopted hand-back lands on, keyed `<agent>:<token>`. */
+const ADOPTED_PHASE: Readonly<Record<string, string>> = {
+  'plan:plan-written': 'Plan review',
+  'impl:pr-opened': 'Waiting for review',
+  'review:approved': 'Ready to merge',
+  'review:needs-revision': 'Needs revision',
+  'revise:revised': 'Waiting for review',
+}
+
 /** #292: hover detail for the one report-only observation kind —
  *  `refresh-deferred` — which never becomes an `ObservationRecord` write
  *  (`main/tick/dispatchable.ts`'s `observableFrom` excludes it), so this is
@@ -196,6 +209,10 @@ export function observationDetailCopy(observation: TickObservation): string | nu
   switch (observation.kind) {
     case 'refresh-deferred':
       return `#${n} conflicts too — refreshes are capped this poll; it goes next.`
+    case 'adopt':
+      return `#${n} already finished on GitHub — moving it to ${ADOPTED_PHASE[`${observation.agent}:${observation.handback.token}`] ?? 'its next stage'}.`
+    case 'rerun-checks':
+      return `#${n} retrying ${observation.runs.map((run) => run.check).join(', ')} on the reviewed head before reviewing again.`
     case 'liveness-reset':
     case 'cycle-cap':
     case 'zero-diff':

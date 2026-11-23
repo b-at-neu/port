@@ -1,4 +1,4 @@
-import type { DispatchLedger, UnknownStreaks, RefreshMemo, ForceDispatch } from '@/types/tick'
+import type { DispatchLedger, UnknownStreaks, RefreshMemo, RerunMemo, ForceDispatch } from '@/types/tick'
 import type { PipelineState, RefreshOutcome, RepositoryState } from '@/types/state'
 import type { PipelineView, TrackedRef } from '@/types/pipeline-state'
 import type { StateEngine } from '@/types/offload'
@@ -8,6 +8,7 @@ import type { ConditionalTransport, GitHubTransport } from '@/types/platform'
 import type { GitRunner } from '@/types/platform'
 import type { RateLimitInfo } from '@/types/github'
 import { readSessionState } from '@/main/sessions/adapter'
+import { verifiableVocabularyOf } from '@/utils/labels/display'
 import type { RepoId } from '@/utils/repos'
 import type { RepositoryEntry } from '@/utils/repos'
 import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth, isDeferred } from '@/types/board'
@@ -60,6 +61,8 @@ interface CreatePipelineWatcherParams {
   readonly unknownStreaks?: UnknownStreaks
   /** Shared with the dispatcher's own observation pass, never a second instance that would disagree with what the dispatcher just wrote. */
   readonly refreshMemo?: RefreshMemo
+  /** Shared with the dispatcher's own observation pass, so one head's failed checks are re-run once. `undefined` never re-runs a check. */
+  readonly rerunMemo?: RerunMemo
   /** The Needs-you "Dispatch anyway" override — shared with the dispatcher's own consumption pass, never a second instance that would disagree on which entries are still live. */
   readonly forceDispatch?: ForceDispatch
   /** This repository's own dispatcher session's `started` tasks, as descriptions. `undefined` reads as `[]`. */
@@ -80,7 +83,10 @@ interface CreatePipelineWatcherParams {
   readonly trackedRefs?: (repoId: RepoId) => readonly TrackedRef[] | null
   /** Seeds a repository whose view was `labels` from the state just projected. */
   readonly seedPipelineState?: (repoId: RepoId, state: Extract<RepositoryState, { readonly ok: true }>) => Promise<void>
-  readonly prunePipelineState?: (repoId: RepoId, closed: readonly number[]) => Promise<void>
+  /** Writes the terminal state of each merged pull request, then drops the closed items. Undefined keeps today's behaviour: nothing is written or dropped. */
+  readonly finishPipelineState?: (entry: Extract<RepositoryEntry, { readonly status: 'ready' }>, finished: { readonly closed: readonly number[]; readonly merged: readonly number[] }) => Promise<void>
+  /** Re-mirrors the items whose last label write failed. Fire-and-forget: it never blocks a snapshot. */
+  readonly retryMirrors?: (entry: Extract<RepositoryEntry, { readonly status: 'ready' }>) => Promise<void>
   /** Settles once the store has loaded; the first projection waits on it. */
   readonly pipelineReady?: () => Promise<void>
 }
@@ -186,7 +192,22 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       return null
     }
     await seedUnseeded(state, views)
+    retryFailedMirrors(entries, views)
     return assembleSnapshot(state)
+  }
+
+  /** One pass per projection over the repositories the store holds; a failure is already recorded on the item, so it is only logged here. */
+  function retryFailedMirrors(entries: readonly RepositoryEntry[], views: Readonly<Record<string, PipelineView>>): void {
+    if (params.retryMirrors === undefined) return
+    for (const entry of entries.filter(isReady)) {
+      const key = `${entry.id}:mirror`
+      if (views[entry.id]?.kind !== 'store' || inFlight.has(key)) continue
+      inFlight.add(key)
+      params
+        .retryMirrors(entry)
+        .catch((error: unknown) => console.error('[watcher] mirror retry failed', error))
+        .finally(() => inFlight.delete(key))
+    }
   }
 
   /** Seeding sees the same items the board just showed, so no ticket changes stage. A terminal-held repository is skipped: its labels are the record. */
@@ -226,6 +247,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
           reviewCycleCap,
           startedTasks: startedTasks(repository.repoId),
           refreshMemo,
+          rerunMemo: params.rerunMemo,
           checkDispositions,
           holdSessionRequired: params.holdSessionRequired?.(repository.repoId) ?? true,
           stageLiveness: params.stageLiveness?.(repository.repoId) ?? null,
@@ -240,7 +262,9 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       if (report.blind !== null) continue
       const entry = entryById.get(report.repoId)
       if (entry === undefined) continue
-      void recordTickFn(entry.path, buildDesktopTickEvent({ repo: entry.config.repo, report, now }), { git: params.git })
+      const read = state.repositories.find((candidate) => candidate.ok && candidate.repoId === report.repoId)
+      const fetchedAt = read?.ok === true && 'at' in read.freshness.github ? read.freshness.github.at : null
+      void recordTickFn(entry.path, buildDesktopTickEvent({ repo: entry.config.repo, report, fetchedAt, now }), { git: params.git })
     }
 
     const nextWakeupAt = stopped ? null : earliestDueAt().toISOString()
@@ -305,9 +329,9 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       outcome = await engine.refreshDenials({ repoId: entry.id, repoRoot: entry.path })
     } else {
       const startedAt = now().toISOString()
-      outcome = await engine.refreshGithub({ repoId: entry.id, repo: repoRefOf(entry), vocabulary: entry.config.vocabulary, integration: entry.config.branches.integration, tracked: params.trackedRefs?.(entry.id) ?? null })
+      outcome = await engine.refreshGithub({ repoId: entry.id, repo: repoRefOf(entry), vocabulary: entry.config.vocabulary, verify: verifiableVocabularyOf(entry.config), integration: entry.config.branches.integration, tracked: params.trackedRefs?.(entry.id) ?? null })
       precheck.settled(entry.id, startedAt, outcome.ok)
-      if (outcome.closed !== undefined && outcome.closed.length > 0) await params.prunePipelineState?.(entry.id, outcome.closed)
+      if (outcome.closed !== undefined && outcome.closed.length > 0) await params.finishPipelineState?.(entry, { closed: outcome.closed, merged: outcome.merged ?? [] })
     }
     const current = ensureHealth(entry.id)
     const previous = current[kind]

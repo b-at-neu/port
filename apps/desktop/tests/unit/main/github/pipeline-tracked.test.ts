@@ -85,6 +85,33 @@ describe('fetchPipelineItems — tracked items', () => {
     expect(result.ok && result.closed).toEqual([3])
   })
 
+  it('reports a merged tracked pull request in merged as well as closed, and an unmerged close in closed only', async () => {
+    const PR_REF: TrackedRef = { kind: 'pull-request', number: 9, keys: ['marker', 'approved'] }
+    const CLOSED_REF: TrackedRef = { kind: 'pull-request', number: 10, keys: ['marker', 'readyForReview'] }
+    const { runner } = transport({
+      swept: [],
+      tracked: () =>
+        ok({
+          data: {
+            repository: { t0: { ...node(9, ['approved'], 'MERGED'), mergedAt: '2026-01-01T00:00:00Z' }, t1: { ...node(10, ['ready for review'], 'CLOSED'), mergedAt: null }, t2: node(3, ['plan review'], 'CLOSED') },
+            rateLimit: RATE_LIMIT_REPLY,
+          },
+        }),
+    })
+    const result = await read(runner, [PR_REF, CLOSED_REF, TRACKED_PLAN])
+    expect(result.ok && result.closed).toEqual([9, 10, 3])
+    expect(result.ok && result.merged).toEqual([9])
+  })
+
+  it('reports nothing merged on the label path or while every tracked item is open', async () => {
+    const labels = transport({ swept: [node(1, ['ready'])] })
+    const byLabels = await read(labels.runner, null)
+    expect(byLabels.ok && byLabels.merged).toEqual([])
+    const open = transport({ swept: [], tracked: () => ok({ data: { repository: { t0: node(3, []) }, rateLimit: RATE_LIMIT_REPLY } }) })
+    const tracked = await read(open.runner, [TRACKED_PLAN])
+    expect(tracked.ok && tracked.merged).toEqual([])
+  })
+
   it('reports an item GitHub no longer has as closed', async () => {
     const { runner } = transport({
       swept: [],

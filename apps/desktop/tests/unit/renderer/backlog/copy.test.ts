@@ -22,15 +22,13 @@ import {
   backlogDetailInvokeErrorCopy,
   backlogDetailMoreCopy,
   backlogDetailRegionAria,
-  backlogDetailToggleAria,
   backlogEmptyGroupCopy,
   backlogEpicDoneCopy,
-  backlogEpicInfoAria,
   backlogEpicInProgressCopy,
   BACKLOG_EPIC_TAG,
   backlogEpicProgressAria,
   backlogEpicProgressCopy,
-  backlogEpicReasonCopy,
+  backlogEpicProgressTooltip,
   backlogEpicToggleAria,
   backlogEpicTruncatedCopy,
   backlogFailureCopy,
@@ -40,7 +38,6 @@ import {
   backlogRepoFilterButtonCopy,
   backlogStartAnywayTitle,
   backlogTruncatedCopy,
-  backlogWaveBandCopy,
   backlogWaveLabel,
 } from '@/renderer/backlog/copy'
 
@@ -112,7 +109,7 @@ describe('other backlog copy', () => {
   })
 })
 
-describe('blocked and epic confirmation copy', () => {
+describe('blocked confirmation copy', () => {
   it('names the ticket in the dialog title', () => {
     expect(backlogStartAnywayTitle(552)).toBe('Start #552 anyway?')
   })
@@ -120,11 +117,6 @@ describe('blocked and epic confirmation copy', () => {
   it('pluralises the blocked reason', () => {
     expect(backlogBlockedReasonCopy(1)).toBe("It's blocked by 1 open ticket:")
     expect(backlogBlockedReasonCopy(2)).toBe("It's blocked by 2 open tickets:")
-  })
-
-  it('pluralises the epic reason', () => {
-    expect(backlogEpicReasonCopy(1)).toBe('It has 1 sub-issue. Work on it happens in its sub-issue.')
-    expect(backlogEpicReasonCopy(21)).toBe('It has 21 sub-issues. Work on it happens in its sub-issues.')
   })
 
   it('renders a blocker as its number and title', () => {
@@ -150,11 +142,7 @@ describe('repository section copy', () => {
 })
 
 describe('detail copy', () => {
-  it('labels the toggles by what they will do', () => {
-    expect(backlogDetailToggleAria(45, false)).toBe('Show details for #45')
-    expect(backlogDetailToggleAria(45, true)).toBe('Hide details for #45')
-    expect(backlogEpicInfoAria(41, false)).toBe('Show info for #41')
-    expect(backlogEpicInfoAria(41, true)).toBe('Hide info for #41')
+  it('labels the pane', () => {
     expect(backlogDetailRegionAria(45)).toBe('Details for #45')
   })
 
@@ -199,16 +187,22 @@ describe('detail copy', () => {
 })
 
 describe('epic and wave copy', () => {
-  it('names the epic tag, waves and band', () => {
+  it('names the epic tag and waves', () => {
     expect(BACKLOG_EPIC_TAG).toBe('Epic')
     expect(backlogWaveLabel(2)).toBe('Wave 2')
-    expect(backlogWaveBandCopy(2, 1)).toBe('Wave 2 · 1 in progress')
   })
 
   it('words the progress, its accessible name and the truncation note', () => {
-    expect(backlogEpicProgressCopy(1, 3)).toBe('1/3')
-    expect(backlogEpicProgressAria(1, 3)).toBe('1 of 3 sub-issues done')
+    expect(backlogEpicProgressCopy(1, 3, 0)).toBe('1/3')
+    expect(backlogEpicProgressCopy(1, 3, 1)).toBe('1/3 · 1 in progress')
+    expect(backlogEpicProgressAria(1, 3, 0)).toBe('1 of 3 sub-issues done')
+    expect(backlogEpicProgressAria(1, 3, 1)).toBe('1 of 3 sub-issues done, 1 in progress')
     expect(backlogEpicTruncatedCopy(50, 70)).toBe('Counted 50 of 70 sub-issues.')
+  })
+
+  it('words the progress tooltip and clamps not started at zero', () => {
+    expect(backlogEpicProgressTooltip(1, 1, 3)).toBe('1 done · 1 in progress · 1 not started')
+    expect(backlogEpicProgressTooltip(2, 2, 3)).toBe('2 done · 2 in progress · 0 not started')
   })
 
   it('labels the epic toggle by what it will do', () => {

@@ -1,5 +1,5 @@
 // The trigger-key to stage-agent map, pinned by scripts/checks/desktop-tick.ts against
-// utils/labels/labels.json's own trigger-role keys, both directions.
+// utils/labels/labels.legacy.json's own trigger-role keys, both directions.
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { StageAgent } from '@/types/tick'
 
@@ -21,10 +21,6 @@ export const AGENT_FOR_IN_FLIGHT: Readonly<Partial<Record<LabelKey, StageAgent>>
   revising: 'revise',
   refreshing: 'revise',
 }
-
-/** The one label pair sanctioned to sit beside each other. Transcribed byte-for-byte from
- *  scripts/port-tick/reconcile.ts's own REFRESH_PAIR, pinned both directions. */
-export const REFRESH_PAIR: readonly LabelKey[] = ['refreshBranch', 'refreshing']
 
 /** The forward direction of `AGENT_FOR_IN_FLIGHT` — `main/stage/launcher.ts`'s own seam for the in-flight key a just-launched stage carries, disambiguating `revise`'s two in-flight keys by `trigger`. */
 export function inFlightKeyFor(agent: StageAgent, trigger: LabelKey): LabelKey {

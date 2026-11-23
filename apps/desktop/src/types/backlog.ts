@@ -20,10 +20,15 @@ export type ParentRead =
   | { readonly ok: true; readonly parent: BacklogIssueRef | null }
   | { readonly ok: false; readonly reason: string }
 
+// `closed` holds the `CLOSED` blocker nodes; `shown`/`total` mean the same as in `BlockerRead`.
+export type ChildBlockerRead =
+  | { readonly ok: true; readonly open: readonly ClaimBlocker[]; readonly closed: readonly ClaimBlocker[]; readonly shown: number; readonly total: number }
+  | { readonly ok: false; readonly reason: string }
+
 // `claimed` means the child carries a vocabulary label.
 export interface BacklogChild extends BacklogIssueRef {
   readonly claimed: boolean
-  readonly blockers: BlockerRead
+  readonly blockers: ChildBlockerRead
 }
 
 // `shown`/`total` mean the same as in `BlockerRead`.
@@ -109,19 +114,18 @@ export interface BacklogRowView {
   readonly children: ChildrenRead
 }
 
-// `unlisted` counts open unclaimed members not rendered in `rows`; `inProgressOnly` is true when only claimed members remain.
+// A wave exists only when it lists at least one row.
 export interface BacklogWave {
   readonly number: number
   readonly rows: readonly BacklogRowView[]
-  readonly inProgress: number
-  readonly unlisted: number
-  readonly inProgressOnly: boolean
 }
 
-// `uncertain` members have an order built from incomplete blocker data; `cycles` members block each other.
+// Wave numbers come from the whole child graph, closed children included; `wavesMayShift` is set when that graph was read incompletely.
+// `uncertain` members have an incomplete order and `cycles` members block each other; a child epic counts once and is never in `canStart`.
 export type BacklogEpicSummary =
   | {
       readonly ok: true
+      readonly wavesMayShift: boolean
       readonly done: number
       readonly inProgress: number
       readonly open: number
@@ -134,12 +138,19 @@ export type BacklogEpicSummary =
   | { readonly ok: false; readonly reason: string }
 
 // `unplaced` rows name the epic as parent but are not in its children read.
+// `start` is the first wave number the epic occupies (1 for a root); `epics` are its nested child epics.
 export interface BacklogEpicGroup {
   readonly epic: BacklogRowView
+  readonly start: number
   readonly waves: readonly BacklogWave[]
+  readonly epics: readonly BacklogEpicGroup[]
   readonly unplaced: readonly BacklogRowView[]
   readonly summary: BacklogEpicSummary
 }
+
+export type BacklogEpicBodyEntry =
+  | { readonly kind: 'wave'; readonly wave: BacklogWave }
+  | { readonly kind: 'epic'; readonly group: BacklogEpicGroup }
 
 export interface BacklogLinkView {
   readonly number: number
@@ -170,7 +181,6 @@ export interface BacklogRowExtras {
   readonly slot?: string
   readonly leading?: ReactNode
   readonly afterTitle?: ReactNode
-  readonly panel?: ReactNode
 }
 
 export type RenderBacklogRow = (row: BacklogRowView, extras?: BacklogRowExtras) => ReactNode
@@ -188,7 +198,6 @@ export interface BacklogEpicLayout {
 export interface WorkOnReasons {
   readonly blockers: readonly ClaimBlocker[]
   readonly truncation: { readonly shown: number; readonly total: number } | null
-  readonly subIssueCount: number
 }
 
 export type BacklogGroupView =

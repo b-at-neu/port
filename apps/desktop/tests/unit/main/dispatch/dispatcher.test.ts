@@ -51,7 +51,7 @@ function tickReport(overrides: Partial<TickReport> = {}): TickReport {
 function snapshotWith(tick: readonly TickReport[]): BoardSnapshot {
   return {
     state: {
-      repositories: [{ ok: true, repoId: REPO_ID, repo: 'o/a', displayName: 'o/a', viewer: 'op' } as never],
+      repositories: [{ ok: true, repoId: REPO_ID, repo: 'o/a', displayName: 'o/a', viewer: 'op', items: [], freshness: { github: { at: '2026-01-01T00:00:00Z' } } } as never],
       sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: '2026-01-01T00:00:00Z' },
       readAt: '2026-01-01T00:00:00Z',
     },
@@ -115,6 +115,8 @@ function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispat
     launch: null,
     ledger: { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined, observeUnmatched: () => ({ class: 'no-record' }) },
     refreshMemo: { get: () => undefined, set: vi.fn(), clear: vi.fn() },
+    rerunMemo: { get: () => undefined, set: vi.fn() },
+    rerunChecks: () => Promise.resolve('applied'),
     forceDispatch: { has: () => false, set: vi.fn(), clear: vi.fn(), prune: vi.fn() },
     writeObservation: () => {
       throw new Error('writeObservation should not be invoked unless a test wires its own')
@@ -144,7 +146,7 @@ function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispat
     escalate: () => {
       throw new Error('escalate should not be invoked when commands.budget is null')
     },
-    requestRead: () => undefined,
+    requestRead: () => undefined, recordIncident: () => Promise.resolve(),
     dirs: { audit: '/audit', scratch: '/scratch' },
     onChange: vi.fn(),
     now: () => new Date('2026-01-01T00:00:00Z'),
@@ -225,7 +227,7 @@ describe('createDispatcher — stageLiveness', () => {
   })
 
   it('reports live and interrupted descriptions once this app owns the repository', async () => {
-    const interrupted = [{ id: 'i1', repoId: REPO_ID, agent: 'plan' as const, number: 7, kind: 'issue' as const, trigger: 'ready' as const, inFlight: 'planning' as const, model: 'opus', claudeSessionId: null, worktree: { path: '/wt', branch: 'b', baseSha: 's' }, startedAt: 't', interruptedAt: 't', reason: 'crash' as const, detail: null, resetsAt: null, costUsd: null }]
+    const interrupted = [{ id: 'i1', repoId: REPO_ID, agent: 'plan' as const, number: 7, kind: 'issue' as const, trigger: 'ready' as const, inFlight: 'planning' as const, model: 'opus', claudeSessionId: null, worktree: { path: '/wt', branch: 'b', baseSha: 's' }, startedAt: 't', interruptedAt: 't', reason: 'crash' as const, detail: null, resetsAt: null, costUsd: null, networkRetries: 0 }]
     const dispatcher = createDispatcher(baseDeps({ readOwnership: () => Promise.resolve(OWNED_BY_APP), interrupted: () => interrupted }))
     await dispatcher.consider(snapshotWith([tickReport()]))
     expect(dispatcher.stageLiveness(REPO_ID)).toEqual({ live: [], interrupted: ['plan #7'] })

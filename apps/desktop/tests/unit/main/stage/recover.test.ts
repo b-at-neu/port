@@ -17,7 +17,7 @@ function noopFs() {
   return { readJson, writeJsonAtomic }
 }
 
-const entry: Omit<InterruptedStage, 'reason' | 'detail' | 'resetsAt' | 'costUsd' | 'interruptedAt'> = {
+const entry: Omit<InterruptedStage, 'reason' | 'detail' | 'resetsAt' | 'costUsd' | 'interruptedAt' | 'networkRetries'> = {
   id: 's1',
   repoId: 'repo1' as RepoId,
   agent: 'impl',
@@ -84,7 +84,7 @@ describe('resumeStage', () => {
     expect(await resumeStage(full, 's1')).toEqual({ kind: 'at-capacity', limit: 2 })
 
     const failed = setup()
-    failed.resume.mockResolvedValue({ ok: false, kind: 'failed', message: 'runtime problem' })
+    failed.resume.mockResolvedValue({ ok: false, kind: 'failed', message: 'runtime problem', cause: 'resume' })
     expect(await resumeStage(failed, 's1')).toEqual({ kind: 'start-failed', message: 'runtime problem' })
   })
 

@@ -52,7 +52,7 @@ function snapshotCarrying(...numbers: readonly number[]): BoardSnapshot {
   const tick: TickReport = { repoId: REPO_ID, displayName: 'o/a', blind: null, actionable: numbers.map(candidate), held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [], autoApprovals: [], labelRepairs: [] }
   return {
     state: {
-      repositories: [{ ok: true, repoId: REPO_ID, repo: 'o/a', displayName: 'o/a', viewer: 'op' } as never],
+      repositories: [{ ok: true, repoId: REPO_ID, repo: 'o/a', displayName: 'o/a', viewer: 'op', items: [], freshness: { github: { at: '2026-01-01T00:00:00Z' } } } as never],
       sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: '2026-01-01T00:00:00Z' },
       readAt: '2026-01-01T00:00:00Z',
     },
@@ -85,6 +85,8 @@ function harness(overrides: Partial<CreateDispatcherParams> = {}) {
     },
     ledger: { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined, observeUnmatched: () => ({ class: 'no-record' }) },
     refreshMemo: { get: () => undefined, set: vi.fn(), clear: vi.fn() },
+    rerunMemo: { get: () => undefined, set: vi.fn() },
+    rerunChecks: () => Promise.resolve('applied'),
     forceDispatch: { has: () => false, set: vi.fn(), clear: vi.fn(), prune: vi.fn() },
     writeObservation: () => {
       throw new Error('writeObservation should not be invoked')
@@ -127,6 +129,7 @@ function harness(overrides: Partial<CreateDispatcherParams> = {}) {
       throw new Error('escalate should not be invoked')
     },
     requestRead,
+    recordIncident: () => Promise.resolve(),
     dirs: { audit: '/audit', scratch: '/scratch' },
     onChange: vi.fn(),
     now: () => new Date('2026-01-01T00:00:00Z'),
@@ -180,7 +183,7 @@ describe('createDispatcher — read on hand-back', () => {
 
   it('a completed hand-back requests exactly one read for its repository, once its label write has settled', async () => {
     const { dispatcher, requestRead } = await trackedSession()
-    dispatcher.recordOutcome(REPO_ID, SESSION_KEY, outcome('completed'))
+    dispatcher.recordOutcome(REPO_ID, SESSION_KEY, outcome('completed'), null)
     expect(requestRead).not.toHaveBeenCalled()
     await flush()
     expect(requestRead).toHaveBeenCalledTimes(1)
@@ -189,14 +192,14 @@ describe('createDispatcher — read on hand-back', () => {
 
   it.each(['questions', 'blocked', 'error', 'usage-limit', 'interrupted'] as const)('a %s hand-back requests no read', async (kind) => {
     const { dispatcher, requestRead } = await trackedSession()
-    dispatcher.recordOutcome(REPO_ID, SESSION_KEY, outcome(kind))
+    dispatcher.recordOutcome(REPO_ID, SESSION_KEY, outcome(kind), null)
     await flush()
     expect(requestRead).not.toHaveBeenCalled()
   })
 
   it('a hand-back for an untracked session requests no read', async () => {
     const { dispatcher, requestRead } = await trackedSession()
-    dispatcher.recordOutcome(REPO_ID, 'hosted-other' as SessionKey, outcome('completed'))
+    dispatcher.recordOutcome(REPO_ID, 'hosted-other' as SessionKey, outcome('completed'), null)
     await flush()
     expect(requestRead).not.toHaveBeenCalled()
   })
