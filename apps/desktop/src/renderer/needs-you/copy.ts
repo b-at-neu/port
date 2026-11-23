@@ -64,6 +64,26 @@ export function dismissedToast(items: readonly Pick<NeedsYouItem, 'number'>[]): 
   return `Dismissed ${plural(items.length, 'item')}.`
 }
 
+export const DISMISSED_LABEL = 'Dismissed'
+
+export const RESTORE_LABEL = 'Restore'
+
+export const RESTORE_ALL_LABEL = 'Restore all'
+
+export function showDismissedLabel(count: number, open: boolean): string {
+  return open ? 'Hide dismissed' : `Show dismissed · ${String(count)}`
+}
+
+export function showDismissedAction(count: number): string {
+  return `Show ${String(count)} dismissed`
+}
+
+export function restoredToast(items: readonly Pick<NeedsYouItem, 'number'>[]): string {
+  const only = items.length === 1 ? items[0] : undefined
+  if (only !== undefined) return only.number !== null ? `Restored #${String(only.number)}.` : 'Restored this item.'
+  return `Restored ${plural(items.length, 'item')}.`
+}
+
 export function resumeAllToast(resumed: number, total: number, slotLimit: number | null, failure: { readonly number: number; readonly reason: string } | null): string {
   if (failure !== null) return `Couldn't resume #${String(failure.number)}: ${failure.reason}.`
   if (resumed === total) return `Resumed ${plural(total, 'session')}.`
@@ -175,9 +195,8 @@ export function needsYouLeadCopy(item: NeedsYouItem, now: Date = new Date()): st
         }
         default: {
           const escalation = item.held.escalation
-          const count = escalation?.kind === 'cycle-cap' ? escalation.count : 0
           const cap = escalation?.kind === 'cycle-cap' ? escalation.cap : 0
-          return `${label} hit the review cycle cap (${String(count)} of ${String(cap)}). Decide how to continue.`
+          return `${label} used all ${String(cap)} review cycles. Grant one more, or merge it and open a follow-up.`
         }
       }
     case 'stalled':

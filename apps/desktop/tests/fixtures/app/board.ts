@@ -76,7 +76,7 @@ function pipelineItemsFor(now: Date, vocabulary: LabelVocabulary, seeds: readonl
       labelEvents,
       headRefOid: isPr ? `fixture-sha-${String(seed.number)}` : null,
       mergeable: isPr ? (seed.mergeable ?? 'MERGEABLE') : null,
-      reviews: isPr ? [] : null,
+      reviews: isPr ? Array.from({ length: seed.reviewCount ?? 0 }, (_, index) => ({ body: '## Code Review\n', submittedAt: offsetMinutes(now, -(index + 1) * 10), commitOid: null })) : null,
       comments: isPr ? (seed.comments ?? []).map((c) => ({ body: c.body, createdAt: offsetMinutes(now, c.offsetMinutes) })) : null,
       checkRollup: isPr ? [] : null,
       blockers: isPr ? null : (seed.blockers ?? { ok: true, open: [], shown: 0, total: 0 }),

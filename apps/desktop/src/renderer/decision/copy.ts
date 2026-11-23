@@ -1,7 +1,7 @@
 // Every string the decision dialog renders — one function per union, pure.
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { mirrorReason } from '@/renderer/lib/mirror-reason'
-import type { ItemDecisionResult, OperatorDecision, RebaseDecision, RebaseOption, RebasePick, ReviseContext, UnblockContext, UnblockRoute } from '@/types/actions'
+import type { GrantContext, ItemDecisionResult, OperatorDecision, RebaseDecision, RebaseOption, RebasePick, ReviseContext, UnblockContext, UnblockRoute } from '@/types/actions'
 
 function labelNameOf(key: string): string {
   return LABEL_DEFAULTS.find((def) => def.key === key)?.name ?? key
@@ -11,7 +11,13 @@ const UNBLOCK_TARGET_LABEL: Readonly<Record<UnblockRoute, string>> = { revision:
 
 export function dialogTitle(decision: OperatorDecision, number: number, target: UnblockContext['target'] = 'pull-request'): string {
   if (target === 'issue') return `Unblock #${String(number)}`
+  if (decision === 'grant') return `Grant PR #${String(number)} one more review cycle?`
   return decision === 'unblock' ? `Unblock PR #${String(number)}` : `Request changes on PR #${String(number)}`
+}
+
+export function grantConsequence(context: GrantContext, number: number): string {
+  const cap = String(context.cap)
+  return `PR #${String(number)} has used all ${cap} review cycles. This posts "## Gate cleared" with a cycle grant, and the next tick sends it to revision. Only this PR changes; reviewCycleCap stays ${cap}.`
 }
 
 export function unblockReasonLine(context: UnblockContext): string {
@@ -78,6 +84,8 @@ interface DecisionResultParams {
   readonly route: UnblockRoute | null
   readonly picks: readonly RebasePick[] | null
   readonly response: ItemDecisionResult
+  /** The effective cap the grant was opened against; only a `grant` reads it. */
+  readonly cap?: number
 }
 
 interface DecisionResultLines {
@@ -92,14 +100,22 @@ interface DecisionResultCopy extends DecisionResultLines {
 
 /** The result toast (the plan's own **UX states**): `applied` is a success, every other outcome an error. */
 export function decisionResultCopy(params: DecisionResultParams): DecisionResultCopy {
-  const applied = params.response.ok && (params.response.labels.kind === 'applied' || params.response.labels.kind === 'mirror-failed')
+  const applied = params.response.ok && (params.response.labels.kind === 'applied' || params.response.labels.kind === 'mirror-failed' || (params.decision === 'grant' && params.response.labels.kind === 'no-op'))
   return { ...decisionResultLines(params), tone: applied ? 'success' : 'error' }
 }
 
 /** Exhaustive over `ItemDecisionResult`. `route` disambiguates `unblock`'s own two lines. */
 function decisionResultLines(params: DecisionResultParams): DecisionResultLines {
-  const { number, decision, route, picks, response } = params
+  const { number, decision, route, picks, response, cap } = params
   const n = route === 'implementation' ? `#${String(number)}` : `PR #${String(number)}`
+
+  if (decision === 'grant' && response.ok && (response.labels.kind === 'applied' || response.labels.kind === 'no-op')) {
+    const cycles = cap === undefined ? '' : ` (${String(cap + 1)})`
+    return { line: `${n} has one more review cycle${cycles}. The next tick sends it to revision.`, note: null, offerLabelOnly: false }
+  }
+  if (decision === 'grant' && !response.ok && response.reason === 'comment-failed') {
+    return { line: `Couldn't post the cycle grant on ${n}, so nothing changed.`, note: null, offerLabelOnly: false }
+  }
 
   if (!response.ok) {
     switch (response.reason) {
@@ -113,7 +129,7 @@ function decisionResultLines(params: DecisionResultParams): DecisionResultLines 
         return { line: "Can't read this repository right now. Nothing was written.", note: null, offerLabelOnly: false }
       case 'refused':
         return {
-          line: `${n} can no longer be ${decision === 'unblock' ? 'unblocked' : 'sent back'} that way.`,
+          line: `${n} can no longer be ${decision === 'unblock' ? 'unblocked' : decision === 'grant' ? 'granted a cycle' : 'sent back'} that way.`,
           note: refusalNote(response),
           offerLabelOnly: false,
         }

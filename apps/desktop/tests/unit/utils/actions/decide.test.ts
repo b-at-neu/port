@@ -368,4 +368,45 @@ describe('decisionPlan', () => {
       action: 'revise',
     })
   })
+
+  it('grant keeps the label set and guards the neighbouring gates', () => {
+    const it1 = item({ stages: [stageLabel('needsRevision', 'trigger')] })
+    expect(decisionPlan('grant', it1, null, 'op')).toEqual({
+      add: ['needsRevision'],
+      remove: [],
+      expect: { present: ['needsRevision'], absent: ['needsHuman', 'refreshBranch', 'refreshing'], assignees: { kind: 'exactly', logins: ['op'] } },
+      action: 'grant',
+    })
+  })
+})
+
+describe('decisionsFor — grant', () => {
+  const capped = (overrides: Partial<ReconciledItem> = {}) => item({ stage: 'trigger', stages: [stageLabel('needsRevision', 'trigger')], reviewCycleCount: 5, ...overrides })
+
+  it('is available on a needsRevision PR at the cap, carrying the cycles used and the cap', () => {
+    expect(decisionsFor({ item: capped(), viewer: 'op', reviewCycleCap: 5, liveStage: false }).grant).toEqual({ available: true, context: { cyclesUsed: 5, cap: 5 } })
+  })
+
+  it('is not-applicable below the cap', () => {
+    expect(decisionsFor({ item: capped({ reviewCycleCount: 4 }), viewer: 'op', reviewCycleCap: 5, liveStage: false }).grant).toEqual({ available: false, reason: 'not-applicable' })
+  })
+
+  it('is not-applicable when another stage label rides along', () => {
+    const both = capped({ stages: [stageLabel('needsRevision', 'trigger'), stageLabel('refreshBranch', 'trigger')] })
+    expect(decisionsFor({ item: both, viewer: 'op', reviewCycleCap: 5, liveStage: false }).grant).toEqual({ available: false, reason: 'not-applicable' })
+  })
+
+  it('refuses agent-live while a stage session is live', () => {
+    expect(decisionsFor({ item: capped(), viewer: 'op', reviewCycleCap: 5, liveStage: true }).grant).toEqual({ available: false, reason: 'agent-live' })
+  })
+
+  it('refuses not-owned and viewer-unknown ahead of everything else', () => {
+    expect(decisionsFor({ item: capped({ assignees: ['other'] }), viewer: 'op', reviewCycleCap: 5, liveStage: false }).grant).toEqual({ available: false, reason: 'not-owned' })
+    expect(decisionsFor({ item: capped(), viewer: null, reviewCycleCap: 5, liveStage: false }).grant).toEqual({ available: false, reason: 'viewer-unknown' })
+  })
+
+  it('counts an earlier grant toward the effective cap', () => {
+    const comments = [{ body: '## Gate cleared\n\n### Cycle grant\nOne extra review cycle for this PR only; reviewCycleCap is unchanged.', createdAt: '2026-01-01T00:00:00Z' }]
+    expect(decisionsFor({ item: capped({ comments }), viewer: 'op', reviewCycleCap: 5, liveStage: false }).grant).toEqual({ available: false, reason: 'not-applicable' })
+  })
 })

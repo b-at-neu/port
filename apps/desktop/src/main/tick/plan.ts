@@ -219,9 +219,9 @@ function actionableAndHeld(
       }
     }
 
-    // The cycle-cap gate: unconditional, fires whatever the latest review said. The effective cap
+    // The cycle-cap gate: unconditional for a revision, fires whatever the latest review said. A refresh is a rebase, never a review cycle. The effective cap
     // folds in any operator-granted cycles.
-    if (agent === 'revise' && (item.reviewCycleCount ?? 0) >= reviewCycleCap + cycleGrantCount(item.comments ?? undefined)) {
+    if (trigger === 'needsRevision' && (item.reviewCycleCount ?? 0) >= reviewCycleCap + cycleGrantCount(item.comments ?? undefined)) {
       held.push({
         number: item.number,
         kind: item.kind,
@@ -274,7 +274,7 @@ function actionableAndHeld(
       }
     }
 
-    const cycle = cycleOf(item, agent === 'revise' ? reviewCycleCap + cycleGrantCount(item.comments ?? undefined) : reviewCycleCap)
+    const cycle = trigger === 'refreshBranch' ? null : cycleOf(item, agent === 'revise' ? reviewCycleCap + cycleGrantCount(item.comments ?? undefined) : reviewCycleCap)
 
     if (agent !== 'impl' || item.claimedFiles === null) {
       ungated.push({ number: item.number, kind: item.kind, trigger, agent, unchecked: agent === 'impl' && item.claimedFiles === null, cycle })

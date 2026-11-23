@@ -1,7 +1,7 @@
 // The one visible-items read: the screen, the sidebar count, the palette and the per-repo dots all
 // go through it, so a dismissed or auto-cleared item can never disagree between them.
 import { useIpcQuery } from '@/renderer/data/query'
-import { useDismissed, visibleNeedsYouItems } from '@/renderer/needs-you/dismissed'
+import { dismissedNeedsYouItems, useDismissed, visibleNeedsYouItems } from '@/renderer/needs-you/dismissed'
 import type { NeedsYouItem } from '@/types/board'
 
 export function useNeedsYouItems(): readonly NeedsYouItem[] {
@@ -10,4 +10,13 @@ export function useNeedsYouItems(): readonly NeedsYouItem[] {
   const dismissed = useDismissed()
   if (snapshot.data === undefined) return []
   return visibleNeedsYouItems(snapshot.data, new Date(), sessions.data ?? [], dismissed)
+}
+
+/** The Show dismissed view's own read; sidebar counts, the palette and the notifier never see these. */
+export function useDismissedNeedsYouItems(): readonly NeedsYouItem[] {
+  const snapshot = useIpcQuery('board:snapshot')
+  const sessions = useIpcQuery('session:list')
+  const dismissed = useDismissed()
+  if (snapshot.data === undefined) return []
+  return dismissedNeedsYouItems(snapshot.data, new Date(), sessions.data ?? [], dismissed)
 }

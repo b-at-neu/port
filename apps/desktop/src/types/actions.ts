@@ -16,8 +16,8 @@ import type { IncidentIntent } from '@/types/incidents'
 export const OPERATOR_ACTIONS = ['pause', 'resume', 'retry', 'stop', 'gate', 'refresh'] as const
 export type OperatorAction = (typeof OPERATOR_ACTIONS)[number]
 
-/** The two actions that need a comment and, for unblock, an operator choice of route. */
-export const OPERATOR_DECISIONS = ['unblock', 'revise'] as const
+/** The actions that need a comment: unblock also takes an operator choice of route, and grant posts only the cycle-grant comment. */
+export const OPERATOR_DECISIONS = ['unblock', 'revise', 'grant'] as const
 export type OperatorDecision = (typeof OPERATOR_DECISIONS)[number]
 
 /** Unblock's own fork — which trigger the cleared item goes back to. */
@@ -111,8 +111,13 @@ export interface ReviseContext {
   readonly cap: number
 }
 
+export interface GrantContext {
+  readonly cyclesUsed: number
+  readonly cap: number
+}
+
 export type DecisionAvailability =
-  | { readonly available: true; readonly context: UnblockContext | ReviseContext }
+  | { readonly available: true; readonly context: UnblockContext | ReviseContext | GrantContext }
   | { readonly available: false; readonly reason: DecisionRefusal }
 
 /** Same shape family as `ItemActionResult`, with `comment`/`labels` replacing `outcome` since a decision writes both. */
