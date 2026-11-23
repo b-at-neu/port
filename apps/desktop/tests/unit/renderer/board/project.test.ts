@@ -243,7 +243,7 @@ describe('projectBoard — one row per ticket', () => {
     expect(row?.stageLabel?.key).toBe('reviewing')
     expect(row?.displayStatus.status).toBe('in-flight')
     const subGroups = boardSections(projection.rows, { repo: null }).flatMap((section) => section.subGroups)
-    expect(subGroups.map((subGroup) => subGroup.key)).toEqual(['reviewing'])
+    expect(subGroups.map((subGroup) => subGroup.key)).toEqual(['review:running'])
   })
 
   describe('a pr opened issue whose pull request is gone from the sweep', () => {

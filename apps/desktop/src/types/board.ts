@@ -205,6 +205,12 @@ export interface BoardProjection {
 
 export type BoardColumnKey = 'queued' | 'plan' | 'implement' | 'review' | 'revise' | 'needs-you'
 
+/** The four section buckets the Board list splits rows into. */
+export type BoardSectionKey = 'waiting-on-you' | 'in-progress' | 'blocked' | 'queued'
+
+/** The row-level kinds a ticket's own stage can put in Needs you. */
+export type RowNeedsYouKind = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'blocked'
+
 export interface BoardColumnCard {
   readonly row: BoardItemRow
   /** Carries a pipeline label but not the marker, so the merge gate is inactive. */

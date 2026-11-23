@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { actions } from '@/main/app/router'
-import { readyEntry } from '../../../fixtures/board-state'
+import { readyEntry } from '../../../support/repo-config'
 import { callAction, createTestContext } from '../../../support/context'
 
 const NAME_SHAPE = /^[a-z]+\.[a-zA-Z]+$/

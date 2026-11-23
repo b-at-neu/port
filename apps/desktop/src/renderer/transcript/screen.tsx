@@ -12,7 +12,8 @@ import { StatusPill } from '@/renderer/components/status-pill'
 import { ConversationList } from '@/renderer/components/conversation-list'
 import { PhaseList } from '@/renderer/components/phase-list'
 import { useIpcQuery } from '@/renderer/data/query'
-import { agentSummaryOf, stageKeyOf } from '@/renderer/board/row-model'
+import { agentSummaryOf } from '@/renderer/board/row-model'
+import { ticketViewOf } from '@/renderer/lib/ticket-view'
 import type { RepoId } from '@/utils/repos'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { retryTail, toggleFollow, useTranscriptTail } from '@/renderer/transcript/tail-store'
@@ -42,13 +43,12 @@ function TicketAside({ repoId, number }: { readonly repoId: RepoId; readonly num
     )
   }
 
-  const stageKey = stageKeyOf(foundItem.stages, foundItem.stage)
   return (
     <div className="w-64 shrink-0 overflow-y-auto border-l border-border p-4">
       <p className="mb-3 text-small font-medium">
         #{foundItem.number} {foundItem.title}
       </p>
-      <PhaseList stageKey={stageKey} kind={foundItem.kind} merged={foundItem.mergedAt !== null} details={{}} extraCurrentLine={agentSummaryOf(foundItem.agents, foundItem.sessions)} />
+      <PhaseList view={ticketViewOf(foundItem)} details={{}} extraCurrentLine={agentSummaryOf(foundItem.agents, foundItem.sessions)} />
     </div>
   )
 }

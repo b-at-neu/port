@@ -9,7 +9,7 @@ import { readRegistry } from '@/main/repos/registry-store'
 import type { ReposListResponse } from '@/types/ipc'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import { makeTempDir } from '../../../fixtures/fs'
-import { readyEntry } from '../../../fixtures/board-state'
+import { readyEntry } from '../../../support/repo-config'
 import { createFakePlatform } from '../../../support/fake-platform'
 
 async function makeRepo(root: string, repo = 'acme/widgets'): Promise<void> {

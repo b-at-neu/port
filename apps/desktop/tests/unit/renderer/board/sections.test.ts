@@ -6,6 +6,7 @@ import type { BlockedOn, BoardItemRow } from '@/types/board'
 import type { SessionKey } from '@/types/hosting'
 import type { ReconciledItem, StageLabel } from '@/types/state'
 import type { Ticket } from '@/types/ticket'
+import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { ticketIndex } from '@/utils/tickets/ticket'
 import { boardSections } from '@/renderer/board/sections'
 
@@ -22,7 +23,7 @@ function row(overrides: {
   readonly blockedOn?: BlockedOn
 }): BoardItemRow {
   const repoId = (overrides.repoId ?? 'repo-a') as RepoId
-  const stageLabel: StageLabel | null = overrides.stageKey != null ? { key: overrides.stageKey, name: overrides.stageKey, role: 'trigger' } : null
+  const stageLabel: StageLabel | null = overrides.stageKey != null ? { key: overrides.stageKey, name: overrides.stageKey, role: LABEL_DEFAULTS.find((def) => def.key === overrides.stageKey)?.role ?? 'trigger' } : null
   const item = {
     repoId,
     repo: overrides.repo ?? 'o/a',
@@ -31,7 +32,7 @@ function row(overrides: {
     title: 't',
     url: 'https://example.com',
     assignees: [],
-    stage: stageLabel?.key ?? null,
+    stage: stageLabel?.role ?? null,
     stages: stageLabel !== null ? [stageLabel] : [],
     stageAmbiguous: false,
     marked: true,
@@ -140,13 +141,16 @@ describe('boardSections', () => {
     expect(sections.map((s) => s.key)).toEqual(['queued'])
   })
 
-  it('phase grouping orders sub-groups in pipeline order and names them from PHASE_NAMES', () => {
-    const rows = [row({ number: 1, stageKey: 'inProgress', status: 'in-flight' }), row({ number: 2, stageKey: 'ready', status: 'waiting' })]
-    const sections = boardSections(rows, { repo: null })
-    const inProgress = sections.find((s) => s.key === 'in-progress')
-    expect(inProgress?.subGroups.map((g) => g.name)).toEqual(['Implementing'])
-    const queued = sections.find((s) => s.key === 'queued')
-    expect(queued?.subGroups.map((g) => g.name)).toEqual(['Queued'])
+  it('orders sub-groups by stage group, whatever order the rows arrive in', () => {
+    const rows = [row({ number: 1, stageKey: 'reviewing', status: 'in-flight' }), row({ number: 2, stageKey: 'planning', status: 'in-flight' }), row({ number: 3, stageKey: 'refreshing', status: 'in-flight' })]
+    const inProgress = boardSections(rows, { repo: null }).find((s) => s.key === 'in-progress')
+    expect(inProgress?.subGroups.map((g) => g.key)).toEqual(['plan:running', 'review:running', 'refresh:running'])
+  })
+
+  it('a replanning row groups apart from a freshly queued one', () => {
+    const rows = [row({ number: 1, stageKey: 'planChangesRequested', status: 'waiting' }), row({ number: 2, stageKey: 'ready', status: 'waiting' })]
+    const queued = boardSections(rows, { repo: null }).find((s) => s.key === 'queued')
+    expect(queued?.subGroups.map((g) => g.name)).toEqual(['Queued', 'Replanning'])
   })
 
   it('an unstaged row gets its own trailing phase sub-group', () => {
@@ -155,7 +159,7 @@ describe('boardSections', () => {
     expect(sections[0]?.subGroups).toEqual([{ key: 'unstaged', name: 'Unstaged', rows: [rows[0]] }])
   })
 
-  it('a stage PHASE_NAMES marks null (prOpened) also falls into Unstaged', () => {
+  it('a key with no stage (prOpened) also falls into Unstaged', () => {
     const rows = [row({ number: 1, stageKey: 'prOpened', status: 'terminal' })]
     const sections = boardSections(rows, { repo: null })
     expect(sections[0]?.subGroups.map((g) => g.key)).toEqual(['unstaged'])

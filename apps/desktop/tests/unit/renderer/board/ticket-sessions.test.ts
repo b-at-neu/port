@@ -40,7 +40,7 @@ function run(overrides: Partial<Parameters<typeof ticketSessionsFor>[0]> = {}) {
 }
 
 describe('ticketSessionsFor', () => {
-  it('places a stage session in the phase of its trigger, with refreshBranch landing in Merge', () => {
+  it('places a stage session in the phase of its trigger, with refreshBranch landing in Revision', () => {
     const result = run({
       index: [
         entry({ claudeSessionId: 'plan', stage: tag('plan', 46, 'issue', 'ready') }),
@@ -48,7 +48,7 @@ describe('ticketSessionsFor', () => {
       ],
     })
     expect(result.byPhase.plan?.map((l) => l.key)).toEqual(['plan'])
-    expect(result.byPhase.merge?.map((l) => l.key)).toEqual(['refresh'])
+    expect(result.byPhase.revision?.map((l) => l.key)).toEqual(['refresh'])
     expect(result.byPhase.plan?.[0]).toMatchObject({ who: { kind: 'stage', agent: 'plan' }, state: 'ended', costUsd: 1, open: { kind: 'transcript', sessionId: 'plan', agentId: null } })
   })
 

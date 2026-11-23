@@ -7,7 +7,8 @@ import type { ReconciledItem, StageEntry, WorkSession } from '@/types/state'
 import type { StageTag } from '@/types/stage-session'
 import type { StageAgent } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
-import { phaseOfStage } from '@/renderer/board/phase-model'
+import { viewOfKey } from '@/renderer/lib/ticket-view'
+import { agentPhase, phaseOf } from '@/utils/pipeline/stages'
 
 interface TicketSessionsParams {
   readonly repoId: RepoId
@@ -23,8 +24,6 @@ interface PlacedLink {
   readonly link: TicketSessionLink
 }
 
-const AGENT_PHASE: Readonly<Record<StageAgent, PhaseKey>> = { plan: 'plan', impl: 'implement', review: 'review', revise: 'revision' }
-
 const TERMINAL_AGENT: Readonly<Record<PortStageAgent, StageAgent>> = { 'plan-agent': 'plan', 'impl-agent': 'impl', 'review-agent': 'review', 'revise-agent': 'revise' }
 
 function targeted(tag: StageTag, targets: readonly StageLinkTarget[]): boolean {
@@ -32,7 +31,7 @@ function targeted(tag: StageTag, targets: readonly StageLinkTarget[]): boolean {
 }
 
 function stagePhase(tag: StageTag): PhaseKey {
-  return phaseOfStage(tag.trigger, tag.kind) ?? AGENT_PHASE[tag.agent]
+  return phaseOf(viewOfKey(tag.trigger, tag.kind)) ?? agentPhase(tag.agent)
 }
 
 function byTime(a: PlacedLink, b: PlacedLink): number {
@@ -82,7 +81,7 @@ function stageLinks(params: TicketSessionsParams, liveById: ReadonlyMap<string, 
       if (agent.stage === null || usedIds.has(agent.sessionId)) continue
       const stage = TERMINAL_AGENT[agent.stage]
       placed.push({
-        phase: AGENT_PHASE[stage],
+        phase: agentPhase(stage),
         link: {
           key: `agent-${agent.agentId}`,
           who: { kind: 'stage', agent: stage },
@@ -112,7 +111,7 @@ function phaseAt(time: number, history: readonly (StageEntry & { readonly itemKi
     if (Number.isNaN(at) || at > time) continue
     if (latest === null || at >= Date.parse(latest.at)) latest = entry
   }
-  return latest === null ? null : phaseOfStage(latest.key, latest.itemKind)
+  return latest === null ? null : phaseOf(viewOfKey(latest.key, latest.itemKind))
 }
 
 function manualLinks(params: TicketSessionsParams, liveById: ReadonlyMap<string, HostedSessionSnapshot>, usedIds: ReadonlySet<string>): PlacedLink[] {

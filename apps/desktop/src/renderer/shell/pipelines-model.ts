@@ -10,9 +10,9 @@ import { repoNeedsYou } from '@/renderer/board/needs-you'
 import { ticketIndex, ticketLabel } from '@/utils/tickets/ticket'
 import type { PhaseTone, PillStatus } from '@/types/components'
 import type { PipelineRow, PipelineSessionRow, RunStateDisplay, SidebarModel } from '@/types/shell'
-import { stageKeyOf } from '@/renderer/board/row-model'
 import { stageAgentPhaseName } from '@/renderer/board/copy'
-import { PHASE_NAMES } from '@/renderer/lib/phase'
+import { ticketViewOf, viewOfKey } from '@/renderer/lib/ticket-view'
+import { stageNameOf } from '@/utils/pipeline/stages'
 import { phaseTone } from '@/renderer/lib/phase-tone'
 import { classifyHandbackText } from '@/utils/stage/handback-text'
 
@@ -42,12 +42,12 @@ function sessionsFor(repoId: RepoId, index: TicketIndex, needsYouNumbers: Readon
     const liveSession = item.sessions.find((s) => s.activity === 'active')
     if (liveAgent === undefined && liveSession === undefined) continue
 
-    const stageKey = stageKeyOf(item.stages, item.stage)
-    const tone = runningTone(phaseTone({ stageKey, active: true, waitingOnYou: false, operatorNeeded: false }))
+    const view = ticketViewOf(item)
+    const tone = runningTone(phaseTone({ view, active: true, waitingOnYou: false, operatorNeeded: false }))
     const transcript: PipelineSessionRow['transcript'] =
       liveAgent !== undefined ? { sessionId: liveAgent.sessionId, agentId: liveAgent.agentId } : liveSession !== undefined ? { sessionId: liveSession.sessionId, agentId: null } : null
 
-    const phaseName = stageKey !== null ? (PHASE_NAMES[stageKey] ?? stageKey) : 'Unstaged'
+    const phaseName = stageNameOf(view)
     rows.push({ key: `${repoId}-${ticket.ref.number}`, repoId, number: ticket.ref.number, label: ticketLabel(ticket.ref), tone, statusText: statusTextOf(tone, phaseName), phaseName, sessionKey: null, transcript })
   }
   return rows
@@ -63,7 +63,7 @@ function stageRowFor(repoId: RepoId, session: HostedSessionSnapshot, index: Tick
   if (stage === null) throw new Error('stageRowFor called with a non-stage snapshot')
   const ticket = index.byNumber.get(stage.number)
   const label = session.title ?? (ticket !== undefined ? ticketLabel(ticket.ref) : `#${String(stage.number)}`)
-  const tone = runningTone(phaseTone({ stageKey: stage.trigger, active: true, waitingOnYou: false, operatorNeeded: operatorNeeded(session) }))
+  const tone = runningTone(phaseTone({ view: viewOfKey(stage.trigger, stage.kind), active: true, waitingOnYou: false, operatorNeeded: operatorNeeded(session) }))
   const phaseName = stageAgentPhaseName(stage.agent)
   return { key: session.sessionKey, repoId, number: ticketNumberOf(stage, index), label, tone, statusText: statusTextOf(tone, phaseName), phaseName, sessionKey: session.sessionKey, transcript: null }
 }

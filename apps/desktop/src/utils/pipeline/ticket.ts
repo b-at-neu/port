@@ -31,7 +31,7 @@ export const statusSchema = z.discriminatedUnion('kind', [
 export type Status = z.infer<typeof statusSchema>
 export type StatusKind = Status['kind']
 
-const STATUS_KINDS = ['queued', 'held', 'running', 'waiting-on-you', 'blocked', 'done'] as const
+export const STATUS_KINDS = ['queued', 'held', 'running', 'waiting-on-you', 'blocked', 'done'] as const
 export const _statusKindsCoverStatus: AssertEqual<(typeof STATUS_KINDS)[number], StatusKind> = true
 
 const WRITE_OUTCOME_KINDS = [

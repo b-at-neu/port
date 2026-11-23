@@ -13,14 +13,13 @@ import type { Conflict } from '@/types/writes'
 import type { StageAgent } from '@/types/tick'
 import { worstHealth } from '@/renderer/board/project'
 import type { LabelKey } from '@/utils/labels/vocabulary'
-import { PHASE_NAMES } from '@/renderer/lib/phase'
+import { stageNameOfKey } from '@/renderer/lib/ticket-view'
+import { agentStageName } from '@/utils/pipeline/stages'
 import { mirrorReason } from '@/renderer/lib/mirror-reason'
-
-const STAGE_NAME: Readonly<Record<StageAgent, string>> = { plan: 'Planning', impl: 'Implementing', review: 'Reviewing', revise: 'Revising' }
 
 /** The phase name a dispatched stage shows before its agent has swapped a label. */
 export function stageAgentPhaseName(agent: StageAgent): string {
-  return STAGE_NAME[agent]
+  return agentStageName(agent)
 }
 
 function timeOf(iso: string): string {
@@ -211,9 +210,9 @@ const PHASE_EVENT_VERB: Readonly<Partial<Record<LabelKey, string>>> = {
   blocked: 'Blocked',
 }
 
-/** One phase history line's leading verb — falls back to `PHASE_NAMES` for a key with no dedicated event phrasing. */
+/** One phase history line's leading verb — falls back to the stage table's name for a key with no dedicated event phrasing. */
 export function phaseEventVerb(key: LabelKey): string {
-  return PHASE_EVENT_VERB[key] ?? PHASE_NAMES[key] ?? key
+  return PHASE_EVENT_VERB[key] ?? stageNameOfKey(key) ?? key
 }
 
 /** `you` when `actor` is the signed-in viewer (case-insensitive), else `@login`. */
@@ -467,7 +466,7 @@ export function actionResultCopy(params: {
       return `port couldn't save its pipeline state for #${n}, so nothing changed — ${outcome.message}. Try again.`
     case 'mirror-failed': {
       const added = plan?.add[0]
-      const phase = added === undefined ? 'its new state' : (PHASE_NAMES[added] ?? labelNameOf(added))
+      const phase = added === undefined ? 'its new state' : (stageNameOfKey(added) ?? labelNameOf(added))
       return `#${n} moved to ${phase}, but its GitHub label couldn't be updated — ${mirrorReason(outcome.mirror)}. The next write will correct it.`
     }
   }
