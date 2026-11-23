@@ -40,6 +40,7 @@ interface StageSessionOptions {
   readonly pendingPermissions?: HostedSessionSnapshot['pendingPermissions']
 }
 
+/** A hosted session running the given pipeline stage. */
 export function stageSession(options: StageSessionOptions): HostedSessionSnapshot {
   return sessionSnapshot({
     sessionKey: (options.key ?? `hosted-${String(options.stage.number)}`) as SessionKey,

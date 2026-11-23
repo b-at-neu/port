@@ -22,6 +22,7 @@ export function repoConfig(overrides: Partial<ResolvedRepoConfig> = {}): Resolve
   }
 }
 
+/** A ready repository entry wrapping a resolved config. */
 export function readyEntry(overrides: Partial<ReadyEntry> = {}, config: Partial<ResolvedRepoConfig> = {}): ReadyEntry {
   return {
     id: 'repo-a' as RepoId,
