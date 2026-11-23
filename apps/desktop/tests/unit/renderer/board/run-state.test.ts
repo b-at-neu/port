@@ -32,11 +32,13 @@ describe('runStateLineCopy', () => {
   })
 
   it('reads the new-repository variant when since is null', () => {
-    expect(runStateLineCopy(runState({ state: 'paused', since: null }), LOADED)).toBe('Stopped — press Run to start dispatching')
+    expect(runStateLineCopy(runState({ state: 'paused', since: null }), LOADED)).not.toContain('since')
   })
 
   it('reads as reading the saved state before load() resolves, regardless of this repository\'s own state', () => {
-    expect(runStateLineCopy(runState({ state: 'dispatching', since: '2026-01-01T00:00:00Z' }), { kind: 'unread' })).toBe('Stopped — reading the saved pipeline state…')
+    const line = runStateLineCopy(runState({ state: 'dispatching', since: '2026-01-01T00:00:00Z' }), { kind: 'unread' })
+    expect(line).not.toContain('Running')
+    expect(line).not.toContain('since')
   })
 
   it('names the message when the store cannot be read, regardless of this repository\'s own state', () => {

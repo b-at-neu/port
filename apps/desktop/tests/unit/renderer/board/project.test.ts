@@ -6,7 +6,7 @@ import type { BoardSnapshot, RepositoryHealth } from '@/types/board'
 import type { TickHeld, TickReport } from '@/types/tick'
 import { boardSignature, displayStatus, projectBoard, stageLabelOf } from '@/renderer/board/project'
 import { boardSections } from '@/renderer/board/sections'
-import { stageSession } from '../../../fixtures/stage-session'
+import { stageSession } from '../../../support/session-snapshot'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 

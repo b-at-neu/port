@@ -8,7 +8,7 @@ import type { FileResult } from '@/types/platform'
 import type { InterruptedStage, StageRestartResult, StageResumeResult } from '@/types/stage'
 import type { RemoveSessionWorktreeOutcome } from '@/types/workspace'
 import type { RepoId } from '@/utils/repos'
-import { boardSnapshot, reconciledItem, repositoryState } from '../../../fixtures/board-state'
+import { boardSnapshot, reconciledItem, repositoryState } from '../../../support/board-snapshot'
 
 const REPO = 'repo-a' as RepoId
 const INTERRUPTED_AT = new Date('2026-01-01T00:10:00.000Z')

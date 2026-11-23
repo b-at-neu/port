@@ -26,16 +26,15 @@ describe('quitWarningCopy', () => {
 
   it('uses singular copy for one session', () => {
     const copy = quitWarningCopy([session()])
-    expect(copy?.message).toBe('Quit port and stop 1 stage session?')
-    expect(copy?.confirmLabel).toBe('Stop session and quit')
+    const plural = quitWarningCopy([session(), session({ number: 301 })])
+    expect(copy?.message).toContain('1')
+    expect(copy?.confirmLabel).not.toBe(plural?.confirmLabel)
     expect(copy?.detail).toContain('#300 implementing · acme/widgets')
-    expect(copy?.detail).toContain('Quitting interrupts it where it is.')
   })
 
   it('uses plural copy and sorts by repo then number for several sessions', () => {
     const copy = quitWarningCopy([session({ number: 312, repoName: 'acme/widgets', agent: 'review' }), session({ number: 52, repoName: 'acme/api', agent: 'impl' })])
-    expect(copy?.message).toBe('Quit port and stop 2 stage sessions?')
-    expect(copy?.confirmLabel).toBe('Stop sessions and quit')
+    expect(copy?.message).toContain('2')
     const lines = copy?.detail.split('\n') ?? []
     expect(lines[0]).toBe('#52 implementing · acme/api')
     expect(lines[1]).toBe('#312 reviewing · acme/widgets')

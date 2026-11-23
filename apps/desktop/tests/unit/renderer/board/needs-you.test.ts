@@ -6,7 +6,7 @@ import type { RepoDispatchStatus } from '@/types/dispatch'
 import type { SessionKey } from '@/types/hosting'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS, type BoardSnapshot } from '@/types/board'
 import { needsYouCount, needsYouItems, repoNeedsYou, waitsOnYou } from '@/renderer/board/needs-you'
-import { stageSession } from '../../../fixtures/stage-session'
+import { stageSession } from '../../../support/session-snapshot'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 

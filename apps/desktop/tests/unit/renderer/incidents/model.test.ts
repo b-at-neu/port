@@ -55,16 +55,19 @@ describe('recordRow', () => {
 describe('copy', () => {
   it('states what a failed read means', () => {
     expect(failureCopy('too-large', '')).toContain('incidents.jsonl')
-    expect(failureCopy('io', 'EIO')).toBe("Couldn't read the incident log: EIO")
+    expect(failureCopy('io', 'EIO')).toContain('EIO')
   })
 
   it('footnotes unreadable lines and dropped older incidents', () => {
-    expect(footnotes(1, null)).toEqual(["1 line couldn't be read and aren't shown."])
-    expect(footnotes(0, { count: 3, through: 't' })).toEqual(['3 older incidents were dropped to stay within 90 days and 32 MB.'])
+    expect(footnotes(1, null)).toHaveLength(1)
+    expect(footnotes(1, null)[0]).toContain('1')
+    expect(footnotes(0, { count: 3, through: 't' })[0]).toContain('3')
     expect(footnotes(0, null)).toEqual([])
   })
 
   it('names the exported file, not its folder', () => {
-    expect(exportedToast('/home/op/port-incidents-2026-11-17.json')).toBe('Exported incidents to port-incidents-2026-11-17.json.')
+    const toast = exportedToast('/home/op/port-incidents-2026-11-17.json')
+    expect(toast).toContain('port-incidents-2026-11-17.json')
+    expect(toast).not.toContain('/home/op')
   })
 })

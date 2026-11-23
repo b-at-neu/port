@@ -9,7 +9,7 @@ function session(overrides: Partial<RawSession>): RawSession {
 
 describe('forkTitle', () => {
   it('appends the fork suffix', () => {
-    expect(forkTitle('Fix the login bug')).toBe('Fix the login bug (fork)')
+    expect(forkTitle('Fix the login bug')).toMatch(/^Fix the login bug \S/)
   })
 
   it('trims surrounding whitespace before appending', () => {

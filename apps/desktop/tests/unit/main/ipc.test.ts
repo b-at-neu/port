@@ -7,7 +7,8 @@ import type { BoardRefreshDeps } from '@/main/app/seams'
 import { resolveWorktreesReport } from '@/main/features/worktrees/resolve'
 import type { WorktreesReportDeps } from '@/main/app/seams'
 import type { RegistryDeps } from '@/types/registry'
-import { boardSnapshot, readyEntry } from '../../fixtures/board-state'
+import { boardSnapshot } from '../../support/board-snapshot'
+import { readyEntry } from '../../support/repo-config'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 

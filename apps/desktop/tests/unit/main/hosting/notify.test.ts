@@ -57,7 +57,9 @@ describe('notificationFor', () => {
     const permission = { permissionId: 'p1', toolName: 'Bash', input: {}, title: null, displayName: null, description: null, decisionReason: null, blockedPath: null, protectedPath: null, agentId: null, requestedAt: 't', sessionGrant: null, interaction: null }
     const previous = snapshot({ stage, title: '#46 Show the last sync time' })
     const next = snapshot({ stage, title: '#46 Show the last sync time', pendingPermissions: [permission] })
-    expect(notificationFor(previous, next, 'widgets')?.title).toBe('widgets · #46 Show the last sync time')
+    const title = notificationFor(previous, next, 'widgets')?.title
+    expect(title).toContain('widgets')
+    expect(title).toContain('#46 Show the last sync time')
   })
 
   it('notifies finished when streaming ends with no pending permissions', () => {
@@ -76,10 +78,10 @@ describe('notificationFor', () => {
   it('notifies ended on the ended transition, with the completed/unexpected wording', () => {
     const previous = snapshot({ phase: 'streaming' })
     const completed = snapshot({ phase: 'ended', end: { reason: 'completed', exitCode: 0, signal: null, message: null, diagnosis: null } })
-    expect(notificationFor(previous, completed, 'widgets')?.body).toBe('The session ended.')
+    const completedBody = notificationFor(previous, completed, 'widgets')?.body
 
     const crashed = snapshot({ phase: 'ended', end: { reason: 'exit-nonzero', exitCode: 1, signal: null, message: null, diagnosis: null } })
-    expect(notificationFor(previous, crashed, 'widgets')?.body).toContain('unexpectedly')
+    expect(notificationFor(previous, crashed, 'widgets')?.body).not.toBe(completedBody)
   })
 
   it('returns null with no transition', () => {

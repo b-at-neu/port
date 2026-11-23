@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HISTORY_CAP, emptyFile, parseFile, prune, recordMirror, seedFrom, trackedOf, transition, viewOf, withItem } from '@/main/pipeline/state/model'
 import type { MirrorFailure, RepoRecord, StoredItem, TransitionInput } from '@/types/pipeline-state'
-import { reconciledItem, repositoryState } from '../../../fixtures/board-state'
+import { reconciledItem, repositoryState } from '../../../support/board-snapshot'
 
 const AT = '2026-01-01T00:00:00.000Z'
 

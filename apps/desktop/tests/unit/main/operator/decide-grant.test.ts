@@ -5,7 +5,8 @@ import type { ItemsByNumberFetch } from '@/types/github'
 import type { ItemDecisionRequest } from '@/types/actions'
 import type { WriteOutcome, WriteStateParams } from '@/types/writes'
 import { applyItemDecision } from '@/main/pipeline/operator/decide'
-import { boardSnapshot as snapshotOf, readyEntry, reconciledItem, repositoryState } from '../../../fixtures/board-state'
+import { boardSnapshot as snapshotOf, reconciledItem, repositoryState } from '../../../support/board-snapshot'
+import { readyEntry } from '../../../support/repo-config'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 const FETCHED_AT = '2026-01-01T00:00:00.000Z'

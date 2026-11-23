@@ -8,7 +8,7 @@ import type { PipelineState, RepositoryState } from '@/types/state'
 import { createInProcessEngine } from '@/main/worker/engine'
 import { createPipelineWatcher } from '@/main/pipeline/board/watcher'
 import { fakeGit, makeFakeTimer, readyEntry } from '../../../fixtures/watcher-harness'
-import { reconciledItem, repositoryState } from '../../../fixtures/board-state'
+import { reconciledItem, repositoryState } from '../../../support/board-snapshot'
 
 const now = () => new Date('2026-01-01T00:00:00.000Z')
 const TRACKED: TrackedRef[] = [{ kind: 'issue', number: 1, keys: ['marker', 'ready'] }]

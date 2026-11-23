@@ -1,7 +1,35 @@
 import { describe, expect, it, vi } from 'vitest'
 import { checkToastOf, downloadToastOf, downloadViewOf, noticeOf, statusOf } from '@/renderer/update/model'
-import { UPDATE_DISABLED_COPY, UPDATE_DOWNLOAD_FAILED_COPY, UPDATE_ERROR_COPY, UPDATE_READY_HINT } from '@/renderer/update/copy'
-import type { AvailableRelease, InstallPackage, UpdateDownloadErrorKind, UpdateDownloadState, UpdateErrorKind, UpdateState } from '@/types/update'
+import {
+  UPDATE_BUTTON_LABEL,
+  UPDATE_CHECKING,
+  UPDATE_DISABLED_COPY,
+  UPDATE_DOWNLOAD_FAILED_COPY,
+  UPDATE_ERROR_COPY,
+  UPDATE_NOT_CHECKED,
+  UPDATE_NOTES_LABEL,
+  UPDATE_OPEN_FAILED_HINT,
+  UPDATE_OPEN_LABEL,
+  UPDATE_OPEN_PAGE_LABEL,
+  UPDATE_READY_HINT,
+  UPDATE_RESTARTING_HINT,
+  UPDATE_RESTART_LABEL,
+  UPDATE_RESTART_PENDING_HINT,
+  UPDATE_RETRY_LABEL,
+  UPDATE_REVEAL_LABEL,
+  UPDATE_UP_TO_DATE,
+  updateAvailableTitle,
+  updateCurrentDescription,
+  updateDownloadedTitle,
+  updateDownloadingRailLabel,
+  updateDownloadingTitle,
+  updateLatestDescription,
+  updateNoAssetCopy,
+  updateRailLabel,
+  updateRestartPendingTitle,
+  updateRestartingTitle,
+} from '@/renderer/update/copy'
+import type { AvailableRelease, InstallPackage, InstallTarget, UpdateDownloadErrorKind, UpdateDownloadState, UpdateErrorKind, UpdateState } from '@/types/update'
 
 const NOW = Date.parse('2026-05-01T12:00:00Z')
 const CHECKED_AT = '2026-05-01T11:58:00Z'
@@ -36,11 +64,11 @@ describe('noticeOf', () => {
 
 describe('statusOf', () => {
   it('maps every kind to its own row', () => {
-    expect(statusOf(STATES.disabled, NOW)).toMatchObject({ kind: 'disabled', text: 'Update checks run only in installed builds.', canCheck: false })
-    expect(statusOf(STATES.idle, NOW)).toMatchObject({ kind: 'idle', text: 'Not checked yet', canCheck: true })
-    expect(statusOf(STATES.checking, NOW)).toMatchObject({ kind: 'checking', text: 'Checking for updates…', canCheck: false })
-    expect(statusOf(STATES['up-to-date'], NOW)).toMatchObject({ kind: 'up-to-date', text: 'port is up to date', checkedAgo: '2m ago', canCheck: true })
-    expect(statusOf(STATES.available, NOW)).toMatchObject({ kind: 'available', text: 'port 0.2.0 is available', release: RELEASE, canCheck: true })
+    expect(statusOf(STATES.disabled, NOW)).toMatchObject({ kind: 'disabled', text: UPDATE_DISABLED_COPY.unpackaged, canCheck: false })
+    expect(statusOf(STATES.idle, NOW)).toMatchObject({ kind: 'idle', text: UPDATE_NOT_CHECKED, canCheck: true })
+    expect(statusOf(STATES.checking, NOW)).toMatchObject({ kind: 'checking', text: UPDATE_CHECKING, canCheck: false })
+    expect(statusOf(STATES['up-to-date'], NOW)).toMatchObject({ kind: 'up-to-date', text: UPDATE_UP_TO_DATE, checkedAgo: '2m ago', canCheck: true })
+    expect(statusOf(STATES.available, NOW)).toMatchObject({ kind: 'available', text: updateAvailableTitle('0.2.0'), release: RELEASE, canCheck: true })
     expect(statusOf(STATES.error, NOW)).toMatchObject({ kind: 'error', text: UPDATE_ERROR_COPY.offline, canCheck: true })
   })
 
@@ -55,14 +83,14 @@ describe('statusOf', () => {
 
 describe('checkToastOf', () => {
   it('reports up to date as a success with the current version', () => {
-    expect(checkToastOf(STATES['up-to-date'], actions())).toMatchObject({ tone: 'success', title: 'port is up to date', description: '0.1.0 is the latest release.', action: null })
+    expect(checkToastOf(STATES['up-to-date'], actions())).toMatchObject({ tone: 'success', title: UPDATE_UP_TO_DATE, description: updateLatestDescription('0.1.0'), action: null })
   })
 
   it('reports an available release as info whose Update action starts the update', () => {
     const a = actions()
     const toast = checkToastOf(STATES.available, a)
-    expect(toast).toMatchObject({ tone: 'info', title: 'port 0.2.0 is available', description: "You're on 0.1.0." })
-    expect(toast?.action?.label).toBe('Update')
+    expect(toast).toMatchObject({ tone: 'info', title: updateAvailableTitle('0.2.0'), description: updateCurrentDescription('0.1.0') })
+    expect(toast?.action?.label).toBe(UPDATE_BUTTON_LABEL)
     toast?.action?.onClick()
     expect(a.update).toHaveBeenCalledOnce()
   })
@@ -71,7 +99,7 @@ describe('checkToastOf', () => {
     const a = actions()
     const toast = checkToastOf({ ...STATES.error, reason } as UpdateState, a)
     expect(toast).toMatchObject({ tone: 'error', title })
-    expect(toast?.action?.label).toBe('Try again')
+    expect(toast?.action?.label).toBe(UPDATE_RETRY_LABEL)
     toast?.action?.onClick()
     expect(a.retry).toHaveBeenCalledOnce()
   })
@@ -99,7 +127,8 @@ function ready(pkg: InstallPackage, opened: 'opened' | 'revealed', openError: st
 
 const downloading = (receivedBytes: number, totalBytes: number): UpdateDownloadState => ({ kind: 'downloading', ...BASE, assetName: 'port-0.2.0.x', receivedBytes, totalBytes, startedAt: CHECKED_AT })
 const failed = (reason: UpdateDownloadErrorKind): UpdateDownloadState => ({ kind: 'failed', ...BASE, assetName: 'port-0.2.0.x', reason, detail: 'x', failedAt: CHECKED_AT })
-const NO_ASSET: UpdateDownloadState = { kind: 'no-asset', ...BASE, target: { os: 'linux', arch: 'arm64', package: 'deb' } }
+const NO_ASSET_TARGET: InstallTarget = { os: 'linux', arch: 'arm64', package: 'deb' }
+const NO_ASSET: UpdateDownloadState = { kind: 'no-asset', ...BASE, target: NO_ASSET_TARGET }
 
 const RESTARTING: UpdateDownloadState = { kind: 'restarting', ...BASE, startedAt: CHECKED_AT }
 const RESTART_PENDING: UpdateDownloadState = { kind: 'restart-pending', ...BASE, finishedAt: CHECKED_AT }
@@ -108,11 +137,11 @@ describe('downloadViewOf', () => {
   it.each<UpdateDownloadState | undefined>([undefined, IDLE])('is the available prompt for %j', (download) => {
     expect(downloadViewOf(RELEASE, download)).toMatchObject({
       kind: 'idle',
-      title: 'port 0.2.0 is available',
-      railLabel: 'Update to port 0.2.0',
+      title: updateAvailableTitle('0.2.0'),
+      railLabel: updateRailLabel('0.2.0'),
       railAction: 'download',
-      linkLabel: 'Release notes',
-      buttons: [{ action: 'download', label: 'Update', variant: 'default' }],
+      linkLabel: UPDATE_NOTES_LABEL,
+      buttons: [{ action: 'download', label: UPDATE_BUTTON_LABEL, variant: 'default' }],
     })
   })
 
@@ -122,13 +151,13 @@ describe('downloadViewOf', () => {
 
   it('shows progress while downloading, with no buttons and no rail action', () => {
     const view = downloadViewOf(RELEASE, downloading(54 * MB, 120 * MB))
-    expect(view).toMatchObject({ kind: 'downloading', title: 'Downloading port 0.2.0', percent: 45, progressText: '54.0 MB of 120.0 MB · 45%', railAction: null, buttons: [], linkLabel: 'Release notes' })
-    expect(view.railLabel).toBe('Downloading port 0.2.0 · 45%')
+    expect(view).toMatchObject({ kind: 'downloading', title: updateDownloadingTitle('0.2.0'), percent: 45, progressText: '54.0 MB of 120.0 MB · 45%', railAction: null, buttons: [], linkLabel: UPDATE_NOTES_LABEL })
+    expect(view.railLabel).toBe(updateDownloadingRailLabel('0.2.0', 45))
   })
 
   it('has no percent for an unknown total', () => {
     const view = downloadViewOf(RELEASE, downloading(54 * MB, 0))
-    expect(view).toMatchObject({ percent: null, progressText: '54.0 MB', railLabel: 'Downloading port 0.2.0' })
+    expect(view).toMatchObject({ percent: null, progressText: '54.0 MB', railLabel: updateDownloadingRailLabel('0.2.0', null) })
   })
 
   it.each([
@@ -142,12 +171,12 @@ describe('downloadViewOf', () => {
   it.each(['dmg', 'nsis', 'deb'] as const)('offers both buttons and the %s hint once opened', (pkg) => {
     expect(downloadViewOf(RELEASE, ready(pkg, 'opened'))).toMatchObject({
       kind: 'ready',
-      title: 'port 0.2.0 downloaded',
+      title: updateDownloadedTitle('0.2.0'),
       hint: UPDATE_READY_HINT[pkg],
       railAction: 'open',
       buttons: [
-        { action: 'reveal', label: 'Show in folder', variant: 'outline' },
-        { action: 'open', label: 'Open installer', variant: 'default' },
+        { action: 'reveal', label: UPDATE_REVEAL_LABEL, variant: 'outline' },
+        { action: 'open', label: UPDATE_OPEN_LABEL, variant: 'default' },
       ],
     })
   })
@@ -156,13 +185,13 @@ describe('downloadViewOf', () => {
     expect(downloadViewOf(RELEASE, ready('appimage', 'revealed'))).toMatchObject({
       hint: UPDATE_READY_HINT.appimage,
       railAction: 'reveal',
-      buttons: [{ action: 'reveal', label: 'Show in folder', variant: 'default' }],
+      buttons: [{ action: 'reveal', label: UPDATE_REVEAL_LABEL, variant: 'default' }],
     })
   })
 
   it('explains a failed open and offers Show in folder', () => {
     expect(downloadViewOf(RELEASE, ready('dmg', 'revealed', 'no application'))).toMatchObject({
-      hint: "port couldn't open the installer, so it's shown in its folder. Open it from there.",
+      hint: UPDATE_OPEN_FAILED_HINT,
       railAction: 'reveal',
       buttons: [{ action: 'reveal', variant: 'default' }],
     })
@@ -172,21 +201,21 @@ describe('downloadViewOf', () => {
     const text = UPDATE_DOWNLOAD_FAILED_COPY[reason]('0.2.0')
     expect(downloadViewOf(RELEASE, failed(reason))).toMatchObject({
       kind: 'failed',
-      title: 'port 0.2.0 is available',
+      title: updateAvailableTitle('0.2.0'),
       hint: text,
       railLabel: text,
       railAction: 'download',
-      linkLabel: 'Open release page',
-      buttons: [{ action: 'download', label: 'Try again', variant: 'default' }],
+      linkLabel: UPDATE_OPEN_PAGE_LABEL,
+      buttons: [{ action: 'download', label: UPDATE_RETRY_LABEL, variant: 'default' }],
     })
   })
 
   it('shows a restarting state with no buttons, link or rail action', () => {
     expect(downloadViewOf(RELEASE, RESTARTING)).toMatchObject({
       kind: 'restarting',
-      title: 'Restarting to update to port 0.2.0',
-      hint: 'port will reopen on its own.',
-      railLabel: 'Restarting to update to port 0.2.0',
+      title: updateRestartingTitle('0.2.0'),
+      hint: UPDATE_RESTARTING_HINT,
+      railLabel: updateRestartingTitle('0.2.0'),
       railAction: null,
       linkLabel: null,
       buttons: [],
@@ -196,23 +225,23 @@ describe('downloadViewOf', () => {
   it('offers Restart now once a restart is pending, which re-runs the update', () => {
     expect(downloadViewOf(RELEASE, RESTART_PENDING)).toMatchObject({
       kind: 'restart-pending',
-      title: 'port 0.2.0 is ready to install',
-      hint: 'Restart port to finish updating.',
+      title: updateRestartPendingTitle('0.2.0'),
+      hint: UPDATE_RESTART_PENDING_HINT,
       railAction: 'download',
-      linkLabel: 'Release notes',
-      buttons: [{ action: 'download', label: 'Restart now', variant: 'default' }],
+      linkLabel: UPDATE_NOTES_LABEL,
+      buttons: [{ action: 'download', label: UPDATE_RESTART_LABEL, variant: 'default' }],
     })
   })
 
   it('points a missing asset at the release page, with no Update button', () => {
     expect(downloadViewOf(RELEASE, NO_ASSET)).toMatchObject({
       kind: 'no-asset',
-      title: "There's no port 0.2.0 download for Linux .deb (Arm). Get it from the release page.",
+      title: updateNoAssetCopy('0.2.0', NO_ASSET_TARGET),
       railAction: 'open-page',
-      linkLabel: 'Open release page',
+      linkLabel: UPDATE_OPEN_PAGE_LABEL,
       buttons: [],
     })
-    expect(downloadViewOf(RELEASE, { ...NO_ASSET, target: null }).title).toContain('this system')
+    expect(downloadViewOf(RELEASE, { ...NO_ASSET, target: null }).title).toBe(updateNoAssetCopy('0.2.0', null))
   })
 })
 
@@ -226,26 +255,26 @@ describe('downloadToastOf', () => {
   it('reports a pending restart as info whose action retries the update', () => {
     const a = toastActions()
     const toast = downloadToastOf(RESTART_PENDING, a)
-    expect(toast).toMatchObject({ tone: 'info', title: 'port 0.2.0 is ready to install', description: 'Restart port to finish updating.' })
-    expect(toast?.action?.label).toBe('Restart now')
+    expect(toast).toMatchObject({ tone: 'info', title: updateRestartPendingTitle('0.2.0'), description: UPDATE_RESTART_PENDING_HINT })
+    expect(toast?.action?.label).toBe(UPDATE_RESTART_LABEL)
     toast?.action?.onClick()
     expect(a.retry).toHaveBeenCalledOnce()
   })
 
   it('reports an opened installer as a success with its hint', () => {
-    expect(downloadToastOf(ready('dmg', 'opened'), toastActions())).toMatchObject({ tone: 'success', title: 'port 0.2.0 downloaded', description: UPDATE_READY_HINT.dmg, action: null })
+    expect(downloadToastOf(ready('dmg', 'opened'), toastActions())).toMatchObject({ tone: 'success', title: updateDownloadedTitle('0.2.0'), description: UPDATE_READY_HINT.dmg, action: null })
   })
 
   it('reports a revealed installer as info', () => {
     expect(downloadToastOf(ready('appimage', 'revealed'), toastActions())).toMatchObject({ tone: 'info', description: UPDATE_READY_HINT.appimage })
-    expect(downloadToastOf(ready('nsis', 'revealed', 'x'), toastActions())?.description).toContain("couldn't open the installer")
+    expect(downloadToastOf(ready('nsis', 'revealed', 'x'), toastActions())?.description).toBe(UPDATE_OPEN_FAILED_HINT)
   })
 
   it.each(Object.keys(UPDATE_DOWNLOAD_FAILED_COPY) as UpdateDownloadErrorKind[])('reports a %s failure as an error whose action retries', (reason) => {
     const a = toastActions()
     const toast = downloadToastOf(failed(reason), a)
     expect(toast).toMatchObject({ tone: 'error', title: UPDATE_DOWNLOAD_FAILED_COPY[reason]('0.2.0') })
-    expect(toast?.action?.label).toBe('Try again')
+    expect(toast?.action?.label).toBe(UPDATE_RETRY_LABEL)
     toast?.action?.onClick()
     expect(a.retry).toHaveBeenCalledOnce()
   })
@@ -253,8 +282,8 @@ describe('downloadToastOf', () => {
   it('reports a missing asset as info whose action opens the release page', () => {
     const a = toastActions()
     const toast = downloadToastOf(NO_ASSET, a)
-    expect(toast).toMatchObject({ tone: 'info', title: expect.stringContaining('Linux .deb (Arm)') as string })
-    expect(toast?.action?.label).toBe('Open release page')
+    expect(toast).toMatchObject({ tone: 'info', title: updateNoAssetCopy('0.2.0', NO_ASSET_TARGET) })
+    expect(toast?.action?.label).toBe(UPDATE_OPEN_PAGE_LABEL)
     toast?.action?.onClick()
     expect(a.openPage).toHaveBeenCalledWith('https://example.test/notes')
   })

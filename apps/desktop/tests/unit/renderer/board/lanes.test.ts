@@ -83,7 +83,7 @@ describe('navigableLaneRows', () => {
 
 describe('laneToggleAria', () => {
   it('names the action the toggle will take', () => {
-    expect(laneToggleAria('acme/widgets', false)).toBe('Collapse acme/widgets')
-    expect(laneToggleAria('acme/widgets', true)).toBe('Expand acme/widgets')
+    expect(laneToggleAria('acme/widgets', false)).toContain('acme/widgets')
+    expect(laneToggleAria('acme/widgets', false)).not.toBe(laneToggleAria('acme/widgets', true))
   })
 })

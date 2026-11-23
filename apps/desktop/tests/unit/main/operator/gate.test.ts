@@ -9,7 +9,7 @@ import type { ReposListResponse } from '@/types/ipc'
 import { autoApprovePlan, gateAnswer, gatePreflight } from '@/main/pipeline/operator/gate'
 import type { GateDeps } from '@/types/gate'
 import type { RegistryDeps } from '@/types/registry'
-import { readyEntry } from '../../../fixtures/board-state'
+import { readyEntry } from '../../../support/repo-config'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 const VOCABULARY: LabelVocabulary = resolveVocabulary({})

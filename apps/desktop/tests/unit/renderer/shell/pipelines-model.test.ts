@@ -8,7 +8,7 @@ import type { PipelineRow, ReadyPipelineRow } from '@/types/shell'
 import type { TickClaim, TickReport } from '@/types/tick'
 import { displayRunState, phaseLineOf, pipelinesModel as pipelinesModelOf } from '@/renderer/shell/pipelines-model'
 import { needsYouItems } from '@/renderer/board/needs-you'
-import { stageSession } from '../../../fixtures/stage-session'
+import { stageSession } from '../../../support/session-snapshot'
 
 function assertReady(row: PipelineRow | undefined): ReadyPipelineRow {
   if (row === undefined || !row.ready) throw new Error('expected a ready row')

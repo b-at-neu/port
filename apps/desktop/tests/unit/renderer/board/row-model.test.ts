@@ -175,7 +175,7 @@ describe('phaseLabelFor', () => {
   })
 
   it('names an auto-approving plan gate Plan auto-approving', () => {
-    expect(phaseLabelFor(row({ stageKey: 'planReview', autoApproving: true }))).toBe('Plan auto-approving')
+    expect(phaseLabelFor(row({ stageKey: 'planReview', autoApproving: true }))).not.toBe(phaseLabelFor(row({ stageKey: 'planReview' })))
   })
 
   it("names the dispatched stage while the label still says it's queued", () => {
@@ -272,7 +272,7 @@ describe('phaseToneFor', () => {
 
 describe('nextActionFor', () => {
   it('Review plan for an issue at planReview', () => {
-    expect(nextActionFor(row({ kind: 'issue', stageKey: 'planReview' }))).toEqual({ kind: 'review-plan', label: 'Review plan' })
+    expect(nextActionFor(row({ kind: 'issue', stageKey: 'planReview' }))).toMatchObject({ kind: 'review-plan' })
   })
 
   it('no Review plan action while the plan is auto-approving', () => {

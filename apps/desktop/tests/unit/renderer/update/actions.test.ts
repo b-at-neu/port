@@ -5,6 +5,7 @@ vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.f
 import { toast } from 'sonner'
 import { QueryClient } from '@tanstack/react-query'
 import { ipcQueryOptions } from '@/renderer/data/query'
+import { UPDATE_RETRY_LABEL } from '@/renderer/update/copy'
 import { checkForUpdates, openDownloaded, runDownloadAction, startUpdate } from '@/renderer/update/actions'
 import type { UpdateDownloadState, UpdateState } from '@/types/update'
 
@@ -126,7 +127,7 @@ describe('startUpdate', () => {
 
     expect(client.getQueryData(DOWNLOAD_KEY)).toEqual(FAILED)
     const action = actionOf(vi.mocked(toast.error).mock.calls[0])
-    expect(action.label).toBe('Try again')
+    expect(action.label).toBe(UPDATE_RETRY_LABEL)
 
     action.onClick()
     await vi.waitFor(() => expect(client.getQueryData(DOWNLOAD_KEY)).toEqual(READY))

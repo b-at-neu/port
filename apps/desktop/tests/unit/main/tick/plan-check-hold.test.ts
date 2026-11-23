@@ -6,7 +6,7 @@ import type { RerunMemo } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
 import { createDispatchLedger, createRefreshMemo, createRerunMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
 import { planTick } from '@/main/pipeline/tick/plan'
-import { reconciledItem as item, repositoryState } from '../../../fixtures/board-state'
+import { reconciledItem as item, repositoryState } from '../../../support/board-snapshot'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 const MARKER_BODY = '## Code Review — Cycle 1 · needs revision\n1 🔴 Critical\nBlocked only by checks: `run-e2e`'

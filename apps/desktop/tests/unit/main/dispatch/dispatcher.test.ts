@@ -1,12 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
-import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
-import type { SessionControls, SessionModels } from '@/utils/hosting/controls'
+import type { SessionKey } from '@/types/hosting'
 
 import type { TickActionable, TickReport } from '@/types/tick'
-import type { ReadyEntry } from '@/types/actions'
 import type { StageLaunchRequest, StageLaunchResult, StageLauncher } from '@/types/dispatch'
 import { createDispatcher } from '@/main/dispatch/dispatcher'
 import { DISPATCH_PROMPT, promptFor, REFRESH_PROMPT } from '@/main/dispatch/launch'
@@ -15,91 +12,23 @@ import type { OwnershipRead } from '@/types/dispatch'
 import type { HostedStore } from '@/types/hosting'
 import { memoryDenialStore } from '../../../fixtures/denials'
 import { DISPATCH_STORE_DEFAULTS, storeStub } from '../../../fixtures/store'
+import { boardSnapshot, repositoryState } from '../../../support/board-snapshot'
+import { readyEntry } from '../../../support/repo-config'
+import { sessionSnapshot } from '../../../support/session-snapshot'
 
 const REPO_ID = 'repo-a' as RepoId
-const VOCABULARY = resolveVocabulary({})
-
-function entry(overrides: Partial<ReadyEntry['config']> = {}): ReadyEntry {
-  return {
-    id: REPO_ID,
-    path: '/repo',
-    displayName: 'o/a',
-    status: 'ready',
-    config: {
-      repo: 'o/a',
-      owner: 'o',
-      name: 'a',
-      branches: { integration: 'dev', production: 'main' },
-      commands: { worktrees: null, budget: null },
-      concurrency: { sharedFiles: [], overlapThreshold: 2 },
-    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
-      checkDispositions: {},
-      overrides: [],
-      models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
-      modules: { approvalGate: true, release: true, scope: true },
-      reviewCycleCap: 5,
-      vocabulary: VOCABULARY,
-      ...overrides,
-    },
-    diagnostics: [],
-  }
-}
 
 function tickReport(overrides: Partial<TickReport> = {}): TickReport {
   return { repoId: REPO_ID, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [], autoApprovals: [], labelRepairs: [], ...overrides }
 }
 
 function snapshotWith(tick: readonly TickReport[]): BoardSnapshot {
-  return {
-    state: {
-      repositories: [{ ok: true, repoId: REPO_ID, repo: 'o/a', displayName: 'o/a', viewer: 'op', items: [], freshness: { github: { at: '2026-01-01T00:00:00Z' } } } as never],
-      sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: '2026-01-01T00:00:00Z' },
-      readAt: '2026-01-01T00:00:00Z',
-    },
-    health: [],
-    policy: { baseIntervalMs: { github: 60_000, sessions: 15_000, worktrees: 15_000, denials: 15_000 }, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: 30_000 },
-    tick,
-    runStates: { store: { kind: 'loaded' }, repositories: [] },
-    nextWakeupAt: null,
-    emittedAt: '2026-01-01T00:00:00Z',
-    dispatch: [],
-    autoPlan: [],
-  }
+  return boardSnapshot([repositoryState([])], undefined, { tick })
 }
 
 const OWNED_BY_APP: OwnershipRead = { kind: 'app', since: '2026-01-01T00:00:00Z', path: '/repo/.agents/cockpit.json', readAt: 'r' }
 const ABSENT_OWNERSHIP: OwnershipRead = { kind: 'absent', path: '/repo/.agents/cockpit.json', readAt: 'r' }
 const UNREADABLE_OWNERSHIP: OwnershipRead = { kind: 'unreadable', message: 'bad', path: '/repo/.agents/cockpit.json', readAt: 'r' }
-
-const TEST_CONTROLS: SessionControls = { permissionMode: 'default', model: null, effort: null }
-const TEST_MODELS: SessionModels = { kind: 'pending' }
-
-function sessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSessionSnapshot {
-  return {
-    sessionKey: 'hosted-1' as SessionKey,
-    claudeSessionId: 'sdk-1',
-    repoId: REPO_ID,
-    workspace: { folder: '/repo', root: '/repo', worktree: null, base: null },
-    phase: 'ready',
-    origin: { kind: 'fresh' },
-    startedAt: '2026-01-01T00:00:00Z',
-    queuedAfterInterrupt: null,
-    end: null,
-    titled: null,
-    pendingPermissions: [],
-    capabilities: { kind: 'ready', commands: [], agents: [], plugin: { kind: 'loaded', path: 'p', version: null }, slashCommands: [] },
-    title: null,
-    rateLimit: null,
-    controls: TEST_CONTROLS,
-    models: TEST_MODELS,
-    usage: null,
-    backgroundTasks: [],
-    stage: null,
-    lastResult: null,
-    operatorJoinedAt: null,
-    ...overrides,
-  }
-}
 
 function fakeStore(overrides: Partial<HostedStore> = {}): HostedStore {
   return storeStub({ ...DISPATCH_STORE_DEFAULTS, ...overrides })
@@ -129,7 +58,7 @@ function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispat
     takeOwnership: () => Promise.resolve({ ok: true, path: 'p' }),
     stateLabels: () => ['plan approved'],
     fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: 'r' }),
-    listRepositories: () => Promise.resolve({ ok: true, repositories: [entry()] }),
+    listRepositories: () => Promise.resolve({ ok: true, repositories: [readyEntry()] }),
     registryDeps: { registryDir: '/registry', git: () => Promise.reject(new Error('unused')), chooseDirectory: () => Promise.resolve(null) },
     budget: {
       reset: () => {

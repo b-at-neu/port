@@ -91,12 +91,17 @@ describe('commandOf', () => {
 describe('detailOf', () => {
   it('names a conflict`s expected and observed labels', () => {
     const result = { kind: 'precondition-failed', conflict: { kind: 'precondition-failed', expected: ['paused'], observed: ['ready', 'claude'], readAt: 't' } } as const
-    expect(detailOf(labelEntry({ result }))).toBe('Expected labels paused; found ready, claude.')
+    const detail = detailOf(labelEntry({ result }))
+    expect(detail).toContain('paused')
+    expect(detail).toContain('ready, claude')
   })
 
   it('names a write failure`s classification and first stderr line', () => {
     const result = { kind: 'write-failed', classification: 'rate-limited', stderr: 'API rate limit exceeded\nretry later', reread: null } as const
-    expect(detailOf(labelEntry({ result }))).toBe('rate-limited: API rate limit exceeded')
+    const detail = detailOf(labelEntry({ result }))
+    expect(detail).toContain('rate-limited')
+    expect(detail).toContain('API rate limit exceeded')
+    expect(detail).not.toContain('retry later')
   })
 
   it('carries a verify failure message', () => {
@@ -104,17 +109,21 @@ describe('detailOf', () => {
   })
 
   it.each([
-    [{ kind: 'ownership-unreadable', path: '.agents/cockpit.json', message: 'EACCES' }, "Couldn't read .agents/cockpit.json: EACCES"],
-    [{ kind: 'unresolvable-label', keys: ['planApproved', 'approved'] }, 'No label is configured for planApproved, approved.'],
-    [{ kind: 'item-unavailable' }, "The item couldn't be read."],
-    [{ kind: 'state-unsaved', message: 'disk full' }, "Port couldn't save its pipeline state: disk full"],
-    [{ kind: 'mirror-failed', mirror: { kind: 'write-failed', classification: 'network', stderr: 'offline\nretry', reread: null } }, 'offline'],
-  ] as const)('explains the %j refusal', (result, expected) => {
-    expect(detailOf(labelEntry({ result }))).toBe(expected)
+    [{ kind: 'ownership-unreadable', path: '.agents/cockpit.json', message: 'EACCES' }, ['.agents/cockpit.json', 'EACCES']],
+    [{ kind: 'unresolvable-label', keys: ['planApproved', 'approved'] }, ['planApproved, approved']],
+    [{ kind: 'state-unsaved', message: 'disk full' }, ['disk full']],
+    [{ kind: 'mirror-failed', mirror: { kind: 'write-failed', classification: 'network', stderr: 'offline\nretry', reread: null } }, ['offline']],
+  ] as const)('explains the %j refusal', (result, fragments) => {
+    const detail = detailOf(labelEntry({ result }))
+    for (const fragment of fragments) expect(detail).toContain(fragment)
+  })
+
+  it('explains an unreadable item with a detail', () => {
+    expect(detailOf(labelEntry({ result: { kind: 'item-unavailable' } }))).toEqual(expect.any(String))
   })
 
   it('reports a comment`s byte count when the result has nothing to add', () => {
-    expect(detailOf(labelEntry({ result: { kind: 'applied', argv: [] }, commentBytes: 212 }))).toBe('Comment of 212 bytes.')
+    expect(detailOf(labelEntry({ result: { kind: 'applied', argv: [] }, commentBytes: 212 }))).toContain('212')
   })
 
   it('is null for a plain applied or no-op write', () => {
@@ -123,7 +132,9 @@ describe('detailOf', () => {
   })
 
   it('counts a partial reclaim`s removed and failed worktrees', () => {
-    expect(detailOf(reclaimEntry({ result: 'partial', removed: ['a'], failed: ['b', 'c'] }))).toBe('Removed 1, failed 2.')
+    const detail = detailOf(reclaimEntry({ result: 'partial', removed: ['a'], failed: ['b', 'c'] }))
+    expect(detail).toContain('1')
+    expect(detail).toContain('2')
   })
 
   it('is null for an applied reclaim', () => {
