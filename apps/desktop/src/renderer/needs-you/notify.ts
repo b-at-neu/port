@@ -1,5 +1,6 @@
 // Sends one OS notification per read that brought new items into Needs you. Main owns the focus rule.
 import type { QueryClient } from '@tanstack/react-query'
+import { perform } from '@/renderer/actions/perform'
 import { invoke } from '@/renderer/data/invoke'
 import { ipcQueryOptions, observeIpcQuery } from '@/renderer/data/query'
 import { dismissedKeys, visibleNeedsYouItems } from '@/renderer/needs-you/dismissed'
@@ -59,7 +60,9 @@ export function createNeedsYouNotifier(deps: NeedsYouNotifierDeps): { readonly e
 export function connectNeedsYouNotifications(client: QueryClient): () => void {
   const notifier = createNeedsYouNotifier({
     storage: window.localStorage,
-    send: (request) => invoke('notify.needsYou', request),
+    send: async (request) => {
+      await perform({ name: 'notify.needsYou', input: request }, { invoke, client })
+    },
     dismissed: dismissedKeys,
     now: () => new Date(),
   })

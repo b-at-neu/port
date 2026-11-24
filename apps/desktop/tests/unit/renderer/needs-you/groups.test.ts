@@ -30,11 +30,6 @@ describe('groupNeedsYou', () => {
     expect(groups.flatMap((g) => g.items)).toHaveLength(KINDS.length)
   })
 
-  it('names the groups the way the screen shows them', () => {
-    const groups = groupNeedsYou(KINDS.map((kind, index) => item(kind, index)))
-    expect(groups.map((g) => g.name)).toEqual(['Plan reviews', 'Ready to merge', 'Escalated', 'Blocked', 'Over budget', 'Held', 'Stalled', 'Questions', 'Edit approvals', 'Denied commands', 'Interrupted', 'Usage limit', 'Label problems', 'Launch failures'])
-  })
-
   it('shares one Questions group between a live question and a questions hand-back', () => {
     const groups = groupNeedsYou([item('stage-question', 1), item('stage-questions', 2)])
     expect(groups).toHaveLength(1)

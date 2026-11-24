@@ -1,6 +1,6 @@
 // The Show dismissed view: every dismissed item that still derives, each with Restore.
 import { Button } from '@/renderer/components/ui/button'
-import { NeedsYouItem } from '@/renderer/components/needs-you-item'
+import { NeedsYouItem } from '@/renderer/needs-you/item'
 import { DISMISSED_LABEL, RESTORE_ALL_LABEL, RESTORE_LABEL, needsYouLeadCopy } from '@/renderer/needs-you/copy'
 import { dismissKeyOf } from '@/renderer/needs-you/dismiss-key'
 import type { NeedsYouItem as NeedsYouItemModel } from '@/types/board'

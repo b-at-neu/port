@@ -39,6 +39,11 @@ export function formatHourMinute(iso: string): string {
   return `${String(date.getHours())}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
+/** The locale's clock with a padded hour and minute. */
+export function formatShortClock(iso: string): string {
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
 /** `Nov 3`. */
 export function formatMonthDay(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
