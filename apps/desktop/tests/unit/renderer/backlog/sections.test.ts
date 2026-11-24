@@ -8,119 +8,57 @@ const B = 'repo-b' as RepoId
 const C = 'repo-c' as RepoId
 const REPOS = [{ id: A }, { id: B }, { id: C }]
 
-function row(repoId: RepoId, number: number): BacklogRowView {
-  return { repoId, number } as BacklogRowView
+const row = (repoId: RepoId, number: number): BacklogRowView => ({ repoId, number }) as BacklogRowView
+const wave = (number: number, rows: BacklogRowView[]): BacklogWave => ({ number, rows })
+const epic = (number: number, waves: BacklogWave[], unplaced: BacklogRowView[] = [], epics: BacklogEpicGroup[] = [], start = 1): BacklogEpicGroup => ({ epic: row(A, number), start, waves, epics, unplaced, summary: { ok: false, reason: 'x' } })
+
+function loaded(repoId: RepoId, layout: BacklogEpicLayout): BacklogGroupView {
+  return { kind: 'loaded', repoId, repo: String(repoId), items: [], totalCount: 0, labelOptions: [], truncatedNote: null, layout }
 }
 
-function loaded(repoId: RepoId, numbers: readonly number[], layout: BacklogEpicLayout = { entries: numbers.map((n) => ({ kind: 'row', row: row(repoId, n) })) }): BacklogGroupView {
-  return { kind: 'loaded', repoId, repo: String(repoId), items: numbers.map((n) => row(repoId, n)), totalCount: numbers.length, labelOptions: [], truncatedNote: null, layout }
-}
+const flat = (repoId: RepoId, ...numbers: number[]): BacklogGroupView => loaded(repoId, { entries: numbers.map((n) => ({ kind: 'row', row: row(repoId, n) })) })
 
-function wave(number: number, rows: BacklogRowView[]): BacklogWave {
-  return { number, rows }
-}
+const EPIC_LAYOUT = loaded(A, { entries: [{ kind: 'row', row: row(A, 120) }, { kind: 'epic', group: epic(100, [wave(1, [row(A, 101)]), wave(3, [row(A, 103)])], [row(A, 104)]) }, { kind: 'row', row: row(A, 110) }] })
+const NESTED_LAYOUT = loaded(A, { entries: [{ kind: 'epic', group: epic(100, [wave(1, [row(A, 101)]), wave(4, [row(A, 103)])], [], [epic(200, [wave(2, [row(A, 201)]), wave(3, [row(A, 202)])], [], [], 2)]) }, { kind: 'row', row: row(A, 110) }] })
 
-function epic(repoId: RepoId, number: number, waves: BacklogWave[], unplaced: BacklogRowView[] = [], epics: BacklogEpicGroup[] = [], start = 1): BacklogEpicGroup {
-  return { epic: row(repoId, number), start, waves, epics, unplaced, summary: { ok: false, reason: 'x' } }
-}
-
-const EPIC_LAYOUT: BacklogEpicLayout = {
-  entries: [
-    { kind: 'row', row: row(A, 120) },
-    { kind: 'epic', group: epic(A, 100, [wave(1, [row(A, 101)]), wave(3, [row(A, 103)])], [row(A, 104)]) },
-    { kind: 'row', row: row(A, 110) },
-  ],
-}
-
-const NESTED_LAYOUT: BacklogEpicLayout = {
-  entries: [
-    {
-      kind: 'epic',
-      group: epic(A, 100, [wave(1, [row(A, 101)]), wave(4, [row(A, 103)])], [], [epic(A, 200, [wave(2, [row(A, 201)]), wave(3, [row(A, 202)])], [], [], 2)]),
-    },
-    { kind: 'row', row: row(A, 110) },
-  ],
-}
-
-describe('visibleRepos', () => {
-  it('keeps registry order and drops hidden ids', () => {
+describe('repository filter', () => {
+  it('keeps registry order, drops hidden ids and toggles without mutating', () => {
     expect(visibleRepos(REPOS, new Set([B])).map((r) => r.id)).toEqual([A, C])
-  })
-
-  it('shows everything when nothing is hidden', () => {
-    expect(visibleRepos(REPOS, new Set())).toEqual(REPOS)
-  })
-})
-
-describe('toggleHiddenRepo', () => {
-  it('hides a shown repository and restores a hidden one without mutating', () => {
     const empty: ReadonlySet<RepoId> = new Set()
     const hidden = toggleHiddenRepo(empty, A)
     expect([...hidden]).toEqual([A])
     expect(empty.size).toBe(0)
     expect(toggleHiddenRepo(hidden, A).size).toBe(0)
   })
-})
 
-describe('repoFilterCount', () => {
-  it('counts shown against total', () => {
-    expect(repoFilterCount(REPOS, new Set([A]))).toEqual({ shown: 2, total: 3 })
+  it.each([
+    ['some hidden', new Set([A]), 2],
+    ['a stale hidden id', new Set(['gone' as RepoId]), 3],
+    ['every repository hidden', new Set([A, B, C]), 0],
+  ])('counts shown with %s', (_name, hidden, shown) => {
+    expect(repoFilterCount(REPOS, hidden)).toEqual({ shown, total: 3 })
   })
 
-  it('ignores a stale hidden id that is no longer registered', () => {
-    expect(repoFilterCount(REPOS, new Set(['gone' as RepoId]))).toEqual({ shown: 3, total: 3 })
-  })
-
-  it('reports zero shown when every repository is hidden', () => {
-    expect(repoFilterCount(REPOS, new Set([A, B, C])).shown).toBe(0)
-  })
-})
-
-describe('rowKey', () => {
-  it('joins the repository id and the number', () => {
+  it('joins the repository id and the number into a row key', () => {
     expect(rowKey(A, 41)).toBe('repo-a:41')
   })
 })
 
 describe('navigableRows', () => {
   const none = new Set<string>()
+  const numbers = (groups: BacklogGroupView[], collapsed: ReadonlySet<RepoId> = new Set(), collapsedEpics: ReadonlySet<string> = none) => navigableRows(groups, collapsed, collapsedEpics).map((r) => r.number)
 
-  it('lists loaded rows in group order', () => {
-    expect(navigableRows([loaded(A, [1, 2]), loaded(B, [3])], new Set(), none).map((r) => r.number)).toEqual([1, 2, 3])
-  })
-
-  it('skips collapsed groups', () => {
-    expect(navigableRows([loaded(A, [1, 2]), loaded(B, [3])], new Set([A]), none).map((r) => r.number)).toEqual([3])
-  })
-
-  it('skips groups that are not loaded', () => {
-    const groups: BacklogGroupView[] = [{ kind: 'loading', repoId: A, repo: 'a' }, { kind: 'invoke-error', repoId: B, repo: 'b', message: 'x' }, loaded(C, [9])]
-    expect(navigableRows(groups, new Set(), none).map((r) => r.number)).toEqual([9])
-  })
-
-  it('walks entries in order, an epic then its wave rows and unplaced rows', () => {
-    const groups = [loaded(A, [], EPIC_LAYOUT)]
-    expect(navigableRows(groups, new Set(), none).map((r) => r.number)).toEqual([120, 100, 101, 103, 104, 110])
-  })
-
-  it('walks a nested epic in body order', () => {
-    expect(navigableRows([loaded(A, [], NESTED_LAYOUT)], new Set(), none).map((r) => r.number)).toEqual([100, 101, 200, 201, 202, 103, 110])
-  })
-
-  it('contributes only the row for a collapsed nested epic', () => {
-    expect(navigableRows([loaded(A, [], NESTED_LAYOUT)], new Set(), new Set([rowKey(A, 200)])).map((r) => r.number)).toEqual([100, 101, 200, 103, 110])
-  })
-
-  it('hides a nested epic with its collapsed parent', () => {
-    expect(navigableRows([loaded(A, [], NESTED_LAYOUT)], new Set(), new Set([rowKey(A, 100)])).map((r) => r.number)).toEqual([100, 110])
-  })
-
-  it('contributes only the epic row for a collapsed epic, in the middle of the list', () => {
-    const groups = [loaded(A, [], EPIC_LAYOUT)]
-    expect(navigableRows(groups, new Set(), new Set([rowKey(A, 100)])).map((r) => r.number)).toEqual([120, 100, 110])
-  })
-
-  it('contributes nothing for a collapsed repository, whatever its epics', () => {
-    expect(navigableRows([loaded(A, [], EPIC_LAYOUT)], new Set([A]), none)).toEqual([])
+  it.each([
+    ['loaded rows in group order', [flat(A, 1, 2), flat(B, 3)], new Set<RepoId>(), none, [1, 2, 3]],
+    ['not collapsed groups only', [flat(A, 1, 2), flat(B, 3)], new Set([A]), none, [3]],
+    ['not-loaded groups skipped', [{ kind: 'loading', repoId: A, repo: 'a' }, { kind: 'invoke-error', repoId: B, repo: 'b', message: 'x' }, flat(C, 9)] as BacklogGroupView[], new Set<RepoId>(), none, [9]],
+    ['an epic then its wave and unplaced rows', [EPIC_LAYOUT], new Set<RepoId>(), none, [120, 100, 101, 103, 104, 110]],
+    ['a collapsed epic as its own row', [EPIC_LAYOUT], new Set<RepoId>(), new Set([rowKey(A, 100)]), [120, 100, 110]],
+    ['nothing for a collapsed repository', [EPIC_LAYOUT], new Set([A]), none, []],
+    ['a nested epic in body order', [NESTED_LAYOUT], new Set<RepoId>(), none, [100, 101, 200, 201, 202, 103, 110]],
+    ['a collapsed nested epic as its own row', [NESTED_LAYOUT], new Set<RepoId>(), new Set([rowKey(A, 200)]), [100, 101, 200, 103, 110]],
+    ['a nested epic hidden by its collapsed parent', [NESTED_LAYOUT], new Set<RepoId>(), new Set([rowKey(A, 100)]), [100, 110]],
+  ])('lists %s', (_name, groups, collapsed, collapsedEpics, expected) => {
+    expect(numbers(groups, collapsed, collapsedEpics)).toEqual(expected)
   })
 })

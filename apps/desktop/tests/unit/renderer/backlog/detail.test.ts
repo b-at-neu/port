@@ -1,17 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { assigneeView, backlogRowPress, epicSummaryView, findEpicGroup, linkListView } from '@/renderer/backlog/detail'
-import type { BacklogEpicGroup, BacklogEpicSummary, BacklogGroupView, BacklogRowView } from '@/types/backlog'
+import type { BacklogEpicGroup, BacklogGroupView, BacklogRowView } from '@/types/backlog'
 import type { RepoId } from '@/utils/repos'
-
-const link = (number: number, state = 'OPEN') => ({
-  number,
-  title: `Ticket ${String(number)}`,
-  url: `https://example.test/${String(number)}`,
-  state,
-})
 
 const A = 'repo-a' as RepoId
 const B = 'repo-b' as RepoId
+
+const link = (number: number, state = 'OPEN') => ({ number, title: `Ticket ${String(number)}`, url: `https://example.test/${String(number)}`, state })
 
 function row(repoId: RepoId, number: number): BacklogRowView {
   return { repoId, number } as BacklogRowView
@@ -22,141 +17,69 @@ function epicGroup(repoId: RepoId, number: number, epics: BacklogEpicGroup[] = [
 }
 
 function loaded(repoId: RepoId, group: BacklogEpicGroup): BacklogGroupView {
-  return {
-    kind: 'loaded',
-    repoId,
-    repo: String(repoId),
-    items: [],
-    totalCount: 0,
-    labelOptions: [],
-    truncatedNote: null,
-    layout: {
-      entries: [
-        { kind: 'epic', group },
-        { kind: 'row', row: row(repoId, 7) },
-      ],
-    },
-  }
+  return { kind: 'loaded', repoId, repo: String(repoId), items: [], totalCount: 0, labelOptions: [], truncatedNote: null, layout: { entries: [{ kind: 'epic', group }, { kind: 'row', row: row(repoId, 7) }] } }
 }
 
 describe('backlogRowPress', () => {
-  it('only selects on a control press', () => {
-    expect(backlogRowPress({ key: 'a:1', detailKey: 'a:1', button: 0, onControl: true })).toBe('select')
-  })
-
-  it('only selects on a non-primary press', () => {
-    expect(backlogRowPress({ key: 'a:1', detailKey: null, button: 2, onControl: false })).toBe('select')
-  })
-
-  it('closes on a primary press on the shown row', () => {
-    expect(backlogRowPress({ key: 'a:1', detailKey: 'a:1', button: 0, onControl: false })).toBe('close')
-  })
-
-  it('opens on a primary press on another row', () => {
-    expect(backlogRowPress({ key: 'a:2', detailKey: 'a:1', button: 0, onControl: false })).toBe('open')
-  })
-
-  it('opens on a primary press with nothing shown', () => {
-    expect(backlogRowPress({ key: 'a:1', detailKey: null, button: 0, onControl: false })).toBe('open')
+  it.each([
+    ['a control press selects', { key: 'a:1', detailKey: 'a:1', button: 0, onControl: true }, 'select'],
+    ['a non-primary press selects', { key: 'a:1', detailKey: null, button: 2, onControl: false }, 'select'],
+    ['a primary press on the shown row closes', { key: 'a:1', detailKey: 'a:1', button: 0, onControl: false }, 'close'],
+    ['a primary press on another row opens', { key: 'a:2', detailKey: 'a:1', button: 0, onControl: false }, 'open'],
+    ['a primary press with nothing shown opens', { key: 'a:1', detailKey: null, button: 0, onControl: false }, 'open'],
+  ] as const)('%s', (_name, press, expected) => {
+    expect(backlogRowPress(press)).toBe(expected)
   })
 })
 
 describe('findEpicGroup', () => {
   const epic = epicGroup(A, 41)
-  const groups = [loaded(A, epic), { kind: 'loading', repoId: B, repo: 'b' } satisfies BacklogGroupView]
+  const inner = epicGroup(A, 48)
+  const groups: BacklogGroupView[] = [loaded(A, epic), loaded(A, epicGroup(A, 50, [inner])), { kind: 'loading', repoId: B, repo: 'b' }]
 
-  it('finds an epic in a loaded group', () => {
-    expect(findEpicGroup(groups, A, 41)).toBe(epic)
-  })
-
-  it('finds a nested epic', () => {
-    const inner = epicGroup(A, 48)
-    expect(findEpicGroup([loaded(A, epicGroup(A, 41, [inner]))], A, 48)).toBe(inner)
-  })
-
-  it('returns null for a regular row', () => {
-    expect(findEpicGroup(groups, A, 7)).toBeNull()
-  })
-
-  it('returns null for another repository', () => {
-    expect(findEpicGroup(groups, B, 41)).toBeNull()
-  })
-
-  it('returns null for a loading group', () => {
-    expect(findEpicGroup([{ kind: 'loading', repoId: A, repo: 'a' }], A, 41)).toBeNull()
+  it.each([
+    ['an epic in a loaded group', A, 41, epic],
+    ['a nested epic', A, 48, inner],
+    ['a regular row', A, 7, null],
+    ['another repository', B, 41, null],
+  ])('finds %s', (_name, repoId, number, expected) => {
+    expect(findEpicGroup(groups, repoId, number)).toBe(expected)
   })
 })
 
 describe('linkListView', () => {
-  it('carries the reason of a failed read', () => {
-    expect(linkListView({ ok: false, reason: 'boom' })).toEqual({ kind: 'failed', reason: 'boom' })
+  it.each([
+    ['a failed read', { ok: false, reason: 'boom' }, { kind: 'failed', reason: 'boom' }],
+    ['an empty list', { ok: true, items: [], total: 0 }, { kind: 'none' }],
+    ['closed items in order', { ok: true, items: [link(43), link(40, 'CLOSED')], total: 2 }, { kind: 'links', items: [{ number: 43, title: 'Ticket 43', url: 'https://example.test/43', closed: false }, { number: 40, title: 'Ticket 40', url: 'https://example.test/40', closed: true }], more: 0 }],
+  ] as const)('reads %s', (_name, input, expected) => {
+    expect(linkListView(input as never)).toEqual(expected)
   })
 
-  it('reports none for an empty list', () => {
-    expect(linkListView({ ok: true, items: [], total: 0 })).toEqual({ kind: 'none' })
-  })
-
-  it('flags closed items and keeps their order', () => {
-    const view = linkListView({ ok: true, items: [link(43), link(40, 'CLOSED')], total: 2 })
-    expect(view).toEqual({
-      kind: 'links',
-      items: [
-        { number: 43, title: 'Ticket 43', url: 'https://example.test/43', closed: false },
-        { number: 40, title: 'Ticket 40', url: 'https://example.test/40', closed: true },
-      ],
-      more: 0,
-    })
-  })
-
-  it('counts the links the page did not hold', () => {
-    const view = linkListView({ ok: true, items: [link(43), link(40)], total: 4 })
-    expect(view).toMatchObject({ kind: 'links', more: 2 })
-  })
-
-  it('never reports a negative remainder', () => {
-    const view = linkListView({ ok: true, items: [link(43), link(40)], total: 1 })
-    expect(view).toMatchObject({ kind: 'links', more: 0 })
+  it.each([
+    ['links the page did not hold', 4, 2],
+    ['never a negative remainder', 1, 0],
+  ])('counts %s', (_name, total, more) => {
+    expect(linkListView({ ok: true, items: [link(43), link(40)], total })).toMatchObject({ kind: 'links', more })
   })
 })
 
 describe('assigneeView', () => {
-  it('is unassigned for an empty list', () => {
-    expect(assigneeView([])).toEqual({ kind: 'unassigned' })
-  })
-
-  it('names one person', () => {
-    expect(assigneeView(['bob'])).toEqual({ kind: 'people', text: 'bob' })
-  })
-
-  it('joins two people', () => {
-    expect(assigneeView(['bob', 'alice'])).toEqual({ kind: 'people', text: 'bob, alice' })
+  it.each([
+    [[], { kind: 'unassigned' }],
+    [['bob'], { kind: 'people', text: 'bob' }],
+    [['bob', 'alice'], { kind: 'people', text: 'bob, alice' }],
+  ])('reads %j', (people, expected) => {
+    expect(assigneeView(people)).toEqual(expected)
   })
 })
 
 describe('epicSummaryView', () => {
-  const child = (number: number) => ({
-    number,
-    title: `Ticket ${String(number)}`,
-    state: 'OPEN' as const,
-    claimed: false,
-    blockers: { ok: true as const, open: [], closed: [], shown: 0, total: 0 },
-  })
-  const ok = (overrides: Partial<Extract<BacklogEpicSummary, { ok: true }>> = {}): BacklogEpicSummary => ({
-    ok: true,
-    wavesMayShift: false,
-    done: 1,
-    inProgress: 2,
-    open: 3,
-    total: 6,
-    canStart: [child(44), child(46)],
-    truncated: null,
-    uncertain: [],
-    cycles: [],
-    ...overrides,
-  })
+  const child = (number: number) => ({ number, title: `Ticket ${String(number)}`, state: 'OPEN' as const, claimed: false, blockers: { ok: true as const, open: [], closed: [], shown: 0, total: 0 } })
+  const summary = { ok: true as const, wavesMayShift: false, done: 1, inProgress: 2, open: 3, total: 6, canStart: [child(44), child(46)], truncated: null, uncertain: [], cycles: [] }
 
-  it('keeps the counts and the can-start order, with each ticket linked beside the epic', () => {
-    expect(epicSummaryView(ok(), 'https://github.com/acme/widgets/issues/41')).toEqual({
+  it('keeps the counts and can-start order, linking each ticket beside the epic', () => {
+    expect(epicSummaryView(summary, 'https://github.com/acme/widgets/issues/41')).toEqual({
       ok: true,
       done: 1,
       total: 6,
@@ -169,17 +92,8 @@ describe('epicSummaryView', () => {
     })
   })
 
-  it('passes truncation through', () => {
-    expect(epicSummaryView(ok({ truncated: { shown: 50, total: 70 } }), 'u/1')).toMatchObject({
-      ok: true,
-      truncated: { shown: 50, total: 70 },
-    })
-  })
-
-  it('carries the reason of a failed read', () => {
-    expect(epicSummaryView({ ok: false, reason: 'no sub-issues' }, 'u/1')).toEqual({
-      ok: false,
-      reason: 'no sub-issues',
-    })
+  it('passes truncation and a failed read through', () => {
+    expect(epicSummaryView({ ...summary, truncated: { shown: 50, total: 70 } }, 'u/1')).toMatchObject({ truncated: { shown: 50, total: 70 } })
+    expect(epicSummaryView({ ok: false, reason: 'no sub-issues' }, 'u/1')).toEqual({ ok: false, reason: 'no sub-issues' })
   })
 })

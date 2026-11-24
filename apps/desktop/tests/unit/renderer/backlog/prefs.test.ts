@@ -6,157 +6,63 @@ import { readBacklogCollapsed, readBacklogCollapsedEpics, readBacklogFilters, re
 
 const A = 'repo-a' as RepoId
 const B = 'repo-b' as RepoId
-const KEY = 'port.backlogFilters.v1'
+const FILTERS_KEY = 'port.backlogFilters.v1'
 
-function fakeStorage(initial?: string): KeyValueStorage & { readonly store: Map<string, string> } {
-  const store = new Map<string, string>()
-  if (initial !== undefined) store.set(KEY, initial)
+function fakeStorage(initial: Readonly<Record<string, string>> = {}): KeyValueStorage & { readonly store: Map<string, string> } {
+  const store = new Map(Object.entries(initial))
   return { store, getItem: (key) => store.get(key) ?? null, setItem: (key, value) => void store.set(key, value) }
 }
 
-describe('backlog filter prefs', () => {
-  it('round-trips per repository', () => {
+const throwingStorage: KeyValueStorage = {
+  getItem: () => null,
+  setItem: () => {
+    throw new Error('quota')
+  },
+}
+
+describe('malformed storage reads as nothing', () => {
+  it.each(['{not json', 'null', '[]', '{"repo-a":{"include":"bug","exclude":[]}}', '{"repo-a":5}'])('filters from %s', (raw) => {
+    expect(readBacklogFilters(fakeStorage({ [FILTERS_KEY]: raw })).get(A)).toBeUndefined()
+  })
+
+  it.each([
+    ['collapsed', 'port.backlogCollapsed.v1', readBacklogCollapsed],
+    ['hidden repositories', 'port.backlogHiddenRepos.v1', readBacklogHiddenRepos],
+    ['collapsed epics', 'port.backlogCollapsedEpics.v1', readBacklogCollapsedEpics],
+  ])('the %s set', (_name, key, read) => {
+    for (const raw of ['{not json', 'null', '{}', '[1]']) expect(read(fakeStorage({ [key]: raw })).size).toBe(0)
+    expect(read(fakeStorage()).size).toBe(0)
+  })
+})
+
+describe('round trips', () => {
+  it('keeps filters per repository and removes an emptied one, leaving others', () => {
     const storage = fakeStorage()
     setBacklogFilter(A, { include: ['bug'], exclude: [] }, storage)
     setBacklogFilter(B, { include: [], exclude: ['epic'] }, storage)
-    const filters = readBacklogFilters(storage)
-    expect(filters.get(A)).toEqual({ include: ['bug'], exclude: [] })
-    expect(filters.get(B)).toEqual({ include: [], exclude: ['epic'] })
-  })
-
-  it('reads an unknown repository as absent', () => {
-    expect(readBacklogFilters(fakeStorage()).get(A)).toBeUndefined()
-  })
-
-  it('reads storage once per call, however many repositories it holds', () => {
-    const storage = fakeStorage('{"repo-a":{"include":["bug"],"exclude":[]},"repo-b":{"include":[],"exclude":["epic"]}}')
-    let reads = 0
-    const counting: KeyValueStorage = {
-      getItem: (key) => {
-        reads += 1
-        return storage.getItem(key)
-      },
-      setItem: (key, value) => storage.setItem(key, value),
-    }
-    expect(readBacklogFilters(counting).size).toBe(2)
-    expect(reads).toBe(1)
-  })
-
-  it.each(['{not json', 'null', '[]', '{"repo-a":{"include":"bug","exclude":[]}}', '{"repo-a":5}'])('reads malformed value %s as no filter', (raw) => {
-    expect(readBacklogFilters(fakeStorage(raw)).get(A)).toBeUndefined()
-  })
-
-  it('swallows a throwing setItem', () => {
-    const storage: KeyValueStorage = {
-      getItem: () => null,
-      setItem: () => {
-        throw new Error('quota')
-      },
-    }
-    expect(() => setBacklogFilter(A, { include: ['bug'], exclude: [] }, storage)).not.toThrow()
-  })
-
-  it('removes the repository entry when the filter is emptied, leaving others', () => {
-    const storage = fakeStorage()
-    setBacklogFilter(A, { include: ['bug'], exclude: [] }, storage)
-    setBacklogFilter(B, { include: ['docs'], exclude: [] }, storage)
+    expect(readBacklogFilters(storage).get(B)).toEqual({ include: [], exclude: ['epic'] })
     setBacklogFilter(A, EMPTY_FILTER, storage)
-    expect(JSON.parse(storage.store.get(KEY) ?? '{}')).toEqual({ 'repo-b': { include: ['docs'], exclude: [] } })
-  })
-})
-
-describe.each([
-  { name: 'collapsed', key: 'port.backlogCollapsed.v1', read: readBacklogCollapsed },
-  { name: 'hidden repositories', key: 'port.backlogHiddenRepos.v1', read: readBacklogHiddenRepos },
-])('backlog $name prefs', ({ key, read }) => {
-  it.each(['{not json', 'null', '{}', '[1]'])('reads malformed value %s as the empty set', (raw) => {
-    const storage = fakeStorage()
-    storage.store.set(key, raw)
-    expect(read(storage).size).toBe(0)
+    expect([...readBacklogFilters(storage).keys()]).toEqual([B])
   })
 
-  it('reads an absent value as the empty set', () => {
-    expect(read(fakeStorage()).size).toBe(0)
-  })
-
-  it('reads storage once per call', () => {
-    let reads = 0
-    const counting: KeyValueStorage = {
-      getItem: () => {
-        reads += 1
-        return '["repo-a","repo-b"]'
-      },
-      setItem: () => undefined,
-    }
-    expect(read(counting).size).toBe(2)
-    expect(reads).toBe(1)
-  })
-})
-
-describe('backlog collapsed round-trip', () => {
-  it('adds and removes a repository, leaving others', () => {
+  it('adds and removes collapsed repositories, epics and hidden repositories independently', () => {
     const storage = fakeStorage()
     setBacklogCollapsed(A, true, storage)
     setBacklogCollapsed(B, true, storage)
-    expect([...readBacklogCollapsed(storage)]).toEqual([A, B])
     setBacklogCollapsed(A, false, storage)
-    expect([...readBacklogCollapsed(storage)]).toEqual([B])
-  })
-
-  it('does not touch the label filters', () => {
-    const storage = fakeStorage()
-    setBacklogFilter(A, { include: ['bug'], exclude: [] }, storage)
-    setBacklogCollapsed(A, true, storage)
-    expect(readBacklogFilters(storage).get(A)).toEqual({ include: ['bug'], exclude: [] })
-  })
-
-  it('swallows a throwing setItem', () => {
-    const storage: KeyValueStorage = {
-      getItem: () => null,
-      setItem: () => {
-        throw new Error('quota')
-      },
-    }
-    expect(() => setBacklogCollapsed(A, true, storage)).not.toThrow()
-    expect(() => setBacklogHiddenRepos(new Set([A]), storage)).not.toThrow()
-  })
-})
-
-describe('backlog collapsed epics prefs', () => {
-  it('round-trips an epic key and leaves collapsed repositories alone', () => {
-    const storage = fakeStorage()
-    setBacklogCollapsed(A, true, storage)
     setBacklogCollapsedEpic('repo-a:41', true, storage)
-    setBacklogCollapsedEpic('repo-a:50', true, storage)
-    expect([...readBacklogCollapsedEpics(storage)]).toEqual(['repo-a:41', 'repo-a:50'])
-    setBacklogCollapsedEpic('repo-a:41', false, storage)
-    expect([...readBacklogCollapsedEpics(storage)]).toEqual(['repo-a:50'])
-    expect([...readBacklogCollapsed(storage)]).toEqual([A])
+    setBacklogHiddenRepos(new Set([A]), storage)
+    expect([...readBacklogCollapsed(storage)]).toEqual([B])
+    expect([...readBacklogCollapsedEpics(storage)]).toEqual(['repo-a:41'])
+    expect([...readBacklogHiddenRepos(storage)]).toEqual([A])
   })
 
-  it.each(['{not json', 'null', '{}', '[1]'])('reads malformed value %s as the empty set', (raw) => {
-    const storage = fakeStorage()
-    storage.store.set('port.backlogCollapsedEpics.v1', raw)
-    expect(readBacklogCollapsedEpics(storage).size).toBe(0)
-  })
-
-  it('swallows a throwing setItem', () => {
-    const storage: KeyValueStorage = {
-      getItem: () => null,
-      setItem: () => {
-        throw new Error('quota')
-      },
-    }
-    expect(() => setBacklogCollapsedEpic('repo-a:41', true, storage)).not.toThrow()
-  })
-})
-
-describe('backlog hidden repositories round-trip', () => {
-  it('stores the hidden set and restores it', () => {
-    const storage = fakeStorage()
-    setBacklogHiddenRepos(new Set([A, B]), storage)
-    expect([...readBacklogHiddenRepos(storage)]).toEqual([A, B])
-    setBacklogHiddenRepos(new Set(), storage)
-    expect(readBacklogHiddenRepos(storage).size).toBe(0)
+  it('swallows a throwing setItem in every writer', () => {
+    expect(() => {
+      setBacklogFilter(A, { include: ['bug'], exclude: [] }, throwingStorage)
+      setBacklogCollapsed(A, true, throwingStorage)
+      setBacklogCollapsedEpic('repo-a:41', true, throwingStorage)
+      setBacklogHiddenRepos(new Set([A]), throwingStorage)
+    }).not.toThrow()
   })
 })

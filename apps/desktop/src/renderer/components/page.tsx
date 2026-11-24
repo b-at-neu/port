@@ -1,5 +1,5 @@
 // DESIGN §4: every data region renders loading, error and empty; a screen supplies only its view.
-import type { ReactNode } from 'react'
+import type { MouseEventHandler, ReactNode, Ref } from 'react'
 import { useIpcQuery } from '@/renderer/data/query'
 import type { ActionInput, ActionOutput, QueryName } from '@/types/ipc'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
@@ -48,14 +48,27 @@ export function PageStates({ variant = 'page', state, loading, errorMessage, onR
 interface PageProps extends PageStatesProps {
   readonly header: ReactNode
   readonly variant: ScreenBodyVariant
+  readonly aside?: ReactNode
+  readonly onMouseDown?: MouseEventHandler<HTMLElement>
+  readonly ref?: Ref<HTMLDivElement>
 }
 
-export function Page({ header, variant, ...states }: PageProps) {
+export function Page({ header, variant, aside, onMouseDown, ref, ...states }: PageProps) {
+  const body = (
+    <ScreenBody variant={variant} className={aside === undefined ? undefined : 'flex-1'}>
+      <PageStates variant={variant} {...states} />
+    </ScreenBody>
+  )
   return (
-    <Screen header={header}>
-      <ScreenBody variant={variant}>
-        <PageStates variant={variant} {...states} />
-      </ScreenBody>
+    <Screen header={header} onMouseDown={onMouseDown} ref={ref}>
+      {aside === undefined ? (
+        body
+      ) : (
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          {body}
+          {aside}
+        </div>
+      )}
     </Screen>
   )
 }
