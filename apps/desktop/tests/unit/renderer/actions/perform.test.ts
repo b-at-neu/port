@@ -55,6 +55,31 @@ describe('perform', () => {
     expect(deps.client.getQueryState(KEY)?.isInvalidated).toBe(true)
   })
 
+  it.each([
+    ['ok', { ok: true }, 'success'],
+    ['refused', { ok: false }, 'error'],
+    ['rejected', 'unreachable', 'error'],
+  ] as const)('a %s reply returns %j and toasts %s without a loading toast when pending is omitted', async (reply, returned, tone) => {
+    const deps = depsFor(reply)
+    const result = await perform(
+      { name: NAME, input: {} as never, invalidates: ['session.list'], toast: { result: (output) => ({ tone: (output as { ok: boolean }).ok ? 'success' : 'error', title: 'T', description: null, action: null, cancel: null }) } },
+      deps,
+    )
+
+    expect(result).toEqual(returned)
+    expect(toast.loading).not.toHaveBeenCalled()
+    expect(toast[tone]).toHaveBeenCalledTimes(1)
+    expect(deps.client.getQueryState(KEY)?.isInvalidated).toBe(true)
+  })
+
+  it('shows no toast when the result maps to null', async () => {
+    const deps = depsFor('ok')
+    await perform({ name: NAME, input: {} as never, toast: { result: () => null } }, deps)
+
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
   it('invalidates nothing when no keys are given', async () => {
     const deps = depsFor('ok')
     await perform({ name: NAME, input: {} as never }, deps)

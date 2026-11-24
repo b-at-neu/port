@@ -1,86 +1,25 @@
 // The repo page's Worktrees tab.
-import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/renderer/components/ui/alert-dialog'
 import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { DetailPane } from '@/renderer/components/detail-pane'
 import { EmptyState } from '@/renderer/components/empty-state'
 import { ErrorBanner } from '@/renderer/components/error-banner'
+import { PageStates } from '@/renderer/components/page'
+import { pageState } from '@/renderer/components/page-state'
 import { StatusPill } from '@/renderer/components/status-pill'
 import type { PillStatus } from '@/types/components'
+import { useActionMutation } from '@/renderer/actions/use-action-mutation'
 import { ipcQueryOptions, useIpcQuery } from '@/renderer/data/query'
-import { invoke } from '@/renderer/data/invoke'
-import { runInBackground } from '@/renderer/lib/background-action'
-import type { ActionToast } from '@/types/toast'
+import { formatTimeOfDay } from '@/renderer/lib/time'
 import type { ForcedFlags, InspectedWorktree, WorktreesReport } from '@/types/reclaimer'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import { useListSelection } from '@/renderer/shell/list-selection'
-import { forcedReclaimFor } from '@/renderer/repositories/worktrees-model'
-import {
-  failureCopy,
-  forcedActionLabel,
-  forcedConfirmLabel,
-  forcedDialogBody,
-  forcedDialogIsDestructive,
-  forcedDialogTitle,
-  forcedReclaimToast,
-  lockedInUseHint,
-  needsAttentionCount,
-  producerCopy,
-  purgeConfirmLabel,
-  purgeDialogBody,
-  purgeDialogTitle,
-  purgeResultToast,
-  reclaimDialogBody,
-  reclaimDialogConfirmLabel,
-  reclaimDialogTitle,
-  reclaimFailureToast,
-  reclaimNothingToReclaimTooltip,
-  reclaimResultToast,
-} from '@/renderer/repositories/worktrees-copy'
-
-interface PendingForced {
-  readonly worktree: InspectedWorktree
-  readonly flags: ForcedFlags
-}
-
-function outcomeToast(tone: 'success' | 'error', title: string): ActionToast {
-  return { tone, title, description: null, action: null, cancel: null }
-}
-
-function ConfirmDialog({
-  title,
-  body,
-  confirmLabel,
-  destructive,
-  onConfirm,
-  onCancel,
-}: {
-  readonly title: string
-  readonly body: string
-  readonly confirmLabel: string
-  readonly destructive: boolean
-  readonly onConfirm: () => void
-  readonly onCancel: () => void
-}) {
-  return (
-    <AlertDialog open onOpenChange={(open) => !open && onCancel()}>
-      <AlertDialogContent data-slot="alert-dialog-content">
-        <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{body}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          {destructive ? <AlertDialogAction onClick={onConfirm}>{confirmLabel}</AlertDialogAction> : <Button onClick={onConfirm}>{confirmLabel}</Button>}
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  )
-}
+import { REPO_INVOKE_ERROR } from '@/renderer/repositories/copy'
+import { forcedConfirm, forcedPending, forcedReclaimFor, forcedToast, purgeConfirm, purgePending, purgeToast, reclaimConfirm, reclaimPending, reclaimToast } from '@/renderer/repositories/worktrees-model'
+import { failureCopy, forcedActionLabel, LOCKED_IN_USE_HINT, needsAttentionCount, NOTHING_TO_RECLAIM_TOOLTIP, producerCopy } from '@/renderer/repositories/worktrees-copy'
 
 const PILL_STATUS: Readonly<Record<InspectedWorktree['state'], PillStatus>> = {
   active: 'working',
@@ -90,10 +29,6 @@ const PILL_STATUS: Readonly<Record<InspectedWorktree['state'], PillStatus>> = {
   dirty: 'attention',
   unresolved: 'attention',
   outside: 'idle',
-}
-
-function orphanName(dir: string): string {
-  return dir.split(/[\\/]/).filter((part) => part !== '').pop() ?? dir
 }
 
 function issueUrl(repo: string, issue: number): string {
@@ -161,94 +96,68 @@ function WorktreeDetailPane({
           {forcedActionLabel(forced)}
         </Button>
       ) : null}
-      {lockedInUse ? <p className="text-small text-muted-foreground">{lockedInUseHint()}</p> : null}
+      {lockedInUse ? <p className="text-small text-muted-foreground">{LOCKED_IN_USE_HINT}</p> : null}
     </DetailPane>
   )
 }
 
 export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; readonly entry: RepositoryEntry }) {
-  const repo = 'config' in entry ? entry.config.repo : ''
-  const [confirmIssue, setConfirmIssue] = useState<number | 'all' | null>(null)
-  const [pendingForced, setPendingForced] = useState<PendingForced | null>(null)
-  const [pendingPurge, setPendingPurge] = useState<string | null>(null)
   const snapshotQuery = useIpcQuery('board.snapshot')
   const worktreesLastSuccessAt = snapshotQuery.data?.health.find((h) => h.repoId === repoId)?.worktrees.lastSuccessAt ?? null
   const query = useQuery(ipcQueryOptions('worktrees.report', { id: repoId }, [worktreesLastSuccessAt]))
-  const worktreePaths = query.data?.ok === true ? query.data.worktrees.map((w) => w.path) : []
-  const selection = useListSelection(worktreePaths)
-
-  if (query.isLoading) {
-    return (
-      <div className="flex flex-col gap-2 p-4">
-        <Skeleton className="h-9 w-full" />
-        <Skeleton className="h-9 w-full" />
-      </div>
-    )
-  }
-
   const report: WorktreesReport | undefined = query.data
-  if (report === undefined) return null
 
-  if (!report.ok) {
-    return (
-      <div className="flex flex-col gap-2 p-4">
-        <ErrorBanner message={failureCopy(report)} />
-        <Button variant="outline" size="small" onClick={() => void query.refetch()} className="self-start">
-          Inspect again
-        </Button>
-      </div>
-    )
-  }
+  return (
+    <PageStates
+      loading={
+        <div className="flex flex-col gap-2 p-4">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+        </div>
+      }
+      state={pageState({ data: report, status: query.status }, () => false)}
+      errorMessage={REPO_INVOKE_ERROR}
+      onRetry={() => void query.refetch()}
+      empty={null}
+    >
+      {report === undefined ? null : report.ok ? (
+        <WorktreesView report={report} repoId={repoId} repo={'config' in entry ? entry.config.repo : ''} onRefresh={() => void query.refetch()} />
+      ) : (
+        <div className="flex flex-col gap-2 p-4">
+          <ErrorBanner message={failureCopy(report)} />
+          <Button variant="outline" size="small" onClick={() => void query.refetch()} className="self-start">
+            Inspect again
+          </Button>
+        </div>
+      )}
+    </PageStates>
+  )
+}
 
-  const worktrees = report.worktrees
-  const reclaimableRows = worktrees.filter((w) => w.reclaimable)
-  const reclaimableCount = reclaimableRows.length
-  const selectedWorktree = report.worktrees.find((w) => w.path === selection.selectedKey) ?? null
+function WorktreesView({ report, repoId, repo, onRefresh }: { readonly report: Extract<WorktreesReport, { ok: true }>; readonly repoId: RepoId; readonly repo: string; readonly onRefresh: () => void }) {
+  const { worktrees } = report
+  const selection = useListSelection(worktrees.map((w) => w.path))
+  const reclaim = useActionMutation('worktrees.reclaim', {
+    confirm: (input) => reclaimConfirm(worktrees, input.issue),
+    toast: { pending: (input) => reclaimPending(worktrees, input.issue), result: (result) => reclaimToast(result) },
+    invalidates: ['worktrees.report'],
+    onResult: () => selection.clear(),
+  })
+  const forced = useActionMutation('worktrees.reclaim', {
+    confirm: (input) => forcedConfirm(worktrees, input.force),
+    toast: { pending: (input) => forcedPending(input.force), result: (result, input) => forcedToast(input.force, result) },
+    invalidates: ['worktrees.report'],
+    onResult: () => selection.clear(),
+  })
+  const purge = useActionMutation('worktrees.purge', {
+    confirm: (input) => purgeConfirm(input.path),
+    toast: { pending: (input) => purgePending(input.path), result: (result) => purgeToast(result) },
+    invalidates: ['worktrees.report'],
+  })
+
+  const reclaimableCount = worktrees.filter((w) => w.reclaimable).length
+  const selectedWorktree = worktrees.find((w) => w.path === selection.selectedKey) ?? null
   const selectedForced = selectedWorktree === null ? null : forcedReclaimFor(selectedWorktree)
-
-  async function runReclaim(issue: number | null): Promise<void> {
-    setConfirmIssue(null)
-    const name = issue === null ? null : (worktrees.find((w) => w.issue === issue)?.pathBasename ?? null)
-    await runInBackground({
-      id: `worktrees:${repoId}:reclaim:${issue === null ? 'all' : String(issue)}`,
-      pending: name === null ? 'Reclaiming worktrees…' : `Reclaiming ${name}…`,
-      run: () => invoke('worktrees.reclaim', { id: repoId, issue, force: null }),
-      toToast: (result) => (result.ok ? outcomeToast('success', reclaimResultToast(result)) : outcomeToast('error', reclaimFailureToast(result))),
-    })
-    await query.refetch()
-    selection.clear()
-  }
-
-  async function runForced(target: PendingForced): Promise<void> {
-    setPendingForced(null)
-    const { worktree, flags } = target
-    await runInBackground({
-      id: `worktrees:${repoId}:forced:${worktree.path}`,
-      pending: `Reclaiming ${worktree.pathBasename}…`,
-      run: () => invoke('worktrees.reclaim', { id: repoId, issue: null, force: { path: worktree.path, ...flags } }),
-      toToast: (result) => (result.ok ? outcomeToast('success', forcedReclaimToast(worktree.pathBasename, result)) : outcomeToast('error', reclaimFailureToast(result))),
-    })
-    await query.refetch()
-    selection.clear()
-  }
-
-  async function runPurge(path: string): Promise<void> {
-    setPendingPurge(null)
-    await runInBackground({
-      id: `worktrees:${repoId}:purge:${path}`,
-      pending: `Deleting ${orphanName(path)}…`,
-      run: () => invoke('worktrees.purge', { id: repoId, path }),
-      toToast: (result) => (result.ok ? outcomeToast('success', purgeResultToast(result)) : outcomeToast('error', reclaimFailureToast(result))),
-    })
-    await query.refetch()
-  }
-
-  const confirmTarget =
-    confirmIssue === 'all'
-      ? { count: reclaimableCount, singleName: null }
-      : confirmIssue !== null
-        ? { count: 1, singleName: report.worktrees.find((w) => w.issue === confirmIssue)?.pathBasename ?? null }
-        : null
 
   return (
     <div className="flex min-h-full flex-1 overflow-hidden" {...selection.surfaceProps()}>
@@ -264,30 +173,30 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
           ) : null}
           <div className="flex items-center justify-between gap-2 text-small text-muted-foreground">
             <span>
-              {report.registered} registered · {reclaimableCount} reclaimable · {needsAttentionCount(report.worktrees)} need attention
+              {report.registered} registered · {reclaimableCount} reclaimable · {needsAttentionCount(worktrees)} need attention
             </span>
             <div className="flex items-center gap-2">
-              <span className="text-meta">Checked {new Date(report.readAt).toLocaleTimeString()}</span>
-              <Button variant="ghost" size="small" onClick={() => void query.refetch()}>
+              <span className="text-meta">Checked {formatTimeOfDay(report.readAt)}</span>
+              <Button variant="ghost" size="small" onClick={onRefresh}>
                 Refresh
               </Button>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span>
-                    <Button variant="outline" size="small" disabled={reclaimableCount === 0} onClick={() => setConfirmIssue('all')}>
+                    <Button variant="outline" size="small" disabled={reclaimableCount === 0} onClick={() => reclaim.request({ id: repoId, issue: null, force: null })}>
                       Reclaim {reclaimableCount}
                     </Button>
                   </span>
                 </TooltipTrigger>
-                {reclaimableCount === 0 ? <TooltipContent>{reclaimNothingToReclaimTooltip()}</TooltipContent> : null}
+                {reclaimableCount === 0 ? <TooltipContent>{NOTHING_TO_RECLAIM_TOOLTIP}</TooltipContent> : null}
               </Tooltip>
             </div>
           </div>
         </div>
-        {report.worktrees.length === 0 ? (
+        {worktrees.length === 0 ? (
           <EmptyState icon={RefreshCw} message="No linked worktrees. Only the main checkout is registered." className="p-6" />
         ) : (
-          report.worktrees.map((worktree) => <WorktreeRow key={worktree.path} worktree={worktree} repo={repo} rowProps={selection.rowProps(worktree.path)} />)
+          worktrees.map((worktree) => <WorktreeRow key={worktree.path} worktree={worktree} repo={repo} rowProps={selection.rowProps(worktree.path)} />)
         )}
         {report.orphanDirs.length > 0 ? (
           <div className="flex flex-col gap-1 px-4 py-3">
@@ -295,7 +204,7 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
             {report.orphanDirs.map((dir) => (
               <div key={dir} className="flex items-center gap-2">
                 <p className="truncate font-mono text-meta text-muted-foreground">{dir}</p>
-                <Button variant="ghost" size="small" onClick={() => setPendingPurge(dir)}>
+                <Button variant="ghost" size="small" onClick={() => purge.request({ id: repoId, path: dir })}>
                   Delete
                 </Button>
               </div>
@@ -307,48 +216,15 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
         <WorktreeDetailPane
           worktree={selectedWorktree}
           onClose={() => selection.clear()}
-          onReclaim={selectedWorktree.reclaimable && selectedWorktree.issue !== null ? () => setConfirmIssue(selectedWorktree.issue) : null}
+          onReclaim={selectedWorktree.reclaimable && selectedWorktree.issue !== null ? () => reclaim.request({ id: repoId, issue: selectedWorktree.issue, force: null }) : null}
           forced={selectedForced}
-          onForced={() => selectedForced !== null && setPendingForced({ worktree: selectedWorktree, flags: selectedForced })}
+          onForced={() => selectedForced !== null && forced.request({ id: repoId, issue: null, force: { path: selectedWorktree.path, ...selectedForced } })}
           lockedInUse={selectedWorktree.state === 'locked' && !selectedWorktree.otherwiseReclaimable}
         />
       ) : null}
-      {pendingForced !== null ? (
-        <ConfirmDialog
-          title={forcedDialogTitle(pendingForced.worktree.pathBasename, pendingForced.flags, pendingForced.worktree.dirtyFiles)}
-          body={forcedDialogBody(pendingForced.worktree.pathBasename, pendingForced.flags, pendingForced.worktree.dirtyFiles)}
-          confirmLabel={forcedConfirmLabel(pendingForced.flags)}
-          destructive={forcedDialogIsDestructive(pendingForced.flags)}
-          onConfirm={() => void runForced(pendingForced)}
-          onCancel={() => setPendingForced(null)}
-        />
-      ) : null}
-      {pendingPurge !== null ? (
-        <ConfirmDialog
-          title={purgeDialogTitle(orphanName(pendingPurge))}
-          body={purgeDialogBody()}
-          confirmLabel={purgeConfirmLabel()}
-          destructive
-          onConfirm={() => void runPurge(pendingPurge)}
-          onCancel={() => setPendingPurge(null)}
-        />
-      ) : null}
-      <AlertDialog open={confirmTarget !== null} onOpenChange={(open) => !open && setConfirmIssue(null)}>
-        {confirmTarget !== null ? (
-          <AlertDialogContent data-slot="alert-dialog-content">
-            <AlertDialogHeader>
-              <AlertDialogTitle>{reclaimDialogTitle(confirmTarget.count, confirmTarget.singleName)}</AlertDialogTitle>
-              <AlertDialogDescription>{reclaimDialogBody()}</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={() => void runReclaim(confirmIssue === 'all' ? null : (confirmIssue ?? null))}>
-                {reclaimDialogConfirmLabel()}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        ) : null}
-      </AlertDialog>
+      {reclaim.confirmDialog}
+      {forced.confirmDialog}
+      {purge.confirmDialog}
     </div>
   )
 }

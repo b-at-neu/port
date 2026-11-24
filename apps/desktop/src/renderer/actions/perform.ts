@@ -5,7 +5,7 @@ import type { invoke } from '@/renderer/data/invoke'
 import { runInBackground, showActionToast, UNREACHABLE } from '@/renderer/lib/background-action'
 
 export interface ActionToastSpec<N extends ActionName> {
-  readonly pending: string
+  readonly pending?: string | ((input: ActionInput<N>) => string)
   readonly result: (output: ActionOutput<N>, input: ActionInput<N>) => ActionToast | null
 }
 
@@ -26,11 +26,14 @@ export async function perform<N extends ActionName>(spec: PerformSpec<N>, deps: 
   const { name, input, toast, invalidates = [] } = spec
   const run = () => deps.invoke(name, input)
   let result: ActionOutput<N> | 'unreachable'
-  if (toast !== undefined) {
-    result = await runInBackground({ id: name, pending: toast.pending, run, toToast: (output) => toast.result(output, input) })
+  if (toast?.pending !== undefined) {
+    const pending = typeof toast.pending === 'function' ? toast.pending(input) : toast.pending
+    result = await runInBackground({ id: name, pending, run, toToast: (output) => toast.result(output, input) })
   } else {
     try {
       result = await run()
+      const shown = toast?.result(result, input) ?? null
+      if (shown !== null) showActionToast(name, shown)
     } catch (error) {
       console.error(`Failed to reach the main process for ${name}`, error)
       showActionToast(name, UNREACHABLE)

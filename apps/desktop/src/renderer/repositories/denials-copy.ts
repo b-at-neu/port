@@ -1,4 +1,5 @@
 // Every pure string the Repositories screen's Denials tab renders. Every count comes from `window`, never the whole-file `summary`.
+import { exactTime, formatAgoSince } from '@/renderer/lib/time'
 import type { AttributionTally, SessionAttribution } from '@/types/local'
 import type { DenialActor, DenialSummary } from '@/types/local'
 
@@ -58,12 +59,15 @@ export function actorAttributionPill(actor: DenialActor | null, attribution: Ses
   }
 }
 
-export function emptyLogCopy(): string {
-  return 'No denial log yet. The guard hook writes .agents/denials.log the first time it records a decision.'
+export const EMPTY_LOG = 'No denial log yet. The guard hook writes .agents/denials.log the first time it records a decision.'
+export const NO_ENTRIES = 'The denial log is empty.'
+
+export function lastSeenCopy(iso: string | null, now: Date): string {
+  return iso === null ? '—' : formatAgoSince(iso, now)
 }
 
-export function noEntriesCopy(): string {
-  return 'The denial log is empty.'
+export function exactOrDash(iso: string | null): string {
+  return iso === null ? '—' : exactTime(iso)
 }
 
 export function readFailedCopy(path: string, message: string): string {

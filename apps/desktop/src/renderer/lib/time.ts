@@ -33,6 +33,10 @@ export function exactTime(iso: string): string {
   return new Date(iso).toLocaleString()
 }
 
+export function formatTimeOfDay(iso: string): string {
+  return new Date(iso).toLocaleTimeString()
+}
+
 /** DESIGN §6's compact duration — `<1m`, `12m`, `1h 4m`, `2d 3h`. */
 export function formatDuration(ms: number): string {
   const totalMinutes = Math.floor(Math.max(0, ms) / MINUTE)

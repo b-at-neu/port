@@ -1,4 +1,3 @@
-// Split out of `inspect.ts` once that file crossed the line limit — the shape grammar has no dependency on the rest of the inspector.
 const SHAPE_MAX_TOKENS = 4
 const SHAPE_MAX_LENGTH = 80
 const PATH_PLACEHOLDER = '<path>'
