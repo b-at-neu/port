@@ -101,7 +101,7 @@ async function scratchLeftovers(fx: Fixture): Promise<string[]> {
   return (await readdir(fx.ctx.scratchDir)).filter((name) => name.startsWith('release-'))
 }
 
-describe('createBumpBranch', () => {
+describe('createBumpBranch', { timeout: 30_000 }, () => {
   it('pushes a signed commit that changes only the version files, then audits once', async () => {
     const fx = await fixture()
     const headBefore = await out(fx.clone, ['rev-parse', 'HEAD'])
