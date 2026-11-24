@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/u
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/renderer/components/ui/dropdown-menu'
 import { LabelChip } from '@/renderer/components/label-chip'
 import { BACKLOG_WORK_ON, PLAN_GATE_OPTIONS } from '@/renderer/backlog/copy'
-import type { useListSelection } from '@/renderer/shell/list-selection'
+import type { useListSelection } from '@/renderer/app/list-selection'
 import { exactTime, formatAgoSince } from '@/renderer/lib/time'
 import { BlockedTag } from '@/renderer/backlog/blocked-tag'
 import { isEpic } from '@/renderer/backlog/epics'

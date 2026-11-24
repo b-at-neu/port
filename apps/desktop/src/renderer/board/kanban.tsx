@@ -9,7 +9,7 @@ import { emptyColumnLabel, laneToggleAria } from '@/renderer/board/copy'
 import { rowKey } from '@/renderer/board/row-model'
 import type { BoardColumn, BoardLane } from '@/types/board'
 import type { RepoId } from '@/utils/repos'
-import type { useListSelection } from '@/renderer/shell/list-selection'
+import type { useListSelection } from '@/renderer/app/list-selection'
 
 const GRID_CLASS = 'grid grid-cols-[repeat(6,minmax(15rem,1fr))] gap-4'
 const ROOT_CLASS = 'min-h-0 flex-1 overflow-auto'

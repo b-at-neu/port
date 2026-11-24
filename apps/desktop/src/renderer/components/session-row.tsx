@@ -4,7 +4,7 @@ import { cn } from '@/renderer/lib/utils'
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '@/renderer/components/ui/context-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { SessionMarkContextItems, SessionMarkMenu, SessionPinGlyph, useSessionMarkMenu } from '@/renderer/components/session-mark-menu'
-import { SELECTED_ROW_CLASS } from '@/renderer/shell/sidebar-selection'
+import { SELECTED_ROW_CLASS } from '@/renderer/app/sidebar-selection'
 import type { SessionMarks } from '@/types/hosting'
 
 type Density = 'sidebar' | 'nested' | 'list'

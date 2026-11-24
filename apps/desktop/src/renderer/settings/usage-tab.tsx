@@ -6,7 +6,7 @@ import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { EmptyState } from '@/renderer/components/empty-state'
 import { useIpcQuery } from '@/renderer/data/query'
-import { ROUTE_IDS } from '@/renderer/router/routes'
+import { ROUTE_IDS } from '@/renderer/app/routes'
 import {
   CALCULATING_LABEL,
   cardReadError,

@@ -18,7 +18,7 @@ import type { DenialsGroup } from '@/types/router'
 import { REPO_INVOKE_ERROR } from '@/renderer/repositories/copy'
 import { actorAttributionPill, attributionLineCopy, burstPillCopy, cappedLineCopy, EMPTY_LOG, exactOrDash, lastSeenCopy, metaStripCopy, NO_ENTRIES, readFailedCopy } from '@/renderer/repositories/denials-copy'
 import { denialsRegion, isDenialsEmpty } from '@/renderer/repositories/model'
-import { useListSelection } from '@/renderer/shell/list-selection'
+import { useListSelection } from '@/renderer/app/list-selection'
 
 function ShapeRow({ group, now, rowProps }: { readonly group: ShapeGroup; readonly now: Date; readonly rowProps: ReturnType<ReturnType<typeof useListSelection>['rowProps']> }) {
   return (

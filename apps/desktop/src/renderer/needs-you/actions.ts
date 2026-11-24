@@ -20,7 +20,7 @@ import { openDecision } from '@/renderer/decision/controller'
 import { openAllowDialog } from '@/renderer/needs-you/allow-dialog'
 import { openRestartDialog } from '@/renderer/needs-you/restart-dialog'
 import { openForceDispatchDialog } from '@/renderer/needs-you/force-dispatch-dialog'
-import { openSession } from '@/renderer/router/navigation'
+import { openSession } from '@/renderer/app/navigation'
 import { invoke } from '@/renderer/data/invoke'
 
 type NeedsYouActionKind = 'review-plan' | 'open' | 'unblock' | 'grant' | 'retry' | 'refresh' | 'answer' | 'approve' | 'allow' | 'resume' | 'resume-all' | 'restart' | 'force' | 'copy-path'

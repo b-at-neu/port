@@ -5,15 +5,15 @@ import { PhaseDot } from '@/renderer/components/phase-dot'
 import { SessionRow } from '@/renderer/components/session-row'
 import { StatusPillMenu } from '@/renderer/components/status-pill-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
-import { phaseLineOf } from '@/renderer/shell/pipelines-model'
-import { REPO_SCREENS } from '@/renderer/shell/repo-nav-model'
-import { LiveSessionEntry } from '@/renderer/shell/sidebar-sessions'
+import { phaseLineOf } from '@/renderer/app/pipelines-model'
+import { REPO_SCREENS } from '@/renderer/app/repo-nav-model'
+import { LiveSessionEntry } from '@/renderer/app/sidebar-sessions'
 import type { ActiveRepoScreen, PipelineRow, PipelineSessionRow, SidebarSelection } from '@/types/shell'
 import type { SessionMarks } from '@/types/hosting'
 import { cn } from '@/renderer/lib/utils'
-import { SELECTED_ROW_CLASS, isUserSessionSelected, repoHoldsSelection, repoToggleLabel } from '@/renderer/shell/sidebar-selection'
-import { useRunStateCommand } from '@/renderer/shell/run-state-command'
-import { ROUTE_IDS } from '@/renderer/router/routes'
+import { SELECTED_ROW_CLASS, isUserSessionSelected, repoHoldsSelection, repoToggleLabel } from '@/renderer/app/sidebar-selection'
+import { useRunState } from '@/renderer/app/run-state'
+import { ROUTE_IDS } from '@/renderer/app/routes'
 
 const SCREEN_ROW_CLASS = 'flex h-7 items-center gap-2 rounded-md px-2 text-body text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring'
 
@@ -25,33 +25,36 @@ function ownershipDisabledReason(owner: Extract<PipelineRow, { readonly ready: t
 }
 
 function RunStateMenu({ row }: { readonly row: Extract<PipelineRow, { readonly ready: true }> }) {
-  const runState = useRunStateCommand()
+  const runState = useRunState()
   const ownershipReason = ownershipDisabledReason(row.owner, row.unreadableMessage)
   return (
-    <StatusPillMenu
-      status={row.pill.status}
-      label={row.pill.label}
-      pending={runState.pending}
-      items={[
-        {
-          key: 'run',
-          label: 'Run',
-          hint: 'start dispatching',
-          current: row.pill.label === 'Running',
-          disabledReason: row.pill.label === 'Running' ? 'Already running' : ownershipReason,
-          onSelect: () => runState.run(row.repoId, row.name),
-        },
-        {
-          key: 'drain',
-          label: 'Drain',
-          hint: 'finish in-flight',
-          current: row.pill.label === 'Draining',
-          disabledReason: row.pill.label === 'Draining' ? 'Already draining' : row.pill.label === 'Stopped' ? 'Already stopped' : ownershipReason,
-          onSelect: () => runState.drain(row.repoId, row.name),
-        },
-        { key: 'stop', label: 'Stop', hint: 'stop now', current: row.pill.label === 'Stopped', disabledReason: row.pill.label === 'Stopped' ? 'Already stopped' : null, onSelect: () => runState.requestPause(row.repoId, row.name, row.inFlight) },
-      ]}
-    />
+    <>
+      <StatusPillMenu
+        status={row.pill.status}
+        label={row.pill.label}
+        pending={runState.pending}
+        items={[
+          {
+            key: 'run',
+            label: 'Run',
+            hint: 'start dispatching',
+            current: row.pill.label === 'Running',
+            disabledReason: row.pill.label === 'Running' ? 'Already running' : ownershipReason,
+            onSelect: () => runState.run(row.repoId, row.name),
+          },
+          {
+            key: 'drain',
+            label: 'Drain',
+            hint: 'finish in-flight',
+            current: row.pill.label === 'Draining',
+            disabledReason: row.pill.label === 'Draining' ? 'Already draining' : row.pill.label === 'Stopped' ? 'Already stopped' : ownershipReason,
+            onSelect: () => runState.drain(row.repoId, row.name),
+          },
+          { key: 'stop', label: 'Stop', hint: 'stop now', current: row.pill.label === 'Stopped', disabledReason: row.pill.label === 'Stopped' ? 'Already stopped' : null, onSelect: () => runState.stop(row.repoId, row.name) },
+        ]}
+      />
+      {runState.confirmDialog}
+    </>
   )
 }
 

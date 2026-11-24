@@ -12,7 +12,7 @@ import { ticketViewOf } from '@/renderer/lib/ticket-view'
 import { PhasePill } from '@/renderer/components/phase-pill'
 import { BlockedOnTag } from '@/renderer/components/blocked-on-tag'
 import { HeldTag } from '@/renderer/components/held-tag'
-import type { useListSelection } from '@/renderer/shell/list-selection'
+import type { useListSelection } from '@/renderer/app/list-selection'
 
 interface TicketRowProps {
   readonly row: BoardItemRow

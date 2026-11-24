@@ -1,6 +1,4 @@
-// Covers the per-repository run-state row's pure copy functions (#314,
-// #316) — the row and its buttons live in `shell/sidebar-pipelines.tsx` now,
-// driven by `shell/run-state-command.ts`'s mutation.
+// Covers the per-repository run-state row's pure copy functions.
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { RepoRunState, RunStatesSnapshot } from '@/types/dispatch'
