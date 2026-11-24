@@ -138,13 +138,13 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     const viewer = snapshotRepoState(entry.id)?.viewer ?? null
     try {
       const runState = deps.runState(entry.id)
-      let ownership = await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
+      let ownership = await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo })
 
       // A persisted run/draining state with an absent record means the app restarted; it takes
       // ownership back rather than sitting idle until the operator clicks Run again.
       if (ownership.kind === 'absent' && (runState === RUN_TARGET.run || runState === RUN_TARGET.drain)) {
-        const taken = await deps.takeOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
-        if (taken.ok) ownership = await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
+        const taken = await deps.takeOwnership({ repoRoot: entry.path, repo: entry.config.repo })
+        if (taken.ok) ownership = await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo })
       }
 
       const owner = ownerOf(ownership)

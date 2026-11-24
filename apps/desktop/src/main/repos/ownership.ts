@@ -1,12 +1,12 @@
 // readOwnership / takeOwnership / releaseOwnership over `<base repo root>/.agents/cockpit.json`,
 // resolving the base root the same way every worktree of a checkout sees the one record.
-import { defaultGitRunner, resolveGitBaseRoot } from '@/main/platform/git'
-import { ensureDirectory, readTextFile, removeFile, writeJsonFileAtomic } from '@/main/platform/files'
-import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import type { FileFailureKind } from '@/types/platform'
+import { z } from 'zod'
+import type { Platform } from '@/main/platform'
+import { resolveGitBaseRoot } from '@/main/platform/git'
+import { createJsonStore, type JsonStore } from '@/main/platform/json-store'
+import { pathOps } from '@/main/platform/paths'
 import type { OwnershipSummary } from '@/types/writes'
-import type { TakeOwnershipResult, TakeOwnershipParams, OwnershipWriteResult, ReadOwnershipParams, OwnershipRead, OwnershipDeps, OwnershipWriteFailureKind } from '@/types/dispatch'
-
+import type { TakeOwnershipResult, OwnershipWriteResult, OwnershipParams, OwnershipRead } from '@/types/dispatch'
 
 interface OwnershipRecord {
   readonly repo: string
@@ -20,20 +20,17 @@ interface OwnershipFileShape {
   readonly since?: unknown
 }
 
-/** The classification alone, with no path or clock — a `repo` mismatch reads as `absent`
- *  (a positive determination), and anything else untrustworthy reads as `unreadable`. */
-export function classifyOwnership(exists: boolean, text: string | null, repo: string): OwnershipVerdict {
-  if (!exists || text === null) return { kind: 'absent' }
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(text)
-  } catch (error) {
-    return { kind: 'unreadable', message: error instanceof Error ? error.message : String(error) }
-  }
-  if (typeof parsed !== 'object' || parsed === null) {
-    return { kind: 'unreadable', message: 'cockpit.json is not a JSON object' }
-  }
-  const value = parsed as OwnershipFileShape
+type OwnershipVerdict =
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'app'; readonly since: string }
+  | { readonly kind: 'unreadable'; readonly message: string }
+
+/** The classification alone, over the parsed file (`undefined` when absent) — a `repo` mismatch reads as
+ *  `absent` (a positive determination), and anything else untrustworthy reads as `unreadable`. */
+export function classifyOwnership(raw: unknown, repo: string): OwnershipVerdict {
+  if (raw === undefined) return { kind: 'absent' }
+  if (typeof raw !== 'object' || raw === null) return { kind: 'unreadable', message: 'cockpit.json is not a JSON object' }
+  const value = raw as OwnershipFileShape
   if (typeof value.repo !== 'string' || value.repo !== repo) return { kind: 'absent' }
   if (typeof value.since !== 'string') return { kind: 'unreadable', message: "cockpit.json is missing 'since'" }
   if (value.owner === 'app') return { kind: 'app', since: value.since }
@@ -41,38 +38,38 @@ export function classifyOwnership(exists: boolean, text: string | null, repo: st
   return { kind: 'unreadable', message: "cockpit.json has an unknown 'owner'" }
 }
 
-type OwnershipVerdict =
-  | { readonly kind: 'absent' }
-  | { readonly kind: 'app'; readonly since: string }
-  | { readonly kind: 'unreadable'; readonly message: string }
+/** Unversioned, because the guard hook and the stage prompts read the same file and expect no version key; classification stays in `classifyOwnership`. A file that cannot be read is never overwritten. */
+function ownershipStore(ctx: Pick<Platform, 'fs'>, path: string): JsonStore<unknown> {
+  return createJsonStore<unknown>({ file: path, version: null, schema: z.unknown(), initial: undefined, unreadable: 'read-only', fs: ctx.fs })
+}
 
-export async function resolveOwnershipPath(deps: OwnershipDeps): Promise<string> {
-  const pathOps = deps.pathOps ?? defaultPathOps
-  const git = deps.git ?? defaultGitRunner()
-  const baseRoot = await resolveGitBaseRoot(git, deps.repoRoot, pathOps)
+export async function resolveOwnershipPath(ctx: Pick<Platform, 'git'>, repoRoot: string): Promise<string> {
+  const baseRoot = await resolveGitBaseRoot(ctx.git, repoRoot, pathOps)
   return pathOps.join(baseRoot, '.agents', 'cockpit.json')
 }
 
-export async function readOwnership(params: ReadOwnershipParams): Promise<OwnershipRead> {
-  const now = params.now ?? (() => new Date())
-  const readAt = now().toISOString()
-  const path = await resolveOwnershipPath(params)
+async function load(ctx: Pick<Platform, 'git' | 'fs' | 'clock'>, params: OwnershipParams): Promise<{ readonly read: OwnershipRead; readonly store: JsonStore<unknown>; readonly path: string }> {
+  const readAt = ctx.clock.now().toISOString()
+  const path = await resolveOwnershipPath(ctx, params.repoRoot)
+  const store = ownershipStore(ctx, path)
+  await store.load()
 
-  const result = await readTextFile(path)
-  if (!result.ok) {
-    if (result.kind === 'not-found') return { kind: 'absent', path, readAt }
-    return { kind: 'unreadable', message: result.message, path, readAt }
-  }
+  const status = store.status()
+  if (status.kind === 'unreadable') return { read: { kind: 'unreadable', message: status.message, path, readAt }, store, path }
 
-  const verdict = classifyOwnership(true, result.value, params.repo)
+  const verdict = classifyOwnership(store.value(), params.repo)
   switch (verdict.kind) {
     case 'absent':
-      return { kind: 'absent', path, readAt }
+      return { read: { kind: 'absent', path, readAt }, store, path }
     case 'app':
-      return { kind: 'app', since: verdict.since, path, readAt }
+      return { read: { kind: 'app', since: verdict.since, path, readAt }, store, path }
     case 'unreadable':
-      return { kind: 'unreadable', message: verdict.message, path, readAt }
+      return { read: { kind: 'unreadable', message: verdict.message, path, readAt }, store, path }
   }
+}
+
+export async function readOwnership(ctx: Pick<Platform, 'git' | 'fs' | 'clock'>, params: OwnershipParams): Promise<OwnershipRead> {
+  return (await load(ctx, params)).read
 }
 
 /** Drops the path/clock fields — the renderer-safe shape every gate and dispatch surface renders. */
@@ -87,42 +84,24 @@ export function toOwnershipSummary(read: OwnershipRead): OwnershipSummary {
   }
 }
 
-export function toOwnershipWriteFailureKind(kind: FileFailureKind): OwnershipWriteFailureKind {
-  return kind === 'unparseable' ? 'io' : kind
-}
-
 /** Always writes `owner: "app"`, the only owner this process ever claims for itself — no
  *  read-modify-write, since a record carries exactly one owner and `since` always starts fresh. */
-export async function takeOwnership(params: TakeOwnershipParams): Promise<TakeOwnershipResult> {
-  const pathOps = params.pathOps ?? defaultPathOps
-  const now = params.now ?? (() => new Date())
-  const path = await resolveOwnershipPath(params)
+export async function takeOwnership(ctx: Pick<Platform, 'git' | 'fs' | 'clock'>, params: OwnershipParams): Promise<TakeOwnershipResult> {
+  const { read, store, path } = await load(ctx, params)
+  if (read.kind === 'unreadable') return { ok: false, kind: 'refused', verdict: read, path }
 
-  const current = await readOwnership(params)
-  if (current.kind === 'unreadable') {
-    return { ok: false, kind: 'refused', verdict: current, path }
-  }
-
-  const ensured = await ensureDirectory(pathOps.dirname(path))
-  if (!ensured.ok) return { ok: false, kind: toOwnershipWriteFailureKind(ensured.kind), message: ensured.message, path }
-
-  const value: OwnershipRecord = { repo: params.repo, owner: 'app', since: now().toISOString() }
-  const written = await writeJsonFileAtomic(path, value)
-  if (!written.ok) return { ok: false, kind: toOwnershipWriteFailureKind(written.kind), message: written.message, path }
+  const value: OwnershipRecord = { repo: params.repo, owner: 'app', since: ctx.clock.now().toISOString() }
+  const written = await store.write(value)
+  if (!written.ok) return { ok: false, kind: 'io', message: written.message, path }
   return { ok: true, path }
 }
 
-interface ReleaseOwnershipParams extends OwnershipDeps {
-  readonly repo: string
-}
-
 /** Deletes the record only when the verdict is `app`, never an unreadable one. */
-export async function releaseOwnership(params: ReleaseOwnershipParams): Promise<OwnershipWriteResult> {
-  const path = await resolveOwnershipPath(params)
-  const current = await readOwnership(params)
-  if (current.kind !== 'app') return { ok: true, path }
+export async function releaseOwnership(ctx: Pick<Platform, 'git' | 'fs' | 'clock'>, params: OwnershipParams): Promise<OwnershipWriteResult> {
+  const { read, path } = await load(ctx, params)
+  if (read.kind !== 'app') return { ok: true, path }
 
-  const removed = await removeFile(path)
-  if (!removed.ok && removed.kind !== 'not-found') return { ok: false, kind: toOwnershipWriteFailureKind(removed.kind), message: removed.message, path }
+  const removed = await ctx.fs.remove(path)
+  if (!removed.ok && removed.kind !== 'not-found') return { ok: false, kind: 'io', message: removed.message, path }
   return { ok: true, path }
 }

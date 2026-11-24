@@ -1,6 +1,6 @@
 import type { LabelPrecondition } from '@/types/writes'
 import type { GatePreflightFetch, GitHubRepoRef, PipelineItemKind } from '@/types/github'
-import type { OwnershipRead } from '@/types/dispatch'
+import type { OwnershipParams, OwnershipRead } from '@/types/dispatch'
 import type { ReposListResponse } from '@/types/ipc'
 import type { RegistryDeps } from '@/types/registry'
 import type { StateLabelsReader } from '@/types/pipeline-state'
@@ -14,7 +14,7 @@ import type { OwnershipSummary, PostCommentParams, WriteOutcome, WriteStateParam
 export interface GateDeps {
   readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
   readonly fetchGatePreflight: (params: { readonly repo: GitHubRepoRef; readonly number: number }) => Promise<GatePreflightFetch>
-  readonly readOwnership: (params: { readonly repoRoot: string; readonly repo: string; readonly now?: () => Date }) => Promise<OwnershipRead>
+  readonly readOwnership: (params: OwnershipParams) => Promise<OwnershipRead>
   readonly writeState: (params: WriteStateParams) => Promise<WriteOutcome>
   readonly stateLabels: StateLabelsReader
   readonly postComment: (params: PostCommentParams) => Promise<WriteOutcome>

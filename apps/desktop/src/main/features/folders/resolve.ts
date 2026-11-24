@@ -57,13 +57,13 @@ export async function resolveFoldersList(registryDeps: RegistryDeps, request: un
   const repositories = listed.ok ? listed.repositories : []
   const readyPaths = repositories.filter(isReadyEntry).map((entry) => entry.path)
 
-  const registryFolders = await Promise.all(readyPaths.map((path) => toFolderEntry(path, { git: deps.git, repositories, lastUsedAt: null, pathOps: ops })))
+  const registryFolders = await Promise.all(readyPaths.map((path) => toFolderEntry({ git: deps.git }, path, repositories, null)))
 
   const recents = await deps.recents.load()
   const live = await pruneMissing(recents, deps.exists)
   const newRecents = live.filter((recent) => !readyPaths.some((path) => ops.samePath(path, recent.path)))
 
-  const recentFolders = await Promise.all(newRecents.map((recent) => toFolderEntry(recent.path, { git: deps.git, repositories, lastUsedAt: recent.lastUsedAt, pathOps: ops })))
+  const recentFolders = await Promise.all(newRecents.map((recent) => toFolderEntry({ git: deps.git }, recent.path, repositories, recent.lastUsedAt)))
 
   const folders: readonly FolderEntry[] = [...registryFolders, ...recentFolders]
   return { folders }
@@ -84,7 +84,7 @@ export async function resolveFoldersChoose(
   const now = deps.now()
 
   await deps.recents.record(picked, now)
-  const folder = await toFolderEntry(picked, { git: deps.git, repositories, lastUsedAt: now.toISOString(), pathOps: deps.pathOps ?? defaultPathOps })
+  const folder = await toFolderEntry({ git: deps.git }, picked, repositories, now.toISOString())
   return { outcome: 'chosen', folder }
 }
 
@@ -94,5 +94,5 @@ export async function resolveSessionChanges(request: { readonly sessionKey: Sess
   }
   const workspace = await deps.workspaceOf(request.sessionKey)
   if (workspace === null) return { ok: false, kind: 'unknown-session', message: `no session is open for key '${request.sessionKey}'` }
-  return deps.computeSessionChanges(workspace, { git: deps.git })
+  return deps.computeSessionChanges({ git: deps.git, clock: { now: deps.now } }, workspace)
 }

@@ -11,6 +11,7 @@ import type { ItemsByNumberFetch, ResolvedItem } from '@/types/github'
 import { applyLabels, postComment, postIssueBody } from '@/main/github/writes/apply'
 import type { GhRunner, GitRunner } from '@/types/platform'
 import { readAuditLog } from '@/main/github/writes/audit'
+import { hostFs } from '@/main/platform'
 import { takeOwnership } from '@/main/repos/ownership'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
@@ -94,7 +95,7 @@ describe('applyLabels — ownership', () => {
 
   it('proceeds to a real write while this app owns the repo', async () => {
     const { repoRoot, auditDir, git } = await makeDirs()
-    await takeOwnership({ repoRoot, repo: 'o/r', git, now })
+    await takeOwnership({ git, fs: hostFs, clock: { now } }, { repoRoot, repo: 'o/r' })
 
     let ghCalled: readonly string[] | undefined
     const gh: GhRunner = (args) => {

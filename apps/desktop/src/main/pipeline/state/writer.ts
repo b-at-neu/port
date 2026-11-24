@@ -18,7 +18,7 @@ import { draftOf, refusedWriteIntent } from '@/main/pipeline/incidents/raise'
 import type { IncidentIntent, RecordIncident } from '@/types/incidents'
 import { resolveKeys } from '@/main/github/writes/command'
 import { evaluate } from '@/main/github/writes/scope'
-import type { OwnershipRead, ReadOwnershipParams } from '@/types/dispatch'
+import type { OwnershipParams, OwnershipRead } from '@/types/dispatch'
 import type { FetchItemsByNumberParams, GitHubRepoRef, ItemsByNumberFetch, PipelineItemKind } from '@/types/github'
 import type { MirrorItemParams, PipelineStateStore, StoredItem } from '@/types/pipeline-state'
 import type { ApplyLabelsParams, AuditEntry, LabelAuditEntry, LabelWriteRequest, ObservedItem, OwnershipKind, WriteOutcome, WriteStateParams } from '@/types/writes'
@@ -30,7 +30,7 @@ import type { RepoId } from '@/utils/repos'
 interface StateWriterDeps {
   readonly store: PipelineStateStore
   readonly applyLabels: (params: ApplyLabelsParams) => Promise<WriteOutcome>
-  readonly readOwnership: (params: ReadOwnershipParams) => Promise<OwnershipRead>
+  readonly readOwnership: (params: OwnershipParams) => Promise<OwnershipRead>
   readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
   readonly appendAudit: (auditDir: string, entry: AuditEntry) => Promise<unknown>
   readonly recordIncident: RecordIncident
@@ -91,7 +91,7 @@ export function createStateWriter(deps: StateWriterDeps): StateWriter {
   }
 
   function readOwner(ctx: MirrorContext): Promise<OwnershipRead> {
-    return deps.readOwnership({ repoRoot: ctx.repoRoot, repo: ctx.repo, git: ctx.git, pathOps: ctx.pathOps, now: deps.now })
+    return deps.readOwnership({ repoRoot: ctx.repoRoot, repo: ctx.repo })
   }
 
   function namesFor(ctx: MirrorContext, items: readonly StoredItem[], item: StoredItem, mode: 'state' | 'merged'): { readonly desired: readonly string[]; readonly all: readonly string[] } {

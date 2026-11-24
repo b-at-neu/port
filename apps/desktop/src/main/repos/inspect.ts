@@ -1,20 +1,14 @@
-// One directory to one RepositoryEntry — pure given its injected `git` runner, so tests need no real repository.
-import { basename } from 'node:path'
+// One directory to one RepositoryEntry — pure given its ctx's `git` and `fs`, so tests need no real repository.
 import { pathOps } from '@/main/platform/paths'
-import { statPath } from '@/main/platform/files'
+import type { Platform } from '@/main/platform'
 import { resolveDisplayVocabulary } from '@/utils/labels/display'
 import { LABEL_KEYS, resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoDiagnostic, RepoId, RepoProblem, RepositoryEntry, ResolvedRepoConfig, SchemaViolation } from '@/utils/repos'
 import { defaultRefName, permissionsStateOf, readAtDefaultRef, refsCarryingConfig } from '@/main/repos/config/harness'
-import type { GitRunner } from '@/types/platform'
 import { resolveEffectiveConfig } from '@/main/repos/config/effective'
 import type { PortResolved, RefReader } from '@/types/registry'
 import { CONFIG_PATH, SETTINGS_PATH } from '@/main/repos/config/paths'
 import { CONFIG_DEFAULTS, validateConfig } from '@/main/repos/config/schema'
-
-interface InspectDeps {
-  readonly git: GitRunner
-}
 
 function toRepoId(root: string): RepoId {
   // Documented cast: main is the only place either brand is minted from a real path.
@@ -22,12 +16,12 @@ function toRepoId(root: string): RepoId {
 }
 
 function problemEntry(root: string, problem: RepoProblem, diagnostics: readonly RepoDiagnostic[] = []): RepositoryEntry {
-  return { id: toRepoId(root), path: root, displayName: basename(root), problem, diagnostics }
+  return { id: toRepoId(root), path: root, displayName: pathOps.basename(root), problem, diagnostics }
 }
 
 /** Also used by `addRepository`, so a subdirectory and its root register as one entry. */
-export async function resolveGitRoot(git: GitRunner, cwd: string): Promise<{ readonly ok: true; readonly root: string } | { readonly ok: false }> {
-  const result = await git(['rev-parse', '--show-toplevel'], cwd)
+export async function resolveGitRoot(ctx: Pick<Platform, 'git'>, cwd: string): Promise<{ readonly ok: true; readonly root: string } | { readonly ok: false }> {
+  const result = await ctx.git(['rev-parse', '--show-toplevel'], cwd)
   if (!result.ok) return { ok: false }
   const trimmed = result.stdout.replace(/\r?\n$/, '')
   return { ok: true, root: pathOps.toNative(trimmed) }
@@ -75,26 +69,26 @@ function resolveField<T>(raw: unknown, path: string, violatedPaths: ReadonlySet<
   return raw === undefined ? fallback : (raw as T)
 }
 
-export async function inspectRepository(path: string, deps: InspectDeps): Promise<RepositoryEntry> {
-  const dirCheck = await statPath(path)
+export async function inspectRepository(ctx: Pick<Platform, 'git' | 'fs'>, path: string): Promise<RepositoryEntry> {
+  const dirCheck = await ctx.fs.stat(path)
   if (!dirCheck.ok || dirCheck.value.kind !== 'directory') {
     return problemEntry(path, { kind: 'directory-missing' })
   }
 
-  const rootResult = await resolveGitRoot(deps.git, path)
+  const rootResult = await resolveGitRoot(ctx, path)
   if (!rootResult.ok) {
     return problemEntry(path, { kind: 'not-a-git-repository' })
   }
   const root = rootResult.root
 
-  const read: RefReader = (relPath) => readAtDefaultRef(deps.git, root, relPath)
+  const read: RefReader = (relPath) => readAtDefaultRef(ctx, root, relPath)
   const configRead = await read(CONFIG_PATH)
 
   if (!configRead.ok) {
     if (configRead.kind === 'ref-unreadable') return problemEntry(root, { kind: 'config-ref-unreadable', message: configRead.message })
     if (configRead.kind === 'not-found') {
-      const ref = (await defaultRefName(deps.git, root)) ?? 'origin/HEAD'
-      const refs = await refsCarryingConfig(deps.git, root)
+      const ref = (await defaultRefName(ctx, root)) ?? 'origin/HEAD'
+      const refs = await refsCarryingConfig(ctx, root)
       const diagnostics: RepoDiagnostic[] = refs.ok ? [] : [{ kind: 'git-unavailable' }]
       return problemEntry(root, { kind: 'not-port-managed', carriedBy: refs.ok ? refs.refs : [], ref }, diagnostics)
     }

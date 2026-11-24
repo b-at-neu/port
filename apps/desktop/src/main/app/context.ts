@@ -6,7 +6,7 @@ import { chooseDirectory, chooseFolder, chooseSavePath } from '@/main/app/shell/
 import { createIncidentLog } from '@/main/pipeline/incidents/log'
 import { defaultWorkspaceChannelDeps } from '@/main/features/folders/resolve'
 import { createRecentsStore } from '@/main/features/folders/recents'
-import { createSessionWorktree, removeSessionWorktreeAt } from '@/main/repos/worktree/worktree'
+import { removeSessionWorktreeAt } from '@/main/repos/worktree/worktree'
 import { releaseStageBranch } from '@/main/repos/worktree/stage-worktree'
 import { createDefaultStageLauncher } from '@/main/dispatch/stage/default'
 import { createOffload } from '@/main/worker/deps'
@@ -33,7 +33,7 @@ import { createUsageLedger } from '@/main/sessions/hosting/usage-ledger'
 import { createSessionMenuRefresher } from '@/main/app/shell/session-menu'
 import { createDefaultUpdate } from '@/main/features/update/default'
 import type { RestartSeams } from '@/types/update'
-import type { Dispatcher, RunStateStore } from '@/types/dispatch'
+import type { Dispatcher, OwnershipParams, RunStateStore } from '@/types/dispatch'
 import type { HostedStore } from '@/types/hosting'
 import type { PipelineWatcher } from '@/types/state'
 import type { ForceDispatch } from '@/types/tick'
@@ -114,7 +114,12 @@ export function createAppContext(restart: RestartSeams): AppContext {
 
   const incidentLog = createIncidentLog({ dir: userData, now: platform.clock.now, newId: () => globalThis.crypto.randomUUID() })
 
-  const pipelineState = createPipelineState({ dir: userData, auditDir: userData, recordIncident: incidentLog.record })
+  const ownership = {
+    read: (params: OwnershipParams) => readOwnership(platform, params),
+    take: (params: OwnershipParams) => takeOwnership(platform, params),
+  }
+
+  const pipelineState = createPipelineState({ dir: userData, auditDir: userData, recordIncident: incidentLog.record, readOwnership: ownership.read })
 
   // Loaded once at boot: a `running` entry found then can only mean the process died, and promotes to `crash`.
   const stageRegistry = createStageRegistry({ path: join(userData, 'stage-sessions.json'), readJson: platform.fs.readJson, writeJsonAtomic: platform.fs.writeJsonAtomic, now: platform.clock.now })
@@ -128,7 +133,7 @@ export function createAppContext(restart: RestartSeams): AppContext {
 
   const { engine, close: closeOffload, ...offload } = createOffload({ onRespawn: () => void watcher.refresh() })
 
-  const actions = bindOperator(pipelineState)
+  const actions = bindOperator(pipelineState, ownership.read)
 
   const notifier = createAppNotifier({ registryDeps: repos.deps, broadcast: (command) => emit('app.command', command), prefs: () => hostedStore.notificationPrefs() })
 
@@ -159,20 +164,14 @@ export function createAppContext(restart: RestartSeams): AppContext {
     onDenial: (repoId, denial) => dispatcherRef?.recordDenial(repoId, denial),
     bundle: { isPackaged: app.isPackaged, mainDir: __dirname, resourcesPath: process.resourcesPath },
   })
-  const hosting = defaultHostingChannelDeps(hostedStore, sessionIndex, {
-    git: platform.git,
-    recents,
-    exists: async (path) => (await platform.fs.stat(path)).ok,
-    readSessions: () => engine.listSessions(),
-    createWorktree: createSessionWorktree,
-  })
+  const hosting = defaultHostingChannelDeps(hostedStore, sessionIndex, { ctx: platform, recents, readSessions: () => engine.listSessions() })
 
   const { watcherDeps, dispatcher, forceDispatch, autoPlanner, bindWatcher, shutdown } = createDispatchRuntime({
     store: hostedStore,
     launch: stageLauncher,
     runState: (repoId) => runStates.current(repoId).state,
-    readOwnership,
-    takeOwnership,
+    readOwnership: ownership.read,
+    takeOwnership: ownership.take,
     fetchItemsByNumber,
     listRepositories,
     registryDeps: repos.deps,
@@ -215,8 +214,8 @@ export function createAppContext(restart: RestartSeams): AppContext {
     dispatcher,
     store: hostedStore,
     launcher: stageLauncher,
-    removeWorktree: (path, force) => removeSessionWorktreeAt({ path, force, git: platform.git }),
-    releaseBranch: (root, branch, baseSha) => releaseStageBranch({ root, git: platform.git, branch, baseSha }),
+    removeWorktree: (path, force) => removeSessionWorktreeAt(platform, { path, force }),
+    releaseBranch: (root, branch, baseSha) => releaseStageBranch(platform, { root, branch, baseSha }),
     applyItemAction: actions.applyItemAction,
     snapshot: watcher.snapshot,
     auditDir: userData,

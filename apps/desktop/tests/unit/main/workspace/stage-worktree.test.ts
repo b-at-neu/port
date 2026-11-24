@@ -1,10 +1,9 @@
-import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { CommandResult, GitRunner } from '@/types/platform'
+import type { CommandResult, GitRunner, PlatformFs } from '@/types/platform'
 import type { CreateStageWorktreeParams } from '@/types/workspace'
 import { branchSlug, createStageWorktree, releaseStageBranch, sweepSessionBranches } from '@/main/repos/worktree/stage-worktree'
-import { makeTempDir } from '../../../fixtures/fs'
+import { createFakeFs } from '../../../support/fake-platform'
 
 function ok(stdout = ''): CommandResult {
   return { ok: true, stdout, stderr: '' }
@@ -35,10 +34,13 @@ function forEachRef(branch: string, tip: string, worktreePath = ''): CommandResu
   return ok(`refs/heads/${branch}\t${tip}\t${worktreePath}\n`)
 }
 
-async function params(overrides: Partial<CreateStageWorktreeParams> & { readonly git: GitRunner }): Promise<CreateStageWorktreeParams> {
-  const root = await makeTempDir()
-  return { root, agent: 'impl', number: 467, integration: 'dev', target: { kind: 'issue', title: 'Stage worktrees use the issue branch' }, liveWorktrees: new Set(), random: () => 'abcdef0123', ...overrides }
+type Case = CreateStageWorktreeParams & { readonly git: GitRunner; readonly fs: PlatformFs }
+
+function params(overrides: Partial<CreateStageWorktreeParams> & { readonly git: GitRunner }): Promise<Case> {
+  return Promise.resolve({ root: '/repo', fs: createFakeFs(), agent: 'impl', number: 467, integration: 'dev', target: { kind: 'issue', title: 'Stage worktrees use the issue branch' }, liveWorktrees: new Set(), random: () => 'abcdef0123', ...overrides })
 }
+
+const create = (p: Case) => createStageWorktree({ git: p.git, fs: p.fs }, p)
 
 function argvOf(calls: readonly string[][], ...prefix: string[]): string[][] {
   return calls.filter((call) => prefix.every((part, i) => call[i] === part))
@@ -78,7 +80,7 @@ describe('createStageWorktree — start point and branch per stage', () => {
   it('plan: detached at the integration branch, no branch, no portBase', async () => {
     const { git, calls } = recorder(withStart())
     const p = await params({ git, agent: 'plan' })
-    const result = await createStageWorktree(p)
+    const result = await create(p)
     const path = join(p.root, '.claude', 'worktrees', 'plan-467')
     expect(result).toEqual({ ok: true, path, branch: null, baseSha: START_SHA, baseLabel: 'origin/dev', reclaimed: null })
     expect(calls[0]).toEqual(['fetch', 'origin'])
@@ -90,7 +92,7 @@ describe('createStageWorktree — start point and branch per stage', () => {
   it('review: detached at the pull request head', async () => {
     const { git, calls } = recorder(withStart())
     const p = await params({ git, agent: 'review', number: 500, target: { kind: 'pr', headRefName: '467-stage-worktrees' } })
-    const result = await createStageWorktree(p)
+    const result = await create(p)
     expect(result).toMatchObject({ ok: true, branch: null, baseLabel: 'origin/467-stage-worktrees' })
     expect(argvOf(calls, 'rev-parse', '--verify')[0]).toEqual(['rev-parse', '--verify', 'refs/remotes/origin/467-stage-worktrees^{commit}'])
     expect(argvOf(calls, 'worktree')[0]?.[2]).toBe('--detach')
@@ -99,7 +101,7 @@ describe('createStageWorktree — start point and branch per stage', () => {
   it('revise: the pull request head as a branch, with portBase recorded', async () => {
     const { git, calls } = recorder(withStart())
     const p = await params({ git, agent: 'revise', number: 500, target: { kind: 'pr', headRefName: '467-stage-worktrees' } })
-    const result = await createStageWorktree(p)
+    const result = await create(p)
     const path = join(p.root, '.claude', 'worktrees', 'revise-500')
     expect(result).toEqual({ ok: true, path, branch: '467-stage-worktrees', baseSha: START_SHA, baseLabel: '467-stage-worktrees', reclaimed: null })
     expect(argvOf(calls, 'worktree')).toEqual([['worktree', 'add', '-b', '467-stage-worktrees', path, START_SHA]])
@@ -109,14 +111,14 @@ describe('createStageWorktree — start point and branch per stage', () => {
   it.each(['review', 'revise'] as const)('%s: refuses a pull request with no head branch', async (agent) => {
     const { git, calls } = recorder(withStart())
     const p = await params({ git, agent, number: 500, target: { kind: 'pr', headRefName: null } })
-    expect(await createStageWorktree(p)).toEqual({ ok: false, message: 'PR #500 has no head branch to check out.' })
+    expect(await create(p)).toEqual({ ok: false, message: 'PR #500 has no head branch to check out.' })
     expect(argvOf(calls, 'worktree')).toEqual([])
   })
 
   it('impl with no remote match: a fresh <N>-<slug> branch from the integration branch', async () => {
     const { git, calls } = recorder(withStart())
     const p = await params({ git })
-    const result = await createStageWorktree(p)
+    const result = await create(p)
     const path = join(p.root, '.claude', 'worktrees', 'impl-467')
     expect(result).toEqual({ ok: true, path, branch: '467-stage-worktrees-use-the-issue-branch', baseSha: START_SHA, baseLabel: '467-stage-worktrees-use-the-issue-branch', reclaimed: null })
     expect(argvOf(calls, 'ls-remote')).toEqual([['ls-remote', '--heads', 'origin', 'refs/heads/467-*']])
@@ -127,7 +129,7 @@ describe('createStageWorktree — start point and branch per stage', () => {
 
   it('impl with exactly one remote match: adopts that name and starts at it', async () => {
     const { git, calls } = recorder(withStart((args) => (args[0] === 'ls-remote' ? ok('1111\trefs/heads/467-earlier-attempt\n') : undefined)))
-    const result = await createStageWorktree(await params({ git }))
+    const result = await create(await params({ git }))
     expect(result).toMatchObject({ ok: true, branch: '467-earlier-attempt' })
     expect(argvOf(calls, 'rev-parse', '--verify')[0]).toEqual(['rev-parse', '--verify', 'refs/remotes/origin/467-earlier-attempt^{commit}'])
     expect(argvOf(calls, 'check-ref-format')).toEqual([])
@@ -135,7 +137,7 @@ describe('createStageWorktree — start point and branch per stage', () => {
 
   it('impl with two matches: derives the slug and starts from the integration branch', async () => {
     const { git, calls } = recorder(withStart((args) => (args[0] === 'ls-remote' ? ok('1\trefs/heads/467-a\n2\trefs/heads/467-b\n') : undefined)))
-    const result = await createStageWorktree(await params({ git }))
+    const result = await create(await params({ git }))
     expect(result).toMatchObject({ ok: true, branch: '467-stage-worktrees-use-the-issue-branch' })
     expect(argvOf(calls, 'rev-parse', '--verify')[0]?.[2]).toBe('refs/remotes/origin/dev^{commit}')
   })
@@ -143,19 +145,19 @@ describe('createStageWorktree — start point and branch per stage', () => {
   it('impl with two matches, one of them the derived name: starts at that remote branch', async () => {
     const derived = '467-stage-worktrees-use-the-issue-branch'
     const { git, calls } = recorder(withStart((args) => (args[0] === 'ls-remote' ? ok(`1\trefs/heads/467-a\n2\trefs/heads/${derived}\n`) : undefined)))
-    await createStageWorktree(await params({ git }))
+    await create(await params({ git }))
     expect(argvOf(calls, 'rev-parse', '--verify')[0]?.[2]).toBe(`refs/remotes/origin/${derived}^{commit}`)
   })
 
   it('impl: refuses when the remote branch listing fails', async () => {
     const { git } = recorder(withStart((args) => (args[0] === 'ls-remote' ? nonzero(128, 'fatal: unable to access') : undefined)))
-    const result = await createStageWorktree(await params({ git }))
+    const result = await create(await params({ git }))
     expect(result.ok).toBe(false)
   })
 
   it('impl: refuses a derived name git rejects', async () => {
     const { git, calls } = recorder(withStart((args) => (args[0] === 'check-ref-format' ? nonzero(1) : undefined)))
-    const result = await createStageWorktree(await params({ git }))
+    const result = await create(await params({ git }))
     expect(result).toEqual({ ok: false, message: '"467-stage-worktrees-use-the-issue-branch" is not a valid branch name.' })
     expect(argvOf(calls, 'worktree')).toEqual([])
   })
@@ -164,28 +166,28 @@ describe('createStageWorktree — start point and branch per stage', () => {
 describe('createStageWorktree — refusals', () => {
   it('a failed fetch refuses before anything else runs', async () => {
     const { git, calls } = recorder((args) => (args[0] === 'fetch' ? nonzero(128, 'fatal: unable to access') : undefined))
-    const result = await createStageWorktree(await params({ git }))
+    const result = await create(await params({ git }))
     expect(result).toEqual({ ok: false, message: "Couldn't fetch origin: fatal: unable to access. Check the network and the remote, then retry." })
     expect(calls).toHaveLength(1)
   })
 
   it('a start point that does not resolve refuses', async () => {
     const { git, calls } = recorder((args) => (args[0] === 'rev-parse' ? nonzero(128, 'fatal: Needed a single revision') : undefined))
-    const result = await createStageWorktree(await params({ git, agent: 'plan' }))
+    const result = await create(await params({ git, agent: 'plan' }))
     expect(result.ok).toBe(false)
     expect(argvOf(calls, 'worktree')).toEqual([])
   })
 
   it('reports a failed worktree add', async () => {
     const { git } = recorder(withStart((args) => (args[0] === 'worktree' ? nonzero(128, 'fatal: boom') : undefined)))
-    const result = await createStageWorktree(await params({ git, agent: 'plan' }))
+    const result = await create(await params({ git, agent: 'plan' }))
     expect(result).toEqual({ ok: false, message: 'git worktree add failed: fatal: boom' })
   })
 
   it('removes the new worktree and its branch when the ignore check fails', async () => {
     const { git, calls } = recorder(withStart((args) => (args[0] === 'check-ignore' ? nonzero(128, 'fatal: boom') : undefined)))
     const p = await params({ git })
-    const result = await createStageWorktree(p)
+    const result = await create(p)
     const path = join(p.root, '.claude', 'worktrees', 'impl-467')
     expect(result.ok).toBe(false)
     expect(argvOf(calls, 'worktree', 'remove')).toEqual([['worktree', 'remove', '--force', path]])
@@ -195,7 +197,7 @@ describe('createStageWorktree — refusals', () => {
   it('removes the new worktree and its branch when portBase cannot be recorded', async () => {
     const { git, calls } = recorder(withStart((args) => (args[0] === 'config' ? nonzero(1, 'error: could not lock config file') : undefined)))
     const p = await params({ git })
-    const result = await createStageWorktree(p)
+    const result = await create(p)
     const path = join(p.root, '.claude', 'worktrees', 'impl-467')
     expect(result).toEqual({ ok: false, message: 'could not record portBase: error: could not lock config file' })
     expect(argvOf(calls, 'worktree', 'remove')).toEqual([['worktree', 'remove', '--force', path]])
@@ -204,7 +206,7 @@ describe('createStageWorktree — refusals', () => {
 
   it('keeps a detached stage with no branch to delete', async () => {
     const { git, calls } = recorder(withStart((args) => (args[0] === 'check-ignore' ? nonzero(128, 'fatal: boom') : undefined)))
-    const result = await createStageWorktree(await params({ git, agent: 'plan' }))
+    const result = await create(await params({ git, agent: 'plan' }))
     expect(result.ok).toBe(false)
     expect(argvOf(calls, 'worktree', 'remove')).toHaveLength(1)
     expect(argvOf(calls, 'branch')).toEqual([])
@@ -219,7 +221,7 @@ describe('createStageWorktree — refusals', () => {
         return undefined
       }),
     )
-    const result = await createStageWorktree(await params({ git }))
+    const result = await create(await params({ git }))
     expect(result.ok).toBe(false)
     expect(argvOf(calls, 'worktree', 'remove')).toHaveLength(1)
     expect(argvOf(calls, 'branch')).toEqual([])
@@ -230,8 +232,8 @@ describe('createStageWorktree — the folder', () => {
   it('suffixes the folder when it already exists', async () => {
     const { git, calls } = recorder(withStart())
     const p = await params({ git, agent: 'plan' })
-    await mkdir(join(p.root, '.claude', 'worktrees', 'plan-467'), { recursive: true })
-    const result = await createStageWorktree(p)
+    await p.fs.ensureDir(join(p.root, '.claude', 'worktrees', 'plan-467'))
+    const result = await create(p)
     const path = join(p.root, '.claude', 'worktrees', 'plan-467-abcdef')
     expect(result).toMatchObject({ ok: true, path })
     expect(argvOf(calls, 'worktree')).toEqual([['worktree', 'add', '--detach', path, START_SHA]])
@@ -244,14 +246,14 @@ describe('createStageWorktree — a local branch of the same name', () => {
 
   it('refuses when it is checked out in another worktree', async () => {
     const { git } = recorder(withStart((args) => (args[0] === 'for-each-ref' ? forEachRef(derived, 'aaaa', '/elsewhere/impl-467') : undefined)))
-    const result = await createStageWorktree(await params({ git }))
+    const result = await create(await params({ git }))
     expect(result).toEqual({ ok: false, leftover: true, message: `Branch ${derived} is checked out in /elsewhere/impl-467, which port didn't create. Finish or remove that worktree, then retry.` })
   })
 
   it('fast-forwards it with -B when its tip is an ancestor of the start', async () => {
     const { git, calls } = recorder(withStart((args) => (args[0] === 'for-each-ref' ? forEachRef(derived, 'aaaa') : undefined)))
     const p = await params({ git })
-    const result = await createStageWorktree(p)
+    const result = await create(p)
     expect(result.ok).toBe(true)
     expect(argvOf(calls, 'merge-base')).toEqual([['merge-base', '--is-ancestor', 'aaaa', 'refs/remotes/origin/dev']])
     expect(argvOf(calls, 'worktree')[0]?.slice(0, 4)).toEqual(['worktree', 'add', '-B', derived])
@@ -265,7 +267,7 @@ describe('createStageWorktree — a local branch of the same name', () => {
         return undefined
       }),
     )
-    const result = await createStageWorktree(await params({ git }))
+    const result = await create(await params({ git }))
     expect(result).toEqual({ ok: false, message: `Local branch ${derived} has commits that aren't on origin. Push or delete it, then retry.` })
     expect(argvOf(calls, 'worktree')).toEqual([])
   })
@@ -278,14 +280,14 @@ describe('createStageWorktree — a local branch of the same name', () => {
         return undefined
       }),
     )
-    const result = await createStageWorktree(await params({ git }))
+    const result = await create(await params({ git }))
     expect(result.ok).toBe(false)
     expect(argvOf(calls, 'worktree')).toEqual([])
   })
 
   it('ignores a branch that merely shares the prefix', async () => {
     const { git, calls } = recorder(withStart((args) => (args[0] === 'for-each-ref' ? forEachRef(`${derived}/nested`, 'aaaa', '/elsewhere') : undefined)))
-    const result = await createStageWorktree(await params({ git }))
+    const result = await create(await params({ git }))
     expect(result.ok).toBe(true)
     expect(argvOf(calls, 'worktree')[0]?.[2]).toBe('-b')
   })
@@ -296,14 +298,14 @@ describe('releaseStageBranch', () => {
 
   it('deletes a branch still at its base', async () => {
     const { git, calls } = recorder((args) => (args[0] === 'rev-parse' ? ok('base1\n') : undefined))
-    expect(await releaseStageBranch({ ...base, git })).toBe('deleted')
+    expect(await releaseStageBranch({ git }, base)).toBe('deleted')
     expect(argvOf(calls, 'branch')).toEqual([['branch', '-D', '467-x']])
     expect(argvOf(calls, 'merge-base')).toEqual([])
   })
 
   it('deletes a branch whose tip is already on origin', async () => {
     const { git, calls } = recorder((args) => (args[0] === 'rev-parse' ? ok('tip9\n') : undefined))
-    expect(await releaseStageBranch({ ...base, git })).toBe('deleted')
+    expect(await releaseStageBranch({ git }, base)).toBe('deleted')
     expect(argvOf(calls, 'merge-base')).toEqual([['merge-base', '--is-ancestor', 'tip9', 'refs/remotes/origin/467-x']])
   })
 
@@ -313,7 +315,7 @@ describe('releaseStageBranch', () => {
       if (args[0] === 'merge-base') return nonzero(1)
       return undefined
     })
-    expect(await releaseStageBranch({ ...base, git })).toBe('kept')
+    expect(await releaseStageBranch({ git }, base)).toBe('kept')
     expect(argvOf(calls, 'branch')).toEqual([])
   })
 
@@ -323,7 +325,7 @@ describe('releaseStageBranch', () => {
       if (args[0] === 'merge-base') return nonzero(128, 'fatal: Not a valid object name')
       return undefined
     })
-    expect(await releaseStageBranch({ ...base, git })).toBe('kept')
+    expect(await releaseStageBranch({ git }, base)).toBe('kept')
   })
 
   it('keeps the branch when git branch -D fails', async () => {
@@ -332,18 +334,18 @@ describe('releaseStageBranch', () => {
       if (args[0] === 'branch') return nonzero(1, "error: Cannot delete branch '467-x' checked out at '/elsewhere'")
       return undefined
     })
-    expect(await releaseStageBranch({ ...base, git })).toBe('kept')
+    expect(await releaseStageBranch({ git }, base)).toBe('kept')
   })
 
   it('treats an already-absent branch as deleted', async () => {
     const { git, calls } = recorder((args) => (args[0] === 'rev-parse' ? nonzero(1) : undefined))
-    expect(await releaseStageBranch({ ...base, git })).toBe('deleted')
+    expect(await releaseStageBranch({ git }, base)).toBe('deleted')
     expect(argvOf(calls, 'branch')).toEqual([])
   })
 
   it('keeps the branch when rev-parse fails for any other reason', async () => {
     const { git } = recorder((args) => (args[0] === 'rev-parse' ? nonzero(128, 'fatal: not a git repository') : undefined))
-    expect(await releaseStageBranch({ ...base, git })).toBe('kept')
+    expect(await releaseStageBranch({ git }, base)).toBe('kept')
   })
 })
 
@@ -354,7 +356,7 @@ describe('sweepSessionBranches', () => {
 
   it('does nothing once the marker says done', async () => {
     const { git, calls } = recorder((args) => (args[0] === 'config' && args[1] === '--get' ? ok('done\n') : undefined))
-    expect(await sweepSessionBranches({ root: '/repo', git })).toEqual({ done: true, deleted: [] })
+    expect(await sweepSessionBranches({ git }, '/repo')).toEqual({ done: true, deleted: [] })
     expect(calls).toHaveLength(1)
   })
 
@@ -365,7 +367,7 @@ describe('sweepSessionBranches', () => {
       if (args[0] === 'config' && args[1] === '--get') return ok('tip1\n')
       return undefined
     })
-    expect(await sweepSessionBranches({ root: '/repo', git })).toEqual({ done: true, deleted: ['session/aaa111'] })
+    expect(await sweepSessionBranches({ git }, '/repo')).toEqual({ done: true, deleted: ['session/aaa111'] })
     expect(argvOf(calls, 'branch')).toEqual([['branch', '-D', 'session/aaa111']])
     expect(argvOf(calls, 'config').at(-1)).toEqual(['config', 'port.sessionBranchSweep', 'done'])
   })
@@ -377,7 +379,7 @@ describe('sweepSessionBranches', () => {
       if (args[0] === 'branch' && args[1] === '-r') return ok('  origin/467-x\n')
       return undefined
     })
-    expect((await sweepSessionBranches({ root: '/repo', git })).deleted).toEqual(['session/bbb222'])
+    expect((await sweepSessionBranches({ git }, '/repo')).deleted).toEqual(['session/bbb222'])
   })
 
   it('keeps a branch with unpublished commits', async () => {
@@ -387,7 +389,7 @@ describe('sweepSessionBranches', () => {
       if (args[0] === 'branch' && args[1] === '-r') return ok('')
       return undefined
     })
-    expect(await sweepSessionBranches({ root: '/repo', git })).toEqual({ done: true, deleted: [] })
+    expect(await sweepSessionBranches({ git }, '/repo')).toEqual({ done: true, deleted: [] })
     expect(argvOf(calls, 'branch', '-D')).toEqual([])
   })
 
@@ -397,7 +399,7 @@ describe('sweepSessionBranches', () => {
       if (args[0] === 'for-each-ref') return listing(['session/ddd444', 'tip4', '/repo/.claude/worktrees/session-ddd444'])
       return undefined
     })
-    expect(await sweepSessionBranches({ root: '/repo', git })).toEqual({ done: true, deleted: [] })
+    expect(await sweepSessionBranches({ git }, '/repo')).toEqual({ done: true, deleted: [] })
     expect(argvOf(calls, 'branch')).toEqual([])
   })
 
@@ -408,7 +410,7 @@ describe('sweepSessionBranches', () => {
       if (args[0] === 'config' && args[1] === '--get') return args[2] === 'branch.session/eee555.portBase' ? nonzero(128, 'fatal: broken') : ok('tip6\n')
       return undefined
     })
-    expect(await sweepSessionBranches({ root: '/repo', git })).toEqual({ done: false, deleted: ['session/fff666'] })
+    expect(await sweepSessionBranches({ git }, '/repo')).toEqual({ done: false, deleted: ['session/fff666'] })
     expect(argvOf(calls, 'config').some((call) => call[1] === 'port.sessionBranchSweep' && call[2] === 'done')).toBe(false)
   })
 
@@ -418,6 +420,6 @@ describe('sweepSessionBranches', () => {
       if (args[0] === 'for-each-ref') return nonzero(128, 'fatal: boom')
       return undefined
     })
-    expect(await sweepSessionBranches({ root: '/repo', git })).toEqual({ done: false, deleted: [] })
+    expect(await sweepSessionBranches({ git }, '/repo')).toEqual({ done: false, deleted: [] })
   })
 })

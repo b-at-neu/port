@@ -1,20 +1,24 @@
-import { mkdir, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { CommandResult } from '@/types/platform'
+import type { CommandResult, PlatformFs } from '@/types/platform'
 import { pathOps } from '@/main/platform/paths'
 import type { GitRunner } from '@/types/platform'
 import { REPOSITORY_LIST_TTL_MS, addRepository, createRepos, listRepositories, readyOf, removeRepository } from '@/main/repos/index'
 import { readRegistry } from '@/main/repos/registry-store'
 import type { ReposListResponse } from '@/types/ipc'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
-import { makeTempDir } from '../../../fixtures/fs'
+import { createFakeFs, createFakePlatform } from '../../../support/fake-platform'
 import { readyEntry } from '../../../support/repo-config'
-import { createFakePlatform } from '../../../support/fake-platform'
 
-async function makeRepo(root: string, repo = 'acme/widgets'): Promise<void> {
-  await mkdir(join(root, '.claude'), { recursive: true })
-  await writeFile(join(root, '.claude', 'port.config.json'), JSON.stringify({ repo }))
+const REGISTRY_DIR = pathOps.toNative('/registry')
+const REPO_DIR = pathOps.toNative('/repos/widgets')
+const SUB_DIR = pathOps.join(REPO_DIR, 'apps', 'desktop')
+const PLAIN_DIR = pathOps.toNative('/repos/not-a-repo')
+const REGISTRY_FILE = pathOps.join(REGISTRY_DIR, 'registry.json')
+
+async function makeFs(): Promise<PlatformFs> {
+  const fs = createFakeFs()
+  for (const dir of [REGISTRY_DIR, REPO_DIR, SUB_DIR, PLAIN_DIR]) await fs.ensureDir(dir)
+  return fs
 }
 
 function ok(stdout: string): CommandResult {
@@ -49,19 +53,14 @@ const ADD_CASES: readonly { readonly name: string; readonly picks: readonly Pick
 
 describe('addRepository', () => {
   it.each(ADD_CASES)('$name', async ({ picks, outcome, registered, problem }) => {
-    const registryDir = await makeTempDir('port-registry-index-')
-    const repoDir = await makeTempDir('port-registry-repo-')
-    await makeRepo(repoDir)
-    const subDir = join(repoDir, 'apps', 'desktop')
-    await mkdir(subDir, { recursive: true })
-    const plainDir = await makeTempDir('port-registry-not-a-repo-')
-    const chosen: Record<Pick, string | null> = { cancel: null, repo: repoDir, subdirectory: subDir, plain: plainDir }
+    const fs = await makeFs()
+    const chosen: Record<Pick, string | null> = { cancel: null, repo: REPO_DIR, subdirectory: SUB_DIR, plain: PLAIN_DIR }
 
     let last: Awaited<ReturnType<typeof addRepository>> | undefined
-    for (const pick of picks) last = await addRepository({ registryDir, git: fakeGit([repoDir]), chooseDirectory: () => Promise.resolve(chosen[pick]) })
+    for (const pick of picks) last = await addRepository({ registryDir: REGISTRY_DIR, git: fakeGit([REPO_DIR]), fs, chooseDirectory: () => Promise.resolve(chosen[pick]) })
 
     expect(last?.ok && last.outcome).toBe(outcome)
-    const stored = await readRegistry(registryDir)
+    const stored = await readRegistry({ fs }, REGISTRY_DIR)
     expect(stored.ok && stored.repositories).toHaveLength(registered)
     if (problem !== undefined) {
       const entry = last?.ok && last.outcome === 'added' ? last.repositories[0] : undefined
@@ -85,15 +84,13 @@ function countingGit(inner: GitRunner): { readonly git: GitRunner; readonly call
 }
 
 async function registeredDeps(extra: { readonly now?: () => number; readonly wrap?: (git: GitRunner) => GitRunner } = {}) {
-  const registryDir = await makeTempDir('port-registry-index-')
-  const repoDir = await makeTempDir('port-registry-repo-')
-  await makeRepo(repoDir)
-  const counter = countingGit(fakeGit([repoDir]))
+  const fs = await makeFs()
+  const counter = countingGit(fakeGit([REPO_DIR]))
   const git = extra.wrap ? extra.wrap(counter.git) : counter.git
-  const deps = { registryDir, git, chooseDirectory: () => Promise.resolve(repoDir), now: extra.now }
+  const deps = { registryDir: REGISTRY_DIR, git, fs, chooseDirectory: () => Promise.resolve(REPO_DIR), now: extra.now }
   const added = await addRepository(deps)
   if (!added.ok || added.outcome !== 'added') throw new Error('unreachable')
-  return { deps, counter, registryDir, repoDir, added: added.added }
+  return { deps, counter, fs, added: added.added }
 }
 
 describe('listRepositories cache', () => {
@@ -139,10 +136,8 @@ describe('listRepositories cache', () => {
   })
 
   it('reflects an add and a remove immediately', async () => {
-    const registryDir = await makeTempDir('port-registry-index-')
-    const repoDir = await makeTempDir('port-registry-repo-')
-    await makeRepo(repoDir)
-    const deps = { registryDir, git: fakeGit([repoDir]), chooseDirectory: () => Promise.resolve(repoDir), now: () => 0 }
+    const fs = await makeFs()
+    const deps = { registryDir: REGISTRY_DIR, git: fakeGit([REPO_DIR]), fs, chooseDirectory: () => Promise.resolve(REPO_DIR), now: () => 0 }
     const empty = await listRepositories(deps)
     expect(empty).toEqual({ ok: true, repositories: [] })
 
@@ -177,11 +172,11 @@ describe('listRepositories cache', () => {
 
   it('does not cache a failed read', async () => {
     let clock = 0
-    const { deps, registryDir } = await registeredDeps({ now: () => clock })
-    await writeFile(join(registryDir, 'registry.json'), '{ not json')
+    const { deps, fs } = await registeredDeps({ now: () => clock })
+    await fs.writeText(REGISTRY_FILE, '{ not json')
     const failed = await listRepositories(deps, { fresh: true })
     expect(failed.ok).toBe(false)
-    await writeFile(join(registryDir, 'registry.json'), JSON.stringify({ version: 1, repositories: [] }))
+    await fs.writeText(REGISTRY_FILE, JSON.stringify({ version: 1, repositories: [] }))
     clock += REPOSITORY_LIST_TTL_MS
     expect(await listRepositories(deps)).toEqual({ ok: true, repositories: [] })
   })
@@ -230,15 +225,14 @@ describe('readyOf', () => {
 
 describe('createRepos', () => {
   it('shares one cache between the service and the legacy deps handle', async () => {
-    const registryDir = await makeTempDir('port-registry-index-')
-    const repoDir = await makeTempDir('port-registry-repo-')
-    await makeRepo(repoDir)
-    const counter = countingGit(fakeGit([repoDir]))
+    const counter = countingGit(fakeGit([REPO_DIR]))
     const platform = createFakePlatform()
+    await platform.fs.ensureDir(REPO_DIR)
     const repos = createRepos({
-      paths: { ...platform.paths, userData: registryDir },
+      paths: { ...platform.paths, userData: REGISTRY_DIR },
       git: counter.git,
-      dialogs: { ...platform.dialogs, chooseDirectory: () => Promise.resolve(repoDir) },
+      fs: platform.fs,
+      dialogs: { ...platform.dialogs, chooseDirectory: () => Promise.resolve(REPO_DIR) },
       clock: platform.clock,
     })
     const added = await repos.add()

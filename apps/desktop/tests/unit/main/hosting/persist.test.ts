@@ -128,7 +128,7 @@ describe('createHostingPersistence', () => {
     const persistence = createHostingPersistence({ dir })
     await persistence.load()
     persistence.save({ limit: 4, open: [ENTRY], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
-    await flush()
+    await waitForState(persistence, { limit: 4, open: [ENTRY], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
     const before = await readFile(join(dir, 'hosting.json'), 'utf8')
     persistence.save({ limit: 4, open: [ENTRY], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
     await flush()

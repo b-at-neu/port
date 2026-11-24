@@ -2,9 +2,9 @@
 // identity, never a second normalisation.
 import { createHash } from 'node:crypto'
 import type { GitRunner } from '@/types/platform'
+import type { Platform } from '@/main/platform'
 import { resolveGitBaseRoot } from '@/main/platform/git'
-import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import type { PathOps } from '@/types/platform'
+import { pathOps as ops } from '@/main/platform/paths'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import type { FolderEntry, FolderId, SessionWorkspace } from '@/types/workspace'
 import { isReadyEntry } from '@/main/repos'
@@ -15,7 +15,7 @@ function toFolderId(pathKey: string): FolderId {
 
 /** Every call here goes through the injected `GitRunner`, never the module-level real `git` —
  *  `gitRepoRoot`'s own convenience wrapper isn't injectable, so root resolution is inlined. */
-async function repoRootOf(git: GitRunner, folder: string, ops: PathOps): Promise<string | null> {
+async function repoRootOf(git: GitRunner, folder: string): Promise<string | null> {
   const result = await git(['rev-parse', '--show-toplevel'], folder)
   if (!result.ok) return null
   const root = result.stdout.replace(/\r?\n$/, '')
@@ -52,63 +52,51 @@ async function portBaseOf(git: GitRunner, cwd: string, branch: string | null): P
   return sha === '' ? null : { sha, label: branch }
 }
 
-interface ResolveWorkspaceDeps {
-  readonly git: GitRunner
-  /** The ready, registered repositories to match the base root against — a snapshot the caller
-   *  already has, never a second registry read inside this pure resolver. */
-  readonly repositories: readonly RepositoryEntry[]
-  readonly pathOps?: PathOps
-}
-
-/** Resolves one folder (a session's cwd) into its `SessionWorkspace` and `repoId`. Non-git folders
- *  resolve to `root: null`, no worktree, no `repoId`. */
-export async function resolveWorkspace(folder: string, deps: ResolveWorkspaceDeps): Promise<{ readonly workspace: SessionWorkspace; readonly repoId: RepoId | null }> {
-  const ops = deps.pathOps ?? defaultPathOps
-  const root = await repoRootOf(deps.git, folder, ops)
+/** A non-git folder resolves to `root: null`; `repositories` is the caller's snapshot, never a second registry read. */
+export async function resolveWorkspace(
+  ctx: Pick<Platform, 'git'>,
+  folder: string,
+  repositories: readonly RepositoryEntry[],
+): Promise<{ readonly workspace: SessionWorkspace; readonly repoId: RepoId | null }> {
+  const { git } = ctx
+  const root = await repoRootOf(git, folder)
   if (root === null) {
     return { workspace: { folder, root: null, worktree: null, base: null }, repoId: null }
   }
 
-  const [linked, branch] = await Promise.all([isLinkedWorktree(deps.git, root), currentBranch(deps.git, root)])
+  const [linked, branch] = await Promise.all([isLinkedWorktree(git, root), currentBranch(git, root)])
 
   let worktree: SessionWorkspace['worktree'] = null
   let base: SessionWorkspace['base']
 
   if (linked && branch !== null) {
     worktree = { path: root, branch }
-    base = await portBaseOf(deps.git, root, branch)
+    base = await portBaseOf(git, root, branch)
   } else {
-    const sha = await headSha(deps.git, root)
+    const sha = await headSha(git, root)
     base = sha !== null ? { sha, label: branch ?? sha.slice(0, 7) } : null
   }
 
-  const baseRoot = await resolveGitBaseRoot(deps.git, root, ops)
-  const repoId = deps.repositories.find((entry) => isReadyEntry(entry) && ops.samePath(entry.path, baseRoot))?.id ?? null
+  const baseRoot = await resolveGitBaseRoot(git, root, ops)
+  const repoId = repositories.find((entry) => isReadyEntry(entry) && ops.samePath(entry.path, baseRoot))?.id ?? null
 
   return { workspace: { folder, root, worktree, base }, repoId }
 }
 
-interface ToFolderEntryDeps {
-  readonly git: GitRunner
-  readonly repositories: readonly RepositoryEntry[]
-  readonly lastUsedAt: string | null
-  readonly pathOps?: PathOps
-}
-
 /** Builds the `FolderEntry` the `folders:list`/`folders:choose` channels return for one path. */
-export async function toFolderEntry(path: string, deps: ToFolderEntryDeps): Promise<FolderEntry> {
-  const ops = deps.pathOps ?? defaultPathOps
+export async function toFolderEntry(ctx: Pick<Platform, 'git'>, path: string, repositories: readonly RepositoryEntry[], lastUsedAt: string | null): Promise<FolderEntry> {
+  const { git } = ctx
   const key = ops.pathKey(path)
   const id = toFolderId(key)
   const name = ops.basename(path)
 
-  const root = await repoRootOf(deps.git, path, ops)
+  const root = await repoRootOf(git, path)
   if (root === null) {
-    return { id, path, name, git: null, repoId: null, lastUsedAt: deps.lastUsedAt }
+    return { id, path, name, git: null, repoId: null, lastUsedAt }
   }
 
-  const [sha, branch, baseRoot] = await Promise.all([headSha(deps.git, root), currentBranch(deps.git, root), resolveGitBaseRoot(deps.git, root, ops)])
-  const repoId = deps.repositories.find((entry) => isReadyEntry(entry) && ops.samePath(entry.path, baseRoot))?.id ?? null
+  const [sha, branch, baseRoot] = await Promise.all([headSha(git, root), currentBranch(git, root), resolveGitBaseRoot(git, root, ops)])
+  const repoId = repositories.find((entry) => isReadyEntry(entry) && ops.samePath(entry.path, baseRoot))?.id ?? null
 
   return {
     id,
@@ -116,7 +104,7 @@ export async function toFolderEntry(path: string, deps: ToFolderEntryDeps): Prom
     name,
     git: sha !== null ? { root, head: { sha, branch } } : null,
     repoId,
-    lastUsedAt: deps.lastUsedAt,
+    lastUsedAt,
   }
 }
 

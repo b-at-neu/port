@@ -1,7 +1,9 @@
 // The write chokepoint's two entry points. Both functions append exactly one audit entry per
 // attempt, aborts included.
 import { randomUUID } from 'node:crypto'
+import { hostFs } from '@/main/platform'
 import { gh as defaultGh } from '@/main/platform/gh'
+import { defaultGitRunner } from '@/main/platform/git'
 import type { GhResult } from '@/types/platform'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
 import { removeFile, writeTextFile } from '@/main/platform/files'
@@ -72,13 +74,12 @@ async function recordLabelAudit(auditDir: string, ctx: AuditContext, outcome: Wr
 // A successful outcome carries no resulting label set — the next poll reports what is actually there.
 export async function applyLabels(params: ApplyLabelsParams): Promise<WriteOutcome> {
   const now = params.now ?? (() => new Date())
-  const pathOps = params.pathOps ?? defaultPathOps
   const gh = params.gh ?? defaultGh
   const { auditDir, observed } = params
   const request = { repo: params.repo, repoId: params.repoId, kind: params.kind, number: params.number, action: params.action }
 
   // The writer already read ownership; this is the second line behind it.
-  const ownership = await readOwnership({ repoRoot: params.repoRoot, repo: params.repo, git: params.git, pathOps, now })
+  const ownership = await readOwnership({ git: params.git ?? defaultGitRunner(), fs: hostFs, clock: { now } }, { repoRoot: params.repoRoot, repo: params.repo })
   if (ownership.kind === 'unreadable') {
     const outcome: WriteOutcome = { kind: 'ownership-unreadable', path: ownership.path, message: ownership.message }
     await recordLabelAudit(auditDir, { request, ownership: 'unreadable', observed, call: null, writeId: params.writeId }, outcome, now)
@@ -139,7 +140,7 @@ async function postBodyFile(params: PostCommentParams, argvFor: (scratchPath: st
     return outcome
   }
 
-  const ownership = await readOwnership({ repoRoot: params.repoRoot, repo: request.repo, git: params.git, pathOps, now })
+  const ownership = await readOwnership({ git: params.git ?? defaultGitRunner(), fs: hostFs, clock: { now } }, { repoRoot: params.repoRoot, repo: request.repo })
   if (ownership.kind === 'unreadable') {
     return record('unreadable', null, { kind: 'ownership-unreadable', path: ownership.path, message: ownership.message })
   }

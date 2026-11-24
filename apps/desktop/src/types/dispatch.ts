@@ -6,7 +6,6 @@ import type { HostedStore } from '@/types/hosting'
 import type { FetchItemsByNumberParams, ItemsByNumberFetch, ResolvedItem } from '@/types/github'
 import type { StageEvent, StagePlanFile, StageTransitionResult } from '@/types/stage-labels'
 import type { ReposListResponse } from '@/types/ipc'
-import type { GitRunner, PathOps, FileFailureKind } from '@/types/platform'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { StateLabelsReader } from '@/types/pipeline-state'
 import type { RecordIncident } from '@/types/incidents'
@@ -14,13 +13,7 @@ import type { ReconciledItem } from '@/types/state'
 
 export type BudgetGateFailure = { readonly ok: false; readonly kind: 'unavailable' | 'failed'; readonly message: string }
 
-export interface OwnershipDeps {
-  readonly repoRoot: string
-  readonly git?: GitRunner
-  readonly pathOps?: PathOps
-}
-
-export type OwnershipWriteFailureKind = Exclude<FileFailureKind, 'unparseable'>
+export type OwnershipWriteFailureKind = 'io'
 
 // Renderer-safe contract for operator control over dispatch: per-repository run state (run/drain/pause) and halt everything. No import here may reach a Node builtin.
 import type { PipelineItemKind } from '@/types/github'
@@ -188,7 +181,7 @@ export interface AutoPlanner {
 export interface AutoPlannerDeps {
   readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
   readonly registryDeps: RegistryDeps
-  readonly readOwnership: (params: ReadOwnershipParams) => Promise<OwnershipRead>
+  readonly readOwnership: (params: OwnershipParams) => Promise<OwnershipRead>
   /** The same per-repository run state `main/dispatch/dispatcher.ts` reads, never a second store. */
   readonly runState: (repoId: RepoId) => RunState
   readonly autoApprove: (params: AutoApprovePlanParams) => Promise<WriteOutcome>
@@ -262,10 +255,10 @@ export interface CreateDispatcherParams {
   readonly launch: StageLauncher | null
   /** Read fresh every pass, never cached. */
   readonly runState: (repoId: RepoId) => RunState
-  readonly readOwnership: (params: ReadOwnershipParams) => Promise<OwnershipRead>
+  readonly readOwnership: (params: OwnershipParams) => Promise<OwnershipRead>
   /** The re-take-on-relaunch rule: a persisted `run`/`draining` state with an `absent` ownership
    *  record takes ownership itself. */
-  readonly takeOwnership: (params: TakeOwnershipParams) => Promise<TakeOwnershipResult>
+  readonly takeOwnership: (params: OwnershipParams) => Promise<TakeOwnershipResult>
   readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
   readonly listRepositories: (registryDeps: RegistryDeps) => Promise<ReposListResponse>
   readonly registryDeps: RegistryDeps
@@ -384,17 +377,12 @@ export type WriteObservation = Exclude<TickObservation, { readonly kind: 'refres
 
 export type TakeOwnershipResult = OwnershipWriteResult | { readonly ok: false; readonly kind: 'refused'; readonly verdict: Extract<OwnershipRead, { kind: 'unreadable' }>; readonly path: string }
 
-export interface TakeOwnershipParams extends OwnershipDeps {
+export interface OwnershipParams {
+  readonly repoRoot: string
   readonly repo: string
-  readonly now?: () => Date
 }
 
 export type OwnershipWriteResult = { readonly ok: true; readonly path: string } | { readonly ok: false; readonly kind: OwnershipWriteFailureKind; readonly message: string; readonly path: string }
-
-export interface ReadOwnershipParams extends OwnershipDeps {
-  readonly repo: string
-  readonly now?: () => Date
-}
 
 export type OwnershipRead =
   | { readonly kind: 'absent'; readonly path: string; readonly readAt: string }

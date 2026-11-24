@@ -2,7 +2,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { RegistryDeps } from '@/types/registry'
-import type { ResolveStartTargetDeps, ResolvedStartTarget } from '@/types/workspace'
+import type { StartTargetSources, ResolvedStartTarget } from '@/types/workspace'
+import { createFakeFs, fakeGit } from '../../../support/fake-platform'
 import { resolveSessionRestore, resolveSessionRestoreDiscard, resolveSessionRestoreList } from '@/main/features/session/resolve'
 import type { HostingChannelDeps } from '@/main/app/seams'
 import { storeStub } from '../../../fixtures/store'
@@ -43,17 +44,9 @@ const READY_ENTRY = {
 const NOT_READY_ENTRY = { id: REPO_ID, path: '/repo', displayName: 'widgets', problem: { kind: 'directory-missing' as const }, diagnostics: [] }
 const WORKSPACE = { folder: '/repo', root: '/repo', worktree: null, base: null }
 
-function targetDepsStub(overrides: Partial<ResolveStartTargetDeps> = {}): Omit<ResolveStartTargetDeps, 'repositories'> {
-  return {
-    git: () => {
-      throw new Error('git should not be invoked directly in this case')
-    },
-    recents: { load: () => Promise.resolve([]), record: () => Promise.resolve() },
-    exists: () => Promise.resolve(true),
-    readSessions: () => Promise.resolve({ ok: true, sessions: [] }),
-    createWorktree: () => Promise.resolve({ ok: false, message: 'should not be called' }),
-    ...overrides,
-  }
+const targetSources: Omit<StartTargetSources, 'repositories'> = {
+  recents: { load: () => Promise.resolve([]), record: () => Promise.resolve() },
+  readSessions: () => Promise.resolve({ ok: true, sessions: [] }),
 }
 
 function depsWith(overrides: Partial<HostingChannelDeps> = {}): HostingChannelDeps {
@@ -65,7 +58,8 @@ function depsWith(overrides: Partial<HostingChannelDeps> = {}): HostingChannelDe
       throw new Error('listSessionFiles should not be invoked in this case')
     },
     resolveStartTarget: () => Promise.resolve({ ok: true, cwd: '/repo', workspace: WORKSPACE, repoId: REPO_ID, createdWorktree: null, recordPath: '/repo' } satisfies ResolvedStartTarget),
-    targetDeps: targetDepsStub(),
+    targetCtx: { git: fakeGit(), fs: createFakeFs() },
+    targetSources,
     now: () => new Date('2026-01-01T00:00:00.000Z'),
     removeCreatedWorktree: () => Promise.resolve(),
     ...overrides,
@@ -106,7 +100,7 @@ describe('resolveSessionRestoreList', () => {
     const restorable = vi.fn(() =>
       Promise.resolve([{ restoreId: 'restore-1', repoId: null, claudeSessionId: 'session-1', title: null, startedAt: 't1', cwd: '/gone' }]),
     )
-    const deps = depsWith({ store: storeStub({ restorable }), targetDeps: targetDepsStub({ exists: () => Promise.resolve(false) }) })
+    const deps = depsWith({ store: storeStub({ restorable }) })
     const result = await resolveSessionRestoreList(registryDeps, undefined, deps)
     expect(result.entries[0]).toMatchObject({ folder: '/gone', availability: { ok: false, reason: "This session's folder is gone." } })
   })
@@ -131,14 +125,14 @@ describe('resolveSessionRestore', () => {
   it('resolves the ready path itself and delegates to the store', async () => {
     const restorable = () => Promise.resolve([{ restoreId: 'restore-1', repoId: REPO_ID, claudeSessionId: 'session-1', title: null, startedAt: 't1' }])
     const restore = vi.fn(() => Promise.resolve({ ok: true as const, snapshot: {} as never }))
-    const deps = depsWith({ store: storeStub({ restorable, restore }), targetDeps: targetDepsStub({ git: () => Promise.resolve({ ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'not a repository' }) }) })
+    const deps = depsWith({ store: storeStub({ restorable, restore }), targetCtx: { git: fakeGit(() => Promise.resolve({ ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'not a repository' })), fs: createFakeFs() } })
     await resolveSessionRestore(registryDeps, { restoreId: 'restore-1' }, deps)
     expect(restore).toHaveBeenCalledWith('restore-1', { repoId: null, workspace: { folder: '/repo', root: null, worktree: null, base: null } })
   })
 
   it('restores by cwd when the entry carries one, returning folder-missing when it is gone', async () => {
     const restorable = () => Promise.resolve([{ restoreId: 'restore-1', repoId: null, claudeSessionId: 'session-1', title: null, startedAt: 't1', cwd: '/gone' }])
-    const deps = depsWith({ store: storeStub({ restorable }), targetDeps: targetDepsStub({ exists: () => Promise.resolve(false) }) })
+    const deps = depsWith({ store: storeStub({ restorable }) })
     await expect(resolveSessionRestore(registryDeps, { restoreId: 'restore-1' }, deps)).resolves.toEqual({ ok: false, kind: 'folder-missing', path: '/gone' })
   })
 })

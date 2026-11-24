@@ -4,10 +4,12 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { hostFs } from '@/main/platform'
 import { defaultGitRunner } from '@/main/platform/git'
 import { createSessionWorktree, removeSessionWorktree, removeSessionWorktreeAt } from '@/main/repos/worktree/worktree'
 
 const git = defaultGitRunner()
+const host = { git, fs: hostFs }
 
 async function makeRepo(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'port-workspace-worktree-'))
@@ -34,7 +36,7 @@ describe('worktree — real git integration', () => {
       return
     }
     const root = await makeRepo()
-    const result = await createSessionWorktree({ root, git })
+    const result = await createSessionWorktree(host, { root })
     expect(result.ok).toBe(true)
     if (!result.ok) return
 
@@ -53,14 +55,14 @@ describe('worktree — real git integration', () => {
       return
     }
     const root = await makeRepo()
-    const first = await createSessionWorktree({ root, git })
+    const first = await createSessionWorktree(host, { root })
     expect(first.ok).toBe(true)
 
     const excludePath = join(root, '.git', 'info', 'exclude')
     const afterFirst = await readFile(excludePath, 'utf8')
     expect(afterFirst).toContain('/.claude/worktrees/')
 
-    const second = await createSessionWorktree({ root, git, random: () => 'bbbbbbbb' })
+    const second = await createSessionWorktree(host, { root, random: () => 'bbbbbbbb' })
     expect(second.ok).toBe(true)
     const afterSecond = await readFile(excludePath, 'utf8')
     expect(afterSecond.match(/\/\.claude\/worktrees\//g)?.length).toBe(1)
@@ -72,7 +74,7 @@ describe('worktree — real git integration', () => {
       return
     }
     const root = await makeRepo()
-    const result = await createSessionWorktree({ root, git })
+    const result = await createSessionWorktree(host, { root })
     expect(result.ok).toBe(true)
     if (!result.ok) return
 
@@ -95,7 +97,7 @@ describe('worktree — real git integration', () => {
       calls += 1
       return calls === 1 ? 'aaaaaa' : 'cccccc'
     }
-    const result = await createSessionWorktree({ root, git, random })
+    const result = await createSessionWorktree(host, { root, random })
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.branch).toBe('session/cccccc')
   })
@@ -107,7 +109,7 @@ describe('worktree — real git integration', () => {
     }
     const root = await makeRepo()
     await git(['branch', 'session/aaaaaa'], root)
-    const result = await createSessionWorktree({ root, git, random: () => 'aaaaaa' })
+    const result = await createSessionWorktree(host, { root, random: () => 'aaaaaa' })
     expect(result.ok).toBe(false)
   })
 
@@ -117,11 +119,11 @@ describe('worktree — real git integration', () => {
       return
     }
     const root = await makeRepo()
-    const created = await createSessionWorktree({ root, git })
+    const created = await createSessionWorktree(host, { root })
     expect(created.ok).toBe(true)
     if (!created.ok) return
 
-    const removed = await removeSessionWorktree({ root, path: created.path, force: false, git })
+    const removed = await removeSessionWorktree(host, { root, path: created.path, force: false })
     expect(removed).toEqual({ outcome: 'removed' })
 
     const branches = await git(['branch', '--list', created.branch], root)
@@ -135,13 +137,13 @@ describe('worktree — real git integration', () => {
       return
     }
     const root = await makeRepo()
-    const created = await createSessionWorktree({ root, git })
+    const created = await createSessionWorktree(host, { root })
     expect(created.ok).toBe(true)
     if (!created.ok) return
 
     await writeFile(join(created.path, 'untracked.txt'), 'dirty\n')
 
-    const removed = await removeSessionWorktree({ root, path: created.path, force: false, git })
+    const removed = await removeSessionWorktree(host, { root, path: created.path, force: false })
     expect(removed).toEqual({ outcome: 'dirty' })
   })
 
@@ -151,13 +153,13 @@ describe('worktree — real git integration', () => {
       return
     }
     const root = await makeRepo()
-    const created = await createSessionWorktree({ root, git })
+    const created = await createSessionWorktree(host, { root })
     expect(created.ok).toBe(true)
     if (!created.ok) return
 
     await writeFile(join(created.path, 'untracked.txt'), 'dirty\n')
 
-    const removed = await removeSessionWorktree({ root, path: created.path, force: true, git })
+    const removed = await removeSessionWorktree(host, { root, path: created.path, force: true })
     expect(removed).toEqual({ outcome: 'removed' })
 
     const branches = await git(['branch', '--list', created.branch], root)
@@ -171,7 +173,7 @@ describe('worktree — real git integration', () => {
       return
     }
     const root = await makeRepo()
-    const removed = await removeSessionWorktree({ root, path: join(root, 'nonexistent'), force: false, git })
+    const removed = await removeSessionWorktree(host, { root, path: join(root, 'nonexistent'), force: false })
     expect(removed.outcome).toBe('failed')
   })
 
@@ -181,11 +183,11 @@ describe('worktree — real git integration', () => {
       return
     }
     const root = await makeRepo()
-    const created = await createSessionWorktree({ root, git })
+    const created = await createSessionWorktree(host, { root })
     expect(created.ok).toBe(true)
     if (!created.ok) return
 
-    const removed = await removeSessionWorktreeAt({ path: created.path, force: false, git })
+    const removed = await removeSessionWorktreeAt(host, { path: created.path, force: false })
     expect(removed).toEqual({ outcome: 'removed' })
 
     const branches = await git(['branch', '--list', created.branch], root)

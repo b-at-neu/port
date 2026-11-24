@@ -11,7 +11,7 @@ export async function runPurge(params: RunPurgeParams): Promise<WorktreesPurgeRe
   const call = ['purge', '--orphan', params.path]
   const pathBasename = pathOps.basename(params.path)
 
-  const read = await readWorktrees({ repoRoot: params.repoRoot, git, pathOps, now })
+  const read = await readWorktrees({ git, clock: { now }, pathOps },params.repoRoot)
   if (!read.ok) return { ok: false, kind: read.kind, message: read.message, readAt, call }
 
   const linked = read.entries.filter((entry) => !entry.isMain).map((entry) => ({ path: entry.path, isOutside: !entry.insideMain }))

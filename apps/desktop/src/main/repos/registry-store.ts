@@ -1,6 +1,7 @@
 // The app-level registry file. A missing file reads as empty; an unparseable, invalid or newer-version file is reported and never written over (`read-only`).
 import { z } from 'zod'
 import { createJsonStore, type JsonStore } from '@/main/platform/json-store'
+import type { Platform } from '@/main/platform'
 import { pathOps } from '@/main/platform/paths'
 import type { PathOps } from '@/types/platform'
 
@@ -24,8 +25,9 @@ export function dedupePaths(paths: readonly string[], ops: PathOps = pathOps): r
   return [...seen.values()]
 }
 
-function registryStore(dir: string): JsonStore<RegistryFile> {
+function registryStore(ctx: Pick<Platform, 'fs'>, dir: string): JsonStore<RegistryFile> {
   return createJsonStore({
+    fs: ctx.fs,
     file: pathOps.join(dir, REGISTRY_FILE),
     version: CURRENT_VERSION,
     schema: registrySchema,
@@ -35,8 +37,8 @@ function registryStore(dir: string): JsonStore<RegistryFile> {
 }
 
 /** File absent is a value, never an exception. */
-export async function readRegistry(dir: string): Promise<ReadRegistryResult> {
-  const store = registryStore(dir)
+export async function readRegistry(ctx: Pick<Platform, 'fs'>, dir: string): Promise<ReadRegistryResult> {
+  const store = registryStore(ctx, dir)
   await store.load()
   const status = store.status()
   if (status.kind === 'unreadable') {
@@ -50,8 +52,8 @@ export async function readRegistry(dir: string): Promise<ReadRegistryResult> {
 type WriteRegistryResult = { readonly ok: true } | { readonly ok: false; readonly kind: 'registry-unwritable'; readonly message: string }
 
 /** Callers must never write when the corresponding read failed, which is why this does not itself read first. */
-export async function writeRegistry(dir: string, paths: readonly string[]): Promise<WriteRegistryResult> {
-  const written = await registryStore(dir).write({ version: CURRENT_VERSION, repositories: dedupePaths(paths).map((path) => ({ path })) })
+export async function writeRegistry(ctx: Pick<Platform, 'fs'>, dir: string, paths: readonly string[]): Promise<WriteRegistryResult> {
+  const written = await registryStore(ctx, dir).write({ version: CURRENT_VERSION, repositories: dedupePaths(paths).map((path) => ({ path })) })
   if (!written.ok) return { ok: false, kind: 'registry-unwritable', message: written.message }
   return { ok: true }
 }

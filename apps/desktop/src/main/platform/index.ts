@@ -42,7 +42,7 @@ export interface Platform {
 /** The Electron-bound facts, passed in by the composition root so this file imports no `electron`. */
 export type PlatformHost = Pick<Platform, 'paths' | 'info' | 'dialogs' | 'notify'>
 
-const fs: PlatformFs = {
+export const hostFs: PlatformFs = {
   readJson: readJsonFile,
   writeJsonAtomic: writeJsonFileAtomic,
   ensureDir: ensureDirectory,
@@ -64,7 +64,7 @@ export function createPlatform(host: PlatformHost): Platform {
     ghWrite: gh,
     git: (args, cwd) => git(args, { cwd }),
     run: runCommand,
-    fs,
+    fs: hostFs,
     sdk: defaultSdk,
     githubHttp,
     githubConditional,

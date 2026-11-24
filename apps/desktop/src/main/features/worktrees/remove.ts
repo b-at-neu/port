@@ -25,7 +25,7 @@ export async function removeWorktree(seams: ResolvedSeams, mainPath: string, can
   await seams.git(['worktree', 'remove', '--force', candidate.path], mainPath)
 
   const dirExists = await seams.fs.pathExists(candidate.path)
-  const relist = await readWorktrees({ repoRoot: mainPath, git: seams.git, pathOps: seams.pathOps, now: seams.now })
+  const relist = await readWorktrees({ git: seams.git, clock: { now: seams.now }, pathOps: seams.pathOps },mainPath)
   if (!relist.ok && dirExists) {
     return { removed: false, error: "couldn't re-read the worktree list after removal; not deleted.", cause: null }
   }

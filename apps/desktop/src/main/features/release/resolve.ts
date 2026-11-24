@@ -34,7 +34,7 @@ export interface ReleaseChannelDeps {
 
 export const defaultReleaseChannelDeps: ReleaseChannelDeps = {
   listRepositories,
-  readConfig: (git, root) => readReleaseConfig((path) => readAtDefaultRef(git, root, path)),
+  readConfig: (git, root) => readReleaseConfig((path) => readAtDefaultRef({ git }, root, path)),
   fetchStatus: fetchReleaseStatus,
   fetchIssues: fetchReleaseIssues,
   readFile: readFileAtRef,
