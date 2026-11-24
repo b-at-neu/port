@@ -294,6 +294,7 @@ describe('createPipelineWatcher — registry re-list', () => {
         setTimer: timer.factory,
         git: fakeGit({ worktreeList: 0 }),
         github: () => Promise.resolve(httpOk(EMPTY_PIPELINE_BODY)),
+        conditional: scriptedConditional().transport,
         sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
       })
       return { watcher, timer, waiter, fresh, advance: (ms: number) => (currentMs += ms) }
