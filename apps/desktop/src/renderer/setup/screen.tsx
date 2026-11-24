@@ -13,7 +13,7 @@ import { ErrorBanner } from '@/renderer/components/error-banner'
 import { useAction } from '@/renderer/actions/use-action'
 import { useActionMutation } from '@/renderer/actions/use-action-mutation'
 import { useIpcQuery } from '@/renderer/data/query'
-import { ROUTE_IDS } from '@/renderer/router/routes'
+import { ROUTE_IDS } from '@/renderer/app/routes'
 import { setupModel } from '@/renderer/setup/model'
 import {
   CLAUDE_STEP_LABEL,

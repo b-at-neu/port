@@ -1,9 +1,8 @@
-// Settings' Appearance card — the theme row. No `useEffect`: `useThemePreference`
-// reads the store through `useSyncExternalStore`.
+// Settings' Appearance card — the theme row.
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/renderer/components/ui/select'
 import { SettingsCard } from '@/renderer/components/settings-card'
 import { APPEARANCE_TITLE, THEME_HELPER, THEME_LABEL, THEME_ROW_LABEL } from '@/renderer/settings/copy'
-import { useThemePreference } from '@/renderer/theme/store'
+import { useThemePreference } from '@/renderer/app/theme'
 import type { ThemePreference } from '@/types/theme'
 
 export function ThemeSection() {

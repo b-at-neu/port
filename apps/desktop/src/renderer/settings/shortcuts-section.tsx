@@ -1,6 +1,6 @@
 // A read-only reference over `KEY_BINDINGS`, grouped by scope.
 import { SettingsCard } from '@/renderer/components/settings-card'
-import { KEY_BINDINGS } from '@/renderer/shell/key-bindings'
+import { KEY_BINDINGS } from '@/renderer/app/key-bindings'
 import { SHORTCUT_SCOPE_LABEL, SHORTCUTS_TITLE, WIDE_CARD } from '@/renderer/settings/copy'
 
 const SCOPES = ['global', 'composer', 'list'] as const

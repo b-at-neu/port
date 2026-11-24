@@ -11,11 +11,11 @@ import { SettingsCard } from '@/renderer/components/settings-card'
 import { StatusPill } from '@/renderer/components/status-pill'
 import { useActionMutation } from '@/renderer/actions/use-action-mutation'
 import { useIpcQuery } from '@/renderer/data/query'
-import { ROUTE_IDS } from '@/renderer/router/routes'
+import { ROUTE_IDS } from '@/renderer/app/routes'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import { problemLabel, REPO_INVOKE_ERROR } from '@/renderer/repositories/copy'
 import { addResultToast, registryFailureCopy, repoName } from '@/renderer/repositories/model'
-import { useListSelection } from '@/renderer/shell/list-selection'
+import { useListSelection } from '@/renderer/app/list-selection'
 import { WIDE_CARD } from '@/renderer/settings/copy'
 
 function RepoRow({

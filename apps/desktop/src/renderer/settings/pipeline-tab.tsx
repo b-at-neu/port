@@ -6,7 +6,7 @@ import { EmptyState } from '@/renderer/components/empty-state'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { useActionMutation } from '@/renderer/actions/use-action-mutation'
 import { useIpcQuery } from '@/renderer/data/query'
-import { ROUTE_IDS } from '@/renderer/router/routes'
+import { ROUTE_IDS } from '@/renderer/app/routes'
 import { OPEN_REPOSITORIES } from '@/renderer/lib/copy'
 import {
   cardReadError,

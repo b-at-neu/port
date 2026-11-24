@@ -9,7 +9,7 @@ import { ConversationEntry } from '@/renderer/components/conversation-entry'
 import { Markdown } from '@/renderer/components/markdown'
 import { groupEntries } from '@/renderer/components/conversation-model'
 import { ErrorBanner } from '@/renderer/components/error-banner'
-import { ROUTE_IDS } from '@/renderer/router/routes'
+import { ROUTE_IDS } from '@/renderer/app/routes'
 import type { LiveBlock, SessionHistory } from '@/types/hosting'
 import type { TranscriptEntry } from '@/utils/sessions/transcript'
 

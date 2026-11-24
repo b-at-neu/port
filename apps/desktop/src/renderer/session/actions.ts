@@ -2,7 +2,7 @@
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
-import { openSession } from '@/renderer/router/navigation'
+import { openSession } from '@/renderer/app/navigation'
 import { ipcQueryOptions } from '@/renderer/data/query'
 import { invoke } from '@/renderer/data/invoke'
 import { forgetTranscript } from '@/renderer/data/transcript'

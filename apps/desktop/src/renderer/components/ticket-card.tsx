@@ -16,7 +16,7 @@ import { PhasePill } from '@/renderer/components/phase-pill'
 import { PHASE_EDGE_CLASS } from '@/renderer/components/phase-classes'
 import { Button } from '@/renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
-import type { useListSelection } from '@/renderer/shell/list-selection'
+import type { useListSelection } from '@/renderer/app/list-selection'
 
 interface TicketCardProps {
   readonly row: BoardItemRow

@@ -15,7 +15,7 @@
     "eslint/*.d.mts",
     "src/main/**/*",
     "src/preload/**/*",
-    "src/renderer/router/routes.ts",
+    "src/renderer/app/routes.ts",
     "src/renderer/local/inspect.ts",
     "src/renderer/lib/ticket-view.ts",
     "src/renderer/local/shape.ts",

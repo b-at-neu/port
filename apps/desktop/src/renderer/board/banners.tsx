@@ -7,7 +7,7 @@ import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { notReadyCopy } from '@/renderer/board/problem-copy'
 import { ownershipBannerFor } from '@/renderer/board/owner'
 import { storeBannerCopy } from '@/renderer/board/tick'
-import { useListSelection } from '@/renderer/shell/list-selection'
+import { useListSelection } from '@/renderer/app/list-selection'
 
 interface BoardBannersProps {
   readonly snapshot: BoardSnapshot

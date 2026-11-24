@@ -15,7 +15,7 @@ import { useIpcQuery } from '@/renderer/data/query'
 import { agentSummaryOf } from '@/renderer/board/row-model'
 import { ticketViewOf } from '@/renderer/lib/ticket-view'
 import type { RepoId } from '@/utils/repos'
-import { ROUTE_IDS } from '@/renderer/router/routes'
+import { ROUTE_IDS } from '@/renderer/app/routes'
 import { useTranscript } from '@/renderer/data/transcript'
 import { openFailureCopy, subtitleFor, tailBannerCopy, tailBannerKindFor, TRUNCATED_NOTE } from '@/renderer/transcript/copy'
 

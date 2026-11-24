@@ -1,7 +1,4 @@
-// Per-repository run-state copy (#314, #316) — the row and its buttons move
-// to `shell/sidebar-pipelines.tsx`'s `StatusPillMenu`, driven by
-// `shell/run-state-command.ts`'s mutation instead of this file's own
-// click-handler/pending-map pair. Only the pure copy survives here.
+// Per-repository run-state copy; `app/run-state.ts` drives the mutation.
 import type { DispatchControlResult, HaltReport, RepoRunState, RunState, RunStatesSnapshot } from '@/types/dispatch'
 
 function timeOf(iso: string): string {
