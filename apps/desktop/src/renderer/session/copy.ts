@@ -159,7 +159,6 @@ export function archiveRemoveFailedToast(message: string): string {
 
 export const ARCHIVE_UNAVAILABLE = "That session can't be dismissed right now."
 export const ARCHIVE_PENDING = 'Dismissing the session…'
-export const ARCHIVING_PENDING = 'Archiving the session…'
 
 export function archiveSuccessToast(choice: 'keep' | 'remove' | 'force'): string {
   return choice === 'keep' ? 'Session dismissed. Its worktree is kept.' : 'Session dismissed and its worktree removed.'

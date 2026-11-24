@@ -15,9 +15,11 @@ interface ConfirmDialogProps extends ConfirmSpec {
   readonly open: boolean
   readonly onConfirm: () => void
   readonly onCancel: () => void
+  /** A third answer that takes Cancel's place; the X and Esc still cancel. */
+  readonly secondary?: { readonly label: string; readonly onSelect: () => void }
 }
 
-export function ConfirmDialog({ open, title, description, confirmLabel, cancelLabel = 'Cancel', tone = 'destructive', onConfirm, onCancel }: ConfirmDialogProps) {
+export function ConfirmDialog({ open, title, description, confirmLabel, cancelLabel = 'Cancel', tone = 'destructive', secondary, onConfirm, onCancel }: ConfirmDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={(next) => !next && onCancel()}>
       <AlertDialogContent {...(description === undefined ? { 'aria-describedby': undefined } : {})}>
@@ -31,7 +33,13 @@ export function ConfirmDialog({ open, title, description, confirmLabel, cancelLa
           ) : null}
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
+          {secondary === undefined ? (
+            <AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
+          ) : (
+            <Button variant="outline" onClick={secondary.onSelect}>
+              {secondary.label}
+            </Button>
+          )}
           <Button variant={tone === 'destructive' ? 'destructive' : 'default'} onClick={onConfirm}>
             {confirmLabel}
           </Button>

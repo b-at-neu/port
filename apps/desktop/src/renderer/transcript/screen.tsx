@@ -16,8 +16,8 @@ import { agentSummaryOf } from '@/renderer/board/row-model'
 import { ticketViewOf } from '@/renderer/lib/ticket-view'
 import type { RepoId } from '@/utils/repos'
 import { ROUTE_IDS } from '@/renderer/router/routes'
-import { retryTail, toggleFollow, useTranscriptTail } from '@/renderer/transcript/tail-store'
-import { subtitleFor, tailBannerCopy, TRUNCATED_NOTE } from '@/renderer/transcript/copy'
+import { useTranscript } from '@/renderer/data/transcript'
+import { openFailureCopy, subtitleFor, tailBannerCopy, tailBannerKindFor, TRUNCATED_NOTE } from '@/renderer/transcript/copy'
 
 function TicketAside({ repoId, number }: { readonly repoId: RepoId; readonly number: number }) {
   const snapshot = useIpcQuery('board.snapshot')
@@ -57,7 +57,7 @@ export function TranscriptScreen() {
   const { sessionId } = useParams({ from: ROUTE_IDS.transcript })
   const search = useSearch({ from: ROUTE_IDS.transcript })
   const navigate = useNavigate()
-  const tail = useTranscriptTail(sessionId, search.agentId)
+  const { view: tail, toggleFollow, retry } = useTranscript({ kind: 'file', sessionId, agentId: search.agentId })
   const [jumpSignal, setJumpSignal] = useState(0)
 
   function back(): void {
@@ -99,13 +99,13 @@ export function TranscriptScreen() {
               <Skeleton className="h-16 w-full" />
             </div>
           </ScreenBody>
-        ) : tail.status === 'error' ? (
+        ) : tail.status === 'open-failed' ? (
           <ScreenBody variant="list">
-            <ErrorBanner message={tail.message} className="m-4" />
+            <ErrorBanner message={openFailureCopy(tail.failure.kind, tail.failure.message, tail.failure.path)} className="m-4" />
           </ScreenBody>
         ) : tail.status === 'unreachable' ? (
           <ScreenBody variant="list">
-            <ErrorBanner message="Could not reach the main process." action={{ label: 'Retry', onClick: retryTail }} className="m-4" />
+            <ErrorBanner message="Could not reach the main process." action={{ label: 'Retry', onClick: retry }} className="m-4" />
           </ScreenBody>
         ) : (
           <ScreenBody variant="conversation">
@@ -113,8 +113,8 @@ export function TranscriptScreen() {
             {tail.source.malformedLines > 0 ? (
               <p className="text-meta text-muted-foreground">{tail.source.malformedLines} lines in this transcript couldn&apos;t be parsed and aren&apos;t shown.</p>
             ) : null}
-            {tail.banner !== null ? (
-              <ErrorBanner message={tailBannerCopy(tail.banner.kind, tail.banner.message, tail.banner.path)} action={tail.banner.kind !== 'too-large' ? { label: 'Retry', onClick: retryTail } : undefined} />
+            {tail.failure !== null ? (
+              <ErrorBanner message={tailBannerCopy(tailBannerKindFor(tail.failure.kind), tail.failure.message, tail.failure.path)} action={tail.failure.kind !== 'too-large' ? { label: 'Retry', onClick: retry } : undefined} />
             ) : null}
             {tail.truncatedNote ? <p className="text-meta text-muted-foreground">{TRUNCATED_NOTE}</p> : null}
             {tail.entries.length === 0 ? (

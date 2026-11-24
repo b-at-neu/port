@@ -8,6 +8,8 @@ import type { BoardSnapshot } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import type { EventListener, SubscribableEvent, SubscriptionBridge, Subscriptions } from '@/types/data'
 import { ipcQueryOptions } from '@/renderer/data/query'
+import { invoke } from '@/renderer/data/invoke'
+import { connectTranscriptCache } from '@/renderer/data/transcript'
 
 /** Attaches one bridge listener per event, lazily — the first `subscribe`
  *  call for an event attaches it, and detaching the last subscriber removes
@@ -104,8 +106,10 @@ export function connectQueryCache(client: QueryClient, subscriptions: Subscripti
     if (reposListIsStale(client, snapshot)) void client.invalidateQueries({ queryKey: ipcQueryOptions('repos.list').queryKey })
   })
   const detachSessions = connectSessionListCache(client, subscriptions)
+  const detachTranscripts = connectTranscriptCache(client, subscriptions, invoke)
   return () => {
     detachBoard()
     detachSessions()
+    detachTranscripts()
   }
 }
