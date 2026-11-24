@@ -8,6 +8,7 @@ import type { RefreshRequest } from '@/types/state'
 import type { DispatchActions } from '@/types/dispatch'
 import { createDispatchRuntime } from '@/main/dispatch/runtime'
 import { DISPATCH_STORE_DEFAULTS, storeStub } from '../../../fixtures/store'
+import { createFakePlatform } from '../../../support/fake-platform'
 
 const REPO_ID = 'repo-a' as RepoId
 const SESSION_KEY = 'hosted-1' as SessionKey
@@ -32,6 +33,7 @@ function fakeStore(overrides: Partial<HostedStore> = {}): HostedStore {
 
 function runtimeDeps(overrides: Partial<Parameters<typeof createDispatchRuntime>[0]> = {}): Parameters<typeof createDispatchRuntime>[0] {
   return {
+    platform: createFakePlatform(),
     store: fakeStore({ snapshotOf: () => ({ phase: 'ready', end: null }) as unknown as HostedSessionSnapshot }),
     launch: { launch: () => Promise.resolve({ ok: true, sessionKey: SESSION_KEY }) },
     runState: () => 'dispatching',

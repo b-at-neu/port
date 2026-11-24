@@ -15,6 +15,7 @@ import type { GhRunner, GitRunner } from '@/types/platform'
 import { applyItemDecision, type ApplyItemDecisionDeps } from '@/main/pipeline/operator/decide'
 import { applyLabels, postComment } from '@/main/github/writes/apply'
 import { boardSnapshot as snapshotOf, reconciledItem, repositoryState } from '../../../support/board-snapshot'
+import { createFakePlatform } from '../../../support/fake-platform'
 import { readyEntry } from '../../../support/repo-config'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
@@ -455,16 +456,15 @@ describe('applyItemDecision — real writers', () => {
   it('writes a comment entry then a label entry with action unblock, through the real applyLabels/postComment', async () => {
     const { repoRoot, auditDir, git } = await makeDirs()
     const scratchDir = await mkdtemp(join(tmpdir(), 'port-decide-scratch-'))
-    const gh: GhRunner = () => Promise.resolve({ ok: true, stdout: '', stderr: '' })
     const fetchItemsByNumber: ApplyItemDecisionDeps['fetchItemsByNumber'] = () =>
       Promise.resolve({ ok: true, resolved: [resolvedItem()], unavailable: [], fetchedAt: NOW().toISOString() })
-
     const comments = [{ body: '## Pipeline Escalation\n5 review cycles reached the cap of 5 without merging.', createdAt: '2026-01-01T00:00:00Z' }]
     const state = repoState([item({ comments })])
     const snapshot = snapshotOf([state])
     const store = createPipelineStateStore({ path: 'pipeline-state.json', readJson: () => Promise.resolve({ ok: false, kind: 'not-found', message: '' }), writeJsonAtomic: () => Promise.resolve({ ok: true, value: undefined }), now: NOW })
     await store.seed(REPO_ID, state)
-    const { writeState } = createStateWriter({ store, applyLabels: (params) => applyLabels({ ...params, gh, git, now: NOW, fetchItemsByNumber }), readOwnership: (p) => readOwnership({ git, fs: hostFs, clock: { now: NOW } }, p), fetchItemsByNumber, appendAudit, recordIncident: () => Promise.resolve(), newId: () => 'write-1', now: NOW })
+    const ctx = { ...createFakePlatform(), ghWrite: (() => Promise.resolve({ ok: true, stdout: '', stderr: '' })) as GhRunner, git, clock: { now: NOW } }
+    const { writeState } = createStateWriter({ store, applyLabels: (params) => applyLabels(ctx, params), readOwnership: (p) => readOwnership({ git, fs: hostFs, clock: { now: NOW } }, p), fetchItemsByNumber, appendAudit, recordIncident: () => Promise.resolve(), newId: () => 'write-1', now: NOW })
     const result = await applyItemDecision(
       {
         request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null },
@@ -475,9 +475,9 @@ describe('applyItemDecision — real writers', () => {
         liveStage: false,
       },
       {
-        writeState: (params) => writeState({ ...params, git, now: NOW }),
+        writeState,
         stateLabels: () => resolvedItem().labels,
-        postComment: (params) => postComment({ ...params, gh, now: NOW }),
+        postComment: (params) => postComment(ctx, params),
         fetchItemsByNumber,
       },
     )

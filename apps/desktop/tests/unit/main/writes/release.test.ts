@@ -6,6 +6,8 @@ import { isReleaseAuditEntry } from '@/types/writes'
 import { git } from '@/main/platform/git'
 import { readAuditLog } from '@/main/github/writes/audit'
 import { createBumpBranch, openBumpPr, openReleasePr, publishRelease } from '@/main/github/writes/release'
+import type { GitHubWriteContext } from '@/main/github/context'
+import { createFakeClock, createFakePlatform } from '../../../support/fake-platform'
 import type { BranchHead, ReleaseGitRunner, ReleaseWriteContext } from '@/types/release'
 import { execFile } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises'
@@ -16,9 +18,14 @@ import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
 
-async function context(gh: GhRunner): Promise<ReleaseWriteContext & { readonly dir: string }> {
+const ghCtx = (ghWrite: GhRunner): GitHubWriteContext => ({ ...createFakePlatform(), ghWrite, clock: createFakeClock('2026-09-05T14:00:00.000Z') })
+const PLATFORM = ghCtx(() => {
+  throw new Error('gh should not be called')
+})
+
+async function context(): Promise<ReleaseWriteContext & { readonly dir: string }> {
   const dir = await mkdtemp(join(tmpdir(), 'release-write-'))
-  return { dir, repo: 'acme/widgets', repoId: 'repo-1' as unknown as RepoId, version: '0.3.0', auditDir: dir, scratchDir: dir, root: dir, gh, now: () => new Date('2026-09-05T14:00:00.000Z') }
+  return { dir, repo: 'acme/widgets', repoId: 'repo-1' as unknown as RepoId, version: '0.3.0', auditDir: dir, scratchDir: dir, root: dir }
 }
 
 async function entriesOf(dir: string): Promise<readonly AuditEntry[]> {
@@ -86,7 +93,7 @@ async function fixture(): Promise<Fixture> {
   await out(clone, ['config', 'gpg.format', 'ssh'])
   await out(clone, ['config', 'user.signingkey', key])
   const head = { oid: await out(clone, ['rev-parse', 'HEAD']), tree: await out(clone, ['rev-parse', 'HEAD^{tree}']) }
-  const ctx = { dir, repo: 'acme/widgets', repoId: 'repo-1' as unknown as RepoId, version: '0.3.0', auditDir: dir, scratchDir: scratch, root: clone, git: isolatedGit, now: () => new Date('2026-09-05T14:00:00.000Z') }
+  const ctx = { dir, repo: 'acme/widgets', repoId: 'repo-1' as unknown as RepoId, version: '0.3.0', auditDir: dir, scratchDir: scratch, root: clone, git: isolatedGit }
   return { ctx, origin, clone, key, head }
 }
 
@@ -98,7 +105,7 @@ describe('createBumpBranch', () => {
   it('pushes a signed commit that changes only the version files, then audits once', async () => {
     const fx = await fixture()
     const headBefore = await out(fx.clone, ['rev-parse', 'HEAD'])
-    const result = await createBumpBranch(fx.ctx, { head: fx.head, files: [{ path: 'package.json', content: BUMPED }], integration: 'dev' })
+    const result = await createBumpBranch(PLATFORM, fx.ctx, { head: fx.head, files: [{ path: 'package.json', content: BUMPED }], integration: 'dev' })
     expect(result.ok).toBe(true)
     const header = await out(fx.origin, ['cat-file', 'commit', 'bump/v0.3.0'])
     expect(header).toContain('gpgsig ')
@@ -118,7 +125,7 @@ describe('createBumpBranch', () => {
   it('fails without creating the branch when the commit cannot be signed', async () => {
     const fx = await fixture()
     await out(fx.clone, ['config', 'user.signingkey', join(fx.ctx.dir, 'missing-key')])
-    const result = await createBumpBranch(fx.ctx, { head: fx.head, files: [{ path: 'package.json', content: BUMPED }], integration: 'dev' })
+    const result = await createBumpBranch(PLATFORM, fx.ctx, { head: fx.head, files: [{ path: 'package.json', content: BUMPED }], integration: 'dev' })
     expect(result.ok).toBe(false)
     expect(!result.ok && result.stderr).toMatch(/^Couldn't sign the bump commit/)
     expect(await out(fx.origin, ['ls-remote', '--heads', fx.origin, 'refs/heads/bump/v0.3.0'])).toBe('')
@@ -131,7 +138,7 @@ describe('createBumpBranch', () => {
   it('refuses to overwrite a bump branch that already exists on origin', async () => {
     const fx = await fixture()
     await out(fx.clone, ['push', 'origin', 'HEAD:refs/heads/bump/v0.3.0'])
-    const result = await createBumpBranch(fx.ctx, { head: fx.head, files: [{ path: 'package.json', content: BUMPED }], integration: 'dev' })
+    const result = await createBumpBranch(PLATFORM, fx.ctx, { head: fx.head, files: [{ path: 'package.json', content: BUMPED }], integration: 'dev' })
     expect(result.ok).toBe(false)
     expect(!result.ok && result.stderr).toContain('bump/v0.3.0 already exists on origin')
     expect(await out(fx.origin, ['rev-parse', 'bump/v0.3.0'])).toBe(fx.head.oid)
@@ -139,7 +146,7 @@ describe('createBumpBranch', () => {
 
   it("fails before writing anything when origin doesn't have the head", async () => {
     const fx = await fixture()
-    const result = await createBumpBranch(fx.ctx, { head: { oid: '0'.repeat(40), tree: fx.head.tree }, files: [], integration: 'dev' })
+    const result = await createBumpBranch(PLATFORM, fx.ctx, { head: { oid: '0'.repeat(40), tree: fx.head.tree }, files: [], integration: 'dev' })
     expect(result.ok).toBe(false)
     expect(!result.ok && result.stderr).toContain("doesn't have")
     expect(await out(fx.origin, ['ls-remote', '--heads', fx.origin, 'refs/heads/bump/v0.3.0'])).toBe('')
@@ -149,8 +156,8 @@ describe('createBumpBranch', () => {
 describe('pull requests', () => {
   it('opens the bump pull request into the integration branch from a body file', async () => {
     const { gh, calls, bodies } = recorder([OK('https://github.com/acme/widgets/pull/611\n')])
-    const ctx = await context(gh)
-    await openBumpPr(ctx, { integration: 'dev' })
+    const ctx = await context()
+    await openBumpPr(ghCtx(gh), ctx, { integration: 'dev' })
     expect(calls[0]?.slice(0, 11)).toEqual(['pr', 'create', '--repo', 'acme/widgets', '--base', 'dev', '--head', 'bump/v0.3.0', '--title', 'bump version to v0.3.0', '--body-file'])
     expect(calls[0]).not.toContain('--assignee')
     expect(bodies[0]).toContain('v0.3.0')
@@ -158,8 +165,8 @@ describe('pull requests', () => {
 
   it('opens the release pull request from integration into production, assigned to the operator', async () => {
     const { gh, calls, bodies } = recorder([OK('url')])
-    const ctx = await context(gh)
-    await openReleasePr(ctx, { production: 'main', integration: 'dev', body: '## Release v0.3.0\n', assignee: 'octo-operator' })
+    const ctx = await context()
+    await openReleasePr(ghCtx(gh), ctx, { production: 'main', integration: 'dev', body: '## Release v0.3.0\n', assignee: 'octo-operator' })
     expect(calls[0]).toEqual(expect.arrayContaining(['--base', 'main', '--head', 'dev', '--title', 'Release v0.3.0', '--assignee', 'octo-operator']))
     expect(bodies[0]).toBe('## Release v0.3.0\n')
     expect((await entriesOf(ctx.dir)).every(isReleaseAuditEntry)).toBe(true)
@@ -167,7 +174,7 @@ describe('pull requests', () => {
 
   it('leaves the release pull request unassigned when no login was resolved', async () => {
     const { gh, calls } = recorder([OK('url')])
-    await openReleasePr(await context(gh), { production: 'main', integration: 'dev', body: 'b', assignee: null })
+    await openReleasePr(ghCtx(gh), await context(), { production: 'main', integration: 'dev', body: 'b', assignee: null })
     expect(calls[0]).not.toContain('--assignee')
   })
 })
@@ -175,8 +182,8 @@ describe('pull requests', () => {
 describe('publishRelease', () => {
   it('creates the release at the production head with the notes file, marked latest', async () => {
     const { gh, calls, bodies } = recorder([OK('https://github.com/acme/widgets/releases/tag/v0.3.0\n')])
-    const ctx = await context(gh)
-    const result = await publishRelease(ctx, { target: 'prod-oid', notes: '- A thing\n- Minor enhancements and bug fixes\n' })
+    const ctx = await context()
+    const result = await publishRelease(ghCtx(gh), ctx, { target: 'prod-oid', notes: '- A thing\n- Minor enhancements and bug fixes\n' })
     expect(result.ok).toBe(true)
     expect(calls[0]?.slice(0, 9)).toEqual(['release', 'create', 'v0.3.0', '--repo', 'acme/widgets', '--target', 'prod-oid', '--title', 'v0.3.0'])
     expect(calls[0]).toContain('--latest')

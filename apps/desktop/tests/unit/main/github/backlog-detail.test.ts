@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { fetchBacklogDetail } from '@/main/github/backlog-detail'
-import { fakeTransport, graphqlBodyOf, httpFail, httpOk, recordingTransport } from '../../../fixtures/github-http'
+import { fakeTransport, githubCtx, graphqlBodyOf, httpFail, httpOk, recordingTransport } from '../../../fixtures/github-http'
 
 const REPO = { owner: 'o', name: 'r' }
 
@@ -34,7 +34,7 @@ function reply(node: unknown, errors?: readonly unknown[]): string {
 }
 
 function run(stdout: string) {
-  return fetchBacklogDetail({ repo: REPO, number: 45, github: fakeTransport(httpOk(stdout)) })
+  return fetchBacklogDetail(githubCtx(fakeTransport(httpOk(stdout))), { repo: REPO, number: 45 })
 }
 
 describe('fetchBacklogDetail', () => {
@@ -66,7 +66,7 @@ describe('fetchBacklogDetail', () => {
 
   it('asks for issueOrPullRequest(number: 45) with the owner and name variables', async () => {
     const { transport, requests } = recordingTransport(() => reply(issueNode()))
-    await fetchBacklogDetail({ repo: REPO, number: 45, github: transport })
+    await fetchBacklogDetail(githubCtx(transport), { repo: REPO, number: 45 })
     const body = graphqlBodyOf(requests[0])
     expect(body.query).toContain('issueOrPullRequest(number: 45)')
     expect(body.variables).toEqual({ owner: 'o', name: 'r' })
@@ -93,7 +93,7 @@ describe('fetchBacklogDetail', () => {
 
   it('asks for createdAt', async () => {
     const { transport, requests } = recordingTransport(() => reply(issueNode()))
-    await fetchBacklogDetail({ repo: REPO, number: 45, github: transport })
+    await fetchBacklogDetail(githubCtx(transport), { repo: REPO, number: 45 })
     expect(graphqlBodyOf(requests[0]).query).toContain('createdAt updatedAt')
   })
 
@@ -125,7 +125,7 @@ describe('fetchBacklogDetail', () => {
 
   describe('read failures', () => {
     it.each(['network', 'unauthenticated'] as const)('passes a %s transport failure through', async (kind) => {
-      const result = await fetchBacklogDetail({ repo: REPO, number: 45, github: fakeTransport(httpFail(kind, 500)) })
+      const result = await fetchBacklogDetail(githubCtx(fakeTransport(httpFail(kind, 500))), { repo: REPO, number: 45 })
       expect(result).toMatchObject({ ok: false, kind })
     })
 

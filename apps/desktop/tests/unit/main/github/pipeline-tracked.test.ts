@@ -4,7 +4,7 @@ import type { GitHubHttpResult, GitHubTransport } from '@/types/platform'
 import type { TrackedRef } from '@/types/pipeline-state'
 import { fetchPipelineItems } from '@/main/github/pipeline'
 import { RATE_LIMIT_REPLY, connection } from '../../../fixtures/pipeline-reply'
-import { httpOk, queryOf } from '../../../fixtures/github-http'
+import { githubCtx, httpOk, queryOf } from '../../../fixtures/github-http'
 
 const REPO = { owner: 'o', name: 'r' }
 const VOCABULARY = resolveVocabulary({})
@@ -43,7 +43,7 @@ function transport(script: Script): { readonly runner: GitHubTransport; readonly
 }
 
 function read(runner: GitHubTransport, tracked: readonly TrackedRef[] | null) {
-  return fetchPipelineItems({ repo: REPO, vocabulary: VOCABULARY, integration: 'dev', tracked, github: runner })
+  return fetchPipelineItems(githubCtx(runner), { repo: REPO, vocabulary: VOCABULARY, integration: 'dev', tracked })
 }
 
 const TRACKED_PLAN: TrackedRef = { kind: 'issue', number: 3, keys: ['marker', 'planReview'] }

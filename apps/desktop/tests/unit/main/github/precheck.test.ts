@@ -3,6 +3,7 @@ import { createEtagCache } from '@/main/github/conditional'
 import { precheckIssues, precheckRequest } from '@/main/github/precheck'
 import type { ConditionalRequest } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
+import { createFakePlatform } from '../../../support/fake-platform'
 import { scriptedConditional } from '../../../fixtures/watcher-harness'
 
 const repoId = 'repo-1' as RepoId
@@ -17,7 +18,8 @@ function setup() {
     seen.push(request)
     return conditional.transport(request)
   }
-  const run = () => precheckIssues({ cache, repoId, repo, conditional: transport, now })
+  const ctx = { ...createFakePlatform(), githubConditional: transport, clock: { now } }
+  const run = () => precheckIssues(ctx, { cache, repoId, repo })
   return { cache, conditional, seen, run }
 }
 
