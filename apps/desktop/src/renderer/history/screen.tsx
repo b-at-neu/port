@@ -23,7 +23,6 @@ import type { AgentRecord, SessionRecord } from '@/types/sessions'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import {
   ALL_ARCHIVED_EMPTY,
-  ALL_REPOSITORIES,
   FORK_ACTION,
   groupHeader,
   HISTORY_TITLE,
@@ -32,9 +31,9 @@ import {
   RESCAN_ACTION,
   RESUME_ACTION,
   SCAN_UNREACHABLE,
-  SEARCH_ACTION,
   SHOW_ARCHIVED_ACTION,
 } from '@/renderer/history/copy'
+import { ALL_REPOSITORIES, SEARCH_ACTION } from '@/renderer/lib/copy'
 
 type OpenTranscript = (sessionId: string, agentId: string | null, title: string) => void
 

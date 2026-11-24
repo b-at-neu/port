@@ -35,7 +35,6 @@ export const SHORTCUTS_TITLE = 'Keyboard shortcuts'
 export const RECHECK_LABEL = 'Recheck'
 export const CHECKING_LABEL = 'Checking…'
 export const TESTING_LABEL = 'Testing…'
-export const OPEN_REPOSITORIES = 'Open Repositories'
 
 export const SESSIONS_TITLE = 'Sessions'
 export const SESSION_LIMIT_LABEL = 'Session limit'

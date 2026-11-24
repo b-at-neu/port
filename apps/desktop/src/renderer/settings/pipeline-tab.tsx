@@ -7,12 +7,12 @@ import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { useActionMutation } from '@/renderer/actions/use-action-mutation'
 import { useIpcQuery } from '@/renderer/data/query'
 import { ROUTE_IDS } from '@/renderer/router/routes'
+import { OPEN_REPOSITORIES } from '@/renderer/lib/copy'
 import {
   cardReadError,
   CONFIG_ROW_LABEL,
   OFF_LABEL,
   ON_LABEL,
-  OPEN_REPOSITORIES,
   OPEN_REPOSITORY,
   PER_REPOSITORY_EMPTY,
   PER_REPOSITORY_NOTE,

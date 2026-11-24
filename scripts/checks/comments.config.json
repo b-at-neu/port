@@ -11,7 +11,7 @@
     { "path": "apps/desktop/src/main/sessions/runtime/", "citations": 0, "longBlocks": 0 },
     { "path": "apps/desktop/src/main/repos/", "citations": 0, "longBlocks": 0 },
     { "path": "apps/desktop/src/main/", "citations": 0, "longBlocks": 0 },
-    { "path": "apps/desktop/src/renderer/", "citations": 27, "longBlocks": 81 },
+    { "path": "apps/desktop/src/renderer/", "citations": 27, "longBlocks": 80 },
     { "path": "apps/desktop/src/types/", "citations": 0, "longBlocks": 0 },
     { "path": "apps/desktop/src/utils/", "citations": 0, "longBlocks": 0 },
     { "path": "apps/desktop/src/preload/", "citations": 0, "longBlocks": 0 },

@@ -11,11 +11,11 @@ import { pageState } from '@/renderer/components/page-state'
 import type { PageStateKind } from '@/renderer/components/page-state'
 import { ScreenHeader } from '@/renderer/components/screen-header'
 import { ROUTE_IDS } from '@/renderer/router/routes'
+import { ALL_REPOSITORIES, SEARCH_ACTION } from '@/renderer/lib/copy'
 import { formatTimeOfDay, relativeTime } from '@/renderer/lib/time'
 import type { SearchResult, SearchScope } from '@/types/search'
 import { MIN_TERM_CHARS } from '@/types/search'
 import {
-  ALL_REPOSITORIES,
   BACK_LABEL,
   emptyCopy,
   errorCopy,
@@ -24,7 +24,6 @@ import {
   IDLE_NOTICE,
   kindChip,
   QUERY_PLACEHOLDER,
-  SEARCH_ACTION,
   SEARCH_HINT,
   SEARCH_UNREACHABLE,
   SEARCH_TITLE,

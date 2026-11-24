@@ -24,7 +24,6 @@ export const ISSUES_LABEL = 'Tickets included'
 export const ISSUES_EMPTY = 'No PRs in this release closed a ticket.'
 export const TRY_AGAIN = 'Try again'
 export const REFRESH_LABEL = 'Refresh'
-export const OPEN_REPOSITORIES = 'Open Repositories'
 export const OPEN_RELEASE_ACTION = 'Open release'
 
 export function issuesHeading(count: number | null): string {

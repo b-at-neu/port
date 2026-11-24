@@ -2,7 +2,7 @@
 import { useQueries } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { RefreshCw, Tag } from 'lucide-react'
-import { SHOW_ALL_REPOSITORIES, releasesNotReadyCopy, unknownRepoCopy } from '@/renderer/lib/copy'
+import { OPEN_REPOSITORIES, SHOW_ALL_REPOSITORIES, releasesNotReadyCopy, unknownRepoCopy } from '@/renderer/lib/copy'
 import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { EmptyState } from '@/renderer/components/empty-state'
@@ -17,7 +17,7 @@ import { isReadyRepo } from '@/utils/repos'
 import { ReleaseGroup, releaseKey } from '@/renderer/releases/release-group'
 import { ReleasePane } from '@/renderer/releases/release-pane'
 import { buildReleaseGroup, refetchIntervalFor, staleSinceAt } from '@/renderer/releases/model'
-import { NO_REPOSITORIES, OPEN_REPOSITORIES, REFRESH_LABEL, RELEASES_TITLE } from '@/renderer/releases/copy'
+import { NO_REPOSITORIES, REFRESH_LABEL, RELEASES_TITLE } from '@/renderer/releases/copy'
 
 export function ReleasesScreen() {
   const reposQuery = useIpcQuery('repos.list')

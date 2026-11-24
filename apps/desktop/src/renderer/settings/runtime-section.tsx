@@ -1,6 +1,4 @@
-// The Settings screen's Claude Code status. Reads `runtime:preflight` as a query and runs
-// `runtime:probe` through `useAction`; `runtime-model.ts` decides everything about what to show,
-// this component only renders it. No `useEffect`.
+// The Claude Code status card: the preflight is a query and the probe runs through useAction.
 import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/renderer/components/ui/button'

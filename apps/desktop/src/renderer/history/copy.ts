@@ -26,8 +26,6 @@ export function groupHeader(kind: 'pinned' | 'recent' | 'archived'): string {
 }
 
 export const HISTORY_TITLE = 'History'
-export const ALL_REPOSITORIES = 'All repositories'
-export const SEARCH_ACTION = 'Search'
 export const RESCAN_ACTION = 'Rescan'
 export const RESUME_ACTION = 'Resume'
 export const FORK_ACTION = 'Fork'
