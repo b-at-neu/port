@@ -2,95 +2,30 @@ import { describe, expect, it } from 'vitest'
 import { resolveDisplayVocabulary } from '@/utils/labels/display'
 import { resolveVocabulary, verifyVocabulary } from '@/utils/labels/vocabulary'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
-import type { BoardSnapshot, RepositoryHealth } from '@/types/board'
-import { DEFAULT_POLL_POLICY, initialHealth } from '@/types/board'
+import { initialHealth } from '@/types/board'
 import type { RepoId, ResolvedRepoConfig } from '@/utils/repos'
-import type { RepositoryState } from '@/types/state'
 import { overviewHealth } from '@/renderer/repositories/health-model'
+import { boardSnapshot, repositoryState } from '../../../support/board-snapshot'
+import { repoConfig } from '../../../support/repo-config'
 
-const REPO_ID = 'repo-gadgets' as RepoId
-const NOW = new Date('2026-01-01T00:00:00.000Z')
+const REPO_ID = 'repo-a' as RepoId
+const MODULES = { approvalGate: true, release: false, scope: true }
 
-function config(vocabulary: LabelVocabulary, overrides: ResolvedRepoConfig['overrides'] = []): ResolvedRepoConfig {
-  return {
-    repo: 'acme/gadgets',
-    owner: 'acme',
-    name: 'gadgets',
-    branches: { integration: 'dev', production: 'main' },
-    models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
-    modules: { approvalGate: true, release: false, scope: true },
-    reviewCycleCap: 3,
-    vocabulary,
-    commands: { worktrees: 'node w.mjs', budget: null },
-    concurrency: { sharedFiles: [], overlapThreshold: 2 },
-      sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
-    checkDispositions: {},
-    overrides,
-  }
+function config(vocabulary: LabelVocabulary, overrides: Partial<ResolvedRepoConfig> = {}): ResolvedRepoConfig {
+  return repoConfig({ modules: MODULES, vocabulary, ...overrides })
 }
 
-function health(): RepositoryHealth {
-  return { repoId: REPO_ID, github: initialHealth('github'), sessions: initialHealth('sessions'), worktrees: initialHealth('worktrees'), denials: initialHealth('denials') }
-}
-
-function readyState(vocabulary: LabelVocabulary, verdict: ReturnType<typeof verifyVocabulary>): RepositoryState {
-  return {
-    ok: true,
-    repoId: REPO_ID,
-    repo: 'acme/gadgets',
-    displayName: 'acme/gadgets',
-    items: [],
-    orphans: [],
-    uncorrelatedWorktrees: [],
-    denials: { ok: true, present: false, path: '/x/.agents/denials.log', readAt: NOW.toISOString() },
-    diagnostics: [],
-    vocabulary: verdict,
-    unavailable: [],
-    truncated: [],
-    rateLimit: { cost: 1, remaining: 4987, resetAt: '2026-01-01T01:00:00.000Z', limit: 5000 },
-    freshness: {
-      github: { at: NOW.toISOString() },
-      sessions: { at: NOW.toISOString() },
-      worktrees: { at: NOW.toISOString() },
-      denials: { at: NOW.toISOString() },
-      itemStates: { at: NOW.toISOString() },
-    },
-    worktreeTotals: null,
-    viewer: 'octo-dev',
-    integrationChecks: {},
-    approvalGate: true,
-    disabled: [],
-    concurrency: { sharedFiles: [], overlapThreshold: 2 },
-    reviewCycleCap: 3,
-  }
-}
-
-function snapshotWith(state: RepositoryState | null): BoardSnapshot | undefined {
-  if (state === null) return undefined
-  return {
-    state: { repositories: [state], sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 1, scanMs: 1, scannedAt: NOW.toISOString() }, readAt: NOW.toISOString() },
-    health: [health()],
-    policy: DEFAULT_POLL_POLICY,
-    tick: [],
-    runStates: { store: { kind: 'loaded' }, repositories: [] },
-    nextWakeupAt: null,
-    emittedAt: NOW.toISOString(),
-    dispatch: [],
-    autoPlan: [],
-  }
+function snapshotWith(verdict: ReturnType<typeof verifyVocabulary>) {
+  const health = { repoId: REPO_ID, github: initialHealth('github'), sessions: initialHealth('sessions'), worktrees: initialHealth('worktrees'), denials: initialHealth('denials') }
+  return boardSnapshot([repositoryState([], { vocabulary: verdict })], undefined, { health: [health] })
 }
 
 describe('overviewHealth', () => {
   it('reports mis-resolved plus a CLAUDE.md override row for a repo with no vocabulary label at all', () => {
-    const vocabulary = resolveVocabulary({ modules: { approvalGate: true, release: false, scope: true }, overrides: { ready: 'queued' } })
-    const verdict = verifyVocabulary(vocabulary, { ok: true, names: [] })
+    const vocabulary = resolveVocabulary({ modules: MODULES, overrides: { ready: 'queued' } })
     const overrides: ResolvedRepoConfig['overrides'] = [{ path: 'labels.ready', value: 'queued', reason: 'CLAUDE.md port-overrides', portDefault: 'ready', source: 'CLAUDE.md' }]
-    const cfg = config(vocabulary, overrides)
-    const snapshot = snapshotWith(readyState(vocabulary, verdict))
+    const result = overviewHealth(config(vocabulary, { overrides }), REPO_ID, snapshotWith(verifyVocabulary(vocabulary, { ok: true, names: [] })))
 
-    const result = overviewHealth(cfg, REPO_ID, snapshot)
-
-    expect(result.labels).not.toBeNull()
     expect(result.labels?.verdict).toBe('mis-resolved')
     const readyRow = result.labels?.rows.find((r) => r.key === 'ready')
     expect(readyRow?.source).toBe('CLAUDE.md')
@@ -99,9 +34,7 @@ describe('overviewHealth', () => {
   })
 
   it('gives labels and sources as null for a repository missing from the snapshot', () => {
-    const vocabulary = resolveVocabulary({ modules: { approvalGate: true, release: false, scope: true } })
-    const cfg = config(vocabulary)
-    const result = overviewHealth(cfg, REPO_ID, undefined)
+    const result = overviewHealth(config(resolveVocabulary({ modules: MODULES })), REPO_ID, undefined)
 
     expect(result.labels).toBeNull()
     expect(result.sources).toBeNull()
@@ -109,9 +42,7 @@ describe('overviewHealth', () => {
   })
 
   it('reports modules in a fixed order, each as its own flag', () => {
-    const vocabulary = resolveVocabulary({ modules: { approvalGate: true, release: false, scope: true } })
-    const cfg = config(vocabulary)
-    const result = overviewHealth(cfg, REPO_ID, undefined)
+    const result = overviewHealth(config(resolveVocabulary({ modules: MODULES })), REPO_ID, undefined)
     expect(result.modules).toEqual([
       { name: 'approvalGate', on: true },
       { name: 'release', on: false },
@@ -120,11 +51,10 @@ describe('overviewHealth', () => {
   })
 
   it('lists the seven display labels, checked against the display vocabulary, for an app-only repository', () => {
-    const vocabulary = resolveVocabulary({ modules: { approvalGate: true, release: false, scope: true } })
     const displayVocabulary = resolveDisplayVocabulary({ states: { implementing: 'Building' } })
     const verdict = verifyVocabulary(displayVocabulary, { ok: true, names: ['port', 'needs you', 'planning'] })
-    const cfg: ResolvedRepoConfig = { ...config(vocabulary), appOnly: true, displayVocabulary }
-    const result = overviewHealth(cfg, REPO_ID, snapshotWith(readyState(vocabulary, verdict)))
+    const cfg = config(resolveVocabulary({ modules: MODULES }), { appOnly: true, displayVocabulary })
+    const result = overviewHealth(cfg, REPO_ID, snapshotWith(verdict))
 
     expect(result.labels?.appOnly).toBe(true)
     expect(result.labels?.rows.map((r) => [r.name, r.present])).toEqual([
@@ -139,11 +69,8 @@ describe('overviewHealth', () => {
   })
 
   it('sets present to null for every row when the verdict is unverified', () => {
-    const vocabulary = resolveVocabulary({ modules: { approvalGate: true, release: false, scope: true } })
-    const verdict = verifyVocabulary(vocabulary, { ok: false, reason: 'rate limited' })
-    const cfg = config(vocabulary)
-    const snapshot = snapshotWith(readyState(vocabulary, verdict))
-    const result = overviewHealth(cfg, REPO_ID, snapshot)
+    const vocabulary = resolveVocabulary({ modules: MODULES })
+    const result = overviewHealth(config(vocabulary), REPO_ID, snapshotWith(verifyVocabulary(vocabulary, { ok: false, reason: 'rate limited' })))
     expect(result.labels?.verdict).toBe('unverified')
     expect(result.labels?.rows.every((r) => r.present === null)).toBe(true)
   })

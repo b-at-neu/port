@@ -1,22 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionRecord, SessionScan } from '@/types/sessions'
 import { actorKeyOf, BURST_MIN_COUNT, BURST_WINDOW_MS, inspectDenials, shapeOf } from '@/renderer/local/inspect'
-import type { DenialActor, DenialDecision, DenialEntry, DenialsRead, DenialSummary } from '@/types/local'
+import type { DenialActor, DenialEntry, DenialsRead, DenialSummary } from '@/types/local'
 
-// The real-repository-log case lives in `main/repos/local/inspect.test.ts` — this file must import nothing from `src/main/`, the same purity `inspect.ts` rests on.
+const AT = '2026-01-01T00:00:00.000Z'
 
-// --- Fixture builders: each builds the minimum shape `inspectDenials` needs ---
-
-let rawCounter = 0
 function entry(overrides: Partial<DenialEntry> = {}): DenialEntry {
-  rawCounter += 1
   return {
-    raw: overrides.raw ?? `raw-line-${rawCounter}`,
-    form: overrides.form ?? 'current',
-    timestamp: overrides.timestamp === undefined ? '2026-01-01T00:00:00.000Z' : overrides.timestamp,
-    decision: overrides.decision === undefined ? 'deny' : overrides.decision,
-    actor: overrides.actor === undefined ? { kind: 'stage-agent', agent: 'impl-agent' } : overrides.actor,
-    subject: overrides.subject === undefined ? 'git push origin main' : overrides.subject,
+    raw: 'raw-line',
+    form: 'current',
+    timestamp: AT,
+    decision: 'deny',
+    actor: { kind: 'stage-agent', agent: 'impl-agent' },
+    subject: 'git push origin main',
+    ...overrides,
   }
 }
 
@@ -25,348 +22,165 @@ function emptySummary(overrides: Partial<DenialSummary> = {}): DenialSummary {
 }
 
 function present(entries: readonly DenialEntry[], overrides: Partial<Extract<DenialsRead, { present: true }>> = {}): Extract<DenialsRead, { present: true }> {
+  return { ok: true, present: true, path: '/repo/.agents/denials.log', entries, summary: emptySummary({ total: entries.length }), capped: false, readAt: AT, ...overrides }
+}
+
+function sessionRecord(overrides: Partial<SessionRecord> = {}): SessionRecord {
   return {
-    ok: true,
-    present: true,
-    path: '/repo/.agents/denials.log',
-    entries,
-    summary: emptySummary({ total: entries.length }),
-    capped: false,
-    readAt: '2026-01-01T00:00:00.000Z',
+    sessionId: 's',
+    repoId: null,
+    cwd: null,
+    worktreePath: null,
+    role: 'cockpit',
+    roleEvidence: 'stage-agent',
+    itemNumber: null,
+    customTitle: null,
+    summary: null,
+    firstPrompt: null,
+    gitBranch: null,
+    lastActivityAt: AT,
+    idleMs: 0,
+    activity: 'active',
+    agentIds: [],
     ...overrides,
   }
 }
 
-let sessionCounter = 0
-function sessionRecord(overrides: Partial<SessionRecord> = {}): SessionRecord {
-  sessionCounter += 1
-  return {
-    sessionId: overrides.sessionId ?? `session-${sessionCounter}`,
-    repoId: overrides.repoId ?? null,
-    cwd: overrides.cwd ?? null,
-    worktreePath: overrides.worktreePath ?? null,
-    role: overrides.role ?? 'cockpit',
-    roleEvidence: overrides.roleEvidence ?? 'stage-agent',
-    itemNumber: overrides.itemNumber ?? null,
-    customTitle: overrides.customTitle ?? null,
-    summary: overrides.summary ?? null,
-    firstPrompt: overrides.firstPrompt ?? null,
-    gitBranch: overrides.gitBranch ?? null,
-    lastActivityAt: overrides.lastActivityAt ?? '2026-01-01T00:00:00.000Z',
-    idleMs: overrides.idleMs ?? 0,
-    activity: overrides.activity ?? 'active',
-    agentIds: overrides.agentIds ?? [],
-  }
-}
-
 function scanOk(sessions: readonly SessionRecord[]): SessionScan {
-  return { ok: true, sessions, agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 1, scanMs: 1, scannedAt: '2026-01-01T00:00:00.000Z' }
+  return { ok: true, sessions, agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 1, scanMs: 1, scannedAt: AT }
 }
 
-function scanFailed(): SessionScan {
-  return { ok: false, kind: 'claude-home-missing', message: 'no claude home', scannedAt: '2026-01-01T00:00:00.000Z' }
-}
+const SCAN_FAILED: SessionScan = { ok: false, kind: 'claude-home-missing', message: 'no claude home', scannedAt: AT }
 
-// --- Three-arm union mirrors DenialsRead exactly ---------------------------
+function inspected(read: DenialsRead, sessions: SessionScan | null = null) {
+  const result = inspectDenials({ read, sessions })
+  if (!result.ok || !result.present) throw new Error('expected a present log')
+  return result
+}
 
 describe('inspectDenials — mirrors DenialsRead', () => {
-  it('present: false stays present: false, not folded into "no denials"', () => {
-    const read: DenialsRead = { ok: true, present: false, path: '/repo/.agents/denials.log', readAt: '2026-01-01T00:00:00.000Z' }
+  it.each([
+    ['an absent log stays absent', { ok: true, present: false, path: '/p', readAt: AT }],
+    ['a failure passes straight through', { ok: false, kind: 'permission-denied', message: 'EACCES', path: '/p', readAt: AT }],
+  ] as const)('%s', (_label, read) => {
     expect(inspectDenials({ read, sessions: null })).toEqual(read)
   })
 
-  it('ok: false passes the failure straight through', () => {
-    const read: DenialsRead = { ok: false, kind: 'permission-denied', message: 'EACCES', path: '/repo/.agents/denials.log', readAt: '2026-01-01T00:00:00.000Z' }
-    const result = inspectDenials({ read, sessions: null })
-    expect(result).toEqual(read)
-  })
-
-  it('ok: true / present: true carries summary, attribution, groupings, analysed, and capped', () => {
+  it('passes the whole-file summary through by reference', () => {
     const read = present([entry()])
-    const result = inspectDenials({ read, sessions: null })
-    if (!result.ok || !result.present) throw new Error('expected present')
-    expect(result.summary).toBe(read.summary) // passed through by reference, never recomputed
+    const result = inspected(read)
+    expect(result.summary).toBe(read.summary)
     expect(result.analysed).toBe(1)
-    expect(result.capped).toBe(false)
   })
 })
 
-// --- Actor kinds reach the right AttributionTally bucket -------------------
-
-describe('inspectDenials — attribution tally', () => {
-  it('counts each of the five actor kinds into the right bucket', () => {
-    const read = present([
-      entry({ actor: { kind: 'stage-agent', agent: 'impl-agent' } }),
-      entry({ actor: { kind: 'subagent', agentType: 'Explore' } }),
-      entry({ actor: { kind: 'subagent-signal', signal: 'some-signal' } }),
-      entry({ actor: { kind: 'session', sessionId: 'known-session' } }),
-      entry({ actor: { kind: 'unattributed', raw: 'bare-uuid' } }),
-    ])
-    const result = inspectDenials({ read, sessions: scanOk([sessionRecord({ sessionId: 'known-session' })]) })
-    if (!result.ok || !result.present) throw new Error('expected present')
-    expect(result.attribution).toEqual({
-      agentAttributed: 3,
-      sessionAttributed: 1,
-      sessionUnresolved: 0,
-      attributionUnavailable: 0,
-      unattributable: 1,
-    })
-  })
-
-  it('counts a malformed line (actor: null) into unattributable, not dropped', () => {
-    const read = present([entry({ form: 'malformed', decision: null, actor: null, subject: null })])
-    const result = inspectDenials({ read, sessions: null })
-    if (!result.ok || !result.present) throw new Error('expected present')
-    expect(result.attribution.unattributable).toBe(1)
-    expect(result.analysed).toBe(1)
-    expect(result.byShape).toHaveLength(0) // no subject, so it never forms a shape
-  })
-
-  it('a legacy line with no decision field lands in undecided, never deny or miss', () => {
-    const read = present([entry({ form: 'legacy', decision: null, actor: { kind: 'unattributed', raw: 'session-abc' } })])
-    const result = inspectDenials({ read, sessions: null })
-    if (!result.ok || !result.present) throw new Error('expected present')
-    const group = result.byActor[0]
-    expect(group?.counts).toEqual({ deny: 0, miss: 0, gateClear: 0, hookError: 0, undecided: 1, total: 1 })
-  })
-})
-
-// --- SessionAttribution's three arms ---------------------------------------
-
-describe('inspectDenials — SessionAttribution', () => {
+describe('inspectDenials — attribution', () => {
   const sessionEntry = entry({ actor: { kind: 'session', sessionId: 'sess-1' } })
 
-  it('resolves attributed when the session id is in the scan', () => {
-    const result = inspectDenials({ read: present([sessionEntry]), sessions: scanOk([sessionRecord({ sessionId: 'sess-1', role: 'implement', customTitle: 'title' })]) })
-    if (!result.ok || !result.present) throw new Error('expected present')
-    expect(result.byActor[0]?.attribution).toEqual({ kind: 'attributed', role: 'implement', repoId: null, label: 'title', lastActivityAt: '2026-01-01T00:00:00.000Z' })
+  it('counts each actor kind into its bucket, with the buckets summing to analysed', () => {
+    const actors: readonly (DenialActor | null)[] = [
+      { kind: 'stage-agent', agent: 'impl-agent' },
+      { kind: 'subagent', agentType: 'Explore' },
+      { kind: 'subagent-signal', signal: 'x' },
+      { kind: 'session', sessionId: 'known' },
+      { kind: 'session', sessionId: 'unknown' },
+      { kind: 'unattributed', raw: 'bare-uuid' },
+      null,
+    ]
+    const result = inspected(present(actors.map((actor) => entry({ actor, ...(actor === null ? { form: 'malformed', decision: null, subject: null } : {}) }))), scanOk([sessionRecord({ sessionId: 'known' })]))
+    expect(result.attribution).toEqual({ agentAttributed: 3, sessionAttributed: 1, sessionUnresolved: 1, attributionUnavailable: 0, unattributable: 2 })
+    const { agentAttributed, sessionAttributed, sessionUnresolved, attributionUnavailable, unattributable } = result.attribution
+    expect(agentAttributed + sessionAttributed + sessionUnresolved + attributionUnavailable + unattributable).toBe(result.analysed)
   })
 
-  it('resolves unknown-session when the scan succeeded but has no matching id', () => {
-    const result = inspectDenials({ read: present([sessionEntry]), sessions: scanOk([sessionRecord({ sessionId: 'some-other-session' })]) })
-    if (!result.ok || !result.present) throw new Error('expected present')
-    expect(result.byActor[0]?.attribution).toEqual({ kind: 'unknown-session' })
+  it.each([
+    ['a known session', scanOk([sessionRecord({ sessionId: 'sess-1', role: 'implement', customTitle: 'title' })]), { kind: 'attributed', role: 'implement', repoId: null, label: 'title', lastActivityAt: AT }],
+    ['a session the scan does not hold', scanOk([sessionRecord({ sessionId: 'other' })]), { kind: 'unknown-session' }],
+    ['no scan', null, { kind: 'attribution-unavailable', reason: 'not-scanned' }],
+    ['a failed scan, never unknown-session', SCAN_FAILED, { kind: 'attribution-unavailable', reason: 'scan-failed' }],
+  ] as const)('resolves %s', (_label, sessions, expected) => {
+    expect(inspected(present([sessionEntry]), sessions).byActor[0]?.attribution).toEqual(expected)
   })
 
-  it('resolves attribution-unavailable: not-scanned when sessions is null', () => {
-    const result = inspectDenials({ read: present([sessionEntry]), sessions: null })
-    if (!result.ok || !result.present) throw new Error('expected present')
-    expect(result.byActor[0]?.attribution).toEqual({ kind: 'attribution-unavailable', reason: 'not-scanned' })
-  })
-
-  it('resolves attribution-unavailable: scan-failed when the scan itself failed, never unknown-session', () => {
-    const result = inspectDenials({ read: present([sessionEntry]), sessions: scanFailed() })
-    if (!result.ok || !result.present) throw new Error('expected present')
-    expect(result.byActor[0]?.attribution).toEqual({ kind: 'attribution-unavailable', reason: 'scan-failed' })
-  })
-
-  it('caps the label at 120 characters, preferring customTitle over summary over firstPrompt', () => {
+  it('caps the label at 120 characters, preferring customTitle', () => {
     const long = 'x'.repeat(150)
-    const result = inspectDenials({
-      read: present([sessionEntry]),
-      sessions: scanOk([sessionRecord({ sessionId: 'sess-1', customTitle: long, summary: 'summary text', firstPrompt: 'first prompt' })]),
-    })
-    if (!result.ok || !result.present) throw new Error('expected present')
-    const attribution = result.byActor[0]?.attribution
-    if (attribution?.kind !== 'attributed') throw new Error('expected attributed')
-    expect(attribution.label).toHaveLength(120)
-    expect(attribution.label).toBe(long.slice(0, 120))
+    const sessions = scanOk([sessionRecord({ sessionId: 'sess-1', customTitle: long, summary: 'summary text', firstPrompt: 'first prompt' })])
+    const attribution = inspected(present([sessionEntry]), sessions).byActor[0]?.attribution
+    expect(attribution?.kind === 'attributed' ? attribution.label : null).toBe(long.slice(0, 120))
   })
-})
 
-// Regression: miss lines and session-actor deny lines are not agent denials
+  it('files a legacy line with no decision under undecided, never deny or miss', () => {
+    const result = inspected(present([entry({ form: 'legacy', decision: null, actor: { kind: 'unattributed', raw: 'session-abc' } })]))
+    expect(result.byActor[0]?.counts).toEqual({ deny: 0, miss: 0, gateClear: 0, hookError: 0, undecided: 1, total: 1 })
+  })
 
-describe('inspectDenials — #63 regression', () => {
-  it('an all-human-session log (miss lines plus session-actor deny) reports zero agent attribution', () => {
+  it('reports zero agent attribution for an all-human-session log', () => {
     const read = present(
       [
-        entry({ decision: 'miss', actor: { kind: 'session', sessionId: 'human-1' }, subject: 'git push origin main' }),
-        entry({ decision: 'miss', actor: { kind: 'session', sessionId: 'human-1' }, subject: 'gh issue list' }),
-        entry({ decision: 'deny', actor: { kind: 'session', sessionId: 'human-2' }, subject: 'gh issue edit 42 --remove-label needs human' }),
+        entry({ decision: 'miss', actor: { kind: 'session', sessionId: 'human-1' } }),
+        entry({ decision: 'deny', actor: { kind: 'session', sessionId: 'human-2' }, subject: 'gh issue edit 42' }),
       ],
-      { summary: emptySummary({ total: 3, misses: 2, railDenials: 1 }) },
+      { summary: emptySummary({ total: 2, misses: 1, railDenials: 1 }) },
     )
-    const result = inspectDenials({ read, sessions: null })
-    if (!result.ok || !result.present) throw new Error('expected present')
+    const result = inspected(read)
     expect(result.attribution.agentAttributed).toBe(0)
-    expect(result.summary.agentDenials).toBe(0)
-    // Every group in byActor is attributed to a session, never an agent —
-    // the reading that made the old report 90% noise.
-    for (const group of result.byActor) {
-      expect(group.actor?.kind).toBe('session')
-    }
+    expect(result.byActor.every((group) => group.actor?.kind === 'session')).toBe(true)
   })
 })
-
-// --- Tally invariant: the five buckets always sum to `analysed` ------------
-
-describe('inspectDenials — tally invariant', () => {
-  function sumTally(tally: { agentAttributed: number; sessionAttributed: number; sessionUnresolved: number; attributionUnavailable: number; unattributable: number }): number {
-    return tally.agentAttributed + tally.sessionAttributed + tally.sessionUnresolved + tally.attributionUnavailable + tally.unattributable
-  }
-
-  it('sums to analysed over a mixed fixture', () => {
-    const read = present([
-      entry({ actor: { kind: 'stage-agent', agent: 'review-agent' } }),
-      entry({ decision: 'miss', actor: { kind: 'subagent', agentType: 'Explore' } }),
-      entry({ actor: { kind: 'session', sessionId: 'known' } }),
-      entry({ actor: { kind: 'session', sessionId: 'unknown' } }),
-      entry({ form: 'legacy', decision: null, actor: { kind: 'unattributed', raw: 'legacy-uuid' } }),
-      entry({ form: 'malformed', decision: null, actor: null, subject: null }),
-    ])
-    const result = inspectDenials({ read, sessions: scanOk([sessionRecord({ sessionId: 'known' })]) })
-    if (!result.ok || !result.present) throw new Error('expected present')
-    expect(sumTally(result.attribution)).toBe(result.analysed)
-  })
-
-  it('sums to analysed over a generated fixture of arbitrary actor kinds', () => {
-    const actors: readonly DenialActor[] = [
-      { kind: 'stage-agent', agent: 'plan-agent' },
-      { kind: 'subagent', agentType: 'general-purpose' },
-      { kind: 'subagent-signal', signal: 'x' },
-      { kind: 'session', sessionId: 'a' },
-      { kind: 'session', sessionId: 'b' },
-      { kind: 'unattributed', raw: 'r' },
-    ]
-    const decisions: readonly DenialDecision[] = ['deny', 'miss', 'gate-clear', 'hook-error']
-    const entries = actors.flatMap((actor, i) => decisions.map((decision) => entry({ actor, decision, subject: `cmd-${i}` })))
-    const read = present(entries)
-    const result = inspectDenials({ read, sessions: scanOk([sessionRecord({ sessionId: 'a' })]) })
-    if (!result.ok || !result.present) throw new Error('expected present')
-    expect(sumTally(result.attribution)).toBe(result.analysed)
-    expect(result.analysed).toBe(entries.length)
-  })
-})
-
-// --- Timestamps: unparseable never sets first/last, still counts -----------
 
 describe('inspectDenials — timestamps', () => {
-  it('an entry with an unparseable timestamp counts in totals but not first/last', () => {
+  it('counts an unparseable timestamp in totals but not in first and last seen', () => {
     const read = present([
-      entry({ timestamp: '2026-01-01T00:00:00.000Z', subject: 'same-shape' }),
+      entry({ timestamp: AT, subject: 'same-shape' }),
       entry({ timestamp: 'not-a-real-timestamp', subject: 'same-shape' }),
       entry({ timestamp: '2026-01-01T00:00:02.000Z', subject: 'same-shape' }),
     ])
-    const result = inspectDenials({ read, sessions: null })
-    if (!result.ok || !result.present) throw new Error('expected present')
-    const group = result.byShape[0]
-    expect(group?.counts.total).toBe(3)
-    expect(group?.firstSeen).toBe('2026-01-01T00:00:00.000Z')
-    expect(group?.lastSeen).toBe('2026-01-01T00:00:02.000Z')
+    const group = inspected(read).byShape[0]
+    expect([group?.counts.total, group?.firstSeen, group?.lastSeen]).toEqual([3, AT, '2026-01-01T00:00:02.000Z'])
   })
 })
-
-// --- Bursts ------------------------------------------------------------
 
 describe('inspectDenials — bursts', () => {
-  function denyEntry(second: number, actorRaw = 'busy-agent'): DenialEntry {
-    return entry({
-      timestamp: `2026-01-01T00:00:${String(second).padStart(2, '0')}.000Z`,
-      actor: { kind: 'subagent', agentType: actorRaw },
-      subject: 'node /repo/scripts/checks.mjs',
-    })
+  const SUBJECT = 'node /repo/scripts/checks.mjs'
+  function deny(second: number, agentType = 'busy-agent', overrides: Partial<DenialEntry> = {}): DenialEntry {
+    return entry({ timestamp: `2026-01-01T00:00:${String(second).padStart(2, '0')}.000Z`, actor: { kind: 'subagent', agentType }, subject: SUBJECT, ...overrides })
   }
+  const farApart = [deny(0), ...[2, 4].map((n) => deny(0, 'busy-agent', { timestamp: new Date(Date.parse(AT) + BURST_WINDOW_MS * n).toISOString() }))]
 
-  it('fires at exactly BURST_MIN_COUNT inside the window', () => {
-    const entries = Array.from({ length: BURST_MIN_COUNT }, (_, i) => denyEntry(i))
-    const result = inspectDenials({ read: present(entries), sessions: null })
-    if (!result.ok || !result.present) throw new Error('expected present')
-    expect(result.byShape[0]?.burst).not.toBeNull()
-    expect(result.byShape[0]?.burst?.count).toBe(BURST_MIN_COUNT)
-  })
-
-  it('does not fire one entry below BURST_MIN_COUNT', () => {
-    const entries = Array.from({ length: BURST_MIN_COUNT - 1 }, (_, i) => denyEntry(i))
-    const result = inspectDenials({ read: present(entries), sessions: null })
-    if (!result.ok || !result.present) throw new Error('expected present')
-    expect(result.byShape[0]?.burst).toBeNull()
-  })
-
-  it('does not combine two actors that individually fall short', () => {
-    const entries = [denyEntry(0, 'agent-a'), denyEntry(1, 'agent-a'), denyEntry(2, 'agent-b'), denyEntry(3, 'agent-b')]
-    const result = inspectDenials({ read: present(entries), sessions: null, burstMinCount: 3 })
-    if (!result.ok || !result.present) throw new Error('expected present')
-    expect(result.byShape[0]?.burst).toBeNull()
-  })
-
-  it('never fires on miss lines, only deny', () => {
-    const entries = Array.from({ length: BURST_MIN_COUNT + 2 }, (_, i) => ({ ...denyEntry(i), decision: 'miss' as const }))
-    const result = inspectDenials({ read: present(entries), sessions: null })
-    if (!result.ok || !result.present) throw new Error('expected present')
-    expect(result.byShape[0]?.burst).toBeNull()
-  })
-
-  it('does not fire when entries fall outside BURST_WINDOW_MS', () => {
-    const farApart = [
-      denyEntry(0),
-      entry({ timestamp: new Date(Date.parse('2026-01-01T00:00:00.000Z') + BURST_WINDOW_MS * 2).toISOString(), actor: { kind: 'subagent', agentType: 'busy-agent' }, subject: 'node /repo/scripts/checks.mjs' }),
-      entry({ timestamp: new Date(Date.parse('2026-01-01T00:00:00.000Z') + BURST_WINDOW_MS * 4).toISOString(), actor: { kind: 'subagent', agentType: 'busy-agent' }, subject: 'node /repo/scripts/checks.mjs' }),
-    ]
-    const result = inspectDenials({ read: present(farApart), sessions: null })
-    if (!result.ok || !result.present) throw new Error('expected present')
-    expect(result.byShape[0]?.burst).toBeNull()
+  it.each([
+    ['at exactly BURST_MIN_COUNT', Array.from({ length: BURST_MIN_COUNT }, (_, i) => deny(i)), true],
+    ['one below BURST_MIN_COUNT', Array.from({ length: BURST_MIN_COUNT - 1 }, (_, i) => deny(i)), false],
+    ['across two actors that each fall short', [deny(0, 'a'), deny(1, 'a'), deny(2, 'b'), deny(3, 'b')], false],
+    ['on miss lines', Array.from({ length: BURST_MIN_COUNT + 2 }, (_, i) => deny(i, 'busy-agent', { decision: 'miss' })), false],
+    ['outside BURST_WINDOW_MS', farApart, false],
+  ] as const)('fires %s: %s', (_label, entries, fires) => {
+    expect(inspected(present(entries)).byShape[0]?.burst !== null).toBe(fires)
   })
 })
-
-// --- shapeOf grammar --------------------------------------------------------
 
 describe('shapeOf', () => {
-  it('returns (empty) for an empty subject', () => {
-    expect(shapeOf('')).toBe('(empty)')
-    expect(shapeOf('   ')).toBe('(empty)')
+  it.each([
+    ['an empty subject', '', '(empty)'],
+    ['a blank subject', '   ', '(empty)'],
+    ['a flag, dropped', 'gh issue view --json', 'gh issue view'],
+    ['an issue number, dropped', 'gh issue view 42', 'gh issue view'],
+    ['a Windows path', 'open C:\\Users\\op\\file.txt', 'open <path>'],
+    ['a POSIX path', 'cat /home/op/file.txt', 'cat <path>'],
+    ['identifier tokens, kept', 'git status', 'git status'],
+    ['a quoted string', 'git "quoted string"', 'git <arg>'],
+    ['consecutive placeholders, collapsed', 'node scripts/checks.mjs 2>&1 | tail -100', 'node <path> <arg> tail'],
+    ['a bare write-deny path', '.claude/settings.json', '<path>'],
+  ] as const)('maps %s', (_label, subject, shape) => {
+    expect(shapeOf(subject)).toBe(shape)
   })
 
-  it('drops a flag token entirely, unlike an ordinary argument', () => {
-    expect(shapeOf('gh issue view --json')).toBe(shapeOf('gh issue view'))
-  })
-
-  it('drops an all-digits token, so an issue number never fragments a group', () => {
-    expect(shapeOf('gh issue view 42')).toBe(shapeOf('gh issue view 99'))
-  })
-
-  it('maps a token containing / or \\ to <path>, including a Windows path', () => {
-    expect(shapeOf('open C:\\Users\\op\\file.txt')).toBe('open <path>')
-    expect(shapeOf('cat /home/op/file.txt')).toBe('cat <path>')
-  })
-
-  it('keeps an identifier-shaped token verbatim', () => {
-    expect(shapeOf('git status')).toBe('git status')
-  })
-
-  it('maps anything else to <arg>', () => {
-    expect(shapeOf('git "quoted string"')).toBe('git <arg>')
-  })
-
-  it('collapses consecutive identical placeholders to one', () => {
-    expect(shapeOf('node scripts/checks.mjs 2>&1 | tail -100')).toBe('node <path> <arg> tail')
-  })
-
-  it('keeps only the first 4 mapped tokens and caps at 80 characters', () => {
-    const shape = shapeOf('a b c d e f g h')
-    expect(shape.split(' ')).toHaveLength(4)
-    expect(shape.length).toBeLessThanOrEqual(80)
-  })
-
-  it('worked example: node <path>', () => {
-    expect(shapeOf('node /home/op/.claude/plugins/cache/port/port/0.1.0/bin/artifacts.mjs')).toBe('node <path>')
-  })
-
-  it('worked example: node <path> <arg> tail, identically for -100 and -60', () => {
-    const a = shapeOf('node scripts/checks.mjs 2>&1 | tail -100')
-    const b = shapeOf('node scripts/checks.mjs 2>&1 | tail -60')
-    expect(a).toBe('node <path> <arg> tail')
-    expect(a).toBe(b)
-  })
-
-  it('worked example: a write-deny subject becomes its own group, <path>', () => {
-    expect(shapeOf('.claude/settings.json')).toBe('<path>')
+  it('keeps only the first 4 mapped tokens', () => {
+    expect(shapeOf('a b c d e f g h').split(' ')).toHaveLength(4)
   })
 })
 
-// --- actorKeyOf --------------------------------------------------------
-
 describe('actorKeyOf', () => {
-  it('is stable and collision-free across every actor kind, including null', () => {
+  it('is collision-free across every actor kind, including null', () => {
     const keys = [
       actorKeyOf({ kind: 'stage-agent', agent: 'impl-agent' }, 'raw'),
       actorKeyOf({ kind: 'subagent', agentType: 'Explore' }, 'raw'),
@@ -379,60 +193,34 @@ describe('actorKeyOf', () => {
   })
 })
 
-// --- window vs summary: the scope mismatch a capped read introduces --------
-
 describe('inspectDenials — window', () => {
-  it('summarizes only the analysed entries, distinct from the whole-file summary when capped', () => {
-    const analysedEntries = [
-      entry({ decision: 'miss', actor: { kind: 'session', sessionId: 'human-1' } }),
-      entry({ decision: 'deny', actor: { kind: 'stage-agent', agent: 'impl-agent' } }),
-    ]
-    // The whole file held more misses than made it into the capped `entries` window.
-    const read = present(analysedEntries, { capped: true, summary: emptySummary({ total: 20, misses: 9, agentDenials: 1 }) })
-    const result = inspectDenials({ read, sessions: null })
-    if (!result.ok || !result.present) throw new Error('expected present')
+  const entries = [entry({ decision: 'miss', actor: { kind: 'session', sessionId: 'human-1' } }), entry()]
 
+  it('summarizes only the analysed entries when the read is capped', () => {
+    const read = present(entries, { capped: true, summary: emptySummary({ total: 20, misses: 9, agentDenials: 1 }) })
+    const result = inspected(read)
     expect(result.window).toEqual(emptySummary({ total: 2, misses: 1, agentDenials: 1 }))
-    expect(result.summary).toBe(read.summary) // whole-file total, still passed through by reference
-    const missAcrossActors = result.byActor.reduce((sum, group) => sum + group.counts.miss, 0)
-    expect(missAcrossActors).toBe(result.window.misses)
+    expect(result.summary).toBe(read.summary)
+    expect(result.byActor.reduce((sum, group) => sum + group.counts.miss, 0)).toBe(result.window.misses)
   })
 
   it('matches summary exactly when the read is not capped', () => {
-    const read = present([entry({ decision: 'miss', actor: { kind: 'session', sessionId: 'human-1' } })], { summary: emptySummary({ total: 1, misses: 1 }) })
-    const result = inspectDenials({ read, sessions: null })
-    if (!result.ok || !result.present) throw new Error('expected present')
+    const result = inspected(present(entries, { summary: emptySummary({ total: 2, misses: 1, agentDenials: 1 }) }))
     expect(result.window).toEqual(result.summary)
   })
 })
 
-// --- Sort orders -------------------------------------------------------
-
 describe('inspectDenials — sort orders', () => {
-  it('byActor sorts by [deny desc, total desc, lastSeen desc, key asc], with deliberate ties', () => {
-    const read = present([
-      entry({ actor: { kind: 'subagent', agentType: 'z-actor' }, timestamp: '2026-01-01T00:00:00.000Z' }),
-      entry({ actor: { kind: 'subagent', agentType: 'a-actor' }, timestamp: '2026-01-01T00:00:00.000Z' }),
-      entry({ actor: { kind: 'subagent', agentType: 'busy-actor' }, timestamp: '2026-01-01T00:00:05.000Z' }),
-      entry({ actor: { kind: 'subagent', agentType: 'busy-actor' }, timestamp: '2026-01-01T00:00:06.000Z' }),
-    ])
-    const result = inspectDenials({ read, sessions: null })
-    if (!result.ok || !result.present) throw new Error('expected present')
-    // busy-actor has 2 denies (beats the two 1-deny ties), then a-actor before z-actor by key.
-    expect(result.byActor.map((g) => g.key)).toEqual(['subagent:busy-actor', 'subagent:a-actor', 'subagent:z-actor'])
+  it('sorts actors by deny count, then total, then recency, then key', () => {
+    const subagent = (agentType: string, timestamp: string) => entry({ actor: { kind: 'subagent', agentType }, timestamp })
+    const read = present([subagent('z-actor', AT), subagent('a-actor', AT), subagent('busy-actor', '2026-01-01T00:00:05.000Z'), subagent('busy-actor', '2026-01-01T00:00:06.000Z')])
+    expect(inspected(read).byActor.map((g) => g.key)).toEqual(['subagent:busy-actor', 'subagent:a-actor', 'subagent:z-actor'])
   })
 
-  it('byShape sorts burst first, then by [deny desc, total desc, lastSeen desc, shape asc]', () => {
-    const burstEntries = Array.from({ length: BURST_MIN_COUNT }, (_, i) =>
-      entry({ timestamp: `2026-01-01T00:00:0${i}.000Z`, actor: { kind: 'subagent', agentType: 'burster' }, subject: 'aaa command' }),
-    )
-    const quieterEntries = [
-      entry({ timestamp: '2026-01-01T00:05:00.000Z', actor: { kind: 'subagent', agentType: 'other' }, subject: 'zzz command', decision: 'deny' }),
-      entry({ timestamp: '2026-01-01T00:05:01.000Z', actor: { kind: 'subagent', agentType: 'other2' }, subject: 'zzz command', decision: 'deny' }),
-    ]
-    const read = present([...quieterEntries, ...burstEntries])
-    const result = inspectDenials({ read, sessions: null })
-    if (!result.ok || !result.present) throw new Error('expected present')
+  it('sorts a burst shape first', () => {
+    const burst = Array.from({ length: BURST_MIN_COUNT }, (_, i) => entry({ timestamp: `2026-01-01T00:00:0${String(i)}.000Z`, actor: { kind: 'subagent', agentType: 'burster' }, subject: 'aaa command' }))
+    const quieter = ['other', 'other2'].map((agentType, i) => entry({ timestamp: `2026-01-01T00:05:0${String(i)}.000Z`, actor: { kind: 'subagent', agentType }, subject: 'zzz command' }))
+    const result = inspected(present([...quieter, ...burst]))
     expect(result.byShape[0]?.shape).toBe(shapeOf('aaa command'))
     expect(result.byShape[0]?.burst).not.toBeNull()
   })

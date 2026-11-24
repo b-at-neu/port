@@ -48,17 +48,9 @@ export function reclaimDialogTitle(count: number, singleName: string | null): st
   return `Reclaim ${String(count)} worktree${count === 1 ? '' : 's'}?`
 }
 
-export function reclaimDialogBody(): string {
-  return 'Removes each finished worktree’s directory and deletes its merged branch. Locked or dirty worktrees are kept.'
-}
-
-export function reclaimDialogConfirmLabel(): string {
-  return 'Reclaim worktrees'
-}
-
-export function reclaimNothingToReclaimTooltip(): string {
-  return 'Nothing to reclaim. Only merged or empty worktrees can be.'
-}
+export const RECLAIM_DIALOG_BODY = 'Removes each finished worktree’s directory and deletes its merged branch. Locked or dirty worktrees are kept.'
+export const RECLAIM_CONFIRM_LABEL = 'Reclaim worktrees'
+export const NOTHING_TO_RECLAIM_TOOLTIP = 'Nothing to reclaim. Only merged or empty worktrees can be.'
 
 function failedEntryCopy(entry: ReclaimedWorktree): string {
   return `${entry.pathBasename}: ${entry.error ?? 'unknown reason'}`
@@ -110,9 +102,7 @@ export function forcedDialogIsDestructive(flags: ForcedFlags): boolean {
   return flags.forceDirty
 }
 
-export function lockedInUseHint(): string {
-  return 'Locked and still in use, so port won’t unlock it.'
-}
+export const LOCKED_IN_USE_HINT = 'Locked and still in use, so port won’t unlock it.'
 
 /** One toast for a path-scoped reclaim: removed, removed nothing, or the target's own error. */
 export function forcedReclaimToast(name: string, result: Extract<WorktreesReclaimResult, { ok: true }>): string {
@@ -128,13 +118,8 @@ export function purgeDialogTitle(name: string): string {
   return `Delete ${name}?`
 }
 
-export function purgeDialogBody(): string {
-  return 'Deletes this directory and everything in it. git doesn’t track it, so nothing else will clear it.'
-}
-
-export function purgeConfirmLabel(): string {
-  return 'Delete directory'
-}
+export const PURGE_DIALOG_BODY = 'Deletes this directory and everything in it. git doesn’t track it, so nothing else will clear it.'
+export const PURGE_CONFIRM_LABEL = 'Delete directory'
 
 export function purgeResultToast(result: Extract<WorktreesPurgeResult, { ok: true }>): string {
   const name = result.pathBasename

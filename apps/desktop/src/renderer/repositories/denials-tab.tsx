@@ -6,32 +6,19 @@ import { Tabs, TabsList, TabsTrigger } from '@/renderer/components/ui/tabs'
 import { DetailPane } from '@/renderer/components/detail-pane'
 import { EmptyState } from '@/renderer/components/empty-state'
 import { ErrorBanner } from '@/renderer/components/error-banner'
+import { PageStates } from '@/renderer/components/page'
+import { pageState } from '@/renderer/components/page-state'
 import { StatusPill } from '@/renderer/components/status-pill'
 import { useIpcQuery } from '@/renderer/data/query'
-import { inspectDenials } from '@/renderer/local/inspect'
+import { formatTimeOfDay } from '@/renderer/lib/time'
+import type { inspectDenials } from '@/renderer/local/inspect'
 import type { ActorGroup, ShapeGroup } from '@/types/local'
 import type { RepoId } from '@/utils/repos'
 import type { DenialsGroup } from '@/types/router'
-import { actorAttributionPill, attributionLineCopy, burstPillCopy, cappedLineCopy, emptyLogCopy, metaStripCopy, noEntriesCopy, readFailedCopy } from '@/renderer/repositories/denials-copy'
+import { REPO_INVOKE_ERROR } from '@/renderer/repositories/copy'
+import { actorAttributionPill, attributionLineCopy, burstPillCopy, cappedLineCopy, EMPTY_LOG, exactOrDash, lastSeenCopy, metaStripCopy, NO_ENTRIES, readFailedCopy } from '@/renderer/repositories/denials-copy'
+import { denialsRegion, isDenialsEmpty } from '@/renderer/repositories/model'
 import { useListSelection } from '@/renderer/shell/list-selection'
-
-function relativeOrDash(iso: string | null, now: Date): string {
-  if (iso === null) return '—'
-  const ms = now.getTime() - Date.parse(iso)
-  if (Number.isNaN(ms)) return '—'
-  const minutes = Math.round(ms / 60_000)
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${String(minutes)}m ago`
-  const hours = Math.round(minutes / 60)
-  if (hours < 24) return `${String(hours)}h ago`
-  return `${String(Math.round(hours / 24))}d ago`
-}
-
-function absoluteOrDash(iso: string | null): string {
-  if (iso === null) return '—'
-  const parsed = Date.parse(iso)
-  return Number.isNaN(parsed) ? '—' : new Date(parsed).toLocaleString()
-}
 
 function ShapeRow({ group, now, rowProps }: { readonly group: ShapeGroup; readonly now: Date; readonly rowProps: ReturnType<ReturnType<typeof useListSelection>['rowProps']> }) {
   return (
@@ -42,7 +29,7 @@ function ShapeRow({ group, now, rowProps }: { readonly group: ShapeGroup; readon
       </span>
       <span className="shrink-0 text-meta text-muted-foreground">{group.actorCount} actors</span>
       {group.burst !== null ? <StatusPill status="attention" label={burstPillCopy(group.burst.count, group.burst.startedAt, group.burst.endedAt)} /> : null}
-      <span className="ml-auto shrink-0 text-meta text-muted-foreground">{relativeOrDash(group.lastSeen, now)}</span>
+      <span className="ml-auto shrink-0 text-meta text-muted-foreground">{lastSeenCopy(group.lastSeen, now)}</span>
     </div>
   )
 }
@@ -57,7 +44,7 @@ function ActorRow({ group, now, rowProps }: { readonly group: ActorGroup; readon
         {group.counts.deny} denied · {group.counts.miss} missed
       </span>
       <span className="shrink-0 text-meta text-muted-foreground">{group.shapeCount} commands</span>
-      <span className="ml-auto shrink-0 text-meta text-muted-foreground">{relativeOrDash(group.lastSeen, now)}</span>
+      <span className="ml-auto shrink-0 text-meta text-muted-foreground">{lastSeenCopy(group.lastSeen, now)}</span>
     </div>
   )
 }
@@ -75,13 +62,13 @@ function ShapeDetailPane({ group, onClose }: { readonly group: ShapeGroup; reado
     <DetailPane onClose={onClose}>
       <h2 className="break-all font-mono text-title font-semibold text-foreground">{group.shape}</h2>
       <p className="text-small text-muted-foreground">
-        First seen {absoluteOrDash(group.firstSeen)} · Last seen {absoluteOrDash(group.lastSeen)}
+        First seen {exactOrDash(group.firstSeen)} · Last seen {exactOrDash(group.lastSeen)}
       </p>
       <CountBreakdown counts={group.counts} />
       <pre className="whitespace-pre-wrap break-all rounded-md bg-muted p-2 font-mono text-meta text-foreground">{group.sample}</pre>
       {group.burst !== null ? (
         <p className="text-small text-attention-dot">
-          Burst window: {absoluteOrDash(group.burst.startedAt)} – {absoluteOrDash(group.burst.endedAt)}
+          Burst window: {exactOrDash(group.burst.startedAt)} – {exactOrDash(group.burst.endedAt)}
         </p>
       ) : null}
     </DetailPane>
@@ -93,12 +80,12 @@ function ActorDetailPane({ group, onClose }: { readonly group: ActorGroup; reado
     <DetailPane onClose={onClose}>
       <h2 className="break-all font-mono text-title font-semibold text-foreground">{group.key}</h2>
       <p className="text-small text-muted-foreground">
-        First seen {absoluteOrDash(group.firstSeen)} · Last seen {absoluteOrDash(group.lastSeen)}
+        First seen {exactOrDash(group.firstSeen)} · Last seen {exactOrDash(group.lastSeen)}
       </p>
       <CountBreakdown counts={group.counts} />
       {group.attribution?.kind === 'attributed' ? (
         <p className="text-small text-muted-foreground">
-          {group.attribution.label ?? group.attribution.role} · last active {absoluteOrDash(group.attribution.lastActivityAt)}
+          {group.attribution.label ?? group.attribution.role} · last active {exactOrDash(group.attribution.lastActivityAt)}
         </p>
       ) : null}
     </DetailPane>
@@ -107,39 +94,31 @@ function ActorDetailPane({ group, onClose }: { readonly group: ActorGroup; reado
 
 export function DenialsTab({ repoId, group, onGroupChange }: { readonly repoId: RepoId; readonly group: DenialsGroup; readonly onGroupChange: (next: DenialsGroup) => void }) {
   const query = useIpcQuery('board.snapshot')
-  const now = new Date()
+  const inspection = query.data === undefined ? undefined : denialsRegion(query.data, repoId)
+  const noEntries = inspection?.ok === true && inspection.present
 
-  if (query.data === undefined) {
-    return (
-      <div className="flex flex-col gap-2 p-4">
-        <Skeleton className="h-9 w-full" />
-        <Skeleton className="h-9 w-full" />
-      </div>
-    )
-  }
-
-  const repo = query.data.state.repositories.find((r) => r.ok && r.repoId === repoId)
-  if (repo === undefined || !repo.ok) return null
-
-  const inspection = inspectDenials({ read: repo.denials, sessions: query.data.state.sessions })
-
-  if (!inspection.ok) {
-    return (
-      <div className="p-4">
-        <ErrorBanner message={readFailedCopy(inspection.path, inspection.message)} />
-      </div>
-    )
-  }
-
-  if (!inspection.present) {
-    return <EmptyState icon={ShieldAlert} message={emptyLogCopy()} className="p-6" />
-  }
-
-  if (inspection.analysed === 0) {
-    return <EmptyState icon={ShieldAlert} message={noEntriesCopy()} className="p-6" />
-  }
-
-  return <DenialsInspector group={group} onGroupChange={onGroupChange} inspection={inspection} now={now} />
+  return (
+    <PageStates
+      loading={
+        <div className="flex flex-col gap-2 p-4">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+        </div>
+      }
+      state={pageState({ data: inspection, status: query.status }, isDenialsEmpty)}
+      errorMessage={REPO_INVOKE_ERROR}
+      onRetry={() => void query.refetch()}
+      empty={<EmptyState icon={ShieldAlert} message={noEntries ? NO_ENTRIES : EMPTY_LOG} className="p-6" />}
+    >
+      {inspection === undefined || inspection === null ? null : !inspection.ok ? (
+        <div className="p-4">
+          <ErrorBanner message={readFailedCopy(inspection.path, inspection.message)} />
+        </div>
+      ) : inspection.present ? (
+        <DenialsInspector group={group} onGroupChange={onGroupChange} inspection={inspection} now={new Date()} />
+      ) : null}
+    </PageStates>
+  )
 }
 
 function DenialsInspector({
@@ -173,7 +152,7 @@ function DenialsInspector({
         <div className="flex flex-col gap-2 px-4 py-3">
           <div className="flex items-center justify-between gap-2 text-small text-muted-foreground">
             <span>{metaStripCopy(inspection.window)}</span>
-            <span className="text-meta">Checked {new Date(inspection.readAt).toLocaleTimeString()}</span>
+            <span className="text-meta">Checked {formatTimeOfDay(inspection.readAt)}</span>
           </div>
           {inspection.capped ? <p className="text-meta text-muted-foreground">{cappedLineCopy(inspection.analysed, inspection.summary)}</p> : null}
           {attributionLine !== null ? <p className="text-small text-attention-dot">{attributionLine}</p> : null}

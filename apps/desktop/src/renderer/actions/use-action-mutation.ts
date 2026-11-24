@@ -12,6 +12,7 @@ interface ActionMutationOptions<N extends MutationName> {
   readonly confirm?: (input: ActionInput<N>) => ConfirmSpec
   readonly toast?: ActionToastSpec<N>
   readonly invalidates?: readonly QueryName[]
+  readonly onResult?: (output: ActionOutput<N>, input: ActionInput<N>) => void
 }
 
 interface Requested<N extends MutationName> {
@@ -28,8 +29,10 @@ export function useActionMutation<N extends MutationName>(name: N, options: Acti
     mutationFn: (input) => perform({ name, input, toast: options.toast, invalidates: options.invalidates }, { invoke, client }),
   })
 
-  function run(input: ActionInput<N>): Promise<ActionOutput<N> | 'unreachable'> {
-    return mutation.mutateAsync(input)
+  async function run(input: ActionInput<N>): Promise<ActionOutput<N> | 'unreachable'> {
+    const result = await mutation.mutateAsync(input)
+    if (result !== 'unreachable') options.onResult?.(result, input)
+    return result
   }
 
   function request(input: ActionInput<N>): void {

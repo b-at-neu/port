@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { BUCKET_TONE, groupRows, recordRow } from '@/renderer/incidents/model'
-import { BUCKET_LABEL, exportedToast, failureCopy, footnotes } from '@/renderer/incidents/copy'
+import { BUCKET_TONE, exportToast, groupRows, recordRow } from '@/renderer/incidents/model'
+import { BUCKET_LABEL, footnotes } from '@/renderer/incidents/copy'
 import { INCIDENT_BUCKETS, type IncidentGroup, type IncidentRecord } from '@/types/incidents'
 
 const GROUP: IncidentGroup = {
@@ -52,22 +52,23 @@ describe('recordRow', () => {
   })
 })
 
-describe('copy', () => {
-  it('states what a failed read means', () => {
-    expect(failureCopy('too-large', '')).toContain('incidents.jsonl')
-    expect(failureCopy('io', 'EIO')).toContain('EIO')
+describe('footnotes', () => {
+  it.each([
+    [1, null, 1],
+    [0, { count: 3, through: 't' }, 1],
+    [2, { count: 3, through: 't' }, 2],
+    [0, null, 0],
+  ] as const)('counts a note per cause for %j malformed and %j pruned', (malformed, pruned, notes) => {
+    expect(footnotes(malformed, pruned)).toHaveLength(notes)
   })
+})
 
-  it('footnotes unreadable lines and dropped older incidents', () => {
-    expect(footnotes(1, null)).toHaveLength(1)
-    expect(footnotes(1, null)[0]).toContain('1')
-    expect(footnotes(0, { count: 3, through: 't' })[0]).toContain('3')
-    expect(footnotes(0, null)).toEqual([])
-  })
-
-  it('names the exported file, not its folder', () => {
-    const toast = exportedToast('/home/op/port-incidents-2026-11-17.json')
-    expect(toast).toContain('port-incidents-2026-11-17.json')
-    expect(toast).not.toContain('/home/op')
+describe('exportToast', () => {
+  it.each([
+    ['a written file', { ok: true, path: '/home/op/incidents.json' }, 'success'],
+    ['a write error', { ok: false, kind: 'io', message: 'disk full' }, 'error'],
+    ['a cancelled save', { ok: false, kind: 'cancelled' }, null],
+  ] as const)('maps %s', (_label, result, tone) => {
+    expect(exportToast(result)?.tone ?? null).toBe(tone)
   })
 })

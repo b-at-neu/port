@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { forcedReclaimFor } from '@/renderer/repositories/worktrees-model'
-import type { InspectedWorktree } from '@/types/reclaimer'
+import { forcedConfirm, forcedReclaimFor, purgeToast, reclaimToast } from '@/renderer/repositories/worktrees-model'
+import type { InspectedWorktree, WorktreesPurgeResult, WorktreesReclaimResult } from '@/types/reclaimer'
 
 function worktree(overrides: Partial<InspectedWorktree> = {}): InspectedWorktree {
   return {
@@ -39,5 +39,36 @@ describe('forcedReclaimFor', () => {
 
   it('offers nothing for a locked worktree that is still in use', () => {
     expect(forcedReclaimFor(worktree({ otherwiseReclaimable: false }))).toBeNull()
+  })
+})
+
+describe('forcedConfirm', () => {
+  it.each([
+    ['discarding changes', { unlock: false, forceDirty: true }, 'destructive'],
+    ['unlocking and discarding', { unlock: true, forceDirty: true }, 'destructive'],
+    ['unlocking only', { unlock: true, forceDirty: false }, 'default'],
+  ] as const)('is %s with the %s tone', (_label, flags, tone) => {
+    const target = worktree()
+    expect(forcedConfirm([target], { path: target.path, ...flags }).tone).toBe(tone)
+  })
+
+  it('falls back to a plain reclaim when there is no forced target', () => {
+    expect(forcedConfirm([worktree()], null).tone).toBe('destructive')
+  })
+})
+
+const RECLAIMED: WorktreesReclaimResult = { ok: true, removed: 1, results: [], readAt: 't', call: [] }
+const RECLAIM_FAILED: WorktreesReclaimResult = { ok: false, readAt: 't', call: null, kind: 'timeout', message: '' }
+const PURGED: WorktreesPurgeResult = { ok: true, outcome: 'deleted', pathBasename: 'x', message: null, cause: null, readAt: 't', call: [] }
+const PURGE_FAILED: WorktreesPurgeResult = { ok: false, readAt: 't', call: null, kind: 'timeout', message: '' }
+
+describe('result toasts', () => {
+  it.each([
+    ['a reclaim that ran', reclaimToast(RECLAIMED), 'success'],
+    ['a reclaim that was refused', reclaimToast(RECLAIM_FAILED), 'error'],
+    ['a purge that ran', purgeToast(PURGED), 'success'],
+    ['a purge that was refused', purgeToast(PURGE_FAILED), 'error'],
+  ] as const)('%s toasts %s', (_label, toast, tone) => {
+    expect(toast.tone).toBe(tone)
   })
 })

@@ -104,7 +104,22 @@ export function summaryParts(config: ResolvedRepoConfig): readonly string[] {
   return [branchSummary, `${labelCount} pipeline labels`, moduleSummary(config.modules)].filter((part) => part !== '')
 }
 
-type RegistryErrorReason = 'unreadable' | 'malformed' | 'unsupported-version'
+export type RegistryErrorReason = 'unreadable' | 'malformed' | 'unsupported-version'
+
+export const REPO_INVOKE_ERROR = "Couldn't reach the main process. Restart port."
+export const NOT_READ_YET = 'Not read yet. port reads it on the next poll.'
+export const NOT_REGISTERED = "That repository isn't registered."
+export const OPEN_REPOSITORIES = 'Open Repositories'
+export const REMOVE_REPOSITORY = 'Remove repository'
+export const REMOVE_DESCRIPTION = 'port stops reading it. The folder, its tickets and its PRs are untouched, and you can add it again.'
+
+export function removeTitle(name: string): string {
+  return `Remove ${name} from port?`
+}
+
+export function removingCopy(name: string): string {
+  return `Removing ${name}…`
+}
 
 interface RegistryBanner {
   readonly path: string

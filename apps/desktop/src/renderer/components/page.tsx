@@ -23,9 +23,8 @@ function DefaultLoading({ variant }: { readonly variant: ScreenBodyVariant }) {
   )
 }
 
-interface PageProps {
-  readonly header: ReactNode
-  readonly variant: ScreenBodyVariant
+interface PageStatesProps {
+  readonly variant?: ScreenBodyVariant
   readonly state: PageStateKind
   readonly loading?: ReactNode
   readonly errorMessage: string
@@ -34,14 +33,28 @@ interface PageProps {
   readonly children: ReactNode
 }
 
-export function Page({ header, variant, state, loading, errorMessage, onRetry, empty, children }: PageProps) {
+/** The four-state body without a screen frame, for a data region inside a screen that already exists. */
+export function PageStates({ variant = 'page', state, loading, errorMessage, onRetry, empty, children }: PageStatesProps) {
+  return (
+    <>
+      {state === 'loading' ? (loading ?? <DefaultLoading variant={variant} />) : null}
+      {state === 'error' ? <ErrorBanner message={errorMessage} action={{ label: RETRY_LABEL, onClick: onRetry }} /> : null}
+      {state === 'empty' ? empty : null}
+      {state === 'ready' ? children : null}
+    </>
+  )
+}
+
+interface PageProps extends PageStatesProps {
+  readonly header: ReactNode
+  readonly variant: ScreenBodyVariant
+}
+
+export function Page({ header, variant, ...states }: PageProps) {
   return (
     <Screen header={header}>
       <ScreenBody variant={variant}>
-        {state === 'loading' ? (loading ?? <DefaultLoading variant={variant} />) : null}
-        {state === 'error' ? <ErrorBanner message={errorMessage} action={{ label: RETRY_LABEL, onClick: onRetry }} /> : null}
-        {state === 'empty' ? empty : null}
-        {state === 'ready' ? children : null}
+        <PageStates variant={variant} {...states} />
       </ScreenBody>
     </Screen>
   )
