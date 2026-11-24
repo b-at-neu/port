@@ -22,8 +22,11 @@ function fakeGit(overrides: Partial<Record<string, () => CommandResult>>): GitRu
   }
 }
 
-const REPO = pathOps.toNative('/repo')
-const PLAIN = pathOps.toNative('/tmp/not-a-repo')
+// Drive-qualified on win32, because `resolveGitBaseRoot` resolves `.git` through `path.win32.resolve`, which adds the drive.
+const absolute = (relative: string): string => pathOps.resolveFrom(pathOps.toNative('/'), relative)
+
+const REPO = absolute('repo')
+const PLAIN = absolute('tmp/not-a-repo')
 const WORKTREE = pathOps.join(REPO, '.claude', 'worktrees', 'session-abc123')
 const LINKED = {
   root: () => ok(`${WORKTREE}\n`),
@@ -70,7 +73,7 @@ describe('resolveWorkspace', () => {
 
 describe('toFolderEntry', () => {
   it('returns git: null for a non-git folder', async () => {
-    const plain = pathOps.toNative('/tmp/plain')
+    const plain = absolute('tmp/plain')
     const entry = await toFolderEntry({ git: fakeGit({}) }, plain, [], null)
     expect(entry).toMatchObject({ git: null, repoId: null, path: plain })
     expect(entry.id.startsWith('folder-')).toBe(true)
@@ -83,7 +86,7 @@ describe('toFolderEntry', () => {
 
   it('produces a stable id for the same path', async () => {
     const ctx = { git: fakeGit({}) }
-    const same = pathOps.toNative('/tmp/same')
+    const same = absolute('tmp/same')
     expect((await toFolderEntry(ctx, same, [], null)).id).toBe((await toFolderEntry(ctx, same, [], null)).id)
   })
 })

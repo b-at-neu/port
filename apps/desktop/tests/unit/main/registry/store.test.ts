@@ -10,7 +10,7 @@ const B = pathOps.toNative('/b')
 
 const READ_CASES: readonly { readonly name: string; readonly file: string | null; readonly expected: unknown; readonly untouched: boolean }[] = [
   { name: 'a missing file reads as empty', file: null, expected: { ok: true, repositories: [] }, untouched: false },
-  { name: 'a valid file lists its paths, deduped', file: JSON.stringify({ version: 1, repositories: [{ path: '/a' }, { path: '/a/' }, { path: '/b' }] }), expected: { ok: true, repositories: [A, B] }, untouched: false },
+  { name: 'a valid file lists its paths, deduped', file: JSON.stringify({ version: 1, repositories: [{ path: A }, { path: `${A}/` }, { path: B }] }), expected: { ok: true, repositories: [A, B] }, untouched: false },
   { name: 'invalid JSON is malformed and never overwritten', file: '{not json', expected: { ok: false, kind: 'registry-malformed' }, untouched: true },
   { name: 'a newer version is unsupported and never overwritten', file: JSON.stringify({ version: 2, repositories: [{ path: '/a' }] }), expected: { ok: false, kind: 'registry-unsupported-version' }, untouched: true },
 ]
@@ -28,7 +28,7 @@ describe('readRegistry', () => {
 describe('writeRegistry', () => {
   it('round-trips and dedupes what it writes', async () => {
     const fs = createFakeFs()
-    expect((await writeRegistry({ fs }, DIR, ['/a', '/a/', '/b'])).ok).toBe(true)
+    expect((await writeRegistry({ fs }, DIR, [A, `${A}/`, B])).ok).toBe(true)
     expect(await readRegistry({ fs }, DIR)).toEqual({ ok: true, repositories: [A, B] })
   })
 })
