@@ -152,7 +152,10 @@ export function useNeedsYouActions(items: readonly NeedsYouItem[]) {
     let tally: ResumeTally = { resumed: 0, attempted: 0, total: entries.length }
     for (const entry of entries) {
       const result = await resume.perform({ id: entry.id })
-      if (result === 'unreachable') break
+      if (result === 'unreachable') {
+        void refresh({ announce: false })
+        return
+      }
       const step = resumeAllStep(tally, result, entry.number)
       if (step.kind === 'stop') {
         showActionToast('stage.resume', step.toast)

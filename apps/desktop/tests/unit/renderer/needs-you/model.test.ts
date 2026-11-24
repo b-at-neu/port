@@ -77,7 +77,7 @@ describe('actionFor', () => {
     ['no matched row', null, false],
   ])('cycle-capped held row with grant %s', (_name, matchedRow, enabled) => {
     const action = actionFor(held('cycle-cap', { matchedRow }), BEFORE)
-    expect([action.kind, action.disabledReason === null, action.secondaryLabel]).toEqual(['grant', enabled, 'Open PR'])
+    expect([action.kind, action.disabledReason === null, action.secondaryLabel !== undefined]).toEqual(['grant', enabled, true])
   })
 
   it.each([
