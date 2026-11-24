@@ -6,6 +6,8 @@ import type { GateAnswerResponse, GateDecision, GateVerdict } from '@/types/gate
 import type { OwnershipSummary } from '@/types/writes'
 import { mirrorReason } from '@/renderer/lib/mirror-reason'
 
+export const PREFLIGHT_UNREACHABLE = 'Failed to reach the main process.'
+
 /** #331: the Reviewing step's own disabled-controls reason — `null` while
  *  `ownership` is `'app'` or `'absent'`, since Approve/Request changes work
  *  directly then (the app answers the gate without a claim either way). */

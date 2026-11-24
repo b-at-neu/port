@@ -1,4 +1,4 @@
-import type { HostedSessionSnapshot, PendingPermission, PermissionDecision, SessionKey, SessionOrigin, SessionPermissionAnswerResult } from '@/types/hosting'
+import type { PendingPermission, SessionKey, SessionOrigin } from '@/types/hosting'
 import type { RepoId } from '@/utils/repos'
 
 interface SessionEntry {
@@ -22,12 +22,4 @@ export interface QueuedPermission {
   readonly origin: SessionOrigin
   readonly startedAt: string
   readonly permission: PendingPermission
-}
-
-export interface PermissionStoreDeps {
-  readonly answerPermission: (params: { readonly sessionKey: QueuedPermission['sessionKey']; readonly permissionId: string; readonly decision: PermissionDecision; readonly message: string | null }) => Promise<SessionPermissionAnswerResult>
-  readonly sessionList: () => Promise<readonly HostedSessionSnapshot[]>
-  readonly subscribeSessionStatus: (listener: (snapshot: HostedSessionSnapshot) => void) => () => void
-  readonly now: () => number
-  readonly setDocumentTitle: (title: string) => void
 }

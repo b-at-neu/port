@@ -5,7 +5,6 @@ import type { ReposListResponse } from '@/types/ipc'
 import type { RegistryDeps } from '@/types/registry'
 import type { StateLabelsReader } from '@/types/pipeline-state'
 import type { LabelKey } from '@/utils/labels/vocabulary'
-import type { RepoId } from '@/utils/repos'
 
 // Renderer-safe contract for the plan gate dialog. No import here may reach a Node builtin — only `main/actions/gate.ts` resolves a repository, spawns `gh`, or reads `.agents/cockpit.json`.
 import type { OwnershipSummary, PostCommentParams, WriteOutcome, WriteStateParams } from '@/types/writes'
@@ -85,14 +84,3 @@ export interface GateClassifyItem {
   /** Computed by `main/actions/gate.ts` from the item's own body — this module never parses one. */
   readonly noPlanBlock: boolean
 }
-
-type AnswerableVerdict = Extract<GateVerdict, { readonly kind: 'answerable' }>
-type RefusalVerdict = Exclude<GateVerdict, { readonly kind: 'answerable' }>
-
-export type GateState =
-  | { readonly step: 'closed' }
-  | { readonly step: 'loading'; readonly repoId: RepoId; readonly number: number }
-  | { readonly step: 'reviewing'; readonly repoId: RepoId; readonly preflight: GatePreflight; readonly verdict: AnswerableVerdict; readonly ownership: OwnershipSummary }
-  | { readonly step: 'feedback'; readonly repoId: RepoId; readonly preflight: GatePreflight; readonly verdict: AnswerableVerdict; readonly ownership: OwnershipSummary; readonly text: string }
-  | { readonly step: 'refused'; readonly repoId: RepoId; readonly number: number; readonly verdict: RefusalVerdict }
-  | { readonly step: 'preflight-failed'; readonly repoId: RepoId; readonly number: number; readonly message: string }

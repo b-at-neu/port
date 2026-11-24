@@ -1,16 +1,17 @@
-// The decision dialog's own steps, the same split gate/dialog-steps.tsx uses.
+import { useState } from 'react'
 import { pickList, picksProblem, reviseNoteProblem } from '@/utils/actions/decide'
 import { Button } from '@/renderer/components/ui/button'
 import { DialogFooter, DialogHeader, DialogTitle } from '@/renderer/components/ui/dialog'
 import { Textarea } from '@/renderer/components/ui/textarea'
-import type { RebaseDecision } from '@/types/actions'
-import type { DecisionState } from '@/types/decision'
-import { AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/renderer/components/ui/alert-dialog'
-import { decisionButtonLabel } from '@/renderer/board/copy'
-import { closeDecisionDialog, setPick, setReviseText, submitGrant, submitRevise, submitUnblock } from '@/renderer/decision/controller'
-import { dialogTitle, grantConsequence, picksHint, rebaseLegend, rebaseOptionLabel, reviseConsequence, reviseNoteHint, unblockCapNote, unblockConsequence, unblockReasonLine } from '@/renderer/decision/copy'
+import { useDecideItem } from '@/renderer/actions/decide-item'
+import type { RebaseDecision, UnblockRoute } from '@/types/actions'
+import type { DecisionTarget } from '@/types/decision'
+import { closeDecisionDialog } from '@/renderer/decision/controller'
+import { dialogTitle, picksHint, rebaseLegend, rebaseOptionLabel, reviseConsequence, reviseNoteHint, unblockCapNote, unblockConsequence, unblockReasonLine } from '@/renderer/decision/copy'
 
-function RebaseDecisionFields({ decisions, picks }: { readonly decisions: readonly RebaseDecision[]; readonly picks: Readonly<Record<string, string>> }) {
+type Picks = Readonly<Record<string, string>>
+
+function RebaseDecisionFields({ decisions, picks, onPick }: { readonly decisions: readonly RebaseDecision[]; readonly picks: Picks; readonly onPick: (id: string, letter: string) => void }) {
   if (decisions.length === 0) return null
   return (
     <div className="flex max-h-[50vh] flex-col gap-3 overflow-y-auto p-1">
@@ -25,7 +26,7 @@ function RebaseDecisionFields({ decisions, picks }: { readonly decisions: readon
                 name={decision.id}
                 value={option.letter}
                 checked={picks[decision.id] === option.letter}
-                onChange={() => setPick(decision.id, option.letter)}
+                onChange={() => onPick(decision.id, option.letter)}
                 className="size-4 shrink-0 accent-primary outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
               <span>{rebaseOptionLabel(option)}</span>
@@ -38,35 +39,46 @@ function RebaseDecisionFields({ decisions, picks }: { readonly decisions: readon
   )
 }
 
-export function ConfirmUnblockStep({ state }: { readonly state: Extract<DecisionState, { readonly step: 'confirm-unblock' }> }) {
-  const capNote = unblockCapNote(state.context)
-  const { decisions } = state.context
-  const hint = picksHint(decisions, state.picks)
-  const picksInvalid = decisions.length > 0 && picksProblem(decisions, pickList(decisions, state.picks)) !== null
+export function ConfirmUnblockStep({ target }: { readonly target: Extract<DecisionTarget, { readonly decision: 'unblock' }> }) {
+  const { repoId, number, expectedStage, context } = target
+  const { decisions } = context
+  const [picks, setPicks] = useState<Picks>(() => Object.fromEntries(decisions.flatMap((d) => (d.recommended === null ? [] : [[d.id, d.recommended]]))))
+  const decide = useDecideItem({})
+  const capNote = unblockCapNote(context)
+  const hint = picksHint(decisions, picks)
+  const picksInvalid = decisions.length > 0 && picksProblem(decisions, pickList(decisions, picks)) !== null
+
+  function submit(route: UnblockRoute): void {
+    const chosen = decisions.length === 0 ? null : pickList(decisions, picks)
+    if (chosen !== null && picksProblem(decisions, chosen) !== null) return
+    closeDecisionDialog()
+    void decide.perform({ repoId, number, expectedStage, decision: 'unblock', route, note: null, skipComment: false, picks: chosen })
+  }
+
   return (
     <>
       <DialogHeader>
-        <DialogTitle>{dialogTitle('unblock', state.number, state.context.target)}</DialogTitle>
+        <DialogTitle>{dialogTitle('unblock', number, context.target)}</DialogTitle>
       </DialogHeader>
-      <p className="text-small text-muted-foreground">{unblockReasonLine(state.context)}</p>
-      <RebaseDecisionFields decisions={decisions} picks={state.picks} />
-      <p className="text-small text-muted-foreground">{unblockConsequence(state.context)}</p>
+      <p className="text-small text-muted-foreground">{unblockReasonLine(context)}</p>
+      <RebaseDecisionFields decisions={decisions} picks={picks} onPick={(id, letter) => setPicks((current) => ({ ...current, [id]: letter }))} />
+      <p className="text-small text-muted-foreground">{unblockConsequence(context)}</p>
       {capNote !== null ? <p className="text-small text-attention-pill-foreground">{capNote}</p> : null}
       {hint !== null ? <p className="text-meta text-muted-foreground">{hint}</p> : null}
       <DialogFooter>
         <Button variant="outline" onClick={closeDecisionDialog}>
           Cancel
         </Button>
-        {state.context.target === 'issue' ? (
-          <Button onClick={() => submitUnblock('implementation')}>Send back to implementation</Button>
+        {context.target === 'issue' ? (
+          <Button onClick={() => submit('implementation')}>Send back to implementation</Button>
         ) : (
           <>
-            {state.context.routes.includes('review') ? (
-              <Button variant="outline" onClick={() => submitUnblock('review')}>
+            {context.routes.includes('review') ? (
+              <Button variant="outline" onClick={() => submit('review')}>
                 Send to review
               </Button>
             ) : null}
-            <Button onClick={() => submitUnblock('revision')} disabled={picksInvalid}>
+            <Button onClick={() => submit('revision')} disabled={picksInvalid}>
               Send to revision
             </Button>
           </>
@@ -76,40 +88,35 @@ export function ConfirmUnblockStep({ state }: { readonly state: Extract<Decision
   )
 }
 
-export function ConfirmGrantStep({ state }: { readonly state: Extract<DecisionState, { readonly step: 'confirm-grant' }> }) {
-  return (
-    <AlertDialogContent>
-      <AlertDialogHeader>
-        <AlertDialogTitle>{dialogTitle('grant', state.number)}</AlertDialogTitle>
-        <AlertDialogDescription>{grantConsequence(state.context, state.number)}</AlertDialogDescription>
-      </AlertDialogHeader>
-      <AlertDialogFooter>
-        <AlertDialogCancel>Cancel</AlertDialogCancel>
-        <AlertDialogAction onClick={submitGrant}>{decisionButtonLabel('grant')}</AlertDialogAction>
-      </AlertDialogFooter>
-    </AlertDialogContent>
-  )
-}
-
-export function ConfirmReviseStep({ state }: { readonly state: Extract<DecisionState, { readonly step: 'confirm-revise' }> }) {
-  const problem = reviseNoteProblem(state.text, state.context.headRefOid)
+export function ConfirmReviseStep({ target }: { readonly target: Extract<DecisionTarget, { readonly decision: 'revise' }> }) {
+  const { repoId, number, expectedStage, context } = target
+  const [text, setText] = useState('')
+  const decide = useDecideItem({})
+  const problem = reviseNoteProblem(text, context.headRefOid)
   const hint = reviseNoteHint(problem)
+
+  function submit(): void {
+    if (problem !== null) return
+    closeDecisionDialog()
+    void decide.perform({ repoId, number, expectedStage, decision: 'revise', route: null, note: text, skipComment: false, picks: null })
+  }
+
   return (
     <>
       <DialogHeader>
-        <DialogTitle>{dialogTitle('revise', state.number)}</DialogTitle>
+        <DialogTitle>{dialogTitle('revise', number)}</DialogTitle>
       </DialogHeader>
-      <p className="text-small text-muted-foreground">{reviseConsequence(state.context)}</p>
+      <p className="text-small text-muted-foreground">{reviseConsequence(context)}</p>
       <label className="flex flex-col gap-1">
         <span className="text-small text-muted-foreground">What should change?</span>
-        <Textarea value={state.text} onChange={(event) => setReviseText(event.target.value)} rows={4} />
+        <Textarea value={text} onChange={(event) => setText(event.target.value)} rows={4} />
       </label>
       {hint !== null ? <p className="text-meta text-muted-foreground">{hint}</p> : null}
       <DialogFooter>
         <Button variant="outline" onClick={closeDecisionDialog}>
           Cancel
         </Button>
-        <Button onClick={submitRevise} disabled={problem !== null}>
+        <Button onClick={submit} disabled={problem !== null}>
           Send back to revision
         </Button>
       </DialogFooter>

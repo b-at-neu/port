@@ -1,10 +1,10 @@
-// The plan gate dialog's own steps, split out to stay under 500 lines.
 import { Button } from '@/renderer/components/ui/button'
 import { DialogFooter, DialogHeader, DialogTitle } from '@/renderer/components/ui/dialog'
 import { Textarea } from '@/renderer/components/ui/textarea'
 import { Markdown } from '@/renderer/components/markdown'
-import type { GateState } from '@/types/gate'
-import { backToReview, closeGateDialog, openFeedback, retryPreflight, setFeedbackText, submitApprove, submitFeedback } from '@/renderer/gate/controller'
+import type { GatePreflight, GateVerdict } from '@/types/gate'
+import type { OwnershipSummary } from '@/types/writes'
+import { closeGateDialog } from '@/renderer/gate/controller'
 import { assigneeNoteCopy, autoPlanNoteCopy, feedbackHint, gateDisabledReason, noPlanNoteCopy, primaryApproveLabel, refusedVerdictCopy, sessionRequiredCopy } from '@/renderer/gate/copy'
 
 function Aside({ line, note }: { readonly line: string; readonly note: string | null }) {
@@ -27,8 +27,16 @@ export function LoadingStep({ hint }: { readonly hint: string }) {
   )
 }
 
-export function ReviewingStep({ state }: { readonly state: Extract<GateState, { readonly step: 'reviewing' }> }) {
-  const { preflight, verdict, ownership } = state
+interface ReviewingProps {
+  readonly preflight: GatePreflight
+  readonly verdict: Extract<GateVerdict, { readonly kind: 'answerable' }>
+  readonly ownership: OwnershipSummary
+  readonly onCancel: () => void
+  readonly onRequestChanges: () => void
+  readonly onApprove: () => void
+}
+
+export function ReviewingStep({ preflight, verdict, ownership, onCancel, onRequestChanges, onApprove }: ReviewingProps) {
   const disabledReason = gateDisabledReason(ownership)
   const required = preflight.sessionRequired && preflight.sessionRequiredReason !== null ? sessionRequiredCopy(preflight.number, preflight.title, preflight.sessionRequiredReason, ownership) : null
 
@@ -59,13 +67,13 @@ export function ReviewingStep({ state }: { readonly state: Extract<GateState, { 
       <Markdown source={preflight.planMarkdown ?? preflight.ticketMarkdown} className="max-h-[60vh] overflow-y-auto rounded-md border border-border p-3" />
       {disabledReason !== null ? <Aside line={disabledReason} note={null} /> : null}
       <DialogFooter>
-        <Button variant="outline" onClick={closeGateDialog}>
+        <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button variant="outline" onClick={openFeedback} disabled={disabledReason !== null}>
+        <Button variant="outline" onClick={onRequestChanges} disabled={disabledReason !== null}>
           Request changes
         </Button>
-        <Button onClick={submitApprove} disabled={disabledReason !== null}>
+        <Button onClick={onApprove} disabled={disabledReason !== null}>
           {primaryApproveLabel(preflight.sessionRequired, ownership)}
         </Button>
       </DialogFooter>
@@ -73,22 +81,31 @@ export function ReviewingStep({ state }: { readonly state: Extract<GateState, { 
   )
 }
 
-export function FeedbackStep({ state }: { readonly state: Extract<GateState, { readonly step: 'feedback' }> }) {
+interface FeedbackProps {
+  readonly number: number
+  readonly text: string
+  readonly onTextChange: (text: string) => void
+  readonly onCancel: () => void
+  readonly onBack: () => void
+  readonly onSubmit: () => void
+}
+
+export function FeedbackStep({ number, text, onTextChange, onCancel, onBack, onSubmit }: FeedbackProps) {
   return (
     <>
       <DialogHeader>
         <DialogTitle>What should change?</DialogTitle>
       </DialogHeader>
-      <Textarea value={state.text} onChange={(event) => setFeedbackText(event.target.value)} rows={4} />
-      <p className="text-meta text-muted-foreground">{feedbackHint(state.preflight.number)}</p>
+      <Textarea value={text} onChange={(event) => onTextChange(event.target.value)} rows={4} />
+      <p className="text-meta text-muted-foreground">{feedbackHint(number)}</p>
       <DialogFooter>
-        <Button variant="outline" onClick={closeGateDialog}>
+        <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button variant="outline" onClick={backToReview}>
+        <Button variant="outline" onClick={onBack}>
           Back
         </Button>
-        <Button onClick={submitFeedback} disabled={state.text.trim() === ''}>
+        <Button onClick={onSubmit} disabled={text.trim() === ''}>
           Post and request changes
         </Button>
       </DialogFooter>
@@ -96,7 +113,7 @@ export function FeedbackStep({ state }: { readonly state: Extract<GateState, { r
   )
 }
 
-export function RefusedStep({ number, verdict }: { readonly number: number; readonly verdict: Extract<GateState, { readonly step: 'refused' }>['verdict'] }) {
+export function RefusedStep({ number, verdict, onRetry }: { readonly number: number; readonly verdict: Exclude<GateVerdict, { readonly kind: 'answerable' }>; readonly onRetry: () => void }) {
   const copy = refusedVerdictCopy(number, verdict)
   return (
     <>
@@ -105,7 +122,7 @@ export function RefusedStep({ number, verdict }: { readonly number: number; read
       </DialogHeader>
       {copy.note !== null ? <p className="text-small text-muted-foreground">{copy.note}</p> : null}
       <DialogFooter>
-        <Button variant="outline" onClick={retryPreflight}>
+        <Button variant="outline" onClick={onRetry}>
           Show me the current state
         </Button>
         <Button onClick={closeGateDialog}>Dismiss</Button>

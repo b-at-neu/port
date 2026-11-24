@@ -64,3 +64,9 @@ export function interactionCount(queue: PermissionQueue): number {
   }
   return count
 }
+
+export function pendingPermissionsOf(sessions: readonly HostedSessionSnapshot[]): { readonly items: readonly QueuedPermission[]; readonly waiting: number } {
+  const queue = seed(sessions)
+  const items = ordered(queue)
+  return { items, waiting: items.length + interactionCount(queue) }
+}
