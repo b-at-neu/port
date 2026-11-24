@@ -1,4 +1,5 @@
 // Renderer-safe contract for the write chokepoint: every mutation the app makes to GitHub is expressed in `LabelKey` values and a stated precondition, never a raw argv or a bypassing `gh` call. No import here may reach a Node builtin.
+import type { TicketEvent } from '@/types/stage-labels'
 import type { MirrorVocabulary } from '@/utils/labels/display'
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
@@ -24,7 +25,7 @@ export interface LabelWriteRequest {
   readonly kind: 'issue' | 'pull-request'
   readonly number: number
   readonly vocabulary: LabelVocabulary
-  /** Which label set the post-transition state is mirrored as; required so no builder defaults to legacy by accident. */
+  /** The display vocabulary the post-transition state is mirrored as. */
   readonly mirror: MirrorVocabulary
   readonly add: readonly LabelKey[]
   readonly remove: readonly LabelKey[]
@@ -34,6 +35,28 @@ export interface LabelWriteRequest {
   /** The operator-facing verb, recorded verbatim in the audit log. */
   readonly action: string
   /** The anomaly this write acts on; `writeState` records it once the outcome is known. */
+  readonly incident?: IncidentIntent
+}
+
+/** One ticket event, committed through the transition table and then mirrored as display labels on both halves of the ticket. */
+export interface EventWriteRequest {
+  readonly repoId: RepoId
+  readonly repo: string
+  /** The half the event names. */
+  readonly kind: 'issue' | 'pull-request'
+  readonly number: number
+  /** The legacy vocabulary, used to name the keys a `labels` event carries and to clean up old labels. */
+  readonly vocabulary: LabelVocabulary
+  readonly mirror: MirrorVocabulary
+  readonly event: TicketEvent
+  /** The `rev` the caller read; `null` skips the concurrency check. */
+  readonly expectedRev: number | null
+  readonly assignees: AssigneeExpectation
+  readonly addAssignees: readonly string[]
+  readonly removeAssignees: readonly string[]
+  /** The operator-facing verb, recorded verbatim in the audit log. */
+  readonly action: string
+  /** The anomaly this write acts on; recorded once the outcome is known. */
   readonly incident?: IncidentIntent
 }
 
@@ -277,6 +300,10 @@ export interface WriteStateParams {
   readonly pathOps?: PathOps
 }
 
+export interface WriteEventParams extends Omit<WriteStateParams, 'request'> {
+  readonly request: EventWriteRequest
+}
+
 /** One label write on resolved names: the mirror call. `observed` is the read the diff was computed from. */
 export interface ApplyLabelsParams {
   readonly repo: string
@@ -300,5 +327,8 @@ export interface ApplyLabelsParams {
   readonly pathOps?: PathOps
 }
 
-/** Every pipeline write goes through this: the store precondition, the store commit, then the full-state label mirror. */
+/** An operator path's label request, wrapped in one transitional table event: the store precondition, the store commit, then the display mirror. */
 export type WriteState = (params: WriteStateParams) => Promise<WriteOutcome>
+
+/** A stage path's typed event: the `rev` check, the store commit, then the display mirror of both halves. */
+export type WriteEvent = (params: WriteEventParams) => Promise<WriteOutcome>

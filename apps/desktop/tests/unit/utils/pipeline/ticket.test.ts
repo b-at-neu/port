@@ -1,25 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { LABEL_KEYS, type LabelKey } from '@/utils/labels/vocabulary'
-import { V1_KEY_MEANING, ticketSchema, type Status, type Ticket } from '@/utils/pipeline/ticket'
-
-const NOW = '2026-11-23T12:00:00.000Z'
-
-function ticketOf(overrides: Partial<Ticket> = {}): Ticket {
-  return {
-    rev: 0,
-    repo: 'owner/repo' as Ticket['repo'],
-    ticket: 843,
-    pr: null,
-    stage: 'plan',
-    status: { kind: 'queued', reason: 'new', since: NOW },
-    autoPlan: false,
-    reviewCycles: 0,
-    runs: [],
-    history: [],
-    mirror: { written: [], failure: null },
-    ...overrides,
-  }
-}
+import { V1_KEY_MEANING, ticketSchema, type Status } from '@/utils/pipeline/ticket'
+import { NOW, ticketOf } from '../../../support/tickets'
 
 const parses = (value: unknown) => ticketSchema.safeParse(value).success
 

@@ -11,9 +11,11 @@ import { appendAudit } from '@/main/github/writes/audit'
 import type { ReadyEntry } from '@/types/actions'
 import type { OwnershipParams, OwnershipRead } from '@/types/dispatch'
 import type { RecordIncident } from '@/types/incidents'
+import type { PipelineItemKind } from '@/types/github'
 import type { PipelineView, StateLabelsReader, TrackedRef } from '@/types/pipeline-state'
 import type { RepositoryState } from '@/types/state'
-import type { WriteState } from '@/types/writes'
+import type { WriteEvent, WriteState } from '@/types/writes'
+import type { Ticket } from '@/utils/pipeline/ticket'
 import type { RepoId } from '@/utils/repos'
 
 interface CreatePipelineStateParams {
@@ -26,6 +28,8 @@ interface CreatePipelineStateParams {
 
 interface PipelineState {
   readonly writeState: WriteState
+  readonly writeEvent: WriteEvent
+  readonly ticketOf: (repoId: RepoId, kind: PipelineItemKind, number: number) => Ticket | null
   readonly stateLabels: StateLabelsReader
   /** The watcher's own seams onto the store, spread into its deps. */
   readonly watcherDeps: {
@@ -40,11 +44,13 @@ interface PipelineState {
 
 export function createPipelineState(params: CreatePipelineStateParams): PipelineState {
   const store = createPipelineStateStore({ path: join(params.dir, 'pipeline-state.json'), readJson: readJsonFile, writeJsonAtomic: writeJsonFileAtomic, now: () => new Date() })
-  const { writeState, mirrorItem } = createStateWriter({ store, applyLabels, readOwnership: params.readOwnership, fetchItemsByNumber, appendAudit, recordIncident: params.recordIncident, newId: () => globalThis.crypto.randomUUID(), now: () => new Date() })
+  const { writeState, writeEvent, mirrorItem } = createStateWriter({ store, applyLabels, readOwnership: params.readOwnership, fetchItemsByNumber, appendAudit, recordIncident: params.recordIncident, newId: () => globalThis.crypto.randomUUID(), now: () => new Date() })
   const { finishPipelineState, retryMirrors } = createPipelineFinish({ store, mirrorItem, auditDir: params.auditDir })
 
   return {
     writeState,
+    writeEvent,
+    ticketOf: (repoId, kind, number) => store.ticket(repoId, { kind, number }),
     stateLabels: (repoId, kind, number, vocabulary) => stateLabelsOf(store.view(repoId), kind, number, vocabulary),
     watcherDeps: {
       pipelineView: (repoId) => store.view(repoId),

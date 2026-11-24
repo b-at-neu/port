@@ -114,15 +114,18 @@ export function resolveDisplayVocabulary(input: DisplayVocabularyInput): Display
   return { labels: resolved, problems }
 }
 
-/** `display` mirrors the seven display labels; `legacy` mirrors the store's own full key set. */
-export type MirrorVocabulary = { readonly kind: 'display'; readonly labels: DisplayVocabulary } | { readonly kind: 'legacy' }
-
-/** Display only when the repository is app-only and its display vocabulary resolved; legacy otherwise, like `verifiableVocabularyOf`. */
-export function mirrorVocabularyOf(config: { readonly appOnly?: boolean; readonly displayVocabulary?: DisplayVocabulary }): MirrorVocabulary {
-  return config.appOnly === true && config.displayVocabulary !== undefined ? { kind: 'display', labels: config.displayVocabulary } : { kind: 'legacy' }
+/** The mirror writes the seven display labels on every repository. */
+export interface MirrorVocabulary {
+  readonly kind: 'display'
+  readonly labels: DisplayVocabulary
 }
 
-/** The part of a resolved repository config that decides which vocabulary the label list is checked against. */
-export function verifiableVocabularyOf(config: { readonly appOnly?: boolean; readonly vocabulary: VerifiableVocabulary; readonly displayVocabulary?: VerifiableVocabulary }): VerifiableVocabulary {
-  return config.appOnly === true && config.displayVocabulary !== undefined ? config.displayVocabulary : config.vocabulary
+/** The repository's resolved display vocabulary, or the defaults when it has none. */
+export function mirrorVocabularyOf(config: { readonly displayVocabulary?: DisplayVocabulary }): MirrorVocabulary {
+  return { kind: 'display', labels: config.displayVocabulary ?? resolveDisplayVocabulary({}) }
+}
+
+/** The vocabulary the repository's label list is checked against: the seven display labels. */
+export function verifiableVocabularyOf(config: { readonly displayVocabulary?: DisplayVocabulary }): VerifiableVocabulary {
+  return mirrorVocabularyOf(config).labels
 }

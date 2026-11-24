@@ -1,23 +1,23 @@
-// Every state write a stage session needs — claim, rollback, hand-back, next turn — through `writeState` and nowhere else.
-import { expectFor, handbackRefusal, pullRequestNumberOf, stageModeFor, transitionFor } from '@/main/pipeline/transitions'
+// Every state write a stage session needs — claim, rollback, hand-back, next turn — as one typed ticket event through `writeEvent` and nowhere else.
+import { accepts, actionOf, handbackRefusal, pullRequestNumberOf, stageModeFor, ticketEventOf } from '@/main/pipeline/transitions'
 import type { ReadyEntry } from '@/types/actions'
-import type { FetchItemsByNumberParams, ItemsByNumberFetch, ResolvedItem } from '@/types/github'
-import type { StateLabelsReader } from '@/types/pipeline-state'
-import type { StageEvent, StagePlannedWrite, StageTransition, StageTransitionResult } from '@/types/stage-labels'
-import type { HandoffRefusal, StageAgent, TickActionable } from '@/types/tick'
+import type { FetchItemsByNumberParams, ItemsByNumberFetch, PipelineItemKind, ResolvedItem } from '@/types/github'
+import type { StageEvent, StageTransitionResult, TicketEvent } from '@/types/stage-labels'
+import type { HandoffRefusal, TickActionable } from '@/types/tick'
 import { stageHandbackIntent } from '@/main/pipeline/incidents/raise'
-import { UNSEEDED_MESSAGE } from '@/main/pipeline/state/labels'
 import type { StageSnapshot } from '@/types/dispatch'
 import type { IncidentIntent } from '@/types/incidents'
-import type { LabelWriteRequest, PostCommentParams, WriteOutcome, WriteStateParams } from '@/types/writes'
+import type { EventWriteRequest, PostCommentParams, WriteEvent, WriteOutcome } from '@/types/writes'
 import { stateMoved } from '@/types/writes'
 import { mirrorVocabularyOf } from '@/utils/labels/display'
-import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { Ticket } from '@/utils/pipeline/ticket'
+import type { RepoId } from '@/utils/repos'
 
 export interface StageWriteDeps {
-  readonly writeState: (params: WriteStateParams) => Promise<WriteOutcome>
+  readonly writeEvent: WriteEvent
+  /** The ticket a half belongs to, `null` when the repository is unseeded or the half is untracked. */
+  readonly ticketOf: (repoId: RepoId, kind: PipelineItemKind, number: number) => Ticket | null
   readonly postIssueBody: (params: PostCommentParams) => Promise<WriteOutcome>
-  readonly stateLabels: StateLabelsReader
   readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
 }
 
@@ -40,18 +40,6 @@ interface ApplyStageTransitionParams {
   readonly scratchDir: string
   /** The tick's view of the ticket, for the incident a `blocked` or `needsHuman` hand-back raises. */
   readonly snapshot?: StageSnapshot
-}
-
-/** The store's role-bearing keys for the item, or `null` while the repository is unseeded. */
-function roleBearingKeysOf(entry: ReadyEntry, resolved: ResolvedItem, deps: StageWriteDeps): readonly LabelKey[] | null {
-  const { vocabulary } = entry.config
-  const labels = deps.stateLabels(entry.id, resolved.kind, resolved.number, vocabulary)
-  if (labels === null) return null
-  return vocabulary.labels.filter((l) => l.role !== 'marker' && labels.includes(l.name)).map((l) => l.key)
-}
-
-function unseeded(): StageTransitionResult {
-  return refused('write-failed', true, UNSEEDED_MESSAGE)
 }
 
 function refused(reason: HandoffRefusal, retryable: boolean, detail: string | null = null): StageTransitionResult {
@@ -82,49 +70,38 @@ function refusalOf(outcome: WriteOutcome): StageTransitionResult {
   }
 }
 
-function requestFor(entry: ReadyEntry, planned: StagePlannedWrite, number: number, resolved: ResolvedItem, keys: readonly LabelKey[], incident?: IncidentIntent | null): LabelWriteRequest {
-  const { vocabulary } = entry.config
+/** The label an event that lands on a human leaves the ticket under, for the incident it raises. */
+function landedOn(event: TicketEvent): 'blocked' | 'needsHuman' | null {
+  if (event.kind === 'blocked') return 'blocked'
+  return event.kind === 'handback' && (event.token === 'checks-pending' || event.token === 'escalated') ? 'needsHuman' : null
+}
+
+function requestFor(entry: ReadyEntry, subject: StageSubject, event: TicketEvent, ticket: Ticket | null, resolved: ResolvedItem, incident: IncidentIntent | null): EventWriteRequest {
   return {
-    ...(incident === null || incident === undefined ? {} : { incident }),
+    ...(incident === null ? {} : { incident }),
     repoId: entry.id,
     repo: entry.config.repo,
-    kind: planned.itemKind,
-    number,
-    vocabulary,
+    kind: subject.kind,
+    number: subject.number,
+    vocabulary: entry.config.vocabulary,
     mirror: mirrorVocabularyOf(entry.config),
-    add: planned.add,
-    remove: planned.remove,
+    event,
+    expectedRev: ticket?.rev ?? null,
+    assignees: { kind: 'exactly', logins: resolved.assignees },
     addAssignees: [],
     removeAssignees: [],
-    expect: expectFor(keys, resolved.assignees),
-    action: planned.action,
+    action: actionOf(event),
   }
 }
 
-/** Applies each planned write in order and stops at the first one that did not settle. */
-async function applyWrites(entry: ReadyEntry, transition: StageTransition, itemsByNumber: ReadonlyMap<number, ResolvedItem>, itemNumber: number, prNumber: number | null, auditDir: string, deps: StageWriteDeps, agent: StageAgent, snapshot?: StageSnapshot): Promise<StageTransitionResult> {
-  if (transition.kind === 'refused') return refused(transition.reason, false)
-  if (transition.kind === 'none') return { kind: 'applied' }
-  for (const planned of transition.writes) {
-    const number = planned.numberFrom === 'arg' ? prNumber : itemNumber
-    const resolved = number === null ? undefined : itemsByNumber.get(number)
-    if (number === null || resolved === undefined) return refused('write-failed', true, 'the item could not be read')
-    const keys = roleBearingKeysOf(entry, resolved, deps)
-    if (keys === null) return unseeded()
-    const incident = snapshot === undefined ? null : stageHandbackIntent(planned, agent, itemNumber, snapshot.item, snapshot.at)
-    const outcome = await deps.writeState({ request: requestFor(entry, planned, number, resolved, keys, incident), repoRoot: entry.path, auditDir })
-    if (!stateMoved(outcome)) return refusalOf(outcome)
-  }
-  return { kind: 'applied' }
-}
-
-/** Trigger → in-flight, planned from the dispatcher's own re-read so the claim never makes a second read. */
+/** Trigger → in-flight, from the dispatcher's own re-read so the claim never makes a second read. */
 export async function applyStageClaim(params: ApplyStageClaimParams, deps: StageWriteDeps): Promise<StageTransitionResult> {
   const { entry, candidate, resolved } = params
-  const observed = roleBearingKeysOf(entry, resolved, deps)
-  if (observed === null) return unseeded()
-  const transition = transitionFor({ event: { kind: 'claim' }, mode: stageModeFor(candidate.agent, candidate.trigger), observed, approvalGate: entry.config.modules.approvalGate })
-  return applyWrites(entry, transition, new Map([[candidate.number, resolved]]), candidate.number, null, params.auditDir, deps, candidate.agent)
+  const event = ticketEventOf({ kind: 'claim' }, stageModeFor(candidate.agent, candidate.trigger))
+  if (event === null) return { kind: 'applied' }
+  const ticket = deps.ticketOf(entry.id, candidate.kind, candidate.number)
+  const outcome = await deps.writeEvent({ request: requestFor(entry, candidate, event, ticket, resolved, null), repoRoot: entry.path, auditDir: params.auditDir })
+  return stateMoved(outcome) ? { kind: 'applied' } : refusalOf(outcome)
 }
 
 function isOpenPullRequestOn(resolved: ResolvedItem | undefined, issueNumber: number): resolved is ResolvedItem {
@@ -147,15 +124,12 @@ export async function applyStageTransition(params: ApplyStageTransitionParams, d
   const resolved = itemsByNumber.get(record.number)
   if (resolved === undefined) return refused('write-failed', true, 'the item could not be read')
 
-  const prResolved = prNumber === null ? undefined : itemsByNumber.get(prNumber)
-  if (prNumber !== null && !isOpenPullRequestOn(prResolved, record.number)) return refused('pr-unverified', false)
+  if (prNumber !== null && !isOpenPullRequestOn(itemsByNumber.get(prNumber), record.number)) return refused('pr-unverified', false)
 
-  const observed = roleBearingKeysOf(entry, resolved, deps)
-  const prObserved = prResolved === undefined ? undefined : roleBearingKeysOf(entry, prResolved, deps)
-  if (observed === null || prObserved === null) return unseeded()
-
-  const transition = transitionFor({ event, mode, observed, prObserved, approvalGate: entry.config.modules.approvalGate })
-  if (transition.kind === 'write' && event.kind === 'outcome' && event.plan?.kind === 'read') {
+  const ticketEvent = ticketEventOf(event, mode)
+  if (ticketEvent === null) return { kind: 'applied' }
+  const ticket = deps.ticketOf(entry.id, record.kind, record.number)
+  if (ticket !== null && event.kind === 'outcome' && event.plan?.kind === 'read' && accepts(ticket, ticketEvent, { kind: record.kind, number: record.number }, entry.id)) {
     const posted = await deps.postIssueBody({
       request: { repoId: entry.id, repo: entry.config.repo, kind: 'issue', number: record.number, body: event.plan.body, action: 'stage-handback-plan-body', scratchDir: params.scratchDir },
       repoRoot: entry.path,
@@ -163,5 +137,9 @@ export async function applyStageTransition(params: ApplyStageTransitionParams, d
     })
     if (!stateMoved(posted)) return refusalOf(posted)
   }
-  return applyWrites(entry, transition, itemsByNumber, record.number, prNumber, params.auditDir, deps, record.agent, params.snapshot)
+
+  const landed = landedOn(ticketEvent)
+  const incident = params.snapshot === undefined || landed === null ? null : stageHandbackIntent({ key: landed, action: actionOf(ticketEvent) }, record.agent, record.number, params.snapshot.item, params.snapshot.at)
+  const outcome = await deps.writeEvent({ request: requestFor(entry, record, ticketEvent, ticket, resolved, incident), repoRoot: entry.path, auditDir: params.auditDir })
+  return stateMoved(outcome) ? { kind: 'applied' } : refusalOf(outcome)
 }

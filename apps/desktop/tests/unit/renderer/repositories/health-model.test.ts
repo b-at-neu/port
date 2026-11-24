@@ -21,13 +21,15 @@ function snapshotWith(verdict: ReturnType<typeof verifyVocabulary>) {
 }
 
 describe('overviewHealth', () => {
-  it('reports mis-resolved plus a CLAUDE.md override row for a repo with no vocabulary label at all', () => {
-    const vocabulary = resolveVocabulary({ modules: MODULES, overrides: { ready: 'queued' } })
-    const overrides: ResolvedRepoConfig['overrides'] = [{ path: 'labels.ready', value: 'queued', reason: 'CLAUDE.md port-overrides', portDefault: 'ready', source: 'CLAUDE.md' }]
-    const result = overviewHealth(config(vocabulary, { overrides }), REPO_ID, snapshotWith(verifyVocabulary(vocabulary, { ok: true, names: [] })))
+  it('reports mis-resolved plus a CLAUDE.md override row for a repo with no display label at all', () => {
+    const vocabulary = resolveVocabulary({ modules: MODULES })
+    const displayVocabulary = resolveDisplayVocabulary({ overrides: { planning: 'thinking' } })
+    const verdict = verifyVocabulary(displayVocabulary, { ok: true, names: [] })
+    const overrides: ResolvedRepoConfig['overrides'] = [{ path: 'states.planning', value: 'thinking', reason: 'CLAUDE.md port-overrides', portDefault: 'planning', source: 'CLAUDE.md' }]
+    const result = overviewHealth(config(vocabulary, { overrides, displayVocabulary }), REPO_ID, snapshotWith(verdict))
 
     expect(result.labels?.verdict).toBe('mis-resolved')
-    const readyRow = result.labels?.rows.find((r) => r.key === 'ready')
+    const readyRow = result.labels?.rows.find((r) => r.key === 'planning')
     expect(readyRow?.source).toBe('CLAUDE.md')
     expect(readyRow?.present).toBe(false)
     expect(result.overrides).toEqual(overrides)
@@ -56,7 +58,6 @@ describe('overviewHealth', () => {
     const cfg = config(resolveVocabulary({ modules: MODULES }), { appOnly: true, displayVocabulary })
     const result = overviewHealth(cfg, REPO_ID, snapshotWith(verdict))
 
-    expect(result.labels?.appOnly).toBe(true)
     expect(result.labels?.rows.map((r) => [r.name, r.present])).toEqual([
       ['port', true],
       ['needs you', true],
