@@ -24,8 +24,9 @@ import { createDispatchLedger, createForceDispatch, createRefreshMemo, createUnk
 import { planTick } from '@/main/pipeline/tick/plan'
 import { reconcileRepository } from '@/main/pipeline/board/reconcile'
 import type { ReadyEntry } from '@/types/actions'
-import type { PostCommentParams, WriteOutcome, WriteStateParams } from '@/types/writes'
+import type { PostCommentParams, WriteOutcome } from '@/types/writes'
 import { applyStageClaim, applyStageTransition } from '@/main/pipeline/operator/stage'
+import { labelMapStore } from '../../../support/label-map-store'
 import type { CreateStageWorktreeResult, RemoveSessionWorktreeOutcome } from '@/types/workspace'
 
 const REPO_ID = 'repo-scratch' as RepoId
@@ -268,26 +269,13 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       return Promise.resolve({ ok: true, resolved, unavailable, fetchedAt: NOW_ISO })
     }
 
-    // The fake "GitHub" write: refuses a stale precondition the way the real chokepoint does, and records every label write the app makes.
-    const labelWrites: { readonly action: string; readonly number: number }[] = []
-    function applyLabels(params: WriteStateParams): Promise<WriteOutcome> {
-      const { request } = params
-      const set = request.kind === 'issue' ? labels.get(request.number) : prs.get(request.number)?.labels
-      if (set === undefined) return Promise.resolve({ kind: 'item-unavailable' })
-      if (!request.expect.present.every((key) => set.has(key)) || !request.expect.absent.every((key) => !set.has(key))) {
-        return Promise.resolve({ kind: 'precondition-failed', conflict: { kind: 'precondition-failed', expected: [], observed: [], readAt: NOW_ISO } })
-      }
-      for (const key of request.remove) set.delete(key)
-      for (const key of request.add) set.add(key)
-      labelWrites.push({ action: request.action, number: request.number })
-      return Promise.resolve({ kind: 'applied', argv: [] })
-    }
+    const { ticketOf, writeEvent, labelWrites } = labelMapStore(labels, prs, entry.id, NOW_ISO)
     const postIssueBody = ({ request }: PostCommentParams): Promise<WriteOutcome> => {
       labelWrites.push({ action: request.action, number: request.number })
       return Promise.resolve({ kind: 'applied', argv: [] })
     }
     const stateLabels = (_repoId: unknown, kind: 'issue' | 'pull-request', number: number): readonly string[] => namesOf(VOCABULARY, (kind === 'issue' ? labels.get(number) : prs.get(number)?.labels) ?? new Set<LabelKey>())
-    const writeDeps = { writeState: applyLabels, postIssueBody, stateLabels, fetchItemsByNumber }
+    const writeDeps = { writeEvent, ticketOf, postIssueBody, fetchItemsByNumber }
 
     // Late-binding, the same construction order `main/ipc.ts` uses: onStatus closes over stageLauncher,
     // stageLauncher's onOutcome/onDenial close over dispatcherRef — both assigned right after.
@@ -478,8 +466,8 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       { action: 'stage-handback-plan-body', number: 7 },
       { action: 'stage-handback-plan-written', number: 7 },
       { action: 'stage-claim', number: 7 },
-      { action: 'stage-handback-pr-opened', number: 8 },
       { action: 'stage-handback-pr-opened', number: 7 },
+      { action: 'stage-handback-pr-opened', number: 8 },
     ])
 
     expect(createdWorktrees).toHaveLength(2)

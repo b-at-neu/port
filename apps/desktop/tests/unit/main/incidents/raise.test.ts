@@ -33,7 +33,7 @@ const RAISED = {
     const observation: WriteObservation = { kind: 'zero-diff', number: 789, itemKind: 'pull-request', count: 2, headRefOid: 'f19c6d5' }
     return bucketsOf([observationIntent(observation, item(), PLAN, null)].filter((intent) => intent !== null))
   },
-  'existing-work': () => bucketsOf([stageHandbackIntent({ itemKind: 'issue', numberFrom: 'item', add: ['blocked'], remove: ['inProgress'], action: 'stage-handback-blocked' }, 'impl', 749, item({ kind: 'issue', number: 749, closingPullRequests: [{ number: 780, state: 'OPEN', headRefName: '749-the-fix' }] }), null)].filter((intent) => intent !== null)),
+  'existing-work': () => bucketsOf([stageHandbackIntent({ key: 'blocked', action: 'stage-handback-blocked' }, 'impl', 749, item({ kind: 'issue', number: 749, closingPullRequests: [{ number: 780, state: 'OPEN', headRefName: '749-the-fix' }] }), null)]),
   'leftover-worktree': () => bucketsOf([launchFailedIntent(RECORD, 'leftover-worktree')]),
   'network-interrupt': () => bucketsOf(endedIntents(RECORD, outcome('interrupted', 'getaddrinfo ENOTFOUND api.anthropic.com'), Date.parse('2026-11-16T11:00:00.000Z'))),
   'refused-write': () => bucketsOf([handoffRefusalIntent({ agent: 'impl', sessionKey: 'hosted-1', trigger: 'planApproved' }, 'write-failed', 3, true)]),
@@ -79,16 +79,15 @@ describe('observationIntent', () => {
 })
 
 describe('stageHandbackIntent', () => {
-  const blocked = { itemKind: 'issue', numberFrom: 'item', add: ['blocked'], remove: ['inProgress'], action: 'stage-handback-blocked' } as const
+  const blocked = { key: 'blocked', action: 'stage-handback-blocked' } as const
 
   it('makes the open own-branch pull request the subject of an existing-work incident', () => {
     const issue = item({ kind: 'issue', number: 749, closingPullRequests: [{ number: 780, state: 'OPEN', headRefName: '749-the-fix' }] })
     expect(stageHandbackIntent(blocked, 'impl', 749, issue, null)).toMatchObject({ bucket: 'existing-work', condition: 'pr-open', subject: { kind: 'pull-request', number: 780 }, inputs: { issue: 749 } })
   })
 
-  it('is an escalation without that pull request, and nothing for a write that adds neither gate', () => {
+  it('is an escalation without that pull request', () => {
     expect(stageHandbackIntent(blocked, 'impl', 749, item({ kind: 'issue', number: 749 }), null)).toMatchObject({ bucket: 'escalation', stage: 'blocked', condition: 'stage-handback-blocked' })
-    expect(stageHandbackIntent({ ...blocked, add: ['prOpened'] }, 'impl', 749, null, null)).toBeNull()
   })
 })
 

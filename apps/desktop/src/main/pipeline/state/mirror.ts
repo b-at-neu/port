@@ -1,88 +1,102 @@
-// Pure: what GitHub should show for a stored item. Nothing here reads a label or touches I/O.
-import { fullKeysOf, type StoredItem } from '@/types/pipeline-state'
+// Pure: the legacy projection of a ticket and the label names GitHub should show for it. Nothing here reads a label or touches I/O.
+import type { PipelineItemKind } from '@/types/github'
+import type { StoredHistoryRow, StoredItem, TicketRef } from '@/types/pipeline-state'
 import type { DisplayKey, DisplayVocabulary } from '@/utils/labels/display'
-import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
-import { labelName, type LabelKey, type LabelVocabulary } from '@/utils/labels/vocabulary'
+import { LABEL_KEYS, labelName, type LabelKey, type LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { Stage, Ticket } from '@/utils/pipeline/ticket'
 
-type DisplayState = 'planning' | 'implementing' | 'reviewing' | 'revising' | 'approved'
+const KEYS: ReadonlySet<string> = new Set(LABEL_KEYS)
 
-const STATE_OF_KEY: Readonly<Partial<Record<LabelKey, DisplayState>>> = {
-  ready: 'planning',
-  planning: 'planning',
-  planReview: 'planning',
-  planChangesRequested: 'planning',
-  planApproved: 'implementing',
-  inProgress: 'implementing',
-  blocked: 'implementing',
-  readyForReview: 'reviewing',
-  reviewing: 'reviewing',
-  needsRevision: 'revising',
-  revising: 'revising',
-  refreshBranch: 'revising',
-  refreshing: 'revising',
-  approved: 'approved',
+function isKey(value: string): value is LabelKey {
+  return KEYS.has(value)
 }
 
-// Revising wins over approved, so a branch refresh beside `approved` shows as revising.
-const PRIORITY: readonly DisplayState[] = ['revising', 'approved', 'reviewing', 'implementing', 'planning']
+const QUEUED_KEY: Readonly<Record<Stage, LabelKey | null>> = { plan: 'ready', implement: 'planApproved', review: 'readyForReview', revise: 'needsRevision', refresh: 'refreshBranch', merge: null }
+const RUNNING_KEY: Readonly<Record<Stage, LabelKey | null>> = { plan: 'planning', implement: 'inProgress', review: 'reviewing', revise: 'revising', refresh: 'refreshing', merge: null }
 
-const NEEDS_YOU_KEYS: readonly LabelKey[] = ['planReview', 'blocked', 'needsHuman']
-
-const REPLACED_BY_APPROVED: ReadonlySet<LabelKey> = new Set(LABEL_DEFAULTS.filter((label) => label.role === 'in-flight' || label.role === 'trigger').map((label) => label.key))
-
-function stateOfKeys(keys: readonly LabelKey[]): DisplayState | null {
-  const states = new Set(keys.flatMap((key) => STATE_OF_KEY[key] ?? []))
-  return PRIORITY.find((state) => states.has(state)) ?? null
-}
-
-/** `needsHuman` alone recovers the state it interrupted from the newest history row that added a mapped key. */
-export function displayStateOf(item: StoredItem): DisplayState | null {
-  const direct = stateOfKeys(item.keys)
-  if (direct !== null) return direct
-  if (!item.keys.includes('needsHuman')) return null
-  for (const row of [...item.history].reverse()) {
-    const recovered = stateOfKeys(row.add)
-    if (recovered !== null) return recovered
+/** The stage key a ticket's stage and status stand for, `null` for a status no label ever carried. */
+export function stateKeyOf(ticket: Pick<Ticket, 'stage' | 'status'>): LabelKey | null {
+  const { stage, status } = ticket
+  switch (status.kind) {
+    case 'queued':
+      return stage === 'plan' && status.reason === 'changes-requested' ? 'planChangesRequested' : QUEUED_KEY[stage]
+    case 'running':
+      return RUNNING_KEY[stage]
+    case 'waiting-on-you':
+      if (status.gate === 'plan-approval') return 'planReview'
+      return status.gate === 'merge' ? 'approved' : 'needsHuman'
+    case 'blocked':
+      return 'blocked'
+    case 'held':
+      return null
+    case 'done':
+      return 'approved'
   }
-  return item.kind === 'issue' ? 'planning' : 'reviewing'
 }
 
-export function needsYouOf(item: StoredItem): boolean {
-  return NEEDS_YOU_KEYS.some((key) => item.keys.includes(key))
+/** The label keys one half of a ticket carries, markers included; `null` when that half is not tracked. */
+export function legacyKeysOf(ticket: Ticket, kind: PipelineItemKind): readonly LabelKey[] | null {
+  const marker: readonly LabelKey[] = ['marker']
+  if (kind === 'issue') {
+    if (ticket.pr?.number === ticket.ticket) return null
+    return [...marker, ...(ticket.autoPlan ? (['autoPlan'] as const) : []), ...(ticket.pr !== null ? (['prOpened'] as const) : stateKeyOrNothing(ticket))]
+  }
+  if (ticket.pr === null) return null
+  return [...marker, ...stateKeyOrNothing(ticket), ...(ticket.pr.approvedAt !== null && ticket.stage === 'refresh' ? (['approved'] as const) : [])]
 }
 
-/** An issue at `prOpened` shows its pull request's state; with no linked pull request in the store it shows implementing. */
-export function displayKeysOf(item: StoredItem, linkedPr: StoredItem | null): readonly DisplayKey[] {
-  const state = item.kind === 'issue' && item.keys.includes('prOpened') ? (linkedPr === null ? 'implementing' : (displayStateOf(linkedPr) ?? 'implementing')) : displayStateOf(item)
-  if (state === null) return ['port']
-  const needsYou = needsYouOf(item) || (item.kind === 'issue' && item.keys.includes('prOpened') && linkedPr !== null && needsYouOf(linkedPr))
-  return needsYou ? ['port', state, 'needsYou'] : ['port', state]
+function stateKeyOrNothing(ticket: Ticket): readonly LabelKey[] {
+  const key = stateKeyOf(ticket)
+  return key === null ? [] : [key]
 }
 
-export function legacyKeysOf(item: StoredItem): readonly LabelKey[] {
-  return fullKeysOf(item)
+function numberOf(ticket: Ticket, kind: PipelineItemKind): number | null {
+  return kind === 'issue' ? ticket.ticket : (ticket.pr?.number ?? null)
 }
 
-/** The stored keys a merged item shows: `approved` in place of every in-flight or trigger key. */
-export function mergedKeysOf(item: StoredItem): readonly LabelKey[] {
-  return [...fullKeysOf(item).filter((key) => !REPLACED_BY_APPROVED.has(key) && key !== 'approved'), 'approved']
+/** The tracked halves of a ticket, issue first. */
+export function halvesOf(ticket: Ticket): TicketRef[] {
+  return (['issue', 'pull-request'] as const).flatMap((kind) => {
+    const number = numberOf(ticket, kind)
+    return legacyKeysOf(ticket, kind) === null || number === null ? [] : [{ kind, number }]
+  })
 }
 
-export function mergedDisplayKeys(): readonly DisplayKey[] {
-  return ['port', 'approved']
+function rowsOf(ticket: Ticket, kind: PipelineItemKind): StoredHistoryRow[] {
+  const prefix = `${kind}:`
+  const keysOf = (entries: readonly string[]): LabelKey[] => entries.filter((entry) => entry.startsWith(prefix)).map((entry) => entry.slice(prefix.length)).filter(isKey)
+  return ticket.history.flatMap((event) => {
+    if (event.legacy === null) return []
+    const add = keysOf(event.legacy.add)
+    const remove = keysOf(event.legacy.remove)
+    return add.length === 0 && remove.length === 0 ? [] : [{ at: event.at, action: event.action, add, remove, actor: event.actor }]
+  })
 }
 
-/** The stored pull request that names this issue as its ticket, newest first. */
-export function linkedPullRequestOf(items: readonly StoredItem[], issueNumber: number): StoredItem | null {
-  const linked = items.filter((item) => item.kind === 'pull-request' && item.issue === issueNumber)
-  return linked.reduce<StoredItem | null>((newest, item) => (newest === null || Date.parse(item.updatedAt) > Date.parse(newest.updatedAt) ? item : newest), null)
-}
-
-/** The ticket of a stored pull request, only while it still holds `prOpened`. */
-export function linkedIssueOf(items: readonly StoredItem[], pr: StoredItem): StoredItem | null {
-  if (pr.issue === null) return null
-  const issue = items.find((item) => item.kind === 'issue' && item.number === pr.issue)
-  return issue !== undefined && issue.keys.includes('prOpened') ? issue : null
+/** The legacy per-item shape the readers still consume: one entry per tracked half. */
+export function itemsOf(ticket: Ticket): StoredItem[] {
+  const updatedAt = ticket.history.at(-1)?.at ?? ticket.mirror.failure?.at ?? ''
+  const claimedAt = ticket.history.findLast((event) => event.to?.status === 'running')?.at ?? null
+  return (['issue', 'pull-request'] as const).flatMap((kind): StoredItem[] => {
+    const keys = legacyKeysOf(ticket, kind)
+    const number = numberOf(ticket, kind)
+    if (keys === null || number === null) return []
+    return [
+      {
+        kind,
+        number,
+        keys: keys.filter((key) => key !== 'marker' && key !== 'autoPlan'),
+        marked: keys.includes('marker'),
+        autoPlan: keys.includes('autoPlan'),
+        claimedAt,
+        reviewCycles: ticket.reviewCycles,
+        history: rowsOf(ticket, kind),
+        updatedAt,
+        issue: kind === 'pull-request' && ticket.pr?.number !== ticket.ticket ? ticket.ticket : null,
+        mirrorFailure: ticket.mirror.failure,
+      },
+    ]
+  })
 }
 
 /** The ticket number a `<n>-…` branch names, `null` for any other branch. */
@@ -95,16 +109,13 @@ export function displayNamesOf(vocabulary: DisplayVocabulary, keys: readonly Dis
   return keys.flatMap((key) => vocabulary.labels.find((label) => label.key === key)?.name ?? [])
 }
 
-export function allDisplayNames(vocabulary: DisplayVocabulary): readonly string[] {
-  return vocabulary.labels.map((label) => label.name)
-}
-
 export function legacyNamesOf(vocabulary: LabelVocabulary, keys: readonly LabelKey[]): readonly string[] {
   return keys.flatMap((key) => labelName(vocabulary, key) ?? [])
 }
 
-export function allLegacyNames(vocabulary: LabelVocabulary): readonly string[] {
-  return vocabulary.labels.map((label) => label.name)
+/** `desired` is what the ticket shows; `all` adds every legacy-vocabulary name, so an old label on the item cleans itself up. */
+export function mirrorNamesOf(display: readonly DisplayKey[], vocabulary: DisplayVocabulary, legacy: LabelVocabulary): { readonly desired: readonly string[]; readonly all: readonly string[] } {
+  return { desired: displayNamesOf(vocabulary, display), all: [...vocabulary.labels.map((label) => label.name), ...legacy.labels.map((label) => label.name)] }
 }
 
 /** Adds the desired names the item lacks and removes every other vocabulary name it carries; a name outside `all` is never touched. */

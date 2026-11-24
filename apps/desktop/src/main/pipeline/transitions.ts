@@ -1,11 +1,14 @@
-// Pure: the (stage, event) → label plan table. No I/O — `main/actions/stage.ts` applies what this plans.
+// Pure: the (ticket, event) → ticket table. No I/O — the store commits what this returns, and only after it is persisted.
+import { HISTORY_CAP, ticketOfKeys } from '@/main/pipeline/state/migrate'
+import { legacyKeysOf } from '@/main/pipeline/state/mirror'
 import type { PipelineItemKind } from '@/types/github'
-import type { StageEvent, StageMode, StagePlannedWrite, StageTransition } from '@/types/stage-labels'
+import type { TicketRef } from '@/types/pipeline-state'
+import { stageOfMode, type StageEvent, type StageMode, type TableResult, type TicketEvent } from '@/types/stage-labels'
 import type { StageHandback } from '@/types/stage-session'
 import type { HandoffRefusal, StageAgent } from '@/types/tick'
 import type { LabelKey } from '@/utils/labels/vocabulary'
-import { inFlightKeyFor } from '@/main/pipeline/tick/routing'
-import { RETRY_TRIGGER } from '@/utils/pipeline/liveness'
+import type { Event, Stage, Status, Ticket } from '@/utils/pipeline/ticket'
+import type { RepoId } from '@/utils/repos'
 
 /** The closed vocabulary of `HANDBACK:` tokens each mode may end with — pinned both directions against the bundled agents by `desktop-stage-labels`. */
 export const HANDBACK_TOKENS: Readonly<Record<StageMode, readonly string[]>> = {
@@ -16,94 +19,15 @@ export const HANDBACK_TOKENS: Readonly<Record<StageMode, readonly string[]>> = {
   refresh: ['refreshed', 'escalated'],
 }
 
+// A review hand-back that is a verdict on the head ends one review cycle; the other tokens re-queue the same head.
+const NON_VERDICT_TOKENS: readonly string[] = ['rebase-required', 'head-moved']
+
 export function stageModeFor(agent: StageAgent, trigger: LabelKey): StageMode {
   return trigger === 'refreshBranch' ? 'refresh' : agent
 }
 
 export function itemKindFor(mode: StageMode): PipelineItemKind {
   return mode === 'plan' || mode === 'impl' ? 'issue' : 'pull-request'
-}
-
-const CLAIM_SOURCES: Readonly<Record<StageMode, readonly LabelKey[]>> = {
-  plan: ['ready', 'planChangesRequested'],
-  impl: ['planApproved'],
-  review: ['readyForReview'],
-  revise: ['needsRevision'],
-  refresh: ['refreshBranch'],
-}
-
-// Labels a refresh may find beside its own: a sanctioned `approved`, and one leftover trigger a claim clears.
-const REFRESH_CLAIM_TOLERATED: readonly LabelKey[] = ['approved', 'readyForReview', 'needsRevision']
-
-interface TransitionParams {
-  readonly event: StageEvent
-  readonly mode: StageMode
-  /** The item's observed role-bearing label keys, markers excluded. */
-  readonly observed: readonly LabelKey[]
-  /** The named pull request's observed role-bearing keys, read only for a `pr-opened` hand-back. */
-  readonly prObserved?: readonly LabelKey[]
-  readonly approvalGate: boolean
-}
-
-interface Match {
-  readonly source: LabelKey
-  readonly tolerated: readonly LabelKey[]
-}
-
-/** Exactly one of `sources` must be observed, and nothing else beyond `tolerated`. */
-function matchSource(observed: readonly LabelKey[], sources: readonly LabelKey[], tolerated: readonly LabelKey[] = []): Match | null {
-  const present = sources.filter((s) => observed.includes(s))
-  if (present.length !== 1) return null
-  const [source] = present
-  if (source === undefined) return null
-  const others = observed.filter((key) => key !== source)
-  if (others.some((key) => !tolerated.includes(key))) return null
-  return { source, tolerated: others }
-}
-
-function write(itemKind: PipelineItemKind, add: readonly LabelKey[], remove: readonly LabelKey[], action: string, numberFrom: 'item' | 'arg' = 'item'): StageTransition {
-  const planned: StagePlannedWrite = { itemKind, numberFrom, add, remove, action }
-  return { kind: 'write', writes: [planned] }
-}
-
-const MOVED: StageTransition = { kind: 'refused', reason: 'moved' }
-
-function claim(mode: StageMode, observed: readonly LabelKey[]): StageTransition {
-  const itemKind = itemKindFor(mode)
-  if (mode === 'refresh') {
-    const match = matchSource(observed, CLAIM_SOURCES.refresh, REFRESH_CLAIM_TOLERATED)
-    if (match === null || match.tolerated.filter((key) => key !== 'approved').length > 1) return MOVED
-    return write(itemKind, ['refreshing'], ['refreshBranch', ...match.tolerated.filter((key) => key !== 'approved')], 'stage-claim')
-  }
-  const match = matchSource(observed, CLAIM_SOURCES[mode])
-  if (match === null) return MOVED
-  const inFlight = inFlightKeyFor(mode, match.source)
-  const add: readonly LabelKey[] = mode === 'plan' && match.source === 'ready' ? [inFlight, 'marker'] : [inFlight]
-  return write(itemKind, add, [match.source], 'stage-claim')
-}
-
-function reset(mode: StageMode, observed: readonly LabelKey[], action: string): StageTransition {
-  const inFlight = mode === 'refresh' ? 'refreshing' : inFlightKeyFor(mode, 'ready')
-  const retry = RETRY_TRIGGER[inFlight] as LabelKey | undefined
-  if (retry === undefined) return MOVED
-  const sources: readonly LabelKey[] = mode === 'impl' ? [inFlight, 'blocked'] : [inFlight]
-  const match = matchSource(observed, sources, mode === 'refresh' ? ['approved'] : [])
-  if (match === null) return MOVED
-  return write(itemKindFor(mode), [retry], [match.source], action)
-}
-
-function blocked(mode: StageMode, observed: readonly LabelKey[]): StageTransition {
-  if (mode !== 'impl') return { kind: 'none' }
-  const match = matchSource(observed, ['inProgress'])
-  if (match === null) return MOVED
-  return write('issue', ['blocked'], ['inProgress'], 'stage-blocked')
-}
-
-function resumedTurn(mode: StageMode, observed: readonly LabelKey[]): StageTransition {
-  if (mode !== 'impl') return { kind: 'none' }
-  const match = matchSource(observed, ['blocked'])
-  if (match === null) return MOVED
-  return write('issue', ['inProgress'], ['blocked'], 'stage-unblocked')
 }
 
 /** A pull request number, with or without a leading hash; nothing else. */
@@ -136,12 +60,6 @@ export function handbackRefusal(event: StageEvent, mode: StageMode): HandoffRefu
   return null
 }
 
-/** The in-flight key a mode's hand-back settles, and the trigger a liveness reset may already have put back in its place. */
-function sourcesOf(inFlight: LabelKey): readonly LabelKey[] {
-  const retry = RETRY_TRIGGER[inFlight] as LabelKey | undefined
-  return retry === undefined ? [inFlight] : [inFlight, retry]
-}
-
 /** Whether an event writes anything at all — the rest wait for the session to carry on or for Resume/Restart. */
 export function eventWrites(event: StageEvent, mode: StageMode): boolean {
   if (event.kind !== 'outcome') return true
@@ -149,112 +67,208 @@ export function eventWrites(event: StageEvent, mode: StageMode): boolean {
   return event.outcome === 'completed' || event.outcome === 'error'
 }
 
-function prOpened(observed: readonly LabelKey[], prObserved: readonly LabelKey[], approvalGate: boolean, actionPrefix: string): StageTransition {
-  const match = matchSource(observed, ['inProgress', 'blocked', 'planApproved'])
-  if (match === null) return MOVED
-  if (prObserved.some((key) => key !== 'readyForReview')) return MOVED
-  const prAdd: readonly LabelKey[] = approvalGate ? ['readyForReview', 'marker'] : ['readyForReview']
-  const action = `${actionPrefix}-pr-opened`
-  return {
-    kind: 'write',
-    writes: [
-      { itemKind: 'pull-request', numberFrom: 'arg', add: prAdd, remove: [], action },
-      { itemKind: 'issue', numberFrom: 'item', add: ['prOpened'], remove: [match.source], action },
-    ],
-  }
+function handbackEvent(stage: Stage, handback: StageHandback, via: 'session' | 'adopt'): TicketEvent {
+  return { kind: 'handback', stage, token: handback.token, arg: handback.arg, pr: stage === 'implement' ? pullRequestNumberOf(handback.arg) : null, via }
 }
 
-function refreshed(arg: string | null, observed: readonly LabelKey[], action: string): StageTransition {
-  const match = matchSource(observed, sourcesOf('refreshing'), ['approved'])
-  if (match === null) return MOVED
-  const approved = match.tolerated.includes('approved')
-  const clean = arg === 'clean'
-  const refreshAction = `${action}-${clean ? 'clean' : 'resolved'}`
-  if (clean) return write('pull-request', approved ? [] : ['readyForReview'], [match.source], refreshAction)
-  return write('pull-request', ['readyForReview'], approved ? [match.source, 'approved'] : [match.source], refreshAction)
-}
-
-/** A write that moves `source` to `target`, or nothing when a reset already put the item there. */
-function move(itemKind: PipelineItemKind, target: LabelKey, source: LabelKey, action: string): StageTransition {
-  return source === target ? { kind: 'none' } : write(itemKind, [target], [source], action)
-}
-
-const REVIEW_TARGET: Readonly<Record<string, LabelKey>> = { approved: 'approved', 'needs-revision': 'needsRevision', 'checks-pending': 'needsHuman', 'rebase-required': 'refreshBranch', 'head-moved': 'readyForReview' }
-
-function handbackTransition(mode: StageMode, handback: StageHandback, params: TransitionParams, actionPrefix: string): StageTransition {
-  const { observed, approvalGate } = params
-  const itemKind = itemKindFor(mode)
-  const action = `${actionPrefix}-${handback.token}`
-  switch (`${mode}:${handback.token}`) {
-    case 'plan:plan-written': {
-      const match = matchSource(observed, sourcesOf('planning'))
-      return match === null ? MOVED : write(itemKind, ['planReview'], [match.source], action)
-    }
-    case 'impl:pr-opened':
-      return prOpened(observed, params.prObserved ?? [], approvalGate, actionPrefix)
-    case 'review:approved':
-    case 'review:needs-revision':
-    case 'review:checks-pending':
-    case 'review:rebase-required':
-    case 'review:head-moved': {
-      const match = matchSource(observed, sourcesOf('reviewing'))
-      const target = REVIEW_TARGET[handback.token]
-      return match === null || target === undefined ? MOVED : move(itemKind, target, match.source, action)
-    }
-    case 'revise:revised': {
-      const match = matchSource(observed, sourcesOf('revising'))
-      return match === null ? MOVED : move(itemKind, 'readyForReview', match.source, action)
-    }
-    case 'revise:escalated': {
-      const match = matchSource(observed, sourcesOf('revising'))
-      return match === null ? MOVED : write(itemKind, ['needsHuman'], [match.source], action)
-    }
-    case 'refresh:refreshed':
-      return refreshed(handback.arg, observed, action)
-    case 'refresh:escalated': {
-      const match = matchSource(observed, sourcesOf('refreshing'), ['approved'])
-      if (match === null) return MOVED
-      return write(itemKind, ['needsHuman'], match.tolerated.includes('approved') ? [match.source, 'approved'] : [match.source], action)
-    }
-    default:
-      return { kind: 'refused', reason: 'unknown-handback' }
-  }
-}
-
-/** What the table plans for one stage event. A write is planned only when the observed set matches a row exactly; any other set is `moved`, and nothing is guessed. */
-export function transitionFor(params: TransitionParams): StageTransition {
-  const { event, mode, observed } = params
+/** The table event a stage event stands for; `null` when the stage event writes nothing. */
+export function ticketEventOf(event: StageEvent, mode: StageMode): TicketEvent | null {
+  const stage = stageOfMode(mode)
   switch (event.kind) {
     case 'claim':
-      return claim(mode, observed)
     case 'rollback':
-      return reset(mode, observed, 'stage-rollback')
+      return { kind: event.kind, stage }
     case 'resumed-turn':
-      return resumedTurn(mode, observed)
-    case 'adopt': {
-      const refusal = handbackRefusal(event, mode)
-      return refusal === null ? handbackTransition(mode, event.handback, params, 'stage-adopt') : { kind: 'refused', reason: refusal }
-    }
+      return mode === 'impl' ? { kind: 'resumed-turn', stage: 'implement' } : null
+    case 'adopt':
+      return handbackEvent(stage, event.handback, 'adopt')
     case 'outcome':
       switch (event.outcome) {
-        case 'completed': {
-          const refusal = handbackRefusal(event, mode)
-          if (refusal !== null || event.handback === null) return { kind: 'refused', reason: refusal ?? 'no-handback' }
-          return handbackTransition(mode, event.handback, params, 'stage-handback')
-        }
+        case 'completed':
+          return event.handback === null ? null : handbackEvent(stage, event.handback, 'session')
         case 'blocked':
-          return blocked(mode, observed)
+          return mode === 'impl' ? { kind: 'blocked', stage: 'implement' } : null
         case 'error':
-          return reset(mode, observed, 'stage-error-reset')
+          return { kind: 'error-reset', stage }
         case 'questions':
         case 'interrupted':
         case 'usage-limit':
-          return { kind: 'none' }
+          return null
       }
   }
 }
 
-/** The exact precondition for one write: the observed role-bearing set is present and the assignees are exactly as read. The serialized store refuses a stale `present`, and nothing else adds a key. */
-export function expectFor(observed: readonly LabelKey[], assignees: readonly string[]) {
-  return { present: observed, absent: [], assignees: { kind: 'exactly' as const, logins: assignees } }
+export interface TableContext {
+  readonly at: string
+  readonly actor: string | null
+  readonly repo: RepoId
+  /** The half the event names; a missing ticket is created from it. */
+  readonly ref: TicketRef
+}
+
+const MOVED: TableResult = { ok: false, reason: 'moved' }
+const UNKNOWN: TableResult = { ok: false, reason: 'unknown-handback' }
+
+interface Next {
+  readonly stage: Stage
+  readonly status: Status
+  readonly pr?: Ticket['pr']
+}
+
+const queued = (at: string, reason: 'new' | 'changes-requested' | 'retry' = 'new'): Status => ({ kind: 'queued', reason, since: at })
+const waiting = (gate: 'plan-approval' | 'merge' | 'escalation'): Status => ({ kind: 'waiting-on-you', gate, detail: '' })
+
+/** The audit verb an event is recorded under. */
+export function actionOf(event: TicketEvent): string {
+  switch (event.kind) {
+    case 'claim':
+      return 'stage-claim'
+    case 'rollback':
+      return 'stage-rollback'
+    case 'error-reset':
+      return 'stage-error-reset'
+    case 'blocked':
+      return 'stage-blocked'
+    case 'resumed-turn':
+      return 'stage-unblocked'
+    case 'merged':
+      return 'mirror-merged'
+    case 'labels':
+      return event.action
+    case 'handback': {
+      const prefix = event.via === 'adopt' ? 'stage-adopt' : 'stage-handback'
+      return `${prefix}-${event.token}${event.token === 'refreshed' ? `-${event.arg ?? ''}` : ''}`
+    }
+  }
+}
+
+function handbackNext(ticket: Ticket, event: Extract<TicketEvent, { kind: 'handback' }>, at: string): Next | TableResult {
+  const { pr } = ticket
+  const unapproved = pr === null ? null : { ...pr, approvedAt: null }
+  switch (`${event.stage}:${event.token}`) {
+    case 'plan:plan-written':
+      return { stage: 'plan', status: waiting('plan-approval') }
+    case 'implement:pr-opened':
+      return event.pr === null ? UNKNOWN : { stage: 'review', status: queued(at), pr: { number: event.pr, approvedAt: null } }
+    case 'review:approved':
+      return { stage: 'merge', status: waiting('merge'), pr: pr === null ? null : { ...pr, approvedAt: at } }
+    case 'review:needs-revision':
+      return { stage: 'revise', status: queued(at, 'changes-requested') }
+    case 'review:checks-pending':
+      return { stage: 'review', status: waiting('escalation') }
+    case 'review:rebase-required':
+      return { stage: 'refresh', status: queued(at) }
+    case 'review:head-moved':
+    case 'revise:revised':
+      return { stage: 'review', status: queued(at) }
+    case 'revise:escalated':
+      return { stage: 'revise', status: waiting('escalation') }
+    case 'refresh:refreshed':
+      if (event.arg === 'resolved') return { stage: 'review', status: queued(at), pr: unapproved }
+      if (event.arg !== 'clean') return UNKNOWN
+      return pr !== null && pr.approvedAt !== null ? { stage: 'merge', status: waiting('merge') } : { stage: 'review', status: queued(at) }
+    case 'refresh:escalated':
+      return { stage: 'refresh', status: waiting('escalation'), pr: unapproved }
+    default:
+      return UNKNOWN
+  }
+}
+
+/** The statuses a hand-back may settle: the session's own `running`, or the `queued retry` a liveness reset left. A `pr-opened` also settles a blocked or freshly queued issue. */
+function settles(ticket: Ticket, event: Extract<TicketEvent, { kind: 'handback' }>): boolean {
+  if (ticket.stage !== event.stage) return false
+  const { status } = ticket
+  if (status.kind === 'running') return true
+  if (event.token === 'pr-opened') return status.kind === 'blocked' || status.kind === 'queued'
+  return status.kind === 'queued' && status.reason === 'retry'
+}
+
+function stageEventNext(ticket: Ticket, event: Exclude<TicketEvent, { kind: 'labels' | 'merged' }>, at: string): Next | TableResult {
+  const { status } = ticket
+  switch (event.kind) {
+    case 'claim':
+      return status.kind === 'queued' && ticket.stage === event.stage ? { stage: event.stage, status: { kind: 'running', runId: null } } : MOVED
+    case 'rollback':
+    case 'error-reset':
+      return ticket.stage === event.stage && (status.kind === 'running' || (status.kind === 'blocked' && event.stage === 'implement')) ? { stage: event.stage, status: queued(at, 'retry') } : MOVED
+    case 'blocked':
+      return status.kind === 'running' && ticket.stage === 'implement' ? { stage: 'implement', status: { kind: 'blocked', on: [], reason: '' } } : MOVED
+    case 'resumed-turn':
+      return status.kind === 'blocked' && ticket.stage === 'implement' ? { stage: 'implement', status: { kind: 'running', runId: null } } : MOVED
+    case 'handback': {
+      if (!settles(ticket, event)) return MOVED
+      const next = handbackNext(ticket, event, at)
+      const alreadyThere = event.token === 'head-moved' && ticket.stage === 'review' && status.kind === 'queued'
+      return alreadyThere ? { ticket, changed: false, ok: true } : next
+    }
+  }
+}
+
+const prefixedKeys = (ticket: Ticket): Set<string> => {
+  const halves = (['issue', 'pull-request'] as const).flatMap((kind) => (legacyKeysOf(ticket, kind) ?? []).map((key) => `${kind}:${key}`))
+  return new Set(halves)
+}
+
+function isVerdict(event: TicketEvent): boolean {
+  return event.kind === 'handback' && event.via === 'session' && event.stage === 'review' && HANDBACK_TOKENS.review.includes(event.token) && !NON_VERDICT_TOKENS.includes(event.token)
+}
+
+/** Records one change on the ticket: its `rev`, its history row with the label diff of both halves, and a review verdict's cycle. A `null` ticket is a creation. */
+function commit(ticket: Ticket | null, next: Ticket, event: TicketEvent, ctx: TableContext): TableResult {
+  const before = ticket === null ? new Set<string>() : prefixedKeys(ticket)
+  const after = prefixedKeys(next)
+  const add = [...after].filter((key) => !before.has(key))
+  const remove = [...before].filter((key) => !after.has(key))
+  const row: Event = { at: ctx.at, action: actionOf(event), actor: ctx.actor, to: { stage: next.stage, status: next.status.kind }, legacy: add.length === 0 && remove.length === 0 ? null : { add, remove } }
+  return {
+    ok: true,
+    changed: true,
+    ticket: { ...next, rev: (ticket?.rev ?? -1) + 1, reviewCycles: (ticket?.reviewCycles ?? 0) + (isVerdict(event) ? 1 : 0), history: [...(ticket?.history ?? []), row].slice(-HISTORY_CAP) },
+  }
+}
+
+function applyLabels(ticket: Ticket | null, event: Extract<TicketEvent, { kind: 'labels' }>, ctx: TableContext): TableResult {
+  const { itemKind } = event
+  const current = ticket === null ? [] : (legacyKeysOf(ticket, itemKind) ?? [])
+  if (!event.expect.present.every((key) => current.includes(key)) || event.expect.absent.some((key) => current.includes(key))) return MOVED
+  const keys: LabelKey[] = current.filter((key) => !event.remove.includes(key))
+  for (const key of event.add) if (!keys.includes(key)) keys.push(key)
+
+  const otherKind = itemKind === 'issue' ? 'pull-request' : 'issue'
+  const other = ticket === null ? null : legacyKeysOf(ticket, otherKind)
+  const issueKeys = itemKind === 'issue' ? keys : (other ?? [])
+  const prNumber = itemKind === 'pull-request' ? ctx.ref.number : (ticket?.pr?.number ?? null)
+  const prKeys = itemKind === 'pull-request' ? keys : other
+  const resolved = ticketOfKeys({
+    repo: ctx.repo,
+    ticket: ticket?.ticket ?? (itemKind === 'issue' ? ctx.ref.number : (event.issue ?? ctx.ref.number)),
+    issueKeys,
+    pr: prNumber === null ? null : { number: prNumber, keys: prKeys ?? [], approvedAt: ticket?.pr?.number === prNumber ? ticket.pr.approvedAt : null },
+    history: ticket?.history ?? [],
+    at: ctx.at,
+    mirrorFailure: ticket?.mirror.failure ?? null,
+    reviewCycles: ticket?.reviewCycles ?? 0,
+    stageHint: ticket?.stage ?? null,
+  }).ticket
+  const next: Ticket = ticket === null ? resolved : { ...ticket, stage: resolved.stage, status: resolved.status, pr: resolved.pr, autoPlan: resolved.autoPlan }
+  if (ticket === null) return commit(null, next, event, ctx)
+  const unchanged = [...prefixedKeys(ticket)].sort().join() === [...prefixedKeys(next)].sort().join()
+  return unchanged ? { ok: true, ticket, changed: false } : commit(ticket, next, event, ctx)
+}
+
+/** Whether the table would take the event from where the ticket stands now; nothing is committed. */
+export function accepts(ticket: Ticket | null, event: TicketEvent, ref: TicketRef, repo: RepoId): boolean {
+  return applyEvent(ticket, event, { at: '1970-01-01T00:00:00.000Z', actor: null, repo, ref }).ok
+}
+
+/** What the table makes of one event: the next ticket, or a refusal when the ticket is not where the event expects it. A missing ticket exists only for a `labels` event, which creates it. */
+export function applyEvent(ticket: Ticket | null, event: TicketEvent, ctx: TableContext): TableResult {
+  if (event.kind === 'labels') return applyLabels(ticket, event, ctx)
+  if (ticket === null) return MOVED
+  if (event.kind === 'merged') {
+    return ticket.status.kind === 'done' ? { ok: true, ticket, changed: false } : commit(ticket, { ...ticket, stage: 'merge', status: { kind: 'done', at: ctx.at } }, event, ctx)
+  }
+  const next = stageEventNext(ticket, event, ctx.at)
+  if ('ok' in next) return next
+  return commit(ticket, { ...ticket, stage: next.stage, status: next.status, pr: next.pr === undefined ? ticket.pr : next.pr }, event, ctx)
 }

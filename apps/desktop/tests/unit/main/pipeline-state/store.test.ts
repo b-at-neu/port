@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createPipelineStateStore } from '@/main/pipeline/state/store'
-import type { TransitionInput } from '@/types/pipeline-state'
+import type { TicketEvent } from '@/types/stage-labels'
 import type { FileResult } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
+import v1 from '../../../fixtures/pipeline-state/v1.json'
 import { reconciledItem, repositoryState } from '../../../support/board-snapshot'
+import { AT, memoryStore } from '../../../support/state-store'
+import { ticketOf } from '../../../support/tickets'
 
 const REPO = 'repo-a' as RepoId
-const AT = '2026-01-01T00:00:00.000Z'
 const READY = repositoryState([reconciledItem({ number: 7, matchedKeys: ['marker', 'ready'] })])
-
-function input(overrides: Partial<TransitionInput> = {}): TransitionInput {
-  return { add: ['planning'], remove: ['ready'], expect: { present: ['ready'], absent: [] }, action: 'stage-claim', at: AT, actor: null, issue: null, ...overrides }
-}
+const ISSUE = { kind: 'issue' as const, number: 7 }
+const CLAIM: TicketEvent = { kind: 'claim', stage: 'plan' }
 
 function rig(options: { readonly file?: FileResult<unknown>; readonly write?: () => Promise<FileResult<void>> } = {}) {
   const writes: unknown[] = []
@@ -27,7 +27,7 @@ function rig(options: { readonly file?: FileResult<unknown>; readonly write?: ()
   return { store, writes }
 }
 
-describe('createPipelineStateStore', () => {
+describe('createPipelineStateStore — loading', () => {
   it('starts empty on a missing, malformed or newer-version file', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     for (const file of [undefined, { ok: true as const, value: '{' }, { ok: true as const, value: { version: 9, repositories: {} } }, { ok: false as const, kind: 'io' as const, message: 'denied' }]) {
@@ -48,55 +48,87 @@ describe('createPipelineStateStore', () => {
     expect(restarted.store.view(REPO)).toMatchObject({ kind: 'store', items: [{ number: 7, keys: ['ready'] }] })
   })
 
-  it('commits a transition to disk before reporting it applied', async () => {
-    const { store, writes } = rig()
-    await store.seed(REPO, READY)
-    writes.length = 0
-    expect(await store.transition(REPO, { kind: 'issue', number: 7 }, input())).toEqual({ ok: true, changed: true })
+  it('loads a version-1 file as version 2, and writes the migrated file back', async () => {
+    const { store, writes } = rig({ file: { ok: true, value: v1 } })
+    await store.ready
     expect(writes).toHaveLength(1)
-    expect(store.view(REPO)).toMatchObject({ items: [{ keys: ['planning'] }] })
+    expect(writes[0]).toMatchObject({ version: 2, repositories: { 'repo-a': { tickets: { '101': { pr: { number: 201 } } } } } })
+    expect(store.ticket('repo-a' as RepoId, { kind: 'pull-request', number: 201 })?.ticket).toBe(101)
+    expect(store.tracked('repo-b' as RepoId)?.map((ref) => ref.number)).toEqual([5, 6, 7])
+  })
+
+  it('reads a version-1 file that cannot be migrated as empty, and leaves it unwritten', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const { store, writes } = rig({ file: { ok: true, value: { version: 1, repositories: 'junk' } } })
+    await store.ready
+    expect(store.view(REPO)).toEqual({ kind: 'unseeded' })
+    expect(writes).toEqual([])
+    error.mockRestore()
+  })
+})
+
+describe('createPipelineStateStore — apply', () => {
+  const queued = () => ticketOf({ ticket: 7, repo: REPO })
+
+  it('commits an event to disk before reporting it applied, and bumps rev', async () => {
+    const { store, writes } = memoryStore(REPO, { tickets: [queued()] })
+    await store.ready
+    const result = await store.apply(REPO, ISSUE, CLAIM, 0)
+    expect(result).toMatchObject({ ok: true, changed: true, ticket: { rev: 1, status: { kind: 'running' } } })
+    expect(writes).toHaveLength(1)
+    expect(store.ticket(REPO, ISSUE)?.rev).toBe(1)
+  })
+
+  it('refuses a stale rev without writing, and never interleaves two events', async () => {
+    const { store, writes } = memoryStore(REPO, { tickets: [queued()] })
+    const [first, second] = await Promise.all([store.apply(REPO, ISSUE, CLAIM, 0), store.apply(REPO, ISSUE, CLAIM, 0)])
+    expect(first).toMatchObject({ ok: true, changed: true })
+    expect(second).toEqual({ ok: false, reason: 'stale' })
+    expect(writes).toHaveLength(1)
+  })
+
+  it('skips the rev check when the caller holds none, and the table still refuses a running ticket', async () => {
+    const { store } = memoryStore(REPO, { tickets: [queued()] })
+    await store.apply(REPO, ISSUE, CLAIM, null)
+    expect(await store.apply(REPO, ISSUE, CLAIM, null)).toEqual({ ok: false, reason: 'moved' })
   })
 
   it('reports persist-failed and leaves memory unchanged when the write fails', async () => {
-    const { store } = rig({ write: () => Promise.resolve({ ok: false, kind: 'io', message: 'disk full' }) })
-    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    await store.seed(REPO, READY)
-    expect(await store.transition(REPO, { kind: 'issue', number: 7 }, input())).toEqual({ ok: false, reason: 'persist-failed', message: 'disk full' })
-    expect(store.view(REPO)).toMatchObject({ items: [{ keys: ['ready'] }] })
-    error.mockRestore()
+    const { store } = memoryStore(REPO, { tickets: [queued()], persistFails: true })
+    expect(await store.apply(REPO, ISSUE, CLAIM, 0)).toEqual({ ok: false, reason: 'persist-failed', message: 'disk full' })
+    expect(store.ticket(REPO, ISSUE)).toMatchObject({ rev: 0, status: { kind: 'queued' } })
   })
 
-  it('refuses a stale precondition without writing, and never interleaves two transitions', async () => {
-    const { store, writes } = rig()
-    await store.seed(REPO, READY)
-    writes.length = 0
-    const [first, second] = await Promise.all([store.transition(REPO, { kind: 'issue', number: 7 }, input()), store.transition(REPO, { kind: 'issue', number: 7 }, input())])
-    expect(first).toEqual({ ok: true, changed: true })
-    expect(second).toEqual({ ok: false, reason: 'precondition-failed' })
-    expect(writes).toHaveLength(1)
+  it('refuses an event on a repository it does not hold', async () => {
+    const { store } = memoryStore(REPO, { tickets: null })
+    expect(await store.apply(REPO, ISSUE, CLAIM, null)).toEqual({ ok: false, reason: 'unseeded' })
   })
 
-  it('refuses a transition on a repository it does not hold', async () => {
-    const { store } = rig()
-    expect(await store.transition(REPO, { kind: 'issue', number: 7 }, input())).toEqual({ ok: false, reason: 'precondition-failed' })
+  it('reports no change, and writes nothing, for an event that lands where the ticket already is', async () => {
+    const { store, writes } = memoryStore(REPO, { tickets: [queued()] })
+    const labels: TicketEvent = { kind: 'labels', itemKind: 'issue', add: ['ready'], remove: [], expect: { present: [], absent: [] }, action: 'noop', issue: null }
+    expect(await store.apply(REPO, ISSUE, labels, null)).toMatchObject({ ok: true, changed: false })
+    expect(writes).toEqual([])
   })
+})
 
-  it('records a mirror failure on the item and persists it, and ignores a missing item', async () => {
+describe('createPipelineStateStore — mirror failures and pruning', () => {
+  it('records a mirror failure on the ticket and persists it once, and ignores a missing ticket', async () => {
     const { store, writes } = rig()
     await store.seed(REPO, READY)
     const failure = { at: AT, outcome: { kind: 'item-unavailable' as const } }
     writes.length = 0
-    await store.recordMirror(REPO, { kind: 'issue', number: 7 }, failure)
-    expect(store.view(REPO)).toMatchObject({ items: [{ mirrorFailure: failure }] })
+    await store.recordMirror(REPO, ISSUE, failure)
+    expect(store.tickets(REPO)?.[0]?.mirror.failure).toEqual(failure)
     expect(writes).toHaveLength(1)
-    await store.recordMirror(REPO, { kind: 'issue', number: 7 }, failure)
+    await store.recordMirror(REPO, ISSUE, failure)
     await store.recordMirror(REPO, { kind: 'issue', number: 99 }, failure)
     expect(writes).toHaveLength(1)
-    await store.recordMirror(REPO, { kind: 'issue', number: 7 }, null)
-    expect(store.view(REPO)).toMatchObject({ items: [{ mirrorFailure: null }] })
+    await store.recordMirror(REPO, ISSUE, null)
+    expect(store.tickets(REPO)?.[0]?.mirror.failure).toBeNull()
   })
 
-  it('prunes closed items and tracks the rest', async () => {
+  it('prunes closed tickets and tracks the rest', async () => {
     const { store } = rig()
     await store.seed(REPO, repositoryState([reconciledItem({ number: 1 }), reconciledItem({ number: 2 })]))
     await store.prune(REPO, [1])
@@ -108,6 +140,7 @@ describe('createPipelineStateStore', () => {
     await store.ready
     expect(store.view(REPO)).toEqual({ kind: 'unseeded' })
     expect(store.tracked(REPO)).toBeNull()
+    expect(store.tickets(REPO)).toBeNull()
     await store.seed(REPO, READY)
     expect(store.view(REPO).kind).toBe('store')
   })

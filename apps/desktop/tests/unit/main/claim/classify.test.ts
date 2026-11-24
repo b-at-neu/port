@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { mirrorVocabularyOf } from '@/utils/labels/display'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import { buildClaimRequest, classifyPreflight } from '@/main/pipeline/claim/classify'
@@ -91,7 +92,7 @@ function claimableVerdict(overrides: Partial<Extract<ClaimVerdict, { kind: 'clai
 describe('buildClaimRequest', () => {
   it('an unassigned item: adds marker+ready, assigns the viewer, expects unassigned, plain action text', () => {
     const preflight = preflightWith({ assignees: [] })
-    const request = buildClaimRequest({ preflight, verdict: claimableVerdict(), vocabulary: VOCABULARY, mirror: { kind: 'legacy' }, repoId: REPO_ID, repo: 'o/r', planGate: 'review' })
+    const request = buildClaimRequest({ preflight, verdict: claimableVerdict(), vocabulary: VOCABULARY, mirror: mirrorVocabularyOf({}), repoId: REPO_ID, repo: 'o/r', planGate: 'review' })
     expect(request.add).toEqual(['marker', 'ready'])
     expect(request.remove).toEqual([])
     expect(request.addAssignees).toEqual(['alice'])
@@ -104,14 +105,14 @@ describe('buildClaimRequest', () => {
 
   it('auto-approve adds autoPlan alongside marker+ready', () => {
     const preflight = preflightWith({ assignees: [] })
-    const request = buildClaimRequest({ preflight, verdict: claimableVerdict(), vocabulary: VOCABULARY, mirror: { kind: 'legacy' }, repoId: REPO_ID, repo: 'o/r', planGate: 'auto' })
+    const request = buildClaimRequest({ preflight, verdict: claimableVerdict(), vocabulary: VOCABULARY, mirror: mirrorVocabularyOf({}), repoId: REPO_ID, repo: 'o/r', planGate: 'auto' })
     expect(request.add).toEqual(['marker', 'ready', 'autoPlan'])
   })
 
   it('already mine: no assignee change, exactly-the-viewer precondition', () => {
     const preflight = preflightWith({ assignees: ['alice'], viewer: 'alice' })
     const verdict = claimableVerdict({ assigneeSituation: 'mine' })
-    const request = buildClaimRequest({ preflight, verdict, vocabulary: VOCABULARY, mirror: { kind: 'legacy' }, repoId: REPO_ID, repo: 'o/r', planGate: 'review' })
+    const request = buildClaimRequest({ preflight, verdict, vocabulary: VOCABULARY, mirror: mirrorVocabularyOf({}), repoId: REPO_ID, repo: 'o/r', planGate: 'review' })
     expect(request.addAssignees).toEqual([])
     expect(request.removeAssignees).toEqual([])
     expect(request.expect.assignees).toEqual({ kind: 'exactly', logins: ['alice'] })
@@ -121,7 +122,7 @@ describe('buildClaimRequest', () => {
   it('a take-over: adds the viewer, removes every other assignee, exactly-the-observed-set precondition, take-over action text', () => {
     const preflight = preflightWith({ assignees: ['bob'], viewer: 'alice' })
     const verdict = claimableVerdict({ assigneeSituation: 'others', others: ['bob'] })
-    const request = buildClaimRequest({ preflight, verdict, vocabulary: VOCABULARY, mirror: { kind: 'legacy' }, repoId: REPO_ID, repo: 'o/r', planGate: 'review' })
+    const request = buildClaimRequest({ preflight, verdict, vocabulary: VOCABULARY, mirror: mirrorVocabularyOf({}), repoId: REPO_ID, repo: 'o/r', planGate: 'review' })
     expect(request.addAssignees).toEqual(['alice'])
     expect(request.removeAssignees).toEqual(['bob'])
     expect(request.expect.assignees).toEqual({ kind: 'exactly', logins: ['bob'] })
@@ -130,7 +131,7 @@ describe('buildClaimRequest', () => {
 
   it('expect.absent always names marker, regardless of assignee situation', () => {
     const preflight = preflightWith({ assignees: ['alice'] })
-    const request = buildClaimRequest({ preflight, verdict: claimableVerdict({ assigneeSituation: 'mine' }), vocabulary: VOCABULARY, mirror: { kind: 'legacy' }, repoId: REPO_ID, repo: 'o/r', planGate: 'review' })
+    const request = buildClaimRequest({ preflight, verdict: claimableVerdict({ assigneeSituation: 'mine' }), vocabulary: VOCABULARY, mirror: mirrorVocabularyOf({}), repoId: REPO_ID, repo: 'o/r', planGate: 'review' })
     expect(request.expect.absent).toEqual(['marker'])
   })
 })

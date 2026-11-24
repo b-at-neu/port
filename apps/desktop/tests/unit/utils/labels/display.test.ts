@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import template from '@/utils/labels/labels.json'
 import { DISPLAY_DEFAULTS, DISPLAY_KEYS, mirrorVocabularyOf, resolveDisplayVocabulary, verifiableVocabularyOf } from '@/utils/labels/display'
-import { resolveVocabulary, verifyVocabulary } from '@/utils/labels/vocabulary'
+import { verifyVocabulary } from '@/utils/labels/vocabulary'
 
 describe('DISPLAY_KEYS / DISPLAY_DEFAULTS match the shipped display template', () => {
   it('carries every template key, both directions', () => {
@@ -67,28 +67,16 @@ describe('verifying the display vocabulary against a repository', () => {
 describe('mirrorVocabularyOf', () => {
   const displayVocabulary = resolveDisplayVocabulary({})
 
-  it('mirrors the display labels only when the repository is app-only with a resolved display vocabulary', () => {
-    expect(mirrorVocabularyOf({ appOnly: true, displayVocabulary })).toEqual({ kind: 'display', labels: displayVocabulary })
-  })
-
-  it('mirrors the legacy set otherwise', () => {
-    expect(mirrorVocabularyOf({ appOnly: false, displayVocabulary })).toEqual({ kind: 'legacy' })
-    expect(mirrorVocabularyOf({ appOnly: true })).toEqual({ kind: 'legacy' })
-    expect(mirrorVocabularyOf({})).toEqual({ kind: 'legacy' })
+  it('mirrors the configured display labels, and the defaults when none resolved', () => {
+    expect(mirrorVocabularyOf({ displayVocabulary })).toEqual({ kind: 'display', labels: displayVocabulary })
+    expect(mirrorVocabularyOf({})).toEqual({ kind: 'display', labels: displayVocabulary })
   })
 })
 
 describe('verifiableVocabularyOf', () => {
-  const vocabulary = resolveVocabulary({})
-  const displayVocabulary = resolveDisplayVocabulary({})
-
-  it('reads the display vocabulary only when app-only', () => {
-    expect(verifiableVocabularyOf({ appOnly: true, vocabulary, displayVocabulary })).toBe(displayVocabulary)
-    expect(verifiableVocabularyOf({ appOnly: false, vocabulary, displayVocabulary })).toBe(vocabulary)
-  })
-
-  it('reads the legacy vocabulary when appOnly or the display vocabulary is absent', () => {
-    expect(verifiableVocabularyOf({ vocabulary })).toBe(vocabulary)
-    expect(verifiableVocabularyOf({ appOnly: true, vocabulary })).toBe(vocabulary)
+  it('verifies the display vocabulary on every repository', () => {
+    const custom = resolveDisplayVocabulary({ states: { planning: 'thinking' } })
+    expect(verifiableVocabularyOf({ displayVocabulary: custom })).toBe(custom)
+    expect(verifiableVocabularyOf({}).labels.map((l) => l.name)).toContain('planning')
   })
 })

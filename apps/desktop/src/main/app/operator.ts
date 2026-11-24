@@ -5,7 +5,7 @@ import { escalateToHuman } from '@/main/pipeline/operator/escalate'
 import { autoApprovePlan, gateAnswer, gatePreflight } from '@/main/pipeline/operator/gate'
 import { applyObservation } from '@/main/pipeline/operator/observe'
 import { recoverPausedTrigger } from '@/main/pipeline/operator/resume'
-import { applyStageClaim, applyStageTransition } from '@/main/pipeline/operator/stage'
+import { applyStageClaim, applyStageTransition, type StageWriteDeps } from '@/main/pipeline/operator/stage'
 import { fetchClaimPreflight, fetchItemsByNumber } from '@/main/github/adapter'
 import { fetchGatePreflight } from '@/main/github/gate'
 import { listRepositories } from '@/main/repos'
@@ -16,12 +16,12 @@ import type { ClaimDeps } from '@/types/claim'
 import type { OwnershipParams, OwnershipRead, StageLabelWrites } from '@/types/dispatch'
 import type { GateDeps } from '@/types/gate'
 import type { StateLabelsReader } from '@/types/pipeline-state'
-import type { WriteState } from '@/types/writes'
+import type { WriteEvent, WriteState } from '@/types/writes'
 
-export function bindOperator(state: { readonly writeState: WriteState; readonly stateLabels: StateLabelsReader }, readOwnership: (params: OwnershipParams) => Promise<OwnershipRead>) {
-  const { writeState, stateLabels } = state
+export function bindOperator(state: { readonly writeState: WriteState; readonly writeEvent: WriteEvent; readonly ticketOf: StageWriteDeps['ticketOf']; readonly stateLabels: StateLabelsReader }, readOwnership: (params: OwnershipParams) => Promise<OwnershipRead>) {
+  const { writeState, writeEvent, ticketOf, stateLabels } = state
   const gateDeps: GateDeps = { listRepositories, fetchGatePreflight, readOwnership, writeState, stateLabels, postComment, now: () => new Date() }
-  const stageDeps = { writeState, postIssueBody, stateLabels, fetchItemsByNumber }
+  const stageDeps: StageWriteDeps = { writeEvent, ticketOf, postIssueBody, fetchItemsByNumber }
   const stageLabels: StageLabelWrites = { claim: (params) => applyStageClaim(params, stageDeps), transition: (params) => applyStageTransition(params, stageDeps) }
   const claimDeps: ClaimDeps = { listRepositories, fetchClaimPreflight, writeState, stateLabels }
   return {

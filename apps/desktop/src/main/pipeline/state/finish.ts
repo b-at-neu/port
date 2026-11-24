@@ -1,7 +1,8 @@
 // The mirror writes that follow no transition: the terminal state of a merged pull request, and the per-poll retry of a failed mirror.
 import type { ReadyEntry } from '@/types/actions'
-import type { MirrorItemParams, PipelineStateStore, StoredItem } from '@/types/pipeline-state'
+import type { MirrorItemParams, PipelineStateStore, TicketRef } from '@/types/pipeline-state'
 import type { WriteOutcome } from '@/types/writes'
+import type { Ticket } from '@/utils/pipeline/ticket'
 
 const RETRY_LIMIT = 10
 const RETRY_BACKOFF_MS = 5 * 60 * 1000
@@ -23,43 +24,41 @@ export interface PipelineFinish {
   readonly retryMirrors: (entry: ReadyEntry) => Promise<void>
 }
 
+/** The half that names a ticket in an audit entry: its pull request when it has one. */
+function refOf(ticket: Ticket): TicketRef {
+  return ticket.pr === null ? { kind: 'issue', number: ticket.ticket } : { kind: 'pull-request', number: ticket.pr.number }
+}
+
 export function createPipelineFinish(deps: FinishDeps): PipelineFinish {
   const now = deps.now ?? Date.now
   const lastRetry = new Map<string, number>()
-  const retryKey = (entry: ReadyEntry, item: StoredItem): string => `${entry.id}:${item.kind}:${item.number}`
+  const retryKey = (entry: ReadyEntry, ticket: Ticket): string => `${entry.id}:${String(ticket.ticket)}`
 
-  const mirror = (entry: ReadyEntry, item: StoredItem, action: string, mode: 'state' | 'merged'): Promise<WriteOutcome> =>
-    deps.mirrorItem({ entry, ref: { kind: item.kind, number: item.number }, action, auditDir: deps.auditDir, mode })
+  const mirror = (entry: ReadyEntry, ref: TicketRef, action: string): Promise<WriteOutcome> => deps.mirrorItem({ entry, ref, action, auditDir: deps.auditDir })
 
   return {
-    /** Writes `approved` on each merged pull request the store holds and on its ticket, then prunes `closed`; a closed but unmerged item is pruned untouched. */
+    /** Marks each merged pull request the store holds done and shows it on both halves, then prunes `closed`; a closed but unmerged item is pruned untouched. */
     async finishPipelineState(entry, finished) {
-      const view = deps.store.view(entry.id)
-      if (view.kind === 'store') {
-        for (const number of finished.merged) {
-          const pr = view.items.find((item) => item.kind === 'pull-request' && item.number === number)
-          if (pr === undefined) continue
-          await mirror(entry, pr, 'mirror-merged', 'merged')
-          const ticket = pr.issue === null ? undefined : view.items.find((item) => item.kind === 'issue' && item.number === pr.issue)
-          if (ticket !== undefined) await mirror(entry, ticket, 'mirror-merged', 'merged')
-        }
+      for (const number of finished.merged) {
+        const ref: TicketRef = { kind: 'pull-request', number }
+        if (deps.store.ticket(entry.id, ref) === null) continue
+        const merged = await deps.store.apply(entry.id, ref, { kind: 'merged' }, null)
+        if (merged.ok) await mirror(entry, ref, 'mirror-merged')
       }
       await deps.store.prune(entry.id, finished.closed)
     },
-    /** Retries each failed item at most once per backoff window, so a failure that persists neither floods the audit log nor re-reads the item on every poll. */
+    /** Retries each failed ticket at most once per backoff window, so a failure that persists neither floods the audit log nor re-reads the item on every poll. */
     async retryMirrors(entry) {
-      const view = deps.store.view(entry.id)
-      if (view.kind !== 'store') return
-      const failed = view.items.filter((candidate) => candidate.mirrorFailure !== null)
-      const failedKeys = new Set(failed.map((item) => retryKey(entry, item)))
+      const failed = (deps.store.tickets(entry.id) ?? []).filter((ticket) => ticket.mirror.failure !== null)
+      const failedKeys = new Set(failed.map((ticket) => retryKey(entry, ticket)))
       for (const key of lastRetry.keys()) if (key.startsWith(`${entry.id}:`) && !failedKeys.has(key)) lastRetry.delete(key)
-      const due = failed.filter((item) => {
-        const last = lastRetry.get(retryKey(entry, item))
+      const due = failed.filter((ticket) => {
+        const last = lastRetry.get(retryKey(entry, ticket))
         return last === undefined || now() - last >= RETRY_BACKOFF_MS
       })
-      for (const item of due.slice(0, RETRY_LIMIT)) {
-        lastRetry.set(retryKey(entry, item), now())
-        await mirror(entry, item, 'mirror-retry', 'state')
+      for (const ticket of due.slice(0, RETRY_LIMIT)) {
+        lastRetry.set(retryKey(entry, ticket), now())
+        await mirror(entry, refOf(ticket), 'mirror-retry')
       }
     },
   }

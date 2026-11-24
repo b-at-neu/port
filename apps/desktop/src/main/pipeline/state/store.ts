@@ -1,8 +1,10 @@
 // The pipeline state file's only writer. A transition is never reported as applied until it is on disk.
 import { z } from 'zod'
 import { createJsonStore } from '@/main/platform/json-store'
-import { FILE_VERSION, emptyFile, parseFile, prune, recordMirror, seedFrom, transition, trackedOf, viewOf, withItem } from '@/main/pipeline/state/model'
-import type { PipelineStateFile, PipelineStateStore, RepoRecord, StoreTransitionResult } from '@/types/pipeline-state'
+import { migrate } from '@/main/pipeline/state/migrate'
+import { FILE_VERSION, emptyFile, parseFile, prune, recordMirror, seedFrom, ticketFor, trackedOf, viewOf, withTicket } from '@/main/pipeline/state/model'
+import { applyEvent } from '@/main/pipeline/transitions'
+import type { PipelineStateFile, PipelineStateStore, RepoRecord, StoreApplyResult } from '@/types/pipeline-state'
 import type { FileResult } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
 
@@ -14,14 +16,15 @@ interface CreatePipelineStateStoreParams {
   readonly now: () => Date
 }
 
-// `reset`: a missing, malformed or newer-version file is empty and the next write replaces it; a bad item is dropped by `parseFile`, never its repository.
-const fileSchema = z.object({ version: z.literal(FILE_VERSION), repositories: z.record(z.string(), z.unknown()) })
+// `reset`: a missing, malformed or newer-version file is empty and the next write replaces it, so the repository reseeds from labels and only history is lost; a bad ticket is dropped by `parseFile`, never its repository.
+const fileSchema = z.object({ version: z.literal(FILE_VERSION), repositories: z.record(z.string(), z.object({ seededAt: z.string(), tickets: z.record(z.string(), z.unknown()) })) })
 
 export function createPipelineStateStore(params: CreatePipelineStateStoreParams): PipelineStateStore {
   const store = createJsonStore({
     file: params.path,
     version: FILE_VERSION,
     schema: fileSchema,
+    migrate,
     initial: emptyFile(),
     unreadable: 'reset',
     fs: { readJson: params.readJson, writeJsonAtomic: params.writeJsonAtomic },
@@ -70,10 +73,18 @@ export function createPipelineStateStore(params: CreatePipelineStateStoreParams)
     ready,
     view: (repoId) => viewOf(file.repositories[repoId]),
     tracked: (repoId) => trackedOf(file.repositories[repoId]),
+    ticket: (repoId, ref) => {
+      const record = file.repositories[repoId]
+      return record === undefined ? null : ticketFor(record, ref, null)
+    },
+    tickets: (repoId) => {
+      const record = file.repositories[repoId]
+      return record === undefined ? null : Object.values(record.tickets)
+    },
     seed: (repoId, state) =>
       serialize(async () => {
         await ready
-        await persistBestEffort(repoId, seedFrom(state, params.now().toISOString()))
+        await persistBestEffort(repoId, seedFrom(repoId, state, params.now().toISOString()))
       }),
     prune: (repoId, closed) =>
       serialize(async () => {
@@ -91,16 +102,18 @@ export function createPipelineStateStore(params: CreatePipelineStateStoreParams)
         const next = recordMirror(record, ref, failure)
         if (next !== record) await persistBestEffort(repoId, next)
       }),
-    transition: (repoId, ref, input) =>
-      serialize(async (): Promise<StoreTransitionResult> => {
+    apply: (repoId, ref, event, expectedRev) =>
+      serialize(async (): Promise<StoreApplyResult> => {
         await ready
         const record = file.repositories[repoId]
-        if (record === undefined) return { ok: false, reason: 'precondition-failed' }
-        const next = transition(record, ref, input)
-        if (!next.ok) return next
-        if (!next.changed) return { ok: true, changed: false }
-        const written = await persist(repoId, withItem(record, next.item))
-        return written.ok ? { ok: true, changed: true } : { ok: false, reason: 'persist-failed', message: written.message }
+        if (record === undefined) return { ok: false, reason: 'unseeded' }
+        const existing = ticketFor(record, ref, event.kind === 'labels' ? event.issue : null)
+        if (expectedRev !== null && existing?.rev !== expectedRev) return { ok: false, reason: 'stale' }
+        const result = applyEvent(existing, event, { at: params.now().toISOString(), actor: null, repo: repoId, ref })
+        if (!result.ok) return result
+        if (!result.changed) return { ok: true, ticket: result.ticket, changed: false }
+        const written = await persist(repoId, withTicket(record, result.ticket))
+        return written.ok ? { ok: true, ticket: result.ticket, changed: true } : { ok: false, reason: 'persist-failed', message: written.message }
       }),
   }
 }

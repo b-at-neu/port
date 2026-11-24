@@ -4,7 +4,9 @@ import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { PipelineItemKind } from '@/types/github'
 import type { RepositoryState } from '@/types/state'
+import type { TicketEvent } from '@/types/stage-labels'
 import type { WriteOutcome } from '@/types/writes'
+import type { Ticket } from '@/utils/pipeline/ticket'
 
 export interface StoredHistoryRow {
   readonly at: string
@@ -38,12 +40,12 @@ export interface StoredItem {
 
 export interface RepoRecord {
   readonly seededAt: string
-  /** Keyed `issue:<n>` / `pull-request:<n>`. */
-  readonly items: Readonly<Record<string, StoredItem>>
+  /** Keyed by `String(ticket.ticket)`. */
+  readonly tickets: Readonly<Record<string, Ticket>>
 }
 
 export interface PipelineStateFile {
-  readonly version: 1
+  readonly version: 2
   readonly repositories: Readonly<Record<string, RepoRecord>>
 }
 
@@ -58,13 +60,18 @@ export function fullKeysOf(item: Pick<StoredItem, 'keys' | 'marked' | 'autoPlan'
 /** `unseeded` means the repository has no record yet and reseeds once from labels; `store` means the stored items decide stage. */
 export type PipelineView = { readonly kind: 'unseeded' } | { readonly kind: 'store'; readonly items: readonly StoredItem[] }
 
-/** One mirror write with no transition: `merged` writes the terminal state, `state` whatever the store holds. */
+/** One mirror write with no transition: whatever the store holds for the ticket. */
 export interface MirrorItemParams {
   readonly entry: ReadyEntry
-  readonly ref: { readonly kind: PipelineItemKind; readonly number: number }
+  readonly ref: TicketRef
   readonly action: string
   readonly auditDir: string
-  readonly mode: 'state' | 'merged'
+}
+
+/** One half of a ticket: its issue, or its pull request. */
+export interface TicketRef {
+  readonly kind: PipelineItemKind
+  readonly number: number
 }
 
 /** A tracked item and the full key set (markers included) it carries in the store. */
@@ -74,31 +81,23 @@ export interface TrackedRef {
   readonly keys: readonly LabelKey[]
 }
 
-export interface TransitionInput {
-  readonly add: readonly LabelKey[]
-  readonly remove: readonly LabelKey[]
-  readonly expect: { readonly present: readonly LabelKey[]; readonly absent: readonly LabelKey[] }
-  readonly action: string
-  readonly at: string
-  readonly actor: string | null
-  /** Sets a pull request's ticket while it is still unknown. */
-  readonly issue: number | null
-}
-
-export type TransitionResult = { readonly ok: true; readonly item: StoredItem; readonly changed: boolean } | { readonly ok: false; readonly reason: 'precondition-failed' }
-
 export interface PipelineStateStore {
   /** Settles once the file has been read; every read and transition waits on it. */
   readonly ready: Promise<void>
   readonly view: (repoId: RepoId) => PipelineView
   readonly tracked: (repoId: RepoId) => readonly TrackedRef[] | null
+  /** The ticket a half belongs to, `null` when the repository is unseeded or the half is unknown. */
+  readonly ticket: (repoId: RepoId, ref: TicketRef) => Ticket | null
+  /** Every ticket the repository holds, `null` while it is unseeded. */
+  readonly tickets: (repoId: RepoId) => readonly Ticket[] | null
   readonly seed: (repoId: RepoId, state: Extract<RepositoryState, { readonly ok: true }>) => Promise<void>
   readonly prune: (repoId: RepoId, closed: readonly number[]) => Promise<void>
-  readonly recordMirror: (repoId: RepoId, ref: { readonly kind: PipelineItemKind; readonly number: number }, failure: MirrorFailure | null) => Promise<void>
-  readonly transition: (repoId: RepoId, ref: { readonly kind: PipelineItemKind; readonly number: number }, input: TransitionInput) => Promise<StoreTransitionResult>
+  readonly recordMirror: (repoId: RepoId, ref: TicketRef, failure: MirrorFailure | null) => Promise<void>
+  /** Runs the table on the ticket `ref` names and persists the result; `expectedRev` `null` skips the concurrency check. */
+  readonly apply: (repoId: RepoId, ref: TicketRef, event: TicketEvent, expectedRev: number | null) => Promise<StoreApplyResult>
 }
 
-export type StoreTransitionResult =
-  | { readonly ok: true; readonly changed: boolean }
-  | { readonly ok: false; readonly reason: 'precondition-failed' }
+export type StoreApplyResult =
+  | { readonly ok: true; readonly ticket: Ticket; readonly changed: boolean }
+  | { readonly ok: false; readonly reason: 'moved' | 'unknown-handback' | 'stale' | 'unseeded' }
   | { readonly ok: false; readonly reason: 'persist-failed'; readonly message: string }

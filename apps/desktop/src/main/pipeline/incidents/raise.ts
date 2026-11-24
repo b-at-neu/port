@@ -8,7 +8,6 @@ import type { ReconciledItem, RepositoryState } from '@/types/state'
 import type { RepoId } from '@/utils/repos'
 import { isTransientNetworkFailure, SETTLE_FAILED_DETAIL } from '@/main/pipeline/handback'
 import type { StageHandback, StageOutcome, StageOutcomeKind } from '@/types/stage-session'
-import type { StagePlannedWrite } from '@/types/stage-labels'
 import type { HandoffRefusal, StageAgent } from '@/types/tick'
 
 /** A session that ends this soon after it started never did the work. */
@@ -57,16 +56,15 @@ export function budgetIntent(trigger: string, headRefOid: string | null): Incide
   return { bucket: 'escalation', stage: 'needsHuman', condition: 'budget', decision: { action: 'budget-escalate', detail: 'budget', intended: null }, inputs: { trigger, observedHead: headRefOid, snapshotAt: null } }
 }
 
-/** A stage's hand-back write that adds `blocked` or `needsHuman`; `null` for any other write. */
-export function stageHandbackIntent(planned: StagePlannedWrite, agent: StageAgent, ticket: number, snapshotItem: ReconciledItem | null, snapshotAt: string | null): IncidentIntent | null {
-  const stage = planned.add.find((key) => key === 'blocked' || key === 'needsHuman')
-  if (stage === undefined) return null
-  const decision = { action: planned.action, detail: agent, intended: null }
+/** A stage's hand-back write that leaves the ticket `blocked` or `needsHuman`. */
+export function stageHandbackIntent(landed: { readonly key: 'blocked' | 'needsHuman'; readonly action: string }, agent: StageAgent, ticket: number, snapshotItem: ReconciledItem | null, snapshotAt: string | null): IncidentIntent {
+  const stage = landed.key
+  const decision = { action: landed.action, detail: agent, intended: null }
   const pullRequest = agent === 'impl' && snapshotItem !== null ? ownBranchPullRequestOf(snapshotItem) : null
   if (pullRequest !== null && snapshotItem !== null) {
     return { bucket: 'existing-work', stage, condition: 'pr-open', decision, inputs: { ...itemInputs(snapshotItem), issue: ticket, snapshotAt }, subject: { kind: 'pull-request', number: pullRequest.number } }
   }
-  return { bucket: 'escalation', stage, condition: planned.action, decision, inputs: { agent, issue: ticket, snapshotAt } }
+  return { bucket: 'escalation', stage, condition: landed.action, decision, inputs: { agent, issue: ticket, snapshotAt } }
 }
 
 interface SessionRecord {
