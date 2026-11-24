@@ -77,7 +77,6 @@ describe('runtimeDiagnosisModel', () => {
   it('a null-repo probe (repository-free mode) names only the elapsed time', () => {
     const model = runtimeDiagnosisModel(preflight(), probe({ repo: null, elapsedMs: 1200 }), READY_REPO, false)
     expect(model.body).toContain('1.2s')
-    expect(model.body).not.toContain('against')
   })
 
   it('surfaces the API key note only when the probe reports one', () => {

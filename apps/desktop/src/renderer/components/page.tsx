@@ -45,18 +45,36 @@ export function PageStates({ variant = 'page', state, loading, errorMessage, onR
   )
 }
 
-interface PageProps extends PageStatesProps {
+interface PageFrameProps {
   readonly header: ReactNode
   readonly variant: ScreenBodyVariant
+  readonly lead?: ReactNode
   readonly aside?: ReactNode
   readonly onMouseDown?: MouseEventHandler<HTMLElement>
   readonly ref?: Ref<HTMLDivElement>
+  readonly children: ReactNode
 }
 
-export function Page({ header, variant, aside, onMouseDown, ref, ...states }: PageProps) {
+interface StatefulProps extends PageFrameProps, Omit<PageStatesProps, 'variant' | 'children'> {}
+
+interface ComposedProps extends PageFrameProps {
+  readonly state?: undefined
+}
+
+type PageProps = StatefulProps | ComposedProps
+
+export function Page(props: PageProps) {
+  const { header, variant, lead, aside, onMouseDown, ref, children } = props
   const body = (
     <ScreenBody variant={variant} className={aside === undefined ? undefined : 'flex-1'}>
-      <PageStates variant={variant} {...states} />
+      {lead}
+      {props.state === undefined ? (
+        children
+      ) : (
+        <PageStates variant={variant} state={props.state} loading={props.loading} errorMessage={props.errorMessage} onRetry={props.onRetry} empty={props.empty}>
+          {children}
+        </PageStates>
+      )}
     </ScreenBody>
   )
   return (

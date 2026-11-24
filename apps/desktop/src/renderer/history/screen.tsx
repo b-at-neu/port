@@ -4,24 +4,38 @@ import { RefreshCw, History as HistoryIcon } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/renderer/components/ui/select'
 import { Button } from '@/renderer/components/ui/button'
 import { Checkbox } from '@/renderer/components/ui/checkbox'
-import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { EmptyState } from '@/renderer/components/empty-state'
 import { ErrorBanner } from '@/renderer/components/error-banner'
+import { Page } from '@/renderer/components/page'
+import { pageState } from '@/renderer/components/page-state'
 import { ScreenHeader } from '@/renderer/components/screen-header'
-import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { useIpcQuery } from '@/renderer/data/query'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { relativeTime } from '@/renderer/lib/time'
 import { startFromTranscript } from '@/renderer/session/actions'
 import { useSessionMarks } from '@/renderer/session/marks'
 import { SessionRow } from '@/renderer/components/session-row'
-import { groupHistory } from '@/renderer/history/model'
-import type { HistoryGroups } from '@/types/history'
+import { historyView } from '@/renderer/history/model'
+import type { HistoryView } from '@/renderer/history/model'
 import { agentLabel, sessionLabel } from '@/utils/sessions/label'
 import type { SessionMarks } from '@/types/hosting'
 import type { AgentRecord, SessionRecord } from '@/types/sessions'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
-import { ALL_ARCHIVED_EMPTY, failureCopy, footnote, groupHeader, SHOW_ARCHIVED_ACTION } from '@/renderer/history/copy'
+import {
+  ALL_ARCHIVED_EMPTY,
+  FORK_ACTION,
+  groupHeader,
+  HISTORY_TITLE,
+  MARKS_ERROR,
+  NO_SESSIONS_EMPTY,
+  RESCAN_ACTION,
+  RESUME_ACTION,
+  SCAN_UNREACHABLE,
+  SHOW_ARCHIVED_ACTION,
+} from '@/renderer/history/copy'
+import { ALL_REPOSITORIES, SEARCH_ACTION } from '@/renderer/lib/copy'
+
+type OpenTranscript = (sessionId: string, agentId: string | null, title: string) => void
 
 function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { status: 'ready' }> {
   return 'config' in entry
@@ -42,142 +56,84 @@ export function HistoryScreen() {
   const marks = useSessionMarks()
   const readyRepos = repos.data?.ok === true ? repos.data.repositories.filter(isReady) : []
   const showArchived = search.archived ?? false
+  const view = scan.data === undefined ? undefined : historyView(scan.data, { repo: search.repo ?? null, marks: marks.data, showArchived })
+  const state = pageState({ data: view, status: scan.status }, (v) => v.kind === 'empty' || v.kind === 'all-archived')
 
   function openTranscript(sessionId: string, agentId: string | null, title: string): void {
     void navigate({ to: ROUTE_IDS.transcript, params: { sessionId }, search: { agentId, from: 'history', focusIndex: null, title, item: null } })
   }
 
   return (
-    <Screen
+    <Page
+      variant="list"
       header={
-      <ScreenHeader className="justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <span>History</span>
-          <Select value={search.repo ?? 'all'} onValueChange={(value) => void navigate({ to: ROUTE_IDS.history, search: { ...search, repo: value === 'all' ? null : (value as RepoId) } })}>
-            <SelectTrigger className="w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All repositories</SelectItem>
-              {readyRepos.map((repo) => (
-                <SelectItem key={repo.id} value={repo.id}>
-                  {repo.config.repo}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <label className="flex items-center gap-1.5 text-small text-foreground-secondary">
-            <Checkbox checked={showArchived} onCheckedChange={(checked) => void navigate({ to: ROUTE_IDS.history, search: { ...search, archived: checked === true } })} />
-            {SHOW_ARCHIVED_ACTION}
-          </label>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Button variant="outline" size="small" onClick={() => void navigate({ to: ROUTE_IDS.search, search: { repo: search.repo ?? null } })}>
-            Search
-          </Button>
-          <Button variant="outline" size="small" onClick={() => void scan.refetch()}>
-            <RefreshCw aria-hidden="true" className="size-3.5" />
-            Rescan
-          </Button>
-        </div>
-      </ScreenHeader>
+        <ScreenHeader className="justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span>{HISTORY_TITLE}</span>
+            <Select value={search.repo ?? 'all'} onValueChange={(value) => void navigate({ to: ROUTE_IDS.history, search: { ...search, repo: value === 'all' ? null : (value as RepoId) } })}>
+              <SelectTrigger className="w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{ALL_REPOSITORIES}</SelectItem>
+                {readyRepos.map((repo) => (
+                  <SelectItem key={repo.id} value={repo.id}>
+                    {repo.config.repo}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <label className="flex items-center gap-1.5 text-small text-foreground-secondary">
+              <Checkbox checked={showArchived} onCheckedChange={(checked) => void navigate({ to: ROUTE_IDS.history, search: { ...search, archived: checked === true } })} />
+              {SHOW_ARCHIVED_ACTION}
+            </label>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button variant="outline" size="small" onClick={() => void navigate({ to: ROUTE_IDS.search, search: { repo: search.repo ?? null } })}>
+              {SEARCH_ACTION}
+            </Button>
+            <Button variant="outline" size="small" onClick={() => void scan.refetch()}>
+              <RefreshCw aria-hidden="true" className="size-3.5" />
+              {RESCAN_ACTION}
+            </Button>
+          </div>
+        </ScreenHeader>
+      }
+      state={state}
+      errorMessage={SCAN_UNREACHABLE}
+      onRetry={() => void scan.refetch()}
+      empty={
+        view?.kind === 'all-archived' ? (
+          <EmptyState icon={HistoryIcon} message={ALL_ARCHIVED_EMPTY} action={{ label: SHOW_ARCHIVED_ACTION, onClick: () => void navigate({ to: ROUTE_IDS.history, search: { ...search, archived: true } }) }} className="px-4 py-6" />
+        ) : (
+          <EmptyState icon={HistoryIcon} message={NO_SESSIONS_EMPTY} className="px-4 py-6" data-slot="history-empty" />
+        )
       }
     >
-      <ScreenBody variant="list">
-        {scan.status === 'pending' ? (
-          <div className="flex flex-col gap-1 px-4 py-2">
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-9 w-full" />
-          </div>
-        ) : scan.status === 'error' ? (
-          <ErrorBanner message="Could not reach the main process." className="mx-4 my-2" />
-        ) : !scan.data.ok ? (
-          <ErrorBanner message={failureCopy(scan.data.kind, scan.data.message)} className="mx-4 my-2" />
-        ) : (
-          <>
-            {marks.status === 'error' ? <ErrorBanner message="Couldn't load pins and archives. Rescan to try again." className="mx-4 my-2" /> : null}
-            <HistoryList
-              repo={search.repo ?? null}
-              sessions={scan.data.sessions}
-              agents={scan.data.agents}
-              unresolved={scan.data.unresolved.length}
-              unreadable={scan.data.unreadable.length}
-              repos={readyRepos}
-              marks={marks.data}
-              showArchived={showArchived}
-              onShowArchived={() => void navigate({ to: ROUTE_IDS.history, search: { ...search, archived: true } })}
-              onOpen={openTranscript}
-            />
-          </>
-        )}
-      </ScreenBody>
-    </Screen>
+      {view === undefined ? null : (
+        <>
+          {marks.status === 'error' ? <ErrorBanner message={MARKS_ERROR} className="mx-4 my-2" /> : null}
+          <HistoryBody view={view} repos={readyRepos} marks={marks.data} onOpen={openTranscript} />
+        </>
+      )}
+    </Page>
   )
 }
 
-function HistoryList({
-  repo,
-  sessions,
-  agents,
-  unresolved,
-  unreadable,
-  repos,
-  marks,
-  showArchived,
-  onShowArchived,
-  onOpen,
-}: {
-  readonly repo: RepoId | null
-  readonly sessions: readonly SessionRecord[]
-  readonly agents: readonly AgentRecord[]
-  readonly unresolved: number
-  readonly unreadable: number
-  readonly repos: readonly Extract<RepositoryEntry, { status: 'ready' }>[]
-  readonly marks: SessionMarks | undefined
-  readonly showArchived: boolean
-  readonly onShowArchived: () => void
-  readonly onOpen: (sessionId: string, agentId: string | null, title: string) => void
-}) {
-  const filtered = (repo === null ? sessions : sessions.filter((session) => session.repoId === repo)).slice().sort((a, b) => a.idleMs - b.idleMs)
-  const agentsBySession = new Map<string, AgentRecord[]>()
-  for (const agent of agents) {
-    if (repo !== null && agent.repoId !== repo) continue
-    const list = agentsBySession.get(agent.sessionId) ?? []
-    list.push(agent)
-    agentsBySession.set(agent.sessionId, list)
-  }
-  const note = footnote(unresolved, unreadable)
-
-  if (filtered.length === 0) {
-    return <EmptyState icon={HistoryIcon} message="No sessions recorded for this repository yet." className="px-4 py-6" data-slot="history-empty" />
-  }
-
-  const groups: HistoryGroups = marks !== undefined ? groupHistory(filtered, marks, showArchived) : { pinned: [], recent: filtered, archived: [] }
-  const groupList = (
-    [
-      { kind: 'pinned', rows: groups.pinned },
-      { kind: 'recent', rows: groups.recent },
-      { kind: 'archived', rows: groups.archived },
-    ] as const
-  ).filter((group) => group.rows.length > 0)
-  const showHeaders = groupList.length > 1
-
-  if (groupList.length === 0) {
-    return <EmptyState icon={HistoryIcon} message={ALL_ARCHIVED_EMPTY} action={{ label: SHOW_ARCHIVED_ACTION, onClick: onShowArchived }} className="px-4 py-6" />
-  }
-
+function HistoryBody({ view, repos, marks, onOpen }: { readonly view: HistoryView; readonly repos: readonly RepositoryEntry[]; readonly marks: SessionMarks | undefined; readonly onOpen: OpenTranscript }) {
+  if (view.kind === 'failed') return <ErrorBanner message={view.message} className="mx-4 my-2" />
+  if (view.kind !== 'list') return null
   return (
     <div className="flex flex-col">
-      {groupList.map((group) => (
+      {view.groups.map((group) => (
         <div key={group.kind} data-slot={`history-group-${group.kind}`}>
-          {showHeaders ? <div className="px-4 py-2 text-meta font-medium text-muted-foreground">{groupHeader(group.kind)}</div> : null}
+          {view.showHeaders ? <div className="px-4 py-2 text-meta font-medium text-muted-foreground">{groupHeader(group.kind)}</div> : null}
           {group.rows.map((session) => (
-            <HistoryEntry key={session.sessionId} session={session} agents={agentsBySession.get(session.sessionId) ?? []} repoTag={repoTagFor(repos, session.repoId)} marks={marks} onOpen={onOpen} />
+            <HistoryEntry key={session.sessionId} session={session} agents={view.agentsBySession.get(session.sessionId) ?? []} repoTag={repoTagFor(repos, session.repoId)} marks={marks} onOpen={onOpen} />
           ))}
         </div>
       ))}
-      {note !== null ? <p className="px-4 py-2 text-meta text-muted-foreground">{note}</p> : null}
+      {view.note !== null ? <p className="px-4 py-2 text-meta text-muted-foreground">{view.note}</p> : null}
     </div>
   )
 }
@@ -193,7 +149,7 @@ function HistoryEntry({
   readonly agents: readonly AgentRecord[]
   readonly repoTag: string
   readonly marks: SessionMarks | undefined
-  readonly onOpen: (sessionId: string, agentId: string | null, title: string) => void
+  readonly onOpen: OpenTranscript
 }) {
   const label = sessionLabel(session)
   const canHost = session.cwd !== null
@@ -214,10 +170,10 @@ function HistoryEntry({
           {canHost ? (
             <div className="flex shrink-0 gap-1">
               <Button variant="outline" size="small" onClick={() => void startFromTranscript(session.repoId as RepoId, session.sessionId, 'resume')}>
-                Resume
+                {RESUME_ACTION}
               </Button>
               <Button variant="outline" size="small" onClick={() => void startFromTranscript(session.repoId as RepoId, session.sessionId, 'fork')}>
-                Fork
+                {FORK_ACTION}
               </Button>
             </div>
           ) : null}

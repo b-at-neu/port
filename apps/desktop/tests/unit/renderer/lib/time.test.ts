@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { exactTime, formatAgo, formatAgoSince, formatClock, formatDuration, relativeTime } from '@/renderer/lib/time'
+import { exactTime, formatAgo, formatAgoSince, formatClock, formatDuration, formatHourMinute, formatMonthDay, formatTimeOfDay, relativeTime } from '@/renderer/lib/time'
 
 const MIN = 60_000
 const HOUR = 60 * MIN
@@ -73,6 +73,32 @@ describe('formatClock', () => {
   it('has a weekday prefix on another calendar day', () => {
     const now = new Date(2026, 0, 6, 9, 0)
     expect(formatClock(new Date(2026, 0, 5, 14, 2).toISOString(), now)).toMatch(/^[A-Za-z]{3}\s/)
+  })
+})
+
+describe('formatHourMinute', () => {
+  it.each([
+    [new Date(2026, 0, 1, 9, 5), '9:05'],
+    [new Date(2026, 0, 1, 14, 30), '14:30'],
+    [new Date(2026, 0, 1, 0, 0), '0:00'],
+  ])('%s reads %s', (date, expected) => {
+    expect(formatHourMinute(date.toISOString())).toBe(expected)
+  })
+})
+
+describe('formatMonthDay', () => {
+  it.each([
+    [new Date(2026, 10, 3, 12), 'Nov 3'],
+    [new Date(2026, 0, 31, 12), 'Jan 31'],
+  ])('%s reads %s', (date, expected) => {
+    expect(formatMonthDay(date.toISOString())).toBe(expected)
+  })
+})
+
+describe('formatTimeOfDay', () => {
+  it('is the locale time, not the raw ISO', () => {
+    const iso = new Date(2026, 0, 1, 9, 5, 7).toISOString()
+    expect(formatTimeOfDay(iso)).toBe(new Date(iso).toLocaleTimeString())
   })
 })
 

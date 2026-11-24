@@ -6,32 +6,30 @@ import { useIpcQuery } from '@/renderer/data/query'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { ABOUT_NOTICE, ABOUT_POWERED_BY } from '@/utils/about/copy'
 import { formatAppVersion } from '@/utils/about/version'
-import { WIDE_CARD } from '@/renderer/settings/copy'
+import { ABOUT_TITLE, APP_NAME, OPEN_SETUP_CHECKLIST, runtimeVersionsLine, VERSION_UNAVAILABLE, versionLine, WIDE_CARD } from '@/renderer/settings/copy'
 import { UpdateStatus } from '@/renderer/update/status'
 
 function VersionLines() {
   const query = useIpcQuery('app.info')
   if (query.status === 'pending') return <Skeleton className="h-4 w-40" />
-  if (query.status === 'error') return <p className="font-mono text-small text-muted-foreground">Version unavailable</p>
+  if (query.status === 'error') return <p className="font-mono text-small text-muted-foreground">{VERSION_UNAVAILABLE}</p>
   const { app, commit, electron, chromium, node } = query.data
   return (
     <>
-      <p className="font-mono text-small text-foreground">Version {formatAppVersion(app, commit)}</p>
-      <p className="font-mono text-small text-muted-foreground">
-        Electron {electron} · Chromium {chromium} · Node {node}
-      </p>
+      <p className="font-mono text-small text-foreground">{versionLine(formatAppVersion(app, commit))}</p>
+      <p className="font-mono text-small text-muted-foreground">{runtimeVersionsLine(electron, chromium, node)}</p>
     </>
   )
 }
 
 export function AboutTab() {
   return (
-    <SettingsCard title="About" className={WIDE_CARD}>
-      <p className="text-body font-semibold text-foreground">port</p>
+    <SettingsCard title={ABOUT_TITLE} className={WIDE_CARD}>
+      <p className="text-body font-semibold text-foreground">{APP_NAME}</p>
       <VersionLines />
       <UpdateStatus />
       <Link to={ROUTE_IDS.setup} className="w-fit rounded text-small text-primary-text hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-        Open setup checklist
+        {OPEN_SETUP_CHECKLIST}
       </Link>
       <p data-about-notice className="text-body text-foreground">
         {ABOUT_POWERED_BY}

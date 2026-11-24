@@ -33,6 +33,11 @@ import {
   updateRestartPendingTitle,
 } from '@/renderer/update/copy'
 
+/** A failed check never replaces a known `available`. */
+export function nextUpdateState(known: UpdateState | undefined, result: UpdateState): UpdateState {
+  return result.kind === 'error' && known?.kind === 'available' ? known : result
+}
+
 export function noticeOf(state: UpdateState | undefined): UpdateNoticeView | null {
   if (state?.kind !== 'available') return null
   return { version: state.release.version, notesUrl: state.release.notesUrl, release: state.release }

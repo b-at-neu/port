@@ -1,14 +1,14 @@
-// The on-demand check and the update button's one seam.
+// The on-demand check and the update button's one seam. They run through `perform` rather than a hook
+// because the app menu, the keyboard and toast actions call them from outside React.
 import type { QueryClient } from '@tanstack/react-query'
-import type { UpdateDownloadAction, UpdateDownloadState, UpdateState } from '@/types/update'
+import type { UpdateDownloadAction } from '@/types/update'
 import { invoke } from '@/renderer/data/invoke'
 import { ipcQueryOptions } from '@/renderer/data/query'
-import { runInBackground, showActionToast, UNREACHABLE } from '@/renderer/lib/background-action'
+import { perform } from '@/renderer/actions/perform'
+import { showActionToast } from '@/renderer/lib/background-action'
 import { createStore, useStore } from '@/renderer/lib/store'
 import { UPDATE_CHECKING } from '@/renderer/update/copy'
-import { checkToastOf, downloadToastOf } from '@/renderer/update/model'
-
-const TOAST_ID = 'update-check'
+import { checkToastOf, downloadToastOf, nextUpdateState } from '@/renderer/update/model'
 
 const pending = createStore(false)
 
@@ -18,38 +18,25 @@ export function useUpdateCheckPending(): boolean {
 
 const DOWNLOAD_TOAST_ID = 'update-download'
 
-type RunDownload = (channel: 'update.download') => Promise<UpdateDownloadState>
-type RunOpen = (channel: 'update.open', request: { reveal: boolean }) => Promise<UpdateDownloadState>
-
 function openReleasePage(notesUrl: string): void {
   window.open(notesUrl, '_blank', 'noreferrer')
 }
 
 /** The one seam every Update button calls. The pending state is the progress bar itself, so no loading toast. */
-export async function startUpdate(client: QueryClient, run: RunDownload = invoke): Promise<void> {
+export async function startUpdate(client: QueryClient): Promise<void> {
   const { queryKey } = ipcQueryOptions('update.downloadState')
-  const pending = run('update.download')
+  const download = perform({ name: 'update.download', input: undefined }, { invoke, client })
   void client.refetchQueries({ queryKey })
-  let result: UpdateDownloadState
-  try {
-    result = await pending
-  } catch (error) {
-    console.error('Failed to reach the main process for update:download', error)
-    showActionToast(DOWNLOAD_TOAST_ID, UNREACHABLE)
-    return
-  }
+  const result = await download
+  if (result === 'unreachable') return
   client.setQueryData(queryKey, result)
-  const next = downloadToastOf(result, { retry: () => void startUpdate(client, run), openPage: openReleasePage })
+  const next = downloadToastOf(result, { retry: () => void startUpdate(client), openPage: openReleasePage })
   if (next !== null) showActionToast(DOWNLOAD_TOAST_ID, next)
 }
 
-export async function openDownloaded(client: QueryClient, reveal: boolean, run: RunOpen = invoke): Promise<void> {
-  try {
-    client.setQueryData(ipcQueryOptions('update.downloadState').queryKey, await run('update.open', { reveal }))
-  } catch (error) {
-    console.error('Failed to reach the main process for update:open', error)
-    showActionToast(DOWNLOAD_TOAST_ID, UNREACHABLE)
-  }
+export async function openDownloaded(client: QueryClient, reveal: boolean): Promise<void> {
+  const result = await perform({ name: 'update.open', input: { reveal } }, { invoke, client })
+  if (result !== 'unreachable') client.setQueryData(ipcQueryOptions('update.downloadState').queryKey, result)
 }
 
 /** Runs what a `DownloadControls` button or the rail icon asks for. */
@@ -59,24 +46,26 @@ export function runDownloadAction(client: QueryClient, action: UpdateDownloadAct
   else void openDownloaded(client, action === 'reveal')
 }
 
-type RunCheck = (channel: 'update.check') => Promise<UpdateState>
-
-/** Writes the result into the `update:state` cache and never invalidates it: a refetch landing after the result would overwrite it with a stale read. A failed check never replaces a known `available`. */
-export async function checkForUpdates(client: QueryClient, run: RunCheck = invoke): Promise<void> {
+/** Writes the result into the `update:state` cache and never invalidates it: a refetch landing after the result would overwrite it with a stale read. */
+export async function checkForUpdates(client: QueryClient): Promise<void> {
   if (pending.get()) return
   pending.set(true)
   try {
-    const result = await runInBackground({
-      id: TOAST_ID,
-      pending: UPDATE_CHECKING,
-      run: () => run('update.check'),
-      toToast: (state) => checkToastOf(state, { update: () => void startUpdate(client), retry: () => void checkForUpdates(client, run) }),
-    })
+    const result = await perform(
+      {
+        name: 'update.check',
+        input: undefined,
+        toast: {
+          id: () => 'update-check',
+          pending: UPDATE_CHECKING,
+          result: (state) => checkToastOf(state, { update: () => void startUpdate(client), retry: () => void checkForUpdates(client) }),
+        },
+      },
+      { invoke, client },
+    )
     if (result === 'unreachable') return
     const { queryKey } = ipcQueryOptions('update.state')
-    const known = client.getQueryData(queryKey)
-    if (result.kind === 'error' && known?.kind === 'available') return
-    client.setQueryData(queryKey, result)
+    client.setQueryData(queryKey, nextUpdateState(client.getQueryData(queryKey), result))
   } finally {
     pending.set(false)
   }

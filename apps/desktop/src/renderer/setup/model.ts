@@ -7,6 +7,26 @@ import type { GhStatus } from '@/types/gh'
 import type { ReposListResponse } from '@/types/ipc'
 import type { RepositoryEntry } from '@/utils/repos'
 import type { QueryState, SetupAction, SetupStep } from '@/types/setup'
+import {
+  ADD_REPOSITORY,
+  CHECK_AGAIN,
+  COULDNT_CHECK,
+  DONE,
+  FOUND,
+  foundBody,
+  GH_LOGIN_COMMAND,
+  GH_MISSING,
+  GH_SIGNED_IN,
+  GH_SIGNED_OUT_PREFIX,
+  GH_SIGNED_OUT_SUFFIX,
+  GH_UNKNOWN,
+  NEEDS_YOU,
+  PICK_FOLDER,
+  repoSummaryText,
+  SETUP_UNREACHABLE,
+  TEST_SIGN_IN,
+  verifiedBody,
+} from '@/renderer/setup/copy'
 
 interface SetupModel {
   readonly claude: SetupStep
@@ -17,16 +37,16 @@ interface SetupModel {
 }
 
 const LOADING_STEP: SetupStep = { state: 'loading', pillStatus: 'idle', pillLabel: '', title: '', body: '', bodyCommand: null, bodySuffix: '', detail: null, action: null }
-const UNREACHABLE_ACTION: SetupAction = { label: 'Check again', kind: 'check-again' }
+const UNREACHABLE_ACTION: SetupAction = { label: CHECK_AGAIN, kind: 'check-again' }
 
 function unreachableStep(message: string): SetupStep {
-  return { state: 'unreachable', pillStatus: 'danger', pillLabel: "Couldn't check", title: "Couldn't check", body: message, bodyCommand: null, bodySuffix: '', detail: null, action: UNREACHABLE_ACTION }
+  return { state: 'unreachable', pillStatus: 'danger', pillLabel: COULDNT_CHECK, title: COULDNT_CHECK, body: message, bodyCommand: null, bodySuffix: '', detail: null, action: UNREACHABLE_ACTION }
 }
 
 function claudeStep(preflight: QueryState<RuntimePreflight>, probe: RuntimeProbe | null): SetupStep {
   if (preflight.status === 'pending') return LOADING_STEP
   if (preflight.status === 'error' || preflight.data === undefined) {
-    return unreachableStep("Couldn't reach the main process to check setup. Restart port to try again.")
+    return unreachableStep(SETUP_UNREACHABLE)
   }
 
   const data = preflight.data
@@ -38,7 +58,7 @@ function claudeStep(preflight: QueryState<RuntimePreflight>, probe: RuntimeProbe
       pillStatus: 'success',
       pillLabel: PILL_LABEL.verified,
       title: PILL_LABEL.verified,
-      body: `Signed in · verified in ${(probe.elapsedMs / 1000).toFixed(1)}s`,
+      body: verifiedBody(probe.elapsedMs),
       bodyCommand: null,
       bodySuffix: '',
       detail: null,
@@ -47,19 +67,16 @@ function claudeStep(preflight: QueryState<RuntimePreflight>, probe: RuntimeProbe
   }
 
   if (diagnosis === 'unverified') {
-    const path = data.executable !== null ? data.executable.path : null
-    const version = data.version?.raw ?? null
-    const versionLine = version !== null ? `Claude Code ${version}${path !== null ? ` · ${path}` : ''}` : null
     return {
       state: 'done',
       pillStatus: 'success',
-      pillLabel: 'Found',
-      title: 'Found',
-      body: versionLine !== null ? `${versionLine}. Not verified yet.` : 'Not verified yet.',
+      pillLabel: FOUND,
+      title: FOUND,
+      body: foundBody(data.version?.raw ?? null, data.executable !== null ? data.executable.path : null),
       bodyCommand: null,
       bodySuffix: '',
       detail: null,
-      action: { label: 'Test sign-in', kind: 'test' },
+      action: { label: TEST_SIGN_IN, kind: 'test' },
     }
   }
 
@@ -74,76 +91,44 @@ function claudeStep(preflight: QueryState<RuntimePreflight>, probe: RuntimeProbe
     bodyCommand: null,
     bodySuffix: '',
     detail,
-    action: { label: 'Check again', kind: 'check-again' },
+    action: UNREACHABLE_ACTION,
   }
+}
+
+function needsYouStep(body: string, bodyCommand: string | null, bodySuffix: string, action: SetupAction): SetupStep {
+  return { state: 'needs-you', pillStatus: 'attention', pillLabel: NEEDS_YOU, title: NEEDS_YOU, body, bodyCommand, bodySuffix, detail: null, action }
+}
+
+function doneStep(body: string): SetupStep {
+  return { state: 'done', pillStatus: 'success', pillLabel: DONE, title: DONE, body, bodyCommand: null, bodySuffix: '', detail: null, action: null }
 }
 
 function ghStep(gh: QueryState<GhStatus>): SetupStep {
   if (gh.status === 'pending') return LOADING_STEP
-  if (gh.status === 'error' || gh.data === undefined) return unreachableStep("Couldn't reach the main process to check setup. Restart port to try again.")
+  if (gh.status === 'error' || gh.data === undefined) return unreachableStep(SETUP_UNREACHABLE)
 
   const status = gh.data
-  if (status.kind === 'signed-in') {
-    return { state: 'done', pillStatus: 'success', pillLabel: 'Done', title: 'Done', body: 'Signed in to GitHub.', bodyCommand: null, bodySuffix: '', detail: null, action: null }
-  }
-  if (status.kind === 'missing') {
-    return {
-      state: 'needs-you',
-      pillStatus: 'attention',
-      pillLabel: 'Needs you',
-      title: 'Needs you',
-      body: "gh isn't installed. Install it from cli.github.com, then check again.",
-      bodyCommand: null,
-      bodySuffix: '',
-      detail: null,
-      action: UNREACHABLE_ACTION,
-    }
-  }
-  if (status.kind === 'signed-out') {
-    return {
-      state: 'needs-you',
-      pillStatus: 'attention',
-      pillLabel: 'Needs you',
-      title: 'Needs you',
-      body: 'gh is signed out. Run ',
-      bodyCommand: 'gh auth login',
-      bodySuffix: '.',
-      detail: null,
-      action: UNREACHABLE_ACTION,
-    }
-  }
-  return { state: 'unreachable', pillStatus: 'danger', pillLabel: "Couldn't check", title: "Couldn't check", body: "Couldn't check gh.", bodyCommand: null, bodySuffix: '', detail: status.message, action: UNREACHABLE_ACTION }
+  if (status.kind === 'signed-in') return doneStep(GH_SIGNED_IN)
+  if (status.kind === 'missing') return needsYouStep(GH_MISSING, null, '', UNREACHABLE_ACTION)
+  if (status.kind === 'signed-out') return needsYouStep(GH_SIGNED_OUT_PREFIX, GH_LOGIN_COMMAND, GH_SIGNED_OUT_SUFFIX, UNREACHABLE_ACTION)
+  return { state: 'unreachable', pillStatus: 'danger', pillLabel: COULDNT_CHECK, title: COULDNT_CHECK, body: GH_UNKNOWN, bodyCommand: null, bodySuffix: '', detail: status.message, action: UNREACHABLE_ACTION }
 }
 
 function repoSummary(repositories: readonly RepositoryEntry[]): string {
   const first = repositories[0]
   if (first === undefined) return ''
-  const label = 'config' in first ? first.config.repo : first.displayName
-  const rest = repositories.length - 1
-  return rest > 0 ? `${label} and ${String(rest)} more` : `${label} added`
+  return repoSummaryText('config' in first ? first.config.repo : first.displayName, repositories.length - 1)
 }
 
 function repoStep(repos: QueryState<ReposListResponse>): SetupStep {
   if (repos.status === 'pending') return LOADING_STEP
   if (repos.status === 'error' || repos.data === undefined || !repos.data.ok) {
-    return unreachableStep("Couldn't reach the main process to check setup. Restart port to try again.")
+    return unreachableStep(SETUP_UNREACHABLE)
   }
 
-  if (repos.data.repositories.length === 0) {
-    return {
-      state: 'needs-you',
-      pillStatus: 'attention',
-      pillLabel: 'Needs you',
-      title: 'Needs you',
-      body: 'Pick a folder that holds a port-managed repository.',
-      bodyCommand: null,
-      bodySuffix: '',
-      detail: null,
-      action: { label: 'Add repository', kind: 'add-repository' },
-    }
-  }
+  if (repos.data.repositories.length === 0) return needsYouStep(PICK_FOLDER, null, '', { label: ADD_REPOSITORY, kind: 'add-repository' })
 
-  return { state: 'done', pillStatus: 'success', pillLabel: 'Done', title: 'Done', body: repoSummary(repos.data.repositories), bodyCommand: null, bodySuffix: '', detail: null, action: null }
+  return doneStep(repoSummary(repos.data.repositories))
 }
 
 /** `complete` is every step at `done` — a query in `error` is never `done`. */

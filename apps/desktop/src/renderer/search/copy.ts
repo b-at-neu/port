@@ -4,6 +4,12 @@ import type { SearchGroup, SearchHit, SearchResult } from '@/types/search'
 export const IDLE_NOTICE = 'port reads transcripts from this machine only. Nothing is sent anywhere.'
 export const TOO_SHORT_COPY = 'Enter at least 3 characters — shorter terms match nearly everything.'
 export const SEARCHING_COPY = 'The first pass over a transcript reads it once and remembers it, so this is the slow one.'
+export const SEARCH_TITLE = 'Search transcripts'
+export const BACK_LABEL = 'Back'
+export const THIS_REPOSITORY = 'This repository'
+export const QUERY_PLACEHOLDER = 'An error, a file path, a decision'
+export const SEARCHING_LABEL = 'Searching…'
+export const SEARCH_UNREACHABLE = "Couldn't reach the main process to search. Restart port to try again."
 export const SEARCH_HINT = 'Terms are combined with AND and match anywhere, case-insensitively. Wrap a phrase in "quotes".'
 
 export function kindChip(hit: SearchHit): string {
