@@ -18,7 +18,7 @@ export function openFailureCopy(kind: TranscriptFailureKind, message: string, pa
   }
 }
 
-export function tailBannerKindFor(kind: TranscriptTailFailureKind): TailBannerKind {
+export function tailBannerKindFor(kind: TranscriptTailFailureKind | 'unreachable'): TailBannerKind {
   if (kind === 'not-found' || kind === 'unreadable' || kind === 'too-large') return kind
   return 'unreachable'
 }

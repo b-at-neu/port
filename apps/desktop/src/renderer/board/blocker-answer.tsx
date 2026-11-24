@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/renderer/components/ui/button'
 import { Textarea } from '@/renderer/components/ui/textarea'
-import { send } from '@/renderer/session/actions'
+import { useSendMessage } from '@/renderer/session/actions'
 import { blockerSendError, blockerSentToast } from '@/renderer/board/blocked-copy'
 import type { SessionKey } from '@/types/hosting'
 
@@ -14,14 +14,12 @@ interface BlockerAnswerProps {
 
 export function BlockerAnswer({ sessionKey, number }: BlockerAnswerProps) {
   const [text, setText] = useState('')
-  const [sending, setSending] = useState(false)
+  const { send, pending: sending } = useSendMessage()
   const [error, setError] = useState<string | null>(null)
 
   async function submit(): Promise<void> {
-    setSending(true)
     setError(null)
     const outcome = await send(sessionKey, text)
-    setSending(false)
     if (outcome.ok) {
       toast(blockerSentToast(number))
       setText('')

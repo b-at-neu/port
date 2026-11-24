@@ -1,8 +1,7 @@
 // The shared row menu for a session — a "…" dropdown and a right-click menu over one item list: Rename (sidebar only), Pin/Unpin, Archive/Unarchive.
 import { Fragment, useState, type ReactNode } from 'react'
 import { MoreHorizontal, Pin } from 'lucide-react'
-import { useQueryClient } from '@tanstack/react-query'
-import { AlertDialog, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/renderer/components/ui/alert-dialog'
+import { ConfirmDialog } from '@/renderer/components/confirm-dialog'
 import { Button } from '@/renderer/components/ui/button'
 import { ContextMenuItem, ContextMenuSeparator } from '@/renderer/components/ui/context-menu'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/renderer/components/ui/dropdown-menu'
@@ -10,7 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/u
 import { useIpcQuery } from '@/renderer/data/query'
 import type { SessionKey, SessionMarks } from '@/types/hosting'
 import { liveUserSession } from '@/utils/shell/session-order'
-import { setSessionMark } from '@/renderer/session/marks'
+import { useSessionMarkActions } from '@/renderer/session/marks'
 import type { SessionMarkItem } from '@/types/session'
 import { sessionMarkItems } from '@/renderer/session/marks-menu-model'
 import { ARCHIVE_CONFIRM_ACTION, ARCHIVE_CONFIRM_PROMPT, MENU_DISABLED_HINT, SESSION_ACTIONS_LABEL } from '@/renderer/session/marks-copy'
@@ -24,7 +23,7 @@ export interface SessionMarkMenuModel {
 }
 
 export function useSessionMarkMenu({ sessionId, marks, onRename }: { readonly sessionId: string | null; readonly marks: SessionMarks | undefined; readonly onRename?: () => void }): SessionMarkMenuModel {
-  const queryClient = useQueryClient()
+  const { setPinned, setArchived } = useSessionMarkActions()
   const pinned = sessionId !== null && (marks?.pinned.includes(sessionId) ?? false)
   const archived = sessionId !== null && (marks?.archived.includes(sessionId) ?? false)
   const sessions = useIpcQuery('session.list')
@@ -33,45 +32,29 @@ export function useSessionMarkMenu({ sessionId, marks, onRename }: { readonly se
   function handleArchiveSelect(): void {
     if (sessionId === null) return
     if (archived) {
-      void setSessionMark(queryClient, 'archived', sessionId, false)
+      void setArchived(sessionId, false, null)
       return
     }
     const live = liveUserSession(sessions.data ?? [], sessionId)
-    if (live === null) void setSessionMark(queryClient, 'archived', sessionId, true)
+    if (live === null) void setArchived(sessionId, true, null)
     else if (live.phase === 'streaming' || live.phase === 'interrupting') setConfirmKey(live.sessionKey)
-    else void setSessionMark(queryClient, 'archived', sessionId, true, live.sessionKey)
+    else void setArchived(sessionId, true, live.sessionKey)
   }
 
   function confirmArchive(): void {
     if (sessionId === null || confirmKey === null) return
-    void setSessionMark(queryClient, 'archived', sessionId, true, confirmKey)
+    void setArchived(sessionId, true, confirmKey)
     setConfirmKey(null)
   }
 
   function select(key: SessionMarkItem['key']): void {
     if (key === 'rename') onRename?.()
     else if (key === 'pin') {
-      if (sessionId !== null) void setSessionMark(queryClient, 'pinned', sessionId, !pinned)
+      if (sessionId !== null) void setPinned(sessionId, !pinned)
     } else handleArchiveSelect()
   }
 
-  const dialog = (
-    <AlertDialog open={confirmKey !== null} onOpenChange={(open) => !open && setConfirmKey(null)}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{ARCHIVE_CONFIRM_PROMPT}</AlertDialogTitle>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <Button variant="outline" onClick={() => setConfirmKey(null)}>
-            {CLOSE_CONFIRM_NO}
-          </Button>
-          <Button variant="destructive" onClick={confirmArchive}>
-            {ARCHIVE_CONFIRM_ACTION}
-          </Button>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  )
+  const dialog = <ConfirmDialog open={confirmKey !== null} title={ARCHIVE_CONFIRM_PROMPT} confirmLabel={ARCHIVE_CONFIRM_ACTION} cancelLabel={CLOSE_CONFIRM_NO} onConfirm={confirmArchive} onCancel={() => setConfirmKey(null)} />
 
   return { items: sessionMarkItems({ sessionId, marks, canRename: onRename !== undefined }), select, pinned, dialog }
 }

@@ -2,8 +2,6 @@
 import { useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { MessageSquare } from 'lucide-react'
-import { AlertDialog, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/renderer/components/ui/alert-dialog'
-import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { EmptyState } from '@/renderer/components/empty-state'
 import { ErrorBanner } from '@/renderer/components/error-banner'
@@ -11,18 +9,20 @@ import { ScreenHeader } from '@/renderer/components/screen-header'
 import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { ConversationList } from '@/renderer/components/conversation-list'
 import { useIpcQuery } from '@/renderer/data/query'
-import { invoke } from '@/renderer/data/invoke'
+import { useTranscript } from '@/renderer/data/transcript'
+import type { SessionReady } from '@/renderer/data/transcript-model'
+import { useActionMutation } from '@/renderer/actions/use-action-mutation'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import type { SessionSearch } from '@/types/router'
 import { ChangesPane } from '@/renderer/session/changes-pane'
 import type { RepositoryEntry } from '@/utils/repos'
 import type { ComposerAttachment } from '@/utils/hosting/attachments'
+import type { PlanDecision } from '@/utils/hosting/controls'
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import { folderLabel } from '@/utils/workspace/label'
 import { openNewSessionDialog } from '@/renderer/shell/stores'
-import { useSessionEntries } from '@/renderer/session/entries-store'
 import { setDraft, clearDraftAttachments } from '@/renderer/session/drafts'
-import { answerPlan, answerQuestion, close, dismiss, send, setControls, stop } from '@/renderer/session/actions'
+import { useCloseSession, useDismissSession, useSendMessage } from '@/renderer/session/actions'
 import { SessionHeader } from '@/renderer/session/header'
 import { EndPanel } from '@/renderer/session/end-panel'
 import { CommandStrip } from '@/renderer/session/command-strip'
@@ -36,9 +36,10 @@ import { QUESTION_SKIPPED_MESSAGE, COMPOSER_PLAN_PLACEHOLDER, COMPOSER_QUESTION_
 import { toast } from 'sonner'
 import { PromptInput } from '@/renderer/session/prompt-input'
 import { PIPELINE_SEND_BLOCKED, STAGE_COMMAND_BLOCKED } from '@/renderer/session/composer-copy'
-import { runInBackground } from '@/renderer/lib/background-action'
-import { COMPOSER_HINT, composerCopy, CLOSE_CONFIRM_NO, CLOSE_CONFIRM_PROMPT, CLOSE_PENDING, CLOSE_SUCCESS, CLOSE_UNKNOWN_SESSION, EMPTY_TITLE, interruptNote, originDividerLabel, RECONNECTING, SEND_FAILED_UNKNOWN_SESSION, SEND_FAILED_UNREACHABLE, windowNote } from '@/renderer/session/copy'
+import { COMPOSER_HINT, composerCopy, EMPTY_TITLE, interruptNote, originDividerLabel, RECONNECTING, SEND_FAILED_UNKNOWN_SESSION, SEND_FAILED_UNREACHABLE, windowNote } from '@/renderer/session/copy'
 import { BackgroundTasksPanel } from '@/renderer/session/background-tasks'
+
+const EMPTY_TRANSCRIPT: Pick<SessionReady, 'entries' | 'firstIndex' | 'live' | 'history'> = { entries: [], firstIndex: 0, live: null, history: { kind: 'none' } }
 
 function repoLabelFor(repos: readonly RepositoryEntry[] | undefined, snapshot: HostedSessionSnapshot): string {
   if (snapshot.repoId === null) return folderLabel(snapshot.workspace.folder)
@@ -97,9 +98,17 @@ function EmptyPanel() {
 function SessionLive({ snapshot, repoLabel, paneOpen }: { readonly snapshot: HostedSessionSnapshot; readonly repoLabel: string; readonly paneOpen: boolean }) {
   const key = snapshot.sessionKey
   const navigate = useNavigate()
-  const entries = useSessionEntries(key)
+  const transcript = useTranscript({ kind: 'session', sessionKey: key }).view
+  const entries = transcript.status === 'ready' ? transcript : EMPTY_TRANSCRIPT
+  const { send } = useSendMessage()
+  const interrupt = useActionMutation('session.interrupt')
+  const { close, confirmDialog: closeDialog } = useCloseSession()
+  const { dismiss } = useDismissSession()
+  const questionAnswer = useActionMutation('session.questionAnswer')
+  const planAnswer = useActionMutation('session.planAnswer')
+  const permissionAnswer = useActionMutation('session.permissionAnswer')
+  const controlsSet = useActionMutation('session.controlsSet')
   const [sendError, setSendError] = useState<string | null>(null)
-  const [closeConfirming, setCloseConfirming] = useState(false)
   const [archiving, setArchiving] = useState(false)
   const [interruptNoteText, setInterruptNoteText] = useState<string | null>(null)
   const [sessionGone, setSessionGone] = useState(false)
@@ -125,23 +134,13 @@ function SessionLive({ snapshot, repoLabel, paneOpen }: { readonly snapshot: Hos
   }
 
   async function handleStop(): Promise<void> {
-    const result = await stop(key)
+    const result = await interrupt.perform({ sessionKey: key })
     if (result === 'unreachable') return
-    setInterruptNoteText(interruptNote(result))
-  }
-
-  function closeSession(): void {
-    void runInBackground({
-      id: `session-close:${key}`,
-      pending: CLOSE_PENDING,
-      run: () => close(key),
-      toToast: (result) => (result.ok ? { tone: 'success', title: CLOSE_SUCCESS, description: null, action: null, cancel: null } : { tone: 'error', title: CLOSE_UNKNOWN_SESSION, description: null, action: null, cancel: null }),
-    })
+    setInterruptNoteText(interruptNote(result.ok ? result.queuedAfterInterrupt : null))
   }
 
   function handleCloseClick(): void {
-    if (snapshot.phase === 'streaming' || snapshot.phase === 'interrupting') setCloseConfirming(true)
-    else closeSession()
+    void close(key, { confirm: snapshot.phase === 'streaming' || snapshot.phase === 'interrupting' })
   }
 
   function toggleChanges(): void {
@@ -165,47 +164,32 @@ function SessionLive({ snapshot, repoLabel, paneOpen }: { readonly snapshot: Hos
 
   const interactionEntry = snapshot.pendingPermissions.filter((permission) => permission.interaction !== null).sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))[0] ?? null
   const interaction = interactionEntry?.interaction ?? null
-  const [questionSending, setQuestionSending] = useState(false)
   const [questionError, setQuestionError] = useState<string | null>(null)
-  const [planSending, setPlanSending] = useState(false)
   const [planError, setPlanError] = useState<string | null>(null)
 
   async function handleQuestionSend(answers: Record<string, string>): Promise<void> {
     if (interactionEntry === null) return
-    setQuestionSending(true)
     setQuestionError(null)
-    const result = await answerQuestion(key, interactionEntry.permissionId, answers)
-    setQuestionSending(false)
-    if (!result.ok) setQuestionError(result.kind)
+    const result = await questionAnswer.perform({ sessionKey: key, permissionId: interactionEntry.permissionId, answers })
+    if (result !== 'unreachable' && !result.ok) setQuestionError(result.kind)
   }
 
   async function handleQuestionSkip(): Promise<void> {
     if (interactionEntry === null) return
-    await invoke('session.permissionAnswer', { sessionKey: key, permissionId: interactionEntry.permissionId, decision: 'deny', message: QUESTION_SKIPPED_MESSAGE })
+    await permissionAnswer.perform({ sessionKey: key, permissionId: interactionEntry.permissionId, decision: 'deny', message: QUESTION_SKIPPED_MESSAGE })
   }
 
-  async function handlePlanApprove(mode: 'default' | 'acceptEdits'): Promise<void> {
+  async function answerPlan(decision: PlanDecision): Promise<void> {
     if (interactionEntry === null) return
-    setPlanSending(true)
     setPlanError(null)
-    const result = await answerPlan(key, interactionEntry.permissionId, { kind: 'approve', mode })
-    setPlanSending(false)
-    if (!result.ok) setPlanError(result.kind)
-  }
-
-  async function handleKeepPlanning(feedback: string): Promise<void> {
-    if (interactionEntry === null) return
-    setPlanSending(true)
-    setPlanError(null)
-    const result = await answerPlan(key, interactionEntry.permissionId, { kind: 'keep-planning', feedback })
-    setPlanSending(false)
-    if (!result.ok) setPlanError(result.kind)
+    const result = await planAnswer.perform({ sessionKey: key, permissionId: interactionEntry.permissionId, decision })
+    if (result !== 'unreachable' && !result.ok) setPlanError(result.kind)
   }
 
   async function handleShiftTab(): Promise<void> {
     const mode = nextMode(snapshot.controls.permissionMode)
-    const result = await setControls(key, { permissionMode: mode })
-    if (result.ok) toast(modeToast(mode === 'default' ? 'Ask before edits' : mode === 'acceptEdits' ? 'Accept edits' : 'Plan mode'))
+    const result = await controlsSet.perform({ sessionKey: key, permissionMode: mode })
+    if (result !== 'unreachable' && result.ok) toast(modeToast(mode === 'default' ? 'Ask before edits' : mode === 'acceptEdits' ? 'Accept edits' : 'Plan mode'))
   }
 
   const composerDisabled = copy.disabled || interaction !== null
@@ -226,27 +210,7 @@ function SessionLive({ snapshot, repoLabel, paneOpen }: { readonly snapshot: Hos
       }
     >
       <ArchiveDialog snapshot={snapshot} open={archiving} onOpenChange={setArchiving} />
-      <AlertDialog open={closeConfirming} onOpenChange={(open) => !open && setCloseConfirming(false)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{CLOSE_CONFIRM_PROMPT}</AlertDialogTitle>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <Button variant="outline" onClick={() => setCloseConfirming(false)}>
-              {CLOSE_CONFIRM_NO}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                setCloseConfirming(false)
-                closeSession()
-              }}
-            >
-              Close session
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {closeDialog}
       <div className="flex min-h-0 flex-1 overflow-hidden">
       <ScreenBody variant="conversation" className="flex-1">
         <RestoreBanner />
@@ -266,10 +230,10 @@ function SessionLive({ snapshot, repoLabel, paneOpen }: { readonly snapshot: Hos
         {snapshot.repoId !== null && snapshot.stage === null ? <CommandStrip snapshot={snapshot} /> : null}
         <BackgroundTasksPanel sessionKey={key} tasks={snapshot.backgroundTasks} />
         {interaction !== null && interaction.kind === 'question' ? (
-          <QuestionCard questions={interaction.questions} sending={questionSending} error={questionError} onSend={(answers) => void handleQuestionSend(answers)} onSkip={() => void handleQuestionSkip()} />
+          <QuestionCard questions={interaction.questions} sending={questionAnswer.pending} error={questionError} onSend={(answers) => void handleQuestionSend(answers)} onSkip={() => void handleQuestionSkip()} />
         ) : null}
         {interaction !== null && interaction.kind === 'plan' ? (
-          <PlanCard plan={interaction.plan} sending={planSending} error={planError} onApprove={(mode) => void handlePlanApprove(mode)} onKeepPlanning={(feedback) => void handleKeepPlanning(feedback)} />
+          <PlanCard plan={interaction.plan} sending={planAnswer.pending} error={planError} onApprove={(mode) => void answerPlan({ kind: 'approve', mode })} onKeepPlanning={(feedback) => void answerPlan({ kind: 'keep-planning', feedback })} />
         ) : null}
         <PromptInput
           sessionKey={key}

@@ -1,6 +1,4 @@
 // Pure copy for the pin/archive row menu and its toasts (DESIGN §4: reversible actions toast with Undo).
-import type { SessionMarkResult } from '@/types/hosting'
-
 type MarkKind = 'pinned' | 'archived'
 
 export function menuItemLabel(kind: MarkKind, on: boolean): string {
@@ -10,19 +8,20 @@ export function menuItemLabel(kind: MarkKind, on: boolean): string {
 
 export const MENU_DISABLED_HINT = 'Available once the session has started'
 
-export function markSuccessToast(kind: MarkKind, on: boolean, closed = false): string {
+export function markPendingToast(kind: MarkKind): string {
+  return kind === 'pinned' ? 'Updating the pin…' : 'Updating the archive…'
+}
+
+export function markSuccessToast(kind: MarkKind, on: boolean): string {
   if (kind === 'pinned') return on ? 'Pinned.' : 'Unpinned.'
-  if (!on) return 'Unarchived.'
-  return closed ? "Archived and closed. It's hidden from History." : "Archived. It's hidden from History."
+  return on ? "Archived. It's hidden from History." : 'Unarchived.'
 }
 
 export const ARCHIVE_CONFIRM_PROMPT = 'Archive while Claude is working? The current turn is abandoned.'
 export const ARCHIVE_CONFIRM_ACTION = 'Archive session'
 
-export function markFailureToast(kind: MarkKind, result: Extract<SessionMarkResult, { ok: false }> | 'unreachable'): string {
-  const verb = kind === 'pinned' ? 'pin' : 'archive'
-  if (result === 'unreachable') return `Couldn't ${verb} the session: couldn't reach the main process.`
-  return `Couldn't ${verb} the session: its id isn't valid.`
+export function markFailureToast(kind: MarkKind): string {
+  return `Couldn't ${kind === 'pinned' ? 'pin' : 'archive'} the session: its id isn't valid.`
 }
 
 export const SESSION_ACTIONS_LABEL = 'Session actions'
