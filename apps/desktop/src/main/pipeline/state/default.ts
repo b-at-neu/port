@@ -8,6 +8,7 @@ import { fetchItemsByNumber } from '@/main/github/adapter'
 import { readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
 import { applyLabels } from '@/main/github/writes/apply'
 import { appendAudit } from '@/main/github/writes/audit'
+import type { GitHubReadContext, GitHubWriteContext } from '@/main/github/context'
 import type { ReadyEntry } from '@/types/actions'
 import type { OwnershipParams, OwnershipRead } from '@/types/dispatch'
 import type { RecordIncident } from '@/types/incidents'
@@ -24,6 +25,7 @@ interface CreatePipelineStateParams {
   readonly auditDir: string
   readonly recordIncident: RecordIncident
   readonly readOwnership: (params: OwnershipParams) => Promise<OwnershipRead>
+  readonly platform: GitHubWriteContext & GitHubReadContext
 }
 
 interface PipelineState {
@@ -44,7 +46,7 @@ interface PipelineState {
 
 export function createPipelineState(params: CreatePipelineStateParams): PipelineState {
   const store = createPipelineStateStore({ path: join(params.dir, 'pipeline-state.json'), readJson: readJsonFile, writeJsonAtomic: writeJsonFileAtomic, now: () => new Date() })
-  const { writeState, writeEvent, mirrorItem } = createStateWriter({ store, applyLabels, readOwnership: params.readOwnership, fetchItemsByNumber, appendAudit, recordIncident: params.recordIncident, newId: () => globalThis.crypto.randomUUID(), now: () => new Date() })
+  const { writeState, writeEvent, mirrorItem } = createStateWriter({ store, applyLabels: (p) => applyLabels(params.platform, p), readOwnership: params.readOwnership, fetchItemsByNumber: (p) => fetchItemsByNumber(params.platform, p), appendAudit, recordIncident: params.recordIncident, newId: () => globalThis.crypto.randomUUID(), now: () => new Date() })
   const { finishPipelineState, retryMirrors } = createPipelineFinish({ store, mirrorItem, auditDir: params.auditDir })
 
   return {

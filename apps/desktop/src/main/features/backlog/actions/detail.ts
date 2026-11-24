@@ -7,5 +7,5 @@ export const backlogDetail = defineAction({
   name: 'backlog.detail',
   kind: 'query',
   input: z.object({ repoId, number: positiveInt }),
-  run: (ctx, input) => resolveBacklogDetail(ctx.repos.deps, input),
+  run: (ctx, input) => resolveBacklogDetail(ctx, ctx.repos.deps, input),
 })

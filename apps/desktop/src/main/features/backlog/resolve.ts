@@ -1,6 +1,7 @@
 // `'backlog:list'`'s composition: registry lookup, then the list read and per-epic children read `fetchBacklog` makes.
 import type { BacklogDetailResponse, BacklogResponse } from '@/types/backlog'
 import { fetchBacklog } from '@/main/github/backlog'
+import type { GitHubReadContext } from '@/main/github/context'
 import { fetchBacklogDetail } from '@/main/github/backlog-detail'
 import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/repos'
 import type { RegistryDeps } from '@/types/registry'
@@ -18,6 +19,7 @@ export const defaultBacklogListDeps: BacklogListDeps = { listRepositories, fetch
 
 // `repoId` must name a registered, `ready` repository; the repo ref comes from its own config.
 export async function resolveBacklogList(
+  ctx: GitHubReadContext,
   registryDeps: RegistryDeps,
   request: { readonly repoId: RepoId },
   deps: BacklogListDeps = defaultBacklogListDeps,
@@ -27,7 +29,7 @@ export async function resolveBacklogList(
 
   const refs = deps.trackedRefs(repoId)
   const tracked = new Set((refs ?? []).filter((ref) => ref.kind === 'issue').map((ref) => ref.number))
-  return deps.fetchBacklog({ repo: { owner: entry.config.owner, name: entry.config.name }, tracked })
+  return deps.fetchBacklog(ctx, { repo: { owner: entry.config.owner, name: entry.config.name }, tracked })
 }
 
 export interface BacklogDetailDeps {
@@ -39,6 +41,7 @@ export const defaultBacklogDetailDeps: BacklogDetailDeps = { listRepositories, f
 
 // A malformed request or unusable repository throws; every GitHub-side outcome is a typed value.
 export async function resolveBacklogDetail(
+  ctx: GitHubReadContext,
   registryDeps: RegistryDeps,
   request: { readonly repoId: RepoId; readonly number: number },
   deps: BacklogDetailDeps = defaultBacklogDetailDeps,
@@ -50,5 +53,5 @@ export async function resolveBacklogDetail(
   }
   const entry = await requireReadyRepo(registryDeps, "'backlog:detail'", repoId, deps.listRepositories)
 
-  return deps.fetchBacklogDetail({ repo: { owner: entry.config.owner, name: entry.config.name }, number })
+  return deps.fetchBacklogDetail(ctx, { repo: { owner: entry.config.owner, name: entry.config.name }, number })
 }

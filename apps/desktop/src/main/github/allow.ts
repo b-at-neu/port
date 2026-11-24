@@ -1,7 +1,7 @@
 // The "Allow from now on" read: the integration head and the two `.claude/` files at that exact oid, plus any open pull request already proposing the rule. Any failed read fails the whole read — a partial one would enable a write.
-import { githubHttp } from '@/main/platform/github-http'
 import type { BranchHead } from '@/types/release'
 import type { AllowBaseRead, ReadAllowBaseParams } from '@/types/stage'
+import type { GitHubReadContext } from '@/main/github/context'
 import { describeHttp } from '@/main/github/envelope'
 import { RAW_ACCEPT, restRequest } from '@/main/github/request'
 import { CONFIG_PATH, SETTINGS_PATH } from '@/main/repos/config/paths'
@@ -33,9 +33,9 @@ function prOf(list: unknown): { readonly number: number; readonly url: string } 
 }
 
 /** `readAllowBase({ repo, integration, branch })` — files are read at the head's oid, never the branch name, so they and the commit's parent agree. A 404 on `.claude/settings.json` reads as `null`. */
-export async function readAllowBase(params: ReadAllowBaseParams): Promise<AllowBaseRead> {
+export async function readAllowBase(ctx: GitHubReadContext, params: ReadAllowBaseParams): Promise<AllowBaseRead> {
   if (!SAFE_REF.test(params.integration)) return { ok: false, message: `${params.integration} isn't a branch name port will read` }
-  const github = params.github ?? githubHttp
+  const github = ctx.githubHttp
   const slug = `${params.repo.owner}/${params.repo.name}`
 
   const headRead = await github(restRequest(`repos/${slug}/commits/${params.integration}`))

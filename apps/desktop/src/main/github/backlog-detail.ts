@@ -1,6 +1,5 @@
 // fetchBacklogDetail: one open issue's body, people, and dependency links in one round trip.
-import { githubHttp } from '@/main/platform/github-http'
-import type { GitHubTransport } from '@/types/platform'
+import type { GitHubReadContext } from '@/main/github/context'
 import type { BacklogDetailResponse, BacklogLinkList, BacklogParentRead } from '@/types/backlog'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
@@ -60,19 +59,15 @@ function toParentRead(value: unknown, errored: boolean): BacklogParentRead {
 interface FetchBacklogDetailParams {
   readonly repo: GitHubRepoRef
   readonly number: number
-  readonly github?: GitHubTransport
-  readonly now?: () => Date
 }
 
 // A failed read is a distinct value; an unreadable issue is `no-data`, never `issue-missing`.
-export async function fetchBacklogDetail(params: FetchBacklogDetailParams): Promise<BacklogDetailResponse> {
-  const github = params.github ?? githubHttp
-  const now = params.now ?? (() => new Date())
-  const fetchedAt = now().toISOString()
+export async function fetchBacklogDetail(ctx: GitHubReadContext, params: FetchBacklogDetailParams): Promise<BacklogDetailResponse> {
+  const fetchedAt = ctx.clock.now().toISOString()
   const { number } = params
   const slug = `${params.repo.owner}/${params.repo.name}`
 
-  const result = await github(repoGraphqlRequest(buildBacklogDetailQuery(number), params.repo))
+  const result = await ctx.githubHttp(repoGraphqlRequest(buildBacklogDetailQuery(number), params.repo))
 
   const text = bodyOf(result)
   const parsed = text !== undefined ? parseEnvelope(text) : undefined

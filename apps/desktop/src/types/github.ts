@@ -1,4 +1,4 @@
-import type { GitHubHttpResult, GitHubTransport } from '@/types/platform'
+import type { GitHubHttpResult } from '@/types/platform'
 
 // Renderer-safe result and item shapes for the GitHub adapter. No import here may reach a Node builtin — only `main/github/` spawns `gh`.
 import type { LabelKey, LabelSource, VocabularyReport } from '@/utils/labels/vocabulary'
@@ -172,16 +172,6 @@ export interface ItemRef {
   readonly number: number
 }
 
-/** `fetchItemStates`'s per-item result — the open-only sweep above cannot see a merged pull request, and this is the primitive that re-checks. */
-export interface ItemState {
-  readonly kind: PipelineItemKind
-  readonly number: number
-  readonly state: string
-  readonly mergedAt: string | null
-  readonly closedAt: string | null
-  readonly url: string
-}
-
 /** Every failure kind these fetches can report — hand-maintained, pinned against the real platform-layer type so a new kind there breaks `pnpm typecheck` here rather than landing in `unknown`. */
 export type PipelineFailureKind =
   | 'not-found'
@@ -262,21 +252,6 @@ export type ItemsByNumberFetch =
       readonly fetchedAt: string
     }
 
-/** `fetchItemStates`'s result — a vanished number is reported in `unavailable`, never inferred as "still open". */
-export type ItemStatesFetch =
-  | {
-      readonly ok: true
-      readonly states: readonly ItemState[]
-      readonly unavailable: readonly ItemRef[]
-      readonly fetchedAt: string
-    }
-  | {
-      readonly ok: false
-      readonly kind: PipelineFailureKind
-      readonly message: string
-      readonly fetchedAt: string
-    }
-
 /** One open-or-closed node off a `blockedBy` connection — the claim dialog reports every one it fetched; `classifyPreflight` filters to the open ones, so the adapter never decides what counts as "still blocking". */
 export interface ClaimBlocker {
   readonly number: number
@@ -333,8 +308,6 @@ export type ItemStatesRead =
 export interface FetchItemsByNumberParams {
   readonly repo: GitHubRepoRef
   readonly numbers: readonly number[]
-  readonly github?: GitHubTransport
-  readonly now?: () => Date
 }
 
 export interface AliasInfo {

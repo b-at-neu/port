@@ -1,7 +1,6 @@
 // fetchGatePreflight — the plan gate's own one round trip; reuses envelope.ts's parsing rather than hand-rolling a second reader.
-import { githubHttp } from '@/main/platform/github-http'
-import type { GitHubTransport } from '@/types/platform'
 import type { GatePreflightFetch, GatePreflightItem } from '@/types/github'
+import type { GitHubReadContext } from '@/main/github/context'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
 import { buildGatePreflightQuery } from '@/main/github/query'
@@ -17,19 +16,15 @@ function kindOfTypename(typename: unknown): 'issue' | 'pull-request' | undefined
 interface FetchGatePreflightParams {
   readonly repo: GitHubRepoRef
   readonly number: number
-  readonly github?: GitHubTransport
-  readonly now?: () => Date
 }
 
 /** The plan gate's one round trip: one issue's identity, labels, assignees, body, and the
  *  signed-in account's login. `item: null` covers "does not exist" or "alias errored", neither a failure. */
-export async function fetchGatePreflight(params: FetchGatePreflightParams): Promise<GatePreflightFetch> {
-  const github = params.github ?? githubHttp
-  const now = params.now ?? (() => new Date())
-  const fetchedAt = now().toISOString()
+export async function fetchGatePreflight(ctx: GitHubReadContext, params: FetchGatePreflightParams): Promise<GatePreflightFetch> {
+  const fetchedAt = ctx.clock.now().toISOString()
 
   const { document } = buildGatePreflightQuery(params.number)
-  const result = await github(repoGraphqlRequest(document, params.repo))
+  const result = await ctx.githubHttp(repoGraphqlRequest(document, params.repo))
 
   const text = bodyOf(result)
   const parsed = text !== undefined ? parseEnvelope(text) : undefined

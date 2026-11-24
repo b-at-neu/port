@@ -2,12 +2,11 @@
 // attempt, aborts included.
 import { randomUUID } from 'node:crypto'
 import { hostFs } from '@/main/platform'
-import { gh as defaultGh } from '@/main/platform/gh'
-import { defaultGitRunner } from '@/main/platform/git'
 import type { GhResult } from '@/types/platform'
-import { pathOps as defaultPathOps } from '@/main/platform/paths'
+import { pathOps } from '@/main/platform/paths'
 import { removeFile, writeTextFile } from '@/main/platform/files'
 import { fetchItemsByNumber } from '@/main/github/adapter'
+import type { GitHubReadContext, GitHubWriteContext } from '@/main/github/context'
 
 import type { GitHubRepoRef } from '@/types/github'
 import type { AssertEqual } from '@/types/assert-type'
@@ -72,51 +71,48 @@ async function recordLabelAudit(auditDir: string, ctx: AuditContext, outcome: Wr
 }
 
 // A successful outcome carries no resulting label set — the next poll reports what is actually there.
-export async function applyLabels(params: ApplyLabelsParams): Promise<WriteOutcome> {
-  const now = params.now ?? (() => new Date())
-  const gh = params.gh ?? defaultGh
+export async function applyLabels(ctx: GitHubWriteContext & GitHubReadContext, params: ApplyLabelsParams): Promise<WriteOutcome> {
+  const now = ctx.clock.now
   const { auditDir, observed } = params
   const request = { repo: params.repo, repoId: params.repoId, kind: params.kind, number: params.number, action: params.action }
 
   // The writer already read ownership; this is the second line behind it.
-  const ownership = await readOwnership({ git: params.git ?? defaultGitRunner(), fs: hostFs, clock: { now } }, { repoRoot: params.repoRoot, repo: params.repo })
+  const ownership = await readOwnership({ git: ctx.git, fs: hostFs, clock: ctx.clock }, { repoRoot: params.repoRoot, repo: params.repo })
   if (ownership.kind === 'unreadable') {
     const outcome: WriteOutcome = { kind: 'ownership-unreadable', path: ownership.path, message: ownership.message }
     await recordLabelAudit(auditDir, { request, ownership: 'unreadable', observed, call: null, writeId: params.writeId }, outcome, now)
     return outcome
   }
 
-  const ctx: AuditContext = { request, ownership: ownership.kind, observed, call: null, writeId: params.writeId }
+  const audit: AuditContext = { request, ownership: ownership.kind, observed, call: null, writeId: params.writeId }
   if (wouldChangeNothing(params, observed)) {
     const outcome: WriteOutcome = { kind: 'no-op' }
-    await recordLabelAudit(auditDir, ctx, outcome, now)
+    await recordLabelAudit(auditDir, audit, outcome, now)
     return outcome
   }
 
   const argv = buildCommand(params)
-  const result = await gh(argv)
-  const ctxWithCall: AuditContext = { ...ctx, call: argv }
+  const result = await ctx.ghWrite(argv)
+  const auditWithCall: AuditContext = { ...audit, call: argv }
 
   if (!result.ok) {
-    const reread = await (params.fetchItemsByNumber ?? fetchItemsByNumber)({ repo: splitRepo(params.repo), numbers: [params.number] })
+    const reread = await fetchItemsByNumber(ctx, { repo: splitRepo(params.repo), numbers: [params.number] })
     const rereadItem = reread.ok ? reread.resolved.find((item) => item.number === params.number) : undefined
     const rereadObserved: ObservedItem | null = rereadItem ? { labels: rereadItem.labels, assignees: rereadItem.assignees, readAt: reread.fetchedAt } : null
     const outcome: WriteOutcome = { kind: 'write-failed', classification: result.kind, stderr: describeGhFailure(result), reread: rereadObserved }
-    await recordLabelAudit(auditDir, ctxWithCall, outcome, now)
+    await recordLabelAudit(auditDir, auditWithCall, outcome, now)
     return outcome
   }
 
   const outcome: WriteOutcome = { kind: 'applied', argv }
-  await recordLabelAudit(auditDir, ctxWithCall, outcome, now)
+  await recordLabelAudit(auditDir, auditWithCall, outcome, now)
   return outcome
 }
 
 /** Passes `--body-file` from a scratch file, deleted in a `finally` — argv-length limits on Windows
  *  are the reason, not shell quoting. Audited with byte length, never the text. */
-async function postBodyFile(params: PostCommentParams, argvFor: (scratchPath: string) => readonly string[], refusal: string | null): Promise<WriteOutcome> {
-  const now = params.now ?? (() => new Date())
-  const pathOps = params.pathOps ?? defaultPathOps
-  const gh = params.gh ?? defaultGh
+async function postBodyFile(ctx: GitHubWriteContext, params: PostCommentParams, argvFor: (scratchPath: string) => readonly string[], refusal: string | null): Promise<WriteOutcome> {
+  const now = ctx.clock.now
   const { request, auditDir } = params
   const scratchPath = pathOps.join(request.scratchDir, `write-comment-${request.kind}-${request.number}-${randomUUID()}.md`)
   const bodyBytes = Buffer.byteLength(request.body, 'utf8')
@@ -140,7 +136,7 @@ async function postBodyFile(params: PostCommentParams, argvFor: (scratchPath: st
     return outcome
   }
 
-  const ownership = await readOwnership({ git: params.git ?? defaultGitRunner(), fs: hostFs, clock: { now } }, { repoRoot: params.repoRoot, repo: request.repo })
+  const ownership = await readOwnership({ git: ctx.git, fs: hostFs, clock: ctx.clock }, { repoRoot: params.repoRoot, repo: request.repo })
   if (ownership.kind === 'unreadable') {
     return record('unreadable', null, { kind: 'ownership-unreadable', path: ownership.path, message: ownership.message })
   }
@@ -155,7 +151,7 @@ async function postBodyFile(params: PostCommentParams, argvFor: (scratchPath: st
 
   try {
     const argv = argvFor(scratchPath)
-    const result = await gh(argv)
+    const result = await ctx.ghWrite(argv)
     if (!result.ok) {
       return await record(ownership.kind, argv, { kind: 'write-failed', classification: result.kind, stderr: describeGhFailure(result), reread: null })
     }
@@ -165,15 +161,15 @@ async function postBodyFile(params: PostCommentParams, argvFor: (scratchPath: st
   }
 }
 
-export async function postComment(params: PostCommentParams): Promise<WriteOutcome> {
+export async function postComment(ctx: GitHubWriteContext, params: PostCommentParams): Promise<WriteOutcome> {
   const { request } = params
   const subcommand = request.kind === 'pull-request' ? 'pr' : 'issue'
-  return postBodyFile(params, (scratchPath) => [subcommand, 'comment', String(request.number), '--repo', request.repo, '--body-file', scratchPath], null)
+  return postBodyFile(ctx, params, (scratchPath) => [subcommand, 'comment', String(request.number), '--repo', request.repo, '--body-file', scratchPath], null)
 }
 
 /** The only issue-body write: replaces the issue's whole body from a scratch file. Never edits a pull request. */
-export async function postIssueBody(params: PostCommentParams): Promise<WriteOutcome> {
+export async function postIssueBody(ctx: GitHubWriteContext, params: PostCommentParams): Promise<WriteOutcome> {
   const { request } = params
   const refusal = request.kind === 'pull-request' ? 'an issue body write never edits a pull request' : null
-  return postBodyFile(params, (scratchPath) => ['issue', 'edit', String(request.number), '--repo', request.repo, '--body-file', scratchPath], refusal)
+  return postBodyFile(ctx, params,(scratchPath) => ['issue', 'edit', String(request.number), '--repo', request.repo, '--body-file', scratchPath], refusal)
 }

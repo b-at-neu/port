@@ -36,13 +36,5 @@ export type LedgerWrite = { readonly ok: true } | { readonly ok: false; readonly
 
 export type IssueForPr = { readonly ok: true; readonly issue: number } | { readonly ok: false; readonly why: string }
 
-export interface LedgerReader {
-  readonly readLedger: (params: { readonly owner: string; readonly name: string; readonly issue: number }) => Promise<LedgerRead>
-  readonly issueForPr: (params: { readonly repo: string; readonly pr: number }) => Promise<IssueForPr>
-}
-
-/** `ref` is the existing comment's id, or `null` to open a new one. */
-export type LedgerWriter = (params: { readonly repo: string; readonly issue: number; readonly ref: number | null; readonly body: string }) => Promise<LedgerWrite>
-
 /** `allow`/`exceeded` only: `hold` is a caller-level state for an unreadable ledger, never a computed one. */
 export type ComputedVerdict = 'allow' | 'exceeded'

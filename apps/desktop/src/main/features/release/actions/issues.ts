@@ -9,5 +9,5 @@ export const releaseIssues = defineAction({
   name: 'release.issues',
   kind: 'query',
   input: z.object({ repoId, tag, previousTag: tag.nullable() }),
-  run: (ctx, input) => resolveReleaseIssues(ctx.repos.deps, input),
+  run: (ctx, input) => resolveReleaseIssues(ctx, ctx.repos.deps, input),
 })

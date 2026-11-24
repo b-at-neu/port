@@ -9,6 +9,7 @@ import { createDispatchLedger, createForceDispatch, createRefreshMemo, createRer
 import type { RepoId } from '@/utils/repos'
 import type { RepoDispatchStatus } from '@/types/dispatch'
 import { createBudgetGate } from '@/main/dispatch/budget-gate'
+import type { GitHubReadContext, LedgerWriteContext } from '@/main/github/context'
 import { createDispatcher } from '@/main/dispatch/dispatcher'
 import { readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
 import { createStageDenialStore } from '@/main/dispatch/stage/denials'
@@ -48,9 +49,9 @@ interface DispatchRuntime {
   readonly shutdown: () => void
 }
 
-type RuntimeDeps = Omit<CreateDispatcherParams, 'ledger' | 'onChange' | 'budget' | 'escalate' | 'writeObservation' | 'rerunChecks' | 'rerunMemo' | 'stageLabels' | 'refreshMemo' | 'forceDispatch' | 'requestRead' | 'denials'> & { readonly actions: DispatchActions }
+type RuntimeDeps = Omit<CreateDispatcherParams, 'ledger' | 'onChange' | 'budget' | 'escalate' | 'writeObservation' | 'rerunChecks' | 'rerunMemo' | 'stageLabels' | 'refreshMemo' | 'forceDispatch' | 'requestRead' | 'denials'> & { readonly actions: DispatchActions; readonly platform: GitHubReadContext & LedgerWriteContext }
 
-export function createDispatchRuntime({ actions, ...deps }: RuntimeDeps): DispatchRuntime {
+export function createDispatchRuntime({ actions, platform, ...deps }: RuntimeDeps): DispatchRuntime {
   const denials = createStageDenialStore({ path: join(deps.dirs.audit, 'stage-denials.json'), readJson: readJsonFile, writeJsonAtomic: writeJsonFileAtomic })
   void denials.load()
   const ledger = createDispatchLedger()
@@ -61,7 +62,7 @@ export function createDispatchRuntime({ actions, ...deps }: RuntimeDeps): Dispat
   let bound: Pick<PipelineWatcher, 'republish' | 'refresh'> | null = null
   // A failed read is retried by the scheduled poll, so it is never surfaced here.
   const requestRead = (repoId: RepoId): void => void bound?.refresh({ repoId, source: 'github' }).catch(() => undefined)
-  const dispatcher = createDispatcher({ ...deps, denials, ledger, refreshMemo, rerunMemo, rerunChecks: actions.rerunChecks, forceDispatch, requestRead, budget: createBudgetGate({ scratchDir: deps.dirs.scratch }), escalate: actions.escalateToHuman, writeObservation: actions.applyObservation, stageLabels: actions.stageLabels, onChange: () => bound?.republish() })
+  const dispatcher = createDispatcher({ ...deps, denials, ledger, refreshMemo, rerunMemo, rerunChecks: actions.rerunChecks, forceDispatch, requestRead, budget: createBudgetGate({ scratchDir: deps.dirs.scratch, platform }), escalate: actions.escalateToHuman, writeObservation: actions.applyObservation, stageLabels: actions.stageLabels, onChange: () => bound?.republish() })
   const autoPlannerDeps: AutoPlannerDeps = {
     listRepositories: deps.listRepositories,
     registryDeps: deps.registryDeps,

@@ -12,5 +12,5 @@ export const releaseRun = defineAction({
     z.object({ repoId, step: z.literal('open'), version: z.string() }),
     z.object({ repoId, step: z.literal('publish'), version: z.string(), notes: z.string().refine((notes) => notes.trim() !== '' && notes.length <= MAX_NOTES_CHARS, { message: `must be 1 to ${String(MAX_NOTES_CHARS)} characters` }) }),
   ]),
-  run: (ctx, input) => resolveReleaseRun(ctx.repos.deps, input, ctx.paths.userData, ctx.paths.temp),
+  run: (ctx, input) => resolveReleaseRun(ctx, ctx.repos.deps, input, ctx.paths.userData, ctx.paths.temp),
 })

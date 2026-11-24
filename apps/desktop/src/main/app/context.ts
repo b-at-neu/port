@@ -17,6 +17,9 @@ import { createDispatchRuntime } from '@/main/dispatch/runtime'
 import { createRunStateStore } from '@/main/dispatch/store'
 import { registeredRepoIds } from '@/main/dispatch/resolve'
 import { fetchItemsByNumber } from '@/main/github/adapter'
+import { readAllowBase } from '@/main/github/allow'
+import { proposeAllowRule } from '@/main/github/writes/allow'
+import type { FetchItemsByNumberParams } from '@/types/github'
 import { readOwnership, takeOwnership } from '@/main/repos/ownership'
 import type { GateChannelDeps, HostingChannelDeps, IncidentChannelDeps, StageChannelDeps } from '@/main/app/seams'
 import { createPlatform, type Platform } from '@/main/platform'
@@ -28,7 +31,7 @@ import { createHostingPersistence } from '@/main/sessions/hosting/persist'
 import { createSessionIndex } from '@/main/sessions/hosting/session-index'
 import { createAppNotifier } from '@/main/sessions/hosting/notify'
 import { createStageRegistry } from '@/main/dispatch/stage/registry'
-import { createStageSweeper, defaultAllowIo } from '@/main/features/stage/resolve'
+import { createStageSweeper } from '@/main/features/stage/resolve'
 import { createUsageLedger } from '@/main/sessions/hosting/usage-ledger'
 import { createSessionMenuRefresher } from '@/main/app/shell/session-menu'
 import { createDefaultUpdate } from '@/main/features/update/default'
@@ -119,7 +122,9 @@ export function createAppContext(restart: RestartSeams): AppContext {
     take: (params: OwnershipParams) => takeOwnership(platform, params),
   }
 
-  const pipelineState = createPipelineState({ dir: userData, auditDir: userData, recordIncident: incidentLog.record, readOwnership: ownership.read })
+  const fetchItems = (params: FetchItemsByNumberParams) => fetchItemsByNumber(platform, params)
+
+  const pipelineState = createPipelineState({ dir: userData, auditDir: userData, recordIncident: incidentLog.record, readOwnership: ownership.read, platform })
 
   // Loaded once at boot: a `running` entry found then can only mean the process died, and promotes to `crash`.
   const stageRegistry = createStageRegistry({ path: join(userData, 'stage-sessions.json'), readJson: platform.fs.readJson, writeJsonAtomic: platform.fs.writeJsonAtomic, now: platform.clock.now })
@@ -133,7 +138,7 @@ export function createAppContext(restart: RestartSeams): AppContext {
 
   const { engine, close: closeOffload, ...offload } = createOffload({ onRespawn: () => void watcher.refresh() })
 
-  const actions = bindOperator(pipelineState, ownership.read)
+  const actions = bindOperator(platform, pipelineState, ownership.read)
 
   const notifier = createAppNotifier({ registryDeps: repos.deps, broadcast: (command) => emit('app.command', command), prefs: () => hostedStore.notificationPrefs() })
 
@@ -172,7 +177,8 @@ export function createAppContext(restart: RestartSeams): AppContext {
     runState: (repoId) => runStates.current(repoId).state,
     readOwnership: ownership.read,
     takeOwnership: ownership.take,
-    fetchItemsByNumber,
+    fetchItemsByNumber: fetchItems,
+    platform,
     listRepositories,
     registryDeps: repos.deps,
     actions,
@@ -220,11 +226,11 @@ export function createAppContext(restart: RestartSeams): AppContext {
     snapshot: watcher.snapshot,
     auditDir: userData,
     scratchDir: platform.paths.temp,
-    allow: defaultAllowIo,
+    allow: { read: (params) => readAllowBase(platform, params), propose: (request, params) => proposeAllowRule(platform, request, params) },
   }
-  const stageSweeper = createStageSweeper(repos.deps, stage, { fetchItemsByNumber, onChange: () => watcher.republish() })
+  const stageSweeper = createStageSweeper(repos.deps, stage, { fetchItemsByNumber: fetchItems, onChange: () => watcher.republish() })
 
-  const update = createDefaultUpdate(restart)
+  const update = createDefaultUpdate(platform, restart)
 
   const seams: AppContext['seams'] = {
     hosting,
