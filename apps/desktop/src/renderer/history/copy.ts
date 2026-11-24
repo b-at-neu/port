@@ -25,6 +25,15 @@ export function groupHeader(kind: 'pinned' | 'recent' | 'archived'): string {
   }
 }
 
+export const HISTORY_TITLE = 'History'
+export const ALL_REPOSITORIES = 'All repositories'
+export const SEARCH_ACTION = 'Search'
+export const RESCAN_ACTION = 'Rescan'
+export const RESUME_ACTION = 'Resume'
+export const FORK_ACTION = 'Fork'
+export const SCAN_UNREACHABLE = "Couldn't reach the main process to list sessions. Restart port to try again."
+export const MARKS_ERROR = "Couldn't load pins and archives. Rescan to try again."
+export const NO_SESSIONS_EMPTY = 'No sessions recorded for this repository yet.'
 export const ALL_ARCHIVED_EMPTY = 'Every session here is archived.'
 export const SHOW_ARCHIVED_ACTION = 'Show archived'
 

@@ -6,6 +6,7 @@ import { runInBackground, showActionToast, UNREACHABLE } from '@/renderer/lib/ba
 
 export interface ActionToastSpec<N extends ActionName> {
   readonly pending?: string | ((input: ActionInput<N>) => string)
+  readonly id?: (input: ActionInput<N>) => string
   readonly result: (output: ActionOutput<N>, input: ActionInput<N>) => ActionToast | null
 }
 
@@ -28,7 +29,7 @@ export async function perform<N extends ActionName>(spec: PerformSpec<N>, deps: 
   let result: ActionOutput<N> | 'unreachable'
   if (toast?.pending !== undefined) {
     const pending = typeof toast.pending === 'function' ? toast.pending(input) : toast.pending
-    result = await runInBackground({ id: name, pending, run, toToast: (output) => toast.result(output, input) })
+    result = await runInBackground({ id: toast.id?.(input) ?? name, pending, run, toToast: (output) => toast.result(output, input) })
   } else {
     try {
       result = await run()

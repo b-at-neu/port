@@ -33,6 +33,17 @@ export function exactTime(iso: string): string {
   return new Date(iso).toLocaleString()
 }
 
+/** `9:05`: the hour unpadded, the minute padded. */
+export function formatHourMinute(iso: string): string {
+  const date = new Date(iso)
+  return `${String(date.getHours())}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+/** `Nov 3`. */
+export function formatMonthDay(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
 export function formatTimeOfDay(iso: string): string {
   return new Date(iso).toLocaleTimeString()
 }

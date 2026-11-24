@@ -5,11 +5,23 @@ import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { EmptyState } from '@/renderer/components/empty-state'
-import { ErrorBanner } from '@/renderer/components/error-banner'
-import { SettingsCard } from '@/renderer/components/settings-card'
 import { useIpcQuery } from '@/renderer/data/query'
 import { ROUTE_IDS } from '@/renderer/router/routes'
-import { cardReadError, WIDE_CARD } from '@/renderer/settings/copy'
+import {
+  CALCULATING_LABEL,
+  cardReadError,
+  CLEAN_UP_LABEL,
+  OTHER_FOLDERS,
+  RECALCULATE_LABEL,
+  SPEND_COLUMNS,
+  SPEND_EMPTY,
+  SPEND_SUBJECT,
+  SPEND_TITLE,
+  STORAGE_SUBJECT,
+  STORAGE_TITLE,
+  WIDE_CARD,
+} from '@/renderer/settings/copy'
+import { QueryCard } from '@/renderer/settings/query-card'
 import { sizeText, usageCell, usageFootnote } from '@/renderer/settings/usage-model'
 import type { StorageEntry } from '@/types/settings'
 
@@ -37,28 +49,31 @@ function SpendCard() {
   }
 
   return (
-    <SettingsCard title="Spend" className={WIDE_CARD}>
-      {usage.status === 'pending' ? (
-        <Skeleton className="h-24 w-full" />
-      ) : usage.status === 'error' ? (
-        <ErrorBanner message={cardReadError('usage')} />
-      ) : usage.data.rows.length === 0 ? (
-        <EmptyState icon={Wallet} message="No usage recorded yet. Totals appear after port hosts a session." className="py-6" />
-      ) : (
+    <QueryCard
+      title={SPEND_TITLE}
+      className={WIDE_CARD}
+      query={usage}
+      errorMessage={cardReadError(SPEND_SUBJECT)}
+      loading={<Skeleton className="h-24 w-full" />}
+      isEmpty={(summary) => summary.rows.length === 0}
+      empty={<EmptyState icon={Wallet} message={SPEND_EMPTY} className="py-6" />}
+    >
+      {(summary) => (
         <>
           <table className="w-full text-small">
             <thead>
               <tr className="text-left text-meta text-muted-foreground">
-                <th className="py-1 font-medium">Repository</th>
-                <th className="py-1 font-medium">Today</th>
-                <th className="py-1 font-medium">7 days</th>
-                <th className="py-1 font-medium">30 days</th>
+                {SPEND_COLUMNS.map((column) => (
+                  <th key={column} className="py-1 font-medium">
+                    {column}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {usage.data.rows.map((row) => (
+              {summary.rows.map((row) => (
                 <tr key={row.repoId ?? 'other'} data-slot="usage-row" className="border-t border-border">
-                  <td className="py-1.5 text-foreground">{row.repoId === null ? 'Other folders' : (names[row.repoId] ?? row.repoId)}</td>
+                  <td className="py-1.5 text-foreground">{row.repoId === null ? OTHER_FOLDERS : (names[row.repoId] ?? row.repoId)}</td>
                   <td className="py-1.5 tabular-nums text-foreground-secondary">{usageCell(row.today)}</td>
                   <td className="py-1.5 tabular-nums text-foreground-secondary">{usageCell(row.week)}</td>
                   <td className="py-1.5 tabular-nums text-foreground-secondary">{usageCell(row.month)}</td>
@@ -66,10 +81,10 @@ function SpendCard() {
               ))}
             </tbody>
           </table>
-          <p className="text-small text-muted-foreground">{usageFootnote(usage.data.since)}</p>
+          <p className="text-small text-muted-foreground">{usageFootnote(summary.since)}</p>
         </>
       )}
-    </SettingsCard>
+    </QueryCard>
   )
 }
 
@@ -82,42 +97,38 @@ function StorageCard() {
       {storage.isFetching ? (
         <>
           <Loader2 aria-hidden="true" className="animate-spin" />
-          Calculating…
+          {CALCULATING_LABEL}
         </>
       ) : (
-        'Recalculate'
+        RECALCULATE_LABEL
       )}
     </Button>
   )
 
   return (
-    <SettingsCard title="Storage" className={WIDE_CARD} actions={recalculate}>
-      {storage.status === 'pending' ? (
-        <Skeleton className="h-24 w-full" />
-      ) : storage.status === 'error' ? (
-        <ErrorBanner message={cardReadError('storage')} />
-      ) : (
+    <QueryCard title={STORAGE_TITLE} className={WIDE_CARD} actions={recalculate} query={storage} errorMessage={cardReadError(STORAGE_SUBJECT)} loading={<Skeleton className="h-24 w-full" />}>
+      {(report) => (
         <div className="flex flex-col">
-          {[...storage.data.appData, storage.data.pluginCache].map((entry) => (
+          {[...report.appData, report.pluginCache].map((entry) => (
             <div key={entry.path} data-slot="usage-row" className="flex h-9 items-center gap-3 border-t border-border text-small first:border-t-0">
               <span className="w-28 shrink-0 text-foreground">{entry.label}</span>
               <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">{entry.path}</span>
               <SizeCell entry={entry} />
             </div>
           ))}
-          {storage.data.worktrees.map((entry) => (
+          {report.worktrees.map((entry) => (
             <div key={entry.path} data-slot="usage-row" className="flex h-9 items-center gap-3 border-t border-border text-small">
               <span className="w-28 shrink-0 truncate text-foreground">{entry.label}</span>
               <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">{entry.path}</span>
               <SizeCell entry={entry} />
               <Button variant="outline" size="small" onClick={() => void navigate({ to: ROUTE_IDS.settingsRepo, params: { repoId: entry.repoId }, search: { tab: 'worktrees' } })}>
-                Clean up…
+                {CLEAN_UP_LABEL}
               </Button>
             </div>
           ))}
         </div>
       )}
-    </SettingsCard>
+    </QueryCard>
   )
 }
 

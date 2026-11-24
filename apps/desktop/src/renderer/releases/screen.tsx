@@ -1,209 +1,27 @@
 // The Releases screen — per ready repository, the upcoming release with the one action its phase allows, then every published release. No `useEffect`: the 60s watch is a query `refetchInterval`.
-import { useState } from 'react'
-import type { ReactNode } from 'react'
-import { useQueries, useQueryClient } from '@tanstack/react-query'
+import { useQueries } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { ExternalLink, Loader2, RefreshCw, Tag } from 'lucide-react'
+import { RefreshCw, Tag } from 'lucide-react'
 import { SHOW_ALL_REPOSITORIES, releasesNotReadyCopy, unknownRepoCopy } from '@/renderer/lib/copy'
 import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { EmptyState } from '@/renderer/components/empty-state'
-import { ErrorBanner } from '@/renderer/components/error-banner'
-import { IconButton } from '@/renderer/components/icon-button'
 import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { ScreenHeader } from '@/renderer/components/screen-header'
-import { StatusPill } from '@/renderer/components/status-pill'
-import { invoke } from '@/renderer/data/invoke'
-import { runInBackground } from '@/renderer/lib/background-action'
 import { ipcQueryOptions, useIpcQuery } from '@/renderer/data/query'
-import { exactTime, formatAgoSince } from '@/renderer/lib/time'
+import { formatAgoSince } from '@/renderer/lib/time'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { useListSelection } from '@/renderer/shell/list-selection'
-import type { HookOutcome, ReleaseGroupView, ReleaseInfo, ReleaseRunRequest, ReleaseRunResult, ReleaseStatus } from '@/types/release'
-import type { ActionToast } from '@/types/toast'
+import type { ReleaseGroupView } from '@/types/release'
 import { isReadyRepo } from '@/utils/repos'
-import type { RepoId } from '@/utils/repos'
-import { CutDialog } from '@/renderer/releases/cut-dialog'
-import { MergedPrs } from '@/renderer/releases/merged-prs'
-import { PublishCard } from '@/renderer/releases/publish-card'
+import { ReleaseGroup, releaseKey } from '@/renderer/releases/release-group'
 import { ReleasePane } from '@/renderer/releases/release-pane'
 import { buildReleaseGroup, refetchIntervalFor, staleSinceAt } from '@/renderer/releases/model'
-import {
-  LATEST_TAG,
-  NO_RELEASES,
-  NO_REPOSITORIES,
-  OPENED_TOAST,
-  OPENING_PENDING,
-  OPEN_BUMP_PR,
-  OPEN_ON_GITHUB,
-  OPEN_PR,
-  OPEN_RELEASE_PR,
-  PREVIOUS_RELEASES,
-  PRERELEASE_TAG,
-  RELEASES_TITLE,
-  WAITING_BUMP_COPY,
-  WAITING_ON_YOU,
-  abandonedCopy,
-  bumpedCopy,
-  conflictCopy,
-  currentVersionCopy,
-  hookFailureCopy,
-  mutedLine,
-  noMergedPrsCopy,
-  publishedToast,
-  publishingPending,
-  runProblemCopy,
-  waitingMergeCopy,
-} from '@/renderer/releases/copy'
-
-const LINK_CLASS = 'text-primary-text hover:underline'
-
-interface HookNotice {
-  readonly version: string
-  readonly command: string | null
-  readonly outcome: Exclude<HookOutcome, { kind: 'skipped' } | { kind: 'ok' }>
-}
-
-function releaseKey(repoId: RepoId, tag: string): string {
-  return `${repoId}:${tag}`
-}
-
-function releaseToast(version: string, result: ReleaseRunResult): ActionToast {
-  const plain = { description: null, action: null, cancel: null } as const
-  if (result.kind === 'opened') return { ...plain, tone: 'success', title: OPENED_TOAST }
-  if (result.kind === 'published') return { ...plain, tone: 'success', title: publishedToast(version), action: { label: 'Open release', onClick: () => window.open(result.url, '_blank', 'noreferrer') } }
-  return { ...plain, tone: 'error', title: runProblemCopy(result) }
-}
-
-function PrLink({ href, label }: { readonly href: string; readonly label: string }) {
-  return (
-    <a href={href} target="_blank" rel="noreferrer" className={LINK_CLASS}>
-      {label}
-    </a>
-  )
-}
-
-interface UpcomingProps {
-  readonly status: ReleaseStatus
-  readonly now: Date
-  readonly pending: boolean
-  readonly onCut: () => void
-  readonly onRun: (request: Omit<Extract<ReleaseRunRequest, { step: 'open' }>, 'repoId'> | Omit<Extract<ReleaseRunRequest, { step: 'publish' }>, 'repoId'>) => void
-}
-
-function PendingButton({ pending, onClick, children }: { readonly pending: boolean; readonly onClick: () => void; readonly children: string }) {
-  return (
-    <Button size="small" disabled={pending} onClick={onClick}>
-      {pending ? <Loader2 aria-hidden="true" className="size-3.5 animate-spin" /> : null}
-      {children}
-    </Button>
-  )
-}
-
-function Waiting({ copy, children }: { readonly copy: string; readonly children?: ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-center gap-2 px-4 py-2 text-body">
-      <StatusPill status="attention" label={WAITING_ON_YOU} />
-      <span className="text-foreground">{copy}</span>
-      {children}
-    </div>
-  )
-}
-
-function Upcoming({ status, now, pending, onCut, onRun }: UpcomingProps) {
-  const phase = status.phase
-  switch (phase.kind) {
-    case 'off':
-    case 'single-branch':
-    case 'misconfigured':
-    case 'needs-terminal':
-      return <p className="px-4 py-2 text-small text-muted-foreground">{mutedLine(phase.kind)}</p>
-    case 'nothing-to-release':
-      return <EmptyState icon={Tag} message={noMergedPrsCopy(status.integration, status.sinceTag)} className="px-4" />
-    case 'idle':
-      return <MergedPrs status={status} pending={pending} onCut={onCut} now={now} />
-
-    case 'bumped':
-      return (
-        <div className="flex items-center gap-3 px-4 py-2 text-body">
-          <span className="text-foreground">{bumpedCopy(status.integration, phase.version)}</span>
-          <PendingButton pending={pending} onClick={() => onRun({ step: 'open', version: phase.version })}>
-            {OPEN_RELEASE_PR}
-          </PendingButton>
-        </div>
-      )
-    case 'waiting-bump':
-      return (
-        <Waiting copy={WAITING_BUMP_COPY}>
-          {phase.bumpPr === null ? (
-            <PendingButton pending={pending} onClick={() => onRun({ step: 'open', version: phase.version })}>
-              {OPEN_BUMP_PR}
-            </PendingButton>
-          ) : (
-            <PrLink href={phase.bumpPr.url} label={OPEN_BUMP_PR} />
-          )}
-          {phase.releasePr === null ? (
-            <PendingButton pending={pending} onClick={() => onRun({ step: 'open', version: phase.version })}>
-              {OPEN_RELEASE_PR}
-            </PendingButton>
-          ) : (
-            <PrLink href={phase.releasePr.url} label={OPEN_RELEASE_PR} />
-          )}
-        </Waiting>
-      )
-    case 'waiting-merge':
-      return (
-        <Waiting copy={waitingMergeCopy(phase.releasePr, phase.version)}>
-          <PrLink href={phase.releasePr.url} label={OPEN_PR} />
-        </Waiting>
-      )
-    case 'ready-to-publish':
-      return <PublishCard key={phase.version} status={status} version={phase.version} pending={pending} onPublish={(notes) => onRun({ step: 'publish', version: phase.version, notes })} />
-    case 'abandoned':
-      return (
-        <div className="px-4 py-2">
-          <ErrorBanner message={abandonedCopy(phase.releasePr, phase.version)} />
-        </div>
-      )
-    case 'conflict':
-      return (
-        <div className="px-4 py-2">
-          <ErrorBanner message={conflictCopy(phase.branches)} />
-        </div>
-      )
-  }
-}
-
-function ReleaseRow({ release, repoId, now, rowProps }: { readonly release: ReleaseInfo; readonly repoId: RepoId; readonly now: Date; readonly rowProps: ReturnType<ReturnType<typeof useListSelection>['rowProps']> }) {
-  return (
-    <div data-slot="release-row" data-release={releaseKey(repoId, release.tagName)} {...rowProps} className={`flex h-9 items-center gap-2 px-4 text-body ${rowProps.className}`}>
-      <span className="w-20 shrink-0 font-mono text-foreground">{release.tagName}</span>
-      <span className="min-w-24 flex-1 truncate text-foreground-secondary">{release.name}</span>
-      {release.isLatest ? <span className="shrink-0 rounded-full bg-muted px-1.5 text-meta font-medium text-foreground-secondary">{LATEST_TAG}</span> : null}
-      {release.isPrerelease ? <span className="shrink-0 rounded-full bg-muted px-1.5 text-meta font-medium text-foreground-secondary">{PRERELEASE_TAG}</span> : null}
-      {release.publishedAt !== null ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="shrink-0 text-meta text-muted-foreground">{formatAgoSince(release.publishedAt, now)}</span>
-          </TooltipTrigger>
-          <TooltipContent>{exactTime(release.publishedAt)}</TooltipContent>
-        </Tooltip>
-      ) : null}
-      <IconButton label={OPEN_ON_GITHUB} onClick={() => window.open(release.url, '_blank', 'noreferrer')}>
-        <ExternalLink aria-hidden="true" className="size-3.5" />
-      </IconButton>
-    </div>
-  )
-}
+import { NO_REPOSITORIES, OPEN_REPOSITORIES, REFRESH_LABEL, RELEASES_TITLE } from '@/renderer/releases/copy'
 
 export function ReleasesScreen() {
   const reposQuery = useIpcQuery('repos.list')
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const [cutting, setCutting] = useState<RepoId | null>(null)
-  const [pending, setPending] = useState<ReadonlySet<RepoId>>(new Set())
-  const [notices, setNotices] = useState<ReadonlyMap<RepoId, HookNotice>>(new Map())
   const now = new Date()
 
   const scopedRepo = useSearch({ from: ROUTE_IDS.releases }).repo ?? null
@@ -222,39 +40,13 @@ export function ReleasesScreen() {
   const selection = useListSelection(releaseKeys)
   const selected = groups.flatMap((group) => (group.kind === 'loaded' ? group.status.releases.filter((release) => releaseKey(group.repoId, release.tagName) === selection.selectedKey).map((release) => ({ release, repoId: group.repoId })) : []))[0] ?? null
 
-  function setRepoPending(repoId: RepoId, value: boolean): void {
-    setPending((previous) => {
-      const next = new Set(previous)
-      if (value) next.add(repoId)
-      else next.delete(repoId)
-      return next
-    })
-  }
-
-  async function run(repoId: RepoId, command: string | null, request: Omit<ReleaseRunRequest, 'repoId'>): Promise<void> {
-    setRepoPending(repoId, true)
-    const result = await runInBackground({
-      id: `release:${repoId}`,
-      pending: request.step === 'open' ? OPENING_PENDING : publishingPending(request.version),
-      run: () => invoke('release.run', { repoId, ...request } as ReleaseRunRequest),
-      toToast: (outcome) => releaseToast(request.version, outcome),
-      unreachable: { tone: 'error', title: "Couldn't reach the main process to run that release step.", description: null, action: null, cancel: null },
-    })
-    if (result !== 'unreachable' && result.kind === 'published' && (result.hook.kind === 'failed' || result.hook.kind === 'unrunnable')) {
-      const notice: HookNotice = { version: request.version, command, outcome: result.hook }
-      setNotices((previous) => new Map(previous).set(repoId, notice))
-    }
-    await queryClient.invalidateQueries({ queryKey: ['release.status'] })
-    setRepoPending(repoId, false)
-  }
-
   function refreshAll(): void {
     for (const query of queries) void query.refetch()
   }
 
   const stale = staleSinceAt(likes)
   const isFetching = queries.some((query) => query.isFetching)
-  const cuttingGroup = groups.find((group) => group.kind === 'loaded' && group.repoId === cutting)
+  const showAll = { label: SHOW_ALL_REPOSITORIES, onClick: () => void navigate({ to: ROUTE_IDS.releases, search: { repo: null } }) }
 
   return (
     <Screen
@@ -266,7 +58,7 @@ export function ReleasesScreen() {
             {stale !== null ? <span className="text-meta font-normal text-attention-dot">Updated {formatAgoSince(new Date(stale).toISOString(), now)}</span> : null}
             <Button variant="ghost" size="small" onClick={refreshAll} disabled={isFetching}>
               <RefreshCw aria-hidden="true" className={isFetching ? 'size-3.5 animate-spin' : 'size-3.5'} />
-              Refresh
+              {REFRESH_LABEL}
             </Button>
           </div>
         </ScreenHeader>
@@ -280,66 +72,17 @@ export function ReleasesScreen() {
               <Skeleton className="h-5 w-full" />
             </div>
           ) : unknownRepo !== null ? (
-            <EmptyState icon={Tag} message={unknownRepoCopy(unknownRepo)} action={{ label: SHOW_ALL_REPOSITORIES, onClick: () => void navigate({ to: ROUTE_IDS.releases, search: { repo: null } }) }} className="px-4 py-6" />
+            <EmptyState icon={Tag} message={unknownRepoCopy(unknownRepo)} action={showAll} className="px-4 py-6" />
           ) : readyRepos.length === 0 && scopedRepo !== null ? (
-            <EmptyState icon={Tag} message={releasesNotReadyCopy(scopedLabel)} action={{ label: SHOW_ALL_REPOSITORIES, onClick: () => void navigate({ to: ROUTE_IDS.releases, search: { repo: null } }) }} className="px-4 py-6" />
+            <EmptyState icon={Tag} message={releasesNotReadyCopy(scopedLabel)} action={showAll} className="px-4 py-6" />
           ) : readyRepos.length === 0 ? (
-            <EmptyState icon={Tag} message={NO_REPOSITORIES} action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.settings, search: { section: 'repositories' } }) }} className="px-4 py-6" />
+            <EmptyState icon={Tag} message={NO_REPOSITORIES} action={{ label: OPEN_REPOSITORIES, onClick: () => void navigate({ to: ROUTE_IDS.settings, search: { section: 'repositories' } }) }} className="px-4 py-6" />
           ) : (
-            groups.map((group) => (
-              <div key={group.repoId}>
-                <div className="flex h-8 items-center justify-between bg-sidebar px-4 text-small font-medium text-foreground-secondary">
-                  <span>{group.repo}</span>
-                  {group.kind === 'loaded' ? <span className="font-normal tabular-nums text-muted-foreground">{currentVersionCopy(group.status.currentVersion)}</span> : null}
-                </div>
-                {group.kind === 'loading' ? (
-                  <div className="flex flex-col gap-1 px-4 py-2">
-                    <Skeleton className="h-9 w-full" />
-                    <Skeleton className="h-9 w-full" />
-                    <Skeleton className="h-9 w-full" />
-                    <Skeleton className="h-9 w-full" />
-                  </div>
-                ) : group.kind === 'error' ? (
-                  <div className="px-4 py-2">
-                    <ErrorBanner message={group.message} />
-                  </div>
-                ) : (
-                  <>
-                    <HookBanner notice={notices.get(group.repoId)} />
-                    <Upcoming
-                      status={group.status}
-                      now={now}
-                      pending={pending.has(group.repoId)}
-                      onCut={() => setCutting(group.repoId)}
-                      onRun={(request) => void run(group.repoId, group.status.postPublishHook, request)}
-                    />
-                    <p className="px-4 pt-3 text-meta font-medium text-muted-foreground">{PREVIOUS_RELEASES}</p>
-                    {group.status.releases.length === 0 ? (
-                      <EmptyState icon={Tag} message={NO_RELEASES} data-slot="releases-empty" className="px-4" />
-                    ) : (
-                      group.status.releases.map((release) => <ReleaseRow key={release.tagName} release={release} repoId={group.repoId} now={now} rowProps={selection.rowProps(releaseKey(group.repoId, release.tagName))} />)
-                    )}
-                  </>
-                )}
-              </div>
-            ))
+            groups.map((group) => <ReleaseGroup key={group.repoId} group={group} now={now} rowProps={(key) => selection.rowProps(key)} />)
           )}
         </ScreenBody>
         {selected !== null ? <ReleasePane release={selected.release} repoId={selected.repoId} now={now} onClose={() => selection.clear()} /> : null}
       </div>
-      {cuttingGroup?.kind === 'loaded' ? (
-        <CutDialog open status={cuttingGroup.status} onCancel={() => setCutting(null)} onConfirm={(version) => void run(cuttingGroup.repoId, cuttingGroup.status.postPublishHook, { step: 'open', version })} />
-      ) : null}
     </Screen>
-  )
-}
-
-function HookBanner({ notice }: { readonly notice: HookNotice | undefined }) {
-  if (notice === undefined) return null
-  return (
-    <div className="flex flex-col gap-2 px-4 py-2">
-      <ErrorBanner message={hookFailureCopy(notice.version, notice.outcome, notice.command)} />
-      {notice.outcome.kind === 'failed' && notice.outcome.stderr.trim() !== '' ? <pre className="overflow-x-auto rounded-md bg-muted p-2 font-mono text-meta text-foreground">{notice.outcome.stderr.trim()}</pre> : null}
-    </div>
   )
 }

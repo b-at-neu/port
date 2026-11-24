@@ -1,7 +1,7 @@
 // The ready-to-publish block: the drafted notes in an editor, and the confirmation that tags production.
 import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/renderer/components/ui/alert-dialog'
+import { ConfirmDialog } from '@/renderer/components/confirm-dialog'
 import { Button } from '@/renderer/components/ui/button'
 import { Textarea } from '@/renderer/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
@@ -38,25 +38,17 @@ export function PublishCard({ status, version, pending, onPublish }: PublishCard
         </TooltipTrigger>
         {blank ? <TooltipContent>{NOTES_EMPTY_TOOLTIP}</TooltipContent> : null}
       </Tooltip>
-      <AlertDialog open={confirming} onOpenChange={setConfirming}>
-        <AlertDialogContent data-slot="alert-dialog-content">
-          <AlertDialogHeader>
-            <AlertDialogTitle>{publishDialogTitle(version)}</AlertDialogTitle>
-            <AlertDialogDescription>{publishDialogBody(version, production, shortOid(status.productionHead ?? ''), status.postPublishHook)}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                setConfirming(false)
-                onPublish(notes)
-              }}
-            >
-              {publishLabel(version)}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={confirming}
+        title={publishDialogTitle(version)}
+        description={publishDialogBody(version, production, shortOid(status.productionHead ?? ''), status.postPublishHook)}
+        confirmLabel={publishLabel(version)}
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => {
+          setConfirming(false)
+          onPublish(notes)
+        }}
+      />
     </div>
   )
 }
