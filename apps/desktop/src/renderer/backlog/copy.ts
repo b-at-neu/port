@@ -1,6 +1,35 @@
 // Every string the Backlog screen renders for a failure or an edge case — pure, one function per concern.
 import type { BacklogDetailFailureKind } from '@/types/backlog'
+import type { PlanGateChoice } from '@/types/claim'
 import type { PipelineFailureKind } from '@/types/github'
+
+export const BACKLOG_TITLE = 'Backlog'
+
+export const BACKLOG_REFRESH = 'Refresh'
+
+export const BACKLOG_WORK_ON = 'Work on'
+
+export const BACKLOG_NO_REPOS = 'Register a repository to see its open tickets.'
+
+export const BACKLOG_OPEN_REPOSITORIES = 'Open Repositories'
+
+export function backlogUpdatedCopy(ago: string): string {
+  return `Updated ${ago}`
+}
+
+export function backlogReposInvokeErrorCopy(): string {
+  return "Couldn't load your repositories. Try again, or restart port."
+}
+
+export function backlogReposReadErrorCopy(message: string): string {
+  return `Couldn't read your repository list: ${message}. Fix it on Repositories.`
+}
+
+/** Shared between the Work on menu and its tooltips, so the two never drift on label or hint. */
+export const PLAN_GATE_OPTIONS: ReadonlyArray<{ readonly value: PlanGateChoice; readonly label: string; readonly hint: string }> = [
+  { value: 'review', label: 'Review the plan', hint: 'You approve or bounce the plan before any code is written. The default for features.' },
+  { value: 'auto', label: 'Auto-approve the plan', hint: 'Skips the plan gate. For small or bug-fix tickets.' },
+]
 
 // The plan's own UX-states table, verbatim.
 export function backlogFailureCopy(repo: string, kind: PipelineFailureKind, message: string): string {

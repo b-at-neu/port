@@ -1,105 +1,44 @@
-// Work on's claim: preflight, then write at once, reporting every outcome as one toast per row.
-import { toast } from 'sonner'
-import { invoke } from '@/renderer/data/invoke'
-import { FRESH, showActionToast } from '@/renderer/lib/background-action'
-import { applyResponseToast, claimedToast, preflightToast, takeOverPrompt, unreachableToast } from '@/renderer/claim/copy'
-import type { ClaimApplyResponse, ClaimPreflightResponse, ClaimToast, ClaimVerdict, PlanGateChoice } from '@/types/claim'
+// Work on's claim decisions — what each read or write result means for the flow. Pure; the hook runs the calls.
+import { applyResponseToast, claimedToast, preflightToast, takeOverPrompt } from '@/renderer/claim/copy'
+import type { ClaimApplyResponse, ClaimPreflightResponse, ClaimToast, ClaimVerdict } from '@/types/claim'
 import type { RepoDispatchStatus } from '@/types/dispatch'
 import type { RepoId } from '@/utils/repos'
 
-interface WorkOnParams {
-  readonly repoId: RepoId
-  readonly repo: string
-  readonly number: number
-  readonly planGate: PlanGateChoice
-  /** Fires once, on an `applied` or `no-op` write. */
-  readonly onClaimed: () => void
-}
+type Claimable = Extract<ClaimVerdict, { kind: 'claimable' }>
 
-interface ApplyParams extends WorkOnParams {
-  readonly confirmedAssignees: readonly string[]
-  readonly verdict: Extract<ClaimVerdict, { kind: 'claimable' }>
-  readonly takeOver: boolean
-}
+export type WorkOnStep =
+  | { readonly kind: 'stop'; readonly toast: ClaimToast }
+  | { readonly kind: 'ask-take-over'; readonly prompt: { readonly title: string; readonly description: string }; readonly confirmedAssignees: readonly string[]; readonly verdict: Claimable }
+  | { readonly kind: 'apply'; readonly confirmedAssignees: readonly string[]; readonly verdict: Claimable }
 
-function toastId(repoId: RepoId, number: number): string {
+/** Every toast for one row shares this id, so a later state replaces an earlier one. */
+export function workOnToastId(repoId: RepoId, number: number): string {
   return `work-on:${repoId}:${String(number)}`
 }
 
-function show(id: string, result: ClaimToast): void {
-  showActionToast(id, { ...result, action: null, cancel: null })
-}
-
-async function dispatchStatusOf(repoId: RepoId): Promise<RepoDispatchStatus | undefined> {
-  try {
-    const snapshot = await invoke('board.refresh', { repoId, source: 'github' })
-    return snapshot.dispatch.find((row) => row.repoId === repoId)
-  } catch (error) {
-    console.error('Failed to refresh the board after a claim', error)
-    return undefined
-  }
-}
-
-async function apply(params: ApplyParams): Promise<void> {
-  const { repoId, repo, number, planGate, confirmedAssignees, verdict, takeOver, onClaimed } = params
-  const id = toastId(repoId, number)
-  if (takeOver) toast.loading(`Taking over #${String(number)}…`, { ...FRESH, id, description: undefined })
-  let response: ClaimApplyResponse
-  try {
-    response = await invoke('claim.apply', { repoId, number, planGate, confirmedAssignees })
-  } catch (error) {
-    console.error('Failed to reach the main process while applying a claim', error)
-    show(id, unreachableToast())
-    return
-  }
-  if (response.kind !== 'write' || (response.outcome.kind !== 'applied' && response.outcome.kind !== 'no-op')) {
-    show(id, applyResponseToast(repo, number, response))
-    return
-  }
-  onClaimed()
-  const status = await dispatchStatusOf(repoId)
-  show(id, response.outcome.kind === 'applied' ? claimedToast({ repo, number, verdict, status }) : applyResponseToast(repo, number, response))
-}
-
-/** Resolves after the preflight and, unless a take-over is pending, after the write. */
-export async function workOn(params: WorkOnParams): Promise<void> {
-  const { repoId, repo, number } = params
-  const id = toastId(repoId, number)
-  toast.loading(`Claiming #${String(number)}…`, { ...FRESH, id, description: undefined })
-  let response: ClaimPreflightResponse
-  try {
-    response = await invoke('claim.preflight', { repoId, number })
-  } catch (error) {
-    console.error('Failed to reach the main process while reading a claim preflight', error)
-    show(id, unreachableToast())
-    return
-  }
-  if (response.kind !== 'resolved') {
-    show(id, preflightToast(repo, number, response))
-    return
-  }
+export function afterPreflight(repo: string, number: number, response: ClaimPreflightResponse): WorkOnStep {
+  if (response.kind !== 'resolved') return { kind: 'stop', toast: preflightToast(repo, number, response) }
   const { preflight, verdict } = response
-  if (verdict.kind !== 'claimable') {
-    show(id, preflightToast(repo, number, { kind: 'refused', verdict }))
-    return
-  }
+  if (verdict.kind !== 'claimable') return { kind: 'stop', toast: preflightToast(repo, number, { kind: 'refused', verdict }) }
   const confirmedAssignees = preflight.assignees
-  if (verdict.assigneeSituation === 'others') {
-    const prompt = takeOverPrompt(number, verdict.others)
-    toast.info(prompt.title, {
-      id,
-      description: prompt.description,
-      duration: Infinity,
-      action: {
-        label: 'Take over',
-        onClick: (event) => {
-          event.preventDefault()
-          void apply({ ...params, confirmedAssignees, verdict, takeOver: true })
-        },
-      },
-      cancel: { label: 'Leave it', onClick: () => undefined },
-    })
-    return
-  }
-  await apply({ ...params, confirmedAssignees, verdict, takeOver: false })
+  if (verdict.assigneeSituation === 'others') return { kind: 'ask-take-over', prompt: takeOverPrompt(number, verdict.others), confirmedAssignees, verdict }
+  return { kind: 'apply', confirmedAssignees, verdict }
+}
+
+/** True when the write landed, so the dispatch status is worth reading. */
+export function isClaimed(response: ClaimApplyResponse): boolean {
+  return response.kind === 'write' && (response.outcome.kind === 'applied' || response.outcome.kind === 'no-op')
+}
+
+export function afterApply(params: {
+  readonly repo: string
+  readonly number: number
+  readonly verdict: Claimable
+  readonly response: ClaimApplyResponse
+  readonly status: RepoDispatchStatus | undefined
+  readonly now: Date
+}): ClaimToast {
+  const { repo, number, verdict, response, status, now } = params
+  if (response.kind === 'write' && response.outcome.kind === 'applied') return claimedToast({ repo, number, verdict, status })
+  return applyResponseToast(repo, number, response, now)
 }
