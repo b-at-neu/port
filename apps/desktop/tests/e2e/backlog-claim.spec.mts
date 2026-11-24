@@ -54,8 +54,7 @@ test('claims an unlabelled backlog issue with a toast and no dialog, and the fir
 
   const state = await harness.state()
   const issue = state.issues.find((i) => i.number === 101)
-  expect(issue?.labels).toContain('ready')
-  expect(issue?.labels).toContain('claude')
+  expect(issue?.labels).toEqual(expect.arrayContaining(['port', 'planning']))
 })
 
 test('takes over an issue assigned to someone else only after one explicit click', async () => {
@@ -82,7 +81,7 @@ test('takes over an issue assigned to someone else only after one explicit click
 
   const state = await harness.state()
   const issue = state.issues.find((i) => i.number === 102)
-  expect(issue?.labels).toEqual(expect.arrayContaining(['claude', 'ready', 'auto plan']))
+  expect(issue?.labels).toEqual(expect.arrayContaining(['port', 'planning']))
   expect(issue?.assignees).toEqual(['octocat'])
 })
 
