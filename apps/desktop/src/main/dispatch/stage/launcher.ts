@@ -17,7 +17,7 @@ import { RESUME_PROMPT } from '@/main/dispatch/stage/recover'
 import { stageModeFor } from '@/main/pipeline/transitions'
 import { isTransientNetworkFailure, SETTLE_FAILED_DETAIL } from '@/main/pipeline/handback'
 import { proposedRule } from '@/main/dispatch/stage/rule'
-import { loadStageAgentDefinition } from '@/main/dispatch/stage/bundle'
+import { LEGACY_STAGE_SYSTEM_PROMPT, loadStageAgentDefinition } from '@/main/dispatch/stage/bundle'
 import { classifyHandback } from '@/main/pipeline/handback'
 import { stageTitle } from '@/main/sessions/hosting/title'
 import { bareTicketLabel } from '@/utils/tickets/ticket'
@@ -47,8 +47,10 @@ interface CreateStageLauncherParams {
   /** Every launch starts a run here, and every hand-back ends or interrupts it, a denial lands on it too. */
   readonly runs: RunStore
   readonly newId: () => string
-  /** The first message's composed text and the inline agent, loaded from the bundled stage prompts; a failure fails the launch. */
+  /** The dispatch line and the inline agent, loaded from the bundled stage prompts; a failure fails the launch. */
   readonly loadInstructions: StageInstructionsLoader
+  /** The system prompt a fresh session was started with, or `null` for one that predates it. */
+  readonly readStagePrompt: (claudeSessionId: string) => Promise<string | null>
   /** The app's own `stage-prompts` folder, which a stage session may read. */
   readonly bundleRoot: string
   readonly readTextFile: (path: string) => Promise<FileResult<string>>
@@ -116,7 +118,9 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     const { entry, root, prompt } = request
     if (entry.claudeSessionId === null) return { ok: false, kind: 'failed', message: 'the session ended before Claude started it', cause: 'resume' }
 
-    const definition = await loadStageAgentDefinition({ root: params.bundleRoot, agent: entry.agent, ops: params.ops, readTextFile: params.readTextFile })
+    // Never rebuilt from the live bundle and config: that would change a running session's stage context.
+    const saved = await params.readStagePrompt(entry.claudeSessionId)
+    const definition = await loadStageAgentDefinition({ root: params.bundleRoot, agent: entry.agent, prompt: saved ?? LEGACY_STAGE_SYSTEM_PROMPT, ops: params.ops, readTextFile: params.readTextFile })
     if (!definition.ok) return { ok: false, kind: 'failed', message: definition.message, cause: 'resume' }
 
     const startResult = await params.store.start({
@@ -131,7 +135,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       },
       stage: {
         tag: { agent: entry.agent, number: entry.number, kind: entry.kind, trigger: entry.trigger },
-        agent: { name: definition.name, definition: definition.definition },
+        agent: { name: definition.name, definition: definition.definition, selfContained: saved !== null },
         instructionsRoot: params.bundleRoot,
         model: entry.model,
         sessionRequiredPaths: root.sessionRequiredPaths,

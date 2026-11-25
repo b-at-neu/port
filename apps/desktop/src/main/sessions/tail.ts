@@ -18,7 +18,7 @@ interface TailState {
 }
 
 /** A factory, never a shared module-level singleton, so a test gets its own `Map`. */
-export function createTailStore(ctx: Pick<Platform, 'fs' | 'clock' | 'claudeHome'>): TranscriptTailStore {
+export function createTailStore(ctx: Pick<Platform, 'fs' | 'clock' | 'claudeHome'>, stagePromptsDir?: string): TranscriptTailStore {
   const tails = new Map<string, TailState>()
   let nextId = 0
   const now = (): number => ctx.clock.now().getTime()
@@ -45,7 +45,7 @@ export function createTailStore(ctx: Pick<Platform, 'fs' | 'clock' | 'claudeHome
 
   async function openTail(params: OpenTailParams): Promise<TranscriptTailOpen> {
     sweepIdle()
-    const { read, cursor } = await openTranscript(ctx, { sessionId: params.sessionId, agentId: params.agentId })
+    const { read, cursor } = await openTranscript(ctx, { sessionId: params.sessionId, agentId: params.agentId, ...(stagePromptsDir !== undefined ? { stagePromptsDir } : {}) })
     if (!read.ok) return { ok: false, kind: read.kind, message: read.message, path: read.path }
     if (cursor === null) {
       // Guarded rather than cast, so a future drift from the contract fails loudly here instead of silently losing follow state.

@@ -9,7 +9,7 @@ import { createFakePlatform, fakeSdk, fakeWhich } from '../../support/fake-platf
 
 export const REPO_ID = 'repo-1' as RepoId
 
-export type HostingCtx = Pick<Platform, 'sdk' | 'which' | 'git' | 'fs' | 'clock' | 'claudeHome'>
+export type HostingCtx = Pick<Platform, 'sdk' | 'which' | 'git' | 'fs' | 'clock' | 'claudeHome' | 'paths'>
 
 /** A never-emitting fake query — enough for tests that only care about store-level bookkeeping. */
 export function idleQuery(): HostedQuery {
@@ -35,7 +35,7 @@ export function endedQuery(): HostedQuery {
 
 /** A fake platform whose `claude` resolves, whose query never emits and whose rename succeeds. */
 export function hostingCtx(overrides: Partial<HostingCtx> = {}): HostingCtx & { readonly fs: Platform['fs'] } {
-  const { git, fs, clock, claudeHome } = createFakePlatform()
+  const { git, fs, clock, claudeHome, paths } = createFakePlatform()
   return {
     sdk: fakeSdk({ query: () => idleQuery(), renameSession: () => Promise.resolve() }),
     which: fakeWhich(() => Promise.resolve({ ok: true, path: '/usr/local/bin/claude' })),
@@ -43,6 +43,7 @@ export function hostingCtx(overrides: Partial<HostingCtx> = {}): HostingCtx & { 
     fs,
     clock,
     claudeHome,
+    paths,
     ...overrides,
   }
 }

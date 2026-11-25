@@ -7,6 +7,7 @@ import type { EntryPatch, TranscriptEntry, TranscriptRead, TranscriptSource } fr
 import { buildProjectIndex, resolveTranscriptPath, SESSION_ID_RE } from '@/main/sessions/locate'
 
 import { createDeriver } from '@/main/sessions/transcript-entries'
+import { readStagePrompt } from '@/main/sessions/hosting/stage-prompt-store'
 
 import type { TranscriptCursor, OpenTranscriptParams } from '@/types/sessions'
 
@@ -116,7 +117,8 @@ export async function openTranscript(ctx: Pick<Platform, 'fs' | 'claudeHome'>, p
   }
 
   const cwd = firstCwdOf(rawRecords)
-  const deriver = createDeriver({ cwd })
+  const stageInstructions = params.stagePromptsDir !== undefined && agentId === null ? await readStagePrompt(ctx.fs, params.stagePromptsDir, sessionId) : null
+  const deriver = createDeriver({ cwd, stageInstructions })
   const { appended, patched } = deriver.push(rawRecords)
   const entries: TranscriptEntry[] = appended.slice()
   for (const patch of patched) entries[patch.index] = patch.entry

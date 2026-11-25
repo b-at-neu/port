@@ -171,4 +171,6 @@ export interface OpenTranscriptParams {
   readonly agentId: string | null
   /** Skips this call's own `buildProjectIndex` when the caller already built one, rather than re-listing `<claudeHome>/projects/` once per transcript. */
   readonly index?: ProjectIndex
+  /** Where saved stage system prompts live; when set, a stage session's first message gets its instructions from there. */
+  readonly stagePromptsDir?: string
 }

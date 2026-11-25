@@ -7,6 +7,9 @@ import type { StageAgentLaunch } from '@/types/stage'
 /** Explicit, never omitted — `[]` would drop the repository's deny rules, plugins, and `CLAUDE.md`. */
 export const SETTING_SOURCES: readonly ('user' | 'project' | 'local')[] = ['user', 'project', 'local']
 
+/** Stage sessions run a 1M window, so without this they would only compact near it. */
+export const STAGE_AUTO_COMPACT_WINDOW = 200_000
+
 interface BuildSessionOptionsParams {
   readonly mode: SessionStartMode
   readonly cwd: string
@@ -16,7 +19,7 @@ interface BuildSessionOptionsParams {
   /** `model` is set only when non-null, matching Claude Code's own default. Ignored entirely when `stage` is set. */
   readonly defaults: SessionDefaults
   /** Non-null only for a stage session: the inline agent, its model, and the bundle root it may read; `permissionMode` is always `'default'` — `defaults` is never read. */
-  readonly stage: { readonly agent: StageAgentLaunch; readonly instructionsRoot: string; readonly model: string; readonly disabledPlugins: readonly string[] } | null
+  readonly stage: { readonly agent: StageAgentLaunch; readonly instructionsRoot: string; readonly model: string; readonly disabledPlugins: readonly string[]; readonly skills: readonly string[] } | null
 }
 
 function denyBash(reason: string) {
@@ -33,14 +36,24 @@ const labelGuardHook: HookCallback = (input) => {
   return Promise.resolve({})
 }
 
+function stageSettings(stage: NonNullable<BuildSessionOptionsParams['stage']>): NonNullable<Options['settings']> | null {
+  const settings = {
+    ...(stage.disabledPlugins.length > 0 ? { enabledPlugins: Object.fromEntries(stage.disabledPlugins.map((id) => [id, false])) } : {}),
+    ...(stage.agent.selfContained ? { autoCompactWindow: STAGE_AUTO_COMPACT_WINDOW } : {}),
+  }
+  return Object.keys(settings).length > 0 ? settings : null
+}
+
 function stageOptions(stage: NonNullable<BuildSessionOptionsParams['stage']>): Options {
+  const settings = stageSettings(stage)
   return {
     agents: { [stage.agent.name]: { ...stage.agent.definition, model: stage.model } },
     agent: stage.agent.name,
     model: stage.model,
     additionalDirectories: [stage.instructionsRoot],
     hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [labelGuardHook] }] },
-    ...(stage.disabledPlugins.length > 0 ? { settings: { enabledPlugins: Object.fromEntries(stage.disabledPlugins.map((id) => [id, false])) } } : {}),
+    skills: [...stage.skills],
+    ...(settings !== null ? { settings } : {}),
   }
 }
 

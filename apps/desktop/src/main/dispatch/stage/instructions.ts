@@ -8,7 +8,7 @@ import type { StageLaunchRequest } from '@/types/dispatch'
 import type { FileResult, GitRunner, PathOps } from '@/types/platform'
 import type { StageInstructionsLoader, StageInstructionsResult } from '@/types/stage'
 import type { StageAgent } from '@/types/tick'
-import { KIND_PROMPT_NAMES, composeStagePrompt, stageModeOf } from '@/utils/stage/prompt'
+import { KIND_PROMPT_NAMES, composeStageSystemPrompt, stageModeOf } from '@/utils/stage/prompt'
 
 /** Every agent file is told to follow these `PIPELINE.md` sections, so they travel with its body. */
 export const STAGE_PIPELINE_SECTIONS = ['CLAUDE.md overrides', 'Operating rules (all stage agents)', 'Hand-back line'] as const
@@ -156,14 +156,14 @@ export function defaultStageInstructionsLoader(bundleRoot: string): StageInstruc
 export function createStageInstructionsLoader(deps: StageInstructionsLoaderDeps): StageInstructionsLoader {
   return async (request, worktreePath) => {
     if (deps.ops.contains(worktreePath, deps.bundleRoot)) return { ok: false, message: `the bundled stage prompts at ${deps.bundleRoot} are inside the stage worktree` }
-    const definition = await loadStageAgentDefinition({ root: deps.bundleRoot, agent: request.agent, ops: deps.ops, readTextFile: deps.readTextFile })
-    if (!definition.ok) return definition
     const instructions = await loadStageInstructions({ pluginRoot: deps.bundleRoot, agent: request.agent, ops: deps.ops, readTextFile: deps.readTextFile })
     if (!instructions.ok) return instructions
     const pointers = await readStageConfigPointers(request.entry.path, deps.git)
     if (!pointers.ok) return pointers
     const root = deps.ops.toPosix(deps.bundleRoot)
-    const text = composeStagePrompt({ header: request.prompt, context: buildStageContext(request, root, pointers), instructions: instructions.text, source: root })
-    return { ok: true, text, agent: { name: definition.name, definition: definition.definition } }
+    const prompt = composeStageSystemPrompt({ context: buildStageContext(request, root, pointers), instructions: instructions.text, source: root })
+    const definition = await loadStageAgentDefinition({ root: deps.bundleRoot, agent: request.agent, prompt, ops: deps.ops, readTextFile: deps.readTextFile })
+    if (!definition.ok) return definition
+    return { ok: true, text: request.prompt, agent: { name: definition.name, definition: definition.definition, selfContained: true } }
   }
 }

@@ -2,6 +2,7 @@
 import type { DiffHunk, DiffLine, DiffSign, EntryPatch, FileDiff, MetaEntry, Payload, ToolCallEntry, TranscriptEntry } from '@/utils/sessions/transcript'
 import { MAX_PAYLOAD_CHARS } from '@/utils/sessions/transcript'
 import { isRecord } from '@/utils/guards'
+import { withStageInstructions } from '@/utils/stage/prompt'
 import { toolDetailFor } from '@/main/sessions/tool-detail'
 import type { Deriver, DerivedChunk } from '@/types/sessions'
 
@@ -11,6 +12,8 @@ export const TOOL_USE_ID_FIELD = 'tool_use_id'
 export interface DeriveEntriesOptions {
   /** Used only to shorten a headline path, never to resolve or open anything. */
   readonly cwd: string | null
+  /** A stage session's saved system prompt, appended to a dispatch line that carries no instructions block of its own. */
+  readonly stageInstructions?: string | null
 }
 
 const DEFAULT_OPTIONS: DeriveEntriesOptions = { cwd: null }
@@ -249,6 +252,13 @@ export function createDeriver(options: DeriveEntriesOptions = DEFAULT_OPTIONS): 
   let nextIndex = 0
   const pendingById = new Map<string, { readonly index: number; readonly entry: ToolCallEntry }>()
   const rawInputById = new Map<string, unknown>()
+  let firstUserText = true
+
+  function userText(text: string): Payload {
+    const first = firstUserText
+    firstUserText = false
+    return capPayload(first && options.stageInstructions != null ? withStageInstructions(text, options.stageInstructions) : text)
+  }
 
   function push(records: readonly unknown[]): DerivedChunk {
     const appended: TranscriptEntry[] = []
@@ -277,7 +287,7 @@ export function createDeriver(options: DeriveEntriesOptions = DEFAULT_OPTIONS): 
       const content = message['content']
 
       if (typeof content === 'string') {
-        if (role === 'user') emit({ type: 'user-text', uuid, timestamp, text: capPayload(content) })
+        if (role === 'user') emit({ type: 'user-text', uuid, timestamp, text: userText(content) })
         else if (role === 'assistant') emit({ type: 'assistant-text', uuid, timestamp, text: capPayload(content) })
         continue
       }
@@ -289,7 +299,7 @@ export function createDeriver(options: DeriveEntriesOptions = DEFAULT_OPTIONS): 
         const blockType = block['type']
 
         if (blockType === 'text' && typeof block['text'] === 'string') {
-          emit({ type: role === 'user' ? 'user-text' : 'assistant-text', uuid, timestamp, text: capPayload(block['text']) })
+          emit(role === 'user' ? { type: 'user-text', uuid, timestamp, text: userText(block['text']) } : { type: 'assistant-text', uuid, timestamp, text: capPayload(block['text']) })
           continue
         }
 
