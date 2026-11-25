@@ -1,11 +1,13 @@
-// The budget gate, in-process: ports bin/budget.mjs's reset/sweep/dispatch/report over the app's own gh and git. Never throws, and an unreadable ledger holds dispatch rather than proceeding blind.
+// The budget gate: reset, sweep, dispatch and report over the app's own gh and git. Never throws, and an unreadable ledger holds dispatch rather than proceeding blind.
 import { defaultGitRunner } from '@/main/platform/git'
 import { ensureDirectory as defaultEnsureDirectory, readTextFile as defaultReadTextFile, writeTextFile as defaultWriteTextFile } from '@/main/platform/files'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import { readAtDefaultRef } from '@/main/registry/harness'
+import { readAtDefaultRef } from '@/main/repos/config/harness'
+import { CONFIG_PATH } from '@/main/repos/config/paths'
 import { BUDGET_SESSION } from '@/main/dispatch/budget'
-import { createLedgerReader } from '@/main/github/ledger-read'
-import { createLedgerWriter } from '@/main/writes/ledger-comment'
+import type { GitHubReadContext, LedgerWriteContext } from '@/main/github/context'
+import { issueForPr, readLedger } from '@/main/github/ledger-read'
+import { writeLedger } from '@/main/github/writes/ledger-comment'
 import {
   allowLine,
   ceilingSecondsFrom,
@@ -20,31 +22,26 @@ import {
   sessionLogName,
   sessionTotals,
   verdict,
-} from '@/main/dispatch/budget-ledger'
+} from '@/main/github/budget-ledger'
 import type { LedgerRow, SessionRow, TicketTotal } from '@/types/budget'
 import type { ReadyEntry } from '@/types/actions'
 import type { BudgetCheckResult, BudgetGate, BudgetGateFailure, BudgetReportResult, BudgetResetResult, BudgetSweepResult } from '@/types/dispatch'
-import type { FileResult, GhRunner, GitHubTransport, GitRunner, PathOps } from '@/types/platform'
+import type { FileResult, GitRunner, PathOps } from '@/types/platform'
 
 interface BudgetGateDeps {
-  readonly github?: GitHubTransport
-  readonly gh?: GhRunner
+  readonly platform: GitHubReadContext & LedgerWriteContext
   readonly git?: GitRunner
   readonly readTextFile?: (path: string) => Promise<FileResult<string>>
   readonly writeTextFile?: (path: string, text: string) => Promise<FileResult<void>>
-  readonly removeFile?: (path: string) => Promise<FileResult<void>>
   readonly ensureDirectory?: (path: string) => Promise<FileResult<void>>
   readonly pathOps?: PathOps
   readonly now?: () => Date
   readonly scratchDir: string
-  readonly randomUUID?: () => string
 }
 
 type Ceiling = { readonly ok: true; readonly ceilingSeconds: number | null } | BudgetGateFailure
 type SessionLog = { readonly ok: true; readonly rows: readonly SessionRow[] } | BudgetGateFailure
 type Flush = { readonly rows: readonly SessionRow[]; readonly tickets: readonly TicketTotal[]; readonly failures: readonly string[] }
-
-const CONFIG_PATH = '.claude/port.config.json'
 
 const failed = (message: string): BudgetGateFailure => ({ ok: false, kind: 'failed', message })
 
@@ -63,21 +60,20 @@ export function createBudgetGate(deps: BudgetGateDeps): BudgetGate {
   const ensureDirectory = deps.ensureDirectory ?? defaultEnsureDirectory
   const pathOps = deps.pathOps ?? defaultPathOps
   const now = deps.now ?? ((): Date => new Date())
-  const reader = createLedgerReader({ github: deps.github })
-  const writeLedger = createLedgerWriter({ gh: deps.gh, writeTextFile, removeFile: deps.removeFile, scratchDir: deps.scratchDir, randomUUID: deps.randomUUID })
+  const { platform } = deps
 
   /** Reads first, so a concurrent write never clobbers rows not just produced. `null` on an unreadable or unwritable ledger. */
   async function appendToLedger(entry: ReadyEntry, issue: number, row: LedgerRow, ceilingSeconds: number | null): Promise<readonly LedgerRow[] | null> {
-    const existing = await reader.readLedger({ owner: entry.config.owner, name: entry.config.name, issue })
+    const existing = await readLedger(platform, { owner: entry.config.owner, name: entry.config.name, issue })
     if (!existing.ok) return null
     const rows = [...existing.rows, row]
-    const written = await writeLedger({ repo: entry.config.repo, issue, ref: existing.ref, body: renderLedger(rows, ceilingSeconds) })
+    const written = await writeLedger(platform, { repo: entry.config.repo, issue, ref: existing.ref, body: renderLedger(rows, ceilingSeconds), scratchDir: deps.scratchDir })
     return written.ok ? rows : null
   }
 
   /** From the default ref, the same ref every other `commands.*` and config read resolves from. */
   async function resolveCeiling(entry: ReadyEntry): Promise<Ceiling> {
-    const read = await readAtDefaultRef(git, entry.path, CONFIG_PATH)
+    const read = await readAtDefaultRef({ git }, entry.path, CONFIG_PATH)
     if (!read.ok) return unavailable(read.message)
     let cfg: unknown
     try {
@@ -181,12 +177,12 @@ export function createBudgetGate(deps: BudgetGateDeps): BudgetGate {
 
     let issue = candidate.number
     if (candidate.kind !== 'issue') {
-      const resolved = await reader.issueForPr({ repo: entry.config.repo, pr: candidate.number })
+      const resolved = await issueForPr(platform, { repo: entry.config.repo, pr: candidate.number })
       if (!resolved.ok) return failed(resolved.why)
       issue = resolved.issue
     }
 
-    const ledger = await reader.readLedger({ owner: entry.config.owner, name: entry.config.name, issue })
+    const ledger = await readLedger(platform, { owner: entry.config.owner, name: entry.config.name, issue })
     if (!ledger.ok) return { ok: true, verdict: 'hold', line: holdLine(issue, ledger.why) }
 
     const secondsUsed = ledger.seconds
@@ -207,7 +203,7 @@ export function createBudgetGate(deps: BudgetGateDeps): BudgetGate {
   async function report(entry: ReadyEntry, issue: number): Promise<BudgetReportResult> {
     const ceiling = await resolveCeiling(entry)
     if (!ceiling.ok) return ceiling
-    const ledger = await reader.readLedger({ owner: entry.config.owner, name: entry.config.name, issue })
+    const ledger = await readLedger(platform, { owner: entry.config.owner, name: entry.config.name, issue })
     if (!ledger.ok) return failed(`could not read #${String(issue)}'s cost ledger: ${ledger.why}`)
     return { ok: true, ...reportLedger(ledger.rows, ceiling.ceilingSeconds) }
   }

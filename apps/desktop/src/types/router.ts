@@ -1,5 +1,5 @@
-// Shared route search-param types for renderer/router/ — multi-file. The route ids and parsers
-// themselves stay in renderer/router/routes.ts, the one literal spelling router.tsx reads.
+// Shared route search-param types for renderer/app/ — multi-file. The route ids and parsers
+// themselves stay in renderer/app/routes.ts, the one literal spelling router.tsx reads.
 import type { RepoId } from '@/utils/repos'
 
 export interface BoardItemRef {

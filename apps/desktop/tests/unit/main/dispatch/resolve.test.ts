@@ -68,7 +68,6 @@ function fakeRunStates(current: RunStateStore['current'], setResult: SetRunState
     current,
     status: () => ({ kind: 'loaded' }),
     snapshot: () => ({ store: { kind: 'loaded' }, repositories: [] }),
-    load: () => Promise.resolve(),
     set: (repoIds, state) => {
       setCalls.push([repoIds, state])
       return Promise.resolve(setResult)
@@ -110,13 +109,13 @@ describe('registeredRepoIds', () => {
 describe('resolveDispatchControl — validation', () => {
   it('rejects a command outside DISPATCH_COMMANDS', async () => {
     await expect(resolveDispatchControl(registryDeps, { command: 'bogus' as never }, depsWith())).rejects.toThrow(
-      "'dispatch:control' requires 'command' to be one of run, drain, pause, take-over",
+      "'dispatch:control' requires 'command' to be one of run, drain, pause",
     )
   })
 
   it('rejects halt — there is no halt command any more', async () => {
     await expect(resolveDispatchControl(registryDeps, { command: 'halt' } as never, depsWith())).rejects.toThrow(
-      "'dispatch:control' requires 'command' to be one of run, drain, pause, take-over",
+      "'dispatch:control' requires 'command' to be one of run, drain, pause",
     )
   })
 
@@ -159,11 +158,11 @@ describe('resolveDispatchControl — run', () => {
     expect(refreshed).toBe(false)
   })
 
-  it('takes ownership before the run-state write, and refuses with no write at all when a terminal cockpit owns it', async () => {
+  it('takes ownership before the run-state write, and refuses with no write at all when the record names the terminal cockpit', async () => {
     let written = false
     const entry = await readyEntry()
     const { runStates } = fakeRunStates(() => ({ repoId: REPO_ID, state: 'paused', since: null }))
-    const terminalSince = '2026-01-01T00:00:00Z'
+    const message = "it names the terminal cockpit as owner — the terminal cockpit can't run a repository this app manages"
     const result = await resolveDispatchControl(
       registryDeps,
       { command: 'run', repoId: REPO_ID },
@@ -171,10 +170,10 @@ describe('resolveDispatchControl — run', () => {
         runStates: { ...runStates, set: (repoIds, state, at) => { written = true; return runStates.set(repoIds, state, at) } },
         listRepositories: () => Promise.resolve({ ok: true, repositories: [entry] }),
         takeOwnership: () =>
-          Promise.resolve({ ok: false, kind: 'refused', verdict: { kind: 'terminal', since: terminalSince, path: '/repo/.agents/cockpit.json', readAt: terminalSince }, path: '/repo/.agents/cockpit.json' }),
+          Promise.resolve({ ok: false, kind: 'refused', verdict: { kind: 'unreadable', message, path: '/repo/.agents/cockpit.json', readAt: '2026-01-01T00:00:00Z' }, path: '/repo/.agents/cockpit.json' }),
       }),
     )
-    expect(result).toEqual({ ok: false, command: 'run', repoId: REPO_ID, reason: 'terminal-owned', since: terminalSince })
+    expect(result).toEqual({ ok: false, command: 'run', repoId: REPO_ID, reason: 'ownership-unreadable', message, path: '/repo/.agents/cockpit.json' })
     expect(written).toBe(false)
   })
 
@@ -212,29 +211,9 @@ describe('resolveDispatchControl — run', () => {
   })
 })
 
-describe('resolveDispatchControl — take-over (#331)', () => {
-  it('requires a ready repository', async () => {
-    const notReady = { id: REPO_ID, path: '/repo', displayName: 'o/a', problem: { kind: 'directory-missing' as const }, diagnostics: [] }
-    await expect(
-      resolveDispatchControl(registryDeps, { command: 'take-over', repoId: REPO_ID }, depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [notReady] }) })),
-    ).rejects.toThrow("take-over requires 'repo-a' to be a ready repository")
-  })
-
-  it('forces ownership, then sets dispatching and refreshes once', async () => {
-    let forced = false
-    const entry = await readyEntry()
-    const { runStates } = fakeRunStates(() => ({ repoId: REPO_ID, state: 'dispatching', since: '2026-01-01T00:00:00Z' }))
-    const result = await resolveDispatchControl(
-      registryDeps,
-      { command: 'take-over', repoId: REPO_ID },
-      depsWith({
-        runStates,
-        listRepositories: () => Promise.resolve({ ok: true, repositories: [entry] }),
-        takeOwnership: (params) => { forced = params.force === true; return Promise.resolve({ ok: true, path: 'p' }) },
-      }),
-    )
-    expect(forced).toBe(true)
-    expect(result).toEqual({ ok: true, command: 'take-over', repoId: REPO_ID, runState: { repoId: REPO_ID, state: 'dispatching', since: '2026-01-01T00:00:00Z' } })
+describe('resolveDispatchControl — take-over', () => {
+  it('is no longer a command', async () => {
+    await expect(resolveDispatchControl(registryDeps, { command: 'take-over', repoId: REPO_ID } as never, depsWith())).rejects.toThrow('to be one of run, drain, pause')
   })
 })
 
@@ -300,7 +279,7 @@ describe('resolveDispatchControl — pause', () => {
     const result = await resolveDispatchControl(
       registryDeps,
       { command: 'pause', repoId: REPO_ID },
-      depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [entry] }), releaseOwnership: () => Promise.resolve({ ok: false, kind: 'permission-denied', message: 'nope', path: 'p' }) }),
+      depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [entry] }), releaseOwnership: () => Promise.resolve({ ok: false, kind: 'io', message: 'nope', path: 'p' }) }),
     )
     expect(result).toMatchObject({ ok: true, command: 'pause', released: false })
   })

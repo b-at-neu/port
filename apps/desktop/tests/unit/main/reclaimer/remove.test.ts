@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createPathOps } from '@/main/platform/paths'
-import { deleteMergedBranch, pruneWorktrees, removeWorktree, unlockWorktree } from '@/main/reclaimer/remove'
+import { deleteMergedBranch, pruneWorktrees, removeWorktree, unlockWorktree } from '@/main/features/worktrees/remove'
 import type { CommandResult } from '@/types/platform'
 import type { ReclaimerFs, ResolvedSeams } from '@/types/reclaimer'
 

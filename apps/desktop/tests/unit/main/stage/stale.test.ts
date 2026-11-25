@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { AUTO_RESUME_GRACE_MS, NETWORK_BACKOFF_MS, NETWORK_RETRY_LIMIT, autoResumable, clearedByRecheck, networkGivenUp, orphanedRunning, staleInterrupted } from '@/main/stage/stale'
+import { AUTO_RESUME_GRACE_MS, NETWORK_RETRY_LIMIT, autoResumable, clearedByRecheck, networkGivenUp, orphanedRunning, staleInterrupted } from '@/main/dispatch/stage/stale'
 import type { DispatchRecord, RepoDispatchStatus } from '@/types/dispatch'
 import type { ItemsByNumberFetch, ResolvedItem } from '@/types/github'
 import type { InterruptedStage } from '@/types/stage'
 import type { RepositoryState } from '@/types/state'
 import type { RepoId } from '@/utils/repos'
-import { reconciledItem, repositoryState } from '../../../fixtures/board-state'
+import { reconciledItem, repositoryState } from '../../../support/board-snapshot'
 
 const REPO = 'repo-a' as RepoId
 const INTERRUPTED_AT = '2026-01-01T00:10:00.000Z'
@@ -196,7 +196,6 @@ describe('autoResumable', () => {
   it.each([
     ['paused', { runState: 'paused' as const }],
     ['draining', { runState: 'draining' as const }],
-    ['terminal-owned', { owner: 'terminal' as const }],
     ['unowned', { owner: 'none' as const }],
     ['unreadable', { owner: 'unreadable' as const }],
   ])('never launches into a %s repository', (_name, overrides) => {
@@ -227,7 +226,6 @@ describe('networkGivenUp', () => {
   const status = (overrides: Partial<RepoDispatchStatus> = {}): RepoDispatchStatus => ({ repoId: REPO, owner: 'app', state: { kind: 'idle' }, runState: 'dispatching', ownedSince: null, unreadableMessage: null, budget: null, observed: [], denials: [], interrupted: [], ...overrides })
 
   it('gives up a network entry at three retries, and one with no session to resume', () => {
-    expect(NETWORK_BACKOFF_MS).toEqual([60_000, 300_000, 900_000])
     const spent = entry({ id: 'spent', reason: 'network', networkRetries: 3 })
     const fresh = entry({ id: 'fresh', reason: 'network', networkRetries: 2 })
     const noSession = entry({ id: 'none', reason: 'network', networkRetries: 0, claudeSessionId: null })

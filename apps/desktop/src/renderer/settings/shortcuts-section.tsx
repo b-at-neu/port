@@ -1,13 +1,13 @@
 // A read-only reference over `KEY_BINDINGS`, grouped by scope.
 import { SettingsCard } from '@/renderer/components/settings-card'
-import { KEY_BINDINGS } from '@/renderer/shell/key-bindings'
-import { SHORTCUT_SCOPE_LABEL, WIDE_CARD } from '@/renderer/settings/copy'
+import { KEY_BINDINGS } from '@/renderer/app/key-bindings'
+import { SHORTCUT_SCOPE_LABEL, SHORTCUTS_TITLE, WIDE_CARD } from '@/renderer/settings/copy'
 
 const SCOPES = ['global', 'composer', 'list'] as const
 
 export function ShortcutsSection() {
   return (
-    <SettingsCard title="Keyboard shortcuts" className={WIDE_CARD}>
+    <SettingsCard title={SHORTCUTS_TITLE} className={WIDE_CARD}>
       <div data-slot="settings-shortcuts" className="grid grid-cols-1 gap-x-8 gap-y-4 lg:grid-cols-2">
         {SCOPES.map((scope) => (
           <div key={scope} className="flex flex-col gap-1">

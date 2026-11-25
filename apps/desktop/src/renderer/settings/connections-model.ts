@@ -6,7 +6,7 @@ import { RATE_LIMIT_FLOOR } from '@/types/board'
 import type { GhStatus } from '@/types/gh'
 import type { RuntimePreflight } from '@/types/runtime'
 import type { ConnectionLine } from '@/types/settings'
-import { formatAgo } from '@/renderer/lib/relative-time'
+import { formatAgoSince, formatHourMinute } from '@/renderer/lib/time'
 
 type QueryLike<T> = Pick<QueryObserverResult<T>, 'status' | 'data'>
 
@@ -19,7 +19,7 @@ interface ConnectionOverviewParams {
 }
 
 function checkedAgo(checkedAt: string, now: Date): string {
-  return `checked ${formatAgo(now.getTime() - Date.parse(checkedAt))}`
+  return `checked ${formatAgoSince(checkedAt, now)}`
 }
 
 function claudeLine(query: QueryLike<RuntimePreflight>, now: Date): ConnectionLine {
@@ -53,11 +53,6 @@ function ghLine(query: QueryLike<GhStatus>, now: Date): ConnectionLine {
   }
 }
 
-function clockTime(iso: string): string {
-  const date = new Date(iso)
-  return `${String(date.getHours())}:${String(date.getMinutes()).padStart(2, '0')}`
-}
-
 /** The rate limit of the repository whose GitHub read succeeded last — every repository shares one gh token, so one number is honest. */
 function rateLimitLine(snapshot: BoardSnapshot | undefined): ConnectionLine {
   const key = 'github'
@@ -74,7 +69,7 @@ function rateLimitLine(snapshot: BoardSnapshot | undefined): ConnectionLine {
   }
   if (newest === null) return { key, label, state: 'no read yet', age: null, tone: 'idle' }
   const points = `${newest.remaining.toLocaleString('en-US')} points left`
-  if (newest.remaining < RATE_LIMIT_FLOOR) return { key, label, state: `${points} · resets ${clockTime(newest.resetAt)}`, age: null, tone: 'attention' }
+  if (newest.remaining < RATE_LIMIT_FLOOR) return { key, label, state: `${points} · resets ${formatHourMinute(newest.resetAt)}`, age: null, tone: 'attention' }
   return { key, label, state: points, age: null, tone: 'success' }
 }
 
@@ -83,7 +78,7 @@ function repositoryLines(snapshot: BoardSnapshot | undefined, displayNames: Read
   return snapshot.health.map((health) => {
     const label = displayNames[health.repoId] ?? health.repoId
     const { lastSuccessAt, consecutiveFailures } = health.github
-    const ago = lastSuccessAt !== null ? formatAgo(now.getTime() - Date.parse(lastSuccessAt)) : null
+    const ago = lastSuccessAt !== null ? formatAgoSince(lastSuccessAt, now) : null
     if (consecutiveFailures > 0) {
       return { key: `repo:${health.repoId}`, label, state: ago !== null ? `last read ${ago} · failing` : 'never read · failing', age: null, tone: 'attention' as const }
     }

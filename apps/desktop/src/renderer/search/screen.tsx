@@ -6,13 +6,33 @@ import { Button } from '@/renderer/components/ui/button'
 import { Input } from '@/renderer/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/renderer/components/ui/select'
 import { useIpcQuery } from '@/renderer/data/query'
-import { Screen, ScreenBody } from '@/renderer/components/screen'
+import { Page } from '@/renderer/components/page'
+import { pageState } from '@/renderer/components/page-state'
+import type { PageStateKind } from '@/renderer/components/page-state'
 import { ScreenHeader } from '@/renderer/components/screen-header'
-import { ROUTE_IDS } from '@/renderer/router/routes'
-import { relativeTime } from '@/renderer/lib/relative-time'
+import { ROUTE_IDS } from '@/renderer/app/routes'
+import { ALL_REPOSITORIES, SEARCH_ACTION } from '@/renderer/lib/copy'
+import { formatTimeOfDay, relativeTime } from '@/renderer/lib/time'
 import type { SearchResult, SearchScope } from '@/types/search'
 import { MIN_TERM_CHARS } from '@/types/search'
-import { emptyCopy, errorCopy, footnotes, groupHeader, IDLE_NOTICE, kindChip, SEARCH_HINT, SEARCHING_COPY, summaryLine, TOO_SHORT_COPY } from '@/renderer/search/copy'
+import {
+  BACK_LABEL,
+  emptyCopy,
+  errorCopy,
+  footnotes,
+  groupHeader,
+  IDLE_NOTICE,
+  kindChip,
+  QUERY_PLACEHOLDER,
+  SEARCH_HINT,
+  SEARCH_UNREACHABLE,
+  SEARCH_TITLE,
+  SEARCHING_COPY,
+  SEARCHING_LABEL,
+  summaryLine,
+  THIS_REPOSITORY,
+  TOO_SHORT_COPY,
+} from '@/renderer/search/copy'
 
 export function SearchScreen() {
   const search = useSearch({ from: ROUTE_IDS.search })
@@ -21,7 +41,9 @@ export function SearchScreen() {
   const [query, setQuery] = useState('')
   const [submitted, setSubmitted] = useState<{ readonly query: string; readonly scope: SearchScope } | null>(null)
 
-  const result = useIpcQuery('search:query', submitted !== null ? { query: submitted.query, scope: submitted.scope } : undefined)
+  const result = useIpcQuery('search.query', submitted !== null ? { query: submitted.query, scope: submitted.scope } : undefined, { enabled: submitted !== null })
+  const state: PageStateKind = submitted === null ? 'empty' : pageState(result, (data) => data.ok && data.groups.length === 0)
+  const trimmedLength = query.trim().length
 
   function submit(): void {
     const trimmed = query.trim()
@@ -33,72 +55,77 @@ export function SearchScreen() {
   }
 
   return (
-    <Screen
+    <Page
+      variant="page"
       header={
         <ScreenHeader className="gap-2">
-          <Button variant="ghost" size="small" onClick={() => void navigate({ to: ROUTE_IDS.history, search: {} })} aria-label="Back">
+          <Button variant="ghost" size="small" onClick={() => void navigate({ to: ROUTE_IDS.history, search: {} })} aria-label={BACK_LABEL}>
             <ChevronLeft aria-hidden="true" className="size-4" />
           </Button>
-          <span>Search transcripts</span>
+          <span>{SEARCH_TITLE}</span>
           <Select value={scope.kind} onValueChange={(value) => setScope(value === 'repo' && search.repo ? { kind: 'repo', repoId: search.repo } : { kind: 'all' })}>
             <SelectTrigger className="w-44">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="repo" disabled={!search.repo}>
-                This repository
+                {THIS_REPOSITORY}
               </SelectItem>
-              <SelectItem value="all">All repositories</SelectItem>
+              <SelectItem value="all">{ALL_REPOSITORIES}</SelectItem>
             </SelectContent>
           </Select>
         </ScreenHeader>
       }
-    >
-      <ScreenBody variant="page">
-        <form
-          onSubmit={(event) => {
-            event.preventDefault()
-            submit()
-          }}
-          className="flex gap-2"
-        >
-          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="An error, a file path, a decision" className="flex-1" />
-          <Button type="submit">
-            <SearchIcon aria-hidden="true" className="size-3.5" />
-            Search
-          </Button>
-        </form>
-        <p className="text-meta text-muted-foreground">{SEARCH_HINT}</p>
-
-        {submitted === null ? (
-          query.trim().length > 0 && query.trim().length < MIN_TERM_CHARS ? (
+      lead={
+        <>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              submit()
+            }}
+            className="flex gap-2"
+          >
+            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={QUERY_PLACEHOLDER} className="flex-1" />
+            <Button type="submit">
+              <SearchIcon aria-hidden="true" className="size-3.5" />
+              {SEARCH_ACTION}
+            </Button>
+          </form>
+          <p className="text-meta text-muted-foreground">{SEARCH_HINT}</p>
+        </>
+      }
+      state={state}
+      loading={
+        <>
+          <p className="text-small text-muted-foreground">{SEARCHING_LABEL}</p>
+          <p className="text-meta text-muted-foreground">{SEARCHING_COPY}</p>
+        </>
+      }
+      errorMessage={SEARCH_UNREACHABLE}
+      onRetry={() => void result.refetch()}
+      empty={
+        submitted === null ? (
+          trimmedLength > 0 && trimmedLength < MIN_TERM_CHARS ? (
             <p className="text-small text-danger-pill-foreground">{TOO_SHORT_COPY}</p>
           ) : (
             <p className="text-small text-muted-foreground">{IDLE_NOTICE}</p>
           )
-        ) : result.status === 'pending' ? (
-          <>
-            <p className="text-small text-muted-foreground">Searching…</p>
-            <p className="text-meta text-muted-foreground">{SEARCHING_COPY}</p>
-          </>
-        ) : result.status === 'error' ? (
-          <p className="text-small text-danger-pill-foreground">Could not reach the main process.</p>
-        ) : !result.data.ok ? (
-          <p className="text-small text-danger-pill-foreground">{errorCopy(result.data.kind, result.data.kind === 'sessions-unavailable' ? result.data.message : null)}</p>
-        ) : (
-          <SearchResults data={result.data} />
-        )}
-      </ScreenBody>
-    </Screen>
+        ) : result.data?.ok === true ? (
+          <p className="text-small text-muted-foreground">{emptyCopy(result.data)}</p>
+        ) : null
+      }
+    >
+      {result.data === undefined ? null : result.data.ok ? (
+        <SearchResults data={result.data} />
+      ) : (
+        <p className="text-small text-danger-pill-foreground">{errorCopy(result.data.kind, result.data.kind === 'sessions-unavailable' ? result.data.message : null)}</p>
+      )}
+    </Page>
   )
 }
 
 function SearchResults({ data }: { readonly data: Extract<SearchResult, { readonly ok: true }> }) {
   const navigate = useNavigate()
-
-  if (data.groups.length === 0) {
-    return <p className="text-small text-muted-foreground">{emptyCopy(data)}</p>
-  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -124,7 +151,7 @@ function SearchResults({ data }: { readonly data: Extract<SearchResult, { readon
                 >
                   <div className="flex items-center gap-2 text-meta text-muted-foreground">
                     <span>{kindChip(hit)}</span>
-                    <span>{new Date(hit.timestamp).toLocaleTimeString()}</span>
+                    <span>{formatTimeOfDay(hit.timestamp)}</span>
                   </div>
                   <div className="text-small">
                     {text.slice(0, matchStart)}

@@ -1,24 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-
-vi.mock('@/renderer/data/invoke', () => ({ invoke: vi.fn() }))
-vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn(), loading: vi.fn() } }))
-
-import { toast } from 'sonner'
-import { invoke } from '@/renderer/data/invoke'
-import { workOn } from '@/renderer/claim/work-on'
+import { describe, expect, it } from 'vitest'
+import { afterApply, afterPreflight, isClaimed, workOnToastId } from '@/renderer/claim/work-on'
 import type { ClaimApplyResponse, ClaimPreflightResponse } from '@/types/claim'
 import type { RepoId } from '@/utils/repos'
 
 const REPO_ID = 'repo-1' as RepoId
-const ID = 'work-on:repo-1:101'
+const NOW = new Date('2026-01-01T12:00:00Z')
 
-interface Routes {
-  preflight?: ClaimPreflightResponse | Error
-  apply?: ClaimApplyResponse | Error
-  refresh?: unknown
-}
+type Resolved = Extract<ClaimPreflightResponse, { kind: 'resolved' }>
 
-function preflight(assigneeSituation: 'unassigned' | 'mine' | 'others', assignees: readonly string[]): ClaimPreflightResponse {
+function resolved(assigneeSituation: 'unassigned' | 'mine' | 'others', assignees: readonly string[]): Resolved {
   return {
     kind: 'resolved',
     preflight: { kind: 'issue', number: 101, title: 'Fix the thing', url: 'u', state: 'OPEN', labels: [], assignees, viewer: 'octocat', blockers: { ok: true, open: [], shown: 0, total: 0 }, readAt: 't' },
@@ -26,174 +16,57 @@ function preflight(assigneeSituation: 'unassigned' | 'mine' | 'others', assignee
   }
 }
 
-const APPLIED: ClaimApplyResponse = { kind: 'write', outcome: { kind: 'applied', argv: [] } }
-const SNAPSHOT = { dispatch: [{ repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, runState: 'dispatching' }] }
+const claimable = resolved('unassigned', []).verdict as Extract<Resolved['verdict'], { kind: 'claimable' }>
+const refusal: Resolved = { ...resolved('unassigned', []), verdict: { kind: 'already-claimed', markerName: 'claude' } }
 
-function route(routes: Routes): void {
-  vi.mocked(invoke).mockImplementation(((channel: string) => {
-    const result = channel === 'claim:preflight' ? routes.preflight : channel === 'claim:apply' ? routes.apply : routes.refresh
-    return result instanceof Error ? Promise.reject(result) : Promise.resolve(result)
-  }) as never)
-}
+describe('afterPreflight', () => {
+  it.each<readonly [string, ClaimPreflightResponse, string]>([
+    ['a failed read', { kind: 'failed', message: 'offline.' }, 'stop'],
+    ['an unresolved number', { kind: 'unresolved' }, 'stop'],
+    ['a refusing verdict', refusal, 'stop'],
+    ['an unassigned issue', resolved('unassigned', []), 'apply'],
+    ['an issue already mine', resolved('mine', ['octocat']), 'apply'],
+    ['an issue assigned to someone else', resolved('others', ['alice']), 'ask-take-over'],
+  ])('routes %s to %s', (_name, response, kind) => {
+    expect(afterPreflight('acme/widgets', 101, response).kind).toBe(kind)
+  })
 
-function channels(): string[] {
-  return vi.mocked(invoke).mock.calls.map(([channel]) => channel)
-}
+  it.each<readonly [string, ClaimPreflightResponse]>([
+    ['a failed read', { kind: 'failed', message: 'offline.' }],
+    ['a refusing verdict', refusal],
+  ])('stops with an error toast for %s', (_name, response) => {
+    expect(afterPreflight('acme/widgets', 101, response)).toMatchObject({ kind: 'stop', toast: { tone: 'error' } })
+  })
 
-function params(onClaimed = vi.fn()) {
-  return { repoId: REPO_ID, repo: 'acme/widgets', number: 101, planGate: 'auto' as const, onClaimed }
-}
-
-interface PromptButtons {
-  readonly action: { readonly onClick: (event: { preventDefault: () => void }) => void }
-  readonly cancel: { readonly onClick: () => void }
-}
-
-function promptButtons(): PromptButtons {
-  return vi.mocked(toast.info).mock.calls[0]?.[1] as unknown as PromptButtons
-}
-
-function takeOverButton(): PromptButtons['action'] {
-  return promptButtons().action
-}
-
-beforeEach(() => {
-  vi.clearAllMocks()
+  it.each([
+    ['unassigned', [] as string[]],
+    ['mine', ['octocat']],
+    ['others', ['alice']],
+  ] as const)('confirms the preflight assignees for %s', (situation, assignees) => {
+    const step = afterPreflight('acme/widgets', 101, resolved(situation, assignees))
+    if (step.kind === 'stop') throw new Error('expected a claimable step')
+    expect(step.confirmedAssignees).toEqual(assignees)
+  })
 })
 
-describe('workOn', () => {
-  it('claims an unassigned issue: preflight, then apply, then refresh, with one success toast', async () => {
-    route({ preflight: preflight('unassigned', []), apply: APPLIED, refresh: SNAPSHOT })
-    const args = params()
-    await workOn(args)
-
-    expect(channels()).toEqual(['claim:preflight', 'claim:apply', 'board:refresh'])
-    expect(invoke).toHaveBeenNthCalledWith(2, 'claim:apply', { repoId: REPO_ID, number: 101, planGate: 'auto', confirmedAssignees: [] })
-    expect(invoke).toHaveBeenNthCalledWith(3, 'board:refresh', { repoId: REPO_ID, source: 'github' })
-    expect(toast.success).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(toast.success).mock.calls[0]?.[0]).toBe('#101 claimed and assigned to you.')
-    expect(vi.mocked(toast.success).mock.calls[0]?.[1]).toMatchObject({ id: ID, description: 'Planning starts now.' })
-    expect(args.onClaimed).toHaveBeenCalledTimes(1)
-    expect(toast.error).not.toHaveBeenCalled()
-  })
-
-  it('claims an issue already assigned to the viewer with the viewer as the confirmed assignee', async () => {
-    route({ preflight: preflight('mine', ['octocat']), apply: APPLIED, refresh: SNAPSHOT })
-    await workOn(params())
-    expect(invoke).toHaveBeenNthCalledWith(2, 'claim:apply', { repoId: REPO_ID, number: 101, planGate: 'auto', confirmedAssignees: ['octocat'] })
-  })
-
-  it('writes nothing for an issue assigned to someone else until Take over is clicked', async () => {
-    route({ preflight: preflight('others', ['alice']), apply: APPLIED, refresh: SNAPSHOT })
-    const args = params()
-    await workOn(args)
-
-    expect(channels()).toEqual(['claim:preflight'])
-    expect(vi.mocked(toast.info).mock.calls[0]?.[0]).toBe('#101 is assigned to @alice.')
-    expect(vi.mocked(toast.info).mock.calls[0]?.[1]).toMatchObject({ id: ID, duration: Infinity })
-
-    const preventDefault = vi.fn()
-    takeOverButton().onClick({ preventDefault })
-    await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1))
-
-    expect(preventDefault).toHaveBeenCalledTimes(1)
-    expect(channels().filter((channel) => channel === 'claim:apply')).toHaveLength(1)
-    expect(invoke).toHaveBeenCalledWith('claim:apply', { repoId: REPO_ID, number: 101, planGate: 'auto', confirmedAssignees: ['alice'] })
-    expect(toast.loading).toHaveBeenCalledWith('Taking over #101…', expect.objectContaining({ id: ID }))
-    expect(args.onClaimed).toHaveBeenCalledTimes(1)
-  })
-
-  it('leaves the issue alone when the take-over prompt is declined', async () => {
-    route({ preflight: preflight('others', ['alice']), apply: APPLIED, refresh: SNAPSHOT })
-    await workOn(params())
-    promptButtons().cancel.onClick()
-    expect(channels()).toEqual(['claim:preflight'])
-  })
-
+describe('afterApply and isClaimed', () => {
+  const conflict = { kind: 'precondition-failed', expected: [], observed: ['x'], readAt: 't' } as const
   it.each([
-    ['a refusal', { kind: 'resolved', preflight: preflight('unassigned', []), verdict: { kind: 'already-claimed', markerName: 'claude' } }],
-    ['an unresolved number', { kind: 'unresolved' }],
-    ['an unreachable GitHub', { kind: 'failed', message: 'offline.' }],
-  ] as const)('stops after the preflight on %s, with one error toast and no write', async (_name, response) => {
-    route({ preflight: response as unknown as ClaimPreflightResponse })
-    const args = params()
-    await workOn(args)
-
-    expect(channels()).toEqual(['claim:preflight'])
-    expect(toast.error).toHaveBeenCalledTimes(1)
-    expect(args.onClaimed).not.toHaveBeenCalled()
+    ['applied', { kind: 'write', outcome: { kind: 'applied', argv: [] } }, 'success', true],
+    ['no-op', { kind: 'write', outcome: { kind: 'no-op' } }, 'success', true],
+    ['mirror-failed', { kind: 'write', outcome: { kind: 'mirror-failed', mirror: { kind: 'write-failed', stderr: 'x' } } }, 'success', false],
+    ['precondition-failed', { kind: 'write', outcome: { kind: 'precondition-failed', conflict } }, 'error', false],
+    ['moved', { kind: 'moved', confirmed: [], current: ['bob'], readAt: '2026-01-01T09:30:00Z' }, 'error', false],
+    ['refused', { kind: 'refused', verdict: { kind: 'not-found' } }, 'error', false],
+    ['preflight-failed', { kind: 'preflight-failed', message: 'offline.' }, 'error', false],
+  ] as unknown as ReadonlyArray<readonly [string, ClaimApplyResponse, 'success' | 'error', boolean]>)('treats %s as %s, claimed %s', (_name, response, tone, claimed) => {
+    expect(isClaimed(response)).toBe(claimed)
+    expect(afterApply({ repo: 'acme/widgets', number: 101, verdict: claimable, response, status: undefined, now: NOW }).tone).toBe(tone)
   })
+})
 
-  it.each([
-    ['moved', { kind: 'moved', confirmed: [], current: ['bob'], readAt: 't' }],
-    ['precondition-failed', { kind: 'write', outcome: { kind: 'precondition-failed', conflict: { kind: 'precondition-failed', expected: [], observed: ['x'], readAt: 't' } } }],
-    ['preflight-failed', { kind: 'preflight-failed', message: 'offline.' }],
-  ] as const)('reports a %s apply as an error and never calls onClaimed', async (_name, response) => {
-    route({ preflight: preflight('unassigned', []), apply: response })
-    const args = params()
-    await workOn(args)
-
-    expect(toast.error).toHaveBeenCalledTimes(1)
-    expect(toast.success).not.toHaveBeenCalled()
-    expect(args.onClaimed).not.toHaveBeenCalled()
-    expect(channels()).not.toContain('board:refresh')
-  })
-
-  it('reports a no-op write as a success without a dispatch line', async () => {
-    route({ preflight: preflight('unassigned', []), apply: { kind: 'write', outcome: { kind: 'no-op' } }, refresh: SNAPSHOT })
-    const args = params()
-    await workOn(args)
-
-    expect(vi.mocked(toast.success).mock.calls[0]?.[0]).toBe('#101 already carries those labels.')
-    expect(args.onClaimed).toHaveBeenCalledTimes(1)
-  })
-
-  it('still reports success, with the refresh-failed dispatch line, when board:refresh rejects', async () => {
-    route({ preflight: preflight('unassigned', []), apply: APPLIED, refresh: new Error('boom') })
-    vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    await workOn(params())
-
-    expect(toast.success).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(toast.success).mock.calls[0]?.[1]).toMatchObject({ description: "Couldn't refresh the board, so it's unclear when planning starts." })
-  })
-
-  it('shows the main-process toast when the preflight invoke rejects', async () => {
-    route({ preflight: new Error('gone') })
-    vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    await workOn(params())
-
-    expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toBe("Couldn't reach the main process.")
-    expect(channels()).toEqual(['claim:preflight'])
-  })
-
-  it('shows the main-process toast when the apply invoke rejects', async () => {
-    route({ preflight: preflight('unassigned', []), apply: new Error('gone') })
-    vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    const args = params()
-    await workOn(args)
-
-    expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toBe("Couldn't reach the main process.")
-    expect(args.onClaimed).not.toHaveBeenCalled()
-  })
-
-  it('gives every toast for one row the same id, and clears a previous prompt\'s buttons', async () => {
-    route({ preflight: preflight('others', ['alice']), apply: APPLIED, refresh: SNAPSHOT })
-    await workOn(params())
-    takeOverButton().onClick({ preventDefault: vi.fn() })
-    await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1))
-
-    const calls = [toast.info, toast.loading, toast.success].flatMap((fn) => vi.mocked(fn).mock.calls)
-    expect(calls).toHaveLength(4)
-    for (const [, options] of calls) expect(options).toMatchObject({ id: ID })
-    expect(vi.mocked(toast.success).mock.calls[0]?.[1]).toMatchObject({ action: undefined, cancel: undefined, duration: undefined })
-    expect(vi.mocked(toast.loading).mock.calls[1]?.[1]).toMatchObject({ action: undefined, cancel: undefined, duration: undefined, description: undefined })
-  })
-
-  it('shows a loading toast for the preflight before anything resolves', async () => {
-    route({ preflight: preflight('unassigned', []), apply: APPLIED, refresh: SNAPSHOT })
-    await workOn(params())
-
-    expect(vi.mocked(toast.loading).mock.calls[0]?.[0]).toBe('Claiming #101…')
-    expect(vi.mocked(toast.loading).mock.calls[0]?.[1]).toMatchObject({ id: ID })
+describe('workOnToastId', () => {
+  it('is one id per row', () => {
+    expect(workOnToastId(REPO_ID, 101)).toBe('work-on:repo-1:101')
   })
 })

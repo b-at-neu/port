@@ -1,7 +1,7 @@
-// Pure hand-back text rules, shared by `main/stage/handback.ts` and `renderer/board/needs-you.ts`
+// Pure hand-back text rules, shared by `main/pipeline/handback.ts` and `renderer/board/needs-you.ts`
 // so the two can no longer classify the same text two different ways.
 
-/** Pinned byte-identical to `plugins/port/skills/pipeline/SKILL.md`'s own completion-handling prefixes, by the `desktop-dispatch` check. */
+/** The three line prefixes a stage session's final message can end with. */
 export const QUESTIONS_PREFIX = 'QUESTIONS FOR HUMAN:'
 export const BLOCKED_PREFIX = 'BLOCKED:'
 export const HANDBACK_PREFIX = 'HANDBACK:'

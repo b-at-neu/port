@@ -22,7 +22,7 @@ import {
   LOADING_FILES,
   NO_MATCHING_COMMANDS,
   NO_MATCHING_FILES,
-} from '@/renderer/session/composer-copy'
+} from '@/renderer/session/copy'
 import { draftAttachmentsFor, setDraft, setDraftAttachments, useDraft, useDraftAttachments } from '@/renderer/session/drafts'
 
 function sizeLabel(bytes: number): string {
@@ -83,7 +83,7 @@ export function PromptInput({ sessionKey, repoId, snapshot, disabled, placeholde
   const [notice, setNotice] = useState<string | null>(null)
 
   const trigger = activeTrigger(draft, caret)
-  const filesQuery = useIpcQuery('session:files', { sessionKey }, { enabled: trigger?.kind === 'file' })
+  const filesQuery = useIpcQuery('session.files', { sessionKey }, { enabled: trigger?.kind === 'file' })
 
   const capabilities = snapshot.capabilities
 

@@ -23,7 +23,7 @@ describe('storeBannerCopy', () => {
 
   it('names the reason and the full path when the file cannot be read', () => {
     expect(storeBannerCopy({ kind: 'unreadable', message: 'boom', path: '/userData/dispatch.json' })).toBe(
-      "Every pipeline is stopped — dispatch.json can't be read (boom). Fix or delete /userData/dispatch.json, then run each repository again.",
+      "Every pipeline is stopped — pipeline-state.json can't be read (boom). Fix or delete /userData/dispatch.json, then run each repository again.",
     )
   })
 })
@@ -39,7 +39,6 @@ describe('heldDetailCopy', () => {
   it('names Needs you, not /port:implement, for a session-required hold while this app owns dispatch', () => {
     const held: TickHeld = { ...base, reason: 'session-required' }
     expect(heldDetailCopy(held, 'app')).toBe('#118 is marked session-required — port runs it and asks you in Needs you before each protected edit.')
-    expect(heldDetailCopy(held, 'terminal')).toBe('#118 session required — run /port:implement.')
     expect(heldDetailCopy(held, 'none')).toBe('#118 session required — run /port:implement.')
   })
 

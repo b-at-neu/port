@@ -5,8 +5,8 @@ import { dismissedNeedsYouItems, useDismissed, visibleNeedsYouItems } from '@/re
 import type { NeedsYouItem } from '@/types/board'
 
 export function useNeedsYouItems(): readonly NeedsYouItem[] {
-  const snapshot = useIpcQuery('board:snapshot')
-  const sessions = useIpcQuery('session:list')
+  const snapshot = useIpcQuery('board.snapshot')
+  const sessions = useIpcQuery('session.list')
   const dismissed = useDismissed()
   if (snapshot.data === undefined) return []
   return visibleNeedsYouItems(snapshot.data, new Date(), sessions.data ?? [], dismissed)
@@ -14,8 +14,8 @@ export function useNeedsYouItems(): readonly NeedsYouItem[] {
 
 /** The Show dismissed view's own read; sidebar counts, the palette and the notifier never see these. */
 export function useDismissedNeedsYouItems(): readonly NeedsYouItem[] {
-  const snapshot = useIpcQuery('board:snapshot')
-  const sessions = useIpcQuery('session:list')
+  const snapshot = useIpcQuery('board.snapshot')
+  const sessions = useIpcQuery('session.list')
   const dismissed = useDismissed()
   if (snapshot.data === undefined) return []
   return dismissedNeedsYouItems(snapshot.data, new Date(), sessions.data ?? [], dismissed)

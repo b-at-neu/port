@@ -1,9 +1,8 @@
-import type { GitRunner, PathOps } from '@/types/platform'
 import type { SessionReader } from '@/types/sessions'
 import type { SessionStartResult } from '@/types/hosting'
 import type { RepositoryEntry } from '@/utils/repos'
 
-// Renderer-safe workspace shapes — folders, session worktrees, and the Changes diff. No Node import here; `main/workspace/` derives these from real git state.
+// Renderer-safe workspace shapes — folders, session worktrees, and the Changes diff. No Node import here; `main/repos/worktree/` derives these from real git state.
 import type { RepoId } from '@/utils/repos'
 import type { StageAgent } from '@/types/tick'
 import type { FileDiff } from '@/utils/sessions/transcript'
@@ -60,14 +59,10 @@ export interface RecentsStore {
   record(path: string, now: Date): Promise<void>
 }
 
-export interface ResolveStartTargetDeps {
-  readonly git: GitRunner
+export interface StartTargetSources {
   readonly repositories: readonly RepositoryEntry[]
   readonly recents: RecentsStore
-  readonly exists: (path: string) => Promise<boolean>
   readonly readSessions: SessionReader
-  readonly createWorktree: (params: CreateSessionWorktreeParams) => Promise<CreateSessionWorktreeResult>
-  readonly pathOps?: PathOps
 }
 
 export type ResolvedStartTarget =
@@ -87,10 +82,8 @@ export type RemoveSessionWorktreeOutcome = { readonly outcome: 'removed' } | { r
 
 export interface CreateSessionWorktreeParams {
   readonly root: string
-  readonly git: GitRunner
   /** Injectable so a collision-retry path is exercised deterministically in tests. */
   readonly random?: () => string
-  readonly pathOps?: PathOps
 }
 
 export type CreateSessionWorktreeResult = { readonly ok: true; readonly path: string; readonly branch: string; readonly baseSha: string } | { readonly ok: false; readonly message: string }
@@ -100,7 +93,6 @@ export type StageWorktreeTarget = { readonly kind: 'issue'; readonly title: stri
 
 export interface CreateStageWorktreeParams {
   readonly root: string
-  readonly git: GitRunner
   readonly agent: StageAgent
   readonly number: number
   readonly integration: string
@@ -108,7 +100,6 @@ export interface CreateStageWorktreeParams {
   /** Worktree paths a live stage session owns; a leftover worktree holding the branch is only reclaimed when it is not among them. */
   readonly liveWorktrees: ReadonlySet<string>
   readonly random?: () => string
-  readonly pathOps?: PathOps
 }
 
 /** `branch` is `null` for a detached worktree; `baseLabel` is the branch, or `origin/<ref>` when detached. `reclaimed` is the absolute path of a leftover worktree this call removed, else `null`. */

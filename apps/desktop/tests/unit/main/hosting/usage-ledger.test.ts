@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createUsageLedger, summarizeUsage } from '@/main/hosting/usage-ledger'
+import { createUsageLedger, summarizeUsage } from '@/main/sessions/hosting/usage-ledger'
 import type { FileResult } from '@/types/platform'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import type { UsageRecord } from '@/types/settings'

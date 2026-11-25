@@ -1,14 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createInterruptedSweeper } from '@/main/stage/sweep'
-import { createStageRegistry } from '@/main/stage/registry'
+import { createInterruptedSweeper } from '@/main/dispatch/stage/sweep'
 import type { BoardSnapshot } from '@/types/board'
 import type { DispatchRecord, RepoDispatchStatus } from '@/types/dispatch'
 import type { ItemsByNumberFetch } from '@/types/github'
-import type { FileResult } from '@/types/platform'
 import type { InterruptedStage, StageRestartResult, StageResumeResult } from '@/types/stage'
 import type { RemoveSessionWorktreeOutcome } from '@/types/workspace'
 import type { RepoId } from '@/utils/repos'
-import { boardSnapshot, reconciledItem, repositoryState } from '../../../fixtures/board-state'
+import { boardSnapshot, reconciledItem, repositoryState } from '../../../support/board-snapshot'
+import { createFakeRuns, type NewRun } from '../../../support/fake-runs'
 
 const REPO = 'repo-a' as RepoId
 const INTERRUPTED_AT = new Date('2026-01-01T00:10:00.000Z')
@@ -17,12 +16,10 @@ const RESET = '2026-01-01T05:00:00.000Z'
 const AFTER_RESET = new Date('2026-01-01T05:30:00.000Z')
 
 function freshRegistry(now: () => Date = () => INTERRUPTED_AT) {
-  const readJson = <T>(): Promise<FileResult<T>> => Promise.resolve({ ok: false, kind: 'not-found', message: 'missing' })
-  const writeJsonAtomic = (): Promise<FileResult<void>> => Promise.resolve({ ok: true, value: undefined })
-  return createStageRegistry({ path: '/tmp/stage-sessions.json', readJson, writeJsonAtomic, now })
+  return createFakeRuns(now)
 }
 
-type NewEntry = Omit<InterruptedStage, 'reason' | 'detail' | 'resetsAt' | 'costUsd' | 'interruptedAt' | 'networkRetries'>
+type NewEntry = NewRun
 
 function newEntry(overrides: Partial<NewEntry> = {}): NewEntry {
   return {
@@ -44,7 +41,7 @@ function newEntry(overrides: Partial<NewEntry> = {}): NewEntry {
 function interrupt(registry: ReturnType<typeof freshRegistry>, overrides: Partial<NewEntry> = {}, reason: InterruptedStage['reason'] = 'crash', resetsAt: string | null = null): void {
   const entry = newEntry(overrides)
   registry.recordRunning(entry)
-  registry.markInterrupted(entry.id, reason, null, resetsAt, 1.5)
+  void registry.interrupt(entry.repoId, entry.id, { reason, detail: null, resetsAt, costUsd: 1.5, outcome: null })
 }
 
 function status(overrides: Partial<RepoDispatchStatus> = {}): RepoDispatchStatus {
@@ -75,7 +72,7 @@ function setup(registry = freshRegistry(), now: Date = AFTER_RESET) {
     void id
     return Promise.resolve({ kind: 'ok' })
   })
-  const sweeper = createInterruptedSweeper({ registry, fetchItemsByNumber, removeWorktree, pathExists, resume, restart, liveWorktreePaths: () => live, samePath: (a, b) => a === b, onChange, now: () => now })
+  const sweeper = createInterruptedSweeper({ runs: registry, fetchItemsByNumber, removeWorktree, pathExists, resume, restart, liveWorktreePaths: () => live, samePath: (a, b) => a === b, onChange, now: () => now })
   return { registry, sweeper, removeWorktree, pathExists, fetchItemsByNumber, resume, restart, live, onChange }
 }
 
@@ -236,13 +233,13 @@ describe('createInterruptedSweeper — usage-limit auto-resume', () => {
     expect(deps.onChange).toHaveBeenCalledTimes(1)
   })
 
-  it('leaves entries alone before their reset, and in a paused or terminal-owned repository', async () => {
+  it('leaves entries alone before their reset, and in a paused or unreadable repository', async () => {
     const beforeReset = setup(freshRegistry(), new Date('2026-01-01T04:00:00.000Z'))
     interrupt(beforeReset.registry, {}, 'usage-limit', RESET)
     await beforeReset.sweeper.consider(snapshotWith(inFlight), [status()])
     expect(beforeReset.resume).not.toHaveBeenCalled()
 
-    for (const overrides of [{ runState: 'paused' as const }, { owner: 'terminal' as const }]) {
+    for (const overrides of [{ runState: 'paused' as const }, { owner: 'unreadable' as const }]) {
       const deps = setup()
       interrupt(deps.registry, {}, 'usage-limit', RESET)
       await deps.sweeper.consider(snapshotWith(inFlight), [status(overrides)])
@@ -347,11 +344,12 @@ describe('createInterruptedSweeper — network failures', () => {
 
   function networkEntry(deps: ReturnType<typeof setup>, retries: number): void {
     deps.registry.recordRunning(newEntry())
+    const network = (costUsd: number | null) => void deps.registry.interrupt(REPO, 'e1', { reason: 'network', detail: 'EAI_AGAIN', resetsAt: null, costUsd, outcome: null })
     for (let i = 0; i < retries; i++) {
-      deps.registry.markInterrupted('e1', 'network', 'EAI_AGAIN', null, null)
+      network(null)
       deps.registry.markRunning('e1')
     }
-    deps.registry.markInterrupted('e1', 'network', 'EAI_AGAIN', null, 1.5)
+    network(1.5)
   }
 
   it('resumes a network entry once its backoff has passed', async () => {

@@ -5,8 +5,8 @@ import type { BlockerRead, IssueCommentNode } from '@/types/github'
 import type { StageEntry } from '@/types/state'
 import { ticketIndex } from '@/utils/tickets/ticket'
 import { blockedOnOf, blockedOnTag } from '@/renderer/board/blocked-on'
-import { reconciledItem } from '../../../fixtures/board-state'
-import { stageSession } from '../../../fixtures/stage-session'
+import { reconciledItem } from '../../../support/board-snapshot'
+import { stageSession } from '../../../support/session-snapshot'
 
 const REPO = 'repo-a' as RepoId
 const BLOCKED_AT = '2026-01-02T00:00:00Z'
@@ -33,7 +33,7 @@ function blockedIssue(overrides: Parameters<typeof reconciledItem>[0] = {}) {
 function derive(item: ReturnType<typeof reconciledItem>, stageKey: string | undefined, sessions: Parameters<typeof blockedOnOf>[0]['sessions'] = []) {
   const ticket = ticketIndex([item]).tickets[0]
   if (ticket === undefined) throw new Error('no ticket')
-  return blockedOnOf({ ticket, stageKey, sessions, repoId: REPO })
+  return blockedOnOf({ ticket, blocked: stageKey === 'blocked', sessions, repoId: REPO })
 }
 
 const blockedSession = (text: string, startedAt?: string, key?: string) =>

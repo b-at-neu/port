@@ -2,9 +2,9 @@
 import { describe, expect, it } from 'vitest'
 import type { IntegrationChecks } from '@/types/github'
 import type { ReconciledItem } from '@/types/state'
-import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
-import { planTick } from '@/main/tick/plan'
-import { reconciledItem as item, repositoryState } from '../../../fixtures/board-state'
+import { createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
+import { planTick } from '@/main/pipeline/tick/plan'
+import { reconciledItem as item, repositoryState } from '../../../support/board-snapshot'
 
 const COMMENT_AT = '2026-01-01T00:00:00Z'
 const RED_BODY = '## Integration red\nHead `abc1234` · `dev` is already red on these checks, so the failure isn\'t from this diff:\n- `test` — FAILURE on `def5678` · https://example.test/run/1'
@@ -26,7 +26,6 @@ function reviewItem(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
 function plan(reviewed: ReconciledItem, integrationChecks: IntegrationChecks | null, now: string) {
   return planTick({
     repository: repositoryState([reviewed], { integrationChecks }, now),
-    ledger: createDispatchLedger(),
     unknownStreaks: createUnknownStreaks(),
     nextDecisionAt: new Date(now),
     now: () => new Date(now),

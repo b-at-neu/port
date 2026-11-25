@@ -7,16 +7,22 @@ import type { BudgetNote, BudgetVerdict } from '@/types/dispatch'
 import type { EscalateToHumanParams, EscalateToHumanResult, ReadyEntry } from '@/types/actions'
 import type { ReconciledItem } from '@/types/state'
 import type { TickActionable } from '@/types/tick'
+import type { WriteOutcome } from '@/types/writes'
 import { labelName } from '@/utils/labels/vocabulary'
-import { commentFailureMessage } from '@/main/dispatch/select'
-import { budgetIntent } from '@/main/incidents/raise'
-import { escalationRepeats } from '../../../../../scripts/port-tick/gates'
+import { budgetIntent } from '@/main/pipeline/incidents/raise'
+import { escalationRepeats } from '@/utils/pipeline/gates'
 
 /** One session log per dispatcher — sharing one log with the cockpit would close rows this
  *  app's own agents are still working through. */
 export const BUDGET_SESSION = 'desktop'
 
 export const BUDGET_VERDICTS = ['allow', 'exceeded', 'hold'] as const
+
+/** `null` for a comment that was never attempted or that itself applied — a short description otherwise. */
+function commentFailureMessage(comment: WriteOutcome | null): string | null {
+  if (comment === null || comment.kind === 'applied') return null
+  return comment.kind === 'write-failed' ? comment.stderr : comment.kind
+}
 
 /** `allow` dispatches and resets the hold streak; `exceeded` escalates; the first consecutive
  *  `hold` holds this pass, the second or later dispatches anyway and resets the streak. */

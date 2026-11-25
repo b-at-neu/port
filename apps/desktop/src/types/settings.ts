@@ -21,6 +21,13 @@ export interface NotificationPrefs {
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = { needsYou: true, sessions: true }
 
+/** What one OS notification for newly waiting Needs you items carries. */
+export interface NeedsYouNotification {
+  readonly title: string
+  readonly body: string
+  readonly focus: string | null
+}
+
 /** One connection's line in the Connections tab and the status popover. */
 export interface ConnectionLine {
   readonly key: string

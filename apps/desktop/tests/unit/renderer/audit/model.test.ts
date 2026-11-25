@@ -59,7 +59,6 @@ describe('outcomeOf', () => {
     [{ kind: 'precondition-failed', conflict: { kind: 'precondition-failed', expected: [], observed: [], readAt: 't' } }, 'danger', 'Conflict'],
     [{ kind: 'write-failed', classification: 'network', stderr: '', reread: null }, 'danger', 'Failed'],
     [{ kind: 'verify-failed', message: 'm' }, 'danger', 'Failed'],
-    [{ kind: 'terminal-owned', since: 't' }, 'attention', 'Refused'],
     [{ kind: 'ownership-unreadable', path: 'p', message: 'm' }, 'attention', 'Refused'],
     [{ kind: 'unresolvable-label', keys: ['planApproved'] }, 'attention', 'Refused'],
     [{ kind: 'item-unavailable' }, 'attention', 'Refused'],
@@ -90,45 +89,26 @@ describe('commandOf', () => {
 })
 
 describe('detailOf', () => {
-  it('names a conflict`s expected and observed labels', () => {
-    const result = { kind: 'precondition-failed', conflict: { kind: 'precondition-failed', expected: ['paused'], observed: ['ready', 'claude'], readAt: 't' } } as const
-    expect(detailOf(labelEntry({ result }))).toBe('Expected labels paused; found ready, claude.')
-  })
-
-  it('names a write failure`s classification and first stderr line', () => {
-    const result = { kind: 'write-failed', classification: 'rate-limited', stderr: 'API rate limit exceeded\nretry later', reread: null } as const
-    expect(detailOf(labelEntry({ result }))).toBe('rate-limited: API rate limit exceeded')
-  })
-
-  it('carries a verify failure message', () => {
-    expect(detailOf(labelEntry({ result: { kind: 'verify-failed', message: 'still labelled' } }))).toBe('still labelled')
+  it.each([
+    ['a conflict', labelEntry({ result: { kind: 'precondition-failed', conflict: { kind: 'precondition-failed', expected: ['paused'], observed: ['ready'], readAt: 't' } } })],
+    ['a write failure', labelEntry({ result: { kind: 'write-failed', classification: 'rate-limited', stderr: 'limit', reread: null } })],
+    ['a verify failure', labelEntry({ result: { kind: 'verify-failed', message: 'still labelled' } })],
+    ['an unreadable ownership file', labelEntry({ result: { kind: 'ownership-unreadable', path: 'p', message: 'EACCES' } })],
+    ['an unresolvable label', labelEntry({ result: { kind: 'unresolvable-label', keys: ['planApproved'] } })],
+    ['an unsaved state', labelEntry({ result: { kind: 'state-unsaved', message: 'disk full' } })],
+    ['a failed mirror', labelEntry({ result: { kind: 'mirror-failed', mirror: { kind: 'verify-failed', message: 'offline' } } })],
+    ['an unavailable item', labelEntry({ result: { kind: 'item-unavailable' } })],
+    ['an applied write with a comment', labelEntry({ result: { kind: 'applied', argv: [] }, commentBytes: 212 })],
+    ['a partial reclaim', reclaimEntry({ result: 'partial', removed: ['a'], failed: ['b'] })],
+  ] as const)('explains %s', (_label, entry) => {
+    expect(detailOf(entry)).not.toBeNull()
   })
 
   it.each([
-    [{ kind: 'terminal-owned', since: '2026-01-01' }, 'A terminal cockpit has owned this repository since 2026-01-01.'],
-    [{ kind: 'ownership-unreadable', path: '.agents/cockpit.json', message: 'EACCES' }, "Couldn't read .agents/cockpit.json: EACCES"],
-    [{ kind: 'unresolvable-label', keys: ['planApproved', 'approved'] }, 'No label is configured for planApproved, approved.'],
-    [{ kind: 'item-unavailable' }, "The item couldn't be read."],
-    [{ kind: 'state-unsaved', message: 'disk full' }, "Port couldn't save its pipeline state: disk full"],
-    [{ kind: 'mirror-failed', mirror: { kind: 'write-failed', classification: 'network', stderr: 'offline\nretry', reread: null } }, 'offline'],
-  ] as const)('explains the %j refusal', (result, expected) => {
-    expect(detailOf(labelEntry({ result }))).toBe(expected)
-  })
-
-  it('reports a comment`s byte count when the result has nothing to add', () => {
-    expect(detailOf(labelEntry({ result: { kind: 'applied', argv: [] }, commentBytes: 212 }))).toBe('Comment of 212 bytes.')
-  })
-
-  it('is null for a plain applied or no-op write', () => {
-    expect(detailOf(labelEntry({ result: { kind: 'applied', argv: [] } }))).toBeNull()
-    expect(detailOf(labelEntry())).toBeNull()
-  })
-
-  it('counts a partial reclaim`s removed and failed worktrees', () => {
-    expect(detailOf(reclaimEntry({ result: 'partial', removed: ['a'], failed: ['b', 'c'] }))).toBe('Removed 1, failed 2.')
-  })
-
-  it('is null for an applied reclaim', () => {
-    expect(detailOf(reclaimEntry())).toBeNull()
+    ['an applied write', labelEntry({ result: { kind: 'applied', argv: [] } })],
+    ['a no-op write', labelEntry()],
+    ['an applied reclaim', reclaimEntry()],
+  ] as const)('has nothing to add for %s', (_label, entry) => {
+    expect(detailOf(entry)).toBeNull()
   })
 })

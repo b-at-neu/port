@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { NeedsYouItem } from '@/types/board'
-import { MAX_DISMISSED, createDismissedStore, dismissedItems, parseDismissed, visibleItems } from '@/renderer/needs-you/dismissed'
+import { MAX_DISMISSED, createDismissedStore, dismissedItems, parseDismissed, visibleItems, withDismissed, withoutDismissed } from '@/renderer/needs-you/dismissed'
 import { dismissKeyOf } from '@/renderer/needs-you/dismiss-key'
 
-const NOW = () => new Date('2026-01-01T00:00:00.000Z')
+const AT = '2026-01-01T00:00:00.000Z'
+const NOW = () => new Date(AT)
 
 function memoryStorage(initial: string | null = null) {
   let value = initial
@@ -12,7 +13,6 @@ function memoryStorage(initial: string | null = null) {
     setItem: vi.fn((_key: string, next: string) => {
       value = next
     }),
-    read: () => value,
   }
 }
 
@@ -20,67 +20,67 @@ function denialItem(id: string): NeedsYouItem {
   return { kind: 'stage-denial', repoId: 'repo-a', repo: null, number: 554, title: null, url: null, ticket: null, at: null, matchedRow: null, denial: { id } } as unknown as NeedsYouItem
 }
 
+const entry = (key: string) => ({ key, at: AT })
+
 describe('parseDismissed', () => {
-  it('reads a missing, malformed or foreign value as empty', () => {
-    expect(parseDismissed(null).entries).toEqual([])
-    expect(parseDismissed('{not json').entries).toEqual([])
-    expect(parseDismissed('"a string"').entries).toEqual([])
-    expect(parseDismissed(JSON.stringify({ version: 2, entries: [{ key: 'k', at: 't' }] })).entries).toEqual([])
-    expect(parseDismissed(JSON.stringify({ version: 1, entries: 'nope' })).entries).toEqual([])
+  it.each([
+    ['missing', null, []],
+    ['not json', '{not json', []],
+    ['a string', '"a string"', []],
+    ['another version', JSON.stringify({ version: 2, entries: [entry('k')] }), []],
+    ['entries not a list', JSON.stringify({ version: 1, entries: 'nope' }), []],
+    ['mixed entries', JSON.stringify({ version: 1, entries: [entry('k1'), { key: 5, at: 't' }, null, entry('k2')] }), [entry('k1'), entry('k2')]],
+  ])('%s reads as the entries that parse', (_name, raw, expected) => {
+    expect(parseDismissed(raw)).toEqual(expected)
+  })
+})
+
+describe('withDismissed', () => {
+  const capped = Array.from({ length: MAX_DISMISSED }, (_, i) => entry(`k${String(i)}`))
+
+  it.each([
+    ['adds new keys', [entry('a')], ['b', 'c'], ['a', 'b', 'c']],
+    ['dedupes a repeated key', [], ['a', 'a'], ['a']],
+    ['skips a key already there', [entry('a')], ['a'], ['a']],
+  ])('%s', (_name, entries, keys, expected) => {
+    expect(withDismissed(entries, keys, AT).map((e) => e.key)).toEqual(expected)
   })
 
-  it('keeps well-formed entries and drops the rest', () => {
-    const raw = JSON.stringify({ version: 1, entries: [{ key: 'k1', at: 't' }, { key: 5, at: 't' }, null, { key: 'k2', at: 't' }] })
-    expect(parseDismissed(raw).entries.map((e) => e.key)).toEqual(['k1', 'k2'])
+  it('drops the oldest past the cap', () => {
+    const next = withDismissed(capped, ['new'], AT)
+    expect(next).toHaveLength(MAX_DISMISSED)
+    expect(next.map((e) => e.key)).not.toContain('k0')
+    expect(next.at(-1)?.key).toBe('new')
+  })
+
+  it('returns the same array on a no-op', () => {
+    const entries = [entry('a')]
+    expect(withDismissed(entries, ['a'], AT)).toBe(entries)
+  })
+})
+
+describe('withoutDismissed', () => {
+  it.each([
+    ['removes the given keys', ['a', 'c'], ['b']],
+    ['ignores a key that is not there', ['nope'], ['a', 'b', 'c']],
+  ])('%s', (_name, keys, expected) => {
+    expect(withoutDismissed([entry('a'), entry('b'), entry('c')], keys).map((e) => e.key)).toEqual(expected)
+  })
+
+  it('returns the same array on a no-op', () => {
+    const entries = [entry('a')]
+    expect(withoutDismissed(entries, ['nope'])).toBe(entries)
   })
 })
 
 describe('createDismissedStore', () => {
-  it('persists a dismissal, and a fresh store over the same storage still has it (a relaunch)', () => {
+  it('keeps a dismissal across a relaunch over the same storage, and Undo removes it', () => {
     const storage = memoryStorage()
     createDismissedStore(storage, NOW).dismiss(['a', 'b'])
     const relaunched = createDismissedStore(storage, NOW)
-    expect([...relaunched.get()]).toEqual(['a', 'b'])
-    expect(JSON.parse(storage.read() ?? '{}')).toMatchObject({ version: 1, entries: [{ key: 'a', at: '2026-01-01T00:00:00.000Z' }, { key: 'b' }] })
-  })
-
-  it('un-dismisses exactly the keys it is given', () => {
-    const store = createDismissedStore(memoryStorage(), NOW)
-    store.dismiss(['a', 'b', 'c'])
-    store.undismiss(['b'])
-    expect([...store.get()]).toEqual(['a', 'c'])
-  })
-
-  it('hands back the same set until something changes', () => {
-    const store = createDismissedStore(memoryStorage(), NOW)
-    store.dismiss(['a'])
-    const before = store.get()
-    store.dismiss(['a'])
-    store.undismiss(['nope'])
-    expect(store.get()).toBe(before)
-    store.dismiss(['b'])
-    expect(store.get()).not.toBe(before)
-  })
-
-  it('tells subscribers about a change and stops after unsubscribe', () => {
-    const store = createDismissedStore(memoryStorage(), NOW)
-    const listener = vi.fn()
-    const unsubscribe = store.subscribe(listener)
-    store.dismiss(['a'])
-    expect(listener).toHaveBeenCalledTimes(1)
-    unsubscribe()
-    store.dismiss(['b'])
-    expect(listener).toHaveBeenCalledTimes(1)
-  })
-
-  it('drops the oldest dismissals past the cap', () => {
-    const store = createDismissedStore(memoryStorage(), NOW)
-    store.dismiss(Array.from({ length: MAX_DISMISSED + 3 }, (_, i) => `k${String(i)}`))
-    expect(store.get().size).toBe(MAX_DISMISSED)
-    expect(store.get().has('k0')).toBe(false)
-    expect(store.get().has('k2')).toBe(false)
-    expect(store.get().has('k3')).toBe(true)
-    expect(store.get().has(`k${String(MAX_DISMISSED + 2)}`)).toBe(true)
+    expect([...relaunched.store.get().keys]).toEqual(['a', 'b'])
+    relaunched.undismiss(['a'])
+    expect([...createDismissedStore(storage, NOW).store.get().keys]).toEqual(['b'])
   })
 
   it('keeps the dismissal for this run when storage refuses the write', () => {
@@ -89,54 +89,23 @@ describe('createDismissedStore', () => {
       throw new Error('quota')
     })
     const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    const store = createDismissedStore(storage, NOW)
-    expect(() => store.dismiss(['a'])).not.toThrow()
-    expect(store.get().has('a')).toBe(true)
+    const dismissed = createDismissedStore(storage, NOW)
+    dismissed.dismiss(['a'])
+    expect(dismissed.store.get().keys.has('a')).toBe(true)
     errors.mockRestore()
   })
-
-  it('starts empty over a corrupt stored value', () => {
-    expect(createDismissedStore(memoryStorage('{oops'), NOW).get().size).toBe(0)
-  })
 })
 
-describe('dismissedItems', () => {
-  it('is the complement of visibleItems', () => {
-    const first = denialItem('d1')
-    const second = denialItem('d2')
-    const dismissed = new Set([dismissKeyOf(first)])
-    expect(dismissedItems([first, second], dismissed)).toEqual([first])
-    expect(visibleItems([first, second], dismissed)).toEqual([second])
-  })
+describe('visibleItems and dismissedItems', () => {
+  const first = denialItem('d1')
+  const second = denialItem('d2')
 
-  it('shows nothing for a stale key whose event no longer derives an item', () => {
-    expect(dismissedItems([denialItem('d2')], new Set(['gone-key']))).toEqual([])
-  })
-
-  it('is empty when nothing is dismissed', () => {
-    expect(dismissedItems([denialItem('d1')], new Set())).toEqual([])
-  })
-})
-
-describe('visibleItems', () => {
-  it('hides a dismissed event but still shows a new event on the same ticket', () => {
-    const store = createDismissedStore(memoryStorage(), NOW)
-    const first = denialItem('d1')
-    const second = denialItem('d2')
-    store.dismiss([dismissKeyOf(first)])
-    expect(visibleItems([first, second], store.get())).toEqual([second])
-  })
-
-  it('shows an item again after Undo', () => {
-    const store = createDismissedStore(memoryStorage(), NOW)
-    const item = denialItem('d1')
-    store.dismiss([dismissKeyOf(item)])
-    store.undismiss([dismissKeyOf(item)])
-    expect(visibleItems([item], store.get())).toEqual([item])
-  })
-
-  it('returns everything when nothing is dismissed', () => {
-    const items = [denialItem('d1'), denialItem('d2')]
-    expect(visibleItems(items, new Set())).toEqual(items)
+  it.each([
+    ['nothing dismissed', new Set<string>(), [first, second], []],
+    ['one dismissed', new Set([dismissKeyOf(first)]), [second], [first]],
+    ['a stale key with no event', new Set(['gone']), [first, second], []],
+  ])('%s: the two are complements', (_name, dismissed, visible, hidden) => {
+    expect(visibleItems([first, second], dismissed)).toEqual(visible)
+    expect(dismissedItems([first, second], dismissed)).toEqual(hidden)
   })
 })

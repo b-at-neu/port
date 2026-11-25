@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import type { CommandResult } from '@/types/platform'
 import type { GitRunner } from '@/types/platform'
 import type { SessionWorkspace } from '@/types/workspace'
-import { computeSessionChanges } from '@/main/workspace/changes'
+import { computeSessionChanges } from '@/main/repos/worktree/changes'
+import { createFakeClock } from '../../../support/fake-platform'
+
+const clock = createFakeClock()
 
 function ok(stdout: string): CommandResult {
   return { ok: true, stdout, stderr: '' }
@@ -31,27 +34,27 @@ function fakeGit(overrides: Partial<Record<string, (args: readonly string[]) => 
 
 describe('computeSessionChanges', () => {
   it('reports not-git without any git call when root is null', async () => {
-    const result = await computeSessionChanges(NON_GIT_WORKSPACE, { git: fakeGit({}) })
+    const result = await computeSessionChanges({ git: fakeGit({}), clock }, NON_GIT_WORKSPACE)
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.kind).toBe('not-git')
   })
 
   it('reports base-missing when workspace.base is null', async () => {
-    const result = await computeSessionChanges(NO_BASE_WORKSPACE, { git: fakeGit({}) })
+    const result = await computeSessionChanges({ git: fakeGit({}), clock }, NO_BASE_WORKSPACE)
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.kind).toBe('base-missing')
   })
 
   it('reports base-missing when the base commit is unreachable', async () => {
     const git = fakeGit({ 'cat-file -e': () => NONZERO() })
-    const result = await computeSessionChanges(workspaceWithBase(), { git })
+    const result = await computeSessionChanges({ git, clock }, workspaceWithBase())
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.kind).toBe('base-missing')
   })
 
   it('reports folder-missing when the worktree directory no longer exists', async () => {
     const git = fakeGit({ 'cat-file -e': () => CWD_MISSING })
-    const result = await computeSessionChanges(workspaceWithBase(), { git })
+    const result = await computeSessionChanges({ git, clock }, workspaceWithBase())
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.kind).toBe('folder-missing')
   })
@@ -63,7 +66,7 @@ describe('computeSessionChanges', () => {
       'ls-files --others': () => ok('untracked.txt\n'),
       diff: () => ok(diffOutput),
     })
-    const result = await computeSessionChanges(workspaceWithBase(), { git })
+    const result = await computeSessionChanges({ git, clock }, workspaceWithBase())
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.truncated).toBe(false)
@@ -79,7 +82,7 @@ describe('computeSessionChanges', () => {
       'ls-files --others': () => ok(''),
       diff: (args) => (args.includes('--numstat') ? ok(numstat) : TOO_LARGE),
     })
-    const result = await computeSessionChanges(workspaceWithBase(), { git })
+    const result = await computeSessionChanges({ git, clock }, workspaceWithBase())
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.truncated).toBe(true)
@@ -94,7 +97,7 @@ describe('computeSessionChanges', () => {
       'ls-files --others': () => ok(''),
       diff: (args) => (args.includes('--numstat') ? NONZERO() : TOO_LARGE),
     })
-    const result = await computeSessionChanges(workspaceWithBase(), { git })
+    const result = await computeSessionChanges({ git, clock }, workspaceWithBase())
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.kind).toBe('git-failed')
   })
@@ -105,7 +108,7 @@ describe('computeSessionChanges', () => {
       'ls-files --others': () => ok(''),
       diff: () => NONZERO('boom'),
     })
-    const result = await computeSessionChanges(workspaceWithBase(), { git })
+    const result = await computeSessionChanges({ git, clock }, workspaceWithBase())
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.kind).toBe('git-failed')
   })

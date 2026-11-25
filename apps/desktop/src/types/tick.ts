@@ -1,20 +1,19 @@
-// Renderer-safe shapes for the tick engine — what one repository's tick would dispatch, what it holds back and why, and what each in-flight claim resolves to. No import here may reach a Node builtin — only `main/tick/` computes these.
+// Renderer-safe shapes for the tick engine — what one repository's tick would dispatch, what it holds back and why, and what each in-flight claim resolves to. No import here may reach a Node builtin — only `main/pipeline/tick/` computes these.
 import type { PipelineItemKind } from '@/types/github'
 import type { MirrorFailure } from '@/types/pipeline-state'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { StageHandback, StageOutcomeKind } from '@/types/stage-session'
 import type { StageLabelResult } from '@/types/stage-labels'
-import type { LedgerRow, UnmatchedResult } from '../../../../scripts/port-tick/liveness'
-import type { RefreshMemoEntry } from '../../../../scripts/port-tick/gates'
+import type { RefreshMemoEntry } from '@/utils/pipeline/gates'
 
 /** A bare four-way key, never the session index's hyphenated `PortStageAgent` — this one names *what to dispatch next*, matching `models.<key>`, not *what already ran*. */
 export type StageAgent = 'plan' | 'impl' | 'review' | 'revise'
 
 /** Why the app's own label write for a stage session was refused or never made — reported on Needs you, never guessed past. */
-export type HandoffRefusal = 'moved' | 'no-handback' | 'unknown-handback' | 'pr-unverified' | 'terminal-owned' | 'write-failed' | 'unresolvable-label' | 'no-plan-file' | 'empty-plan-file'
+export type HandoffRefusal = 'moved' | 'no-handback' | 'unknown-handback' | 'pr-unverified' | 'write-failed' | 'unresolvable-label' | 'no-plan-file' | 'empty-plan-file'
 
-/** One stage session this app's own launcher recorded as ended, projected from `DispatchRecord`s that are not `started` and carry a non-`null` outcome — `main/tick/repair.ts`'s own session-shape evidence, newest per number. */
+/** One stage session this app's own launcher recorded as ended, projected from `DispatchRecord`s that are not `started` and carry a non-`null` outcome — `main/pipeline/tick/repair.ts`'s own session-shape evidence, newest per number. */
 export interface EndedStage {
   readonly agent: StageAgent
   readonly number: number
@@ -96,7 +95,7 @@ export type TickBlind =
   | { readonly reason: 'viewer-unknown' }
   | { readonly reason: 'stale-read'; readonly ageMs: number }
 
-/** The machine-observation write families this app ports from the cockpit's cadence, plus one report-only kind (`refresh-deferred`) that authorises no write of its own. `observe.ts`'s `observationsOf` is the only producer, except for `plan-missing`, which `main/tick/repair.ts`'s `repairsOf` produces. */
+/** The machine-observation write families this app ports from the cockpit's cadence, plus one report-only kind (`refresh-deferred`) that authorises no write of its own. `observe.ts`'s `observationsOf` is the only producer, except for `plan-missing`, which `main/pipeline/tick/repair.ts`'s `repairsOf` produces. */
 export type TickObservationKind = 'liveness-reset' | 'cycle-cap' | 'zero-diff' | 'integration-red' | 'refresh' | 'refresh-stuck' | 'refresh-deferred' | 'withdraw-approval' | 'plan-missing' | 'adopt' | 'rerun-checks'
 
 /** Which GitHub fact an adoption was read from. */
@@ -136,7 +135,7 @@ export type TickObservation =
       readonly headRefOid: string
     })
   | (TickObservationBase & { readonly kind: 'plan-missing' })
-  /** `trigger` is the stage's own trigger label, which with `agent` names the hand-back table row `main/dispatch/transitions.ts` applies. */
+  /** `trigger` is the stage's own trigger label, which with `agent` names the hand-back table row `main/pipeline/transitions.ts` applies. */
   | (TickObservationBase & { readonly kind: 'adopt'; readonly agent: StageAgent; readonly trigger: LabelKey; readonly handback: StageHandback; readonly evidence: AdoptionEvidence })
   | (TickObservationBase & { readonly kind: 'rerun-checks'; readonly runs: readonly { readonly check: string; readonly runId: string }[]; readonly headRefOid: string })
 
@@ -145,7 +144,7 @@ export interface TickAutoApproval {
   readonly number: number
 }
 
-/** `main/tick/repair.ts`'s own report-only shapes — a human decision is needed, since repairing any of these would be a guess. */
+/** `main/pipeline/tick/repair.ts`'s own report-only shapes — a human decision is needed, since repairing any of these would be a guess. */
 export type TickLabelRepairShape = 'handback-unlabelled' | 'mirror-failed' | 'plan-missing-approved' | 'pr-missing'
 
 export interface TickLabelRepair {
@@ -168,7 +167,7 @@ export interface TickReport {
   readonly actionable: readonly TickActionable[]
   readonly held: readonly TickHeld[]
   readonly claims: readonly TickClaim[]
-  /** Every `autoPlan` issue at `planReview` alone, assigned to the viewer — `[]` on a blind report. `main/tick/dispatchable.ts`'s `autoApprovableFrom` is the only reader under `main/`. */
+  /** Every `autoPlan` issue at `planReview` alone, assigned to the viewer — `[]` on a blind report. `main/pipeline/tick/dispatchable.ts`'s `autoApprovableFrom` is the only reader under `main/`. */
   readonly autoApprovals: readonly TickAutoApproval[]
   /** Every module-gated stage key this repository's config currently turns off — a gated stage is absent from the UI, never a stage rendered at zero. */
   readonly disabledStages: readonly LabelKey[]
@@ -176,7 +175,7 @@ export interface TickReport {
   readonly nextTickAt: string | null
   /** The machine-observation writes the app would make (or has made) this pass, under the `dispatch` claim — always `[]` on a blind report. */
   readonly observations: readonly TickObservation[]
-  /** Every half-labelled ticket `main/tick/repair.ts` could not repair unambiguously this pass — always `[]` on a blind report. */
+  /** Every half-labelled ticket `main/pipeline/tick/repair.ts` could not repair unambiguously this pass — always `[]` on a blind report. */
   readonly labelRepairs: readonly TickLabelRepair[]
 }
 
@@ -206,14 +205,3 @@ export interface ForceDispatch {
   readonly prune: (repoId: RepoId, keep: ReadonlySet<number>) => void
 }
 
-export interface DispatchLedger {
-  /** Records the claim at `state: 'dispatched'`, carrying over any `resets` a prior row already had. */
-  readonly record: (repoId: RepoId, number: number) => void
-  /** Writes the row forward only when `classifyUnmatched` returned a `nextState`; `no-record` and
-   *  `capped` leave the ledger untouched. */
-  readonly advance: (repoId: RepoId, number: number, result: UnmatchedResult) => void
-  readonly rowFor: (repoId: RepoId, number: number) => LedgerRow | undefined
-  /** Classifies and advances the row at most once per distinct `readAt`, so repeated polls over
-   *  the same GitHub read don't independently advance the state past the intended debounce. */
-  readonly observeUnmatched: (repoId: RepoId, number: number, readAt: string | null) => UnmatchedResult
-}

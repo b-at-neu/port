@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { ReposListResponse } from '@/types/ipc'
 import type { WorktreesReport } from '@/types/reclaimer'
-import { resolveBoardRefresh } from '@/main/channels/board'
-import type { BoardRefreshDeps } from '@/types/channels'
-import { resolveWorktreesReport } from '@/main/channels/worktrees'
-import type { WorktreesReportDeps } from '@/types/channels'
+import { resolveBoardRefresh } from '@/main/features/board/resolve'
+import type { BoardRefreshDeps } from '@/main/app/seams'
+import { resolveWorktreesReport } from '@/main/features/worktrees/resolve'
+import type { WorktreesReportDeps } from '@/main/app/seams'
 import type { RegistryDeps } from '@/types/registry'
-import { boardSnapshot, readyEntry } from '../../fixtures/board-state'
+import { boardSnapshot } from '../../support/board-snapshot'
+import { readyEntry } from '../../support/repo-config'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 

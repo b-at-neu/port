@@ -12,7 +12,7 @@ import { useIpcQuery } from '@/renderer/data/query'
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import type { FileDiff } from '@/utils/sessions/transcript'
 import type { SessionChanges } from '@/types/workspace'
-import { CLOSE_CHANGES, REFRESH_CHANGES, binaryLine, changesEmpty, changesErrorCopy, changesHeader, changesTooLarge, numstatLine, untrackedLine } from '@/renderer/session/changes-copy'
+import { CHANGES_BUTTON, CLOSE_CHANGES, REFRESH_CHANGES, binaryLine, changesEmpty, changesErrorCopy, changesHeader, changesTooLarge, numstatLine, untrackedLine } from '@/renderer/session/copy'
 
 function sortedFiles(files: readonly FileDiff[]): readonly FileDiff[] {
   return [...files].sort((a, b) => a.path.localeCompare(b.path))
@@ -20,7 +20,7 @@ function sortedFiles(files: readonly FileDiff[]): readonly FileDiff[] {
 
 export function ChangesPane({ snapshot, onClose }: { readonly snapshot: HostedSessionSnapshot; readonly onClose: () => void }) {
   const sessionKey: SessionKey = snapshot.sessionKey
-  const query = useIpcQuery('session:changes', { sessionKey }, { refetchInterval: 5000 })
+  const query = useIpcQuery('session.changes', { sessionKey }, { refetchInterval: 5000 })
   const data = query.data
   const baseSha = snapshot.workspace.base?.sha ?? null
   const header = data?.ok === true ? changesHeader(data.base ?? { sha: '' }, snapshot.workspace.worktree?.branch ?? null) : null
@@ -36,7 +36,7 @@ export function ChangesPane({ snapshot, onClose }: { readonly snapshot: HostedSe
               {header.sha}
             </>
           ) : (
-            'Changes'
+            CHANGES_BUTTON
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">

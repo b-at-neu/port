@@ -5,8 +5,9 @@ import type { RepoId } from '@/utils/repos'
 import type { CommandResult, FileResult, GhResult, GhRunner, GitHubHttpResult, GitHubRequest, GitHubTransport, GitRunner } from '@/types/platform'
 import type { ReadyEntry } from '@/types/actions'
 import { createBudgetGate } from '@/main/dispatch/budget-gate'
-import { renderLedger } from '@/main/dispatch/budget-ledger'
+import { renderLedger } from '@/main/github/budget-ledger'
 import type { LedgerRow } from '@/types/budget'
+import { createFakePlatform } from '../../../support/fake-platform'
 
 const NOW = new Date('2026-09-05T14:02:00.000Z')
 const LOG_PATH = pathOps.join('/repo', '.temp', 'budget-session-desktop.tsv')
@@ -99,20 +100,29 @@ function harness(options: HarnessOptions = {}): Harness {
     files.set(path, text)
     return Promise.resolve({ ok: true, value: undefined })
   }
+  const base = createFakePlatform()
+  const platform = {
+    ...base,
+    ghWrite: gh,
+    githubHttp: github,
+    clock: { now: () => NOW },
+    fs: {
+      ...base.fs,
+      writeText: writeTextFile,
+      remove: (path: string) => {
+        files.delete(path)
+        return Promise.resolve({ ok: true, value: undefined } as const)
+      },
+    },
+  }
   const gate = createBudgetGate({
-    gh,
-    github,
+    platform,
     git,
     readTextFile,
     writeTextFile,
-    removeFile: (path) => {
-      files.delete(path)
-      return Promise.resolve({ ok: true, value: undefined })
-    },
     ensureDirectory: () => Promise.resolve({ ok: true, value: undefined }),
     now: () => NOW,
     scratchDir: '/scratch',
-    randomUUID: () => 'uuid',
   })
   return { gate, ghCalls, githubCalls, files }
 }

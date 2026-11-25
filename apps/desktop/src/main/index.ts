@@ -1,25 +1,25 @@
 import { app, BrowserWindow, Menu } from 'electron'
 import { isAbsolute, join } from 'node:path'
-import { devDockIconPath, windowIconPath } from '@/main/icon'
-import { registerIpc, broadcastAppCommand } from '@/main/ipc'
+import { devDockIconPath, windowIconPath } from '@/main/app/shell/icon'
+import { createAppContext, broadcastAppCommand } from '@/main/app/context'
+import { registerActions } from '@/main/app/ipc'
 import { registerFixtureIpc } from '#app-fixtures'
-import { fixtureMode } from '@/main/fixtures/mode'
-import { e2eMode } from '@/main/e2e/mode'
-import { setE2ERoute } from '@/main/platform/run'
+import { fixtureMode } from '@/main/app/modes/fixture-mode'
+import { e2eMode } from '@/main/app/modes/e2e-mode'
 import { applyLoginShellPath } from '@/main/platform/shell-env'
 import { statOwnerMode, pathExists } from '@/main/platform/files'
 import type { PipelineWatcher } from '@/types/state'
 import type { HostedStore } from '@/types/hosting'
 import { createQuitGuard } from '@/main/dispatch/quit'
 import type { Dispatcher } from '@/types/dispatch'
-import { confirmQuit } from '@/main/dialogs'
-import { applyNavigationGuards } from '@/main/navigation'
+import { confirmQuit } from '@/main/app/shell/dialogs'
+import { applyNavigationGuards } from '@/main/app/shell/navigation'
 import { ABOUT_NOTICE, ABOUT_POWERED_BY } from '@/utils/about/copy'
 import { formatAppVersion } from '@/utils/about/version'
-import { menuTemplate } from '@/main/menu'
-import { presentWindow, windowPresentation } from '@/main/presentation'
-import { chromeSandboxPath, needsNoSandbox } from '@/main/sandbox'
-import type { StageRegistry } from '@/types/stage'
+import { menuTemplate } from '@/main/app/shell/menu'
+import { presentWindow, windowPresentation } from '@/main/app/shell/presentation'
+import { chromeSandboxPath, needsNoSandbox } from '@/main/app/shell/sandbox'
+import type { RunStore } from '@/types/stage'
 
 // A hung registry write must never block quitting.
 const MARK_ALL_QUIT_TIMEOUT_MS = 2_000
@@ -54,7 +54,7 @@ app.setPath('userData', defaultUserDataPath)
 // An `on` result relocates `userData` before the single-instance lock is ever requested, so a
 // fixture run never contends for the operator's own lock or touches their real profile.
 const fixture = fixtureMode(process.env, app.isPackaged, { compiled: __PORT_FIXTURES__, packaged: __PORT_PACKAGED_FIXTURES__ }, isAbsolute)
-const e2e = e2eMode(process.env, app.isPackaged, isAbsolute)
+const e2e = e2eMode(process.env, app.isPackaged, __PORT_E2E__, isAbsolute)
 
 if (fixture.kind === 'invalid') {
   console.error(`[fixtures] ${fixture.reason}`)
@@ -70,11 +70,10 @@ if (fixture.kind === 'invalid') {
     app.setPath('userData', fixture.userData)
   }
   if (e2e.kind === 'ignored') {
-    console.warn('[e2e] PORT_E2E is set but ignored in a packaged build')
+    console.warn('[e2e] PORT_E2E is set but ignored: this build has no E2E route')
   }
   if (e2e.kind === 'on') {
     app.setPath('userData', e2e.userData)
-    setE2ERoute({ fake: e2e.fake })
   }
 
   const presentation = windowPresentation({ fixture: fixture.kind, e2e: e2e.kind, platform: process.platform })
@@ -92,7 +91,7 @@ if (fixture.kind === 'invalid') {
     let hostedStore: HostedStore | null = null
     let dispatcher: Dispatcher | null = null
     let shutdownDispatch: (() => void) | null = null
-    let stageRegistry: StageRegistry | null = null
+    let runs: RunStore | null = null
 
     // Intercepts `before-quit` and (off darwin) the main window's own `close` while any stage
     // session is still live, naming each one before the operator confirms.
@@ -175,13 +174,14 @@ if (fixture.kind === 'invalid') {
       } else {
         // Bounded by its own timeout; a failure or skip leaves `claude` resolution unaffected.
         await applyLoginShellPath({ platform: process.platform, env: process.env, isE2E: e2e.kind === 'on' })
-        // registerIpc builds the real initial menu itself, from the hosted store it just created.
-        const registered = registerIpc({ confirm: () => quitGuard.prepare(), cancel: () => quitGuard.cancelPrepared() })
-        watcher = registered.watcher
-        hostedStore = registered.hostedStore
-        dispatcher = registered.dispatcher
-        shutdownDispatch = registered.shutdownDispatch
-        stageRegistry = registered.stageRegistry
+        // The context builds the real initial menu itself, from the hosted store it just created.
+        const ctx = createAppContext({ confirm: () => quitGuard.prepare(), cancel: () => quitGuard.cancelPrepared() })
+        registerActions(ctx)
+        watcher = ctx.live.watcher
+        hostedStore = ctx.live.hostedStore
+        dispatcher = ctx.live.dispatcher
+        shutdownDispatch = ctx.live.shutdown
+        runs = ctx.stores.runs
       }
       Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform, app.isPackaged, [], broadcastAppCommand)))
       void createWindow()
@@ -201,7 +201,7 @@ if (fixture.kind === 'invalid') {
       if (quitGuard.intercept(() => event.preventDefault())) return
       shutdownDispatch?.()
       watcher?.stop()
-      const marked = stageRegistry !== null ? withTimeout(stageRegistry.markAllQuit(), MARK_ALL_QUIT_TIMEOUT_MS) : Promise.resolve()
+      const marked = runs !== null ? withTimeout(runs.quitAll(), MARK_ALL_QUIT_TIMEOUT_MS) : Promise.resolve()
       void marked.then(() => hostedStore?.closeAll())
     })
   }

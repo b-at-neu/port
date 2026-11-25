@@ -3,7 +3,7 @@ import { createReadStream } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { appendFile, mkdir, readFile, readdir, rename, rm, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import type { ReadLinesFromResult, DirEntry, DirEntryKind, FileResult, FileFailureKind, RemoveDirectoryResult, StatInfo } from '@/types/platform'
+import type { ReadLinesFromOptions, ReadLinesFromResult, DirEntry, DirEntryKind, FileResult, FileFailureKind, RemoveDirectoryResult, StatInfo } from '@/types/platform'
 
 // Keeps a runaway denials log from OOM-ing the main process.
 const MAX_BYTES = 16 * 1024 * 1024
@@ -115,10 +115,6 @@ export async function ensureDirectory(path: string): Promise<FileResult<void>> {
   } catch (error) {
     return { ok: false, ...classifyFsError(error) }
   }
-}
-
-interface ReadLinesFromOptions {
-  readonly maxBytes: number
 }
 
 /** Finds the **last** newline in the window and decodes only the bytes before it, so a multi-byte

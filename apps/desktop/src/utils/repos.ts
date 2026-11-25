@@ -1,7 +1,7 @@
-// The types every process shares for the repo registry — the renderer never manipulates a path, only displays what main resolved and hands `id` back verbatim. Types only: inspection and persistence live in src/main/registry/.
+// The types every process shares for the repo registry — the renderer never manipulates a path, only displays what main resolved and hands `id` back verbatim. Types only: inspection and persistence live in src/main/repos/.
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { DisplayVocabulary } from '@/utils/labels/display'
-import type { AppliedOverride, OverrideValue } from '../../../../scripts/port-tick/overrides'
+import type { AppliedOverride, OverrideValue } from '@/utils/pipeline/overrides'
 export type { AppliedOverride, OverrideValue }
 
 declare const repoIdBrand: unique symbol
@@ -9,7 +9,7 @@ declare const repoIdBrand: unique symbol
 /** Branded string minted only by main — a raw path cannot be passed where an id is expected, so importing this type asserts "this came from the registry". */
 export type RepoId = string & { readonly [repoIdBrand]: true }
 
-/** One violation ajv reported, in a shape an operator can read without knowing JSON Schema. */
+/** One violation the config schema reported, in a shape an operator can read without knowing JSON Schema. */
 export interface SchemaViolation {
   readonly path: string
   readonly message: string

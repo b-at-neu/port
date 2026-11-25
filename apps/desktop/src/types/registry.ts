@@ -1,4 +1,4 @@
-import type { GitRunner } from '@/types/platform'
+import type { GitRunner, PlatformFs } from '@/types/platform'
 
 
 /** Values `inspect.ts` has already defaulted off the schema, before any `CLAUDE.md` override applies. */
@@ -22,6 +22,8 @@ export type RefReader = (relPath: string) => Promise<RefRead>
 export interface RegistryDeps {
   readonly registryDir: string
   readonly git: GitRunner
+  /** Defaults to the host file system, so a literal built before `fs` existed still compiles. */
+  readonly fs?: PlatformFs
   readonly chooseDirectory: () => Promise<string | null>
   /** The clock `listRepositories`'s TTL reads. Defaults to `Date.now`. */
   readonly now?: () => number

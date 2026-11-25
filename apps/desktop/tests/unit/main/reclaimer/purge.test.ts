@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createFakeRepo, MAIN, WORKTREES } from '../../../fixtures/reclaimer-harness'
 import type { FakeRepoOptions } from '../../../fixtures/reclaimer-harness'
-import { runPurge } from '@/main/reclaimer/purge'
+import { runPurge } from '@/main/features/worktrees/purge'
 
 const STALE = `${WORKTREES}/impl-29-stale`
 

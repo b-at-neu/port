@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createHostedHandle } from '@/main/hosting/handle'
+import { createHostedHandle } from '@/main/sessions/hosting/handle'
 import { baseParams, fakeQuery, flush } from '../../../fixtures/hosting/handle'
 
 describe('createHostedHandle — background tasks', () => {

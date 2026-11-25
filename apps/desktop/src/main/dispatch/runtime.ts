@@ -1,25 +1,22 @@
-import type { DispatchLedger, UnknownStreaks, RefreshMemo, RerunMemo, ForceDispatch } from '@/types/tick'
+import type { UnknownStreaks, RefreshMemo, RerunMemo, ForceDispatch } from '@/types/tick'
 import type { Dispatcher, AutoPlanner, CreateDispatcherParams, AutoPlannerDeps, DispatchActions } from '@/types/dispatch'
 import type { PipelineWatcher } from '@/types/state'
 
 // Bundles the dispatch loop's own process-lifetime state so main/ipc.ts creates one thing
 // instead of wiring several by hand.
-import { createDispatchLedger, createForceDispatch, createRefreshMemo, createRerunMemo, createUnknownStreaks } from '@/main/tick/ledger'
+import { createForceDispatch, createRefreshMemo, createRerunMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
 
 import type { RepoId } from '@/utils/repos'
 import type { RepoDispatchStatus } from '@/types/dispatch'
 import { createBudgetGate } from '@/main/dispatch/budget-gate'
+import type { GitHubReadContext, LedgerWriteContext } from '@/main/github/context'
 import { createDispatcher } from '@/main/dispatch/dispatcher'
-import { readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
-import { createStageDenialStore } from '@/main/stage/denials'
-import { join } from 'node:path'
 
 import { createAutoPlanner } from '@/main/dispatch/auto-plan'
 
 import type { EndedStage } from '@/types/tick'
 
 interface WatcherDeps {
-  readonly ledger: DispatchLedger
   readonly unknownStreaks: UnknownStreaks
   readonly refreshMemo: RefreshMemo
   readonly rerunMemo: RerunMemo
@@ -33,7 +30,6 @@ interface WatcherDeps {
 }
 
 interface DispatchRuntime {
-  readonly ledger: DispatchLedger
   readonly unknownStreaks: UnknownStreaks
   readonly refreshMemo: RefreshMemo
   readonly rerunMemo: RerunMemo
@@ -48,12 +44,9 @@ interface DispatchRuntime {
   readonly shutdown: () => void
 }
 
-type RuntimeDeps = Omit<CreateDispatcherParams, 'ledger' | 'onChange' | 'budget' | 'escalate' | 'writeObservation' | 'rerunChecks' | 'rerunMemo' | 'stageLabels' | 'refreshMemo' | 'forceDispatch' | 'requestRead' | 'denials'> & { readonly actions: DispatchActions }
+type RuntimeDeps = Omit<CreateDispatcherParams, 'onChange' | 'budget' | 'escalate' | 'writeObservation' | 'rerunChecks' | 'rerunMemo' | 'stageLabels' | 'refreshMemo' | 'forceDispatch' | 'requestRead'> & { readonly actions: DispatchActions; readonly platform: GitHubReadContext & LedgerWriteContext }
 
-export function createDispatchRuntime({ actions, ...deps }: RuntimeDeps): DispatchRuntime {
-  const denials = createStageDenialStore({ path: join(deps.dirs.audit, 'stage-denials.json'), readJson: readJsonFile, writeJsonAtomic: writeJsonFileAtomic })
-  void denials.load()
-  const ledger = createDispatchLedger()
+export function createDispatchRuntime({ actions, platform, ...deps }: RuntimeDeps): DispatchRuntime {
   const unknownStreaks = createUnknownStreaks()
   const refreshMemo = createRefreshMemo()
   const rerunMemo = createRerunMemo()
@@ -61,7 +54,7 @@ export function createDispatchRuntime({ actions, ...deps }: RuntimeDeps): Dispat
   let bound: Pick<PipelineWatcher, 'republish' | 'refresh'> | null = null
   // A failed read is retried by the scheduled poll, so it is never surfaced here.
   const requestRead = (repoId: RepoId): void => void bound?.refresh({ repoId, source: 'github' }).catch(() => undefined)
-  const dispatcher = createDispatcher({ ...deps, denials, ledger, refreshMemo, rerunMemo, rerunChecks: actions.rerunChecks, forceDispatch, requestRead, budget: createBudgetGate({ scratchDir: deps.dirs.scratch }), escalate: actions.escalateToHuman, writeObservation: actions.applyObservation, stageLabels: actions.stageLabels, onChange: () => bound?.republish() })
+  const dispatcher = createDispatcher({ ...deps, refreshMemo, rerunMemo, rerunChecks: actions.rerunChecks, forceDispatch, requestRead, budget: createBudgetGate({ scratchDir: deps.dirs.scratch, platform }), escalate: actions.escalateToHuman, writeObservation: actions.applyObservation, stageLabels: actions.stageLabels, onChange: () => bound?.republish() })
   const autoPlannerDeps: AutoPlannerDeps = {
     listRepositories: deps.listRepositories,
     registryDeps: deps.registryDeps,
@@ -75,7 +68,6 @@ export function createDispatchRuntime({ actions, ...deps }: RuntimeDeps): Dispat
   }
   const autoPlanner = createAutoPlanner(autoPlannerDeps)
   return {
-    ledger,
     unknownStreaks,
     refreshMemo,
     rerunMemo,
@@ -83,7 +75,6 @@ export function createDispatchRuntime({ actions, ...deps }: RuntimeDeps): Dispat
     forceDispatch,
     autoPlanner,
     watcherDeps: {
-      ledger,
       unknownStreaks,
       refreshMemo,
       rerunMemo,

@@ -2,16 +2,12 @@ import type { GrantContext, ReviseContext, UnblockContext } from '@/types/action
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 
-export type DecisionState =
-  | { readonly step: 'closed' }
-  | {
-      readonly step: 'confirm-unblock'
-      readonly repoId: RepoId
-      readonly number: number
-      readonly expectedStage: LabelKey | null
-      readonly context: UnblockContext
-      /** Chosen letter per decision id, seeded from each decision's recommendation. */
-      readonly picks: Readonly<Record<string, string>>
-    }
-  | { readonly step: 'confirm-revise'; readonly repoId: RepoId; readonly number: number; readonly expectedStage: LabelKey | null; readonly context: ReviseContext; readonly text: string }
-  | { readonly step: 'confirm-grant'; readonly repoId: RepoId; readonly number: number; readonly expectedStage: LabelKey | null; readonly context: GrantContext }
+export type DecisionTarget = {
+  readonly repoId: RepoId
+  readonly number: number
+  readonly expectedStage: LabelKey | null
+} & (
+  | { readonly decision: 'unblock'; readonly context: UnblockContext }
+  | { readonly decision: 'revise'; readonly context: ReviseContext }
+  | { readonly decision: 'grant'; readonly context: GrantContext }
+)

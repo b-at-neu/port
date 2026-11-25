@@ -1,4 +1,4 @@
-import type { RunStateStore, HaltDispatchParams, HaltDispatchDeps } from '@/types/dispatch'
+import type { RunStateStore, HaltDispatchParams, HaltDispatchDeps, OwnershipParams, OwnershipWriteResult, TakeOwnershipResult } from '@/types/dispatch'
 
 // The 'dispatch:control' channel's own validation and composition — all the branching lives here,
 // not in main/ipc.ts, the same split every other multi-call channel in this app follows.
@@ -7,18 +7,15 @@ import type { DispatchCommand, DispatchControlResult, HaltReport } from '@/types
 import type { BoardSnapshot } from '@/types/board'
 import type { RefreshRequest } from '@/types/state'
 import type { RepoId } from '@/utils/repos'
-import { isReadyEntry, listRepositories } from '@/main/registry'
+import { isReadyEntry, listRepositories } from '@/main/repos'
 import type { RegistryDeps } from '@/types/registry'
-import { releaseOwnership, takeOwnership } from '@/main/dispatch/ownership'
-
-
 
 export interface ResolveDispatchControlDeps {
   readonly listRepositories: typeof listRepositories
   readonly runStates: RunStateStore
   readonly haltDispatch: (params: HaltDispatchParams, deps?: HaltDispatchDeps) => Promise<HaltReport>
-  readonly takeOwnership: typeof takeOwnership
-  readonly releaseOwnership: typeof releaseOwnership
+  readonly takeOwnership: (params: OwnershipParams) => Promise<TakeOwnershipResult>
+  readonly releaseOwnership: (params: OwnershipParams) => Promise<OwnershipWriteResult>
   readonly snapshot: () => BoardSnapshot
   readonly refresh: (request?: RefreshRequest) => Promise<BoardSnapshot>
   readonly auditDir: string
@@ -40,17 +37,12 @@ async function findReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, deps: 
 }
 
 /** Maps a failed `takeOwnership`/`releaseOwnership` write into the same reasons a run-state write failure carries. */
-function ownershipWriteFailureReason(result: Extract<Awaited<ReturnType<typeof takeOwnership>>, { readonly ok: false }>): { readonly reason: 'terminal-owned'; readonly since: string } | { readonly reason: 'ownership-unreadable'; readonly message: string; readonly path: string } | { readonly reason: 'unwritable'; readonly message: string; readonly path: string } {
-  if (result.kind === 'refused') {
-    return result.verdict.kind === 'terminal'
-      ? { reason: 'terminal-owned', since: result.verdict.since }
-      : { reason: 'ownership-unreadable', message: result.verdict.message, path: result.verdict.path }
-  }
+function ownershipWriteFailureReason(result: Extract<TakeOwnershipResult, { readonly ok: false }>): { readonly reason: 'ownership-unreadable' | 'unwritable'; readonly message: string; readonly path: string } {
+  if (result.kind === 'refused') return { reason: 'ownership-unreadable', message: result.verdict.message, path: result.verdict.path }
   return { reason: 'unwritable', message: result.message, path: result.path }
 }
 
-/** Every command requires a registered `repoId`; `run`/`drain`/`take-over` take or release
- *  ownership before writing the run state and refreshing. */
+/** Every command requires a registered `repoId`; `run`/`drain` take ownership and `pause` releases it. */
 export async function resolveDispatchControl(
   registryDeps: RegistryDeps,
   request: { readonly command: DispatchCommand; readonly repoId?: RepoId },
@@ -71,7 +63,7 @@ export async function resolveDispatchControl(
   if (request.command === 'run') {
     const entry = await findReadyEntry(registryDeps, repoId, deps)
     if (entry !== null) {
-      const taken = await deps.takeOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
+      const taken = await deps.takeOwnership({ repoRoot: entry.path, repo: entry.config.repo })
       if (!taken.ok) return { ok: false, command: 'run', repoId, ...ownershipWriteFailureReason(taken) }
     }
     const written = await deps.runStates.set([repoId], RUN_TARGET.run, deps.now().toISOString())
@@ -80,22 +72,10 @@ export async function resolveDispatchControl(
     return { ok: true, command: 'run', repoId, runState: deps.runStates.current(repoId) }
   }
 
-  if (request.command === 'take-over') {
-    const entry = await findReadyEntry(registryDeps, repoId, deps)
-    if (entry === null) throw new Error(`'dispatch:control' take-over requires '${repoId}' to be a ready repository`)
-    const taken = await deps.takeOwnership({ repoRoot: entry.path, repo: entry.config.repo, force: true, now: deps.now })
-    // `force: true` means `taken.kind` can never actually be `'refused'`.
-    if (!taken.ok) return { ok: false, command: 'take-over', repoId, reason: 'unwritable', message: taken.kind === 'refused' ? 'ownership write unexpectedly refused despite force' : taken.message, path: taken.path }
-    const written = await deps.runStates.set([repoId], RUN_TARGET.run, deps.now().toISOString())
-    if (!written.ok) return { ok: false, command: 'take-over', repoId, reason: 'unwritable', message: written.message, path: deps.runStates.path }
-    await deps.refresh({ repoId })
-    return { ok: true, command: 'take-over', repoId, runState: deps.runStates.current(repoId) }
-  }
-
   if (request.command === 'drain') {
     const entry = await findReadyEntry(registryDeps, repoId, deps)
     if (entry !== null) {
-      const taken = await deps.takeOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
+      const taken = await deps.takeOwnership({ repoRoot: entry.path, repo: entry.config.repo })
       if (!taken.ok) return { ok: false, command: 'drain', repoId, ...ownershipWriteFailureReason(taken) }
     }
     const written = await deps.runStates.set([repoId], RUN_TARGET.drain, deps.now().toISOString())

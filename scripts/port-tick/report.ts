@@ -3,14 +3,11 @@
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { EVENTS_PATH, EVENTS_PREV_PATH } from './events.ts';
-import { computeParity } from './parity.ts';
 
 const RESOLUTION_SECONDS = 270;
 const DENIAL_LOG_WARN_BYTES = 4 * 1024 * 1024;
 const DEFAULT_GAP_GRACE_SECONDS = 300;
 const ESCALATION_KINDS = new Set(['cycle-cap', 'zero-diff', 'refresh-stuck', 'approval-withdrawn', 'blocked']);
-// The desktop app's own trajectory record — a sibling of EVENTS_PATH, read only here, never by the tick engine itself.
-const DEFAULT_DESKTOP_EVENTS_PATH = '.agents/desktop-events.jsonl';
 
 /** Reads both generations, oldest first, tolerating either being absent or unreadable. Never
  *  throws — a missing file means "nothing recorded". */
@@ -315,56 +312,6 @@ export function renderText(
   return lines.join('\n');
 }
 
-/** Reads one desktop trajectory line file whole, tolerating an absent or unreadable path —
- *  never a throw. Reads only the single path given (no `.prev` fallback): the parity harness compares against what is currently live. */
-function readDesktopEventLines(path: string): string[] {
-  if (!existsSync(path)) return [];
-  let text: string;
-  try {
-    text = readFileSync(path, 'utf8');
-  } catch {
-    return [];
-  }
-  return text.split('\n').filter((line) => line !== '');
-}
-
-/** Pure: parses raw JSONL lines from the desktop trajectory record. A line that fails to
- *  parse, or whose `v` is unrecognized, is counted in `malformed`, same direction as `parseEventLines`. */
-export function parseDesktopEventLines(lines: readonly string[]): { events: any[]; malformed: number } {
-  const events: any[] = [];
-  let malformed = 0;
-  for (const line of lines) {
-    let obj: any;
-    try {
-      obj = JSON.parse(line);
-    } catch {
-      malformed += 1;
-      continue;
-    }
-    if (obj == null || typeof obj !== 'object' || obj.v !== 1) {
-      malformed += 1;
-      continue;
-    }
-    events.push(obj);
-  }
-  return { events, malformed };
-}
-
-/** The `--desktop-events <path>` mode's own read + diff. An absent desktop trajectory file
- *  reports `{ available: false, reason }`, never `{ available: true, pairs: [] }` — that would read as "compared, and clean" for a comparison that never ran. */
-function buildParitySection(root: string, cockpitEvents: readonly any[], desktopEventsArg: string | undefined): any {
-  const relPath = desktopEventsArg ?? DEFAULT_DESKTOP_EVENTS_PATH;
-  const path = join(root, relPath);
-  if (!existsSync(path)) {
-    return { available: false, reason: `no desktop trajectory recorded at ${relPath}` };
-  }
-  const { events: desktopEvents, malformed } = parseDesktopEventLines(readDesktopEventLines(path));
-  const { pairs, unmatchedCockpit, unmatchedDesktop } = computeParity(cockpitEvents, desktopEvents);
-  const section: any = { available: true, pairs, unmatchedCockpit, unmatchedDesktop };
-  if (malformed > 0) section.malformed = malformed;
-  return section;
-}
-
 /** The `report` subcommand's whole implementation — the only impure entry point in this
  *  module. Never throws: an absent record is reported in `text`, not treated as an error. */
 export function runReport(root: string, cfg: any, args: any = {}): any {
@@ -396,7 +343,6 @@ export function runReport(root: string, cfg: any, args: any = {}): any {
     denialLogBytes = null;
   }
   const text = renderText(report, { repo: cfg.repo, skipped, denialLogBytes });
-  const parity = buildParitySection(root, events, args['desktop-events']);
 
-  return { ok: true, present: true, ...report, skipped, text, parity };
+  return { ok: true, present: true, ...report, skipped, text };
 }

@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "repositories": {
+    "repo-a": {
+      "seededAt": "2026-11-01T09:00:00.000Z",
+      "items": {
+        "issue:101": {
+          "kind": "issue", "number": 101, "keys": ["prOpened"], "marked": true, "autoPlan": false, "claimedAt": "2026-11-02T09:10:00.000Z", "reviewCycles": 0, "updatedAt": "2026-11-02T10:00:00.000Z", "issue": null, "mirrorFailure": null,
+          "history": [
+            { "at": "2026-11-01T10:00:00.000Z", "action": "seed", "add": ["ready"], "remove": [], "actor": null },
+            { "at": "2026-11-01T10:05:00.000Z", "action": "stage-claim", "add": ["planning"], "remove": ["ready"], "actor": null },
+            { "at": "2026-11-01T10:20:00.000Z", "action": "stage-handback-plan-written", "add": ["planReview"], "remove": ["planning"], "actor": null },
+            { "at": "2026-11-02T09:00:00.000Z", "action": "gate-approve", "add": ["planApproved"], "remove": ["planReview"], "actor": "op" },
+            { "at": "2026-11-02T09:10:00.000Z", "action": "stage-claim", "add": ["inProgress"], "remove": ["planApproved"], "actor": null },
+            { "at": "2026-11-02T10:00:00.000Z", "action": "stage-handback-pr-opened", "add": ["prOpened"], "remove": ["inProgress"], "actor": null }
+          ]
+        },
+        "pull-request:201": {
+          "kind": "pull-request", "number": 201, "keys": ["readyForReview"], "marked": true, "autoPlan": false, "claimedAt": null, "reviewCycles": 0, "updatedAt": "2026-11-02T10:00:00.000Z", "issue": 101, "mirrorFailure": null,
+          "history": [{ "at": "2026-11-02T10:00:00.000Z", "action": "stage-handback-pr-opened", "add": ["readyForReview"], "remove": [], "actor": null }]
+        },
+        "issue:102": {
+          "kind": "issue", "number": 102, "keys": ["prOpened"], "marked": true, "autoPlan": false, "claimedAt": null, "reviewCycles": 0, "updatedAt": "2026-11-03T08:00:00.000Z", "issue": null, "mirrorFailure": null,
+          "history": [{ "at": "2026-11-03T08:00:00.000Z", "action": "stage-handback-pr-opened", "add": ["prOpened"], "remove": ["inProgress"], "actor": null }]
+        },
+        "pull-request:202": {
+          "kind": "pull-request", "number": 202, "keys": ["refreshBranch", "approved"], "marked": true, "autoPlan": false, "claimedAt": null, "reviewCycles": 1, "updatedAt": "2026-11-03T12:00:00.000Z", "issue": 102, "mirrorFailure": null,
+          "history": [
+            { "at": "2026-11-03T08:00:00.000Z", "action": "stage-handback-pr-opened", "add": ["readyForReview"], "remove": [], "actor": null },
+            { "at": "2026-11-03T09:00:00.000Z", "action": "stage-handback-approved", "add": ["approved"], "remove": ["reviewing"], "actor": null },
+            { "at": "2026-11-03T12:00:00.000Z", "action": "observe-refresh", "add": ["refreshBranch"], "remove": [], "actor": null }
+          ]
+        },
+        "issue:103": {
+          "kind": "issue", "number": 103, "keys": ["needsHuman"], "marked": true, "autoPlan": false, "claimedAt": null, "reviewCycles": 0, "updatedAt": "2026-11-03T13:00:00.000Z", "issue": null, "mirrorFailure": null,
+          "history": [
+            { "at": "2026-11-03T12:00:00.000Z", "action": "stage-claim", "add": ["planApproved"], "remove": [], "actor": null },
+            { "at": "2026-11-03T13:00:00.000Z", "action": "escalate", "add": ["needsHuman"], "remove": ["planApproved"], "actor": "op" }
+          ]
+        },
+        "issue:104": {
+          "kind": "issue", "number": 104, "keys": ["ready"], "marked": false, "autoPlan": false, "claimedAt": null, "reviewCycles": 0, "updatedAt": "2026-11-01T09:00:00.000Z", "issue": null, "mirrorFailure": null,
+          "history": []
+        },
+        "pull-request:205": {
+          "kind": "pull-request", "number": 205, "keys": ["needsRevision"], "marked": true, "autoPlan": false, "claimedAt": null, "reviewCycles": 2, "updatedAt": "2026-11-04T10:00:00.000Z", "issue": null,
+          "mirrorFailure": { "at": "2026-11-04T10:00:00.000Z", "outcome": { "kind": "item-unavailable" } },
+          "history": [{ "at": "2026-11-04T10:00:00.000Z", "action": "stage-handback-needs-revision", "add": ["needsRevision"], "remove": ["reviewing"], "actor": null }]
+        },
+        "issue:106": {
+          "kind": "issue", "number": 106, "keys": ["prOpened"], "marked": true, "autoPlan": false, "claimedAt": null, "reviewCycles": 0, "updatedAt": "2026-11-04T08:00:00.000Z", "issue": null, "mirrorFailure": null,
+          "history": []
+        },
+        "pull-request:206": {
+          "kind": "pull-request", "number": 206, "keys": ["readyForReview"], "marked": true, "autoPlan": false, "claimedAt": null, "reviewCycles": 0, "updatedAt": "2026-11-04T09:00:00.000Z", "issue": 106, "mirrorFailure": null,
+          "history": [{ "at": "2026-11-04T09:00:00.000Z", "action": "stage-handback-pr-opened", "add": ["readyForReview"], "remove": [], "actor": null }]
+        },
+        "pull-request:207": {
+          "kind": "pull-request", "number": 207, "keys": ["reviewing"], "marked": true, "autoPlan": false, "claimedAt": "2026-11-05T09:00:00.000Z", "reviewCycles": 0, "updatedAt": "2026-11-05T09:00:00.000Z", "issue": 106, "mirrorFailure": null,
+          "history": [{ "at": "2026-11-05T09:00:00.000Z", "action": "stage-claim", "add": ["reviewing"], "remove": ["readyForReview"], "actor": null }]
+        },
+        "issue:108": {
+          "kind": "issue", "number": 108, "keys": [], "marked": true, "autoPlan": false, "claimedAt": null, "reviewCycles": 0, "updatedAt": "2026-11-05T10:00:00.000Z", "issue": null, "mirrorFailure": null,
+          "history": [
+            { "at": "2026-11-05T09:30:00.000Z", "action": "stage-claim", "add": ["inProgress"], "remove": ["planApproved"], "actor": null },
+            { "at": "2026-11-05T10:00:00.000Z", "action": "item-stop", "add": [], "remove": ["inProgress"], "actor": "op" }
+          ]
+        },
+        "issue:109": {
+          "kind": "issue", "number": 109, "keys": ["planReview"], "marked": true, "autoPlan": true, "claimedAt": null, "reviewCycles": 0, "updatedAt": "2026-11-05T11:00:00.000Z", "issue": null, "mirrorFailure": null,
+          "history": []
+        }
+      }
+    },
+    "repo-b": {
+      "seededAt": "2026-11-06T09:00:00.000Z",
+      "items": {
+        "issue:5": {
+          "kind": "issue", "number": 5, "keys": ["inProgress"], "marked": true, "autoPlan": false, "claimedAt": "2026-11-06T10:00:00.000Z", "reviewCycles": 0, "updatedAt": "2026-11-06T10:00:00.000Z", "issue": null, "mirrorFailure": null,
+          "history": [{ "at": "2026-11-06T10:00:00.000Z", "action": "stage-claim", "add": ["inProgress"], "remove": ["planApproved"], "actor": null }]
+        },
+        "issue:6": {
+          "kind": "issue", "number": 6, "keys": ["blocked"], "marked": true, "autoPlan": false, "claimedAt": null, "reviewCycles": 0, "updatedAt": "2026-11-06T11:00:00.000Z", "issue": null, "mirrorFailure": null,
+          "history": []
+        },
+        "issue:7": {
+          "kind": "issue", "number": 7, "keys": ["ready", "planning", "needsHuman"], "marked": true, "autoPlan": false, "claimedAt": null, "reviewCycles": 0, "updatedAt": "2026-11-06T12:00:00.000Z", "issue": null, "mirrorFailure": null,
+          "history": []
+        }
+      }
+    }
+  }
+}

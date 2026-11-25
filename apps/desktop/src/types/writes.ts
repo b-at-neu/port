@@ -1,11 +1,10 @@
 // Renderer-safe contract for the write chokepoint: every mutation the app makes to GitHub is expressed in `LabelKey` values and a stated precondition, never a raw argv or a bypassing `gh` call. No import here may reach a Node builtin.
+import type { StateEvent } from '@/types/stage-labels'
 import type { MirrorVocabulary } from '@/utils/labels/display'
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { ReclaimerFailureKind } from '@/types/reclaimer'
 import type { PillStatus } from '@/types/components'
-import type { GhRunner, GitRunner, PathOps } from '@/types/platform'
-import type { FetchItemsByNumberParams, ItemsByNumberFetch } from '@/types/github'
 import type { ReleaseAuditEntry } from '@/types/release'
 import type { IncidentIntent } from '@/types/incidents'
 
@@ -24,7 +23,7 @@ export interface LabelWriteRequest {
   readonly kind: 'issue' | 'pull-request'
   readonly number: number
   readonly vocabulary: LabelVocabulary
-  /** Which label set the post-transition state is mirrored as; required so no builder defaults to legacy by accident. */
+  /** The display vocabulary the post-transition state is mirrored as. */
   readonly mirror: MirrorVocabulary
   readonly add: readonly LabelKey[]
   readonly remove: readonly LabelKey[]
@@ -34,6 +33,28 @@ export interface LabelWriteRequest {
   /** The operator-facing verb, recorded verbatim in the audit log. */
   readonly action: string
   /** The anomaly this write acts on; `writeState` records it once the outcome is known. */
+  readonly incident?: IncidentIntent
+}
+
+/** One ticket event, committed through the transition table and then mirrored as display labels on both halves of the ticket. */
+export interface EventWriteRequest {
+  readonly repoId: RepoId
+  readonly repo: string
+  /** The half the event names. */
+  readonly kind: 'issue' | 'pull-request'
+  readonly number: number
+  /** The legacy vocabulary, used to name the keys a `labels` event carries and to clean up old labels. */
+  readonly vocabulary: LabelVocabulary
+  readonly mirror: MirrorVocabulary
+  readonly event: StateEvent
+  /** The `rev` the caller read; `null` skips the concurrency check. */
+  readonly expectedRev: number | null
+  readonly assignees: AssigneeExpectation
+  readonly addAssignees: readonly string[]
+  readonly removeAssignees: readonly string[]
+  /** The operator-facing verb, recorded verbatim in the audit log. */
+  readonly action: string
+  /** The anomaly this write acts on; recorded once the outcome is known. */
   readonly incident?: IncidentIntent
 }
 
@@ -55,17 +76,16 @@ export interface ObservedItem {
   readonly readAt: string
 }
 
-/** Mirrors `docs/COORDINATION.md`'s conflict table, pinned both directions by literal and field-name set. Only `precondition-failed` is produced by `main/writes/` — the other two belong to the reconciler and the UI. */
+/** Only `precondition-failed` is produced by `main/github/writes/` — the other two belong to the reconciler and the UI. */
 export type Conflict =
   | { readonly kind: 'precondition-failed'; readonly expected: readonly string[]; readonly observed: readonly string[]; readonly readAt: string }
   | { readonly kind: 'unattributed-transition'; readonly from: readonly string[]; readonly to: readonly string[]; readonly observedAt: string; readonly lastLocalWriteAt: string | null }
   | { readonly kind: 'dispatch-overtook-pause'; readonly agent: string; readonly pausedAt: string; readonly dispatchedAt: string }
 
-/** Mirrors `main/dispatch/ownership.ts`'s own `OwnershipRead`, hand-maintained since the renderer cannot reach `main/`. Shared by the gate dialog and the dispatch owner line. */
+/** The renderer-safe shape of `main/repos/ownership.ts`'s `OwnershipRead`, shared by the gate dialog and the dispatch owner line. */
 export type OwnershipSummary =
   | { readonly kind: 'absent' }
   | { readonly kind: 'app'; readonly since: string }
-  | { readonly kind: 'terminal'; readonly since: string }
   | { readonly kind: 'unreadable'; readonly path: string; readonly message: string }
 
 export type OwnershipKind = OwnershipSummary['kind']
@@ -90,8 +110,6 @@ export type WriteOutcome =
   | { readonly kind: 'applied'; readonly argv: readonly string[] }
   | { readonly kind: 'no-op' }
   | { readonly kind: 'precondition-failed'; readonly conflict: Conflict }
-  /** A terminal cockpit owns this repo — no `gh` call was made. `since` feeds the operator-facing "owned it since <time>" copy. */
-  | { readonly kind: 'terminal-owned'; readonly since: string }
   /** `.agents/cockpit.json` could not be read — no `gh` call was made. */
   | { readonly kind: 'ownership-unreadable'; readonly path: string; readonly message: string }
   | { readonly kind: 'unresolvable-label'; readonly keys: readonly LabelKey[] }
@@ -188,8 +206,6 @@ export interface RerunContext {
   readonly repo: string
   readonly repoId: RepoId
   readonly auditDir: string
-  readonly gh?: GhRunner
-  readonly now?: () => Date
 }
 
 export interface AllowWriteContext {
@@ -197,9 +213,6 @@ export interface AllowWriteContext {
   readonly repoId: RepoId
   readonly auditDir: string
   readonly scratchDir: string
-  readonly gh?: GhRunner
-  readonly now?: () => Date
-  readonly pathOps?: PathOps
 }
 
 export type AllowWriteResult = { readonly ok: true; readonly number: number; readonly url: string } | { readonly ok: false; readonly step: 'commit' | 'pr'; readonly message: string }
@@ -263,21 +276,16 @@ export interface PostCommentParams {
   readonly request: CommentRequest
   readonly repoRoot: string
   readonly auditDir: string
-  readonly gh?: GhRunner
-  readonly git?: GitRunner
-  readonly now?: () => Date
-  readonly pathOps?: PathOps
 }
 
 export interface WriteStateParams {
   readonly request: LabelWriteRequest
   readonly repoRoot: string
   readonly auditDir: string
-  readonly gh?: GhRunner
-  readonly git?: GitRunner
-  readonly fetchItemsByNumber?: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
-  readonly now?: () => Date
-  readonly pathOps?: PathOps
+}
+
+export interface WriteEventParams extends Omit<WriteStateParams, 'request'> {
+  readonly request: EventWriteRequest
 }
 
 /** One label write on resolved names: the mirror call. `observed` is the read the diff was computed from. */
@@ -295,13 +303,10 @@ export interface ApplyLabelsParams {
   readonly repoRoot: string
   readonly auditDir: string
   readonly writeId?: string
-  readonly gh?: GhRunner
-  readonly git?: GitRunner
-  /** The re-read a failed call reports as `reread`. */
-  readonly fetchItemsByNumber?: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
-  readonly now?: () => Date
-  readonly pathOps?: PathOps
 }
 
-/** Every pipeline write goes through this: the store precondition, the store commit, then the full-state label mirror. */
+/** An operator path's label request, wrapped in one transitional table event: the store precondition, the store commit, then the display mirror. */
 export type WriteState = (params: WriteStateParams) => Promise<WriteOutcome>
+
+/** A stage path's typed event: the `rev` check, the store commit, then the display mirror of both halves. */
+export type WriteEvent = (params: WriteEventParams) => Promise<WriteOutcome>

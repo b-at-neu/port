@@ -1,57 +1,44 @@
-// The one place that writes the `session:marks` cache — pin/archive set, with Undo (DESIGN §4: reversible actions toast with Undo).
-import { toast } from 'sonner'
-import type { QueryClient } from '@tanstack/react-query'
-import { ipcQueryOptions, useIpcQuery } from '@/renderer/data/query'
-import { invoke } from '@/renderer/data/invoke'
-import type { SessionKey, SessionMarkResult, SessionMarks } from '@/types/hosting'
-import type { ActionToast } from '@/types/toast'
-import { close } from '@/renderer/session/actions'
-import { UNDO_LABEL } from '@/renderer/lib/copy'
-import { FRESH, showActionToast } from '@/renderer/lib/background-action'
-import { ARCHIVING_PENDING } from '@/renderer/session/copy'
-import { markFailureToast, markSuccessToast } from '@/renderer/session/marks-copy'
+// Pin and archive writes, each with Undo (DESIGN §4: reversible actions toast with Undo).
+import { useIpcQuery } from '@/renderer/data/query'
+import { useActionMutation } from '@/renderer/actions/use-action-mutation'
+import type { SessionKey } from '@/types/hosting'
+import { useCloseSession } from '@/renderer/session/actions'
+import { markToast } from '@/renderer/session/outcomes'
+import { markPendingToast } from '@/renderer/session/copy'
 
 export function useSessionMarks() {
-  return useIpcQuery('session:marks')
+  return useIpcQuery('session.marks')
 }
 
-type MarkKind = 'pinned' | 'archived'
+export function useSessionMarkActions() {
+  const { close } = useCloseSession()
 
-async function invokeSet(kind: MarkKind, sessionId: string, on: boolean): Promise<SessionMarkResult> {
-  return kind === 'pinned' ? invoke('session:pin:set', { sessionId, pinned: on }) : invoke('session:archive:set', { sessionId, archived: on })
-}
-
-function failure(title: string): ActionToast {
-  return { tone: 'error', title, description: null, action: null, cancel: null }
-}
-
-/** `closeKey` is the live session to end alongside an archive; it is ignored for any other mark. */
-export async function setSessionMark(queryClient: QueryClient, kind: MarkKind, sessionId: string, on: boolean, closeKey: SessionKey | null = null): Promise<void> {
-  const id = `session-mark:${sessionId}`
-  const closing = kind === 'archived' && on && closeKey !== null
-  if (closing) toast.loading(ARCHIVING_PENDING, { ...FRESH, id, description: undefined })
-  try {
-    const result = await invokeSet(kind, sessionId, on)
-    if (!result.ok) {
-      showActionToast(id, failure(markFailureToast(kind, result)))
-      return
-    }
-    queryClient.setQueryData<SessionMarks>(ipcQueryOptions('session:marks').queryKey, result.marks)
-    const closed = closing && (await close(closeKey).then(
-      (closeResult) => closeResult.ok,
-      (error: unknown) => {
-        console.error('Failed to close a session after archiving it', error)
-        return false
-      },
-    ))
-    showActionToast(id, {
-      tone: closing && !closed ? 'info' : 'success',
-      title: markSuccessToast(kind, on, closed),
-      description: null,
-      action: { label: UNDO_LABEL, onClick: () => void setSessionMark(queryClient, kind, sessionId, !on) },
-      cancel: null,
-    })
-  } catch {
-    showActionToast(id, failure(markFailureToast(kind, 'unreachable')))
+  function undoPin(sessionId: string, pinned: boolean): Promise<unknown> {
+    return pin.perform({ sessionId, pinned })
   }
+
+  function undoArchive(sessionId: string, archived: boolean): Promise<unknown> {
+    return archive.perform({ sessionId, archived })
+  }
+
+  const pin = useActionMutation('session.pinSet', {
+    toast: { pending: markPendingToast('pinned'), result: (result, input) => markToast('pinned', input.pinned, result, () => void undoPin(input.sessionId, !input.pinned)) },
+    invalidates: ['session.marks'],
+  })
+  const archive = useActionMutation('session.archiveSet', {
+    toast: { pending: markPendingToast('archived'), result: (result, input) => markToast('archived', input.archived, result, () => void undoArchive(input.sessionId, !input.archived)) },
+    invalidates: ['session.marks'],
+  })
+
+  async function setPinned(sessionId: string, on: boolean): Promise<void> {
+    await pin.perform({ sessionId, pinned: on })
+  }
+
+  /** `closeKey` is the live session to end alongside an archive; it is ignored when unarchiving. */
+  async function setArchived(sessionId: string, on: boolean, closeKey: SessionKey | null): Promise<void> {
+    const result = await archive.perform({ sessionId, archived: on })
+    if (on && closeKey !== null && result !== 'unreachable' && result.ok) await close(closeKey, { confirm: false })
+  }
+
+  return { setPinned, setArchived }
 }

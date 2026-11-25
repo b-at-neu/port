@@ -132,7 +132,7 @@ export async function settle(page: Page, target: Target, variant?: CaptureVarian
   const hash = variant?.hash ?? target.hash
   const ready = variant?.ready ?? target.ready
 
-  // Clears a dialog a previous test left open — the gate dialog mounts once in shell/layout.tsx.
+  // Clears a dialog a previous test left open — the gate dialog mounts once in app/layout.tsx.
   await page.keyboard.press('Escape')
 
   await page.evaluate((h: string) => {

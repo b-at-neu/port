@@ -1,7 +1,7 @@
 // The Board row's "held on" tag: one pill naming the most specific thing a blocked ticket waits on.
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { blockedOnTag } from '@/renderer/board/blocked-on'
-import { BLOCKED_DEPENDENCY_HEADING, blockedDependencyLine, blockedTagLabel, blockedTagSummary, blockedTruncatedCopy } from '@/renderer/board/blocked-copy'
+import { BLOCKED_DEPENDENCY_HEADING, blockedDependencyLine, blockedTagLabel, blockedTagSummary, blockedTruncatedCopy } from '@/renderer/board/copy'
 import type { BlockedOn } from '@/types/board'
 import { cn } from '@/renderer/lib/utils'
 

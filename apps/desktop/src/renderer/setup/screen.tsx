@@ -2,27 +2,34 @@
 // display state. Checks never re-run on their own; every re-check is a button.
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { ScreenHeader } from '@/renderer/components/screen-header'
-import { Screen, ScreenBody } from '@/renderer/components/screen'
+import { Page } from '@/renderer/components/page'
 import { StatusPill } from '@/renderer/components/status-pill'
 import { ErrorBanner } from '@/renderer/components/error-banner'
-import { ipcQueryOptions, useIpcMutation, useIpcQuery } from '@/renderer/data/query'
-import { ROUTE_IDS } from '@/renderer/router/routes'
+import { useAction } from '@/renderer/actions/use-action'
+import { useActionMutation } from '@/renderer/actions/use-action-mutation'
+import { useIpcQuery } from '@/renderer/data/query'
+import { ROUTE_IDS } from '@/renderer/app/routes'
 import { setupModel } from '@/renderer/setup/model'
-import type { SetupAction, SetupStep } from '@/types/setup'
+import {
+  CLAUDE_STEP_LABEL,
+  FINISH_STEPS_FIRST,
+  GH_STEP_LABEL,
+  OPEN_BOARD,
+  PENDING_LABEL,
+  PROBE_UNREACHABLE,
+  REPO_STEP_LABEL,
+  SETUP_INTRO,
+  SETUP_TITLE,
+  SETUP_UNREACHABLE,
+  SKIP_FOR_NOW,
+} from '@/renderer/setup/copy'
+import type { SetupStep } from '@/types/setup'
 import type { RuntimeProbe } from '@/types/runtime'
-import type { ReposListResponse } from '@/types/ipc'
-
-const PENDING_LABEL: Record<SetupAction['kind'], string> = {
-  test: 'Testing…',
-  'check-again': 'Checking…',
-  'add-repository': 'Adding…',
-}
 
 function StepRow({ label, step, loading, pending, onAction }: { readonly label: string; readonly step: SetupStep; readonly loading: boolean; readonly pending: boolean; readonly onAction: () => void }) {
   if (loading) {
@@ -64,12 +71,11 @@ function StepRow({ label, step, loading, pending, onAction }: { readonly label: 
 
 export function SetupScreen() {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const preflightQuery = useIpcQuery('runtime:preflight')
-  const ghQuery = useIpcQuery('gh:status')
-  const reposQuery = useIpcQuery('repos:list')
-  const probeMutation = useIpcMutation('runtime:probe')
-  const addRepoMutation = useIpcMutation('repos:add')
+  const preflightQuery = useIpcQuery('runtime.preflight')
+  const ghQuery = useIpcQuery('gh.status')
+  const reposQuery = useIpcQuery('repos.list')
+  const probeAction = useAction('runtime.probe')
+  const addRepo = useActionMutation('repos.add', { invalidates: ['repos.list'] })
   const [probe, setProbe] = useState<RuntimeProbe | null>(null)
   const [probeError, setProbeError] = useState(false)
   const [repoError, setRepoError] = useState<string | null>(null)
@@ -81,8 +87,7 @@ export function SetupScreen() {
     setProbeError(false)
     try {
       const readyRepo = reposQuery.data?.ok === true ? reposQuery.data.repositories.find((entry) => 'config' in entry) : undefined
-      const result = await probeMutation.mutateAsync({ repoId: readyRepo !== undefined ? readyRepo.id : null })
-      setProbe(result)
+      setProbe(await probeAction.run({ repoId: readyRepo !== undefined ? readyRepo.id : null }))
     } catch {
       setProbeError(true)
     }
@@ -95,70 +100,47 @@ export function SetupScreen() {
 
   async function addRepository(): Promise<void> {
     setRepoError(null)
-    try {
-      const result = await addRepoMutation.mutateAsync(undefined)
-      if (result.ok && (result.outcome === 'added' || result.outcome === 'already-registered')) {
-        const repositories = result.repositories
-        queryClient.setQueryData(ipcQueryOptions('repos:list').queryKey, (): ReposListResponse => ({ ok: true, repositories }))
-      } else if (!result.ok) {
-        setRepoError(result.message)
-      }
-    } catch {
-      setRepoError("Couldn't reach the main process to add a repository.")
-    }
+    const result = await addRepo.perform(undefined)
+    if (result !== 'unreachable' && !result.ok) setRepoError(result.message)
   }
 
   return (
-    <Screen header={<ScreenHeader>Set up port</ScreenHeader>}>
-      <ScreenBody variant="form">
-        <p className="text-small text-foreground-secondary">port runs your own installed Claude Code and gh under your own accounts. Finish these steps to start.</p>
-        {anyErrored ? <ErrorBanner message="Couldn't reach the main process to check setup. Restart port to try again." /> : null}
-        <div className="flex flex-col divide-y divide-border">
-          <StepRow
-            label="Claude Code installed and signed in"
-            step={model.claude}
-            loading={model.claude.state === 'loading'}
-            pending={probeMutation.isPending}
-            onAction={() => void (model.claude.action?.kind === 'test' ? testSignIn() : checkClaudeAgain())}
-          />
-          {model.claudeApiKeyNote !== null ? <p className="text-small text-muted-foreground">{model.claudeApiKeyNote}</p> : null}
-          {probeError ? <ErrorBanner message="Couldn't reach the main process to test the connection." /> : null}
-          <StepRow
-            label="gh installed and signed in"
-            step={model.gh}
-            loading={model.gh.state === 'loading'}
-            pending={ghQuery.isFetching}
-            onAction={() => void ghQuery.refetch()}
-          />
-          <StepRow
-            label="Add a repository"
-            step={model.repo}
-            loading={model.repo.state === 'loading'}
-            pending={addRepoMutation.isPending}
-            onAction={() => void addRepository()}
-          />
-          {repoError !== null ? <ErrorBanner message={repoError} /> : null}
-        </div>
-        <div className="flex items-center gap-2 pt-2">
-          {model.complete ? (
-            <Button onClick={() => void navigate({ to: ROUTE_IDS.board })}>Open board</Button>
-          ) : (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span tabIndex={0} className="inline-flex w-fit rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-                  <Button disabled tabIndex={-1}>
-                    Open board
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>Finish the steps above first.</TooltipContent>
-            </Tooltip>
-          )}
-          <Button variant="ghost" onClick={() => void navigate({ to: ROUTE_IDS.board })}>
-            Skip for now
-          </Button>
-        </div>
-      </ScreenBody>
-    </Screen>
+    <Page variant="form" header={<ScreenHeader>{SETUP_TITLE}</ScreenHeader>}>
+      <p className="text-small text-foreground-secondary">{SETUP_INTRO}</p>
+      {anyErrored ? <ErrorBanner message={SETUP_UNREACHABLE} /> : null}
+      <div className="flex flex-col divide-y divide-border">
+        <StepRow
+          label={CLAUDE_STEP_LABEL}
+          step={model.claude}
+          loading={model.claude.state === 'loading'}
+          pending={probeAction.pending}
+          onAction={() => void (model.claude.action?.kind === 'test' ? testSignIn() : checkClaudeAgain())}
+        />
+        {model.claudeApiKeyNote !== null ? <p className="text-small text-muted-foreground">{model.claudeApiKeyNote}</p> : null}
+        {probeError ? <ErrorBanner message={PROBE_UNREACHABLE} /> : null}
+        <StepRow label={GH_STEP_LABEL} step={model.gh} loading={model.gh.state === 'loading'} pending={ghQuery.isFetching} onAction={() => void ghQuery.refetch()} />
+        <StepRow label={REPO_STEP_LABEL} step={model.repo} loading={model.repo.state === 'loading'} pending={addRepo.pending} onAction={() => void addRepository()} />
+        {repoError !== null ? <ErrorBanner message={repoError} /> : null}
+      </div>
+      <div className="flex items-center gap-2 pt-2">
+        {model.complete ? (
+          <Button onClick={() => void navigate({ to: ROUTE_IDS.board })}>{OPEN_BOARD}</Button>
+        ) : (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0} className="inline-flex w-fit rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                <Button disabled tabIndex={-1}>
+                  {OPEN_BOARD}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{FINISH_STEPS_FIRST}</TooltipContent>
+          </Tooltip>
+        )}
+        <Button variant="ghost" onClick={() => void navigate({ to: ROUTE_IDS.board })}>
+          {SKIP_FOR_NOW}
+        </Button>
+      </div>
+    </Page>
   )
 }

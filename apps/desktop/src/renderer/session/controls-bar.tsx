@@ -8,8 +8,8 @@ import type { SessionControls, SessionEffort, SessionModels } from '@/utils/host
 import type { SessionKey } from '@/types/hosting'
 import type { SessionUsage } from '@/utils/hosting/usage'
 import { DEFAULT_SELECT_VALUE, MODE_OPTIONS, controlsBarState, effortLabel } from '@/renderer/session/controls-model'
-import { controlsChangeFailed, MODELS_LOADING } from '@/renderer/session/interaction-copy'
-import { setControls } from '@/renderer/session/actions'
+import { controlsChangeFailed, MODELS_LOADING } from '@/renderer/session/copy'
+import { useActionMutation } from '@/renderer/actions/use-action-mutation'
 
 interface ControlsBarProps {
   readonly sessionKey: SessionKey
@@ -22,16 +22,14 @@ interface ControlsBarProps {
 
 export function ControlsBar({ sessionKey, controls, models, usage, disabled, disabledReason }: ControlsBarProps) {
   const [pending, setPending] = useState<'permissionMode' | 'model' | 'effort' | null>(null)
+  const setControls = useActionMutation('session.controlsSet')
   const state = controlsBarState(controls, models)
 
   async function apply(patch: { readonly permissionMode?: SessionControls['permissionMode']; readonly model?: string; readonly effort?: SessionEffort | null }, field: 'permissionMode' | 'model' | 'effort'): Promise<void> {
     setPending(field)
-    try {
-      const result = await setControls(sessionKey, patch)
-      if (!result.ok) toast.error(controlsChangeFailed(result.kind === 'rejected' ? result.message : result.kind))
-    } finally {
-      setPending(null)
-    }
+    const result = await setControls.perform({ sessionKey, ...patch })
+    setPending(null)
+    if (result !== 'unreachable' && !result.ok) toast.error(controlsChangeFailed(result.kind === 'rejected' ? result.message : result.kind))
   }
 
   const row = (

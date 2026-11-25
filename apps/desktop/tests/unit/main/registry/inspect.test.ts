@@ -1,17 +1,16 @@
-import { mkdtemp } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { labelName } from '@/utils/labels/vocabulary'
 import type { LabelKey } from '@/utils/labels/vocabulary'
-import type { CommandResult } from '@/types/platform'
-import { inspectRepository } from '@/main/registry/inspect'
+import type { CommandResult, PlatformFs } from '@/types/platform'
+import { inspectRepository } from '@/main/repos/inspect'
 import type { GitRunner } from '@/types/platform'
+import { createFakeFs } from '../../../support/fake-platform'
 
 type OriginHead = 'present' | 'missing' | 'restorable'
 
 interface FakeRepo {
   readonly root: string
+  readonly fs: PlatformFs
   readonly files: Record<string, string>
   readonly unreadable: Set<string>
   originHead: OriginHead
@@ -19,8 +18,10 @@ interface FakeRepo {
 }
 
 async function makeRepo(): Promise<FakeRepo> {
-  const root = await mkdtemp(join(tmpdir(), 'port-registry-inspect-'))
-  return { root, files: {}, unreadable: new Set(), originHead: 'present', calls: [] }
+  const fs = createFakeFs()
+  const root = '/repo'
+  await fs.ensureDir(root)
+  return { root, fs, files: {}, unreadable: new Set(), originHead: 'present', calls: [] }
 }
 
 function writeConfig(repo: FakeRepo, content: string): void {
@@ -78,7 +79,7 @@ function fakeGit(repo: FakeRepo, overrides: Partial<Record<string, (args: readon
 }
 
 async function readyEntry(repo: FakeRepo) {
-  const entry = await inspectRepository(repo.root, { git: fakeGit(repo) })
+  const entry = await inspectRepository({ git: fakeGit(repo), fs: repo.fs }, repo.root)
   if (!('config' in entry)) throw new Error('unreachable')
   return entry
 }
@@ -218,7 +219,7 @@ describe('inspectRepository', () => {
   it('reports config-malformed for invalid JSON', async () => {
     const repo = await makeRepo()
     writeConfig(repo, '{not json')
-    const entry = await inspectRepository(repo.root, { git: fakeGit(repo) })
+    const entry = await inspectRepository({ git: fakeGit(repo), fs: repo.fs }, repo.root)
     if (!('problem' in entry)) throw new Error('unreachable')
     expect(entry.problem.kind).toBe('config-malformed')
   })
@@ -226,7 +227,7 @@ describe('inspectRepository', () => {
   it('reports config-invalid when repo is missing', async () => {
     const repo = await makeRepo()
     writeConfig(repo, JSON.stringify({ branches: {} }))
-    const entry = await inspectRepository(repo.root, { git: fakeGit(repo) })
+    const entry = await inspectRepository({ git: fakeGit(repo), fs: repo.fs }, repo.root)
     if (!('problem' in entry) || entry.problem.kind !== 'config-invalid') throw new Error('unreachable')
     expect(entry.problem.violations.length).toBeGreaterThan(0)
   })
@@ -234,7 +235,7 @@ describe('inspectRepository', () => {
   it('reports config-invalid when repo fails the slug pattern', async () => {
     const repo = await makeRepo()
     writeConfig(repo, JSON.stringify({ repo: 'not-a-slug' }))
-    const entry = await inspectRepository(repo.root, { git: fakeGit(repo) })
+    const entry = await inspectRepository({ git: fakeGit(repo), fs: repo.fs }, repo.root)
     if (!('problem' in entry)) throw new Error('unreachable')
     expect(entry.problem.kind).toBe('config-invalid')
   })
@@ -251,7 +252,7 @@ describe('inspectRepository', () => {
 
   it('reports not-port-managed for a default branch with no config file', async () => {
     const repo = await makeRepo()
-    const entry = await inspectRepository(repo.root, { git: fakeGit(repo) })
+    const entry = await inspectRepository({ git: fakeGit(repo), fs: repo.fs }, repo.root)
     if (!('problem' in entry) || entry.problem.kind !== 'not-port-managed') throw new Error('unreachable')
     expect(entry.problem.carriedBy).toEqual([])
     expect(entry.problem.ref).toBe('origin/dev')
@@ -264,7 +265,7 @@ describe('inspectRepository', () => {
       branch: () => ok('main\n'),
       'ls-tree': () => ok('.claude/port.config.json\n'),
     })
-    const entry = await inspectRepository(repo.root, { git })
+    const entry = await inspectRepository({ git, fs: repo.fs }, repo.root)
     if (!('problem' in entry) || entry.problem.kind !== 'not-port-managed') throw new Error('unreachable')
     expect(entry.problem.carriedBy).toEqual(['main'])
   })
@@ -272,14 +273,14 @@ describe('inspectRepository', () => {
   it('keeps the git-unavailable diagnostic when the carrier search cannot run git', async () => {
     const repo = await makeRepo()
     const git = fakeGit(repo, { 'rev-list': () => NOT_FOUND })
-    const entry = await inspectRepository(repo.root, { git })
+    const entry = await inspectRepository({ git, fs: repo.fs }, repo.root)
     if (!('problem' in entry)) throw new Error('unreachable')
     expect(entry.diagnostics).toEqual([{ kind: 'git-unavailable' }])
   })
 
   it('reports directory-missing for a path that does not exist', async () => {
     const repo = await makeRepo()
-    const entry = await inspectRepository(join(repo.root, 'gone'), { git: fakeGit(repo) })
+    const entry = await inspectRepository({ git: fakeGit(repo), fs: repo.fs }, `${repo.root}/gone`)
     if (!('problem' in entry)) throw new Error('unreachable')
     expect(entry.problem.kind).toBe('directory-missing')
   })
@@ -287,7 +288,7 @@ describe('inspectRepository', () => {
   it('reports not-a-git-repository when git cannot resolve a toplevel', async () => {
     const repo = await makeRepo()
     const git: GitRunner = () => Promise.resolve({ ok: false, kind: 'not-found', command: 'git', searched: [] })
-    const entry = await inspectRepository(repo.root, { git })
+    const entry = await inspectRepository({ git, fs: repo.fs }, repo.root)
     if (!('problem' in entry)) throw new Error('unreachable')
     expect(entry.problem.kind).toBe('not-a-git-repository')
   })
@@ -314,7 +315,7 @@ describe('inspectRepository — the default branch at origin/HEAD', () => {
     const repo = await makeRepo()
     repo.originHead = 'missing'
     writeConfig(repo, JSON.stringify({ repo: 'o/n' }))
-    const entry = await inspectRepository(repo.root, { git: fakeGit(repo) })
+    const entry = await inspectRepository({ git: fakeGit(repo), fs: repo.fs }, repo.root)
     if (!('problem' in entry) || entry.problem.kind !== 'config-ref-unreadable') throw new Error('unreachable')
     expect(entry.problem.message).toContain("No such remote 'origin'")
   })
@@ -322,7 +323,7 @@ describe('inspectRepository — the default branch at origin/HEAD', () => {
   it('reports config-unreadable when the config blob exists but cannot be read', async () => {
     const repo = await makeRepo()
     repo.unreadable.add('.claude/port.config.json')
-    const entry = await inspectRepository(repo.root, { git: fakeGit(repo) })
+    const entry = await inspectRepository({ git: fakeGit(repo), fs: repo.fs }, repo.root)
     if (!('problem' in entry) || entry.problem.kind !== 'config-unreadable') throw new Error('unreachable')
     expect(entry.problem.message).toContain('unable to read blob')
   })
@@ -418,7 +419,7 @@ describe('inspectRepository — CLAUDE.md port-overrides', () => {
     const repo = await makeRepo()
     writeConfig(repo, JSON.stringify({ repo: 'o/n' }))
     repo.unreadable.add('CLAUDE.md')
-    const entry = await inspectRepository(repo.root, { git: fakeGit(repo) })
+    const entry = await inspectRepository({ git: fakeGit(repo), fs: repo.fs }, repo.root)
     if (!('problem' in entry) || entry.problem.kind !== 'effective-config-unreadable') throw new Error('unreachable')
     expect(entry.problem.file).toBe('CLAUDE.md')
   })
@@ -427,7 +428,7 @@ describe('inspectRepository — CLAUDE.md port-overrides', () => {
     const repo = await makeRepo()
     writeConfig(repo, JSON.stringify({ repo: 'o/n' }))
     repo.unreadable.add('.github/workflows/approval-check.yml')
-    const entry = await inspectRepository(repo.root, { git: fakeGit(repo) })
+    const entry = await inspectRepository({ git: fakeGit(repo), fs: repo.fs }, repo.root)
     if (!('problem' in entry) || entry.problem.kind !== 'effective-config-unreadable') throw new Error('unreachable')
     expect(entry.problem.file).toBe('.github/workflows/approval-check.yml')
   })

@@ -1,7 +1,7 @@
 // Fixture mode's own canned backlog detail: the issues `backlog.ts` lists for `acme/widgets`.
 import type { BacklogDetail, BacklogDetailResponse } from '@/types/backlog'
 import type { ClaimBlocker } from '@/types/github'
-import type { IpcMap } from '@/types/ipc'
+import type { ActionInput } from '@/types/ipc'
 import type { FixtureScenario } from '@/types/fixtures'
 import { fixtureFailingBacklog } from './failing'
 import { WIDGETS_ID } from './repos'
@@ -65,7 +65,7 @@ function detailFor(now: Date, number: number): BacklogDetail | undefined {
 }
 
 // Pure, synchronous, never throws; every scenario but `failing` serves the same canned issues.
-export function fixtureBacklogDetail(now: Date, scenario: FixtureScenario, request: IpcMap['backlog:detail']['request']): BacklogDetailResponse {
+export function fixtureBacklogDetail(now: Date, scenario: FixtureScenario, request: ActionInput<'backlog.detail'>): BacklogDetailResponse {
   const fetchedAt = now.toISOString()
   if (scenario === 'failing') {
     const failure = fixtureFailingBacklog(now, request.repoId)

@@ -1,82 +1,24 @@
-import type { StageRecord, OwnershipRead, StageSessionSummary } from '@/types/dispatch'
-
 // The app's own dispatch loop: turns a BoardSnapshot into real stage-session launches through a
 // StageLauncher seam. `consider` is the one entry point main/ipc.ts wires to `onTick`.
-import type { BoardSnapshot } from '@/types/board'
-import type { BudgetNote, BudgetStatus, DispatchOwner, DispatcherState, ObservationRecord, RepoDispatchStatus } from '@/types/dispatch'
-import { RUN_TARGET } from '@/types/dispatch'
-import type { RunState } from '@/types/dispatch'
-import type { RepoId } from '@/utils/repos'
-
-import type { SessionKey } from '@/types/hosting'
 import type { ReadyEntry } from '@/types/actions'
-
-import { dispatchableFrom, observableFrom } from '@/main/tick/dispatchable'
-import { KIND_PROMPT_NAMES, STAGE_PROMPT_NAMES } from '@/utils/stage/prompt'
-import { ticketIndex, ticketLabelFor } from '@/utils/tickets/ticket'
-import { runObservationPass } from '@/main/dispatch/observe-pass'
-import { selectDispatches, survived } from '@/main/dispatch/select'
-import { budgetLiveSets, budgetRoute, escalateOverBudget, sumCostUsd } from '@/main/dispatch/budget'
-import { createStageHandoff } from '@/main/dispatch/handoff'
-import type { StageDenial } from '@/types/stage'
-import { boundRecords, endedStagesOf, freeSlots, newStageRecord, refreshRecords, settlingDescriptions, targetOf } from '@/main/dispatch/launch'
-import type { ResolvedItem } from '@/types/github'
-import type { EndedStage, TickActionable } from '@/types/tick'
-import type { InterruptedStage } from '@/types/stage'
+import type { BoardSnapshot } from '@/types/board'
+import type { CreateDispatcherParams, Dispatcher, DispatchOwner, DispatcherState, RepoDispatchStatus, RunState, StageRecord, StageSnapshot } from '@/types/dispatch'
+import { RUN_TARGET } from '@/types/dispatch'
+import type { SessionKey } from '@/types/hosting'
 import type { StagePlanFile } from '@/types/stage-labels'
 import type { StageOutcome } from '@/types/stage-session'
-import { reviewDispatchFacts } from '../../../../../scripts/port-tick/gates'
-import type { ReviewDispatchFacts } from '../../../../../scripts/port-tick/gates'
-import type { Dispatcher, CreateDispatcherParams, StageLaunchFailureCause, StageSnapshot } from '@/types/dispatch'
-import { createRaiser, endedIntents, launchFailedIntent, stageSnapshotOf } from '@/main/incidents/raise'
+import type { EndedStage } from '@/types/tick'
+import type { RepoId } from '@/utils/repos'
+import { dispatchableFrom, observableFrom } from '@/main/pipeline/tick/dispatchable'
+import { createRaiser, endedIntents, stageSnapshotOf } from '@/main/pipeline/incidents/raise'
+import { budgetLiveSets, sumCostUsd } from '@/main/dispatch/budget'
+import { createStageHandoff } from '@/main/dispatch/handoff'
+import { createLaunchSection, survived } from '@/main/dispatch/launch'
+import { runObservationPass } from '@/main/dispatch/observe'
+import { activeOrIdle, boundRecords, emptyRepoState, endedStagesOf, liveStageSessionsOf, liveStagesOf, ownerOf, selectDispatches, stageLivenessOf, statusOf, syncChanges } from '@/main/dispatch/records'
+import type { RepoDispatcherState } from '@/main/dispatch/records'
 
 const RECENT_LIMIT = 20
-const NOTE_LIMIT = 20
-
-/** The text the stage session's first message opens with; port has already moved the label, so no agent step names one. */
-export const DISPATCH_PROMPT = '<Stage> stage for <kind> #<n>. Run your pipeline stage for #<n>. port has already moved its label. Follow your Pre-flight, Work, and Handoff steps exactly.'
-export const REFRESH_PROMPT = 'Refresh stage for pull request #<n>. Run your pipeline stage for pull request #<n> in refresh mode.'
-
-/** `launch.ts`'s own `StageLaunchRequest.prompt` is filled from this, never re-derived at the launcher. */
-export function promptFor(actionable: Pick<TickActionable, 'trigger' | 'number' | 'agent' | 'kind'>): string {
-  const n = String(actionable.number)
-  if (actionable.trigger === 'refreshBranch') return REFRESH_PROMPT.replaceAll('<n>', n)
-  return DISPATCH_PROMPT.replaceAll('<Stage>', STAGE_PROMPT_NAMES[actionable.agent]).replaceAll('<kind>', KIND_PROMPT_NAMES[actionable.kind]).replaceAll('<n>', n)
-}
-
-interface RepoDispatcherState {
-  records: readonly StageRecord[]
-  owner: DispatchOwner
-  dispatcherState: DispatcherState
-  runState: RunState
-  ownedSince: string | null
-  unreadableMessage: string | null
-  budgetReset: boolean
-  budgetHolds: Map<number, number>
-  budget: BudgetStatus | null
-  observed: ObservationRecord[]
-  observedWriteAt: Map<number, string>
-}
-
-function emptyRepoState(): RepoDispatcherState {
-  return {
-    records: [],
-    owner: 'none',
-    dispatcherState: { kind: 'idle' },
-    runState: 'paused',
-    ownedSince: null,
-    unreadableMessage: null,
-    budgetReset: false,
-    budgetHolds: new Map(),
-    budget: null,
-    observed: [],
-    observedWriteAt: new Map(),
-  }
-}
-
-function ownerOf(ownership: OwnershipRead): DispatchOwner {
-  return ownership.kind === 'absent' ? 'none' : ownership.kind
-}
 
 export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   const repoStates = new Map<RepoId, RepoDispatcherState>()
@@ -88,6 +30,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   // Serializes every repository's own launch section so two repositories never race for the same free slot.
   let launchQueue: Promise<void> = Promise.resolve()
   const handoff = createStageHandoff({ write: (p) => deps.stageLabels.transition({ ...p, snapshot: snapshotOf(p.entry.id, p.record.number) }), auditDir: deps.dirs.audit, scratchDir: deps.dirs.scratch, onChange: deps.onChange, recordIncident: deps.recordIncident, requestRead: deps.requestRead, now: deps.now })
+  const launching = createLaunchSection({ deps, raise, isStopped: () => stopped, serialize, report, recordsOf, itemsOf: (repoId) => snapshotRepoState(repoId)?.items ?? [] })
 
   function serialize<T>(fn: () => Promise<T>): Promise<T> {
     const result = launchQueue.then(fn)
@@ -106,9 +49,9 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     return created
   }
 
-  function pushRecord(repoId: RepoId, record: StageRecord): void {
-    const state = stateFor(repoId)
-    state.records = boundRecords([...state.records, record], RECENT_LIMIT)
+  /** The repository's newest runs as the loop reads them, never more than `RECENT_LIMIT`. */
+  function recordsOf(repoId: RepoId): readonly StageRecord[] {
+    return boundRecords(deps.runs.records(repoId), RECENT_LIMIT)
   }
 
   function report(repoId: RepoId, owner: DispatchOwner, dispatcherState: DispatcherState, runState: RunState): void {
@@ -119,52 +62,36 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     deps.onChange()
   }
 
-  function activeOrIdle(repoId: RepoId): DispatcherState {
-    const records = stateFor(repoId).records
-    return records.length > 0
-      ? { kind: 'active', recent: records.map((r) => ({ agent: r.agent, number: r.number, kind: r.kind, trigger: r.trigger, state: r.state, at: r.at, detail: r.detail, outcome: r.outcome, sessionKey: r.sessionKey, claudeSessionId: r.claudeSessionId, operatorJoinedAt: r.operatorJoinedAt })) }
-      : { kind: 'idle' }
-  }
-
   function recordOutcome(repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome, plan: StagePlanFile | null): void {
-    const state = repoStates.get(repoId)
-    if (state === undefined) return
-    const idx = state.records.findIndex((r) => r.sessionKey === sessionKey)
-    if (idx === -1) return
-    const next = [...state.records]
-    // Never reassigned, so a non-null `Infinity`-bounds index access stays well-typed.
-    const existing = next[idx]
+    const records = deps.runs.records(repoId)
+    const existing = records.find((r) => r.sessionKey === sessionKey)
     if (existing === undefined) return
-    next[idx] = { ...existing, outcome }
-    state.records = next
     for (const intent of endedIntents(existing, outcome, deps.now().getTime())) raise(repoId, existing, intent, { kind: outcome.kind })
     deps.onChange()
     // A newer session on the same ticket owns it now, so this older outcome writes no label.
-    if (next.some((r) => r.number === existing.number && r.state === 'started' && r.at > existing.at)) return
+    if (records.some((r) => r.number === existing.number && r.state === 'started' && r.at > existing.at)) return
     handoff.settle(repoId, { ...existing, sessionKey }, outcome, plan)
   }
-  /** A resumed session settles labels like a launched one; it joins the records as `started`. */
-  function trackResumed(repoId: RepoId, sessionKey: SessionKey, entry: InterruptedStage): void {
-    pushRecord(repoId, newStageRecord(entry, 'started', deps.now().toISOString(), sessionKey, null))
-  }
   function recordResumedTurn(repoId: RepoId, sessionKey: SessionKey): void {
-    const record = repoStates.get(repoId)?.records.find((r) => r.sessionKey === sessionKey)
+    const record = deps.runs.records(repoId).find((r) => r.sessionKey === sessionKey)
     if (record !== undefined) handoff.resumedTurn(repoId, { ...record, sessionKey })
   }
   function holdsSessionRequired(repoId: RepoId): boolean {
     return stateFor(repoId).owner !== 'app'
   }
-  function recordDenial(repoId: RepoId, denial: StageDenial): void {
-    deps.denials.record(denial)
-    deps.onChange()
-  }
   function dismissDenial(repoId: RepoId, id: string): void {
-    deps.denials.dismiss(repoId, id)
-    deps.onChange()
+    void deps.runs.dismissDenial(repoId, id).then(deps.onChange)
   }
   function clearDenialsFor(repoId: RepoId, rule: string): void {
-    deps.denials.clearRule(repoId, rule)
-    deps.onChange()
+    void deps.runs.clearRule(repoId, rule).then(deps.onChange)
+  }
+
+  /** Ends the runs whose sessions are gone and records an operator joining one, so the loop reads what the hosted sessions say. */
+  async function syncRuns(repoId: RepoId): Promise<void> {
+    for (const { runId, change } of syncChanges(deps.runs.records(repoId), (sessionKey) => deps.store.snapshotOf(sessionKey))) {
+      if (change.kind === 'joined') await deps.runs.joined(repoId, runId, change.at)
+      else if (change.kind === 'ended') await deps.runs.ended(repoId, runId, null)
+    }
   }
 
   /** A request made during a pass is coalesced into one follow-up pass on the newest snapshot, never dropped. */
@@ -188,22 +115,23 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     const viewer = snapshotRepoState(entry.id)?.viewer ?? null
     try {
       const runState = deps.runState(entry.id)
-      let ownership = await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
+      let ownership = await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo })
 
       // A persisted run/draining state with an absent record means the app restarted; it takes
       // ownership back rather than sitting idle until the operator clicks Run again.
       if (ownership.kind === 'absent' && (runState === RUN_TARGET.run || runState === RUN_TARGET.drain)) {
-        const taken = await deps.takeOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
-        if (taken.ok) ownership = await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
+        const taken = await deps.takeOwnership({ repoRoot: entry.path, repo: entry.config.repo })
+        if (taken.ok) ownership = await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo })
       }
 
       const owner = ownerOf(ownership)
       const state = stateFor(entry.id)
-      state.ownedSince = ownership.kind === 'app' || ownership.kind === 'terminal' ? ownership.since : null
+      state.ownedSince = ownership.kind === 'app' ? ownership.since : null
       state.unreadableMessage = ownership.kind === 'unreadable' ? ownership.message : null
-      state.records = refreshRecords(state.records, (sessionKey) => deps.store.snapshotOf(sessionKey), deps.now().toISOString())
+      await syncRuns(entry.id)
+      const records = recordsOf(entry.id)
 
-      const anyLive = state.records.some((r) => r.state === 'started')
+      const anyLive = records.some((r) => r.state === 'started')
       if (entry.config.commands.budget !== null && (owner === 'app' || anyLive)) {
         if (!state.budgetReset) {
           const resetResult = await deps.budget.reset(entry)
@@ -215,9 +143,9 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
           }
         }
         if (state.budgetReset) {
-          const sets = budgetLiveSets(state.records)
+          const sets = budgetLiveSets(records)
           const sweepResult = await deps.budget.sweep(entry, sets)
-          state.budget = { line: sweepResult.line, problem: sweepResult.problem, notes: state.budget?.notes ?? [], costUsd: sumCostUsd(state.records) }
+          state.budget = { line: sweepResult.line, problem: sweepResult.problem, notes: state.budget?.notes ?? [], costUsd: sumCostUsd(records) }
         }
       }
 
@@ -227,10 +155,15 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       }
 
       handoff.remember(entry)
+      // A hand-back the last boot found finished but unwritten settles once, from the run alone.
+      if (!state.replayed) {
+        state.replayed = true
+        for (const unsettled of deps.runs.unsettled(entry.id)) handoff.settle(entry.id, unsettled.record, unsettled.outcome, null)
+      }
       await handoff.retryPending(entry.id)
 
       if (tick === undefined || tick.blind !== null || viewer === null) {
-        report(entry.id, owner, activeOrIdle(entry.id), runState)
+        report(entry.id, owner, activeOrIdle(records), runState)
         return
       }
 
@@ -253,11 +186,11 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       }
 
       const dispatchable = dispatchableFrom(tick, runState)
-      const liveNumbers = new Set(state.records.filter((r) => r.state === 'started').map((r) => r.number))
+      const liveNumbers = new Set(records.filter((r) => r.state === 'started').map((r) => r.number))
       const notAlreadyLive = dispatchable.filter((c) => !liveNumbers.has(c.number))
-      const candidates = selectDispatches({ dispatchable: notAlreadyLive, recent: state.records, now: deps.now() })
+      const candidates = selectDispatches({ dispatchable: notAlreadyLive, recent: records, now: deps.now() })
       if (candidates.length === 0) {
-        report(entry.id, owner, activeOrIdle(entry.id), runState)
+        report(entry.id, owner, activeOrIdle(records), runState)
         return
       }
 
@@ -272,143 +205,17 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       const resolvedByNumber = new Map(reread.resolved.map((r) => [r.number, r] as const))
       const survivors = candidates.filter((c) => {
         const resolved = resolvedByNumber.get(c.number)
-        return resolved !== undefined && !reread.unavailable.includes(c.number) && survived(resolved, c, entry.config.vocabulary, viewer, deps.stateLabels?.(entry.id, c.kind, c.number, entry.config.vocabulary) ?? null)
+        return resolved !== undefined && !reread.unavailable.includes(c.number) && survived(resolved, c, entry.config.vocabulary, viewer, deps.stateLabels(entry.id, c.kind, c.number, entry.config.vocabulary))
       })
       if (survivors.length === 0) {
-        report(entry.id, owner, activeOrIdle(entry.id), runState)
+        report(entry.id, owner, activeOrIdle(records), runState)
         return
       }
 
-      await launchSurvivors(entry, survivors, resolvedByNumber, state, owner, runState, viewer)
+      await launching.launchSurvivors({ entry, survivors, resolvedByNumber, state, owner, runState, viewer })
     } finally {
       inFlight.delete(entry.id)
     }
-  }
-
-  async function launchSurvivors(entry: ReadyEntry, survivors: readonly TickActionable[], resolvedByNumber: ReadonlyMap<number, ResolvedItem>, state: RepoDispatcherState, owner: DispatchOwner, runState: RunState, viewer: string): Promise<void> {
-    const launch = deps.launch
-    if (launch === null) return
-
-    let gated: readonly TickActionable[] = survivors
-    const notes: BudgetNote[] = []
-    if (entry.config.commands.budget !== null) {
-      const kept: TickActionable[] = []
-      for (const candidate of survivors) {
-        const result = await deps.budget.check(entry, candidate, entry.config.models[candidate.agent])
-        if (!result.ok) {
-          notes.push({ kind: 'gate-failed', number: candidate.number, message: result.message })
-          continue
-        }
-        const priorHolds = state.budgetHolds.get(candidate.number) ?? 0
-        const route = budgetRoute(result.verdict, priorHolds)
-        if (route.holds === 0) state.budgetHolds.delete(candidate.number)
-        else state.budgetHolds.set(candidate.number, route.holds)
-
-        if (route.action === 'dispatch') {
-          kept.push(candidate)
-          if (priorHolds > 0) notes.push({ kind: 'held-dispatched', number: candidate.number })
-          continue
-        }
-        if (route.action === 'hold') {
-          notes.push({ kind: 'held', number: candidate.number, line: result.line })
-          continue
-        }
-        const item = candidate.kind === 'pull-request' ? snapshotRepoState(entry.id)?.items.find((i) => i.number === candidate.number) : undefined
-        await escalateOverBudget({ entry, candidate, line: result.line, notes, viewer, item, escalate: deps.escalate, dirs: deps.dirs })
-      }
-      gated = kept
-      state.budget = { line: state.budget?.line ?? null, problem: state.budget?.problem ?? null, costUsd: state.budget?.costUsd ?? null, notes: notes.length > NOTE_LIMIT ? notes.slice(notes.length - NOTE_LIMIT) : notes }
-    }
-
-    if (gated.length === 0) {
-      report(entry.id, owner, activeOrIdle(entry.id), runState)
-      return
-    }
-
-    const index = ticketIndex(snapshotRepoState(entry.id)?.items ?? [])
-    let waiting = 0
-    await serialize(async () => {
-      const limit = (await deps.store.capacity()).limit
-      for (const candidate of gated) {
-        if (stopped) break
-        if (deps.runState(entry.id) !== RUN_TARGET.run) {
-          waiting += 1
-          continue
-        }
-        const free = freeSlots(limit, deps.store.list())
-        if (free <= 0) {
-          waiting += 1
-          continue
-        }
-        let review: ReviewDispatchFacts | null = null
-        if (candidate.agent === 'review') {
-          if (candidate.cycle === null) {
-            const message = `Couldn't count the earlier reviews on pull request #${candidate.number}, so the review wasn't started.`
-            pushRecord(entry.id, newStageRecord(candidate, 'failed', deps.now().toISOString(), null, message))
-            continue
-          }
-          review = reviewDispatchFacts({ priorReviews: candidate.cycle.count, author: resolvedByNumber.get(candidate.number)?.author ?? null, viewer })
-        }
-        const claimed = await claim(entry, candidate, resolvedByNumber.get(candidate.number))
-        if (!claimed) continue
-        try {
-          const result = await launch.launch({
-            entry,
-            agent: candidate.agent,
-            number: candidate.number,
-            kind: candidate.kind,
-            trigger: candidate.trigger,
-            model: entry.config.models[candidate.agent],
-            prompt: promptFor(candidate),
-            title: ticketLabelFor(index, candidate.number, candidate.kind),
-            target: targetOf(candidate.kind, resolvedByNumber.get(candidate.number)),
-            review,
-          })
-          const at = deps.now().toISOString()
-          if (result.ok) {
-            if (stopped) {
-              void deps.store.close(result.sessionKey)
-              continue
-            }
-            pushRecord(entry.id, newStageRecord(candidate, 'started', at, result.sessionKey, null))
-            deps.ledger.record(entry.id, candidate.number)
-            deps.forceDispatch.clear(entry.id, candidate.number)
-          } else if (result.kind === 'at-capacity') {
-            await rollback(entry, candidate)
-            waiting += 1
-          } else {
-            await launchFailed(entry, candidate, result.cause, result.message, true)
-          }
-        } catch (error) {
-          await launchFailed(entry, candidate, 'threw', error instanceof Error ? error.message : String(error), true)
-        }
-      }
-    })
-
-    const limit = (await deps.store.capacity()).limit
-    if (waiting > 0) report(entry.id, owner, { kind: 'at-capacity', limit, waiting }, runState)
-    else report(entry.id, owner, activeOrIdle(entry.id), runState)
-  }
-
-  /** Trigger → in-flight before the session exists. `moved` skips silently, since the next read shows the truth; any other refusal is a launch failure. */
-  async function claim(entry: ReadyEntry, candidate: TickActionable, resolved: ResolvedItem | undefined): Promise<boolean> {
-    if (resolved === undefined) return false
-    const result = await deps.stageLabels.claim({ entry, candidate, resolved, auditDir: deps.dirs.audit })
-    if (result.kind === 'applied') return true
-    if (result.reason !== 'moved') await launchFailed(entry, candidate, `claim-${result.reason}`, `port couldn't move the label before starting: ${result.reason}${result.detail === null ? '' : ` (${result.detail})`}`, false)
-    return false
-  }
-
-  /** A launch that never produced a session: undoes the claim when it made one, records the failure and raises its incident. */
-  async function launchFailed(entry: ReadyEntry, candidate: TickActionable, cause: StageLaunchFailureCause | `claim-${string}`, message: string, undo: boolean): Promise<void> {
-    if (undo) await rollback(entry, candidate)
-    pushRecord(entry.id, newStageRecord(candidate, 'failed', deps.now().toISOString(), null, message))
-    raise(entry.id, candidate, launchFailedIntent(candidate, cause), { kind: 'failed' })
-  }
-
-  /** Undoes a claim whose launch failed; a refused rollback is left to the stall ladder. */
-  async function rollback(entry: ReadyEntry, candidate: TickActionable): Promise<void> {
-    await deps.stageLabels.transition({ entry, record: candidate, event: { kind: 'rollback' }, auditDir: deps.dirs.audit, scratchDir: deps.dirs.scratch })
   }
 
   // The most recent consider() call's own snapshot, the one a pass reads when it starts.
@@ -429,47 +236,22 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   }
 
   function status(): readonly RepoDispatchStatus[] {
-    return [...repoStates.entries()].map(([repoId, s]) => ({
-      repoId,
-      owner: s.owner,
-      state: s.dispatcherState,
-      runState: s.runState,
-      ownedSince: s.ownedSince,
-      unreadableMessage: s.unreadableMessage,
-      budget: s.budget,
-      observed: s.observed,
-      denials: deps.denials.list(repoId),
-      interrupted: deps.interrupted?.(repoId) ?? [],
-    }))
+    return statusOf(repoStates, (repoId) => deps.runs.denials(repoId), (repoId) => deps.runs.list(repoId))
   }
-
   function liveStages(repoId: RepoId): readonly string[] {
-    const state = repoStates.get(repoId)
-    if (state === undefined) return []
-    return state.records.filter((r) => r.state === 'started').map((r) => `${r.agent} #${String(r.number)}`)
+    return liveStagesOf(deps.runs.records(repoId))
   }
   function stageLiveness(repoId: RepoId): { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null {
-    if (stateFor(repoId).owner !== 'app') return null
-    const settling = settlingDescriptions(repoStates.get(repoId)?.records ?? [], handoff.pendingNumbers(repoId), deps.now())
-    return { live: [...liveStages(repoId), ...settling], interrupted: (deps.interrupted?.(repoId) ?? []).map((i) => `${i.agent} #${String(i.number)}`) }
+    return stageLivenessOf(stateFor(repoId), deps.runs.records(repoId), handoff.pendingNumbers(repoId), deps.runs.list(repoId), deps.now())
   }
   function endedStages(repoId: RepoId): readonly EndedStage[] {
-    return endedStagesOf(repoStates.get(repoId)?.records ?? [], (sessionKey) => handoff.resultFor(sessionKey))
+    return endedStagesOf(deps.runs.records(repoId), (sessionKey) => handoff.resultFor(sessionKey))
   }
-  function liveStageSessions(): readonly StageSessionSummary[] {
-    const summaries: StageSessionSummary[] = []
-    for (const [repoId, state] of repoStates.entries()) {
-      const repoName = repoNames.get(repoId) ?? String(repoId)
-      for (const record of state.records) {
-        if (record.state === 'started') summaries.push({ agent: record.agent, number: record.number, trigger: record.trigger, repoName })
-      }
-    }
-    return summaries
+  function liveStageSessions() {
+    return liveStageSessionsOf([...repoStates.keys()], (repoId) => deps.runs.records(repoId), (repoId) => repoNames.get(repoId) ?? String(repoId))
   }
   async function stopFor(repoId: RepoId, number: number): Promise<boolean> {
-    const state = repoStates.get(repoId)
-    if (state === undefined) return false
-    const record = state.records.find((r) => r.number === number && r.state === 'started' && r.sessionKey !== null)
+    const record = deps.runs.records(repoId).find((r) => r.number === number && r.state === 'started' && r.sessionKey !== null)
     if (record === undefined || record.sessionKey === null) return false
     const result = await deps.store.close(record.sessionKey)
     if (result.ok) deps.onChange()
@@ -477,9 +259,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   }
 
   async function standDown(repoId: RepoId): Promise<boolean> {
-    const state = repoStates.get(repoId)
-    if (state === undefined) return false
-    const live = state.records.filter((r): r is StageRecord & { sessionKey: SessionKey } => r.state === 'started' && r.sessionKey !== null)
+    const live = deps.runs.records(repoId).filter((r): r is StageRecord & { sessionKey: SessionKey } => r.state === 'started' && r.sessionKey !== null)
     if (live.length === 0) return false
     let allOk = true
     for (const record of live) {
@@ -494,5 +274,5 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     stopped = true
   }
 
-  return { consider, status, stopFor, standDown, liveStages, stageLiveness, endedStages, liveStageSessions, shutdown, recordOutcome, recordResumedTurn, trackResumed, holdsSessionRequired, recordDenial, dismissDenial, clearDenialsFor }
+  return { consider, status, stopFor, standDown, liveStages, stageLiveness, endedStages, liveStageSessions, shutdown, recordOutcome, recordResumedTurn, holdsSessionRequired, dismissDenial, clearDenialsFor }
 }

@@ -4,7 +4,7 @@
 // extraResources), and fails the build the moment any of them bundles an
 // excluded SDK platform binary or is missing the positive control that
 // proves the listing actually saw the packaged app. Every release asar's
-// main-process JS is also scanned for fixture data.
+// main-process JS is also scanned for fixture data and the E2E route.
 //
 // Direction: fails closed (docs/ENGINEERING.md §4, "An absent signal is
 // never read as a passing one") — a listing that cannot be read, or that
@@ -14,7 +14,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, relative, sep } from 'node:path'
 import { extractFile, listPackage } from '@electron/asar'
-import { appUpdateConfigGaps, asarArchivePath, auditEntries, fixtureLeaks, readSdkManifest, sdkPlatformPackages, updateMetadataGaps } from './bundle-audit.mjs'
+import { appUpdateConfigGaps, asarArchivePath, auditEntries, e2eLeaks, fixtureLeaks, readSdkManifest, sdkPlatformPackages, updateMetadataGaps } from './bundle-audit.mjs'
 
 const distDir = join(import.meta.dirname, '../dist')
 const SMOKE_DIR = 'smoke'
@@ -117,6 +117,10 @@ for (const asarPath of asarFiles) {
   for (const leak of fixtureLeaks(files)) {
     failed = true
     console.error(`bundle audit: FAIL — ${asarPath} carries fixture data in ${leak}`)
+  }
+  for (const leak of e2eLeaks(files)) {
+    failed = true
+    console.error(`bundle audit: FAIL — ${asarPath} carries the E2E route in ${leak}`)
   }
   scannedForFixtures += 1
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { BUCKET_TONE, groupRows, recordRow } from '@/renderer/incidents/model'
-import { BUCKET_LABEL, exportedToast, failureCopy, footnotes } from '@/renderer/incidents/copy'
+import { BUCKET_TONE, exportToast, groupRows, recordRow } from '@/renderer/incidents/model'
+import { BUCKET_LABEL, footnotes } from '@/renderer/incidents/copy'
 import { INCIDENT_BUCKETS, type IncidentGroup, type IncidentRecord } from '@/types/incidents'
 
 const GROUP: IncidentGroup = {
@@ -52,19 +52,23 @@ describe('recordRow', () => {
   })
 })
 
-describe('copy', () => {
-  it('states what a failed read means', () => {
-    expect(failureCopy('too-large', '')).toContain('incidents.jsonl')
-    expect(failureCopy('io', 'EIO')).toBe("Couldn't read the incident log: EIO")
+describe('footnotes', () => {
+  it.each([
+    [1, null, 1],
+    [0, { count: 3, through: 't' }, 1],
+    [2, { count: 3, through: 't' }, 2],
+    [0, null, 0],
+  ] as const)('counts a note per cause for %j malformed and %j pruned', (malformed, pruned, notes) => {
+    expect(footnotes(malformed, pruned)).toHaveLength(notes)
   })
+})
 
-  it('footnotes unreadable lines and dropped older incidents', () => {
-    expect(footnotes(1, null)).toEqual(["1 line couldn't be read and aren't shown."])
-    expect(footnotes(0, { count: 3, through: 't' })).toEqual(['3 older incidents were dropped to stay within 90 days and 32 MB.'])
-    expect(footnotes(0, null)).toEqual([])
-  })
-
-  it('names the exported file, not its folder', () => {
-    expect(exportedToast('/home/op/port-incidents-2026-11-17.json')).toBe('Exported incidents to port-incidents-2026-11-17.json.')
+describe('exportToast', () => {
+  it.each([
+    ['a written file', { ok: true, path: '/home/op/incidents.json' }, 'success'],
+    ['a write error', { ok: false, kind: 'io', message: 'disk full' }, 'error'],
+    ['a cancelled save', { ok: false, kind: 'cancelled' }, null],
+  ] as const)('maps %s', (_label, result, tone) => {
+    expect(exportToast(result)?.tone ?? null).toBe(tone)
   })
 })

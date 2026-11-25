@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dropAdopted, mintRestorable, nextPersisted, persistedOpen } from '@/main/hosting/restore'
+import { dropAdopted, mintRestorable, nextPersisted, persistedOpen } from '@/main/sessions/hosting/restore'
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import type { SessionControls, SessionModels } from '@/utils/hosting/controls'
 import type { RepoId } from '@/utils/repos'
@@ -24,7 +24,7 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     end: null,
     titled: null,
     pendingPermissions: [],
-    capabilities: { kind: 'pending', request: { source: 'installed' } },
+    capabilities: { kind: 'pending' },
     title: 'Fix the thing',
     rateLimit: null,
     controls: TEST_CONTROLS,

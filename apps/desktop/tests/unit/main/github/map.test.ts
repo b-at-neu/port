@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyItemDetails, applyItemStates, mapPipelineItems } from '@/main/github/map'
+import { applyItemDetails, mapPipelineItems } from '@/main/github/map'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 
 const VOCABULARY = resolveVocabulary({})
@@ -207,21 +207,5 @@ describe('applyItemDetails', () => {
   it('leaves an item with no detail on its placeholders', () => {
     const swept = mapPulls([pullNode()])
     expect(applyItemDetails(swept, [])).toEqual(swept)
-  })
-})
-
-describe('applyItemStates', () => {
-  it('mergedAt is null on the open sweep and populated from a fetchItemStates node', () => {
-    const items = mapPulls([pullNode()])
-    expect(items[0]?.mergedAt).toBeNull()
-
-    const updated = applyItemStates(items, [{ kind: 'pull-request', number: 5, state: 'MERGED', mergedAt: '2026-01-01T00:00:00Z', closedAt: '2026-01-01T00:00:00Z', url: 'u' }])
-    expect(updated[0]?.mergedAt).toBe('2026-01-01T00:00:00Z')
-    expect(updated[0]?.state).toBe('MERGED')
-  })
-
-  it('leaves an item unchanged when no matching state was returned', () => {
-    const items = mapIssues([issueNode({ title: '' })])
-    expect(applyItemStates(items, [])).toEqual(items)
   })
 })

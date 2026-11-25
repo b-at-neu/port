@@ -4,7 +4,7 @@ import { access, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
-import { createHostedStore, defaultHostedStoreDeps } from '@/main/hosting/store'
+import { createHostedStore, defaultHostedStoreDeps } from '@/main/sessions/hosting/store'
 import type { RepoId } from '@/utils/repos'
 import type { HostedSessionSnapshot, PendingPermission, SessionEntriesDelta, SessionKey } from '@/types/hosting'
 import type { SessionWorkspace } from '@/types/workspace'
@@ -150,7 +150,6 @@ describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1
       expect(loaded.plugin.path).toBe(join(cwd, 'plugins', 'port'))
       expect(typeof loaded.plugin.version).toBe('string')
     }
-    expect(loaded.components).toEqual({ kind: 'complete' })
 
     await store.close(sessionKey)
     await store.closeAll()

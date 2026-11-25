@@ -8,12 +8,12 @@ import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { useIpcQuery } from '@/renderer/data/query'
-import { invoke } from '@/renderer/data/invoke'
+import { useActionMutation } from '@/renderer/actions/use-action-mutation'
 import type { RepositoryEntry } from '@/utils/repos'
 import type { FolderEntry, FolderId } from '@/types/workspace'
-import { closeNewSessionDialog, useNewSessionDialog } from '@/renderer/shell/stores'
+import { closeNewSessionDialog, useNewSessionDialog } from '@/renderer/app/stores'
 import { effectiveWorktree, initialFolderId, orderFolders, worktreeControl, worktreeHint } from '@/renderer/session/new-session-model'
-import { startInFolder } from '@/renderer/session/actions'
+import { useStartInFolder } from '@/renderer/session/actions'
 import type { RenderableStartFailure } from '@/types/session'
 import { NEW_SESSION_CANCEL, NEW_SESSION_CHOOSE_FOLDER, NEW_SESSION_DIALOG_TITLE, NEW_SESSION_EMPTY_LINE, NEW_SESSION_FOLDERS_FAILED, NEW_SESSION_START, NEW_SESSION_STARTING, NEW_SESSION_WORKTREE_LABEL } from '@/renderer/session/copy'
 
@@ -34,16 +34,17 @@ function slugFor(repos: readonly RepositoryEntry[] | undefined, folder: FolderEn
 }
 
 function NewSessionDialogContent({ preselect }: { readonly preselect: Parameters<typeof initialFolderId>[1] }) {
-  const folders = useIpcQuery('folders:list')
-  const sessions = useIpcQuery('session:list')
-  const repos = useIpcQuery('repos:list')
+  const folders = useIpcQuery('folders.list')
+  const sessions = useIpcQuery('session.list')
+  const repos = useIpcQuery('repos.list')
   const list = folders.data?.folders ?? []
   const { repos: repoFolders, recents } = orderFolders(list)
 
   const [userSelectedId, setSelectedId] = useState<FolderId | null>(null)
   const [userChecked, setUserChecked] = useState(false)
   const [busyOverride, setBusyOverride] = useState(false)
-  const [pending, setPending] = useState(false)
+  const { start, pending } = useStartInFolder()
+  const choose = useActionMutation('folders.choose')
   const [failure, setFailure] = useState<{ readonly title: string; readonly body: string; readonly detail: string | null } | null>(null)
 
   const selectedId = userSelectedId ?? initialFolderId(list, preselect)
@@ -60,8 +61,8 @@ function NewSessionDialogContent({ preselect }: { readonly preselect: Parameters
   }
 
   async function chooseFolder(): Promise<void> {
-    const result = await invoke('folders:choose')
-    if (result.outcome === 'chosen') {
+    const result = await choose.perform(undefined)
+    if (result !== 'unreachable' && result.outcome === 'chosen') {
       void folders.refetch()
       selectFolder(result.folder.id)
     }
@@ -69,10 +70,8 @@ function NewSessionDialogContent({ preselect }: { readonly preselect: Parameters
 
   async function handleStart(): Promise<void> {
     if (selected === null) return
-    setPending(true)
     setFailure(null)
-    const outcome = await startInFolder(selected.id, checked)
-    setPending(false)
+    const outcome = await start(selected.id, checked)
     if (outcome.kind === 'started') {
       closeNewSessionDialog()
       return

@@ -4,10 +4,10 @@ import { useState } from 'react'
 import { Textarea } from '@/renderer/components/ui/textarea'
 import { Button } from '@/renderer/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/renderer/components/ui/collapsible'
-import { invoke } from '@/renderer/data/invoke'
+import { useActionMutation } from '@/renderer/actions/use-action-mutation'
 import type { AgentSummary, CommandSummary, HostedSessionSnapshot, SessionKey } from '@/types/hosting'
-import { argumentRequired, bannerCopy, chipCopy, INVOKE_REJECTED, invokeFailureCopy } from '@/renderer/session/commands-copy'
-import { AGENTS_DISCLOSURE_NOTE } from '@/renderer/session/composer-copy'
+import { AGENTS_DISCLOSURE_NOTE, bannerCopy, chipCopy, INVOKE_REJECTED, invokeFailureCopy } from '@/renderer/session/copy'
+import { argumentRequired } from '@/renderer/session/model'
 
 interface OpenRow {
   readonly commandName: string
@@ -17,25 +17,23 @@ interface OpenRow {
 export function CommandStrip({ snapshot }: { readonly snapshot: HostedSessionSnapshot }) {
   const [openRow, setOpenRow] = useState<OpenRow | null>(null)
   const [invokeFailure, setInvokeFailure] = useState<string | null>(null)
+  const invokeCommand = useActionMutation('session.invoke')
 
   if (snapshot.phase === 'ended') return null
 
   const { capabilities } = snapshot
-  const chipTitle = capabilities.kind === 'ready' && (capabilities.plugin.kind === 'loaded' || capabilities.plugin.kind === 'shadowed') ? capabilities.plugin.path : undefined
+  const chipTitle = capabilities.kind === 'ready' && capabilities.plugin.kind === 'loaded' ? capabilities.plugin.path : undefined
   const banner = bannerCopy(capabilities)
 
   async function run(sessionKey: SessionKey, name: string, args: string): Promise<void> {
-    try {
-      const result = await invoke('session:invoke', { sessionKey, name, args })
-      if (!result.ok) {
-        setInvokeFailure(invokeFailureCopy(name, result))
-      } else {
-        setInvokeFailure(null)
-        setOpenRow((row) => (row?.commandName === name ? null : row))
-      }
-    } catch (error) {
-      console.error('Failed to reach the main process invoking a command', error)
+    const result = await invokeCommand.perform({ sessionKey, name, args })
+    if (result === 'unreachable') {
       setInvokeFailure(INVOKE_REJECTED)
+    } else if (!result.ok) {
+      setInvokeFailure(invokeFailureCopy(name, result))
+    } else {
+      setInvokeFailure(null)
+      setOpenRow((row) => (row?.commandName === name ? null : row))
     }
   }
 

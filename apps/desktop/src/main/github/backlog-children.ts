@@ -1,22 +1,19 @@
 // The Backlog's per-epic children read: one aliased `issue(number:)` lookup per epic kept in the list.
-import { githubHttp } from '@/main/platform/github-http'
-import type { GitHubTransport } from '@/types/platform'
+import type { GitHubReadContext } from '@/main/github/context'
 import type { BacklogChild, ChildrenRead } from '@/types/backlog'
 import type { GitHubRepoRef, GraphQLErrorEntry } from '@/types/github'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
-import { fieldListOf } from '@/main/github/map'
 import { toChildBlockerRead } from '@/main/github/blockers'
 import { blockedByField } from '@/main/github/query'
 import { repoGraphqlRequest } from '@/main/github/request'
 
 const CHILD_PAGE_SIZE = 50
-const CHILD_LABEL_PAGE_SIZE = 20
 const CHILD_BLOCKER_PAGE_SIZE = 10
 
 export const EMPTY_CHILDREN: ChildrenRead = { ok: true, children: [], shown: 0, total: 0 }
 
 export function buildChildrenQuery(numbers: readonly number[]): string {
-  const child = `number title state labels(first: ${CHILD_LABEL_PAGE_SIZE}) { nodes { name } } ${blockedByField(CHILD_BLOCKER_PAGE_SIZE)}`
+  const child = `number title state ${blockedByField(CHILD_BLOCKER_PAGE_SIZE)}`
   const fields = numbers.map((number, idx) => `  e${String(idx)}: issue(number: ${String(number)}) { subIssues(first: ${String(CHILD_PAGE_SIZE)}) { totalCount nodes { ${child} } } }`)
   return ['query($owner: String!, $name: String!) {', '  repository(owner: $owner, name: $name) {', ...fields, '  }', '}'].join('\n')
 }
@@ -25,10 +22,7 @@ function failedAll(numbers: readonly number[], reason: string): ReadonlyMap<numb
   return new Map(numbers.map((number) => [number, { ok: false, reason } satisfies ChildrenRead]))
 }
 
-/** `store`: the store's tracked issue numbers. `labels`: the vocabulary names, for a repository the store does not hold. */
-type ClaimedSource = { readonly kind: 'store'; readonly numbers: ReadonlySet<number> } | { readonly kind: 'labels'; readonly names: ReadonlySet<string> }
-
-function childOf(node: unknown, errored: boolean, claimed: ClaimedSource): BacklogChild | null {
+function childOf(node: unknown, errored: boolean, claimed: ReadonlySet<number>): BacklogChild | null {
   if (typeof node !== 'object' || node === null) return null
   const raw = node as Record<string, unknown>
   if (typeof raw.number !== 'number' || (raw.state !== 'OPEN' && raw.state !== 'CLOSED')) return null
@@ -36,12 +30,12 @@ function childOf(node: unknown, errored: boolean, claimed: ClaimedSource): Backl
     number: raw.number,
     title: typeof raw.title === 'string' ? raw.title : '',
     state: raw.state,
-    claimed: claimed.kind === 'store' ? claimed.numbers.has(raw.number) : fieldListOf(raw.labels, 'name').some((name) => claimed.names.has(name)),
+    claimed: claimed.has(raw.number),
     blockers: toChildBlockerRead(raw.blockedBy, errored),
   }
 }
 
-function epicRead(value: unknown, errors: readonly GraphQLErrorEntry[], alias: string, claimed: ClaimedSource): ChildrenRead {
+function epicRead(value: unknown, errors: readonly GraphQLErrorEntry[], alias: string, claimed: ReadonlySet<number>): ChildrenRead {
   const own = errors.filter((error) => error.path?.[0] === 'repository' && error.path[1] === alias)
   const isChildBlockedBy = (path: readonly (string | number)[]): boolean => path.length === 6 && path[2] === 'subIssues' && path[3] === 'nodes' && typeof path[4] === 'number' && path[5] === 'blockedBy'
   const blockerErrored = (index: number): boolean => own.some((error) => isChildBlockedBy(error.path ?? []) && error.path?.[4] === index)
@@ -63,17 +57,15 @@ function epicRead(value: unknown, errors: readonly GraphQLErrorEntry[], alias: s
 interface ChildrenParams {
   readonly repo: GitHubRepoRef
   readonly epics: readonly number[]
-  readonly claimed: ClaimedSource
-  readonly github?: GitHubTransport
+  readonly claimed: ReadonlySet<number>
 }
 
 /** A failure is always per epic and typed, never an empty list; the list read around it stays good. */
-export async function fetchChildren(params: ChildrenParams): Promise<ReadonlyMap<number, ChildrenRead>> {
+export async function fetchChildren(ctx: GitHubReadContext, params: ChildrenParams): Promise<ReadonlyMap<number, ChildrenRead>> {
   const { epics } = params
   if (epics.length === 0) return new Map()
-  const github = params.github ?? githubHttp
 
-  const result = await github(repoGraphqlRequest(buildChildrenQuery(epics), params.repo))
+  const result = await ctx.githubHttp(repoGraphqlRequest(buildChildrenQuery(epics), params.repo))
   const text = bodyOf(result)
   const parsed = text !== undefined ? parseEnvelope(text) : undefined
   const verdict = classifyFailure(result, parsed)

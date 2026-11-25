@@ -6,9 +6,9 @@ import type { ReposListResponse } from '@/types/ipc'
 import type { SessionScan } from '@/types/sessions'
 import type { PipelineFetch } from '@/types/github'
 import type { RepoId } from '@/utils/repos'
-import { reconcileRepository } from '@/main/state/reconcile'
-import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
-import { planTick } from '@/main/tick/plan'
+import { reconcileRepository } from '@/main/pipeline/board/reconcile'
+import { createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
+import { planTick } from '@/main/pipeline/tick/plan'
 import { gadgetsRepositoryState, notReadyRepositoryState, repositoryHealth, widgetsEntry } from './board'
 import { fixtureEmptySessionScan } from './unregistered'
 import { GADGETS_ID, WIDGETS_ID } from './repos'
@@ -59,7 +59,6 @@ export function fixtureFailingBoard(now: Date): BoardSnapshot {
 
   const nextDecisionAt = new Date(now.getTime() + SOURCE_BASE_INTERVAL_MS.github)
   const tickParams = {
-    ledger: createDispatchLedger(),
     unknownStreaks: createUnknownStreaks(),
     nextDecisionAt,
     now: () => now,

@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { createHostingPersistence, DEFAULT_SESSION_LIMIT } from '@/main/hosting/persist'
+import { createHostingPersistence, DEFAULT_SESSION_LIMIT } from '@/main/sessions/hosting/persist'
 import type { HostingPersistedState } from '@/types/hosting'
 import type { RepoId } from '@/utils/repos'
 import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
@@ -128,7 +128,7 @@ describe('createHostingPersistence', () => {
     const persistence = createHostingPersistence({ dir })
     await persistence.load()
     persistence.save({ limit: 4, open: [ENTRY], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
-    await flush()
+    await waitForState(persistence, { limit: 4, open: [ENTRY], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
     const before = await readFile(join(dir, 'hosting.json'), 'utf8')
     persistence.save({ limit: 4, open: [ENTRY], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS, notifications: DEFAULT_NOTIFICATION_PREFS })
     await flush()

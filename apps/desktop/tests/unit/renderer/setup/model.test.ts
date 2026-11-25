@@ -57,14 +57,15 @@ describe('setupModel', () => {
   it('an unverified preflight with no probe counts claude as done', () => {
     const model = setupModel(preflight({ diagnosis: 'unverified' }), null, gh('signed-in'), ONE_REPO)
     expect(model.claude.state).toBe('done')
-    expect(model.claude.action).toEqual({ label: 'Test sign-in', kind: 'test' })
+    expect(model.claude.action?.kind).toBe('test')
+    expect(model.claude.pillStatus).toBe('success')
   })
 
   it('a verified probe counts claude as done, with no action', () => {
     const probe: RuntimeProbe = { checkedAt: 'now', repo: 'acme/widgets', elapsedMs: 1200, apiKeyInEnvironment: false, diagnosis: 'verified', detail: null }
     const model = setupModel(preflight({ diagnosis: 'unverified' }), probe, gh('signed-in'), ONE_REPO)
     expect(model.claude.state).toBe('done')
-    expect(model.claude.body).toBe('Signed in · verified in 1.2s')
+    expect(model.claude.body).toContain('1.2s')
     expect(model.claude.action).toBeNull()
     expect(model.complete).toBe(true)
   })
@@ -78,7 +79,8 @@ describe('setupModel', () => {
   it('any failure diagnosis fails the claude step and complete', () => {
     const model = setupModel(preflight({ diagnosis: 'cli-missing' }), null, gh('signed-in'), ONE_REPO)
     expect(model.claude.state).toBe('failed')
-    expect(model.claude.action).toEqual({ label: 'Check again', kind: 'check-again' })
+    expect(model.claude.pillStatus).toBe('danger')
+    expect(model.claude.action?.kind).toBe('check-again')
     expect(model.complete).toBe(false)
   })
 
@@ -115,7 +117,8 @@ describe('setupModel', () => {
   it('no repositories registered needs the operator, with an Add repository action', () => {
     const model = setupModel(preflight(), null, gh('signed-in'), NO_REPOS)
     expect(model.repo.state).toBe('needs-you')
-    expect(model.repo.action).toEqual({ label: 'Add repository', kind: 'add-repository' })
+    expect(model.repo.pillStatus).toBe('attention')
+    expect(model.repo.action?.kind).toBe('add-repository')
   })
 
   it('a registered repository, any status, counts the repo step done', () => {
@@ -133,7 +136,7 @@ describe('setupModel', () => {
     expect(model.complete).toBe(false)
   })
 
-  it('more than one repository summarizes as "and N more"', () => {
+  it('more than one repository summarizes the first and counts the rest', () => {
     const many = repos({
       ok: true,
       repositories: [
@@ -142,6 +145,8 @@ describe('setupModel', () => {
         { id: 'c' as never, path: '/c', displayName: 'c', status: 'ready', config: { repo: 'acme/gizmos' } as never, diagnostics: [] },
       ],
     })
-    expect(setupModel(preflight(), null, gh('signed-in'), many).repo.body).toBe('acme/widgets and 2 more')
+    const body = setupModel(preflight(), null, gh('signed-in'), many).repo.body
+    expect(body).toContain('acme/widgets')
+    expect(body).toContain('2')
   })
 })

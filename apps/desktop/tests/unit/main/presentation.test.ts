@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { presentWindow, windowPresentation } from '@/main/presentation'
+import { presentWindow, windowPresentation } from '@/main/app/shell/presentation'
 
 const KINDS = ['off', 'ignored', 'invalid', 'on'] as const
 

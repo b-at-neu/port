@@ -1,7 +1,7 @@
 // A `tool_use` block and the `tool_result` that later carries its id collapse into one entry; an unpaired call keeps `result: null` rather than being dropped.
 import type { DiffHunk, DiffLine, DiffSign, EntryPatch, FileDiff, MetaEntry, Payload, ToolCallEntry, TranscriptEntry } from '@/utils/sessions/transcript'
 import { MAX_PAYLOAD_CHARS } from '@/utils/sessions/transcript'
-import { isRecord } from '@/main/guards'
+import { isRecord } from '@/utils/guards'
 import { toolDetailFor } from '@/main/sessions/tool-detail'
 import type { Deriver, DerivedChunk } from '@/types/sessions'
 

@@ -8,6 +8,9 @@ import type { RefreshRequest } from '@/types/state'
 import type { DispatchActions } from '@/types/dispatch'
 import { createDispatchRuntime } from '@/main/dispatch/runtime'
 import { DISPATCH_STORE_DEFAULTS, storeStub } from '../../../fixtures/store'
+import { createFakePlatform } from '../../../support/fake-platform'
+import { memoryRuns } from '../../../support/state-store'
+import { runOf, ticketOf } from '../../../support/tickets'
 
 const REPO_ID = 'repo-a' as RepoId
 const SESSION_KEY = 'hosted-1' as SessionKey
@@ -31,12 +34,21 @@ function fakeStore(overrides: Partial<HostedStore> = {}): HostedStore {
 }
 
 function runtimeDeps(overrides: Partial<Parameters<typeof createDispatchRuntime>[0]> = {}): Parameters<typeof createDispatchRuntime>[0] {
+  const { runs } = memoryRuns(REPO_ID, { tickets: [ticketOf({ repo: REPO_ID, ticket: 52, stage: 'implement' })] })
   return {
+    platform: createFakePlatform(),
     store: fakeStore({ snapshotOf: () => ({ phase: 'ready', end: null }) as unknown as HostedSessionSnapshot }),
-    launch: { launch: () => Promise.resolve({ ok: true, sessionKey: SESSION_KEY }) },
+    runs,
+    launch: {
+      launch: async () => {
+        await runs.start(REPO_ID, runOf({ item: { kind: 'issue', number: 52 }, sessionKey: SESSION_KEY }))
+        return { ok: true, sessionKey: SESSION_KEY }
+      },
+    },
     runState: () => 'dispatching',
     readOwnership: () => Promise.resolve({ kind: 'app', since: '2026-01-01T00:00:00Z', path: 'p', readAt: 'r' }),
     takeOwnership: () => Promise.resolve({ ok: true, path: 'p' }),
+    stateLabels: () => ['plan approved'],
     fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'], headRefName: null, author: null }], unavailable: [], fetchedAt: 'r' }),
     listRepositories: () =>
       Promise.resolve({

@@ -3,7 +3,7 @@ import type { GitHubHttpResult, GitHubRequest, GitHubTransport } from '@/types/p
 import type { ReleaseConfig } from '@/types/release'
 import { fetchReleaseStatus } from '@/main/github/release'
 import { buildStateQuery, stateVariables } from '@/main/github/release-query'
-import { graphqlBodyOf, httpFail, httpOk } from '../../../fixtures/github-http'
+import { githubCtx, graphqlBodyOf, httpFail, httpOk } from '../../../fixtures/github-http'
 
 const CONFIG: ReleaseConfig = { versionSource: 'package', versionFiles: ['package.json'], versionCommand: null, postPublishHook: null }
 const REPO = { owner: 'acme', name: 'widgets' }
@@ -53,8 +53,10 @@ function prCalls(calls: readonly GitHubRequest[]): readonly GitHubRequest[] {
   return calls.filter((call) => graphqlBodyOf(call).query.includes('$base: String!'))
 }
 
-function fetchStatus(scenario: Scenario, overrides: Partial<Parameters<typeof fetchReleaseStatus>[0]> = {}) {
-  return fetchReleaseStatus({ repo: REPO, integration: 'dev', production: 'main', moduleEnabled: true, config: CONFIG, github: runner(scenario), now: NOW, ...overrides })
+const ctxOf = (github: GitHubTransport) => ({ ...githubCtx(github), clock: { now: NOW } })
+
+function fetchStatus(scenario: Scenario, overrides: Partial<Parameters<typeof fetchReleaseStatus>[1]> = {}) {
+  return fetchReleaseStatus(ctxOf(runner(scenario)), { repo: REPO, integration: 'dev', production: 'main', moduleEnabled: true, config: CONFIG, ...overrides })
 }
 
 describe('fetchReleaseStatus', () => {
@@ -189,7 +191,7 @@ describe('fetchReleaseStatus', () => {
   })
 
   it('reports a GitHub failure as data', async () => {
-    const result = await fetchReleaseStatus({ repo: REPO, integration: 'dev', production: 'main', moduleEnabled: true, config: CONFIG, now: NOW, github: () => Promise.resolve(httpFail('unauthenticated', 401, '', 'GitHub: Bad credentials (HTTP 401)')) })
+    const result = await fetchReleaseStatus(ctxOf(() => Promise.resolve(httpFail('unauthenticated', 401, '', 'GitHub: Bad credentials (HTTP 401)'))), { repo: REPO, integration: 'dev', production: 'main', moduleEnabled: true, config: CONFIG })
     expect(result).toEqual({ ok: false, message: 'GitHub: Bad credentials (HTTP 401)', readAt: '2026-09-05T14:00:00.000Z' })
   })
 })

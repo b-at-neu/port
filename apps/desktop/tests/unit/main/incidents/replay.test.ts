@@ -1,9 +1,9 @@
 // Replays of the cases that motivated the log, through the real raising code and the real writer.
 import { describe, expect, it } from 'vitest'
-import { applyObservation } from '@/main/actions/observe'
-import { groupIncidents } from '@/main/incidents/group'
-import { createIncidentLog } from '@/main/incidents/log'
-import { draftOf, noRelated, observationIntent, stageHandbackIntent } from '@/main/incidents/raise'
+import { applyObservation } from '@/main/pipeline/operator/observe'
+import { groupIncidents } from '@/main/pipeline/incidents/group'
+import { createIncidentLog } from '@/main/pipeline/incidents/log'
+import { draftOf, noRelated, observationIntent, stageHandbackIntent } from '@/main/pipeline/incidents/raise'
 import type { WriteObservation } from '@/types/dispatch'
 import type { IncidentDraft } from '@/types/incidents'
 import { ENTRY, item, memory, writerRig } from './fixtures'
@@ -55,7 +55,7 @@ describe('the 2026-11-16 sleep case', () => {
     raise(observationIntent(reset(779), item({ kind: 'issue', number: 779 }), { add: ['planApproved'], remove: ['inProgress'], action: 'observe-liveness-reset' }, null), 779, 'issue')
     raise(observationIntent(zeroDiff, item({ number: 779 }), { add: ['needsHuman'], remove: ['readyForReview'], action: 'observe-zero-diff' }, null), 779, 'pull-request')
     raise(observationIntent(reset(749), item({ kind: 'issue', number: 749 }), { add: ['planApproved'], remove: ['inProgress'], action: 'observe-liveness-reset' }, null), 749, 'issue')
-    const blocked = { itemKind: 'issue', numberFrom: 'item', add: ['blocked'], remove: ['inProgress'], action: 'stage-handback-blocked' } as const
+    const blocked = { key: 'blocked', action: 'stage-handback-blocked' } as const
     const existing = stageHandbackIntent(blocked, 'impl', 749, item({ kind: 'issue', number: 749, closingPullRequests: [{ number: 780, state: 'OPEN', headRefName: '749-the-fix' }] }), null)
     if (existing !== null) drafts.push(draftOf(existing, ref(749, 'issue'), { kind: 'applied' }, noRelated()))
 

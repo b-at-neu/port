@@ -34,7 +34,7 @@ function Heading({ count }: { readonly count: number | null }) {
 }
 
 export function ReleaseIssues({ repoId, release }: { readonly repoId: RepoId; readonly release: ReleaseInfo }) {
-  const query = useIpcQuery('release:issues', { repoId, tag: release.tagName, previousTag: release.previousTag })
+  const query = useIpcQuery('release.issues', { repoId, tag: release.tagName, previousTag: release.previousTag })
   const [expanded, setExpanded] = useState(false)
   const data = query.data
 

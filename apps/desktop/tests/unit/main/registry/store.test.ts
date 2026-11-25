@@ -1,76 +1,44 @@
-import { readFile, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { createPathOps } from '@/main/platform/paths'
-import { dedupePaths, readRegistry, writeRegistry } from '@/main/registry/store'
-import { makeTempDir } from '../../../fixtures/fs'
+import { createPathOps, pathOps } from '@/main/platform/paths'
+import { dedupePaths, readRegistry, writeRegistry } from '@/main/repos/registry-store'
+import { createFakeFs } from '../../../support/fake-platform'
+
+const DIR = pathOps.toNative('/userData')
+const FILE = pathOps.join(DIR, 'registry.json')
+const A = pathOps.toNative('/a')
+const B = pathOps.toNative('/b')
+
+const READ_CASES: readonly { readonly name: string; readonly file: string | null; readonly expected: unknown; readonly untouched: boolean }[] = [
+  { name: 'a missing file reads as empty', file: null, expected: { ok: true, repositories: [] }, untouched: false },
+  { name: 'a valid file lists its paths, deduped', file: JSON.stringify({ version: 1, repositories: [{ path: A }, { path: `${A}/` }, { path: B }] }), expected: { ok: true, repositories: [A, B] }, untouched: false },
+  { name: 'invalid JSON is malformed and never overwritten', file: '{not json', expected: { ok: false, kind: 'registry-malformed' }, untouched: true },
+  { name: 'a newer version is unsupported and never overwritten', file: JSON.stringify({ version: 2, repositories: [{ path: '/a' }] }), expected: { ok: false, kind: 'registry-unsupported-version' }, untouched: true },
+]
 
 describe('readRegistry', () => {
-  it('returns empty when the file is absent', async () => {
-    const dir = await makeTempDir()
-    expect(await readRegistry(dir)).toEqual({ ok: true, repositories: [] })
-  })
+  it.each(READ_CASES)('$name', async ({ file, expected, untouched }) => {
+    const fs = createFakeFs()
+    if (file !== null) await fs.writeText(FILE, file)
 
-  it('round-trips a written registry', async () => {
-    const dir = await makeTempDir()
-    await writeRegistry(dir, ['/a', '/b'])
-    expect(await readRegistry(dir)).toEqual({ ok: true, repositories: ['/a', '/b'] })
-  })
-
-  it('reports registry-malformed for invalid JSON, and never overwrites it', async () => {
-    const dir = await makeTempDir()
-    await writeFile(join(dir, 'registry.json'), '{not json')
-    const before = await readFile(join(dir, 'registry.json'), 'utf8')
-    const result = await readRegistry(dir)
-    expect(result.ok).toBe(false)
-    if (result.ok) throw new Error('unreachable')
-    expect(result.kind).toBe('registry-malformed')
-    const after = await readFile(join(dir, 'registry.json'), 'utf8')
-    expect(after).toBe(before)
-  })
-
-  it('reports registry-unsupported-version for a newer version, and never overwrites it', async () => {
-    const dir = await makeTempDir()
-    await writeFile(join(dir, 'registry.json'), JSON.stringify({ version: 2, repositories: [{ path: '/a' }] }))
-    const before = await readFile(join(dir, 'registry.json'), 'utf8')
-    const result = await readRegistry(dir)
-    expect(result.ok).toBe(false)
-    if (result.ok) throw new Error('unreachable')
-    expect(result.kind).toBe('registry-unsupported-version')
-    const after = await readFile(join(dir, 'registry.json'), 'utf8')
-    expect(after).toBe(before)
+    expect(await readRegistry({ fs }, DIR)).toMatchObject(expected as object)
+    if (untouched) expect(await fs.readText(FILE)).toEqual({ ok: true, value: file })
   })
 })
 
 describe('writeRegistry', () => {
-  it('creates the directory on first write', async () => {
-    const parent = await makeTempDir()
-    const dir = join(parent, 'nested', 'userData')
-    const result = await writeRegistry(dir, ['/a'])
-    expect(result.ok).toBe(true)
-    expect(await readRegistry(dir)).toEqual({ ok: true, repositories: ['/a'] })
-  })
-
-  it('dedupes on write', async () => {
-    const dir = await makeTempDir()
-    await writeRegistry(dir, ['/a', '/a/', '/a'])
-    expect(await readRegistry(dir)).toEqual({ ok: true, repositories: ['/a'] })
+  it('round-trips and dedupes what it writes', async () => {
+    const fs = createFakeFs()
+    expect((await writeRegistry({ fs }, DIR, [A, `${A}/`, B])).ok).toBe(true)
+    expect(await readRegistry({ fs }, DIR)).toEqual({ ok: true, repositories: [A, B] })
   })
 })
 
 describe('dedupePaths', () => {
-  it('collapses a trailing separator [posix]', () => {
-    const ops = createPathOps('posix', { home: '/home/u' })
-    expect(dedupePaths(['/a/b', '/a/b/'], ops)).toEqual(['/a/b'])
-  })
-
-  it('collapses drive-letter case and separator differences [win32]', () => {
-    const ops = createPathOps('win32', { home: 'C:\\Users\\u' })
-    expect(dedupePaths(['C:\\Users\\u\\repo', 'c:/users/U/repo'], ops)).toEqual(['C:\\Users\\u\\repo'])
-  })
-
-  it('keeps genuinely distinct paths separate', () => {
-    const ops = createPathOps('posix', { home: '/home/u' })
-    expect(dedupePaths(['/a', '/b'], ops)).toEqual(['/a', '/b'])
+  it.each([
+    { name: 'a trailing separator [posix]', ops: createPathOps('posix', { home: '/home/u' }), paths: ['/a/b', '/a/b/'], expected: ['/a/b'] },
+    { name: 'drive-letter case and separators [win32]', ops: createPathOps('win32', { home: 'C:\\Users\\u' }), paths: ['C:\\Users\\u\\repo', 'c:/users/U/repo'], expected: ['C:\\Users\\u\\repo'] },
+    { name: 'genuinely distinct paths stay separate', ops: createPathOps('posix', { home: '/home/u' }), paths: ['/a', '/b'], expected: ['/a', '/b'] },
+  ])('collapses $name', ({ ops, paths, expected }) => {
+    expect(dedupePaths(paths, ops)).toEqual(expected)
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { reconcileRepository } from '@/main/state/reconcile'
+import { reconcileRepository } from '@/main/pipeline/board/reconcile'
 import type { PipelineView, StoredItem } from '@/types/pipeline-state'
 import { denialsOf, entry, fetchOf, item, sessionsOf, worktreesOf } from './reconcile-fixtures'
 
@@ -49,16 +49,16 @@ describe('reconcileRepository — store view', () => {
     expect(low.items[0]?.reviewCycleCount).toBe(1)
   })
 
-  it('copies the stored mirror failure onto the item, and sets nothing without a store view', () => {
+  it('copies the stored mirror failure onto the item, and sets nothing for an unseeded view', () => {
     const mirrorFailure = { at: '2026-01-01T00:00:00Z', outcome: { kind: 'item-unavailable' as const } }
     expect(reconcile([item()], { kind: 'store', items: [stored({ mirrorFailure })] }).items[0]?.mirrorFailure).toEqual(mirrorFailure)
     expect(reconcile([item()], { kind: 'store', items: [stored()] }).items[0]?.mirrorFailure).toBeNull()
-    expect(reconcile([item()], { kind: 'labels' }).items[0]).not.toHaveProperty('mirrorFailure')
+    expect(reconcile([item()], { kind: 'unseeded' }).items[0]).not.toHaveProperty('mirrorFailure')
   })
 
-  it('reads labels exactly as before under a labels view or no view', () => {
+  it('reads the matched keys from GitHub for an unseeded view or no view, the seed read', () => {
     const labelled = item({ labels: ['ready'], matchedKeys: ['ready'] })
-    expect(reconcile([labelled], { kind: 'labels' }).items[0]?.matchedKeys).toEqual(['ready'])
+    expect(reconcile([labelled], { kind: 'unseeded' }).items[0]?.matchedKeys).toEqual(['ready'])
     expect(reconcile([labelled], undefined).items[0]?.matchedKeys).toEqual(['ready'])
   })
 })

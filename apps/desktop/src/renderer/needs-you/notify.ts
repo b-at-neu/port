@@ -1,12 +1,13 @@
 // Sends one OS notification per read that brought new items into Needs you. Main owns the focus rule.
 import type { QueryClient } from '@tanstack/react-query'
+import { perform } from '@/renderer/actions/perform'
 import { invoke } from '@/renderer/data/invoke'
 import { ipcQueryOptions, observeIpcQuery } from '@/renderer/data/query'
 import { dismissedKeys, visibleNeedsYouItems } from '@/renderer/needs-you/dismissed'
 import { diffNeedsYou, displayNamesOf, needsYouNotification, readableRepoIds } from '@/renderer/needs-you/notify-model'
 import type { BoardSnapshot, NeedsYouBaseline } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
-import type { IpcMap } from '@/types/ipc'
+import type { NeedsYouNotification } from '@/types/settings'
 
 const STORAGE_KEY = 'port.needsYouNotified.v1'
 
@@ -14,7 +15,7 @@ type KeyValueStore = Pick<Storage, 'getItem' | 'setItem'>
 
 interface NeedsYouNotifierDeps {
   readonly storage: KeyValueStore
-  readonly send: (request: IpcMap['notify:needs-you']['request']) => Promise<void>
+  readonly send: (request: NeedsYouNotification) => Promise<void>
   readonly dismissed: () => ReadonlySet<string>
   readonly now: () => Date
 }
@@ -59,22 +60,24 @@ export function createNeedsYouNotifier(deps: NeedsYouNotifierDeps): { readonly e
 export function connectNeedsYouNotifications(client: QueryClient): () => void {
   const notifier = createNeedsYouNotifier({
     storage: window.localStorage,
-    send: (request) => invoke('notify:needs-you', request),
+    send: async (request) => {
+      await perform({ name: 'notify.needsYou', input: request }, { invoke, client })
+    },
     dismissed: dismissedKeys,
     now: () => new Date(),
   })
 
   function evaluate(): void {
-    const snapshot = client.getQueryData(ipcQueryOptions('board:snapshot').queryKey)
-    const sessions = client.getQueryData(ipcQueryOptions('session:list').queryKey)
+    const snapshot = client.getQueryData(ipcQueryOptions('board.snapshot').queryKey)
+    const sessions = client.getQueryData(ipcQueryOptions('session.list').queryKey)
     if (snapshot !== undefined && sessions !== undefined) notifier.evaluate(snapshot, sessions)
   }
 
   const stops = [
-    observeIpcQuery(client, 'board:snapshot', undefined, (result) => {
+    observeIpcQuery(client, 'board.snapshot', undefined, (result) => {
       if (result.status === 'success') evaluate()
     }),
-    observeIpcQuery(client, 'session:list', undefined, (result) => {
+    observeIpcQuery(client, 'session.list', undefined, (result) => {
       if (result.status === 'success') evaluate()
     }),
   ]

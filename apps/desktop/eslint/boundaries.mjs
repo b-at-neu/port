@@ -6,7 +6,7 @@ const FS_SYNC_NAMES = [
   'readFileSync', 'writeFileSync', 'appendFileSync', 'mkdirSync', 'rmdirSync', 'rmSync', 'unlinkSync', 'existsSync', 'statSync', 'lstatSync',
   'readdirSync', 'renameSync', 'copyFileSync', 'accessSync', 'realpathSync', 'chmodSync', 'symlinkSync', 'readlinkSync',
 ]
-const SDK_SEAMS = ['src/main/sessions/sdk.ts', 'src/main/runtime/sdk.ts', 'src/main/hosting/sdk.ts']
+const SDK_SEAMS = ['src/main/platform/sdk.ts']
 const TIMERS = ['setTimeout', 'setInterval', 'setImmediate']
 const NODE_BUILTIN = { group: ['node:*'], message: 'A node: builtin is not available here — this code compiles without Node types.' }
 const NO_MAIN = { group: ['@/main/**'], message: 'The renderer and shared code never import main/ — reach it over IPC.' }
@@ -58,7 +58,7 @@ export const RESTRICTIONS = [
   {
     id: 'sdk',
     except: SDK_SEAMS,
-    paths: [{ name: '@anthropic-ai/claude-agent-sdk', message: 'Only the three sdk.ts seams reference the Agent SDK.' }],
+    paths: [{ name: '@anthropic-ai/claude-agent-sdk', message: 'Only main/platform/sdk.ts references the Agent SDK.' }],
   },
   {
     id: 'sdk-names',
@@ -66,14 +66,15 @@ export const RESTRICTIONS = [
     paths: [{ name: '@anthropic-ai/claude-agent-sdk', importNames: ['getSessionMessages', 'getSubagentMessages'], message: 'Read transcripts through main/sessions/, never the SDK.' }],
   },
   { id: 'no-tests', patterns: [{ group: ['**/tests/**'], message: TESTING }] },
+  { id: 'no-repo-scripts', patterns: [{ group: ['**/scripts/**', '**/plugins/**'], message: 'apps/desktop/src imports nothing from scripts/ or plugins/ (ENGINEERING §9).' }] },
   {
     id: 'gh',
-    except: ['src/main/writes/**', 'src/main/platform/**'],
-    paths: [{ name: '@/main/platform/gh', importNames: ['gh', 'ghJson'], message: 'Only main/writes/ calls gh; reads go through platform/github-http.' }],
+    except: ['src/main/github/writes/**', 'src/main/platform/**'],
+    paths: [{ name: '@/main/platform/gh', importNames: ['gh', 'ghJson'], message: 'Only main/github/writes/ calls gh; reads go through platform/github-http.' }],
   },
   {
     id: 'github-http',
-    except: ['src/main/github/**'],
+    except: ['src/main/github/**', 'src/main/platform/index.ts', 'src/main/worker/engine.ts', 'src/main/pipeline/board/read.ts', 'src/main/features/worktrees/inspect.ts'],
     paths: [{ name: '@/main/platform/github-http', importNames: ['githubHttp', 'githubConditional', 'githubPublic'], message: 'Only main/github/ reads GitHub over HTTP.' }],
   },
   {
@@ -83,8 +84,8 @@ export const RESTRICTIONS = [
   },
   {
     id: 'apply-labels',
-    except: ['src/main/pipeline-state/default.ts', 'src/main/writes/**'],
-    paths: [{ name: '@/main/writes/apply', importNames: ['applyLabels'], message: 'Only the pipeline-state composition applies labels, so no transition bypasses the store.' }],
+    except: ['src/main/pipeline/state/default.ts', 'src/main/github/writes/**'],
+    paths: [{ name: '@/main/github/writes/apply', importNames: ['applyLabels'], message: 'Only the pipeline-state composition applies labels, so no transition bypasses the store.' }],
   },
   {
     id: 'fetch',
@@ -101,40 +102,41 @@ export const RESTRICTIONS = [
   {
     id: 'one-clock',
     files: ['src/main/**'],
-    except: ['src/main/state/watcher.ts'],
-    globals: TIMERS.map((name) => ({ name, message: 'Main holds exactly one clock — only main/state/watcher.ts names a timer.' })),
+    except: ['src/main/pipeline/board/watcher.ts'],
+    globals: TIMERS.map((name) => ({ name, message: 'Main holds exactly one clock — only main/pipeline/board/watcher.ts names a timer.' })),
   },
   { id: 'renderer', files: ['src/renderer/**'], paths: RENDERER_PATHS, syntax: RENDERER_SYNTAX },
-  { id: 'pure', files: ['src/renderer/**', 'src/utils/**', 'src/types/**'], patterns: [NO_MAIN, NODE_BUILTIN] },
+  // `types/ipc.ts` is the one place the renderer's types reach `main/`: a type-only read of the router's inferred action map.
+  { id: 'pure', files: ['src/renderer/**', 'src/utils/**', 'src/types/**'], except: ['src/types/ipc.ts'], patterns: [NO_MAIN, NODE_BUILTIN] },
   {
     id: 'tick',
-    files: ['src/main/tick/**'],
-    patterns: [{ group: ['@/main/platform/**'], message: 'main/tick/ decides over an already-built state, it never reaches I/O.' }, NODE_BUILTIN],
+    files: ['src/main/pipeline/tick/**'],
+    patterns: [{ group: ['@/main/platform/**'], message: 'main/pipeline/tick/ decides over an already-built state, it never reaches I/O.' }, NODE_BUILTIN],
   },
   {
     id: 'state',
-    files: ['src/main/state/**'],
-    paths: ['@/main/platform/gh', '@/main/platform/run'].map((name) => ({ name, message: 'main/state/ composes already-fetched results, it never spawns a command.' })),
+    files: ['src/main/pipeline/board/**'],
+    paths: ['@/main/platform/gh', '@/main/platform/run'].map((name) => ({ name, message: 'main/pipeline/board/ composes already-fetched results, it never spawns a command.' })),
   },
   {
     id: 'local',
-    files: ['src/main/local/**'],
-    paths: [{ name: '@/main/platform/gh', message: 'main/local/ is local-only, never a second GitHub caller.' }],
-    patterns: [{ group: ['@/main/github/**'], message: 'main/local/ is local-only, never a second GitHub caller.' }],
+    files: ['src/main/repos/local/**'],
+    paths: [{ name: '@/main/platform/gh', message: 'main/repos/local/ is local-only, never a second GitHub caller.' }],
+    patterns: [{ group: ['@/main/github/**'], message: 'main/repos/local/ is local-only, never a second GitHub caller.' }],
   },
   {
     id: 'search',
-    files: ['src/main/search/**'],
-    patterns: [{ group: ['@/main/sessions/*', '!@/main/sessions/locate', '!@/main/sessions/transcript'], message: 'main/search/ imports only sessions/locate and sessions/transcript.' }],
+    files: ['src/main/sessions/search/**'],
+    patterns: [{ regex: '^@/main/sessions/(?!(?:locate|transcript|search/[\\w-]+)$)', message: 'main/sessions/search/ imports only sessions/locate and sessions/transcript.' }],
   },
   {
     id: 'mirror',
-    files: ['src/main/pipeline-state/mirror.ts'],
-    patterns: [{ group: ['@/main/platform/**', '@/main/writes/**', '@/main/github/**'], message: 'The label mapping stays pure, with no I/O.' }],
+    files: ['src/main/pipeline/state/mirror.ts'],
+    patterns: [{ group: ['@/main/platform/**', '@/main/github/**'], message: 'The label mapping stays pure, with no I/O.' }],
   },
   {
     id: 'hosting-permissions',
-    files: ['src/main/hosting/**', 'src/utils/hosting/**', 'src/types/hosting.ts'],
+    files: ['src/main/sessions/hosting/**', 'src/utils/hosting/**', 'src/types/hosting.ts'],
     syntax: [
       { selector: "Literal[value='bypassPermissions']", message: "Never bypass the operator's own permission prompt." },
       { selector: "Literal[value='dontAsk']", message: "Never bypass the operator's own permission prompt." },
@@ -143,7 +145,7 @@ export const RESTRICTIONS = [
   },
   {
     id: 'hosting-options',
-    files: ['src/main/hosting/**'],
+    files: ['src/main/sessions/hosting/**'],
     syntax: [
       { selector: "Property[key.name='tools'][shorthand=false]", message: "A tools: key restricts the whole session's built-in set — use allowedTools." },
       { selector: "Property[key.name='skills'][shorthand=false]", message: 'Commands run as typed slash commands, never through the Skill-tool filter.' },
@@ -154,12 +156,12 @@ export const RESTRICTIONS = [
   },
   {
     id: 'writes',
-    files: ['src/main/writes/**'],
+    files: ['src/main/github/writes/**'],
     syntax: [{ selector: 'Literal[value=/^(?:merge|close|--delete-branch|ready)$/]', message: 'Merging and closing stay human actions.' }],
   },
   {
     id: 'stage',
-    files: ['src/main/stage/**'],
+    files: ['src/main/dispatch/stage/**'],
     syntax: [
       { selector: 'Literal[value=/^--force/]', message: 'A stage hand-back never forces a worktree removal.' },
       { selector: ":matches(CallExpression[callee.name='dismiss'], CallExpression[callee.property.name='dismiss']) > Literal[value='force']", message: 'A stage hand-back never forces a worktree removal.' },
@@ -170,7 +172,7 @@ export const RESTRICTIONS = [
     files: ['tests/fixtures/app/**'],
     patterns: [
       {
-        regex: '^(?!(?:electron|node:path|\\./[\\w-]+|@/types/.+|@/utils/.+|@/main/registry/schema|@/main/state/reconcile|@/main/tick/ledger|@/main/tick/plan)$)',
+        regex: '^(?!(?:electron|node:path|\\./[\\w-]+|@/types/.+|@/utils/.+|@/main/repos/config/schema|@/main/pipeline/board/reconcile|@/main/pipeline/tick/ledger|@/main/pipeline/tick/plan)$)',
         message: 'Fixture mode may import only these modules — it must never reach gh or claude.',
       },
     ],

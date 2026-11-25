@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { FolderEntry, FolderId } from '@/types/workspace'
 import type { HostedSessionSnapshot } from '@/types/hosting'
-import { effectiveWorktree, initialFolderId, orderFolders, worktreeControl, worktreeHint } from '@/renderer/session/new-session-model'
+import { effectiveWorktree, initialFolderId, orderFolders, worktreeControl } from '@/renderer/session/new-session-model'
 
 function folder(overrides: Partial<FolderEntry>): FolderEntry {
   return {
@@ -30,7 +30,7 @@ function snapshot(overrides: Partial<HostedSessionSnapshot>): HostedSessionSnaps
     titled: null,
     title: null,
     pendingPermissions: [],
-    capabilities: { kind: 'unavailable', request: { source: 'installed' }, message: '' },
+    capabilities: { kind: 'unavailable', message: '' },
     rateLimit: null,
     controls: { permissionMode: 'default', model: 'sonnet', effort: null },
     models: { kind: 'unavailable', message: '' },
@@ -119,16 +119,3 @@ describe('effectiveWorktree', () => {
   })
 })
 
-describe('worktreeHint', () => {
-  it('names the branch and a 7-char short sha', () => {
-    expect(worktreeHint(folder({ git: { root: '/x', head: { sha: '3eb526cdef', branch: 'dev' } } }))).toBe('Branches from dev (3eb526c) into its own folder.')
-  })
-
-  it('drops the branch clause for a detached HEAD', () => {
-    expect(worktreeHint(folder({ git: { root: '/x', head: { sha: '3eb526cdef', branch: null } } }))).toBe('Branches from 3eb526c into its own folder.')
-  })
-
-  it('is null for a non-git folder', () => {
-    expect(worktreeHint(folder({ git: null }))).toBeNull()
-  })
-})

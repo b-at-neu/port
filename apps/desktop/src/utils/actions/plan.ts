@@ -5,7 +5,7 @@ import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { AssigneeExpectation, LabelAuditEntry, LabelPrecondition } from '@/types/writes'
 import type { ReconciledItem } from '@/types/state'
 import type { ActionAvailability, ActionPlan, ActionRefusal, OperatorAction } from '@/types/actions'
-import { RETRY_TRIGGER as ENGINE_RETRY_TRIGGER } from '../../../../../scripts/port-tick/liveness'
+import { RETRY_TRIGGER as ENGINE_RETRY_TRIGGER } from '@/utils/pipeline/liveness'
 
 /** Reused directly from the tick engine's own `RETRY_TRIGGER`, so there is no second copy to drift; retry reads it forward, pause reads it inverted. */
 export const RETRY_TRIGGER: Readonly<Partial<Record<LabelKey, LabelKey>>> = ENGINE_RETRY_TRIGGER

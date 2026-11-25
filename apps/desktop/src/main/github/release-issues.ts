@@ -1,6 +1,6 @@
 // fetchReleaseIssues: the tickets a published release's merged pull requests closed. Fails toward showing less with a note; a transport or whole-query failure is `ok: false`.
-import { githubHttp } from '@/main/platform/github-http'
 import type { GitHubTransport } from '@/types/platform'
+import type { GitHubReadContext } from '@/main/github/context'
 import type { GitHubRepoRef } from '@/types/github'
 import type { ReleaseIssue, ReleaseIssuesResponse } from '@/types/release'
 import { labelsOf } from '@/main/github/backlog'
@@ -17,7 +17,6 @@ export interface FetchReleaseIssuesParams {
   readonly repo: GitHubRepoRef
   readonly tag: string
   readonly previousTag: string | null
-  readonly github?: GitHubTransport
 }
 
 type CommitRead = { readonly ok: true; readonly shas: readonly string[]; readonly note: string | null } | { readonly ok: false; readonly message: string }
@@ -62,15 +61,14 @@ function issueOf(node: Readonly<Record<string, unknown>>, repo: GitHubRepoRef): 
   return { number, title, url, labels: labelsOf(node.labels) }
 }
 
-export async function fetchReleaseIssues(params: FetchReleaseIssuesParams): Promise<ReleaseIssuesResponse> {
-  const github = params.github ?? githubHttp
+export async function fetchReleaseIssues(ctx: GitHubReadContext, params: FetchReleaseIssuesParams): Promise<ReleaseIssuesResponse> {
   const { repo } = params
-  const read = await readShas(github, repo, params.tag, params.previousTag)
+  const read = await readShas(ctx.githubHttp, repo, params.tag, params.previousTag)
   if (!read.ok) return { ok: false, message: read.message }
   if (read.shas.length === 0) return { ok: true, issues: [], note: read.note }
 
   const variables = Object.fromEntries(read.shas.map((sha, index) => [`c${String(index)}`, sha]))
-  const result = await github(repoGraphqlRequest(buildIncludedIssuesQuery(read.shas.length), repo, variables))
+  const result = await ctx.githubHttp(repoGraphqlRequest(buildIncludedIssuesQuery(read.shas.length), repo, variables))
   const text = bodyOf(result)
   const parsed = text === undefined ? undefined : parseEnvelope(text)
   const verdict = classifyFailure(result, parsed)

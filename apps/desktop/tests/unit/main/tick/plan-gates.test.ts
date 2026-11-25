@@ -1,10 +1,9 @@
-// Split out of plan.test.ts to keep that file under the file-size limit: the cycle-cap/zero-diff
-// and refresh-wins/mergeability gate coverage, which shares no state with the rest of that file.
+// The cycle-cap/zero-diff and refresh-wins/mergeability gate coverage.
 import { describe, expect, it } from 'vitest'
 import type { ReconciledItem, RepositoryState } from '@/types/state'
-import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
-import { planTick } from '@/main/tick/plan'
-import { reconciledItem as item, repositoryState } from '../../../fixtures/board-state'
+import { createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
+import { planTick } from '@/main/pipeline/tick/plan'
+import { reconciledItem as item, repositoryState } from '../../../support/board-snapshot'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 const NEXT_DECISION_AT = new Date('2026-01-01T01:01:00.000Z')
@@ -45,7 +44,7 @@ describe('planTick — cycle-cap and zero-diff gates (#108)', () => {
   it('a revise candidate below the cap is actionable, carrying its cycle count', () => {
     const reviews = [{ body: '## Code Review — Cycle 1', submittedAt: '2026-01-01T00:00:00Z', commitOid: 'sha1' }]
     const repo = readyRepo([reviseItem({ reviews, reviewCycleCount: 1 })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([{ number: 204, kind: 'pull-request', trigger: 'needsRevision', agent: 'revise', unchecked: false, cycle: { count: 1, cap: 5 } }])
     expect(report.held).toEqual([])
   })
@@ -53,7 +52,7 @@ describe('planTick — cycle-cap and zero-diff gates (#108)', () => {
   it('a revise candidate at or above the cap is held, cycle-cap, unconditionally', () => {
     const reviews = Array.from({ length: 5 }, (_, i) => ({ body: `## Code Review — Cycle ${String(i + 1)}`, submittedAt: '2026-01-01T00:00:00Z', commitOid: 'sha1' }))
     const repo = readyRepo([reviseItem({ reviews, reviewCycleCount: 5 })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([])
     expect(report.held).toEqual([
       { number: 204, kind: 'pull-request', trigger: 'needsRevision', reason: 'cycle-cap', contention: null, escalation: { kind: 'cycle-cap', count: 5, cap: 5 } },
@@ -63,7 +62,7 @@ describe('planTick — cycle-cap and zero-diff gates (#108)', () => {
   it('the cap reads the item\'s review count, so a stored high-water mark holds a revise that GitHub\'s reviews alone would not', () => {
     const reviews = [{ body: '## Code Review — Cycle 1', submittedAt: '2026-01-01T00:00:00Z', commitOid: 'sha1' }]
     const repo = readyRepo([reviseItem({ reviews, reviewCycleCount: 5 })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([])
     expect(report.held).toMatchObject([{ number: 204, reason: 'cycle-cap', escalation: { kind: 'cycle-cap', count: 5, cap: 5 } }])
   })
@@ -72,7 +71,7 @@ describe('planTick — cycle-cap and zero-diff gates (#108)', () => {
     const reviews = Array.from({ length: 5 }, (_, i) => ({ body: `## Code Review — Cycle ${String(i + 1)}`, submittedAt: '2026-01-01T00:00:00Z', commitOid: 'sha1' }))
     const comments = [{ body: '## Gate cleared\n\n### Cycle grant\nOne extra review cycle for this PR only; reviewCycleCap is unchanged.', createdAt: '2026-01-01T00:00:00Z' }]
     const repo = readyRepo([reviseItem({ reviews, comments, reviewCycleCount: 5 })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([{ number: 204, kind: 'pull-request', trigger: 'needsRevision', agent: 'revise', unchecked: false, cycle: { count: 5, cap: 6 } }])
     expect(report.held).toEqual([])
   })
@@ -81,7 +80,7 @@ describe('planTick — cycle-cap and zero-diff gates (#108)', () => {
     const reviews = Array.from({ length: 6 }, (_, i) => ({ body: `## Code Review — Cycle ${String(i + 1)}`, submittedAt: '2026-01-01T00:00:00Z', commitOid: 'sha1' }))
     const comments = [{ body: '## Gate cleared\n\n### Cycle grant\nOne extra review cycle for this PR only; reviewCycleCap is unchanged.', createdAt: '2026-01-01T00:00:00Z' }]
     const repo = readyRepo([reviseItem({ reviews, comments, reviewCycleCount: 6 })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([])
     expect(report.held).toEqual([
       { number: 204, kind: 'pull-request', trigger: 'needsRevision', reason: 'cycle-cap', contention: null, escalation: { kind: 'cycle-cap', count: 6, cap: 6 } },
@@ -90,14 +89,14 @@ describe('planTick — cycle-cap and zero-diff gates (#108)', () => {
 
   it('a lone refreshBranch PR at the cap is actionable, never held on the cycle cap', () => {
     const repo = readyRepo([reviseItem({ stages: [{ key: 'refreshBranch', name: 'refresh branch', role: 'trigger' }], reviewCycleCount: 5 })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([{ number: 204, kind: 'pull-request', trigger: 'refreshBranch', agent: 'revise', unchecked: false, cycle: null }])
     expect(report.held).toEqual([])
   })
 
   it('a review candidate with no prior Code Review dispatches, cycle null (no reviews yet)', () => {
     const repo = readyRepo([reviewItem()])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([{ number: 157, kind: 'pull-request', trigger: 'readyForReview', agent: 'review', unchecked: false, cycle: { count: 0, cap: 5 } }])
     expect(report.held).toEqual([])
   })
@@ -105,7 +104,7 @@ describe('planTick — cycle-cap and zero-diff gates (#108)', () => {
   it('a review candidate whose newest review needs revision on the unchanged head gets one more review, never an escalation', () => {
     const reviews = [{ body: '## Code Review — Cycle 1 · needs revision', submittedAt: '2026-01-01T00:00:00Z', commitOid: 'sha1' }]
     const repo = readyRepo([reviewItem({ headRefOid: 'sha1', reviews, reviewCycleCount: 1 })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.held).toEqual([])
     expect(report.actionable).toEqual([{ number: 157, kind: 'pull-request', trigger: 'readyForReview', agent: 'review', unchecked: false, cycle: { count: 1, cap: 5 } }])
     expect(report.observations).toEqual([])
@@ -117,7 +116,7 @@ describe('planTick — cycle-cap and zero-diff gates (#108)', () => {
       { body: '## Code Review — Cycle 2 · needs revision', submittedAt: '2026-01-01T00:30:00Z', commitOid: 'sha1' },
     ]
     const repo = readyRepo([reviewItem({ headRefOid: 'sha1', reviews, reviewCycleCount: 2 })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([])
     expect(report.held).toEqual([{ number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } }])
   })
@@ -125,7 +124,7 @@ describe('planTick — cycle-cap and zero-diff gates (#108)', () => {
   it('a review candidate whose head already has an approving review adopts it: no hold, no second review', () => {
     const reviews = [{ body: '## Code Review — Cycle 2 · approved', submittedAt: '2026-01-01T00:00:00Z', commitOid: 'sha1' }]
     const repo = readyRepo([reviewItem({ headRefOid: 'sha1', reviews, reviewCycleCount: 2 })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([])
     expect(report.held).toEqual([])
     expect(report.observations).toEqual([{ kind: 'adopt', number: 157, itemKind: 'pull-request', agent: 'review', trigger: 'readyForReview', handback: { token: 'approved', arg: null }, evidence: 'held-verdict' }])
@@ -134,7 +133,7 @@ describe('planTick — cycle-cap and zero-diff gates (#108)', () => {
   it('an approving review on an older head is not adopted for the new head', () => {
     const reviews = [{ body: '## Code Review — Cycle 1 · approved', submittedAt: '2026-01-01T00:00:00Z', commitOid: 'old-sha' }]
     const repo = readyRepo([reviewItem({ headRefOid: 'new-sha', reviews, reviewCycleCount: 1 })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.observations).toEqual([])
     expect(report.actionable).toHaveLength(1)
   })
@@ -142,7 +141,7 @@ describe('planTick — cycle-cap and zero-diff gates (#108)', () => {
   it('a review candidate whose head moved since the review dispatches again', () => {
     const reviews = [{ body: '## Code Review — Cycle 1 · needs revision', submittedAt: '2026-01-01T00:00:00Z', commitOid: 'old-sha' }]
     const repo = readyRepo([reviewItem({ headRefOid: 'new-sha', reviews, reviewCycleCount: 1 })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([{ number: 157, kind: 'pull-request', trigger: 'readyForReview', agent: 'review', unchecked: false, cycle: { count: 1, cap: 5 } }])
     expect(report.held).toEqual([])
   })
@@ -151,14 +150,14 @@ describe('planTick — cycle-cap and zero-diff gates (#108)', () => {
     const reviews = [{ body: '## Code Review — Cycle 1 · needs revision', submittedAt: '2026-01-01T00:00:00Z', commitOid: 'sha1' }]
     const comments = [{ body: '## Gate cleared', createdAt: '2026-01-02T00:00:00Z' }]
     const repo = readyRepo([reviewItem({ headRefOid: 'sha1', reviews, comments, reviewCycleCount: 1 })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([{ number: 157, kind: 'pull-request', trigger: 'readyForReview', agent: 'review', unchecked: false, cycle: { count: 1, cap: 5 } }])
     expect(report.held).toEqual([])
   })
 
   it('a non-revise/review actionable item never carries a cycle count', () => {
     const repo = readyRepo([item()])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable[0]?.cycle).toBeNull()
   })
 })
@@ -193,7 +192,7 @@ describe('planTick — refresh-wins veto and mergeability gate (#265)', () => {
 
   it('a readyForReview item that also carries refreshBranch is vetoed, never dispatched to review — the refresh itself still dispatches (#292)', () => {
     const repo = readyRepo([reviewItem({ stages: [...reviewItem().stages, { key: 'refreshBranch', name: 'refresh branch', role: 'trigger' }] })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([{ number: 157, kind: 'pull-request', trigger: 'refreshBranch', agent: 'revise', unchecked: false, cycle: null }])
     expect(report.held).toEqual([{ number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'refresh-wins', contention: null, escalation: null }])
   })
@@ -202,21 +201,21 @@ describe('planTick — refresh-wins veto and mergeability gate (#265)', () => {
     // Both are trigger-role, so this stays in triggerItems. needsRevision listed first so
     // stageKeyOf resolves to it, matching the realistic case the veto exists for.
     const repo = readyRepo([reviseItem({ stages: [...reviseItem().stages, { key: 'refreshBranch', name: 'refresh branch', role: 'trigger' }] })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([{ number: 204, kind: 'pull-request', trigger: 'refreshBranch', agent: 'revise', unchecked: false, cycle: null }])
     expect(report.held).toEqual([{ number: 204, kind: 'pull-request', trigger: 'needsRevision', reason: 'refresh-wins', contention: null, escalation: null }])
   })
 
   it('a refreshBranch trigger is never vetoed against its own label', () => {
     const repo = readyRepo([item({ number: 9, kind: 'pull-request', stages: [{ key: 'refreshBranch', name: 'refresh branch', role: 'trigger' }] })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.held).toEqual([])
     expect(report.actionable).toEqual([{ number: 9, kind: 'pull-request', trigger: 'refreshBranch', agent: 'revise', unchecked: false, cycle: null }])
   })
 
   it('CONFLICTING holds as conflicting, no write, never reaching the zero-diff gate', () => {
     const repo = readyRepo([reviewItem({ mergeable: 'CONFLICTING' })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([])
     expect(report.held).toEqual([{ number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'conflicting', contention: null, escalation: null }])
   })
@@ -224,10 +223,10 @@ describe('planTick — refresh-wins veto and mergeability gate (#265)', () => {
   it('UNKNOWN holds the first poll, then dispatches the second consecutive poll', () => {
     const repo = readyRepo([reviewItem({ mergeable: 'UNKNOWN' })])
     const unknownStreaks = createUnknownStreaks()
-    const first = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const first = planTick({ repository: repo, unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(first.held).toEqual([{ number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'mergeability-unknown', contention: null, escalation: null }])
 
-    const second = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const second = planTick({ repository: repo, unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(second.held).toEqual([])
     expect(second.actionable).toEqual([{ number: 157, kind: 'pull-request', trigger: 'readyForReview', agent: 'review', unchecked: false, cycle: { count: 0, cap: 5 } }])
   })
@@ -235,8 +234,8 @@ describe('planTick — refresh-wins veto and mergeability gate (#265)', () => {
   it('null holds every poll — fail closed on action, never guessed', () => {
     const repo = readyRepo([reviewItem({ mergeable: null })])
     const unknownStreaks = createUnknownStreaks()
-    const first = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
-    const second = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const first = planTick({ repository: repo, unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const second = planTick({ repository: repo, unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(first.held).toEqual([{ number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'mergeability-unknown', contention: null, escalation: null }])
     expect(second.held).toEqual([{ number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'mergeability-unknown', contention: null, escalation: null }])
   })
@@ -244,12 +243,12 @@ describe('planTick — refresh-wins veto and mergeability gate (#265)', () => {
   it('the streak memo clears once an item reads MERGEABLE again, so a later UNKNOWN holds afresh', () => {
     const unknownStreaks = createUnknownStreaks()
     const unknownRepo = readyRepo([reviewItem({ mergeable: 'UNKNOWN' })])
-    planTick({ repository: unknownRepo, ledger: createDispatchLedger(), unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true }) // streak -> 1
+    planTick({ repository: unknownRepo, unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true }) // streak -> 1
 
     const mergeableRepo = readyRepo([reviewItem({ mergeable: 'MERGEABLE' })])
-    planTick({ repository: mergeableRepo, ledger: createDispatchLedger(), unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true }) // clears
+    planTick({ repository: mergeableRepo, unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true }) // clears
 
-    const again = planTick({ repository: unknownRepo, ledger: createDispatchLedger(), unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    const again = planTick({ repository: unknownRepo, unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(again.held).toEqual([{ number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'mergeability-unknown', contention: null, escalation: null }])
   })
 })
@@ -273,7 +272,6 @@ describe('planTick — approval withdrawal and CLAUDE.md-excused checks (#300)',
     const repo = readyRepo([approvedItem()])
     const report = planTick({
       repository: repo,
-      ledger: createDispatchLedger(),
       unknownStreaks: createUnknownStreaks(),
       nextDecisionAt: NEXT_DECISION_AT,
       now: () => NOW,
@@ -290,7 +288,6 @@ describe('planTick — approval withdrawal and CLAUDE.md-excused checks (#300)',
     const repo = readyRepo([approvedItem()])
     const report = planTick({
       repository: repo,
-      ledger: createDispatchLedger(),
       unknownStreaks: createUnknownStreaks(),
       nextDecisionAt: NEXT_DECISION_AT,
       now: () => NOW,

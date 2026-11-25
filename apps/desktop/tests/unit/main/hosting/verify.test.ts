@@ -1,68 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { checkComponents, checkPluginLoad, composeInvocation, isBlockedCommand, validateCommandName } from '@/main/hosting/verify'
-
-import type { PluginRequest, InitPlugin } from '@/types/hosting-plugin'
-
-const REPOSITORY: PluginRequest = { source: 'repository', path: '/repo/plugins/port' }
-const INSTALLED: PluginRequest = { source: 'installed' }
-const samePath = (a: string, b: string) => a === b
+import { checkPluginLoad, composeInvocation, isBlockedCommand, validateCommandName, type InitPlugin } from '@/main/sessions/hosting/verify'
 
 describe('checkPluginLoad', () => {
-  it('unconfirmed before any init', () => {
-    expect(checkPluginLoad({ request: INSTALLED, initPlugins: null, samePath })).toEqual({ kind: 'unconfirmed' })
-  })
-
-  it('missing when no plugin named port loaded', () => {
-    const plugins: InitPlugin[] = [{ name: 'other', path: '/x' }]
-    expect(checkPluginLoad({ request: INSTALLED, initPlugins: plugins, samePath })).toEqual({ kind: 'missing' })
-  })
-
-  it('duplicate when two plugins named port loaded', () => {
-    const plugins: InitPlugin[] = [{ name: 'port', path: '/a' }, { name: 'port', path: '/b' }]
-    expect(checkPluginLoad({ request: INSTALLED, initPlugins: plugins, samePath })).toEqual({ kind: 'duplicate', paths: ['/a', '/b'] })
-  })
-
-  it('loaded for the installed source with exactly one match', () => {
-    const plugins: InitPlugin[] = [{ name: 'port', path: '/home/op/.claude/plugins/cache/port', version: '0.3.1' }]
-    expect(checkPluginLoad({ request: INSTALLED, initPlugins: plugins, samePath })).toEqual({ kind: 'loaded', path: '/home/op/.claude/plugins/cache/port', version: '0.3.1' })
-  })
-
-  it('loaded for the repository source when the loaded path matches the request', () => {
-    const plugins: InitPlugin[] = [{ name: 'port', path: '/repo/plugins/port', version: '0.3.1' }]
-    expect(checkPluginLoad({ request: REPOSITORY, initPlugins: plugins, samePath })).toEqual({ kind: 'loaded', path: '/repo/plugins/port', version: '0.3.1' })
-  })
-
-  it('shadowed for the repository source when the loaded path disagrees', () => {
-    const plugins: InitPlugin[] = [{ name: 'port', path: '/other/copy' }]
-    expect(checkPluginLoad({ request: REPOSITORY, initPlugins: plugins, samePath })).toEqual({ kind: 'shadowed', path: '/other/copy', version: null })
-  })
-
-  it('shadowed when samePath throws on a non-absolute reported path — never guessed as a match', () => {
-    const plugins: InitPlugin[] = [{ name: 'port', path: 'relative/path' }]
-    const throwingSamePath = (): boolean => {
-      throw new TypeError('requires an absolute path')
-    }
-    expect(checkPluginLoad({ request: REPOSITORY, initPlugins: plugins, samePath: throwingSamePath })).toEqual({ kind: 'shadowed', path: 'relative/path', version: null })
-  })
-})
-
-describe('checkComponents', () => {
-  it('unchecked, no-plugin-path, when expected is null and no read was ever attempted', () => {
-    expect(checkComponents({ expected: null, expectedAttempted: false, commandNames: [], agentNames: [] })).toEqual({ kind: 'unchecked', reason: 'no-plugin-path' })
-  })
-
-  it('unchecked, unreadable, when expected is null after a read was attempted', () => {
-    expect(checkComponents({ expected: null, expectedAttempted: true, commandNames: [], agentNames: [] })).toEqual({ kind: 'unchecked', reason: 'unreadable' })
-  })
-
-  it('complete when every expected skill and agent is present', () => {
-    const result = checkComponents({ expected: { skills: ['pipeline'], agents: ['plan-agent'] }, expectedAttempted: true, commandNames: ['pipeline', 'scope'], agentNames: ['plan-agent'] })
-    expect(result).toEqual({ kind: 'complete' })
-  })
-
-  it('incomplete naming exactly the missing skills and agents', () => {
-    const result = checkComponents({ expected: { skills: ['pipeline', 'scope'], agents: ['plan-agent', 'impl-agent'] }, expectedAttempted: true, commandNames: ['pipeline'], agentNames: [] })
-    expect(result).toEqual({ kind: 'incomplete', missingSkills: ['scope'], missingAgents: ['plan-agent', 'impl-agent'] })
+  it.each([
+    ['unconfirmed before any init', null, { kind: 'unconfirmed' }],
+    ['missing when no plugin named port loaded', [{ name: 'other', path: '/x' }], { kind: 'missing' }],
+    ['duplicate when two plugins named port loaded', [{ name: 'port', path: '/a' }, { name: 'port', path: '/b' }], { kind: 'duplicate', paths: ['/a', '/b'] }],
+    ['loaded with exactly one match', [{ name: 'port', path: '/home/op/.claude/plugins/cache/port', version: '0.3.1' }], { kind: 'loaded', path: '/home/op/.claude/plugins/cache/port', version: '0.3.1' }],
+    ['loaded without a version', [{ name: 'port', path: '/p' }], { kind: 'loaded', path: '/p', version: null }],
+  ] as const satisfies readonly (readonly [string, readonly InitPlugin[] | null, object])[])('%s', (_name, initPlugins, expected) => {
+    expect(checkPluginLoad({ initPlugins })).toEqual(expected)
   })
 })
 

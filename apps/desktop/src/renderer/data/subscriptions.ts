@@ -3,21 +3,13 @@
 // all subscribe through this module instead of the bridge directly, so a
 // pushed event is attached once no matter how many screens care about it.
 import type { QueryClient } from '@tanstack/react-query'
-import type { IpcEventMap, ReposListResponse } from '@/types/ipc'
+import type { ReposListResponse } from '@/types/ipc'
 import type { BoardSnapshot } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import type { EventListener, SubscribableEvent, SubscriptionBridge, Subscriptions } from '@/types/data'
 import { ipcQueryOptions } from '@/renderer/data/query'
-
-/** The one place `window.port.onBoardUpdate`/`onSessionStatus`/
- *  `onSessionEntries` are named — an explicit switch rather than the generic
- *  `bridgeListenerName` derivation, since there are only three subscribable events. */
-function attachTo<E extends SubscribableEvent>(bridge: SubscriptionBridge, event: E, onPayload: (payload: IpcEventMap[E]) => void): () => void {
-  if (event === 'board:update') return bridge.onBoardUpdate(onPayload as EventListener<'board:update'>)
-  if (event === 'session:status') return bridge.onSessionStatus(onPayload as EventListener<'session:status'>)
-  if (event === 'session:entries') return bridge.onSessionEntries(onPayload as EventListener<'session:entries'>)
-  return bridge.onAppCommand(onPayload as EventListener<'app:command'>)
-}
+import { invoke } from '@/renderer/data/invoke'
+import { connectTranscriptCache } from '@/renderer/data/transcript'
 
 /** Attaches one bridge listener per event, lazily — the first `subscribe`
  *  call for an event attaches it, and detaching the last subscriber removes
@@ -28,7 +20,7 @@ export function createSubscriptions(bridge: SubscriptionBridge = window.port): S
 
   function ensureAttached<E extends SubscribableEvent>(event: E): void {
     if (detachers.has(event)) return
-    const detach = attachTo(bridge, event, (payload) => {
+    const detach = bridge.on(event, (payload) => {
       for (const listener of fanouts.get(event) ?? []) (listener as EventListener<E>)(payload)
     })
     detachers.set(event, detach)
@@ -71,20 +63,16 @@ export function sharedSubscriptions(): Subscriptions {
   return shared
 }
 
-/** Feeds `board:update` straight into the query cache so the legacy Board
- *  (and any future React consumer) reads one source of truth. Cancels any
- *  in-flight `board:snapshot` invoke first, so an older fetch resolving after
- *  a newer push can never clobber it. */
-/** Feeds `session:status` into the `session:list` cache (#316) so the
+/** Feeds `session.status` into the `session.list` cache so the
  *  sidebar's own session list stays live without polling. Upserts by
  *  `sessionKey` only while the cache already holds an entry and nothing is
- *  mid-fetch — a push landing before the first `session:list` read, or
+ *  mid-fetch — a push landing before the first `session.list` read, or
  *  mid-fetch, invalidates instead, so a race can never drop or stale-patch
  *  the eventual real list. */
 function connectSessionListCache(client: QueryClient, subscriptions: Subscriptions): () => void {
-  const key = ipcQueryOptions('session:list').queryKey
-  const indexKey = ipcQueryOptions('session:index').queryKey
-  return subscriptions.subscribe('session:status', (snapshot: HostedSessionSnapshot) => {
+  const key = ipcQueryOptions('session.list').queryKey
+  const indexKey = ipcQueryOptions('session.index').queryKey
+  return subscriptions.subscribe('session.status', (snapshot: HostedSessionSnapshot) => {
     if (snapshot.phase === 'ended') void client.invalidateQueries({ queryKey: indexKey })
     const state = client.getQueryState(key)
     if (state === undefined || state.fetchStatus === 'fetching') {
@@ -104,22 +92,24 @@ function connectSessionListCache(client: QueryClient, subscriptions: Subscriptio
 
 // One-directional on purpose: a repository that fails its own read must never trigger a loop.
 function reposListIsStale(client: QueryClient, snapshot: BoardSnapshot): boolean {
-  const cached = client.getQueryData<ReposListResponse>(ipcQueryOptions('repos:list').queryKey)
+  const cached = client.getQueryData<ReposListResponse>(ipcQueryOptions('repos.list').queryKey)
   if (cached === undefined || !cached.ok) return false
   const ready = new Set(cached.repositories.filter((entry) => 'config' in entry).map((entry) => entry.id))
   return snapshot.state.repositories.some((repo) => repo.ok && !ready.has(repo.repoId))
 }
 
 export function connectQueryCache(client: QueryClient, subscriptions: Subscriptions = sharedSubscriptions()): () => void {
-  const key = ipcQueryOptions('board:snapshot').queryKey
-  const detachBoard = subscriptions.subscribe('board:update', (snapshot) => {
+  const key = ipcQueryOptions('board.snapshot').queryKey
+  const detachBoard = subscriptions.subscribe('board.update', (snapshot) => {
     void client.cancelQueries({ queryKey: key })
     client.setQueryData(key, snapshot)
-    if (reposListIsStale(client, snapshot)) void client.invalidateQueries({ queryKey: ipcQueryOptions('repos:list').queryKey })
+    if (reposListIsStale(client, snapshot)) void client.invalidateQueries({ queryKey: ipcQueryOptions('repos.list').queryKey })
   })
   const detachSessions = connectSessionListCache(client, subscriptions)
+  const detachTranscripts = connectTranscriptCache(client, subscriptions, invoke)
   return () => {
     detachBoard()
     detachSessions()
+    detachTranscripts()
   }
 }

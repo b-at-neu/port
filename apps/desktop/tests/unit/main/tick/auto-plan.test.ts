@@ -3,8 +3,8 @@ import type { ReconciledItem } from '@/types/state'
 import type { RepoDispatchStatus } from '@/types/dispatch'
 import type { TickReport } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
-import { autoApprovalsOf, autoPlanApprovingOf, autoPlanStatusOf, autoPlanSwapCandidatesOf } from '@/main/tick/auto-plan'
-import { reconciledItem } from '../../../fixtures/board-state'
+import { autoApprovalsOf, autoPlanApprovingOf, autoPlanStatusOf, autoPlanSwapCandidatesOf } from '@/main/pipeline/tick/auto-plan'
+import { reconciledItem } from '../../../support/board-snapshot'
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
   return reconciledItem({
@@ -77,16 +77,12 @@ describe('autoPlanSwapCandidatesOf', () => {
     expect(autoPlanSwapCandidatesOf({ report: report(), owner: 'app', runState })).toEqual([])
   })
 
-  it.each(['paused', 'draining'] as const)('lists every candidate for a terminal owner whatever the app run state (%s)', (runState) => {
-    expect(autoPlanSwapCandidatesOf({ report: report(), owner: 'terminal', runState })).toEqual([7, 8])
-  })
-
   it.each(['none', 'unreadable'] as const)('lists none when the owner is %s', (owner) => {
     expect(autoPlanSwapCandidatesOf({ report: report(), owner, runState: 'dispatching' })).toEqual([])
   })
 
-  it.each(['app', 'terminal'] as const)('lists none on a blind report for a %s owner', (owner) => {
-    expect(autoPlanSwapCandidatesOf({ report: report({ blind: { reason: 'github-unavailable' } as never }), owner, runState: 'dispatching' })).toEqual([])
+  it('lists none on a blind report for an app owner', () => {
+    expect(autoPlanSwapCandidatesOf({ report: report({ blind: { reason: 'github-unavailable' } as never }), owner: 'app', runState: 'dispatching' })).toEqual([])
   })
 })
 

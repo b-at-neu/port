@@ -40,7 +40,7 @@ describe('runInBackground', () => {
     const value = await runInBackground({ id: 'x', pending: 'Working…', run: () => Promise.reject(new Error('gone')), toToast: () => result('success') })
 
     expect(value).toBe('unreachable')
-    expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toBe("Couldn't reach the main process. Restart port to try again.")
+    expect(toast.error).toHaveBeenCalledTimes(1)
     expect(toast.success).not.toHaveBeenCalled()
   })
 

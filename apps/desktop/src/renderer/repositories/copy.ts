@@ -1,5 +1,6 @@
 // Every pure string the Repositories screens render. No DOM here.
 import type { AppliedOverride, RepoDiagnostic, RepoProblem, ResolvedRepoConfig } from '@/utils/repos'
+import { mirrorVocabularyOf } from '@/utils/labels/display'
 import type { LabelSource, VocabularyProblem, VocabularyVerdict } from '@/utils/labels/vocabulary'
 import type { OverviewModuleFlag } from '@/types/repositories'
 
@@ -100,11 +101,26 @@ export function moduleSummary(modules: ResolvedRepoConfig['modules']): string {
 // branch alone, never 'dev → null'.
 export function summaryParts(config: ResolvedRepoConfig): readonly string[] {
   const branchSummary = config.branches.production === null ? config.branches.integration : `${config.branches.integration} → ${config.branches.production}`
-  const labelCount = config.appOnly === true && config.displayVocabulary !== undefined ? config.displayVocabulary.labels.length : config.vocabulary.labels.length
+  const labelCount = mirrorVocabularyOf(config).labels.labels.length
   return [branchSummary, `${labelCount} pipeline labels`, moduleSummary(config.modules)].filter((part) => part !== '')
 }
 
-type RegistryErrorReason = 'unreadable' | 'malformed' | 'unsupported-version'
+export type RegistryErrorReason = 'unreadable' | 'malformed' | 'unsupported-version'
+
+export const REPO_INVOKE_ERROR = "Couldn't reach the main process. Restart port."
+export const NOT_READ_YET = 'Not read yet. port reads it on the next poll.'
+export const NOT_REGISTERED = "That repository isn't registered."
+export const OPEN_REPOSITORIES = 'Open Repositories'
+export const REMOVE_REPOSITORY = 'Remove repository'
+export const REMOVE_DESCRIPTION = 'port stops reading it. The folder, its tickets and its PRs are untouched, and you can add it again.'
+
+export function removeTitle(name: string): string {
+  return `Remove ${name} from port?`
+}
+
+export function removingCopy(name: string): string {
+  return `Removing ${name}…`
+}
 
 interface RegistryBanner {
   readonly path: string
@@ -119,18 +135,14 @@ export function registryBannerCopy(banner: RegistryBanner): string {
 // --- Overview → Labels -------------------------------------------------
 
 // The verdict line's own sentence, by `VocabularyVerdict`.
-export function verdictCopy(verdict: VocabularyVerdict, total: number, missing: number, unverifiedReason: string | undefined, appOnly = false): string {
+export function verdictCopy(verdict: VocabularyVerdict, total: number, missing: number, unverifiedReason: string | undefined): string {
   switch (verdict) {
     case 'verified':
       return `All ${String(total)} labels exist on GitHub.`
     case 'partial':
-      return appOnly
-        ? `${String(missing)} of ${String(total)} labels are missing on GitHub. Run /port:init to create the missing labels.`
-        : `${String(missing)} of ${String(total)} labels are missing on GitHub. Items carrying them won't show.`
+      return `${String(missing)} of ${String(total)} labels are missing on GitHub. Run /port:init to create the missing labels.`
     case 'mis-resolved':
-      return appOnly
-        ? `None of the ${String(total)} labels this config resolves exist on GitHub. Run /port:init to create them, or check \`labels\` and \`states\` in .claude/port.config.json and the CLAUDE.md overrides.`
-        : `None of the ${String(total)} labels this config resolves exist on GitHub. Check \`labels\` in .claude/port.config.json and the CLAUDE.md overrides.`
+      return `None of the ${String(total)} labels this config resolves exist on GitHub. Run /port:init to create them, or check \`labels\` and \`states\` in .claude/port.config.json and the CLAUDE.md overrides.`
     case 'unverified':
       return `Couldn't check labels on GitHub — ${unverifiedReason ?? 'unknown reason'}.`
   }

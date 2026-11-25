@@ -1,23 +1,23 @@
 // Every string Work on's toasts show lives here, one function per union — a new variant is a compile error rather than a silently blank toast. Pure string functions; no DOM here.
 import { lastLaunchFailed } from '@/renderer/board/dispatch-failures'
-import type { ClaimApplyResponse, ClaimToast, ClaimVerdict, PlanGateChoice } from '@/types/claim'
+import type { ClaimApplyResponse, ClaimToast, ClaimVerdict } from '@/types/claim'
 import type { RepoDispatchStatus } from '@/types/dispatch'
 import type { WriteOutcome } from '@/types/writes'
 import { mirrorReason } from '@/renderer/lib/mirror-reason'
+import { formatClock } from '@/renderer/lib/time'
 
 type Claimable = Extract<ClaimVerdict, { kind: 'claimable' }>
 type Refusal = Exclude<ClaimVerdict, { kind: 'claimable' }>
 
-/** Shared between the Backlog screen's Work on menu and its tooltips, so the two never drift on label or hint. */
-export const PLAN_GATE_OPTIONS: ReadonlyArray<{ readonly value: PlanGateChoice; readonly label: string; readonly hint: string }> = [
-  { value: 'review', label: 'Review the plan', hint: 'You approve or bounce the plan before any code is written. The default for features.' },
-  { value: 'auto', label: 'Auto-approve the plan', hint: 'Skips the plan gate. For small or bug-fix tickets.' },
-]
+export const CLAIM_TAKE_OVER = 'Take over'
+export const CLAIM_LEAVE_IT = 'Leave it'
 
-function timeOf(iso: string): string {
-  const parsed = new Date(iso)
-  if (Number.isNaN(parsed.getTime())) return iso
-  return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+export function claimingCopy(number: number): string {
+  return `Claiming #${String(number)}…`
+}
+
+export function takingOverCopy(number: number): string {
+  return `Taking over #${String(number)}…`
 }
 
 function logins(names: readonly string[]): string {
@@ -28,8 +28,6 @@ function logins(names: readonly string[]): string {
 export function dispatchLine(repo: string, status: RepoDispatchStatus | undefined): string {
   if (status === undefined) return "Couldn't refresh the board, so it's unclear when planning starts."
   switch (status.owner) {
-    case 'terminal':
-      return `Your terminal cockpit runs ${repo} and plans it on its next tick.`
     case 'none':
       return `Nothing runs ${repo} yet. Run it to start planning.`
     case 'unreadable':
@@ -89,7 +87,7 @@ export function claimedTitle(number: number): string {
   return `#${String(number)} claimed and assigned to you.`
 }
 
-/** One line per `WriteOutcome` arm. `terminal-owned` and `ownership-unreadable` are named for exhaustiveness, though a claim only writes while this app owns the repository. */
+/** One line per `WriteOutcome` arm. `ownership-unreadable` is named for exhaustiveness, though a claim only writes while this app owns the repository. */
 export function writeOutcomeCopy(number: number, outcome: WriteOutcome): { readonly line: string; readonly note: string | null } {
   switch (outcome.kind) {
     case 'applied':
@@ -113,7 +111,6 @@ export function writeOutcomeCopy(number: number, outcome: WriteOutcome): { reado
       return { line: `Couldn't re-read #${String(number)} before writing.`, note: 'The item is no longer available. Nothing was written.' }
     case 'unresolvable-label':
       return { line: "This repository's label vocabulary doesn't resolve.", note: `Check the following keys in .claude/port.config.json's labels: ${outcome.keys.join(', ')}.` }
-    case 'terminal-owned':
     case 'ownership-unreadable':
       return { line: 'Blocked by repository ownership.', note: 'This should be unreachable for Work on — please report it.' }
     case 'state-unsaved':
@@ -138,13 +135,13 @@ export function claimedToast(params: { readonly repo: string; readonly number: n
   return { tone: 'success', title: claimedTitle(number), description: advisory === null ? dispatch : `${dispatch} ${advisory}` }
 }
 
-export function applyResponseToast(repo: string, number: number, response: ClaimApplyResponse): ClaimToast {
+export function applyResponseToast(repo: string, number: number, response: ClaimApplyResponse, now: Date): ClaimToast {
   switch (response.kind) {
     case 'moved':
       return {
         tone: 'error',
         title: `#${String(number)} changed on GitHub before the write.`,
-        description: `It's now assigned to ${logins(response.current)} (read ${timeOf(response.readAt)}). Nothing was written. Work on it again to see where it stands.`,
+        description: `It's now assigned to ${logins(response.current)} (read ${formatClock(response.readAt, now)}). Nothing was written. Work on it again to see where it stands.`,
       }
     case 'refused':
       return errorToast(refusalCopy(repo, number, response.verdict))
@@ -172,8 +169,4 @@ export function preflightToast(repo: string, number: number, response: { readonl
 
 export function takeOverPrompt(number: number, others: readonly string[]): { readonly title: string; readonly description: string } {
   return { title: `#${String(number)} is assigned to ${logins(others)}.`, description: 'Taking it over removes them, so only your pipeline dispatches it.' }
-}
-
-export function unreachableToast(): ClaimToast {
-  return { tone: 'error', title: "Couldn't reach the main process.", description: 'Nothing was written. Restart port to try again.' }
 }

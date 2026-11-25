@@ -1,5 +1,5 @@
-// One handler per `IpcChannel`, so the exhaustive `FixtureHandlers` type fails `pnpm typecheck` when a new channel ships with none. No handler throws or causes a side effect.
-import type { IpcChannel, IpcMap } from '@/types/ipc'
+// One handler per action, so the exhaustive `FixtureHandlers` type fails `pnpm typecheck` when a new action ships with none. No handler throws or causes a side effect.
+import type { ActionInput, ActionName, ActionOutput } from '@/types/ipc'
 import type { RepoRunState } from '@/types/dispatch'
 import { RUN_TARGET } from '@/types/dispatch'
 import type { TranscriptSource } from '@/utils/sessions/transcript'
@@ -25,9 +25,9 @@ import { fixtureUpdateDownload, fixtureUpdateState } from './update'
 import { fixtureEmptySessionScan, fixtureUnregisteredBoard } from './unregistered'
 import { fixtureWorktreesPurge, fixtureWorktreesReclaim, fixtureWorktreesReport } from './worktrees'
 
-/** Exhaustive by construction: a new `IpcChannel` fails `pnpm typecheck` in
+/** Exhaustive by construction: a new action fails `pnpm typecheck` in
  *  `fixtureHandlers`'s own return literal until a fixture exists for it. */
-type FixtureHandlers = { readonly [C in IpcChannel]: (request: IpcMap[C]['request']) => IpcMap[C]['response'] }
+type FixtureHandlers = { readonly [N in ActionName]: (request: ActionInput<N>) => ActionOutput<N> }
 
 // Pins the live sidebar session and a History row; archives a second History row, per the Implementation checklist.
 const FIXTURE_MARKS = { pinned: ['fixture-claude-1', 'fixture-history-2'], archived: ['fixture-history-3'] }
@@ -45,18 +45,18 @@ function transcriptSourceFor(sessionId: string, agentId: string | null, now: Dat
 export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populated'): FixtureHandlers {
   return {
     // --- Screen reads, populated -------------------------------------------
-    'app:info': () => ({ app: '0.1.0', electron: '38.2.1', node: '22.14.0', chromium: '140.0.0.0', commit: null }),
+    'app.info': () => ({ app: '0.1.0', electron: '38.2.1', node: '22.14.0', chromium: '140.0.0.0', commit: null }),
 
-    'repos:list': () => {
+    'repos.list': () => {
       if (scenario === 'unregistered') return { ok: true, repositories: [] }
       if (scenario === 'registry-error') return FIXTURE_REGISTRY_ERROR
       return { ok: true, repositories: fixtureRepositoriesFor(scenario) }
     },
 
-    'board:snapshot': () => boardFor(now, scenario),
-    'board:refresh': () => boardFor(now, scenario),
+    'board.snapshot': () => boardFor(now, scenario),
+    'board.refresh': () => boardFor(now, scenario),
 
-    'runtime:preflight': () => ({
+    'runtime.preflight': () => ({
       checkedAt: now.toISOString(),
       executable: { path: '/usr/local/bin/claude' },
       version: { raw: '2.1.3', belowMinimum: false },
@@ -66,108 +66,107 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
       detail: null,
     }),
 
-    'sessions:scan': () => {
+    'history.scan': () => {
       if (scenario === 'unregistered') return fixtureEmptySessionScan(now)
       if (scenario === 'failing') return fixtureFailingSessionScan(now)
       return fixtureSessionsScan(now)
     },
 
-    'session:list': () => {
+    'session.list': () => {
       if (scenario === 'unregistered') return []
       return scenario === 'empty' ? fixturePermissionSnapshots(now) : fixtureSessionSnapshots(now, scenario)
     },
-    'session:index': () => (scenario === 'empty' || scenario === 'unregistered' ? [] : fixtureSessionIndex(now)),
-    'session:capacity': () => ({ limit: 4, ceiling: 8 }),
-    'session:capacity:set': () => ({ limit: 4, ceiling: 8 }),
-    'session:restore:list': () => ({ entries: [] }),
+    'session.index': () => (scenario === 'empty' || scenario === 'unregistered' ? [] : fixtureSessionIndex(now)),
+    'session.capacity': () => ({ limit: 4, ceiling: 8 }),
+    'session.capacitySet': () => ({ limit: 4, ceiling: 8 }),
+    'session.restoreList': () => ({ entries: [] }),
 
     // --- Click-only reads, valid and populated ------------------------------
-    'worktrees:report': () => fixtureWorktreesReport(now),
-    'worktrees:reclaim': (request) => fixtureWorktreesReclaim(now, request.force),
-    'worktrees:purge': () => fixtureWorktreesPurge(now),
+    'worktrees.report': () => fixtureWorktreesReport(now),
+    'worktrees.reclaim': (request) => fixtureWorktreesReclaim(now, request.force),
+    'worktrees.purge': () => fixtureWorktreesPurge(now),
 
-    'transcript:tail:open': (request) => ({ ok: true, tailId: 'fixture-tail', source: transcriptSourceFor(request.sessionId, request.agentId, now), entries: fixtureAttachEntries(now) }),
-    'transcript:tail:poll': () => ({ ok: true, source: transcriptSourceFor('fixture-session', null, now), appended: [], patched: [], hasMore: false }),
-    'transcript:tail:close': () => undefined,
+    'transcript.tailOpen': (request) => ({ ok: true, tailId: 'fixture-tail', source: transcriptSourceFor(request.sessionId, request.agentId, now), entries: fixtureAttachEntries(now) }),
+    'transcript.tailPoll': () => ({ ok: true, source: transcriptSourceFor('fixture-session', null, now), appended: [], patched: [], hasMore: false }),
+    'transcript.tailClose': () => undefined,
 
-    'search:query': () => fixtureSearchResult(now),
+    'search.query': () => fixtureSearchResult(now),
 
-    'claim:preflight': () => fixtureClaimPreflight(now),
-    'gate:preflight': () => fixtureGatePreflight(now),
+    'claim.preflight': () => fixtureClaimPreflight(now),
+    'gate.preflight': () => fixtureGatePreflight(now),
 
-    'runtime:probe': (request) => ({ checkedAt: now.toISOString(), repo: request.repoId === null ? null : 'acme/widgets', elapsedMs: 420, apiKeyInEnvironment: false, diagnosis: 'verified', detail: null }),
+    'runtime.probe': (request) => ({ checkedAt: now.toISOString(), repo: request.repoId === null ? null : 'acme/widgets', elapsedMs: 420, apiKeyInEnvironment: false, diagnosis: 'verified', detail: null }),
 
     // --- Writes, never a side effect ---------------------------------------
-    'repos:add': () => ({ ok: true, outcome: 'cancelled' }),
-    'repos:remove': () => ({ ok: true, repositories: fixtureRepositoriesFor(scenario) }),
+    'repos.add': () => ({ ok: true, outcome: 'cancelled' }),
+    'repos.remove': () => ({ ok: true, repositories: fixtureRepositoriesFor(scenario) }),
 
-    'item:action': () => ({ ok: true, outcome: { kind: 'no-op' } }),
+    'item.action': () => ({ ok: true, outcome: { kind: 'no-op' } }),
 
-    'item:decide': () => ({ ok: true, comment: null, labels: { kind: 'no-op' } }),
+    'item.decide': () => ({ ok: true, comment: null, labels: { kind: 'no-op' } }),
 
-    'dispatch:control': (request) => {
-      if (request.command === 'take-over') return { ok: true, command: 'take-over', repoId: request.repoId, runState: { repoId: request.repoId, state: RUN_TARGET.run, since: now.toISOString() } }
+    'dispatch.control': (request) => {
       const runState: RepoRunState = { repoId: request.repoId, state: RUN_TARGET[request.command], since: now.toISOString() }
       if (request.command === 'run') return { ok: true, command: 'run', repoId: request.repoId, runState }
       if (request.command === 'drain') return { ok: true, command: 'drain', repoId: request.repoId, runState, persisted: false }
       return { ok: true, command: 'pause', repoId: request.repoId, runState, report: { kind: 'completed', items: [] }, released: true }
     },
 
-    'claim:apply': () => ({ kind: 'refused', verdict: { kind: 'not-found' } }),
+    'claim.apply': () => ({ kind: 'refused', verdict: { kind: 'not-found' } }),
 
-    'gate:answer': () => ({ kind: 'refused', verdict: { kind: 'not-found' } }),
+    'gate.answer': () => ({ kind: 'refused', verdict: { kind: 'not-found' } }),
 
-    'session:start': () => ({ ok: false, kind: 'runtime', diagnosis: 'unverified', detail: 'Fixture mode: sessions are not started.' }),
-    'session:send': () => ({ ok: false, kind: 'unknown-session' }),
-    'session:interrupt': () => ({ ok: false, kind: 'unknown-session' }),
-    'session:close': () => ({ ok: false, kind: 'unknown-session' }),
-    'session:attach': (request) => fixtureSessionAttach(request.sessionKey, now, scenario),
-    'session:permission:answer': () => ({ ok: false, kind: 'unknown-session' }),
-    'session:invoke': () => ({ ok: false, kind: 'unknown-session' }),
-    'session:dismiss': () => ({ ok: false, kind: 'unknown-session' }),
-    'session:restore': () => ({ ok: false, kind: 'unknown-restore' }),
-    'session:restore:discard': () => ({ ok: true }),
+    'session.start': () => ({ ok: false, kind: 'runtime', diagnosis: 'unverified', detail: 'Fixture mode: sessions are not started.' }),
+    'session.send': () => ({ ok: false, kind: 'unknown-session' }),
+    'session.interrupt': () => ({ ok: false, kind: 'unknown-session' }),
+    'session.close': () => ({ ok: false, kind: 'unknown-session' }),
+    'session.attach': (request) => fixtureSessionAttach(request.sessionKey, now, scenario),
+    'session.permissionAnswer': () => ({ ok: false, kind: 'unknown-session' }),
+    'session.invoke': () => ({ ok: false, kind: 'unknown-session' }),
+    'session.dismiss': () => ({ ok: false, kind: 'unknown-session' }),
+    'session.restore': () => ({ ok: false, kind: 'unknown-restore' }),
+    'session.restoreDiscard': () => ({ ok: true }),
 
-    'gh:status': () => ({ kind: 'signed-in', checkedAt: now.toISOString(), account: 'octo-operator', scopes: ['repo', 'read:org', 'workflow'] }),
-    'backlog:list': (request) => (scenario === 'failing' ? fixtureFailingBacklog(now, request.repoId) : fixtureBacklog(now, request.repoId)),
-    'backlog:detail': (request) => fixtureBacklogDetail(now, scenario, request),
-    'audit:list': (request) => fixtureAuditRead(now, scenario, request),
-    'incidents:groups': () => fixtureIncidentGroups(now, scenario),
-    'incidents:list': (request) => fixtureIncidentList(now, scenario, request),
-    'incidents:export': () => fixtureIncidentExport(),
-    'session:defaults': () => DEFAULT_SESSION_DEFAULTS,
-    'session:defaults:set': (request) => request,
-    'session:rename': () => ({ ok: false, kind: 'unknown-session' }),
-    'session:controls:set': () => ({ ok: false, kind: 'unknown-session' }),
-    'session:question:answer': () => ({ ok: false, kind: 'unknown-session' }),
-    'session:plan:answer': () => ({ ok: false, kind: 'unknown-session' }),
-    'session:files': () => ({ ok: false, kind: 'unknown-session' }),
+    'gh.status': () => ({ kind: 'signed-in', checkedAt: now.toISOString(), account: 'octo-operator', scopes: ['repo', 'read:org', 'workflow'] }),
+    'backlog.list': (request) => (scenario === 'failing' ? fixtureFailingBacklog(now, request.repoId) : fixtureBacklog(now, request.repoId)),
+    'backlog.detail': (request) => fixtureBacklogDetail(now, scenario, request),
+    'audit.list': (request) => fixtureAuditRead(now, scenario, request),
+    'incidents.groups': () => fixtureIncidentGroups(now, scenario),
+    'incidents.list': (request) => fixtureIncidentList(now, scenario, request),
+    'incidents.export': () => fixtureIncidentExport(),
+    'session.defaults': () => DEFAULT_SESSION_DEFAULTS,
+    'session.defaultsSet': (request) => request,
+    'session.rename': () => ({ ok: false, kind: 'unknown-session' }),
+    'session.controlsSet': () => ({ ok: false, kind: 'unknown-session' }),
+    'session.questionAnswer': () => ({ ok: false, kind: 'unknown-session' }),
+    'session.planAnswer': () => ({ ok: false, kind: 'unknown-session' }),
+    'session.files': () => ({ ok: false, kind: 'unknown-session' }),
 
-    'folders:list': () => ({ folders: fixtureFolders(now) }),
-    'folders:choose': () => ({ outcome: 'cancelled' }),
-    'session:changes': (request) => (request.sessionKey === STREAMING_KEY ? fixtureSessionChanges(now) : { ok: false, kind: 'unknown-session', message: `no session is open for key '${request.sessionKey}'` }),
-    'session:marks': () => FIXTURE_MARKS,
-    'session:pin:set': (request) => ({ ok: true, marks: { ...FIXTURE_MARKS, pinned: request.pinned ? [...FIXTURE_MARKS.pinned, request.sessionId] : FIXTURE_MARKS.pinned.filter((id) => id !== request.sessionId) } }),
-    'session:archive:set': (request) => ({ ok: true, marks: { ...FIXTURE_MARKS, archived: request.archived ? [...FIXTURE_MARKS.archived, request.sessionId] : FIXTURE_MARKS.archived.filter((id) => id !== request.sessionId) } }),
-    'session:task:stop': () => ({ ok: true }),
+    'folders.list': () => ({ folders: fixtureFolders(now) }),
+    'folders.choose': () => ({ outcome: 'cancelled' }),
+    'session.changes': (request) => (request.sessionKey === STREAMING_KEY ? fixtureSessionChanges(now) : { ok: false, kind: 'unknown-session', message: `no session is open for key '${request.sessionKey}'` }),
+    'session.marks': () => FIXTURE_MARKS,
+    'session.pinSet': (request) => ({ ok: true, marks: { ...FIXTURE_MARKS, pinned: request.pinned ? [...FIXTURE_MARKS.pinned, request.sessionId] : FIXTURE_MARKS.pinned.filter((id) => id !== request.sessionId) } }),
+    'session.archiveSet': (request) => ({ ok: true, marks: { ...FIXTURE_MARKS, archived: request.archived ? [...FIXTURE_MARKS.archived, request.sessionId] : FIXTURE_MARKS.archived.filter((id) => id !== request.sessionId) } }),
+    'session.taskStop': () => ({ ok: true }),
 
-    'stage:allow': () => ({ kind: 'unknown-denial' }),
-    'stage:dismiss-denial': () => undefined,
-    'stage:resume': () => ({ kind: 'unknown-stage' }),
-    'stage:restart': () => ({ kind: 'unknown-stage' }),
-    'held:force-dispatch': () => ({ kind: 'ok' }),
-    'notify:needs-you': () => undefined,
-    'notify:prefs': () => DEFAULT_NOTIFICATION_PREFS,
-    'notify:prefs:set': (request) => request,
-    'storage:report': () => fixtureStorageReport(),
-    'usage:summary': () => fixtureUsageSummary(now),
-    'release:status': (request) => fixtureReleaseStatus(now, scenario, request.repoId),
-    'release:issues': (request) => fixtureReleaseIssues(scenario, request),
-    'update:state': () => fixtureUpdateState(now, scenario, 'startup'),
-    'update:check': () => fixtureUpdateState(now, scenario, 'manual'),
-    'update:download': () => fixtureUpdateDownload(now, scenario),
-    'update:download:state': () => fixtureUpdateDownload(now, scenario),
-    'update:open': () => fixtureUpdateDownload(now, scenario),
-    'release:run': () => ({ kind: 'refused', reason: 'unsupported', message: 'Fixture mode: releases are not cut.' }),
+    'stage.allow': () => ({ kind: 'unknown-denial' }),
+    'stage.dismissDenial': () => undefined,
+    'stage.resume': () => ({ kind: 'unknown-stage' }),
+    'stage.restart': () => ({ kind: 'unknown-stage' }),
+    'held.forceDispatch': () => ({ kind: 'ok' }),
+    'notify.needsYou': () => undefined,
+    'notify.prefs': () => DEFAULT_NOTIFICATION_PREFS,
+    'notify.prefsSet': (request) => request,
+    'storage.report': () => fixtureStorageReport(),
+    'usage.summary': () => fixtureUsageSummary(now),
+    'release.status': (request) => fixtureReleaseStatus(now, scenario, request.repoId),
+    'release.issues': (request) => fixtureReleaseIssues(scenario, request),
+    'update.state': () => fixtureUpdateState(now, scenario, 'startup'),
+    'update.check': () => fixtureUpdateState(now, scenario, 'manual'),
+    'update.download': () => fixtureUpdateDownload(now, scenario),
+    'update.downloadState': () => fixtureUpdateDownload(now, scenario),
+    'update.open': () => fixtureUpdateDownload(now, scenario),
+    'release.run': () => ({ kind: 'refused', reason: 'unsupported', message: 'Fixture mode: releases are not cut.' }),
   }
 }

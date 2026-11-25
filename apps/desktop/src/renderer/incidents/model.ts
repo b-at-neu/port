@@ -1,7 +1,8 @@
 // The one incident group/record → row mapping — pure, no DOM.
-import { BUCKET_LABEL } from '@/renderer/incidents/copy'
+import { BUCKET_LABEL, exportedToast, exportFailedToast } from '@/renderer/incidents/copy'
 import type { PillStatus } from '@/types/components'
-import type { IncidentBucket, IncidentGroup, IncidentGroupRow, IncidentRecord } from '@/types/incidents'
+import type { IncidentBucket, IncidentExportResult, IncidentGroup, IncidentGroupRow, IncidentRecord } from '@/types/incidents'
+import type { ActionToast } from '@/types/toast'
 
 export const BUCKET_TONE: Readonly<Record<IncidentBucket, PillStatus>> = {
   'stale-snapshot': 'danger',
@@ -37,6 +38,12 @@ function ticketsOf(group: IncidentGroup): string {
   const repos = [...new Set(group.items.map((item) => item.repo))]
   const more = group.droppedItems > 0 ? [`+${String(group.droppedItems)} more`] : []
   return [...numbers, ...more, ...repos].join(' ')
+}
+
+export function exportToast(result: IncidentExportResult): ActionToast | null {
+  if (result.ok) return { tone: 'success', title: exportedToast(result.path), description: null, action: null, cancel: null }
+  if (result.kind === 'cancelled') return null
+  return { tone: 'error', title: exportFailedToast(result.message), description: null, action: null, cancel: null }
 }
 
 /** Groups arrive newest-first from main. */

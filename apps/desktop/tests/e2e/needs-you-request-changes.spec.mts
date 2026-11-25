@@ -49,7 +49,7 @@ test('sends an approved PR back to revision, posting the note before swapping la
   const state = await harness.state()
   const pull = state.pulls.find((p) => p.number === 202)
   expect(pull?.labels).not.toContain('approved')
-  expect(pull?.labels).toContain('needs revision')
+  expect(pull?.labels).toEqual(expect.arrayContaining(['port', 'revising']))
   expect(pull?.comments?.[0]).toMatch(/^## Changes requested/)
   expect(pull?.comments?.[0]).toContain(note)
 })

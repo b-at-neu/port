@@ -1,7 +1,5 @@
-// fetchBacklog: every open issue, dropping what the store tracks, or under a labels view anything carrying a vocabulary label.
-import { githubHttp } from '@/main/platform/github-http'
-import type { GitHubTransport } from '@/types/platform'
-import type { LabelVocabulary } from '@/utils/labels/vocabulary'
+// fetchBacklog: every open issue, dropping what the store tracks.
+import type { GitHubReadContext } from '@/main/github/context'
 import type { BacklogItem, BacklogLabel, BacklogResponse, ParentRead } from '@/types/backlog'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
@@ -81,21 +79,16 @@ function buildBacklogQuery(): string {
 
 interface FetchBacklogParams {
   readonly repo: GitHubRepoRef
-  readonly vocabulary: LabelVocabulary
-  /** The store's tracked issue numbers; `null` is a labels view, where membership falls back to the vocabulary names. */
-  readonly tracked: ReadonlySet<number> | null
-  readonly github?: GitHubTransport
-  readonly now?: () => Date
+  /** The store's tracked issue numbers; empty for an unseeded repository until the first poll seeds it. */
+  readonly tracked: ReadonlySet<number>
 }
 
 // `scanned`/`total` diverging means the page was truncated; a viewer-query error is never itself a failure.
-export async function fetchBacklog(params: FetchBacklogParams): Promise<BacklogResponse> {
-  const github = params.github ?? githubHttp
-  const now = params.now ?? (() => new Date())
-  const fetchedAt = now().toISOString()
+export async function fetchBacklog(ctx: GitHubReadContext, params: FetchBacklogParams): Promise<BacklogResponse> {
+  const fetchedAt = ctx.clock.now().toISOString()
 
   const document = buildBacklogQuery()
-  const result = await github(repoGraphqlRequest(document, params.repo))
+  const result = await ctx.githubHttp(repoGraphqlRequest(document, params.repo))
 
   const text = bodyOf(result)
   const parsed = text !== undefined ? parseEnvelope(text) : undefined
@@ -127,15 +120,12 @@ export async function fetchBacklog(params: FetchBacklogParams): Promise<BacklogR
   const total = typeof raw.totalCount === 'number' ? raw.totalCount : 0
   const nodes = Array.isArray(raw.nodes) ? raw.nodes : []
 
-  const vocabularyNames = new Set(params.vocabulary.labels.map((label) => label.name))
-
   const items: Omit<BacklogItem, 'children'>[] = []
   for (const [index, node] of nodes.entries()) {
     if (typeof node !== 'object' || node === null) continue
     const issue = node as Record<string, unknown>
     const number = typeof issue.number === 'number' ? issue.number : 0
-    const inPipeline = params.tracked !== null ? params.tracked.has(number) : fieldListOf(issue.labels, 'name').some((name) => vocabularyNames.has(name))
-    if (inPipeline) continue
+    if (params.tracked.has(number)) continue
     items.push({
       number,
       title: typeof issue.title === 'string' ? issue.title : '',
@@ -150,11 +140,10 @@ export async function fetchBacklog(params: FetchBacklogParams): Promise<BacklogR
     })
   }
 
-  const children = await fetchChildren({
+  const children = await fetchChildren(ctx, {
     repo: params.repo,
     epics: items.filter((item) => item.subIssueCount > 0).map((item) => item.number),
-    claimed: params.tracked !== null ? { kind: 'store', numbers: params.tracked } : { kind: 'labels', names: vocabularyNames },
-    github,
+    claimed: params.tracked,
   })
 
   const withChildren = items.map((item): BacklogItem => ({ ...item, children: children.get(item.number) ?? EMPTY_CHILDREN }))

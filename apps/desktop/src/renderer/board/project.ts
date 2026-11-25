@@ -11,6 +11,7 @@ import type { BoardItemRow, BoardProjection, BoardRepositorySummary, BoardSnapsh
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import { blockedOnOf } from '@/renderer/board/blocked-on'
 import { heldEntriesFor } from '@/renderer/board/tick'
+import { ticketViewOf } from '@/renderer/lib/ticket-view'
 import type { DispatchOwner } from '@/types/dispatch'
 import type { TickReport } from '@/types/tick'
 
@@ -159,7 +160,7 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
       else ds = displayStatus(item, health, repo.freshness, now)
       const stageLabel = stageLabelOf(item)
       const autoApproving = autoApprovingKeys.has(`${repo.repoId}:${String(item.number)}`)
-      const blockedOn = blockedOnOf({ ticket, stageKey: stageLabel?.key, sessions, repoId: repo.repoId })
+      const blockedOn = blockedOnOf({ ticket, blocked: ticketViewOf(item)?.status.kind === 'blocked', sessions, repoId: repo.repoId })
       rows.push({ item, ticket, displayStatus: ds, liveStage, stageLabel, actions, decisions, viewer: repo.viewer, autoApproving, blockedOn, held: rowHeldOf(reportByRepo.get(repo.repoId), ownerByRepo.get(repo.repoId), item) })
     }
   }

@@ -7,7 +7,7 @@ import { NEEDS_YOU_TONE } from '@/renderer/lib/phase-tone'
 import type { AskQuestion } from '@/utils/hosting/controls'
 import { initialState, isComplete, setOther, toAnswers, toggleOption } from '@/renderer/session/question-model'
 import type { QuestionsState } from '@/types/session'
-import { QUESTION_OTHER_LABEL, QUESTION_SEND, QUESTION_SKIP, questionAnswerFailed, questionProgress } from '@/renderer/session/interaction-copy'
+import { QUESTION_OTHER_LABEL, QUESTION_SEND, QUESTION_SKIP, questionAnswerFailed, questionProgress } from '@/renderer/session/copy'
 
 interface QuestionCardProps {
   readonly questions: readonly AskQuestion[]

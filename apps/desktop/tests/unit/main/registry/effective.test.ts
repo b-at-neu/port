@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { displayOverridesOf, foldDispositions, fromShape, labelOverridesOf, parseExcusedCheckName, toShape } from '@/main/registry/effective'
+import { displayOverridesOf, foldDispositions, fromShape, labelOverridesOf, parseExcusedCheckName, toShape } from '@/main/repos/config/effective'
 import type { PortResolved } from '@/types/registry'
 import type { AppliedOverride } from '@/utils/repos'
 

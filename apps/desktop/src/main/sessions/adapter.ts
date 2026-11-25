@@ -4,7 +4,7 @@ import { pathOps } from '@/main/platform/paths'
 import type { AgentRecord, MetaProblem, SessionRecord, SessionRef, SessionScan } from '@/types/sessions'
 import { activityOf, attributeSession, itemNumberOf, parseAgentMeta, sessionRole, stageOf } from '@/main/sessions/classify'
 import { buildProjectIndex, defaultClaudeHome, resolveSessionDir } from '@/main/sessions/locate'
-import { createSdkSessionReader } from '@/main/sessions/sdk'
+import { createSdkSessionReader } from '@/main/sessions/reader'
 
 import type { ReadSessionStateParams } from '@/types/sessions'
 

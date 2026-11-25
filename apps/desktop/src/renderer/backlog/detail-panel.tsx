@@ -5,12 +5,12 @@ import type { LucideIcon } from 'lucide-react'
 import { DetailPane } from '@/renderer/components/detail-pane'
 import { PaneCloseButton } from '@/renderer/components/pane-close-button'
 import { ErrorBanner } from '@/renderer/components/error-banner'
-import { openTicketLinkLabel } from '@/renderer/board/copy'
+import { OPEN_TICKET_LABEL } from '@/renderer/board/copy'
 import { Markdown } from '@/renderer/components/markdown'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { useIpcQuery } from '@/renderer/data/query'
-import { exactTime, relativeAge } from '@/renderer/backlog/group'
+import { exactTime, formatAgoSince } from '@/renderer/lib/time'
 import { assigneeView, epicSummaryView, linkListView } from '@/renderer/backlog/detail'
 import {
   BACKLOG_DETAIL_CLOSE,
@@ -43,7 +43,7 @@ import type { BacklogDetail, BacklogEpicGroup, BacklogLinkListView, BacklogRowVi
 const FOCUS_RING = 'outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
 
 function useBacklogDetail(row: BacklogRowView) {
-  return useIpcQuery('backlog:detail', { repoId: row.repoId, number: row.number })
+  return useIpcQuery('backlog.detail', { repoId: row.repoId, number: row.number })
 }
 
 type DetailQuery = ReturnType<typeof useBacklogDetail>
@@ -167,7 +167,7 @@ function TicketMetaItems({ detail, now }: { readonly detail: BacklogDetail; read
         </MetaItem>
       ) : null}
       <MetaItem icon={Clock} name={BACKLOG_META_UPDATED} field="updated" tooltip={`${BACKLOG_META_UPDATED} · ${exactTime(detail.updatedAt)}`}>
-        <span>{relativeAge(detail.updatedAt, now)}</span>
+        <span>{formatAgoSince(detail.updatedAt, now)}</span>
       </MetaItem>
       <MetaItem icon={assignee.kind === 'unassigned' ? UserX : User} name={BACKLOG_META_ASSIGNEE} field="assignee">
         <span>{assignee.kind === 'unassigned' ? BACKLOG_DETAIL_UNASSIGNED : assignee.text}</span>
@@ -223,7 +223,7 @@ function EpicDetailItems({ query, now }: { readonly query: DetailQuery; readonly
       ) : null}
       {createdAt !== null ? (
         <MetaItem icon={Clock} name={BACKLOG_META_OPENED} field="age" tooltip={`${BACKLOG_META_OPENED} · ${exactTime(createdAt)}`}>
-          <span>{relativeAge(createdAt, now)}</span>
+          <span>{formatAgoSince(createdAt, now)}</span>
         </MetaItem>
       ) : null}
     </>
@@ -255,7 +255,7 @@ export function BacklogDetailPane({ row, epic, now, onClose }: BacklogDetailPane
         </div>
         <div className="flex items-center gap-3 text-small">
           <a href={row.url} target="_blank" rel="noreferrer" className="text-primary-text hover:underline">
-            {openTicketLinkLabel()}
+            {OPEN_TICKET_LABEL}
           </a>
         </div>
       </div>

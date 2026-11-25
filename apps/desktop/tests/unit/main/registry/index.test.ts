@@ -1,16 +1,24 @@
-import { mkdir, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { CommandResult } from '@/types/platform'
+import type { CommandResult, PlatformFs } from '@/types/platform'
 import { pathOps } from '@/main/platform/paths'
 import type { GitRunner } from '@/types/platform'
-import { REPOSITORY_LIST_TTL_MS, addRepository, listRepositories, removeRepository } from '@/main/registry/index'
-import { readRegistry } from '@/main/registry/store'
-import { makeTempDir } from '../../../fixtures/fs'
+import { REPOSITORY_LIST_TTL_MS, addRepository, createRepos, listRepositories, readyOf, removeRepository } from '@/main/repos/index'
+import { readRegistry } from '@/main/repos/registry-store'
+import type { ReposListResponse } from '@/types/ipc'
+import type { RepoId, RepositoryEntry } from '@/utils/repos'
+import { createFakeFs, createFakePlatform } from '../../../support/fake-platform'
+import { readyEntry } from '../../../support/repo-config'
 
-async function makeRepo(root: string, repo = 'acme/widgets'): Promise<void> {
-  await mkdir(join(root, '.claude'), { recursive: true })
-  await writeFile(join(root, '.claude', 'port.config.json'), JSON.stringify({ repo }))
+const REGISTRY_DIR = pathOps.toNative('/registry')
+const REPO_DIR = pathOps.toNative('/repos/widgets')
+const SUB_DIR = pathOps.join(REPO_DIR, 'apps', 'desktop')
+const PLAIN_DIR = pathOps.toNative('/repos/not-a-repo')
+const REGISTRY_FILE = pathOps.join(REGISTRY_DIR, 'registry.json')
+
+async function makeFs(): Promise<PlatformFs> {
+  const fs = createFakeFs()
+  for (const dir of [REGISTRY_DIR, REPO_DIR, SUB_DIR, PLAIN_DIR]) await fs.ensureDir(dir)
+  return fs
 }
 
 function ok(stdout: string): CommandResult {
@@ -33,71 +41,31 @@ function fakeGit(roots: readonly string[]): GitRunner {
   }
 }
 
+type Pick = 'cancel' | 'repo' | 'subdirectory' | 'plain'
+
+const ADD_CASES: readonly { readonly name: string; readonly picks: readonly Pick[]; readonly outcome: string; readonly registered: number; readonly problem?: string }[] = [
+  { name: 'cancel leaves the registry untouched', picks: ['cancel'], outcome: 'cancelled', registered: 0 },
+  { name: 'adds a new repository', picks: ['repo'], outcome: 'added', registered: 1 },
+  { name: 'adding the same path again reports already-registered with one entry', picks: ['repo', 'repo'], outcome: 'already-registered', registered: 1 },
+  { name: 'adding a subdirectory of a registered repository reports already-registered', picks: ['repo', 'subdirectory'], outcome: 'already-registered', registered: 1 },
+  { name: 'a directory that is not a repository is still added, problem visible', picks: ['plain'], outcome: 'added', registered: 1, problem: 'not-a-git-repository' },
+]
+
 describe('addRepository', () => {
-  it('cancel leaves the registry untouched', async () => {
-    const registryDir = await makeTempDir('port-registry-index-')
-    const deps = { registryDir, git: fakeGit([]), chooseDirectory: () => Promise.resolve(null) }
-    const result = await addRepository(deps)
-    expect(result).toEqual({ ok: true, outcome: 'cancelled' })
-    expect(await readRegistry(registryDir)).toEqual({ ok: true, repositories: [] })
-  })
+  it.each(ADD_CASES)('$name', async ({ picks, outcome, registered, problem }) => {
+    const fs = await makeFs()
+    const chosen: Record<Pick, string | null> = { cancel: null, repo: REPO_DIR, subdirectory: SUB_DIR, plain: PLAIN_DIR }
 
-  it('adds a new repository', async () => {
-    const registryDir = await makeTempDir('port-registry-index-')
-    const repoDir = await makeTempDir('port-registry-repo-')
-    await makeRepo(repoDir)
-    const deps = { registryDir, git: fakeGit([repoDir]), chooseDirectory: () => Promise.resolve(repoDir) }
-    const result = await addRepository(deps)
-    expect(result.ok).toBe(true)
-    if (!result.ok) throw new Error('unreachable')
-    expect(result.outcome).toBe('added')
-    if (result.outcome !== 'added') throw new Error('unreachable')
-    expect(result.repositories).toHaveLength(1)
-    expect(result.repositories[0]?.id).toBe(result.added)
-  })
+    let last: Awaited<ReturnType<typeof addRepository>> | undefined
+    for (const pick of picks) last = await addRepository({ registryDir: REGISTRY_DIR, git: fakeGit([REPO_DIR]), fs, chooseDirectory: () => Promise.resolve(chosen[pick]) })
 
-  it('adding the same path again reports already-registered with one entry', async () => {
-    const registryDir = await makeTempDir('port-registry-index-')
-    const repoDir = await makeTempDir('port-registry-repo-')
-    await makeRepo(repoDir)
-    const deps = { registryDir, git: fakeGit([repoDir]), chooseDirectory: () => Promise.resolve(repoDir) }
-    await addRepository(deps)
-    const second = await addRepository(deps)
-    expect(second.ok).toBe(true)
-    if (!second.ok) throw new Error('unreachable')
-    expect(second.outcome).toBe('already-registered')
-    if (second.outcome !== 'already-registered') throw new Error('unreachable')
-    expect(second.repositories).toHaveLength(1)
-  })
-
-  it('adding a subdirectory of a registered repository reports already-registered', async () => {
-    const registryDir = await makeTempDir('port-registry-index-')
-    const repoDir = await makeTempDir('port-registry-repo-')
-    await makeRepo(repoDir)
-    const subDir = join(repoDir, 'apps', 'desktop')
-    await mkdir(subDir, { recursive: true })
-    const deps = { registryDir, git: fakeGit([repoDir]), chooseDirectory: () => Promise.resolve(repoDir) }
-    await addRepository(deps)
-    const second = await addRepository({ ...deps, chooseDirectory: () => Promise.resolve(subDir) })
-    expect(second.ok).toBe(true)
-    if (!second.ok) throw new Error('unreachable')
-    expect(second.outcome).toBe('already-registered')
-    if (second.outcome !== 'already-registered') throw new Error('unreachable')
-    expect(second.repositories).toHaveLength(1)
-  })
-
-  it('adding a directory that is not a repository still adds it, problem visible', async () => {
-    const registryDir = await makeTempDir('port-registry-index-')
-    const notARepo = await makeTempDir('port-registry-not-a-repo-')
-    const deps = { registryDir, git: fakeGit([]), chooseDirectory: () => Promise.resolve(notARepo) }
-    const result = await addRepository(deps)
-    expect(result.ok).toBe(true)
-    if (!result.ok) throw new Error('unreachable')
-    expect(result.outcome).toBe('added')
-    if (result.outcome !== 'added') throw new Error('unreachable')
-    expect(result.repositories).toHaveLength(1)
-    const entry = result.repositories[0]
-    expect(entry && 'problem' in entry && entry.problem.kind).toBe('not-a-git-repository')
+    expect(last?.ok && last.outcome).toBe(outcome)
+    const stored = await readRegistry({ fs }, REGISTRY_DIR)
+    expect(stored.ok && stored.repositories).toHaveLength(registered)
+    if (problem !== undefined) {
+      const entry = last?.ok && last.outcome === 'added' ? last.repositories[0] : undefined
+      expect(entry && 'problem' in entry && entry.problem.kind).toBe(problem)
+    }
   })
 })
 
@@ -116,15 +84,13 @@ function countingGit(inner: GitRunner): { readonly git: GitRunner; readonly call
 }
 
 async function registeredDeps(extra: { readonly now?: () => number; readonly wrap?: (git: GitRunner) => GitRunner } = {}) {
-  const registryDir = await makeTempDir('port-registry-index-')
-  const repoDir = await makeTempDir('port-registry-repo-')
-  await makeRepo(repoDir)
-  const counter = countingGit(fakeGit([repoDir]))
+  const fs = await makeFs()
+  const counter = countingGit(fakeGit([REPO_DIR]))
   const git = extra.wrap ? extra.wrap(counter.git) : counter.git
-  const deps = { registryDir, git, chooseDirectory: () => Promise.resolve(repoDir), now: extra.now }
+  const deps = { registryDir: REGISTRY_DIR, git, fs, chooseDirectory: () => Promise.resolve(REPO_DIR), now: extra.now }
   const added = await addRepository(deps)
   if (!added.ok || added.outcome !== 'added') throw new Error('unreachable')
-  return { deps, counter, registryDir, repoDir, added: added.added }
+  return { deps, counter, fs, added: added.added }
 }
 
 describe('listRepositories cache', () => {
@@ -170,10 +136,8 @@ describe('listRepositories cache', () => {
   })
 
   it('reflects an add and a remove immediately', async () => {
-    const registryDir = await makeTempDir('port-registry-index-')
-    const repoDir = await makeTempDir('port-registry-repo-')
-    await makeRepo(repoDir)
-    const deps = { registryDir, git: fakeGit([repoDir]), chooseDirectory: () => Promise.resolve(repoDir), now: () => 0 }
+    const fs = await makeFs()
+    const deps = { registryDir: REGISTRY_DIR, git: fakeGit([REPO_DIR]), fs, chooseDirectory: () => Promise.resolve(REPO_DIR), now: () => 0 }
     const empty = await listRepositories(deps)
     expect(empty).toEqual({ ok: true, repositories: [] })
 
@@ -208,11 +172,11 @@ describe('listRepositories cache', () => {
 
   it('does not cache a failed read', async () => {
     let clock = 0
-    const { deps, registryDir } = await registeredDeps({ now: () => clock })
-    await writeFile(join(registryDir, 'registry.json'), '{ not json')
+    const { deps, fs } = await registeredDeps({ now: () => clock })
+    await fs.writeText(REGISTRY_FILE, '{ not json')
     const failed = await listRepositories(deps, { fresh: true })
     expect(failed.ok).toBe(false)
-    await writeFile(join(registryDir, 'registry.json'), JSON.stringify({ version: 1, repositories: [] }))
+    await fs.writeText(REGISTRY_FILE, JSON.stringify({ version: 1, repositories: [] }))
     clock += REPOSITORY_LIST_TTL_MS
     expect(await listRepositories(deps)).toEqual({ ok: true, repositories: [] })
   })
@@ -228,29 +192,53 @@ describe('listRepositories cache', () => {
 })
 
 describe('removeRepository', () => {
-  it('removes a registered repository by id', async () => {
-    const registryDir = await makeTempDir('port-registry-index-')
-    const repoDir = await makeTempDir('port-registry-repo-')
-    await makeRepo(repoDir)
-    const deps = { registryDir, git: fakeGit([repoDir]), chooseDirectory: () => Promise.resolve(repoDir) }
-    const added = await addRepository(deps)
-    if (!added.ok || added.outcome !== 'added') throw new Error('unreachable')
-    const result = await removeRepository(deps, added.added)
-    expect(result).toEqual({ ok: true, repositories: [] })
-  })
-
-  it('reports not-registered for an unknown id, list unchanged', async () => {
-    const registryDir = await makeTempDir('port-registry-index-')
-    const repoDir = await makeTempDir('port-registry-repo-')
-    await makeRepo(repoDir)
-    const deps = { registryDir, git: fakeGit([repoDir]), chooseDirectory: () => Promise.resolve(repoDir) }
-    await addRepository(deps)
+  it.each([
+    { name: 'removes a registered repository by id', known: true },
+    { name: 'reports not-registered for an unknown id, list unchanged', known: false },
+  ])('$name', async ({ known }) => {
+    const { deps, added } = await registeredDeps({ now: () => 0 })
     const before = await listRepositories(deps)
-    const result = await removeRepository(deps, 'not-a-real-id' as never)
-    expect(result.ok).toBe(false)
-    if (result.ok) throw new Error('unreachable')
-    expect(result.kind).toBe('not-registered')
-    const after = await listRepositories(deps)
-    expect(after).toEqual(before)
+    const result = await removeRepository(deps, known ? added : ('not-a-real-id' as RepoId))
+    if (known) {
+      expect(result).toEqual({ ok: true, repositories: [] })
+      return
+    }
+    expect(result.ok === false && result.kind).toBe('not-registered')
+    expect(await listRepositories(deps)).toEqual(before)
+  })
+})
+
+describe('readyOf', () => {
+  const ready = readyEntry()
+  const broken: RepositoryEntry = { id: 'broken' as RepoId, path: '/broken', displayName: 'broken', problem: { kind: 'not-a-git-repository' }, diagnostics: [] }
+  const list: ReposListResponse = { ok: true, repositories: [ready, broken] }
+
+  it.each([
+    { name: 'a ready repository resolves to its entry', list, id: ready.id, expected: { ok: true, entry: ready } },
+    { name: 'an unknown id is not-registered', list, id: 'nope' as RepoId, expected: { ok: false, kind: 'not-registered', message: "no repository is registered with id 'nope'" } },
+    { name: 'a problem entry is not-ready', list, id: broken.id, expected: { ok: false, kind: 'not-ready', message: "repository 'broken' is 'not-a-git-repository', not ready" } },
+    { name: 'an unlistable registry carries its own message', list: { ok: false, kind: 'registry-unreadable', message: 'disk on fire' } as ReposListResponse, id: ready.id, expected: { ok: false, kind: 'unlistable', message: 'disk on fire' } },
+  ])('$name', ({ list: given, id, expected }) => {
+    expect(readyOf(given, id)).toEqual(expected)
+  })
+})
+
+describe('createRepos', () => {
+  it('shares one cache between the service and the legacy deps handle', async () => {
+    const counter = countingGit(fakeGit([REPO_DIR]))
+    const platform = createFakePlatform()
+    await platform.fs.ensureDir(REPO_DIR)
+    const repos = createRepos({
+      paths: { ...platform.paths, userData: REGISTRY_DIR },
+      git: counter.git,
+      fs: platform.fs,
+      dialogs: { ...platform.dialogs, chooseDirectory: () => Promise.resolve(REPO_DIR) },
+      clock: platform.clock,
+    })
+    const added = await repos.add()
+    expect(added.ok && added.outcome).toBe('added')
+    counter.reset()
+    await listRepositories(repos.deps)
+    expect(counter.calls()).toBe(0)
   })
 })

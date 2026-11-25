@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createHostedHandle } from '@/main/hosting/handle'
+import { createHostedHandle } from '@/main/sessions/hosting/handle'
 import { baseParams, fakeQuery, flush } from '../../../fixtures/hosting/handle'
 
 describe('setControls / answerQuestion / answerPlan', () => {
@@ -53,7 +53,7 @@ describe('setControls / answerQuestion / answerPlan', () => {
 })
 
 describe('a stage session pins the default permission mode at runtime', () => {
-  const STAGE = { tag: { agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved' } as const, agent: { name: 'impl-agent', definition: { description: 'impl', prompt: 'body' } }, instructionsRoot: '/bundle', model: 'sonnet', sessionRequiredPaths: [], editAllow: [] }
+  const STAGE = { tag: { agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved' } as const, agent: { name: 'impl-agent', definition: { description: 'impl', prompt: 'body' } }, instructionsRoot: '/bundle', model: 'sonnet', sessionRequiredPaths: [], editAllow: [], disabledPlugins: [] }
 
   it('calls setPermissionMode("default") once at start', () => {
     const fake = fakeQuery()

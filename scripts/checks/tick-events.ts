@@ -89,7 +89,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     else expect(!(bigParsed.truncated !== true), 'tick-events', 'formatEvent capped an oversized payload but never stamped truncated: true');
   }
 
-  // pin: `scripts/port-tick/denials.ts`'s `DENIAL_DECISIONS` ↔ `hooks/agent-guard.mjs`'s logged decisions ↔ `apps/desktop`'s `CURRENT_DECISIONS`, all three directions
+  // pin: `scripts/port-tick/denials.ts`'s `DENIAL_DECISIONS` ↔ `hooks/agent-guard.mjs`'s logged decisions, both directions
   {
     const { DENIAL_DECISIONS } = await importEngine(`${TICK_DIR}/denials.ts`);
     const hookText = readFileSync(join(root, 'plugins/port/hooks/agent-guard.mjs'), 'utf8');
@@ -99,15 +99,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
     for (const d of DENIAL_DECISIONS) {
       expect(hookDecisions.has(d), 'tick-events', `denials.ts's DENIAL_DECISIONS carries '${d}', which agent-guard.mjs never logs`);
-    }
-    const desktopText = readFileSync(join(root, 'apps/desktop/src/main/local/denials.ts'), 'utf8');
-    const desktopMatch = /CURRENT_DECISIONS[^=]*=\s*new Set\(\[([^\]]+)\]\)/.exec(desktopText);
-    const desktopDecisions = new Set((desktopMatch?.[1].match(/'([a-z-]+)'/g) ?? []).map((s) => s.slice(1, -1)));
-    for (const d of desktopDecisions) {
-      expect(DENIAL_DECISIONS.has(d), 'tick-events', `desktop's CURRENT_DECISIONS carries '${d}', which denials.ts's DENIAL_DECISIONS does not`);
-    }
-    for (const d of DENIAL_DECISIONS) {
-      expect(desktopDecisions.has(d), 'tick-events', `denials.ts's DENIAL_DECISIONS carries '${d}', which desktop's CURRENT_DECISIONS does not`);
     }
   }
 

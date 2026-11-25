@@ -10,7 +10,7 @@ import { blockedReasonOf, capHandbackText, classifyHandbackText } from '@/utils/
 
 interface BlockedOnParams {
   readonly ticket: Ticket
-  readonly stageKey: string | undefined
+  readonly blocked: boolean
   readonly sessions: readonly HostedSessionSnapshot[]
   readonly repoId: RepoId
 }
@@ -60,11 +60,11 @@ function commentReasonOf(issue: ReconciledItem | null): BlockedOn['comment'] {
   return text === null ? null : { text, url: picked.node.url }
 }
 
-/** `null` unless the stage is `blocked` or a live session's hand-back says `BLOCKED:` — open `blockedBy` links alone never make a ticket blocked. */
+/** `null` unless the ticket is `blocked` or a live session's hand-back says `BLOCKED:` — open `blockedBy` links alone never make a ticket blocked. */
 export function blockedOnOf(params: BlockedOnParams): BlockedOn | null {
   const members = [params.ticket.issue, params.ticket.pullRequest].filter((member): member is ReconciledItem => member !== null)
   const session = sessionReasonOf(members, params.sessions, params.repoId)
-  if (params.stageKey !== 'blocked' && session === null) return null
+  if (!params.blocked && session === null) return null
   return { dependencies: params.ticket.issue?.blockers ?? null, session, comment: commentReasonOf(params.ticket.issue) }
 }
 

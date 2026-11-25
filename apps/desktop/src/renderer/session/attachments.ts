@@ -9,7 +9,7 @@ import {
   TOTAL_TOO_LARGE_NOTICE,
   unreadableFileNotice,
   unsupportedFileNotice,
-} from '@/renderer/session/composer-copy'
+} from '@/renderer/session/copy'
 import type { FileLike } from '@/types/session'
 
 type FileKind = 'image' | 'pdf' | 'text' | 'unsupported'

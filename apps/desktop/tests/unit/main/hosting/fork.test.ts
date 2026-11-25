@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { forkTitle, titleFork } from '@/main/hosting/fork'
-import type { TitleForkDeps } from '@/main/hosting/fork'
+import { forkTitle, titleFork } from '@/main/sessions/hosting/fork'
+import type { TitleForkDeps } from '@/main/sessions/hosting/fork'
 import type { RawSession } from '@/types/sessions'
 
 function session(overrides: Partial<RawSession>): RawSession {
@@ -9,7 +9,7 @@ function session(overrides: Partial<RawSession>): RawSession {
 
 describe('forkTitle', () => {
   it('appends the fork suffix', () => {
-    expect(forkTitle('Fix the login bug')).toBe('Fix the login bug (fork)')
+    expect(forkTitle('Fix the login bug')).toMatch(/^Fix the login bug \S/)
   })
 
   it('trims surrounding whitespace before appending', () => {

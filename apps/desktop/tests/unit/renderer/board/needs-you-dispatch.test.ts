@@ -124,8 +124,8 @@ describe('needsYouItems — dispatch-failed', () => {
     expect(failedItems(snapshotWith([], { state: { kind: 'active', recent: [failedRecord()] } }))).toEqual([])
   })
 
-  it('shows nothing when another owner runs the repository or the dispatcher is not active', () => {
-    expect(failedItems(snapshotWith([readyTicket()], { owner: 'terminal', state: { kind: 'active', recent: [failedRecord()] } }))).toEqual([])
+  it('shows nothing when this app does not own the repository or the dispatcher is not active', () => {
+    expect(failedItems(snapshotWith([readyTicket()], { owner: 'unreadable', state: { kind: 'active', recent: [failedRecord()] } }))).toEqual([])
     expect(failedItems(snapshotWith([readyTicket()], { state: { kind: 'idle' } }))).toEqual([])
   })
 })

@@ -5,7 +5,8 @@ import { ghAuthStatus, ghJson } from '@/main/platform/gh'
 import type { GitHubHttpResult, GitHubTransport } from '@/types/platform'
 import { fetchPipelineItems } from '@/main/github/pipeline'
 import { RATE_LIMIT_REPLY, connection } from '../../../fixtures/pipeline-reply'
-import { httpFail, httpOk, queryOf } from '../../../fixtures/github-http'
+import { githubHttp } from '@/main/platform/github-http'
+import { githubCtx, httpFail, httpOk, queryOf } from '../../../fixtures/github-http'
 
 const REPO = { owner: 'o', name: 'r' }
 const VOCABULARY = resolveVocabulary({})
@@ -74,7 +75,7 @@ function scripted(script: Script): { readonly runner: GitHubTransport; readonly 
 }
 
 function fetchWith(runner: GitHubTransport, vocabulary: LabelVocabulary = VOCABULARY): ReturnType<typeof fetchPipelineItems> {
-  return fetchPipelineItems({ repo: REPO, vocabulary, integration: 'dev', github: runner })
+  return fetchPipelineItems(githubCtx(runner), { repo: REPO, vocabulary, integration: 'dev' })
 }
 
 describe('fetchPipelineItems', () => {
@@ -480,7 +481,7 @@ describe('fetchPipelineItems — live', () => {
     }
 
     const vocabulary = resolveVocabulary({ modules: { approvalGate: true, release: true, scope: true } })
-    const result = await fetchPipelineItems({ repo: { owner, name }, vocabulary, integration: 'dev' })
+    const result = await fetchPipelineItems(githubCtx(githubHttp), { repo: { owner, name }, vocabulary, integration: 'dev' })
 
     expect(result.ok).toBe(true)
     if (!result.ok) return

@@ -3,9 +3,8 @@
 // `window.port` call or a `useEffect` fetch.
 import { QueryClient, QueryObserver, useMutation, useQuery, queryOptions } from '@tanstack/react-query'
 import type { QueryObserverResult } from '@tanstack/react-query'
-import type { IpcMap } from '@/types/ipc'
+import type { ActionInput, ActionOutput, MutationName, QueryName } from '@/types/ipc'
 import { invoke } from '@/renderer/data/invoke'
-import type { MutationChannel, QueryChannel } from '@/types/channels'
 
 /** `networkMode: 'always'` because IPC never touches the network — the
  *  default `'online'` mode would pause every query on an offline machine,
@@ -21,30 +20,30 @@ export function createQueryClient(): QueryClient {
   })
 }
 
-/** `board:snapshot` gets `staleTime: Infinity` because `data/subscriptions.ts`'s
- *  `connectQueryCache` keeps it fresh from the `board:update` push — a
- *  background refetch here would race that cache write. `backlog:list` gets
+/** `board.snapshot` gets `staleTime: Infinity` because `data/subscriptions.ts`'s
+ *  `connectQueryCache` keeps it fresh from the `board.update` push — a
+ *  background refetch here would race that cache write. `backlog.list` gets
  *  a 60s `staleTime` (the Backlog screen's own read) — open issues don't
- *  move fast enough to justify refetching on every remount; `release:status`
- *  shares it for the same reason. `worktrees:report`
- *  also gets `staleTime: Infinity` (#319) — a reclamation report runs only on
+ *  move fast enough to justify refetching on every remount; `release.status`
+ *  shares it for the same reason. `worktrees.report`
+ *  also gets `staleTime: Infinity` — a reclamation report runs only on
  *  an explicit Inspect/Refresh (`worktrees-tab.tsx` passes `enabled: false`
- *  and calls `refetch()` itself), never polled. `release:issues` is
- *  `Infinity` too (a tag range never changes), as is `backlog:detail`: Refresh updates it. */
-export function ipcQueryOptions<C extends QueryChannel>(channel: C, request?: IpcMap[C]['request'], extraKey?: readonly unknown[]) {
+ *  and calls `refetch()` itself), never polled. `release.issues` is
+ *  `Infinity` too (a tag range never changes), as is `backlog.detail`: Refresh updates it. */
+export function ipcQueryOptions<C extends QueryName>(channel: C, request?: ActionInput<C>, extraKey?: readonly unknown[]) {
   return queryOptions({
     queryKey: [channel, request ?? null, ...(extraKey ?? [])] as const,
     queryFn: () => invoke(channel, request),
-    ...(channel === 'board:snapshot' || channel === 'worktrees:report' || channel === 'release:issues' || channel === 'backlog:detail' ? { staleTime: Infinity } : {}),
-    ...(channel === 'backlog:detail' ? { gcTime: Infinity } : {}),
-    ...(channel === 'backlog:list' || channel === 'release:status' ? { staleTime: 60_000 } : {}),
-    ...(channel === 'storage:report' ? { staleTime: 5 * 60_000 } : {}),
+    ...(channel === 'board.snapshot' || channel === 'worktrees.report' || channel === 'release.issues' || channel === 'backlog.detail' ? { staleTime: Infinity } : {}),
+    ...(channel === 'backlog.detail' ? { gcTime: Infinity } : {}),
+    ...(channel === 'backlog.list' || channel === 'release.status' ? { staleTime: 60_000 } : {}),
+    ...(channel === 'storage.report' ? { staleTime: 5 * 60_000 } : {}),
   })
 }
 
-interface IpcQueryOptions<C extends QueryChannel> {
+interface IpcQueryOptions<C extends QueryName> {
   readonly enabled?: boolean
-  readonly refetchInterval?: number | ((data: IpcMap[C]['response'] | undefined) => number | false)
+  readonly refetchInterval?: number | ((data: ActionOutput<C> | undefined) => number | false)
 }
 
 /** Adapts a data-reading interval to TanStack's query-reading one. */
@@ -52,24 +51,24 @@ export function queryInterval<D>(interval: number | ((data: D | undefined) => nu
   return typeof interval === 'function' ? (query) => interval(query.state.data) : interval
 }
 
-export function useIpcQuery<C extends QueryChannel>(channel: C, request?: IpcMap[C]['request'], options?: IpcQueryOptions<C>) {
+export function useIpcQuery<C extends QueryName>(channel: C, request?: ActionInput<C>, options?: IpcQueryOptions<C>) {
   return useQuery({ ...ipcQueryOptions(channel, request), enabled: options?.enabled, refetchInterval: queryInterval(options?.refetchInterval) })
 }
 
-export function useIpcMutation<C extends MutationChannel>(channel: C) {
+export function useIpcMutation<C extends MutationName>(channel: C) {
   return useMutation({
-    mutationFn: (request?: IpcMap[C]['request']) => invoke(channel, request),
+    mutationFn: (request?: ActionInput<C>) => invoke(channel, request),
   })
 }
 
 /** Wraps a `QueryObserver` for a legacy (hand-built DOM) consumer that
  *  cannot call a hook — `main.ts`'s `initBoard` is the first one. Returns the
  *  observer's own unsubscribe function. */
-export function observeIpcQuery<C extends QueryChannel>(
+export function observeIpcQuery<C extends QueryName>(
   client: QueryClient,
   channel: C,
-  request: IpcMap[C]['request'] | undefined,
-  listener: (result: QueryObserverResult<IpcMap[C]['response']>) => void,
+  request: ActionInput<C> | undefined,
+  listener: (result: QueryObserverResult<ActionOutput<C>>) => void,
 ): () => void {
   const observer = new QueryObserver(client, ipcQueryOptions(channel, request))
   return observer.subscribe(listener)

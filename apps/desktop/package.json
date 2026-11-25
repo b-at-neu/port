@@ -1,6 +1,6 @@
 {
   "name": "@port/desktop",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "private": true,
   "description": "Desktop cockpit for the port pipeline. Runs your own installed Claude Code under your own account.",
   "main": "out/main/index.js",
@@ -12,7 +12,8 @@
     "dist:smoke": "node scripts/icon.mjs && electron-vite build --mode smoke && electron-builder --config electron-builder.config.mjs --dir --publish never -c.directories.output=dist/smoke",
     "screenshots": "node scripts/icon.mjs && electron-vite build --mode fixtures && node scripts/screenshots.mjs",
     "smoke:packaged": "node scripts/screenshots.mjs --config playwright.packaged.config.mts",
-    "e2e": "electron-vite build && node scripts/screenshots.mjs --config playwright.e2e.config.mts",
+    "e2e": "electron-vite build --mode e2e && node scripts/screenshots.mjs --config playwright.e2e.config.mts",
+    "schema:config": "node scripts/config-schema.mjs",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "pnpm typecheck:node && pnpm typecheck:web",
@@ -77,9 +78,9 @@
     "@radix-ui/react-scroll-area": "^1.4.0",
     "@radix-ui/react-separator": "^1.2.0",
     "@radix-ui/react-switch": "^1.4.1",
-    "ajv": "^8.20.0",
     "cmdk": "^1.1.1",
     "electron-updater": "^6.8.11",
-    "sonner": "^2.0.8"
+    "sonner": "^2.0.8",
+    "zod": "^4.0.0"
   }
 }

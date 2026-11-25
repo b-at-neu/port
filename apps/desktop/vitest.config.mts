@@ -4,10 +4,11 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   resolve: {
     alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url))
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '#app-route': fileURLToPath(new URL('./src/main/platform/route.ts', import.meta.url))
     }
   },
-  define: { __PORT_BUILD_COMMIT__: 'null', __PORT_RELEASE_REPO__: JSON.stringify('octo/port') },
+  define: { __PORT_BUILD_COMMIT__: 'null', __PORT_RELEASE_REPO__: JSON.stringify('octo/port'), __PORT_E2E__: 'false' },
   test: {
     environment: 'node',
     include: ['tests/unit/**/*.test.ts'],

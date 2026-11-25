@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { stateLabelsOf } from '@/main/pipeline-state/labels'
+import { stateLabelsOf } from '@/main/pipeline/state/labels'
 import type { PipelineView } from '@/types/pipeline-state'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 
@@ -10,8 +10,8 @@ const STORE: PipelineView = {
 }
 
 describe('stateLabelsOf', () => {
-  it('is null under a labels view, so the caller keeps GitHub\'s labels', () => {
-    expect(stateLabelsOf({ kind: 'labels' }, 'issue', 7, VOCABULARY)).toBeNull()
+  it('is null for an unseeded repository, which has no store to read', () => {
+    expect(stateLabelsOf({ kind: 'unseeded' }, 'issue', 7, VOCABULARY)).toBeNull()
   })
 
   it('names the stored keys, markers included, as configured', () => {

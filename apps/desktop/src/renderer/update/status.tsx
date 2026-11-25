@@ -6,6 +6,7 @@ import { Button } from '@/renderer/components/ui/button'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
+import { exactTime } from '@/renderer/lib/time'
 import { checkForUpdates, useUpdateCheckPending } from '@/renderer/update/actions'
 import { UPDATE_CHECK_LABEL, UPDATE_RETRY_LABEL, UPDATE_UNAVAILABLE } from '@/renderer/update/copy'
 import { DownloadControls } from '@/renderer/update/download-controls'
@@ -21,7 +22,7 @@ function CheckedAgo({ state, ago }: { readonly state: UpdateState; readonly ago:
       <TooltipTrigger asChild>
         <span className="text-small text-muted-foreground">· checked {ago}</span>
       </TooltipTrigger>
-      <TooltipContent>{new Date(state.checkedAt).toLocaleString()}</TooltipContent>
+      <TooltipContent>{exactTime(state.checkedAt)}</TooltipContent>
     </Tooltip>
   )
 }

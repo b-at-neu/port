@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { readSignatureIndex, writeSignatureIndex } from '@/main/search/store'
+import { readSignatureIndex, writeSignatureIndex } from '@/main/sessions/search/store'
 import type { SignatureIndexEntry } from '@/types/search'
 import { makeTempDir } from '../../../fixtures/fs'
 

@@ -1,4 +1,4 @@
-// The app menu's own command table — one entry per global §3 chord, shared by main/menu.ts
+// The app menu's own command table — one entry per global §3 chord, shared by main/app/shell/menu.ts
 // and the renderer, which both run the identical action a key press would.
 import type { SessionKey } from '@/types/hosting'
 

@@ -1,7 +1,7 @@
 import type { ImageMediaType, ComposerAttachment } from '@/utils/hosting/attachments'
 import type { QuestionAnswerResult, PlanDecision, PlanAnswerResult, SetControlsResult } from '@/utils/hosting/controls'
 
-// Renderer-safe contract for a hosted session. No import here may reach a Node builtin — only `main/hosting/` spawns a `claude` child or holds a `Query`. `message: unknown` on the event envelope is deliberate: narrowing it is the renderer's own job, never a second guess at the SDK's union here.
+// Renderer-safe contract for a hosted session. No import here may reach a Node builtin — only `main/sessions/hosting/` spawns a `claude` child or holds a `Query`. `message: unknown` on the event envelope is deliberate: narrowing it is the renderer's own job, never a second guess at the SDK's union here.
 import type { RepoId } from '@/utils/repos'
 import type { RuntimeDiagnosis } from '@/types/runtime'
 import type { NotificationPrefs } from '@/types/settings'
@@ -10,7 +10,6 @@ import type { SessionWorkspace } from '@/types/workspace'
 import type { PendingInteraction, SessionControls, SessionModels } from '@/utils/hosting/controls'
 import type { SessionResult, StageTag } from '@/types/stage-session'
 import type { SessionUsage } from '@/utils/hosting/usage'
-import type { PluginRequest, PluginLoad, ComponentCheck } from '@/types/hosting-plugin'
 import type { StageAgentLaunch } from '@/types/stage'
 
 declare const sessionKeyBrand: unique symbol
@@ -118,7 +117,7 @@ export type SessionStartTarget = { readonly kind: 'folder'; readonly folderId: s
 /** `'keep'`/`'remove'`/`'force'` — a worktree session's dismiss choice. Never forces without the caller's explicit `'force'`. */
 export type WorktreeChoice = 'keep' | 'remove' | 'force'
 
-/** `'session:start'`'s response — `at-capacity` names the limit rather than a bare refusal; `runtime` carries the existing `RuntimeDiagnosis`/`detail`, never a new error vocabulary. The four workspace-resolution kinds are the operator-reachable half of `main/workspace/target.ts`'s own contract — a malformed target throws instead. */
+/** `'session:start'`'s response — `at-capacity` names the limit rather than a bare refusal; `runtime` carries the existing `RuntimeDiagnosis`/`detail`, never a new error vocabulary. The four workspace-resolution kinds are the operator-reachable half of `main/repos/worktree/target.ts`'s own contract — a malformed target throws instead. */
 export type SessionStartResult =
   | { readonly ok: true; readonly snapshot: HostedSessionSnapshot }
   | { readonly ok: false; readonly kind: 'at-capacity'; readonly limit: number }
@@ -240,17 +239,22 @@ export interface AgentSummary {
   readonly model: string | null
 }
 
-/** The Pipeline strip's own state — `pending` before the capability read settles, `unavailable` on timeout or rejection, `ready` carrying the plugin load, component check, and filtered command/agent lists. */
+/** What actually loaded, read back from the SDK rather than assumed. `unconfirmed` is the state before any `init` has arrived. */
+export type PluginLoad =
+  | { readonly kind: 'unconfirmed' }
+  | { readonly kind: 'loaded'; readonly path: string; readonly version: string | null }
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'duplicate'; readonly paths: readonly string[] }
+
+/** The Pipeline strip's own state — `pending` before the capability read settles, `unavailable` on timeout or rejection, `ready` carrying the plugin load and filtered command/agent lists. */
 export type SessionCapabilities =
-  | { readonly kind: 'pending'; readonly request: PluginRequest }
-  | { readonly kind: 'unavailable'; readonly request: PluginRequest; readonly message: string }
+  | { readonly kind: 'pending' }
+  | { readonly kind: 'unavailable'; readonly message: string }
   | {
       readonly kind: 'ready'
-      readonly request: PluginRequest
       readonly commands: readonly CommandSummary[]
       readonly agents: readonly AgentSummary[]
       readonly plugin: PluginLoad
-      readonly components: ComponentCheck
       /** The composer's own `/` autocomplete source, sorted, pipeline already dropped. */
       readonly slashCommands: readonly SlashCommandSummary[]
     }
@@ -445,7 +449,7 @@ export type StagePolicyDecision = { readonly kind: 'ask'; readonly protectedPath
 
 export interface HostedStore {
   start(params: StartSessionParams): Promise<SessionStartResult>
-  /** `options.source` defaults to `'app'` so an unmarked caller never fakes an operator join — `main/channels/hosting.ts`'s `resolveSessionSend` is the only `'operator'` caller. */
+  /** `options.source` defaults to `'app'` so an unmarked caller never fakes an operator join — `resolveSessionSend` in `main/features/session/resolve.ts` is the only `'operator'` caller. */
   send(sessionKey: SessionKey, text: string, attachments?: readonly ComposerAttachment[], options?: { readonly source: 'operator' | 'app' }): SessionSendResult
   interrupt(sessionKey: SessionKey): Promise<SessionInterruptResult>
   close(sessionKey: SessionKey): Promise<SessionCloseResult>
@@ -488,6 +492,6 @@ export interface StartSessionParams {
   readonly workspace: SessionWorkspace
   /** The restore path's own resolved title, or a stage launch's ticket title — omitted for every other start path. */
   readonly initialTitle?: string | null
-  /** Non-null only for a stage launch — passed straight through to the handle; `main/stage/` is the only caller that sets it. `onDeny` fires once per denied tool call, never for a protected-path or interaction `ask`. */
+  /** Non-null only for a stage launch — passed straight through to the handle; `main/dispatch/stage/` is the only caller that sets it. `onDeny` fires once per denied tool call, never for a protected-path or interaction `ask`. */
   readonly stage?: { readonly tag: StageTag; readonly agent: StageAgentLaunch; readonly instructionsRoot: string; readonly model: string; readonly sessionRequiredPaths: readonly string[]; readonly onDeny?: (toolName: string, input: Readonly<Record<string, unknown>>) => void } | null
 }

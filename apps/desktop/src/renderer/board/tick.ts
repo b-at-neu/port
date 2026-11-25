@@ -2,6 +2,7 @@
 import type { DispatchOwner, RunStatesSnapshot } from '@/types/dispatch'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import type { LabelKey } from '@/utils/labels/vocabulary'
+import { stageNameOfKey } from '@/renderer/lib/ticket-view'
 import type { PipelineItemKind } from '@/types/github'
 import type { TickActionable, TickClaim, TickHeld, TickObservation, TickReport } from '@/types/tick'
 
@@ -12,7 +13,7 @@ function labelNameOf(key: LabelKey): string {
 /** `null` unless the run-state store can't be read — the transient `unread` state needs no banner. The full path stays reachable in the sentence itself. */
 export function storeBannerCopy(store: RunStatesSnapshot['store']): string | null {
   if (store.kind !== 'unreadable') return null
-  return `Every pipeline is stopped — dispatch.json can't be read (${store.message}). Fix or delete ${store.path}, then run each repository again.`
+  return `Every pipeline is stopped — pipeline-state.json can't be read (${store.message}). Fix or delete ${store.path}, then run each repository again.`
 }
 
 /** Truncates a contended path list to the first three, naming the remainder
@@ -188,18 +189,23 @@ export function stalledDetailCopy(claim: TickClaim, owner: DispatchOwner = 'none
   }
 }
 
-/** The phase an adopted hand-back lands on, keyed `<agent>:<token>`. */
-const ADOPTED_PHASE: Readonly<Record<string, string>> = {
-  'plan:plan-written': 'Plan review',
-  'impl:pr-opened': 'Waiting for review',
-  'review:approved': 'Ready to merge',
-  'review:needs-revision': 'Needs revision',
-  'revise:revised': 'Waiting for review',
+/** The label an adopted hand-back lands on, keyed `<agent>:<token>`. */
+const ADOPTED_LANDING: Readonly<Record<string, LabelKey>> = {
+  'plan:plan-written': 'planReview',
+  'impl:pr-opened': 'readyForReview',
+  'review:approved': 'approved',
+  'review:needs-revision': 'needsRevision',
+  'revise:revised': 'readyForReview',
+}
+
+function adoptedPhaseName(observation: Extract<TickObservation, { readonly kind: 'adopt' }>): string {
+  const landing = ADOPTED_LANDING[`${observation.agent}:${observation.handback.token}`]
+  return (landing !== undefined ? stageNameOfKey(landing) : null) ?? 'its next stage'
 }
 
 /** #292: hover detail for the one report-only observation kind —
  *  `refresh-deferred` — which never becomes an `ObservationRecord` write
- *  (`main/tick/dispatchable.ts`'s `observableFrom` excludes it), so this is
+ *  (`main/pipeline/tick/dispatchable.ts`'s `observableFrom` excludes it), so this is
  *  the only place it is ever rendered. `null` for every write-bearing kind,
  *  which already has its own held/stalled detail line above; the switch
  *  stays exhaustive so a new `TickObservationKind` member is a compile error
@@ -210,7 +216,7 @@ export function observationDetailCopy(observation: TickObservation): string | nu
     case 'refresh-deferred':
       return `#${n} conflicts too — refreshes are capped this poll; it goes next.`
     case 'adopt':
-      return `#${n} already finished on GitHub — moving it to ${ADOPTED_PHASE[`${observation.agent}:${observation.handback.token}`] ?? 'its next stage'}.`
+      return `#${n} already finished on GitHub — moving it to ${adoptedPhaseName(observation)}.`
     case 'rerun-checks':
       return `#${n} retrying ${observation.runs.map((run) => run.check).join(', ')} on the reviewed head before reviewing again.`
     case 'liveness-reset':

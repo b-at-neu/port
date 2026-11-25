@@ -1,5 +1,5 @@
 // Fixes chrome-sandbox's setuid bit via one sudo prompt (AppArmor-hardened distros need it even
-// with --no-sandbox). The permission check mirrors `src/main/sandbox.ts`, untranspiled here.
+// with --no-sandbox). The permission check mirrors `src/main/app/shell/sandbox.ts`, untranspiled here.
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { statSync } from 'node:fs'

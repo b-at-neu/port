@@ -5,11 +5,11 @@ import { CollapsibleGroupHeader } from '@/renderer/components/collapsible-group-
 import { TicketCard } from '@/renderer/components/ticket-card'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { cn } from '@/renderer/lib/utils'
-import { emptyColumnLabel, laneToggleAria } from '@/renderer/board/copy'
+import { EMPTY_COLUMN_LABEL, laneToggleAria } from '@/renderer/board/copy'
 import { rowKey } from '@/renderer/board/row-model'
 import type { BoardColumn, BoardLane } from '@/types/board'
 import type { RepoId } from '@/utils/repos'
-import type { useListSelection } from '@/renderer/shell/list-selection'
+import type { useListSelection } from '@/renderer/app/list-selection'
 
 const GRID_CLASS = 'grid grid-cols-[repeat(6,minmax(15rem,1fr))] gap-4'
 const ROOT_CLASS = 'min-h-0 flex-1 overflow-auto'
@@ -42,7 +42,7 @@ function ColumnCells({ columns, selection, emptyLabel }: { readonly columns: rea
     <>
       {columns.map((column, index) => (
         <section key={column.key} aria-label={column.name} className="flex flex-col gap-2">
-          {column.cards.length === 0 && emptyLabel(index) ? <span className="text-meta text-muted-foreground">{emptyColumnLabel()}</span> : null}
+          {column.cards.length === 0 && emptyLabel(index) ? <span className="text-meta text-muted-foreground">{EMPTY_COLUMN_LABEL}</span> : null}
           {column.cards.map((card) => (
             <TicketCard key={rowKey(card.row)} row={card.row} ungated={card.ungated} rowProps={selection.rowProps(rowKey(card.row))} />
           ))}

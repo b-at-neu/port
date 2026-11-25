@@ -1,28 +1,18 @@
 // DESIGN §4 PhaseBar — five segments, one Tooltip/aria-label for the bar.
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { cn } from '@/renderer/lib/utils'
-import type { LabelKey } from '@/utils/labels/vocabulary'
-import type { PipelineItemKind } from '@/types/github'
-import { PHASE_NAMES } from '@/renderer/lib/phase'
-import { phaseSegmentsFor } from '@/renderer/board/phase-model'
+import { phaseSegmentsOf, stageNameOf } from '@/utils/pipeline/stages'
+import type { TicketView } from '@/utils/pipeline/stages'
 import { segmentClass } from '@/renderer/components/phase-classes'
 
 interface PhaseBarProps {
-  readonly stageKey: LabelKey | null
-  readonly kind: PipelineItemKind
-  readonly merged: boolean
+  readonly view: TicketView | null
   readonly className?: string
 }
 
-// The bar's name, read straight from PHASE_NAMES; merged has no label key.
-function nameFor(stageKey: LabelKey | null, merged: boolean): string {
-  if (merged) return 'Merged'
-  return stageKey !== null ? (PHASE_NAMES[stageKey] ?? stageKey) : 'Unstaged'
-}
-
-export function PhaseBar({ stageKey, kind, merged, className }: PhaseBarProps) {
-  const segments = phaseSegmentsFor({ stageKey, kind, merged })
-  const name = nameFor(stageKey, merged)
+export function PhaseBar({ view, className }: PhaseBarProps) {
+  const segments = phaseSegmentsOf(view)
+  const name = stageNameOf(view)
 
   return (
     <Tooltip>

@@ -3,7 +3,7 @@ import type { DirEntry, FileResult, GitHubTransport, GitRunner, PathOps, RemoveD
 import type { CorrelationRung, WorktreeCorrelation, WorktreeEntry, WorktreeProducer } from '@/types/local'
 import type { ItemStateName } from '@/types/github'
 
-/** Byte-for-byte `bin/worktrees.mjs`'s own state vocabulary, pinned by `desktop-reclaimer`. */
+/** The worktree state vocabulary. */
 export const WORKTREE_STATES = ['active', 'done', 'no-work', 'locked', 'dirty', 'outside', 'unresolved'] as const
 
 export type WorktreeState = (typeof WORKTREE_STATES)[number]
@@ -20,7 +20,7 @@ export function isReclaimableState(state: WorktreeState): state is ReclaimableSt
 /** One worktree row. `prunable`/`producer` are `null` only when the local read's join failed. */
 export interface InspectedWorktree {
   readonly path: string
-  /** Computed in `main/reclaimer/report.ts` — the renderer never manipulates a path itself, only displays the native string main resolved. */
+  /** Computed in `main/features/worktrees/report.ts` — the renderer never manipulates a path itself, only displays the native string main resolved. */
   readonly pathBasename: string
   readonly branch: string | null
   readonly head: string | null

@@ -1,13 +1,13 @@
 // Shared view-model and bridge-subscription types for renderer/data/ — multi-file or test-only.
-import type { BridgeListener, IpcEvent, IpcEventMap } from '@/types/ipc'
+import type { EventMap, EventName } from '@/types/ipc'
 
-export type SubscribableEvent = IpcEvent
+export type SubscribableEvent = EventName
 
-export type EventListener<E extends SubscribableEvent> = (payload: IpcEventMap[E]) => void
+export type EventListener<E extends SubscribableEvent> = (payload: EventMap[E]) => void
 
 /** The narrow slice of `PortBridge` a test needs to satisfy, structurally. */
-export type SubscriptionBridge = {
-  [E in SubscribableEvent as BridgeListener<E>]: (listener: EventListener<E>) => () => void
+export interface SubscriptionBridge {
+  readonly on: <E extends SubscribableEvent>(event: E, listener: EventListener<E>) => () => void
 }
 
 export interface Subscriptions {

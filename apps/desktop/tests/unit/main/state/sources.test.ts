@@ -5,8 +5,8 @@ import { join } from 'node:path'
 import type { CommandResult } from '@/types/platform'
 import type { GitHubHttpResult } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
-import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/state/sources'
-import { httpFail, httpOk, queryOf } from '../../../fixtures/github-http'
+import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/pipeline/board/sources'
+import { githubCtx, httpFail, httpOk, queryOf } from '../../../fixtures/github-http'
 import { EMPTY_PIPELINE_BODY } from '../../../fixtures/pipeline-reply'
 
 const REPO_1 = 'repo-1' as RepoId
@@ -48,15 +48,15 @@ describe('createSourceCache', () => {
 describe('refreshGithub — Decision 4', () => {
   it('a failing attempt keeps the previous good fetch in the cache', async () => {
     const cache = createSourceCache()
-    await refreshGithub(cache, { repoId: REPO_1, repo: REPO, vocabulary: VOCAB, integration: 'dev', worktreeEntries: [], agents: [], github: () => Promise.resolve(okGh()) })
-    const outcome = await refreshGithub(cache, { repoId: REPO_1, repo: REPO, vocabulary: VOCAB, integration: 'dev', worktreeEntries: [], agents: [], github: () => Promise.resolve(failGh()) })
+    await refreshGithub(cache, { repoId: REPO_1, repo: REPO, vocabulary: VOCAB, integration: 'dev', worktreeEntries: [], agents: [], ctx: githubCtx(() => Promise.resolve(okGh())) })
+    const outcome = await refreshGithub(cache, { repoId: REPO_1, repo: REPO, vocabulary: VOCAB, integration: 'dev', worktreeEntries: [], agents: [], ctx: githubCtx(() => Promise.resolve(failGh())) })
     expect(outcome.ok).toBe(false)
     expect(cache.github.get(REPO_1)?.ok).toBe(true)
   })
 
   it('a never-succeeded source projects its own failure, never an empty read', async () => {
     const cache = createSourceCache()
-    await refreshGithub(cache, { repoId: REPO_1, repo: REPO, vocabulary: VOCAB, integration: 'dev', worktreeEntries: [], agents: [], github: () => Promise.resolve(failGh()) })
+    await refreshGithub(cache, { repoId: REPO_1, repo: REPO, vocabulary: VOCAB, integration: 'dev', worktreeEntries: [], agents: [], ctx: githubCtx(() => Promise.resolve(failGh())) })
     expect(cache.github.get(REPO_1)?.ok).toBe(false)
   })
 
@@ -70,11 +70,11 @@ describe('refreshGithub — Decision 4', () => {
       integration: 'dev',
       worktreeEntries: [],
       agents: [],
-      github: (request) => {
+      ctx: githubCtx((request) => {
         const document = queryOf(request)
         if (document.includes('issueOrPullRequest')) sawItemsByNumberCall = true
         return Promise.resolve(okGh())
-      },
+      }),
     })
     expect(sawItemsByNumberCall).toBe(false)
     expect(cache.itemStates.get(REPO_1)).toBeNull()

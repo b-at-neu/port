@@ -1,63 +1,53 @@
 // The composer's per-session draft, kept outside React so switching sessions
 // never loses what was half-typed (or half-attached) in another one.
 import { useSyncExternalStore } from 'react'
+import { createStore } from '@/renderer/lib/store'
+import type { Store } from '@/renderer/lib/store'
 import type { SessionKey } from '@/types/hosting'
 import type { ComposerAttachment } from '@/utils/hosting/attachments'
 
-const drafts = new Map<SessionKey, string>()
-const listeners = new Set<() => void>()
+const NO_ATTACHMENTS: readonly ComposerAttachment[] = []
 
-function notify(): void {
-  for (const listener of listeners) listener()
+const drafts = createStore<ReadonlyMap<SessionKey, string>>(new Map())
+const draftAttachments = createStore<ReadonlyMap<SessionKey, readonly ComposerAttachment[]>>(new Map())
+
+/** A `null` value removes the key; removing an absent key changes nothing and notifies nobody. */
+function put<V>(store: Store<ReadonlyMap<SessionKey, V>>, key: SessionKey, value: V | null): void {
+  if (value === null && !store.get().has(key)) return
+  const next = new Map(store.get())
+  if (value === null) next.delete(key)
+  else next.set(key, value)
+  store.set(next)
 }
 
 export function draftFor(key: SessionKey): string {
-  return drafts.get(key) ?? ''
+  return drafts.get().get(key) ?? ''
 }
 
 export function setDraft(key: SessionKey, value: string): void {
-  if (value === '') drafts.delete(key)
-  else drafts.set(key, value)
-  notify()
+  put(drafts, key, value === '' ? null : value)
 }
 
 export function clearDraft(key: SessionKey): void {
-  if (!drafts.has(key)) return
-  drafts.delete(key)
-  notify()
-}
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
+  put(drafts, key, null)
 }
 
 export function useDraft(key: SessionKey | null): string {
-  return useSyncExternalStore(subscribe, () => (key === null ? '' : draftFor(key)))
+  return useSyncExternalStore(drafts.subscribe, () => (key === null ? '' : draftFor(key)))
 }
 
-// The draft's own attachment chips, same lifetime rule as the text above — its own map, since every existing text caller only ever wants the text.
-const draftAttachments = new Map<SessionKey, readonly ComposerAttachment[]>()
-
-// Stable "no attachments" reference — useSyncExternalStore needs the same value back when nothing changed.
-const NO_ATTACHMENTS: readonly ComposerAttachment[] = []
-
 export function draftAttachmentsFor(key: SessionKey): readonly ComposerAttachment[] {
-  return draftAttachments.get(key) ?? NO_ATTACHMENTS
+  return draftAttachments.get().get(key) ?? NO_ATTACHMENTS
 }
 
 export function setDraftAttachments(key: SessionKey, value: readonly ComposerAttachment[]): void {
-  if (value.length === 0) draftAttachments.delete(key)
-  else draftAttachments.set(key, value)
-  notify()
+  put(draftAttachments, key, value.length === 0 ? null : value)
 }
 
 export function clearDraftAttachments(key: SessionKey): void {
-  if (!draftAttachments.has(key)) return
-  draftAttachments.delete(key)
-  notify()
+  put(draftAttachments, key, null)
 }
 
 export function useDraftAttachments(key: SessionKey | null): readonly ComposerAttachment[] {
-  return useSyncExternalStore(subscribe, () => (key === null ? NO_ATTACHMENTS : draftAttachmentsFor(key)))
+  return useSyncExternalStore(draftAttachments.subscribe, () => (key === null ? NO_ATTACHMENTS : draftAttachmentsFor(key)))
 }

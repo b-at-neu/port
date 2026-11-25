@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createHostedHandle, REPLAY_LIMIT } from '@/main/hosting/handle'
-import { GUARD_ALLOWLIST_MISS_MARKER } from '@/main/hosting/guard-marker'
+import { createHostedHandle, REPLAY_LIMIT } from '@/main/sessions/hosting/handle'
+import { GUARD_ALLOWLIST_MISS_MARKER } from '@/main/sessions/hosting/guard-marker'
 import type { SessionEntriesDelta, SessionEventEnvelope } from '@/types/hosting'
 import { SESSION_KEY, baseParams, fakeQuery, flush } from '../../../fixtures/hosting/handle'
 
@@ -186,7 +186,7 @@ describe('createHostedHandle', () => {
   })
 
   describe('in a stage session', () => {
-    const STAGE = { tag: { agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved' } as const, agent: { name: 'impl-agent', definition: { description: 'impl', prompt: 'body' } }, instructionsRoot: '/bundle', model: 'sonnet', sessionRequiredPaths: [], editAllow: [] }
+    const STAGE = { tag: { agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved' } as const, agent: { name: 'impl-agent', definition: { description: 'impl', prompt: 'body' } }, instructionsRoot: '/bundle', model: 'sonnet', sessionRequiredPaths: [], editAllow: [], disabledPlugins: [] }
     const COMMANDS = [
       { name: 'port:scope', description: 'Scope', argumentHint: '' },
       { name: 'other:cmd', description: 'Other', argumentHint: '' },

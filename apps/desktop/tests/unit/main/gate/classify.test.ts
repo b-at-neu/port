@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
-import { buildAutoApprovePlan, buildGatePlan, classifyGate } from '@/main/gate/classify'
+import { buildAutoApprovePlan, buildGatePlan, classifyGate } from '@/main/pipeline/gate/classify'
 import type { GateClassifyItem } from '@/types/gate'
 
 const VOCABULARY: LabelVocabulary = resolveVocabulary({})

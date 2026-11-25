@@ -5,23 +5,24 @@ import type { QueryClient } from '@tanstack/react-query'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { LayoutGrid } from 'lucide-react'
+import { useActionMutation } from '@/renderer/actions/use-action-mutation'
 import { EmptyState } from '@/renderer/components/empty-state'
 import { TicketRow } from '@/renderer/components/ticket-row'
-import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { ipcQueryOptions, observeIpcQuery, useIpcQuery } from '@/renderer/data/query'
-import { invoke } from '@/renderer/data/invoke'
-import { ROUTE_IDS } from '@/renderer/router/routes'
+import { ROUTE_IDS } from '@/renderer/app/routes'
 import type { BoardItemRef, BoardSearch, BoardView } from '@/types/router'
 import { projectBoard } from '@/renderer/board/project'
 import type { BoardItemRow } from '@/types/board'
 import type { RepoId } from '@/utils/repos'
-import { registerListNavigator } from '@/renderer/shell/stores'
-import { useListSelection } from '@/renderer/shell/list-selection'
+import { listNavigatorRef } from '@/renderer/app/list-navigator'
+import { useListSelection } from '@/renderer/app/list-selection'
 import { pruneItemActionStates } from '@/renderer/board/actions'
 import { BoardBanners } from '@/renderer/board/banners'
 import { BoardHeader } from '@/renderer/board/header'
 import { ItemPane } from '@/renderer/board/item-pane'
-import { Screen, ScreenBody } from '@/renderer/components/screen'
+import { Page } from '@/renderer/components/page'
+import { pageState } from '@/renderer/components/page-state'
+import { BOARD_UNREACHABLE, NO_REPOSITORIES_EMPTY, OPEN_REPOSITORIES_LABEL, SHOW_ALL_REPOSITORIES_LABEL, nothingAssignedEmpty } from '@/renderer/board/copy'
 import { boardSections } from '@/renderer/board/sections'
 import { boardColumns } from '@/renderer/board/columns'
 import { BoardKanban, BoardKanbanSkeleton } from '@/renderer/board/kanban'
@@ -33,7 +34,7 @@ import type { DispatchRecord } from '@/types/dispatch'
 // Registered once from main.ts's boot — never a useEffect inside the
 // component.
 export function connectItemActionPruning(client: QueryClient): () => void {
-  return observeIpcQuery(client, 'board:snapshot', undefined, (result) => {
+  return observeIpcQuery(client, 'board.snapshot', undefined, (result) => {
     if (result.status === 'success') pruneItemActionStates(result.data)
   })
 }
@@ -47,9 +48,11 @@ export function BoardScreen() {
   const search = useSearch({ from: ROUTE_IDS.board })
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const query = useIpcQuery('board:snapshot')
-  const sessions = useIpcQuery('session:list')
-  const [refreshing, setRefreshing] = useState(false)
+  const query = useIpcQuery('board.snapshot')
+  const sessions = useIpcQuery('session.list')
+  const refresh = useActionMutation('board.refresh', {
+    onResult: (fresh) => queryClient.setQueryData(ipcQueryOptions('board.snapshot').queryKey, fresh),
+  })
   const [collapsedLanes, setCollapsedLanes] = useState<ReadonlySet<RepoId>>(() => readBoardCollapsedLanes())
   const now = new Date()
 
@@ -61,17 +64,6 @@ export function BoardScreen() {
 
   function selectRow(row: BoardItemRow | null): void {
     setSearch({ item: row !== null ? { repoId: row.item.repoId, number: row.ticket.ref.number } : null })
-  }
-
-  async function handleRefresh(): Promise<void> {
-    setRefreshing(true)
-    try {
-      const fresh = await invoke('board:refresh', {})
-      queryClient.setQueryData(ipcQueryOptions('board:snapshot').queryKey, fresh)
-    } catch (error) {
-      console.error('Failed to refresh the board', error)
-    }
-    setRefreshing(false)
   }
 
   const repo = search.repo ?? null
@@ -114,7 +106,7 @@ export function BoardScreen() {
     onChange: (key) => selectRow(key !== null ? (flatRows.find((row) => rowKey(row) === key) ?? null) : null),
   })
 
-  registerListNavigator('board', {
+  const navigatorRef = listNavigatorRef({
     next: () => selection.next(),
     prev: () => selection.prev(),
     // J/K already opens the pane on every move (above); Enter on an
@@ -154,15 +146,40 @@ export function BoardScreen() {
     )
   }
 
+  const noRepositories = snapshot !== null && snapshot.state.repositories.length === 0
+  const banners = snapshot !== null && projection !== null ? <BoardBanners snapshot={snapshot} projection={projection} ungated={ungatedRows} selection={selection} /> : null
+
+  const empty = (
+    <>
+      {banners}
+      {noRepositories ? (
+        <EmptyState
+          icon={LayoutGrid}
+          message={NO_REPOSITORIES_EMPTY}
+          action={{ label: OPEN_REPOSITORIES_LABEL, onClick: () => void navigate({ to: ROUTE_IDS.settings, search: { section: 'repositories' } }) }}
+          className="px-4 py-6"
+        />
+      ) : (
+        <EmptyState
+          icon={LayoutGrid}
+          message={nothingAssignedEmpty(repo !== null)}
+          action={repo !== null ? { label: SHOW_ALL_REPOSITORIES_LABEL, onClick: () => setSearch({ repo: null }) } : undefined}
+          className="px-4 py-6"
+        />
+      )}
+    </>
+  )
+
   return (
-    <Screen
+    <Page
+      ref={navigatorRef}
       onMouseDown={selection.surfaceProps().onMouseDown}
       header={
         <BoardHeader
           snapshot={snapshot}
           now={now}
-          refreshing={refreshing}
-          onRefresh={() => void handleRefresh()}
+          refreshing={refresh.pending}
+          onRefresh={() => refresh.request({})}
           repo={repo}
           onRepoChange={(nextRepo: RepoId | null) => setSearch({ repo: nextRepo })}
           view={view}
@@ -172,44 +189,20 @@ export function BoardScreen() {
           }}
         />
       }
+      variant="list"
+      bodyClassName={kanban ? 'flex flex-col overflow-hidden' : undefined}
+      state={pageState({ data: snapshot ?? undefined, status: query.status }, () => noRepositories || allRows.length === 0)}
+      loading={kanban ? <BoardKanbanSkeleton /> : undefined}
+      errorMessage={BOARD_UNREACHABLE}
+      onRetry={() => void query.refetch()}
+      empty={empty}
+      aside={selectedRow !== null ? <ItemPane row={selectedRow} report={report} owner={owner} onClose={() => selectRow(null)} /> : undefined}
     >
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <ScreenBody variant="list" className={kanban ? 'flex flex-1 flex-col overflow-hidden' : 'flex-1'}>
-          <div className={kanban ? 'flex min-h-0 flex-1 flex-col' : undefined}>
-            {snapshot === null ? (
-              kanban ? (
-                <BoardKanbanSkeleton />
-              ) : (
-                <div className="flex flex-col gap-1 px-4 py-2">
-                  <Skeleton className="h-9 w-full" />
-                  <Skeleton className="h-9 w-full" />
-                  <Skeleton className="h-9 w-full" />
-                </div>
-              )
-            ) : projection !== null ? (
-              <>
-                {waitingSection !== undefined ? renderSection(waitingSection) : null}
-                <BoardBanners snapshot={snapshot} projection={projection} ungated={ungatedRows} selection={selection} />
-                {snapshot.state.repositories.length === 0 ? (
-                  <EmptyState icon={LayoutGrid} message="Add a repository to see its pipeline." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.settings, search: { section: 'repositories' } }) }} className="px-4 py-6" />
-                ) : allRows.length === 0 ? (
-                  <EmptyState
-                    icon={LayoutGrid}
-                    message={repo !== null ? "Nothing assigned to you in this repository's pipeline." : 'Nothing assigned to you in the pipeline.'}
-                    action={repo !== null ? { label: 'Show all repositories', onClick: () => setSearch({ repo: null }) } : undefined}
-                    className="px-4 py-6"
-                  />
-                ) : kanban ? (
-                  <BoardKanban columns={columns} lanes={lanes} collapsed={collapsedLanes} onToggleLane={toggleLane} selection={selection} />
-                ) : (
-                  otherSections.map(renderSection)
-                )}
-              </>
-            ) : null}
-          </div>
-        </ScreenBody>
-        {selectedRow !== null ? <ItemPane row={selectedRow} report={report} owner={owner} onClose={() => selectRow(null)} /> : null}
+      <div className={kanban ? 'flex min-h-0 flex-1 flex-col' : undefined}>
+        {waitingSection !== undefined ? renderSection(waitingSection) : null}
+        {banners}
+        {kanban ? <BoardKanban columns={columns} lanes={lanes} collapsed={collapsedLanes} onToggleLane={toggleLane} selection={selection} /> : otherSections.map(renderSection)}
       </div>
-    </Screen>
+    </Page>
   )
 }

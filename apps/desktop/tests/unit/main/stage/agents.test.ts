@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { DISPATCH_PROMPT, REFRESH_PROMPT } from '@/main/dispatch/dispatcher'
-import { HANDBACK_TOKENS } from '@/main/dispatch/transitions'
-import { STAGE_AGENT_NAMES } from '@/main/stage/agents'
+import { DISPATCH_PROMPT, REFRESH_PROMPT } from '@/main/dispatch/launch'
+import { HANDBACK_TOKENS } from '@/main/pipeline/transitions'
+import { STAGE_AGENT_NAMES } from '@/main/dispatch/stage/agents'
 import { BLOCKED_PREFIX, HANDBACK_PREFIX, QUESTIONS_PREFIX } from '@/utils/stage/handback-text'
 
 const BUNDLE_ROOT = join(__dirname, '../../../../stage-prompts')
@@ -62,6 +62,16 @@ describe('bundled stage agents', () => {
     const text = await textOf(stage)
     expect(text).toContain(HANDBACK_PREFIX)
     for (const needle of LABEL_WRITING_NEEDLES) expect(text).not.toContain(needle)
+  })
+
+  it('every agent carries impl-agent\'s "Dispatched with a stage context" paragraph', async () => {
+    const paragraphOf = (text: string): string | null => {
+      const start = text.indexOf('**Dispatched with a stage context.**')
+      return start === -1 ? null : text.slice(start, text.indexOf('\n', start))
+    }
+    const canonical = paragraphOf(await textOf('impl'))
+    expect(canonical).not.toBeNull()
+    for (const stage of STAGES) expect(paragraphOf(await textOf(stage))).toBe(canonical)
   })
 
   it('names the questions and blocked prefixes somewhere across the four', async () => {

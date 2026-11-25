@@ -1,7 +1,7 @@
 // fetchReleaseStatus: the state read and the merged-PR read behind the Releases screen. Reads fail toward showing less with a note, except where a partial read would enable a write.
-import { githubHttp } from '@/main/platform/github-http'
-import type { GhResult, GitHubTransport } from '@/types/platform'
+import type { GhResult } from '@/types/platform'
 import type { GitHubRepoRef } from '@/types/github'
+import type { GitHubReadContext } from '@/main/github/context'
 import type {
   BranchHead,
   ClosedReleasePrInput,
@@ -22,7 +22,7 @@ import { nodesOf, obj, str } from '@/main/github/json'
 import type { Obj } from '@/main/github/json'
 import { readMergedPrs } from '@/main/github/release-prs'
 import { BUMP_BRANCH_DIR, versionOfBumpBranch } from '@/utils/release/format'
-import { resolvePhase } from '@/main/release/state'
+import { resolvePhase } from '@/main/github/release-phase'
 import { normalizeVersion, parseVersion, stripPrerelease } from '@/utils/release/version'
 
 const SAFE_REF = /^[A-Za-z0-9._/-]+$/
@@ -103,8 +103,6 @@ export interface FetchReleaseStatusParams {
   readonly production: string | null
   readonly moduleEnabled: boolean
   readonly config: ReleaseConfig
-  readonly github?: GitHubTransport
-  readonly now?: () => Date
 }
 
 const GATHERING: ReadonlySet<ReleasePhase['kind']> = new Set(['idle', 'bumped', 'waiting-bump', 'ready-to-publish'])
@@ -127,9 +125,8 @@ function guardStatus(params: FetchReleaseStatusParams, phase: ReleasePhase, read
   return { ok: true, status, integrationHead: null, viewer: null }
 }
 
-export async function fetchReleaseStatus(params: FetchReleaseStatusParams): Promise<ReleaseRead> {
-  const github = params.github ?? githubHttp
-  const readAt = (params.now ?? (() => new Date()))().toISOString()
+export async function fetchReleaseStatus(ctx: GitHubReadContext, params: FetchReleaseStatusParams): Promise<ReleaseRead> {
+  const readAt = ctx.clock.now().toISOString()
   const { config, repo, integration, production } = params
 
   const base: PhaseInput = {
@@ -153,7 +150,7 @@ export async function fetchReleaseStatus(params: FetchReleaseStatusParams): Prom
   }
 
   const versionFile = config.versionSource === 'package' ? (config.versionFiles[0] ?? null) : null
-  const result = await github(repoGraphqlRequest(buildStateQuery(versionFile !== null), repo, stateVariables({ integration, production, versionFile })))
+  const result = await ctx.githubHttp(repoGraphqlRequest(buildStateQuery(versionFile !== null), repo, stateVariables({ integration, production, versionFile })))
   const text = bodyOf(result)
   const parsed = text === undefined ? undefined : parseEnvelope(text)
   const verdict = classifyFailure(result, parsed)
@@ -197,7 +194,7 @@ export async function fetchReleaseStatus(params: FetchReleaseStatusParams): Prom
   if (GATHERING.has(phase.kind)) {
     const since = tagged[0] === undefined ? null : (tagged[0].taggedAt ?? tagged[0].release.publishedAt)
     const until = phase.kind === 'ready-to-publish' ? str(obj(obj(repository.productionHead)?.target)?.committedDate) : null
-    const read = await readMergedPrs({ github, repo, base: integration, since, until })
+    const read = await readMergedPrs(ctx, { repo, base: integration, since, until })
     if (!read.ok) return failure(read.message, readAt)
     entries = read.entries
     note = read.note
@@ -227,8 +224,7 @@ export async function fetchReleaseStatus(params: FetchReleaseStatusParams): Prom
 }
 
 /** One version file's text at a commit, read raw — never from the operator's checkout. */
-export async function readFileAtRef(params: { readonly repo: GitHubRepoRef; readonly path: string; readonly ref: string; readonly github?: GitHubTransport }): Promise<{ readonly ok: true; readonly text: string } | { readonly ok: false; readonly message: string }> {
-  const github = params.github ?? githubHttp
-  const result = await github(restRequest(`repos/${params.repo.owner}/${params.repo.name}/contents/${params.path}?ref=${params.ref}`, RAW_ACCEPT))
+export async function readFileAtRef(ctx: GitHubReadContext, params: { readonly repo: GitHubRepoRef; readonly path: string; readonly ref: string }): Promise<{ readonly ok: true; readonly text: string } | { readonly ok: false; readonly message: string }> {
+  const result = await ctx.githubHttp(restRequest(`repos/${params.repo.owner}/${params.repo.name}/contents/${params.path}?ref=${params.ref}`, RAW_ACCEPT))
   return result.ok ? { ok: true, text: result.body } : { ok: false, message: describeHttp(result) }
 }

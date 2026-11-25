@@ -3,10 +3,10 @@ import type { RepoId } from '@/utils/repos'
 import type { ClaimPreflightFetch } from '@/types/github'
 import type { LabelWriteRequest, WriteOutcome } from '@/types/writes'
 import type { ReposListResponse } from '@/types/ipc'
-import { claimApply, claimPreflight } from '@/main/claim'
+import { claimApply, claimPreflight } from '@/main/pipeline/claim'
 import type { ClaimDeps } from '@/types/claim'
 import type { RegistryDeps } from '@/types/registry'
-import { readyEntry } from '../../fixtures/board-state'
+import { readyEntry } from '../../support/repo-config'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 
@@ -37,7 +37,7 @@ function depsWith(overrides: Partial<ClaimDeps>): ClaimDeps {
     writeState: () => {
       throw new Error('writeState should not be invoked in this case')
     },
-    stateLabels: () => null,
+    stateLabels: () => [],
     ...overrides,
   }
 }
@@ -70,6 +70,11 @@ describe('claimPreflight', () => {
     const deps = depsWith({ fetchClaimPreflight: () => Promise.resolve(preflightFetch({ item: null })) })
     const result = await claimPreflight({ registryDeps, repoId: REPO_ID, number: 999999 }, deps)
     expect(result).toEqual({ kind: 'unresolved' })
+  })
+
+  it('fails with the unseeded message while the store holds no state for the repository', async () => {
+    const deps = depsWith({ fetchClaimPreflight: () => Promise.resolve(preflightFetch()), stateLabels: () => null })
+    expect(await claimPreflight({ registryDeps, repoId: REPO_ID, number: 93 }, deps)).toEqual({ kind: 'failed', message: "port hasn't loaded this repository's pipeline state yet" })
   })
 
   it('resolves a claimable item with its verdict', async () => {
@@ -118,6 +123,12 @@ describe('claimApply', () => {
     const deps = depsWith({ fetchClaimPreflight: () => Promise.resolve(preflightFetch()), stateLabels: () => ['claude', 'ready'] })
     const result = await claimApply({ registryDeps, repoId: REPO_ID, number: 93, planGate: 'review', confirmedAssignees: [], auditDir: '/audit' }, deps)
     expect(result).toEqual({ kind: 'refused', verdict: { kind: 'already-claimed', markerName: 'claude' } })
+  })
+
+  it('refuses with the unseeded state-unsaved outcome, and writes nothing, while the store holds no state', async () => {
+    const deps = depsWith({ fetchClaimPreflight: () => Promise.resolve(preflightFetch()), stateLabels: () => null })
+    const result = await claimApply({ registryDeps, repoId: REPO_ID, number: 93, planGate: 'review', confirmedAssignees: [], auditDir: '/audit' }, deps)
+    expect(result).toEqual({ kind: 'write', outcome: { kind: 'state-unsaved', message: "port hasn't loaded this repository's pipeline state yet" } })
   })
 
   it('surfaces an unreachable preflight as preflight-failed, without writing', async () => {

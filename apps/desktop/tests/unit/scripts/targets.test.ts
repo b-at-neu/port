@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ROUTE_IDS } from '@/renderer/router/routes'
+import { ROUTE_IDS } from '@/renderer/app/routes'
 import { ROUTE_KEYS } from '../../visual/targets.mjs'
 
 describe('visual ROUTE_KEYS', () => {

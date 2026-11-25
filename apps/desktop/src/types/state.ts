@@ -3,7 +3,7 @@ import type { EtagCache, PipelineFetch, ItemsByNumberFetch } from '@/types/githu
 import type { WorktreesRead } from '@/types/local'
 import type { BoardSnapshot, SourceKind } from '@/types/board'
 
-// Renderer-safe reconciled shapes for the unified state model. No import here may reach a Node builtin — only `main/state/` joins the four adapters. A condition a human or the environment could cause is a value, never a throw.
+// Renderer-safe reconciled shapes for the unified state model. No import here may reach a Node builtin — only `main/pipeline/board/` joins the four adapters. A condition a human or the environment could cause is a value, never a throw.
 import type { LabelKey, VocabularyReport } from '@/utils/labels/vocabulary'
 import type { LabelRole } from '@/utils/labels/defaults'
 import type { MirrorFailure } from '@/types/pipeline-state'
@@ -138,23 +138,23 @@ export interface ReconciledItem {
   readonly sources: readonly ('github' | 'itemStates' | 'sessions' | 'worktrees' | 'denials')[]
   /** The plan's own ` ```files ` fence, parsed for issues only. `null` is "no file list" (dispatches unchecked); `[]` is a fence that parsed to nothing — the two are never collapsed. */
   readonly claimedFiles: readonly string[] | null
-  /** Copied straight off `PipelineItem`, pull-request only — `null` for an issue. Feeds `scripts/port-tick/gates.ts`'s `cycleCapExceeded`/`zeroDiffGate`. */
+  /** Copied straight off `PipelineItem`, pull-request only — `null` for an issue. Feeds `utils/pipeline/gates.ts`'s `cycleCapExceeded`/`zeroDiffGate`. */
   readonly headRefOid: string | null
-  /** Copied straight off `PipelineItem`, pull-request only — `null` for an issue. Feeds `scripts/port-tick/gates.ts`'s `mergeabilityRoute`. */
+  /** Copied straight off `PipelineItem`, pull-request only — `null` for an issue. Feeds `utils/pipeline/gates.ts`'s `mergeabilityRoute`. */
   readonly mergeable: Mergeable
   readonly reviews: readonly ReviewNode[] | null
   readonly comments: readonly PullRequestCommentNode[] | null
   /** `codeReviewCount(reviews)`, precomputed here so the renderer never re-derives it from raw review bodies — `null` for an issue. */
   readonly reviewCycleCount: number | null
-  /** Copied straight off `PipelineItem`, pull-request only — `null` for an issue. Feeds `scripts/port-tick/checks.ts`'s `rollupVerdict` for the approval-withdrawal observation, and `zeroDiffChecksOf` for the zero-diff gate on `readyForReview`. */
+  /** Copied straight off `PipelineItem`, pull-request only — `null` for an issue. Feeds `utils/pipeline/checks.ts`'s `rollupVerdict` for the approval-withdrawal observation, and `zeroDiffChecksOf` for the zero-diff gate on `readyForReview`. */
   readonly checkRollup: readonly CheckContext[] | null
-  /** Whether this issue's body carries `link.ts`'s own `IMPLEMENTATION_PLAN_HEADING`, trimmed-line exact — `null` for a pull request, never a second copy of the heading. Feeds `main/tick/repair.ts`'s `plan-missing`/`plan-missing-approved` shapes. */
+  /** Whether this issue's body carries `link.ts`'s own `IMPLEMENTATION_PLAN_HEADING`, trimmed-line exact — `null` for a pull request, never a second copy of the heading. Feeds `main/pipeline/tick/repair.ts`'s `plan-missing`/`plan-missing-approved` shapes. */
   readonly planPresent: boolean | null
   /** Copied straight off `PipelineItem` — the Board's "held on" dependency read, `null` for a pull request. */
   readonly blockers: BlockerRead | null
   /** Copied straight off `PipelineItem` — the newest comments of a blocked issue, `null` when not read. */
   readonly blockerComments: readonly IssueCommentNode[] | null
-  /** Copied straight off `PipelineItem` — the pull requests closing this issue, `null` when unread or errored and for a pull request. Feeds `main/tick/adopt.ts`. */
+  /** Copied straight off `PipelineItem` — the pull requests closing this issue, `null` when unread or errored and for a pull request. Feeds `main/pipeline/tick/adopt.ts`. */
   readonly closingPullRequests: readonly ClosingPullRequest[] | null
   /** The store's failed label mirror for this item — set only under a store view. */
   readonly mirrorFailure?: MirrorFailure | null

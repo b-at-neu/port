@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 import { pathOps } from '@/main/platform/paths'
-import { createStageLauncher } from '@/main/stage/launcher'
+import { createStageLauncher } from '@/main/dispatch/stage/launcher'
 import type { ReadyEntry } from '@/types/actions'
 import type { StageLaunchRequest } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionKey, StartSessionParams } from '@/types/hosting'
 import type { FileResult } from '@/types/platform'
-import type { InterruptedStage, StageInstructionsLoader } from '@/types/stage'
+import type { StageInstructionsLoader } from '@/types/stage'
 import { WIDGETS_ID, FIXTURE_REPOSITORIES } from '../../../fixtures/app/repos'
+import { memoryRuns } from '../../../support/state-store'
+import { ticketOf } from '../../../support/tickets'
 
 const ENTRY = FIXTURE_REPOSITORIES.find((r) => r.id === WIDGETS_ID) as ReadyEntry
 const WORKTREE = '/repo/.claude/worktrees/plan-52'
@@ -29,7 +31,7 @@ function snapshot(text: string): HostedSessionSnapshot {
     end: null,
     titled: null,
     pendingPermissions: [],
-    capabilities: { kind: 'pending', request: { source: 'installed' } },
+    capabilities: { kind: 'pending' },
     title: null,
     rateLimit: null,
     controls: { permissionMode: 'default', model: null, effort: null },
@@ -49,7 +51,7 @@ async function settle(read: FileResult<string>, text: string, agent: StageLaunch
   const readTextFile = vi.fn((path: string) => Promise.resolve<FileResult<string>>(path === PLAN_PATH ? read : { ok: false, kind: 'not-found', message: `ENOENT ${path}` }))
   const onOutcome = vi.fn()
   const loadInstructions = vi.fn<StageInstructionsLoader>().mockResolvedValue({ ok: true, text: 'prompt', agent: { name: 'plan-agent', definition: { description: 'plan', prompt: 'body' } } })
-  const registry = { recordRunning: vi.fn(), markRunning: vi.fn(), setSessionId: vi.fn(), markInterrupted: vi.fn(), markAllQuit: vi.fn(), remove: vi.fn(), list: vi.fn((): readonly InterruptedStage[] => []), running: vi.fn((): readonly InterruptedStage[] => []), load: vi.fn() }
+  const { runs } = memoryRuns(WIDGETS_ID, { tickets: [ticketOf({ repo: WIDGETS_ID, ticket: 52, stage: 'plan' })] })
   const launcher = createStageLauncher({
     store: store as never,
     git: vi.fn() as never,
@@ -60,10 +62,8 @@ async function settle(read: FileResult<string>, text: string, agent: StageLaunch
     now: () => new Date(),
     onOutcome,
     onResumedTurn: vi.fn(),
-    onResumed: vi.fn(),
     pathExists: () => Promise.resolve(true),
-    registry,
-    onDenial: vi.fn(),
+    runs,
     newId: () => 'id-1',
     loadInstructions,
     bundleRoot: '/bundle',

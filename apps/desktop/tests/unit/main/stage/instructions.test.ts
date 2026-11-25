@@ -1,7 +1,8 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { buildStageContext, createStageInstructionsLoader, extractSection, loadStageInstructions, readStageConfigPointers, STAGE_PIPELINE_SECTIONS } from '@/main/stage/instructions'
+import { buildStageContext, createStageInstructionsLoader, extractSection, loadStageInstructions, readStageConfigPointers, STAGE_PIPELINE_SECTIONS } from '@/main/dispatch/stage/instructions'
+import { STAGE_SYSTEM_PROMPT } from '@/main/dispatch/stage/bundle'
 import { readTextFile } from '@/main/platform/files'
 import { pathOps } from '@/main/platform/paths'
 import { FIXTURE_REPOSITORIES, WIDGETS_ID } from '../../../fixtures/app/repos'
@@ -208,7 +209,7 @@ describe('createStageInstructionsLoader', () => {
     expect(text).toContain('You are the Impl agent.')
     expect(text).toContain('repo: ')
     expect(text).toContain(`plugin-root: ${ROOT}`)
-    expect(result.ok ? result.agent : null).toEqual({ name: 'impl-agent', definition: { description: 'Implements a plan', prompt: 'You are the Impl agent.', disallowedTools: ['Agent'] } })
+    expect(result.ok ? result.agent : null).toEqual({ name: 'impl-agent', definition: { description: 'Implements a plan', prompt: STAGE_SYSTEM_PROMPT, disallowedTools: ['Agent'] } })
   })
 
   it('takes commands from the default branch even when the worktree carries a different config', async () => {

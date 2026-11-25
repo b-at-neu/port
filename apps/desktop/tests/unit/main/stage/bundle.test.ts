@@ -2,8 +2,8 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { readTextFile } from '@/main/platform/files'
 import { pathOps } from '@/main/platform/paths'
-import { loadStageAgentDefinition, stageBundleRoot } from '@/main/stage/bundle'
-import { extractSection, STAGE_PIPELINE_SECTIONS } from '@/main/stage/instructions'
+import { STAGE_SYSTEM_PROMPT, loadStageAgentDefinition, stageBundleRoot } from '@/main/dispatch/stage/bundle'
+import { extractSection, STAGE_PIPELINE_SECTIONS } from '@/main/dispatch/stage/instructions'
 import type { FileResult } from '@/types/platform'
 import type { StageAgent } from '@/types/tick'
 
@@ -25,19 +25,19 @@ describe('stageBundleRoot', () => {
 })
 
 describe('loadStageAgentDefinition', () => {
-  it('splits the frontmatter from the body and reads the tool lists', async () => {
+  it('reads the frontmatter and its tool lists, and points the system prompt at the first message', async () => {
     const result = await load('---\nname: impl-agent\ndescription: Implements a plan\ntools: Read, Edit,, Bash\ndisallowedTools: Agent\nmodel: sonnet\n---\n\nYou are the Impl agent.\n')
-    expect(result).toEqual({ ok: true, name: 'impl-agent', definition: { description: 'Implements a plan', prompt: 'You are the Impl agent.', tools: ['Read', 'Edit', 'Bash'], disallowedTools: ['Agent'] } })
+    expect(result).toEqual({ ok: true, name: 'impl-agent', definition: { description: 'Implements a plan', prompt: STAGE_SYSTEM_PROMPT, tools: ['Read', 'Edit', 'Bash'], disallowedTools: ['Agent'] } })
   })
 
   it('omits the tool lists the file does not declare', async () => {
     const result = await load('---\nname: plan-agent\ndescription: Plans\n---\nBody')
-    expect(result).toEqual({ ok: true, name: 'plan-agent', definition: { description: 'Plans', prompt: 'Body' } })
+    expect(result).toEqual({ ok: true, name: 'plan-agent', definition: { description: 'Plans', prompt: STAGE_SYSTEM_PROMPT } })
   })
 
   it('reads a CRLF file the same way', async () => {
     const result = await load('---\r\nname: plan-agent\r\ndescription: Plans\r\n---\r\nBody\r\n')
-    expect(result).toEqual({ ok: true, name: 'plan-agent', definition: { description: 'Plans', prompt: 'Body' } })
+    expect(result).toEqual({ ok: true, name: 'plan-agent', definition: { description: 'Plans', prompt: STAGE_SYSTEM_PROMPT } })
   })
 
   it.each([

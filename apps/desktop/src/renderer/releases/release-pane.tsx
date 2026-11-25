@@ -4,7 +4,7 @@ import { DetailPane } from '@/renderer/components/detail-pane'
 import { Markdown } from '@/renderer/components/markdown'
 import { Button } from '@/renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
-import { exactTime, relativeAge } from '@/renderer/backlog/group'
+import { exactTime, formatAgoSince } from '@/renderer/lib/time'
 import type { ReleaseInfo } from '@/types/release'
 import type { RepoId } from '@/utils/repos'
 import { NOTES_EMPTY, NOTES_LABEL, OPEN_ON_GITHUB } from '@/renderer/releases/copy'
@@ -25,7 +25,7 @@ export function ReleasePane({ release, repoId, now, onClose }: ReleasePaneProps)
         {release.publishedAt !== null ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="shrink-0 text-meta text-muted-foreground">{relativeAge(release.publishedAt, now)}</span>
+              <span className="shrink-0 text-meta text-muted-foreground">{formatAgoSince(release.publishedAt, now)}</span>
             </TooltipTrigger>
             <TooltipContent>{exactTime(release.publishedAt)}</TooltipContent>
           </Tooltip>

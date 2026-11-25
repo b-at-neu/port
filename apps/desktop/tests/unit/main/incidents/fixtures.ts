@@ -1,15 +1,14 @@
 // Shared rigs for the incident tests: a reconciled item and a real state writer over an in-memory store.
-import { vi } from 'vitest'
-import { itemKey, recordMirror, transition, viewOf, withItem } from '@/main/pipeline-state/model'
-import { createStateWriter } from '@/main/pipeline-state/writer'
+import { createStateWriter } from '@/main/pipeline/state/writer'
 import type { FileResult } from '@/types/platform'
 import type { ReadyEntry } from '@/types/actions'
 import type { IncidentDraft, IncidentFiles } from '@/types/incidents'
-import type { MirrorFailure, PipelineStateStore, RepoRecord, StoredItem } from '@/types/pipeline-state'
 import type { ReconciledItem } from '@/types/state'
 import type { WriteOutcome } from '@/types/writes'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
+import { AT, memoryStore } from '../../../support/state-store'
+import { ticketOf } from '../../../support/tickets'
 
 export const REPO_ID = 'repo-a' as RepoId
 export const REPO = 'o/r'
@@ -106,35 +105,18 @@ export function memory(fail: { readonly append?: boolean } = {}) {
   return { store, files }
 }
 
-function stored(number: number): StoredItem {
-  return { kind: 'pull-request', number, keys: ['readyForReview'], marked: true, autoPlan: false, claimedAt: null, reviewCycles: 0, history: [], updatedAt: '2026-01-01T00:00:00.000Z', issue: null, mirrorFailure: null }
-}
-
 interface WriterRigOptions {
   readonly number: number
   /** The head GitHub reports when the write reads the item. */
   readonly writeHead: string
 }
 
-/** A real `writeState` over an in-memory store, with every incident it raises collected. */
+/** A real `writeState` over the real store in memory, with every incident it raises collected. */
 export function writerRig(options: WriterRigOptions) {
   const incidents: IncidentDraft[] = []
-  let record: RepoRecord = { seededAt: 't', heldBy: null, items: { [itemKey('pull-request', options.number)]: stored(options.number) } }
-  const store = {
-    view: () => viewOf(record),
-    transition: vi.fn((_id: RepoId, ref: { kind: 'issue' | 'pull-request'; number: number }, input: Parameters<PipelineStateStore['transition']>[2]) => {
-      const next = transition(record, ref, input)
-      if (!next.ok) return Promise.resolve(next)
-      record = withItem(record, next.item)
-      return Promise.resolve({ ok: true as const, changed: next.changed })
-    }),
-    recordMirror: vi.fn((_id: RepoId, ref: { kind: 'issue' | 'pull-request'; number: number }, failure: MirrorFailure | null) => {
-      record = recordMirror(record, ref, failure)
-      return Promise.resolve()
-    }),
-  }
+  const { store } = memoryStore(REPO_ID, { tickets: [ticketOf({ repo: REPO_ID, ticket: options.number, pr: { number: options.number, approvedAt: null }, stage: 'review', status: { kind: 'queued', reason: 'new', since: AT } })] })
   const writer = createStateWriter({
-    store: store as unknown as PipelineStateStore,
+    store,
     applyLabels: (): Promise<WriteOutcome> => Promise.resolve({ kind: 'applied', argv: ['edit'] }),
     readOwnership: () => Promise.resolve({ kind: 'app', since: 's', path: 'p', readAt: 'r' }),
     fetchItemsByNumber: ({ numbers }) =>

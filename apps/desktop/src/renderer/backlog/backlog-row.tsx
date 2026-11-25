@@ -4,9 +4,9 @@ import { Button } from '@/renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/renderer/components/ui/dropdown-menu'
 import { LabelChip } from '@/renderer/components/label-chip'
-import { PLAN_GATE_OPTIONS } from '@/renderer/claim/copy'
-import type { useListSelection } from '@/renderer/shell/list-selection'
-import { exactTime, relativeAge } from '@/renderer/backlog/group'
+import { BACKLOG_WORK_ON, PLAN_GATE_OPTIONS } from '@/renderer/backlog/copy'
+import type { useListSelection } from '@/renderer/app/list-selection'
+import { exactTime, formatAgoSince } from '@/renderer/lib/time'
 import { BlockedTag } from '@/renderer/backlog/blocked-tag'
 import { isEpic } from '@/renderer/backlog/epics'
 import type { BacklogRowExtras, BacklogRowView } from '@/types/backlog'
@@ -32,7 +32,7 @@ function WorkOnMenu({ open, pending, onOpenChange, onPick }: WorkOnMenuProps) {
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="small" data-slot="backlog-work-on" disabled={pending}>
-          Work on
+          {BACKLOG_WORK_ON}
           {pending ? <Loader2 aria-hidden="true" className="size-3.5 animate-spin" /> : <ChevronDown aria-hidden="true" className="size-3.5" />}
         </Button>
       </DropdownMenuTrigger>
@@ -108,7 +108,7 @@ export function BacklogRow({ row, rowProps, menuOpen, pending, onMenuOpenChange,
       {row.assignee !== null ? <span className="shrink-0 text-meta text-muted-foreground">{row.assignee}</span> : null}
       <Tooltip>
         <TooltipTrigger asChild>
-          <span data-slot="backlog-age" className="shrink-0 text-meta text-muted-foreground">{relativeAge(row.createdAt, now)}</span>
+          <span data-slot="backlog-age" className="shrink-0 text-meta text-muted-foreground">{formatAgoSince(row.createdAt, now)}</span>
         </TooltipTrigger>
         <TooltipContent>{exactTime(row.createdAt)}</TooltipContent>
       </Tooltip>

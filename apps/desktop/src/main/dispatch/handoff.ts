@@ -1,6 +1,6 @@
 // Per-repository pending stage label writes: serialized, retried a bounded number of times, and reported rather than guessed.
-import { eventWrites, stageModeFor } from '@/main/dispatch/transitions'
-import { draftOf, handoffRefusalIntent, noRelated } from '@/main/incidents/raise'
+import { eventWrites, stageModeFor } from '@/main/pipeline/transitions'
+import { draftOf, handoffRefusalIntent, noRelated } from '@/main/pipeline/incidents/raise'
 import type { ReadyEntry } from '@/types/actions'
 import type { RecordIncident } from '@/types/incidents'
 import type { SessionKey } from '@/types/hosting'

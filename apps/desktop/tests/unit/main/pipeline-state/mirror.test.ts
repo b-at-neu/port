@@ -1,138 +1,63 @@
 import { describe, expect, it } from 'vitest'
-import {
-  allDisplayNames,
-  displayKeysOf,
-  displayNamesOf,
-  displayStateOf,
-  issueNumberOfBranch,
-  legacyKeysOf,
-  linkedIssueOf,
-  linkedPullRequestOf,
-  mergedKeysOf,
-  mirrorDiff,
-  needsYouOf,
-} from '@/main/pipeline-state/mirror'
-import type { StoredHistoryRow, StoredItem } from '@/types/pipeline-state'
+import { displayNamesOf, halvesOf, issueNumberOfBranch, itemsOf, legacyKeysOf, mirrorDiff, mirrorNamesOf } from '@/main/pipeline/state/mirror'
 import { resolveDisplayVocabulary } from '@/utils/labels/display'
-import type { LabelKey } from '@/utils/labels/vocabulary'
+import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import type { Event, Ticket } from '@/utils/pipeline/ticket'
+import { NOW, ticketOf } from '../../../support/tickets'
 
-function stored(keys: readonly LabelKey[], overrides: Partial<StoredItem> = {}): StoredItem {
-  return { kind: 'issue', number: 7, keys, marked: true, autoPlan: false, claimedAt: null, reviewCycles: 0, history: [], updatedAt: '2026-01-01T00:00:00.000Z', issue: null, mirrorFailure: null, ...overrides }
-}
+const waiting = (gate: 'plan-approval' | 'merge' | 'escalation') => ({ kind: 'waiting-on-you' as const, gate, detail: '' })
+const running = { kind: 'running' as const, runId: null }
+const prOf = (approvedAt: string | null = null) => ({ pr: { number: 9, approvedAt } })
 
-function row(add: readonly LabelKey[], remove: readonly LabelKey[] = []): StoredHistoryRow {
-  return { at: 't', action: 'a', add, remove, actor: null }
-}
-
-describe('displayStateOf', () => {
+describe('legacyKeysOf', () => {
   it.each([
-    ['ready', 'planning'],
-    ['planning', 'planning'],
-    ['planReview', 'planning'],
-    ['planChangesRequested', 'planning'],
-    ['planApproved', 'implementing'],
-    ['inProgress', 'implementing'],
-    ['blocked', 'implementing'],
-    ['readyForReview', 'reviewing'],
-    ['reviewing', 'reviewing'],
-    ['needsRevision', 'revising'],
-    ['revising', 'revising'],
-    ['refreshBranch', 'revising'],
-    ['refreshing', 'revising'],
-    ['approved', 'approved'],
-  ] as const)('%s shows %s', (key, state) => {
-    expect(displayStateOf(stored([key]))).toBe(state)
+    ['a queued plan', { stage: 'plan', status: { kind: 'queued', reason: 'new', since: NOW } }, ['marker', 'ready'], null],
+    ['plan changes requested', { stage: 'plan', status: { kind: 'queued', reason: 'changes-requested', since: NOW } }, ['marker', 'planChangesRequested'], null],
+    ['an auto-plan gate', { stage: 'plan', status: waiting('plan-approval'), autoPlan: true }, ['marker', 'autoPlan', 'planReview'], null],
+    ['a blocked implementation', { stage: 'implement', status: { kind: 'blocked', on: [], reason: '' } }, ['marker', 'blocked'], null],
+    ['a held ticket', { stage: 'implement', status: { kind: 'held', on: 'paused', detail: '' } }, ['marker'], null],
+    ['a review in flight', { stage: 'review', status: running, ...prOf() }, ['marker', 'prOpened'], ['marker', 'reviewing']],
+    ['a refresh of an approved pull request', { stage: 'refresh', status: { kind: 'queued', reason: 'new', since: NOW }, ...prOf(NOW) }, ['marker', 'prOpened'], ['marker', 'refreshBranch', 'approved']],
+    ['an escalated revision', { stage: 'revise', status: waiting('escalation'), ...prOf() }, ['marker', 'prOpened'], ['marker', 'needsHuman']],
+    ['the merge gate', { stage: 'merge', status: waiting('merge'), ...prOf(NOW) }, ['marker', 'prOpened'], ['marker', 'approved']],
+    ['a merged ticket', { stage: 'merge', status: { kind: 'done', at: NOW }, ...prOf(NOW) }, ['marker', 'prOpened'], ['marker', 'approved']],
+  ] as const)('%s', (_name, shape, issueKeys, prKeys) => {
+    const ticket = ticketOf(shape as Partial<Ticket>)
+    expect(legacyKeysOf(ticket, 'issue')).toEqual(issueKeys)
+    expect(legacyKeysOf(ticket, 'pull-request')).toEqual(prKeys)
   })
 
-  it('shows nothing for an item holding no mapped key', () => {
-    expect(displayStateOf(stored([]))).toBeNull()
-    expect(displayStateOf(stored(['prOpened']))).toBeNull()
-  })
-
-  it('lets a branch refresh beside approved win as revising', () => {
-    expect(displayStateOf(stored(['approved', 'refreshBranch']))).toBe('revising')
-    expect(displayStateOf(stored(['approved', 'refreshing']))).toBe('revising')
-  })
-
-  it('recovers the state needsHuman interrupted from the newest history row that added a mapped key', () => {
-    const history = [row(['planning']), row(['reviewing'], ['planning']), row(['needsHuman'], ['reviewing'])]
-    expect(displayStateOf(stored(['needsHuman'], { kind: 'pull-request', history }))).toBe('reviewing')
-    expect(displayStateOf(stored(['needsHuman'], { history: [row(['ready']), row(['inProgress'], ['ready']), row(['needsHuman'])] }))).toBe('implementing')
-  })
-
-  it('falls back to planning for an issue and reviewing for a pull request when history names no state', () => {
-    expect(displayStateOf(stored(['needsHuman']))).toBe('planning')
-    expect(displayStateOf(stored(['needsHuman'], { kind: 'pull-request' }))).toBe('reviewing')
+  it('leaves the issue half untracked for a pull request-only ticket', () => {
+    const ticket = ticketOf({ ticket: 9, pr: { number: 9, approvedAt: null }, stage: 'review' })
+    expect(legacyKeysOf(ticket, 'issue')).toBeNull()
+    expect(halvesOf(ticket)).toEqual([{ kind: 'pull-request', number: 9 }])
   })
 })
 
-describe('needsYouOf', () => {
-  it.each(['planReview', 'blocked', 'needsHuman'] as const)('%s needs a person', (key) => {
-    expect(needsYouOf(stored([key]))).toBe(true)
+describe('itemsOf', () => {
+  const history: Event[] = [
+    { at: '2026-11-23T10:00:00.000Z', action: 'stage-claim', actor: null, to: { stage: 'implement', status: 'running' }, legacy: { add: ['issue:inProgress'], remove: ['issue:planApproved'] } },
+    { at: '2026-11-23T11:00:00.000Z', action: 'stage-handback-pr-opened', actor: 'op', to: { stage: 'review', status: 'queued' }, legacy: { add: ['issue:prOpened', 'pull-request:readyForReview'], remove: ['issue:inProgress'] } },
+    { at: '2026-11-23T11:30:00.000Z', action: 'noop', actor: null, to: null, legacy: null },
+  ]
+  const ticket = ticketOf({ ticket: 7, pr: { number: 70, approvedAt: null }, stage: 'review', reviewCycles: 2, autoPlan: true, history })
+
+  it('projects each half with its own keys, its own history rows and the ticket link', () => {
+    expect(itemsOf(ticket)).toMatchObject([
+      { kind: 'issue', number: 7, keys: ['prOpened'], marked: true, autoPlan: true, issue: null, reviewCycles: 2, claimedAt: '2026-11-23T10:00:00.000Z' },
+      { kind: 'pull-request', number: 70, keys: ['readyForReview'], marked: true, autoPlan: false, issue: 7 },
+    ])
+    expect(itemsOf(ticket).map((item) => item.history)).toEqual([
+      [
+        { at: history[0]?.at, action: 'stage-claim', add: ['inProgress'], remove: ['planApproved'], actor: null },
+        { at: history[1]?.at, action: 'stage-handback-pr-opened', add: ['prOpened'], remove: ['inProgress'], actor: 'op' },
+      ],
+      [{ at: history[1]?.at, action: 'stage-handback-pr-opened', add: ['readyForReview'], remove: [], actor: 'op' }],
+    ])
   })
 
-  it('does not for an in-flight or terminal key', () => {
-    for (const key of ['planning', 'inProgress', 'reviewing', 'approved', 'readyForReview'] as const) expect(needsYouOf(stored([key]))).toBe(false)
-  })
-})
-
-describe('displayKeysOf', () => {
-  it('always includes port, with the one state', () => {
-    expect(displayKeysOf(stored(['inProgress']), null)).toEqual(['port', 'implementing'])
-  })
-
-  it('puts needs you on top of the state, never in place of it', () => {
-    expect(displayKeysOf(stored(['planReview']), null)).toEqual(['port', 'planning', 'needsYou'])
-    expect(displayKeysOf(stored(['blocked']), null)).toEqual(['port', 'implementing', 'needsYou'])
-  })
-
-  it('gives an item with no mapped key port alone', () => {
-    expect(displayKeysOf(stored([]), null)).toEqual(['port'])
-  })
-
-  it('shows an issue at prOpened its pull request\'s state, and implementing with no pull request stored', () => {
-    const issue = stored(['prOpened'])
-    expect(displayKeysOf(issue, stored(['needsRevision'], { kind: 'pull-request', number: 9, issue: 7 }))).toEqual(['port', 'revising'])
-    expect(displayKeysOf(issue, null)).toEqual(['port', 'implementing'])
-  })
-
-  it('shows needs you on the ticket when either it or its pull request needs a person', () => {
-    const escalated = stored(['needsHuman'], { kind: 'pull-request', number: 9, issue: 7, history: [row(['reviewing'])] })
-    expect(displayKeysOf(stored(['prOpened']), escalated)).toEqual(['port', 'reviewing', 'needsYou'])
-    expect(displayKeysOf(stored(['prOpened', 'needsHuman']), stored(['reviewing'], { kind: 'pull-request', number: 9, issue: 7 }))).toEqual(['port', 'reviewing', 'needsYou'])
-  })
-
-  it('shows a pull request its own state', () => {
-    expect(displayKeysOf(stored(['approved'], { kind: 'pull-request', number: 9, issue: 7 }), null)).toEqual(['port', 'approved'])
-  })
-})
-
-describe('legacyKeysOf and mergedKeysOf', () => {
-  it('writes the store\'s own keys, markers included', () => {
-    expect(legacyKeysOf(stored(['planApproved'], { autoPlan: true }))).toEqual(['marker', 'autoPlan', 'planApproved'])
-  })
-
-  it('puts approved in place of every in-flight or trigger key, keeping markers and gates', () => {
-    expect(mergedKeysOf(stored(['reviewing'], { kind: 'pull-request' }))).toEqual(['marker', 'approved'])
-    expect(mergedKeysOf(stored(['readyForReview', 'needsHuman'], { kind: 'pull-request' }))).toEqual(['marker', 'needsHuman', 'approved'])
-    expect(mergedKeysOf(stored(['approved'], { kind: 'pull-request' }))).toEqual(['marker', 'approved'])
-  })
-})
-
-describe('linkedPullRequestOf and linkedIssueOf', () => {
-  const older = stored(['readyForReview'], { kind: 'pull-request', number: 8, issue: 7, updatedAt: '2026-01-01T00:00:00.000Z' })
-  const newer = stored(['readyForReview'], { kind: 'pull-request', number: 9, issue: 7, updatedAt: '2026-01-02T00:00:00.000Z' })
-  const other = stored(['readyForReview'], { kind: 'pull-request', number: 10, issue: 3 })
-
-  it('picks the newest stored pull request naming the issue', () => {
-    expect(linkedPullRequestOf([older, newer, other], 7)).toBe(newer)
-    expect(linkedPullRequestOf([other], 7)).toBeNull()
-  })
-
-  it('finds the ticket only while it still holds prOpened', () => {
-    expect(linkedIssueOf([stored(['prOpened'])], newer)?.number).toBe(7)
-    expect(linkedIssueOf([stored(['approved'])], newer)).toBeNull()
-    expect(linkedIssueOf([stored(['prOpened'])], stored([], { kind: 'pull-request', issue: null }))).toBeNull()
+  it('has no ticket link for a pull request that is its own ticket', () => {
+    expect(itemsOf(ticketOf({ ticket: 9, pr: { number: 9, approvedAt: null }, stage: 'review' }))).toMatchObject([{ kind: 'pull-request', number: 9, issue: null }])
   })
 })
 
@@ -175,6 +100,12 @@ describe('display names', () => {
 
   it('resolves keys through the configured names', () => {
     expect(displayNamesOf(vocabulary, ['port', 'implementing', 'needsYou'])).toEqual(['port', 'building', 'help'])
-    expect(allDisplayNames(vocabulary)).toEqual(['port', 'help', 'planning', 'building', 'reviewing', 'revising', 'approved'])
+  })
+
+  it('removes a legacy label an item still carries, since the legacy names are part of what is cleaned up', () => {
+    const names = mirrorNamesOf(['port', 'implementing'], vocabulary, resolveVocabulary({}))
+    expect(names.desired).toEqual(['port', 'building'])
+    expect(names.all).toEqual(expect.arrayContaining(['port', 'help', 'building', 'claude', 'plan approved', 'in progress']))
+    expect(mirrorDiff(names.desired, names.all, ['claude', 'in progress', 'bug'])).toEqual({ addNames: ['port', 'building'], removeNames: ['claude', 'in progress'] })
   })
 })

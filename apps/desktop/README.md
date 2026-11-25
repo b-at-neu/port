@@ -17,6 +17,12 @@ Download the installer for your OS from the assets of the [latest release](https
 
 Unreleased builds from `dev` are on the **Package desktop app** workflow's runs, as the `port-desktop-<OS>-v<version>` artifact, kept for 7 days.
 
+## Terminal cockpit
+
+Running `/port:pipeline` in a repository this app manages is unsupported. The app reads a `.agents/cockpit.json` that names the terminal as owner as unreadable, and won't run that repository until the file is deleted.
+
+Hosted sessions load only the plugins installed in Claude Code, never a repository's own `plugins/port/`.
+
 ## Updates
 
 **When it checks:** on every launch of an installed build, with no timer and no throttle. port compares its version with the latest stable GitHub release, skipping drafts and prereleases. `pnpm dev` and other unpackaged runs, and any `-dev` version, never check and never touch the network. An offline or rate-limited startup check fails silently, with no notice and no dialog; Settings → About shows the reason.

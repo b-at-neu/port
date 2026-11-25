@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CommandResult, NodeRunner } from '@/types/platform'
-import { runPostPublishHook } from '@/main/release/hook'
+import { runPostPublishHook } from '@/main/features/release/hook'
 
 function runner(result: CommandResult, seen: { args?: readonly string[]; cwd?: string | undefined; timeoutMs?: number | undefined } = {}): NodeRunner {
   return (args, options) => {

@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "entries": [
+    { "id": "den-1", "repoId": "repo-a", "agent": "impl", "number": 101, "toolName": "Bash", "inputSummary": "git push", "rule": "Bash(git push:*)", "at": "2026-11-21T10:05:00.000Z", "sessionKey": "hosted-live" },
+    { "id": "den-2", "repoId": "repo-a", "agent": "plan", "number": 103, "toolName": "Bash", "inputSummary": "curl example.test", "rule": "Bash(curl:*)", "at": "2026-11-21T08:10:00.000Z", "sessionKey": null }
+  ]
+}

@@ -1,7 +1,7 @@
 // DESIGN §4 ContextMeter — a label, a 56×4px track and the percentage; token counts stay in the tooltip.
 import { MeterBar } from '@/renderer/components/meter-bar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
-import { CONTEXT_METER_LABEL, contextMeterLabel } from '@/renderer/session/rail-copy'
+import { CONTEXT_METER_LABEL, contextMeterLabel } from '@/renderer/session/copy'
 import { contextPercent, type SessionUsage } from '@/utils/hosting/usage'
 
 export function ContextMeter({ usage }: { readonly usage: SessionUsage | null }) {

@@ -5,6 +5,7 @@ import type { ActionAvailability, DecisionAvailability, OperatorAction, Operator
 import type { BlockedOn, BoardColumnKey, BoardItemRow } from '@/types/board'
 import type { ReconciledItem, StageLabel } from '@/types/state'
 import type { Ticket } from '@/types/ticket'
+import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { LABEL_KEYS } from '@/utils/labels/vocabulary'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import { ticketIndex } from '@/utils/tickets/ticket'
@@ -20,7 +21,7 @@ function row(overrides: {
   readonly blockedOn?: BlockedOn
 }): BoardItemRow {
   const repoId = (overrides.repoId ?? 'repo-a') as RepoId
-  const stageLabel: StageLabel | null = overrides.stageKey != null ? { key: overrides.stageKey, name: overrides.stageKey, role: 'trigger' } : null
+  const stageLabel: StageLabel | null = overrides.stageKey != null ? { key: overrides.stageKey, name: overrides.stageKey, role: LABEL_DEFAULTS.find((def) => def.key === overrides.stageKey)?.role ?? 'trigger' } : null
   const item = {
     repoId,
     repo: 'o/a',
@@ -29,7 +30,7 @@ function row(overrides: {
     title: 't',
     url: 'https://example.com',
     assignees: [],
-    stage: stageLabel?.key ?? null,
+    stage: stageLabel?.role ?? null,
     stages: stageLabel !== null ? [stageLabel] : [],
     stageAmbiguous: false,
     marked: true,
@@ -87,7 +88,7 @@ const EXPECTED: Readonly<Record<LabelKey, BoardColumnKey>> = {
   ready: 'queued',
   planChangesRequested: 'plan',
   planning: 'plan',
-  planReview: 'plan',
+  planReview: 'needs-you',
   planApproved: 'implement',
   inProgress: 'implement',
   prOpened: 'queued',
@@ -98,8 +99,8 @@ const EXPECTED: Readonly<Record<LabelKey, BoardColumnKey>> = {
   approved: 'needs-you',
   needsHuman: 'needs-you',
   blocked: 'queued',
-  refreshBranch: 'needs-you',
-  refreshing: 'needs-you',
+  refreshBranch: 'revise',
+  refreshing: 'revise',
 }
 
 describe('boardColumns', () => {
@@ -123,9 +124,9 @@ describe('boardColumns', () => {
     expect(columnOfRow(row({ stageKey: 'inProgress', blockedOn: HELD }))).toBe('queued')
   })
 
-  it('keeps an approved ticket in Needs you when it is also refreshing', () => {
+  it('keeps an approved ticket in Needs you and a refreshing one in Revise', () => {
     expect(columnOfRow(row({ stageKey: 'approved' }))).toBe('needs-you')
-    expect(columnOfRow(row({ stageKey: 'refreshing' }))).toBe('needs-you')
+    expect(columnOfRow(row({ stageKey: 'refreshing' }))).toBe('revise')
   })
 
   it('puts a row with no stage in Queued', () => {

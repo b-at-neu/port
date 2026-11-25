@@ -39,15 +39,18 @@ function releaseRepo(): string {
 // Only `development`, `--mode fixtures` and `--mode smoke` bundle fixture data; `smoke` alone also honours `PORT_FIXTURES` when packaged. Every other mode, `production` included, resolves `#app-fixtures` to the stub.
 export default defineConfig(({ mode }) => {
   const fixtures = fixtureBuild(mode)
+  const e2e = mode === 'e2e'
   return {
     main: {
       resolve: {
         alias: {
           ...alias,
-          '#app-fixtures': fileURLToPath(new URL(fixtures.compiled ? './tests/fixtures/app/index.ts' : './src/main/fixtures/absent.ts', import.meta.url))
+          '#app-fixtures': fileURLToPath(new URL(fixtures.compiled ? './tests/fixtures/app/index.ts' : './src/main/app/modes/absent.ts', import.meta.url)),
+          '#app-route': fileURLToPath(new URL(e2e ? './tests/e2e/route.ts' : './src/main/platform/route.ts', import.meta.url))
         }
       },
       define: {
+        __PORT_E2E__: JSON.stringify(e2e),
         __PORT_FIXTURES__: JSON.stringify(fixtures.compiled),
         __PORT_PACKAGED_FIXTURES__: JSON.stringify(fixtures.packaged),
         __PORT_BUILD_COMMIT__: JSON.stringify(buildCommit()),
@@ -58,7 +61,7 @@ export default defineConfig(({ mode }) => {
         rollupOptions: {
           input: {
             index: fileURLToPath(new URL('./src/main/index.ts', import.meta.url)),
-            'state-worker': fileURLToPath(new URL('./src/main/offload/worker.ts', import.meta.url))
+            'state-worker': fileURLToPath(new URL('./src/main/worker/worker.ts', import.meta.url))
           }
         }
       }

@@ -6,7 +6,7 @@ import type { BoardSnapshot, RepositoryHealth } from '@/types/board'
 import type { TickHeld, TickReport } from '@/types/tick'
 import { boardSignature, displayStatus, projectBoard, stageLabelOf } from '@/renderer/board/project'
 import { boardSections } from '@/renderer/board/sections'
-import { stageSession } from '../../../fixtures/stage-session'
+import { stageSession } from '../../../support/session-snapshot'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 
@@ -243,7 +243,7 @@ describe('projectBoard — one row per ticket', () => {
     expect(row?.stageLabel?.key).toBe('reviewing')
     expect(row?.displayStatus.status).toBe('in-flight')
     const subGroups = boardSections(projection.rows, { repo: null }).flatMap((section) => section.subGroups)
-    expect(subGroups.map((subGroup) => subGroup.key)).toEqual(['reviewing'])
+    expect(subGroups.map((subGroup) => subGroup.key)).toEqual(['review:running'])
   })
 
   describe('a pr opened issue whose pull request is gone from the sweep', () => {

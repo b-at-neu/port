@@ -7,8 +7,7 @@ import type { StageOutcome } from '@/types/stage-session'
 import type { TickActionable, TickReport } from '@/types/tick'
 import type { ReadyEntry } from '@/types/actions'
 import type { CreateDispatcherParams, OwnershipRead, StageLaunchRequest } from '@/types/dispatch'
-import { createDispatcher } from '@/main/dispatch/dispatcher'
-import { memoryDenialStore } from '../../../fixtures/denials'
+import { buildDispatcher, dispatchRuns } from '../../../support/dispatch-runs'
 import { DISPATCH_STORE_DEFAULTS, storeStub } from '../../../fixtures/store'
 
 const REPO_ID = 'repo-a' as RepoId
@@ -76,14 +75,13 @@ function harness(overrides: Partial<CreateDispatcherParams> = {}) {
   let releaseFirstOwnership: () => void = () => undefined
   const deps: CreateDispatcherParams = {
     store: storeStub({ ...DISPATCH_STORE_DEFAULTS, snapshotOf: () => ({ phase: 'ready', claudeSessionId: null, operatorJoinedAt: null }) as unknown as HostedSessionSnapshot }),
-    denials: memoryDenialStore(),
+    runs: dispatchRuns(REPO_ID).runs,
     launch: {
       launch: (request: StageLaunchRequest) => {
         launched.push(request.number)
         return Promise.resolve({ ok: true, sessionKey: SESSION_KEY })
       },
     },
-    ledger: { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined, observeUnmatched: () => ({ class: 'no-record' }) },
     refreshMemo: { get: () => undefined, set: vi.fn(), clear: vi.fn() },
     rerunMemo: { get: () => undefined, set: vi.fn() },
     rerunChecks: () => Promise.resolve('applied'),
@@ -102,6 +100,7 @@ function harness(overrides: Partial<CreateDispatcherParams> = {}) {
       })
     },
     takeOwnership: () => Promise.resolve({ ok: true, path: 'p' }),
+    stateLabels: () => ['plan approved'],
     fetchItemsByNumber: (params) =>
       Promise.resolve({
         ok: true,
@@ -135,7 +134,7 @@ function harness(overrides: Partial<CreateDispatcherParams> = {}) {
     now: () => new Date('2026-01-01T00:00:00Z'),
     ...overrides,
   }
-  return { dispatcher: createDispatcher(deps), launched, requestRead, ownershipReads: () => ownershipReads, releaseFirstOwnership: () => releaseFirstOwnership() }
+  return { dispatcher: buildDispatcher(REPO_ID, deps), launched, requestRead, ownershipReads: () => ownershipReads, releaseFirstOwnership: () => releaseFirstOwnership() }
 }
 
 describe('createDispatcher — coalesced passes', () => {

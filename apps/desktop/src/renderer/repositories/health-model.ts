@@ -3,10 +3,9 @@
 import type { BoardSnapshot, RepositoryHealth, SourceKind } from '@/types/board'
 import { SOURCE_KINDS } from '@/types/board'
 import type { ModuleFlagName, OverviewModuleFlag } from '@/types/repositories'
-import type { DisplayKey } from '@/utils/labels/display'
-import type { LabelKey, LabelSource, VocabularyProblem, VocabularyVerdict } from '@/utils/labels/vocabulary'
+import { mirrorVocabularyOf, type DisplayKey } from '@/utils/labels/display'
+import type { LabelSource, VocabularyProblem, VocabularyVerdict } from '@/utils/labels/vocabulary'
 import type { AppliedOverride, RepoId, ResolvedRepoConfig } from '@/utils/repos'
-import { PHASE_NAMES } from '@/renderer/lib/phase'
 
 interface OverviewSourceSection {
   readonly kind: SourceKind
@@ -22,7 +21,6 @@ interface OverviewLabelRow {
 }
 
 interface OverviewLabels {
-  readonly appOnly: boolean
   readonly verdict: VocabularyVerdict
   readonly unverifiedReason: string | undefined
   readonly problems: readonly VocabularyProblem[]
@@ -41,14 +39,6 @@ interface OverviewHealth {
  *  order `types/actions.ts`'s `MODULE_LABELS` iterates. */
 const MODULE_FLAG_NAMES: readonly ModuleFlagName[] = ['approvalGate', 'release', 'scope']
 
-function roleDisplayFor(key: LabelKey): string {
-  const name = PHASE_NAMES[key]
-  if (name !== null) return name
-  if (key === 'marker') return 'Marker'
-  if (key === 'prOpened') return 'PR opened'
-  return 'Auto-plan'
-}
-
 const DISPLAY_ROLE_NAMES: Readonly<Record<DisplayKey, string>> = {
   port: 'Marker',
   needsYou: 'Needs you',
@@ -59,12 +49,9 @@ const DISPLAY_ROLE_NAMES: Readonly<Record<DisplayKey, string>> = {
   approved: 'Done',
 }
 
-/** An app-only repository lists the seven labels the app shows; any other lists its 17 stage labels. */
+/** Every repository lists the seven labels the app shows. */
 function rowsOf(config: ResolvedRepoConfig): readonly Omit<OverviewLabelRow, 'present'>[] {
-  if (config.appOnly === true && config.displayVocabulary !== undefined) {
-    return config.displayVocabulary.labels.map((label) => ({ name: label.name, key: label.key, roleDisplay: DISPLAY_ROLE_NAMES[label.key], source: label.source }))
-  }
-  return config.vocabulary.labels.map((label) => ({ name: label.name, key: label.key, roleDisplay: roleDisplayFor(label.key), source: label.source }))
+  return mirrorVocabularyOf(config).labels.labels.map((label) => ({ name: label.name, key: label.key, roleDisplay: DISPLAY_ROLE_NAMES[label.key], source: label.source }))
 }
 
 export function overviewHealth(config: ResolvedRepoConfig, repoId: RepoId, snapshot: BoardSnapshot | undefined): OverviewHealth {
@@ -80,7 +67,6 @@ export function overviewHealth(config: ResolvedRepoConfig, repoId: RepoId, snaps
     repoState === null
       ? null
       : {
-          appOnly: config.appOnly === true,
           verdict: repoState.vocabulary.verdict,
           unverifiedReason: repoState.vocabulary.unverifiedReason,
           problems: repoState.vocabulary.problems,

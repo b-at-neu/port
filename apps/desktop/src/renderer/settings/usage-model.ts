@@ -2,6 +2,7 @@
 import type { SizeRead } from '@/types/settings'
 import { formatCost, formatTokens } from '@/utils/hosting/usage'
 import type { UsageTotals } from '@/utils/hosting/usage'
+import { formatMonthDay } from '@/renderer/lib/time'
 
 const UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const
 
@@ -29,6 +30,6 @@ export function usageCell(totals: UsageTotals): string {
 }
 
 export function usageFootnote(since: string | null): string {
-  const from = since !== null ? `, from ${new Date(since).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''
+  const from = since !== null ? `, from ${formatMonthDay(since)}` : ''
   return `Counts sessions port hosted${from}. Kept for 30 days.`
 }

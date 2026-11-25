@@ -1,12 +1,14 @@
 // A stage session that ends on a network error is interrupted with the `network` reason, so its label stays and the sweeper retries it.
 import { describe, expect, it, vi } from 'vitest'
 import { pathOps } from '@/main/platform/paths'
-import { createStageLauncher } from '@/main/stage/launcher'
+import { createStageLauncher } from '@/main/dispatch/stage/launcher'
 import type { ReadyEntry } from '@/types/actions'
 import type { StageLaunchRequest } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import type { FileResult } from '@/types/platform'
 import { WIDGETS_ID, FIXTURE_REPOSITORIES } from '../../../fixtures/app/repos'
+import { memoryRuns } from '../../../support/state-store'
+import { ticketOf } from '../../../support/tickets'
 
 const ENTRY = FIXTURE_REPOSITORIES.find((r) => r.id === WIDGETS_ID) as ReadyEntry
 const WORKTREE = '/repo/.claude/worktrees/impl-52'
@@ -26,7 +28,7 @@ function errored(text: string): HostedSessionSnapshot {
     end: null,
     titled: null,
     pendingPermissions: [],
-    capabilities: { kind: 'pending', request: { source: 'installed' } },
+    capabilities: { kind: 'pending' },
     title: null,
     rateLimit: null,
     controls: { permissionMode: 'default', model: null, effort: null },
@@ -41,7 +43,7 @@ function errored(text: string): HostedSessionSnapshot {
 
 async function run(text: string) {
   const store = { start: vi.fn().mockResolvedValue({ ok: true, snapshot: errored(text) }), send: vi.fn().mockReturnValue({ ok: true }), close: vi.fn().mockResolvedValue({ ok: true }), dismiss: vi.fn(), list: vi.fn(() => []) }
-  const registry = { recordRunning: vi.fn(), markRunning: vi.fn(), setSessionId: vi.fn(), markInterrupted: vi.fn(), markAllQuit: vi.fn(), remove: vi.fn(), list: vi.fn(() => []), running: vi.fn(() => []), load: vi.fn() }
+  const { runs } = memoryRuns(WIDGETS_ID, { tickets: [ticketOf({ repo: WIDGETS_ID, ticket: 52, stage: 'implement' })] })
   const onOutcome = vi.fn()
   const launcher = createStageLauncher({
     store: store as never,
@@ -53,10 +55,8 @@ async function run(text: string) {
     now: () => new Date(),
     onOutcome,
     onResumedTurn: vi.fn(),
-    onResumed: vi.fn(),
     pathExists: () => Promise.resolve(false),
-    registry,
-    onDenial: vi.fn(),
+    runs,
     newId: () => 'id-1',
     loadInstructions: vi.fn().mockResolvedValue({ ok: true, text: 'go', agent: { name: 'impl-agent', definition: { description: 'impl', prompt: 'body' } } }),
     bundleRoot: '/bundle',
@@ -66,20 +66,20 @@ async function run(text: string) {
   await launcher.launch(request)
   launcher.observe(errored(text))
   await vi.waitFor(() => expect(onOutcome).toHaveBeenCalled())
-  return { registry, store, onOutcome }
+  return { runs, store, onOutcome }
 }
 
 describe('createStageLauncher — a network failure', () => {
-  it('closes the session and keeps the worktree, marking the entry network so it is retried with backoff', async () => {
-    const { registry, store, onOutcome } = await run("error_during_execution: API Error: Can't reach the API server (EAI_AGAIN)")
+  it('closes the session and keeps the worktree, marking the run network so it is retried with backoff', async () => {
+    const { runs, store, onOutcome } = await run("error_during_execution: API Error: Can't reach the API server (EAI_AGAIN)")
     expect(store.close).toHaveBeenCalledWith('hosted-1')
     expect(store.dismiss).not.toHaveBeenCalled()
-    expect(registry.markInterrupted).toHaveBeenCalledWith('id-1', 'network', expect.stringContaining('EAI_AGAIN'), null, null)
+    expect(runs.list()).toMatchObject([{ id: 'id-1', reason: 'network', detail: expect.stringContaining('EAI_AGAIN') as string }])
     expect(onOutcome).toHaveBeenCalledWith(WIDGETS_ID, 'hosted-1', expect.objectContaining({ kind: 'interrupted' }), null)
   })
 
-  it('any other error stays an ordinary error entry', async () => {
-    const { registry } = await run('ran out of turns')
-    expect(registry.markInterrupted).toHaveBeenCalledWith('id-1', 'error', expect.any(String), null, null)
+  it('any other error stays an ordinary error run', async () => {
+    const { runs } = await run('ran out of turns')
+    expect(runs.list()).toMatchObject([{ id: 'id-1', reason: 'error' }])
   })
 })

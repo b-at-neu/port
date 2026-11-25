@@ -1,4 +1,4 @@
-// The literals `plugins/port/skills/release/SKILL.md` also uses, pinned against it by the `desktop-release` check.
+// The literal titles, branch names and subjects a release writes.
 export const RELEASE_LITERALS = {
   prTitle: 'Release v<version>',
   bumpBranch: 'bump/v<version>',
