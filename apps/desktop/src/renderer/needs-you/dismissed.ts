@@ -1,9 +1,11 @@
 // Dismissals live only in this renderer's localStorage, per event key — never on GitHub or in main.
-// A malformed stored value reads as empty, which fails toward showing every item.
-import { useSyncExternalStore } from 'react'
+// A missing, malformed or wrong-version stored value reads as empty, which fails toward showing every item.
+import { z } from 'zod'
 import type { BoardSnapshot, NeedsYouItem } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import { needsYouItems } from '@/renderer/board/needs-you'
+import { createStore, useStore } from '@/renderer/lib/store'
+import type { Store } from '@/renderer/lib/store'
 import { dismissKeyOf } from '@/renderer/needs-you/dismiss-key'
 
 const STORAGE_KEY = 'port.needsYou.dismissed'
@@ -11,101 +13,97 @@ const STORAGE_KEY = 'port.needsYou.dismissed'
 /** Oldest dismissals drop first, so a long-lived profile never grows the value without bound. */
 export const MAX_DISMISSED = 500
 
-interface DismissedEntry {
-  readonly key: string
-  readonly at: string
-}
+const entrySchema = z.object({ key: z.string(), at: z.string() })
+const fileSchema = z.object({ version: z.literal(1), entries: z.array(z.unknown()) })
 
-interface DismissedFile {
-  readonly version: 1
+type DismissedEntry = z.infer<typeof entrySchema>
+
+export interface DismissedState {
   readonly entries: readonly DismissedEntry[]
+  readonly keys: ReadonlySet<string>
 }
 
-function isEntry(value: unknown): value is DismissedEntry {
-  return typeof value === 'object' && value !== null && typeof (value as Record<string, unknown>).key === 'string' && typeof (value as Record<string, unknown>).at === 'string'
-}
-
-export function parseDismissed(raw: string | null): DismissedFile {
-  const empty: DismissedFile = { version: 1, entries: [] }
-  if (raw === null) return empty
+export function parseDismissed(raw: string | null): readonly DismissedEntry[] {
+  if (raw === null) return []
+  let json: unknown
   try {
-    const parsed: unknown = JSON.parse(raw)
-    if (typeof parsed !== 'object' || parsed === null) return empty
-    const value = parsed as Record<string, unknown>
-    if (value.version !== 1 || !Array.isArray(value.entries)) return empty
-    return { version: 1, entries: value.entries.filter(isEntry) }
+    json = JSON.parse(raw)
   } catch {
-    return empty
+    return []
   }
+  const file = fileSchema.safeParse(json)
+  if (!file.success) return []
+  return file.data.entries.flatMap((entry) => {
+    const parsed = entrySchema.safeParse(entry)
+    return parsed.success ? [parsed.data] : []
+  })
+}
+
+export function withDismissed(entries: readonly DismissedEntry[], keys: readonly string[], at: string): readonly DismissedEntry[] {
+  const known = new Set(entries.map((entry) => entry.key))
+  const fresh = [...new Set(keys)].filter((key) => !known.has(key)).map((key): DismissedEntry => ({ key, at }))
+  if (fresh.length === 0) return entries
+  return [...entries, ...fresh].slice(-MAX_DISMISSED)
+}
+
+export function withoutDismissed(entries: readonly DismissedEntry[], keys: readonly string[]): readonly DismissedEntry[] {
+  const drop = new Set(keys)
+  return entries.some((entry) => drop.has(entry.key)) ? entries.filter((entry) => !drop.has(entry.key)) : entries
+}
+
+function stateOf(entries: readonly DismissedEntry[]): DismissedState {
+  return { entries, keys: new Set(entries.map((entry) => entry.key)) }
 }
 
 export interface DismissedStore {
-  readonly get: () => ReadonlySet<string>
+  readonly store: Store<DismissedState>
   readonly dismiss: (keys: readonly string[]) => void
   readonly undismiss: (keys: readonly string[]) => void
-  readonly subscribe: (listener: () => void) => () => void
 }
 
-/** `createDismissedStore(storage, now)` — `get()` returns the same set until a write changes it, as `useSyncExternalStore` requires. */
+/** A refused write keeps the change for this run and logs, since the next launch only loses the dismissal. */
 export function createDismissedStore(storage: Pick<Storage, 'getItem' | 'setItem'>, now: () => Date): DismissedStore {
-  const listeners = new Set<() => void>()
-  let entries: readonly DismissedEntry[] = parseDismissed(storage.getItem(STORAGE_KEY)).entries
-  let keys: ReadonlySet<string> = new Set(entries.map((entry) => entry.key))
+  const store = createStore(stateOf(parseDismissed(storage.getItem(STORAGE_KEY))))
 
-  function commit(next: readonly DismissedEntry[]): void {
-    entries = next
-    keys = new Set(next.map((entry) => entry.key))
+  function commit(entries: readonly DismissedEntry[]): void {
+    if (entries === store.get().entries) return
     try {
-      const file: DismissedFile = { version: 1, entries }
-      storage.setItem(STORAGE_KEY, JSON.stringify(file))
+      storage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, entries }))
     } catch (error) {
       console.error('Could not persist the dismissed Needs you items', error)
     }
-    for (const listener of listeners) listener()
+    store.set(stateOf(entries))
   }
 
   return {
-    get: () => keys,
-    dismiss(add) {
-      const at = now().toISOString()
-      const fresh = [...new Set(add)].filter((key) => !keys.has(key)).map((key): DismissedEntry => ({ key, at }))
-      if (fresh.length === 0) return
-      commit([...entries, ...fresh].slice(-MAX_DISMISSED))
-    },
-    undismiss(remove) {
-      const drop = new Set(remove)
-      if (!entries.some((entry) => drop.has(entry.key))) return
-      commit(entries.filter((entry) => !drop.has(entry.key)))
-    },
-    subscribe(listener) {
-      listeners.add(listener)
-      return () => listeners.delete(listener)
-    },
+    store,
+    dismiss: (keys) => commit(withDismissed(store.get().entries, keys, now().toISOString())),
+    undismiss: (keys) => commit(withoutDismissed(store.get().entries, keys)),
   }
 }
 
 // Created on first use, so importing this module never touches `window`.
 let appStore: DismissedStore | null = null
 
-function store(): DismissedStore {
+function app(): DismissedStore {
   appStore ??= createDismissedStore(window.localStorage, () => new Date())
   return appStore
 }
 
 export function dismiss(keys: readonly string[]): void {
-  store().dismiss(keys)
+  app().dismiss(keys)
 }
 
 export function undismiss(keys: readonly string[]): void {
-  store().undismiss(keys)
+  app().undismiss(keys)
 }
 
 export function dismissedKeys(): ReadonlySet<string> {
-  return store().get()
+  return app().store.get().keys
 }
 
 export function useDismissed(): ReadonlySet<string> {
-  return useSyncExternalStore(store().subscribe, store().get)
+  return useStore(app().store).keys
 }
 
 /** Items whose event key is not dismissed — every count and list reads through this. */

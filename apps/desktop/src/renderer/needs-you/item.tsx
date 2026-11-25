@@ -9,6 +9,7 @@ import { PhaseDot } from '@/renderer/components/phase-dot'
 import { NEEDS_YOU_TONE } from '@/renderer/lib/phase-tone'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { exactTime, formatAgoSince } from '@/renderer/lib/time'
+import { COLLAPSE_DETAILS_LABEL, DISMISS_LABEL, EXPAND_DETAILS_LABEL, WORKING_LABEL } from '@/renderer/needs-you/copy'
 
 interface NeedsYouItemProps {
   readonly leadCopy: string
@@ -53,7 +54,7 @@ export function NeedsYouItem({
       <div className="flex h-9 items-center gap-2 px-4 text-body">
         <PhaseDot tone={NEEDS_YOU_TONE} />
         {expandable ? (
-          <button type="button" onClick={onToggleExpand} className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent" aria-label={expanded ? 'Collapse details' : 'Expand details'}>
+          <button type="button" onClick={onToggleExpand} className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent" aria-label={expanded ? COLLAPSE_DETAILS_LABEL : EXPAND_DETAILS_LABEL}>
             <ChevronRight aria-hidden="true" className={cn('size-3.5 transition-transform', expanded && 'rotate-90')} />
           </button>
         ) : null}
@@ -80,7 +81,7 @@ export function NeedsYouItem({
           </Tooltip>
         ) : (
           <Button variant="ghost" size="small" onClick={onAction} disabled={actionPending} className="shrink-0">
-            {actionPending ? 'Working…' : actionLabel}
+            {actionPending ? WORKING_LABEL : actionLabel}
           </Button>
         )}
         {secondaryActionLabel !== undefined && onSecondaryAction !== undefined ? (
@@ -102,7 +103,7 @@ export function NeedsYouItem({
           )
         ) : null}
         {onDismiss !== undefined ? (
-          <IconButton label="Dismiss" onClick={onDismiss}>
+          <IconButton label={DISMISS_LABEL} onClick={onDismiss}>
             <X aria-hidden="true" />
           </IconButton>
         ) : null}

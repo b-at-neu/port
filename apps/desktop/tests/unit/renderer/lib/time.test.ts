@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { exactTime, formatAgo, formatAgoSince, formatClock, formatDuration, formatHourMinute, formatMonthDay, formatTimeOfDay, relativeTime } from '@/renderer/lib/time'
+import { exactTime, formatAgo, formatAgoSince, formatClock, formatDuration, formatHourMinute, formatMonthDay, formatShortClock, formatTimeOfDay, relativeTime } from '@/renderer/lib/time'
 
 const MIN = 60_000
 const HOUR = 60 * MIN
@@ -83,6 +83,12 @@ describe('formatHourMinute', () => {
     [new Date(2026, 0, 1, 0, 0), '0:00'],
   ])('%s reads %s', (date, expected) => {
     expect(formatHourMinute(date.toISOString())).toBe(expected)
+  })
+})
+
+describe('formatShortClock', () => {
+  it.each([new Date(2026, 0, 1, 9, 5), new Date(2026, 0, 1, 14, 30)])('%s is the locale clock with a padded hour and minute', (date) => {
+    expect(formatShortClock(date.toISOString())).toBe(date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
   })
 })
 
