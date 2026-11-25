@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { REDISPATCH_FLOOR_MS, SETTLE_GRACE_MS, boundRecords, endedStagesOf, refreshRecords, selectDispatches, settlingDescriptions } from '@/main/dispatch/records'
+import { REDISPATCH_FLOOR_MS, SETTLE_GRACE_MS, boundRecords, endedStagesOf, selectDispatches, settlingDescriptions, syncChanges } from '@/main/dispatch/records'
 import type { StageRecord } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import type { TickActionable } from '@/types/tick'
@@ -42,6 +42,7 @@ function actionable(overrides: Partial<TickActionable> = {}): TickActionable {
 
 function record(overrides: Partial<StageRecord> = {}): StageRecord {
   return {
+    runId: 'run-1',
     sessionKey: 'hosted-1' as SessionKey,
     agent: 'impl',
     number: 52,
@@ -116,43 +117,27 @@ describe('endedStagesOf', () => {
   })
 })
 
-describe('refreshRecords', () => {
-  it('ends a started record whose handle is gone, stamping when it was first seen ended', () => {
-    const result = refreshRecords([record()], () => null, NOW)
-    expect(result[0]?.state).toBe('ended')
-    expect(result[0]?.endedAt).toBe(NOW)
+describe('syncChanges', () => {
+  const ended = { runId: 'run-1', change: { kind: 'ended', outcome: null } }
+
+  it('ends a started record whose handle is gone or ended', () => {
+    expect(syncChanges([record()], () => null)).toEqual([ended])
+    expect(syncChanges([record()], () => snapshot({ phase: 'ended' }))).toEqual([ended])
   })
 
-  it('ends a started record whose handle itself ended', () => {
-    const result = refreshRecords([record()], () => snapshot({ phase: 'ended' }), NOW)
-    expect(result[0]?.state).toBe('ended')
-    expect(result[0]?.endedAt).toBe(NOW)
-  })
-
-  it('leaves a started record alone while its handle is still live', () => {
-    const result = refreshRecords([record()], () => snapshot({ phase: 'streaming' }), NOW)
-    expect(result[0]?.state).toBe('started')
-    expect(result[0]?.endedAt).toBeNull()
+  it('leaves a started record alone while its handle is live', () => {
+    expect(syncChanges([record()], () => snapshot({ phase: 'streaming' }))).toEqual([])
   })
 
   it('never touches an already-ended or failed record', () => {
-    const ended = record({ state: 'ended', endedAt: '2026-01-01T00:01:00.000Z' })
-    const failed = record({ state: 'failed', sessionKey: null, detail: 'boom' })
-    const result = refreshRecords([ended, failed], () => null, NOW)
-    expect(result).toEqual([ended, failed])
+    expect(syncChanges([record({ state: 'ended' }), record({ state: 'failed', sessionKey: null })], () => null)).toEqual([])
   })
 
-  it('copies claudeSessionId and operatorJoinedAt off a still-live snapshot', () => {
-    const result = refreshRecords([record()], () => snapshot({ phase: 'streaming', claudeSessionId: 'sdk-1', operatorJoinedAt: '2026-01-01T00:05:00.000Z' }), NOW)
-    expect(result[0]?.claudeSessionId).toBe('sdk-1')
-    expect(result[0]?.operatorJoinedAt).toBe('2026-01-01T00:05:00.000Z')
-  })
-
-  it('keeps the newest copied values once the handle is gone', () => {
-    const result = refreshRecords([record()], () => snapshot({ phase: 'ended', claudeSessionId: 'sdk-1', operatorJoinedAt: '2026-01-01T00:05:00.000Z' }), NOW)
-    expect(result[0]?.state).toBe('ended')
-    expect(result[0]?.claudeSessionId).toBe('sdk-1')
-    expect(result[0]?.operatorJoinedAt).toBe('2026-01-01T00:05:00.000Z')
+  it('records an operator joining once, and still ends the run in the same pass', () => {
+    const joined = { runId: 'run-1', change: { kind: 'joined', at: '2026-01-01T00:05:00.000Z' } }
+    expect(syncChanges([record()], () => snapshot({ phase: 'streaming', operatorJoinedAt: '2026-01-01T00:05:00.000Z' }))).toEqual([joined])
+    expect(syncChanges([record()], () => snapshot({ phase: 'ended', operatorJoinedAt: '2026-01-01T00:05:00.000Z' }))).toEqual([joined, ended])
+    expect(syncChanges([record({ operatorJoinedAt: '2026-01-01T00:05:00.000Z' })], () => snapshot({ phase: 'streaming', operatorJoinedAt: '2026-01-01T00:05:00.000Z' }))).toEqual([])
   })
 })
 

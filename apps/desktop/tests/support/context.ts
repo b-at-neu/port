@@ -1,7 +1,9 @@
 // An in-memory AppContext, and the call that runs an action exactly as the router does.
 import type { AppContext } from '@/main/app/context'
 import { actions } from '@/main/app/router'
-import { createStageRegistry } from '@/main/dispatch/stage/registry'
+import { createRunStateStore } from '@/main/pipeline/state/run-state'
+import { createRunStore } from '@/main/pipeline/state/run-store'
+import { createPipelineStateStore } from '@/main/pipeline/state/store'
 import { createSessionIndex } from '@/main/sessions/hosting/session-index'
 import { createUsageLedger } from '@/main/sessions/hosting/usage-ledger'
 import type { Platform } from '@/main/platform'
@@ -21,6 +23,8 @@ export interface TestContextOptions {
 }
 
 export type TestContext = AppContext & {
+  /** Settles once the pipeline state file has been read and its boot recovery written. */
+  readonly ready: Promise<void>
   readonly clock: FakePlatform['clock']
   readonly emitted: { readonly event: EventName; readonly payload: unknown }[]
 }
@@ -72,8 +76,17 @@ export function createTestContext(options: TestContextOptions = {}): TestContext
   }
 
   const path = (file: string): string => `${platform.paths.userData}/${file}`
+  const state = createPipelineStateStore({
+    path: path('pipeline-state.json'),
+    legacy: { dispatch: path('dispatch.json'), sessions: path('stage-sessions.json'), denials: path('stage-denials.json') },
+    readJson: platform.fs.readJson,
+    writeJsonAtomic: platform.fs.writeJsonAtomic,
+    remove: platform.fs.remove,
+    now: platform.clock.now,
+  })
   const stores = {
-    stageRegistry: createStageRegistry({ path: path('stage-sessions.json'), readJson: platform.fs.readJson, writeJsonAtomic: platform.fs.writeJsonAtomic, now: platform.clock.now }),
+    runs: createRunStore({ store: state, newId: () => globalThis.crypto.randomUUID(), now: platform.clock.now }),
+    runStates: createRunStateStore(state, path('pipeline-state.json')),
     sessionIndex: createSessionIndex({ path: path('session-index.json'), readJson: platform.fs.readJson, writeJsonAtomic: platform.fs.writeJsonAtomic, now: platform.clock.now }),
     usageLedger: createUsageLedger({ path: path('usage-ledger.json'), readJson: platform.fs.readJson, writeJsonAtomic: platform.fs.writeJsonAtomic, now: platform.clock.now, bootId: 'test-boot' }),
     ...options.stores,
@@ -85,6 +98,7 @@ export function createTestContext(options: TestContextOptions = {}): TestContext
       emitted.push({ event, payload })
     },
     emitted,
+    ready: state.ready,
     repos,
     stores: unscriptedGroup('stores', stores),
     live: unscriptedGroup('live', options.live ?? {}),

@@ -81,7 +81,7 @@ async function readyRootsOf(registryDeps: RegistryDeps, deps: Pick<StageChannelD
 
 function recoverDepsOf(registryDeps: RegistryDeps, roots: ReadonlyMap<RepoId, ResolvedStageRoot>, deps: StageChannelDeps): RecoverDeps {
   return {
-    registry: deps.registry,
+    runs: deps.runs,
     store: deps.store,
     resume: deps.launcher.resume,
     removeWorktree: deps.removeWorktree,
@@ -112,7 +112,7 @@ export async function resolveStageResume(registryDeps: RegistryDeps, request: { 
 /** The sweeper resumes through `resolveStageResume`, so the capacity and root checks exist once. */
 export function createStageSweeper(registryDeps: RegistryDeps, deps: StageChannelDeps, hooks: Pick<Parameters<typeof createInterruptedSweeper>[0], 'fetchItemsByNumber' | 'onChange'>): ReturnType<typeof createInterruptedSweeper> {
   return createInterruptedSweeper({
-    registry: deps.registry,
+    runs: deps.runs,
     removeWorktree: deps.removeWorktree,
     pathExists,
     resume: (id) => resolveStageResume(registryDeps, { id }, deps),

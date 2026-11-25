@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AUTO_RESUME_GRACE_MS, NETWORK_BACKOFF_MS, NETWORK_RETRY_LIMIT, autoResumable, clearedByRecheck, networkGivenUp, orphanedRunning, staleInterrupted } from '@/main/dispatch/stage/stale'
+import { AUTO_RESUME_GRACE_MS, NETWORK_RETRY_LIMIT, autoResumable, clearedByRecheck, networkGivenUp, orphanedRunning, staleInterrupted } from '@/main/dispatch/stage/stale'
 import type { DispatchRecord, RepoDispatchStatus } from '@/types/dispatch'
 import type { ItemsByNumberFetch, ResolvedItem } from '@/types/github'
 import type { InterruptedStage } from '@/types/stage'
@@ -226,7 +226,6 @@ describe('networkGivenUp', () => {
   const status = (overrides: Partial<RepoDispatchStatus> = {}): RepoDispatchStatus => ({ repoId: REPO, owner: 'app', state: { kind: 'idle' }, runState: 'dispatching', ownedSince: null, unreadableMessage: null, budget: null, observed: [], denials: [], interrupted: [], ...overrides })
 
   it('gives up a network entry at three retries, and one with no session to resume', () => {
-    expect(NETWORK_BACKOFF_MS).toEqual([60_000, 300_000, 900_000])
     const spent = entry({ id: 'spent', reason: 'network', networkRetries: 3 })
     const fresh = entry({ id: 'fresh', reason: 'network', networkRetries: 2 })
     const noSession = entry({ id: 'none', reason: 'network', networkRetries: 0, claudeSessionId: null })

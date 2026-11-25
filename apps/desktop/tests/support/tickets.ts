@@ -1,8 +1,34 @@
-import type { Ticket } from '@/utils/pipeline/ticket'
+import type { Run, Ticket } from '@/utils/pipeline/ticket'
 
 export const NOW = '2026-11-23T12:00:00.000Z'
 
 export const REPO = 'owner/repo' as Ticket['repo']
+
+export function runOf(overrides: Partial<Run> = {}): Run {
+  return {
+    id: 'run-1',
+    stage: 'implement',
+    item: { kind: 'issue', number: 843 },
+    agent: 'impl',
+    trigger: 'planApproved',
+    model: 'sonnet',
+    title: null,
+    sessionKey: 'session-1' as Run['sessionKey'],
+    claudeSessionId: null,
+    worktree: { path: '/wt/run-1', branch: 'branch-1', baseSha: 'abc' },
+    startedAt: NOW,
+    endedAt: null,
+    outcome: null,
+    handback: null,
+    costUsd: null,
+    operatorJoinedAt: null,
+    failure: null,
+    interruption: null,
+    networkRetries: 0,
+    denials: [],
+    ...overrides,
+  }
+}
 
 export function ticketOf(overrides: Partial<Ticket> = {}): Ticket {
   return {

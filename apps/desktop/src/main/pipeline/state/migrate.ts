@@ -242,7 +242,7 @@ export function ticketsOfItems(repo: RepoId, items: readonly StoredItem[], actio
 }
 
 /** The version-2 file, from a version-1 one. Any other version throws, which `createJsonStore` maps to unreadable. */
-export function migrate(fromVersion: number, raw: unknown): unknown {
+export function migrateV1(fromVersion: number, raw: unknown): unknown {
   if (fromVersion !== 1 || !isRecord(raw) || !isRecord(raw.repositories)) throw new Error(`no migration from pipeline state version ${String(fromVersion)}`)
   const repositories: Record<string, { seededAt: string; tickets: Record<string, Ticket> }> = {}
   for (const [repoId, value] of Object.entries(raw.repositories)) {

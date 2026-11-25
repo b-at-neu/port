@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { HANDBACK_TOKENS, accepts, actionOf, applyEvent, eventWrites, handbackRefusal, itemKindFor, pullRequestNumberOf, stageModeFor, ticketEventOf, type TableContext } from '@/main/pipeline/transitions'
-import { stageOfMode, type StageEvent, type StageMode, type StagePlanFile, type TicketEvent } from '@/types/stage-labels'
+import { stageOfMode, type StageEvent, type StageMode, type StagePlanFile, type StateEvent, type TicketEvent } from '@/types/stage-labels'
 import type { Stage, Status, Ticket } from '@/utils/pipeline/ticket'
 import { NOW, REPO, ticketOf } from '../../../support/tickets'
 
@@ -13,7 +13,7 @@ const waiting = (gate: 'plan-approval' | 'merge' | 'escalation'): Status => ({ k
 const pr = (approvedAt: string | null = null): Pick<Ticket, 'pr'> => ({ pr: { number: 9, approvedAt } })
 const at = (stage: Stage, status: Status, extra: Partial<Ticket> = {}): Ticket => ticketOf({ stage, status, ...extra })
 
-const handback = (stage: Stage, token: string, arg: string | null = null, prNumber: number | null = null): TicketEvent => ({ kind: 'handback', stage, token, arg, pr: prNumber, via: 'session' })
+const handback = (stage: Stage, token: string, arg: string | null = null, prNumber: number | null = null): StateEvent => ({ kind: 'handback', stage, token, arg, pr: prNumber, via: 'session' })
 
 function ok(ticket: Ticket | null, event: TicketEvent) {
   const result = applyEvent(ticket, event, CTX)

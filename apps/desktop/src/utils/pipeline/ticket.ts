@@ -3,7 +3,7 @@ import { repoId, sessionKey } from '@/utils/schemas'
 import { STAGE_OUTCOME_KINDS } from '@/types/stage-session'
 import type { AssertEqual } from '@/types/assert-type'
 import type { WriteOutcome } from '@/types/writes'
-import type { LabelKey } from '@/utils/labels/vocabulary'
+import { LABEL_KEYS, type LabelKey } from '@/utils/labels/vocabulary'
 
 const timestamp = z.iso.datetime()
 
@@ -60,11 +60,30 @@ export const mirrorFailureSchema = z.object({
   ),
 })
 
+/** The newest runs a ticket keeps; an open run is never dropped. */
+export const RUN_CAP = 20
+
+/** Wait before the next automatic resume of a network failure, indexed by retries already made. */
+export const NETWORK_BACKOFF_MS: readonly number[] = [60_000, 300_000, 900_000]
+
+export const INTERRUPTED_REASONS = ['quit', 'crash', 'usage-limit', 'error', 'cleanup-failed', 'network'] as const
+export type InterruptedReason = (typeof INTERRUPTED_REASONS)[number]
+
+export const STAGE_AGENTS = ['plan', 'impl', 'review', 'revise'] as const
+
+export const denialSchema = z.object({ id: z.string().min(1), toolName: z.string(), inputSummary: z.string(), rule: z.string(), at: timestamp })
+
 export const runSchema = z.object({
   id: z.string().min(1),
   stage: stageSchema,
+  item: z.object({ kind: z.enum(['issue', 'pull-request']), number: z.int().positive() }),
+  agent: z.enum(STAGE_AGENTS),
+  trigger: z.enum(LABEL_KEYS),
+  model: z.string(),
+  title: z.string().nullable(),
   sessionKey: sessionKey.nullable(),
   claudeSessionId: z.string().min(1).nullable(),
+  worktree: z.object({ path: z.string().min(1), branch: z.string().nullable(), baseSha: z.string() }).nullable(),
   startedAt: timestamp,
   endedAt: timestamp.nullable(),
   outcome: z.enum(STAGE_OUTCOME_KINDS).nullable(),
@@ -72,9 +91,13 @@ export const runSchema = z.object({
   costUsd: z.number().min(0).nullable(),
   operatorJoinedAt: timestamp.nullable(),
   failure: z.string().nullable(),
-  denials: z.array(z.object({ toolName: z.string(), inputSummary: z.string(), rule: z.string(), at: timestamp })),
+  interruption: z.object({ reason: z.enum(INTERRUPTED_REASONS), detail: z.string().nullable(), at: timestamp, resetsAt: timestamp.nullable() }).nullable(),
+  /** How many times a network interruption was resumed; survives the resume that clears `interruption`. */
+  networkRetries: z.int().min(0),
+  denials: z.array(denialSchema),
 })
 export type Run = z.infer<typeof runSchema>
+export type RunDenial = z.infer<typeof denialSchema>
 
 export const eventSchema = z.object({
   at: timestamp,

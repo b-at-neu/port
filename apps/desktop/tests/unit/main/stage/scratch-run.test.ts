@@ -1,13 +1,14 @@
 import type { HostedQuery, HostedSdk, Options } from '@/main/platform/sdk'
 import type { StageLauncherHandle } from '@/types/stage'
 
-// A scratch-repo run takes one ticket from `ready` to an opened PR entirely through stage sessions, against a fake SDK; only the outer edges (SDK, git, worktrees, GitHub, ownership, the stage registry, the budget gate) are faked.
+// A scratch-repo run takes one ticket from `ready` to an opened PR entirely through stage sessions, against a fake SDK; only the outer edges (SDK, git, worktrees, GitHub, ownership, the budget gate) are faked.
 import { describe, expect, it, vi } from 'vitest'
 import { labelName, resolveVocabulary, verifyVocabulary } from '@/utils/labels/vocabulary'
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { PipelineFetch, PipelineItem, QueriedLabel, ResolvedItem } from '@/types/github'
-import { memoryDenialStore } from '../../../fixtures/denials'
+import { memoryRuns } from '../../../support/state-store'
+import { ticketOf as stateTicketOf } from '../../../support/tickets'
 import { DEFAULT_POLL_POLICY } from '@/types/board'
 import type { BoardSnapshot } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
@@ -16,11 +17,9 @@ import { createInMemoryHostingPersistence } from '@/main/sessions/hosting/persis
 import { pathOps } from '@/main/platform/paths'
 import { createStageLauncher } from '@/main/dispatch/stage/launcher'
 
-import { createStageRegistry } from '@/main/dispatch/stage/registry'
 import { createDispatcher } from '@/main/dispatch/dispatcher'
 import type { Dispatcher } from '@/types/dispatch'
-import type { StageDenial } from '@/types/stage'
-import { createDispatchLedger, createForceDispatch, createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
+import { createForceDispatch, createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
 import { planTick } from '@/main/pipeline/tick/plan'
 import { reconcileRepository } from '@/main/pipeline/board/reconcile'
 import type { ReadyEntry } from '@/types/actions'
@@ -302,13 +301,8 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       readHistory: () => Promise.resolve({ kind: 'none' }),
     })
 
-    const stageRegistry = createStageRegistry({
-      path: '/repo/.agents/stage-sessions.json',
-      readJson: () => Promise.resolve({ ok: false, kind: 'not-found', message: 'none' }),
-      writeJsonAtomic: () => Promise.resolve({ ok: true, value: undefined }),
-      now: () => new Date(NOW_ISO),
-    })
-    await stageRegistry.load()
+    const { runs, store: stateStore } = memoryRuns(REPO_ID, { at: NOW_ISO, tickets: [stateTicketOf({ repo: REPO_ID, ticket: 7, stage: 'plan' })] })
+    await stateStore.ready
 
     const stageLauncher: StageLauncherHandle = createStageLauncher({
       store,
@@ -319,9 +313,9 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       sweepBranches: () => Promise.resolve(undefined),
       now: () => new Date(NOW_ISO),
       onOutcome: (repoId, sessionKey, outcome, plan) => dispatcherRef?.recordOutcome(repoId, sessionKey, outcome, plan),
-      onResumedTurn: (repoId, sessionKey) => dispatcherRef?.recordResumedTurn(repoId, sessionKey), onResumed: (repoId, sessionKey, resumedEntry) => dispatcherRef?.trackResumed(repoId, sessionKey, resumedEntry), pathExists: () => Promise.resolve(false),
-      registry: stageRegistry,
-      onDenial: (repoId, denial: StageDenial) => dispatcherRef?.recordDenial(repoId, denial),
+      onResumedTurn: (repoId, sessionKey) => dispatcherRef?.recordResumedTurn(repoId, sessionKey),
+      pathExists: () => Promise.resolve(false),
+      runs,
       newId: () => `id-${String(Math.random())}`,
       loadInstructions: (launchRequest) => Promise.resolve({ ok: true, text: launchRequest.prompt, agent: { name: `${launchRequest.agent}-agent`, definition: { description: launchRequest.agent, prompt: 'body' } } }),
       bundleRoot: '/bundle',
@@ -329,15 +323,13 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       readTextFile: (path) => Promise.resolve(path.endsWith('plan-7.md') ? { ok: true, value: '## Implementation Plan' } : { ok: false, kind: 'not-found', message: 'unused' }),
     })
 
-    const ledger = createDispatchLedger()
     const unknownStreaks = createUnknownStreaks()
     const refreshMemo = createRefreshMemo()
     const forceDispatch = createForceDispatch()
 
     const dispatcher = createDispatcher({
       store,
-      denials: memoryDenialStore(),
-      ledger,
+      runs,
       launch: stageLauncher,
       runState: () => 'dispatching',
       readOwnership: () => Promise.resolve({ kind: 'app', since: NOW_ISO, path: '/repo/.agents/cockpit.json', readAt: NOW_ISO }),
@@ -377,7 +369,6 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       dirs: { audit: '/audit', scratch: '/scratch' },
       onChange: () => undefined,
       now: () => new Date(NOW_ISO),
-      interrupted: () => [],
     })
     dispatcherRef = dispatcher
 
@@ -393,7 +384,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       })
       const tickReport = planTick({
         repository: repoState,
-        ledger,
+        runsOf: (repoId, kind, number) => runs.runsOf(repoId, kind, number),
         unknownStreaks,
         nextDecisionAt: new Date(NOW_ISO),
         now: () => new Date(NOW_ISO),

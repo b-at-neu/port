@@ -9,7 +9,7 @@ import { evaluate } from '@/main/github/writes/scope'
 import type { OwnershipParams, OwnershipRead } from '@/types/dispatch'
 import type { FetchItemsByNumberParams, GitHubRepoRef, ItemsByNumberFetch } from '@/types/github'
 import type { MirrorItemParams, PipelineStateStore, TicketRef } from '@/types/pipeline-state'
-import type { TicketEvent } from '@/types/stage-labels'
+import type { StateEvent } from '@/types/stage-labels'
 import type { ApplyLabelsParams, AuditEntry, EventWriteRequest, LabelAuditEntry, ObservedItem, OwnershipKind, WriteEventParams, WriteOutcome, WriteStateParams } from '@/types/writes'
 import { stateMoved } from '@/types/writes'
 import { mirrorVocabularyOf, type MirrorVocabulary } from '@/utils/labels/display'
@@ -77,7 +77,7 @@ function preconditionOf(request: EventWriteRequest): IncidentInputs {
   return event.kind === 'labels' ? { present: event.expect.present, absent: event.expect.absent, assignees: request.assignees } : { expectedRev: request.expectedRev, assignees: request.assignees }
 }
 
-function expectedKeysOf(event: TicketEvent): { readonly present: readonly LabelKey[]; readonly absent: readonly LabelKey[] } {
+function expectedKeysOf(event: StateEvent): { readonly present: readonly LabelKey[]; readonly absent: readonly LabelKey[] } {
   return event.kind === 'labels' ? event.expect : { present: [], absent: [] }
 }
 
@@ -138,7 +138,7 @@ export function createStateWriter(deps: StateWriterDeps): StateWriter {
   /** An operator path's label request, wrapped in one transitional `labels` event. */
   function writeState(params: WriteStateParams): Promise<WriteOutcome> {
     const { request } = params
-    const event: TicketEvent = { kind: 'labels', itemKind: request.kind, add: request.add, remove: request.remove, expect: { present: request.expect.present, absent: request.expect.absent }, action: request.action, issue: null }
+    const event: StateEvent = { kind: 'labels', itemKind: request.kind, add: request.add, remove: request.remove, expect: { present: request.expect.present, absent: request.expect.absent }, action: request.action, issue: null }
     return writeEvent({
       ...params,
       request: {
@@ -206,7 +206,7 @@ export function createStateWriter(deps: StateWriterDeps): StateWriter {
       return log(githubSide, { kind: 'precondition-failed', conflict: { kind: 'precondition-failed', expected: assignees.expected, observed: assignees.observed, readAt: read.fetchedAt } })
     }
 
-    const applied: TicketEvent = event.kind === 'labels' && request.kind === 'pull-request' ? { ...event, issue: issueNumberOfBranch(item.headRefName) } : event
+    const applied: StateEvent = event.kind === 'labels' && request.kind === 'pull-request' ? { ...event, issue: issueNumberOfBranch(item.headRefName) } : event
     const moved = await deps.store.apply(request.repoId, target, applied, request.expectedRev)
     if (!moved.ok) {
       if (moved.reason === 'persist-failed') return log(githubSide, { kind: 'state-unsaved', message: moved.message })

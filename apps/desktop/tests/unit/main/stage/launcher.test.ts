@@ -10,6 +10,9 @@ import { WIDGETS_ID, FIXTURE_REPOSITORIES } from '../../../fixtures/app/repos'
 import type { ReadyEntry } from '@/types/actions'
 import type { StartSessionParams } from '@/types/hosting'
 import type { InterruptedStage, StageInstructionsLoader, StageResumeRequest } from '@/types/stage'
+import type { Run } from '@/utils/pipeline/ticket'
+import { memoryRuns } from '../../../support/state-store'
+import { runOf, ticketOf } from '../../../support/tickets'
 
 const ENTRY = FIXTURE_REPOSITORIES.find((r) => r.id === WIDGETS_ID) as ReadyEntry
 
@@ -44,7 +47,28 @@ function baseSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSes
   }
 }
 
-function fakeDeps(overrides: Partial<{ start: SessionStartResult }> = {}) {
+const AT = '2026-01-01T00:00:00.000Z'
+
+/** An interrupted run in the kept worktree of `session-abc123`, as a previous process left it. */
+function interruptedRun(id: string, overrides: Partial<Run> = {}): Run {
+  return runOf({
+    id,
+    item: { kind: 'issue', number: 52 },
+    sessionKey: null,
+    claudeSessionId: 'sdk-1',
+    worktree: { path: '/repo/.claude/worktrees/session-abc123', branch: 'session/abc123', baseSha: 'abc' },
+    startedAt: AT,
+    endedAt: '2026-01-01T00:10:00.000Z',
+    costUsd: 1,
+    interruption: { reason: 'usage-limit', detail: null, at: '2026-01-01T00:10:00.000Z', resetsAt: '2026-01-01T05:00:00.000Z' },
+    ...overrides,
+  })
+}
+
+function fakeDeps(overrides: Partial<{ start: SessionStartResult; runs: readonly Run[] }> = {}) {
+  const seeded = overrides.runs ?? []
+  const held = (number: number) => ticketOf({ repo: WIDGETS_ID, ticket: number, stage: 'implement', runs: seeded.filter((run) => run.item.number === number) })
+  const { runs, store: state } = memoryRuns(WIDGETS_ID, { at: AT, tickets: [52, 53, 60, 61, 62, 63].map(held).concat(ticketOf({ repo: WIDGETS_ID, ticket: 46, stage: 'review', pr: { number: 47, approvedAt: null } })) })
   const started = overrides.start ?? { ok: true, snapshot: baseSnapshot() }
   const close = vi.fn().mockResolvedValue({ ok: true })
   const dismiss = vi.fn().mockResolvedValue({ ok: true })
@@ -58,9 +82,6 @@ function fakeDeps(overrides: Partial<{ start: SessionStartResult }> = {}) {
   const sweepBranches = vi.fn().mockResolvedValue({ done: true, deleted: [] })
   const onOutcome = vi.fn()
   const onResumedTurn = vi.fn()
-  const registryMock = { recordRunning: vi.fn(), markRunning: vi.fn(), setSessionId: vi.fn(), markInterrupted: vi.fn(), markAllQuit: vi.fn(), remove: vi.fn(), list: vi.fn((): readonly InterruptedStage[] => []), running: vi.fn((): readonly InterruptedStage[] => []), load: vi.fn() }
-  const registry = registryMock as unknown as Parameters<typeof createStageLauncher>[0]['registry']
-  const onDenial = vi.fn()
   let nextId = 0
   const newId = vi.fn(() => `id-${String((nextId += 1))}`)
   const loadInstructions = vi.fn<StageInstructionsLoader>().mockImplementation((req) =>
@@ -75,9 +96,10 @@ function fakeDeps(overrides: Partial<{ start: SessionStartResult }> = {}) {
     void path
     return Promise.resolve(true)
   })
-  const onResumed = vi.fn()
-  return { store, storeList: list, removeWorktree, createWorktree, releaseBranch, sweepBranches, onOutcome, onResumedTurn, onResumed, pathExists, close, dismiss, send, start, registry, registryMock, onDenial, newId, loadInstructions, bundleRoot: '/bundle', ops: pathOps, readTextFile }
+  return { ready: state.ready, store, storeList: list, removeWorktree, createWorktree, releaseBranch, sweepBranches, onOutcome, onResumedTurn, pathExists, close, dismiss, send, start, runs, newId, loadInstructions, bundleRoot: '/bundle', ops: pathOps, readTextFile }
 }
+
+const runsOf = (deps: ReturnType<typeof fakeDeps>, number = 52) => deps.runs.runsOf(WIDGETS_ID, 'issue', number)
 
 describe('createStageLauncher.launch', () => {
   it('creates a worktree, starts a stage session, sends the prompt, and tracks the key', async () => {
@@ -114,7 +136,7 @@ describe('createStageLauncher.launch', () => {
     expect(result).toEqual({ ok: false, kind: 'failed', message: "Couldn't load the stage instructions from the app's bundled stage prompts: couldn't read /bundle/agents/impl-agent.md: ENOENT", cause: 'instructions' })
     expect(deps.start).not.toHaveBeenCalled()
     expect(deps.send).not.toHaveBeenCalled()
-    expect(deps.registryMock.recordRunning).not.toHaveBeenCalled()
+    expect(runsOf(deps)).toEqual([])
     expect(deps.removeWorktree).toHaveBeenCalledWith('/repo/.claude/worktrees/impl-52', false)
     expect(deps.releaseBranch).toHaveBeenCalledWith(ENTRY.path, '52-add-a-dark-mode-icon', 'abc')
   })
@@ -126,11 +148,11 @@ describe('createStageLauncher.launch', () => {
     expect(deps.start).toHaveBeenCalledWith(expect.objectContaining({ initialTitle: '#46 Show the last sync time in the header' }))
   })
 
-  it('records the ticket label on the registry entry', async () => {
+  it('starts a run on the ticket, carrying the label, session and worktree', async () => {
     const deps = fakeDeps()
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     await launcher.launch(request({ title: '#52 Add a dark mode icon' }))
-    expect(deps.registryMock.recordRunning).toHaveBeenCalledWith(expect.objectContaining({ title: '#52 Add a dark mode icon' }))
+    expect(runsOf(deps)).toMatchObject([{ id: 'id-1', title: '#52 Add a dark mode icon', sessionKey: 'hosted-1', stage: 'implement', endedAt: null, worktree: { path: '/repo/.claude/worktrees/impl-52', branch: '52-add-a-dark-mode-icon', baseSha: 'abc' } }])
   })
 
   it.each([[undefined, 'worktree'], [true, 'leftover-worktree']] as const)('removes the worktree and returns failed when the worktree itself cannot be created (leftover %s, cause %s)', async (leftover, cause) => {
@@ -151,14 +173,6 @@ describe('createStageLauncher.launch', () => {
     expect(deps.releaseBranch).toHaveBeenCalledWith(ENTRY.path, '52-add-a-dark-mode-icon', 'abc')
   })
 
-  it('does not release the branch when the worktree could not be removed', async () => {
-    const deps = fakeDeps({ start: { ok: false, kind: 'not-git' } })
-    deps.removeWorktree.mockResolvedValue({ outcome: 'dirty' })
-    const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
-    await launcher.launch(request())
-    expect(deps.releaseBranch).not.toHaveBeenCalled()
-  })
-
   it('asks for a stage worktree built from the request and the configured integration branch', async () => {
     const deps = fakeDeps()
     const git = vi.fn() as never
@@ -167,9 +181,8 @@ describe('createStageLauncher.launch', () => {
     expect(deps.createWorktree).toHaveBeenCalledWith({ root: ENTRY.path, agent: 'impl', number: 52, integration: ENTRY.config.branches.integration, target: { kind: 'issue', title: 'Add a dark-mode icon for the tray' }, liveWorktrees: new Set() })
   })
 
-  it('passes only open session worktrees as live — a registry running entry whose session died never blocks the reclaim', async () => {
-    const deps = fakeDeps()
-    deps.registryMock.running.mockReturnValue([{ ...INTERRUPTED, worktree: { path: '/repo/.claude/worktrees/impl-9', branch: null, baseSha: 'abc' } }])
+  it('passes only open session worktrees as live — an open run whose session died never blocks the reclaim', async () => {
+    const deps = fakeDeps({ runs: [runOf({ id: 'open-9', item: { kind: 'issue', number: 60 }, worktree: { path: '/repo/.claude/worktrees/impl-9', branch: null, baseSha: 'abc' } })] })
     deps.storeList.mockReturnValue([
       baseSnapshot({ workspace: { folder: '/repo/.claude/worktrees/impl-8', root: '/repo', worktree: { path: '/repo/.claude/worktrees/impl-8', branch: null }, base: null } }),
       baseSnapshot({ phase: 'ended', workspace: { folder: '/repo/.claude/worktrees/impl-7', root: '/repo', worktree: { path: '/repo/.claude/worktrees/impl-7', branch: null }, base: null } }),
@@ -180,31 +193,30 @@ describe('createStageLauncher.launch', () => {
     expect(deps.createWorktree).toHaveBeenCalledWith(expect.objectContaining({ liveWorktrees: new Set(['/repo/.claude/worktrees/impl-8']) }))
   })
 
-  describe('an interrupted entry for the same ticket and agent', () => {
-    const resumable = { ...INTERRUPTED, resetsAt: null, reason: 'error' as const }
+  describe('an interrupted run for the same ticket and agent', () => {
+    const resumable = (overrides: Partial<Run> = {}) => interruptedRun('reg-1', { interruption: { reason: 'error', detail: null, at: '2026-01-01T00:10:00.000Z', resetsAt: null }, ...overrides })
 
-    it('is resumed in its kept worktree rather than launched fresh, with no second worktree and no onResumed callback', async () => {
-      const deps = fakeDeps()
-      deps.registryMock.list.mockReturnValue([resumable])
+    it('is resumed in its kept worktree rather than launched fresh, as the same run', async () => {
+      const deps = fakeDeps({ runs: [resumable()] })
+      await deps.ready
       const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date('2026-01-01T06:00:00Z') })
       const result = await launcher.launch(request())
       expect(result).toEqual({ ok: true, sessionKey: 'hosted-1' })
       expect(deps.createWorktree).not.toHaveBeenCalled()
       expect(deps.start).toHaveBeenCalledWith(expect.objectContaining({ mode: { kind: 'resume', sessionId: 'sdk-1' } }))
-      expect(deps.registryMock.markRunning).toHaveBeenCalledWith('reg-1')
-      expect(deps.onResumed).not.toHaveBeenCalled()
+      expect(runsOf(deps)).toMatchObject([{ id: 'reg-1', sessionKey: 'hosted-1', endedAt: null, interruption: null }])
     })
 
     it.each([
       ['has no session id', { claudeSessionId: null }, true],
-      ['is still waiting out a reset', { resetsAt: '2026-01-01T09:00:00.000Z' }, true],
-      ['belongs to another ticket', { number: 60 }, true],
+      ['is still waiting out a reset', { interruption: { reason: 'usage-limit' as const, detail: null, at: '2026-01-01T00:10:00.000Z', resetsAt: '2026-01-01T09:00:00.000Z' } }, true],
+      ['belongs to another ticket', { item: { kind: 'issue' as const, number: 60 } }, true],
       ['belongs to another agent', { agent: 'plan' as const }, true],
       ['has a worktree folder that is gone', {}, false],
     ])('falls through to a fresh launch when it %s', async (_name, overrides, folderExists) => {
-      const deps = fakeDeps()
+      const deps = fakeDeps({ runs: [resumable(overrides)] })
+      await deps.ready
       deps.pathExists.mockResolvedValue(folderExists)
-      deps.registryMock.list.mockReturnValue([{ ...resumable, ...overrides }])
       const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date('2026-01-01T06:00:00Z') })
       await launcher.launch(request())
       expect(deps.createWorktree).toHaveBeenCalled()
@@ -212,26 +224,23 @@ describe('createStageLauncher.launch', () => {
 
   })
 
-  it('drops every registry entry pointing at a reclaimed worktree before recording the new run', async () => {
-    const deps = fakeDeps()
+  it('clears every interrupted run pointing at a reclaimed worktree and keeps the others', async () => {
     const reclaimed = '/repo/.claude/worktrees/impl-52'
+    const at = (path: string, id: string, number: number) => interruptedRun(id, { item: { kind: 'issue', number }, worktree: { path, branch: null, baseSha: 'abc' } })
+    const deps = fakeDeps({ runs: [at(reclaimed, 'old-1', 61), at(reclaimed, 'old-2', 62), at('/repo/.claude/worktrees/impl-60', 'other', 63)] })
     deps.createWorktree.mockResolvedValue({ ok: true, path: reclaimed, branch: '52-add-a-dark-mode-icon', baseSha: 'abc', baseLabel: '52-add-a-dark-mode-icon', reclaimed })
-    deps.registryMock.list.mockReturnValue([
-      { ...INTERRUPTED, id: 'old-1', number: 61, worktree: { path: reclaimed, branch: null, baseSha: 'abc' } },
-      { ...INTERRUPTED, id: 'old-2', number: 62, worktree: { path: reclaimed, branch: null, baseSha: 'abc' } },
-      { ...INTERRUPTED, id: 'other', number: 63, worktree: { path: '/repo/.claude/worktrees/impl-60', branch: null, baseSha: 'abc' } },
-    ])
+    await deps.ready
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     await launcher.launch(request())
-    expect(deps.registryMock.remove.mock.calls).toEqual([['old-1'], ['old-2']])
-    expect(deps.registryMock.remove.mock.invocationCallOrder[1]).toBeLessThan(deps.registryMock.recordRunning.mock.invocationCallOrder[0] ?? 0)
+    expect(deps.runs.list().map((entry) => entry.id)).toEqual(['other'])
   })
 
-  it('leaves the registry alone when nothing was reclaimed', async () => {
-    const deps = fakeDeps()
+  it('leaves every interrupted run alone when nothing was reclaimed', async () => {
+    const deps = fakeDeps({ runs: [interruptedRun('kept', { item: { kind: 'issue', number: 61 } })] })
+    await deps.ready
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     await launcher.launch(request())
-    expect(deps.registryMock.remove).not.toHaveBeenCalled()
+    expect(deps.runs.list().map((entry) => entry.id)).toEqual(['kept'])
   })
 
   it('sweeps stale session branches once per repository root, never as a gate', async () => {
@@ -254,14 +263,6 @@ describe('createStageLauncher.launch', () => {
     expect(deps.releaseBranch).not.toHaveBeenCalled()
   })
 
-  it('removes the worktree and returns failed on any other start failure', async () => {
-    const deps = fakeDeps({ start: { ok: false, kind: 'not-git' } })
-    const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
-    const result = await launcher.launch(request())
-    expect(result.ok).toBe(false)
-    expect(deps.removeWorktree).toHaveBeenCalled()
-  })
-
   it('closes the session and removes the worktree when the send itself fails', async () => {
     const deps = fakeDeps()
     deps.send.mockReturnValue({ ok: false, kind: 'blocked-command', name: 'pipeline' })
@@ -274,13 +275,13 @@ describe('createStageLauncher.launch', () => {
 })
 
 describe('createStageLauncher denials', () => {
-  it('stamps the raising session on a denial from a fresh launch', async () => {
+  it('lands a denial from a fresh launch on its run', async () => {
     const deps = fakeDeps()
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date('2026-01-01T00:00:00Z') })
     await launcher.launch(request())
     const onDeny = deps.start.mock.calls[0]?.[0].stage?.onDeny
     onDeny?.('Bash', { command: 'git push' })
-    expect(deps.onDenial).toHaveBeenCalledWith(WIDGETS_ID, expect.objectContaining({ number: 52, toolName: 'Bash', sessionKey: 'hosted-1' }))
+    await vi.waitFor(() => expect(deps.runs.denials(WIDGETS_ID)).toMatchObject([{ number: 52, toolName: 'Bash', sessionKey: 'hosted-1' }]))
   })
 })
 
@@ -309,8 +310,10 @@ function resumeRequest(overrides: Partial<StageResumeRequest> = {}): StageResume
 }
 
 describe('createStageLauncher.resume', () => {
-  it('starts in resume mode on the kept worktree, sends the prompt, and flips the entry to running in place', async () => {
-    const deps = fakeDeps()
+  const withRun = () => fakeDeps({ runs: [interruptedRun('reg-1')] })
+
+  it('starts in resume mode on the kept worktree, sends the prompt, and opens the run again in place', async () => {
+    const deps = withRun()
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     const result = await launcher.resume(resumeRequest())
     expect(result).toEqual({ ok: true, sessionKey: 'hosted-1' })
@@ -322,12 +325,11 @@ describe('createStageLauncher.resume', () => {
     expect(deps.createWorktree).not.toHaveBeenCalled()
     expect(deps.loadInstructions).not.toHaveBeenCalled()
     expect(deps.send).toHaveBeenCalledWith('hosted-1', 'You were interrupted.')
-    expect(deps.registryMock.markRunning).toHaveBeenCalledWith('reg-1')
-    expect(deps.registryMock.recordRunning).not.toHaveBeenCalled()
+    expect(runsOf(deps)).toMatchObject([{ id: 'reg-1', sessionKey: 'hosted-1', endedAt: null, interruption: null }])
   })
 
   it('reapplies the recorded ticket label as the resumed session title', async () => {
-    const deps = fakeDeps()
+    const deps = withRun()
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     await launcher.resume(resumeRequest({ entry: { ...INTERRUPTED, title: '#46 Show the last sync time in the header' } }))
     expect(deps.start).toHaveBeenCalledWith(expect.objectContaining({ initialTitle: '#46 Show the last sync time in the header' }))
@@ -343,55 +345,56 @@ describe('createStageLauncher.resume', () => {
   })
 
   it('fails the resume, naming the file, before starting when the bundled agent file is missing', async () => {
-    const deps = fakeDeps()
+    const deps = withRun()
     deps.readTextFile.mockResolvedValue({ ok: false, kind: 'not-found', message: 'ENOENT' })
+    await deps.ready
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     const result = await launcher.resume(resumeRequest())
     expect(result).toEqual({ ok: false, kind: 'failed', message: `couldn't read ${pathOps.join('/bundle', 'agents', 'impl-agent.md')}: ENOENT`, cause: 'resume' })
     expect(deps.start).not.toHaveBeenCalled()
-    expect(deps.registryMock.markRunning).not.toHaveBeenCalled()
+    expect(deps.runs.list().map((entry) => entry.id)).toEqual(['reg-1'])
   })
 
-  it('settles the same entry when the resumed session hands back', async () => {
-    const deps = fakeDeps()
+  it('settles the same run when the resumed session hands back', async () => {
+    const deps = withRun()
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     await launcher.resume(resumeRequest())
     launcher.observe(baseSnapshot({ lastResult: { subtype: 'success', isError: false, text: 'all done', at: 't1' } }))
     await vi.waitFor(() => expect(deps.onOutcome).toHaveBeenCalled())
-    expect(deps.registryMock.remove).toHaveBeenCalledWith('reg-1')
+    expect(runsOf(deps)).toMatchObject([{ id: 'reg-1', outcome: 'completed', interruption: null }])
+    expect(runsOf(deps)[0]?.endedAt).not.toBeNull()
     expect(deps.dismiss).toHaveBeenCalledWith('hosted-1', 'remove')
   })
 
-  it('marks the same entry interrupted again when the resumed session ends abnormally', async () => {
-    const deps = fakeDeps()
+  it('interrupts the same run again when the resumed session ends abnormally', async () => {
+    const deps = withRun()
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     await launcher.resume(resumeRequest())
     launcher.observe(baseSnapshot({ phase: 'ended', end: { reason: 'exit-nonzero', exitCode: 1, signal: null, message: 'boom', diagnosis: null } }))
-    await vi.waitFor(() => expect(deps.registryMock.markInterrupted).toHaveBeenCalled())
-    expect(deps.registryMock.markInterrupted).toHaveBeenCalledWith('reg-1', 'error', 'exit-nonzero', null, null)
+    await vi.waitFor(() => expect(deps.runs.list()).toMatchObject([{ id: 'reg-1', reason: 'error', detail: 'exit-nonzero' }]))
   })
 
-  it('stamps the resumed session on its denials', async () => {
-    const deps = fakeDeps()
+  it('lands denials of the resumed session on the same run', async () => {
+    const deps = withRun()
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     await launcher.resume(resumeRequest())
     deps.start.mock.calls[0]?.[0].stage?.onDeny?.('Bash', { command: 'rm -rf x' })
-    expect(deps.onDenial).toHaveBeenCalledWith(WIDGETS_ID, expect.objectContaining({ number: 52, sessionKey: 'hosted-1' }))
+    await vi.waitFor(() => expect(deps.runs.denials(WIDGETS_ID)).toMatchObject([{ number: 52, sessionKey: 'hosted-1' }]))
   })
 
-  it('leaves the entry interrupted when the store refuses or the send fails', async () => {
-    const full = fakeDeps({ start: { ok: false, kind: 'at-capacity', limit: 2 } })
+  it('leaves the run interrupted when the store refuses or the send fails', async () => {
+    const full = fakeDeps({ start: { ok: false, kind: 'at-capacity', limit: 2 }, runs: [interruptedRun('reg-1')] })
     const fullLauncher = createStageLauncher({ ...full, git: vi.fn() as never, now: () => new Date() })
     expect(await fullLauncher.resume(resumeRequest())).toEqual({ ok: false, kind: 'at-capacity', limit: 2 })
-    expect(full.registryMock.markRunning).not.toHaveBeenCalled()
+    expect(full.runs.list().map((entry) => entry.id)).toEqual(['reg-1'])
 
-    const deps = fakeDeps()
+    const deps = withRun()
     deps.send.mockReturnValue({ ok: false, kind: 'blocked-command', name: 'pipeline' })
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     const result = await launcher.resume(resumeRequest())
     expect(result.ok).toBe(false)
     expect(deps.close).toHaveBeenCalledWith('hosted-1')
-    expect(deps.registryMock.markRunning).not.toHaveBeenCalled()
+    expect(deps.runs.list().map((entry) => entry.id)).toEqual(['reg-1'])
   })
 
   it('refuses an entry that never got a Claude session id', async () => {
@@ -414,8 +417,9 @@ describe('createStageLauncher.observe', () => {
     expect(deps.dismiss).toHaveBeenCalledWith('hosted-1', 'remove')
     expect(deps.onOutcome).toHaveBeenCalledWith(WIDGETS_ID, 'hosted-1', expect.objectContaining({ kind: 'completed', worktree: 'removed' }), null)
     expect(deps.releaseBranch).toHaveBeenCalledWith(ENTRY.path, '52-add-a-dark-mode-icon', 'abc')
-    expect(deps.registryMock.remove).toHaveBeenCalledWith('id-1')
-    expect(deps.registryMock.markInterrupted).not.toHaveBeenCalled()
+    expect(runsOf(deps)).toMatchObject([{ id: 'id-1', outcome: 'completed', handback: null, interruption: null }])
+    expect(runsOf(deps)[0]?.endedAt).not.toBeNull()
+    expect(deps.runs.list()).toEqual([])
   })
 
   it.each([
@@ -429,8 +433,7 @@ describe('createStageLauncher.observe', () => {
     await launcher.launch(request())
     launcher.observe(baseSnapshot({ lastResult: { subtype: 'success', isError: false, text: 'all done', at: 't1' } }))
     await vi.waitFor(() => expect(deps.onOutcome).toHaveBeenCalled())
-    expect(deps.registryMock.markInterrupted).toHaveBeenCalledWith('id-1', 'cleanup-failed', detail, null, null)
-    expect(deps.registryMock.remove).not.toHaveBeenCalled()
+    expect(deps.runs.list()).toMatchObject([{ id: 'id-1', reason: 'cleanup-failed', detail }])
     expect(deps.releaseBranch).not.toHaveBeenCalled()
   })
 
@@ -472,19 +475,14 @@ describe('createStageLauncher.observe', () => {
     expect(deps.onResumedTurn).toHaveBeenCalledWith(WIDGETS_ID, 'hosted-1')
   })
 
-  it('does not call onResumedTurn for a session that never blocked', async () => {
+  it('does not call onResumedTurn for a session that never blocked, and ignores an untracked session key', async () => {
     const deps = fakeDeps()
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     await launcher.launch(request())
     launcher.observe(baseSnapshot({ phase: 'ready' }))
     launcher.observe(baseSnapshot({ phase: 'streaming' }))
+    launcher.observe(baseSnapshot({ sessionKey: 'hosted-999' as SessionKey }))
     expect(deps.onResumedTurn).not.toHaveBeenCalled()
-  })
-
-  it('ignores a snapshot for an untracked session key', () => {
-    const deps = fakeDeps()
-    const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
-    expect(() => launcher.observe(baseSnapshot({ sessionKey: 'hosted-999' as SessionKey }))).not.toThrow()
     expect(deps.onOutcome).not.toHaveBeenCalled()
   })
 

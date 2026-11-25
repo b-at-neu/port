@@ -1,0 +1,7 @@
+{
+  "version": 2,
+  "repositories": [
+    { "id": "repo-a", "state": "dispatching", "since": "2026-11-21T07:00:00.000Z" },
+    { "id": "repo-b", "state": "draining", "since": "2026-11-21T07:30:00.000Z" }
+  ]
+}

@@ -5,7 +5,6 @@ import type { BoardSnapshot } from '@/types/board'
 import type { CreateDispatcherParams, Dispatcher, DispatchOwner, DispatcherState, RepoDispatchStatus, RunState, StageRecord, StageSnapshot } from '@/types/dispatch'
 import { RUN_TARGET } from '@/types/dispatch'
 import type { SessionKey } from '@/types/hosting'
-import type { StageDenial, InterruptedStage } from '@/types/stage'
 import type { StagePlanFile } from '@/types/stage-labels'
 import type { StageOutcome } from '@/types/stage-session'
 import type { EndedStage } from '@/types/tick'
@@ -16,20 +15,7 @@ import { budgetLiveSets, sumCostUsd } from '@/main/dispatch/budget'
 import { createStageHandoff } from '@/main/dispatch/handoff'
 import { createLaunchSection, survived } from '@/main/dispatch/launch'
 import { runObservationPass } from '@/main/dispatch/observe'
-import {
-  activeOrIdle,
-  boundRecords,
-  emptyRepoState,
-  endedStagesOf,
-  liveStageSessionsOf,
-  liveStagesOf,
-  newStageRecord,
-  ownerOf,
-  refreshRecords,
-  selectDispatches,
-  stageLivenessOf,
-  statusOf,
-} from '@/main/dispatch/records'
+import { activeOrIdle, boundRecords, emptyRepoState, endedStagesOf, liveStageSessionsOf, liveStagesOf, ownerOf, selectDispatches, stageLivenessOf, statusOf, syncChanges } from '@/main/dispatch/records'
 import type { RepoDispatcherState } from '@/main/dispatch/records'
 
 const RECENT_LIMIT = 20
@@ -44,7 +30,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   // Serializes every repository's own launch section so two repositories never race for the same free slot.
   let launchQueue: Promise<void> = Promise.resolve()
   const handoff = createStageHandoff({ write: (p) => deps.stageLabels.transition({ ...p, snapshot: snapshotOf(p.entry.id, p.record.number) }), auditDir: deps.dirs.audit, scratchDir: deps.dirs.scratch, onChange: deps.onChange, recordIncident: deps.recordIncident, requestRead: deps.requestRead, now: deps.now })
-  const launching = createLaunchSection({ deps, raise, isStopped: () => stopped, serialize, pushRecord, report, itemsOf: (repoId) => snapshotRepoState(repoId)?.items ?? [] })
+  const launching = createLaunchSection({ deps, raise, isStopped: () => stopped, serialize, report, recordsOf, itemsOf: (repoId) => snapshotRepoState(repoId)?.items ?? [] })
 
   function serialize<T>(fn: () => Promise<T>): Promise<T> {
     const result = launchQueue.then(fn)
@@ -63,9 +49,9 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     return created
   }
 
-  function pushRecord(repoId: RepoId, record: StageRecord): void {
-    const state = stateFor(repoId)
-    state.records = boundRecords([...state.records, record], RECENT_LIMIT)
+  /** The repository's newest runs as the loop reads them, never more than `RECENT_LIMIT`. */
+  function recordsOf(repoId: RepoId): readonly StageRecord[] {
+    return boundRecords(deps.runs.records(repoId), RECENT_LIMIT)
   }
 
   function report(repoId: RepoId, owner: DispatchOwner, dispatcherState: DispatcherState, runState: RunState): void {
@@ -77,44 +63,35 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   }
 
   function recordOutcome(repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome, plan: StagePlanFile | null): void {
-    const state = repoStates.get(repoId)
-    if (state === undefined) return
-    const idx = state.records.findIndex((r) => r.sessionKey === sessionKey)
-    if (idx === -1) return
-    const next = [...state.records]
-    // Never reassigned, so a non-null `Infinity`-bounds index access stays well-typed.
-    const existing = next[idx]
+    const records = deps.runs.records(repoId)
+    const existing = records.find((r) => r.sessionKey === sessionKey)
     if (existing === undefined) return
-    next[idx] = { ...existing, outcome }
-    state.records = next
     for (const intent of endedIntents(existing, outcome, deps.now().getTime())) raise(repoId, existing, intent, { kind: outcome.kind })
     deps.onChange()
     // A newer session on the same ticket owns it now, so this older outcome writes no label.
-    if (next.some((r) => r.number === existing.number && r.state === 'started' && r.at > existing.at)) return
+    if (records.some((r) => r.number === existing.number && r.state === 'started' && r.at > existing.at)) return
     handoff.settle(repoId, { ...existing, sessionKey }, outcome, plan)
   }
-  /** A resumed session settles labels like a launched one; it joins the records as `started`. */
-  function trackResumed(repoId: RepoId, sessionKey: SessionKey, entry: InterruptedStage): void {
-    pushRecord(repoId, newStageRecord(entry, 'started', deps.now().toISOString(), sessionKey, null))
-  }
   function recordResumedTurn(repoId: RepoId, sessionKey: SessionKey): void {
-    const record = repoStates.get(repoId)?.records.find((r) => r.sessionKey === sessionKey)
+    const record = deps.runs.records(repoId).find((r) => r.sessionKey === sessionKey)
     if (record !== undefined) handoff.resumedTurn(repoId, { ...record, sessionKey })
   }
   function holdsSessionRequired(repoId: RepoId): boolean {
     return stateFor(repoId).owner !== 'app'
   }
-  function recordDenial(repoId: RepoId, denial: StageDenial): void {
-    deps.denials.record(denial)
-    deps.onChange()
-  }
   function dismissDenial(repoId: RepoId, id: string): void {
-    deps.denials.dismiss(repoId, id)
-    deps.onChange()
+    void deps.runs.dismissDenial(repoId, id).then(deps.onChange)
   }
   function clearDenialsFor(repoId: RepoId, rule: string): void {
-    deps.denials.clearRule(repoId, rule)
-    deps.onChange()
+    void deps.runs.clearRule(repoId, rule).then(deps.onChange)
+  }
+
+  /** Ends the runs whose sessions are gone and records an operator joining one, so the loop reads what the hosted sessions say. */
+  async function syncRuns(repoId: RepoId): Promise<void> {
+    for (const { runId, change } of syncChanges(deps.runs.records(repoId), (sessionKey) => deps.store.snapshotOf(sessionKey))) {
+      if (change.kind === 'joined') await deps.runs.joined(repoId, runId, change.at)
+      else if (change.kind === 'ended') await deps.runs.ended(repoId, runId, null)
+    }
   }
 
   /** A request made during a pass is coalesced into one follow-up pass on the newest snapshot, never dropped. */
@@ -151,9 +128,10 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       const state = stateFor(entry.id)
       state.ownedSince = ownership.kind === 'app' ? ownership.since : null
       state.unreadableMessage = ownership.kind === 'unreadable' ? ownership.message : null
-      state.records = refreshRecords(state.records, (sessionKey) => deps.store.snapshotOf(sessionKey), deps.now().toISOString())
+      await syncRuns(entry.id)
+      const records = recordsOf(entry.id)
 
-      const anyLive = state.records.some((r) => r.state === 'started')
+      const anyLive = records.some((r) => r.state === 'started')
       if (entry.config.commands.budget !== null && (owner === 'app' || anyLive)) {
         if (!state.budgetReset) {
           const resetResult = await deps.budget.reset(entry)
@@ -165,9 +143,9 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
           }
         }
         if (state.budgetReset) {
-          const sets = budgetLiveSets(state.records)
+          const sets = budgetLiveSets(records)
           const sweepResult = await deps.budget.sweep(entry, sets)
-          state.budget = { line: sweepResult.line, problem: sweepResult.problem, notes: state.budget?.notes ?? [], costUsd: sumCostUsd(state.records) }
+          state.budget = { line: sweepResult.line, problem: sweepResult.problem, notes: state.budget?.notes ?? [], costUsd: sumCostUsd(records) }
         }
       }
 
@@ -177,10 +155,15 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       }
 
       handoff.remember(entry)
+      // A hand-back the last boot found finished but unwritten settles once, from the run alone.
+      if (!state.replayed) {
+        state.replayed = true
+        for (const unsettled of deps.runs.unsettled(entry.id)) handoff.settle(entry.id, unsettled.record, unsettled.outcome, null)
+      }
       await handoff.retryPending(entry.id)
 
       if (tick === undefined || tick.blind !== null || viewer === null) {
-        report(entry.id, owner, activeOrIdle(state), runState)
+        report(entry.id, owner, activeOrIdle(records), runState)
         return
       }
 
@@ -203,11 +186,11 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       }
 
       const dispatchable = dispatchableFrom(tick, runState)
-      const liveNumbers = new Set(state.records.filter((r) => r.state === 'started').map((r) => r.number))
+      const liveNumbers = new Set(records.filter((r) => r.state === 'started').map((r) => r.number))
       const notAlreadyLive = dispatchable.filter((c) => !liveNumbers.has(c.number))
-      const candidates = selectDispatches({ dispatchable: notAlreadyLive, recent: state.records, now: deps.now() })
+      const candidates = selectDispatches({ dispatchable: notAlreadyLive, recent: records, now: deps.now() })
       if (candidates.length === 0) {
-        report(entry.id, owner, activeOrIdle(state), runState)
+        report(entry.id, owner, activeOrIdle(records), runState)
         return
       }
 
@@ -225,7 +208,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
         return resolved !== undefined && !reread.unavailable.includes(c.number) && survived(resolved, c, entry.config.vocabulary, viewer, deps.stateLabels(entry.id, c.kind, c.number, entry.config.vocabulary))
       })
       if (survivors.length === 0) {
-        report(entry.id, owner, activeOrIdle(state), runState)
+        report(entry.id, owner, activeOrIdle(records), runState)
         return
       }
 
@@ -252,27 +235,23 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     await Promise.all(readyEntries.map((entry) => considerRepo(entry)))
   }
 
-  const interruptedOf = (repoId: RepoId): readonly InterruptedStage[] => deps.interrupted?.(repoId) ?? []
-
   function status(): readonly RepoDispatchStatus[] {
-    return statusOf(repoStates, (repoId) => deps.denials.list(repoId), interruptedOf)
+    return statusOf(repoStates, (repoId) => deps.runs.denials(repoId), (repoId) => deps.runs.list(repoId))
   }
   function liveStages(repoId: RepoId): readonly string[] {
-    return liveStagesOf(repoStates.get(repoId))
+    return liveStagesOf(deps.runs.records(repoId))
   }
   function stageLiveness(repoId: RepoId): { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null {
-    return stageLivenessOf(stateFor(repoId), handoff.pendingNumbers(repoId), interruptedOf(repoId), deps.now())
+    return stageLivenessOf(stateFor(repoId), deps.runs.records(repoId), handoff.pendingNumbers(repoId), deps.runs.list(repoId), deps.now())
   }
   function endedStages(repoId: RepoId): readonly EndedStage[] {
-    return endedStagesOf(repoStates.get(repoId)?.records ?? [], (sessionKey) => handoff.resultFor(sessionKey))
+    return endedStagesOf(deps.runs.records(repoId), (sessionKey) => handoff.resultFor(sessionKey))
   }
   function liveStageSessions() {
-    return liveStageSessionsOf(repoStates, (repoId) => repoNames.get(repoId) ?? String(repoId))
+    return liveStageSessionsOf([...repoStates.keys()], (repoId) => deps.runs.records(repoId), (repoId) => repoNames.get(repoId) ?? String(repoId))
   }
   async function stopFor(repoId: RepoId, number: number): Promise<boolean> {
-    const state = repoStates.get(repoId)
-    if (state === undefined) return false
-    const record = state.records.find((r) => r.number === number && r.state === 'started' && r.sessionKey !== null)
+    const record = deps.runs.records(repoId).find((r) => r.number === number && r.state === 'started' && r.sessionKey !== null)
     if (record === undefined || record.sessionKey === null) return false
     const result = await deps.store.close(record.sessionKey)
     if (result.ok) deps.onChange()
@@ -280,9 +259,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   }
 
   async function standDown(repoId: RepoId): Promise<boolean> {
-    const state = repoStates.get(repoId)
-    if (state === undefined) return false
-    const live = state.records.filter((r): r is StageRecord & { sessionKey: SessionKey } => r.state === 'started' && r.sessionKey !== null)
+    const live = deps.runs.records(repoId).filter((r): r is StageRecord & { sessionKey: SessionKey } => r.state === 'started' && r.sessionKey !== null)
     if (live.length === 0) return false
     let allOk = true
     for (const record of live) {
@@ -297,5 +274,5 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     stopped = true
   }
 
-  return { consider, status, stopFor, standDown, liveStages, stageLiveness, endedStages, liveStageSessions, shutdown, recordOutcome, recordResumedTurn, trackResumed, holdsSessionRequired, recordDenial, dismissDenial, clearDenialsFor }
+  return { consider, status, stopFor, standDown, liveStages, stageLiveness, endedStages, liveStageSessions, shutdown, recordOutcome, recordResumedTurn, holdsSessionRequired, dismissDenial, clearDenialsFor }
 }

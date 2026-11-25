@@ -11,7 +11,7 @@ import type { StageBundleRootInput, StageLauncherHandle } from '@/types/stage'
 
 type StageLauncherParams = Parameters<typeof createStageLauncher>[0]
 
-type DefaultStageLauncherParams = Pick<StageLauncherParams, 'store' | 'registry' | 'onOutcome' | 'onResumedTurn' | 'onResumed' | 'onDenial'> & { readonly bundle: StageBundleRootInput }
+type DefaultStageLauncherParams = Pick<StageLauncherParams, 'store' | 'runs' | 'onOutcome' | 'onResumedTurn'> & { readonly bundle: StageBundleRootInput }
 
 /** The app's real launcher: every I/O seam bound to its production implementation. */
 export function createDefaultStageLauncher({ bundle, ...params }: DefaultStageLauncherParams): StageLauncherHandle {

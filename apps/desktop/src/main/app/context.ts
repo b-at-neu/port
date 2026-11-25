@@ -14,8 +14,6 @@ import { bindOperator } from '@/main/app/operator'
 import { createPipelineState } from '@/main/pipeline/state/default'
 import { defaultHostingChannelDeps } from '@/main/features/session/resolve'
 import { createDispatchRuntime } from '@/main/dispatch/runtime'
-import { createRunStateStore } from '@/main/dispatch/store'
-import { registeredRepoIds } from '@/main/dispatch/resolve'
 import { fetchItemsByNumber } from '@/main/github/adapter'
 import { readAllowBase } from '@/main/github/allow'
 import { proposeAllowRule } from '@/main/github/writes/allow'
@@ -30,7 +28,6 @@ import { createHostedStore, defaultHostedStoreDeps } from '@/main/sessions/hosti
 import { createHostingPersistence } from '@/main/sessions/hosting/persist'
 import { createSessionIndex } from '@/main/sessions/hosting/session-index'
 import { createAppNotifier } from '@/main/sessions/hosting/notify'
-import { createStageRegistry } from '@/main/dispatch/stage/registry'
 import { createStageSweeper } from '@/main/features/stage/resolve'
 import { createUsageLedger } from '@/main/sessions/hosting/usage-ledger'
 import { createSessionMenuRefresher } from '@/main/app/shell/session-menu'
@@ -41,7 +38,7 @@ import type { HostedStore } from '@/types/hosting'
 import type { PipelineWatcher } from '@/types/state'
 import type { ForceDispatch } from '@/types/tick'
 import type { SessionIndex } from '@/types/session-index'
-import type { StageLauncherHandle, StageRegistry } from '@/types/stage'
+import type { RunStore, StageLauncherHandle } from '@/types/stage'
 import type { IncidentLog } from '@/types/incidents'
 import type { RecentsStore } from '@/types/workspace'
 import type { UsageLedger } from '@/types/settings'
@@ -59,7 +56,7 @@ export type AppContext = Platform & {
     readonly runStates: RunStateStore
     readonly sessionIndex: SessionIndex
     readonly usageLedger: UsageLedger
-    readonly stageRegistry: StageRegistry
+    readonly runs: RunStore
     readonly recents: RecentsStore
     readonly pipelineState: ReturnType<typeof createPipelineState>
     readonly incidentLog: IncidentLog
@@ -110,9 +107,6 @@ export function createAppContext(restart: RestartSeams): AppContext {
   })
   const repos = createRepos(platform)
 
-  const runStates = createRunStateStore(userData)
-  void runStates.load(() => registeredRepoIds(repos.deps))
-
   const recents = createRecentsStore({ dir: userData })
 
   const incidentLog = createIncidentLog({ dir: userData, now: platform.clock.now, newId: () => globalThis.crypto.randomUUID() })
@@ -124,11 +118,9 @@ export function createAppContext(restart: RestartSeams): AppContext {
 
   const fetchItems = (params: FetchItemsByNumberParams) => fetchItemsByNumber(platform, params)
 
+  // Loading it once at boot marks every run a lost process left open `crash`.
   const pipelineState = createPipelineState({ dir: userData, auditDir: userData, recordIncident: incidentLog.record, readOwnership: ownership.read, platform })
-
-  // Loaded once at boot: a `running` entry found then can only mean the process died, and promotes to `crash`.
-  const stageRegistry = createStageRegistry({ path: join(userData, 'stage-sessions.json'), readJson: platform.fs.readJson, writeJsonAtomic: platform.fs.writeJsonAtomic, now: platform.clock.now })
-  void stageRegistry.load()
+  const { runs, runStates } = pipelineState
 
   const sessionIndex = createSessionIndex({ path: join(userData, 'session-index.json'), readJson: platform.fs.readJson, writeJsonAtomic: platform.fs.writeJsonAtomic, now: platform.clock.now })
   void sessionIndex.load()
@@ -162,17 +154,16 @@ export function createAppContext(restart: RestartSeams): AppContext {
   const sessionMenu = createSessionMenuRefresher({ store: hostedStore, platform: process.platform, isPackaged: app.isPackaged, send: broadcastAppCommand })
   const stageLauncher: StageLauncherHandle = createDefaultStageLauncher({
     store: hostedStore,
-    registry: stageRegistry,
+    runs,
     onOutcome: (repoId, sessionKey, outcome, plan) => dispatcherRef?.recordOutcome(repoId, sessionKey, outcome, plan),
     onResumedTurn: (repoId, sessionKey) => dispatcherRef?.recordResumedTurn(repoId, sessionKey),
-    onResumed: (repoId, sessionKey, entry) => dispatcherRef?.trackResumed(repoId, sessionKey, entry),
-    onDenial: (repoId, denial) => dispatcherRef?.recordDenial(repoId, denial),
     bundle: { isPackaged: app.isPackaged, mainDir: __dirname, resourcesPath: process.resourcesPath },
   })
   const hosting = defaultHostingChannelDeps(hostedStore, sessionIndex, { ctx: platform, recents, readSessions: () => engine.listSessions() })
 
   const { watcherDeps, dispatcher, forceDispatch, autoPlanner, bindWatcher, shutdown } = createDispatchRuntime({
     store: hostedStore,
+    runs,
     launch: stageLauncher,
     runState: (repoId) => runStates.current(repoId).state,
     readOwnership: ownership.read,
@@ -186,7 +177,6 @@ export function createAppContext(restart: RestartSeams): AppContext {
     dirs: { audit: userData, scratch: platform.paths.temp },
     now: platform.clock.now,
     recordIncident: incidentLog.record,
-    interrupted: (repoId) => stageRegistry.list().filter((entry) => entry.repoId === repoId),
   })
   dispatcherRef = dispatcher
 
@@ -216,7 +206,7 @@ export function createAppContext(restart: RestartSeams): AppContext {
 
   const stage: StageChannelDeps = {
     listRepositories,
-    registry: stageRegistry,
+    runs,
     dispatcher,
     store: hostedStore,
     launcher: stageLauncher,
@@ -262,5 +252,5 @@ export function createAppContext(restart: RestartSeams): AppContext {
 
   void update.service.check('startup')
 
-  return { ...platform, emit, repos, stores: { runStates, sessionIndex, usageLedger, stageRegistry, recents, pipelineState, incidentLog }, seams, live }
+  return { ...platform, emit, repos, stores: { runStates, sessionIndex, usageLedger, runs, recents, pipelineState, incidentLog }, seams, live }
 }

@@ -13,11 +13,10 @@ import type { TickReport } from '@/types/tick'
 import type { EscalateToHumanParams } from '@/types/actions'
 import type { ReadyEntry } from '@/types/actions'
 import type { StageLaunchResult, StageLauncher } from '@/types/dispatch'
-import { createDispatcher } from '@/main/dispatch/dispatcher'
 import type { CreateDispatcherParams } from '@/types/dispatch'
 import type { BudgetCheckResult, BudgetGate, BudgetResetResult, BudgetSweepResult } from '@/types/dispatch'
 import type { OwnershipRead } from '@/types/dispatch'
-import { memoryDenialStore } from '../../../fixtures/denials'
+import { buildDispatcher, dispatchRuns } from '../../../support/dispatch-runs'
 import { DISPATCH_STORE_DEFAULTS, storeStub } from '../../../fixtures/store'
 
 const REPO_ID = 'repo-a' as RepoId
@@ -132,9 +131,8 @@ function fakeLauncher(result: StageLaunchResult = { ok: true, sessionKey: 'hoste
 function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispatcherParams {
   return {
     store: fakeStore(),
-    denials: memoryDenialStore(),
+    runs: dispatchRuns(REPO_ID).runs,
     launch: null,
-    ledger: { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined, observeUnmatched: () => ({ class: 'no-record' }) },
     refreshMemo: { get: () => undefined, set: vi.fn(), clear: vi.fn() },
     rerunMemo: { get: () => undefined, set: vi.fn() },
     rerunChecks: () => Promise.resolve('applied'),
@@ -177,7 +175,7 @@ describe('createDispatcher — budget bookkeeping', () => {
         return Promise.resolve({ line: 'session 1 dispatch · 2m 00s agent wall-clock', problem: null } satisfies BudgetSweepResult)
       },
     })
-    const dispatcher = createDispatcher(baseDeps({ budget }))
+    const dispatcher = buildDispatcher(REPO_ID,baseDeps({ budget }))
     await dispatcher.consider(snapshotWith([tickReport()]))
     expect(resetCalls).toBe(1)
     expect(sweepCalls).toBe(1)
@@ -190,7 +188,7 @@ describe('createDispatcher — budget bookkeeping', () => {
 
   it('a reset failure reports budget-unavailable and dispatches nothing this pass', async () => {
     const budget = fakeBudget({ reset: () => Promise.resolve({ ok: false, kind: 'unavailable', message: "the budget ceiling can't be read (not on the default branch)." }) })
-    const dispatcher = createDispatcher(baseDeps({ budget }))
+    const dispatcher = buildDispatcher(REPO_ID,baseDeps({ budget }))
     await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })]))
     expect(dispatcher.status()[0]?.state).toEqual({ kind: 'budget-unavailable', message: "the budget ceiling can't be read (not on the default branch)." })
   })
@@ -207,7 +205,7 @@ describe('createDispatcher — budget bookkeeping', () => {
       },
     })
     let ownership: OwnershipRead = OWNED_BY_APP
-    const dispatcher = createDispatcher(
+    const dispatcher = buildDispatcher(REPO_ID,
       baseDeps({
         store,
         launch,
@@ -239,7 +237,7 @@ describe('createDispatcher — the budget gate itself', () => {
       fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'], headRefName: null, author: null }], unavailable: [], fetchedAt: 'r' }),
       ...overrides,
     })
-    return { dispatcher: createDispatcher(deps) }
+    return { dispatcher: buildDispatcher(REPO_ID,deps) }
   }
 
   it('allow launches the candidate — no notes', async () => {

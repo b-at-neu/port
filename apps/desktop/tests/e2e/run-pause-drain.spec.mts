@@ -10,15 +10,15 @@ const CONTROL_SETTLE_MS = 30_000
 
 let harness: E2EApp
 
-interface DispatchFileShape {
-  readonly repositories: ReadonlyArray<{ readonly state: string }>
+interface PipelineStateShape {
+  readonly dispatch: Readonly<Record<string, { readonly state: string }>>
 }
 
-async function dispatchState(dispatchPath: string): Promise<string | undefined> {
+async function dispatchState(statePath: string): Promise<string | undefined> {
   try {
-    const raw = await readFile(dispatchPath, 'utf8')
-    const parsed = JSON.parse(raw) as DispatchFileShape
-    return parsed.repositories[0]?.state
+    const raw = await readFile(statePath, 'utf8')
+    const parsed = JSON.parse(raw) as PipelineStateShape
+    return Object.values(parsed.dispatch)[0]?.state
   } catch {
     return undefined
   }
@@ -38,7 +38,7 @@ test.afterEach(async ({}) => {
 test('runs, stops, and drains a pipeline, with Drain disabled while nothing is in flight', async () => {
   const { app, page } = harness
   const userDataPath = await app.evaluate(({ app: electronApp }: typeof import('electron')) => electronApp.getPath('userData'))
-  const dispatchPath = `${userDataPath}/dispatch.json`
+  const dispatchPath = `${userDataPath}/pipeline-state.json`
 
   const pill = page.getByRole('button', { name: /^Stopped$/ }).first()
   await pill.click()

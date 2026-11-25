@@ -19,7 +19,7 @@ import { formatAppVersion } from '@/utils/about/version'
 import { menuTemplate } from '@/main/app/shell/menu'
 import { presentWindow, windowPresentation } from '@/main/app/shell/presentation'
 import { chromeSandboxPath, needsNoSandbox } from '@/main/app/shell/sandbox'
-import type { StageRegistry } from '@/types/stage'
+import type { RunStore } from '@/types/stage'
 
 // A hung registry write must never block quitting.
 const MARK_ALL_QUIT_TIMEOUT_MS = 2_000
@@ -91,7 +91,7 @@ if (fixture.kind === 'invalid') {
     let hostedStore: HostedStore | null = null
     let dispatcher: Dispatcher | null = null
     let shutdownDispatch: (() => void) | null = null
-    let stageRegistry: StageRegistry | null = null
+    let runs: RunStore | null = null
 
     // Intercepts `before-quit` and (off darwin) the main window's own `close` while any stage
     // session is still live, naming each one before the operator confirms.
@@ -181,7 +181,7 @@ if (fixture.kind === 'invalid') {
         hostedStore = ctx.live.hostedStore
         dispatcher = ctx.live.dispatcher
         shutdownDispatch = ctx.live.shutdown
-        stageRegistry = ctx.stores.stageRegistry
+        runs = ctx.stores.runs
       }
       Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform, app.isPackaged, [], broadcastAppCommand)))
       void createWindow()
@@ -201,7 +201,7 @@ if (fixture.kind === 'invalid') {
       if (quitGuard.intercept(() => event.preventDefault())) return
       shutdownDispatch?.()
       watcher?.stop()
-      const marked = stageRegistry !== null ? withTimeout(stageRegistry.markAllQuit(), MARK_ALL_QUIT_TIMEOUT_MS) : Promise.resolve()
+      const marked = runs !== null ? withTimeout(runs.quitAll(), MARK_ALL_QUIT_TIMEOUT_MS) : Promise.resolve()
       void marked.then(() => hostedStore?.closeAll())
     })
   }

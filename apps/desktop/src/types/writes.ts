@@ -1,5 +1,5 @@
 // Renderer-safe contract for the write chokepoint: every mutation the app makes to GitHub is expressed in `LabelKey` values and a stated precondition, never a raw argv or a bypassing `gh` call. No import here may reach a Node builtin.
-import type { TicketEvent } from '@/types/stage-labels'
+import type { StateEvent } from '@/types/stage-labels'
 import type { MirrorVocabulary } from '@/utils/labels/display'
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
@@ -46,7 +46,7 @@ export interface EventWriteRequest {
   /** The legacy vocabulary, used to name the keys a `labels` event carries and to clean up old labels. */
   readonly vocabulary: LabelVocabulary
   readonly mirror: MirrorVocabulary
-  readonly event: TicketEvent
+  readonly event: StateEvent
   /** The `rev` the caller read; `null` skips the concurrency check. */
   readonly expectedRev: number | null
   readonly assignees: AssigneeExpectation

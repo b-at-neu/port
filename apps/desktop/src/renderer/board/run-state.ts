@@ -13,7 +13,7 @@ function timeOf(iso: string): string {
  *  regardless of this repository's own persisted state. */
 export function runStateLineCopy(repoRunState: RepoRunState, store: RunStatesSnapshot['store']): string {
   if (store.kind === 'unread') return 'Stopped — reading the saved pipeline state…'
-  if (store.kind === 'unreadable') return `Stopped — dispatch.json can't be read (${store.message}). Fix or delete it, then run it again.`
+  if (store.kind === 'unreadable') return `Stopped — pipeline-state.json can't be read (${store.message}). Fix or delete it, then run it again.`
 
   const { state, since } = repoRunState
   if (state === 'dispatching') return since !== null ? `Running since ${timeOf(since)}` : 'Running'
@@ -35,12 +35,12 @@ export function runStateResultNote(result: DispatchControlResult): string | null
     if (result.ok) return null
     if (result.reason === 'ownership-unreadable') return ownershipRefusalNote(result.message)
     if (result.reason === 'unwritable') return `Couldn't run: ${result.path} couldn't be written (${result.message}). It's still stopped.`
-    return `Stays stopped: dispatch.json can't be read (${result.message}). Fix or delete it, then run it again.`
+    return `Stays stopped: pipeline-state.json can't be read (${result.message}). Fix or delete it, then run it again.`
   }
   if (result.command === 'drain') {
     if (!result.ok) {
       if (result.reason === 'ownership-unreadable') return ownershipRefusalNote(result.message)
-      return `Stays stopped: dispatch.json can't be read (${result.message}). Fix or delete it, then run it again.`
+      return `Stays stopped: pipeline-state.json can't be read (${result.message}). Fix or delete it, then run it again.`
     }
     return result.persisted ? null : "Draining, but it wasn't saved to disk, so it won't survive a restart."
   }

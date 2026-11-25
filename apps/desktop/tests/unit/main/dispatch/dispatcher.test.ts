@@ -7,12 +7,14 @@ import type { TickActionable, TickReport } from '@/types/tick'
 import type { StageLaunchRequest, StageLaunchResult, StageLauncher } from '@/types/dispatch'
 import { createDispatcher } from '@/main/dispatch/dispatcher'
 import { DISPATCH_PROMPT, promptFor, REFRESH_PROMPT } from '@/main/dispatch/launch'
-import type { CreateDispatcherParams } from '@/types/dispatch'
+import type { CreateDispatcherParams, Dispatcher } from '@/types/dispatch'
 import type { OwnershipRead } from '@/types/dispatch'
 import type { HostedStore } from '@/types/hosting'
-import { memoryDenialStore } from '../../../fixtures/denials'
 import { DISPATCH_STORE_DEFAULTS, storeStub } from '../../../fixtures/store'
 import { boardSnapshot, repositoryState } from '../../../support/board-snapshot'
+import { dispatchRuns, recordingLauncher } from '../../../support/dispatch-runs'
+import { memoryRuns } from '../../../support/state-store'
+import { NOW, runOf, ticketOf } from '../../../support/tickets'
 import { readyEntry } from '../../../support/repo-config'
 import { sessionSnapshot } from '../../../support/session-snapshot'
 
@@ -38,12 +40,17 @@ function fakeLauncher(launch: (request: StageLaunchRequest) => Promise<StageLaun
   return { launch }
 }
 
+/** The dispatcher over a launcher that records the run a real one would. */
+function build(deps: CreateDispatcherParams): Dispatcher {
+  const { launch } = deps
+  return createDispatcher({ ...deps, launch: launch === null ? null : recordingLauncher(deps.runs, REPO_ID, (request) => launch.launch(request)) })
+}
+
 function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispatcherParams {
   return {
     store: fakeStore(),
-    denials: memoryDenialStore(),
+    runs: dispatchRuns(REPO_ID).runs,
     launch: null,
-    ledger: { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined, observeUnmatched: () => ({ class: 'no-record' }) },
     refreshMemo: { get: () => undefined, set: vi.fn(), clear: vi.fn() },
     rerunMemo: { get: () => undefined, set: vi.fn() },
     rerunChecks: () => Promise.resolve('applied'),
@@ -89,7 +96,7 @@ const ACTIONABLE = [{ number: 52, kind: 'issue' as const, trigger: 'planApproved
 
 describe('createDispatcher — ownership', () => {
   it('reports none for an absent record, and never touches the store', async () => {
-    const dispatcher = createDispatcher(baseDeps())
+    const dispatcher = build(baseDeps())
     await dispatcher.consider(snapshotWith([tickReport()]))
     expect(dispatcher.status()).toEqual([
       { repoId: REPO_ID, owner: 'none', state: { kind: 'idle' }, runState: 'dispatching', ownedSince: null, unreadableMessage: null, budget: null, observed: [], denials: [], interrupted: [] },
@@ -97,7 +104,7 @@ describe('createDispatcher — ownership', () => {
   })
 
   it('reports unreadable for an unreadable record', async () => {
-    const dispatcher = createDispatcher(baseDeps({ readOwnership: () => Promise.resolve(UNREADABLE_OWNERSHIP) }))
+    const dispatcher = build(baseDeps({ readOwnership: () => Promise.resolve(UNREADABLE_OWNERSHIP) }))
     await dispatcher.consider(snapshotWith([tickReport()]))
     expect(dispatcher.status()).toEqual([
       { repoId: REPO_ID, owner: 'unreadable', state: { kind: 'idle' }, runState: 'dispatching', ownedSince: null, unreadableMessage: 'bad', budget: null, observed: [], denials: [], interrupted: [] },
@@ -105,7 +112,7 @@ describe('createDispatcher — ownership', () => {
   })
 
   it('reports app for a record owned by this app', async () => {
-    const dispatcher = createDispatcher(baseDeps({ readOwnership: () => Promise.resolve(OWNED_BY_APP) }))
+    const dispatcher = build(baseDeps({ readOwnership: () => Promise.resolve(OWNED_BY_APP) }))
     await dispatcher.consider(snapshotWith([tickReport()]))
     expect(dispatcher.status()[0]?.owner).toBe('app')
   })
@@ -114,7 +121,7 @@ describe('createDispatcher — ownership', () => {
 describe('createDispatcher — re-take on relaunch (#331)', () => {
   it('takes ownership itself when run state is dispatching but the record is absent', async () => {
     let took = false
-    const dispatcher = createDispatcher(
+    const dispatcher = build(
       baseDeps({
         readOwnership: () => Promise.resolve(ABSENT_OWNERSHIP),
         takeOwnership: () => {
@@ -129,7 +136,7 @@ describe('createDispatcher — re-take on relaunch (#331)', () => {
 
   it('never takes ownership while paused', async () => {
     let took = false
-    const dispatcher = createDispatcher(
+    const dispatcher = build(
       baseDeps({
         runState: () => 'paused',
         readOwnership: () => Promise.resolve(ABSENT_OWNERSHIP),
@@ -146,14 +153,15 @@ describe('createDispatcher — re-take on relaunch (#331)', () => {
 
 describe('createDispatcher — stageLiveness', () => {
   it('is null for a repository this app does not own', async () => {
-    const dispatcher = createDispatcher(baseDeps())
+    const dispatcher = build(baseDeps())
     await dispatcher.consider(snapshotWith([tickReport()]))
     expect(dispatcher.stageLiveness(REPO_ID)).toBeNull()
   })
 
   it('reports live and interrupted descriptions once this app owns the repository', async () => {
-    const interrupted = [{ id: 'i1', repoId: REPO_ID, agent: 'plan' as const, number: 7, kind: 'issue' as const, trigger: 'ready' as const, inFlight: 'planning' as const, model: 'opus', claudeSessionId: null, worktree: { path: '/wt', branch: 'b', baseSha: 's' }, startedAt: 't', interruptedAt: 't', reason: 'crash' as const, detail: null, resetsAt: null, costUsd: null, networkRetries: 0 }]
-    const dispatcher = createDispatcher(baseDeps({ readOwnership: () => Promise.resolve(OWNED_BY_APP), interrupted: () => interrupted }))
+    const interrupted = runOf({ id: 'i1', stage: 'plan', agent: 'plan', trigger: 'ready', item: { kind: 'issue', number: 7 }, endedAt: NOW, interruption: { reason: 'crash', detail: null, at: NOW, resetsAt: null } })
+    const { runs } = memoryRuns(REPO_ID, { tickets: [ticketOf({ repo: REPO_ID, ticket: 7, stage: 'plan', runs: [interrupted] })] })
+    const dispatcher = build(baseDeps({ readOwnership: () => Promise.resolve(OWNED_BY_APP), runs }))
     await dispatcher.consider(snapshotWith([tickReport()]))
     expect(dispatcher.stageLiveness(REPO_ID)).toEqual({ live: [], interrupted: ['plan #7'] })
   })
@@ -162,7 +170,7 @@ describe('createDispatcher — stageLiveness', () => {
 describe('createDispatcher — no-launcher', () => {
   it('holds visibly with candidates and no launcher, never fetching or budgeting', async () => {
     let fetched = false
-    const dispatcher = createDispatcher(
+    const dispatcher = build(
       baseDeps({ readOwnership: () => Promise.resolve(OWNED_BY_APP), fetchItemsByNumber: () => { fetched = true; return Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: 'r' }) } }),
     )
     await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
@@ -171,7 +179,7 @@ describe('createDispatcher — no-launcher', () => {
   })
 
   it('stays idle with nothing dispatchable', async () => {
-    const dispatcher = createDispatcher(baseDeps({ readOwnership: () => Promise.resolve(OWNED_BY_APP) }))
+    const dispatcher = build(baseDeps({ readOwnership: () => Promise.resolve(OWNED_BY_APP) }))
     await dispatcher.consider(snapshotWith([tickReport({ actionable: [] })]))
     expect(dispatcher.status()[0]?.state).toEqual({ kind: 'idle' })
   })
@@ -192,7 +200,7 @@ describe('createDispatcher — launching', () => {
       fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'], headRefName: null, author: null }], unavailable: [], fetchedAt: 'r' }),
       ...overrides,
     })
-    return { dispatcher: createDispatcher(deps), launched }
+    return { dispatcher: build(deps), launched, runs: deps.runs }
   }
 
   it('a candidate that moved (label no longer present) is dropped — nothing launches', async () => {
@@ -272,18 +280,12 @@ describe('createDispatcher — launching', () => {
     expect(launched[0]).toMatchObject({ agent: 'review', number: 47, title: '#46 Show the last sync time' })
   })
 
-  it('calls ledger.record only after a launch returns ok', async () => {
-    const ledger = { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined, observeUnmatched: () => ({ class: 'no-record' as const }) }
-    const { dispatcher } = readyToDispatch({ ledger })
-    await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
-    expect(ledger.record).toHaveBeenCalledWith(REPO_ID, 52)
-  })
-
-  it('a launch that reports at-capacity holds the candidate as waiting', async () => {
+  it('a launch that reports at-capacity holds the candidate as waiting, with no run recorded', async () => {
     const launch = fakeLauncher(() => Promise.resolve({ ok: false, kind: 'at-capacity', limit: 4 }))
-    const { dispatcher } = readyToDispatch({ launch })
+    const { dispatcher, runs } = readyToDispatch({ launch })
     await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
     expect(dispatcher.status()[0]?.state).toEqual({ kind: 'at-capacity', limit: 4, waiting: 1 })
+    expect(runs.runsOf(REPO_ID, 'issue', 52)).toEqual([])
   })
 
   it('clears the forceDispatch entry once a forced candidate launches', async () => {
@@ -326,12 +328,12 @@ describe('createDispatcher — launching', () => {
 
 describe('createDispatcher — stopFor and standDown', () => {
   it('stopFor returns false when there is no started record for that item', async () => {
-    const dispatcher = createDispatcher(baseDeps())
+    const dispatcher = build(baseDeps())
     expect(await dispatcher.stopFor(REPO_ID, 999)).toBe(false)
   })
 
   it('standDown returns false when no session is live for that repository', async () => {
-    const dispatcher = createDispatcher(baseDeps())
+    const dispatcher = build(baseDeps())
     expect(await dispatcher.standDown(REPO_ID)).toBe(false)
   })
 
@@ -339,7 +341,7 @@ describe('createDispatcher — stopFor and standDown', () => {
     const close = vi.fn(() => Promise.resolve({ ok: true as const }))
     const launch = fakeLauncher(() => Promise.resolve({ ok: true, sessionKey: 'hosted-1' as SessionKey }))
     const store = fakeStore({ snapshotOf: () => sessionSnapshot(), close })
-    const dispatcher = createDispatcher(
+    const dispatcher = build(
       baseDeps({
         store,
         launch,
@@ -360,7 +362,7 @@ describe('createDispatcher — run state (#314)', () => {
       throw new Error('launch should not be called while draining')
     })
     const store = fakeStore({ snapshotOf: () => sessionSnapshot() })
-    const dispatcher = createDispatcher(
+    const dispatcher = build(
       baseDeps({
         store,
         launch,
@@ -374,7 +376,7 @@ describe('createDispatcher — run state (#314)', () => {
   })
 
   it('status() reports this repository\'s own current run state even for the none owner', async () => {
-    const dispatcher = createDispatcher(baseDeps({ runState: () => 'paused' }))
+    const dispatcher = build(baseDeps({ runState: () => 'paused' }))
     await dispatcher.consider(snapshotWith([tickReport()]))
     expect(dispatcher.status()[0]).toMatchObject({ owner: 'none', runState: 'paused' })
   })
@@ -382,7 +384,7 @@ describe('createDispatcher — run state (#314)', () => {
 
 describe('createDispatcher — shutdown', () => {
   it('consider is a no-op once shutdown has run', async () => {
-    const dispatcher = createDispatcher(baseDeps({ readOwnership: () => Promise.resolve(OWNED_BY_APP) }))
+    const dispatcher = build(baseDeps({ readOwnership: () => Promise.resolve(OWNED_BY_APP) }))
     dispatcher.shutdown()
     await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
     expect(dispatcher.status()).toEqual([])

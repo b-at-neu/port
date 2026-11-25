@@ -11,9 +11,9 @@ function freeSlotsOf(limit: number, open: number): number {
   return Math.max(0, limit - open)
 }
 
-/** `resumeStage(deps, id)` — the kept worktree, resumed through the launcher and sent `RESUME_PROMPT`. The launcher flips the registry entry back to `running` in place. */
+/** `resumeStage(deps, id)` — the kept worktree, resumed through the launcher and sent `RESUME_PROMPT`. The launcher opens the run again in place. */
 export async function resumeStage(deps: RecoverDeps, id: string): Promise<StageResumeResult> {
-  const entry = deps.registry.list().find((e) => e.id === id)
+  const entry = deps.runs.list().find((e) => e.id === id)
   if (entry === undefined) return { kind: 'unknown-stage' }
   if (entry.claudeSessionId === null) return { kind: 'no-session-id' }
 
@@ -30,9 +30,9 @@ export async function resumeStage(deps: RecoverDeps, id: string): Promise<StageR
   return { kind: 'start-failed', message: result.message }
 }
 
-/** `restartStage(deps, id)` — removes the kept worktree without force, applies the existing `retry` plan, then removes the registry entry. Stops at the first failure; a dirty worktree never reaches the label step. */
+/** `restartStage(deps, id)` — removes the kept worktree without force, applies the existing `retry` plan, then clears the run's interruption. Stops at the first failure; a dirty worktree never reaches the label step. */
 export async function restartStage(deps: RecoverDeps, id: string): Promise<StageRestartResult> {
-  const entry = deps.registry.list().find((e) => e.id === id)
+  const entry = deps.runs.list().find((e) => e.id === id)
   if (entry === undefined) return { kind: 'unknown-stage' }
 
   const removed = await deps.removeWorktree(entry.worktree.path, false)
@@ -45,6 +45,6 @@ export async function restartStage(deps: RecoverDeps, id: string): Promise<Stage
   const retried = await deps.applyRetry(entry)
   if (!retried.ok) return { kind: 'label-refused', reason: retried.reason }
 
-  deps.registry.remove(id)
+  await deps.runs.cleared(entry.repoId, id)
   return { kind: 'ok' }
 }

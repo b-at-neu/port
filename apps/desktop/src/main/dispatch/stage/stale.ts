@@ -5,6 +5,7 @@ import type { DispatchRecord, RepoDispatchStatus } from '@/types/dispatch'
 import type { ItemsByNumberFetch } from '@/types/github'
 import type { RepositoryState } from '@/types/state'
 import type { InterruptedStage } from '@/types/stage'
+import { NETWORK_BACKOFF_MS } from '@/utils/pipeline/ticket'
 
 /** Past `resetsAt`, a usage-limit entry waits this long more before it resumes on its own. */
 export const AUTO_RESUME_GRACE_MS = 60_000
@@ -85,9 +86,6 @@ function mayAutoLaunch(status: readonly RepoDispatchStatus[], repoId: Interrupte
   const repo = status.find((s) => s.repoId === repoId)
   return repo !== undefined && repo.owner === 'app' && repo.runState === RUN_TARGET.run
 }
-
-/** Wait before the next automatic resume of a network failure, indexed by retries already made. */
-export const NETWORK_BACKOFF_MS: readonly number[] = [60_000, 300_000, 900_000]
 
 /** Retries after which a network entry is restarted instead of resumed. */
 export const NETWORK_RETRY_LIMIT = NETWORK_BACKOFF_MS.length

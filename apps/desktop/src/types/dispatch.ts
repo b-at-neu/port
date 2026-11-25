@@ -1,7 +1,7 @@
 import type { BoardSnapshot } from '@/types/board'
 import type { RegistryDeps } from '@/types/registry'
 import type { AutoApprovePlanParams, ReadyEntry, EscalateToHumanParams, EscalateToHumanResult, ApplyObservationParams, ApplyObservationResult, ApplyItemActionParams, RerunChecksParams } from '@/types/actions'
-import type { TickActionable, EndedStage, DispatchLedger, RefreshMemo, RerunMemo, TickObservation, ForceDispatch } from '@/types/tick'
+import type { TickActionable, EndedStage, RefreshMemo, RerunMemo, TickObservation, ForceDispatch } from '@/types/tick'
 import type { HostedStore } from '@/types/hosting'
 import type { FetchItemsByNumberParams, ItemsByNumberFetch, ResolvedItem } from '@/types/github'
 import type { StageEvent, StagePlanFile, StageTransitionResult } from '@/types/stage-labels'
@@ -23,11 +23,11 @@ import type { StageAgent, TickObservationKind } from '@/types/tick'
 import type { WriteOutcome } from '@/types/writes'
 import type { StageOutcome } from '@/types/stage-session'
 import type { SessionKey } from '@/types/hosting'
-import type { InterruptedStage, StageDenial, StageDenialStore } from '@/types/stage'
+import type { InterruptedStage, RunStore, StageDenial } from '@/types/stage'
 import type { StageWorktreeTarget } from '@/types/workspace'
 import type { ReviewDispatchFacts } from '@/utils/pipeline/gates'
 
-/** `dispatch.json`'s own per-repository run state — `dispatching`, `draining` (scoped to one repository), or `paused` (the hard stop: the transition into it also stops every in-flight agent). */
+/** The per-repository run state the pipeline state file's `dispatch` section holds — `dispatching`, `draining` (scoped to one repository), or `paused` (the hard stop: the transition into it also stops every in-flight agent). */
 export const RUN_STATES = ['dispatching', 'draining', 'paused'] as const
 export type RunState = (typeof RUN_STATES)[number]
 
@@ -166,9 +166,9 @@ export interface RepoDispatchStatus {
   readonly budget: BudgetStatus | null
   /** The machine-observation writes this app has made for this repository, newest last — `[]` while `owner !== 'app'`, or before the first observation pass runs. */
   readonly observed: readonly ObservationRecord[]
-  /** Off-allowlist tool calls a stage session's policy denied, deduped by proposed rule and bounded to 20 — survive a relaunch through `stage-denials.json`. */
+  /** Off-allowlist tool calls a stage session's policy denied, deduped by proposed rule and bounded to 20 — they survive a relaunch on their runs. */
   readonly denials: readonly StageDenial[]
-  /** Stage sessions that ended without reaching a hand-back — survive a relaunch through `stage-sessions.json`, cleared once the item no longer carries the in-flight label. */
+  /** Stage sessions that ended without reaching a hand-back — they survive a relaunch on their runs, cleared once the item no longer carries the in-flight label. */
   readonly interrupted: readonly InterruptedStage[]
 }
 
@@ -237,20 +237,16 @@ export interface Dispatcher {
   recordOutcome(repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome, plan: StagePlanFile | null): void
   /** A blocked stage session's next turn began — the app clears the block. A no-op if the key is not tracked. */
   recordResumedTurn(repoId: RepoId, sessionKey: SessionKey): void
-  /** An interrupted entry was resumed as a session: its hand-back now settles labels. */
-  trackResumed(repoId: RepoId, sessionKey: SessionKey, entry: InterruptedStage): void
   /** `true` unless this app currently owns `repoId` — an unread repository (`'none'`) holds, the fail direction for `SESSION REQUIRED`. */
   holdsSessionRequired(repoId: RepoId): boolean
-  /** Stage-denial bookkeeping: record (deduped by rule, bounded to 20), dismiss by id (operator's own Dismiss), or clear every denial proposing a given rule (once Allow succeeds or reports `already-allowed`). */
-  recordDenial(repoId: RepoId, denial: StageDenial): void
+  /** Stage-denial bookkeeping: dismiss by id (operator's own Dismiss), or clear every denial proposing a given rule (once Allow succeeds or reports `already-allowed`). */
   dismissDenial(repoId: RepoId, id: string): void
   clearDenialsFor(repoId: RepoId, rule: string): void
 }
 
 export interface CreateDispatcherParams {
   readonly store: HostedStore
-  readonly denials: StageDenialStore
-  readonly ledger: DispatchLedger
+  readonly runs: RunStore
   /** `null` is the honest state until a real launcher exists; a candidate sits visibly at `no-launcher`. */
   readonly launch: StageLauncher | null
   /** Read fresh every pass, never cached. */
@@ -282,8 +278,6 @@ export interface CreateDispatcherParams {
   readonly now: () => Date
   /** Best-effort: never rejects, and no call site depends on it landing. */
   readonly recordIncident: RecordIncident
-  /** Interrupted stage sessions for a repository, read from `main/dispatch/stage/registry.ts` — `[]` when none is wired (tests, or before the registry loads). */
-  readonly interrupted?: (repoId: RepoId) => readonly InterruptedStage[]
 }
 
 /** The writes the dispatch runtime hands to the dispatcher and the auto-planner, already bound to the state writer. */
@@ -327,8 +321,9 @@ export interface HaltDispatchParams {
   readonly now: () => Date
 }
 
-// This app's own per-item launch record, kept internally by the loop.
+/** A run as the dispatch loop reads it: one stage-session launch attempt, projected from `Ticket.runs`. */
 export interface StageRecord {
+  readonly runId: string
   // `null` for a `failed` record — no session was ever created to key.
   readonly sessionKey: SessionKey | null
   readonly agent: StageAgent
@@ -410,9 +405,6 @@ export interface RunStateStore {
   readonly current: (repoId: RepoId) => RepoRunState
   readonly status: () => RunStateStoreStatus
   readonly snapshot: (repoIds: readonly RepoId[]) => RunStatesSnapshot
-  /** Resolves the on-disk state once, at startup. `registered` is called only for a v1 file, to
-   *  migrate every currently-registered repository onto its own entry. */
-  readonly load: (registered: () => Promise<readonly RepoId[] | null>) => Promise<void>
   /** A failed `set(..., 'paused' | 'draining', ...)` still applies in memory; a failed
    *  `set(..., RUN_TARGET.run, ...)` changes nothing at all. */
   readonly set: (repoIds: readonly RepoId[], state: RunState, at: string) => Promise<SetRunStateResult>
