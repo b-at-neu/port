@@ -5,10 +5,10 @@ import { ScreenHeader } from '@/renderer/components/screen-header'
 import { PhasePill } from '@/renderer/components/phase-pill'
 import { StatusPill } from '@/renderer/components/status-pill'
 import { NEEDS_YOU_TONE } from '@/renderer/lib/phase-tone'
-import { waitingLabelOf } from '@/renderer/session/interaction-copy'
+import { waitingLabelOf } from '@/renderer/session/model'
 import type { PillStatus } from '@/types/components'
 import { CapacityMenu } from '@/renderer/session/capacity-menu'
-import { END_COPY, PHASE_COPY } from '@/renderer/session/copy'
+import { CHANGES_BUTTON, CLOSE_BUTTON, CLOSING_BUTTON, DETACHED_BRANCH, END_COPY, PHASE_COPY, PHASE_LABEL, STOP_BUTTON, STOPPING_BUTTON } from '@/renderer/session/copy'
 import { sessionDisplayLabel } from '@/utils/hosting/label'
 import type { HostedSessionSnapshot, SessionPhase } from '@/types/hosting'
 
@@ -19,14 +19,6 @@ const PHASE_STATUS: Readonly<Record<SessionPhase, PillStatus>> = {
   interrupting: 'working',
   closing: 'idle',
   ended: 'idle',
-}
-
-const PHASE_LABEL: Readonly<Record<Exclude<SessionPhase, 'ended'>, string>> = {
-  starting: 'Starting',
-  ready: 'Idle',
-  streaming: 'Streaming',
-  interrupting: 'Stopping…',
-  closing: 'Closing…',
 }
 
 export function SessionHeader({
@@ -59,7 +51,7 @@ export function SessionHeader({
         {snapshot.workspace.worktree !== null ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="truncate font-mono text-meta text-muted-foreground">{snapshot.workspace.worktree.branch ?? 'detached'}</span>
+              <span className="truncate font-mono text-meta text-muted-foreground">{snapshot.workspace.worktree.branch ?? DETACHED_BRANCH}</span>
             </TooltipTrigger>
             <TooltipContent>{snapshot.workspace.worktree.path}</TooltipContent>
           </Tooltip>
@@ -68,17 +60,17 @@ export function SessionHeader({
       <div className="flex shrink-0 items-center gap-2">
         {snapshot.workspace.root !== null ? (
           <Button variant={changesOpen ? 'secondary' : 'outline'} size="small" aria-pressed={changesOpen} onClick={onToggleChanges}>
-            Changes
+            {CHANGES_BUTTON}
           </Button>
         ) : null}
         {phaseCopy.stop !== 'hidden' ? (
           <Button variant="outline" size="small" disabled={phaseCopy.stop === 'disabled' || phaseCopy.stop === 'stopping'} onClick={onStop}>
-            {phaseCopy.stop === 'stopping' ? 'Stopping…' : 'Stop'}
+            {phaseCopy.stop === 'stopping' ? STOPPING_BUTTON : STOP_BUTTON}
           </Button>
         ) : null}
         {phaseCopy.close !== 'hidden' ? (
           <Button variant="outline" size="small" disabled={phaseCopy.close === 'closing'} onClick={onClose}>
-            {phaseCopy.close === 'closing' ? 'Closing…' : 'Close session'}
+            {phaseCopy.close === 'closing' ? CLOSING_BUTTON : CLOSE_BUTTON}
           </Button>
         ) : null}
         <CapacityMenu usage={snapshot.usage} onDismiss={onDismiss} showDismiss={phase === 'ended'} />

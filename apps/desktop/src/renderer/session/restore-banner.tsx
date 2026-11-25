@@ -6,8 +6,7 @@ import type { RestorableSession } from '@/types/hosting'
 import type { RepositoryEntry } from '@/utils/repos'
 import { folderLabel } from '@/utils/workspace/label'
 import { adoptSession, selectSession } from '@/renderer/session/actions'
-import { startFailureCopy } from '@/renderer/session/copy'
-import { RESTORE_DISMISS, RESTORE_FORGET, RESTORE_RESUME_ALL, RESTORE_RESUME_ONE, RESTORE_REVIEW, restoreBannerLine, restoreOpenedLine, restorePartialLine, restoreUnavailableLine } from '@/renderer/session/rail-copy'
+import { DISMISS_BUTTON, RESTORE_FORGET, RESTORE_RESUME_ALL, RESTORE_RESUME_ONE, RESTORE_REVIEW, restoreBannerLine, restoreOpenedLine, restorePartialLine, restoreUnavailableLine, startFailureCopy } from '@/renderer/session/copy'
 
 function repoLabelFor(repos: readonly RepositoryEntry[] | undefined, repoId: string): string {
   const entry = repos?.find((candidate) => candidate.id === repoId)
@@ -110,7 +109,7 @@ export function RestoreBanner() {
           {RESTORE_REVIEW}
         </Button>
         <Button size="small" variant="outline" onClick={() => void dismiss()}>
-          {RESTORE_DISMISS}
+          {DISMISS_BUTTON}
         </Button>
       </div>
       {reviewing ? (

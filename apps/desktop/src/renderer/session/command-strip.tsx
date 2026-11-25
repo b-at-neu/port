@@ -6,8 +6,8 @@ import { Button } from '@/renderer/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/renderer/components/ui/collapsible'
 import { useActionMutation } from '@/renderer/actions/use-action-mutation'
 import type { AgentSummary, CommandSummary, HostedSessionSnapshot, SessionKey } from '@/types/hosting'
-import { argumentRequired, bannerCopy, chipCopy, INVOKE_REJECTED, invokeFailureCopy } from '@/renderer/session/commands-copy'
-import { AGENTS_DISCLOSURE_NOTE } from '@/renderer/session/composer-copy'
+import { AGENTS_DISCLOSURE_NOTE, bannerCopy, chipCopy, INVOKE_REJECTED, invokeFailureCopy } from '@/renderer/session/copy'
+import { argumentRequired } from '@/renderer/session/model'
 
 interface OpenRow {
   readonly commandName: string

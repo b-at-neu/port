@@ -3,8 +3,7 @@ import type { SessionCloseResult, SessionDismissResult, SessionMarkResult, Sessi
 import type { RenderableStartFailure, StartFailureCopy } from '@/types/session'
 import type { ActionToast } from '@/types/toast'
 import { UNDO_LABEL } from '@/renderer/lib/copy'
-import { ARCHIVE_UNAVAILABLE, archiveRemoveFailedToast, archiveSuccessToast, CLOSE_SUCCESS, CLOSE_UNKNOWN_SESSION, START_UNREACHABLE, startFailureCopy, TASK_STOP_SUCCESS, TASK_STOP_UNKNOWN, TASK_STOP_UNKNOWN_SESSION, taskStopFailed } from '@/renderer/session/copy'
-import { markFailureToast, markSuccessToast } from '@/renderer/session/marks-copy'
+import { ARCHIVE_UNAVAILABLE, archiveRemoveFailedToast, archiveSuccessToast, CLOSE_SUCCESS, CLOSE_UNKNOWN_SESSION, markFailureToast, markSuccessToast, START_UNREACHABLE, startFailureCopy, TASK_STOP_SUCCESS, TASK_STOP_UNKNOWN, TASK_STOP_UNKNOWN_SESSION, taskStopFailed } from '@/renderer/session/copy'
 
 export interface SendOutcome {
   readonly ok: boolean

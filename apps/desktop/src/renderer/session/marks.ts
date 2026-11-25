@@ -4,7 +4,7 @@ import { useActionMutation } from '@/renderer/actions/use-action-mutation'
 import type { SessionKey } from '@/types/hosting'
 import { useCloseSession } from '@/renderer/session/actions'
 import { markToast } from '@/renderer/session/outcomes'
-import { markPendingToast } from '@/renderer/session/marks-copy'
+import { markPendingToast } from '@/renderer/session/copy'
 
 export function useSessionMarks() {
   return useIpcQuery('session.marks')
