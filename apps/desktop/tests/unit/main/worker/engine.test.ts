@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { mkdir, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { hostFs } from '@/main/platform'
 import { createInProcessEngine } from '@/main/worker/engine'
 import type { RepoId } from '@/utils/repos'
 import { engineCtx, fakeGit, scriptedConditional } from '../../../fixtures/watcher-harness'
@@ -16,7 +17,7 @@ async function makeClaudeHome(): Promise<string> {
 
 describe('createInProcessEngine', () => {
   it('projects the cache it refreshed, and reports sessions as unscanned before that', async () => {
-    const engine = createInProcessEngine(engineCtx({ git: fakeGit({ worktreeList: 0 }), claudeHome: await makeClaudeHome() }), () => Promise.resolve({ ok: true, sessions: [] }))
+    const engine = createInProcessEngine(engineCtx({ git: fakeGit({ worktreeList: 0 }), fs: hostFs, claudeHome: await makeClaudeHome() }), () => Promise.resolve({ ok: true, sessions: [] }))
     const before = await engine.project({ repositories: [] })
     expect(before.sessions.ok).toBe(false)
     expect(await engine.refreshSessions({ repos: [] })).toMatchObject({ ok: true })

@@ -1,29 +1,21 @@
-import type { UnknownStreaks, RefreshMemo, RerunMemo, ForceDispatch } from '@/types/tick'
-import type { Run } from '@/utils/pipeline/ticket'
-import type { PipelineState, RefreshOutcome, RepositoryState } from '@/types/state'
-import type { PipelineView, TrackedRef } from '@/types/pipeline-state'
-import type { StateEngine } from '@/types/offload'
-import type { SessionReader } from '@/types/sessions'
+import type { PipelineState, RefreshOutcome } from '@/types/state'
+import type { PipelineView } from '@/types/pipeline-state'
 
 // The only clock in main — one timer, rescheduled to the earliest `nextDueAt`. `schedule.ts` decides *when*; this file is the only place under `src/main/` allowed to name `setTimeout`.
-import type { ConditionalTransport, GitHubTransport } from '@/types/platform'
-import type { GitRunner } from '@/types/platform'
-import type { PipelineItemKind, RateLimitInfo } from '@/types/github'
+import type { RateLimitInfo } from '@/types/github'
 import { verifiableVocabularyOf } from '@/utils/labels/display'
 import type { RepoId } from '@/utils/repos'
 import type { RepositoryEntry } from '@/utils/repos'
 import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth, isDeferred } from '@/types/board'
 import type { BoardSnapshot, RepositoryHealth, SourceHealth, SourceKind } from '@/types/board'
-import type { RepoDispatchStatus, RunStatesSnapshot } from '@/types/dispatch'
-import { createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
 import { planTick } from '@/main/pipeline/tick/plan'
 import { autoPlanStatusOf } from '@/main/pipeline/tick/auto-plan'
 
-import type { EndedStage } from '@/types/tick'
 import { isReady } from '@/main/pipeline/board/read'
 import { afterFailure, afterSuccess, budgetedIntervalMs, deferredUntil, dueSources, githubSweepGapMs, nextDueAt } from '@/main/pipeline/board/schedule'
-import { createHostEngine } from '@/main/worker/engine'
 import { createGithubPrecheck } from '@/main/pipeline/board/precheck'
+import type { WatcherContext } from '@/main/pipeline/context'
+import { finishPipelineState, retryMirrors } from '@/main/pipeline/state/finish'
 
 import type { PipelineWatcher, RefreshRequest, TimerFactory, TimerHandle } from '@/types/state'
 
@@ -32,58 +24,11 @@ const defaultSetTimer: TimerFactory = (callback, ms) => {
   return { clear: () => clearTimeout(handle) }
 }
 
-interface CreatePipelineWatcherParams {
-  /** A static list, or a provider re-invoked on the GitHub cadence, so a repository added or removed appears on the board without a restart. */
-  readonly repositories: readonly RepositoryEntry[] | ((options: { readonly fresh: boolean }) => Promise<readonly RepositoryEntry[]>)
+interface WatcherSinks {
   readonly onSnapshot: (snapshot: BoardSnapshot) => void
   /** Fired after `buildSnapshot()` on the timer path and in `refresh()` — never in `republish()`, so a dispatch pass never re-triggers itself off its own state change. */
   readonly onTick?: (snapshot: BoardSnapshot) => void
-  /** Owns the source cache and every CPU-bound read. Defaults to an in-process engine built from `github`/`git`/`sessionReader`/`claudeHome`, which the worker-backed one replaces in production. */
-  readonly engine?: StateEngine
-  readonly github?: GitHubTransport
-  /** Used by the default engine's issues-list pre-check; tests inject one so a clock past 10s never reaches the network. */
-  readonly conditional?: ConditionalTransport
-  readonly git?: GitRunner
-  readonly sessionReader?: SessionReader
-  readonly claudeHome?: string
-  readonly now?: () => Date
   readonly setTimer?: TimerFactory
-  /** Read fresh on every `buildSnapshot()`, never cached. Defaults to every repository reading paused. */
-  readonly runStates?: (repoIds: readonly RepoId[]) => RunStatesSnapshot
-  /** The runs the stall ladder reads, per item. `undefined` reads as none, so no claim is ever reset. */
-  readonly runsOf?: (repoId: RepoId, kind: PipelineItemKind, number: number) => readonly Run[]
-  /** A dispatcher built after the watcher needs this same streak memo, never a second instance that would disagree with what the board just reported. */
-  readonly unknownStreaks?: UnknownStreaks
-  /** Shared with the dispatcher's own observation pass, never a second instance that would disagree with what the dispatcher just wrote. */
-  readonly refreshMemo?: RefreshMemo
-  /** Shared with the dispatcher's own observation pass, so one head's failed checks are re-run once. `undefined` never re-runs a check. */
-  readonly rerunMemo?: RerunMemo
-  /** The Needs-you "Dispatch anyway" override — shared with the dispatcher's own consumption pass, never a second instance that would disagree on which entries are still live. */
-  readonly forceDispatch?: ForceDispatch
-  /** This repository's own dispatcher session's `started` tasks, as descriptions. `undefined` reads as `[]`. */
-  readonly startedTasks?: (repoId: RepoId) => readonly string[]
-  /** Read fresh inside `buildSnapshot()`, never cached. `undefined` reads as `[]`. */
-  readonly dispatchStatus?: () => readonly RepoDispatchStatus[]
-  /** `planTick`'s own `holdSessionRequired` input, read fresh per repository. `undefined` reads as `true`. */
-  readonly holdSessionRequired?: (repoId: RepoId) => boolean
-  /** `planTick`'s own `stageLiveness` input, read fresh per repository. `undefined` reads as `null` for every repository. */
-  readonly stageLiveness?: (repoId: RepoId) => { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
-  /** `planTick`'s own `endedStages` input, read fresh per repository. `undefined` reads as `[]` for every repository. */
-  readonly endedStages?: (repoId: RepoId) => readonly EndedStage[]
-  /** The auto-planner's refused swaps, read fresh per repository. `undefined` reads as none. */
-  readonly autoPlanRefused?: (repoId: RepoId) => ReadonlySet<number>
-  /** Read fresh on every projection. `undefined` reads every repository as unseeded. */
-  readonly pipelineView?: (repoId: RepoId) => PipelineView
-  /** The store's tracked items for a repository's GitHub read; `null` reads the seed sweep. */
-  readonly trackedRefs?: (repoId: RepoId) => readonly TrackedRef[] | null
-  /** Seeds a repository whose view was unseeded from the state just projected. */
-  readonly seedPipelineState?: (repoId: RepoId, state: Extract<RepositoryState, { readonly ok: true }>) => Promise<void>
-  /** Writes the terminal state of each merged pull request, then drops the closed items. Undefined keeps today's behaviour: nothing is written or dropped. */
-  readonly finishPipelineState?: (entry: Extract<RepositoryEntry, { readonly status: 'ready' }>, finished: { readonly closed: readonly number[]; readonly merged: readonly number[] }) => Promise<void>
-  /** Re-mirrors the items whose last label write failed. Fire-and-forget: it never blocks a snapshot. */
-  readonly retryMirrors?: (entry: Extract<RepositoryEntry, { readonly status: 'ready' }>) => Promise<void>
-  /** Settles once the store has loaded; the first projection waits on it. */
-  readonly pipelineReady?: () => Promise<void>
 }
 
 function repoRefOf(entry: Extract<RepositoryEntry, { status: 'ready' }>): { readonly owner: string; readonly name: string } {
@@ -98,11 +43,13 @@ function isForced(request: RefreshRequest | undefined, kind: SourceKind, repoId?
   return true
 }
 
-export function createPipelineWatcher(params: CreatePipelineWatcherParams): PipelineWatcher {
-  const now = params.now ?? (() => new Date())
-  const setTimer = params.setTimer ?? defaultSetTimer
-  const engine = params.engine ?? createHostEngine({ github: params.github, conditional: params.conditional, git: params.git, claudeHome: params.claudeHome, now }, params.sessionReader)
-  const precheck = createGithubPrecheck({ engine, now })
+export function createPipelineWatcher(ctx: WatcherContext, sinks: WatcherSinks): PipelineWatcher {
+  const now = ctx.clock.now
+  const setTimer = sinks.setTimer ?? defaultSetTimer
+  // `ctx.live` is read at call time only: the watcher is built before the services it reads exist.
+  const precheck = createGithubPrecheck({ engine: { precheckGithub: (target) => ctx.live.engine.precheckGithub(target) }, now })
+  const store = ctx.stores.pipelineState
+  const mirrorRetries = new Map<string, number>()
   const githubCost = new Map<RepoId, number>()
   const githubRateLimit = new Map<RepoId, RateLimitInfo>()
   let projections: Promise<unknown> = Promise.resolve()
@@ -111,17 +58,11 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
   const inFlight = new Set<string>()
   const active = new Map<string, Promise<void>>()
   const queued = new Map<string, Promise<void>>()
-  let repositories: readonly RepositoryEntry[] = Array.isArray(params.repositories) ? params.repositories : []
-  let hasListedRepositories = Array.isArray(params.repositories)
+  let repositories: readonly RepositoryEntry[] = []
+  let hasListedRepositories = false
   let stopped = false
   let timer: TimerHandle | null = null
-  // Process-scoped for this watcher's whole lifetime, so a restarted app starts each at nothing recorded.
-  const unknownStreaks = params.unknownStreaks ?? createUnknownStreaks()
-  const refreshMemo = params.refreshMemo ?? createRefreshMemo()
-  const startedTasks = params.startedTasks ?? ((): readonly string[] => [])
-  const runStatesOf =
-    params.runStates ??
-    ((repoIds: readonly RepoId[]): RunStatesSnapshot => ({ store: { kind: 'loaded' }, repositories: repoIds.map((repoId) => ({ repoId, state: 'paused', since: null })) }))
+  const runStatesOf = (repoIds: readonly RepoId[]) => ctx.stores.runStates.snapshot(repoIds)
   let latest: BoardSnapshot = {
     state: {
       repositories: [],
@@ -134,12 +75,11 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     runStates: runStatesOf(repositories.map((entry) => entry.id)),
     nextWakeupAt: null,
     emittedAt: now().toISOString(),
-    dispatch: params.dispatchStatus?.() ?? [],
+    dispatch: [],
     autoPlan: [],
   }
 
-  const noRefusals: ReadonlySet<number> = new Set()
-  const autoPlanOf = (tick: BoardSnapshot['tick'], dispatch: BoardSnapshot['dispatch']): BoardSnapshot['autoPlan'] => autoPlanStatusOf(tick, dispatch, (repoId) => params.autoPlanRefused?.(repoId) ?? noRefusals)
+  const autoPlanOf = (tick: BoardSnapshot['tick'], dispatch: BoardSnapshot['dispatch']): BoardSnapshot['autoPlan'] => autoPlanStatusOf(tick, dispatch, (repoId) => ctx.live.autoPlanner.refused(repoId))
 
   function ensureHealth(repoId: RepoId): RepositoryHealth {
     const existing = health.get(repoId)
@@ -171,12 +111,12 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
 
   async function composeSnapshot(): Promise<BoardSnapshot | null> {
     const entries = repositories
-    await params.pipelineReady?.()
+    await store.ready
     const views: Record<string, PipelineView> = {}
-    for (const entry of entries.filter(isReady)) views[entry.id] = params.pipelineView?.(entry.id) ?? { kind: 'unseeded' }
+    for (const entry of entries.filter(isReady)) views[entry.id] = store.view(entry.id)
     let state: PipelineState
     try {
-      state = await engine.project({ repositories: entries, views })
+      state = await ctx.live.engine.project({ repositories: entries, views })
     } catch (error) {
       console.error('[watcher] projection failed', error)
       return null
@@ -188,13 +128,11 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
 
   /** One pass per projection over the repositories the store holds; a failure is already recorded on the item, so it is only logged here. */
   function retryFailedMirrors(entries: readonly RepositoryEntry[], views: Readonly<Record<string, PipelineView>>): void {
-    if (params.retryMirrors === undefined) return
     for (const entry of entries.filter(isReady)) {
       const key = `${entry.id}:mirror`
       if (views[entry.id]?.kind !== 'store' || inFlight.has(key)) continue
       inFlight.add(key)
-      params
-        .retryMirrors(entry)
+      retryMirrors(ctx, entry, ctx.paths.userData, mirrorRetries)
         .catch((error: unknown) => console.error('[watcher] mirror retry failed', error))
         .finally(() => inFlight.delete(key))
     }
@@ -202,10 +140,9 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
 
   /** Seeding sees the same items the board just showed, so no ticket changes stage. */
   async function seedUnseeded(state: PipelineState, views: Readonly<Record<string, PipelineView>>): Promise<void> {
-    if (params.seedPipelineState === undefined) return
     for (const repository of state.repositories) {
       if (!repository.ok || views[repository.repoId]?.kind !== 'unseeded') continue
-      await params.seedPipelineState(repository.repoId, repository)
+      await store.seed(repository.repoId, repository)
     }
   }
 
@@ -229,24 +166,24 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
         if (checkDispositions === undefined) throw new Error(`no checkDispositions for ready repository ${String(repository.repoId)}`)
         return planTick({
           repository,
-          runsOf: params.runsOf,
-          unknownStreaks,
+          runsOf: ctx.stores.runs.runsOf,
+          unknownStreaks: ctx.live.memos.unknownStreaks,
           nextDecisionAt: nextDueAt(ensureHealth(repository.repoId).github, now()),
           now,
           reviewCycleCap,
-          startedTasks: startedTasks(repository.repoId),
-          refreshMemo,
-          rerunMemo: params.rerunMemo,
+          startedTasks: ctx.live.dispatcher.liveStages(repository.repoId),
+          refreshMemo: ctx.live.memos.refreshMemo,
+          rerunMemo: ctx.live.memos.rerunMemo,
           checkDispositions,
-          holdSessionRequired: params.holdSessionRequired?.(repository.repoId) ?? true,
-          stageLiveness: params.stageLiveness?.(repository.repoId) ?? null,
-          endedStages: params.endedStages?.(repository.repoId) ?? [],
-          forceDispatch: params.forceDispatch,
+          holdSessionRequired: ctx.live.dispatcher.holdsSessionRequired(repository.repoId),
+          stageLiveness: ctx.live.dispatcher.stageLiveness(repository.repoId),
+          endedStages: ctx.live.dispatcher.endedStages(repository.repoId),
+          forceDispatch: ctx.live.forceDispatch,
         })
       })
 
     const nextWakeupAt = stopped ? null : earliestDueAt().toISOString()
-    const dispatch = params.dispatchStatus?.() ?? []
+    const dispatch = ctx.live.dispatcher.status()
     latest = {
       state,
       health: healthList,
@@ -302,14 +239,14 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
   async function readRepoSource(entry: Extract<RepositoryEntry, { status: 'ready' }>, kind: 'github' | 'worktrees' | 'denials'): Promise<void> {
     let outcome: RefreshOutcome
     if (kind === 'worktrees') {
-      outcome = await engine.refreshWorktrees({ repoId: entry.id, repoRoot: entry.path })
+      outcome = await ctx.live.engine.refreshWorktrees({ repoId: entry.id, repoRoot: entry.path })
     } else if (kind === 'denials') {
-      outcome = await engine.refreshDenials({ repoId: entry.id, repoRoot: entry.path })
+      outcome = await ctx.live.engine.refreshDenials({ repoId: entry.id, repoRoot: entry.path })
     } else {
       const startedAt = now().toISOString()
-      outcome = await engine.refreshGithub({ repoId: entry.id, repo: repoRefOf(entry), vocabulary: entry.config.vocabulary, verify: verifiableVocabularyOf(entry.config), integration: entry.config.branches.integration, tracked: params.trackedRefs?.(entry.id) ?? null })
+      outcome = await ctx.live.engine.refreshGithub({ repoId: entry.id, repo: repoRefOf(entry), vocabulary: entry.config.vocabulary, verify: verifiableVocabularyOf(entry.config), integration: entry.config.branches.integration, tracked: store.tracked(entry.id) })
       precheck.settled(entry.id, startedAt, outcome.ok)
-      if (outcome.closed !== undefined && outcome.closed.length > 0) await params.finishPipelineState?.(entry, { closed: outcome.closed, merged: outcome.merged ?? [] })
+      if (outcome.closed !== undefined && outcome.closed.length > 0) await finishPipelineState(ctx, entry, { closed: outcome.closed, merged: outcome.merged ?? [] }, ctx.paths.userData)
     }
     const current = ensureHealth(entry.id)
     const previous = current[kind]
@@ -335,7 +272,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     if (inFlight.has(key)) return
     inFlight.add(key)
     try {
-      const outcome = await engine.refreshSessions({ repos: readyEntries.map((entry) => ({ id: entry.id, root: entry.path })) })
+      const outcome = await ctx.live.engine.refreshSessions({ repos: readyEntries.map((entry) => ({ id: entry.id, root: entry.path })) })
       sessionsHealth = outcome.ok ? afterSuccess(sessionsHealth, 'sessions', now()) : afterFailure(sessionsHealth, 'sessions', now(), outcome.error ?? 'unknown error')
     } finally {
       inFlight.delete(key)
@@ -354,8 +291,9 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     const githubWillRun = currentReady.some((entry) => isDue('github', entry.id) || isForced(request, 'github', entry.id))
     // An explicit github-scoped refresh bypasses the list cache, so a manual refresh always re-reads config.
     const explicit = request !== undefined && (request.source === undefined || request.source === 'github')
-    if (typeof params.repositories === 'function' && (!hasListedRepositories || githubWillRun || explicit)) {
-      repositories = await params.repositories({ fresh: explicit })
+    if (!hasListedRepositories || githubWillRun || explicit) {
+      const listed = await ctx.repos.list({ fresh: explicit })
+      repositories = listed.ok ? listed.repositories : []
       hasListedRepositories = true
     }
 
@@ -394,8 +332,8 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
         .then(buildSnapshot)
         .then((snap) => {
           if (snap !== null) {
-            params.onSnapshot(snap)
-            params.onTick?.(snap)
+            sinks.onSnapshot(snap)
+            sinks.onTick?.(snap)
           }
           scheduleNext()
         })
@@ -410,8 +348,8 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       await tick(request)
       const snap = await buildSnapshot()
       if (snap !== null) {
-        params.onSnapshot(snap)
-        params.onTick?.(snap)
+        sinks.onSnapshot(snap)
+        sinks.onTick?.(snap)
       }
       scheduleNext()
       return snap ?? latest
@@ -428,9 +366,9 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     },
     republish(): void {
       if (stopped) return
-      const dispatch = params.dispatchStatus?.() ?? []
+      const dispatch = ctx.live.dispatcher.status()
       latest = { ...latest, dispatch, autoPlan: autoPlanOf(latest.tick, dispatch), emittedAt: now().toISOString() }
-      params.onSnapshot(latest)
+      sinks.onSnapshot(latest)
     },
   }
 }

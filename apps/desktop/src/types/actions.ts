@@ -1,5 +1,4 @@
 import type { BoardSnapshot } from '@/types/board'
-import type { RegistryDeps } from '@/types/registry'
 import type { GateDecision } from '@/types/gate'
 import type { ReconciledItem } from '@/types/state'
 import type { WriteObservation } from '@/types/dispatch'
@@ -181,7 +180,6 @@ export interface AutoApprovePlanParams {
 }
 
 export interface GateAnswerParams {
-  readonly registryDeps: RegistryDeps
   readonly repoId: RepoId
   readonly number: number
   readonly decision: GateDecision
@@ -193,7 +191,6 @@ export interface GateAnswerParams {
 }
 
 export interface GatePreflightParams {
-  readonly registryDeps: RegistryDeps
   readonly repoId: RepoId
   readonly number: number
 }

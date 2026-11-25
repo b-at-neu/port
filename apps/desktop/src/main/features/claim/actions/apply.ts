@@ -8,5 +8,5 @@ export const claimApply = defineAction({
   name: 'claim.apply',
   kind: 'mutation',
   input: z.object({ repoId, number: positiveInt, planGate: z.enum(PLAN_GATE_CHOICES), confirmedAssignees: z.array(z.string()).readonly() }),
-  run: (ctx, input) => resolveClaimApply(ctx.repos.deps, input, ctx.paths.userData, ctx.live.actions.claimDeps),
+  run: (ctx, input) => resolveClaimApply(ctx, input, ctx.paths.userData),
 })

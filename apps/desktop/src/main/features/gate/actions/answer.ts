@@ -8,5 +8,5 @@ export const gateAnswer = defineAction({
   name: 'gate.answer',
   kind: 'mutation',
   input: z.object({ repoId, number: positiveInt, decision: z.enum(GATE_DECISIONS), feedback: z.string().nullable(), skipComment: z.boolean() }),
-  run: (ctx, input) => resolveGateAnswer(ctx.repos.deps, input, ctx.paths.userData, ctx.paths.temp, ctx.seams.gate),
+  run: (ctx, input) => resolveGateAnswer(input, ctx.paths.userData, ctx.paths.temp, ctx.seams.gate),
 })

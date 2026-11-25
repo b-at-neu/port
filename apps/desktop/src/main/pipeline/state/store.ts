@@ -6,22 +6,18 @@ import { migrateRuns, NO_RUN_FILES, type RunFiles } from '@/main/pipeline/state/
 import { FILE_VERSION, emptyFile, parseFile, prune, recordMirror, seedFrom, ticketFor, trackedOf, viewOf, withTicket } from '@/main/pipeline/state/model'
 import { isOpen, recoverRuns, ticketOfRun } from '@/main/pipeline/runs'
 import { applyEvent } from '@/main/pipeline/transitions'
+import { pathOps } from '@/main/platform/paths'
+import type { Platform } from '@/main/platform'
 import type { DispatchEntry, PipelineStateFile, PipelineStateStore, RepoRecord, StoreApplyResult, UnsettledRun } from '@/types/pipeline-state'
 import type { FileResult } from '@/types/platform'
 import type { TicketEvent } from '@/types/stage-labels'
 import type { Ticket } from '@/utils/pipeline/ticket'
 import type { RepoId } from '@/utils/repos'
 
-interface CreatePipelineStateStoreParams {
-  /** The file's full path; the composition in `default.ts` is the only place that names it. */
-  readonly path: string
-  /** The three files version 3 replaces, read once for the migration and deleted once the new file is written. */
-  readonly legacy: { readonly dispatch: string; readonly sessions: string; readonly denials: string }
-  readonly readJson: <T>(path: string) => Promise<FileResult<T>>
-  readonly writeJsonAtomic: (path: string, value: unknown) => Promise<FileResult<void>>
-  readonly remove: (path: string) => Promise<FileResult<void>>
-  readonly now: () => Date
-}
+export const PIPELINE_STATE_FILE = 'pipeline-state.json'
+
+/** The three files version 3 replaces, read once for the migration and deleted once the new file is written. */
+const LEGACY_FILES = { dispatch: 'dispatch.json', sessions: 'stage-sessions.json', denials: 'stage-denials.json' } as const
 
 // `reset`: a missing, malformed or newer-version file is empty and the next write replaces it, so every repository reads paused and reseeds from labels, and only history and runs are lost; a bad ticket is dropped by `parseFile`, never its repository.
 const fileSchema = z.object({ version: z.literal(FILE_VERSION), dispatch: z.record(z.string(), z.unknown()), repositories: z.record(z.string(), z.object({ seededAt: z.string(), tickets: z.record(z.string(), z.unknown()) })) })
@@ -32,7 +28,15 @@ function migrateFile(from: number, raw: unknown, files: RunFiles | undefined): u
   throw new Error(`no migration from pipeline state version ${String(from)}`)
 }
 
-export function createPipelineStateStore(params: CreatePipelineStateStoreParams): PipelineStateStore {
+export function createPipelineStateStore(ctx: Pick<Platform, 'fs' | 'clock' | 'paths'>): PipelineStateStore {
+  const { fs } = ctx
+  const params = {
+    path: pathOps.join(ctx.paths.userData, PIPELINE_STATE_FILE),
+    legacy: { dispatch: pathOps.join(ctx.paths.userData, LEGACY_FILES.dispatch), sessions: pathOps.join(ctx.paths.userData, LEGACY_FILES.sessions), denials: pathOps.join(ctx.paths.userData, LEGACY_FILES.denials) },
+    readJson: fs.readJson,
+    remove: fs.remove,
+    now: ctx.clock.now,
+  }
   const store = createJsonStore<z.infer<typeof fileSchema>, RunFiles>({
     file: params.path,
     version: FILE_VERSION,
@@ -40,7 +44,7 @@ export function createPipelineStateStore(params: CreatePipelineStateStoreParams)
     migrate: migrateFile,
     initial: emptyFile(),
     unreadable: 'reset',
-    fs: { readJson: params.readJson, writeJsonAtomic: params.writeJsonAtomic },
+    fs: { readJson: fs.readJson, writeJsonAtomic: fs.writeJsonAtomic },
   })
   let file: PipelineStateFile = emptyFile()
   const replays = new Map<RepoId, UnsettledRun[]>()

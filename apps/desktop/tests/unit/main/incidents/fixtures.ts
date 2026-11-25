@@ -1,13 +1,15 @@
-// Shared rigs for the incident tests: a reconciled item and a real state writer over an in-memory store.
-import { createStateWriter } from '@/main/pipeline/state/writer'
-import type { FileResult } from '@/types/platform'
+// Shared rigs for the incident tests: a reconciled item and a test context whose writer runs over a fake GitHub.
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { ReadyEntry } from '@/types/actions'
-import type { IncidentDraft, IncidentFiles } from '@/types/incidents'
+import type { IncidentDraft } from '@/types/incidents'
 import type { ReconciledItem } from '@/types/state'
-import type { WriteOutcome } from '@/types/writes'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
-import { AT, memoryStore } from '../../../support/state-store'
+import { createTestContext } from '../../../support/context'
+import { createFakeGitHub } from '../../../support/fake-github'
+import { AT } from '../../../support/state-store'
 import { ticketOf } from '../../../support/tickets'
 
 export const REPO_ID = 'repo-a' as RepoId
@@ -60,76 +62,20 @@ export function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
   }
 }
 
-function ok<T>(value: T): FileResult<T> {
-  return { ok: true, value }
-}
-
-const NOT_FOUND = { ok: false, kind: 'not-found', message: 'missing' } as const
-
-/** An in-memory stand-in for the platform file helpers, keyed by path. */
-export function memory(fail: { readonly append?: boolean } = {}) {
-  const store = new Map<string, string>()
-  const files: IncidentFiles = {
-    append: (path, text) => {
-      if (fail.append === true) return Promise.resolve({ ok: false, kind: 'io', message: 'disk full' })
-      store.set(path, (store.get(path) ?? '') + text)
-      return Promise.resolve(ok(undefined))
-    },
-    stat: (path) => {
-      const text = store.get(path)
-      return Promise.resolve(text === undefined ? NOT_FOUND : ok({ kind: 'file', size: Buffer.byteLength(text), modifiedAt: 'x' }))
-    },
-    readLines: (path) => {
-      const text = store.get(path)
-      if (text === undefined) return Promise.resolve(NOT_FOUND)
-      return Promise.resolve(ok({ lines: text.split('\n').slice(0, -1), bytesConsumed: Buffer.byteLength(text), filledBudget: false }))
-    },
-    readJson: (path) => {
-      const text = store.get(path)
-      return Promise.resolve(text === undefined ? NOT_FOUND : ok(JSON.parse(text) as never))
-    },
-    writeText: (path, text) => {
-      store.set(path, text)
-      return Promise.resolve(ok(undefined))
-    },
-    writeJson: (path, value) => {
-      store.set(path, JSON.stringify(value))
-      return Promise.resolve(ok(undefined))
-    },
-    rename: (from, to) => {
-      store.set(to, store.get(from) ?? '')
-      store.delete(from)
-      return Promise.resolve(ok(undefined))
-    },
-  }
-  return { store, files }
-}
-
 interface WriterRigOptions {
   readonly number: number
   /** The head GitHub reports when the write reads the item. */
   readonly writeHead: string
 }
 
-/** A real `writeState` over the real store in memory, with every incident it raises collected. */
-export function writerRig(options: WriterRigOptions) {
+/** A test context over a fake GitHub and a seeded record store, with every incident the writer raises collected. */
+export async function writerRig(options: WriterRigOptions) {
   const incidents: IncidentDraft[] = []
-  const { store } = memoryStore(REPO_ID, { tickets: [ticketOf({ repo: REPO_ID, ticket: options.number, pr: { number: options.number, approvedAt: null }, stage: 'review', status: { kind: 'queued', reason: 'new', since: AT } })] })
-  const writer = createStateWriter({
-    store,
-    applyLabels: (): Promise<WriteOutcome> => Promise.resolve({ kind: 'applied', argv: ['edit'] }),
-    readOwnership: () => Promise.resolve({ kind: 'app', since: 's', path: 'p', readAt: 'r' }),
-    fetchItemsByNumber: ({ numbers }) =>
-      Promise.resolve({
-        ok: true,
-        resolved: numbers.map((number) => ({ number, kind: 'pull-request' as const, state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: [], assignees: ['op'], headRefName: `${String(number)}-x`, headRefOid: options.writeHead, author: null })),
-        unavailable: [],
-        fetchedAt: 'r',
-      }),
-    appendAudit: () => Promise.resolve(),
-    recordIncident: (draft) => Promise.resolve(void incidents.push(draft)),
-    newId: () => 'write-1',
-    now: () => new Date('2026-11-16T12:00:00.000Z'),
-  })
-  return { ...writer, incidents }
+  const github = createFakeGitHub({ items: [{ number: options.number, kind: 'pull-request', assignees: ['op'], headRefName: `${String(options.number)}-x`, headRefOid: options.writeHead }] })
+  const incidentLog = { record: (draft: IncidentDraft) => Promise.resolve(void incidents.push(draft)), read: () => Promise.resolve({ ok: true as const, records: [], malformed: 0, pruned: null, readAt: AT }) }
+  const ticket = ticketOf({ repo: REPO_ID, ticket: options.number, pr: { number: options.number, approvedAt: null }, stage: 'review', status: { kind: 'queued', reason: 'new', since: AT } })
+  const ctx = createTestContext({ platform: github.platform, tickets: { repoId: REPO_ID, tickets: [ticket] }, stores: { incidentLog } })
+  await ctx.ready
+  const auditDir = await mkdtemp(join(tmpdir(), 'port-incident-'))
+  return { ctx, incidents, auditDir }
 }

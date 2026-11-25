@@ -5,42 +5,29 @@ import type { ClaimPreflightFetch } from '@/types/github'
 import { mirrorVocabularyOf } from '@/utils/labels/display'
 import type { RepoId } from '@/utils/repos'
 import type { ReadyEntry } from '@/types/actions'
-import { UNSEEDED_MESSAGE } from '@/main/pipeline/state/labels'
-import { requireReadyRepo } from '@/main/repos'
-import type { RegistryDeps } from '@/types/registry'
+import { storedLabels, UNSEEDED_MESSAGE } from '@/main/pipeline/state/labels'
+import { writeState } from '@/main/pipeline/state/writer'
+import { readyEntryOf, type OperatorContext } from '@/main/pipeline/context'
+import { fetchClaimPreflight } from '@/main/github/tracker/items'
 
-import type { ClaimDeps } from '@/types/claim'
-
-function resolveReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, deps: ClaimDeps) {
-  return requireReadyRepo(
-    registryDeps,
-    'claim',
-    repoId,
-    deps.listRepositories,
-    (message) => `claim requires the registry, which could not be listed: ${message}`,
-  )
+function resolveReadyEntry(ctx: OperatorContext, repoId: RepoId) {
+  return readyEntryOf(ctx, 'claim', repoId, (message) => `claim requires the registry, which could not be listed: ${message}`)
 }
 
 // `null` passes straight through so `classifyPreflight` reports `not-found` itself; `'unseeded'` means the store holds no labels to read yet.
-function toClaimPreflight(fetch: Extract<ClaimPreflightFetch, { readonly ok: true }>, entry: ReadyEntry, deps: ClaimDeps): ClaimPreflight | null | 'unseeded' {
+function toClaimPreflight(ctx: OperatorContext, fetch: Extract<ClaimPreflightFetch, { readonly ok: true }>, entry: ReadyEntry): ClaimPreflight | null | 'unseeded' {
   if (fetch.item === null) return null
-  const labels = deps.stateLabels(entry.id, fetch.item.kind, fetch.item.number, entry.config.vocabulary)
+  const labels = storedLabels(ctx, entry.id, fetch.item.kind, fetch.item.number, entry.config.vocabulary)
   if (labels === null) return 'unseeded'
   return { ...fetch.item, labels, viewer: fetch.viewer, readAt: fetch.fetchedAt }
 }
 
-interface ClaimPreflightParams {
-  readonly registryDeps: RegistryDeps
-  readonly repoId: RepoId
-  readonly number: number
-}
-
-export async function claimPreflight(params: ClaimPreflightParams, deps: ClaimDeps): Promise<ClaimPreflightResponse> {
-  const entry = await resolveReadyEntry(params.registryDeps, params.repoId, deps)
-  const fetch = await deps.fetchClaimPreflight({ repo: { owner: entry.config.owner, name: entry.config.name }, number: params.number })
+export async function claimPreflight(ctx: OperatorContext, { repoId, number }: { readonly repoId: RepoId; readonly number: number }): Promise<ClaimPreflightResponse> {
+  const entry = await resolveReadyEntry(ctx, repoId)
+  const fetch = await fetchClaimPreflight(ctx, { repo: { owner: entry.config.owner, name: entry.config.name }, number })
   if (!fetch.ok) return { kind: 'failed', message: fetch.message }
 
-  const preflight = toClaimPreflight(fetch, entry, deps)
+  const preflight = toClaimPreflight(ctx, fetch, entry)
   if (preflight === 'unseeded') return { kind: 'failed', message: UNSEEDED_MESSAGE }
   const verdict = classifyPreflight({ item: preflight, vocabulary: entry.config.vocabulary })
   if (preflight === null) return { kind: 'unresolved' }
@@ -48,7 +35,6 @@ export async function claimPreflight(params: ClaimPreflightParams, deps: ClaimDe
 }
 
 interface ClaimApplyParams {
-  readonly registryDeps: RegistryDeps
   readonly repoId: RepoId
   readonly number: number
   readonly planGate: PlanGateChoice
@@ -65,12 +51,12 @@ function sameAssigneeSet(a: readonly string[], b: readonly string[]): boolean {
 }
 
 // **Re-runs the preflight itself** rather than trusting anything the renderer held.
-export async function claimApply(params: ClaimApplyParams, deps: ClaimDeps): Promise<ClaimApplyResponse> {
-  const entry = await resolveReadyEntry(params.registryDeps, params.repoId, deps)
-  const fetch = await deps.fetchClaimPreflight({ repo: { owner: entry.config.owner, name: entry.config.name }, number: params.number })
+export async function claimApply(ctx: OperatorContext, params: ClaimApplyParams): Promise<ClaimApplyResponse> {
+  const entry = await resolveReadyEntry(ctx, params.repoId)
+  const fetch = await fetchClaimPreflight(ctx, { repo: { owner: entry.config.owner, name: entry.config.name }, number: params.number })
   if (!fetch.ok) return { kind: 'preflight-failed', message: fetch.message }
 
-  const preflight = toClaimPreflight(fetch, entry, deps)
+  const preflight = toClaimPreflight(ctx, fetch, entry)
   if (preflight === 'unseeded') return { kind: 'write', outcome: { kind: 'state-unsaved', message: UNSEEDED_MESSAGE } }
   const verdict = classifyPreflight({ item: preflight, vocabulary: entry.config.vocabulary })
   if (verdict.kind !== 'claimable') {
@@ -95,6 +81,6 @@ export async function claimApply(params: ClaimApplyParams, deps: ClaimDeps): Pro
     planGate: params.planGate,
   })
 
-  const outcome = await deps.writeState({ request, repoRoot: entry.path, auditDir: params.auditDir })
+  const outcome = await writeState(ctx, { request, repoRoot: entry.path, auditDir: params.auditDir })
   return { kind: 'write', outcome }
 }

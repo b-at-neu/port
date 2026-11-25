@@ -5,63 +5,43 @@ import { describe, expect, it } from 'vitest'
 import type { BoardSnapshot } from '@/types/board'
 import type { GitHubTransport } from '@/types/platform'
 import { budgetedIntervalMs } from '@/main/pipeline/board/schedule'
-import { createPipelineWatcher } from '@/main/pipeline/board/watcher'
 import { GITHUB_PRECHECK_INTERVAL_MS } from '@/types/board'
 import { RATE_LIMIT_REPLY } from '../../../fixtures/pipeline-reply'
-import { fakeGit, makeFakeTimer, readyEntry, readyItemTransport, scriptedConditional } from '../../../fixtures/watcher-harness'
+import { readyEntry, readyItemTransport, scriptedConditional, watcherRig } from '../../../fixtures/watcher-harness'
 
 const T0 = Date.parse('2026-01-01T00:00:00.000Z')
 
-interface Rig {
-  readonly step: (ms: number) => Promise<BoardSnapshot>
-  readonly conditional: ReturnType<typeof scriptedConditional>
-  readonly sweeps: () => number
-  readonly setLabels: (labels: readonly string[]) => void
-  readonly elapsed: () => number
-  readonly sweepRequests: number
-}
-
-async function rig(rateLimit: unknown = RATE_LIMIT_REPLY): Promise<Rig> {
-  let currentMs = T0
+async function rig(rateLimit: unknown = RATE_LIMIT_REPLY) {
   let labels: readonly string[] = ['ready']
   let sweeps = 0
   let resolveNext: ((snapshot: BoardSnapshot) => void) | null = null
-  const timer = makeFakeTimer()
   const conditional = scriptedConditional()
-  const root = await mkdtemp(join(tmpdir(), 'port-precheck-'))
   const github: GitHubTransport = (request) => {
     sweeps += 1
     return readyItemTransport('op', ['op'], rateLimit, labels)(request)
   }
-  const watcher = createPipelineWatcher({
-    repositories: [readyEntry('repo-a', root, 'o/a')],
-    onSnapshot: (snapshot) => resolveNext?.(snapshot),
-    now: () => new Date(currentMs),
-    setTimer: timer.factory,
-    git: fakeGit({ worktreeList: 0 }),
-    github,
-    conditional: conditional.transport,
-    sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
-  })
+  const root = await mkdtemp(join(tmpdir(), 'port-precheck-'))
+  const harness = watcherRig({ repositories: [readyEntry('repo-a', root, 'o/a')], github, conditional: conditional.transport })
+  const watcher = harness.watch({ onSnapshot: (snapshot) => resolveNext?.(snapshot) })
   await watcher.refresh()
   const sweepRequests = sweeps
   sweeps = 0
   return {
     sweepRequests,
-    step: (ms) => {
+    step: (ms: number) => {
       const next = new Promise<BoardSnapshot>((resolve) => {
         resolveNext = resolve
       })
-      currentMs += ms
-      timer.fire()
+      harness.clock.advance(ms)
+      harness.timer.fire()
       return next
     },
     conditional,
     sweeps: () => sweeps,
-    setLabels: (next) => {
+    setLabels: (next: readonly string[]) => {
       labels = next
     },
-    elapsed: () => currentMs - T0,
+    elapsed: () => harness.clock.now().getTime() - T0,
   }
 }
 
@@ -80,7 +60,7 @@ describe('createPipelineWatcher — issues-list pre-check', () => {
 
     expect(r.elapsed()).toBe(30_000)
     expect(r.sweeps()).toBeGreaterThan(0)
-    expect(snap.tick[0]?.actionable[0]?.trigger).toBe('planApproved')
+    expect(snap.health[0]?.github.lastSuccessAt).toBe(new Date(T0 + 30_000).toISOString())
   })
 
   it('holds a triggered sweep until the budgeted gap has passed, then runs it once', async () => {

@@ -1,119 +1,39 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
-import type { ReposListResponse } from '@/types/ipc'
 import { resolveClaimApply, resolveClaimPreflight } from '@/main/features/claim/resolve'
-import type { ClaimDeps } from '@/types/claim'
-import type { RegistryDeps } from '@/types/registry'
+import { createTestContext } from '../../../support/context'
+import { operatorRig, REPO_ID } from '../../../support/operator-rig'
 
-const REPO_ID = 'repo-1' as unknown as RepoId
-
-const registryDeps: RegistryDeps = {
-  registryDir: '/registry',
-  git: () => {
-    throw new Error('git should not be invoked directly by resolveClaimPreflight/resolveClaimApply')
-  },
-  chooseDirectory: () => Promise.resolve(null),
-}
-
-const READY_ENTRY = {
-  id: REPO_ID,
-  path: '/repo',
-  displayName: 'widgets',
-  status: 'ready' as const,
-  config: {
-    repo: 'acme/widgets',
-    owner: 'acme',
-    name: 'widgets',
-    branches: { integration: 'dev', production: 'main' },
-    models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
-    modules: { approvalGate: true, release: true, scope: true },
-    reviewCycleCap: 3,
-    vocabulary: {} as never,
-    commands: { worktrees: 'node scripts/worktrees.mjs', budget: null },
-    concurrency: { sharedFiles: [], overlapThreshold: 2 },
-    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
-    checkDispositions: {},
-    overrides: [],
-  },
-  diagnostics: [],
-}
-
-function claimDepsWith(overrides: Partial<ClaimDeps>): ClaimDeps {
-  return {
-    listRepositories: () => Promise.resolve({ ok: true, repositories: [] } as ReposListResponse),
-    fetchClaimPreflight: () => {
-      throw new Error('fetchClaimPreflight should not be invoked in this case')
-    },
-    writeState: () => {
-      throw new Error('writeState should not be invoked in this case')
-    },
-    stateLabels: () => null,
-    ...overrides,
-  }
-}
+const ctx = createTestContext()
+const APPLY = { repoId: REPO_ID, number: 1, planGate: 'review' as const, confirmedAssignees: [] }
 
 describe('resolveClaimPreflight', () => {
-  it('rejects a missing repoId', async () => {
-    await expect(resolveClaimPreflight(registryDeps, { repoId: undefined as unknown as RepoId, number: 1 }, claimDepsWith({}))).rejects.toThrow(
-      "'claim:preflight' requires a non-empty 'repoId'",
-    )
-  })
-
-  it('rejects a non-integer number', async () => {
-    await expect(resolveClaimPreflight(registryDeps, { repoId: REPO_ID, number: 1.5 }, claimDepsWith({}))).rejects.toThrow(
-      "'claim:preflight' requires 'number' to be a positive integer",
-    )
-  })
-
-  it('rejects a non-positive number', async () => {
-    await expect(resolveClaimPreflight(registryDeps, { repoId: REPO_ID, number: 0 }, claimDepsWith({}))).rejects.toThrow(
-      "'claim:preflight' requires 'number' to be a positive integer",
-    )
+  it.each([
+    { name: 'a missing repoId', request: { repoId: undefined as unknown as RepoId, number: 1 }, message: "'claim:preflight' requires a non-empty 'repoId'" },
+    { name: 'a non-integer number', request: { repoId: REPO_ID, number: 1.5 }, message: "'claim:preflight' requires 'number' to be a positive integer" },
+    { name: 'a non-positive number', request: { repoId: REPO_ID, number: 0 }, message: "'claim:preflight' requires 'number' to be a positive integer" },
+  ])('rejects $name', async ({ request, message }) => {
+    await expect(resolveClaimPreflight(ctx, request)).rejects.toThrow(message)
   })
 
   it('passes a valid request through to claimPreflight', async () => {
-    const deps = claimDepsWith({
-      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      fetchClaimPreflight: () =>
-        Promise.resolve({ ok: true, viewer: 'alice', fetchedAt: 't', item: null }),
-    })
-    const result = await resolveClaimPreflight(registryDeps, { repoId: REPO_ID, number: 93 }, deps)
-    expect(result).toEqual({ kind: 'unresolved' })
+    const rig = await operatorRig({ viewer: 'alice' })
+    expect(await resolveClaimPreflight(rig.ctx, { repoId: REPO_ID, number: 93 })).toEqual({ kind: 'unresolved' })
   })
 })
 
 describe('resolveClaimApply', () => {
-  it('rejects a missing repoId', async () => {
-    await expect(
-      resolveClaimApply(registryDeps, { repoId: undefined as unknown as RepoId, number: 1, planGate: 'review', confirmedAssignees: [] }, '/audit', claimDepsWith({})),
-    ).rejects.toThrow("'claim:apply' requires a non-empty 'repoId'")
-  })
-
-  it('rejects a non-integer number', async () => {
-    await expect(
-      resolveClaimApply(registryDeps, { repoId: REPO_ID, number: 1.5, planGate: 'review', confirmedAssignees: [] }, '/audit', claimDepsWith({})),
-    ).rejects.toThrow("'claim:apply' requires 'number' to be a positive integer")
-  })
-
-  it('rejects a planGate outside PLAN_GATE_CHOICES', async () => {
-    await expect(
-      resolveClaimApply(registryDeps, { repoId: REPO_ID, number: 1, planGate: 'bogus' as never, confirmedAssignees: [] }, '/audit', claimDepsWith({})),
-    ).rejects.toThrow("'claim:apply' requires 'planGate' to be one of review, auto")
-  })
-
-  it('rejects confirmedAssignees that is not an array of strings', async () => {
-    await expect(
-      resolveClaimApply(registryDeps, { repoId: REPO_ID, number: 1, planGate: 'review', confirmedAssignees: [1 as never] }, '/audit', claimDepsWith({})),
-    ).rejects.toThrow("'claim:apply' requires 'confirmedAssignees' to be an array of strings")
+  it.each([
+    { name: 'a missing repoId', request: { ...APPLY, repoId: undefined as unknown as RepoId }, message: "'claim:apply' requires a non-empty 'repoId'" },
+    { name: 'a non-integer number', request: { ...APPLY, number: 1.5 }, message: "'claim:apply' requires 'number' to be a positive integer" },
+    { name: 'a planGate outside PLAN_GATE_CHOICES', request: { ...APPLY, planGate: 'bogus' as never }, message: "'claim:apply' requires 'planGate' to be one of review, auto" },
+    { name: 'confirmedAssignees that is not an array of strings', request: { ...APPLY, confirmedAssignees: [1 as never] }, message: "'claim:apply' requires 'confirmedAssignees' to be an array of strings" },
+  ])('rejects $name', async ({ request, message }) => {
+    await expect(resolveClaimApply(ctx, request, '/audit')).rejects.toThrow(message)
   })
 
   it('passes a valid request through to claimApply', async () => {
-    const deps = claimDepsWith({
-      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      fetchClaimPreflight: () =>
-        Promise.resolve({ ok: true, viewer: 'alice', fetchedAt: 't', item: null }),
-    })
-    const result = await resolveClaimApply(registryDeps, { repoId: REPO_ID, number: 93, planGate: 'review', confirmedAssignees: [] }, '/audit', deps)
-    expect(result).toEqual({ kind: 'refused', verdict: { kind: 'not-found' } })
+    const rig = await operatorRig({ viewer: 'alice' })
+    expect(await resolveClaimApply(rig.ctx, { ...APPLY, number: 93 }, rig.auditDir)).toEqual({ kind: 'refused', verdict: { kind: 'not-found' } })
   })
 })
