@@ -9,7 +9,7 @@ import denials from '../../../fixtures/pipeline-state/v2/stage-denials.json'
 import v2 from '../../../fixtures/pipeline-state/v2/pipeline-state.json'
 import sessions from '../../../fixtures/pipeline-state/v2/stage-sessions.json'
 import { reconciledItem, repositoryState } from '../../../support/board-snapshot'
-import { AT, memoryStore } from '../../../support/state-store'
+import { AT, memoryStore, STATE_PATH, storeCtx } from '../../../support/state-store'
 import { runOf, ticketOf } from '../../../support/tickets'
 
 const REPO = 'repo-a' as RepoId
@@ -29,24 +29,23 @@ interface RigOptions {
 function rig(options: RigOptions = {}) {
   const writes: unknown[] = []
   const removed: string[] = []
-  const store = createPipelineStateStore({
-    path: '/data/state.json',
-    legacy: LEGACY,
-    readJson: <T>(path: string) => {
-      if (path === '/data/state.json') return Promise.resolve((options.file ?? { ok: false, kind: 'not-found', message: 'missing' }) as FileResult<T>)
-      const held = options.legacy?.[path]
-      return Promise.resolve((held === undefined ? { ok: false, kind: 'not-found', message: 'missing' } : { ok: true, value: held }) as FileResult<T>)
-    },
-    writeJsonAtomic: (_path, value) => {
-      writes.push(value)
-      return options.write?.() ?? Promise.resolve({ ok: true, value: undefined })
-    },
-    remove: (path) => {
-      removed.push(path)
-      return Promise.resolve({ ok: true, value: undefined })
-    },
-    now: () => new Date(AT),
-  })
+  const store = createPipelineStateStore(
+    storeCtx({
+      readJson: <T>(path: string) => {
+        if (path === STATE_PATH) return Promise.resolve((options.file ?? { ok: false, kind: 'not-found', message: 'missing' }) as FileResult<T>)
+        const held = options.legacy?.[path]
+        return Promise.resolve((held === undefined ? { ok: false, kind: 'not-found', message: 'missing' } : { ok: true, value: held }) as FileResult<T>)
+      },
+      writeJsonAtomic: (_path, value) => {
+        writes.push(value)
+        return options.write?.() ?? Promise.resolve({ ok: true, value: undefined })
+      },
+      remove: (path) => {
+        removed.push(path)
+        return Promise.resolve({ ok: true, value: undefined })
+      },
+    }),
+  )
   return { store, writes, removed }
 }
 

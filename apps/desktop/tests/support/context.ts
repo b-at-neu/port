@@ -3,19 +3,27 @@ import type { AppContext } from '@/main/app/context'
 import { actions } from '@/main/app/router'
 import { createRunStateStore } from '@/main/pipeline/state/run-state'
 import { createRunStore } from '@/main/pipeline/state/run-store'
-import { createPipelineStateStore } from '@/main/pipeline/state/store'
+import { createIncidentLog } from '@/main/pipeline/incidents/log'
+import { createPipelineStateStore, PIPELINE_STATE_FILE } from '@/main/pipeline/state/store'
+import { createForceDispatch, createRefreshMemo, createRerunMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
 import { createSessionIndex } from '@/main/sessions/hosting/session-index'
 import { createUsageLedger } from '@/main/sessions/hosting/usage-ledger'
 import type { Platform } from '@/main/platform'
 import { readyOf, type Repos } from '@/main/repos'
 import type { EventMap, EventName } from '@/main/app/events'
+import type { StateEngine } from '@/types/offload'
 import type { ActionInput, ActionName, ActionOutput } from '@/types/ipc'
-import type { RepositoryEntry } from '@/utils/repos'
+import type { Ticket } from '@/utils/pipeline/ticket'
+import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import { createFakePlatform, type FakePlatform } from './fake-platform'
+
+const SEEDED_AT = '2026-11-23T12:00:00.000Z'
 
 export interface TestContextOptions {
   readonly platform?: Partial<Platform>
   readonly repositories?: readonly RepositoryEntry[]
+  /** Seeds the pipeline state file with these tickets for one repository, so it reads as seeded. */
+  readonly tickets?: { readonly repoId: RepoId; readonly tickets: readonly Ticket[] }
   readonly repos?: Partial<Repos>
   readonly stores?: Partial<AppContext['stores']>
   readonly live?: Partial<AppContext['live']>
@@ -76,17 +84,16 @@ export function createTestContext(options: TestContextOptions = {}): TestContext
   }
 
   const path = (file: string): string => `${platform.paths.userData}/${file}`
-  const state = createPipelineStateStore({
-    path: path('pipeline-state.json'),
-    legacy: { dispatch: path('dispatch.json'), sessions: path('stage-sessions.json'), denials: path('stage-denials.json') },
-    readJson: platform.fs.readJson,
-    writeJsonAtomic: platform.fs.writeJsonAtomic,
-    remove: platform.fs.remove,
-    now: platform.clock.now,
-  })
+  if (options.tickets !== undefined) {
+    const { repoId, tickets } = options.tickets
+    void platform.fs.writeJsonAtomic(path(PIPELINE_STATE_FILE), { version: 3, dispatch: {}, repositories: { [repoId]: { seededAt: SEEDED_AT, tickets: Object.fromEntries(tickets.map((ticket) => [String(ticket.ticket), ticket])) } } })
+  }
+  const state = createPipelineStateStore(platform)
   const stores = {
     runs: createRunStore({ store: state, newId: () => globalThis.crypto.randomUUID(), now: platform.clock.now }),
-    runStates: createRunStateStore(state, path('pipeline-state.json')),
+    runStates: createRunStateStore(state, path(PIPELINE_STATE_FILE)),
+    pipelineState: state,
+    incidentLog: createIncidentLog(platform),
     sessionIndex: createSessionIndex({ path: path('session-index.json'), readJson: platform.fs.readJson, writeJsonAtomic: platform.fs.writeJsonAtomic, now: platform.clock.now }),
     usageLedger: createUsageLedger({ path: path('usage-ledger.json'), readJson: platform.fs.readJson, writeJsonAtomic: platform.fs.writeJsonAtomic, now: platform.clock.now, bootId: 'test-boot' }),
     ...options.stores,
@@ -104,6 +111,60 @@ export function createTestContext(options: TestContextOptions = {}): TestContext
     live: unscriptedGroup('live', options.live ?? {}),
     seams: unscriptedGroup('seams', options.seams ?? {}),
   }
+}
+
+const IDLE_DISPATCHER = {
+  status: () => [],
+  liveStages: () => [],
+  holdsSessionRequired: () => true,
+  stageLiveness: () => null,
+  endedStages: () => [],
+} satisfies Pick<AppContext['live']['dispatcher'], 'status' | 'liveStages' | 'holdsSessionRequired' | 'stageLiveness' | 'endedStages'>
+
+const EMPTY_PROJECTION = { repositories: [], sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: '2026-01-01T00:00:00.000Z' }, readAt: '2026-01-01T00:00:00.000Z' } as const
+
+const OK_REFRESH = { ok: true, at: '2026-01-01T00:00:00.000Z' } as const
+
+/** A scripted engine: every refresh succeeds and the board projects empty, each member replaceable. */
+export function scriptedEngine(overrides: Partial<StateEngine> = {}): StateEngine {
+  const unscripted = (name: string) => () => Promise.reject(new Error(`engine.${name} is not scripted`))
+  return {
+    refreshSessions: () => Promise.resolve(OK_REFRESH),
+    refreshWorktrees: () => Promise.resolve(OK_REFRESH),
+    refreshDenials: () => Promise.resolve(OK_REFRESH),
+    refreshGithub: () => Promise.resolve(OK_REFRESH),
+    precheckGithub: () => Promise.resolve({ ok: true, changed: false, at: OK_REFRESH.at }),
+    project: () => Promise.resolve(EMPTY_PROJECTION),
+    scanSessions: unscripted('scanSessions'),
+    listSessions: unscripted('listSessions'),
+    search: unscripted('search'),
+    tailOpen: unscripted('tailOpen'),
+    tailPoll: unscripted('tailPoll'),
+    tailClose: unscripted('tailClose'),
+    forgetRepo: unscripted('forgetRepo'),
+    ...overrides,
+  } as StateEngine
+}
+
+export interface WatcherContextOptions extends TestContextOptions {
+  readonly engine?: Partial<StateEngine>
+  readonly dispatcher?: Partial<typeof IDLE_DISPATCHER>
+}
+
+/** A test context whose `live` holds what the watcher reads: a scripted engine, an idle dispatcher, fresh memos. */
+export function watcherContext(options: WatcherContextOptions = {}): TestContext {
+  const { engine, dispatcher, ...rest } = options
+  return createTestContext({
+    ...rest,
+    live: {
+      engine: scriptedEngine(engine),
+      dispatcher: { ...IDLE_DISPATCHER, ...dispatcher } as unknown as AppContext['live']['dispatcher'],
+      autoPlanner: { refused: () => new Set<number>() } as unknown as AppContext['live']['autoPlanner'],
+      memos: { unknownStreaks: createUnknownStreaks(), refreshMemo: createRefreshMemo(), rerunMemo: createRerunMemo() },
+      forceDispatch: createForceDispatch(),
+      ...rest.live,
+    },
+  })
 }
 
 /** Runs an action exactly as the router does: parse the raw request, then `run`. */

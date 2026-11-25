@@ -20,9 +20,9 @@ function bucketsOf(intents: readonly { readonly bucket: IncidentBucket }[]): rea
 // Typed `satisfies Record<IncidentBucket, …>`, so a bucket added without a raising case fails the typecheck.
 const RAISED = {
   'stale-snapshot': async () => {
-    const rig = writerRig({ number: 789, writeHead: 'a7e3b21' })
+    const rig = await writerRig({ number: 789, writeHead: 'a7e3b21' })
     const observation: WriteObservation = { kind: 'zero-diff', number: 789, itemKind: 'pull-request', count: 2, headRefOid: 'f19c6d5' }
-    await applyObservation({ entry: ENTRY, item: item(), observation, snapshotAt: 'tick-1', auditDir: '/audit', scratchDir: '/scratch' }, { writeState: rig.writeState, postComment: () => Promise.resolve({ kind: 'no-op' }), fetchGatePreflight: () => Promise.reject(new Error('unused')) })
+    await applyObservation(rig.ctx, { entry: ENTRY, item: item(), observation, snapshotAt: 'tick-1', auditDir: rig.auditDir, scratchDir: rig.auditDir })
     return rig.incidents.map((draft) => draft.bucket)
   },
   'liveness-reset': () => {

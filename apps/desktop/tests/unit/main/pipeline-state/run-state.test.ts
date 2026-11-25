@@ -3,26 +3,25 @@ import { createRunStateStore } from '@/main/pipeline/state/run-state'
 import { createPipelineStateStore } from '@/main/pipeline/state/store'
 import type { FileResult } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
-import { AT } from '../../../support/state-store'
+import { AT, STATE_PATH, storeCtx } from '../../../support/state-store'
 
 const A = 'repo-a' as RepoId
 const B = 'repo-b' as RepoId
-const PATH = '/data/state.json'
+const PATH = STATE_PATH
 
 function rig(options: { readonly file?: FileResult<unknown>; readonly writeFails?: boolean } = {}) {
   const writes: unknown[] = []
-  const store = createPipelineStateStore({
-    path: PATH,
-    legacy: { dispatch: '/data/dispatch.json', sessions: '/data/stage-sessions.json', denials: '/data/stage-denials.json' },
-    readJson: <T>() => Promise.resolve((options.file ?? { ok: false, kind: 'not-found', message: 'missing' }) as FileResult<T>),
-    writeJsonAtomic: (_path, value) => {
-      if (options.writeFails === true) return Promise.resolve({ ok: false, kind: 'io', message: 'disk full' })
-      writes.push(value)
-      return Promise.resolve({ ok: true, value: undefined })
-    },
-    remove: () => Promise.resolve({ ok: true, value: undefined }),
-    now: () => new Date(AT),
-  })
+  const store = createPipelineStateStore(
+    storeCtx({
+      readJson: <T>() => Promise.resolve((options.file ?? { ok: false, kind: 'not-found', message: 'missing' }) as FileResult<T>),
+      writeJsonAtomic: (_path, value) => {
+        if (options.writeFails === true) return Promise.resolve({ ok: false, kind: 'io', message: 'disk full' })
+        writes.push(value)
+        return Promise.resolve({ ok: true, value: undefined })
+      },
+      remove: () => Promise.resolve({ ok: true, value: undefined }),
+    }),
+  )
   return { runStates: createRunStateStore(store, PATH), store, writes }
 }
 
