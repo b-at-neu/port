@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { pathOps } from '@/main/platform/paths'
 import { createStageLauncher } from '@/main/dispatch/stage/launcher'
-import { STAGE_SYSTEM_PROMPT } from '@/main/dispatch/stage/bundle'
+import { LEGACY_STAGE_SYSTEM_PROMPT } from '@/main/dispatch/stage/bundle'
 import type { FileResult } from '@/types/platform'
 import type { StageLaunchRequest } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '@/types/hosting'
@@ -84,19 +84,14 @@ function fakeDeps(overrides: Partial<{ start: SessionStartResult; runs: readonly
   const onResumedTurn = vi.fn()
   let nextId = 0
   const newId = vi.fn(() => `id-${String((nextId += 1))}`)
-  const loadInstructions = vi.fn<StageInstructionsLoader>().mockImplementation((req) =>
-    Promise.resolve({
-      ok: true,
-      text: `${req.prompt}\n\n<port-stage-context>\nrepo: widgets\n</port-stage-context>\n\n<port-stage-instructions source="/bundle">\nbody\n</port-stage-instructions>`,
-      agent: { name: 'impl-agent', definition: { description: 'impl', prompt: 'body' } },
-    }),
-  )
+  const loadInstructions = vi.fn<StageInstructionsLoader>().mockImplementation((req) => Promise.resolve({ ok: true, text: req.prompt, agent: { name: 'impl-agent', definition: { description: 'impl', prompt: 'body' }, selfContained: true } }))
+  const readStagePrompt = vi.fn<(claudeSessionId: string) => Promise<string | null>>().mockResolvedValue(null)
   const readTextFile = vi.fn((path: string) => Promise.resolve<FileResult<string>>(path === pathOps.join('/bundle', 'agents', 'impl-agent.md') ? { ok: true, value: '---\nname: impl-agent\ndescription: impl\ndisallowedTools: Agent\n---\nbody\n' } : { ok: false, kind: 'not-found', message: `ENOENT ${path}` }))
   const pathExists = vi.fn((path: string) => {
     void path
     return Promise.resolve(true)
   })
-  return { ready: state.ready, store, storeList: list, removeWorktree, createWorktree, releaseBranch, sweepBranches, onOutcome, onResumedTurn, pathExists, close, dismiss, send, start, runs, newId, loadInstructions, bundleRoot: '/bundle', ops: pathOps, readTextFile }
+  return { ready: state.ready, store, storeList: list, removeWorktree, createWorktree, releaseBranch, sweepBranches, onOutcome, onResumedTurn, pathExists, close, dismiss, send, start, runs, newId, loadInstructions, readStagePrompt, bundleRoot: '/bundle', ops: pathOps, readTextFile }
 }
 
 const runsOf = (deps: ReturnType<typeof fakeDeps>, number = 52) => deps.runs.runsOf(WIDGETS_ID, 'issue', number)
@@ -111,20 +106,16 @@ describe('createStageLauncher.launch', () => {
       expect.objectContaining({
         repoId: WIDGETS_ID,
         mode: { kind: 'fresh' },
-        stage: expect.objectContaining({ agent: { name: 'impl-agent', definition: { description: 'impl', prompt: 'body' } }, instructionsRoot: '/bundle', model: 'sonnet' }) as unknown as StartSessionParams['stage'],
+        stage: expect.objectContaining({ agent: { name: 'impl-agent', definition: { description: 'impl', prompt: 'body' }, selfContained: true }, instructionsRoot: '/bundle', model: 'sonnet' }) as unknown as StartSessionParams['stage'],
       }),
     )
-    expect(deps.send).toHaveBeenCalledWith('hosted-1', expect.stringContaining('Run your pipeline stage for #52.'))
+    expect(deps.send).toHaveBeenCalledWith('hosted-1', 'Run your pipeline stage for #52.')
   })
 
-  it('sends the composed text, which opens with the dispatch prompt and carries both blocks', async () => {
+  it('loads the instructions for the new worktree', async () => {
     const deps = fakeDeps()
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
     await launcher.launch(request())
-    const sent = String(deps.send.mock.calls[0]?.[1])
-    expect(sent.startsWith('Run your pipeline stage for #52.')).toBe(true)
-    expect(sent).toContain('<port-stage-context>')
-    expect(sent).toContain('<port-stage-instructions')
     expect(deps.loadInstructions).toHaveBeenCalledWith(expect.objectContaining({ number: 52 }), '/repo/.claude/worktrees/impl-52')
   })
 
@@ -320,12 +311,21 @@ describe('createStageLauncher.resume', () => {
     const params = deps.start.mock.calls[0]?.[0]
     expect(params?.mode).toEqual({ kind: 'resume', sessionId: 'sdk-1' })
     expect(params?.workspace.folder).toBe('/repo/.claude/worktrees/session-abc123')
-    expect(params?.stage?.agent).toEqual({ name: 'impl-agent', definition: { description: 'impl', prompt: STAGE_SYSTEM_PROMPT, disallowedTools: ['Agent'] } })
+    expect(params?.stage?.agent).toEqual({ name: 'impl-agent', definition: { description: 'impl', prompt: LEGACY_STAGE_SYSTEM_PROMPT, disallowedTools: ['Agent'] }, selfContained: false })
     expect(params?.stage?.instructionsRoot).toBe('/bundle')
     expect(deps.createWorktree).not.toHaveBeenCalled()
     expect(deps.loadInstructions).not.toHaveBeenCalled()
     expect(deps.send).toHaveBeenCalledWith('hosted-1', 'You were interrupted.')
     expect(runsOf(deps)).toMatchObject([{ id: 'reg-1', sessionKey: 'hosted-1', endedAt: null, interruption: null }])
+  })
+
+  it('resumes with the saved system prompt and marks the session self-contained', async () => {
+    const deps = withRun()
+    deps.readStagePrompt.mockResolvedValue('saved prompt')
+    const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
+    await launcher.resume(resumeRequest())
+    expect(deps.readStagePrompt).toHaveBeenCalledWith('sdk-1')
+    expect(deps.start.mock.calls[0]?.[0].stage?.agent).toMatchObject({ definition: { prompt: 'saved prompt' }, selfContained: true })
   })
 
   it('reapplies the recorded ticket label as the resumed session title', async () => {

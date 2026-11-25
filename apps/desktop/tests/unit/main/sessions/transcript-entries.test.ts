@@ -243,6 +243,28 @@ describe('createDeriver', () => {
   })
 })
 
+describe('createDeriver with stage instructions', () => {
+  const HEADER = 'Implementation stage for issue #12. Run your pipeline stage for #12.'
+  const SYSTEM = 'You are a port pipeline stage agent. Your stage context and full instructions follow. Follow them exactly.\n\n<port-stage-instructions source="/p">\nbody\n</port-stage-instructions>'
+  const userRecord = (uuid: string, text: string): unknown => ({ uuid, timestamp: '2026-01-01T00:00:00.000Z', type: 'user', message: { role: 'user', content: text } })
+  const textsOf = (entries: readonly TranscriptEntry[]) => entries.flatMap((entry) => (entry.type === 'user-text' ? [entry.text.text] : []))
+
+  it('appends the saved prompt to the dispatch line, and only to the first user message', () => {
+    const [first, second] = textsOf(deriveEntries([userRecord('u1', HEADER), userRecord('u2', 'Implementation stage for issue #13. Next.')], { cwd: null, stageInstructions: SYSTEM }))
+    expect(first).toBe(`${HEADER}\n\n<port-stage-instructions source="/p">\nbody\n</port-stage-instructions>`)
+    expect(second).toBe('Implementation stage for issue #13. Next.')
+  })
+
+  it('leaves a first message that already carries its instructions block as it is', () => {
+    const old = `${HEADER}\n\n<port-stage-instructions source="/old">\nold\n</port-stage-instructions>`
+    expect(textsOf(deriveEntries([userRecord('u1', old)], { cwd: null, stageInstructions: SYSTEM }))).toEqual([old])
+  })
+
+  it('changes nothing without saved instructions', () => {
+    expect(textsOf(deriveEntries([userRecord('u1', HEADER)], { cwd: null }))).toEqual([HEADER])
+  })
+})
+
 describe('sanitize', () => {
   it('strips the ESC control byte out of an ANSI escape run, leaving the inert bracket text', () => {
     // Sanitizing removes only the control byte, so "[31m"/"[0m" stays inert text rather than rendering as colour.

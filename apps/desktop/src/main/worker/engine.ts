@@ -13,7 +13,10 @@ import { runSearch } from '@/main/sessions/search/query'
 import { projectFromCache } from '@/main/pipeline/board/read'
 import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/pipeline/board/sources'
 
-type EngineContext = Pick<Platform, 'git' | 'ghWrite' | 'githubHttp' | 'githubConditional' | 'sdk' | 'fs' | 'clock' | 'claudeHome'>
+type EngineContext = Pick<Platform, 'git' | 'ghWrite' | 'githubHttp' | 'githubConditional' | 'sdk' | 'fs' | 'clock' | 'claudeHome'> & {
+  /** Absent in the in-process fallback, which has no app data directory; transcripts then show a stage session's first message as it is. */
+  readonly stagePromptsDir?: string
+}
 
 interface HostEngineOverrides {
   readonly github?: EngineContext['githubHttp']
@@ -43,7 +46,7 @@ export function createHostEngine(overrides: HostEngineOverrides, reader?: Sessio
 /** Owns the source cache and every CPU-bound read; the worker runs exactly this. */
 export function createInProcessEngine(ctx: EngineContext, reader: SessionReader = createSdkSessionReader(ctx.sdk)): StateEngine {
   const cache = createSourceCache()
-  const tails = createTailStore(ctx)
+  const tails = createTailStore(ctx, ctx.stagePromptsDir)
   const now = (): Date => ctx.clock.now()
   const read = { githubHttp: ctx.githubHttp, clock: ctx.clock }
   const tracker = createGithubTracker({ githubHttp: ctx.githubHttp, githubConditional: ctx.githubConditional, ghWrite: ctx.ghWrite, git: ctx.git, clock: ctx.clock })

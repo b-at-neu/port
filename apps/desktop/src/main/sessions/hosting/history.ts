@@ -9,10 +9,10 @@ export const HISTORY_LIMIT = 500
 const RESUME_POINT_MESSAGE = "The resume point isn't in the transcript."
 
 /** `fresh` reads nothing. `resume`/`fork` read the whole transcript; `resume-at` cuts after the last entry whose `uuid` matches, failing (never aborting the session) when that uuid isn't present. A read failure is also reported rather than thrown, so the session still starts. */
-export async function readHistory(ctx: Pick<Platform, 'fs' | 'claudeHome'>, mode: SessionStartMode): Promise<SessionHistory> {
+export async function readHistory(ctx: Pick<Platform, 'fs' | 'claudeHome'>, mode: SessionStartMode, stagePromptsDir?: string): Promise<SessionHistory> {
   if (mode.kind === 'fresh') return { kind: 'none' }
 
-  const result = await openTranscript(ctx, { sessionId: mode.sessionId, agentId: null })
+  const result = await openTranscript(ctx, { sessionId: mode.sessionId, agentId: null, ...(stagePromptsDir !== undefined ? { stagePromptsDir } : {}) })
   if (!result.read.ok) return { kind: 'failed', message: result.read.message }
 
   let entries = result.read.entries

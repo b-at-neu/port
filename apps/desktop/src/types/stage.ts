@@ -127,11 +127,13 @@ export interface StageBundleRootInput {
 export interface StageAgentLaunch {
   readonly name: string
   readonly definition: StageAgentDefinition
+  /** True when `definition.prompt` holds the full instructions and stage context, which makes the session safe to compact. */
+  readonly selfContained: boolean
 }
 
 type StageLoadedInstructions = { readonly ok: true; readonly text: string; readonly agent: StageAgentLaunch } | { readonly ok: false; readonly message: string }
 
-/** Resolves to the full first message — the dispatch line, the stage context, and the bundled instructions — and the inline agent definition. */
+/** Resolves to the first message — only the dispatch line — and the inline agent, whose system prompt carries the stage context and the bundled instructions. */
 export type StageInstructionsLoader = (request: StageLaunchRequest, worktreePath: string) => Promise<StageLoadedInstructions>
 
 export interface StageResumeRequest {

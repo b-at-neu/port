@@ -36,7 +36,8 @@ import { createHostingSettings } from '@/main/sessions/hosting/settings'
 import { readHistory } from '@/main/sessions/hosting/history'
 import { titleFork } from '@/main/sessions/hosting/fork'
 import { readStageEditAllow } from '@/main/sessions/hosting/stage-allow'
-import { readStageDisabledPlugins } from '@/main/sessions/hosting/stage-plugins'
+import { readStageDisabledPlugins, readStageSkills } from '@/main/sessions/hosting/stage-plugins'
+import { stagePromptsDir, writeStagePrompt } from '@/main/sessions/hosting/stage-prompt-store'
 import { resolveStartTitle } from '@/main/sessions/hosting/title'
 import { resolveClaudeExecutable } from '@/main/sessions/runtime/locate'
 import { pathOps } from '@/main/platform/paths'
@@ -56,7 +57,7 @@ function toSessionKey(n: number): SessionKey {
   return `hosted-${String(n)}` as SessionKey
 }
 
-export function createHostedStore(ctx: Pick<Platform, 'sdk' | 'which' | 'git' | 'fs' | 'clock' | 'claudeHome'>, options: HostedStoreOptions): HostedStore {
+export function createHostedStore(ctx: Pick<Platform, 'sdk' | 'which' | 'git' | 'fs' | 'clock' | 'claudeHome' | 'paths'>, options: HostedStoreOptions): HostedStore {
   const handles = createHandleRegistry()
   const settings = createHostingSettings(options.persistence, handles.list)
   const now = (): number => ctx.clock.now().getTime()
@@ -103,16 +104,23 @@ export function createHostedStore(ctx: Pick<Platform, 'sdk' | 'which' | 'git' | 
     const stageParams = params.stage ?? null
     const editAllowRead: Promise<readonly string[]> = stageParams === null ? Promise.resolve([]) : readStageEditAllow(ctx, cwd)
     const disabledPluginsRead: Promise<readonly string[]> = stageParams === null ? Promise.resolve([]) : readStageDisabledPlugins(ctx, cwd)
-    const [sdk, history, editAllow, disabledPlugins] = await Promise.all([ctx.sdk.load(), readHistory(ctx, params.mode), editAllowRead, disabledPluginsRead])
+    const skillsRead: Promise<readonly string[]> = stageParams === null ? Promise.resolve([]) : readStageSkills(ctx, cwd, stageParams.tag.agent)
+    const promptsDir = stagePromptsDir(ctx.paths.userData)
+    const [sdk, history, editAllow, disabledPlugins, skills] = await Promise.all([ctx.sdk.load(), readHistory(ctx, params.mode, promptsDir), editAllowRead, disabledPluginsRead, skillsRead])
     const sessionKey = toSessionKey(nextId)
     nextId += 1
     const mode = params.mode
     const queryFn: HostedQueryFn = (queryParams) => sdk.query(queryParams)
     const initialTitle = params.initialTitle ?? null
-    const stage = stageParams === null ? null : { ...stageParams, editAllow, disabledPlugins }
+    const stage = stageParams === null ? null : { ...stageParams, editAllow, disabledPlugins, skills }
 
     function onSessionId(claudeSessionId: string): void {
       settings.dropAdopted(claudeSessionId)
+      if (stage?.agent.selfContained === true && mode.kind === 'fresh') {
+        void writeStagePrompt(ctx.fs, promptsDir, claudeSessionId, stage.agent.definition.prompt).then((failure) => {
+          if (failure !== null) console.error(`[hosting] could not save the system prompt of stage session ${sessionKey}: ${failure}`)
+        })
+      }
       if (mode.kind === 'fork') {
         void titleFork(sdk, options.listSessions, { parentSessionId: mode.sessionId, forkedSessionId: claudeSessionId, cwd }).then((titled) => handles.get(sessionKey)?.setTitled(titled))
       }

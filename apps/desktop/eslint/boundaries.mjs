@@ -148,7 +148,7 @@ export const RESTRICTIONS = [
     files: ['src/main/sessions/hosting/**'],
     syntax: [
       { selector: "Property[key.name='tools'][shorthand=false]", message: "A tools: key restricts the whole session's built-in set — use allowedTools." },
-      { selector: "Property[key.name='skills'][shorthand=false]", message: 'Commands run as typed slash commands, never through the Skill-tool filter.' },
+      { selector: "Property[key.name='skills'][shorthand=false]:not(FunctionDeclaration[id.name='stageOptions'] Property)", message: 'Commands run as typed slash commands, never through the Skill-tool filter; only a stage session, which has none, narrows its skills.' },
       { selector: "Property[key.name='prompt'][value.type='Literal'][value.raw=/^[\"']/]", message: 'A string prompt disables Stop — keep streaming input mode.' },
       { selector: "Property[key.name='prompt'][value.type='TemplateLiteral']", message: 'A string prompt disables Stop — keep streaming input mode.' },
       { selector: "CallExpression[callee.property.name='kill']", message: 'The SDK owns termination — never kill a process directly.' },

@@ -19,7 +19,7 @@ const SESSION_ID = '3f2a9c10-1b2c-4d3e-8f4a-5b6c7d8e9f01'
 
 const BUNDLED ='/app/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude'
 
-const STAGE = { tag: { agent: 'impl', number: 550, kind: 'issue', trigger: 'planApproved' }, agent: { name: 'impl-agent', definition: { description: 'impl', prompt: 'body' } }, instructionsRoot: '/bundle', model: 'sonnet', sessionRequiredPaths: [] } as const
+const STAGE = { tag: { agent: 'impl', number: 550, kind: 'issue', trigger: 'planApproved' }, agent: { name: 'impl-agent', definition: { description: 'impl', prompt: 'body' }, selfContained: false }, instructionsRoot: '/bundle', model: 'sonnet', sessionRequiredPaths: [] } as const
 
 describe('createHostedStore', () => {
   it('start() returns a ready snapshot naming the repo, and a second start() mints a distinct sessionKey', async () => {
