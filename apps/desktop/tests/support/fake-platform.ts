@@ -19,7 +19,19 @@ export function createFakeClock(start: Date | string = '2026-01-01T00:00:00.000Z
 
 const parentOf = (path: string): string => path.slice(0, Math.max(0, path.lastIndexOf('/')))
 
+const withSlashes = (path: string): string => path.replace(/\\/g, '/')
+
+/** Keys are stored with `/` so a fixture written through a native Windows path matches the code under test. */
 export function createFakeFs(clock: Clock = createFakeClock()): PlatformFs {
+  const raw = createSlashFs(clock)
+  const wrapped: Record<string, unknown> = {}
+  for (const [name, member] of Object.entries(raw)) {
+    wrapped[name] = (first: unknown, ...rest: unknown[]) => (member as (...args: unknown[]) => unknown)(typeof first === 'string' ? withSlashes(first) : first, ...rest.map((arg) => (name === 'rename' && typeof arg === 'string' ? withSlashes(arg) : arg)))
+  }
+  return wrapped as unknown as PlatformFs
+}
+
+function createSlashFs(clock: Clock): PlatformFs {
   const files = new Map<string, string>()
   const dirs = new Set<string>()
 
