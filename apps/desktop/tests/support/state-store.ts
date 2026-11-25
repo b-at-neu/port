@@ -1,3 +1,4 @@
+import { pathOps } from '@/main/platform/paths'
 import { createRunStore } from '@/main/pipeline/state/run-store'
 import { createPipelineStateStore } from '@/main/pipeline/state/store'
 import type { Platform } from '@/main/platform'
@@ -16,13 +17,15 @@ interface MemoryStoreOptions {
   readonly at?: string
 }
 
+export const USER_DATA = pathOps.toNative('/data')
+
 /** The state file's full path under `storeCtx`. */
-export const STATE_PATH = '/data/pipeline-state.json'
+export const STATE_PATH = pathOps.join(USER_DATA, 'pipeline-state.json')
 
 /** A platform whose file reads, writes and removals are the three given members; everything else is the in-memory fs. */
 export function storeCtx(fs: Pick<PlatformFs, 'readJson' | 'writeJsonAtomic' | 'remove'>, at: string = AT): Pick<Platform, 'fs' | 'clock' | 'paths'> {
   const clock = createFakeClock(at)
-  return { paths: { userData: '/data', temp: '/data/tmp', logs: '/data/logs' }, clock, fs: { ...createFakeFs(clock), ...fs } }
+  return { paths: { userData: USER_DATA, temp: pathOps.join(USER_DATA, 'tmp'), logs: pathOps.join(USER_DATA, 'logs') }, clock, fs: { ...createFakeFs(clock), ...fs } }
 }
 
 /** The real pipeline state store over an in-memory file, seeded with `tickets` for `repoId`. */

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { pathOps } from '@/main/platform/paths'
 import { createPipelineStateStore } from '@/main/pipeline/state/store'
 import type { TicketEvent } from '@/types/stage-labels'
 import type { FileResult } from '@/types/platform'
@@ -9,7 +10,7 @@ import denials from '../../../fixtures/pipeline-state/v2/stage-denials.json'
 import v2 from '../../../fixtures/pipeline-state/v2/pipeline-state.json'
 import sessions from '../../../fixtures/pipeline-state/v2/stage-sessions.json'
 import { reconciledItem, repositoryState } from '../../../support/board-snapshot'
-import { AT, memoryStore, STATE_PATH, storeCtx } from '../../../support/state-store'
+import { AT, memoryStore, STATE_PATH, storeCtx, USER_DATA } from '../../../support/state-store'
 import { runOf, ticketOf } from '../../../support/tickets'
 
 const REPO = 'repo-a' as RepoId
@@ -17,7 +18,7 @@ const READY = repositoryState([reconciledItem({ number: 7, matchedKeys: ['marker
 const ISSUE = { kind: 'issue' as const, number: 7 }
 const CLAIM: TicketEvent = { kind: 'claim', stage: 'plan' }
 
-const LEGACY = { dispatch: '/data/dispatch.json', sessions: '/data/stage-sessions.json', denials: '/data/stage-denials.json' }
+const LEGACY = { dispatch: pathOps.join(USER_DATA, 'dispatch.json'), sessions: pathOps.join(USER_DATA, 'stage-sessions.json'), denials: pathOps.join(USER_DATA, 'stage-denials.json') }
 
 interface RigOptions {
   readonly file?: FileResult<unknown>
