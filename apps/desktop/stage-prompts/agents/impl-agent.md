@@ -5,7 +5,7 @@ model: sonnet
 isolation: worktree
 permissionMode: dontAsk
 maxTurns: 150
-disallowedTools: Agent
+disallowedTools: Agent, ScheduleWakeup, ReportFindings, ShareOnboardingGuide, ListAgents
 color: green
 ---
 

@@ -16,7 +16,7 @@ interface BuildSessionOptionsParams {
   /** `model` is set only when non-null, matching Claude Code's own default. Ignored entirely when `stage` is set. */
   readonly defaults: SessionDefaults
   /** Non-null only for a stage session: the inline agent, its model, and the bundle root it may read; `permissionMode` is always `'default'` — `defaults` is never read. */
-  readonly stage: { readonly agent: StageAgentLaunch; readonly instructionsRoot: string; readonly model: string } | null
+  readonly stage: { readonly agent: StageAgentLaunch; readonly instructionsRoot: string; readonly model: string; readonly disabledPlugins: readonly string[] } | null
 }
 
 function denyBash(reason: string) {
@@ -40,6 +40,7 @@ function stageOptions(stage: NonNullable<BuildSessionOptionsParams['stage']>): O
     model: stage.model,
     additionalDirectories: [stage.instructionsRoot],
     hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [labelGuardHook] }] },
+    ...(stage.disabledPlugins.length > 0 ? { settings: { enabledPlugins: Object.fromEntries(stage.disabledPlugins.map((id) => [id, false])) } } : {}),
   }
 }
 

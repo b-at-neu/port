@@ -25,16 +25,19 @@ function commaList(value: string | undefined): string[] | undefined {
   return items.length > 0 ? items : undefined
 }
 
-function parseFrontmatter(text: string): { readonly fields: ReadonlyMap<string, string>; readonly body: string } | null {
-  const match = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(text)
+function parseFrontmatter(text: string): { readonly fields: ReadonlyMap<string, string> } | null {
+  const match = /^---\n([\s\S]*?)\n---\n/.exec(text)
   if (match === null) return null
   const fields = new Map<string, string>()
   for (const line of (match[1] ?? '').split('\n')) {
     const split = /^([\w-]+):\s*(.*)$/.exec(line)
     if (split?.[1] !== undefined) fields.set(split[1], (split[2] ?? '').trim())
   }
-  return { fields, body: (match[2] ?? '').trim() }
+  return { fields }
 }
+
+/** The agent body already travels in the first message's instructions block, so the system prompt only points at it. */
+export const STAGE_SYSTEM_PROMPT = 'You are a port pipeline stage agent. Your full instructions are the `<port-stage-instructions>` block in your first message. Follow them exactly.'
 
 /** Never throws: a missing file or a frontmatter without `name`/`description` is a typed failure naming the file. */
 export async function loadStageAgentDefinition(params: LoadStageAgentDefinitionParams): Promise<StageAgentDefinitionResult> {
@@ -52,6 +55,6 @@ export async function loadStageAgentDefinition(params: LoadStageAgentDefinitionP
   return {
     ok: true,
     name,
-    definition: { description, prompt: parsed.body, ...(tools !== undefined ? { tools } : {}), ...(disallowedTools !== undefined ? { disallowedTools } : {}) },
+    definition: { description, prompt: STAGE_SYSTEM_PROMPT, ...(tools !== undefined ? { tools } : {}), ...(disallowedTools !== undefined ? { disallowedTools } : {}) },
   }
 }

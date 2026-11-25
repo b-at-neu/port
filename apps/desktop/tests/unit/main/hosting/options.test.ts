@@ -95,26 +95,32 @@ describe('buildSessionOptions — stage branch (#327)', () => {
   const IMPL = { name: 'impl-agent', definition: { description: 'impl', prompt: 'body', disallowedTools: ['Agent'] } }
 
   it('sets agent, model and permissionMode: default from stage, never reading defaults', () => {
-    const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, defaults: { model: 'haiku', permissionMode: 'acceptEdits' }, stage: { agent: IMPL, instructionsRoot: '/bundle', model: 'sonnet' } })
+    const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, defaults: { model: 'haiku', permissionMode: 'acceptEdits' }, stage: { agent: IMPL, instructionsRoot: '/bundle', model: 'sonnet', disabledPlugins: [] } })
     expect(options.permissionMode).toBe('default')
     expect(options.model).toBe('sonnet')
     expect(options.agent).toBe('impl-agent')
   })
 
   it('defines the agent inline with the stage model and reads the bundle through additionalDirectories', () => {
-    const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, stage: { agent: IMPL, instructionsRoot: '/bundle', model: 'sonnet' } })
+    const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, stage: { agent: IMPL, instructionsRoot: '/bundle', model: 'sonnet', disabledPlugins: [] } })
     expect(options.agents).toEqual({ 'impl-agent': { description: 'impl', prompt: 'body', disallowedTools: ['Agent'], model: 'sonnet' } })
     expect(options.additionalDirectories).toEqual(['/bundle'])
   })
 
   it('adds no allowedTools or systemPrompt', () => {
-    const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, stage: { agent: { name: 'plan-agent', definition: { description: 'plan', prompt: 'body' } }, instructionsRoot: '/bundle', model: 'opus' } }) as Record<string, unknown>
+    const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, stage: { agent: { name: 'plan-agent', definition: { description: 'plan', prompt: 'body' } }, instructionsRoot: '/bundle', model: 'opus', disabledPlugins: [] } }) as Record<string, unknown>
     expect(options['allowedTools']).toBeUndefined()
     expect(options['systemPrompt']).toBeUndefined()
   })
 
+  it('turns the given plugins off through flag settings, and sets no settings when there are none', () => {
+    const off = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, stage: { agent: IMPL, instructionsRoot: '/bundle', model: 'sonnet', disabledPlugins: ['posthog@posthog'] } })
+    expect(off.settings).toEqual({ enabledPlugins: { 'posthog@posthog': false } })
+    expect(buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, stage: { agent: IMPL, instructionsRoot: '/bundle', model: 'sonnet', disabledPlugins: [] } }).settings).toBeUndefined()
+  })
+
   describe('label guard hook', () => {
-    const STAGE = { agent: IMPL, instructionsRoot: '/bundle', model: 'sonnet' }
+    const STAGE = { agent: IMPL, instructionsRoot: '/bundle', model: 'sonnet', disabledPlugins: [] }
     const SIGNAL = { signal: new AbortController().signal }
     const bashInput = (command: string) => ({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command }, tool_use_id: 't' }) as never
 

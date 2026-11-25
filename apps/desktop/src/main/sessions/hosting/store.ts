@@ -39,6 +39,7 @@ import { createHostingSettings } from '@/main/sessions/hosting/settings'
 import { readHistory } from '@/main/sessions/hosting/history'
 import { defaultForkListSessions, titleFork } from '@/main/sessions/hosting/fork'
 import { readStageEditAllow } from '@/main/sessions/hosting/stage-allow'
+import { readStageDisabledPlugins } from '@/main/sessions/hosting/stage-plugins'
 import { resolveStartTitle } from '@/main/sessions/hosting/title'
 import { createInMemoryHostingPersistence } from '@/main/sessions/hosting/persist'
 import { resolveClaudeExecutable } from '@/main/sessions/runtime/locate'
@@ -61,6 +62,8 @@ export interface HostedStoreDeps {
   readonly onEntries: (delta: SessionEntriesDelta) => void
   /** A stage start's own edit-allow globs, read from the stage worktree. */
   readonly readStageEditAllow: (cwd: string) => Promise<readonly string[]>
+  /** The operator's own plugins a stage start turns off, read against the stage worktree's settings. */
+  readonly readStageDisabledPlugins: (cwd: string) => Promise<readonly string[]>
   readonly samePath: (a: string, b: string) => boolean
   /** `main/ipc.ts` supplies the real file-backed one; the default here is disk-free, for tests. */
   readonly persistence: HostingPersistence
@@ -80,6 +83,7 @@ export const defaultHostedStoreDeps: HostedStoreDeps = {
   onStatus: () => undefined,
   onEntries: () => undefined,
   readStageEditAllow: (cwd: string) => readStageEditAllow(cwd),
+  readStageDisabledPlugins: (cwd: string) => readStageDisabledPlugins(cwd),
   samePath: (a: string, b: string) => pathOps.samePath(a, b),
   persistence: createInMemoryHostingPersistence(),
   removeWorktree: (path, force) => removeSessionWorktreeAt({ git: defaultGitRunner() }, { path, force }),
@@ -132,13 +136,14 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     const cwd = params.workspace.folder
     const stageParams = params.stage ?? null
     const editAllowRead: Promise<readonly string[]> = stageParams === null ? Promise.resolve([]) : deps.readStageEditAllow(cwd)
-    const [sdk, history, editAllow] = await Promise.all([deps.getSdk(), deps.readHistory(params.mode), editAllowRead])
+    const disabledPluginsRead: Promise<readonly string[]> = stageParams === null ? Promise.resolve([]) : deps.readStageDisabledPlugins(cwd)
+    const [sdk, history, editAllow, disabledPlugins] = await Promise.all([deps.getSdk(), deps.readHistory(params.mode), editAllowRead, disabledPluginsRead])
     const sessionKey = toSessionKey(nextId)
     nextId += 1
     const mode = params.mode
     const queryFn: HostedQueryFn = (queryParams) => sdk.query(queryParams)
     const initialTitle = params.initialTitle ?? null
-    const stage = stageParams === null ? null : { ...stageParams, editAllow }
+    const stage = stageParams === null ? null : { ...stageParams, editAllow, disabledPlugins }
 
     function onSessionId(claudeSessionId: string): void {
       settings.dropAdopted(claudeSessionId)
