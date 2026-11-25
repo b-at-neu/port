@@ -8,6 +8,7 @@ export interface ActionToastSpec<N extends ActionName> {
   readonly pending?: string | ((input: ActionInput<N>) => string)
   readonly id?: (input: ActionInput<N>) => string
   readonly result: (output: ActionOutput<N>, input: ActionInput<N>) => ActionToast | null
+  readonly unreachable?: ActionToast | null
 }
 
 export interface PerformSpec<N extends ActionName> {
@@ -29,7 +30,7 @@ export async function perform<N extends ActionName>(spec: PerformSpec<N>, deps: 
   let result: ActionOutput<N> | 'unreachable'
   if (toast?.pending !== undefined) {
     const pending = typeof toast.pending === 'function' ? toast.pending(input) : toast.pending
-    result = await runInBackground({ id: toast.id?.(input) ?? name, pending, run, toToast: (output) => toast.result(output, input) })
+    result = await runInBackground({ id: toast.id?.(input) ?? name, pending, run, toToast: (output) => toast.result(output, input), unreachable: toast.unreachable })
   } else {
     try {
       result = await run()
@@ -37,7 +38,8 @@ export async function perform<N extends ActionName>(spec: PerformSpec<N>, deps: 
       if (shown !== null) showActionToast(name, shown)
     } catch (error) {
       console.error(`Failed to reach the main process for ${name}`, error)
-      showActionToast(name, UNREACHABLE)
+      const unreachable = toast?.unreachable === undefined ? UNREACHABLE : toast.unreachable
+      if (unreachable !== null) showActionToast(name, unreachable)
       result = 'unreachable'
     }
   }

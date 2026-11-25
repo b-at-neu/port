@@ -10,6 +10,7 @@ import { createQueryClient, ipcQueryOptions } from '@/renderer/data/query'
 import { connectQueryCache } from '@/renderer/data/subscriptions'
 import { connectItemActionPruning } from '@/renderer/board/screen'
 import { connectNeedsYouNotifications } from '@/renderer/needs-you/notify'
+import { connectPermissionTitle } from '@/renderer/permission/title'
 import { themeStore } from '@/renderer/app/theme'
 import { initSidebarCollapsed, openNewSessionDialog, openPalette, setRenaming, toggleSidebarCollapsed } from '@/renderer/app/stores'
 import { isRepoScreenRoute, restoreHashOf, setLastRepo, shellPrefs, setSidebarCollapsed, trackLastRoute } from '@/renderer/app/prefs'
@@ -30,6 +31,7 @@ const queryClient = createQueryClient()
 connectQueryCache(queryClient)
 connectItemActionPruning(queryClient)
 connectNeedsYouNotifications(queryClient)
+connectPermissionTitle(queryClient)
 setSessionsQueryClient(queryClient)
 initSidebarCollapsed(shellPrefs().sidebarCollapsed)
 if (app) {

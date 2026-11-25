@@ -1,42 +1,41 @@
-// The decision dialog — a shadcn Dialog over decision/controller.ts's
-// useSyncExternalStore state, the same shape gate/dialog.tsx establishes.
-import { useSyncExternalStore } from 'react'
 import { Dialog, DialogContent } from '@/renderer/components/ui/dialog'
-import { closeDecisionDialog, getState, subscribe } from '@/renderer/decision/controller'
-import { AlertDialog } from '@/renderer/components/ui/alert-dialog'
-import { ConfirmGrantStep, ConfirmReviseStep, ConfirmUnblockStep } from '@/renderer/decision/dialog-steps'
+import { ConfirmDialog } from '@/renderer/components/confirm-dialog'
+import { useDecideItem } from '@/renderer/actions/decide-item'
+import { decisionButtonLabel } from '@/renderer/board/copy'
+import { closeDecisionDialog, useDecisionTarget } from '@/renderer/decision/controller'
+import { dialogTitle, grantConsequence } from '@/renderer/decision/copy'
+import { ConfirmReviseStep, ConfirmUnblockStep } from '@/renderer/decision/dialog-steps'
+import type { DecisionTarget } from '@/types/decision'
 
-function DialogBody() {
-  const state = useSyncExternalStore(subscribe, getState)
-  switch (state.step) {
-    case 'closed':
-      return null
-    case 'confirm-unblock':
-      return <ConfirmUnblockStep state={state} />
-    case 'confirm-revise':
-      return <ConfirmReviseStep state={state} />
-    case 'confirm-grant':
-      return null
+type GrantTarget = Extract<DecisionTarget, { readonly decision: 'grant' }>
+
+function GrantConfirm({ target }: { readonly target: GrantTarget }) {
+  const { repoId, number, expectedStage, context } = target
+  const decide = useDecideItem({ cap: context.cap })
+
+  function confirm(): void {
+    closeDecisionDialog()
+    void decide.perform({ repoId, number, expectedStage, decision: 'grant', route: null, note: null, skipComment: false, picks: null })
   }
+
+  return <ConfirmDialog open title={dialogTitle('grant', number)} description={grantConsequence(context, number)} confirmLabel={decisionButtonLabel('grant')} onCancel={closeDecisionDialog} onConfirm={confirm} />
+}
+
+function DecisionForm({ target }: { readonly target: Exclude<DecisionTarget, { readonly decision: 'grant' }> }) {
+  const key = `${target.repoId}:${String(target.number)}`
+  return target.decision === 'unblock' ? <ConfirmUnblockStep key={key} target={target} /> : <ConfirmReviseStep key={key} target={target} />
 }
 
 export function DecisionDialog() {
-  const state = useSyncExternalStore(subscribe, getState)
-  const open = state.step !== 'closed'
+  const target = useDecisionTarget()
 
-  if (state.step === 'confirm-grant') {
-    return (
-      <AlertDialog open onOpenChange={(next) => !next && closeDecisionDialog()}>
-        <ConfirmGrantStep state={state} />
-      </AlertDialog>
-    )
-  }
+  if (target?.decision === 'grant') return <GrantConfirm target={target} />
 
   return (
-    <Dialog open={open} onOpenChange={(next) => !next && closeDecisionDialog()}>
-      {open ? (
+    <Dialog open={target !== null} onOpenChange={(next) => !next && closeDecisionDialog()}>
+      {target !== null ? (
         <DialogContent className="max-w-xl">
-          <DialogBody />
+          <DecisionForm target={target} />
         </DialogContent>
       ) : null}
     </Dialog>

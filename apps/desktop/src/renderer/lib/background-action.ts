@@ -23,7 +23,7 @@ interface BackgroundAction<T> {
   readonly pending: string
   readonly run: () => Promise<T>
   readonly toToast: (result: T) => ActionToast | null
-  readonly unreachable?: ActionToast
+  readonly unreachable?: ActionToast | null
 }
 
 export async function runInBackground<T>(action: BackgroundAction<T>): Promise<T | 'unreachable'> {
@@ -34,7 +34,8 @@ export async function runInBackground<T>(action: BackgroundAction<T>): Promise<T
     result = await run()
   } catch (error) {
     console.error(`Failed to reach the main process for ${id}`, error)
-    showActionToast(id, unreachable)
+    if (unreachable === null) toast.dismiss(id)
+    else showActionToast(id, unreachable)
     return 'unreachable'
   }
   const next = toToast(result)

@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { perform } from '@/renderer/actions/perform'
 import type { PerformDeps } from '@/renderer/actions/perform'
 import { createQueryClient } from '@/renderer/data/query'
+import type { ActionToast } from '@/types/toast'
 
 const NAME = 'session.close' as const
 const KEY = ['session.list']
@@ -70,6 +71,24 @@ describe('perform', () => {
     expect(toast.loading).not.toHaveBeenCalled()
     expect(toast[tone]).toHaveBeenCalledTimes(1)
     expect(deps.client.getQueryState(KEY)?.isInvalidated).toBe(true)
+  })
+
+  const CUSTOM: ActionToast = { tone: 'error', title: 'Custom', description: null, action: null, cancel: null }
+
+  it.each([
+    ['pending', 'a null override', null, 0, 0],
+    ['plain', 'a null override', null, 0, 0],
+    ['pending', 'a custom toast', CUSTOM, 1, 0],
+    ['plain', 'a custom toast', CUSTOM, 1, 0],
+  ] as const)('a rejected invoke on the %s branch with %s still returns unreachable', async (branch, _name, unreachable, errors, successes) => {
+    const deps = depsFor('rejected')
+    const result = await perform({ name: NAME, input: {} as never, toast: { ...(branch === 'pending' ? { pending: 'Working' } : {}), result: () => null, unreachable } }, deps)
+
+    expect(result).toBe('unreachable')
+    expect(toast.error).toHaveBeenCalledTimes(errors)
+    expect(toast.success).toHaveBeenCalledTimes(successes)
+    if (unreachable !== null) expect(toast.error).toHaveBeenCalledWith('Custom', expect.anything())
+    if (branch === 'pending' && unreachable === null) expect(toast.dismiss).toHaveBeenCalledTimes(1)
   })
 
   it('shows no toast when the result maps to null', async () => {
