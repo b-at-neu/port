@@ -5,7 +5,8 @@ import type { ReconciledItem } from '@/types/state'
 import type { WriteOutcome } from '@/types/writes'
 import type { ApplyObservationParams, ReadyEntry } from '@/types/actions'
 import { applyObservation } from '@/main/pipeline/operator/observe'
-import type { PostCommentParams } from '@/types/writes'
+import type { PostCommentParams, WriteStateParams } from '@/types/writes'
+import type { GatePreflightFetch } from '@/types/github'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 const APPLIED = { kind: 'applied', argv: [] } satisfies WriteOutcome
@@ -102,6 +103,9 @@ function deps(): { readonly posted: PostCommentParams[]; readonly labelCalls: ()
         posted.push(p)
         return Promise.resolve(APPLIED)
       },
+      fetchGatePreflight: () => {
+        throw new Error('fetchGatePreflight must not be called for this observation')
+      },
     },
   }
 }
@@ -129,5 +133,49 @@ describe('applyObservation — escalation dedup', () => {
     const comments = [{ body: '## Pipeline Escalation\nEarlier.\n<!-- port:escalation sha-cap old1111 -->', createdAt: '2026-01-01T00:00:00Z' }]
     await applyObservation(params(comments), d.value)
     expect(d.posted).toHaveLength(1)
+  })
+})
+
+describe('applyObservation — plan-missing re-read', () => {
+  const PLAN_MISSING_PARAMS: ApplyObservationParams = {
+    ...params([]),
+    item: { ...item([]), kind: 'issue', stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }], planPresent: false },
+    observation: { kind: 'plan-missing', number: 52, itemKind: 'issue' },
+  }
+
+  function preflightItem(body: string): GatePreflightFetch {
+    return { ok: true, item: { kind: 'issue', number: 52, title: 'a ticket', url: 'https://github.com/acme/widgets/issues/52', state: 'OPEN', body, assignees: ['op'] }, viewer: 'op', fetchedAt: '2026-01-01T00:00:00Z' }
+  }
+
+  const FAILED: GatePreflightFetch = { ok: false, kind: 'timeout', message: 'timed out', fetchedAt: '2026-01-01T00:00:00Z' }
+  const UNRESOLVED: GatePreflightFetch = { ok: true, item: null, viewer: 'op', fetchedAt: '2026-01-01T00:00:00Z' }
+
+  it.each([
+    { name: 'stale snapshot, plan on re-read', fetch: preflightItem('Why\n\n## Implementation Plan\n\nSteps'), labels: { kind: 'no-op' }, writes: 0, comments: 0 },
+    { name: 'genuinely missing plan', fetch: preflightItem('Why\n\nNo plan here'), labels: APPLIED, writes: 1, comments: 1 },
+    { name: 'heading only inside a longer line', fetch: preflightItem('See ## Implementation Plan below'), labels: APPLIED, writes: 1, comments: 1 },
+    { name: 're-read fails', fetch: FAILED, labels: { kind: 'verify-failed', message: 'timed out' }, writes: 0, comments: 0 },
+    { name: 're-read resolves to no item', fetch: UNRESOLVED, labels: { kind: 'item-unavailable' }, writes: 0, comments: 0 },
+  ] as const)('$name', async ({ fetch, labels, writes, comments }) => {
+    const d = deps()
+    const requests: WriteStateParams[] = []
+    const value = {
+      ...d.value,
+      writeState: (p: WriteStateParams) => {
+        requests.push(p)
+        return Promise.resolve(APPLIED)
+      },
+      fetchGatePreflight: () => Promise.resolve(fetch),
+    }
+    const result = await applyObservation(PLAN_MISSING_PARAMS, value)
+    expect(result.labels).toEqual(labels)
+    expect(requests).toHaveLength(writes)
+    expect(d.posted).toHaveLength(comments)
+    const request = requests[0]?.request
+    if (request !== undefined) {
+      expect(request.action).toBe('observe-plan-missing')
+      expect(request.add).toEqual(['ready'])
+      expect(request.remove).toEqual(['planReview'])
+    }
   })
 })

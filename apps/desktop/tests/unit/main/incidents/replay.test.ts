@@ -12,7 +12,7 @@ const postComment = () => Promise.resolve({ kind: 'no-op' } as const)
 
 async function observe(number: number, headAtDecision: string, headAtWrite: string, observation: WriteObservation) {
   const rig = writerRig({ number, writeHead: headAtWrite })
-  await applyObservation({ entry: ENTRY, item: item({ number, headRefOid: headAtDecision }), observation, snapshotAt: '2026-11-16T11:59:00.000Z', auditDir: '/audit', scratchDir: '/scratch' }, { writeState: rig.writeState, postComment })
+  await applyObservation({ entry: ENTRY, item: item({ number, headRefOid: headAtDecision }), observation, snapshotAt: '2026-11-16T11:59:00.000Z', auditDir: '/audit', scratchDir: '/scratch' }, { writeState: rig.writeState, postComment, fetchGatePreflight: () => Promise.reject(new Error('unused')) })
   return rig.incidents
 }
 

@@ -22,6 +22,11 @@ const SESSION_REQUIRED_LINE = new RegExp(`^${SESSION_REQUIRED_PREFIX.replace(/[*
 export const IMPLEMENTATION_PLAN_HEADING = '## Implementation Plan'
 const CLOSES_LINE = /^Closes #\d+\b/
 
+/** True when any line, trimmed, is exactly the plan heading — the one rule both the snapshot and the pre-write re-read use. */
+export function planPresentIn(body: string): boolean {
+  return body.split(/\r?\n/).some((line) => line.trim() === IMPLEMENTATION_PLAN_HEADING)
+}
+
 /** Fails open toward "not session-required": a false positive stalls an item forever and invisibly, while a false negative costs one denied edit and a retry. */
 function slotMarkerReason(lines: readonly string[], fromIdx: number): string | null {
   for (let i = fromIdx; i < lines.length; i++) {

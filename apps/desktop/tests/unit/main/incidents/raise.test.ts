@@ -22,7 +22,7 @@ const RAISED = {
   'stale-snapshot': async () => {
     const rig = writerRig({ number: 789, writeHead: 'a7e3b21' })
     const observation: WriteObservation = { kind: 'zero-diff', number: 789, itemKind: 'pull-request', count: 2, headRefOid: 'f19c6d5' }
-    await applyObservation({ entry: ENTRY, item: item(), observation, snapshotAt: 'tick-1', auditDir: '/audit', scratchDir: '/scratch' }, { writeState: rig.writeState, postComment: () => Promise.resolve({ kind: 'no-op' }) })
+    await applyObservation({ entry: ENTRY, item: item(), observation, snapshotAt: 'tick-1', auditDir: '/audit', scratchDir: '/scratch' }, { writeState: rig.writeState, postComment: () => Promise.resolve({ kind: 'no-op' }), fetchGatePreflight: () => Promise.reject(new Error('unused')) })
     return rig.incidents.map((draft) => draft.bucket)
   },
   'liveness-reset': () => {
