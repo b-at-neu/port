@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { Button } from '@/renderer/components/ui/button'
 import { Textarea } from '@/renderer/components/ui/textarea'
 import { useSendMessage } from '@/renderer/session/actions'
-import { blockerSendError, blockerSentToast } from '@/renderer/board/blocked-copy'
+import { BLOCKER_ANSWER_LABEL, BLOCKER_SEND_LABEL, blockerSendError, blockerSentToast } from '@/renderer/board/copy'
 import type { SessionKey } from '@/types/hosting'
 
 interface BlockerAnswerProps {
@@ -31,13 +31,13 @@ export function BlockerAnswer({ sessionKey, number }: BlockerAnswerProps) {
   return (
     <div data-slot="blocker-answer" className="flex flex-col gap-2">
       <label htmlFor={`blocker-answer-${sessionKey}`} className="text-small text-foreground">
-        Your answer
+        {BLOCKER_ANSWER_LABEL}
       </label>
       <Textarea id={`blocker-answer-${sessionKey}`} value={text} onChange={(event) => setText(event.target.value)} disabled={sending} />
       {error !== null ? <p className="text-meta text-destructive">{error}</p> : null}
       <div className="flex justify-end">
         <Button size="small" disabled={text.trim() === '' || sending} onClick={() => void submit()}>
-          Send to agent
+          {BLOCKER_SEND_LABEL}
         </Button>
       </div>
     </div>

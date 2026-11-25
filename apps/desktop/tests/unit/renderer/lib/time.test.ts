@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { exactTime, formatAgo, formatAgoSince, formatClock, formatDuration, formatHourMinute, formatMonthDay, formatShortClock, formatTimeOfDay, relativeTime } from '@/renderer/lib/time'
+import { exactTime, formatAgo, formatAgoSeconds, formatAgoSince, formatClock, formatDuration, formatHourMinute, formatMonthDay, formatShortClock, formatShortTime, formatTimeOfDay, relativeTime } from '@/renderer/lib/time'
 
 const MIN = 60_000
 const HOUR = 60 * MIN
@@ -31,6 +31,33 @@ describe('formatAgo', () => {
     [24 * HOUR, '1d ago'],
   ])('%d ms reads %s', (ms, expected) => {
     expect(formatAgo(ms)).toBe(expected)
+  })
+})
+
+describe('formatAgoSeconds', () => {
+  it.each([
+    [Number.NaN, 'just now'],
+    [-1, 'just now'],
+    [0, '0s ago'],
+    [59_400, '59s ago'],
+    [59_600, '1m ago'],
+    [89_000, '1m ago'],
+    [59 * MIN, '59m ago'],
+    [90 * MIN, '2h ago'],
+    [25 * HOUR, '25h ago'],
+  ])('%d ms reads %s', (ms, expected) => {
+    expect(formatAgoSeconds(ms)).toBe(expected)
+  })
+})
+
+describe('formatShortTime', () => {
+  it('is the locale clock with a padded hour and minute', () => {
+    const date = new Date(2026, 0, 1, 9, 5)
+    expect(formatShortTime(date.toISOString())).toBe(date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+  })
+
+  it('returns an unparsable string as it came', () => {
+    expect(formatShortTime('not a date')).toBe('not a date')
   })
 })
 

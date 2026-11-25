@@ -6,7 +6,6 @@ import type { Ticket } from '@/types/ticket'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import { ticketIndex } from '@/utils/tickets/ticket'
 import { boardColumns } from '@/renderer/board/columns'
-import { laneToggleAria } from '@/renderer/board/copy'
 import { boardLanes, navigableLaneRows } from '@/renderer/board/lanes'
 
 function row(repoId: string, number: number, stageKey: LabelKey | null): BoardItemRow {
@@ -78,12 +77,5 @@ describe('navigableLaneRows', () => {
 
   it('is empty when every lane is collapsed', () => {
     expect(navigableLaneRows(lanes, new Set([A, B, C]))).toEqual([])
-  })
-})
-
-describe('laneToggleAria', () => {
-  it('names the action the toggle will take', () => {
-    expect(laneToggleAria('acme/widgets', false)).toContain('acme/widgets')
-    expect(laneToggleAria('acme/widgets', false)).not.toBe(laneToggleAria('acme/widgets', true))
   })
 })

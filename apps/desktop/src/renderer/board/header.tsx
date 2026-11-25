@@ -11,7 +11,7 @@ import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
 import type { BoardView } from '@/types/router'
 import type { RepositoryState } from '@/types/state'
-import { boardLayoutLabel, boardViewLabel, freshnessIndicator } from '@/renderer/board/copy'
+import { ALL_REPOSITORIES, BOARD_LAYOUT_LABEL, BOARD_TITLE, REFRESH_LABEL, boardViewLabel, freshnessIndicator } from '@/renderer/board/copy'
 
 interface BoardHeaderProps {
   readonly snapshot: BoardSnapshot | null
@@ -31,7 +31,7 @@ export function BoardHeader({ snapshot, now, refreshing, onRefresh, repo, onRepo
   return (
     <ScreenHeader className="justify-between gap-2">
       <div className="flex min-w-0 items-center gap-2">
-        <span className="shrink-0">Board</span>
+        <span className="shrink-0">{BOARD_TITLE}</span>
         {indicator !== null ? (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -49,7 +49,7 @@ export function BoardHeader({ snapshot, now, refreshing, onRefresh, repo, onRepo
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <Tabs value={view} onValueChange={(value) => onViewChange(value as BoardView)}>
-          <TabsList aria-label={boardLayoutLabel()} className="text-foreground-secondary">
+          <TabsList aria-label={BOARD_LAYOUT_LABEL} className="text-foreground-secondary">
             <TabsTrigger value="list">
               <List aria-hidden="true" className="size-4" />
               {boardViewLabel('list')}
@@ -65,7 +65,7 @@ export function BoardHeader({ snapshot, now, refreshing, onRefresh, repo, onRepo
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All repositories</SelectItem>
+            <SelectItem value="all">{ALL_REPOSITORIES}</SelectItem>
             {readyRepos.map((r) => (
               <SelectItem key={r.repoId} value={r.repoId}>
                 {r.displayName}
@@ -75,7 +75,7 @@ export function BoardHeader({ snapshot, now, refreshing, onRefresh, repo, onRepo
         </Select>
         <Button variant="ghost" size="small" onClick={onRefresh} disabled={refreshing}>
           <RefreshCw aria-hidden="true" className={refreshing ? 'size-3.5 animate-spin' : 'size-3.5'} />
-          Refresh
+          {REFRESH_LABEL}
         </Button>
       </div>
     </ScreenHeader>

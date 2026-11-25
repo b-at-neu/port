@@ -1,12 +1,10 @@
 // The Board kanban's TicketCard — identity, phase pill and the one next action, with a narrow edge in the card's own phase tone.
-import { useSyncExternalStore } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
 import { Send, Sparkles } from 'lucide-react'
-import { toast } from 'sonner'
 import { cn } from '@/renderer/lib/utils'
 import type { BoardItemRow } from '@/types/board'
-import { actionButtonLabel, actionPendingLabel, actionResultCopy, autoPlanTagTitle, dispatchedTagTitle, noTicketTagLabel, noTicketTagTitle, ungatedTagLabel, ungatedTagTitle } from '@/renderer/board/copy'
-import { itemActionState, runItemAction, subscribeItemActions } from '@/renderer/board/actions'
+import { actionButtonLabel, actionPendingLabel, AUTO_PLAN_TAG_TITLE, DISPATCHED_TAG_TITLE, NO_TICKET_TAG_LABEL, NO_TICKET_TAG_TITLE, UNGATED_TAG_LABEL, UNGATED_TAG_TITLE } from '@/renderer/board/copy'
+import { useItemAction } from '@/renderer/board/actions'
 import { isDispatchedRow, phaseLabelFor, phaseToneFor } from '@/renderer/board/row-model'
 import { prSuffixOf } from '@/utils/tickets/ticket'
 import { BlockedOnTag } from '@/renderer/components/blocked-on-tag'
@@ -38,18 +36,8 @@ function IconTag({ label, children }: { readonly label: string; readonly childre
 }
 
 function AddGateAction({ row }: { readonly row: BoardItemRow }) {
-  const { item } = row
-  const state = useSyncExternalStore(subscribeItemActions, () => itemActionState(item.repoId, item.number))
+  const { state, run } = useItemAction(row)
   const pending = state?.kind === 'pending' && state.action === 'gate'
-
-  async function handleClick(): Promise<void> {
-    await runItemAction({ repoId: item.repoId, kind: item.kind, number: item.number, action: 'gate', expectedStage: row.stageLabel?.key ?? null })
-    const result = itemActionState(item.repoId, item.number)
-    if (result?.kind === 'result' && !result.result.ok) {
-      const availability = row.actions.gate
-      toast(actionResultCopy({ action: 'gate', number: row.ticket.ref.number, plan: availability.available ? availability.plan : null, currentStageName: row.stageLabel?.name ?? null, result: result.result, now: new Date() }))
-    }
-  }
 
   return (
     <Button
@@ -58,7 +46,7 @@ function AddGateAction({ row }: { readonly row: BoardItemRow }) {
       disabled={pending}
       onMouseDown={(event) => event.stopPropagation()}
       onFocus={(event) => event.stopPropagation()}
-      onClick={() => void handleClick()}
+      onClick={() => void run('gate')}
       className="shrink-0 text-primary-text"
     >
       {pending ? actionPendingLabel('gate') : actionButtonLabel('gate')}
@@ -90,18 +78,18 @@ export function TicketCard({ row, ungated, rowProps }: TicketCardProps) {
         </span>
         {prSuffix !== null ? <span className="shrink-0 tabular-nums text-muted-foreground">{prSuffix}</span> : null}
         {ref.kind === 'unlinked-pr' ? (
-          <span title={noTicketTagTitle()} className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-meta text-foreground-secondary">
-            {noTicketTagLabel()}
+          <span title={NO_TICKET_TAG_TITLE} className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-meta text-foreground-secondary">
+            {NO_TICKET_TAG_LABEL}
           </span>
         ) : null}
         <span className="flex-1" />
         {row.item.autoPlan ? (
-          <IconTag label={autoPlanTagTitle()}>
+          <IconTag label={AUTO_PLAN_TAG_TITLE}>
             <Sparkles aria-hidden="true" className="size-4" />
           </IconTag>
         ) : null}
         {isDispatchedRow(row) ? (
-          <IconTag label={dispatchedTagTitle()}>
+          <IconTag label={DISPATCHED_TAG_TITLE}>
             <Send aria-hidden="true" className="size-4" />
           </IconTag>
         ) : null}
@@ -113,8 +101,8 @@ export function TicketCard({ row, ungated, rowProps }: TicketCardProps) {
         <PhasePill tone={tone} label={phaseLabelFor(row)} className="shrink-0" />
         {row.held !== null ? <HeldTag held={row.held} /> : null}
         {ungated ? (
-          <span title={ungatedTagTitle()} className="shrink-0 rounded-full bg-attention-pill px-1.5 py-0.5 text-meta text-attention-pill-foreground">
-            {ungatedTagLabel()}
+          <span title={UNGATED_TAG_TITLE} className="shrink-0 rounded-full bg-attention-pill px-1.5 py-0.5 text-meta text-attention-pill-foreground">
+            {UNGATED_TAG_LABEL}
           </span>
         ) : null}
         {row.blockedOn !== null ? <BlockedOnTag blockedOn={row.blockedOn} /> : null}

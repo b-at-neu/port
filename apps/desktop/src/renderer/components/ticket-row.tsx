@@ -3,7 +3,16 @@
 import type { KeyboardEvent } from 'react'
 import { cn } from '@/renderer/lib/utils'
 import type { BoardItemRow } from '@/types/board'
-import { autoPlanTagLabel, autoPlanTagTitle, dispatchedTagLabel, dispatchedTagTitle, noTicketTagLabel, noTicketTagTitle, operatorJoinedTagLabel, operatorJoinedTagTitle } from '@/renderer/board/copy'
+import {
+  AUTO_PLAN_TAG_LABEL,
+  AUTO_PLAN_TAG_TITLE,
+  DISPATCHED_TAG_LABEL,
+  DISPATCHED_TAG_TITLE,
+  NO_TICKET_TAG_LABEL,
+  NO_TICKET_TAG_TITLE,
+  OPERATOR_JOINED_TAG_LABEL,
+  OPERATOR_JOINED_TAG_TITLE,
+} from '@/renderer/board/copy'
 import { prSuffixOf } from '@/utils/tickets/ticket'
 import { isDispatchedRow, phaseLabelFor, phaseToneFor } from '@/renderer/board/row-model'
 import { NextActionLink } from '@/renderer/components/next-action-link'
@@ -40,14 +49,14 @@ export function TicketRow({ row, rowProps, operatorJoined = false }: TicketRowPr
       {prSuffix !== null ? <span className="shrink-0 tabular-nums text-muted-foreground">{prSuffix}</span> : null}
       <span className="flex-1" />
       {ref.kind === 'unlinked-pr' ? (
-        <span title={noTicketTagTitle()} className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-meta text-foreground-secondary">
-          {noTicketTagLabel()}
+        <span title={NO_TICKET_TAG_TITLE} className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-meta text-foreground-secondary">
+          {NO_TICKET_TAG_LABEL}
         </span>
       ) : null}
       <span className="shrink-0 text-meta text-muted-foreground">{item.repo}</span>
       {item.autoPlan ? (
-        <span title={autoPlanTagTitle()} className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-meta text-foreground-secondary">
-          {autoPlanTagLabel()}
+        <span title={AUTO_PLAN_TAG_TITLE} className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-meta text-foreground-secondary">
+          {AUTO_PLAN_TAG_LABEL}
         </span>
       ) : null}
       <PhaseBar view={ticketViewOf(item)} className="shrink-0" />
@@ -55,13 +64,13 @@ export function TicketRow({ row, rowProps, operatorJoined = false }: TicketRowPr
       {row.held !== null ? <HeldTag held={row.held} /> : null}
       {row.blockedOn !== null ? <BlockedOnTag blockedOn={row.blockedOn} /> : null}
       {isDispatchedRow(row) ? (
-        <span title={dispatchedTagTitle()} aria-label={dispatchedTagTitle()} className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-meta text-foreground-secondary">
-          {dispatchedTagLabel()}
+        <span title={DISPATCHED_TAG_TITLE} aria-label={DISPATCHED_TAG_TITLE} className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-meta text-foreground-secondary">
+          {DISPATCHED_TAG_LABEL}
         </span>
       ) : null}
       {operatorJoined ? (
-        <span title={operatorJoinedTagTitle()} aria-label={operatorJoinedTagTitle()} className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-meta text-foreground-secondary">
-          {operatorJoinedTagLabel()}
+        <span title={OPERATOR_JOINED_TAG_TITLE} aria-label={OPERATOR_JOINED_TAG_TITLE} className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-meta text-foreground-secondary">
+          {OPERATOR_JOINED_TAG_LABEL}
         </span>
       ) : null}
       <NextActionLink row={row} />

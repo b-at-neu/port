@@ -3,8 +3,7 @@
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { TicketRow } from '@/renderer/components/ticket-row'
 import type { BoardItemRow, BoardProjection, BoardSnapshot } from '@/types/board'
-import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
-import { notReadyCopy } from '@/renderer/board/problem-copy'
+import { UNGATED_BANNER_NOTE, notReadyCopy, ungatedBannerHeading } from '@/renderer/board/copy'
 import { ownershipBannerFor } from '@/renderer/board/owner'
 import { storeBannerCopy } from '@/renderer/board/tick'
 import { useListSelection } from '@/renderer/app/list-selection'
@@ -60,13 +59,10 @@ function OwnershipBanners({ snapshot }: { readonly snapshot: BoardSnapshot }) {
 // mount — same `selection` and bare `data-row-key` a section row would use.
 function UngatedBanner({ rows, selection }: { readonly rows: readonly BoardItemRow[]; readonly selection: ReturnType<typeof useListSelection> }) {
   if (rows.length === 0) return null
-  const markerName = LABEL_DEFAULTS.find((def) => def.key === 'marker')?.name ?? 'marker'
   return (
     <div className="flex flex-col gap-1 px-4 pt-3">
-      <div className="text-small font-medium text-foreground">Ungated pull requests · {rows.length}</div>
-      <p className="text-meta text-muted-foreground">
-        These carry a pipeline label but not &quot;{markerName}&quot;, so CI can&apos;t tell them from a human pull request and the merge gate is inactive.
-      </p>
+      <div className="text-small font-medium text-foreground">{ungatedBannerHeading(rows.length)}</div>
+      <p className="text-meta text-muted-foreground">{UNGATED_BANNER_NOTE}</p>
       <div>
         {rows.map((row) => (
           <TicketRow key={`${row.item.repoId}:${String(row.ticket.ref.number)}`} row={row} rowProps={selection.rowProps(`${row.item.repoId}:${String(row.ticket.ref.number)}`)} />

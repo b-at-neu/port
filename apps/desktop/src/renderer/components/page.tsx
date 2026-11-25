@@ -50,6 +50,7 @@ interface PageFrameProps {
   readonly variant: ScreenBodyVariant
   readonly lead?: ReactNode
   readonly aside?: ReactNode
+  readonly bodyClassName?: string
   readonly onMouseDown?: MouseEventHandler<HTMLElement>
   readonly ref?: Ref<HTMLDivElement>
   readonly children: ReactNode
@@ -64,9 +65,9 @@ interface ComposedProps extends PageFrameProps {
 type PageProps = StatefulProps | ComposedProps
 
 export function Page(props: PageProps) {
-  const { header, variant, lead, aside, onMouseDown, ref, children } = props
+  const { header, variant, lead, aside, bodyClassName, onMouseDown, ref, children } = props
   const body = (
-    <ScreenBody variant={variant} className={aside === undefined ? undefined : 'flex-1'}>
+    <ScreenBody variant={variant} className={cn(aside !== undefined && 'flex-1', bodyClassName)}>
       {lead}
       {props.state === undefined ? (
         children
