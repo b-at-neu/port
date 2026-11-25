@@ -196,7 +196,7 @@ export function decisionRefusalNote(reason: string, number: number): string | nu
   return null
 }
 
-export const ACTION_BUTTON_LABELS: Readonly<Record<OperatorAction, string>> = { pause: 'Pause', resume: 'Resume', retry: 'Retry', stop: 'Stop', gate: 'Add gate label', refresh: 'Refresh' }
+export const ACTION_BUTTON_LABELS: Readonly<Record<OperatorAction, string>> = { pause: 'Pause', resume: 'Resume', retry: 'Retry', stop: 'Stop', gate: 'Add gate label', refresh: REFRESH_LABEL }
 export const ACTION_PENDING_LABELS: Readonly<Record<OperatorAction, string>> = { pause: 'Pausing…', resume: 'Resuming…', retry: 'Retrying…', stop: 'Stopping…', gate: 'Adding…', refresh: 'Refreshing…' }
 
 export function actionInProgressTooltip(number: number): string {
