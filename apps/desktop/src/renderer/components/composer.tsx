@@ -5,7 +5,7 @@ import type { ClipboardEvent, DragEvent, KeyboardEvent, ReactNode } from 'react'
 import { FileText, Image as ImageIcon, Paperclip, Send, X } from 'lucide-react'
 import { Textarea } from '@/renderer/components/ui/textarea'
 import { Button } from '@/renderer/components/ui/button'
-import { ATTACH_FILES_TOOLTIP, DROP_TO_ATTACH_HINT, removeAttachmentLabel } from '@/renderer/session/composer-copy'
+import { ATTACH_FILES_TOOLTIP, DROP_TO_ATTACH_HINT, removeAttachmentLabel } from '@/renderer/session/copy'
 import type { ComposerAttachmentChip } from '@/types/components'
 
 interface ComposerComboboxProps {

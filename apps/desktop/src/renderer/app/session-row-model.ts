@@ -1,6 +1,6 @@
 // Pure dot and state-label derivation for an operator session row in the sidebar.
 import type { HostedSessionSnapshot, SessionPhase } from '@/types/hosting'
-import { waitingLabelOf } from '@/renderer/session/interaction-copy'
+import { waitingLabelOf } from '@/renderer/session/model'
 
 type RowSession = Pick<HostedSessionSnapshot, 'phase' | 'pendingPermissions'>
 

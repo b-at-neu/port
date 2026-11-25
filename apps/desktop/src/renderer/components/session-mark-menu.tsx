@@ -12,8 +12,7 @@ import { liveUserSession } from '@/utils/shell/session-order'
 import { useSessionMarkActions } from '@/renderer/session/marks'
 import type { SessionMarkItem } from '@/types/session'
 import { sessionMarkItems } from '@/renderer/session/marks-menu-model'
-import { ARCHIVE_CONFIRM_ACTION, ARCHIVE_CONFIRM_PROMPT, MENU_DISABLED_HINT, SESSION_ACTIONS_LABEL } from '@/renderer/session/marks-copy'
-import { CLOSE_CONFIRM_NO } from '@/renderer/session/copy'
+import { ARCHIVE_CONFIRM_ACTION, ARCHIVE_CONFIRM_PROMPT, CLOSE_CONFIRM_NO, MENU_DISABLED_HINT, SESSION_ACTIONS_LABEL } from '@/renderer/session/copy'
 
 export interface SessionMarkMenuModel {
   readonly items: readonly SessionMarkItem[]

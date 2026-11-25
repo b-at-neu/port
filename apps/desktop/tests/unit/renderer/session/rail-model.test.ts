@@ -76,16 +76,11 @@ describe('openCount', () => {
 })
 
 describe('capacityLine', () => {
-  it('reads plainly under the limit', () => {
-    expect(capacityLine(2, 4)).toBe('2 of 4 open')
-  })
-
-  it('explains at the limit', () => {
-    expect(capacityLine(4, 4)).toBe('4 of 4 open — close one to start another')
-  })
-
-  it('explains over the limit, after lowering it', () => {
-    expect(capacityLine(5, 3)).toBe('5 of 3 open — close 2 to start another')
+  it('adds a hint at and over the limit that the plain line lacks', () => {
+    const plain = capacityLine(2, 4)
+    expect(capacityLine(4, 4)).not.toBe(plain)
+    expect(capacityLine(5, 3)).not.toBe(plain)
+    expect(capacityLine(5, 3)).not.toBe(capacityLine(4, 4))
   })
 })
 

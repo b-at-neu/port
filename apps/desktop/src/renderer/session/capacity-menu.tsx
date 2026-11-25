@@ -19,7 +19,7 @@ import {
   usageNoticeLines,
   usageSessionsLine,
   usageValue,
-} from '@/renderer/session/rail-copy'
+} from '@/renderer/session/copy'
 import type { SessionUsage } from '@/utils/hosting/usage'
 
 export function CapacityMenu({ usage, onDismiss, showDismiss }: { readonly usage: SessionUsage | null; readonly onDismiss: () => void; readonly showDismiss: boolean }) {

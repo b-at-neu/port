@@ -4,7 +4,7 @@ import { Button } from '@/renderer/components/ui/button'
 import { useActionMutation } from '@/renderer/actions/use-action-mutation'
 import { openSession } from '@/renderer/app/navigation'
 import { QuestionCard } from '@/renderer/session/question-card'
-import { QUESTION_SKIPPED_MESSAGE } from '@/renderer/session/interaction-copy'
+import { QUESTION_SKIPPED_MESSAGE } from '@/renderer/session/copy'
 import { CLEANUP_FAILED_HELP, ENDED_DENIAL_LINE, LAUNCH_FAILED_HELP, LAUNCH_FAILED_NO_DETAIL, OPEN_SESSION_LABEL, PROTECTED_PATH_HELP, SHARED_FILES_LABEL, usageLimitEntryLine } from '@/renderer/needs-you/copy'
 import type { NeedsYouItem } from '@/types/board'
 

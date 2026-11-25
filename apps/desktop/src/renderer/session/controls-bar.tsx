@@ -8,7 +8,7 @@ import type { SessionControls, SessionEffort, SessionModels } from '@/utils/host
 import type { SessionKey } from '@/types/hosting'
 import type { SessionUsage } from '@/utils/hosting/usage'
 import { DEFAULT_SELECT_VALUE, MODE_OPTIONS, controlsBarState, effortLabel } from '@/renderer/session/controls-model'
-import { controlsChangeFailed, MODELS_LOADING } from '@/renderer/session/interaction-copy'
+import { controlsChangeFailed, MODELS_LOADING } from '@/renderer/session/copy'
 import { useActionMutation } from '@/renderer/actions/use-action-mutation'
 
 interface ControlsBarProps {

@@ -22,7 +22,7 @@ import {
   LOADING_FILES,
   NO_MATCHING_COMMANDS,
   NO_MATCHING_FILES,
-} from '@/renderer/session/composer-copy'
+} from '@/renderer/session/copy'
 import { draftAttachmentsFor, setDraft, setDraftAttachments, useDraft, useDraftAttachments } from '@/renderer/session/drafts'
 
 function sizeLabel(bytes: number): string {

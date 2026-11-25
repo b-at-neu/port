@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { FolderEntry, FolderId } from '@/types/workspace'
 import type { HostedSessionSnapshot } from '@/types/hosting'
-import { effectiveWorktree, initialFolderId, orderFolders, worktreeControl, worktreeHint } from '@/renderer/session/new-session-model'
+import { effectiveWorktree, initialFolderId, orderFolders, worktreeControl } from '@/renderer/session/new-session-model'
 
 function folder(overrides: Partial<FolderEntry>): FolderEntry {
   return {
@@ -119,18 +119,3 @@ describe('effectiveWorktree', () => {
   })
 })
 
-describe('worktreeHint', () => {
-  it('names the branch and a 7-char short sha', () => {
-    expect(worktreeHint(folder({ git: { root: '/x', head: { sha: '3eb526cdef', branch: 'dev' } } }))).toContain('dev (3eb526c)')
-  })
-
-  it('drops the branch clause for a detached HEAD', () => {
-    const hint = worktreeHint(folder({ git: { root: '/x', head: { sha: '3eb526cdef', branch: null } } }))
-    expect(hint).toContain('3eb526c')
-    expect(hint).not.toContain('(')
-  })
-
-  it('is null for a non-git folder', () => {
-    expect(worktreeHint(folder({ git: null }))).toBeNull()
-  })
-})
