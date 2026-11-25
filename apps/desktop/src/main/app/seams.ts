@@ -1,9 +1,6 @@
-import type { GatePreflightParams, GateAnswerParams, ApplyItemDecisionParams, ItemDecisionResult, ApplyItemActionParams, ItemActionResult } from '@/types/actions'
-import type { GatePreflightResponse, GateAnswerResponse } from '@/types/gate'
-import type { IncidentLog } from '@/types/incidents'
-import type { BoardSnapshot, SourceKind } from '@/types/board'
-import type { RepoId } from '@/utils/repos'
-import type { HostedSessionSnapshot, HostedStore, SessionStartTarget, SessionStartMode } from '@/types/hosting'
+import type { ApplyItemActionParams, ItemActionResult } from '@/types/actions'
+import type { BoardSnapshot } from '@/types/board'
+import type { HostedStore, SessionStartTarget, SessionStartMode } from '@/types/hosting'
 import type { Platform } from '@/main/platform'
 import type { StartTargetSources, ReleaseBranchOutcome, RemoveSessionWorktreeOutcome, ResolvedStartTarget } from '@/types/workspace'
 import type { FileResult } from '@/types/platform'
@@ -20,29 +17,6 @@ import type { ReposListResponse } from '@/types/ipc'
 import type { NeedsYouNotification, NotificationPrefs } from '@/types/settings'
 import type { ReadWorktreeReportParams, WorktreesReport } from '@/types/reclaimer'
 
-/** Omitting either field widens the force to every repository or every source. */
-export type RefreshRequest = { readonly repoId?: RepoId; readonly source?: SourceKind } | undefined
-
-/** The seam `'board.refresh'` composes through. */
-export interface BoardRefreshDeps {
-  readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
-  readonly refresh: (request: RefreshRequest) => Promise<BoardSnapshot>
-}
-
-export interface IncidentChannelDeps {
-  readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
-  readonly log: Pick<IncidentLog, 'read'>
-  readonly chooseSavePath: (defaultName: string) => Promise<string | null>
-  readonly writeJson: (path: string, value: unknown) => Promise<FileResult<void>>
-  readonly now: () => Date
-}
-
-export interface GateChannelDeps {
-  readonly gatePreflight: (params: GatePreflightParams) => Promise<GatePreflightResponse>
-  readonly gateAnswer: (params: GateAnswerParams) => Promise<GateAnswerResponse>
-  readonly refresh: (request: RefreshRequest) => Promise<BoardSnapshot>
-}
-
 export interface HostingChannelDeps {
   readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
   readonly store: HostedStore
@@ -54,15 +28,6 @@ export interface HostingChannelDeps {
   readonly now: () => Date
   /** Best-effort cleanup for a worktree created ahead of a start that then failed — logged, never surfaced over the start result. */
   readonly removeCreatedWorktree: (path: string) => Promise<void>
-}
-
-/** The seam `'item.decide'` composes through. */
-export interface ItemDecisionDeps {
-  readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
-  readonly applyItemDecision: (params: ApplyItemDecisionParams) => Promise<ItemDecisionResult>
-  readonly sessions: () => readonly HostedSessionSnapshot[]
-  readonly snapshot: () => BoardSnapshot
-  readonly refresh: (request: RefreshRequest) => Promise<BoardSnapshot>
 }
 
 export interface TranscriptTailDeps {

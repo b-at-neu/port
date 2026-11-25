@@ -1,11 +1,20 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { repoId } from '@/main/app/schemas'
-import { defaultBacklogListDeps, resolveBacklogList } from '@/main/features/backlog/resolve'
+import { fetchBacklog } from '@/main/github/tracker/backlog'
+import { readyEntryOf } from '@/main/pipeline/context'
+
+const SUBJECT = "'backlog:list'"
 
 export const backlogList = defineAction({
   name: 'backlog.list',
   kind: 'query',
   input: z.object({ repoId }),
-  run: (ctx, input) => resolveBacklogList(ctx, ctx.repos.deps, input, { ...defaultBacklogListDeps, trackedRefs: (repoId) => ctx.stores.pipelineState.tracked(repoId) }),
+  run: async (ctx, input) => {
+    const entry = await readyEntryOf(ctx, SUBJECT, input.repoId, (message) => `${SUBJECT} could not list repositories: ${message}`)
+    // An unseeded repository tracks nothing yet.
+    const refs = ctx.stores.pipelineState.tracked(input.repoId) ?? []
+    const tracked = new Set(refs.filter((ref) => ref.kind === 'issue').map((ref) => ref.number))
+    return fetchBacklog(ctx, { repo: { owner: entry.config.owner, name: entry.config.name }, tracked })
+  },
 })

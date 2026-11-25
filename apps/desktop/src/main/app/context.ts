@@ -23,7 +23,7 @@ import { readAllowBase } from '@/main/github/allow'
 import { proposeAllowRule } from '@/main/github/writes/allow'
 import type { FetchItemsByNumberParams } from '@/types/github'
 import { readOwnership, takeOwnership } from '@/main/repos/ownership'
-import type { GateChannelDeps, HostingChannelDeps, IncidentChannelDeps, SearchQueryDeps, SessionsScanDeps, StageChannelDeps, TranscriptTailDeps } from '@/main/app/seams'
+import type { HostingChannelDeps, SearchQueryDeps, SessionsScanDeps, StageChannelDeps, TranscriptTailDeps } from '@/main/app/seams'
 import type { StateEngine } from '@/types/offload'
 import { createPlatform, type Platform } from '@/main/platform'
 import { nativeNotify } from '@/main/platform/notify'
@@ -87,8 +87,6 @@ export type AppContext = Platform & {
     readonly hosting: HostingChannelDeps
     readonly workspace: WorkspaceChannelDeps
     readonly stage: StageChannelDeps
-    readonly incidents: IncidentChannelDeps
-    readonly gate: GateChannelDeps
   }
 }
 
@@ -252,9 +250,6 @@ export function createAppContext(restart: RestartSeams): AppContext {
     hosting,
     workspace: defaultWorkspaceChannelDeps(userData, workspaceOf, recents),
     stage,
-    incidents: { listRepositories, log: incidentLog, chooseSavePath: platform.dialogs.chooseSavePath, writeJson: platform.fs.writeJsonAtomic, now: platform.clock.now },
-    // `refresh` is the live watcher's method, never a second poll built here.
-    gate: { gatePreflight: actions.gatePreflight, gateAnswer: actions.gateAnswer, refresh: watcher.refresh },
   }
 
   live = {
