@@ -12,7 +12,7 @@ import type {
   WorktreesReport,
 } from '@/types/reclaimer'
 import type { WorktreesReportDeps } from '@/main/app/seams'
-import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/repos'
+import { listRepositories, requireReadyRepo } from '@/main/repos'
 import type { RegistryDeps } from '@/types/registry'
 import { isRecord } from '@/utils/guards'
 import { pathOps } from '@/main/platform/paths'
@@ -81,7 +81,7 @@ export async function resolveWorktreesReclaim(
   auditDir: string,
   deps: WorktreesReclaimDeps = defaultWorktreesReclaimDeps,
 ): Promise<WorktreesReclaimResult> {
-  const repoId = requireRepoId(request?.id, "'worktrees:reclaim'")
+  const repoId = request.id
   const issue: unknown = request.issue
   if (!(issue === null || (Number.isInteger(issue) && (issue as number) > 0))) {
     throw new Error("'worktrees:reclaim' requires 'issue' to be null or a positive integer")
@@ -142,7 +142,7 @@ export async function resolveWorktreesPurge(
   auditDir: string,
   deps: WorktreesPurgeDeps = defaultWorktreesPurgeDeps,
 ): Promise<WorktreesPurgeResult> {
-  const repoId = requireRepoId(request?.id, "'worktrees:purge'")
+  const repoId = request.id
   const entry = await requireReadyRepo(registryDeps, "'worktrees:purge'", repoId, deps.listRepositories)
   const path = requireContainedPath(request.path, entry.path, 'worktrees:purge', 'path')
 

@@ -114,12 +114,6 @@ export function isReadyEntry(entry: RepositoryEntry): entry is ReadyEntry {
   return 'config' in entry
 }
 
-/** The non-empty-string check every channel that takes a `repoId` opens with, before ever reaching `requireReadyRepo`. */
-export function requireRepoId(repoId: unknown, channel: string): RepoId {
-  if (typeof repoId !== 'string' || repoId === '') throw new Error(`${channel} requires a non-empty 'repoId'`)
-  return repoId as RepoId
-}
-
 /** "Find a registered, ready repository by id, or throw" — every repository-scoped channel composes this. `notListableMessage` lets a caller keep its own original wording. */
 export async function requireReadyRepo(
   registryDeps: RegistryDeps,

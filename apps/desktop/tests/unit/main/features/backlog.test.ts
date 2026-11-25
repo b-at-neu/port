@@ -1,172 +1,43 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '@/utils/repos'
-import type { ReposListResponse } from '@/types/ipc'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
-import { resolveBacklogDetail, resolveBacklogList } from '@/main/features/backlog/resolve'
-import type { BacklogDetailDeps, BacklogListDeps } from '@/main/features/backlog/resolve'
-import type { RegistryDeps } from '@/types/registry'
-import { createFakePlatform } from '../../../support/fake-platform'
+import { readyEntry } from '../../../support/repo-config'
+import { callAction, createTestContext } from '../../../support/context'
+import { fakeTransport, httpOk } from '../../../fixtures/github-http'
+import { ticketOf } from '../../../support/tickets'
 
-const REPO_ID = 'repo-1' as unknown as RepoId
-const ctx = createFakePlatform()
+const REPO_ID = readyEntry().id
+const NO_BLOCKERS = { totalCount: 0, nodes: [] }
+const node = (number: number) => ({ number, title: `t${String(number)}`, url: `u${String(number)}`, createdAt: 'x', labels: { nodes: [] }, assignees: { nodes: [] }, blockedBy: NO_BLOCKERS, blocking: NO_BLOCKERS, parent: null })
 
-const registryDeps: RegistryDeps = {
-  registryDir: '/registry',
-  git: () => {
-    throw new Error('git should not be invoked directly by resolveBacklogList')
-  },
-  chooseDirectory: () => Promise.resolve(null),
-}
+describe('backlog actions', () => {
+  it.each(['backlog.list', 'backlog.detail'] as const)('%s rejects a repository that is not registered', async (name) => {
+    const ctx = createTestContext()
+    await expect(callAction(ctx, name, { repoId: REPO_ID, number: 45 })).rejects.toThrow(`found no repository registered with id '${REPO_ID}'`)
+  })
 
-const READY_ENTRY = {
-  id: REPO_ID,
-  path: '/repo',
-  displayName: 'widgets',
-  status: 'ready' as const,
-  config: {
-    repo: 'acme/widgets',
-    owner: 'acme',
-    name: 'widgets',
-    branches: { integration: 'dev', production: 'main' },
-    models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
-    modules: { approvalGate: true, release: true, scope: true },
-    reviewCycleCap: 3,
-    vocabulary: resolveVocabulary({}),
-    commands: { worktrees: 'node scripts/worktrees.mjs', budget: null },
-    concurrency: { sharedFiles: [], overlapThreshold: 2 },
-    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
-    checkDispositions: {},
-    overrides: [],
-  },
-  diagnostics: [],
-}
-
-const NOT_READY_ENTRY = {
-  id: REPO_ID,
-  path: '/repo',
-  displayName: 'widgets',
-  problem: { kind: 'directory-missing' as const },
-  diagnostics: [],
-}
-
-function depsWith(overrides: Partial<BacklogListDeps>): BacklogListDeps {
-  return {
-    listRepositories: () => Promise.resolve({ ok: true, repositories: [] } as ReposListResponse),
-    fetchBacklog: () => {
-      throw new Error('fetchBacklog should not be invoked in this case')
-    },
-    trackedRefs: () => null,
-    ...overrides,
-  }
-}
-
-describe('resolveBacklogList', () => {
-  it('rejects a missing repoId', async () => {
-    await expect(resolveBacklogList(ctx, registryDeps, { repoId: undefined as unknown as RepoId }, depsWith({}))).rejects.toThrow(
-      "'backlog:list' requires a non-empty 'repoId'",
-    )
+  it.each(['backlog.list', 'backlog.detail'] as const)('%s rejects a repository that is not ready', async (name) => {
+    const ctx = createTestContext({ repositories: [{ id: REPO_ID, path: '/repo', displayName: 'widgets', problem: { kind: 'directory-missing' }, diagnostics: [] }] })
+    await expect(callAction(ctx, name, { repoId: REPO_ID, number: 45 })).rejects.toThrow("requires a 'ready' repository, got 'directory-missing'")
   })
 
   it('surfaces a registry that could not be listed', async () => {
-    const deps = depsWith({ listRepositories: () => Promise.resolve({ ok: false, kind: 'registry-unreadable', message: 'disk on fire' }) })
-    await expect(resolveBacklogList(ctx, registryDeps, { repoId: REPO_ID }, deps)).rejects.toThrow(
-      "'backlog:list' could not list repositories: disk on fire",
-    )
+    const ctx = createTestContext({ repos: { list: () => Promise.resolve({ ok: false, kind: 'registry-unreadable', message: 'disk on fire' }) } })
+    await expect(callAction(ctx, 'backlog.list', { repoId: REPO_ID })).rejects.toThrow("'backlog:list' could not list repositories: disk on fire")
   })
 
-  it('rejects an id with no matching repository', async () => {
-    const deps = depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [] }) })
-    await expect(resolveBacklogList(ctx, registryDeps, { repoId: REPO_ID }, deps)).rejects.toThrow(
-      `'backlog:list' found no repository registered with id '${REPO_ID}'`,
-    )
-  })
-
-  it('rejects a repository that is not ready', async () => {
-    const deps = depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [NOT_READY_ENTRY] }) })
-    await expect(resolveBacklogList(ctx, registryDeps, { repoId: REPO_ID }, deps)).rejects.toThrow(
-      "'backlog:list' requires a 'ready' repository, got 'directory-missing'",
-    )
-  })
-
-  it('forwards the ready repository repo to fetchBacklog, with nothing tracked for an unseeded one', async () => {
-    let received: unknown
-    const deps = depsWith({
-      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      fetchBacklog: (_ctx, params) => {
-        received = params
-        return Promise.resolve({ ok: true, items: [], scanned: 0, total: 0, viewer: 'octo-dev', fetchedAt: 't' })
-      },
+  it('list omits the issues the store already tracks', async () => {
+    const body = JSON.stringify({ data: { repository: { issues: { totalCount: 3, nodes: [node(12), node(13), node(40)] } }, viewer: { login: 'octo-dev' } } })
+    const ctx = createTestContext({
+      platform: { githubHttp: fakeTransport(httpOk(body)) },
+      repositories: [readyEntry()],
+      tickets: { repoId: REPO_ID, tickets: [ticketOf({ repo: REPO_ID, ticket: 12 })] },
     })
-    const result = await resolveBacklogList(ctx, registryDeps, { repoId: REPO_ID }, deps)
-    expect(result).toEqual({ ok: true, items: [], scanned: 0, total: 0, viewer: 'octo-dev', fetchedAt: 't' })
-    expect(received).toEqual({ repo: { owner: 'acme', name: 'widgets' }, tracked: new Set() })
+    await ctx.ready
+    const result = await callAction(ctx, 'backlog.list', { repoId: REPO_ID })
+    expect(result.ok && result.items.map((item) => item.number)).toEqual([13, 40])
   })
 
-  it('passes only the issue numbers of the store tracked refs, and an empty set for an unseeded repository', async () => {
-    const received: unknown[] = []
-    const read = (trackedRefs: BacklogListDeps['trackedRefs']) =>
-      resolveBacklogList(ctx, registryDeps, { repoId: REPO_ID }, depsWith({
-        listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-        fetchBacklog: (_ctx, params) => {
-          received.push(params.tracked)
-          return Promise.resolve({ ok: true, items: [], scanned: 0, total: 0, viewer: null, fetchedAt: 't' })
-        },
-        trackedRefs,
-      }))
-    await read(() => [{ kind: 'issue', number: 12, keys: [] }, { kind: 'pull-request', number: 40, keys: [] }, { kind: 'issue', number: 13, keys: [] }])
-    await read(() => null)
-    expect(received).toEqual([new Set([12, 13]), new Set()])
-  })
-})
-
-function detailDepsWith(overrides: Partial<BacklogDetailDeps>): BacklogDetailDeps {
-  return {
-    listRepositories: () => Promise.resolve({ ok: true, repositories: [] } as ReposListResponse),
-    fetchBacklogDetail: () => {
-      throw new Error('fetchBacklogDetail should not be invoked in this case')
-    },
-    ...overrides,
-  }
-}
-
-describe('resolveBacklogDetail', () => {
-  it('rejects a missing repoId', async () => {
-    await expect(resolveBacklogDetail(ctx, registryDeps, { repoId: undefined as unknown as RepoId, number: 45 }, detailDepsWith({}))).rejects.toThrow(
-      "'backlog:detail' requires a non-empty 'repoId'",
-    )
-  })
-
-  it.each([0, 1.5, '45'])('rejects a number of %j', async (number) => {
-    await expect(resolveBacklogDetail(ctx, registryDeps, { repoId: REPO_ID, number: number as number }, detailDepsWith({}))).rejects.toThrow(
-      "'backlog:detail' requires 'number' to be a positive integer",
-    )
-  })
-
-  it('rejects an id with no matching repository', async () => {
-    const deps = detailDepsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [] }) })
-    await expect(resolveBacklogDetail(ctx, registryDeps, { repoId: REPO_ID, number: 45 }, deps)).rejects.toThrow(
-      `'backlog:detail' found no repository registered with id '${REPO_ID}'`,
-    )
-  })
-
-  it('rejects a repository that is not ready', async () => {
-    const deps = detailDepsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [NOT_READY_ENTRY] }) })
-    await expect(resolveBacklogDetail(ctx, registryDeps, { repoId: REPO_ID, number: 45 }, deps)).rejects.toThrow(
-      "'backlog:detail' requires a 'ready' repository, got 'directory-missing'",
-    )
-  })
-
-  it('forwards the ready repository ref and the number to fetchBacklogDetail', async () => {
-    let received: unknown
-    const response = { ok: false, kind: 'issue-missing', message: 'gone', fetchedAt: 't' } as const
-    const deps = detailDepsWith({
-      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      fetchBacklogDetail: (_ctx, params) => {
-        received = params
-        return Promise.resolve(response)
-      },
-    })
-    expect(await resolveBacklogDetail(ctx, registryDeps, { repoId: REPO_ID, number: 45 }, deps)).toEqual(response)
-    expect(received).toEqual({ repo: { owner: 'acme', name: 'widgets' }, number: 45 })
+  it('detail passes a typed issue-missing outcome through', async () => {
+    const ctx = createTestContext({ platform: { githubHttp: fakeTransport(httpOk(JSON.stringify({ data: { repository: { detail: null } } }))) }, repositories: [readyEntry()] })
+    expect(await callAction(ctx, 'backlog.detail', { repoId: REPO_ID, number: 45 })).toMatchObject({ ok: false, kind: 'issue-missing' })
   })
 })

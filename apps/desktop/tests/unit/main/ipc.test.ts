@@ -2,12 +2,11 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { ReposListResponse } from '@/types/ipc'
 import type { WorktreesReport } from '@/types/reclaimer'
-import { resolveBoardRefresh } from '@/main/features/board/resolve'
-import type { BoardRefreshDeps } from '@/main/app/seams'
 import { resolveWorktreesReport } from '@/main/features/worktrees/resolve'
 import type { WorktreesReportDeps } from '@/main/app/seams'
 import type { RegistryDeps } from '@/types/registry'
-import { boardSnapshot } from '../../support/board-snapshot'
+import { callAction, createTestContext } from '../../support/context'
+import { recordingWatcher } from '../../support/operator-rig'
 import { readyEntry } from '../../support/repo-config'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
@@ -100,54 +99,28 @@ describe('resolveWorktreesReport', () => {
   })
 })
 
-const FAKE_SNAPSHOT = boardSnapshot([], '2026-01-01T00:00:00.000Z')
-
-function boardDepsWith(overrides: Partial<BoardRefreshDeps>): BoardRefreshDeps {
-  return {
-    listRepositories: () => Promise.resolve({ ok: true, repositories: [] } as ReposListResponse),
-    refresh: () => Promise.resolve(FAKE_SNAPSHOT),
-    ...overrides,
-  }
-}
-
-describe('resolveBoardRefresh', () => {
+describe('board.refresh', () => {
   it('rejects an id with no matching repository', async () => {
-    const deps = boardDepsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [] }) })
-    await expect(resolveBoardRefresh(registryDeps, { repoId: REPO_ID }, deps)).rejects.toThrow(
-      `'board:refresh' found no repository registered with id '${REPO_ID}'`,
-    )
-  })
-
-  it('rejects an unknown source', async () => {
-    const deps = boardDepsWith({})
-    await expect(resolveBoardRefresh(registryDeps, { source: 'bogus' as never }, deps)).rejects.toThrow(
-      "'board:refresh' source must be one of github, sessions, worktrees, denials",
-    )
+    const ctx = createTestContext({ live: recordingWatcher().live })
+    await expect(callAction(ctx, 'board.refresh', { repoId: REPO_ID })).rejects.toThrow(`'board:refresh' found no repository registered with id '${REPO_ID}'`)
   })
 
   it('surfaces a registry that could not be listed when repoId is present', async () => {
-    const deps = boardDepsWith({ listRepositories: () => Promise.resolve({ ok: false, kind: 'registry-unreadable', message: 'disk on fire' }) })
-    await expect(resolveBoardRefresh(registryDeps, { repoId: REPO_ID }, deps)).rejects.toThrow(
-      "'board:refresh' could not list repositories: disk on fire",
-    )
+    const ctx = createTestContext({ repos: { list: () => Promise.resolve({ ok: false, kind: 'registry-unreadable', message: 'disk on fire' }) }, live: recordingWatcher().live })
+    await expect(callAction(ctx, 'board.refresh', { repoId: REPO_ID })).rejects.toThrow("'board:refresh' could not list repositories: disk on fire")
   })
 
-  it('forwards a valid request to refresh() and returns its snapshot', async () => {
-    const deps = boardDepsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }), refresh: () => Promise.resolve(FAKE_SNAPSHOT) })
-    const result = await resolveBoardRefresh(registryDeps, { repoId: REPO_ID, source: 'github' }, deps)
-    expect(result).toBe(FAKE_SNAPSHOT)
+  it('forwards a registered repository to the watcher and returns its snapshot', async () => {
+    const { live, refreshes } = recordingWatcher()
+    const ctx = createTestContext({ repositories: [NOT_READY_ENTRY], live })
+    expect(await callAction(ctx, 'board.refresh', { repoId: REPO_ID, source: 'github' })).toBe(live.watcher.snapshot())
+    expect(refreshes).toEqual([{ repoId: REPO_ID, source: 'github' }])
   })
 
-  it('an empty request (no repoId, no source) forces every source', async () => {
-    let received: unknown
-    const deps = boardDepsWith({
-      refresh: (request) => {
-        received = request
-        return Promise.resolve(FAKE_SNAPSHOT)
-      },
-    })
-    await resolveBoardRefresh(registryDeps, {}, deps)
-    expect(received).toEqual({})
+  it('an empty request forces every source', async () => {
+    const { live, refreshes } = recordingWatcher()
+    await callAction(createTestContext({ live }), 'board.refresh', {})
+    expect(refreshes).toEqual([{}])
   })
 })
 

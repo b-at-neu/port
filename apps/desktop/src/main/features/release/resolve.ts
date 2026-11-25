@@ -7,7 +7,7 @@ import type { GitHubReadContext, GitHubWriteContext } from '@/main/github/contex
 import { fetchReleaseStatus, readFileAtRef } from '@/main/github/release'
 import { fetchReleaseIssues } from '@/main/github/release-issues'
 import { readAtDefaultRef } from '@/main/repos/config/harness'
-import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/repos'
+import { listRepositories, requireReadyRepo } from '@/main/repos'
 import { readReleaseConfig } from '@/main/features/release/config'
 import { runPostPublishHook } from '@/main/features/release/hook'
 import { createBumpBranch, openBumpPr, openReleasePr, publishRelease, recordHook } from '@/main/github/writes/release'
@@ -67,7 +67,7 @@ async function readState(ctx: ReleaseContext, registryDeps: RegistryDeps, entry:
 }
 
 export async function resolveReleaseStatus(ctx: ReleaseContext, registryDeps: RegistryDeps, request: { readonly repoId: RepoId }, deps: ReleaseChannelDeps = defaultReleaseChannelDeps): Promise<ReleaseStatusResponse> {
-  const repoId = requireRepoId(request?.repoId, "'release:status'")
+  const repoId = request.repoId
   const entry = await requireReadyRepo(registryDeps, "'release:status'", repoId, deps.listRepositories)
   const { read } = await readState(ctx, registryDeps, entry, deps)
   return read.ok ? { ok: true, status: read.status } : read
@@ -76,7 +76,7 @@ export async function resolveReleaseStatus(ctx: ReleaseContext, registryDeps: Re
 const TAG_PATTERN = /^[A-Za-z0-9._+/-]{1,255}$/
 
 export async function resolveReleaseIssues(ctx: ReleaseContext, registryDeps: RegistryDeps, request: ReleaseIssuesRequest, deps: ReleaseChannelDeps = defaultReleaseChannelDeps): Promise<ReleaseIssuesResponse> {
-  const repoId = requireRepoId(request?.repoId, "'release:issues'")
+  const repoId = request.repoId
   if (typeof request.tag !== 'string' || !TAG_PATTERN.test(request.tag)) throw new Error("'release:issues' requires a 'tag' of 1 to 255 tag characters")
   if (request.previousTag !== null && (typeof request.previousTag !== 'string' || !TAG_PATTERN.test(request.previousTag))) {
     throw new Error("'release:issues' requires 'previousTag' to be null or 1 to 255 tag characters")
@@ -197,7 +197,7 @@ export async function resolveReleaseRun(
   scratchDir: string,
   deps: ReleaseChannelDeps = defaultReleaseChannelDeps,
 ): Promise<ReleaseRunResult> {
-  const repoId = requireRepoId(request?.repoId, "'release:run'")
+  const repoId = request.repoId
   if (request.step !== 'open' && request.step !== 'publish') throw new Error("'release:run' step must be 'open' or 'publish'")
   if (request.step === 'publish' && (typeof request.notes !== 'string' || request.notes.trim() === '' || request.notes.length > MAX_NOTES_CHARS)) {
     throw new Error(`'release:run' requires notes of 1 to ${String(MAX_NOTES_CHARS)} characters`)
