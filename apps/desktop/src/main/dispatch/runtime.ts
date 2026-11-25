@@ -7,27 +7,11 @@ import type { PipelineWatcher } from '@/types/state'
 import { createForceDispatch, createRefreshMemo, createRerunMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
 
 import type { RepoId } from '@/utils/repos'
-import type { RepoDispatchStatus } from '@/types/dispatch'
 import { createBudgetGate } from '@/main/dispatch/budget-gate'
 import type { GitHubReadContext, LedgerWriteContext } from '@/main/github/context'
 import { createDispatcher } from '@/main/dispatch/dispatcher'
 
 import { createAutoPlanner } from '@/main/dispatch/auto-plan'
-
-import type { EndedStage } from '@/types/tick'
-
-interface WatcherDeps {
-  readonly unknownStreaks: UnknownStreaks
-  readonly refreshMemo: RefreshMemo
-  readonly rerunMemo: RerunMemo
-  readonly forceDispatch: ForceDispatch
-  readonly startedTasks: (repoId: RepoId) => readonly string[]
-  readonly dispatchStatus: () => readonly RepoDispatchStatus[]
-  readonly holdSessionRequired: (repoId: RepoId) => boolean
-  readonly stageLiveness: (repoId: RepoId) => { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
-  readonly endedStages: (repoId: RepoId) => readonly EndedStage[]
-  readonly autoPlanRefused: (repoId: RepoId) => ReadonlySet<number>
-}
 
 interface DispatchRuntime {
   readonly unknownStreaks: UnknownStreaks
@@ -37,7 +21,6 @@ interface DispatchRuntime {
   readonly forceDispatch: ForceDispatch
   /** The auto-plan swap's own snapshot consumer, gated on this app owning the repository. */
   readonly autoPlanner: AutoPlanner
-  readonly watcherDeps: WatcherDeps
   /** Called once, right after the watcher that owns `republish()` and `refresh()` is built. */
   readonly bindWatcher: (watcher: Pick<PipelineWatcher, 'republish' | 'refresh'>) => void
   /** Stops new launches and is called before `hostedStore.closeAll()` on quit. */
@@ -74,18 +57,6 @@ export function createDispatchRuntime({ actions, platform, ...deps }: RuntimeDep
     dispatcher,
     forceDispatch,
     autoPlanner,
-    watcherDeps: {
-      unknownStreaks,
-      refreshMemo,
-      rerunMemo,
-      forceDispatch,
-      startedTasks: (repoId) => dispatcher.liveStages(repoId),
-      dispatchStatus: () => dispatcher.status(),
-      holdSessionRequired: (repoId) => dispatcher.holdsSessionRequired(repoId),
-      stageLiveness: (repoId) => dispatcher.stageLiveness(repoId),
-      endedStages: (repoId) => dispatcher.endedStages(repoId),
-      autoPlanRefused: (repoId) => autoPlanner.refused(repoId),
-    },
     bindWatcher: (watcher) => {
       bound = watcher
     },

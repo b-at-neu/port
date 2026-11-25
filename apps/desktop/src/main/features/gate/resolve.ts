@@ -3,16 +3,15 @@
 import { GATE_DECISIONS } from '@/types/gate'
 import type { GateAnswerResponse, GateDecision, GatePreflightResponse } from '@/types/gate'
 import type { RepoId } from '@/utils/repos'
-import type { RegistryDeps } from '@/types/registry'
 import { requireRepoId } from '@/main/repos'
 import type { GateChannelDeps } from '@/main/app/seams'
 
-export async function resolveGatePreflight(registryDeps: RegistryDeps, request: { readonly repoId: RepoId; readonly number: number }, deps: GateChannelDeps): Promise<GatePreflightResponse> {
+export async function resolveGatePreflight(request: { readonly repoId: RepoId; readonly number: number }, deps: GateChannelDeps): Promise<GatePreflightResponse> {
   const repoId = requireRepoId(request?.repoId, "'gate:preflight'")
   if (!Number.isInteger(request.number) || request.number <= 0) {
     throw new Error("'gate:preflight' requires 'number' to be a positive integer")
   }
-  return deps.gatePreflight({ registryDeps, repoId, number: request.number })
+  return deps.gatePreflight({ repoId, number: request.number })
 }
 
 function isGateDecision(value: unknown): value is GateDecision {
@@ -20,7 +19,6 @@ function isGateDecision(value: unknown): value is GateDecision {
 }
 
 export async function resolveGateAnswer(
-  registryDeps: RegistryDeps,
   request: { readonly repoId: RepoId; readonly number: number; readonly decision: GateDecision; readonly feedback: string | null; readonly skipComment: boolean },
   auditDir: string,
   scratchDir: string,
@@ -42,7 +40,6 @@ export async function resolveGateAnswer(
   }
 
   const result = await deps.gateAnswer({
-    registryDeps,
     repoId,
     number: request.number,
     decision: request.decision,

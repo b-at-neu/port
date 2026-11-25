@@ -1,6 +1,7 @@
-import type { WriteStateParams } from '@/types/writes'
 import { mirrorVocabularyOf } from '@/utils/labels/display'
-import type { RecoverPausedTriggerParams, RecoverPausedTriggerResult } from '@/types/actions'
+import type { StateWriteContext } from '@/main/pipeline/context'
+import { recoverPausedTrigger } from '@/main/pipeline/operator/resume'
+import { writeState } from '@/main/pipeline/state/writer'
 
 // A renderer-supplied `expectedStage` is only ever grounds to refuse, never to widen a plan.
 import { actionsFor, stageKeyOf } from '@/utils/actions/plan'
@@ -10,15 +11,9 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
 import type { ReconciledItem, RepositoryState } from '@/types/state'
-import type { LabelWriteRequest, WriteOutcome } from '@/types/writes'
+import type { LabelWriteRequest } from '@/types/writes'
 
 import type { ApplyItemActionParams, ItemActionRequest, ReadyEntry } from '@/types/actions'
-
-
-export interface ApplyItemActionDeps {
-  readonly writeState: (params: WriteStateParams) => Promise<WriteOutcome>
-  readonly recoverPausedTrigger: (params: RecoverPausedTriggerParams) => Promise<RecoverPausedTriggerResult>
-}
 
 export function findRepoState(snapshot: BoardSnapshot, repoId: RepoId): Extract<RepositoryState, { readonly ok: true }> | null {
   const state = snapshot.state.repositories.find((repository) => repository.repoId === repoId)
@@ -65,7 +60,7 @@ function buildWriteRequest(entry: ReadyEntry, request: ItemActionRequest, plan: 
   }
 }
 
-export async function applyItemAction(params: ApplyItemActionParams, deps: ApplyItemActionDeps): Promise<ItemActionResult> {
+export async function applyItemAction(ctx: StateWriteContext, params: ApplyItemActionParams): Promise<ItemActionResult> {
   const { request, snapshot, entry, auditDir } = params
   const repoState = findRepoState(snapshot, entry.id)
   if (repoState === null) return { ok: false, reason: 'repo-unavailable' }
@@ -86,12 +81,12 @@ export async function applyItemAction(params: ApplyItemActionParams, deps: Apply
 
   let plan = availability.plan
   if (request.action === 'resume') {
-    const recovered = await deps.recoverPausedTrigger({ auditDir, repo: entry.config.repo, number: request.number, vocabulary: entry.config.vocabulary })
+    const recovered = await recoverPausedTrigger({ auditDir, repo: entry.config.repo, number: request.number, vocabulary: entry.config.vocabulary })
     if (recovered.kind === 'no-record') return { ok: false, reason: 'no-pause-record' }
     if (recovered.kind === 'unresolvable') return { ok: false, reason: 'pause-record-unresolvable' }
     plan = { ...plan, add: [recovered.trigger] }
   }
 
-  const outcome = await deps.writeState({ request: buildWriteRequest(entry, request, plan), repoRoot: entry.path, auditDir })
+  const outcome = await writeState(ctx, { request: buildWriteRequest(entry, request, plan), repoRoot: entry.path, auditDir })
   return { ok: true, outcome }
 }

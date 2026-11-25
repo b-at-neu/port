@@ -1,10 +1,10 @@
 // Append-only `incidents.jsonl`: one serialized writer per process, best-effort, never read for a decision.
-import { appendTextFile, readJsonFile, readLinesFrom, renamePath, statPath, writeJsonFileAtomic, writeTextFile } from '@/main/platform/files'
-import { pathOps as defaultPathOps } from '@/main/platform/paths'
+import type { Platform } from '@/main/platform'
+import { pathOps } from '@/main/platform/paths'
 import { boundInputs } from '@/main/pipeline/incidents/snapshot'
 import { signatureOf } from '@/main/pipeline/incidents/raise'
-import type { FileFailureKind, PathOps } from '@/types/platform'
-import type { IncidentDraft, IncidentFiles, IncidentLog, IncidentPruned, IncidentRead, IncidentReadFailureKind, IncidentRecord } from '@/types/incidents'
+import type { FileFailureKind } from '@/types/platform'
+import type { IncidentDraft, IncidentLog, IncidentPruned, IncidentRead, IncidentReadFailureKind, IncidentRecord } from '@/types/incidents'
 
 const LOG_FILE = 'incidents.jsonl'
 const TEMP_FILE = 'incidents.tmp'
@@ -17,17 +17,6 @@ export const INCIDENT_LIMITS = {
   maxAgeMs: 90 * DAY_MS,
   readCapBytes: 40 * 1024 * 1024,
 } as const
-
-const defaultFiles: IncidentFiles = { append: appendTextFile, readJson: readJsonFile, readLines: readLinesFrom, rename: renamePath, stat: statPath, writeJson: writeJsonFileAtomic, writeText: writeTextFile }
-
-export interface IncidentLogDeps {
-  readonly dir: string
-  readonly now: () => Date
-  readonly newId: () => string
-  readonly files?: IncidentFiles
-  readonly pathOps?: PathOps
-  readonly limits?: typeof INCIDENT_LIMITS
-}
 
 interface ParsedLine {
   readonly text: string
@@ -47,13 +36,13 @@ function toReadFailureKind(kind: FileFailureKind): IncidentReadFailureKind {
   return kind === 'permission-denied' || kind === 'too-large' ? kind : 'io'
 }
 
-export function createIncidentLog(deps: IncidentLogDeps): IncidentLog {
-  const files = deps.files ?? defaultFiles
-  const pathOps = deps.pathOps ?? defaultPathOps
-  const limits = deps.limits ?? INCIDENT_LIMITS
-  const path = pathOps.join(deps.dir, LOG_FILE)
-  const tempPath = pathOps.join(deps.dir, TEMP_FILE)
-  const prunedPath = pathOps.join(deps.dir, PRUNED_FILE)
+export function createIncidentLog(ctx: Pick<Platform, 'fs' | 'clock' | 'paths'>, limits: typeof INCIDENT_LIMITS = INCIDENT_LIMITS): IncidentLog {
+  const { fs } = ctx
+  const files = { append: fs.appendText, readJson: fs.readJson, readLines: fs.readLinesFrom, rename: fs.rename, stat: fs.stat, writeJson: fs.writeJsonAtomic, writeText: fs.writeText }
+  const now = ctx.clock.now
+  const path = pathOps.join(ctx.paths.userData, LOG_FILE)
+  const tempPath = pathOps.join(ctx.paths.userData, TEMP_FILE)
+  const prunedPath = pathOps.join(ctx.paths.userData, PRUNED_FILE)
   let chain: Promise<void> = Promise.resolve()
   let ageCheckedAt: number | null = null
 
@@ -66,7 +55,7 @@ export function createIncidentLog(deps: IncidentLogDeps): IncidentLog {
     const lines = await files.readLines(path, 0, { maxBytes: limits.readCapBytes })
     if (!lines.ok) return
     const parsed = lines.value.lines.filter((line) => line.trim() !== '').map(parseLine)
-    const cutoff = new Date(deps.now().getTime() - limits.maxAgeMs).toISOString()
+    const cutoff = new Date(now().getTime() - limits.maxAgeMs).toISOString()
     let kept = parsed.filter((line) => line.at !== null && line.at >= cutoff)
     let size = kept.reduce((total, line) => total + Buffer.byteLength(line.text) + 1, 0)
     while (size > limits.pruneToBytes && kept.length > 0) {
@@ -80,7 +69,7 @@ export function createIncidentLog(deps: IncidentLogDeps): IncidentLog {
     if (dropped.length === 0) return
     const before = await readPruned()
     const through = dropped.reduce((newest, line) => (line.at !== null && line.at > newest ? line.at : newest), before?.through ?? '')
-    const sidecar = await files.writeJson(prunedPath, { count: (before?.count ?? 0) + dropped.length, through: through === '' ? deps.now().toISOString() : through })
+    const sidecar = await files.writeJson(prunedPath, { count: (before?.count ?? 0) + dropped.length, through: through === '' ? now().toISOString() : through })
     if (!sidecar.ok) return
     const written = await files.writeText(tempPath, kept.map((line) => `${line.text}\n`).join(''))
     if (!written.ok) return
@@ -90,7 +79,7 @@ export function createIncidentLog(deps: IncidentLogDeps): IncidentLog {
   async function prunedIfDue(): Promise<void> {
     const size = await files.stat(path)
     if (!size.ok) return
-    const nowMs = deps.now().getTime()
+    const nowMs = now().getTime()
     const ageDue = ageCheckedAt === null || nowMs - ageCheckedAt >= DAY_MS
     if (size.value.size <= limits.maxBytes && !ageDue) return
     if (ageDue) ageCheckedAt = nowMs
@@ -107,8 +96,8 @@ export function createIncidentLog(deps: IncidentLogDeps): IncidentLog {
     await prunedIfDue()
     const entry: IncidentRecord = {
       v: 1,
-      id: deps.newId(),
-      at: deps.now().toISOString(),
+      id: globalThis.crypto.randomUUID(),
+      at: now().toISOString(),
       repo: draft.repo,
       number: draft.number,
       kind: draft.kind,
@@ -129,7 +118,7 @@ export function createIncidentLog(deps: IncidentLogDeps): IncidentLog {
   }
 
   async function read(): Promise<IncidentRead> {
-    const readAt = deps.now().toISOString()
+    const readAt = now().toISOString()
     const pruned = await readPruned()
     const size = await files.stat(path)
     if (!size.ok) return size.kind === 'not-found' ? { ok: true, records: [], malformed: 0, pruned, readAt } : { ok: false, kind: toReadFailureKind(size.kind), message: size.message, readAt }

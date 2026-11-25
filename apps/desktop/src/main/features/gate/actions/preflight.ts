@@ -7,5 +7,5 @@ export const gatePreflight = defineAction({
   name: 'gate.preflight',
   kind: 'query',
   input: z.object({ repoId, number: positiveInt }),
-  run: (ctx, input) => resolveGatePreflight(ctx.repos.deps, input, ctx.seams.gate),
+  run: (ctx, input) => resolveGatePreflight(input, ctx.seams.gate),
 })

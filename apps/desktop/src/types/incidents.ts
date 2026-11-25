@@ -1,7 +1,6 @@
 // Renderer-safe contract for the incident log: every anomaly the app detects, with the bounded inputs behind the decision and a bucket assigned where it was raised.
 import type { PipelineItemKind } from '@/types/github'
 import type { PillStatus } from '@/types/components'
-import type { FileResult, ReadLinesFromResult, StatInfo } from '@/types/platform'
 
 export const INCIDENT_BUCKETS = [
   'stale-snapshot',
@@ -92,17 +91,6 @@ export interface IncidentRecord {
 
 /** Never rejects: a lost incident costs analysis, a failed write costs the pipeline. */
 export type RecordIncident = (draft: IncidentDraft) => Promise<void>
-
-/** The platform file helpers the log writes and reads through, injectable so a test needs no disk. */
-export interface IncidentFiles {
-  readonly append: (path: string, text: string) => Promise<FileResult<void>>
-  readonly readJson: <T>(path: string) => Promise<FileResult<T>>
-  readonly readLines: (path: string, start: number, options: { readonly maxBytes: number }) => Promise<ReadLinesFromResult>
-  readonly rename: (from: string, to: string) => Promise<FileResult<void>>
-  readonly stat: (path: string) => Promise<FileResult<StatInfo>>
-  readonly writeJson: (path: string, value: unknown) => Promise<FileResult<void>>
-  readonly writeText: (path: string, text: string) => Promise<FileResult<void>>
-}
 
 export interface IncidentLog {
   readonly record: RecordIncident

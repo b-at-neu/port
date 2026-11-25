@@ -1,11 +1,6 @@
-import type { WriteStateParams } from '@/types/writes'
-
 // Renderer-safe contract for Work on's claim (the "work on #N" flow). No import here may reach a Node builtin — only `main/pipeline/claim/index.ts` resolves a repository, spawns `gh`, or writes a label.
-import type { BlockerRead, ClaimPreflightFetch, GitHubRepoRef, PipelineItemKind } from '@/types/github'
+import type { BlockerRead, PipelineItemKind } from '@/types/github'
 import type { WriteOutcome } from '@/types/writes'
-import type { RegistryDeps } from '@/types/registry'
-import type { ReposListResponse } from '@/types/ipc'
-import type { StateLabelsReader } from '@/types/pipeline-state'
 
 /** IPC-validated at `main/ipc.ts` against this exact list — a literal union carries no runtime list of its own to check a request against. */
 export const PLAN_GATE_CHOICES = ['review', 'auto'] as const
@@ -56,12 +51,4 @@ export interface ClaimToast {
   readonly tone: 'success' | 'error'
   readonly title: string
   readonly description: string | null
-}
-
-export interface ClaimDeps {
-  readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
-  readonly fetchClaimPreflight: (params: { readonly repo: GitHubRepoRef; readonly number: number }) => Promise<ClaimPreflightFetch>
-  readonly writeState: (params: WriteStateParams) => Promise<WriteOutcome>
-  /** The store's labels for an item, so a ticket the store tracks is refused exactly as a labelled one is. */
-  readonly stateLabels: StateLabelsReader
 }

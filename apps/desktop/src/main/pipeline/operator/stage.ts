@@ -1,25 +1,20 @@
 // Every state write a stage session needs — claim, rollback, hand-back, next turn — as one typed ticket event through `writeEvent` and nowhere else.
 import { accepts, actionOf, handbackRefusal, pullRequestNumberOf, stageModeFor, ticketEventOf } from '@/main/pipeline/transitions'
 import type { ReadyEntry } from '@/types/actions'
-import type { FetchItemsByNumberParams, ItemsByNumberFetch, PipelineItemKind, ResolvedItem } from '@/types/github'
+import type { ResolvedItem } from '@/types/github'
 import type { StageEvent, StageTransitionResult, StateEvent } from '@/types/stage-labels'
 import type { HandoffRefusal, TickActionable } from '@/types/tick'
 import { stageHandbackIntent } from '@/main/pipeline/incidents/raise'
 import type { StageSnapshot } from '@/types/dispatch'
 import type { IncidentIntent } from '@/types/incidents'
-import type { EventWriteRequest, PostCommentParams, WriteEvent, WriteOutcome } from '@/types/writes'
+import type { EventWriteRequest, WriteOutcome } from '@/types/writes'
 import { stateMoved } from '@/types/writes'
 import { mirrorVocabularyOf } from '@/utils/labels/display'
 import type { Ticket } from '@/utils/pipeline/ticket'
-import type { RepoId } from '@/utils/repos'
-
-export interface StageWriteDeps {
-  readonly writeEvent: WriteEvent
-  /** The ticket a half belongs to, `null` when the repository is unseeded or the half is untracked. */
-  readonly ticketOf: (repoId: RepoId, kind: PipelineItemKind, number: number) => Ticket | null
-  readonly postIssueBody: (params: PostCommentParams) => Promise<WriteOutcome>
-  readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
-}
+import { fetchItemsByNumber } from '@/main/github/tracker/items'
+import { postIssueBody } from '@/main/github/writes/apply'
+import type { StateWriteContext } from '@/main/pipeline/context'
+import { writeEvent } from '@/main/pipeline/state/writer'
 
 type StageSubject = Pick<TickActionable, 'number' | 'kind' | 'agent' | 'trigger'>
 
@@ -95,12 +90,12 @@ function requestFor(entry: ReadyEntry, subject: StageSubject, event: StateEvent,
 }
 
 /** Trigger → in-flight, from the dispatcher's own re-read so the claim never makes a second read. */
-export async function applyStageClaim(params: ApplyStageClaimParams, deps: StageWriteDeps): Promise<StageTransitionResult> {
+export async function applyStageClaim(ctx: StateWriteContext, params: ApplyStageClaimParams): Promise<StageTransitionResult> {
   const { entry, candidate, resolved } = params
   const event = ticketEventOf({ kind: 'claim' }, stageModeFor(candidate.agent, candidate.trigger))
   if (event === null) return { kind: 'applied' }
-  const ticket = deps.ticketOf(entry.id, candidate.kind, candidate.number)
-  const outcome = await deps.writeEvent({ request: requestFor(entry, candidate, event, ticket, resolved, null), repoRoot: entry.path, auditDir: params.auditDir })
+  const ticket = ctx.stores.pipelineState.ticket(entry.id, { kind: candidate.kind, number: candidate.number })
+  const outcome = await writeEvent(ctx, { request: requestFor(entry, candidate, event, ticket, resolved, null), repoRoot: entry.path, auditDir: params.auditDir })
   return stateMoved(outcome) ? { kind: 'applied' } : refusalOf(outcome)
 }
 
@@ -109,7 +104,7 @@ function isOpenPullRequestOn(resolved: ResolvedItem | undefined, issueNumber: nu
 }
 
 /** Rollback, hand-back and next-turn writes: a fresh read first, then the table. A `pr-opened` hand-back is verified against the pull request it names before anything is written. */
-export async function applyStageTransition(params: ApplyStageTransitionParams, deps: StageWriteDeps): Promise<StageTransitionResult> {
+export async function applyStageTransition(ctx: StateWriteContext, params: ApplyStageTransitionParams): Promise<StageTransitionResult> {
   const { entry, record, event } = params
   const mode = stageModeFor(record.agent, record.trigger)
   const unusable = handbackRefusal(event, mode)
@@ -118,7 +113,7 @@ export async function applyStageTransition(params: ApplyStageTransitionParams, d
   const prNumber = mode === 'impl' && handback?.token === 'pr-opened' ? pullRequestNumberOf(handback.arg) : null
 
   const numbers = prNumber === null ? [record.number] : [record.number, prNumber]
-  const fetched = await deps.fetchItemsByNumber({ repo: { owner: entry.config.owner, name: entry.config.name }, numbers })
+  const fetched = await fetchItemsByNumber(ctx, { repo: { owner: entry.config.owner, name: entry.config.name }, numbers })
   if (!fetched.ok) return refused('write-failed', true, fetched.message)
   const itemsByNumber = new Map(fetched.resolved.filter((r) => !fetched.unavailable.includes(r.number)).map((r) => [r.number, r] as const))
   const resolved = itemsByNumber.get(record.number)
@@ -128,9 +123,9 @@ export async function applyStageTransition(params: ApplyStageTransitionParams, d
 
   const ticketEvent = ticketEventOf(event, mode)
   if (ticketEvent === null) return { kind: 'applied' }
-  const ticket = deps.ticketOf(entry.id, record.kind, record.number)
+  const ticket = ctx.stores.pipelineState.ticket(entry.id, { kind: record.kind, number: record.number })
   if (ticket !== null && event.kind === 'outcome' && event.plan?.kind === 'read' && accepts(ticket, ticketEvent, { kind: record.kind, number: record.number }, entry.id)) {
-    const posted = await deps.postIssueBody({
+    const posted = await postIssueBody(ctx, {
       request: { repoId: entry.id, repo: entry.config.repo, kind: 'issue', number: record.number, body: event.plan.body, action: 'stage-handback-plan-body', scratchDir: params.scratchDir },
       repoRoot: entry.path,
       auditDir: params.auditDir,
@@ -140,6 +135,6 @@ export async function applyStageTransition(params: ApplyStageTransitionParams, d
 
   const landed = landedOn(ticketEvent)
   const incident = params.snapshot === undefined || landed === null ? null : stageHandbackIntent({ key: landed, action: actionOf(ticketEvent) }, record.agent, record.number, params.snapshot.item, params.snapshot.at)
-  const outcome = await deps.writeEvent({ request: requestFor(entry, record, ticketEvent, ticket, resolved, incident), repoRoot: entry.path, auditDir: params.auditDir })
+  const outcome = await writeEvent(ctx, { request: requestFor(entry, record, ticketEvent, ticket, resolved, incident), repoRoot: entry.path, auditDir: params.auditDir })
   return stateMoved(outcome) ? { kind: 'applied' } : refusalOf(outcome)
 }

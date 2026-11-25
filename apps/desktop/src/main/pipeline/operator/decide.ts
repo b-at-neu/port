@@ -1,6 +1,4 @@
-import type { PostCommentParams, WriteStateParams } from '@/types/writes'
 import { mirrorVocabularyOf } from '@/utils/labels/display'
-import type { FetchItemsByNumberParams } from '@/types/github'
 import type { ReadyEntry, RebaseDecision, RebasePick } from '@/types/actions'
 
 // applyItemDecision — unblock, revise and grant, the comment-then-swap write
@@ -13,20 +11,14 @@ import { labelName } from '@/utils/labels/vocabulary'
 import type { ReconciledItem } from '@/types/state'
 import type { LabelWriteRequest, ObservedItem, WriteOutcome } from '@/types/writes'
 import { evaluate } from '@/main/github/writes/scope'
-import { UNSEEDED_MESSAGE } from '@/main/pipeline/state/labels'
-
-import type { ItemsByNumberFetch } from '@/types/github'
-import type { StateLabelsReader } from '@/types/pipeline-state'
+import { storedLabels, UNSEEDED_MESSAGE } from '@/main/pipeline/state/labels'
+import { writeState } from '@/main/pipeline/state/writer'
+import { fetchItemsByNumber } from '@/main/github/tracker/items'
+import { postComment } from '@/main/github/writes/apply'
+import type { StateWriteContext } from '@/main/pipeline/context'
 import { findRepoState, movedResult } from '@/main/pipeline/operator/apply'
 
 import type { ApplyItemDecisionParams } from '@/types/actions'
-
-export interface ApplyItemDecisionDeps {
-  readonly writeState: (params: WriteStateParams) => Promise<WriteOutcome>
-  readonly stateLabels: StateLabelsReader
-  readonly postComment: (params: PostCommentParams) => Promise<WriteOutcome>
-  readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
-}
 
 function findItem(repoState: ReturnType<typeof findRepoState>, number: number): ReconciledItem | null {
   if (repoState === null) return null
@@ -35,7 +27,7 @@ function findItem(repoState: ReturnType<typeof findRepoState>, number: number): 
 
 // Fixed order: find the item, refuse moved, check availability, validate a
 // revise note, re-read fresh, post the comment, then swap the labels.
-export async function applyItemDecision(params: ApplyItemDecisionParams, deps: ApplyItemDecisionDeps): Promise<ItemDecisionResult> {
+export async function applyItemDecision(ctx: StateWriteContext, params: ApplyItemDecisionParams): Promise<ItemDecisionResult> {
   const { request, snapshot, entry, auditDir, scratchDir, liveStage } = params
   const repoState = findRepoState(snapshot, entry.id)
   if (repoState === null) return { ok: false, reason: 'repo-unavailable' }
@@ -80,16 +72,16 @@ export async function applyItemDecision(params: ApplyItemDecisionParams, deps: A
 
   const plan = decisionPlan(request.decision, item, request.route, viewer)
 
-  const fetch = await deps.fetchItemsByNumber({ repo: { owner: entry.config.owner, name: entry.config.name }, numbers: [request.number] })
+  const fetch = await fetchItemsByNumber(ctx, { repo: { owner: entry.config.owner, name: entry.config.name }, numbers: [request.number] })
   if (!fetch.ok) return { ok: false, reason: 'verify-failed', message: fetch.message }
   const fresh = fetch.resolved.find((resolved) => resolved.number === request.number)
   if (fresh === undefined) return movedResult(entry.config.vocabulary, request.expectedStage, 'gone')
 
   const presentNames = plan.expect.present.map((key) => labelName(entry.config.vocabulary, key)).filter((name): name is string => name !== undefined)
   const absentNames = plan.expect.absent.map((key) => labelName(entry.config.vocabulary, key)).filter((name): name is string => name !== undefined)
-  const storedLabels = deps.stateLabels(entry.id, item.kind, request.number, entry.config.vocabulary)
-  if (storedLabels === null) return { ok: true, comment: null, labels: { kind: 'state-unsaved', message: UNSEEDED_MESSAGE } }
-  const observed: ObservedItem = { labels: storedLabels, assignees: fresh.assignees, readAt: fetch.fetchedAt }
+  const stored = storedLabels(ctx, entry.id, item.kind, request.number, entry.config.vocabulary)
+  if (stored === null) return { ok: true, comment: null, labels: { kind: 'state-unsaved', message: UNSEEDED_MESSAGE } }
+  const observed: ObservedItem = { labels: stored, assignees: fresh.assignees, readAt: fetch.fetchedAt }
   const verdict = evaluate({ presentNames, absentNames, assignees: plan.expect.assignees }, observed)
   if (!verdict.satisfied) {
     return { ok: false, reason: 'moved', expected: verdict.expected.join(', ') || 'nothing', observed: verdict.observed.join(', ') || 'nothing' }
@@ -99,7 +91,7 @@ export async function applyItemDecision(params: ApplyItemDecisionParams, deps: A
   if (!request.skipComment) {
     const body = commentBody(request, item, decisions, picks, headRefOid)
     if (body !== null) {
-      comment = await deps.postComment({
+      comment = await postComment(ctx, {
         request: { repoId: entry.id, repo: entry.config.repo, kind: item.kind, number: request.number, body, action: request.decision, scratchDir },
         repoRoot: entry.path,
         auditDir,
@@ -108,7 +100,7 @@ export async function applyItemDecision(params: ApplyItemDecisionParams, deps: A
     }
   }
 
-  const labels = await deps.writeState({
+  const labels = await writeState(ctx, {
     request: buildWriteRequest(entry, item.kind, request.number, plan),
     repoRoot: entry.path,
     auditDir,

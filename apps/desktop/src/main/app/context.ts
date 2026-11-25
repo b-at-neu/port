@@ -4,6 +4,10 @@ import { join } from 'node:path'
 import type { EventMap, EventName } from '@/main/app/events'
 import { chooseDirectory, chooseFolder, chooseSavePath } from '@/main/app/shell/dialogs'
 import { createIncidentLog } from '@/main/pipeline/incidents/log'
+import { createRunStateStore } from '@/main/pipeline/state/run-state'
+import { createRunStore } from '@/main/pipeline/state/run-store'
+import { createPipelineStateStore, PIPELINE_STATE_FILE } from '@/main/pipeline/state/store'
+import { pathOps } from '@/main/platform/paths'
 import { defaultWorkspaceChannelDeps } from '@/main/features/folders/resolve'
 import { createRecentsStore } from '@/main/features/folders/recents'
 import { removeSessionWorktreeAt } from '@/main/repos/worktree/worktree'
@@ -12,7 +16,6 @@ import { createDefaultStageLauncher } from '@/main/dispatch/stage/default'
 import { createWorkerEngine } from '@/main/worker/client'
 import { resolveSessionsScan } from '@/main/features/history/resolve'
 import { bindOperator } from '@/main/app/operator'
-import { createPipelineState } from '@/main/pipeline/state/default'
 import { defaultHostingChannelDeps } from '@/main/features/session/resolve'
 import { createDispatchRuntime } from '@/main/dispatch/runtime'
 import { fetchItemsByNumber } from '@/main/github/tracker/items'
@@ -35,10 +38,11 @@ import { createUsageLedger } from '@/main/sessions/hosting/usage-ledger'
 import { createSessionMenuRefresher } from '@/main/app/shell/session-menu'
 import { createDefaultUpdate } from '@/main/features/update/default'
 import type { RestartSeams } from '@/types/update'
-import type { Dispatcher, OwnershipParams, RunStateStore } from '@/types/dispatch'
+import type { AutoPlanner, Dispatcher, OwnershipParams, RunStateStore } from '@/types/dispatch'
 import type { HostedStore } from '@/types/hosting'
+import type { PipelineStateStore } from '@/types/pipeline-state'
 import type { PipelineWatcher } from '@/types/state'
-import type { ForceDispatch } from '@/types/tick'
+import type { ForceDispatch, RefreshMemo, RerunMemo, UnknownStreaks } from '@/types/tick'
 import type { SessionIndex } from '@/types/session-index'
 import type { RunStore, StageLauncherHandle } from '@/types/stage'
 import type { IncidentLog } from '@/types/incidents'
@@ -58,7 +62,7 @@ export type AppContext = Platform & {
     readonly usageLedger: UsageLedger
     readonly runs: RunStore
     readonly recents: RecentsStore
-    readonly pipelineState: ReturnType<typeof createPipelineState>
+    readonly pipelineState: PipelineStateStore
     readonly incidentLog: IncidentLog
   }
   readonly live: {
@@ -72,6 +76,8 @@ export type AppContext = Platform & {
     readonly sessionMenu: ReturnType<typeof createSessionMenuRefresher>
     readonly update: ReturnType<typeof createDefaultUpdate>
     readonly forceDispatch: ForceDispatch
+    readonly autoPlanner: AutoPlanner
+    readonly memos: { readonly unknownStreaks: UnknownStreaks; readonly refreshMemo: RefreshMemo; readonly rerunMemo: RerunMemo }
     readonly actions: ReturnType<typeof bindOperator>
     readonly stageSweeper: ReturnType<typeof createStageSweeper>
     /** Stops the dispatcher and closes the worker. */
@@ -109,7 +115,7 @@ export function createAppContext(restart: RestartSeams): AppContext {
 
   const recents = createRecentsStore({ dir: userData })
 
-  const incidentLog = createIncidentLog({ dir: userData, now: platform.clock.now, newId: () => globalThis.crypto.randomUUID() })
+  const incidentLog = createIncidentLog(platform)
 
   const ownership = {
     read: (params: OwnershipParams) => readOwnership(platform, params),
@@ -119,8 +125,9 @@ export function createAppContext(restart: RestartSeams): AppContext {
   const fetchItems = (params: FetchItemsByNumberParams) => fetchItemsByNumber(platform, params)
 
   // Loading it once at boot marks every run a lost process left open `crash`.
-  const pipelineState = createPipelineState({ dir: userData, auditDir: userData, recordIncident: incidentLog.record, readOwnership: ownership.read, platform })
-  const { runs, runStates } = pipelineState
+  const pipelineState = createPipelineStateStore(platform)
+  const runs = createRunStore({ store: pipelineState, newId: () => globalThis.crypto.randomUUID(), now: platform.clock.now })
+  const runStates = createRunStateStore(pipelineState, pathOps.join(userData, PIPELINE_STATE_FILE))
 
   const sessionIndex = createSessionIndex({ path: join(userData, 'session-index.json'), readJson: platform.fs.readJson, writeJsonAtomic: platform.fs.writeJsonAtomic, now: platform.clock.now })
   void sessionIndex.load()
@@ -128,7 +135,26 @@ export function createAppContext(restart: RestartSeams): AppContext {
   const usageLedger = createUsageLedger({ path: join(userData, 'usage-ledger.json'), readJson: platform.fs.readJson, writeJsonAtomic: platform.fs.writeJsonAtomic, now: platform.clock.now, bootId: globalThis.crypto.randomUUID() })
   void usageLedger.load()
 
-  const { close: closeOffload, ...engine } = createWorkerEngine(platform, { onRespawn: () => void watcher.refresh() })
+  // `live` and `seams` are assigned once every service exists; a read before then is a construction-order bug.
+  let live: AppContext['live'] | null = null
+  let seams: AppContext['seams'] | null = null
+  const stores: AppContext['stores'] = { runStates, sessionIndex, usageLedger, runs, recents, pipelineState, incidentLog }
+  const ctx: AppContext = {
+    ...platform,
+    emit,
+    repos,
+    stores,
+    get live() {
+      if (live === null) throw new Error('ctx.live read during construction')
+      return live
+    },
+    get seams() {
+      if (seams === null) throw new Error('ctx.seams read during construction')
+      return seams
+    },
+  }
+
+  const { close: closeOffload, ...engine } = createWorkerEngine(platform, { onRespawn: () => void ctx.live.watcher.refresh() })
   const sessionsScan: SessionsScanDeps = { listRepositories, readSessionState: ({ repos: scanRepos }) => engine.scanSessions({ repos: scanRepos }) }
   const offload: AppContext['live']['offload'] = {
     sessionsScan,
@@ -143,12 +169,9 @@ export function createAppContext(restart: RestartSeams): AppContext {
     },
   }
 
-  const actions = bindOperator(platform, pipelineState, ownership.read)
+  const actions = bindOperator(ctx)
 
   const notifier = createNotifier({ notify: platform.notify, repos, emit }, () => hostedStore.notificationPrefs())
-
-  // Assigned right after createDispatchRuntime below — stageLauncher's onOutcome closes over it, so construction order stays acyclic.
-  let dispatcherRef: Dispatcher | null = null
 
   const hostedStore = createHostedStore(platform, {
     listSessions: () => engine.listSessions(),
@@ -167,13 +190,13 @@ export function createAppContext(restart: RestartSeams): AppContext {
   const stageLauncher: StageLauncherHandle = createDefaultStageLauncher({
     store: hostedStore,
     runs,
-    onOutcome: (repoId, sessionKey, outcome, plan) => dispatcherRef?.recordOutcome(repoId, sessionKey, outcome, plan),
-    onResumedTurn: (repoId, sessionKey) => dispatcherRef?.recordResumedTurn(repoId, sessionKey),
+    onOutcome: (repoId, sessionKey, outcome, plan) => ctx.live.dispatcher.recordOutcome(repoId, sessionKey, outcome, plan),
+    onResumedTurn: (repoId, sessionKey) => ctx.live.dispatcher.recordResumedTurn(repoId, sessionKey),
     bundle: { isPackaged: app.isPackaged, mainDir: __dirname, resourcesPath: process.resourcesPath },
   })
   const hosting = defaultHostingChannelDeps(hostedStore, sessionIndex, { ctx: platform, recents, readSessions: () => engine.listSessions() })
 
-  const { watcherDeps, dispatcher, forceDispatch, autoPlanner, bindWatcher, shutdown } = createDispatchRuntime({
+  const { unknownStreaks, refreshMemo, rerunMemo, dispatcher, forceDispatch, autoPlanner, bindWatcher, shutdown } = createDispatchRuntime({
     store: hostedStore,
     runs,
     launch: stageLauncher,
@@ -185,24 +208,14 @@ export function createAppContext(restart: RestartSeams): AppContext {
     listRepositories,
     registryDeps: repos.deps,
     actions,
-    stateLabels: pipelineState.stateLabels,
+    stateLabels: actions.stateLabels,
     dirs: { audit: userData, scratch: platform.paths.temp },
     now: platform.clock.now,
     recordIncident: incidentLog.record,
   })
-  dispatcherRef = dispatcher
 
   // One watcher for the process lifetime. `onTick` fires only on a fresh poll, never awaited.
-  const watcher = createPipelineWatcher({
-    engine,
-    repositories: async ({ fresh }) => {
-      const list = await repos.list({ fresh })
-      return list.ok ? list.repositories : []
-    },
-    git: platform.git,
-    runStates: (repoIds) => runStates.snapshot(repoIds),
-    ...watcherDeps,
-    ...pipelineState.watcherDeps,
+  const watcher = createPipelineWatcher(ctx, {
     onSnapshot: (snapshot) => {
       emit('board.update', snapshot)
       void autoPlanner.consider(snapshot)
@@ -234,7 +247,7 @@ export function createAppContext(restart: RestartSeams): AppContext {
 
   const update = createDefaultUpdate(platform, restart)
 
-  const seams: AppContext['seams'] = {
+  seams = {
     hosting,
     workspace: defaultWorkspaceChannelDeps(userData, workspaceOf, recents),
     stage,
@@ -243,7 +256,7 @@ export function createAppContext(restart: RestartSeams): AppContext {
     gate: { gatePreflight: actions.gatePreflight, gateAnswer: actions.gateAnswer, refresh: watcher.refresh },
   }
 
-  const live: AppContext['live'] = {
+  live = {
     watcher,
     hostedStore,
     dispatcher,
@@ -254,6 +267,8 @@ export function createAppContext(restart: RestartSeams): AppContext {
     sessionMenu,
     update,
     forceDispatch,
+    autoPlanner,
+    memos: { unknownStreaks, refreshMemo, rerunMemo },
     actions,
     stageSweeper,
     shutdown: () => {
@@ -264,5 +279,5 @@ export function createAppContext(restart: RestartSeams): AppContext {
 
   void update.service.check('startup')
 
-  return { ...platform, emit, repos, stores: { runStates, sessionIndex, usageLedger, runs, recents, pipelineState, incidentLog }, seams, live }
+  return ctx
 }
