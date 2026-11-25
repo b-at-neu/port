@@ -1,4 +1,4 @@
-import type { DispatchLedger, UnknownStreaks, RefreshMemo, RerunMemo, ForceDispatch } from '@/types/tick'
+import type { UnknownStreaks, RefreshMemo, RerunMemo, ForceDispatch } from '@/types/tick'
 
 // planTick — one RepositoryState to one TickReport. Pure: no gh, no timer, no write. This app
 // computes the decision and the report; it never writes the escalation itself.
@@ -15,6 +15,9 @@ import { zeroDiffChecksOf } from '@/utils/pipeline/checks'
 import { cycleGrantCount, integrationRedGate, mergeabilityRoute, refreshWins, zeroDiffGate } from '@/utils/pipeline/gates'
 
 import { RETRY_TRIGGER } from '@/utils/pipeline/liveness'
+import { unmatchedClaimOf } from '@/main/pipeline/runs'
+import { stageOfMode } from '@/types/stage-labels'
+import type { Run, Stage } from '@/utils/pipeline/ticket'
 import { observationsOf } from '@/main/pipeline/tick/observe'
 import { adoptionsOf, heldVerdictAdoption, openPullRequestAdoption } from '@/main/pipeline/tick/adopt'
 import { partitionOwnership } from '@/utils/pipeline/classify'
@@ -24,7 +27,8 @@ import { repairsOf } from '@/main/pipeline/tick/repair'
 
 interface PlanTickParams {
   readonly repository: RepositoryState
-  readonly ledger: DispatchLedger
+  /** The runs the ticket holding this item carries, which the stall ladder reads. `undefined` reads as none, so no claim is ever reset. */
+  readonly runsOf?: (repoId: RepoId, kind: PipelineItemKind, number: number) => readonly Run[]
   /** This app's own process-scoped mergeability-UNKNOWN memo, read and written only by the
    *  `readyForReview` mergeability check below. */
   readonly unknownStreaks: UnknownStreaks
@@ -42,7 +46,7 @@ interface PlanTickParams {
   readonly checkDispositions: Readonly<Record<string, Disposition>>
   /** `false` exactly when this app owns the repository and dispatches stage sessions itself — `SESSION REQUIRED` then holds nothing: `heldReasonOf` skips the `session-required` rung and `claimsOf` skips the `session-required` class. `true` is the default. */
   readonly holdSessionRequired: boolean
-  /** App-owned repositories only: this repository's own live and interrupted stage sessions, as `${agent} #${number}` descriptions. `null`/`undefined` (unowned) leaves `item.status`/`startedTasks` to decide. Non-null ignores `item.status` entirely: a `live` claim is `matched`, an `interrupted` one is `interrupted`, anything else goes straight to the ledger ladder. */
+  /** App-owned repositories only: this repository's own live and interrupted stage sessions, as `${agent} #${number}` descriptions. `null`/`undefined` (unowned) leaves `item.status`/`startedTasks` to decide. Non-null ignores `item.status` entirely: a `live` claim is `matched`, an `interrupted` one is `interrupted`, anything else goes straight to the stall ladder. */
   readonly stageLiveness?: { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
   /** This app's own ended stage-session records for this repository, newest per number — `main/pipeline/tick/repair.ts`'s session-shape evidence. `undefined`/`[]` is byte-identical: no session shape ever fires. */
   readonly endedStages?: readonly EndedStage[]
@@ -321,10 +325,17 @@ function actionableAndHeld(
   return { actionable: [...ungated, ...forcedActionable, ...gatedActionable], held, adoptions }
 }
 
+/** The ticket stage an in-flight claim belongs to. */
+function stageOfInFlight(inFlight: LabelKey): Stage | null {
+  if (inFlight === 'refreshing') return 'refresh'
+  const agent = AGENT_FOR_IN_FLIGHT[inFlight]
+  return agent === undefined ? null : stageOfMode(agent)
+}
+
 function claimsOf(
   items: readonly ReconciledItem[],
   repoId: RepoId,
-  ledger: DispatchLedger,
+  runsOf: (repoId: RepoId, kind: PipelineItemKind, number: number) => readonly Run[],
   startedTasks: readonly string[],
   readAt: string | null,
   holdSessionRequired: boolean,
@@ -364,8 +375,9 @@ function claimsOf(
       }
     }
 
-    const result = ledger.observeUnmatched(repoId, item.number, readAt)
-    const cls = result.class === 'reset' ? 'stalled-confirmed' : result.class
+    const stage = stageOfInFlight(inFlight)
+    const result = stage === null ? 'no-record' : unmatchedClaimOf(runsOf(repoId, item.kind, item.number), stage, readAt)
+    const cls = result === 'reset' ? 'stalled-confirmed' : result
     // RETRY_TRIGGER's engine type is a bare Record<string, string>; this caller narrows it to LabelKey.
     const retryKey = cls === 'stalled-confirmed' ? ((RETRY_TRIGGER[inFlight] as LabelKey | undefined) ?? null) : null
     claims.push({ number: item.number, kind: item.kind, inFlight, class: cls, retryKey })
@@ -374,7 +386,7 @@ function claimsOf(
 }
 
 export function planTick(params: PlanTickParams): TickReport {
-  const { repository, ledger, nextDecisionAt, now, reviewCycleCap, unknownStreaks, startedTasks, refreshMemo, checkDispositions, holdSessionRequired } = params
+  const { repository, nextDecisionAt, now, reviewCycleCap, unknownStreaks, startedTasks, refreshMemo, checkDispositions, holdSessionRequired } = params
   const stageLiveness = params.stageLiveness ?? null
   const endedStages = params.endedStages ?? []
 
@@ -399,7 +411,7 @@ export function planTick(params: PlanTickParams): TickReport {
   }
 
   const { actionable, held, adoptions: triggerAdoptions } = actionableAndHeld(repository.items, repository.viewer, repository.concurrency, reviewCycleCap, repository.repoId, unknownStreaks, holdSessionRequired, params.forceDispatch, checkDispositions, now(), repository.integrationChecks)
-  const claims = claimsOf(repository.items, repository.repoId, ledger, startedTasks, readAt, holdSessionRequired, stageLiveness)
+  const claims = claimsOf(repository.items, repository.repoId, params.runsOf ?? (() => []), startedTasks, readAt, holdSessionRequired, stageLiveness)
   const claimAdoptions = adoptionsOf({ items: repository.items, claims, viewer: repository.viewer })
   const adopted = new Set(claimAdoptions.map((adoption) => adoption.number))
 

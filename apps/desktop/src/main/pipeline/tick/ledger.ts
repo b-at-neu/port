@@ -1,57 +1,7 @@
-// The process-scoped dispatch ledger: this app's own analogue of the cockpit's session-scoped
-// dispatch log, in memory rather than on disk. A restarted app has an empty ledger, never a false reset.
+// The process-scoped memos of the tick: each starts empty after a restart.
 import type { RepoId } from '@/utils/repos'
-import type { LedgerRow, LedgerState, UnmatchedResult } from '@/utils/pipeline/liveness'
-import { classifyUnmatched } from '@/utils/pipeline/liveness'
 import type { RefreshMemoEntry } from '@/utils/pipeline/gates'
-import type { RefreshMemo, RerunMemo, UnknownStreaks, DispatchLedger, ForceDispatch } from '@/types/tick'
-
-export function createDispatchLedger(): DispatchLedger {
-  const rows = new Map<RepoId, Map<number, LedgerRow>>()
-  const observedAt = new Map<RepoId, Map<number, { readonly readAt: string; readonly result: UnmatchedResult }>>()
-
-  function bucket(repoId: RepoId): Map<number, LedgerRow> {
-    const existing = rows.get(repoId)
-    if (existing) return existing
-    const created = new Map<number, LedgerRow>()
-    rows.set(repoId, created)
-    return created
-  }
-
-  function observedBucket(repoId: RepoId): Map<number, { readonly readAt: string; readonly result: UnmatchedResult }> {
-    const existing = observedAt.get(repoId)
-    if (existing) return existing
-    const created = new Map<number, { readonly readAt: string; readonly result: UnmatchedResult }>()
-    observedAt.set(repoId, created)
-    return created
-  }
-
-  function advance(repoId: RepoId, number: number, result: UnmatchedResult): void {
-    if (result.nextState === undefined) return
-    bucket(repoId).set(number, { state: result.nextState, resets: result.nextResets ?? 0 })
-  }
-
-  return {
-    record(repoId, number) {
-      const prior = bucket(repoId).get(number)
-      const dispatched: LedgerState = 'dispatched'
-      bucket(repoId).set(number, { state: dispatched, resets: prior?.resets ?? 0 })
-    },
-    advance,
-    rowFor(repoId, number) {
-      return rows.get(repoId)?.get(number)
-    },
-    observeUnmatched(repoId, number, readAt) {
-      if (readAt === null) return classifyUnmatched(bucket(repoId).get(number))
-      const memo = observedBucket(repoId).get(number)
-      if (memo !== undefined && memo.readAt === readAt) return memo.result
-      const result = classifyUnmatched(bucket(repoId).get(number))
-      advance(repoId, number, result)
-      observedBucket(repoId).set(number, { readAt, result })
-      return result
-    },
-  }
-}
+import type { RefreshMemo, RerunMemo, UnknownStreaks, ForceDispatch } from '@/types/tick'
 
 /** The app's own equivalent of the cockpit's `tickState.unknownStreak` — a process-scoped map
  *  counting consecutive UNKNOWN mergeability ticks. `get` defaults to 0 for an item never recorded. */

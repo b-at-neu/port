@@ -136,7 +136,6 @@ function fakeRunStates(setResult: SetRunStateResult = { ok: true }): { readonly 
     current: (repoId) => ({ repoId, state: 'paused', since: '2026-01-01T00:00:00Z' }),
     status: () => ({ kind: 'loaded' }),
     snapshot: () => ({ store: { kind: 'loaded' }, repositories: [] }),
-    load: () => Promise.resolve(),
     set: (repoIds, state) => {
       setCalls.push([repoIds, state])
       return Promise.resolve(setResult)

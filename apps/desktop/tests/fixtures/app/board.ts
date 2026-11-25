@@ -11,7 +11,8 @@ import type { RepositoryState } from '@/types/state'
 import type { SessionKey } from '@/types/hosting'
 import type { InterruptedStage } from '@/types/stage'
 import { reconcileRepository } from '@/main/pipeline/board/reconcile'
-import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
+import { createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
+import type { Run } from '@/utils/pipeline/ticket'
 import { planTick } from '@/main/pipeline/tick/plan'
 import { FIXTURE_REPOSITORIES, GADGETS_ID, GADGETS_VOCABULARY_REPORT, LEGACY_SITE_ID, WIDGETS_ID, WIDGETS_VOCABULARY_REPORT } from './repos'
 import type { RepoId } from '@/utils/repos'
@@ -262,15 +263,36 @@ export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'pop
   const readyEntry = widgetsEntry()
   const gadgetsEntryConfig = gadgetsEntry()
 
-  const ledger = createDispatchLedger()
   const unknownStreaks = createUnknownStreaks()
   const refreshMemo = createRefreshMemo()
   const nextDecisionAt = new Date(now.getTime() + SOURCE_BASE_INTERVAL_MS.github)
 
-  // Stands in for the earlier tick a fresh ledger never saw, so the stalled seed's first observation here classifies as a reset rather than a first sighting.
-  if (attention) ledger.advance(WIDGETS_ID, 54, { class: 'suspect', nextState: 'suspect', nextResets: 0 })
+  // The stalled seed's session ended long ago with no hand-back, so its claim classifies as a reset.
+  const stalled: Run = {
+    id: 'stalled-54',
+    stage: 'implement',
+    item: { kind: 'issue', number: 54 },
+    agent: 'impl',
+    trigger: 'planApproved',
+    model: 'sonnet',
+    title: null,
+    sessionKey: 'stalled-session' as SessionKey,
+    claudeSessionId: null,
+    worktree: { path: '/wt/impl-54', branch: null, baseSha: 'abc' },
+    startedAt: offsetMinutes(now, -120),
+    endedAt: offsetMinutes(now, -100),
+    outcome: null,
+    handback: null,
+    costUsd: null,
+    operatorJoinedAt: null,
+    failure: null,
+    interruption: null,
+    networkRetries: 0,
+    denials: [],
+  }
+  const runsOf = (_repoId: RepoId, kind: string, number: number) => (attention && kind === 'issue' && number === 54 ? [stalled] : [])
 
-  const tickParams = { ledger, unknownStreaks, nextDecisionAt, now: () => now, reviewCycleCap: readyEntry.config.reviewCycleCap, startedTasks: [], refreshMemo, checkDispositions: readyEntry.config.checkDispositions, holdSessionRequired: true }
+  const tickParams = { runsOf, unknownStreaks, nextDecisionAt, now: () => now, reviewCycleCap: readyEntry.config.reviewCycleCap, startedTasks: [], refreshMemo, checkDispositions: readyEntry.config.checkDispositions, holdSessionRequired: true }
   const gadgetsTickParams = { ...tickParams, reviewCycleCap: gadgetsEntryConfig.config.reviewCycleCap, checkDispositions: gadgetsEntryConfig.config.checkDispositions }
   const repositories = attention ? [ready, notReady, gadgets] : [ready, gadgets]
   const tick = [planTick({ repository: ready, ...tickParams }), ...(attention ? [planTick({ repository: notReady, ...tickParams })] : []), planTick({ repository: gadgets, ...gadgetsTickParams })]

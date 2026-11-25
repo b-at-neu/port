@@ -3,7 +3,7 @@ import { emptyFile, parseFile, prune, recordMirror, seedFrom, ticketFor, tracked
 import type { MirrorFailure, RepoRecord } from '@/types/pipeline-state'
 import type { Ticket } from '@/utils/pipeline/ticket'
 import { reconciledItem, repositoryState } from '../../../support/board-snapshot'
-import { NOW as AT, REPO, ticketOf } from '../../../support/tickets'
+import { NOW as AT, REPO, runOf, ticketOf } from '../../../support/tickets'
 
 function recordOf(...tickets: Ticket[]): RepoRecord {
   return tickets.reduce((record, ticket) => withTicket(record, ticket), { seededAt: AT, tickets: {} } as RepoRecord)
@@ -12,14 +12,20 @@ function recordOf(...tickets: Ticket[]): RepoRecord {
 const withPr = (ticket: number, pr: number): Ticket => ticketOf({ ticket, pr: { number: pr, approvedAt: null }, stage: 'review' })
 
 describe('parseFile', () => {
-  it.each([undefined, null, '{', [], { version: 2 }, { version: 2, repositories: [] }, { version: 1, repositories: {} }, { version: 3, repositories: {} }])('reads %j as empty', (value) => {
+  it.each([undefined, null, '{', [], { version: 3 }, { version: 3, repositories: [] }, { version: 2, repositories: {} }, { version: 4, repositories: {} }])('reads %j as empty', (value) => {
     expect(parseFile(value)).toEqual(emptyFile())
+  })
+
+  it('keeps a good dispatch entry and drops a bad one, never the section', () => {
+    const file = parseFile({ version: 3, dispatch: { a: { state: 'dispatching', since: AT }, b: { state: 'sleeping', since: null }, c: 'junk', d: { state: 'paused' } }, repositories: {} })
+    expect(file.dispatch).toEqual({ a: { state: 'dispatching', since: AT }, d: { state: 'paused', since: null } })
   })
 
   it('keeps a good repository and drops a bad ticket, never the whole repository', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const file = parseFile({
-      version: 2,
+      version: 3,
+      dispatch: {},
       repositories: {
         'repo-a': { seededAt: AT, tickets: { '7': ticketOf({ ticket: 7 }), '8': { ticket: 8 }, '9': { ...ticketOf({ ticket: 9 }), stage: 'nowhere' } } },
         'repo-b': 'junk',
@@ -102,6 +108,14 @@ describe('prune', () => {
   ])('drops %s', (_name, closed, kept) => {
     const record = recordOf(ticketOf({ ticket: 1 }), withPr(2, 20), withPr(3, 30))
     expect(Object.keys(prune(record, closed).tickets).sort()).toEqual(kept)
+  })
+
+  it.each([
+    ['an open run', { endedAt: null }],
+    ['an interrupted run', { endedAt: AT, interruption: { reason: 'crash' as const, detail: null, at: AT, resetsAt: null } }],
+  ])('keeps a closed ticket with %s, so a kept worktree is never orphaned', (_name, run) => {
+    const record = recordOf(ticketOf({ ticket: 1, runs: [runOf(run)] }), ticketOf({ ticket: 2, runs: [runOf({ id: 'done', endedAt: AT, outcome: 'completed' })] }))
+    expect(Object.keys(prune(record, [1, 2]).tickets)).toEqual(['1'])
   })
 
   it('keeps the record identity when nothing matched', () => {

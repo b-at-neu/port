@@ -7,31 +7,6 @@ export function isLive(description: string, liveDescriptions: string[]): boolean
   return liveDescriptions.includes(description)
 }
 
-export type LedgerState = 'dispatched' | 'suspect' | 'reset'
-
-export interface LedgerRow {
-  readonly state: LedgerState
-  readonly resets: number
-}
-
-export type UnmatchedClass = 'no-record' | 'suspect' | 'reset' | 'capped'
-
-export interface UnmatchedResult {
-  readonly class: UnmatchedClass
-  readonly nextState?: LedgerState
-  readonly nextResets?: number
-}
-
-/** At most one automatic reset per item per session: no row is `no-record`, `dispatched` is `suspect` (debounced one tick), `suspect` with no resets is `reset`, else `capped`. */
-export function classifyUnmatched(logRow: LedgerRow | undefined): UnmatchedResult {
-  if (!logRow) return { class: 'no-record' }
-  if (logRow.state === 'dispatched') return { class: 'suspect', nextState: 'suspect', nextResets: logRow.resets ?? 0 }
-  if (logRow.state === 'suspect' && (logRow.resets ?? 0) === 0) {
-    return { class: 'reset', nextState: 'reset', nextResets: 1 }
-  }
-  return { class: 'capped' }
-}
-
 /** The five in-flight aliases' expected-liveness rows, read from `actionable` so a contradictory item is never auto-reset. */
 export function buildLivenessExpected(actionable: Record<string, { mine: { readonly number: number }[] }>, labels: Record<string, string>): { readonly item: number; readonly labelKey: string; readonly label: string; readonly stage: string }[] {
   const specs: Array<[string, string, string]> = [

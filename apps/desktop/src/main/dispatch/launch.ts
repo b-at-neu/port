@@ -1,5 +1,7 @@
 import type { ReadyEntry } from '@/types/actions'
 import type { BudgetNote, CreateDispatcherParams, DispatchOwner, RunState, StageLaunchFailureCause, StageRecord } from '@/types/dispatch'
+import { stageOfMode } from '@/types/stage-labels'
+import { stageModeFor } from '@/main/pipeline/transitions'
 import { RUN_TARGET } from '@/types/dispatch'
 import type { PipelineItemKind, ResolvedItem } from '@/types/github'
 import type { HostedSessionSnapshot } from '@/types/hosting'
@@ -13,7 +15,7 @@ import type { ReviewDispatchFacts } from '@/utils/pipeline/gates'
 import { KIND_PROMPT_NAMES, STAGE_PROMPT_NAMES } from '@/utils/stage/prompt'
 import { ticketIndex, ticketLabelFor } from '@/utils/tickets/ticket'
 import { budgetRoute, escalateOverBudget } from '@/main/dispatch/budget'
-import { activeOrIdle, newStageRecord } from '@/main/dispatch/records'
+import { activeOrIdle } from '@/main/dispatch/records'
 import type { RepoDispatcherState } from '@/main/dispatch/records'
 import { launchFailedIntent } from '@/main/pipeline/incidents/raise'
 import type { createRaiser } from '@/main/pipeline/incidents/raise'
@@ -60,7 +62,7 @@ interface LaunchEnv {
   readonly isStopped: () => boolean
   /** Runs `fn` after every earlier launch section, so two repositories never race for the same free slot. */
   readonly serialize: <T>(fn: () => Promise<T>) => Promise<T>
-  readonly pushRecord: (repoId: RepoId, record: StageRecord) => void
+  readonly recordsOf: (repoId: RepoId) => readonly StageRecord[]
   readonly report: (repoId: RepoId, owner: DispatchOwner, state: RepoDispatcherState['dispatcherState'], runState: RunState) => void
   readonly itemsOf: (repoId: RepoId) => readonly ReconciledItem[]
 }
@@ -76,7 +78,12 @@ interface LaunchPass {
 }
 
 export function createLaunchSection(env: LaunchEnv): { readonly launchSurvivors: (pass: LaunchPass) => Promise<void> } {
-  const { deps, raise, pushRecord, report } = env
+  const { deps, raise, report } = env
+
+  /** A launch that never produced a session still shows as a run, ended the instant it started. */
+  async function recordFailure(entry: ReadyEntry, candidate: TickActionable, message: string): Promise<void> {
+    await deps.runs.launchFailed(entry.id, { stage: stageOfMode(stageModeFor(candidate.agent, candidate.trigger)), kind: candidate.kind, number: candidate.number, agent: candidate.agent, trigger: candidate.trigger, model: entry.config.models[candidate.agent], title: null, message })
+  }
 
   /** Trigger → in-flight before the session exists. `moved` skips silently, since the next read shows the truth; any other refusal is a launch failure. */
   async function claim(entry: ReadyEntry, candidate: TickActionable, resolved: ResolvedItem | undefined): Promise<boolean> {
@@ -90,7 +97,7 @@ export function createLaunchSection(env: LaunchEnv): { readonly launchSurvivors:
   /** A launch that never produced a session: undoes the claim when it made one, records the failure and raises its incident. */
   async function launchFailed(entry: ReadyEntry, candidate: TickActionable, cause: StageLaunchFailureCause | `claim-${string}`, message: string, undo: boolean): Promise<void> {
     if (undo) await rollback(entry, candidate)
-    pushRecord(entry.id, newStageRecord(candidate, 'failed', deps.now().toISOString(), null, message))
+    await recordFailure(entry, candidate, message)
     raise(entry.id, candidate, launchFailedIntent(candidate, cause), { kind: 'failed' })
   }
 
@@ -132,13 +139,13 @@ export function createLaunchSection(env: LaunchEnv): { readonly launchSurvivors:
   }
 
   async function launchSurvivors(pass: LaunchPass): Promise<void> {
-    const { entry, survivors, resolvedByNumber, state, owner, runState, viewer } = pass
+    const { entry, survivors, resolvedByNumber, owner, runState, viewer } = pass
     const launch = deps.launch
     if (launch === null) return
 
     const gated = entry.config.commands.budget !== null ? await budgetGated(pass) : survivors
     if (gated.length === 0) {
-      report(entry.id, owner, activeOrIdle(state), runState)
+      report(entry.id, owner, activeOrIdle(env.recordsOf(entry.id)), runState)
       return
     }
 
@@ -161,7 +168,7 @@ export function createLaunchSection(env: LaunchEnv): { readonly launchSurvivors:
         if (candidate.agent === 'review') {
           if (candidate.cycle === null) {
             const message = `Couldn't count the earlier reviews on pull request #${candidate.number}, so the review wasn't started.`
-            pushRecord(entry.id, newStageRecord(candidate, 'failed', deps.now().toISOString(), null, message))
+            await recordFailure(entry, candidate, message)
             continue
           }
           review = reviewDispatchFacts({ priorReviews: candidate.cycle.count, author: resolvedByNumber.get(candidate.number)?.author ?? null, viewer })
@@ -181,14 +188,11 @@ export function createLaunchSection(env: LaunchEnv): { readonly launchSurvivors:
             target: targetOf(candidate.kind, resolvedByNumber.get(candidate.number)),
             review,
           })
-          const at = deps.now().toISOString()
           if (result.ok) {
             if (env.isStopped()) {
               void deps.store.close(result.sessionKey)
               continue
             }
-            pushRecord(entry.id, newStageRecord(candidate, 'started', at, result.sessionKey, null))
-            deps.ledger.record(entry.id, candidate.number)
             deps.forceDispatch.clear(entry.id, candidate.number)
           } else if (result.kind === 'at-capacity') {
             await rollback(entry, candidate)
@@ -204,7 +208,7 @@ export function createLaunchSection(env: LaunchEnv): { readonly launchSurvivors:
 
     const limit = (await deps.store.capacity()).limit
     if (waiting > 0) report(entry.id, owner, { kind: 'at-capacity', limit, waiting }, runState)
-    else report(entry.id, owner, activeOrIdle(state), runState)
+    else report(entry.id, owner, activeOrIdle(env.recordsOf(entry.id)), runState)
   }
 
   return { launchSurvivors }

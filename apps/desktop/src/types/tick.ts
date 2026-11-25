@@ -5,7 +5,6 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { StageHandback, StageOutcomeKind } from '@/types/stage-session'
 import type { StageLabelResult } from '@/types/stage-labels'
-import type { LedgerRow, UnmatchedResult } from '@/utils/pipeline/liveness'
 import type { RefreshMemoEntry } from '@/utils/pipeline/gates'
 
 /** A bare four-way key, never the session index's hyphenated `PortStageAgent` — this one names *what to dispatch next*, matching `models.<key>`, not *what already ran*. */
@@ -206,14 +205,3 @@ export interface ForceDispatch {
   readonly prune: (repoId: RepoId, keep: ReadonlySet<number>) => void
 }
 
-export interface DispatchLedger {
-  /** Records the claim at `state: 'dispatched'`, carrying over any `resets` a prior row already had. */
-  readonly record: (repoId: RepoId, number: number) => void
-  /** Writes the row forward only when `classifyUnmatched` returned a `nextState`; `no-record` and
-   *  `capped` leave the ledger untouched. */
-  readonly advance: (repoId: RepoId, number: number, result: UnmatchedResult) => void
-  readonly rowFor: (repoId: RepoId, number: number) => LedgerRow | undefined
-  /** Classifies and advances the row at most once per distinct `readAt`, so repeated polls over
-   *  the same GitHub read don't independently advance the state past the intended debounce. */
-  readonly observeUnmatched: (repoId: RepoId, number: number, readAt: string | null) => UnmatchedResult
-}

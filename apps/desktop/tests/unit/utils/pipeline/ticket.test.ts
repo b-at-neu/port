@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { LABEL_KEYS, type LabelKey } from '@/utils/labels/vocabulary'
 import { V1_KEY_MEANING, ticketSchema, type Status } from '@/utils/pipeline/ticket'
-import { NOW, ticketOf } from '../../../support/tickets'
+import { NOW, runOf, ticketOf } from '../../../support/tickets'
 
 const parses = (value: unknown) => ticketSchema.safeParse(value).success
 
@@ -67,20 +67,7 @@ describe('ticketSchema', () => {
     const full = ticketOf({
       pr: { number: 7, approvedAt: NOW },
       runs: [
-        {
-          id: 'run-1',
-          stage: 'plan',
-          sessionKey: 'key' as never,
-          claudeSessionId: 'abc',
-          startedAt: NOW,
-          endedAt: NOW,
-          outcome: 'completed',
-          handback: { token: 'plan-ready', arg: null },
-          costUsd: 0.5,
-          operatorJoinedAt: null,
-          failure: null,
-          denials: [{ toolName: 'Bash', inputSummary: 'rm', rule: 'deny', at: NOW }],
-        },
+        runOf({ stage: 'plan', claudeSessionId: 'abc', endedAt: NOW, outcome: 'completed', handback: { token: 'plan-ready', arg: null }, costUsd: 0.5, denials: [{ id: 'd1', toolName: 'Bash', inputSummary: 'rm', rule: 'deny', at: NOW }] }),
       ],
       history: [{ at: NOW, action: 'dispatch', actor: 'me', to: { stage: 'plan', status: 'running' }, legacy: null }],
       mirror: { written: ['planning'], failure: { at: NOW, outcome: { kind: 'no-op' } } },

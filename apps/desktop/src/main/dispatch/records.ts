@@ -1,7 +1,7 @@
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import type { BudgetStatus, DispatchOwner, DispatcherState, ObservationRecord, OwnershipRead, RepoDispatchStatus, RunState, StageRecord, StageSessionSummary } from '@/types/dispatch'
 import type { InterruptedStage, StageDenial } from '@/types/stage'
-import type { StageLabelResult } from '@/types/stage-labels'
+import type { RunChange, StageLabelResult } from '@/types/stage-labels'
 import type { EndedStage, TickActionable } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
 
@@ -11,8 +11,8 @@ export const REDISPATCH_FLOOR_MS = 270_000
 /** How long an ended session whose hand-back has not been classified still counts as live. Bounds a launcher that never reports an outcome. */
 export const SETTLE_GRACE_MS = 120_000
 
+/** What the dispatch loop keeps per repository besides its runs, which `Ticket.runs` holds. */
 export interface RepoDispatcherState {
-  records: readonly StageRecord[]
   owner: DispatchOwner
   dispatcherState: DispatcherState
   runState: RunState
@@ -23,11 +23,12 @@ export interface RepoDispatcherState {
   budget: BudgetStatus | null
   observed: ObservationRecord[]
   observedWriteAt: Map<number, string>
+  /** Whether this boot's unwritten hand-backs were settled; they are, once, on the first owned pass. */
+  replayed: boolean
 }
 
 export function emptyRepoState(): RepoDispatcherState {
   return {
-    records: [],
     owner: 'none',
     dispatcherState: { kind: 'idle' },
     runState: 'paused',
@@ -38,6 +39,7 @@ export function emptyRepoState(): RepoDispatcherState {
     budget: null,
     observed: [],
     observedWriteAt: new Map(),
+    replayed: false,
   }
 }
 
@@ -45,24 +47,25 @@ export function ownerOf(ownership: OwnershipRead): DispatchOwner {
   return ownership.kind === 'absent' ? 'none' : ownership.kind
 }
 
-export function activeOrIdle(state: RepoDispatcherState): DispatcherState {
-  return state.records.length > 0
-    ? { kind: 'active', recent: state.records.map((r) => ({ agent: r.agent, number: r.number, kind: r.kind, trigger: r.trigger, state: r.state, at: r.at, detail: r.detail, outcome: r.outcome, sessionKey: r.sessionKey, claudeSessionId: r.claudeSessionId, operatorJoinedAt: r.operatorJoinedAt })) }
+export function activeOrIdle(records: readonly StageRecord[]): DispatcherState {
+  return records.length > 0
+    ? { kind: 'active', recent: records.map((r) => ({ agent: r.agent, number: r.number, kind: r.kind, trigger: r.trigger, state: r.state, at: r.at, detail: r.detail, outcome: r.outcome, sessionKey: r.sessionKey, claudeSessionId: r.claudeSessionId, operatorJoinedAt: r.operatorJoinedAt })) }
     : { kind: 'idle' }
 }
 
-export function newStageRecord(candidate: Pick<TickActionable, 'agent' | 'number' | 'kind' | 'trigger'>, state: 'started' | 'failed', at: string, sessionKey: SessionKey | null, detail: string | null): StageRecord {
-  return { sessionKey, agent: candidate.agent, number: candidate.number, kind: candidate.kind, trigger: candidate.trigger, state, at, endedAt: null, detail, outcome: null, claudeSessionId: null, operatorJoinedAt: null }
+interface RunSync {
+  readonly runId: string
+  readonly change: RunChange
 }
 
-/** A `started` record whose handle is `null` or `ended` becomes `ended`, stamped with `now`. `claudeSessionId`/`operatorJoinedAt` are copied off the snapshot while it exists, including on the pass that marks the record `ended` — once the handle is gone, the last values stay. */
-export function refreshRecords(records: readonly StageRecord[], snapshotOf: (sessionKey: SessionKey) => HostedSessionSnapshot | null, now: string): readonly StageRecord[] {
-  return records.map((record) => {
-    if (record.state !== 'started' || record.sessionKey === null) return record
+/** What the hosted sessions say about the runs still started: a session that is gone or ended ends its run, and an operator's first message into one is recorded. `ended` leaves the outcome untouched. */
+export function syncChanges(records: readonly StageRecord[], snapshotOf: (sessionKey: SessionKey) => HostedSessionSnapshot | null): readonly RunSync[] {
+  return records.flatMap((record): RunSync[] => {
+    if (record.state !== 'started' || record.sessionKey === null) return []
     const snap = snapshotOf(record.sessionKey)
-    if (snap === null) return { ...record, state: 'ended' as const, endedAt: now }
-    const withSnap = { ...record, claudeSessionId: snap.claudeSessionId, operatorJoinedAt: snap.operatorJoinedAt }
-    return snap.phase !== 'ended' ? withSnap : { ...withSnap, state: 'ended' as const, endedAt: now }
+    const joined: RunSync[] = snap !== null && snap.operatorJoinedAt !== null && record.operatorJoinedAt === null ? [{ runId: record.runId, change: { kind: 'joined', at: snap.operatorJoinedAt } }] : []
+    const ended: RunSync[] = snap === null || snap.phase === 'ended' ? [{ runId: record.runId, change: { kind: 'ended', outcome: null } }] : []
+    return [...joined, ...ended]
   })
 }
 
@@ -120,26 +123,22 @@ export function endedStagesOf(records: readonly StageRecord[], resultFor: (sessi
   return [...newestByNumber.values()]
 }
 
-export function liveStagesOf(state: RepoDispatcherState | undefined): readonly string[] {
-  if (state === undefined) return []
-  return state.records.filter((r) => r.state === 'started').map((r) => `${r.agent} #${String(r.number)}`)
+export function liveStagesOf(records: readonly StageRecord[]): readonly string[] {
+  return records.filter((r) => r.state === 'started').map((r) => `${r.agent} #${String(r.number)}`)
 }
 
 /** `null` unless this app owns the repository — a cockpit that is not dispatching has no liveness to report. */
-export function stageLivenessOf(state: RepoDispatcherState | undefined, pendingNumbers: ReadonlySet<number>, interrupted: readonly InterruptedStage[], now: Date): { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null {
+export function stageLivenessOf(state: RepoDispatcherState | undefined, records: readonly StageRecord[], pendingNumbers: ReadonlySet<number>, interrupted: readonly InterruptedStage[], now: Date): { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null {
   if (state === undefined || state.owner !== 'app') return null
-  return { live: [...liveStagesOf(state), ...settlingDescriptions(state.records, pendingNumbers, now)], interrupted: interrupted.map((i) => `${i.agent} #${String(i.number)}`) }
+  return { live: [...liveStagesOf(records), ...settlingDescriptions(records, pendingNumbers, now)], interrupted: interrupted.map((i) => `${i.agent} #${String(i.number)}`) }
 }
 
-export function liveStageSessionsOf(states: ReadonlyMap<RepoId, RepoDispatcherState>, nameOf: (repoId: RepoId) => string): readonly StageSessionSummary[] {
-  const summaries: StageSessionSummary[] = []
-  for (const [repoId, state] of states.entries()) {
-    const repoName = nameOf(repoId)
-    for (const record of state.records) {
-      if (record.state === 'started') summaries.push({ agent: record.agent, number: record.number, trigger: record.trigger, repoName })
-    }
-  }
-  return summaries
+export function liveStageSessionsOf(repoIds: readonly RepoId[], recordsOf: (repoId: RepoId) => readonly StageRecord[], nameOf: (repoId: RepoId) => string): readonly StageSessionSummary[] {
+  return repoIds.flatMap((repoId) =>
+    recordsOf(repoId)
+      .filter((record) => record.state === 'started')
+      .map((record) => ({ agent: record.agent, number: record.number, trigger: record.trigger, repoName: nameOf(repoId) })),
+  )
 }
 
 export function statusOf(states: ReadonlyMap<RepoId, RepoDispatcherState>, denialsOf: (repoId: RepoId) => readonly StageDenial[], interruptedOf: (repoId: RepoId) => readonly InterruptedStage[]): readonly RepoDispatchStatus[] {

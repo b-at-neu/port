@@ -1,9 +1,10 @@
 // Pure: the (ticket, event) → ticket table. No I/O — the store commits what this returns, and only after it is persisted.
 import { HISTORY_CAP, ticketOfKeys } from '@/main/pipeline/state/migrate'
 import { legacyKeysOf } from '@/main/pipeline/state/mirror'
+import { applyRunChange } from '@/main/pipeline/runs'
 import type { PipelineItemKind } from '@/types/github'
 import type { TicketRef } from '@/types/pipeline-state'
-import { stageOfMode, type StageEvent, type StageMode, type TableResult, type TicketEvent } from '@/types/stage-labels'
+import { stageOfMode, type StageEvent, type StageMode, type StateEvent, type TableResult, type TicketEvent } from '@/types/stage-labels'
 import type { StageHandback } from '@/types/stage-session'
 import type { HandoffRefusal, StageAgent } from '@/types/tick'
 import type { LabelKey } from '@/utils/labels/vocabulary'
@@ -67,12 +68,12 @@ export function eventWrites(event: StageEvent, mode: StageMode): boolean {
   return event.outcome === 'completed' || event.outcome === 'error'
 }
 
-function handbackEvent(stage: Stage, handback: StageHandback, via: 'session' | 'adopt'): TicketEvent {
+function handbackEvent(stage: Stage, handback: StageHandback, via: 'session' | 'adopt'): StateEvent {
   return { kind: 'handback', stage, token: handback.token, arg: handback.arg, pr: stage === 'implement' ? pullRequestNumberOf(handback.arg) : null, via }
 }
 
 /** The table event a stage event stands for; `null` when the stage event writes nothing. */
-export function ticketEventOf(event: StageEvent, mode: StageMode): TicketEvent | null {
+export function ticketEventOf(event: StageEvent, mode: StageMode): StateEvent | null {
   const stage = stageOfMode(mode)
   switch (event.kind) {
     case 'claim':
@@ -119,7 +120,7 @@ const queued = (at: string, reason: 'new' | 'changes-requested' | 'retry' = 'new
 const waiting = (gate: 'plan-approval' | 'merge' | 'escalation'): Status => ({ kind: 'waiting-on-you', gate, detail: '' })
 
 /** The audit verb an event is recorded under. */
-export function actionOf(event: TicketEvent): string {
+export function actionOf(event: StateEvent): string {
   switch (event.kind) {
     case 'claim':
       return 'stage-claim'
@@ -142,7 +143,7 @@ export function actionOf(event: TicketEvent): string {
   }
 }
 
-function handbackNext(ticket: Ticket, event: Extract<TicketEvent, { kind: 'handback' }>, at: string): Next | TableResult {
+function handbackNext(ticket: Ticket, event: Extract<StateEvent, { kind: 'handback' }>, at: string): Next | TableResult {
   const { pr } = ticket
   const unapproved = pr === null ? null : { ...pr, approvedAt: null }
   switch (`${event.stage}:${event.token}`) {
@@ -175,7 +176,7 @@ function handbackNext(ticket: Ticket, event: Extract<TicketEvent, { kind: 'handb
 }
 
 /** The statuses a hand-back may settle: the session's own `running`, or the `queued retry` a liveness reset left. A `pr-opened` also settles a blocked or freshly queued issue. */
-function settles(ticket: Ticket, event: Extract<TicketEvent, { kind: 'handback' }>): boolean {
+function settles(ticket: Ticket, event: Extract<StateEvent, { kind: 'handback' }>): boolean {
   if (ticket.stage !== event.stage) return false
   const { status } = ticket
   if (status.kind === 'running') return true
@@ -183,7 +184,7 @@ function settles(ticket: Ticket, event: Extract<TicketEvent, { kind: 'handback' 
   return status.kind === 'queued' && status.reason === 'retry'
 }
 
-function stageEventNext(ticket: Ticket, event: Exclude<TicketEvent, { kind: 'labels' | 'merged' }>, at: string): Next | TableResult {
+function stageEventNext(ticket: Ticket, event: Exclude<StateEvent, { kind: 'labels' | 'merged' }>, at: string): Next | TableResult {
   const { status } = ticket
   switch (event.kind) {
     case 'claim':
@@ -209,12 +210,12 @@ const prefixedKeys = (ticket: Ticket): Set<string> => {
   return new Set(halves)
 }
 
-function isVerdict(event: TicketEvent): boolean {
+function isVerdict(event: StateEvent): boolean {
   return event.kind === 'handback' && event.via === 'session' && event.stage === 'review' && HANDBACK_TOKENS.review.includes(event.token) && !NON_VERDICT_TOKENS.includes(event.token)
 }
 
 /** Records one change on the ticket: its `rev`, its history row with the label diff of both halves, and a review verdict's cycle. A `null` ticket is a creation. */
-function commit(ticket: Ticket | null, next: Ticket, event: TicketEvent, ctx: TableContext): TableResult {
+function commit(ticket: Ticket | null, next: Ticket, event: StateEvent, ctx: TableContext): TableResult {
   const before = ticket === null ? new Set<string>() : prefixedKeys(ticket)
   const after = prefixedKeys(next)
   const add = [...after].filter((key) => !before.has(key))
@@ -227,7 +228,7 @@ function commit(ticket: Ticket | null, next: Ticket, event: TicketEvent, ctx: Ta
   }
 }
 
-function applyLabels(ticket: Ticket | null, event: Extract<TicketEvent, { kind: 'labels' }>, ctx: TableContext): TableResult {
+function applyLabels(ticket: Ticket | null, event: Extract<StateEvent, { kind: 'labels' }>, ctx: TableContext): TableResult {
   const { itemKind } = event
   const current = ticket === null ? [] : (legacyKeysOf(ticket, itemKind) ?? [])
   if (!event.expect.present.every((key) => current.includes(key)) || event.expect.absent.some((key) => current.includes(key))) return MOVED
@@ -265,6 +266,7 @@ export function accepts(ticket: Ticket | null, event: TicketEvent, ref: TicketRe
 export function applyEvent(ticket: Ticket | null, event: TicketEvent, ctx: TableContext): TableResult {
   if (event.kind === 'labels') return applyLabels(ticket, event, ctx)
   if (ticket === null) return MOVED
+  if (event.kind === 'run-start' || event.kind === 'run') return applyRunChange(ticket, event, ctx.at)
   if (event.kind === 'merged') {
     return ticket.status.kind === 'done' ? { ok: true, ticket, changed: false } : commit(ticket, { ...ticket, stage: 'merge', status: { kind: 'done', at: ctx.at } }, event, ctx)
   }

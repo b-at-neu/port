@@ -11,7 +11,8 @@ import type { StageOutcome } from '@/types/stage-session'
 import type { TickReport } from '@/types/tick'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
-import { memoryDenialStore } from '../../../fixtures/denials'
+import { buildDispatcher, dispatchRuns } from '../../../support/dispatch-runs'
+import { runOf } from '../../../support/tickets'
 import { DISPATCH_STORE_DEFAULTS, storeStub } from '../../../fixtures/store'
 
 const REPO_ID = 'repo-a' as RepoId
@@ -83,8 +84,7 @@ function rig(overrides: Partial<CreateDispatcherParams> = {}) {
   })
   const deps: CreateDispatcherParams = {
     store: storeStub({ ...DISPATCH_STORE_DEFAULTS, snapshotOf: () => live() }),
-    denials: memoryDenialStore(),
-    ledger: { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined, observeUnmatched: () => ({ class: 'no-record' }) },
+    runs: dispatchRuns(REPO_ID).runs,
     refreshMemo: { get: () => undefined, set: vi.fn(), clear: vi.fn() },
     rerunMemo: { get: () => undefined, set: vi.fn() },
     rerunChecks: () => Promise.resolve('applied'),
@@ -128,8 +128,10 @@ function rig(overrides: Partial<CreateDispatcherParams> = {}) {
     now: () => new Date('2026-01-01T00:00:00Z'),
     ...overrides,
   }
-  return { dispatcher: createDispatcher(deps), calls, claim, transition }
+  return { dispatcher: buildDispatcher(REPO_ID, deps), calls, claim, transition, runs: deps.runs }
 }
+
+const RUN_ID = `run-of-${KEY}`
 
 const consider = (dispatcher: ReturnType<typeof createDispatcher>) => dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
@@ -235,11 +237,12 @@ describe('createDispatcher — stage label writes', () => {
 
   it('records the hand-back write result on the ended stage the tick reads', async () => {
     let phase: 'ready' | 'ended' = 'ready'
-    const { dispatcher } = rig({
+    const { dispatcher, runs } = rig({
       store: storeStub({ ...DISPATCH_STORE_DEFAULTS, snapshotOf: () => live(phase) }),
       stageLabels: { claim: () => Promise.resolve(APPLIED), transition: () => Promise.resolve({ kind: 'refused', reason: 'no-handback', retryable: false, detail: null }) },
     })
     await consider(dispatcher)
+    await runs.ended(REPO_ID, RUN_ID, completed(null))
     dispatcher.recordOutcome(REPO_ID, KEY, completed(null), null)
     await settle()
     phase = 'ended'
@@ -261,41 +264,20 @@ describe('createDispatcher — stage label writes', () => {
 
 describe('createDispatcher — a resumed session, a superseded outcome and a settling one', () => {
   const RESUMED_KEY = 'hosted-2' as SessionKey
-  const INTERRUPTED = {
-    id: 'reg-1',
-    repoId: REPO_ID,
-    agent: 'impl' as const,
-    number: 52,
-    kind: 'issue' as const,
-    trigger: 'planApproved' as const,
-    inFlight: 'inProgress' as const,
-    model: 'sonnet',
-    claudeSessionId: 'sdk-1',
-    worktree: { path: '/wt', branch: 'b', baseSha: 's' },
-    startedAt: '2026-01-01T00:00:00.000Z',
-    interruptedAt: '2026-01-01T00:01:00.000Z',
-    reason: 'network' as const,
-    detail: null,
-    resetsAt: null,
-    costUsd: null,
-    networkRetries: 1,
-  }
-
-  it('trackResumed makes a resumed session’s hand-back write its labels', async () => {
-    const { dispatcher, transition } = rig()
-    await dispatcher.consider(snapshotWith([tickReport()]))
-    dispatcher.trackResumed(REPO_ID, RESUMED_KEY, INTERRUPTED)
+  it('a resumed session’s hand-back writes its labels', async () => {
+    const { dispatcher, transition, runs } = rig()
+    await consider(dispatcher)
+    await runs.resumed(REPO_ID, RUN_ID, RESUMED_KEY)
     dispatcher.recordOutcome(REPO_ID, RESUMED_KEY, completed({ token: 'pr-opened', arg: '#8' }), null)
     await settle()
     expect(transition.mock.calls[0]?.[0]).toMatchObject({ record: { number: 52, agent: 'impl', trigger: 'planApproved', sessionKey: RESUMED_KEY }, event: { kind: 'outcome', outcome: 'completed' } })
   })
 
   it('an older session’s outcome writes no label once a newer session owns the ticket, but is still recorded', async () => {
-    let at = new Date('2026-01-01T00:00:00Z')
-    const { dispatcher, transition } = rig({ now: () => at })
+    const { dispatcher, transition, runs } = rig()
     await consider(dispatcher)
-    at = new Date('2026-01-01T00:10:00Z')
-    dispatcher.trackResumed(REPO_ID, RESUMED_KEY, INTERRUPTED)
+    await runs.ended(REPO_ID, RUN_ID, completed({ token: 'pr-opened', arg: '#8' }))
+    await runs.start(REPO_ID, runOf({ id: 'run-2', item: { kind: 'issue', number: 52 }, sessionKey: RESUMED_KEY, startedAt: '2026-01-01T00:10:00.000Z' }))
     dispatcher.recordOutcome(REPO_ID, KEY, completed({ token: 'pr-opened', arg: '#8' }), null)
     await settle()
     expect(transition).not.toHaveBeenCalled()

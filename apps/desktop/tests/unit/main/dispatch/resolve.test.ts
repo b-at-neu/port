@@ -68,7 +68,6 @@ function fakeRunStates(current: RunStateStore['current'], setResult: SetRunState
     current,
     status: () => ({ kind: 'loaded' }),
     snapshot: () => ({ store: { kind: 'loaded' }, repositories: [] }),
-    load: () => Promise.resolve(),
     set: (repoIds, state) => {
       setCalls.push([repoIds, state])
       return Promise.resolve(setResult)

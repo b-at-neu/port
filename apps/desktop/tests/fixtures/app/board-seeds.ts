@@ -164,7 +164,7 @@ const ATTENTION_ITEM_SEEDS: readonly ItemSeed[] = [
   // The viewer's ticket whose pull request someone else owns: it stays on the Board while planTick holds the pull request as 'other-operator'.
   { kind: 'issue', number: 57, title: 'Compress exported PDFs', stageKey: 'prOpened' },
   { kind: 'pull-request', number: 58, title: 'Compress exported PDFs', stageKey: 'readyForReview', body: 'Closes #57', assignees: ['someone-else'] },
-  // No attached agent, so the dispatch ledger's unmatched read reaches the Needs-you 'stalled' classification.
+  // No attached agent, so the stall ladder's unmatched read reaches the Needs-you 'stalled' classification.
   { kind: 'issue', number: 54, title: 'Migrate session storage to Redis', stageKey: 'inProgress', updatedMinutesAgo: -40 },
 ]
 

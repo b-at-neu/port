@@ -1,30 +1,32 @@
 import { describe, expect, it } from 'vitest'
-import { migrate, ticketOfKeys } from '@/main/pipeline/state/migrate'
+import { migrateV1, ticketOfKeys } from '@/main/pipeline/state/migrate'
+import { NO_RUN_FILES, migrateRuns } from '@/main/pipeline/state/migrate-runs'
 import { legacyKeysOf } from '@/main/pipeline/state/mirror'
 import { parseFile } from '@/main/pipeline/state/model'
 import type { Ticket } from '@/utils/pipeline/ticket'
 import v1 from '../../../fixtures/pipeline-state/v1.json'
 import { NOW, REPO, ticketOf } from '../../../support/tickets'
 
-const file = parseFile(migrate(1, v1))
+const toV3 = (raw: unknown): unknown => migrateRuns(migrateV1(1, raw), NO_RUN_FILES)
+const file = parseFile(toV3(v1))
 const ticketsOf = (repo: string): Ticket[] => Object.values(file.repositories[repo]?.tickets ?? {})
 const ticket = (repo: string, number: number): Ticket | undefined => ticketsOf(repo).find((candidate) => candidate.ticket === number)
 
 describe('migrate', () => {
-  it('writes version 2, keeping both repositories', () => {
-    expect(file.version).toBe(2)
+  it('writes version 3, keeping both repositories', () => {
+    expect(file.version).toBe(3)
     expect(Object.keys(file.repositories)).toEqual(['repo-a', 'repo-b'])
     expect(file.repositories['repo-a']?.seededAt).toBe('2026-11-01T09:00:00.000Z')
   })
 
   it('refuses any version it has no migration from', () => {
-    expect(() => migrate(0, v1)).toThrow()
-    expect(() => migrate(1, 'junk')).toThrow()
+    expect(() => migrateV1(0, v1)).toThrow()
+    expect(() => migrateV1(1, 'junk')).toThrow()
   })
 
   it('drops a repository record the terminal cockpit held, so it reseeds from labels', () => {
     const held = { version: 1, repositories: { 'repo-1': { seededAt: NOW, heldBy: 'terminal', items: {} } } }
-    expect(parseFile(migrate(1, held)).repositories).toEqual({})
+    expect(parseFile(toV3(held)).repositories).toEqual({})
   })
 
   it('loses no item: every version-1 number is exactly one half of one ticket', () => {

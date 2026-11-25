@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import type { IntegrationChecks } from '@/types/github'
 import type { ReconciledItem } from '@/types/state'
-import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
+import { createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
 import { planTick } from '@/main/pipeline/tick/plan'
 import { reconciledItem as item, repositoryState } from '../../../support/board-snapshot'
 
@@ -26,7 +26,6 @@ function reviewItem(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
 function plan(reviewed: ReconciledItem, integrationChecks: IntegrationChecks | null, now: string) {
   return planTick({
     repository: repositoryState([reviewed], { integrationChecks }, now),
-    ledger: createDispatchLedger(),
     unknownStreaks: createUnknownStreaks(),
     nextDecisionAt: new Date(now),
     now: () => new Date(now),

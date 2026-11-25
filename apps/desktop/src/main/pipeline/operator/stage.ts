@@ -2,7 +2,7 @@
 import { accepts, actionOf, handbackRefusal, pullRequestNumberOf, stageModeFor, ticketEventOf } from '@/main/pipeline/transitions'
 import type { ReadyEntry } from '@/types/actions'
 import type { FetchItemsByNumberParams, ItemsByNumberFetch, PipelineItemKind, ResolvedItem } from '@/types/github'
-import type { StageEvent, StageTransitionResult, TicketEvent } from '@/types/stage-labels'
+import type { StageEvent, StageTransitionResult, StateEvent } from '@/types/stage-labels'
 import type { HandoffRefusal, TickActionable } from '@/types/tick'
 import { stageHandbackIntent } from '@/main/pipeline/incidents/raise'
 import type { StageSnapshot } from '@/types/dispatch'
@@ -71,12 +71,12 @@ function refusalOf(outcome: WriteOutcome): StageTransitionResult {
 }
 
 /** The label an event that lands on a human leaves the ticket under, for the incident it raises. */
-function landedOn(event: TicketEvent): 'blocked' | 'needsHuman' | null {
+function landedOn(event: StateEvent): 'blocked' | 'needsHuman' | null {
   if (event.kind === 'blocked') return 'blocked'
   return event.kind === 'handback' && (event.token === 'checks-pending' || event.token === 'escalated') ? 'needsHuman' : null
 }
 
-function requestFor(entry: ReadyEntry, subject: StageSubject, event: TicketEvent, ticket: Ticket | null, resolved: ResolvedItem, incident: IncidentIntent | null): EventWriteRequest {
+function requestFor(entry: ReadyEntry, subject: StageSubject, event: StateEvent, ticket: Ticket | null, resolved: ResolvedItem, incident: IncidentIntent | null): EventWriteRequest {
   return {
     ...(incident === null ? {} : { incident }),
     repoId: entry.id,

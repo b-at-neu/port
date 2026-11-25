@@ -1,5 +1,7 @@
-import type { StageLaunchRequest, StageLauncher, StageLaunchResult } from '@/types/dispatch'
+import type { StageLaunchRequest, StageLauncher, StageLaunchResult, StageRecord } from '@/types/dispatch'
 import type { HostedSessionSnapshot, HostedStore, SessionKey } from '@/types/hosting'
+import type { StageOutcome } from '@/types/stage-session'
+import type { InterruptedReason, Run, RunDenial, Stage } from '@/utils/pipeline/ticket'
 import type { ReleaseBranchOutcome, RemoveSessionWorktreeOutcome } from '@/types/workspace'
 import type { ItemActionResult } from '@/types/actions'
 import type { GitHubRepoRef } from '@/types/github'
@@ -13,7 +15,7 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { StageAgent } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
 
-/** A single off-allowlist tool call a stage session's policy denied. Persisted in `stage-denials.json`, deduped per repository by `rule` and bounded to 20 — a repeated denial simply re-raises the item. */
+/** A single off-allowlist tool call a stage session's policy denied. Kept on its run, deduped per repository by `rule` and bounded to 20 — a repeated denial simply re-raises the item. */
 export interface StageDenial {
   readonly id: string
   readonly repoId: RepoId
@@ -28,20 +30,9 @@ export interface StageDenial {
   readonly sessionKey: SessionKey | null
 }
 
-export interface StageDenialStore {
-  /** Loads `stage-denials.json`; a missing or malformed file, or an entry failing the guard, loads as empty. */
-  load(): Promise<void>
-  /** Dedupes by rule within the repository and bounds it to 20. */
-  record(denial: StageDenial): void
-  dismiss(repoId: RepoId, id: string): void
-  clearRule(repoId: RepoId, rule: string): void
-  list(repoId: RepoId): readonly StageDenial[]
-}
+export type { InterruptedReason }
 
-export const INTERRUPTED_REASONS = ['quit', 'crash', 'usage-limit', 'error', 'cleanup-failed', 'network'] as const
-export type InterruptedReason = (typeof INTERRUPTED_REASONS)[number]
-
-/** A stage session that ended without reaching a `completed`/`questions`/`blocked` hand-back — tracked in `stage-sessions.json` until it is resumed, restarted, or the operator clears its label by hand. Also kept, as `cleanup-failed`, when a `completed` session's worktree could not be removed. */
+/** A stage session that ended without reaching a `completed`/`questions`/`blocked` hand-back — its run is kept until it is resumed, restarted, or the operator clears its label by hand. Also kept, as `cleanup-failed`, when a `completed` session's worktree could not be removed. */
 export interface InterruptedStage {
   readonly id: string
   readonly repoId: RepoId
@@ -152,12 +143,12 @@ export interface StageResumeRequest {
 export interface StageLauncherHandle extends StageLauncher {
   /** Wired from `main/ipc.ts`'s own `onStatus` — classifies a hand-back once per new `lastResult`/`end`, serialized per session key. */
   observe(snapshot: HostedSessionSnapshot): void
-  /** Resumes an interrupted entry's kept worktree as a tracked session — its hand-back settles the same registry entry, and the entry flips back to `running` in place. */
+  /** Resumes an interrupted entry's kept worktree as a tracked session — its hand-back settles the same run, which opens again in place. */
   resume(request: StageResumeRequest): Promise<StageLaunchResult>
 }
 
 export interface RecoverDeps {
-  readonly registry: StageRegistry
+  readonly runs: RunStore
   readonly store: Pick<HostedStore, 'list'>
   readonly resume: StageLauncherHandle['resume']
   readonly removeWorktree: (path: string, force: boolean) => Promise<RemoveSessionWorktreeOutcome>
@@ -172,21 +163,52 @@ export interface ResolvedStageRoot {
   readonly sessionRequiredPaths: readonly string[]
 }
 
-export interface StageRegistry {
-  /** Loads the file, promoting every `running` entry found to `crash` — a `running` record at boot can only mean the process died before it marked itself otherwise. Missing/malformed loads as empty. */
-  load(): Promise<readonly InterruptedStage[]>
-  /** Replaces any entry already holding the same `id`, never appends a second one. */
-  recordRunning(entry: Omit<InterruptedStage, 'reason' | 'detail' | 'resetsAt' | 'costUsd' | 'interruptedAt' | 'networkRetries'>): void
-  /** Flips an interrupted entry back to `running` in place — a no-op for an unknown id. Resuming a `network` entry counts one retry. */
-  markRunning(id: string): void
-  setSessionId(id: string, claudeSessionId: string): void
+/** A hand-back the last boot found unwritten, ready for the dispatcher to settle again. */
+export interface UnsettledStage {
+  readonly record: StageRecord & { readonly sessionKey: SessionKey }
+  readonly outcome: StageOutcome
+}
+
+/** What a launch that never produced a session records, so the attempt still shows as a run. */
+export interface LaunchFailure {
+  readonly stage: Stage
+  readonly kind: PipelineItemKind
+  readonly number: number
+  readonly agent: StageAgent
+  readonly trigger: LabelKey
+  readonly model: string
+  readonly title: string | null
+  readonly message: string
+}
+
+/** Every stage-session run a ticket carries. A write is one `RunChange` on the pipeline state, resolved once it is on disk and never rejecting; a read is a projection of `Ticket.runs`. */
+export interface RunStore {
+  start(repoId: RepoId, run: Run): Promise<void>
+  launchFailed(repoId: RepoId, failure: LaunchFailure): Promise<void>
+  /** Flips an interrupted run back to open under a new session; resuming a `network` interruption counts one retry. */
+  resumed(repoId: RepoId, runId: string, sessionKey: SessionKey): Promise<void>
+  session(repoId: RepoId, runId: string, claudeSessionId: string): Promise<void>
+  joined(repoId: RepoId, runId: string, at: string): Promise<void>
+  /** A hand-back that leaves the session open: questions or a block. */
+  handback(repoId: RepoId, runId: string, outcome: StageOutcome): Promise<void>
+  ended(repoId: RepoId, runId: string, outcome: StageOutcome | null): Promise<void>
   /** A `network` reason sets `resetsAt` to the next backoff instant itself and keeps the retry count; any other reason resets the count. */
-  markInterrupted(id: string, reason: InterruptedReason, detail: string | null, resetsAt: string | null, costUsd: number | null): void
-  /** Marks every currently-`running` entry `quit` — called on the quit path before `closeAll()`. */
-  /** Awaited at the quit path, with a timeout the caller applies — a hung write must never block quitting. */
-  markAllQuit(): Promise<void>
-  remove(id: string): void
-  list(): readonly InterruptedStage[]
-  /** Every `running` entry — `list()` only ever returns interrupted ones. */
+  interrupt(repoId: RepoId, runId: string, interruption: { readonly reason: InterruptedReason; readonly detail: string | null; readonly resetsAt: string | null; readonly costUsd: number | null; readonly outcome: StageOutcome | null }): Promise<void>
+  /** The row leaves Needs you; the run stays as history. */
+  cleared(repoId: RepoId, runId: string): Promise<void>
+  denied(repoId: RepoId, runId: string, denial: RunDenial): Promise<void>
+  dismissDenial(repoId: RepoId, id: string): Promise<void>
+  clearRule(repoId: RepoId, rule: string): Promise<void>
+  /** Marks every open run `quit` — awaited at the quit path with a timeout the caller applies, since a hung write must never block quitting. */
+  quitAll(): Promise<void>
+  /** Interrupted runs, every repository unless one is named. */
+  list(repoId?: RepoId): readonly InterruptedStage[]
+  /** Runs whose session may still be going. */
   running(): readonly InterruptedStage[]
+  denials(repoId: RepoId): readonly StageDenial[]
+  /** Every run of the repository as a dispatch record, oldest first. */
+  records(repoId: RepoId): readonly StageRecord[]
+  runsOf(repoId: RepoId, kind: PipelineItemKind, number: number): readonly Run[]
+  /** The hand-backs the last boot found unwritten, once. */
+  unsettled(repoId: RepoId): readonly UnsettledStage[]
 }

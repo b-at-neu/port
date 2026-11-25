@@ -1,4 +1,5 @@
-import type { DispatchLedger, UnknownStreaks, RefreshMemo, RerunMemo, ForceDispatch } from '@/types/tick'
+import type { UnknownStreaks, RefreshMemo, RerunMemo, ForceDispatch } from '@/types/tick'
+import type { Run } from '@/utils/pipeline/ticket'
 import type { PipelineState, RefreshOutcome, RepositoryState } from '@/types/state'
 import type { PipelineView, TrackedRef } from '@/types/pipeline-state'
 import type { StateEngine } from '@/types/offload'
@@ -6,7 +7,7 @@ import type { StateEngine } from '@/types/offload'
 // The only clock in main — one timer, rescheduled to the earliest `nextDueAt`. `schedule.ts` decides *when*; this file is the only place under `src/main/` allowed to name `setTimeout`.
 import type { ConditionalTransport, GitHubTransport } from '@/types/platform'
 import type { GitRunner } from '@/types/platform'
-import type { RateLimitInfo } from '@/types/github'
+import type { PipelineItemKind, RateLimitInfo } from '@/types/github'
 import { readSessionState } from '@/main/sessions/adapter'
 import { verifiableVocabularyOf } from '@/utils/labels/display'
 import type { RepoId } from '@/utils/repos'
@@ -14,7 +15,7 @@ import type { RepositoryEntry } from '@/utils/repos'
 import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth, isDeferred } from '@/types/board'
 import type { BoardSnapshot, RepositoryHealth, SourceHealth, SourceKind } from '@/types/board'
 import type { RepoDispatchStatus, RunStatesSnapshot } from '@/types/dispatch'
-import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
+import { createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
 import { planTick } from '@/main/pipeline/tick/plan'
 import { autoPlanStatusOf } from '@/main/pipeline/tick/auto-plan'
 
@@ -49,8 +50,9 @@ interface CreatePipelineWatcherParams {
   readonly setTimer?: TimerFactory
   /** Read fresh on every `buildSnapshot()`, never cached. Defaults to every repository reading paused. */
   readonly runStates?: (repoIds: readonly RepoId[]) => RunStatesSnapshot
-  /** A dispatcher built after the watcher needs this same ledger/streak memo, never a second instance that would disagree with what the board just reported. */
-  readonly ledger?: DispatchLedger
+  /** The runs the stall ladder reads, per item. `undefined` reads as none, so no claim is ever reset. */
+  readonly runsOf?: (repoId: RepoId, kind: PipelineItemKind, number: number) => readonly Run[]
+  /** A dispatcher built after the watcher needs this same streak memo, never a second instance that would disagree with what the board just reported. */
   readonly unknownStreaks?: UnknownStreaks
   /** Shared with the dispatcher's own observation pass, never a second instance that would disagree with what the dispatcher just wrote. */
   readonly refreshMemo?: RefreshMemo
@@ -113,11 +115,8 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
   let hasListedRepositories = Array.isArray(params.repositories)
   let stopped = false
   let timer: TimerHandle | null = null
-  // One process-scoped ledger, this watcher's whole lifetime — a restarted app gets a fresh one, so every in-flight item reads `no-record`, never a false reset.
-  const ledger = params.ledger ?? createDispatchLedger()
-  // Same lifetime and restart behaviour as `ledger` above.
+  // Process-scoped for this watcher's whole lifetime, so a restarted app starts each at nothing recorded.
   const unknownStreaks = params.unknownStreaks ?? createUnknownStreaks()
-  // Same lifetime and restart behaviour as `ledger`/`unknownStreaks` above.
   const refreshMemo = params.refreshMemo ?? createRefreshMemo()
   const startedTasks = params.startedTasks ?? ((): readonly string[] => [])
   const runStatesOf =
@@ -163,7 +162,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     return new Date(Math.min(...candidates))
   }
 
-  /** Serialized, so two overlapping refreshes never apply `planTick`'s ledger writes out of order. A failed projection keeps the last good board and resolves `null`, so the next tick is still scheduled. */
+  /** Serialized, so two overlapping refreshes never project the board out of order. A failed projection keeps the last good board and resolves `null`, so the next tick is still scheduled. */
   function buildSnapshot(): Promise<BoardSnapshot | null> {
     const built = projections.then(composeSnapshot)
     projections = built.catch(() => undefined)
@@ -230,7 +229,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
         if (checkDispositions === undefined) throw new Error(`no checkDispositions for ready repository ${String(repository.repoId)}`)
         return planTick({
           repository,
-          ledger,
+          runsOf: params.runsOf,
           unknownStreaks,
           nextDecisionAt: nextDueAt(ensureHealth(repository.repoId).github, now()),
           now,

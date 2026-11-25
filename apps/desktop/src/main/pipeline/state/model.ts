@@ -1,7 +1,9 @@
 // Pure: no I/O. The store file's validation, seeding, pruning and the legacy views of its tickets.
+import { isOpen } from '@/main/pipeline/runs'
 import { ticketsOfItems } from '@/main/pipeline/state/migrate'
 import { itemsOf } from '@/main/pipeline/state/mirror'
-import { fullKeysOf, type MirrorFailure, type PipelineStateFile, type PipelineView, type RepoRecord, type StoredHistoryRow, type StoredItem, type TicketRef, type TrackedRef } from '@/types/pipeline-state'
+import { RUN_STATES } from '@/types/dispatch'
+import { fullKeysOf, type DispatchEntry, type MirrorFailure, type PipelineStateFile, type PipelineView, type RepoRecord, type StoredHistoryRow, type StoredItem, type TicketRef, type TrackedRef } from '@/types/pipeline-state'
 import type { RepositoryState } from '@/types/state'
 import type { WriteOutcome } from '@/types/writes'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
@@ -9,13 +11,23 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 import { ticketSchema, type Ticket } from '@/utils/pipeline/ticket'
 import type { RepoId } from '@/utils/repos'
 
-export const FILE_VERSION = 2
+export const FILE_VERSION = 3
 
 const HISTORY_ROWS = 50
 const IN_FLIGHT: ReadonlySet<LabelKey> = new Set(LABEL_DEFAULTS.filter((label) => label.role === 'in-flight').map((label) => label.key))
 
 export function emptyFile(): PipelineStateFile {
-  return { version: FILE_VERSION, repositories: {} }
+  return { version: FILE_VERSION, dispatch: {}, repositories: {} }
+}
+
+function dispatchOf(value: unknown): Record<string, DispatchEntry> {
+  const entries: Record<string, DispatchEntry> = {}
+  if (!isRecord(value)) return entries
+  for (const [repoId, raw] of Object.entries(value)) {
+    const state = isRecord(raw) ? RUN_STATES.find((candidate) => candidate === raw.state) : undefined
+    if (isRecord(raw) && state !== undefined) entries[repoId] = { state, since: typeof raw.since === 'string' ? raw.since : null }
+  }
+  return entries
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -41,7 +53,7 @@ export function parseFile(value: unknown): PipelineStateFile {
     const record = recordOf(repoId, raw)
     if (record !== null) repositories[repoId] = record
   }
-  return { version: FILE_VERSION, repositories }
+  return { version: FILE_VERSION, dispatch: dispatchOf(value.dispatch), repositories }
 }
 
 /** One ticket per reconciled change, from what the board just showed. */
@@ -91,11 +103,11 @@ export function recordMirror(record: RepoRecord, ref: TicketRef, failure: Mirror
   return same ? record : withTicket(record, { ...existing, mirror: { ...existing.mirror, failure } })
 }
 
-/** Drops a ticket whose pull request is closed, or whose issue is closed when it has none, which keeps the tracked list bounded. */
+/** Drops a ticket whose pull request is closed, or whose issue is closed when it has none, which keeps the tracked list bounded. A ticket with an open or interrupted run stays, so a kept worktree is never orphaned. */
 export function prune(record: RepoRecord, closed: readonly number[]): RepoRecord {
   if (closed.length === 0) return record
   const gone = new Set(closed)
-  const tickets = Object.fromEntries(Object.entries(record.tickets).filter(([, ticket]) => !gone.has(ticket.pr?.number ?? ticket.ticket)))
+  const tickets = Object.fromEntries(Object.entries(record.tickets).filter(([, ticket]) => !gone.has(ticket.pr?.number ?? ticket.ticket) || ticket.runs.some((run) => isOpen(run) || run.interruption !== null)))
   return Object.keys(tickets).length === Object.keys(record.tickets).length ? record : { ...record, tickets }
 }
 

@@ -1,9 +1,10 @@
 // Renderer-safe shapes for the state writes the app makes on a stage session's behalf: claim, rollback, hand-back and the next turn after a block.
 import type { PipelineItemKind } from '@/types/github'
-import type { StageHandback, StageOutcomeKind } from '@/types/stage-session'
+import type { SessionKey } from '@/types/hosting'
+import type { StageHandback, StageOutcome, StageOutcomeKind } from '@/types/stage-session'
 import type { HandoffRefusal, StageAgent } from '@/types/tick'
 import type { LabelKey } from '@/utils/labels/vocabulary'
-import type { Stage, Ticket } from '@/utils/pipeline/ticket'
+import type { InterruptedReason, Run, RunDenial, Stage, Ticket } from '@/utils/pipeline/ticket'
 
 /** `revise` split by its trigger: a refresh runs the same agent against a different set of labels and tokens. */
 export type StageMode = StageAgent | 'refresh'
@@ -25,8 +26,25 @@ export type StageEvent =
   /** `plan` is `null` for every outcome except a completed `plan-written`. */
   | { readonly kind: 'outcome'; readonly outcome: StageOutcomeKind; readonly handback: StageHandback | null; readonly plan: StagePlanFile | null }
 
-/** One typed change to a ticket; the transition table is the only thing that turns it into a new ticket. */
-export type TicketEvent =
+/** One change to a run the table applies to the ticket that holds it; none of them writes a history row. */
+export type RunChange =
+  | { readonly kind: 'session'; readonly claudeSessionId: string }
+  | { readonly kind: 'joined'; readonly at: string }
+  | { readonly kind: 'handback'; readonly outcome: StageOutcome }
+  | { readonly kind: 'ended'; readonly outcome: StageOutcome | null }
+  | { readonly kind: 'interrupted'; readonly reason: InterruptedReason; readonly detail: string | null; readonly resetsAt: string | null; readonly costUsd: number | null; readonly outcome: StageOutcome | null }
+  | { readonly kind: 'resumed'; readonly sessionKey: SessionKey }
+  | { readonly kind: 'cleared' }
+  | { readonly kind: 'quit' }
+  | { readonly kind: 'denied'; readonly denial: RunDenial }
+  | { readonly kind: 'denial-dismissed'; readonly id: string }
+  | { readonly kind: 'denials-cleared'; readonly rule: string }
+
+/** A change to one of a ticket's runs. It writes no history row and never moves the ticket. */
+export type RunEvent = { readonly kind: 'run-start'; readonly run: Run } | { readonly kind: 'run'; readonly runId: string; readonly change: RunChange }
+
+/** One typed change to a ticket's own state; the transition table turns it into a new ticket and a history row. */
+export type StateEvent =
   | { readonly kind: 'claim'; readonly stage: Stage }
   | { readonly kind: 'rollback'; readonly stage: Stage }
   | { readonly kind: 'error-reset'; readonly stage: Stage }
@@ -45,6 +63,8 @@ export type TicketEvent =
       /** The ticket a new pull request belongs to, when its branch names one. */
       readonly issue: number | null
     }
+
+export type TicketEvent = StateEvent | RunEvent
 
 export type TableResult = { readonly ok: true; readonly ticket: Ticket; readonly changed: boolean } | { readonly ok: false; readonly reason: 'moved' | 'unknown-handback' }
 

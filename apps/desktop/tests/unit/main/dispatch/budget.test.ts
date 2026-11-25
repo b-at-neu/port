@@ -8,6 +8,7 @@ import { resolveVocabulary } from '@/utils/labels/vocabulary'
 
 function record(overrides: Partial<StageRecord> = {}): StageRecord {
   return {
+    runId: 'run-1',
     sessionKey: 'hosted-1' as SessionKey,
     agent: 'impl',
     number: 52,

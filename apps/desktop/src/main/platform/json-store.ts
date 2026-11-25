@@ -34,8 +34,16 @@ export interface JsonStoreOptions<T, Env> {
   readonly fs?: StoreFs
 }
 
+/** `written` is true only when a migrated file was written back; the old file is still the one on disk otherwise. */
+export interface LoadResult {
+  readonly migrated: boolean
+  readonly written: boolean
+}
+
+const UNMIGRATED: LoadResult = { migrated: false, written: false }
+
 export interface JsonStore<T, Env = void> {
-  readonly load: (env?: Env) => Promise<void>
+  readonly load: (env?: Env) => Promise<LoadResult>
   readonly value: () => T
   readonly status: () => StoreStatus
   readonly write: (next: T) => Promise<StoreWriteResult>
@@ -54,9 +62,10 @@ export function createJsonStore<T, Env = void>(options: JsonStoreOptions<T, Env>
   let state: StoreStatus = { kind: 'loaded' }
   let tail: Promise<void> | null = null
 
-  function unreadable(reason: UnreadableReason, message: string): void {
+  function unreadable(reason: UnreadableReason, message: string): LoadResult {
     current = options.initial
     state = { kind: 'unreadable', reason, message, path: options.file }
+    return UNMIGRATED
   }
 
   async function persist(next: T): Promise<StoreWriteResult> {
@@ -87,16 +96,16 @@ export function createJsonStore<T, Env = void>(options: JsonStoreOptions<T, Env>
     return run
   }
 
-  async function load(env?: Env): Promise<void> {
+  async function load(env?: Env): Promise<LoadResult> {
     const read = await fs.readJson(options.file)
     if (!read.ok) {
       if (read.kind === 'not-found') {
         current = options.initial
         state = { kind: 'loaded' }
-        return
+        return UNMIGRATED
       }
       unreadable(read.kind === 'unparseable' ? 'malformed' : 'io', read.message)
-      return
+      return UNMIGRATED
     }
 
     let raw = read.value
@@ -115,7 +124,7 @@ export function createJsonStore<T, Env = void>(options: JsonStoreOptions<T, Env>
         if (raw === null) {
           current = options.initial
           state = { kind: 'loaded' }
-          return
+          return UNMIGRATED
         }
         migrated = true
       }
@@ -126,10 +135,10 @@ export function createJsonStore<T, Env = void>(options: JsonStoreOptions<T, Env>
 
     current = parsed.data
     state = { kind: 'loaded' }
-    if (migrated) {
-      const written = await fs.writeJsonAtomic(options.file, parsed.data)
-      if (!written.ok) console.error(`${options.file}: the migrated file could not be written back, so the old file stays on disk: ${written.message}`)
-    }
+    if (!migrated) return UNMIGRATED
+    const written = await fs.writeJsonAtomic(options.file, parsed.data)
+    if (!written.ok) console.error(`${options.file}: the migrated file could not be written back, so the old file stays on disk: ${written.message}`)
+    return { migrated: true, written: written.ok }
   }
 
   return {

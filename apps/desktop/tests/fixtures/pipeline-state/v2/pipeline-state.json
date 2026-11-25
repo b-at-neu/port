@@ -1,0 +1,67 @@
+{
+  "version": 2,
+  "repositories": {
+    "repo-a": {
+      "seededAt": "2026-11-20T09:00:00.000Z",
+      "tickets": {
+        "101": {
+          "rev": 3,
+          "repo": "repo-a",
+          "ticket": 101,
+          "pr": null,
+          "stage": "implement",
+          "status": { "kind": "running", "runId": null },
+          "autoPlan": false,
+          "reviewCycles": 0,
+          "runs": [],
+          "history": [{ "at": "2026-11-21T10:00:00.000Z", "action": "stage-claim", "actor": null, "to": { "stage": "implement", "status": "running" }, "legacy": { "add": ["issue:inProgress"], "remove": ["issue:planApproved"] } }],
+          "mirror": { "written": [], "failure": null }
+        },
+        "102": {
+          "rev": 5,
+          "repo": "repo-a",
+          "ticket": 102,
+          "pr": { "number": 202, "approvedAt": null },
+          "stage": "review",
+          "status": { "kind": "running", "runId": null },
+          "autoPlan": false,
+          "reviewCycles": 1,
+          "runs": [],
+          "history": [{ "at": "2026-11-21T11:00:00.000Z", "action": "stage-claim", "actor": null, "to": { "stage": "review", "status": "running" }, "legacy": null }],
+          "mirror": { "written": [], "failure": null }
+        },
+        "103": {
+          "rev": 1,
+          "repo": "repo-a",
+          "ticket": 103,
+          "pr": null,
+          "stage": "plan",
+          "status": { "kind": "queued", "reason": "new", "since": "2026-11-21T08:00:00.000Z" },
+          "autoPlan": true,
+          "reviewCycles": 0,
+          "runs": [],
+          "history": [],
+          "mirror": { "written": [], "failure": null }
+        }
+      }
+    },
+    "repo-b": {
+      "seededAt": "2026-11-20T09:30:00.000Z",
+      "tickets": {
+        "5": {
+          "rev": 2,
+          "repo": "repo-b",
+          "ticket": 5,
+          "pr": null,
+          "stage": "implement",
+          "status": { "kind": "running", "runId": null },
+          "autoPlan": false,
+          "reviewCycles": 0,
+          "runs": [],
+          "history": [],
+          "mirror": { "written": [], "failure": null }
+        }
+      }
+    }
+  }
+}

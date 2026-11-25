@@ -19,7 +19,7 @@ import type { RegistryDeps } from '@/types/registry'
 import type { SessionIndex } from '@/types/session-index'
 import type { ReadSessionStateParams, SessionScan, TranscriptTailStore } from '@/types/sessions'
 import type { RunSearchParams, SearchResult } from '@/types/search'
-import type { StageAllowIo, StageLauncherHandle, StageRegistry } from '@/types/stage'
+import type { RunStore, StageAllowIo, StageLauncherHandle } from '@/types/stage'
 import type { Dispatcher, RepoDispatchStatus } from '@/types/dispatch'
 import type { ForceDispatch } from '@/types/tick'
 import type { ReposListResponse } from '@/types/ipc'
@@ -90,7 +90,7 @@ export interface SearchQueryDeps {
 
 export interface StageChannelDeps {
   readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
-  readonly registry: StageRegistry
+  readonly runs: RunStore
   readonly dispatcher: Pick<Dispatcher, 'status' | 'clearDenialsFor' | 'dismissDenial'>
   readonly store: Pick<HostedStore, 'list' | 'capacity'>
   readonly launcher: Pick<StageLauncherHandle, 'resume'>

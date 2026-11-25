@@ -461,7 +461,7 @@ describe('applyItemDecision — real writers', () => {
     const comments = [{ body: '## Pipeline Escalation\n5 review cycles reached the cap of 5 without merging.', createdAt: '2026-01-01T00:00:00Z' }]
     const state = repoState([item({ comments })])
     const snapshot = snapshotOf([state])
-    const store = createPipelineStateStore({ path: 'pipeline-state.json', readJson: () => Promise.resolve({ ok: false, kind: 'not-found', message: '' }), writeJsonAtomic: () => Promise.resolve({ ok: true, value: undefined }), now: NOW })
+    const store = createPipelineStateStore({ path: 'pipeline-state.json', readJson: () => Promise.resolve({ ok: false, kind: 'not-found', message: '' }), writeJsonAtomic: () => Promise.resolve({ ok: true, value: undefined }), legacy: { dispatch: 'dispatch.json', sessions: 'stage-sessions.json', denials: 'stage-denials.json' }, remove: () => Promise.resolve({ ok: true, value: undefined }), now: NOW })
     await store.seed(REPO_ID, state)
     const ctx = { ...createFakePlatform(), ghWrite: (() => Promise.resolve({ ok: true, stdout: '', stderr: '' })) as GhRunner, git, clock: { now: NOW } }
     const { writeState } = createStateWriter({ store, applyLabels: (params) => applyLabels(ctx, params), readOwnership: (p) => readOwnership({ git, fs: hostFs, clock: { now: NOW } }, p), fetchItemsByNumber, appendAudit, recordIncident: () => Promise.resolve(), newId: () => 'write-1', now: NOW })
