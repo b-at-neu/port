@@ -57,6 +57,6 @@ export async function loadStageAgentDefinition(params: LoadStageAgentDefinitionP
   return {
     ok: true,
     name,
-    definition: { description, prompt: params.prompt,...(tools !== undefined ? { tools } : {}), ...(disallowedTools !== undefined ? { disallowedTools } : {}) },
+    definition: { description, prompt: params.prompt, ...(tools !== undefined ? { tools } : {}), ...(disallowedTools !== undefined ? { disallowedTools } : {}) },
   }
 }
