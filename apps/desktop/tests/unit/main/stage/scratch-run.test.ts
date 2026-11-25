@@ -307,6 +307,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       },
       onEntries: () => undefined,
       readStageEditAllow: () => Promise.resolve([]),
+      readStageDisabledPlugins: () => Promise.resolve([]),
       samePath: (a, b) => a === b,
       persistence: createInMemoryHostingPersistence(),
       removeWorktree,

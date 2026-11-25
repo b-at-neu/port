@@ -40,6 +40,7 @@ export function baseDeps(overrides: Partial<HostedStoreDeps> = {}): HostedStoreD
     onStatus: vi.fn(),
     onEntries: vi.fn(),
     readStageEditAllow: () => Promise.resolve([]),
+    readStageDisabledPlugins: () => Promise.resolve([]),
     samePath: (a: string, b: string) => a === b,
     persistence: createInMemoryHostingPersistence(),
     removeWorktree: () => Promise.resolve({ outcome: 'removed' }),

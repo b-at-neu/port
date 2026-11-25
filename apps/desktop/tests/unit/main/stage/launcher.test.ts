@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { pathOps } from '@/main/platform/paths'
 import { createStageLauncher } from '@/main/dispatch/stage/launcher'
+import { STAGE_SYSTEM_PROMPT } from '@/main/dispatch/stage/bundle'
 import type { FileResult } from '@/types/platform'
 import type { StageLaunchRequest } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '@/types/hosting'
@@ -316,7 +317,7 @@ describe('createStageLauncher.resume', () => {
     const params = deps.start.mock.calls[0]?.[0]
     expect(params?.mode).toEqual({ kind: 'resume', sessionId: 'sdk-1' })
     expect(params?.workspace.folder).toBe('/repo/.claude/worktrees/session-abc123')
-    expect(params?.stage?.agent).toEqual({ name: 'impl-agent', definition: { description: 'impl', prompt: 'body', disallowedTools: ['Agent'] } })
+    expect(params?.stage?.agent).toEqual({ name: 'impl-agent', definition: { description: 'impl', prompt: STAGE_SYSTEM_PROMPT, disallowedTools: ['Agent'] } })
     expect(params?.stage?.instructionsRoot).toBe('/bundle')
     expect(deps.createWorktree).not.toHaveBeenCalled()
     expect(deps.loadInstructions).not.toHaveBeenCalled()

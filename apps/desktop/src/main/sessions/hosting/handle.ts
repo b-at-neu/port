@@ -73,7 +73,7 @@ interface CreateHostedHandleParams {
   /** Read before spawn and kept frozen on the handle for its whole life. */
   readonly history: SessionHistory
   /** Non-null only for a stage session: carried on the snapshot, drives `buildSessionOptions`'s stage branch, and builds the `stagePolicy` the permission broker consults first. */
-  readonly stage: { readonly tag: StageTag; readonly agent: StageAgentLaunch; readonly instructionsRoot: string; readonly model: string; readonly sessionRequiredPaths: readonly string[]; readonly editAllow: readonly string[]; readonly onDeny?: (toolName: string, input: Readonly<Record<string, unknown>>) => void } | null
+  readonly stage: { readonly tag: StageTag; readonly agent: StageAgentLaunch; readonly instructionsRoot: string; readonly model: string; readonly sessionRequiredPaths: readonly string[]; readonly editAllow: readonly string[]; readonly disabledPlugins: readonly string[]; readonly onDeny?: (toolName: string, input: Readonly<Record<string, unknown>>) => void } | null
 }
 
 interface HostedSendResult {
@@ -121,7 +121,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     executablePath: params.executablePath,
     canUseTool: broker.canUseTool,
     defaults: params.defaults,
-    stage: params.stage !== null ? { agent: params.stage.agent, instructionsRoot: params.stage.instructionsRoot, model: params.stage.model } : null,
+    stage: params.stage !== null ? { agent: params.stage.agent, instructionsRoot: params.stage.instructionsRoot, model: params.stage.model, disabledPlugins: params.stage.disabledPlugins } : null,
   })
   const startedAt = new Date(params.now()).toISOString()
   const projector = createSessionProjector({ cwd: params.cwd })
