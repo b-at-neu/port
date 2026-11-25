@@ -8,7 +8,7 @@ import type { InterruptedStage, StageAllowResult, StageDenial, StageRestartResul
 import type { ActionToast } from '@/types/toast'
 import type { ConfirmSpec } from '@/renderer/components/confirm-dialog'
 import type { openDecision } from '@/renderer/decision/controller'
-import { decisionButtonLabel } from '@/renderer/board/copy'
+import { DECISION_BUTTON_LABELS } from '@/renderer/board/copy'
 import {
   ACTION_LABELS,
   ALLOW_DISMISSED_TOAST,
@@ -72,9 +72,9 @@ function reviseDisabledReason(reason: DecisionRefusal): string {
 function readyToMergeAction(item: KindOf<'ready-to-merge'>): NeedsYouAction {
   const open = { label: ACTION_LABELS.openPr, kind: 'open', disabledReason: null } as const
   const revise = item.row.decisions.revise
-  if (revise.available) return { ...open, secondaryLabel: decisionButtonLabel('revise'), secondaryDisabledReason: null }
+  if (revise.available) return { ...open, secondaryLabel: DECISION_BUTTON_LABELS.revise, secondaryDisabledReason: null }
   if (revise.reason === 'not-applicable') return open
-  return { ...open, secondaryLabel: decisionButtonLabel('revise'), secondaryDisabledReason: reviseDisabledReason(revise.reason) }
+  return { ...open, secondaryLabel: DECISION_BUTTON_LABELS.revise, secondaryDisabledReason: reviseDisabledReason(revise.reason) }
 }
 
 function unblockAction(item: KindOf<'needs-human' | 'blocked'>): NeedsYouAction {
@@ -88,7 +88,7 @@ function heldAction(item: KindOf<'held'>): NeedsYouAction {
   if (item.held.reason === 'cycle-cap') {
     const decision = item.matchedRow?.decisions.grant
     const disabledReason = decision === undefined ? UNREADABLE_STATE_REASON : decision.available ? null : DECISION_REFUSAL_COPY[decision.reason]
-    return { label: decisionButtonLabel('grant'), kind: 'grant', disabledReason, secondaryLabel: ACTION_LABELS.openPr, secondaryDisabledReason: null }
+    return { label: DECISION_BUTTON_LABELS.grant, kind: 'grant', disabledReason, secondaryLabel: ACTION_LABELS.openPr, secondaryDisabledReason: null }
   }
   if (item.held.reason === 'contended') return { label: ACTION_LABELS.dispatchAnyway, kind: 'force', disabledReason: item.owner === 'app' ? null : NOT_RUNNING_REPO_REASON }
   return { label: ACTION_LABELS.openTicket, kind: 'open', disabledReason: null }

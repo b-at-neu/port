@@ -3,7 +3,7 @@ import type { ItemStatus, RepositoryFreshness, RepositoryState } from '@/types/s
 import type { BlockedOnTag, BoardColumnKey, BoardSnapshot, SourceHealth, SourceKind, TicketSessionLink } from '@/types/board'
 import type { BoardView } from '@/types/router'
 import { SOURCE_KINDS, isDeferred } from '@/types/board'
-import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
+import { labelNameOf } from '@/utils/labels/defaults'
 import { RETRY_TRIGGER } from '@/utils/actions/plan'
 import type { ActionPlan, ActionRefusal, ItemActionResult, OperatorAction, OperatorDecision } from '@/types/actions'
 import type { Conflict } from '@/types/writes'
@@ -19,12 +19,6 @@ import { formatCost } from '@/utils/hosting/usage'
 import { BACKLOG_BLOCKED_TOOLTIP_HEADING, backlogBlockerLine } from '@/renderer/backlog/copy'
 
 export { BACKLOG_BLOCKED_TOOLTIP_HEADING as BLOCKED_DEPENDENCY_HEADING, backlogBlockerLine as blockedDependencyLine, backlogBlockerTruncatedCopy as blockedTruncatedCopy } from '@/renderer/backlog/copy'
-
-function labelNameOf(key: string): string {
-  return LABEL_DEFAULTS.find((def) => def.key === key)?.name ?? key
-}
-
-// --- The screen, columns and tags ---------------------------------------
 
 export const BOARD_TITLE = 'Board'
 export const ALL_REPOSITORIES = 'All repositories'
@@ -77,26 +71,16 @@ export function boardViewLabel(view: BoardView): string {
   return view === 'board' ? 'Board' : 'List'
 }
 
-const STATUS_WORDS: Readonly<Record<ItemStatus, string>> = { waiting: 'Waiting', 'in-flight': 'In flight', stalled: 'Stalled', gated: 'Awaiting human', terminal: 'Terminal', unstaged: 'Unstaged', interrupted: 'Interrupted' }
-
-export function statusWord(status: ItemStatus): string {
-  return STATUS_WORDS[status]
-}
-
-// --- Freshness ------------------------------------------------------------
+export const STATUS_WORDS: Readonly<Record<ItemStatus, string>> = { waiting: 'Waiting', 'in-flight': 'In flight', stalled: 'Stalled', gated: 'Awaiting human', terminal: 'Terminal', unstaged: 'Unstaged', interrupted: 'Interrupted' }
 
 const SOURCE_NAMES: Readonly<Record<SourceKind, string>> = { github: 'GitHub', sessions: 'Sessions', worktrees: 'Worktrees', denials: 'Denials' }
-
-export function sourceName(kind: SourceKind): string {
-  return SOURCE_NAMES[kind]
-}
 
 function ageCopy(at: string | null, now: Date): string {
   return at === null ? 'never read' : formatAgoSeconds(now.getTime() - Date.parse(at))
 }
 
 export function sourceHealthCopy(kind: SourceKind, health: SourceHealth, now: Date): string {
-  const name = sourceName(kind)
+  const name = SOURCE_NAMES[kind]
   if (health.lastSuccessAt === null && health.consecutiveFailures === 0) return `${name} — reading…`
   if (health.consecutiveFailures === 0) return `${name} ${ageCopy(health.lastSuccessAt, now)}`
   if (health.lastSuccessAt === null) return `${name} — never read. ${health.lastError ?? ''}`.trim()
@@ -146,7 +130,7 @@ export function freshnessIndicator(snapshot: BoardSnapshot, now: Date): { readon
 
   const head = githubClause(snapshot, github, now)
   const failing = SOURCE_KINDS.filter((kind) => kind !== 'github' && (worstHealth(snapshot.health, kind)?.consecutiveFailures ?? 0) > 0)
-  const label = failing.length > 0 ? `${head.text} · ${failing.map(sourceName).join(', ')} failing` : head.text
+  const label = failing.length > 0 ? `${head.text} · ${failing.map((kind) => SOURCE_NAMES[kind]).join(', ')} failing` : head.text
   const tone = failing.length > 0 ? 'attention' : head.tone
 
   const sourceLines = SOURCE_KINDS.map((kind) => {
@@ -201,42 +185,19 @@ export function openPrLinkLabel(number: number | null): string {
   return number === null ? OPEN_PR_LABEL : `${OPEN_PR_LABEL} #${String(number)}`
 }
 
-// --- The operator decisions ---------------------------------------------------
-
-const DECISION_BUTTON_LABELS: Readonly<Record<OperatorDecision, string>> = { unblock: 'Unblock', revise: 'Request changes', grant: 'Grant one more cycle' }
-
-export function decisionButtonLabel(decision: OperatorDecision): string {
-  return DECISION_BUTTON_LABELS[decision]
-}
+export const DECISION_BUTTON_LABELS: Readonly<Record<OperatorDecision, string>> = { unblock: 'Unblock', revise: 'Request changes', grant: 'Grant one more cycle' }
 
 /** The row's note for a `cycle-cap`, `rebase-decisions` or `agent-live` refusal; every other refusal is silent. */
-export function decisionRefusalNote(decision: OperatorDecision, reason: string, number: number): string | null {
+export function decisionRefusalNote(reason: string, number: number): string | null {
   const n = String(number)
-  if (reason === 'agent-live') {
-    return `#${n}'s agent is still waiting in its session. Answer it there and it clears the block itself.`
-  }
-  if (reason === 'cycle-cap') {
-    return `PR #${n} has used all its review cycles. Sending it back would escalate straight to "${labelNameOf('needsHuman')}". Merge it and open a follow-up, or raise reviewCycleCap.`
-  }
-  if (reason === 'rebase-decisions') {
-    return `PR #${n} is waiting on rebase decisions port couldn't read — answer them with unblock #${n} in the cockpit.`
-  }
-  void decision
+  if (reason === 'agent-live') return `#${n}'s agent is still waiting in its session. Answer it there and it clears the block itself.`
+  if (reason === 'cycle-cap') return `PR #${n} has used all its review cycles. Sending it back would escalate straight to "${labelNameOf('needsHuman')}". Merge it and open a follow-up, or raise reviewCycleCap.`
+  if (reason === 'rebase-decisions') return `PR #${n} is waiting on rebase decisions port couldn't read — answer them with unblock #${n} in the cockpit.`
   return null
 }
 
-// --- The single-label operator actions ----------------------------------------
-
-const ACTION_BUTTON_LABELS: Readonly<Record<OperatorAction, string>> = { pause: 'Pause', resume: 'Resume', retry: 'Retry', stop: 'Stop', gate: 'Add gate label', refresh: 'Refresh' }
-const ACTION_PENDING_LABELS: Readonly<Record<OperatorAction, string>> = { pause: 'Pausing…', resume: 'Resuming…', retry: 'Retrying…', stop: 'Stopping…', gate: 'Adding…', refresh: 'Refreshing…' }
-
-export function actionButtonLabel(action: OperatorAction): string {
-  return ACTION_BUTTON_LABELS[action]
-}
-
-export function actionPendingLabel(action: OperatorAction): string {
-  return ACTION_PENDING_LABELS[action]
-}
+export const ACTION_BUTTON_LABELS: Readonly<Record<OperatorAction, string>> = { pause: 'Pause', resume: 'Resume', retry: 'Retry', stop: 'Stop', gate: 'Add gate label', refresh: 'Refresh' }
+export const ACTION_PENDING_LABELS: Readonly<Record<OperatorAction, string>> = { pause: 'Pausing…', resume: 'Resuming…', retry: 'Retrying…', stop: 'Stopping…', gate: 'Adding…', refresh: 'Refreshing…' }
 
 export function actionInProgressTooltip(number: number): string {
   return `Another action on #${String(number)} is already in progress.`

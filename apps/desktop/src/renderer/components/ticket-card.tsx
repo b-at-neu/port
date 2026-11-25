@@ -3,7 +3,7 @@ import type { KeyboardEvent, ReactNode } from 'react'
 import { Send, Sparkles } from 'lucide-react'
 import { cn } from '@/renderer/lib/utils'
 import type { BoardItemRow } from '@/types/board'
-import { actionButtonLabel, actionPendingLabel, AUTO_PLAN_TAG_TITLE, DISPATCHED_TAG_TITLE, NO_TICKET_TAG_LABEL, NO_TICKET_TAG_TITLE, UNGATED_TAG_LABEL, UNGATED_TAG_TITLE } from '@/renderer/board/copy'
+import { ACTION_BUTTON_LABELS, ACTION_PENDING_LABELS, AUTO_PLAN_TAG_TITLE, DISPATCHED_TAG_TITLE, NO_TICKET_TAG_LABEL, NO_TICKET_TAG_TITLE, UNGATED_TAG_LABEL, UNGATED_TAG_TITLE } from '@/renderer/board/copy'
 import { useItemAction } from '@/renderer/board/actions'
 import { isDispatchedRow, phaseLabelFor, phaseToneFor } from '@/renderer/board/row-model'
 import { prSuffixOf } from '@/utils/tickets/ticket'
@@ -49,7 +49,7 @@ function AddGateAction({ row }: { readonly row: BoardItemRow }) {
       onClick={() => void run('gate')}
       className="shrink-0 text-primary-text"
     >
-      {pending ? actionPendingLabel('gate') : actionButtonLabel('gate')}
+      {pending ? ACTION_PENDING_LABELS.gate : ACTION_BUTTON_LABELS.gate}
     </Button>
   )
 }

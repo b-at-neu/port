@@ -20,16 +20,16 @@ import { openDecision } from '@/renderer/decision/controller'
 import { openReviewDialog } from '@/renderer/gate/controller'
 import { useItemAction } from '@/renderer/board/actions'
 import {
+  ACTION_BUTTON_LABELS,
+  ACTION_PENDING_LABELS,
   CLOSE_DETAILS_LABEL,
+  DECISION_BUTTON_LABELS,
   OPEN_TICKET_LABEL,
   PAST_SESSIONS_UNREADABLE,
   REVIEW_PLAN_LABEL,
   WRITE_HISTORY_LABEL,
   YOUR_SESSIONS_LABEL,
-  actionButtonLabel,
   actionInProgressTooltip,
-  actionPendingLabel,
-  decisionButtonLabel,
   openPrLinkLabel,
 } from '@/renderer/board/copy'
 import { BlockedOnDetail } from '@/renderer/board/blocked-on-detail'
@@ -136,7 +136,7 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
                 <span>
                   <Button variant="outline" size="small" disabled={pendingAction !== null} onClick={() => void run(action)}>
                     {pendingAction === action ? <Loader2 aria-hidden="true" className="size-3.5 animate-spin" /> : null}
-                    {pendingAction === action ? actionPendingLabel(action) : actionButtonLabel(action)}
+                    {pendingAction === action ? ACTION_PENDING_LABELS[action] : ACTION_BUTTON_LABELS[action]}
                   </Button>
                 </span>
               </TooltipTrigger>
@@ -153,7 +153,7 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
                 size="small"
                 onClick={() => openDecision({ repoId: item.repoId, number: item.number, decision, expectedStage: row.stageLabel?.key ?? null, context: availability.context })}
               >
-                {decisionButtonLabel(decision)}
+                {DECISION_BUTTON_LABELS[decision]}
               </Button>
             )
           })}
