@@ -8,9 +8,8 @@ import { stateMoved } from '@/types/writes'
 
 import { observationWrite } from '@/main/pipeline/observation'
 import { observationIntent } from '@/main/pipeline/incidents/raise'
-import { commentRepeats } from '@/utils/pipeline/gates'
-
 import { planPresentIn } from '@/main/pipeline/board/link'
+import { commentRepeats } from '@/utils/pipeline/gates'
 
 import type { ApplyObservationResult, ApplyObservationParams } from '@/types/actions'
 import type { GateDeps } from '@/types/gate'
