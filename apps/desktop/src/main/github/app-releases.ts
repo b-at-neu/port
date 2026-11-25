@@ -1,6 +1,5 @@
-import { githubPublic } from '@/main/platform/github-http'
-
-import type { GitHubHttpResult, GitHubTransport } from '@/types/platform'
+import type { GitHubPublicContext } from '@/main/github/context'
+import type { GitHubHttpResult } from '@/types/platform'
 import type { AppRelease, FetchReleasesResult, ReleaseAsset, UpdateErrorKind } from '@/types/update'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -30,8 +29,8 @@ function narrowRelease(value: unknown): AppRelease | null {
 }
 
 /** The app's own public releases, newest first; every failure is a typed value, never a throw. */
-export async function fetchAppReleases(repo: { readonly owner: string; readonly name: string }, transport: GitHubTransport = githubPublic): Promise<FetchReleasesResult> {
-  const result = await transport({ method: 'GET', path: `repos/${repo.owner}/${repo.name}/releases?per_page=30` })
+export async function fetchAppReleases(ctx: GitHubPublicContext, repo: { readonly owner: string; readonly name: string }): Promise<FetchReleasesResult> {
+  const result = await ctx.githubPublic({ method: 'GET', path: `repos/${repo.owner}/${repo.name}/releases?per_page=30` })
   if (!result.ok) return { ok: false, ...failureOf(result) }
   let parsed: unknown
   try {

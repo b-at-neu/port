@@ -1,7 +1,7 @@
 // Nodes → PipelineItem. matchedKeys is bucketed here, client-side, against the resolved vocabulary.
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import { integrationChecksOf } from '@/utils/pipeline/checks'
-import type { CheckContext, ClosingPullRequest, IntegrationChecks, IssueCommentNode, ItemDetail, ItemState, LabelEventNode, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, ReviewNode } from '@/types/github'
+import type { CheckContext, ClosingPullRequest, IntegrationChecks, IssueCommentNode, ItemDetail, LabelEventNode, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, ReviewNode } from '@/types/github'
 import { toBlockerRead } from '@/main/github/blockers'
 
 interface ConnectionLike {
@@ -275,16 +275,5 @@ export function applyItemDetails(items: readonly PipelineItem[], details: readon
       blockerComments: commentsRead ? issueCommentsOf(node.comments) : null,
       closingPullRequests: isPullRequest ? null : closingPullRequestsOf(node.closedByPullRequestsReferences, detail.erroredFields.includes('closedByPullRequestsReferences')),
     }
-  })
-}
-
-/** Overlays `fetchItemStates` results onto an already-mapped item list. An item with no matching
- *  state is returned unchanged; a state with no matching item is ignored. */
-export function applyItemStates(items: readonly PipelineItem[], states: readonly ItemState[]): readonly PipelineItem[] {
-  const byKey = new Map(states.map((state) => [`${state.kind}:${state.number}`, state]))
-  return items.map((item) => {
-    const state = byKey.get(`${item.kind}:${item.number}`)
-    if (!state) return item
-    return { ...item, state: state.state, mergedAt: state.mergedAt }
   })
 }

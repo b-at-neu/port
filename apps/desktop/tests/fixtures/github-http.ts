@@ -1,4 +1,10 @@
 import type { ConditionalHttpResult, ConditionalRequest, ConditionalTransport, GhClassification, GitHubHttpResult, GitHubRequest, GitHubTransport } from '@/types/platform'
+import { createFakePlatform } from '../support/fake-platform'
+
+/** A fake platform whose GitHub read transport is `transport`; every other adapter throws when called. */
+export function githubCtx(transport: GitHubTransport) {
+  return { ...createFakePlatform(), githubHttp: transport }
+}
 
 export function httpOk(body: string, headers: Readonly<Record<string, string>> = {}): GitHubHttpResult {
   return { ok: true, status: 200, headers, body }

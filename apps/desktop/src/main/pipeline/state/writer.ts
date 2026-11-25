@@ -47,10 +47,6 @@ interface MirrorContext {
   readonly mirror: MirrorVocabulary
   readonly repoRoot: string
   readonly auditDir: string
-  readonly gh?: WriteStateParams['gh']
-  readonly git?: WriteStateParams['git']
-  readonly pathOps?: WriteStateParams['pathOps']
-  readonly fetchItemsByNumber?: WriteStateParams['fetchItemsByNumber']
   readonly writeId?: string
 }
 
@@ -111,11 +107,6 @@ export function createStateWriter(deps: StateWriterDeps): StateWriter {
       repoRoot: ctx.repoRoot,
       auditDir: ctx.auditDir,
       writeId: ctx.writeId,
-      gh: ctx.gh,
-      git: ctx.git,
-      fetchItemsByNumber: ctx.fetchItemsByNumber,
-      pathOps: ctx.pathOps,
-      now: deps.now,
     })
   }
 
@@ -179,7 +170,7 @@ export function createStateWriter(deps: StateWriterDeps): StateWriter {
   async function attemptWrite(params: WriteEventParams, writeId: string, seen: WriteFacts): Promise<WriteOutcome> {
     const { request } = params
     await deps.store.ready
-    const ctx: MirrorContext = { repo: request.repo, repoId: request.repoId, vocabulary: request.vocabulary, mirror: request.mirror, repoRoot: params.repoRoot, auditDir: params.auditDir, gh: params.gh, git: params.git, pathOps: params.pathOps, fetchItemsByNumber: params.fetchItemsByNumber, writeId }
+    const ctx: MirrorContext = { repo: request.repo, repoId: request.repoId, vocabulary: request.vocabulary, mirror: request.mirror, repoRoot: params.repoRoot, auditDir: params.auditDir, writeId }
     const target: TicketRef = { kind: request.kind, number: request.number }
     const expected = expectedKeysOf(request.event)
     const present = resolveKeys(request.vocabulary, expected.present)
@@ -203,7 +194,7 @@ export function createStateWriter(deps: StateWriterDeps): StateWriter {
     const other = stored === null ? undefined : halvesOf(stored).find((half) => half.number !== request.number)
     const numbers = other === undefined ? [request.number] : [request.number, other.number]
 
-    const read = await (params.fetchItemsByNumber ?? deps.fetchItemsByNumber)({ repo: splitRepo(request.repo), numbers })
+    const read = await deps.fetchItemsByNumber({ repo: splitRepo(request.repo), numbers })
     if (!read.ok) return log(null, { kind: 'verify-failed', message: read.message })
     const item = read.resolved.find((candidate) => candidate.number === request.number)
     seen.head = item?.headRefOid ?? null
@@ -241,7 +232,7 @@ export function createStateWriter(deps: StateWriterDeps): StateWriter {
 
   /** Never changes the write's own outcome: a failure here is recorded on the ticket and retried by the poll. */
   async function mirrorCounterpart(ctx: MirrorContext, ticket: Ticket, counterpart: TicketRef, action: string, known: ObservedItem | null): Promise<WriteOutcome[]> {
-    const observed = known ?? observedOf(await (ctx.fetchItemsByNumber ?? deps.fetchItemsByNumber)({ repo: splitRepo(ctx.repo), numbers: [counterpart.number] }), counterpart.number)
+    const observed = known ?? observedOf(await deps.fetchItemsByNumber({ repo: splitRepo(ctx.repo), numbers: [counterpart.number] }), counterpart.number)
     if (observed === null) return []
     const names = mirrorNamesOf(displayOf(ticket), ctx.mirror.labels, ctx.vocabulary)
     const diff = mirrorDiff(names.desired, names.all, observed.labels)

@@ -1,8 +1,9 @@
 // A 304 on an authenticated REST call costs nothing against GitHub's `core` bucket. Only the ETag is cached, never the body — callers need "changed or not".
-import { DEFAULT_ACCEPT, githubConditional } from '@/main/platform/github-http'
+import { DEFAULT_ACCEPT } from '@/main/platform/github-http'
 
+import type { GitHubConditionalContext } from '@/main/github/context'
 import type { ConditionalGetResult, EtagCache } from '@/types/github'
-import type { ConditionalRequest, ConditionalTransport } from '@/types/platform'
+import type { ConditionalRequest } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
 
 interface RepoEtags {
@@ -50,16 +51,14 @@ interface ConditionalGetParams {
   readonly cache: EtagCache
   readonly repoId: RepoId
   readonly request: Omit<ConditionalRequest, 'ifNoneMatch'>
-  readonly conditional?: ConditionalTransport
 }
 
-export async function conditionalGet(params: ConditionalGetParams): Promise<ConditionalGetResult> {
+export async function conditionalGet(ctx: GitHubConditionalContext, params: ConditionalGetParams): Promise<ConditionalGetResult> {
   const { cache, repoId, request } = params
-  const send = params.conditional ?? githubConditional
   const key = etagKey(request)
   const known = cache.lookup(repoId, key)
 
-  const result = await send(known.etag === null ? request : { ...request, ifNoneMatch: known.etag })
+  const result = await ctx.githubConditional(known.etag === null ? request : { ...request, ifNoneMatch: known.etag })
   if (!result.ok) return result
 
   const etag = result.headers.etag ?? null

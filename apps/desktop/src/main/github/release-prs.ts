@@ -1,5 +1,5 @@
 // readMergedPrs: the pull requests merged into the integration branch inside a release window, newest merge first.
-import type { GitHubTransport } from '@/types/platform'
+import type { GitHubReadContext } from '@/main/github/context'
 import type { GitHubRepoRef } from '@/types/github'
 import type { ReleaseEntry } from '@/types/release'
 import { labelsOf } from '@/main/github/backlog'
@@ -15,7 +15,6 @@ export const PARTIAL_NOTE = "Couldn't read older PRs, so this list may be incomp
 const DEPENDENCY_LABEL = /dependenc/i
 
 export interface ReadMergedPrsParams {
-  readonly github: GitHubTransport
   readonly repo: GitHubRepoRef
   readonly base: string
   readonly since: string | null
@@ -26,9 +25,9 @@ export type MergedPrsRead = { readonly ok: true; readonly entries: readonly Rele
 
 type Page = { readonly ok: true; readonly nodes: readonly Readonly<Record<string, unknown>>[]; readonly next: string | null } | { readonly ok: false; readonly message: string }
 
-async function readPage(params: ReadMergedPrsParams, after: string | null): Promise<Page> {
+async function readPage(ctx: GitHubReadContext, params: ReadMergedPrsParams, after: string | null): Promise<Page> {
   const variables = { base: params.base, ...(after === null ? {} : { after }) }
-  const result = await params.github(repoGraphqlRequest(buildMergedPrsQuery(), params.repo, variables))
+  const result = await ctx.githubHttp(repoGraphqlRequest(buildMergedPrsQuery(), params.repo, variables))
   const text = bodyOf(result)
   const parsed = text === undefined ? undefined : parseEnvelope(text)
   const verdict = classifyFailure(result, parsed)
@@ -60,14 +59,14 @@ function pastWindow(nodes: readonly Readonly<Record<string, unknown>>[], since: 
   return updated !== null && Date.parse(updated) < since
 }
 
-export async function readMergedPrs(params: ReadMergedPrsParams): Promise<MergedPrsRead> {
+export async function readMergedPrs(ctx: GitHubReadContext, params: ReadMergedPrsParams): Promise<MergedPrsRead> {
   const since = params.since === null ? null : Date.parse(params.since)
   const until = params.until === null ? null : Date.parse(params.until)
   const kept: ReleaseEntry[] = []
   let after: string | null = null
   let note: string | null = null
   for (let page = 1; page <= MAX_PAGES; page++) {
-    const read = await readPage(params, after)
+    const read = await readPage(ctx, params, after)
     if (!read.ok) {
       if (page === 1) return { ok: false, message: `Couldn't read the merged PRs: ${read.message}` }
       note = PARTIAL_NOTE

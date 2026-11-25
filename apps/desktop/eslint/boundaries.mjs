@@ -74,7 +74,7 @@ export const RESTRICTIONS = [
   },
   {
     id: 'github-http',
-    except: ['src/main/github/**', 'src/main/platform/index.ts'],
+    except: ['src/main/github/**', 'src/main/platform/index.ts', 'src/main/worker/engine.ts', 'src/main/pipeline/board/read.ts', 'src/main/features/worktrees/inspect.ts'],
     paths: [{ name: '@/main/platform/github-http', importNames: ['githubHttp', 'githubConditional', 'githubPublic'], message: 'Only main/github/ reads GitHub over HTTP.' }],
   },
   {

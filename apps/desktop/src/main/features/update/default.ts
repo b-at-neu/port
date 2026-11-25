@@ -1,6 +1,7 @@
 // The one place real I/O meets the update seams.
 import { app, session, shell } from 'electron'
 import { fetchAppReleases } from '@/main/github/app-releases'
+import type { GitHubPublicContext } from '@/main/github/context'
 import { inPlaceSupported, installTargetOf } from '@/main/features/update/assets'
 import { createUpdateDownloader } from '@/main/features/update/download'
 import { createInPlaceUpdater } from '@/main/features/update/in-place'
@@ -9,12 +10,12 @@ import { createFileDownloader } from '@/main/platform/download'
 import { createNativeUpdater } from '@/main/platform/native-updater'
 import type { RestartSeams, UpdateDownloader, UpdateService } from '@/types/update'
 
-export function createDefaultUpdate(restart: RestartSeams): { readonly service: UpdateService; readonly downloader: UpdateDownloader } {
+export function createDefaultUpdate(ctx: GitHubPublicContext, restart: RestartSeams): { readonly service: UpdateService; readonly downloader: UpdateDownloader } {
   const service = createUpdateService({
     version: app.getVersion(),
     isPackaged: app.isPackaged,
     repo: __PORT_RELEASE_REPO__,
-    fetchReleases: (repo) => fetchAppReleases(repo),
+    fetchReleases: (repo) => fetchAppReleases(ctx, repo),
     now: () => new Date(),
   })
   const release = () => {

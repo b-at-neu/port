@@ -1,7 +1,7 @@
 // The pipeline read: a paged two-connection sweep for the light fields, then a per-number detail
 // read for the heavy ones. Cost stays flat in the number of enabled labels.
 import type { GitHubTransport } from '@/types/platform'
-import { githubHttp } from '@/main/platform/github-http'
+import type { GitHubReadContext } from '@/main/github/context'
 import { verifyVocabulary } from '@/utils/labels/vocabulary'
 import type { LabelKey, LabelVocabulary, RepoLabels, VerifiableVocabulary } from '@/utils/labels/vocabulary'
 import type {
@@ -289,8 +289,6 @@ interface FetchPipelineItemsParams {
   readonly integration: string
   /** The store's items: non-null makes them, not the swept labels, the set of items read. `null` is the label path. */
   readonly tracked?: readonly TrackedRef[] | null
-  readonly github?: GitHubTransport
-  readonly now?: () => Date
 }
 
 function queriedLabelsOf(vocabulary: LabelVocabulary): readonly QueriedLabel[] {
@@ -299,10 +297,9 @@ function queriedLabelsOf(vocabulary: LabelVocabulary): readonly QueriedLabel[] {
 
 /** Every pipeline item, the repository's real label list, and the rate-limit cost together. Never
  *  filters the reply server-side, and no path returns an empty list for a read that did not succeed. */
-export async function fetchPipelineItems(params: FetchPipelineItemsParams): Promise<PipelineFetch> {
-  const github = params.github ?? githubHttp
-  const now = params.now ?? (() => new Date())
-  const fetchedAt = now().toISOString()
+export async function fetchPipelineItems(ctx: GitHubReadContext, params: FetchPipelineItemsParams): Promise<PipelineFetch> {
+  const github = ctx.githubHttp
+  const fetchedAt = ctx.clock.now().toISOString()
   const repo = `${params.repo.owner}/${params.repo.name}`
 
   const swept = await sweep(github, params.repo, params.vocabulary)

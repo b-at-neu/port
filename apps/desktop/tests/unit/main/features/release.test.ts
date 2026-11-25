@@ -7,8 +7,10 @@ import type { ReleasePhase, ReleaseRead, ReleaseStatus } from '@/types/release'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import { resolveReleaseIssues, resolveReleaseRun, resolveReleaseStatus } from '@/main/features/release/resolve'
 import type { ReleaseChannelDeps } from '@/main/features/release/resolve'
+import { createFakePlatform } from '../../../support/fake-platform'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
+const ctx = createFakePlatform()
 
 const registryDeps: RegistryDeps = {
   registryDir: '/registry',
@@ -61,19 +63,19 @@ function depsFor(read: ReleaseRead, calls: Calls, overrides: Partial<ReleaseChan
     fetchStatus: () => Promise.resolve(read),
     fetchIssues: () => Promise.resolve({ ok: true, issues: [], note: null }),
     readFile: () => Promise.resolve({ ok: true, text: JSON.stringify({ name: 'x', version: '0.2.1-dev' }) }),
-    createBumpBranch: (ctx, params) => {
-      record('bump', { ...params, root: ctx.root })
+    createBumpBranch: (_ctx, request, params) => {
+      record('bump', { ...params, root: request.root })
       return Promise.resolve({ ok: true, stdout: '' })
     },
     openBumpPr: () => {
       record('bump-pr')
       return Promise.resolve({ ok: true, stdout: '' })
     },
-    openReleasePr: (_ctx, params) => {
+    openReleasePr: (_ctx, _request, params) => {
       record('release-pr', params)
       return Promise.resolve({ ok: true, stdout: '' })
     },
-    publishRelease: (_ctx, params) => {
+    publishRelease: (_ctx, _request, params) => {
       record('publish', params)
       return Promise.resolve({ ok: true, stdout: 'https://github.com/acme/widgets/releases/tag/v0.3.0\n' })
     },
@@ -95,28 +97,28 @@ function newCalls(): Calls {
   return { names: [], seen: {} }
 }
 
-function run(read: ReleaseRead, request: Parameters<typeof resolveReleaseRun>[1], calls: Calls, overrides: Partial<ReleaseChannelDeps> = {}) {
-  return resolveReleaseRun(registryDeps, request, '/audit', '/tmp', depsFor(read, calls, overrides))
+function run(read: ReleaseRead, request: Parameters<typeof resolveReleaseRun>[2], calls: Calls, overrides: Partial<ReleaseChannelDeps> = {}) {
+  return resolveReleaseRun(ctx, registryDeps, request, '/audit', '/tmp', depsFor(read, calls, overrides))
 }
 
 describe('resolveReleaseStatus', () => {
   it('rejects a missing repoId and a repository that is not ready', async () => {
     const deps = depsFor(readOf({ kind: 'idle' }), newCalls())
-    await expect(resolveReleaseStatus(registryDeps, { repoId: undefined as unknown as RepoId }, deps)).rejects.toThrow("'release:status' requires a non-empty 'repoId'")
+    await expect(resolveReleaseStatus(ctx, registryDeps, { repoId: undefined as unknown as RepoId }, deps)).rejects.toThrow("'release:status' requires a non-empty 'repoId'")
     const notReady = { ...deps, listRepositories: () => Promise.resolve({ ok: true, repositories: [{ id: REPO_ID, path: '/repo', displayName: 'w', problem: { kind: 'directory-missing' as const }, diagnostics: [] }] } as ReposListResponse) }
-    await expect(resolveReleaseStatus(registryDeps, { repoId: REPO_ID }, notReady)).rejects.toThrow("requires a 'ready' repository")
+    await expect(resolveReleaseStatus(ctx, registryDeps, { repoId: REPO_ID }, notReady)).rejects.toThrow("requires a 'ready' repository")
   })
 
   it('returns the status without the integration head, and a read failure as data', async () => {
     const calls = newCalls()
-    expect(await resolveReleaseStatus(registryDeps, { repoId: REPO_ID }, depsFor(readOf({ kind: 'idle' }), calls))).toEqual({ ok: true, status: status({ kind: 'idle' }) })
+    expect(await resolveReleaseStatus(ctx, registryDeps, { repoId: REPO_ID }, depsFor(readOf({ kind: 'idle' }), calls))).toEqual({ ok: true, status: status({ kind: 'idle' }) })
     const failed: ReleaseRead = { ok: false, message: 'gh is signed out', readAt: 't' }
-    expect(await resolveReleaseStatus(registryDeps, { repoId: REPO_ID }, depsFor(failed, calls))).toEqual(failed)
+    expect(await resolveReleaseStatus(ctx, registryDeps, { repoId: REPO_ID }, depsFor(failed, calls))).toEqual(failed)
   })
 
   it('fails the read, offering no action, when the config is unreadable', async () => {
     const deps = depsFor(readOf({ kind: 'idle' }), newCalls(), { readConfig: () => Promise.resolve({ ok: false, message: 'no config' }) })
-    expect(await resolveReleaseStatus(registryDeps, { repoId: REPO_ID }, deps)).toMatchObject({ ok: false, message: 'no config' })
+    expect(await resolveReleaseStatus(ctx, registryDeps, { repoId: REPO_ID }, deps)).toMatchObject({ ok: false, message: 'no config' })
   })
 })
 
@@ -126,24 +128,24 @@ describe('resolveReleaseIssues', () => {
   it('rejects a missing repoId, a malformed tag or previousTag, and a repository that is not ready', async () => {
     const deps = depsFor(readOf({ kind: 'idle' }), newCalls())
     const good = { repoId: REPO_ID, tag: 'v0.2.0', previousTag: 'v0.1.0' }
-    await expect(resolveReleaseIssues(registryDeps, { ...good, repoId: undefined as unknown as RepoId }, deps)).rejects.toThrow("'release:issues' requires a non-empty 'repoId'")
-    await expect(resolveReleaseIssues(registryDeps, { ...good, tag: 'v1 --upload' }, deps)).rejects.toThrow("'release:issues' requires a 'tag'")
-    await expect(resolveReleaseIssues(registryDeps, { ...good, tag: 5 as unknown as string }, deps)).rejects.toThrow("'release:issues' requires a 'tag'")
-    await expect(resolveReleaseIssues(registryDeps, { ...good, previousTag: '../x?y' }, deps)).rejects.toThrow("'release:issues' requires 'previousTag'")
-    await expect(resolveReleaseIssues(registryDeps, { ...good, previousTag: undefined as unknown as null }, deps)).rejects.toThrow("'release:issues' requires 'previousTag'")
+    await expect(resolveReleaseIssues(ctx, registryDeps, { ...good, repoId: undefined as unknown as RepoId }, deps)).rejects.toThrow("'release:issues' requires a non-empty 'repoId'")
+    await expect(resolveReleaseIssues(ctx, registryDeps, { ...good, tag: 'v1 --upload' }, deps)).rejects.toThrow("'release:issues' requires a 'tag'")
+    await expect(resolveReleaseIssues(ctx, registryDeps, { ...good, tag: 5 as unknown as string }, deps)).rejects.toThrow("'release:issues' requires a 'tag'")
+    await expect(resolveReleaseIssues(ctx, registryDeps, { ...good, previousTag: '../x?y' }, deps)).rejects.toThrow("'release:issues' requires 'previousTag'")
+    await expect(resolveReleaseIssues(ctx, registryDeps, { ...good, previousTag: undefined as unknown as null }, deps)).rejects.toThrow("'release:issues' requires 'previousTag'")
     const notReady = { ...deps, listRepositories: () => Promise.resolve({ ok: true, repositories: [{ id: REPO_ID, path: '/repo', displayName: 'w', problem: { kind: 'directory-missing' as const }, diagnostics: [] }] } as ReposListResponse) }
-    await expect(resolveReleaseIssues(registryDeps, good, notReady)).rejects.toThrow("requires a 'ready' repository")
+    await expect(resolveReleaseIssues(ctx, registryDeps, good, notReady)).rejects.toThrow("requires a 'ready' repository")
   })
 
   it("reads only the registered repository's own tags, and passes the response through", async () => {
     let seen: unknown = null
     const deps = depsFor(readOf({ kind: 'idle' }), newCalls(), {
-      fetchIssues: (params) => {
+      fetchIssues: (_ctx, params) => {
         seen = params
         return Promise.resolve(issues)
       },
     })
-    expect(await resolveReleaseIssues(registryDeps, { repoId: REPO_ID, tag: 'v0.2.0', previousTag: null }, deps)).toEqual(issues)
+    expect(await resolveReleaseIssues(ctx, registryDeps, { repoId: REPO_ID, tag: 'v0.2.0', previousTag: null }, deps)).toEqual(issues)
     expect(seen).toEqual({ repo: { owner: 'acme', name: 'widgets' }, tag: 'v0.2.0', previousTag: null })
   })
 })

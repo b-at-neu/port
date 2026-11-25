@@ -1,5 +1,6 @@
 import type { ConditionalTransport, GitHubTransport, GitRunner } from '@/types/platform'
 import { precheckIssues } from '@/main/github/precheck'
+import { githubConditional, githubHttp } from '@/main/platform/github-http'
 import type { StateEngine } from '@/types/offload'
 import type { SessionReader } from '@/types/sessions'
 import { readSessionState } from '@/main/sessions/adapter'
@@ -24,6 +25,9 @@ export function createInProcessEngine(params: InProcessEngineParams = {}): State
   const tails = createTailStore()
   const now = params.now ?? (() => new Date())
   const reader = params.sessionReader ?? createSdkSessionReader()
+  const clock = { now }
+  const read = { githubHttp: params.github ?? githubHttp, clock }
+  const conditional = { githubConditional: params.conditional ?? githubConditional, clock }
 
   return {
     refreshSessions: ({ repos }) => refreshSessions(cache, { repos, reader: params.sessionReader, claudeHome: params.claudeHome, now }),
@@ -33,9 +37,9 @@ export function createInProcessEngine(params: InProcessEngineParams = {}): State
       const worktrees = cache.worktrees.get(repoId)
       const worktreeEntries = worktrees?.ok ? worktrees.entries : []
       const agents = cache.sessions?.ok ? cache.sessions.agents.filter((agent) => agent.repoId === repoId) : []
-      return refreshGithub(cache, { repoId, repo, vocabulary, verify, integration, tracked, worktreeEntries, agents, github: params.github, now })
+      return refreshGithub(cache, { repoId, repo, vocabulary, verify, integration, tracked, worktreeEntries, agents, ctx: read })
     },
-    precheckGithub: ({ repoId, repo }) => precheckIssues({ cache: cache.etags, repoId, repo, conditional: params.conditional, now }),
+    precheckGithub: ({ repoId, repo }) => precheckIssues(conditional, { cache: cache.etags, repoId, repo }),
     project: ({ repositories, views }) => Promise.resolve(projectFromCache(cache, repositories, now, views)),
     scanSessions: ({ repos }) => readSessionState({ repos, reader: params.sessionReader, claudeHome: params.claudeHome, now }),
     listSessions: () => reader(),

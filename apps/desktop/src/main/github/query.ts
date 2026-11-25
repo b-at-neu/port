@@ -204,40 +204,6 @@ export function buildItemsByNumberQuery(numbers: readonly number[]): ItemsByNumb
   return { document, aliases }
 }
 
-interface ItemStateAlias {
-  readonly alias: string
-  readonly kind: PipelineItemKind
-  readonly number: number
-}
-
-interface ItemStatesQuery {
-  readonly document: string
-  readonly aliases: readonly ItemStateAlias[]
-}
-
-function itemStateFields(kind: PipelineItemKind): string {
-  // Issues carry no mergedAt field at all — requesting it is a GraphQL validation error, not a null.
-  return kind === 'pull-request' ? 'number state mergedAt closedAt url' : 'number state closedAt url'
-}
-
-/** One aliased `issue(number:)`/`pullRequest(number:)` per input item. The caller supplies
- *  `kind`, so a vanished number comes back as a partial error, handled by `envelope.ts`. */
-export function buildItemStatesQuery(items: readonly ItemRef[]): ItemStatesQuery {
-  const aliases: ItemStateAlias[] = []
-  const fields: string[] = []
-
-  items.forEach((item, idx) => {
-    const alias = `s${idx}`
-    const selector = item.kind === 'pull-request' ? 'pullRequest' : 'issue'
-    fields.push(`  ${alias}: ${selector}(number: ${item.number}) { ${itemStateFields(item.kind)} }`)
-    aliases.push({ alias, kind: item.kind, number: item.number })
-  })
-
-  const document = ['query($owner: String!, $name: String!) {', '  repository(owner: $owner, name: $name) {', ...fields, '  }', '}'].join('\n')
-
-  return { document, aliases }
-}
-
 interface ClaimPreflightQuery {
   readonly document: string
 }

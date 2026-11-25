@@ -3,6 +3,7 @@ import type { GitRunner } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
 import type { RegistryDeps } from '@/types/registry'
 import type { HookOutcome, ReleaseIssuesRequest, ReleaseRunRequest, ReleaseConfig, ReleaseConfigRead, ReleaseIssuesResponse, ReleaseRead, ReleaseRunResult, ReleaseStatus, ReleaseStatusResponse, ReleaseWriteContext, ReleaseWriteResult, VersionFileWrite } from '@/types/release'
+import type { GitHubReadContext, GitHubWriteContext } from '@/main/github/context'
 import { fetchReleaseStatus, readFileAtRef } from '@/main/github/release'
 import { fetchReleaseIssues } from '@/main/github/release-issues'
 import { readAtDefaultRef } from '@/main/repos/config/harness'
@@ -16,6 +17,8 @@ import { normalizeVersion } from '@/utils/release/version'
 import type { ReadyEntry } from '@/types/actions'
 
 const MAX_NOTES_CHARS = 125_000
+
+type ReleaseContext = GitHubReadContext & GitHubWriteContext
 
 export interface ReleaseChannelDeps {
   readonly listRepositories: typeof listRepositories
@@ -50,10 +53,10 @@ export const defaultReleaseChannelDeps: ReleaseChannelDeps = {
 type Resolved = { readonly read: ReleaseRead; readonly config: ReleaseConfig } | { readonly read: Extract<ReleaseRead, { ok: false }>; readonly config: null }
 
 // Fails closed: an unreadable config yields a failed read, so no action is offered.
-async function readState(registryDeps: RegistryDeps, entry: ReadyEntry, deps: ReleaseChannelDeps): Promise<Resolved> {
+async function readState(ctx: ReleaseContext, registryDeps: RegistryDeps, entry: ReadyEntry, deps: ReleaseChannelDeps): Promise<Resolved> {
   const config = await deps.readConfig(registryDeps.git, entry.path)
   if (!config.ok) return { read: { ok: false, message: config.message, readAt: deps.now().toISOString() }, config: null }
-  const read = await deps.fetchStatus({
+  const read = await deps.fetchStatus(ctx, {
     repo: { owner: entry.config.owner, name: entry.config.name },
     integration: entry.config.branches.integration,
     production: entry.config.branches.production,
@@ -63,23 +66,23 @@ async function readState(registryDeps: RegistryDeps, entry: ReadyEntry, deps: Re
   return { read, config: config.config }
 }
 
-export async function resolveReleaseStatus(registryDeps: RegistryDeps, request: { readonly repoId: RepoId }, deps: ReleaseChannelDeps = defaultReleaseChannelDeps): Promise<ReleaseStatusResponse> {
+export async function resolveReleaseStatus(ctx: ReleaseContext, registryDeps: RegistryDeps, request: { readonly repoId: RepoId }, deps: ReleaseChannelDeps = defaultReleaseChannelDeps): Promise<ReleaseStatusResponse> {
   const repoId = requireRepoId(request?.repoId, "'release:status'")
   const entry = await requireReadyRepo(registryDeps, "'release:status'", repoId, deps.listRepositories)
-  const { read } = await readState(registryDeps, entry, deps)
+  const { read } = await readState(ctx, registryDeps, entry, deps)
   return read.ok ? { ok: true, status: read.status } : read
 }
 
 const TAG_PATTERN = /^[A-Za-z0-9._+/-]{1,255}$/
 
-export async function resolveReleaseIssues(registryDeps: RegistryDeps, request: ReleaseIssuesRequest, deps: ReleaseChannelDeps = defaultReleaseChannelDeps): Promise<ReleaseIssuesResponse> {
+export async function resolveReleaseIssues(ctx: ReleaseContext, registryDeps: RegistryDeps, request: ReleaseIssuesRequest, deps: ReleaseChannelDeps = defaultReleaseChannelDeps): Promise<ReleaseIssuesResponse> {
   const repoId = requireRepoId(request?.repoId, "'release:issues'")
   if (typeof request.tag !== 'string' || !TAG_PATTERN.test(request.tag)) throw new Error("'release:issues' requires a 'tag' of 1 to 255 tag characters")
   if (request.previousTag !== null && (typeof request.previousTag !== 'string' || !TAG_PATTERN.test(request.previousTag))) {
     throw new Error("'release:issues' requires 'previousTag' to be null or 1 to 255 tag characters")
   }
   const entry = await requireReadyRepo(registryDeps, "'release:issues'", repoId, deps.listRepositories)
-  return deps.fetchIssues({ repo: { owner: entry.config.owner, name: entry.config.name }, tag: request.tag, previousTag: request.previousTag })
+  return deps.fetchIssues(ctx, { repo: { owner: entry.config.owner, name: entry.config.name }, tag: request.tag, previousTag: request.previousTag })
 }
 
 function refused(reason: Extract<ReleaseRunResult, { kind: 'refused' }>['reason'], message: string): ReleaseRunResult {
@@ -108,10 +111,10 @@ function withVersion(text: string, version: string): string | null {
   }
 }
 
-async function bumpFiles(entry: ReadyEntry, config: ReleaseConfig, oid: string, version: string, deps: ReleaseChannelDeps): Promise<readonly VersionFileWrite[] | string> {
+async function bumpFiles(ctx: ReleaseContext, entry: ReadyEntry, config: ReleaseConfig, oid: string, version: string, deps: ReleaseChannelDeps): Promise<readonly VersionFileWrite[] | string> {
   const files: VersionFileWrite[] = []
   for (const path of config.versionFiles) {
-    const read = await deps.readFile({ repo: { owner: entry.config.owner, name: entry.config.name }, path, ref: oid })
+    const read = await deps.readFile(ctx, { repo: { owner: entry.config.owner, name: entry.config.name }, path, ref: oid })
     if (!read.ok) return `Couldn't read ${path}: ${read.message}`
     const content = withVersion(read.text, version)
     if (content === null) return `${path} isn't a JSON file with a version field, so the app can't bump it. Cut this release with /port:release in a terminal.`
@@ -121,6 +124,7 @@ async function bumpFiles(entry: ReadyEntry, config: ReleaseConfig, oid: string, 
 }
 
 interface RunContext {
+  readonly platform: ReleaseContext
   readonly entry: ReadyEntry
   readonly config: ReleaseConfig
   readonly status: ReleaseStatus
@@ -148,21 +152,21 @@ async function runOpen(ctx: RunContext, version: string): Promise<ReleaseRunResu
   const integration = status.integration
   if (phase.kind === 'idle' && config.versionSource === 'package') {
     if (ctx.integrationHead === null) return refused('state-changed', `${integration} has no head to bump from.`)
-    const files = await bumpFiles(ctx.entry, config, ctx.integrationHead.oid, version, deps)
+    const files = await bumpFiles(ctx.platform, ctx.entry, config, ctx.integrationHead.oid, version, deps)
     if (typeof files === 'string') return refused('unsupported', files)
-    const bump = failed('bump', await deps.createBumpBranch(ctx.write, { head: ctx.integrationHead, files, integration }))
+    const bump = failed('bump', await deps.createBumpBranch(ctx.platform, ctx.write, { head: ctx.integrationHead, files, integration }))
     if (bump !== null) return bump
   }
 
   const needsBumpPr = config.versionSource === 'package' && (phase.kind === 'idle' || (phase.kind === 'waiting-bump' && phase.bumpPr === null))
   if (needsBumpPr) {
-    const bumpPr = failed('bump-pr', await deps.openBumpPr(ctx.write, { integration }))
+    const bumpPr = failed('bump-pr', await deps.openBumpPr(ctx.platform, ctx.write, { integration }))
     if (bumpPr !== null) return bumpPr
   }
 
   const needsReleasePr = phase.kind !== 'waiting-bump' || phase.releasePr === null
   if (needsReleasePr) {
-    const releasePr = failed('release-pr', await deps.openReleasePr(ctx.write, { production, integration, body: renderReleaseBody(version, status.entries), assignee: ctx.viewer }))
+    const releasePr = failed('release-pr', await deps.openReleasePr(ctx.platform, ctx.write, { production, integration, body: renderReleaseBody(version, status.entries), assignee: ctx.viewer }))
     if (releasePr !== null) return releasePr
   }
   return { kind: 'opened' }
@@ -174,18 +178,19 @@ async function runPublish(ctx: RunContext, version: string, notes: string): Prom
   if (status.releases.some((release) => release.tagName === releaseTag(version))) return refused('tag-exists', `v${version} is already released.`)
   if (status.productionHead === null) return refused('state-changed', `${status.production ?? 'The production branch'} has no head to tag.`)
 
-  const published = await deps.publishRelease(ctx.write, { target: status.productionHead, notes })
+  const published = await deps.publishRelease(ctx.platform, ctx.write, { target: status.productionHead, notes })
   if (!published.ok) return { kind: 'failed', step: 'publish', stderr: published.stderr }
 
   const hook: HookOutcome = await deps.runHook({ command: config.postPublishHook, cwd: ctx.entry.path })
   if (hook.kind !== 'skipped') {
     const outcome: ReleaseWriteResult = hook.kind === 'ok' ? { ok: true, stdout: hook.stdout } : { ok: false, stderr: hook.kind === 'failed' ? hook.stderr : hook.message }
-    await deps.recordHook(ctx.write, config.postPublishHook === null ? null : config.postPublishHook.split(/\s+/), outcome)
+    await deps.recordHook(ctx.platform, ctx.write, config.postPublishHook === null ? null : config.postPublishHook.split(/\s+/), outcome)
   }
   return { kind: 'published', url: lastLine(published.stdout), hook }
 }
 
 export async function resolveReleaseRun(
+  ctx: ReleaseContext,
   registryDeps: RegistryDeps,
   request: ReleaseRunRequest,
   auditDir: string,
@@ -201,17 +206,18 @@ export async function resolveReleaseRun(
   if (version === null) return refused('invalid-version', 'Use X.Y.Z, optionally with a prerelease like 1.5.0-beta.1.')
 
   const entry = await requireReadyRepo(registryDeps, "'release:run'", repoId, deps.listRepositories)
-  const { read, config } = await readState(registryDeps, entry, deps)
+  const { read, config } = await readState(ctx, registryDeps, entry, deps)
   if (!read.ok || config === null) return refused('state-changed', `Couldn't read the release state: ${read.ok ? 'no config' : read.message}`)
 
-  const ctx: RunContext = {
+  const run: RunContext = {
+    platform: ctx,
     entry,
     config,
     status: read.status,
     integrationHead: read.integrationHead,
     viewer: read.viewer,
-    write: { repo: entry.config.repo, repoId, version, auditDir, scratchDir, root: entry.path, now: deps.now },
+    write: { repo: entry.config.repo, repoId, version, auditDir, scratchDir, root: entry.path },
     deps,
   }
-  return request.step === 'open' ? runOpen(ctx, version) : runPublish(ctx, version, request.notes)
+  return request.step === 'open' ? runOpen(run, version) : runPublish(run, version, request.notes)
 }

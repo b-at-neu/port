@@ -2,7 +2,6 @@ import type { StageLaunchRequest, StageLauncher, StageLaunchResult } from '@/typ
 import type { HostedSessionSnapshot, HostedStore, SessionKey } from '@/types/hosting'
 import type { ReleaseBranchOutcome, RemoveSessionWorktreeOutcome } from '@/types/workspace'
 import type { ItemActionResult } from '@/types/actions'
-import type { GitHubTransport } from '@/types/platform'
 import type { GitHubRepoRef } from '@/types/github'
 import type { BranchHead } from '@/types/release'
 import type { AllowWriteContext, AllowWriteResult } from '@/types/writes'
@@ -86,7 +85,6 @@ export interface ReadAllowBaseParams {
   readonly repo: GitHubRepoRef
   readonly integration: string
   readonly branch: string
-  readonly github?: GitHubTransport
 }
 
 export interface ProposeAllowParams {

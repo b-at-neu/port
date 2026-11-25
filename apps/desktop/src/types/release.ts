@@ -1,6 +1,6 @@
 // Renderer-safe contract for the Releases screen: the status read, the phase it resolves to, and the two `release:run` steps.
 import type { BacklogLabel } from '@/types/backlog'
-import type { CommandResult, GhRunner, PathOps } from '@/types/platform'
+import type { CommandResult } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
 
 export interface PullLink {
@@ -77,10 +77,7 @@ export interface ReleaseWriteContext {
   readonly scratchDir: string
   /** The registered local clone the bump commit is built and signed in. */
   readonly root: string
-  readonly gh?: GhRunner
   readonly git?: ReleaseGitRunner
-  readonly now?: () => Date
-  readonly pathOps?: PathOps
 }
 
 export type ReleaseWriteResult = { readonly ok: true; readonly stdout: string } | { readonly ok: false; readonly stderr: string }

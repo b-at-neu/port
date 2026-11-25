@@ -2,6 +2,7 @@
 import { readItemStates } from '@/main/github/item-states'
 import { readWorktrees } from '@/main/repos/local/worktrees'
 import { listDirectory, pathExists, readTextFile, removeDirectory, statPath } from '@/main/platform/files'
+import { githubHttp } from '@/main/platform/github-http'
 import { defaultGitRunner } from '@/main/platform/git'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
 import type { AssertEqual } from '@/types/assert-type'
@@ -119,7 +120,7 @@ export async function inspectWorktrees(params: InspectParams): Promise<Inspectio
 
   const numbers = [...new Set(linked.flatMap(({ entry, isOutside }) => (isOutside || entry.correlation === null ? [] : [entry.correlation.number])))]
   const [owner = '', name = ''] = params.repo.split('/')
-  const stateRead = await readItemStates({ repo: { owner, name }, numbers, github: params.github })
+  const stateRead = await readItemStates({ githubHttp: params.github ?? githubHttp, clock: { now } }, { repo: { owner, name }, numbers })
   const states: ReadonlyMap<number, ItemStateName | null> = stateRead.ok ? stateRead.states : new Map()
   const githubError = stateRead.ok ? null : stateRead.message
 

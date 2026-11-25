@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { GitHubHttpResult, GitHubRequest } from '@/types/platform'
 import { CAPPED_NOTE, MAX_PAGES, PARTIAL_NOTE, readMergedPrs } from '@/main/github/release-prs'
 import { buildMergedPrsQuery } from '@/main/github/release-query'
-import { graphqlBodyOf, httpFail, recordingTransport } from '../../../fixtures/github-http'
+import { githubCtx, graphqlBodyOf, httpFail, recordingTransport } from '../../../fixtures/github-http'
 
 const REPO = { owner: 'acme', name: 'widgets' }
 const SINCE = '2026-08-01T00:00:00Z'
@@ -24,7 +24,7 @@ function page(nodes: readonly Node[], next: string | null): string {
 
 function read(pages: readonly (string | GitHubHttpResult)[], over: { since?: string | null; until?: string | null } = {}) {
   const { transport, requests } = recordingTransport((_request, index) => pages[index] ?? page([], null))
-  const result = readMergedPrs({ github: transport, repo: REPO, base: 'dev', since: SINCE, until: null, ...over })
+  const result = readMergedPrs(githubCtx(transport), { repo: REPO, base: 'dev', since: SINCE, until: null, ...over })
   return { result, requests }
 }
 

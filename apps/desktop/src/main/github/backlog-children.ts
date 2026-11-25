@@ -1,6 +1,5 @@
 // The Backlog's per-epic children read: one aliased `issue(number:)` lookup per epic kept in the list.
-import { githubHttp } from '@/main/platform/github-http'
-import type { GitHubTransport } from '@/types/platform'
+import type { GitHubReadContext } from '@/main/github/context'
 import type { BacklogChild, ChildrenRead } from '@/types/backlog'
 import type { GitHubRepoRef, GraphQLErrorEntry } from '@/types/github'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
@@ -59,16 +58,14 @@ interface ChildrenParams {
   readonly repo: GitHubRepoRef
   readonly epics: readonly number[]
   readonly claimed: ReadonlySet<number>
-  readonly github?: GitHubTransport
 }
 
 /** A failure is always per epic and typed, never an empty list; the list read around it stays good. */
-export async function fetchChildren(params: ChildrenParams): Promise<ReadonlyMap<number, ChildrenRead>> {
+export async function fetchChildren(ctx: GitHubReadContext, params: ChildrenParams): Promise<ReadonlyMap<number, ChildrenRead>> {
   const { epics } = params
   if (epics.length === 0) return new Map()
-  const github = params.github ?? githubHttp
 
-  const result = await github(repoGraphqlRequest(buildChildrenQuery(epics), params.repo))
+  const result = await ctx.githubHttp(repoGraphqlRequest(buildChildrenQuery(epics), params.repo))
   const text = bodyOf(result)
   const parsed = text !== undefined ? parseEnvelope(text) : undefined
   const verdict = classifyFailure(result, parsed)

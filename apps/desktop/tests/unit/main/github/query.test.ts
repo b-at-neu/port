@@ -5,7 +5,6 @@ import {
   buildClaimPreflightQuery,
   buildGatePreflightQuery,
   buildItemDetailsQuery,
-  buildItemStatesQuery,
   buildItemsByNumberQuery,
   buildPipelineQuery,
   graphqlStringLiteral,
@@ -201,35 +200,6 @@ describe('buildItemDetailsQuery', () => {
 
   it('carries rateLimit, so every round trip reports its own cost', () => {
     expect(buildItemDetailsQuery([{ kind: 'issue', number: 1, rollup: false, blockerComments: false, closingPullRequests: false }]).document).toContain('rateLimit { cost remaining resetAt limit }')
-  })
-})
-
-describe('buildItemStatesQuery', () => {
-  it('emits exactly one alias per input item', () => {
-    const items = [
-      { kind: 'issue' as const, number: 76 },
-      { kind: 'pull-request' as const, number: 184 },
-    ]
-    const { aliases } = buildItemStatesQuery(items)
-    expect(aliases).toEqual([
-      { alias: 's0', kind: 'issue', number: 76 },
-      { alias: 's1', kind: 'pull-request', number: 184 },
-    ])
-  })
-
-  it('picks the field selector from kind — issue() vs pullRequest(), no mergedAt on an issue alias', () => {
-    const { document } = buildItemStatesQuery([
-      { kind: 'issue', number: 1 },
-      { kind: 'pull-request', number: 2 },
-    ])
-    expect(document).toContain('s0: issue(number: 1) { number state closedAt url }')
-    expect(document).toContain('s1: pullRequest(number: 2) { number state mergedAt closedAt url }')
-  })
-
-  it('returns an empty alias list and a still-valid document for no items', () => {
-    const { document, aliases } = buildItemStatesQuery([])
-    expect(aliases).toEqual([])
-    expect(document).toContain('repository(owner: $owner, name: $name)')
   })
 })
 

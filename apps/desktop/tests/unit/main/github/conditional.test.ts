@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { conditionalGet, createEtagCache, etagKey } from '@/main/github/conditional'
 import type { ConditionalHttpResult, ConditionalRequest, ConditionalTransport } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
+import { createFakePlatform } from '../../../support/fake-platform'
 import { httpFail, httpNotModified, recordingConditionalTransport } from '../../../fixtures/github-http'
 
 const REPO_A = 'repo-a' as RepoId
@@ -22,15 +23,17 @@ function fakeGitHub() {
 
 const request: Omit<ConditionalRequest, 'ifNoneMatch'> = { method: 'GET', path: PATH }
 
+const get = (cache: ReturnType<typeof createEtagCache>, repoId: RepoId, githubConditional: ConditionalTransport, sent = request) => conditionalGet({ ...createFakePlatform(), githubConditional }, { cache, repoId, request: sent })
+
 describe('conditionalGet', () => {
   it('an unchanged resource is not-modified on the second call and costs no rate limit', async () => {
     const github = fakeGitHub()
     const cache = createEtagCache()
-    const first = await conditionalGet({ cache, repoId: REPO_A, request, conditional: github.transport })
+    const first = await get(cache, REPO_A, github.transport)
     expect(first).toMatchObject({ ok: true, outcome: 'modified', etag: '"v1"', body: 'one' })
     expect(github.state.remaining).toBe(4999)
 
-    const second = await conditionalGet({ cache, repoId: REPO_A, request, conditional: github.transport })
+    const second = await get(cache, REPO_A, github.transport)
     expect(second).toMatchObject({ ok: true, outcome: 'not-modified', etag: '"v1"' })
     expect(github.requests[1]?.ifNoneMatch).toBe('"v1"')
     expect(github.state.remaining).toBe(4999)
@@ -39,54 +42,48 @@ describe('conditionalGet', () => {
   it('a changed resource returns the new body and replaces the cached ETag', async () => {
     const github = fakeGitHub()
     const cache = createEtagCache()
-    await conditionalGet({ cache, repoId: REPO_A, request, conditional: github.transport })
+    await get(cache, REPO_A, github.transport)
     github.state.etag = '"v2"'
     github.state.body = 'two'
 
-    expect(await conditionalGet({ cache, repoId: REPO_A, request, conditional: github.transport })).toMatchObject({ outcome: 'modified', etag: '"v2"', body: 'two' })
-    expect(await conditionalGet({ cache, repoId: REPO_A, request, conditional: github.transport })).toMatchObject({ outcome: 'not-modified', etag: '"v2"' })
+    expect(await get(cache, REPO_A, github.transport)).toMatchObject({ outcome: 'modified', etag: '"v2"', body: 'two' })
+    expect(await get(cache, REPO_A, github.transport)).toMatchObject({ outcome: 'not-modified', etag: '"v2"' })
     expect(github.requests.map((sent) => sent.ifNoneMatch)).toEqual([undefined, '"v1"', '"v2"'])
   })
 
-  it('a weak ETag is sent back unchanged', async () => {
+  const keyed: readonly { readonly name: string; readonly second: { readonly repoId: RepoId; readonly request: Omit<ConditionalRequest, 'ifNoneMatch'> }; readonly sent: string | undefined }[] = [
+    { name: 'the same request shape reuses the ETag', second: { repoId: REPO_A, request }, sent: '"v1"' },
+    { name: 'a different Accept never reuses it', second: { repoId: REPO_A, request: { ...request, accept: RAW_ACCEPT } }, sent: undefined },
+    { name: 'a different query string never reuses it', second: { repoId: REPO_A, request: { ...request, path: `${PATH}?per_page=1` } }, sent: undefined },
+    { name: 'another repo on the same path never reuses it', second: { repoId: REPO_B, request }, sent: undefined },
+  ]
+  it.each(keyed)('$name', async ({ second, sent }) => {
+    const github = fakeGitHub()
+    const cache = createEtagCache()
+    await get(cache, REPO_A, github.transport)
+    await get(cache, second.repoId, github.transport, second.request)
+    expect(github.requests[1]?.ifNoneMatch).toBe(sent)
+  })
+
+  it('a weak ETag is sent back unchanged, and an explicit default Accept shares the key of an absent one', async () => {
     const github = fakeGitHub()
     github.state.etag = 'W/"weak"'
     const cache = createEtagCache()
-    await conditionalGet({ cache, repoId: REPO_A, request, conditional: github.transport })
-    await conditionalGet({ cache, repoId: REPO_A, request, conditional: github.transport })
+    await get(cache, REPO_A, github.transport)
+    await get(cache, REPO_A, github.transport)
     expect(github.requests[1]?.ifNoneMatch).toBe('W/"weak"')
-  })
-
-  it('a different Accept or query string never reuses another request shape’s ETag', async () => {
-    const github = fakeGitHub()
-    const cache = createEtagCache()
-    await conditionalGet({ cache, repoId: REPO_A, request, conditional: github.transport })
-    await conditionalGet({ cache, repoId: REPO_A, request: { ...request, accept: RAW_ACCEPT }, conditional: github.transport })
-    await conditionalGet({ cache, repoId: REPO_A, request: { ...request, path: `${PATH}?per_page=1` }, conditional: github.transport })
-    expect(github.requests.map((sent) => sent.ifNoneMatch)).toEqual([undefined, undefined, undefined])
-  })
-
-  it('an explicit default Accept shares the key of an absent one', () => {
     expect(etagKey({ ...request, accept: 'application/vnd.github+json' })).toBe(etagKey(request))
-  })
-
-  it('never sends one repo’s ETag for another repo on the same path', async () => {
-    const github = fakeGitHub()
-    const cache = createEtagCache()
-    await conditionalGet({ cache, repoId: REPO_A, request, conditional: github.transport })
-    await conditionalGet({ cache, repoId: REPO_B, request, conditional: github.transport })
-    expect(github.requests[1]?.ifNoneMatch).toBeUndefined()
   })
 
   it('after forget, that repo is unconditional again and another repo’s entry is untouched', async () => {
     const github = fakeGitHub()
     const cache = createEtagCache()
-    await conditionalGet({ cache, repoId: REPO_A, request, conditional: github.transport })
-    await conditionalGet({ cache, repoId: REPO_B, request, conditional: github.transport })
+    await get(cache, REPO_A, github.transport)
+    await get(cache, REPO_B, github.transport)
     cache.forget(REPO_A)
 
-    await conditionalGet({ cache, repoId: REPO_A, request, conditional: github.transport })
-    await conditionalGet({ cache, repoId: REPO_B, request, conditional: github.transport })
+    await get(cache, REPO_A, github.transport)
+    await get(cache, REPO_B, github.transport)
     expect(github.requests.slice(2).map((sent) => sent.ifNoneMatch)).toEqual([undefined, '"v1"'])
   })
 
@@ -98,27 +95,27 @@ describe('conditionalGet', () => {
       cache.forget(REPO_A)
       return reply
     }
-    await conditionalGet({ cache, repoId: REPO_A, request, conditional: racing })
-    await conditionalGet({ cache, repoId: REPO_A, request, conditional: github.transport })
+    await get(cache, REPO_A, racing)
+    await get(cache, REPO_A, github.transport)
     expect(github.requests[1]?.ifNoneMatch).toBeUndefined()
   })
 
   it('a 200 without an etag header deletes the existing entry', async () => {
     const cache = createEtagCache()
     const github = fakeGitHub()
-    await conditionalGet({ cache, repoId: REPO_A, request, conditional: github.transport })
+    await get(cache, REPO_A, github.transport)
     const bare: ConditionalTransport = () => Promise.resolve({ ok: true, notModified: false, status: 200, headers: {}, body: 'x' })
-    expect(await conditionalGet({ cache, repoId: REPO_A, request, conditional: bare })).toMatchObject({ outcome: 'modified', etag: null })
-    await conditionalGet({ cache, repoId: REPO_A, request, conditional: github.transport })
+    expect(await get(cache, REPO_A, bare)).toMatchObject({ outcome: 'modified', etag: null })
+    await get(cache, REPO_A, github.transport)
     expect(github.requests[1]?.ifNoneMatch).toBeUndefined()
   })
 
   it('a 304 that carries a new etag replaces the cached one', async () => {
     const cache = createEtagCache()
     const github = fakeGitHub()
-    await conditionalGet({ cache, repoId: REPO_A, request, conditional: github.transport })
+    await get(cache, REPO_A, github.transport)
     const restated: ConditionalTransport = () => Promise.resolve(httpNotModified({ etag: '"v1b"' }))
-    expect(await conditionalGet({ cache, repoId: REPO_A, request, conditional: restated })).toMatchObject({ outcome: 'not-modified', etag: '"v1b"' })
+    expect(await get(cache, REPO_A, restated)).toMatchObject({ outcome: 'not-modified', etag: '"v1b"' })
     expect(cache.lookup(REPO_A, etagKey(request)).etag).toBe('"v1b"')
   })
 
@@ -129,10 +126,9 @@ describe('conditionalGet', () => {
   ])('%s passes through and leaves the entry in place', async (_name, failure) => {
     const cache = createEtagCache()
     const github = fakeGitHub()
-    await conditionalGet({ cache, repoId: REPO_A, request, conditional: github.transport })
+    await get(cache, REPO_A, github.transport)
     const failing: ConditionalTransport = () => failure
-    const result = await conditionalGet({ cache, repoId: REPO_A, request, conditional: failing })
-    expect(result.ok).toBe(false)
+    expect((await get(cache, REPO_A, failing)).ok).toBe(false)
     expect(cache.lookup(REPO_A, etagKey(request)).etag).toBe('"v1"')
   })
 })

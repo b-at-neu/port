@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { GitHubHttpResult, GitHubRequest } from '@/types/platform'
 import { fetchReleaseIssues } from '@/main/github/release-issues'
 import { buildIncludedIssuesQuery } from '@/main/github/release-query'
-import { graphqlBodyOf, httpFail, httpOk, recordingTransport } from '../../../fixtures/github-http'
+import { githubCtx, graphqlBodyOf, httpFail, httpOk, recordingTransport } from '../../../fixtures/github-http'
 
 const REPO = { owner: 'acme', name: 'widgets' }
 const SHA_A = 'a'.repeat(40)
@@ -37,7 +37,7 @@ function run(scenario: Scenario, params: { tag?: string; previousTag?: string | 
     if (request.path === 'graphql') return JSON.stringify({ data: { repository: scenario.repository ?? {} }, ...(scenario.errors === undefined ? {} : { errors: scenario.errors }) })
     return scenario.restReply ?? JSON.stringify(scenario.rest)
   })
-  const result = fetchReleaseIssues({ repo: REPO, tag: params.tag ?? 'v0.2.0', previousTag: params.previousTag === undefined ? 'v0.1.0' : params.previousTag, github: transport })
+  const result = fetchReleaseIssues(githubCtx(transport), { repo: REPO, tag: params.tag ?? 'v0.2.0', previousTag: params.previousTag === undefined ? 'v0.1.0' : params.previousTag })
   return { result, requests }
 }
 
@@ -120,7 +120,7 @@ describe('fetchReleaseIssues', () => {
     expect(await run({ restReply: httpFail('unauthenticated', 401, '', 'GitHub: Bad credentials (HTTP 401)') }).result).toEqual({ ok: false, message: 'GitHub: Bad credentials (HTTP 401)' })
     expect(await run({ rest: 'nope', restReply: httpOk('not json') }).result).toEqual({ ok: false, message: "GitHub's comparison wasn't JSON" })
     const { transport } = recordingTransport((request) => (request.path === 'graphql' ? httpFail('forbidden', 403, '', 'GitHub: forbidden (HTTP 403)') : JSON.stringify(COMPARE)))
-    expect(await fetchReleaseIssues({ repo: REPO, tag: 'v0.2.0', previousTag: 'v0.1.0', github: transport })).toEqual({ ok: false, message: 'GitHub: forbidden (HTTP 403)' })
+    expect(await fetchReleaseIssues(githubCtx(transport), { repo: REPO, tag: 'v0.2.0', previousTag: 'v0.1.0' })).toEqual({ ok: false, message: 'GitHub: forbidden (HTTP 403)' })
   })
 
   it('notes a compare that returned fewer commits than the release holds', async () => {

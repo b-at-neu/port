@@ -2,7 +2,7 @@
 import { fetchItemsByNumber } from '@/main/github/adapter'
 import { createEtagCache } from '@/main/github/conditional'
 import { fetchPipelineItems } from '@/main/github/pipeline'
-import type { GitHubTransport } from '@/types/platform'
+import type { GitHubReadContext } from '@/main/github/context'
 import { collectOrphanNumbers } from '@/main/pipeline/board/attach'
 import { readDenials } from '@/main/repos/local/denials'
 import { readWorktrees } from '@/main/repos/local/worktrees'
@@ -36,20 +36,19 @@ interface RefreshGithubParams {
   /** Read from whatever the worktree/session sources most recently returned — never re-fetched here; this primitive composes, it does not read a second source. */
   readonly worktreeEntries: readonly WorktreeEntry[]
   readonly agents: readonly AgentRecord[]
-  readonly github?: GitHubTransport
-  readonly now?: () => Date
+  readonly ctx: GitHubReadContext
 }
 
 /** Fires the conditional `fetchItemsByNumber` re-check itself whenever the fresh sweep leaves orphan numbers, so `itemStates` stays dependent on a GitHub refresh. */
 export async function refreshGithub(cache: SourceCache, params: RefreshGithubParams): Promise<RefreshOutcome> {
-  const now = params.now ?? (() => new Date())
-  const fetch = await fetchPipelineItems({ repo: params.repo, vocabulary: params.vocabulary, verify: params.verify, integration: params.integration, tracked: params.tracked, github: params.github, now })
+  const { ctx } = params
+  const fetch = await fetchPipelineItems(ctx, { repo: params.repo, vocabulary: params.vocabulary, verify: params.verify, integration: params.integration, tracked: params.tracked })
   const previous = cache.github.get(params.repoId) ?? null
   cache.github.set(params.repoId, projectOk(previous, fetch))
 
   if (fetch.ok) {
     const orphanNumbers = collectOrphanNumbers(fetch.items, params.worktreeEntries, params.agents)
-    cache.itemStates.set(params.repoId, orphanNumbers.length === 0 ? null : await fetchItemsByNumber({ repo: params.repo, numbers: orphanNumbers, github: params.github, now }))
+    cache.itemStates.set(params.repoId, orphanNumbers.length === 0 ? null : await fetchItemsByNumber(ctx, { repo: params.repo, numbers: orphanNumbers }))
   }
 
   return fetch.ok

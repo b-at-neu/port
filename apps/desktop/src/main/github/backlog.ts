@@ -1,6 +1,5 @@
 // fetchBacklog: every open issue, dropping what the store tracks.
-import { githubHttp } from '@/main/platform/github-http'
-import type { GitHubTransport } from '@/types/platform'
+import type { GitHubReadContext } from '@/main/github/context'
 import type { BacklogItem, BacklogLabel, BacklogResponse, ParentRead } from '@/types/backlog'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
@@ -82,18 +81,14 @@ interface FetchBacklogParams {
   readonly repo: GitHubRepoRef
   /** The store's tracked issue numbers; empty for an unseeded repository until the first poll seeds it. */
   readonly tracked: ReadonlySet<number>
-  readonly github?: GitHubTransport
-  readonly now?: () => Date
 }
 
 // `scanned`/`total` diverging means the page was truncated; a viewer-query error is never itself a failure.
-export async function fetchBacklog(params: FetchBacklogParams): Promise<BacklogResponse> {
-  const github = params.github ?? githubHttp
-  const now = params.now ?? (() => new Date())
-  const fetchedAt = now().toISOString()
+export async function fetchBacklog(ctx: GitHubReadContext, params: FetchBacklogParams): Promise<BacklogResponse> {
+  const fetchedAt = ctx.clock.now().toISOString()
 
   const document = buildBacklogQuery()
-  const result = await github(repoGraphqlRequest(document, params.repo))
+  const result = await ctx.githubHttp(repoGraphqlRequest(document, params.repo))
 
   const text = bodyOf(result)
   const parsed = text !== undefined ? parseEnvelope(text) : undefined
@@ -145,11 +140,10 @@ export async function fetchBacklog(params: FetchBacklogParams): Promise<BacklogR
     })
   }
 
-  const children = await fetchChildren({
+  const children = await fetchChildren(ctx, {
     repo: params.repo,
     epics: items.filter((item) => item.subIssueCount > 0).map((item) => item.number),
     claimed: params.tracked,
-    github,
   })
 
   const withChildren = items.map((item): BacklogItem => ({ ...item, children: children.get(item.number) ?? EMPTY_CHILDREN }))

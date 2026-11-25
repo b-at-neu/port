@@ -5,8 +5,6 @@ import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { ReclaimerFailureKind } from '@/types/reclaimer'
 import type { PillStatus } from '@/types/components'
-import type { GhRunner, GitRunner, PathOps } from '@/types/platform'
-import type { FetchItemsByNumberParams, ItemsByNumberFetch } from '@/types/github'
 import type { ReleaseAuditEntry } from '@/types/release'
 import type { IncidentIntent } from '@/types/incidents'
 
@@ -208,8 +206,6 @@ export interface RerunContext {
   readonly repo: string
   readonly repoId: RepoId
   readonly auditDir: string
-  readonly gh?: GhRunner
-  readonly now?: () => Date
 }
 
 export interface AllowWriteContext {
@@ -217,9 +213,6 @@ export interface AllowWriteContext {
   readonly repoId: RepoId
   readonly auditDir: string
   readonly scratchDir: string
-  readonly gh?: GhRunner
-  readonly now?: () => Date
-  readonly pathOps?: PathOps
 }
 
 export type AllowWriteResult = { readonly ok: true; readonly number: number; readonly url: string } | { readonly ok: false; readonly step: 'commit' | 'pr'; readonly message: string }
@@ -283,21 +276,12 @@ export interface PostCommentParams {
   readonly request: CommentRequest
   readonly repoRoot: string
   readonly auditDir: string
-  readonly gh?: GhRunner
-  readonly git?: GitRunner
-  readonly now?: () => Date
-  readonly pathOps?: PathOps
 }
 
 export interface WriteStateParams {
   readonly request: LabelWriteRequest
   readonly repoRoot: string
   readonly auditDir: string
-  readonly gh?: GhRunner
-  readonly git?: GitRunner
-  readonly fetchItemsByNumber?: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
-  readonly now?: () => Date
-  readonly pathOps?: PathOps
 }
 
 export interface WriteEventParams extends Omit<WriteStateParams, 'request'> {
@@ -319,12 +303,6 @@ export interface ApplyLabelsParams {
   readonly repoRoot: string
   readonly auditDir: string
   readonly writeId?: string
-  readonly gh?: GhRunner
-  readonly git?: GitRunner
-  /** The re-read a failed call reports as `reread`. */
-  readonly fetchItemsByNumber?: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
-  readonly now?: () => Date
-  readonly pathOps?: PathOps
 }
 
 /** An operator path's label request, wrapped in one transitional table event: the store precondition, the store commit, then the display mirror. */
