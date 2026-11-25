@@ -6,13 +6,12 @@ import { createIncidentLog } from '@/main/pipeline/incidents/log'
 import { draftOf, noRelated, observationIntent, stageHandbackIntent } from '@/main/pipeline/incidents/raise'
 import type { WriteObservation } from '@/types/dispatch'
 import type { IncidentDraft } from '@/types/incidents'
-import { ENTRY, item, memory, writerRig } from './fixtures'
-
-const postComment = () => Promise.resolve({ kind: 'no-op' } as const)
+import { createFakePlatform } from '../../../support/fake-platform'
+import { ENTRY, item, writerRig } from './fixtures'
 
 async function observe(number: number, headAtDecision: string, headAtWrite: string, observation: WriteObservation) {
-  const rig = writerRig({ number, writeHead: headAtWrite })
-  await applyObservation({ entry: ENTRY, item: item({ number, headRefOid: headAtDecision }), observation, snapshotAt: '2026-11-16T11:59:00.000Z', auditDir: '/audit', scratchDir: '/scratch' }, { writeState: rig.writeState, postComment })
+  const rig = await writerRig({ number, writeHead: headAtWrite })
+  await applyObservation(rig.ctx, { entry: ENTRY, item: item({ number, headRefOid: headAtDecision }), observation, snapshotAt: '2026-11-16T11:59:00.000Z', auditDir: rig.auditDir, scratchDir: rig.auditDir })
   return rig.incidents
 }
 
@@ -20,7 +19,7 @@ describe('#789 — a refresh pushed, then an escalation computed from the pre-pu
   it('records one stale-snapshot incident carrying both head SHAs', async () => {
     const incidents = await observe(789, 'f19c6d5', 'a7e3b21', { kind: 'refresh-stuck', number: 789, itemKind: 'pull-request', sourceLabel: 'readyForReview', reason: 'same-sha', sha: 'f19c6d5', count: 2 })
     expect(incidents).toHaveLength(1)
-    expect(incidents[0]).toMatchObject({ bucket: 'stale-snapshot', stage: 'needsHuman', condition: 'head-moved', number: 789, decision: { action: 'observe-refresh-stuck', detail: 'refresh-stuck', intended: 'escalation' }, related: { audit: ['write-1'], tick: '2026-11-16T11:59:00.000Z' } })
+    expect(incidents[0]).toMatchObject({ bucket: 'stale-snapshot', stage: 'needsHuman', condition: 'head-moved', number: 789, decision: { action: 'observe-refresh-stuck', detail: 'refresh-stuck', intended: 'escalation' }, related: { audit: [expect.any(String)], tick: '2026-11-16T11:59:00.000Z' } })
     expect(incidents[0]?.inputs).toMatchObject({ observedHead: 'f19c6d5', writeHead: 'a7e3b21' })
   })
 })
@@ -31,7 +30,7 @@ describe('#790 — a revise push, then a zero-diff escalation five seconds later
     const second = await observe(790, '4a05a87', '9c1e2f0', { kind: 'zero-diff', number: 790, itemKind: 'pull-request', count: 2, headRefOid: '4a05a87' })
     expect(second[0]).toMatchObject({ bucket: 'stale-snapshot', condition: 'head-moved', decision: { intended: 'duplicate-head' } })
 
-    const log = createIncidentLog({ dir: '/data', now: () => new Date('2026-11-16T12:00:00.000Z'), newId: () => 'id', files: memory().files })
+    const log = createIncidentLog(createFakePlatform())
     for (const draft of [...first, ...second]) await log.record(draft)
     const read = await log.read()
     expect(read.ok).toBe(true)

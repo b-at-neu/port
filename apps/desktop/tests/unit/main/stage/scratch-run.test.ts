@@ -2,6 +2,9 @@ import type { HostedQuery, HostedSdk, Options } from '@/main/platform/sdk'
 import type { StageLauncherHandle } from '@/types/stage'
 
 // A scratch-repo run takes one ticket from `ready` to an opened PR entirely through stage sessions, against a fake SDK; only the outer edges (SDK, git, worktrees, GitHub, ownership, the budget gate) are faked.
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { labelName, resolveVocabulary, verifyVocabulary } from '@/utils/labels/vocabulary'
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
@@ -16,17 +19,23 @@ import { createHostedStore } from '@/main/sessions/hosting/store'
 import { createInMemoryHostingPersistence } from '@/main/sessions/hosting/persist'
 import { pathOps } from '@/main/platform/paths'
 import { createStageLauncher } from '@/main/dispatch/stage/launcher'
-
 import { createDispatcher } from '@/main/dispatch/dispatcher'
 import type { Dispatcher } from '@/types/dispatch'
 import { createForceDispatch, createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
 import { planTick } from '@/main/pipeline/tick/plan'
 import { reconcileRepository } from '@/main/pipeline/board/reconcile'
 import type { ReadyEntry } from '@/types/actions'
-import type { PostCommentParams, WriteOutcome } from '@/types/writes'
+import type { WriteEventParams } from '@/types/writes'
 import { applyStageClaim, applyStageTransition } from '@/main/pipeline/operator/stage'
 import { labelMapStore } from '../../../support/label-map-store'
+import { createTestContext } from '../../../support/context'
+import { fakeGit, fakeSdk } from '../../../support/fake-platform'
+import { httpOk } from '../../../fixtures/github-http'
+import { hostingCtx } from '../../../fixtures/hosting/store'
 import type { CreateStageWorktreeResult, RemoveSessionWorktreeOutcome } from '@/types/workspace'
+// The writer is the one stand-in here: `labelMapStore` moves the label maps this test drives the tick from, which the real writer would not.
+const writer = vi.hoisted(() => ({ writeEvent: null as ((params: unknown) => Promise<unknown>) | null }))
+vi.mock('@/main/pipeline/state/writer', () => ({ writeEvent: (_ctx: unknown, params: unknown) => writer.writeEvent?.(params) }))
 
 const REPO_ID = 'repo-scratch' as RepoId
 const VIEWER = 'op'
@@ -269,36 +278,48 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
     }
 
     const { ticketOf, writeEvent, labelWrites } = labelMapStore(labels, prs, entry.id, NOW_ISO)
-    const postIssueBody = ({ request }: PostCommentParams): Promise<WriteOutcome> => {
-      labelWrites.push({ action: request.action, number: request.number })
-      return Promise.resolve({ kind: 'applied', argv: [] })
-    }
+    writer.writeEvent = (params) => writeEvent(params as WriteEventParams)
     const stateLabels = (_repoId: unknown, kind: 'issue' | 'pull-request', number: number): readonly string[] => namesOf(VOCABULARY, (kind === 'issue' ? labels.get(number) : prs.get(number)?.labels) ?? new Set<LabelKey>())
-    const writeDeps = { writeEvent, ticketOf, postIssueBody, fetchItemsByNumber }
+    const dir = await mkdtemp(join(tmpdir(), 'port-scratch-run-'))
+    const stageCtx = createTestContext({
+      platform: {
+        git: () => Promise.resolve({ ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'not a repository' }),
+        githubHttp: async (request) => {
+          const query = (JSON.parse(request.body ?? '{}') as { query?: string }).query ?? ''
+          const aliases = [...query.matchAll(/(\w+): issueOrPullRequest\(number: (\d+)\)/g)].map((match) => ({ alias: match[1] ?? '', number: Number(match[2]) }))
+          const fetched = await fetchItemsByNumber({ numbers: aliases.map((entry) => entry.number) })
+          const repository = Object.fromEntries(aliases.map(({ alias, number }) => {
+            const found = fetched.resolved.find((resolved) => resolved.number === number)
+            return [alias, found === undefined ? null : { __typename: found.kind === 'issue' ? 'Issue' : 'PullRequest', ...found, labels: { nodes: found.labels.map((name) => ({ name })) }, assignees: { nodes: found.assignees.map((login) => ({ login })) }, author: { login: found.author } }]
+          }))
+          return httpOk(JSON.stringify({ data: { repository } }))
+        },
+        ghWrite: (argv) => {
+          if (argv[0] === 'issue' && argv[1] === 'edit' && argv.includes('--body-file')) labelWrites.push({ action: 'stage-handback-plan-body', number: Number(argv[2]) })
+          return Promise.resolve({ ok: true, stdout: '', stderr: '' })
+        },
+      },
+      stores: { pipelineState: { ticket: (repoId: RepoId, ref: { readonly kind: 'issue' | 'pull-request'; readonly number: number }) => ticketOf(repoId, ref.kind, ref.number) } as never },
+    })
 
     // Late-binding, the same construction order `main/ipc.ts` uses: onStatus closes over stageLauncher,
     // stageLauncher's onOutcome/onDenial close over dispatcherRef — both assigned right after.
     let dispatcherRef: Dispatcher | null = null
 
-    const store = createHostedStore({
-      getSdk: () => Promise.resolve(createFakeSdk(seen, prs)),
-      resolveClaudeExecutable: () => Promise.resolve({ ok: true, path: '/usr/local/bin/claude' }),
-      listSessionsForFork: () => Promise.resolve({ ok: true, sessions: [] }),
-      env: {},
-      platform: 'linux',
-      now: () => Date.now(),
-      onEvent: () => undefined,
+    const store = createHostedStore(hostingCtx({
+      sdk: fakeSdk(createFakeSdk(seen, prs)),
+      git: fakeGit((args) => {
+        if (args[0] === 'rev-parse') return Promise.resolve({ ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'not a repository' })
+        removedWorktrees.push({ path: args[args.length - 1] ?? '', force: args.includes('--force') })
+        return Promise.resolve({ ok: true, stdout: '', stderr: '' })
+      }),
+    }), {
+      listSessions: () => Promise.resolve({ ok: true, sessions: [] }),
+      persistence: createInMemoryHostingPersistence(),
       onStatus: (snapshot) => {
         listedSnapshots.push(snapshot)
         stageLauncher.observe(snapshot)
       },
-      onEntries: () => undefined,
-      readStageEditAllow: () => Promise.resolve([]),
-      readStageDisabledPlugins: () => Promise.resolve([]),
-      samePath: (a, b) => a === b,
-      persistence: createInMemoryHostingPersistence(),
-      removeWorktree,
-      readHistory: () => Promise.resolve({ kind: 'none' }),
     })
 
     const { runs, store: stateStore } = memoryRuns(REPO_ID, { at: NOW_ISO, tickets: [stateTicketOf({ repo: REPO_ID, ticket: 7, stage: 'plan' })] })
@@ -317,7 +338,8 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       pathExists: () => Promise.resolve(false),
       runs,
       newId: () => `id-${String(Math.random())}`,
-      loadInstructions: (launchRequest) => Promise.resolve({ ok: true, text: launchRequest.prompt, agent: { name: `${launchRequest.agent}-agent`, definition: { description: launchRequest.agent, prompt: 'body' } } }),
+      readStagePrompt: () => Promise.resolve(null),
+      loadInstructions: (launchRequest) => Promise.resolve({ ok: true, text: launchRequest.prompt, agent: { name: `${launchRequest.agent}-agent`, definition: { description: launchRequest.agent, prompt: 'body' }, selfContained: true } }),
       bundleRoot: '/bundle',
       ops: pathOps,
       readTextFile: (path) => Promise.resolve(path.endsWith('plan-7.md') ? { ok: true, value: '## Implementation Plan' } : { ok: false, kind: 'not-found', message: 'unused' }),
@@ -360,13 +382,13 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       },
       // The run scripts only plan and impl, so a review of the opened pull request is skipped the way a moved claim is.
       stageLabels: {
-        claim: (claimParams) => (claimParams.candidate.agent === 'review' ? Promise.resolve({ kind: 'refused', reason: 'moved', retryable: false, detail: null }) : applyStageClaim(claimParams, writeDeps)),
-        transition: (transitionParams) => applyStageTransition(transitionParams, writeDeps),
+        claim: (claimParams) => (claimParams.candidate.agent === 'review' ? Promise.resolve({ kind: 'refused', reason: 'moved', retryable: false, detail: null }) : applyStageClaim(stageCtx, claimParams)),
+        transition: (transitionParams) => applyStageTransition(stageCtx, transitionParams),
       },
       refreshMemo, rerunMemo: { get: () => undefined, set: () => undefined }, rerunChecks: () => Promise.resolve('applied'),
       forceDispatch,
       requestRead: () => undefined, recordIncident: () => Promise.resolve(),
-      dirs: { audit: '/audit', scratch: '/scratch' },
+      dirs: { audit: dir, scratch: dir },
       onChange: () => undefined,
       now: () => new Date(NOW_ISO),
     })

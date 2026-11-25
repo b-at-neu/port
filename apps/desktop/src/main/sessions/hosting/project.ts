@@ -13,6 +13,8 @@ import type { SessionProjectorWindow, ProjectedDelta } from '@/types/hosting'
 interface CreateSessionProjectorParams {
   /** Used only to shorten a headline path, never to resolve or open anything. */
   readonly cwd: string
+  /** A stage session's system prompt, shown on the stage card in place of the first message's own instructions block. */
+  readonly stageInstructions?: string | null
 }
 
 /** The bounded ring's size — a live session's window, never a growing per-session array. */
@@ -50,7 +52,7 @@ function formatSeconds(durationMs: unknown): string {
 }
 
 export function createSessionProjector(params: CreateSessionProjectorParams): SessionProjector {
-  const deriver = createDeriver({ cwd: params.cwd })
+  const deriver = createDeriver({ cwd: params.cwd, stageInstructions: params.stageInstructions ?? null })
 
   // Deriver-produced entries and directly-built meta rows share one absolute-index sequence.
   let ring: TranscriptEntry[] = []

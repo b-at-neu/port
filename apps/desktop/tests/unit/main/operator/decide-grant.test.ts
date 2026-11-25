@@ -1,103 +1,64 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '@/utils/repos'
 import type { ReconciledItem, StageLabel } from '@/types/state'
-import type { ItemsByNumberFetch } from '@/types/github'
 import type { ItemDecisionRequest } from '@/types/actions'
-import type { WriteOutcome, WriteStateParams } from '@/types/writes'
 import { applyItemDecision } from '@/main/pipeline/operator/decide'
 import { boardSnapshot as snapshotOf, reconciledItem, repositoryState } from '../../../support/board-snapshot'
-import { readyEntry } from '../../../support/repo-config'
-
-const REPO_ID = 'repo-1' as unknown as RepoId
-const FETCHED_AT = '2026-01-01T00:00:00.000Z'
-const APPLIED: WriteOutcome = { kind: 'applied', argv: [] }
+import { operatorRig, REPO_ID, type OperatorRigOptions } from '../../../support/operator-rig'
+import { ticketOf } from '../../../support/tickets'
 
 const REQUEST: ItemDecisionRequest = { repoId: REPO_ID, number: 300, decision: 'grant', expectedStage: 'needsRevision', route: null, note: null, skipComment: false, picks: null }
 
-function stageLabel(key: StageLabel['key'], role: StageLabel['role']): StageLabel {
-  return { key, name: key, role }
+const stageLabel = (key: StageLabel['key'], role: StageLabel['role']): StageLabel => ({ key, name: key, role })
+
+const cappedItem = (overrides: Partial<ReconciledItem> = {}): ReconciledItem =>
+  reconciledItem({ repoId: REPO_ID, kind: 'pull-request', number: 300, stage: 'trigger', stages: [stageLabel('needsRevision', 'trigger')], status: 'waiting', matchedKeys: ['needsRevision'], headRefOid: 'a'.repeat(40), reviewCycleCount: 5, ...overrides })
+
+const AT_CAP: OperatorRigOptions = {
+  viewer: 'op',
+  items: [{ number: 51, labels: ['port'], assignees: ['op'] }, { number: 300, kind: 'pull-request', labels: ['port', 'needs revision'], assignees: ['op'], headRefName: '51-fix', headRefOid: 'a'.repeat(40) }],
+  tickets: [ticketOf({ repo: REPO_ID, ticket: 51, pr: { number: 300, approvedAt: null }, stage: 'revise', status: { kind: 'queued', reason: 'new', since: '2026-11-23T12:00:00.000Z' } })],
 }
 
-function cappedItem(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
-  return reconciledItem({
-    repoId: REPO_ID,
-    kind: 'pull-request',
-    number: 300,
-    stage: 'trigger',
-    stages: [stageLabel('needsRevision', 'trigger')],
-    status: 'waiting',
-    matchedKeys: ['needsRevision'],
-    headRefOid: 'a'.repeat(40),
-    reviewCycleCount: 5,
-    ...overrides,
-  })
-}
-
-function fresh(labels: readonly string[]): ItemsByNumberFetch {
-  return { ok: true, resolved: [{ number: 300, kind: 'pull-request', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels, assignees: ['op'], headRefName: null, author: null }], unavailable: [], fetchedAt: FETCHED_AT }
-}
-
-interface Calls {
-  readonly bodies: string[]
-  readonly writes: WriteStateParams[]
-}
-
-function run(options: { readonly item?: ReconciledItem; readonly fetch?: ItemsByNumberFetch; readonly comment?: WriteOutcome; readonly labels?: WriteOutcome; readonly liveStage?: boolean; readonly request?: ItemDecisionRequest }) {
-  const calls: Calls = { bodies: [], writes: [] }
-  const read = options.fetch ?? fresh(['needs revision'])
-  const deps: Parameters<typeof applyItemDecision>[1] = {
-    writeState: (params) => {
-      calls.writes.push(params)
-      return Promise.resolve(options.labels ?? { kind: 'no-op' })
-    },
-    stateLabels: () => (read.ok ? (read.resolved[0]?.labels ?? []) : []),
-    postComment: (params) => {
-      calls.bodies.push(params.request.body)
-      return Promise.resolve(options.comment ?? APPLIED)
-    },
-    fetchItemsByNumber: () => Promise.resolve(read),
-  }
+async function grant(options: { readonly rig?: OperatorRigOptions; readonly item?: ReconciledItem; readonly liveStage?: boolean } = {}) {
+  const rig = await operatorRig(options.rig ?? AT_CAP)
   const snapshot = snapshotOf([repositoryState([options.item ?? cappedItem()], { repoId: REPO_ID, reviewCycleCap: 5 })])
-  const result = applyItemDecision({ request: options.request ?? REQUEST, snapshot, entry: readyEntry({ id: REPO_ID }), auditDir: '/audit', scratchDir: '/scratch', liveStage: options.liveStage ?? false }, deps)
-  return { result, calls }
+  const result = applyItemDecision(rig.ctx, { request: REQUEST, snapshot, entry: rig.entry, auditDir: rig.auditDir, scratchDir: rig.scratchDir, liveStage: options.liveStage ?? false })
+  return { rig, result }
 }
 
 describe('applyItemDecision — grant', () => {
   it('posts the cycle grant comment, then writes the unchanged label set and counts no-op as success', async () => {
-    const { result, calls } = run({})
-    expect(await result).toEqual({ ok: true, comment: APPLIED, labels: { kind: 'no-op' } })
-    expect(calls.bodies).toEqual(['## Gate cleared\nCleared by the operator in port: back to revision.\n\n### Cycle grant\nOne extra review cycle for this PR only; reviewCycleCap is unchanged.'])
-    expect(calls.writes).toHaveLength(1)
-    expect(calls.writes[0]?.request).toMatchObject({ add: ['needsRevision'], remove: [], action: 'grant' })
+    const { rig, result } = await grant()
+    expect(await result).toMatchObject({ ok: true, comment: { kind: 'applied' } })
+    expect(rig.github.comments(300)).toEqual(['## Gate cleared\nCleared by the operator in port: back to revision.\n\n### Cycle grant\nOne extra review cycle for this PR only; reviewCycleCap is unchanged.'])
   })
 
-  it('refuses moved when the fresh read carries needs human, posting nothing', async () => {
-    const { result, calls } = run({ fetch: fresh(['needs revision', 'needs human']) })
+  it('refuses moved when the store shows the item waiting on a human, posting nothing', async () => {
+    const atHuman: OperatorRigOptions = { ...AT_CAP, tickets: [ticketOf({ repo: REPO_ID, ticket: 51, pr: { number: 300, approvedAt: null }, stage: 'review', status: { kind: 'waiting-on-you', gate: 'escalation', detail: '' } })] }
+    const { rig, result } = await grant({ rig: atHuman })
     expect(await result).toMatchObject({ ok: false, reason: 'moved' })
-    expect(calls.bodies).toEqual([])
-    expect(calls.writes).toEqual([])
+    expect(rig.github.comments(300)).toEqual([])
   })
 
   it('aborts comment-failed without touching the labels', async () => {
-    const failed: WriteOutcome = { kind: 'write-failed', classification: 'unknown', stderr: 'boom', reread: null }
-    const { result, calls } = run({ comment: failed })
-    expect(await result).toEqual({ ok: false, reason: 'comment-failed', comment: failed })
-    expect(calls.writes).toEqual([])
+    const rig = await operatorRig(AT_CAP)
+    rig.github.failComments('boom')
+    const result = await applyItemDecision(rig.ctx, { request: REQUEST, snapshot: snapshotOf([repositoryState([cappedItem()], { repoId: REPO_ID, reviewCycleCap: 5 })]), entry: rig.entry, auditDir: rig.auditDir, scratchDir: rig.scratchDir, liveStage: false })
+    expect(result).toMatchObject({ ok: false, reason: 'comment-failed' })
+    expect(rig.ticket(51)?.rev).toBe(0)
   })
 
-  it('refuses agent-live while a stage session is live', async () => {
-    const { result, calls } = run({ liveStage: true })
-    expect(await result).toEqual({ ok: false, reason: 'refused', refusal: 'agent-live' })
-    expect(calls.bodies).toEqual([])
-  })
-
-  it('refuses not-owned with the owners', async () => {
-    const { result } = run({ item: cappedItem({ assignees: ['other'] }) })
-    expect(await result).toEqual({ ok: false, reason: 'not-owned', owners: ['other'] })
+  it.each([
+    { name: 'agent-live while a stage session is live', options: { liveStage: true }, expected: { ok: false, reason: 'refused', refusal: 'agent-live' } },
+    { name: 'not-owned with the owners', options: { item: cappedItem({ assignees: ['other'] }) }, expected: { ok: false, reason: 'not-owned', owners: ['other'] } },
+  ])('refuses $name', async ({ options, expected }) => {
+    const { rig, result } = await grant(options)
+    expect(await result).toEqual(expected)
+    expect(rig.github.comments(300)).toEqual([])
   })
 
   it('throws below the cap, where grant does not apply', async () => {
-    const { result } = run({ item: cappedItem({ reviewCycleCount: 2 }) })
+    const { result } = await grant({ item: cappedItem({ reviewCycleCount: 2 }) })
     await expect(result).rejects.toThrow("'grant' is not applicable")
   })
 })

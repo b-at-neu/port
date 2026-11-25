@@ -2,136 +2,106 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import type { PipelineView, TrackedRef } from '@/types/pipeline-state'
-import type { StateEngine } from '@/types/offload'
+import type { RepoId } from '@/utils/repos'
 import type { PipelineState, RepositoryState } from '@/types/state'
-import { createInProcessEngine } from '@/main/worker/engine'
-import { createPipelineWatcher } from '@/main/pipeline/board/watcher'
-import { fakeGit, makeFakeTimer, readyEntry } from '../../../fixtures/watcher-harness'
+import type { Ticket } from '@/utils/pipeline/ticket'
+import { createFakeGitHub, type FakeItem } from '../../../support/fake-github'
 import { reconciledItem, repositoryState } from '../../../support/board-snapshot'
+import { AT } from '../../../support/state-store'
+import { ticketOf } from '../../../support/tickets'
+import { readyEntry, watcherRig } from '../../../fixtures/watcher-harness'
 
-const now = () => new Date('2026-01-01T00:00:00.000Z')
-const TRACKED: TrackedRef[] = [{ kind: 'issue', number: 1, keys: ['marker', 'ready'] }]
+const REPO = 'repo-a' as RepoId
+const SESSIONS = { ok: true as const, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: AT }
+const FAILURE = { at: AT, outcome: { kind: 'item-unavailable' as const } }
+const FAILED_TO_READ: RepositoryState = { ok: false, repoId: REPO, repo: 'o/a', displayName: 'o/a', reason: 'github-unavailable', kind: 'network', message: 'offline', freshness: { github: { unavailable: 'offline' }, itemStates: { unavailable: 'x' }, sessions: { at: AT }, worktrees: { at: AT }, denials: { at: AT } } }
 
-async function rig(options: { readonly view: PipelineView; readonly state?: RepositoryState; readonly closed?: readonly number[]; readonly merged?: readonly number[]; readonly retryFails?: boolean }) {
+interface RigOptions {
+  /** Tickets the store already holds; none leaves the repository unseeded. */
+  readonly tickets?: readonly Ticket[]
+  readonly state?: RepositoryState
+  readonly closed?: readonly number[]
+  readonly merged?: readonly number[]
+  readonly items?: readonly FakeItem[]
+}
+
+async function rig(options: RigOptions = {}) {
   const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
-  const inner = createInProcessEngine({ now, git: fakeGit({ worktreeList: 0 }), sessionReader: () => Promise.resolve({ ok: true, sessions: [] }) })
-  const log: string[] = []
+  const github = createFakeGitHub({ items: options.items ?? [{ number: 1, labels: ['port'], assignees: ['op'] }] })
   const projected: unknown[] = []
-  const github: unknown[] = []
-  const repoState = options.state ?? repositoryState([reconciledItem({ number: 1 })], { repoId: 'repo-a' as never })
-  const engine: StateEngine = {
-    ...inner,
-    refreshGithub: (params) => {
-      github.push(params)
-      return Promise.resolve({ ok: true, at: 't', closed: options.closed, merged: options.merged })
+  const refreshed: unknown[] = []
+  const state = options.state ?? repositoryState([reconciledItem({ number: 2 })], { repoId: REPO })
+  const harness = watcherRig({
+    repositories: [readyEntry(REPO, root, 'o/a')],
+    platform: github.platform,
+    ...(options.tickets === undefined ? {} : { tickets: { repoId: REPO, tickets: options.tickets } }),
+    engine: {
+      refreshGithub: (params) => {
+        refreshed.push(params)
+        return Promise.resolve({ ok: true, at: AT, closed: options.closed, merged: options.merged })
+      },
+      project: (params) => {
+        projected.push(params.views)
+        return Promise.resolve({ repositories: [state], sessions: SESSIONS, readAt: AT } satisfies PipelineState)
+      },
     },
-    project: (params) => {
-      log.push('project')
-      projected.push(params.views)
-      const sessions = { ok: true as const, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: 't' }
-      return Promise.resolve({ repositories: [repoState], sessions, readAt: 't' } satisfies PipelineState)
-    },
-  }
-  const seeded: string[] = []
-  const finished: unknown[] = []
-  const retried: string[] = []
-  const watcher = createPipelineWatcher({
-    repositories: [readyEntry('repo-a', root, 'o/a')],
-    onSnapshot: () => undefined,
-    now,
-    setTimer: makeFakeTimer().factory,
-    engine,
-    pipelineView: () => options.view,
-    trackedRefs: () => (options.view.kind === 'store' ? TRACKED : null),
-    seedPipelineState: (repoId) => (seeded.push(`${String(repoId)}`), Promise.resolve()),
-    finishPipelineState: (_entry, outcome) => (finished.push(outcome), Promise.resolve()),
-    retryMirrors: (entry) => {
-      retried.push(String(entry.id))
-      return options.retryFails === true ? Promise.reject(new Error('boom')) : Promise.resolve()
-    },
-    pipelineReady: () => (log.push('ready'), Promise.resolve()),
   })
-  return { watcher, log, projected, github, seeded, finished, retried }
+  const store = harness.ctx.stores.pipelineState
+  return { watcher: harness.watch(), store, github, projected, refreshed }
 }
 
 describe('createPipelineWatcher — pipeline state', () => {
   it('waits for the store to load before its first projection', async () => {
-    const { watcher, log } = await rig({ view: { kind: 'unseeded' } })
+    const { watcher, projected, store } = await rig({ tickets: [ticketOf({ repo: REPO, ticket: 1 })] })
     await watcher.refresh()
     watcher.stop()
-    expect(log).toEqual(['ready', 'project'])
+    expect(projected).toEqual([{ [REPO]: store.view(REPO) }])
+    expect(store.view(REPO).kind).toBe('store')
   })
 
-  it('hands every repository its view to the projection and its tracked items to the GitHub read', async () => {
-    const view: PipelineView = { kind: 'store', items: [] }
-    const { watcher, projected, github } = await rig({ view })
+  it("hands the projection the repository's view and the GitHub read its tracked items", async () => {
+    const { watcher, projected, refreshed, store } = await rig({ tickets: [ticketOf({ repo: REPO, ticket: 1 })] })
     await watcher.refresh()
     watcher.stop()
-    expect(projected).toEqual([{ 'repo-a': view }])
-    expect(github[0]).toMatchObject({ tracked: TRACKED })
+    expect(projected).toEqual([{ [REPO]: store.view(REPO) }])
+    expect(refreshed[0]).toMatchObject({ tracked: store.tracked(REPO) })
   })
 
-  it('seeds an unseeded repository from the state just projected, once it is ok', async () => {
-    const { watcher, seeded } = await rig({ view: { kind: 'unseeded' } })
+  it.each([
+    { name: 'seeds an unseeded repository from the state just projected', options: {} satisfies RigOptions, seeded: [2] },
+    { name: 'does not seed a repository already read from the store', options: { tickets: [ticketOf({ repo: REPO, ticket: 1 })] } satisfies RigOptions, seeded: [1] },
+    { name: 'does not seed a repository whose GitHub read failed', options: { state: FAILED_TO_READ } satisfies RigOptions, seeded: [] },
+  ])('$name', async ({ options, seeded }) => {
+    const { watcher, store } = await rig(options)
     await watcher.refresh()
     watcher.stop()
-    expect(seeded).toEqual(['repo-a'])
+    expect((store.tickets(REPO) ?? []).map((ticket) => ticket.ticket)).toEqual(seeded)
   })
 
-  it('does not seed a repository already read from the store', async () => {
-    const { watcher, seeded } = await rig({ view: { kind: 'store', items: [] } })
+  it.each([
+    { name: 'prunes the items the GitHub read found closed', closed: [3], merged: undefined, left: [4] },
+    { name: 'finishes a merged pull request, then prunes it with its issue', closed: [4, 5], merged: [5], left: [3] },
+    { name: 'finishes nothing when the read found nothing closed', closed: [] as number[], merged: undefined, left: [3, 4] },
+  ])('$name', async ({ closed, merged, left }) => {
+    const tickets = [ticketOf({ repo: REPO, ticket: 3 }), ticketOf({ repo: REPO, ticket: 4, pr: { number: 5, approvedAt: null }, stage: 'merge', status: { kind: 'waiting-on-you', gate: 'merge', detail: '' } })]
+    const items: FakeItem[] = [{ number: 3, labels: ['port'], assignees: ['op'] }, { number: 4, labels: ['port'], assignees: ['op'] }, { number: 5, kind: 'pull-request', labels: ['port'], assignees: ['op'], headRefName: '4-fix' }]
+    const { watcher, store } = await rig({ tickets, closed, merged, items })
     await watcher.refresh()
     watcher.stop()
-    expect(seeded).toEqual([])
+    expect((store.tickets(REPO) ?? []).map((ticket) => ticket.ticket).sort()).toEqual(left)
   })
 
-  it('does not seed a repository whose GitHub read failed', async () => {
-    const failed: RepositoryState = { ok: false, repoId: 'repo-a' as never, repo: 'o/a', displayName: 'o/a', reason: 'github-unavailable', kind: 'network', message: 'offline', freshness: { github: { unavailable: 'offline' }, itemStates: { unavailable: 'x' }, sessions: { at: 't' }, worktrees: { at: 't' }, denials: { at: 't' } } }
-    const { watcher, seeded } = await rig({ view: { kind: 'unseeded' }, state: failed })
+  it('retries a failed mirror for a repository read from the store', async () => {
+    const { watcher, store } = await rig({ tickets: [ticketOf({ repo: REPO, ticket: 1, mirror: { written: [], failure: FAILURE } })] })
     await watcher.refresh()
+    await vi.waitFor(() => expect(store.ticket(REPO, { kind: 'issue', number: 1 })?.mirror.failure).toBeNull())
     watcher.stop()
-    expect(seeded).toEqual([])
-  })
-
-  it('finishes the items the GitHub read found closed, naming the merged ones', async () => {
-    const { watcher, finished } = await rig({ view: { kind: 'store', items: [] }, closed: [4, 5], merged: [5] })
-    await watcher.refresh()
-    watcher.stop()
-    expect(finished).toEqual([{ closed: [4, 5], merged: [5] }])
-  })
-
-  it('reads a read with no merged list as none merged', async () => {
-    const { watcher, finished } = await rig({ view: { kind: 'store', items: [] }, closed: [4] })
-    await watcher.refresh()
-    watcher.stop()
-    expect(finished).toEqual([{ closed: [4], merged: [] }])
-  })
-
-  it('finishes nothing when the read found nothing closed', async () => {
-    const { watcher, finished } = await rig({ view: { kind: 'store', items: [] }, closed: [] })
-    await watcher.refresh()
-    watcher.stop()
-    expect(finished).toEqual([])
-  })
-
-  it('retries failed mirrors for a repository read from the store, after seeding', async () => {
-    const { watcher, retried } = await rig({ view: { kind: 'store', items: [] } })
-    await watcher.refresh()
-    watcher.stop()
-    expect(retried).toEqual(['repo-a'])
-  })
-
-  it('does not retry mirrors for an unseeded repository', async () => {
-    const { watcher, retried } = await rig({ view: { kind: 'unseeded' } })
-    await watcher.refresh()
-    watcher.stop()
-    expect(retried).toEqual([])
   })
 
   it('never lets a failed retry reject the refresh', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    const { watcher } = await rig({ view: { kind: 'store', items: [] }, retryFails: true })
+    const { watcher, github } = await rig({ tickets: [ticketOf({ repo: REPO, ticket: 1, mirror: { written: [], failure: FAILURE } })] })
+    github.failWrites(1, 'boom')
     await expect(watcher.refresh()).resolves.toBeDefined()
     watcher.stop()
     error.mockRestore()

@@ -5,7 +5,7 @@ import { hostFs } from '@/main/platform'
 import type { GhResult } from '@/types/platform'
 import { pathOps } from '@/main/platform/paths'
 import { removeFile, writeTextFile } from '@/main/platform/files'
-import { fetchItemsByNumber } from '@/main/github/adapter'
+import { fetchItemsByNumber } from '@/main/github/tracker/items'
 import type { GitHubReadContext, GitHubWriteContext } from '@/main/github/context'
 
 import type { GitHubRepoRef } from '@/types/github'

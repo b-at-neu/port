@@ -1,12 +1,13 @@
 import type { ProjectIndex } from '@/types/sessions'
 
 // advanceTranscript reads one more bounded chunk from the cursor's offset and pushes it through the same Deriver, so a tool_use at the end of one chunk still pairs with its tool_result at the start of the next.
-import { readLinesFrom, statPath } from '@/main/platform/files'
+import type { Platform } from '@/main/platform'
 import type { ReadLinesFromResult } from '@/types/platform'
 import type { EntryPatch, TranscriptEntry, TranscriptRead, TranscriptSource } from '@/utils/sessions/transcript'
-import { buildProjectIndex, defaultClaudeHome, resolveTranscriptPath, SESSION_ID_RE } from '@/main/sessions/locate'
+import { buildProjectIndex, resolveTranscriptPath, SESSION_ID_RE } from '@/main/sessions/locate'
 
 import { createDeriver } from '@/main/sessions/transcript-entries'
+import { readStagePrompt } from '@/main/sessions/hosting/stage-prompt-store'
 
 import type { TranscriptCursor, OpenTranscriptParams } from '@/types/sessions'
 
@@ -22,10 +23,10 @@ const MAX_CHUNK_BYTES = 8 * 1024 * 1024
 const INVALID_ID_MESSAGE = "That session or agent id isn't a valid identifier."
 
 /** Rather than hard-failing on one stuck line, retries the same offset with a doubled window capped at `remainingBudget`. */
-async function readChunkWithRetry(path: string, offset: number, remainingBudget: number): Promise<ReadLinesFromResult> {
+async function readChunkWithRetry(fs: Platform['fs'], path: string, offset: number, remainingBudget: number): Promise<ReadLinesFromResult> {
   let windowBytes = Math.min(MAX_CHUNK_BYTES, remainingBudget)
   while (true) {
-    const chunk = await readLinesFrom(path, offset, { maxBytes: windowBytes })
+    const chunk = await fs.readLinesFrom(path, offset, { maxBytes: windowBytes })
     if (chunk.ok || chunk.kind !== 'too-large' || windowBytes >= remainingBudget) return chunk
     windowBytes = Math.min(windowBytes * 2, remainingBudget)
   }
@@ -61,20 +62,18 @@ interface OpenTranscriptResult {
 }
 
 /** `cwd` is resolved from the accumulated raw records before the deriver is constructed, and never adopted again — a later record carrying a different `cwd` never re-bases an in-flight headline. */
-export async function openTranscript(params: OpenTranscriptParams): Promise<OpenTranscriptResult> {
+export async function openTranscript(ctx: Pick<Platform, 'fs' | 'claudeHome'>, params: OpenTranscriptParams): Promise<OpenTranscriptResult> {
   const { sessionId, agentId } = params
 
   if (!SESSION_ID_RE.test(sessionId) || (agentId !== null && !AGENT_ID_RE.test(agentId))) {
     return { read: { ok: false, kind: 'invalid-id', message: INVALID_ID_MESSAGE, path: null }, cursor: null }
   }
 
-  const claudeHome = params.claudeHome ?? defaultClaudeHome()
-
   let index: ProjectIndex
   if (params.index !== undefined) {
     index = params.index
   } else {
-    const indexResult = await buildProjectIndex(claudeHome)
+    const indexResult = await buildProjectIndex(ctx)
     if (!indexResult.ok) {
       return { read: { ok: false, kind: 'session-unresolved', message: indexResult.message, path: null }, cursor: null }
     }
@@ -88,7 +87,7 @@ export async function openTranscript(params: OpenTranscriptParams): Promise<Open
   }
   const path = resolved.path
 
-  const stat = await statPath(path)
+  const stat = await ctx.fs.stat(path)
   if (!stat.ok) {
     if (stat.kind === 'not-found') return { read: { ok: false, kind: 'not-found', message: `No transcript file at ${path}.`, path }, cursor: null }
     return { read: { ok: false, kind: 'unreadable', message: stat.message, path }, cursor: null }
@@ -99,7 +98,7 @@ export async function openTranscript(params: OpenTranscriptParams): Promise<Open
   let offset = 0
 
   while (true) {
-    const chunk = await readChunkWithRetry(path, offset, MAX_TRANSCRIPT_BYTES - offset)
+    const chunk = await readChunkWithRetry(ctx.fs, path, offset, MAX_TRANSCRIPT_BYTES - offset)
     if (!chunk.ok) {
       if (chunk.kind === 'too-large') return { read: { ok: false, kind: 'too-large', message: chunk.message, path }, cursor: null }
       if (chunk.kind === 'not-found') return { read: { ok: false, kind: 'not-found', message: `No transcript file at ${path}.`, path }, cursor: null }
@@ -118,7 +117,8 @@ export async function openTranscript(params: OpenTranscriptParams): Promise<Open
   }
 
   const cwd = firstCwdOf(rawRecords)
-  const deriver = createDeriver({ cwd })
+  const stageInstructions = params.stagePromptsDir !== undefined && agentId === null ? await readStagePrompt(ctx.fs, params.stagePromptsDir, sessionId) : null
+  const deriver = createDeriver({ cwd, stageInstructions })
   const { appended, patched } = deriver.push(rawRecords)
   const entries: TranscriptEntry[] = appended.slice()
   for (const patch of patched) entries[patch.index] = patch.entry
@@ -151,8 +151,8 @@ type AdvanceTranscriptResult =
   | { readonly ok: false; readonly kind: 'not-found' | 'unreadable' | 'too-large' | 'truncated'; readonly message: string; readonly path: string }
 
 /** `hasMore` signals the caller to poll again on the next macrotask rather than waiting the full interval, so a big catch-up drains fast. A stale cursor re-opens — it never goes quiet. */
-export async function advanceTranscript(cursor: TranscriptCursor): Promise<AdvanceTranscriptResult> {
-  const stat = await statPath(cursor.path)
+export async function advanceTranscript(ctx: Pick<Platform, 'fs'>, cursor: TranscriptCursor): Promise<AdvanceTranscriptResult> {
+  const stat = await ctx.fs.stat(cursor.path)
   if (!stat.ok) {
     if (stat.kind === 'not-found') return { ok: false, kind: 'not-found', message: `No transcript file at ${cursor.path}.`, path: cursor.path }
     return { ok: false, kind: 'unreadable', message: stat.message, path: cursor.path }
@@ -165,7 +165,7 @@ export async function advanceTranscript(cursor: TranscriptCursor): Promise<Advan
     return { ok: false, kind: 'too-large', message: `${cursor.path} exceeds the ${MAX_TRANSCRIPT_BYTES}-byte cap`, path: cursor.path }
   }
 
-  const chunk = await readChunkWithRetry(cursor.path, cursor.offset, MAX_TRANSCRIPT_BYTES - cursor.offset)
+  const chunk = await readChunkWithRetry(ctx.fs, cursor.path, cursor.offset, MAX_TRANSCRIPT_BYTES - cursor.offset)
   if (!chunk.ok) {
     if (chunk.kind === 'not-found') return { ok: false, kind: 'not-found', message: `No transcript file at ${cursor.path}.`, path: cursor.path }
     if (chunk.kind === 'too-large') return { ok: false, kind: 'too-large', message: chunk.message, path: cursor.path }

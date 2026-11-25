@@ -2,7 +2,6 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { buildStageContext, createStageInstructionsLoader, extractSection, loadStageInstructions, readStageConfigPointers, STAGE_PIPELINE_SECTIONS } from '@/main/dispatch/stage/instructions'
-import { STAGE_SYSTEM_PROMPT } from '@/main/dispatch/stage/bundle'
 import { readTextFile } from '@/main/platform/files'
 import { pathOps } from '@/main/platform/paths'
 import { FIXTURE_REPOSITORIES, WIDGETS_ID } from '../../../fixtures/app/repos'
@@ -11,7 +10,7 @@ import type { StageLaunchRequest } from '@/types/dispatch'
 import type { FileResult, GitRunner } from '@/types/platform'
 import { makeTempDir } from '../../../fixtures/fs'
 import type { StageAgent } from '@/types/tick'
-import { parseStagePrompt } from '@/utils/stage/prompt'
+import { parseStagePrompt, STAGE_SYSTEM_PREAMBLE } from '@/utils/stage/prompt'
 
 const ENTRY = FIXTURE_REPOSITORIES.find((r) => r.id === WIDGETS_ID) as ReadyEntry
 const REPO = '/work/widgets'
@@ -199,24 +198,25 @@ describe('createStageInstructionsLoader', () => {
   }
   const defaultBranchConfig = JSON.stringify({ docs: { engineering: null, design: null }, commands: { artifacts: 'node default.mjs' } })
 
-  it('composes the dispatch line, the context and the bundled instructions into one message, with the inline agent', async () => {
+  it('keeps only the dispatch line in the first message and puts the context and instructions in the inline agent’s system prompt', async () => {
     const load = createStageInstructionsLoader({ bundleRoot: ROOT, ops: pathOps, ...fakeFiles(files), git: fakeGit(defaultBranchConfig) })
     const result = await load(launchRequest(), WORKTREE)
     expect(result.ok).toBe(true)
-    const text = result.ok ? result.text : ''
-    expect(text.startsWith(launchRequest().prompt)).toBe(true)
-    expect(parseStagePrompt(text)).toMatchObject({ stage: 'impl', kind: 'issue', number: 52, source: ROOT })
-    expect(text).toContain('You are the Impl agent.')
-    expect(text).toContain('repo: ')
-    expect(text).toContain(`plugin-root: ${ROOT}`)
-    expect(result.ok ? result.agent : null).toEqual({ name: 'impl-agent', definition: { description: 'Implements a plan', prompt: STAGE_SYSTEM_PROMPT, disallowedTools: ['Agent'] } })
+    expect(result.ok ? result.text : '').toBe(launchRequest().prompt)
+    const prompt = result.ok ? result.agent.definition.prompt : ''
+    expect(prompt.startsWith(STAGE_SYSTEM_PREAMBLE)).toBe(true)
+    expect(parseStagePrompt(`${launchRequest().prompt}\n\n${prompt}`)).toMatchObject({ stage: 'impl', kind: 'issue', number: 52, source: ROOT })
+    expect(prompt).toContain('You are the Impl agent.')
+    expect(prompt).toContain('repo: ')
+    expect(prompt).toContain(`plugin-root: ${ROOT}`)
+    expect(result.ok ? result.agent : null).toMatchObject({ name: 'impl-agent', definition: { description: 'Implements a plan', disallowedTools: ['Agent'] }, selfContained: true })
   })
 
   it('takes commands from the default branch even when the worktree carries a different config', async () => {
     const worktreeConfig = JSON.stringify({ commands: { artifacts: 'node hijack.mjs' } })
     const load = createStageInstructionsLoader({ bundleRoot: ROOT, ops: pathOps, ...fakeFiles({ ...files, [`${WORKTREE}/.claude/port.config.json`]: worktreeConfig }), git: fakeGit(defaultBranchConfig) })
     const result = await load(launchRequest(), WORKTREE)
-    const text = result.ok ? result.text : ''
+    const text = result.ok ? result.agent.definition.prompt : ''
     expect(text).toContain('commands.artifacts: node default.mjs')
     expect(text).not.toContain('hijack')
   })
@@ -256,6 +256,6 @@ describe('createStageInstructionsLoader', () => {
     const real = createStageInstructionsLoader({ bundleRoot: bundle, ops: pathOps, readTextFile, git: fakeGit(defaultBranchConfig) })
     const result = await real(launchRequest(), WORKTREE)
     expect(result.ok).toBe(true)
-    expect(result.ok ? result.text : '').toContain('You are the Impl agent.')
+    expect(result.ok ? result.agent.definition.prompt : '').toContain('You are the Impl agent.')
   })
 })

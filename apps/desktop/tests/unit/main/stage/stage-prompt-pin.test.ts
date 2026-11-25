@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { promptFor } from '@/main/dispatch/launch'
-import { composeStagePrompt, parseStagePrompt } from '@/utils/stage/prompt'
+import { composeStageSystemPrompt, parseStagePrompt, withStageInstructions } from '@/utils/stage/prompt'
 import type { PipelineItemKind } from '@/types/github'
 import type { StageAgent } from '@/types/tick'
 import type { LabelKey } from '@/utils/labels/vocabulary'
@@ -24,8 +24,8 @@ const CASES: readonly Case[] = [
 describe('the dispatcher prompt and the stage prompt parser', () => {
   it.each(CASES)('parse what promptFor produces for the $trigger trigger', ({ trigger, agent, kind, stage }) => {
     const header = promptFor({ trigger, number: 467, agent, kind })
-    const text = composeStagePrompt({ header, context: [['stage', agent]], instructions: 'body', source: '/plugin' })
+    const system = composeStageSystemPrompt({ context: [['stage', agent]], instructions: 'body', source: '/plugin' })
     expect(parseStagePrompt(header)).toMatchObject({ stage, kind, number: 467, instructions: null })
-    expect(parseStagePrompt(text)).toEqual({ stage, kind, number: 467, instructions: 'body', source: '/plugin' })
+    expect(parseStagePrompt(withStageInstructions(header, system))).toEqual({ stage, kind, number: 467, instructions: 'body', source: '/plugin' })
   })
 })

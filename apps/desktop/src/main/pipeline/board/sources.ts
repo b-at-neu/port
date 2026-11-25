@@ -1,24 +1,22 @@
 // One refresh primitive per source, each keeping the previous good value in place on a failed attempt. `watcher.ts` decides *when* to call these; no file here names a timer.
-import { fetchItemsByNumber } from '@/main/github/adapter'
-import { createEtagCache } from '@/main/github/conditional'
+import { fetchItemsByNumber } from '@/main/github/tracker/items'
 import { fetchPipelineItems } from '@/main/github/pipeline'
 import type { GitHubReadContext } from '@/main/github/context'
 import { collectOrphanNumbers } from '@/main/pipeline/board/attach'
 import { readDenials } from '@/main/repos/local/denials'
 import { readWorktrees } from '@/main/repos/local/worktrees'
-import type { GitRunner } from '@/types/platform'
-import { hostFs } from '@/main/platform'
-import { defaultGitRunner } from '@/main/platform/git'
+import type { Platform } from '@/main/platform'
 import { readSessionState } from '@/main/sessions/adapter'
+import { createSdkSessionReader } from '@/main/sessions/reader'
 import type { RepoId } from '@/utils/repos'
 import type { LabelVocabulary, VerifiableVocabulary } from '@/utils/labels/vocabulary'
 import type { WorktreeEntry } from '@/types/local'
-import type { AgentRecord } from '@/types/sessions'
+import type { AgentRecord, ReadSessionStateParams } from '@/types/sessions'
 import type { RefreshOutcome, SourceCache } from '@/types/state'
 import type { TrackedRef } from '@/types/pipeline-state'
 
 export function createSourceCache(): SourceCache {
-  return { github: new Map(), itemStates: new Map(), worktrees: new Map(), denials: new Map(), etags: createEtagCache(), sessions: null }
+  return { github: new Map(), itemStates: new Map(), worktrees: new Map(), denials: new Map(), sessions: null }
 }
 
 function projectOk<T extends { readonly ok: boolean }>(previous: T | null, attempt: T): T {
@@ -36,12 +34,10 @@ interface RefreshGithubParams {
   /** Read from whatever the worktree/session sources most recently returned — never re-fetched here; this primitive composes, it does not read a second source. */
   readonly worktreeEntries: readonly WorktreeEntry[]
   readonly agents: readonly AgentRecord[]
-  readonly ctx: GitHubReadContext
 }
 
 /** Fires the conditional `fetchItemsByNumber` re-check itself whenever the fresh sweep leaves orphan numbers, so `itemStates` stays dependent on a GitHub refresh. */
-export async function refreshGithub(cache: SourceCache, params: RefreshGithubParams): Promise<RefreshOutcome> {
-  const { ctx } = params
+export async function refreshGithub(ctx: GitHubReadContext, cache: SourceCache, params: RefreshGithubParams): Promise<RefreshOutcome> {
   const fetch = await fetchPipelineItems(ctx, { repo: params.repo, vocabulary: params.vocabulary, verify: params.verify, integration: params.integration, tracked: params.tracked })
   const previous = cache.github.get(params.repoId) ?? null
   cache.github.set(params.repoId, projectOk(previous, fetch))
@@ -56,48 +52,33 @@ export async function refreshGithub(cache: SourceCache, params: RefreshGithubPar
     : { ok: false, at: fetch.fetchedAt, error: fetch.message, failureKind: fetch.kind }
 }
 
-interface RefreshWorktreesParams {
+interface RefreshRepoParams {
   readonly repoId: RepoId
   readonly repoRoot: string
-  readonly git?: GitRunner
-  readonly now?: () => Date
 }
 
-export async function refreshWorktrees(cache: SourceCache, params: RefreshWorktreesParams): Promise<RefreshOutcome> {
-  const git = params.git ?? defaultGitRunner()
-  const now = params.now ?? (() => new Date())
-  const read = await readWorktrees({ git, clock: { now } }, params.repoRoot)
+export async function refreshWorktrees(ctx: Pick<Platform, 'git' | 'clock'>, cache: SourceCache, params: RefreshRepoParams): Promise<RefreshOutcome> {
+  const read = await readWorktrees(ctx, params.repoRoot)
   const previous = cache.worktrees.get(params.repoId) ?? null
   cache.worktrees.set(params.repoId, projectOk(previous, read))
   return read.ok ? { ok: true, at: read.readAt } : { ok: false, at: read.readAt, error: read.message }
 }
 
-interface RefreshDenialsParams {
-  readonly repoId: RepoId
-  readonly repoRoot: string
-  readonly git?: GitRunner
-  readonly now?: () => Date
-}
-
-export async function refreshDenials(cache: SourceCache, params: RefreshDenialsParams): Promise<RefreshOutcome> {
-  const git = params.git ?? defaultGitRunner()
-  const now = params.now ?? (() => new Date())
-  const read = await readDenials({ git, fs: hostFs, clock: { now } }, params.repoRoot)
+export async function refreshDenials(ctx: Pick<Platform, 'git' | 'fs' | 'clock'>, cache: SourceCache, params: RefreshRepoParams): Promise<RefreshOutcome> {
+  const read = await readDenials(ctx, params.repoRoot)
   const previous = cache.denials.get(params.repoId) ?? null
   cache.denials.set(params.repoId, projectOk(previous, read))
   return read.ok ? { ok: true, at: read.readAt } : { ok: false, at: read.readAt, error: read.message }
 }
 
 interface RefreshSessionsParams {
-  readonly repos: Parameters<typeof readSessionState>[0]['repos']
-  readonly reader?: Parameters<typeof readSessionState>[0]['reader']
-  readonly claudeHome?: string
-  readonly now?: () => Date
+  readonly repos: ReadSessionStateParams['repos']
+  readonly reader?: ReadSessionStateParams['reader']
 }
 
 /** The one machine-wide call — every repository shares this cache slot. */
-export async function refreshSessions(cache: SourceCache, params: RefreshSessionsParams): Promise<RefreshOutcome> {
-  const scan = await readSessionState({ repos: params.repos, reader: params.reader, claudeHome: params.claudeHome, now: params.now })
+export async function refreshSessions(ctx: Pick<Platform, 'fs' | 'clock' | 'claudeHome' | 'sdk'>, cache: SourceCache, params: RefreshSessionsParams): Promise<RefreshOutcome> {
+  const scan = await readSessionState(ctx, { repos: params.repos, reader: params.reader ?? createSdkSessionReader(ctx.sdk) })
   cache.sessions = projectOk(cache.sessions, scan)
   return scan.ok ? { ok: true, at: scan.scannedAt } : { ok: false, at: scan.scannedAt, error: scan.message }
 }

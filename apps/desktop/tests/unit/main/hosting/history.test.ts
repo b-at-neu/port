@@ -1,51 +1,58 @@
 import { describe, expect, it } from 'vitest'
 import { HISTORY_LIMIT, readHistory } from '@/main/sessions/hosting/history'
-import type { ReadHistoryDeps } from '@/main/sessions/hosting/history'
-import type { TranscriptEntry } from '@/utils/sessions/transcript'
+import { pathOps } from '@/main/platform/paths'
+import type { SessionStartMode } from '@/types/hosting'
+import { createFakeFs } from '../../../support/fake-platform'
 
-function entry(uuid: string): TranscriptEntry {
-  return { type: 'meta', uuid, timestamp: '2024-01-01T00:00:00.000Z', label: uuid }
+const SESSION_ID = '3f2a9c10-1b2c-4d3e-8f4a-5b6c7d8e9f01'
+const CLAUDE_HOME = '/test/claude'
+
+// A user record per uuid; the deriver turns each into one entry.
+const record = (uuid: string): string => JSON.stringify({ type: 'user', uuid, timestamp: '2024-01-01T00:00:00.000Z', message: { role: 'user', content: uuid } })
+
+async function ctxWith(uuids: readonly string[] | null) {
+  const fs = createFakeFs()
+  if (uuids !== null) await fs.writeText(pathOps.join(CLAUDE_HOME, 'projects', 'p1', `${SESSION_ID}.jsonl`), `${uuids.map(record).join('\n')}\n`)
+  return { fs, claudeHome: CLAUDE_HOME }
 }
 
-function depsReturning(entries: readonly TranscriptEntry[]): ReadHistoryDeps {
-  return { openTranscript: () => Promise.resolve({ read: { ok: true, source: { sessionId: 's', agentId: null, path: '/p', sizeBytes: 0, modifiedAt: '', recordCount: entries.length, malformedLines: 0 }, entries }, cursor: null }) }
-}
+const uuidsOf = (entries: readonly { readonly uuid?: string }[]): (string | undefined)[] => entries.map((entry) => entry.uuid)
 
 describe('readHistory', () => {
-  it('reads nothing for a fresh session', async () => {
-    const result = await readHistory({ kind: 'fresh' }, depsReturning([]))
-    expect(result).toEqual({ kind: 'none' })
-  })
+  const resume: SessionStartMode = { kind: 'resume', sessionId: SESSION_ID }
 
-  it('loads the whole transcript for resume', async () => {
-    const entries = [entry('a'), entry('b')]
-    const result = await readHistory({ kind: 'resume', sessionId: 's1' }, depsReturning(entries))
-    expect(result).toEqual({ kind: 'loaded', entries, omittedBefore: 0, sourceSessionId: 's1' })
-  })
-
-  it('cuts after the resume point for resume-at', async () => {
-    const entries = [entry('a'), entry('b'), entry('c')]
-    const result = await readHistory({ kind: 'resume-at', sessionId: 's1', messageUuid: 'b', resumeDropsTurn: null }, depsReturning(entries))
-    expect(result).toEqual({ kind: 'loaded', entries: [entry('a'), entry('b')], omittedBefore: 0, sourceSessionId: 's1' })
-  })
-
-  it('fails when the resume point is not in the transcript', async () => {
-    const result = await readHistory({ kind: 'resume-at', sessionId: 's1', messageUuid: 'missing', resumeDropsTurn: null }, depsReturning([entry('a')]))
-    expect(result).toEqual({ kind: 'failed', message: "The resume point isn't in the transcript." })
-  })
-
-  it('reports a failed read rather than throwing', async () => {
-    const deps: ReadHistoryDeps = { openTranscript: () => Promise.resolve({ read: { ok: false, kind: 'not-found', message: 'gone', path: null }, cursor: null }) }
-    const result = await readHistory({ kind: 'fork', sessionId: 's1' }, deps)
-    expect(result).toEqual({ kind: 'failed', message: 'gone' })
+  it.each<{ readonly name: string; readonly mode: SessionStartMode; readonly uuids: readonly string[] | null; readonly expected: unknown }>([
+    { name: 'reads nothing for a fresh session', mode: { kind: 'fresh' }, uuids: null, expected: { kind: 'none' } },
+    { name: 'loads the whole transcript for resume', mode: resume, uuids: ['a', 'b'], expected: { kind: 'loaded', uuids: ['a', 'b'], omittedBefore: 0 } },
+    {
+      name: 'cuts after the resume point for resume-at',
+      mode: { kind: 'resume-at', sessionId: SESSION_ID, messageUuid: 'b', resumeDropsTurn: null },
+      uuids: ['a', 'b', 'c'],
+      expected: { kind: 'loaded', uuids: ['a', 'b'], omittedBefore: 0 },
+    },
+    {
+      name: 'fails when the resume point is not in the transcript',
+      mode: { kind: 'resume-at', sessionId: SESSION_ID, messageUuid: 'missing', resumeDropsTurn: null },
+      uuids: ['a'],
+      expected: { kind: 'failed', message: "The resume point isn't in the transcript." },
+    },
+    { name: 'reports a failed read rather than throwing', mode: { kind: 'fork', sessionId: SESSION_ID }, uuids: null, expected: { kind: 'failed' } },
+  ])('$name', async ({ mode, uuids, expected }) => {
+    const result = await readHistory(await ctxWith(uuids), mode)
+    if (result.kind === 'loaded') {
+      expect({ kind: result.kind, uuids: uuidsOf(result.entries), omittedBefore: result.omittedBefore }).toEqual(expected)
+      expect(result.sourceSessionId).toBe(SESSION_ID)
+      return
+    }
+    expect(result).toMatchObject(expected as object)
   })
 
   it('keeps only the last HISTORY_LIMIT entries, counting the rest as omittedBefore', async () => {
-    const entries = Array.from({ length: HISTORY_LIMIT + 10 }, (_, i) => entry(`e${String(i)}`))
-    const result = await readHistory({ kind: 'resume', sessionId: 's1' }, depsReturning(entries))
+    const uuids = Array.from({ length: HISTORY_LIMIT + 10 }, (_, i) => `e${String(i)}`)
+    const result = await readHistory(await ctxWith(uuids), resume)
     if (result.kind !== 'loaded') throw new Error('expected loaded')
     expect(result.omittedBefore).toBe(10)
     expect(result.entries).toHaveLength(HISTORY_LIMIT)
-    expect(result.entries[0]).toEqual(entry('e10'))
+    expect(result.entries[0]?.uuid).toBe('e10')
   })
 })

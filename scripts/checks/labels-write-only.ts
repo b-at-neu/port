@@ -22,8 +22,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
   {
     const SOURCES: Record<string, string> = {
       [`${mainDir}/github/map.ts`]: "the sweep's candidate index and the seed source; for a seeded repository pipeline.ts replaces its keys with the store's",
-      [`${mainDir}/github/adapter.ts`]: "the fresh read; it feeds the mirror diff's observed set and the assignee precondition",
-      [`${mainDir}/github/backlog.ts`]: 'Backlog chips (display)',
+      [`${mainDir}/github/tracker/items.ts`]: "the fresh read; it feeds the mirror diff's observed set and the assignee precondition",
+      [`${mainDir}/github/tracker/backlog.ts`]: 'Backlog chips (display)',
       [`${mainDir}/github/release-prs.ts`]: 'release-note chips; no pipeline label is involved',
       [`${mainDir}/github/release-issues.ts`]: 'release-note chips and dependency grouping; no pipeline label is involved',
     };

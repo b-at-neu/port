@@ -1,24 +1,13 @@
-import type { EnvelopeFailureKind, GraphQLErrorEntry } from '@/types/github'
-
-// The public logic behind the point reads: building the document, calling the transport on ctx,
-// then composing envelope.ts and map.ts. The pipeline sweep lives in pipeline.ts.
-import type { GitHubHttpResult } from '@/types/platform'
-import type { FetchItemsByNumberParams } from '@/types/github'
-
-import type { AssertEqual } from '@/types/assert-type'
-import type { ClaimPreflightFetch, ClaimPreflightItem, ItemsByNumberFetch, PipelineFailureKind, PipelineItemKind, GitHubRepoRef, ResolvedItem } from '@/types/github'
+// The point reads by number: building the document, calling the transport on ctx, then composing
+// envelope.ts and map.ts. The pipeline sweep lives in pipeline.ts.
+import type { ClaimPreflightFetch, ClaimPreflightItem, FetchItemsByNumberParams, GraphQLErrorEntry, ItemsByNumberFetch, PipelineItemKind, ResolvedItem } from '@/types/github'
+import type { ItemNumberParams } from '@/types/tracker'
 import type { GitHubReadContext } from '@/main/github/context'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { toBlockerRead } from '@/main/github/blockers'
-
 import { fieldListOf } from '@/main/github/map'
-import { buildClaimPreflightQuery, buildItemsByNumberQuery } from '@/main/github/query'
+import { buildClaimPreflightQuery, buildItemsByNumberQuery } from '@/main/github/tracker/query'
 import { repoGraphqlRequest } from '@/main/github/request'
-
-/** Fails to compile if a failure kind is added to the platform layer or `envelope.ts` without the
- *  hand-maintained, renderer-safe `PipelineFailureKind` growing to match. */
-type GitHubHttpFailureKind = Exclude<GitHubHttpResult, { ok: true }>['kind']
-export const _kindsCoverGitHubHttp: AssertEqual<PipelineFailureKind, GitHubHttpFailureKind | EnvelopeFailureKind> = true
 
 /** Every `errors[].path` entry beside `"repository"`, as the set of unusable alias names. */
 function unavailableAliasNames(errors: readonly GraphQLErrorEntry[] | undefined): ReadonlySet<string> {
@@ -104,14 +93,9 @@ function authorLoginOf(author: unknown): string | null {
   return typeof login === 'string' ? login : null
 }
 
-interface FetchClaimPreflightParams {
-  readonly repo: GitHubRepoRef
-  readonly number: number
-}
-
 /** The claim dialog's one round trip: one item's identity, labels, assignees, open blockers, and
  *  the signed-in login. `item: null` covers "does not exist" or "alias errored", neither a failure. */
-export async function fetchClaimPreflight(ctx: GitHubReadContext, params: FetchClaimPreflightParams): Promise<ClaimPreflightFetch> {
+export async function fetchClaimPreflight(ctx: GitHubReadContext, params: ItemNumberParams): Promise<ClaimPreflightFetch> {
   const fetchedAt = ctx.clock.now().toISOString()
 
   const { document } = buildClaimPreflightQuery(params.number)

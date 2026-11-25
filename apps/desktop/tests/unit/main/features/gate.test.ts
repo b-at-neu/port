@@ -2,18 +2,10 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { GateAnswerResponse, GatePreflightResponse } from '@/types/gate'
 import type { BoardSnapshot } from '@/types/board'
-import type { RegistryDeps } from '@/types/registry'
 import { resolveGateAnswer, resolveGatePreflight } from '@/main/features/gate/resolve'
 import type { GateChannelDeps } from '@/main/app/seams'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
-const registryDeps: RegistryDeps = {
-  registryDir: '/registry',
-  git: () => {
-    throw new Error('git should not be invoked directly by the gate channel')
-  },
-  chooseDirectory: () => Promise.resolve(null),
-}
 
 function depsWith(overrides: Partial<GateChannelDeps>): GateChannelDeps {
   return {
@@ -32,13 +24,13 @@ function depsWith(overrides: Partial<GateChannelDeps>): GateChannelDeps {
 
 describe('resolveGatePreflight', () => {
   it('rejects a missing repoId', async () => {
-    await expect(resolveGatePreflight(registryDeps, { repoId: undefined as unknown as RepoId, number: 1 }, depsWith({}))).rejects.toThrow(
+    await expect(resolveGatePreflight({ repoId: undefined as unknown as RepoId, number: 1 }, depsWith({}))).rejects.toThrow(
       "'gate:preflight' requires a non-empty 'repoId'",
     )
   })
 
   it('rejects a non-positive number', async () => {
-    await expect(resolveGatePreflight(registryDeps, { repoId: REPO_ID, number: 0 }, depsWith({}))).rejects.toThrow(
+    await expect(resolveGatePreflight({ repoId: REPO_ID, number: 0 }, depsWith({}))).rejects.toThrow(
       "'gate:preflight' requires 'number' to be a positive integer",
     )
   })
@@ -52,40 +44,40 @@ describe('resolveGatePreflight', () => {
         return Promise.resolve(response)
       },
     })
-    const result = await resolveGatePreflight(registryDeps, { repoId: REPO_ID, number: 148 }, deps)
+    const result = await resolveGatePreflight({ repoId: REPO_ID, number: 148 }, deps)
     expect(result).toBe(response)
-    expect(received).toEqual({ registryDeps, repoId: REPO_ID, number: 148 })
+    expect(received).toEqual({ repoId: REPO_ID, number: 148 })
   })
 })
 
 describe('resolveGateAnswer', () => {
   it('rejects a missing repoId', async () => {
     await expect(
-      resolveGateAnswer(registryDeps, { repoId: undefined as unknown as RepoId, number: 1, decision: 'approve', feedback: null, skipComment: false }, '/audit', '/scratch', depsWith({})),
+      resolveGateAnswer({ repoId: undefined as unknown as RepoId, number: 1, decision: 'approve', feedback: null, skipComment: false }, '/audit', '/scratch', depsWith({})),
     ).rejects.toThrow("'gate:answer' requires a non-empty 'repoId'")
   })
 
   it('rejects a non-positive number', async () => {
     await expect(
-      resolveGateAnswer(registryDeps, { repoId: REPO_ID, number: 0, decision: 'approve', feedback: null, skipComment: false }, '/audit', '/scratch', depsWith({})),
+      resolveGateAnswer({ repoId: REPO_ID, number: 0, decision: 'approve', feedback: null, skipComment: false }, '/audit', '/scratch', depsWith({})),
     ).rejects.toThrow("'gate:answer' requires 'number' to be a positive integer")
   })
 
   it('rejects a decision outside GATE_DECISIONS', async () => {
     await expect(
-      resolveGateAnswer(registryDeps, { repoId: REPO_ID, number: 1, decision: 'bogus' as never, feedback: null, skipComment: false }, '/audit', '/scratch', depsWith({})),
+      resolveGateAnswer({ repoId: REPO_ID, number: 1, decision: 'bogus' as never, feedback: null, skipComment: false }, '/audit', '/scratch', depsWith({})),
     ).rejects.toThrow("'gate:answer' requires 'decision' to be one of approve, request-changes")
   })
 
   it('rejects a non-boolean skipComment', async () => {
     await expect(
-      resolveGateAnswer(registryDeps, { repoId: REPO_ID, number: 1, decision: 'approve', feedback: null, skipComment: 'no' as never }, '/audit', '/scratch', depsWith({})),
+      resolveGateAnswer({ repoId: REPO_ID, number: 1, decision: 'approve', feedback: null, skipComment: 'no' as never }, '/audit', '/scratch', depsWith({})),
     ).rejects.toThrow("'gate:answer' requires 'skipComment' to be a boolean")
   })
 
   it('rejects request-changes with no feedback and skipComment false', async () => {
     await expect(
-      resolveGateAnswer(registryDeps, { repoId: REPO_ID, number: 1, decision: 'request-changes', feedback: null, skipComment: false }, '/audit', '/scratch', depsWith({})),
+      resolveGateAnswer({ repoId: REPO_ID, number: 1, decision: 'request-changes', feedback: null, skipComment: false }, '/audit', '/scratch', depsWith({})),
     ).rejects.toThrow("'gate:answer' requires a non-empty 'feedback'")
   })
 
@@ -93,7 +85,6 @@ describe('resolveGateAnswer', () => {
     const response: GateAnswerResponse = { kind: 'answered', comment: null, labels: { kind: 'no-op' } }
     const deps = depsWith({ gateAnswer: () => Promise.resolve(response) })
     const result = await resolveGateAnswer(
-      registryDeps,
       { repoId: REPO_ID, number: 1, decision: 'request-changes', feedback: null, skipComment: true },
       '/audit',
       '/scratch',
@@ -112,7 +103,7 @@ describe('resolveGateAnswer', () => {
         return Promise.resolve({} as BoardSnapshot)
       },
     })
-    await resolveGateAnswer(registryDeps, { repoId: REPO_ID, number: 1, decision: 'approve', feedback: null, skipComment: false }, '/audit', '/scratch', deps)
+    await resolveGateAnswer({ repoId: REPO_ID, number: 1, decision: 'approve', feedback: null, skipComment: false }, '/audit', '/scratch', deps)
     expect(refreshed).toBe(false)
   })
 
@@ -126,7 +117,7 @@ describe('resolveGateAnswer', () => {
         return Promise.resolve({} as BoardSnapshot)
       },
     })
-    const result = await resolveGateAnswer(registryDeps, { repoId: REPO_ID, number: 148, decision: 'approve', feedback: null, skipComment: false }, '/audit', '/scratch', deps)
+    const result = await resolveGateAnswer({ repoId: REPO_ID, number: 148, decision: 'approve', feedback: null, skipComment: false }, '/audit', '/scratch', deps)
     expect(result).toBe(response)
     expect(refreshRequest).toEqual({ repoId: REPO_ID, source: 'github' })
   })
@@ -139,7 +130,7 @@ describe('resolveGateAnswer', () => {
         throw new Error('transient github error')
       },
     })
-    const result = await resolveGateAnswer(registryDeps, { repoId: REPO_ID, number: 148, decision: 'approve', feedback: null, skipComment: false }, '/audit', '/scratch', deps)
+    const result = await resolveGateAnswer({ repoId: REPO_ID, number: 148, decision: 'approve', feedback: null, skipComment: false }, '/audit', '/scratch', deps)
     expect(result).toBe(response)
   })
 })

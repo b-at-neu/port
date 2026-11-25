@@ -25,17 +25,27 @@ const CONTEXT_OPEN = '<port-stage-context>'
 const CONTEXT_CLOSE = '</port-stage-context>'
 const INSTRUCTIONS_CLOSE = '</port-stage-instructions>'
 
-export interface ComposeStagePromptParams {
-  readonly header: string
+export const STAGE_SYSTEM_PREAMBLE = 'You are a port pipeline stage agent. Your stage context and full instructions follow. Follow them exactly.'
+
+export interface ComposeStageSystemPromptParams {
   readonly context: readonly (readonly [key: string, value: string])[]
   readonly instructions: string
   readonly source: string
 }
 
-export function composeStagePrompt(params: ComposeStagePromptParams): string {
+/** The stage context and instructions live in the system prompt, which survives compaction; the first message is only the dispatch line. */
+export function composeStageSystemPrompt(params: ComposeStageSystemPromptParams): string {
   const context = params.context.map(([key, value]) => `${key}: ${value}`).join('\n')
   const source = params.source.replaceAll('"', "'")
-  return `${params.header}\n\n${CONTEXT_OPEN}\n${context}\n${CONTEXT_CLOSE}\n\n<port-stage-instructions source="${source}">\n${params.instructions}\n${INSTRUCTIONS_CLOSE}`
+  return `${STAGE_SYSTEM_PREAMBLE}\n\n${CONTEXT_OPEN}\n${context}\n${CONTEXT_CLOSE}\n\n<port-stage-instructions source="${source}">\n${params.instructions}\n${INSTRUCTIONS_CLOSE}`
+}
+
+/** A dispatch line that carries no instructions block gets the saved system prompt's blocks appended, so the transcript card can show them; any other text is returned as it is. */
+export function withStageInstructions(firstMessage: string, systemPrompt: string): string {
+  const parsed = parseStagePrompt(firstMessage)
+  if (parsed === null || parsed.instructions !== null) return firstMessage
+  const blocks = systemPrompt.startsWith(`${STAGE_SYSTEM_PREAMBLE}\n\n`) ? systemPrompt.slice(STAGE_SYSTEM_PREAMBLE.length + 2) : systemPrompt
+  return `${firstMessage}\n\n${blocks}`
 }
 
 export interface ParsedStagePrompt {

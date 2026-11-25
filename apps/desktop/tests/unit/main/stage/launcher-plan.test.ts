@@ -50,7 +50,7 @@ async function settle(read: FileResult<string>, text: string, agent: StageLaunch
   const store = { start, send: vi.fn().mockReturnValue({ ok: true }), close: vi.fn().mockResolvedValue({ ok: true }), dismiss, list: vi.fn(() => []) }
   const readTextFile = vi.fn((path: string) => Promise.resolve<FileResult<string>>(path === PLAN_PATH ? read : { ok: false, kind: 'not-found', message: `ENOENT ${path}` }))
   const onOutcome = vi.fn()
-  const loadInstructions = vi.fn<StageInstructionsLoader>().mockResolvedValue({ ok: true, text: 'prompt', agent: { name: 'plan-agent', definition: { description: 'plan', prompt: 'body' } } })
+  const loadInstructions = vi.fn<StageInstructionsLoader>().mockResolvedValue({ ok: true, text: 'prompt', agent: { name: 'plan-agent', definition: { description: 'plan', prompt: 'body' }, selfContained: true } })
   const { runs } = memoryRuns(WIDGETS_ID, { tickets: [ticketOf({ repo: WIDGETS_ID, ticket: 52, stage: 'plan' })] })
   const launcher = createStageLauncher({
     store: store as never,
@@ -66,6 +66,7 @@ async function settle(read: FileResult<string>, text: string, agent: StageLaunch
     runs,
     newId: () => 'id-1',
     loadInstructions,
+    readStagePrompt: () => Promise.resolve(null),
     bundleRoot: '/bundle',
     ops: pathOps,
     readTextFile,

@@ -1,9 +1,60 @@
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepositoryEntry } from '@/utils/repos'
 import type { CommandResult, ConditionalTransport, GitHubTransport } from '@/types/platform'
-import type { TimerFactory, TimerHandle } from '@/types/state'
+import type { BoardSnapshot } from '@/types/board'
+import type { StateEngine } from '@/types/offload'
+import type { PipelineWatcher, TimerFactory, TimerHandle } from '@/types/state'
+import { createPipelineWatcher } from '@/main/pipeline/board/watcher'
+import { createInProcessEngine } from '@/main/worker/engine'
+import type { Repos } from '@/main/repos'
+import { watcherContext, type WatcherContextOptions } from '../support/context'
+import { createFakeClock, createFakePlatform } from '../support/fake-platform'
 import { queryOf } from './github-http'
 import { RATE_LIMIT_REPLY, connection } from './pipeline-reply'
+
+type EngineCtx = Parameters<typeof createInProcessEngine>[0]
+
+export interface WatcherRigOptions extends Pick<WatcherContextOptions, 'platform' | 'tickets' | 'stores' | 'dispatcher'> {
+  readonly repositories?: readonly RepositoryEntry[]
+  readonly repos?: Partial<Repos>
+  readonly github?: GitHubTransport
+  readonly conditional?: ConditionalTransport
+  readonly git?: (args: readonly string[], cwd: string) => Promise<CommandResult>
+  /** Members replaced on the in-process engine the watcher reads through `ctx.live`. */
+  readonly engine?: Partial<StateEngine>
+  readonly refused?: () => ReadonlySet<number>
+}
+
+/** A watcher over a test context whose engine is the real in-process one, on one shared fake clock and timer. */
+export function watcherRig(options: WatcherRigOptions = {}) {
+  const clock = createFakeClock('2026-01-01T00:00:00.000Z')
+  const inner = createInProcessEngine(
+    engineCtx({ git: options.git ?? fakeGit({ worktreeList: 0 }), githubHttp: options.github ?? offlineGithub, githubConditional: options.conditional ?? scriptedConditional().transport, clock }),
+    () => Promise.resolve({ ok: true, sessions: [] }),
+  )
+  const engine: StateEngine = { ...inner, ...options.engine }
+  const timer = makeFakeTimer()
+  const ctx = watcherContext({
+    platform: { ...options.platform, clock },
+    repositories: options.repositories,
+    repos: options.repos,
+    tickets: options.tickets,
+    stores: options.stores,
+    dispatcher: options.dispatcher,
+    live: { engine, ...(options.refused === undefined ? {} : { autoPlanner: { refused: options.refused } as never }) },
+  })
+  const watch = (sinks: { readonly onSnapshot?: (snapshot: BoardSnapshot) => void; readonly onTick?: (snapshot: BoardSnapshot) => void } = {}): PipelineWatcher => createPipelineWatcher(ctx, { onSnapshot: sinks.onSnapshot ?? (() => undefined), onTick: sinks.onTick, setTimer: timer.factory })
+  return { ctx, clock, timer, engine, inner, watch }
+}
+
+/** A GitHub transport that is down, so a refresh reports a failure value instead of reaching the network. */
+export const offlineGithub: GitHubTransport = () => Promise.resolve({ ok: false, kind: 'network', status: null, body: '', message: 'offline' })
+
+/** The adapters an in-process engine reads, all unscripted fakes until a test passes its own. */
+export function engineCtx(overrides: Partial<EngineCtx> = {}): EngineCtx {
+  const { git, ghWrite, githubHttp, githubConditional, sdk, fs, clock, claudeHome } = createFakePlatform()
+  return { git, ghWrite, githubHttp, githubConditional, sdk, fs, clock, claudeHome, ...overrides }
+}
 
 /** One ready issue: the sweep reply names it, and the detail read (`d0`) answers with an empty timeline. */
 export function readyItemTransport(signedInLogin: string, assignees: readonly string[], rateLimit: unknown = RATE_LIMIT_REPLY, labels: readonly string[] = ['ready']): GitHubTransport {

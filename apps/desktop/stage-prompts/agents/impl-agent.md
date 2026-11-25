@@ -5,7 +5,7 @@ model: sonnet
 isolation: worktree
 permissionMode: dontAsk
 maxTurns: 150
-disallowedTools: Agent, ScheduleWakeup, ReportFindings, ShareOnboardingGuide, ListAgents
+disallowedTools: Agent, Skill, ScheduleWakeup, ReportFindings, ShareOnboardingGuide, ListAgents
 color: green
 ---
 
@@ -75,6 +75,7 @@ Impl-agent specifics:
 
 - **You are already in your own isolated git worktree (your cwd).** Do **all** work in place with **cwd-relative paths**. **Never** `cd` out of it (including to the base repository), use `git -C`, run `git worktree list`/`add`/`remove`/`prune`, use `--ignore-other-worktrees`, or force anything.
 - **Toolchain: only what `commands` and `extraAllow` give you.** Do not reach for a package runner or global binary that the repository has not declared — it will auto-deny. If a task genuinely needs a command outside the allowlist, that is a `BLOCKED:`, not something to work around.
+- **Keep context small.** Every request re-sends everything read so far. Find code with Grep, then Read only the lines you need with `offset` and `limit`; read a whole file only when you will edit most of it. Do not re-read a file that is already in context and unchanged. Never use `git stash`: it is denied, because every worktree shares one stash stack. Set work aside with a WIP commit instead.
 - **Clean code only:** no dead scaffolding, shims, or transitional re-exports.
 - **When blocked or auto-denied:** disallowed commands are **auto-denied silently** — no human prompt, since you run in `dontAsk` — so a denied tool call just returns an error. Do **not** retry it or improvise a workaround: **stop and emit `BLOCKED: <the exact denied command + what you needed>`** (see Blockers) so the cockpit can surface it. **Never spawn subagents.**
 

@@ -1,5 +1,7 @@
 import { join } from 'node:path'
 import { Worker } from 'node:worker_threads'
+import type { Platform } from '@/main/platform'
+import type { PlatformPaths } from '@/types/platform'
 import type { OffloadOp, OffloadParams, OffloadRequest, OffloadResponse, OffloadValue, StateEngine } from '@/types/offload'
 import type { RefreshOutcome } from '@/types/state'
 
@@ -13,7 +15,6 @@ interface OffloadWorker {
 
 interface WorkerEngineOptions {
   readonly spawn?: () => OffloadWorker
-  readonly now?: () => Date
   readonly onRespawn?: () => void
 }
 
@@ -26,16 +27,16 @@ function reasonOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function spawnStateWorker(): OffloadWorker {
-  const worker = new Worker(join(__dirname, 'state-worker.js'))
+function spawnStateWorker(paths: PlatformPaths): OffloadWorker {
+  const worker = new Worker(join(__dirname, 'state-worker.js'), { workerData: { paths } })
   worker.unref()
   return worker
 }
 
 /** Spawned lazily, so the worker's copy of `process.env` carries the login-shell PATH. A crash fails every pending request and the next call respawns it. */
-export function createWorkerEngine(options: WorkerEngineOptions = {}): StateEngine & { readonly close: () => Promise<void> } {
-  const spawn = options.spawn ?? spawnStateWorker
-  const now = options.now ?? (() => new Date())
+export function createWorkerEngine(ctx: Pick<Platform, 'clock' | 'paths'>, options: WorkerEngineOptions = {}): StateEngine & { readonly close: () => Promise<void> } {
+  const spawn = options.spawn ?? (() => spawnStateWorker(ctx.paths))
+  const now = (): Date => ctx.clock.now()
   const pending = new Map<number, Pending>()
   let worker: OffloadWorker | null = null
   let nextId = 0

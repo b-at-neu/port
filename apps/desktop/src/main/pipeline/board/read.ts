@@ -2,8 +2,11 @@ import type { SourceCache, RepoSessionSlice } from '@/types/state'
 
 // `watcher.ts` calls the same two primitives (`refreshGithub` and friends, `projectFromCache`) on its own cadence rather than a second copy of this composition.
 import type { GitHubTransport } from '@/types/platform'
+import { claudeHomeDir, hostFs } from '@/main/platform'
+import { defaultGitRunner } from '@/main/platform/git'
 import { githubHttp } from '@/main/platform/github-http'
-import { readSessionState } from '@/main/sessions/adapter'
+import { defaultSdk } from '@/main/platform/sdk'
+import type { SessionReader } from '@/types/sessions'
 import type { GitRunner } from '@/types/platform'
 import type { RepositoryEntry } from '@/utils/repos'
 import { verifiableVocabularyOf } from '@/utils/labels/display'
@@ -18,7 +21,7 @@ interface ReadPipelineStateParams {
   readonly repositories: readonly RepositoryEntry[]
   readonly github?: GitHubTransport
   readonly git?: GitRunner
-  readonly sessionReader?: Parameters<typeof readSessionState>[0]['reader']
+  readonly sessionReader?: SessionReader
   /** Forwarded verbatim to `readSessionState`, so `read.test.ts` can attribute a fake session without touching the real machine's transcripts. */
   readonly claudeHome?: string
   readonly now?: () => Date
@@ -66,20 +69,20 @@ export async function readPipelineState(params: ReadPipelineStateParams): Promis
   const now = params.now ?? (() => new Date())
   const cache = createSourceCache()
   const readyEntries = params.repositories.filter(isReady)
-  const ctx = { githubHttp: params.github ?? githubHttp, clock: { now } }
+  const ctx = { githubHttp: params.github ?? githubHttp, git: params.git ?? defaultGitRunner(), fs: hostFs, sdk: defaultSdk, claudeHome: params.claudeHome ?? claudeHomeDir(), clock: { now } }
 
-  await refreshSessions(cache, { repos: readyEntries.map((entry) => ({ id: entry.id, root: entry.path })), reader: params.sessionReader, claudeHome: params.claudeHome, now })
+  await refreshSessions(ctx, cache, { repos: readyEntries.map((entry) => ({ id: entry.id, root: entry.path })), reader: params.sessionReader })
 
   for (const entry of readyEntries) {
-    await refreshWorktrees(cache, { repoId: entry.id, repoRoot: entry.path, git: params.git, now })
-    await refreshDenials(cache, { repoId: entry.id, repoRoot: entry.path, git: params.git, now })
+    await refreshWorktrees(ctx, cache, { repoId: entry.id, repoRoot: entry.path })
+    await refreshDenials(ctx, cache, { repoId: entry.id, repoRoot: entry.path })
 
     const worktrees = cache.worktrees.get(entry.id)
     const worktreeEntries = worktrees?.ok ? worktrees.entries : []
     const sessions = cache.sessions
     const agents = sessions?.ok ? sessions.agents.filter((a) => a.repoId === entry.id) : []
     const repo = splitRepo(entry.config.repo)
-    await refreshGithub(cache, { repoId: entry.id, repo, vocabulary: entry.config.vocabulary, verify: verifiableVocabularyOf(entry.config), integration: entry.config.branches.integration, worktreeEntries, agents, ctx })
+    await refreshGithub(ctx, cache, { repoId: entry.id, repo, vocabulary: entry.config.vocabulary, verify: verifiableVocabularyOf(entry.config), integration: entry.config.branches.integration, worktreeEntries, agents })
   }
 
   return projectFromCache(cache, params.repositories, now)

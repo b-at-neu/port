@@ -5,9 +5,8 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { RepoDispatchStatus } from '@/types/dispatch'
 import type { BoardSnapshot } from '@/types/board'
-import { createPipelineWatcher } from '@/main/pipeline/board/watcher'
 import { RATE_LIMIT_REPLY } from '../../../fixtures/pipeline-reply'
-import { fakeGit, makeFakeTimer, readyEntry, readyItemTransport } from '../../../fixtures/watcher-harness'
+import { readyEntry, readyItemTransport, watcherRig } from '../../../fixtures/watcher-harness'
 
 const AUTO_PLAN_LABELS = ['claude', 'auto plan', 'plan review']
 
@@ -18,31 +17,24 @@ function dispatchRow(overrides: Partial<RepoDispatchStatus> = {}): RepoDispatchS
 async function build(options: { readonly dispatch: () => readonly RepoDispatchStatus[]; readonly refused?: () => ReadonlySet<number> }) {
   const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
   const snapshots: BoardSnapshot[] = []
-  const watcher = createPipelineWatcher({
+  const rig = watcherRig({
     repositories: [readyEntry('repo-a', root, 'o/a')],
-    onSnapshot: (snapshot) => snapshots.push(snapshot),
-    now: () => new Date('2026-01-01T00:00:00.000Z'),
-    setTimer: makeFakeTimer().factory,
-    git: fakeGit({ worktreeList: 0 }),
     github: readyItemTransport('op', ['op'], RATE_LIMIT_REPLY, AUTO_PLAN_LABELS),
-    sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
-    dispatchStatus: options.dispatch,
-    autoPlanRefused: options.refused,
+    dispatcher: { status: options.dispatch },
+    refused: options.refused,
   })
-  return { watcher, snapshots }
+  return { watcher: rig.watch({ onSnapshot: (snapshot) => snapshots.push(snapshot) }), snapshots }
 }
 
 describe('createPipelineWatcher — auto-plan status', () => {
   it('lists the issue the swap will approve under its repository', async () => {
     const { watcher } = await build({ dispatch: () => [dispatchRow()] })
-    const snap = await watcher.refresh()
-    expect(snap.autoPlan).toEqual([{ repoId: 'repo-a', approving: [42] }])
+    expect((await watcher.refresh()).autoPlan).toEqual([{ repoId: 'repo-a', approving: [42] }])
   })
 
   it('leaves a refused issue out', async () => {
     const { watcher } = await build({ dispatch: () => [dispatchRow()], refused: () => new Set([42]) })
-    const snap = await watcher.refresh()
-    expect(snap.autoPlan).toEqual([{ repoId: 'repo-a', approving: [] }])
+    expect((await watcher.refresh()).autoPlan).toEqual([{ repoId: 'repo-a', approving: [] }])
   })
 
   it('republish() recomputes the list from the fresh dispatch row without a poll', async () => {

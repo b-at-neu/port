@@ -11,6 +11,8 @@ export function stageBundleRoot(input: StageBundleRootInput): string {
 interface LoadStageAgentDefinitionParams {
   readonly root: string
   readonly agent: StageAgent
+  /** Becomes the agent's system prompt. */
+  readonly prompt: string
   readonly ops: Pick<PathOps, 'join'>
   readonly readTextFile: (path: string) => Promise<FileResult<string>>
 }
@@ -36,8 +38,8 @@ function parseFrontmatter(text: string): { readonly fields: ReadonlyMap<string, 
   return { fields }
 }
 
-/** The agent body already travels in the first message's instructions block, so the system prompt only points at it. */
-export const STAGE_SYSTEM_PROMPT = 'You are a port pipeline stage agent. Your full instructions are the `<port-stage-instructions>` block in your first message. Follow them exactly.'
+/** Sessions started before the instructions moved into the system prompt still carry them in their first message, so a resume of one points at that block. */
+export const LEGACY_STAGE_SYSTEM_PROMPT = 'You are a port pipeline stage agent. Your full instructions are the `<port-stage-instructions>` block in your first message. Follow them exactly.'
 
 /** Never throws: a missing file or a frontmatter without `name`/`description` is a typed failure naming the file. */
 export async function loadStageAgentDefinition(params: LoadStageAgentDefinitionParams): Promise<StageAgentDefinitionResult> {
@@ -55,6 +57,6 @@ export async function loadStageAgentDefinition(params: LoadStageAgentDefinitionP
   return {
     ok: true,
     name,
-    definition: { description, prompt: STAGE_SYSTEM_PROMPT, ...(tools !== undefined ? { tools } : {}), ...(disallowedTools !== undefined ? { disallowedTools } : {}) },
+    definition: { description, prompt: params.prompt, ...(tools !== undefined ? { tools } : {}), ...(disallowedTools !== undefined ? { disallowedTools } : {}) },
   }
 }

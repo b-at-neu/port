@@ -1,4 +1,5 @@
-import type { TranscriptCursor, OpenTranscriptParams, OpenTailParams, PollTailParams, CloseTailParams, TranscriptTailStore } from '@/types/sessions'
+import type { Platform } from '@/main/platform'
+import type { TranscriptCursor, OpenTailParams, PollTailParams, CloseTailParams, TranscriptTailStore } from '@/types/sessions'
 
 // Gives the renderer a follow primitive without ever exposing a TranscriptCursor across IPC. tailId is a module-local counter, not randomUUID, since its whole scope is one main process.
 import type { TranscriptTailOpen, TranscriptTailPoll } from '@/utils/sessions/transcript'
@@ -16,29 +17,14 @@ interface TailState {
   readonly touchedAt: number
 }
 
-interface TranscriptTailStoreDeps {
-  readonly openTranscript: typeof openTranscript
-  readonly advanceTranscript: typeof advanceTranscript
-  readonly now: () => number
-}
-
-const defaultDeps: TranscriptTailStoreDeps = {
-  openTranscript,
-  advanceTranscript,
-  now: () => Date.now(),
-}
-
-function paramsToOpen(params: OpenTailParams): OpenTranscriptParams {
-  return { sessionId: params.sessionId, agentId: params.agentId, claudeHome: params.claudeHome }
-}
-
-/** A factory, never a shared module-level singleton, so a test gets its own `Map` and injected clock. */
-export function createTailStore(deps: TranscriptTailStoreDeps = defaultDeps): TranscriptTailStore {
+/** A factory, never a shared module-level singleton, so a test gets its own `Map`. */
+export function createTailStore(ctx: Pick<Platform, 'fs' | 'clock' | 'claudeHome'>, stagePromptsDir?: string): TranscriptTailStore {
   const tails = new Map<string, TailState>()
   let nextId = 0
+  const now = (): number => ctx.clock.now().getTime()
 
   function sweepIdle(): void {
-    const cutoff = deps.now() - TAIL_IDLE_MS
+    const cutoff = now() - TAIL_IDLE_MS
     for (const [id, state] of tails) {
       if (state.touchedAt < cutoff) tails.delete(id)
     }
@@ -59,7 +45,7 @@ export function createTailStore(deps: TranscriptTailStoreDeps = defaultDeps): Tr
 
   async function openTail(params: OpenTailParams): Promise<TranscriptTailOpen> {
     sweepIdle()
-    const { read, cursor } = await deps.openTranscript(paramsToOpen(params))
+    const { read, cursor } = await openTranscript(ctx, { sessionId: params.sessionId, agentId: params.agentId, ...(stagePromptsDir !== undefined ? { stagePromptsDir } : {}) })
     if (!read.ok) return { ok: false, kind: read.kind, message: read.message, path: read.path }
     if (cursor === null) {
       // Guarded rather than cast, so a future drift from the contract fails loudly here instead of silently losing follow state.
@@ -69,7 +55,7 @@ export function createTailStore(deps: TranscriptTailStoreDeps = defaultDeps): Tr
     evictOldestIfFull()
     nextId += 1
     const tailId = `tail-${nextId}`
-    tails.set(tailId, { cursor, touchedAt: deps.now() })
+    tails.set(tailId, { cursor, touchedAt: now() })
     return { ok: true, tailId, source: read.source, entries: read.entries }
   }
 
@@ -80,14 +66,14 @@ export function createTailStore(deps: TranscriptTailStoreDeps = defaultDeps): Tr
       return { ok: false, kind: 'unknown-tail', message: `No open tail for '${params.tailId}'.`, path: null }
     }
 
-    const advanced = await deps.advanceTranscript(state.cursor)
+    const advanced = await advanceTranscript(ctx, state.cursor)
     if (!advanced.ok) {
       // Dropping the tail means a later poll reports unknown-tail rather than repeating the same failure forever.
       tails.delete(params.tailId)
       return { ok: false, kind: advanced.kind, message: advanced.message, path: advanced.path }
     }
 
-    tails.set(params.tailId, { cursor: advanced.cursor, touchedAt: deps.now() })
+    tails.set(params.tailId, { cursor: advanced.cursor, touchedAt: now() })
     return { ok: true, source: advanced.source, appended: advanced.appended, patched: advanced.patched, hasMore: advanced.hasMore }
   }
 

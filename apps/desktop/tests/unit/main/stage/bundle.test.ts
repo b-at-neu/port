@@ -2,16 +2,17 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { readTextFile } from '@/main/platform/files'
 import { pathOps } from '@/main/platform/paths'
-import { STAGE_SYSTEM_PROMPT, loadStageAgentDefinition, stageBundleRoot } from '@/main/dispatch/stage/bundle'
+import { loadStageAgentDefinition, stageBundleRoot } from '@/main/dispatch/stage/bundle'
 import { extractSection, STAGE_PIPELINE_SECTIONS } from '@/main/dispatch/stage/instructions'
 import type { FileResult } from '@/types/platform'
 import type { StageAgent } from '@/types/tick'
 
 const ROOT = '/bundle'
+const PROMPT = 'system prompt'
 
 function load(file: string | null, agent: StageAgent = 'impl') {
   const readFake = (path: string): Promise<FileResult<string>> => Promise.resolve(file === null ? { ok: false, kind: 'not-found', message: `ENOENT ${path}` } : { ok: true, value: file })
-  return loadStageAgentDefinition({ root: ROOT, agent, ops: pathOps, readTextFile: readFake })
+  return loadStageAgentDefinition({ root: ROOT, agent, prompt: PROMPT, ops: pathOps, readTextFile: readFake })
 }
 
 describe('stageBundleRoot', () => {
@@ -25,19 +26,19 @@ describe('stageBundleRoot', () => {
 })
 
 describe('loadStageAgentDefinition', () => {
-  it('reads the frontmatter and its tool lists, and points the system prompt at the first message', async () => {
+  it('reads the frontmatter and its tool lists, and uses the given system prompt', async () => {
     const result = await load('---\nname: impl-agent\ndescription: Implements a plan\ntools: Read, Edit,, Bash\ndisallowedTools: Agent\nmodel: sonnet\n---\n\nYou are the Impl agent.\n')
-    expect(result).toEqual({ ok: true, name: 'impl-agent', definition: { description: 'Implements a plan', prompt: STAGE_SYSTEM_PROMPT, tools: ['Read', 'Edit', 'Bash'], disallowedTools: ['Agent'] } })
+    expect(result).toEqual({ ok: true, name: 'impl-agent', definition: { description: 'Implements a plan', prompt: PROMPT, tools: ['Read', 'Edit', 'Bash'], disallowedTools: ['Agent'] } })
   })
 
   it('omits the tool lists the file does not declare', async () => {
     const result = await load('---\nname: plan-agent\ndescription: Plans\n---\nBody')
-    expect(result).toEqual({ ok: true, name: 'plan-agent', definition: { description: 'Plans', prompt: STAGE_SYSTEM_PROMPT } })
+    expect(result).toEqual({ ok: true, name: 'plan-agent', definition: { description: 'Plans', prompt: PROMPT } })
   })
 
   it('reads a CRLF file the same way', async () => {
     const result = await load('---\r\nname: plan-agent\r\ndescription: Plans\r\n---\r\nBody\r\n')
-    expect(result).toEqual({ ok: true, name: 'plan-agent', definition: { description: 'Plans', prompt: STAGE_SYSTEM_PROMPT } })
+    expect(result).toEqual({ ok: true, name: 'plan-agent', definition: { description: 'Plans', prompt: PROMPT } })
   })
 
   it.each([
@@ -60,7 +61,7 @@ describe('the real bundled stage prompts', () => {
   const REAL_ROOT = join(__dirname, '../../../../stage-prompts')
 
   it.each<StageAgent>(['plan', 'impl', 'review', 'revise'])('loads the %s agent', async (agent) => {
-    const result = await loadStageAgentDefinition({ root: REAL_ROOT, agent, ops: pathOps, readTextFile })
+    const result = await loadStageAgentDefinition({ root: REAL_ROOT, agent, prompt: PROMPT, ops: pathOps, readTextFile })
     expect(result.ok).toBe(true)
     expect(result.ok ? result.name : '').toBe(`${agent}-agent`)
     expect(result.ok ? result.definition.prompt.length : 0).toBeGreaterThan(0)

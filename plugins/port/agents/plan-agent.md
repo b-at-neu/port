@@ -114,6 +114,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
      Bound this to **directly-linked** issues only — do not sweep all open issues.
    - **Do not re-derive dependency state.** Whether a dependency has merged is the cockpit's job; it ran the `blockedBy` check and warned the human at opt-in. Never query other pull requests' state, and never conflate an issue number with a pull request number.
+   - **Size the plan.** Estimate the files whose logic changes and the added or changed lines. Moves, import-only fixes, deletions and generated files don't count. Aim for about 800 lines across about 30 files; the cap is 1,000 lines or 40 files. State the estimate in `## Risks / notes`. A plan over the cap proposes a split into tickets under it there, for the human to approve, instead of growing. A limit the ticket itself states wins over these numbers.
 4. **Clarifying questions — never guess, never stall.** If blocking ambiguities remain after research, do **not** write the plan. Leave the issue labeled `<labels.planning>` and end your final message in exactly this form, which the cockpit relays before resuming you with answers:
 
    ```

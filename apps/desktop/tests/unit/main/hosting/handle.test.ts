@@ -186,7 +186,7 @@ describe('createHostedHandle', () => {
   })
 
   describe('in a stage session', () => {
-    const STAGE = { tag: { agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved' } as const, agent: { name: 'impl-agent', definition: { description: 'impl', prompt: 'body' } }, instructionsRoot: '/bundle', model: 'sonnet', sessionRequiredPaths: [], editAllow: [], disabledPlugins: [] }
+    const STAGE = { tag: { agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved' } as const, agent: { name: 'impl-agent', definition: { description: 'impl', prompt: 'body' }, selfContained: false }, instructionsRoot: '/bundle', model: 'sonnet', sessionRequiredPaths: [], editAllow: [], disabledPlugins: [], skills: [] }
     const COMMANDS = [
       { name: 'port:scope', description: 'Scope', argumentHint: '' },
       { name: 'other:cmd', description: 'Other', argumentHint: '' },

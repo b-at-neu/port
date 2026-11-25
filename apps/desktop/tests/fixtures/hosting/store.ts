@@ -1,10 +1,15 @@
 import { vi } from 'vitest'
-import type { HostedStoreDeps } from '@/main/sessions/hosting/store'
-import { createInMemoryHostingPersistence } from '@/main/sessions/hosting/persist'
+import type { Platform } from '@/main/platform'
+import type { HostedQueryFn } from '@/main/platform/sdk'
 import type { HostedQuery } from '@/main/sessions/hosting/handle'
+import type { HostedStoreOptions } from '@/main/sessions/hosting/store'
+import { createInMemoryHostingPersistence } from '@/main/sessions/hosting/persist'
 import type { RepoId } from '@/utils/repos'
+import { createFakePlatform, fakeSdk, fakeWhich } from '../../support/fake-platform'
 
 export const REPO_ID = 'repo-1' as RepoId
+
+export type HostingCtx = Pick<Platform, 'sdk' | 'which' | 'git' | 'fs' | 'clock' | 'claudeHome' | 'paths'>
 
 /** A never-emitting fake query — enough for tests that only care about store-level bookkeeping. */
 export function idleQuery(): HostedQuery {
@@ -28,23 +33,30 @@ export function endedQuery(): HostedQuery {
   } as unknown as HostedQuery
 }
 
-export function baseDeps(overrides: Partial<HostedStoreDeps> = {}): HostedStoreDeps {
+/** A fake platform whose `claude` resolves, whose query never emits and whose rename succeeds. */
+export function hostingCtx(overrides: Partial<HostingCtx> = {}): HostingCtx & { readonly fs: Platform['fs'] } {
+  const { git, fs, clock, claudeHome, paths } = createFakePlatform()
   return {
-    getSdk: () => Promise.resolve({ query: () => idleQuery(), renameSession: vi.fn(() => Promise.resolve(undefined)) }),
-    resolveClaudeExecutable: () => Promise.resolve({ ok: true, path: '/usr/local/bin/claude' }),
-    listSessionsForFork: () => Promise.resolve({ ok: true, sessions: [] }),
-    env: {},
-    platform: 'linux',
-    now: () => 1_000,
-    onEvent: vi.fn(),
-    onStatus: vi.fn(),
-    onEntries: vi.fn(),
-    readStageEditAllow: () => Promise.resolve([]),
-    readStageDisabledPlugins: () => Promise.resolve([]),
-    samePath: (a: string, b: string) => a === b,
+    sdk: fakeSdk({ query: () => idleQuery(), renameSession: () => Promise.resolve() }),
+    which: fakeWhich(() => Promise.resolve({ ok: true, path: '/usr/local/bin/claude' })),
+    git,
+    fs,
+    clock,
+    claudeHome,
+    paths,
+    ...overrides,
+  }
+}
+
+/** A platform sdk whose query is `query`, with a rename that resolves unless `renameSession` says otherwise. */
+export function sdkWith(query: HostedQueryFn, renameSession: () => Promise<void> = () => Promise.resolve()): Platform['sdk'] {
+  return fakeSdk({ query, renameSession })
+}
+
+export function storeOptions(overrides: Partial<HostedStoreOptions> = {}): HostedStoreOptions {
+  return {
+    listSessions: () => Promise.resolve({ ok: true, sessions: [] }),
     persistence: createInMemoryHostingPersistence(),
-    removeWorktree: () => Promise.resolve({ outcome: 'removed' }),
-    readHistory: () => Promise.resolve({ kind: 'none' }),
     ...overrides,
   }
 }

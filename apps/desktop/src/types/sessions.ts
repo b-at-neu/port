@@ -100,9 +100,7 @@ export type SessionScan =
 
 export interface ReadSessionStateParams {
   readonly repos: readonly LocalRepoRef[]
-  readonly claudeHome?: string
-  readonly reader?: SessionReader
-  readonly now?: () => Date
+  readonly reader: SessionReader
 }
 
 export type ProjectIndex = ReadonlyMap<string, string>
@@ -128,7 +126,6 @@ export interface RawSession {
 export interface OpenTailParams {
   readonly sessionId: string
   readonly agentId: string | null
-  readonly claudeHome?: string
 }
 
 export interface PollTailParams {
@@ -172,7 +169,8 @@ export interface TranscriptCursor {
 export interface OpenTranscriptParams {
   readonly sessionId: string
   readonly agentId: string | null
-  readonly claudeHome?: string
   /** Skips this call's own `buildProjectIndex` when the caller already built one, rather than re-listing `<claudeHome>/projects/` once per transcript. */
   readonly index?: ProjectIndex
+  /** Where saved stage system prompts live; when set, a stage session's first message gets its instructions from there. */
+  readonly stagePromptsDir?: string
 }

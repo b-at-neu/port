@@ -25,7 +25,7 @@ import type { LabelEventNode } from '@/types/github'
 import { fullKeysOf, type PipelineView, type StoredItem } from '@/types/pipeline-state'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers, indexWorkSessions, workSessionsFor } from '@/main/pipeline/board/attach'
-import { closingReference, IMPLEMENTATION_PLAN_HEADING, sessionRequiredAt } from '@/main/pipeline/board/link'
+import { closingReference, planPresentIn, sessionRequiredAt } from '@/main/pipeline/board/link'
 import { stageOf } from '@/main/pipeline/board/stage'
 import { CLAIM_SCAN_GRACE_MS } from '@/types/board'
 import { codeReviewCount } from '@/utils/pipeline/gates'
@@ -203,7 +203,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     const reviewCycleCount = item.kind === 'pull-request' ? Math.max(own?.reviewCycles ?? 0, codeReviewCount(item.reviews ?? undefined)) : null
 
     // `null` for a pull request — a `## Changes` block is prose, never this heading.
-    const planPresent = item.kind === 'issue' ? item.body.split(/\r?\n/).some((line) => line.trim() === IMPLEMENTATION_PLAN_HEADING) : null
+    const planPresent = item.kind === 'issue' ? planPresentIn(item.body) : null
 
     return {
       repoId,

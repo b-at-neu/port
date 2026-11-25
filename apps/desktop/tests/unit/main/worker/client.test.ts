@@ -23,11 +23,11 @@ function fakeWorker() {
 }
 
 const now = () => new Date('2026-01-01T00:00:00.000Z')
+const ctx = { clock: { now }, paths: { userData: '/test/userData', temp: '/test/temp', logs: '/test/logs' } }
 
 function setup() {
   const workers: ReturnType<typeof fakeWorker>[] = []
-  const engine = createWorkerEngine({
-    now,
+  const engine = createWorkerEngine(ctx, {
     spawn: () => {
       const worker = fakeWorker()
       workers.push(worker)
@@ -68,8 +68,7 @@ describe('createWorkerEngine', () => {
   it('asks its owner to re-read every source once after a crash, never on the first spawn', async () => {
     const workers: ReturnType<typeof fakeWorker>[] = []
     let respawns = 0
-    const engine = createWorkerEngine({
-      now,
+    const engine = createWorkerEngine(ctx, {
       onRespawn: () => void (respawns += 1),
       spawn: () => {
         const worker = fakeWorker()

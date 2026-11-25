@@ -1,6 +1,5 @@
-import type { ConditionalTransport, GitHubTransport, GitRunner } from '@/types/platform'
-import { precheckIssues } from '@/main/github/precheck'
-import { githubConditional, githubHttp } from '@/main/platform/github-http'
+import type { Platform } from '@/main/platform'
+import { createGithubTracker } from '@/main/github/tracker'
 import type { StateEngine } from '@/types/offload'
 import type { SessionReader } from '@/types/sessions'
 import { readSessionState } from '@/main/sessions/adapter'
@@ -10,40 +9,33 @@ import { runSearch } from '@/main/sessions/search/query'
 import { projectFromCache } from '@/main/pipeline/board/read'
 import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/pipeline/board/sources'
 
-interface InProcessEngineParams {
-  readonly github?: GitHubTransport
-  readonly conditional?: ConditionalTransport
-  readonly git?: GitRunner
-  readonly sessionReader?: SessionReader
-  readonly claudeHome?: string
-  readonly now?: () => Date
+type EngineContext = Pick<Platform, 'git' | 'ghWrite' | 'githubHttp' | 'githubConditional' | 'sdk' | 'fs' | 'clock' | 'claudeHome'> & {
+  /** Absent in the in-process fallback, which has no app data directory; transcripts then show a stage session's first message as it is. */
+  readonly stagePromptsDir?: string
 }
 
-/** Owns the source cache and every CPU-bound read; the worker runs exactly this, and the watcher defaults to it in tests. */
-export function createInProcessEngine(params: InProcessEngineParams = {}): StateEngine {
+/** Owns the source cache and every CPU-bound read; the worker runs exactly this. */
+export function createInProcessEngine(ctx: EngineContext, reader: SessionReader = createSdkSessionReader(ctx.sdk)): StateEngine {
   const cache = createSourceCache()
-  const tails = createTailStore()
-  const now = params.now ?? (() => new Date())
-  const reader = params.sessionReader ?? createSdkSessionReader()
-  const clock = { now }
-  const read = { githubHttp: params.github ?? githubHttp, clock }
-  const conditional = { githubConditional: params.conditional ?? githubConditional, clock }
+  const tails = createTailStore(ctx, ctx.stagePromptsDir)
+  const now = (): Date => ctx.clock.now()
+  const tracker = createGithubTracker({ githubHttp: ctx.githubHttp, githubConditional: ctx.githubConditional, ghWrite: ctx.ghWrite, git: ctx.git, clock: ctx.clock })
 
   return {
-    refreshSessions: ({ repos }) => refreshSessions(cache, { repos, reader: params.sessionReader, claudeHome: params.claudeHome, now }),
-    refreshWorktrees: ({ repoId, repoRoot }) => refreshWorktrees(cache, { repoId, repoRoot, git: params.git, now }),
-    refreshDenials: ({ repoId, repoRoot }) => refreshDenials(cache, { repoId, repoRoot, git: params.git, now }),
+    refreshSessions: ({ repos }) => refreshSessions(ctx, cache, { repos, reader }),
+    refreshWorktrees: ({ repoId, repoRoot }) => refreshWorktrees(ctx, cache, { repoId, repoRoot }),
+    refreshDenials: ({ repoId, repoRoot }) => refreshDenials(ctx, cache, { repoId, repoRoot }),
     refreshGithub: ({ repoId, repo, vocabulary, verify, integration, tracked }) => {
       const worktrees = cache.worktrees.get(repoId)
       const worktreeEntries = worktrees?.ok ? worktrees.entries : []
       const agents = cache.sessions?.ok ? cache.sessions.agents.filter((agent) => agent.repoId === repoId) : []
-      return refreshGithub(cache, { repoId, repo, vocabulary, verify, integration, tracked, worktreeEntries, agents, ctx: read })
+      return refreshGithub(ctx, cache, { repoId, repo, vocabulary, verify, integration, tracked, worktreeEntries, agents })
     },
-    precheckGithub: ({ repoId, repo }) => precheckIssues(conditional, { cache: cache.etags, repoId, repo }),
+    precheckGithub: (params) => tracker.precheck(params),
     project: ({ repositories, views }) => Promise.resolve(projectFromCache(cache, repositories, now, views)),
-    scanSessions: ({ repos }) => readSessionState({ repos, reader: params.sessionReader, claudeHome: params.claudeHome, now }),
+    scanSessions: ({ repos }) => readSessionState(ctx, { repos, reader }),
     listSessions: () => reader(),
-    search: (request) => runSearch(request),
+    search: (request) => runSearch(ctx, request),
     tailOpen: (request) => tails.openTail(request),
     tailPoll: (request) => tails.pollTail(request),
     tailClose: (request) => {
@@ -51,7 +43,7 @@ export function createInProcessEngine(params: InProcessEngineParams = {}): State
       return Promise.resolve()
     },
     forgetRepo: ({ repoId }) => {
-      cache.etags.forget(repoId)
+      tracker.forget(repoId)
       return Promise.resolve()
     },
   }

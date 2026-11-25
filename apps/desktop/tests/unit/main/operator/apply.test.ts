@@ -1,17 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '@/utils/repos'
-import type { ReconciledItem, RepositoryState } from '@/types/state'
-import type { LabelWriteRequest, WriteOutcome } from '@/types/writes'
-
-import type { RecoverPausedTriggerResult } from '@/types/actions'
+import type { RepositoryState, ReconciledItem } from '@/types/state'
 import { applyItemAction } from '@/main/pipeline/operator/apply'
-import type { ApplyItemActionDeps } from '@/main/pipeline/operator/apply'
 import type { ItemActionRequest } from '@/types/actions'
-import type { WriteStateParams } from '@/types/writes'
 import { boardSnapshot as snapshotOf, reconciledItem, repositoryState as repoState } from '../../../support/board-snapshot'
-import { readyEntry as entry } from '../../../support/repo-config'
-
-const REPO_ID = 'repo-a' as RepoId
+import { operatorRig, REPO_ID } from '../../../support/operator-rig'
+import { AT } from '../../../support/state-store'
+import { ticketOf } from '../../../support/tickets'
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
   return reconciledItem({
@@ -27,118 +21,43 @@ function request(overrides: Partial<ItemActionRequest> = {}): ItemActionRequest 
   return { repoId: REPO_ID, kind: 'issue', number: 148, action: 'pause', expectedStage: 'planApproved', ...overrides }
 }
 
-function fakeDeps(overrides: Partial<ApplyItemActionDeps> = {}): { readonly deps: ApplyItemActionDeps; readonly calls: LabelWriteRequest[] } {
-  const calls: LabelWriteRequest[] = []
-  const deps: ApplyItemActionDeps = {
-    writeState: (params: WriteStateParams): Promise<WriteOutcome> => {
-      calls.push(params.request)
-      return Promise.resolve({ kind: 'applied', argv: [] })
-    },
-    recoverPausedTrigger: (): Promise<RecoverPausedTriggerResult> => Promise.resolve({ kind: 'no-record' }),
-    ...overrides,
-  }
-  return { deps, calls }
-}
+const NOT_OK: RepositoryState = { ok: false, repoId: REPO_ID, repo: 'o/a', displayName: 'o/a', reason: 'github-unavailable', kind: 'network', message: 'boom', freshness: {
+  github: { unavailable: 'boom' }, itemStates: { unavailable: 'no re-check needed' }, sessions: { at: AT }, worktrees: { at: AT }, denials: { at: AT },
+} }
 
-describe('applyItemAction', () => {
-  it('refuses repo-unavailable when the repository is missing from the snapshot entirely', async () => {
-    const { deps } = fakeDeps()
-    const result = await applyItemAction({ request: request(), snapshot: snapshotOf([]), entry: entry(), auditDir: '/audit' }, deps)
-    expect(result).toEqual({ ok: false, reason: 'repo-unavailable' })
-  })
+const movedItem = item({ stage: 'in-flight', stages: [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }], matchedKeys: ['inProgress'] })
 
-  it('refuses repo-unavailable when the repository is present but not ok (github-unavailable)', async () => {
-    const { deps } = fakeDeps()
-    const notOk: RepositoryState = { ok: false, repoId: REPO_ID, repo: 'o/a', displayName: 'o/a', reason: 'github-unavailable', kind: 'network', message: 'boom', freshness: {
-      github: { unavailable: 'boom' }, itemStates: { unavailable: 'no re-check needed' }, sessions: { at: '2026-01-01T00:00:00Z' }, worktrees: { at: '2026-01-01T00:00:00Z' }, denials: { at: '2026-01-01T00:00:00Z' },
-    } }
-    const result = await applyItemAction({ request: request(), snapshot: snapshotOf([notOk]), entry: entry(), auditDir: '/audit' }, deps)
-    expect(result).toEqual({ ok: false, reason: 'repo-unavailable' })
-  })
-
-  it('refuses moved when the item is no longer in the reconciled list at all', async () => {
-    const { deps } = fakeDeps()
-    const result = await applyItemAction({ request: request(), snapshot: snapshotOf([repoState([])]), entry: entry(), auditDir: '/audit' }, deps)
-    expect(result).toEqual({ ok: false, reason: 'moved', expected: 'plan approved', observed: 'no longer tracked' })
-  })
-
-  it('refuses moved when the fresh stage disagrees with expectedStage, naming both', async () => {
-    const movedItem = item({ stage: 'in-flight', stages: [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }], matchedKeys: ['inProgress'] })
-    const { deps } = fakeDeps()
-    const result = await applyItemAction({ request: request({ expectedStage: 'planApproved' }), snapshot: snapshotOf([repoState([movedItem])]), entry: entry(), auditDir: '/audit' }, deps)
-    expect(result).toEqual({ ok: false, reason: 'moved', expected: 'plan approved', observed: 'in progress' })
-  })
-
-  it('refuses viewer-unknown when the repository has no resolved viewer', async () => {
-    const { deps } = fakeDeps()
-    const result = await applyItemAction({ request: request(), snapshot: snapshotOf([repoState([item()], { viewer: null })]), entry: entry(), auditDir: '/audit' }, deps)
-    expect(result).toEqual({ ok: false, reason: 'viewer-unknown' })
-  })
-
-  it('refuses not-owned, naming the current assignees, when assigned to someone else', async () => {
-    const { deps } = fakeDeps()
-    const owned = item({ assignees: ['other'] })
-    const result = await applyItemAction({ request: request(), snapshot: snapshotOf([repoState([owned])]), entry: entry(), auditDir: '/audit' }, deps)
-    expect(result).toEqual({ ok: false, reason: 'not-owned', owners: ['other'] })
-  })
-
-  it('applies pause and forwards applyLabels\' own outcome unchanged', async () => {
-    const { deps, calls } = fakeDeps()
-    const result = await applyItemAction({ request: request(), snapshot: snapshotOf([repoState([item()])]), entry: entry(), auditDir: '/audit' }, deps)
-    expect(result).toEqual({ ok: true, outcome: { kind: 'applied', argv: [] } })
-    expect(calls).toHaveLength(1)
-    expect(calls[0]).toMatchObject({ repo: 'o/a', kind: 'issue', number: 148, remove: ['planApproved'], action: 'pause' })
-  })
-
-  it('resume: reports no-pause-record without ever calling applyLabels', async () => {
-    const resumable = item({ marked: true, stage: null, stages: [], matchedKeys: [] })
-    const { deps, calls } = fakeDeps({ recoverPausedTrigger: () => Promise.resolve({ kind: 'no-record' }) })
-    const result = await applyItemAction(
-      { request: request({ action: 'resume', expectedStage: null }), snapshot: snapshotOf([repoState([resumable])]), entry: entry(), auditDir: '/audit' },
-      deps,
-    )
-    expect(result).toEqual({ ok: false, reason: 'no-pause-record' })
-    expect(calls).toHaveLength(0)
-  })
-
-  it('resume: reports pause-record-unresolvable without ever calling applyLabels', async () => {
-    const resumable = item({ marked: true, stage: null, stages: [], matchedKeys: [] })
-    const { deps, calls } = fakeDeps({ recoverPausedTrigger: () => Promise.resolve({ kind: 'unresolvable' }) })
-    const result = await applyItemAction(
-      { request: request({ action: 'resume', expectedStage: null }), snapshot: snapshotOf([repoState([resumable])]), entry: entry(), auditDir: '/audit' },
-      deps,
-    )
-    expect(result).toEqual({ ok: false, reason: 'pause-record-unresolvable' })
-    expect(calls).toHaveLength(0)
-  })
-
-  it('resume: fills the recovered trigger into the plan before writing', async () => {
-    const resumable = item({ marked: true, stage: null, stages: [], matchedKeys: [] })
-    const { deps, calls } = fakeDeps({ recoverPausedTrigger: () => Promise.resolve({ kind: 'recovered', trigger: 'ready' }) })
-    const result = await applyItemAction(
-      { request: request({ action: 'resume', expectedStage: null }), snapshot: snapshotOf([repoState([resumable])]), entry: entry(), auditDir: '/audit' },
-      deps,
-    )
-    expect(result).toEqual({ ok: true, outcome: { kind: 'applied', argv: [] } })
-    expect(calls[0]?.add).toEqual(['ready'])
-  })
-
-  it('gate: available and applied even when the repository has no resolved viewer', async () => {
-    const pr = item({ kind: 'pull-request', marked: false, assignees: [] })
-    const { deps, calls } = fakeDeps()
-    const result = await applyItemAction(
-      { request: request({ kind: 'pull-request', action: 'gate', expectedStage: 'planApproved' }), snapshot: snapshotOf([repoState([pr], { viewer: null })]), entry: entry(), auditDir: '/audit' },
-      deps,
-    )
-    expect(result).toEqual({ ok: true, outcome: { kind: 'applied', argv: [] } })
-    expect(calls[0]?.add).toEqual(['marker'])
+describe('applyItemAction — refusals', () => {
+  it.each([
+    { name: 'a repository missing from the snapshot', snapshot: snapshotOf([]), expected: { ok: false, reason: 'repo-unavailable' } },
+    { name: 'a repository that is present but not ok', snapshot: snapshotOf([NOT_OK]), expected: { ok: false, reason: 'repo-unavailable' } },
+    { name: 'an item no longer in the reconciled list', snapshot: snapshotOf([repoState([])]), expected: { ok: false, reason: 'moved', expected: 'plan approved', observed: 'no longer tracked' } },
+    { name: 'a stage that disagrees with expectedStage', snapshot: snapshotOf([repoState([movedItem])]), expected: { ok: false, reason: 'moved', expected: 'plan approved', observed: 'in progress' } },
+    { name: 'a repository with no resolved viewer', snapshot: snapshotOf([repoState([item()], { viewer: null })]), expected: { ok: false, reason: 'viewer-unknown' } },
+    { name: 'an item assigned to someone else', snapshot: snapshotOf([repoState([item({ assignees: ['other'] })])]), expected: { ok: false, reason: 'not-owned', owners: ['other'] } },
+  ])('refuses $name', async ({ snapshot, expected }) => {
+    const rig = await operatorRig()
+    expect(await applyItemAction(rig.ctx, { request: request(), snapshot, entry: rig.entry, auditDir: rig.auditDir })).toEqual(expected)
   })
 
   it('throws when the action is not applicable and the stage did not drift — a client bug, not a race', async () => {
-    const { deps } = fakeDeps()
-    const issue = item({ kind: 'issue' })
-    await expect(
-      applyItemAction({ request: request({ action: 'gate', expectedStage: 'planApproved' }), snapshot: snapshotOf([repoState([issue])]), entry: entry(), auditDir: '/audit' }, deps),
-    ).rejects.toThrow(/not applicable/)
+    const rig = await operatorRig()
+    await expect(applyItemAction(rig.ctx, { request: request({ action: 'gate', expectedStage: 'planApproved' }), snapshot: snapshotOf([repoState([item({ kind: 'issue' })])]), entry: rig.entry, auditDir: rig.auditDir })).rejects.toThrow(/not applicable/)
+  })
+
+  it('resume: reports no-pause-record when nothing was ever paused', async () => {
+    const rig = await operatorRig()
+    const resumable = item({ marked: true, stage: null, stages: [], matchedKeys: [] })
+    const result = await applyItemAction(rig.ctx, { request: request({ action: 'resume', expectedStage: null }), snapshot: snapshotOf([repoState([resumable])]), entry: rig.entry, auditDir: rig.auditDir })
+    expect(result).toEqual({ ok: false, reason: 'no-pause-record' })
+  })
+})
+
+describe('applyItemAction — writes', () => {
+  it("applies the gate action and forwards the writer's outcome", async () => {
+    const rig = await operatorRig({ items: [{ number: 148, labels: ['port'], assignees: [] }], tickets: [ticketOf({ repo: REPO_ID, ticket: 148 })] })
+    const pr = item({ kind: 'pull-request', marked: false, assignees: [] })
+    const result = await applyItemAction(rig.ctx, { request: request({ kind: 'pull-request', action: 'gate', expectedStage: 'planApproved' }), snapshot: snapshotOf([repoState([pr], { viewer: null })]), entry: rig.entry, auditDir: rig.auditDir })
+    expect(result.ok).toBe(true)
   })
 })

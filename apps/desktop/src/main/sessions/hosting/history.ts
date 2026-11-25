@@ -1,24 +1,18 @@
 // Reads and slices the earlier conversation for resume/resume-at/fork — read before spawn, kept frozen on the handle.
+import type { Platform } from '@/main/platform'
 import type { SessionHistory, SessionStartMode } from '@/types/hosting'
 import { openTranscript } from '@/main/sessions/transcript'
-import type { OpenTranscriptParams } from '@/types/sessions'
 
 /** The last `HISTORY_LIMIT` entries are kept; the rest are counted as `omittedBefore`, never silently dropped. */
 export const HISTORY_LIMIT = 500
 
 const RESUME_POINT_MESSAGE = "The resume point isn't in the transcript."
 
-export interface ReadHistoryDeps {
-  readonly openTranscript: (params: OpenTranscriptParams) => ReturnType<typeof openTranscript>
-}
-
-export const defaultReadHistoryDeps: ReadHistoryDeps = { openTranscript }
-
 /** `fresh` reads nothing. `resume`/`fork` read the whole transcript; `resume-at` cuts after the last entry whose `uuid` matches, failing (never aborting the session) when that uuid isn't present. A read failure is also reported rather than thrown, so the session still starts. */
-export async function readHistory(mode: SessionStartMode, deps: ReadHistoryDeps = defaultReadHistoryDeps): Promise<SessionHistory> {
+export async function readHistory(ctx: Pick<Platform, 'fs' | 'claudeHome'>, mode: SessionStartMode, stagePromptsDir?: string): Promise<SessionHistory> {
   if (mode.kind === 'fresh') return { kind: 'none' }
 
-  const result = await deps.openTranscript({ sessionId: mode.sessionId, agentId: null })
+  const result = await openTranscript(ctx, { sessionId: mode.sessionId, agentId: null, ...(stagePromptsDir !== undefined ? { stagePromptsDir } : {}) })
   if (!result.read.ok) return { kind: 'failed', message: result.read.message }
 
   let entries = result.read.entries

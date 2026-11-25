@@ -69,7 +69,7 @@ export const RESTRICTIONS = [
   { id: 'no-repo-scripts', patterns: [{ group: ['**/scripts/**', '**/plugins/**'], message: 'apps/desktop/src imports nothing from scripts/ or plugins/ (ENGINEERING §9).' }] },
   {
     id: 'gh',
-    except: ['src/main/github/writes/**', 'src/main/platform/**'],
+    except: ['src/main/github/writes/**', 'src/main/platform/**', 'src/main/worker/engine.ts'],
     paths: [{ name: '@/main/platform/gh', importNames: ['gh', 'ghJson'], message: 'Only main/github/writes/ calls gh; reads go through platform/github-http.' }],
   },
   {
@@ -84,8 +84,8 @@ export const RESTRICTIONS = [
   },
   {
     id: 'apply-labels',
-    except: ['src/main/pipeline/state/default.ts', 'src/main/github/writes/**'],
-    paths: [{ name: '@/main/github/writes/apply', importNames: ['applyLabels'], message: 'Only the pipeline-state composition applies labels, so no transition bypasses the store.' }],
+    except: ['src/main/pipeline/state/writer.ts', 'src/main/github/writes/**'],
+    paths: [{ name: '@/main/github/writes/apply', importNames: ['applyLabels'], message: 'Only the state writer applies labels, so no transition bypasses the store.' }],
   },
   {
     id: 'fetch',
@@ -148,7 +148,7 @@ export const RESTRICTIONS = [
     files: ['src/main/sessions/hosting/**'],
     syntax: [
       { selector: "Property[key.name='tools'][shorthand=false]", message: "A tools: key restricts the whole session's built-in set — use allowedTools." },
-      { selector: "Property[key.name='skills'][shorthand=false]", message: 'Commands run as typed slash commands, never through the Skill-tool filter.' },
+      { selector: "Property[key.name='skills'][shorthand=false]:not(FunctionDeclaration[id.name='stageOptions'] Property)", message: 'Commands run as typed slash commands, never through the Skill-tool filter; only a stage session, which has none, narrows its skills.' },
       { selector: "Property[key.name='prompt'][value.type='Literal'][value.raw=/^[\"']/]", message: 'A string prompt disables Stop — keep streaming input mode.' },
       { selector: "Property[key.name='prompt'][value.type='TemplateLiteral']", message: 'A string prompt disables Stop — keep streaming input mode.' },
       { selector: "CallExpression[callee.property.name='kill']", message: 'The SDK owns termination — never kill a process directly.' },

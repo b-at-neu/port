@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { forkTitle, titleFork } from '@/main/sessions/hosting/fork'
-import type { TitleForkDeps } from '@/main/sessions/hosting/fork'
-import type { RawSession } from '@/types/sessions'
+import { forkRename, forkTitle, titleFork } from '@/main/sessions/hosting/fork'
+import type { ListSessionsResult, RawSession } from '@/types/sessions'
 
 function session(overrides: Partial<RawSession>): RawSession {
   return { sessionId: 's', summary: null, lastModified: '2026-01-01T00:00:00.000Z', customTitle: null, firstPrompt: null, gitBranch: null, cwd: null, ...overrides }
@@ -24,60 +23,29 @@ describe('forkTitle', () => {
   })
 })
 
+describe('forkRename', () => {
+  const params = { parentSessionId: 'parent-1', forkedSessionId: 'fork-1' }
+  const listing = (...sessions: RawSession[]): ListSessionsResult => ({ ok: true, sessions })
+
+  it.each<{ readonly name: string; readonly list: ListSessionsResult; readonly expected: ReturnType<typeof forkRename> }>([
+    { name: 'prefers the parent customTitle', list: listing(session({ sessionId: 'parent-1', customTitle: 'My custom title', summary: 'ignored', firstPrompt: 'ignored' })), expected: { kind: 'rename', title: 'My custom title (fork)' } },
+    { name: 'falls back to the parent summary', list: listing(session({ sessionId: 'parent-1', summary: 'a summary', firstPrompt: 'ignored' })), expected: { kind: 'rename', title: 'a summary (fork)' } },
+    { name: 'falls back to the parent firstPrompt', list: listing(session({ sessionId: 'parent-1', firstPrompt: 'do the thing' })), expected: { kind: 'rename', title: 'do the thing (fork)' } },
+    { name: 'is already titled when the fork carries a custom title', list: listing(session({ sessionId: 'fork-1', customTitle: 'already named' }), session({ sessionId: 'parent-1', customTitle: 'Parent' })), expected: { kind: 'titled' } },
+    { name: 'does nothing when the parent has no title', list: listing(session({ sessionId: 'parent-1' })), expected: { kind: 'none' } },
+    { name: 'does nothing when the parent is not listed', list: listing(), expected: { kind: 'none' } },
+    { name: 'does nothing when the session list itself failed', list: { ok: false, kind: 'sdk-unavailable', message: 'no sdk' }, expected: { kind: 'none' } },
+  ])('$name', ({ list, expected }) => {
+    expect(forkRename(list, params)).toEqual(expected)
+  })
+})
+
 describe('titleFork', () => {
-  const params = { parentSessionId: 'parent-1', forkedSessionId: 'fork-1', cwd: '/repo' }
-
-  function deps(overrides: Partial<TitleForkDeps> = {}): TitleForkDeps {
-    return { listSessions: vi.fn(() => Promise.resolve({ ok: true as const, sessions: [] })), renameSession: vi.fn(() => Promise.resolve(undefined)), ...overrides }
-  }
-
-  it('resolves the parent title as customTitle first', async () => {
-    const rename = vi.fn(() => Promise.resolve(undefined))
-    const d = deps({
-      listSessions: () =>
-        Promise.resolve({ ok: true, sessions: [session({ sessionId: 'parent-1', customTitle: 'My custom title', summary: 'ignored', firstPrompt: 'ignored' })] }),
-      renameSession: rename,
-    })
-    const titled = await titleFork(params, d)
-    expect(titled).toBe(true)
-    expect(rename).toHaveBeenCalledWith('fork-1', 'My custom title (fork)', { dir: '/repo' })
-  })
-
-  it('falls back to summary, then firstPrompt', async () => {
-    const rename = vi.fn(() => Promise.resolve(undefined))
-    const d = deps({ listSessions: () => Promise.resolve({ ok: true, sessions: [session({ sessionId: 'parent-1', summary: 'a summary' })] }), renameSession: rename })
-    await titleFork(params, d)
-    expect(rename).toHaveBeenCalledWith('fork-1', 'a summary (fork)', { dir: '/repo' })
-
-    const rename2 = vi.fn(() => Promise.resolve(undefined))
-    const d2 = deps({ listSessions: () => Promise.resolve({ ok: true, sessions: [session({ sessionId: 'parent-1', firstPrompt: 'do the thing' })] }), renameSession: rename2 })
-    await titleFork(params, d2)
-    expect(rename2).toHaveBeenCalledWith('fork-1', 'do the thing (fork)', { dir: '/repo' })
-  })
-
-  it('is skipped, and reported titled, when the fork already carries a custom title', async () => {
-    const rename = vi.fn(() => Promise.resolve(undefined))
-    const d = deps({ listSessions: () => Promise.resolve({ ok: true, sessions: [session({ sessionId: 'fork-1', customTitle: 'already named' })] }), renameSession: rename })
-    const titled = await titleFork(params, d)
-    expect(titled).toBe(true)
-    expect(rename).not.toHaveBeenCalled()
-  })
-
-  it('reports false, never throws, when nothing resolves a parent title', async () => {
-    const d = deps({ listSessions: () => Promise.resolve({ ok: true, sessions: [] }) })
-    await expect(titleFork(params, d)).resolves.toBe(false)
-  })
-
-  it('reports false, never throws, when the session list itself failed', async () => {
-    const d = deps({ listSessions: () => Promise.resolve({ ok: false, kind: 'sdk-unavailable', message: 'no sdk' }) })
-    await expect(titleFork(params, d)).resolves.toBe(false)
-  })
-
   it('reports false, never throws, when renameSession itself rejects', async () => {
-    const d = deps({
-      listSessions: () => Promise.resolve({ ok: true, sessions: [session({ sessionId: 'parent-1', customTitle: 'Title' })] }),
-      renameSession: vi.fn(() => Promise.reject(new Error('disk full'))),
-    })
-    await expect(titleFork(params, d)).resolves.toBe(false)
+    const renameSession = vi.fn(() => Promise.reject(new Error('disk full')))
+    const listSessions = () => Promise.resolve<ListSessionsResult>({ ok: true, sessions: [session({ sessionId: 'parent-1', customTitle: 'Title' })] })
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    await expect(titleFork({ renameSession }, listSessions, { parentSessionId: 'parent-1', forkedSessionId: 'fork-1', cwd: '/repo' })).resolves.toBe(false)
+    expect(renameSession).toHaveBeenCalledWith('fork-1', 'Title (fork)', { dir: '/repo' })
   })
 })

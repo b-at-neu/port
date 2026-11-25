@@ -7,5 +7,5 @@ export const backlogList = defineAction({
   name: 'backlog.list',
   kind: 'query',
   input: z.object({ repoId }),
-  run: (ctx, input) => resolveBacklogList(ctx, ctx.repos.deps, input, { ...defaultBacklogListDeps, trackedRefs: ctx.stores.pipelineState.watcherDeps.trackedRefs }),
+  run: (ctx, input) => resolveBacklogList(ctx, ctx.repos.deps, input, { ...defaultBacklogListDeps, trackedRefs: (repoId) => ctx.stores.pipelineState.tracked(repoId) }),
 })

@@ -189,3 +189,34 @@ describe('repairsOf — artifact shapes (issues only)', () => {
     expect(result.reports).toEqual([])
   })
 })
+
+describe('repairsOf — plan-missing freshness', () => {
+  const BEFORE_READ = '2026-01-01T00:59:00.000Z'
+  const AFTER_READ = '2026-01-01T01:00:01.000Z'
+  const REVIEW_REPORT = { number: 52, kind: 'issue', shape: 'plan-missing-approved', labels: ['planApproved'], agent: null, reason: null, mirror: null }
+
+  function planItem(key: 'planReview' | 'planApproved', enteredAt: string, planPresent: boolean): ReconciledItem {
+    const role = key === 'planReview' ? 'gate' : 'trigger'
+    return item({ stage: role, stages: [{ key, name: key, role }], matchedKeys: [key], planPresent, stageHistory: [{ key, actor: null, at: enteredAt }] })
+  }
+
+  function run(planItem: ReconciledItem, readAt: string | null = READ_AT) {
+    return repairsOf({ items: [planItem], endedStages: [], liveNumbers: new Set(), viewer: VIEWER, readAt })
+  }
+
+  it.each([
+    { key: 'planReview', enteredAt: AFTER_READ, planPresent: false, readAt: READ_AT, observations: 0, reports: 0 },
+    { key: 'planReview', enteredAt: BEFORE_READ, planPresent: false, readAt: READ_AT, observations: 1, reports: 0 },
+    { key: 'planApproved', enteredAt: AFTER_READ, planPresent: false, readAt: READ_AT, observations: 0, reports: 0 },
+    { key: 'planApproved', enteredAt: BEFORE_READ, planPresent: false, readAt: READ_AT, observations: 0, reports: 1 },
+    { key: 'planReview', enteredAt: BEFORE_READ, planPresent: false, readAt: null, observations: 0, reports: 0 },
+    { key: 'planApproved', enteredAt: BEFORE_READ, planPresent: false, readAt: null, observations: 0, reports: 0 },
+    { key: 'planReview', enteredAt: BEFORE_READ, planPresent: true, readAt: READ_AT, observations: 0, reports: 0 },
+    { key: 'planApproved', enteredAt: AFTER_READ, planPresent: true, readAt: READ_AT, observations: 0, reports: 0 },
+  ] as const)('$key entered $enteredAt, planPresent $planPresent, readAt $readAt → $observations observations, $reports reports', ({ key, enteredAt, planPresent, readAt, observations, reports }) => {
+    const result = run(planItem(key, enteredAt, planPresent), readAt)
+    expect(result.observations).toHaveLength(observations)
+    expect(result.reports).toHaveLength(reports)
+    if (reports === 1) expect(result.reports).toEqual([REVIEW_REPORT])
+  })
+})

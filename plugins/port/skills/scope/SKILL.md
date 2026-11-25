@@ -26,7 +26,7 @@ This is a conversation, not a form. Ask **one question at a time**, multiple cho
 - **Purpose** — what user or business problem this solves, and what done looks like
 - **Constraints** — data-model implications, roles and permissions affected, existing behaviour it must not break
 - **Success criteria** — how a human verifies the feature works
-- **Decomposition** — independently shippable sub-tickets, each one pull-request sized, ordered by dependency
+- **Decomposition** — independently shippable sub-tickets, each one pull-request sized, ordered by dependency. Size each against the code it touches: aim for about 800 added or changed lines across about 30 files whose logic changes, with a cap of 1,000 lines or 40 files. Moves, import-only fixes, deletions and generated files don't count. Combine slices under about 300 lines with a neighbour, since every ticket also pays for its own plan and review.
 
 Read `docs.engineering` when it is set, plus the relevant parts of the codebase, so the decomposition reflects how this repository is actually built rather than a generic shape.
 
@@ -43,7 +43,7 @@ gh issue create --repo <repo> --title "<Epic Title>" --body-file .temp/epic.md
 gh issue create --repo <repo> --title "<Sub-Ticket Title>" --body-file .temp/sub-<k>.md
 ```
 
-Write each body with the Write tool rather than passing it inline — bodies contain markdown and backticks, and inline quoting fails cross-platform.
+Write each body with the Write tool rather than passing it inline — bodies contain markdown and backticks, and inline quoting fails cross-platform. Each sub-ticket body ends with a `## Size` section giving its estimated files and lines, so the plan stage can check it.
 
 Link each child to the epic. This uses the REST API and the **database `id`**, not the issue number:
 

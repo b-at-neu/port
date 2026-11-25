@@ -58,14 +58,22 @@ function sessionShapeOf(item: ReconciledItem, ended: EndedStage, readAt: string 
   return { number: item.number, kind: item.kind, shape: 'handback-unlabelled', labels: roleBearing, agent: ended.agent, reason: ended.labels.reason, mirror: null }
 }
 
-function artifactShapeOf(item: ReconciledItem): TickLabelRepair | { readonly observationOnly: true } | null {
+/** True only when the GitHub read postdates the moment the item entered its current label — an older read may predate the hand-back's body edit. No matching entry leaves today's behaviour standing. */
+function bodyFresh(item: ReconciledItem, key: LabelKey, readAt: string | null): boolean {
+  if (readAt === null) return false
+  const entered = item.stageHistory.filter((entry) => entry.key === key).map((entry) => Date.parse(entry.at))
+  if (entered.length === 0) return true
+  return Date.parse(readAt) > Math.max(...entered)
+}
+
+function artifactShapeOf(item: ReconciledItem, readAt: string | null): TickLabelRepair | { readonly observationOnly: true } | null {
   if (item.kind !== 'issue') return null
   const roleBearing = roleBearingKeys(item)
   if (roleBearing.length !== 1) return null
   const only = roleBearing[0]
 
-  if (only === 'planReview' && item.planPresent === false) return { observationOnly: true }
-  if (only === 'planApproved' && item.planPresent === false) {
+  if (only === 'planReview' && item.planPresent === false && bodyFresh(item, only, readAt)) return { observationOnly: true }
+  if (only === 'planApproved' && item.planPresent === false && bodyFresh(item, only, readAt)) {
     return { number: item.number, kind: item.kind, shape: 'plan-missing-approved', labels: roleBearing, agent: null, reason: null, mirror: null }
   }
   if (only === 'prOpened' && item.linkReason === 'counterpart-not-open') {
@@ -93,7 +101,7 @@ export function repairsOf(params: RepairsOfParams): RepairsOfResult {
       }
     }
 
-    const artifact = artifactShapeOf(item)
+    const artifact = artifactShapeOf(item, readAt)
     if (artifact !== null) {
       if ('observationOnly' in artifact) {
         observations.push({ kind: 'plan-missing', number: item.number, itemKind: item.kind })
