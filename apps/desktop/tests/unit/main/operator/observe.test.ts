@@ -1,181 +1,69 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
-import type { RepoId } from '@/utils/repos'
 import type { ReconciledItem } from '@/types/state'
-import type { WriteOutcome } from '@/types/writes'
-import type { ApplyObservationParams, ReadyEntry } from '@/types/actions'
+import type { ApplyObservationParams } from '@/types/actions'
 import { applyObservation } from '@/main/pipeline/operator/observe'
-import type { PostCommentParams, WriteStateParams } from '@/types/writes'
-import type { GatePreflightFetch } from '@/types/github'
+import { reconciledItem } from '../../../support/board-snapshot'
+import { operatorRig, REPO_ID, type OperatorRigOptions } from '../../../support/operator-rig'
+import { ticketOf } from '../../../support/tickets'
 
-const REPO_ID = 'repo-1' as unknown as RepoId
-const APPLIED = { kind: 'applied', argv: [] } satisfies WriteOutcome
+const pullRequestRig = (): OperatorRigOptions => ({
+  items: [{ number: 7, labels: ['port'], assignees: ['op'] }, { number: 52, kind: 'pull-request', labels: ['port'], assignees: ['op'], headRefName: '7-fix', headRefOid: 'abc1234' }],
+  tickets: [ticketOf({ repo: REPO_ID, ticket: 7, pr: { number: 52, approvedAt: null }, stage: 'review' })],
+})
 
-const ENTRY: ReadyEntry = {
-  id: REPO_ID,
-  path: '/repo',
-  displayName: 'widgets',
-  status: 'ready',
-  config: {
-    repo: 'acme/widgets',
-    owner: 'acme',
-    name: 'widgets',
-    branches: { integration: 'dev', production: 'main' },
-    models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
-    modules: { approvalGate: true, release: true, scope: true },
-    reviewCycleCap: 3,
-    vocabulary: resolveVocabulary({}),
-    commands: { worktrees: null, budget: null },
-    concurrency: { sharedFiles: [], overlapThreshold: 2 },
-    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
-    checkDispositions: {},
-    overrides: [],
-  },
-  diagnostics: [],
-}
+const item = (comments: ReconciledItem['comments']): ReconciledItem =>
+  reconciledItem({ repoId: REPO_ID, kind: 'pull-request', number: 52, stages: [{ key: 'readyForReview', name: 'ready for review', role: 'trigger' }], matchedKeys: ['readyForReview'], headRefOid: 'abc1234', comments })
 
-function item(comments: ReconciledItem['comments']): ReconciledItem {
-  return {
-    repoId: REPO_ID,
-    repo: 'acme/widgets',
-    kind: 'pull-request',
-    number: 52,
-    title: 'a pull request',
-    url: 'https://github.com/acme/widgets/pull/52',
-    assignees: ['op'],
-    stage: 'trigger',
-    stages: [{ key: 'readyForReview', name: 'ready for review', role: 'trigger' }],
-    stageAmbiguous: false,
-    marked: true,
-    autoPlan: false,
-    status: 'gated',
-    statusEvidence: null,
-    waitingOn: null,
-    sessionRequired: false,
-    linked: null,
-    linkReason: null,
-    agents: [],
-    sessions: [],
-    worktrees: [],
-    workSessions: [],
-    state: 'OPEN',
-    mergedAt: null,
-    updatedAt: null,
-    stageHistory: [],
-    matchedKeys: ['readyForReview'],
-    sources: ['github'],
-    claimedFiles: null,
-    headRefOid: 'abc1234',
-    mergeable: 'MERGEABLE',
-    reviews: null,
-    comments,
-    reviewCycleCount: null,
-    checkRollup: null,
-    planPresent: null,
-    blockers: null,
-    blockerComments: null,
-    closingPullRequests: null,
-  }
-}
-
-function params(comments: ReconciledItem['comments']): ApplyObservationParams {
-  return {
-    entry: ENTRY,
-    item: item(comments),
-    observation: { kind: 'zero-diff', number: 52, itemKind: 'pull-request', count: 2, headRefOid: 'abc1234' },
-    auditDir: '/audit',
-    scratchDir: '/scratch',
-  }
-}
-
-function deps(): { readonly posted: PostCommentParams[]; readonly labelCalls: () => number; readonly value: Parameters<typeof applyObservation>[1] } {
-  const posted: PostCommentParams[] = []
-  let labels = 0
-  return {
-    posted,
-    labelCalls: () => labels,
-    value: {
-      writeState: () => {
-        labels++
-        return Promise.resolve(APPLIED)
-      },
-      postComment: (p) => {
-        posted.push(p)
-        return Promise.resolve(APPLIED)
-      },
-      fetchGatePreflight: () => {
-        throw new Error('fetchGatePreflight must not be called for this observation')
-      },
-    },
-  }
+async function observeZeroDiff(comments: ReconciledItem['comments']) {
+  const rig = await operatorRig(pullRequestRig())
+  const params: ApplyObservationParams = { entry: rig.entry, item: item(comments), observation: { kind: 'zero-diff', number: 52, itemKind: 'pull-request', count: 2, headRefOid: 'abc1234' }, auditDir: rig.auditDir, scratchDir: rig.scratchDir }
+  return { rig, result: await applyObservation(rig.ctx, params) }
 }
 
 describe('applyObservation — escalation dedup', () => {
   it('posts the first escalation on a head', async () => {
-    const d = deps()
-    const result = await applyObservation(params([]), d.value)
-    expect(d.posted).toHaveLength(1)
-    expect(result.comment).toEqual(APPLIED)
+    const { rig, result } = await observeZeroDiff([])
+    expect(result.comment?.kind).toBe('applied')
+    expect(rig.github.comments(52)).toHaveLength(1)
   })
 
-  it('applies the labels but skips the comment when the newest escalation already carries this cause on this head', async () => {
-    const d = deps()
-    const comments = [{ body: '## Pipeline Escalation\nEarlier.\n<!-- port:escalation sha-cap abc1234 -->', createdAt: '2026-01-01T00:00:00Z' }]
-    const result = await applyObservation(params(comments), d.value)
-    expect(d.labelCalls()).toBe(1)
-    expect(d.posted).toHaveLength(0)
-    expect(result.labels).toEqual(APPLIED)
-    expect(result.comment).toBeNull()
-  })
-
-  it('posts again for the same cause on a moved head', async () => {
-    const d = deps()
-    const comments = [{ body: '## Pipeline Escalation\nEarlier.\n<!-- port:escalation sha-cap old1111 -->', createdAt: '2026-01-01T00:00:00Z' }]
-    await applyObservation(params(comments), d.value)
-    expect(d.posted).toHaveLength(1)
+  it.each([
+    { name: 'skips the comment when the newest escalation already carries this cause on this head', head: 'abc1234', posted: 0 },
+    { name: 'posts again for the same cause on a moved head', head: 'old1111', posted: 1 },
+  ])('$name', async ({ head, posted }) => {
+    const comments = [{ body: `## Pipeline Escalation\nEarlier.\n<!-- port:escalation sha-cap ${head} -->`, createdAt: '2026-01-01T00:00:00Z' }]
+    const { rig, result } = await observeZeroDiff(comments)
+    expect(result.labels.kind).toBe('applied')
+    expect(rig.github.comments(52)).toHaveLength(posted)
   })
 })
 
 describe('applyObservation — plan-missing re-read', () => {
-  const PLAN_MISSING_PARAMS: ApplyObservationParams = {
-    ...params([]),
-    item: { ...item([]), kind: 'issue', stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }], planPresent: false },
-    observation: { kind: 'plan-missing', number: 52, itemKind: 'issue' },
-  }
-
-  function preflightItem(body: string): GatePreflightFetch {
-    return { ok: true, item: { kind: 'issue', number: 52, title: 'a ticket', url: 'https://github.com/acme/widgets/issues/52', state: 'OPEN', body, assignees: ['op'] }, viewer: 'op', fetchedAt: '2026-01-01T00:00:00Z' }
-  }
-
-  const FAILED: GatePreflightFetch = { ok: false, kind: 'timeout', message: 'timed out', fetchedAt: '2026-01-01T00:00:00Z' }
-  const UNRESOLVED: GatePreflightFetch = { ok: true, item: null, viewer: 'op', fetchedAt: '2026-01-01T00:00:00Z' }
+  const issueRig = (body: string | null): OperatorRigOptions => ({
+    items: body === null ? [] : [{ number: 52, labels: ['port'], assignees: ['op'], body }],
+    tickets: [ticketOf({ repo: REPO_ID, ticket: 52, stage: 'plan', status: { kind: 'waiting-on-you', gate: 'plan-approval', detail: '' } })],
+  })
 
   it.each([
-    { name: 'stale snapshot, plan on re-read', fetch: preflightItem('Why\n\n## Implementation Plan\n\nSteps'), labels: { kind: 'no-op' }, writes: 0, comments: 0 },
-    { name: 'genuinely missing plan', fetch: preflightItem('Why\n\nNo plan here'), labels: APPLIED, writes: 1, comments: 1 },
-    { name: 'heading only inside a longer line', fetch: preflightItem('See ## Implementation Plan below'), labels: APPLIED, writes: 1, comments: 1 },
-    { name: 're-read fails', fetch: FAILED, labels: { kind: 'verify-failed', message: 'timed out' }, writes: 0, comments: 0 },
-    { name: 're-read resolves to no item', fetch: UNRESOLVED, labels: { kind: 'item-unavailable' }, writes: 0, comments: 0 },
-  ] as const)('$name', async ({ fetch, labels, writes, comments }) => {
-    const d = deps()
-    const requests: WriteStateParams[] = []
-    const value = {
-      ...d.value,
-      writeState: (p: WriteStateParams) => {
-        requests.push(p)
-        return Promise.resolve(APPLIED)
-      },
-      fetchGatePreflight: () => Promise.resolve(fetch),
-    }
-    const result = await applyObservation(PLAN_MISSING_PARAMS, value)
-    expect(result.labels).toEqual(labels)
-    expect(requests).toHaveLength(writes)
-    expect(d.posted).toHaveLength(comments)
-    const request = requests[0]?.request
-    if (request !== undefined) {
-      expect(request.action).toBe('observe-plan-missing')
-      expect(request.add).toEqual(['ready'])
-      expect(request.remove).toEqual(['planReview'])
-    }
+    { name: 'stale snapshot, plan on re-read', body: 'Why\n\n## Implementation Plan\n\nSteps', labels: 'no-op', comments: 0 },
+    { name: 'genuinely missing plan', body: 'Why\n\nNo plan here', labels: 'applied', comments: 1 },
+    { name: 'heading only inside a longer line', body: 'See ## Implementation Plan below', labels: 'applied', comments: 1 },
+    { name: 're-read resolves to no item', body: null, labels: 'item-unavailable', comments: 0 },
+  ])('$name', async ({ body, labels, comments }) => {
+    const rig = await operatorRig(issueRig(body))
+    const planMissing = reconciledItem({ repoId: REPO_ID, kind: 'issue', number: 52, stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }], matchedKeys: ['planReview'], planPresent: false })
+    const result = await applyObservation(rig.ctx, { entry: rig.entry, item: planMissing, observation: { kind: 'plan-missing', number: 52, itemKind: 'issue' }, auditDir: rig.auditDir, scratchDir: rig.scratchDir })
+    expect(result.labels.kind).toBe(labels)
+    if (body !== null) expect(rig.github.comments(52)).toHaveLength(comments)
+  })
+
+  it('reports a failed re-read without writing', async () => {
+    const rig = await operatorRig(issueRig('Why'))
+    rig.github.failNextRead('timed out')
+    const planMissing = reconciledItem({ repoId: REPO_ID, kind: 'issue', number: 52, stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }], matchedKeys: ['planReview'], planPresent: false })
+    const result = await applyObservation(rig.ctx, { entry: rig.entry, item: planMissing, observation: { kind: 'plan-missing', number: 52, itemKind: 'issue' }, auditDir: rig.auditDir, scratchDir: rig.scratchDir })
+    expect(result.labels.kind).toBe('verify-failed')
+    expect(result.comment).toBeNull()
+    expect(rig.github.labels(52)).toEqual(['port'])
   })
 })

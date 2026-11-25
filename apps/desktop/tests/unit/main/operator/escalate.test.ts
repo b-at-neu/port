@@ -1,127 +1,56 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
-import type { LabelVocabulary } from '@/utils/labels/vocabulary'
-import type { RepoId } from '@/utils/repos'
-import type { WriteOutcome } from '@/types/writes'
 import { escalateToHuman } from '@/main/pipeline/operator/escalate'
-import type { EscalateToHumanDeps } from '@/main/pipeline/operator/escalate'
 import type { EscalateToHumanParams } from '@/types/actions'
-import type { ReadyEntry } from '@/types/actions'
+import { operatorRig, REPO_ID, type OperatorRigOptions } from '../../../support/operator-rig'
+import { ticketOf } from '../../../support/tickets'
 
-const REPO_ID = 'repo-1' as unknown as RepoId
-const VOCABULARY: LabelVocabulary = resolveVocabulary({})
+const READY: OperatorRigOptions = { items: [{ number: 52, labels: ['port', 'claude', 'plan approved'], assignees: ['op'] }], tickets: [ticketOf({ repo: REPO_ID, ticket: 52, stage: 'implement' })] }
 
-const ENTRY: ReadyEntry = {
-  id: REPO_ID,
-  path: '/repo',
-  displayName: 'widgets',
-  status: 'ready',
-  config: {
-    repo: 'acme/widgets',
-    owner: 'acme',
-    name: 'widgets',
-    branches: { integration: 'dev', production: 'main' },
-    models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
-    modules: { approvalGate: true, release: true, scope: true },
-    reviewCycleCap: 3,
-    vocabulary: VOCABULARY,
-    commands: { worktrees: null, budget: null },
-    concurrency: { sharedFiles: [], overlapThreshold: 2 },
-    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
-    checkDispositions: {},
-    overrides: [],
-  },
-  diagnostics: [],
-}
-
-function params(overrides: Partial<EscalateToHumanParams> = {}): EscalateToHumanParams {
-  return {
-    entry: ENTRY,
-    kind: 'issue',
-    number: 52,
-    trigger: 'planApproved',
-    viewer: 'op',
-    body: '## Pipeline Escalation\nover budget',
-    action: 'budget-escalate',
-    auditDir: '/audit',
-    scratchDir: '/scratch',
-    ...overrides,
-  }
+async function escalate(options: OperatorRigOptions = READY, overrides: Partial<EscalateToHumanParams> = {}) {
+  const rig = await operatorRig(options)
+  const result = await escalateToHuman(rig.ctx, { entry: rig.entry, kind: 'issue', number: 52, trigger: 'planApproved', viewer: 'op', body: '## Pipeline Escalation\nover budget', action: 'budget-escalate', auditDir: rig.auditDir, scratchDir: rig.scratchDir, ...overrides })
+  return { rig, result }
 }
 
 describe('escalateToHuman', () => {
   it('swaps the label first, then comments — both applied', async () => {
-    const calls: string[] = []
-    const deps: EscalateToHumanDeps = {
-      writeState: (p) => {
-        calls.push('applyLabels')
-        expect(p.request.add).toEqual(['needsHuman'])
-        expect(p.request.remove).toEqual(['planApproved'])
-        expect(p.request.expect).toEqual({ present: ['planApproved'], absent: ['needsHuman'], assignees: { kind: 'exactly', logins: ['op'] } })
-        return Promise.resolve({ kind: 'applied', argv: [] } satisfies WriteOutcome)
-      },
-      postComment: (p) => {
-        calls.push('postComment')
-        expect(p.request.body).toContain('over budget')
-        return Promise.resolve({ kind: 'applied', argv: [] } satisfies WriteOutcome)
-      },
-    }
-    const result = await escalateToHuman(params(), deps)
-    expect(calls).toEqual(['applyLabels', 'postComment'])
+    const { rig, result } = await escalate()
     expect(result.labels.kind).toBe('applied')
+    expect(result.comment?.kind).toBe('applied')
+    expect(rig.github.labels(52)).toContain('needs you')
+    expect(rig.github.comments(52)).toEqual([expect.stringContaining('over budget')])
+  })
+
+  it('comments when the state moved but its label mirror failed', async () => {
+    const rig = await operatorRig(READY)
+    rig.github.failWrites(null, 'offline')
+    const result = await escalateToHuman(rig.ctx, { entry: rig.entry, kind: 'issue', number: 52, trigger: 'planApproved', viewer: 'op', body: 'over budget', action: 'budget-escalate', auditDir: rig.auditDir, scratchDir: rig.scratchDir })
+    expect(result.labels.kind).toBe('mirror-failed')
     expect(result.comment?.kind).toBe('applied')
   })
 
-  it('comments when the state moved but its label mirror failed, and stays quiet when the state did not save', async () => {
-    const posted: string[] = []
-    const postComment: EscalateToHumanDeps['postComment'] = () => (posted.push('comment'), Promise.resolve({ kind: 'applied', argv: [] } satisfies WriteOutcome))
-    const mirror: WriteOutcome = { kind: 'mirror-failed', mirror: { kind: 'write-failed', classification: 'network', stderr: 'offline', reread: null } }
-    const moved = await escalateToHuman(params(), { writeState: () => Promise.resolve(mirror), postComment })
-    expect(moved.labels.kind).toBe('mirror-failed')
-    expect(moved.comment?.kind).toBe('applied')
-
-    const unsaved = await escalateToHuman(params(), { writeState: () => Promise.resolve({ kind: 'state-unsaved', message: 'disk full' }), postComment })
-    expect(unsaved.comment).toBeNull()
-    expect(posted).toEqual(['comment'])
-  })
-
-  it('never comments when the label swap does not apply', async () => {
-    let commentCalled = false
-    const deps: EscalateToHumanDeps = {
-      writeState: () => Promise.resolve({ kind: 'ownership-unreadable', path: '/repo/.agents/cockpit.json', message: 'bad' } satisfies WriteOutcome),
-      postComment: () => {
-        commentCalled = true
-        return Promise.resolve({ kind: 'applied', argv: [] } satisfies WriteOutcome)
-      },
-    }
-    const result = await escalateToHuman(params(), deps)
-    expect(commentCalled).toBe(false)
+  it.each([
+    { name: 'the state did not save', options: { ...READY, tickets: null } satisfies OperatorRigOptions, kind: 'state-unsaved' },
+    { name: 'ownership is unreadable', options: { ...READY, unreadableOwnership: true } satisfies OperatorRigOptions, kind: 'ownership-unreadable' },
+  ])('never comments when $name', async ({ options, kind }) => {
+    const { rig, result } = await escalate(options)
+    expect(result.labels.kind).toBe(kind)
     expect(result.comment).toBeNull()
-    expect(result.labels.kind).toBe('ownership-unreadable')
+    expect(rig.github.comments(52)).toEqual([])
   })
 
   it('swaps the label and posts nothing when the body is null', async () => {
-    let commentCalled = false
-    const deps: EscalateToHumanDeps = {
-      writeState: () => Promise.resolve({ kind: 'applied', argv: [] } satisfies WriteOutcome),
-      postComment: () => {
-        commentCalled = true
-        return Promise.resolve({ kind: 'applied', argv: [] } satisfies WriteOutcome)
-      },
-    }
-    const result = await escalateToHuman(params({ body: null }), deps)
-    expect(commentCalled).toBe(false)
-    expect(result.comment).toBeNull()
+    const { rig, result } = await escalate(READY, { body: null })
     expect(result.labels.kind).toBe('applied')
+    expect(result.comment).toBeNull()
+    expect(rig.github.comments(52)).toEqual([])
   })
 
   it('reports a failed comment without discarding the successful swap', async () => {
-    const deps: EscalateToHumanDeps = {
-      writeState: () => Promise.resolve({ kind: 'applied', argv: [] } satisfies WriteOutcome),
-      postComment: () => Promise.resolve({ kind: 'write-failed', classification: 'unknown', stderr: 'boom', reread: null } satisfies WriteOutcome),
-    }
-    const result = await escalateToHuman(params(), deps)
+    const rig = await operatorRig(READY)
+    rig.github.failComments('boom')
+    const result = await escalateToHuman(rig.ctx, { entry: rig.entry, kind: 'issue', number: 52, trigger: 'planApproved', viewer: 'op', body: 'over budget', action: 'budget-escalate', auditDir: rig.auditDir, scratchDir: rig.scratchDir })
     expect(result.labels.kind).toBe('applied')
-    expect(result.comment?.kind).toBe('write-failed')
+    expect(result.comment).toMatchObject({ kind: 'write-failed', stderr: 'boom' })
   })
 })

@@ -1,113 +1,58 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
-import type { LabelVocabulary } from '@/utils/labels/vocabulary'
-import type { RepoId } from '@/utils/repos'
-import type { GatePreflightFetch } from '@/types/github'
-import type { LabelWriteRequest, OwnershipSummary, WriteOutcome } from '@/types/writes'
-import type { OwnershipRead } from '@/types/dispatch'
-import type { ReposListResponse } from '@/types/ipc'
 import { autoApprovePlan, gateAnswer, gatePreflight } from '@/main/pipeline/operator/gate'
-import type { GateDeps } from '@/types/gate'
-import type { RegistryDeps } from '@/types/registry'
-import { readyEntry } from '../../../support/repo-config'
+import type { GateAnswerParams } from '@/types/actions'
+import type { RepoId } from '@/utils/repos'
+import { createTestContext } from '../../../support/context'
+import { operatorRig, REPO_ID, type OperatorRigOptions } from '../../../support/operator-rig'
+import { ticketOf } from '../../../support/tickets'
 
-const REPO_ID = 'repo-1' as unknown as RepoId
-const VOCABULARY: LabelVocabulary = resolveVocabulary({})
-const NOW = () => new Date('2026-01-01T00:00:00.000Z')
+const BODY = 'Ticket body.\n\n## Implementation Plan\n\nPlan text.'
+const atPlanReview = ticketOf({ repo: REPO_ID, ticket: 148, stage: 'plan', status: { kind: 'waiting-on-you', gate: 'plan-approval', detail: '' } })
+const GATE: OperatorRigOptions = { viewer: 'alice', items: [{ number: 148, title: 'E3 · Plan review gate', labels: ['port', 'plan review'], assignees: [], body: BODY }], tickets: [atPlanReview] }
 
-const registryDeps: RegistryDeps = {
-  registryDir: '/registry',
-  git: () => {
-    throw new Error('git should not be invoked directly by gate.ts')
-  },
-  chooseDirectory: () => Promise.resolve(null),
-}
-
-const READY_ENTRY = readyEntry({ id: REPO_ID, displayName: 'widgets' }, { repo: 'acme/widgets', owner: 'acme', name: 'widgets', reviewCycleCap: 3 })
-
-const ABSENT_OWNERSHIP: OwnershipRead = { kind: 'absent', path: '/repo/.agents/cockpit.json', readAt: '2026-01-01T00:00:00.000Z' }
-const ABSENT_OWNERSHIP_SUMMARY: OwnershipSummary = { kind: 'absent' }
-
-function depsWith(overrides: Partial<GateDeps>): GateDeps {
-  return {
-    listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] } as ReposListResponse),
-    fetchGatePreflight: () => {
-      throw new Error('fetchGatePreflight should not be invoked in this case')
-    },
-    readOwnership: () => Promise.resolve(ABSENT_OWNERSHIP),
-    writeState: () => {
-      throw new Error('applyLabels should not be invoked in this case')
-    },
-    stateLabels: () => ['plan review'],
-    postComment: () => {
-      throw new Error('postComment should not be invoked in this case')
-    },
-    now: NOW,
-    ...overrides,
-  }
-}
-
-function preflightFetch(overrides: Partial<Extract<GatePreflightFetch, { ok: true }>> = {}): Extract<GatePreflightFetch, { ok: true }> {
-  return {
-    ok: true,
-    viewer: 'alice',
-    fetchedAt: '2026-01-01T00:00:00.000Z',
-    item: {
-      kind: 'issue',
-      number: 148,
-      title: 'E3 · Plan review gate',
-      url: 'u',
-      state: 'OPEN',
-      body: 'Ticket body.\n\n## Implementation Plan\n\nPlan text.',
-      assignees: [],
-    },
-    ...overrides,
-  }
-}
+const answer = (rig: Awaited<ReturnType<typeof operatorRig>>, overrides: Partial<GateAnswerParams> = {}) =>
+  gateAnswer(rig.ctx, { repoId: REPO_ID, number: 148, decision: 'approve', feedback: null, skipComment: false, auditDir: rig.auditDir, scratchDir: rig.scratchDir, ...overrides })
 
 describe('gatePreflight', () => {
-  it('rejects a repository that is not ready', async () => {
-    const notReady = { id: REPO_ID, path: '/repo', displayName: 'widgets', problem: { kind: 'directory-missing' as const }, diagnostics: [] }
-    const deps = depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [notReady] }) })
-    await expect(gatePreflight({ registryDeps, repoId: REPO_ID, number: 148 }, deps)).rejects.toThrow("gate requires a 'ready' repository, got 'directory-missing'")
+  it.each([
+    { name: 'a repository that is not registered', repositories: [], repoId: REPO_ID, message: "gate found no repository registered with id 'repo-a'" },
+    { name: 'a repository that is not ready', repositories: [{ id: REPO_ID, path: '/repo', displayName: 'widgets', problem: { kind: 'directory-missing' as const }, diagnostics: [] }], repoId: REPO_ID, message: "gate requires a 'ready' repository, got 'directory-missing'" },
+  ])('rejects $name', async ({ repositories, repoId, message }) => {
+    const ctx = createTestContext({ repositories })
+    await expect(gatePreflight(ctx, { repoId: repoId as RepoId, number: 148 })).rejects.toThrow(message)
   })
 
   it('carries ownership on a fetch failure', async () => {
-    const deps = depsWith({ fetchGatePreflight: () => Promise.resolve({ ok: false, kind: 'network', message: 'dial tcp', fetchedAt: 't' }) })
-    const result = await gatePreflight({ registryDeps, repoId: REPO_ID, number: 148 }, deps)
-    expect(result).toEqual({ kind: 'failed', message: 'dial tcp', ownership: ABSENT_OWNERSHIP_SUMMARY })
+    const rig = await operatorRig(GATE)
+    rig.github.failNextRead('dial tcp')
+    expect(await gatePreflight(rig.ctx, { repoId: REPO_ID, number: 148 })).toMatchObject({ kind: 'failed', ownership: { kind: 'absent' } })
   })
 
   it('reports unresolved for a number that does not exist, carrying ownership', async () => {
-    const deps = depsWith({ fetchGatePreflight: () => Promise.resolve(preflightFetch({ item: null })) })
-    const result = await gatePreflight({ registryDeps, repoId: REPO_ID, number: 999999 }, deps)
-    expect(result).toEqual({ kind: 'unresolved', ownership: ABSENT_OWNERSHIP_SUMMARY })
+    const rig = await operatorRig(GATE)
+    expect(await gatePreflight(rig.ctx, { repoId: REPO_ID, number: 999_999 })).toEqual({ kind: 'unresolved', ownership: { kind: 'absent' } })
   })
 
   it('resolves an answerable item, splitting ticket and plan markdown at the heading, and summarizes ownership', async () => {
-    const deps = depsWith({
-      fetchGatePreflight: () => Promise.resolve(preflightFetch()),
-      readOwnership: () => Promise.resolve({ kind: 'app', since: '2026-01-01T00:00:00.000Z', path: 'p', readAt: 'r' }),
-    })
-    const result = await gatePreflight({ registryDeps, repoId: REPO_ID, number: 148 }, deps)
+    const rig = await operatorRig({ ...GATE, appOwned: true })
+    const result = await gatePreflight(rig.ctx, { repoId: REPO_ID, number: 148 })
     expect(result.kind).toBe('resolved')
     if (result.kind !== 'resolved') return
     expect(result.preflight.ticketMarkdown).toBe('Ticket body.')
     expect(result.preflight.planMarkdown).toBe('## Implementation Plan\n\nPlan text.')
     expect(result.preflight.sessionRequired).toBe(false)
     expect(result.verdict).toEqual({ kind: 'answerable', noPlanBlock: false, assignedElsewhere: [] })
-    expect(result.ownership).toEqual({ kind: 'app', since: '2026-01-01T00:00:00.000Z' })
+    expect(result.ownership.kind).toBe('app')
   })
 
   it('fails with the unseeded message while the store holds no state for the repository', async () => {
-    const deps = depsWith({ fetchGatePreflight: () => Promise.resolve(preflightFetch()), stateLabels: () => null })
-    const result = await gatePreflight({ registryDeps, repoId: REPO_ID, number: 148 }, deps)
-    expect(result).toEqual({ kind: 'failed', message: "port hasn't loaded this repository's pipeline state yet", ownership: ABSENT_OWNERSHIP_SUMMARY })
+    const rig = await operatorRig({ ...GATE, tickets: null })
+    expect(await gatePreflight(rig.ctx, { repoId: REPO_ID, number: 148 })).toEqual({ kind: 'failed', message: "port hasn't loaded this repository's pipeline state yet", ownership: { kind: 'absent' } })
   })
 
   it('reports noPlanBlock when the body carries no Implementation Plan heading', async () => {
-    const deps = depsWith({ fetchGatePreflight: () => Promise.resolve(preflightFetch({ item: { ...preflightFetch().item!, body: 'Just a ticket body.' } })) })
-    const result = await gatePreflight({ registryDeps, repoId: REPO_ID, number: 148 }, deps)
+    const rig = await operatorRig({ ...GATE, items: [{ number: 148, labels: ['port'], assignees: [], body: 'Just a ticket body.' }] })
+    const result = await gatePreflight(rig.ctx, { repoId: REPO_ID, number: 148 })
     expect(result.kind).toBe('resolved')
     if (result.kind !== 'resolved') return
     expect(result.preflight.planMarkdown).toBeNull()
@@ -117,135 +62,55 @@ describe('gatePreflight', () => {
 
 describe('gateAnswer', () => {
   it('refuses without any write when the fresh verdict is no longer answerable', async () => {
-    const deps = depsWith({ fetchGatePreflight: () => Promise.resolve(preflightFetch()), stateLabels: () => ['plan approved'] })
-    const result = await gateAnswer(
-      { registryDeps, repoId: REPO_ID, number: 148, decision: 'approve', feedback: null, skipComment: false, auditDir: '/audit', scratchDir: '/scratch' },
-      deps,
-    )
-    expect(result).toEqual({ kind: 'refused', verdict: { kind: 'not-at-plan-review', observed: ['plan approved'] } })
+    const rig = await operatorRig({ ...GATE, tickets: [ticketOf({ repo: REPO_ID, ticket: 148, stage: 'implement' })] })
+    expect(await answer(rig)).toMatchObject({ kind: 'refused', verdict: { kind: 'not-at-plan-review' } })
+    expect(rig.ticket(148)?.rev).toBe(0)
   })
 
   it('surfaces an unreachable preflight as preflight-failed, without writing', async () => {
-    const deps = depsWith({ fetchGatePreflight: () => Promise.resolve({ ok: false, kind: 'unauthenticated', message: 'gh: 401', fetchedAt: 't' }) })
-    const result = await gateAnswer(
-      { registryDeps, repoId: REPO_ID, number: 148, decision: 'approve', feedback: null, skipComment: false, auditDir: '/audit', scratchDir: '/scratch' },
-      deps,
-    )
-    expect(result).toEqual({ kind: 'preflight-failed', message: 'gh: 401' })
+    const rig = await operatorRig(GATE)
+    rig.github.failNextRead('gh: 401')
+    expect(await answer(rig)).toMatchObject({ kind: 'preflight-failed' })
+    expect(rig.ticket(148)?.rev).toBe(0)
   })
 
-  it('approve: never posts a comment, applies planApproved/planReview', async () => {
-    let received: LabelWriteRequest | undefined
-    const outcome: WriteOutcome = { kind: 'applied', argv: ['issue', 'edit', '148'] }
-    const deps = depsWith({
-      fetchGatePreflight: () => Promise.resolve(preflightFetch()),
-      writeState: (p) => {
-        received = p.request
-        return Promise.resolve(outcome)
-      },
-    })
-    const result = await gateAnswer(
-      { registryDeps, repoId: REPO_ID, number: 148, decision: 'approve', feedback: null, skipComment: false, auditDir: '/audit', scratchDir: '/scratch' },
-      deps,
-    )
-    expect(result).toEqual({ kind: 'answered', comment: null, labels: outcome })
-    expect(received?.add).toEqual(['planApproved'])
-    expect(received?.remove).toEqual(['planReview'])
-    expect(received?.action).toBe('approve-plan')
+  it('approve: never posts a comment, moves the ticket to implementation', async () => {
+    const rig = await operatorRig(GATE)
+    expect(await answer(rig)).toMatchObject({ kind: 'answered', comment: null, labels: { kind: 'applied' } })
+    expect(rig.github.comments(148)).toEqual([])
+    expect(rig.ticket(148)).toMatchObject({ rev: 1, stage: 'implement' })
   })
 
-  it('request-changes: posts the comment before the label swap, in that order', async () => {
-    const order: string[] = []
-    const commentOutcome: WriteOutcome = { kind: 'applied', argv: ['issue', 'comment', '148'] }
-    const labelOutcome: WriteOutcome = { kind: 'applied', argv: ['issue', 'edit', '148'] }
-    const deps = depsWith({
-      fetchGatePreflight: () => Promise.resolve(preflightFetch()),
-      postComment: (p) => {
-        order.push('comment')
-        expect(p.request.body).toBe('please rework the risks section')
-        expect(p.request.action).toBe('request-plan-changes')
-        return Promise.resolve(commentOutcome)
-      },
-      writeState: () => {
-        order.push('labels')
-        return Promise.resolve(labelOutcome)
-      },
-    })
-    const result = await gateAnswer(
-      {
-        registryDeps,
-        repoId: REPO_ID,
-        number: 148,
-        decision: 'request-changes',
-        feedback: 'please rework the risks section',
-        skipComment: false,
-        auditDir: '/audit',
-        scratchDir: '/scratch',
-      },
-      deps,
-    )
-    expect(order).toEqual(['comment', 'labels'])
-    expect(result).toEqual({ kind: 'answered', comment: commentOutcome, labels: labelOutcome })
+  it('request-changes: posts the comment, then swaps the labels', async () => {
+    const rig = await operatorRig(GATE)
+    const result = await answer(rig, { decision: 'request-changes', feedback: 'please rework the risks section' })
+    expect(result).toMatchObject({ kind: 'answered', comment: { kind: 'applied' }, labels: { kind: 'applied' } })
+    expect(rig.github.comments(148)).toEqual(['please rework the risks section'])
+    expect(rig.ticket(148)?.rev).toBe(1)
   })
 
   it('aborts as comment-failed before touching any label when the comment does not land', async () => {
-    const commentOutcome: WriteOutcome = { kind: 'write-failed', classification: 'network', stderr: 'boom', reread: null }
-    let labelsCalled = false
-    const deps = depsWith({
-      fetchGatePreflight: () => Promise.resolve(preflightFetch()),
-      postComment: () => Promise.resolve(commentOutcome),
-      writeState: () => {
-        labelsCalled = true
-        return Promise.resolve({ kind: 'applied', argv: [] })
-      },
-    })
-    const result = await gateAnswer(
-      { registryDeps, repoId: REPO_ID, number: 148, decision: 'request-changes', feedback: 'x', skipComment: false, auditDir: '/audit', scratchDir: '/scratch' },
-      deps,
-    )
-    expect(result).toEqual({ kind: 'comment-failed', comment: commentOutcome })
-    expect(labelsCalled).toBe(false)
+    const rig = await operatorRig(GATE)
+    rig.github.failComments('boom')
+    expect(await answer(rig, { decision: 'request-changes', feedback: 'x' })).toMatchObject({ kind: 'comment-failed', comment: { kind: 'write-failed', stderr: 'boom' } })
+    expect(rig.ticket(148)?.rev).toBe(0)
+    expect(rig.github.labels(148)).toEqual(['port', 'plan review'])
   })
 
   it('skipComment suppresses the comment and nothing else — only the label swap retries', async () => {
-    let commentCalled = false
-    const labelOutcome: WriteOutcome = { kind: 'applied', argv: [] }
-    const deps = depsWith({
-      fetchGatePreflight: () => Promise.resolve(preflightFetch()),
-      postComment: () => {
-        commentCalled = true
-        return Promise.resolve({ kind: 'applied', argv: [] })
-      },
-      writeState: () => Promise.resolve(labelOutcome),
-    })
-    const result = await gateAnswer(
-      { registryDeps, repoId: REPO_ID, number: 148, decision: 'request-changes', feedback: 'x', skipComment: true, auditDir: '/audit', scratchDir: '/scratch' },
-      deps,
-    )
-    expect(commentCalled).toBe(false)
-    expect(result).toEqual({ kind: 'answered', comment: null, labels: labelOutcome })
+    const rig = await operatorRig(GATE)
+    expect(await answer(rig, { decision: 'request-changes', feedback: 'x', skipComment: true })).toMatchObject({ kind: 'answered', comment: null, labels: { kind: 'applied' } })
+    expect(rig.github.comments(148)).toEqual([])
+    expect(rig.ticket(148)?.rev).toBe(1)
   })
 })
 
 describe('autoApprovePlan', () => {
-  it('writes planApproved/planReview with the auto-approve-plan action, posting no comment', async () => {
-    let received: LabelWriteRequest | undefined
-    const outcome: WriteOutcome = { kind: 'applied', argv: ['issue', 'edit', '148'] }
-    const deps = depsWith({
-      writeState: (p) => {
-        received = p.request
-        return Promise.resolve(outcome)
-      },
-    })
-    const result = await autoApprovePlan({ entry: READY_ENTRY, item: { number: 148, assignees: ['alice'] }, auditDir: '/audit' }, deps)
-    expect(result).toEqual(outcome)
-    expect(received?.add).toEqual(['planApproved'])
-    expect(received?.remove).toEqual(['planReview'])
-    expect(received?.action).toBe('auto-approve-plan')
-    expect(received?.expect).toEqual({
-      present: ['planReview', 'autoPlan'],
-      absent: VOCABULARY.labels.filter((l) => l.role !== 'marker' && l.key !== 'planReview').map((l) => l.key),
-      assignees: { kind: 'exactly', logins: ['alice'] },
-    })
+  it('approves an auto-plan ticket at the gate with no comment', async () => {
+    const rig = await operatorRig({ ...GATE, items: [{ number: 148, labels: ['port', 'plan review', 'auto plan'], assignees: ['alice'], body: BODY }], tickets: [{ ...atPlanReview, autoPlan: true }] })
+    const outcome = await autoApprovePlan(rig.ctx, { entry: rig.entry, item: { number: 148, assignees: ['alice'] }, auditDir: rig.auditDir })
+    expect(outcome.kind).toBe('applied')
+    expect(rig.ticket(148)).toMatchObject({ rev: 1, stage: 'implement' })
+    expect(rig.github.comments(148)).toEqual([])
   })
 })

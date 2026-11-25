@@ -37,6 +37,8 @@ export interface FakeGitHub {
   readonly body: (number: number) => string
   /** Makes the next transport read fail with `message`, once. */
   readonly failNextRead: (message: string) => void
+  /** Makes every comment write fail with `stderr`. */
+  readonly failComments: (stderr: string) => void
   /** Makes every `gh` write to `number` fail with `stderr`; the next write to any item fails when `number` is `null`, once. */
   readonly failWrites: (number: number | null, stderr: string) => void
 }
@@ -71,6 +73,7 @@ export function createFakeGitHub({ viewer = 'viewer', items }: { readonly viewer
   )
   let readFailure: string | null = null
   let nextWriteFailure: string | null = null
+  let commentFailure: string | null = null
   const failingWrites = new Map<number, string>()
 
   const need = (number: number): HeldItem => {
@@ -98,7 +101,7 @@ export function createFakeGitHub({ viewer = 'viewer', items }: { readonly viewer
   const ghWrite: Platform['ghWrite'] = (argv) => {
     const [subcommand, verb, rawNumber, ...flags] = argv
     if ((subcommand !== 'issue' && subcommand !== 'pr') || rawNumber === undefined) throw new Error(`fake GitHub does not answer gh ${argv.join(' ')}`)
-    const failure = nextWriteFailure ?? failingWrites.get(Number(rawNumber)) ?? null
+    const failure = nextWriteFailure ?? failingWrites.get(Number(rawNumber)) ?? (verb === 'comment' ? commentFailure : null)
     nextWriteFailure = null
     if (failure !== null) return Promise.resolve<GhResult>({ ok: false, kind: 'unknown', stdout: '', stderr: failure })
     const item = need(Number(rawNumber))
@@ -124,6 +127,9 @@ export function createFakeGitHub({ viewer = 'viewer', items }: { readonly viewer
     body: (number) => need(number).body,
     failNextRead: (message) => {
       readFailure = message
+    },
+    failComments: (stderr) => {
+      commentFailure = stderr
     },
     failWrites: (number, stderr) => {
       if (number === null) nextWriteFailure = stderr

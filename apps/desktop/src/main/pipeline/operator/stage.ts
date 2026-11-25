@@ -42,7 +42,7 @@ function refused(reason: HandoffRefusal, retryable: boolean, detail: string | nu
 }
 
 /** A `WriteOutcome` that is not `applied`/`no-op`, as the one refusal a hand-back reports; the four transient kinds are the only retryable ones. */
-function refusalOf(outcome: WriteOutcome): StageTransitionResult {
+export function refusalOf(outcome: WriteOutcome): StageTransitionResult {
   switch (outcome.kind) {
     case 'precondition-failed':
       return refused('moved', false)
