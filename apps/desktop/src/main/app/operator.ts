@@ -36,7 +36,7 @@ export function bindOperator(platform: GitHubWriteContext & GitHubReadContext, s
     gateAnswer: (params: GateAnswerParams) => gateAnswer(params, gateDeps),
     autoApprovePlan: (params: AutoApprovePlanParams) => autoApprovePlan(params, { writeState }),
     escalateToHuman: (params: EscalateToHumanParams) => escalateToHuman(params, { writeState, postComment: comment }),
-    applyObservation: (params: ApplyObservationParams) => applyObservation(params, { writeState, postComment: comment }),
+    applyObservation: (params: ApplyObservationParams) => applyObservation(params, { writeState, postComment: comment, fetchGatePreflight: gateDeps.fetchGatePreflight }),
     rerunChecks: (params: RerunChecksParams) => rerunChecks(platform, params),
     stageLabels,
     claimDeps,
