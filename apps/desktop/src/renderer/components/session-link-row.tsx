@@ -1,6 +1,6 @@
 // One session link on the Board item pane — shared by each phase row and the "Your sessions" group.
 import type { TicketSessionLink } from '@/types/board'
-import { sessionLinkAccessibleName, sessionLinkMeta, sessionLinkName } from '@/renderer/board/session-copy'
+import { sessionLinkAccessibleName, sessionLinkMeta, sessionLinkName } from '@/renderer/board/copy'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 
 interface SessionLinkRowProps {

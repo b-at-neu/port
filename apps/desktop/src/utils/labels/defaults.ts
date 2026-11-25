@@ -48,6 +48,11 @@ function isLabelDefault(entry: unknown): entry is LabelDefault {
 // Cast to `unknown[]` before filtering: a JSON import's inferred element type widens every field to `string`, which `LabelDefault` cannot extend directly.
 export const LABEL_DEFAULTS: readonly LabelDefault[] = (template.labels as unknown[]).filter(isLabelDefault)
 
+/** The repository-default display name for a label key, or the key itself when none is defined. */
+export function labelNameOf(key: string): string {
+  return LABEL_DEFAULTS.find((label) => label.key === key)?.name ?? key
+}
+
 export function paletteOf(key: LabelKey): LabelPalette | null {
   return LABEL_DEFAULTS.find((label) => label.key === key)?.palette ?? null
 }

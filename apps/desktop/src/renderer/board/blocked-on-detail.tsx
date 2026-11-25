@@ -1,6 +1,6 @@
 // The item pane's "Blocked on" block: every available source, not only the one the row tag shows.
 import { BlockerAnswer } from '@/renderer/board/blocker-answer'
-import { BLOCKED_AGENT_SAYS, BLOCKED_FALLBACK_COPY, BLOCKED_FROM_TICKET, BLOCKED_OPEN_COMMENT, BLOCKED_SECTION_HEADING, blockedDependencyLine, blockedTruncatedCopy, blockedUnreadableCopy } from '@/renderer/board/blocked-copy'
+import { BLOCKED_AGENT_SAYS, BLOCKED_FALLBACK_COPY, BLOCKED_FROM_TICKET, BLOCKED_OPEN_COMMENT, BLOCKED_SECTION_HEADING, blockedDependencyLine, blockedTruncatedCopy, blockedUnreadableCopy } from '@/renderer/board/copy'
 import type { BlockedOn } from '@/types/board'
 
 interface BlockedOnDetailProps {

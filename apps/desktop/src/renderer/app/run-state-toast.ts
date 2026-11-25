@@ -1,7 +1,7 @@
 import type { DispatchCommand, DispatchControlResult } from '@/types/dispatch'
 import type { ActionToast, ToastButton } from '@/types/toast'
 import type { ConfirmSpec } from '@/renderer/components/confirm-dialog'
-import { haltHeadingCopy, haltItemLine } from '@/renderer/board/halt-copy'
+import { haltHeadingCopy, haltItemLine } from '@/renderer/board/copy'
 import { pauseAbortedCopy, pauseReportNote, runStateResultNote } from '@/renderer/board/run-state'
 
 export const PENDING: Record<DispatchCommand, string> = {

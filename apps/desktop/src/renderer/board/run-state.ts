@@ -1,35 +1,23 @@
 // Per-repository run-state copy; `app/run-state.ts` drives the mutation.
 import type { DispatchControlResult, HaltReport, RepoRunState, RunState, RunStatesSnapshot } from '@/types/dispatch'
+import { formatShortTime } from '@/renderer/lib/time'
 
-function timeOf(iso: string): string {
-  const parsed = new Date(iso)
-  if (Number.isNaN(parsed.getTime())) return iso
-  return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
-/** The row's own store-aware line — "Running since 14:02", "Draining
- *  since…", "Stopped since…", the new-repo variant with no `since` at all, or
- *  the two store-level overrides (`unread`/`unreadable`) that apply
- *  regardless of this repository's own persisted state. */
+/** The row's store-aware line; the two store-level states override the repository's own persisted state. */
 export function runStateLineCopy(repoRunState: RepoRunState, store: RunStatesSnapshot['store']): string {
   if (store.kind === 'unread') return 'Stopped — reading the saved pipeline state…'
   if (store.kind === 'unreadable') return `Stopped — pipeline-state.json can't be read (${store.message}). Fix or delete it, then run it again.`
 
   const { state, since } = repoRunState
-  if (state === 'dispatching') return since !== null ? `Running since ${timeOf(since)}` : 'Running'
-  if (state === 'draining') return since !== null ? `Draining since ${timeOf(since)} — work in progress finishes, nothing new starts` : 'Draining — work in progress finishes, nothing new starts'
-  return since !== null ? `Stopped since ${timeOf(since)} — nothing dispatches` : 'Stopped — press Run to start dispatching'
+  if (state === 'dispatching') return since !== null ? `Running since ${formatShortTime(since)}` : 'Running'
+  if (state === 'draining') return since !== null ? `Draining since ${formatShortTime(since)} — work in progress finishes, nothing new starts` : 'Draining — work in progress finishes, nothing new starts'
+  return since !== null ? `Stopped since ${formatShortTime(since)} — nothing dispatches` : 'Stopped — press Run to start dispatching'
 }
 
 function ownershipRefusalNote(message: string | undefined): string {
   return `Stays stopped: its ownership record can't be read (${message}). Fix or delete it, then run it again.`
 }
 
-/** The one line rendered near the row once a run/drain command's
- *  own result needs the operator's attention — `null` for an ordinary
- *  success, since `runStateLineCopy` already covers the persisted state on
- *  every later read. `pause`'s own result renders as a stop report instead
- *  (`pauseReportNote`/`pauseAbortedCopy`), never through this line. */
+/** The line shown once a run or drain result needs attention; `null` for an ordinary success. A pause renders as a stop report instead. */
 export function runStateResultNote(result: DispatchControlResult): string | null {
   if (result.command === 'run') {
     if (result.ok) return null
@@ -57,10 +45,6 @@ export function undoCommandFor(prior: RunState | null, command: 'run' | 'drain')
   return prior === 'dispatching' ? 'run' : null
 }
 
-/** `pause`'s own stop report, reusing `halt-copy.ts`'s halt copy — the same
- *  report shape `main/dispatch/halt.ts`'s `haltDispatch` always returns,
- *  scoped here to one repository, with the run-state-specific note the
- *  plan's **UX states** table names. */
 export function pauseReportNote(report: Extract<HaltReport, { readonly kind: 'completed' }>, repoName: string): string {
   return `Nothing in ${repoName} will be picked up until you run it. Stopped tickets have no stage; Resume on a row restores it.`
 }

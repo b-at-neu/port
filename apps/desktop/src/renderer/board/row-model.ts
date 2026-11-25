@@ -10,9 +10,9 @@ import type { AttachedAgent, AttachedSession } from '@/types/state'
 import type { PhaseTone } from '@/types/components'
 import { phaseTone } from '@/renderer/lib/phase-tone'
 import { ticketViewOf } from '@/renderer/lib/ticket-view'
-import { needsYouKindOf, stageNameOf } from '@/utils/pipeline/stages'
+import { agentStageName, needsYouKindOf, stageNameOf } from '@/utils/pipeline/stages'
 import type { ItemActionState, StageLinkTarget } from '@/types/board'
-import { actionRefusalNote, actionResultCopy, autoApprovingPhaseLabel, decisionButtonLabel, decisionRefusalNote, openPrButtonLabel, reviewPlanButtonLabel, stageAgentPhaseName, statusWord } from '@/renderer/board/copy'
+import { actionRefusalNote, actionResultCopy, AUTO_APPROVING_PHASE_LABEL, DECISION_BUTTON_LABELS, decisionRefusalNote, OPEN_PR_LABEL, REVIEW_PLAN_LABEL, STATUS_WORDS } from '@/renderer/board/copy'
 
 // `waitingOnYou` mirrors board/sections.ts's own waiting-on-you predicate, so a row's
 // section and its pulse can never disagree.
@@ -33,9 +33,9 @@ export function isDispatchedRow(row: BoardItemRow): boolean {
 
 export function phaseLabelFor(row: BoardItemRow): string {
   const status = row.displayStatus.status
-  if (status === 'interrupted' || status === 'stalled') return statusWord(status)
-  if (row.autoApproving) return autoApprovingPhaseLabel()
-  if (row.liveStage !== null && isDispatchedRow(row)) return stageAgentPhaseName(row.liveStage.agent)
+  if (status === 'interrupted' || status === 'stalled') return STATUS_WORDS[status]
+  if (row.autoApproving) return AUTO_APPROVING_PHASE_LABEL
+  if (row.liveStage !== null && isDispatchedRow(row)) return agentStageName(row.liveStage.agent)
   return stageNameOf(ticketViewOf(row.item))
 }
 
@@ -73,7 +73,7 @@ export function decisionNoteFor(row: BoardItemRow): string | null {
   for (const decision of OPERATOR_DECISIONS) {
     const availability = row.decisions[decision]
     if (!availability.available && (availability.reason === 'cycle-cap' || availability.reason === 'rebase-decisions' || availability.reason === 'agent-live')) {
-      return decisionRefusalNote(decision, availability.reason, row.ticket.ref.number)
+      return decisionRefusalNote(availability.reason, row.ticket.ref.number)
     }
   }
   return null
@@ -127,14 +127,14 @@ type NextAction =
 export function nextActionFor(row: BoardItemRow): NextAction | null {
   const kind = needsYouKindOf(ticketViewOf(row.item), false)
   if (row.item.kind === 'issue' && kind === 'plan-review' && !row.autoApproving) {
-    return { kind: 'review-plan', label: reviewPlanButtonLabel() }
+    return { kind: 'review-plan', label: REVIEW_PLAN_LABEL }
   }
   if (kind === 'ready-to-merge') {
-    return { kind: 'open-pr', label: openPrButtonLabel(), url: row.item.url }
+    return { kind: 'open-pr', label: OPEN_PR_LABEL, url: row.item.url }
   }
   for (const decision of OPERATOR_DECISIONS) {
     const availability = row.decisions[decision]
-    if (availability.available) return { kind: 'decision', label: decisionButtonLabel(decision), decision }
+    if (availability.available) return { kind: 'decision', label: DECISION_BUTTON_LABELS[decision], decision }
   }
   return null
 }

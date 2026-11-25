@@ -29,6 +29,22 @@ export function formatAgoSince(iso: string, now: Date): string {
   return formatAgo(now.getTime() - new Date(iso).getTime())
 }
 
+/** `Ns ago`, `Nm ago` or `Nh ago` from a millisecond age; `just now` for a negative or non-numeric one. */
+export function formatAgoSeconds(ms: number): string {
+  if (Number.isNaN(ms) || ms < 0) return 'just now'
+  const seconds = Math.round(ms / 1000)
+  if (seconds < 60) return `${String(seconds)}s ago`
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) return `${String(minutes)}m ago`
+  return `${String(Math.round(minutes / 60))}h ago`
+}
+
+/** The locale's clock with a padded hour and minute; the input unchanged when it is not a date. */
+export function formatShortTime(iso: string): string {
+  const parsed = new Date(iso)
+  return Number.isNaN(parsed.getTime()) ? iso : parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
 export function exactTime(iso: string): string {
   return new Date(iso).toLocaleString()
 }

@@ -1,8 +1,6 @@
 // The Board's detail pane content, inside the shared `DetailPane` shell:
 // header, actions and decisions, `PhaseList` with its session links, held detail.
-import { useSyncExternalStore } from 'react'
 import { Loader2, ScrollText } from 'lucide-react'
-import { toast } from 'sonner'
 import { useNavigate } from '@tanstack/react-router'
 import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
@@ -14,17 +12,27 @@ import { PhaseList } from '@/renderer/components/phase-list'
 import { PhasePill } from '@/renderer/components/phase-pill'
 import { SessionLinkRow } from '@/renderer/components/session-link-row'
 import { OPERATOR_ACTIONS, OPERATOR_DECISIONS } from '@/types/actions'
-import type { OperatorAction } from '@/types/actions'
 import type { BoardItemRow, TicketSessionLink } from '@/types/board'
 import type { DispatchOwner } from '@/types/dispatch'
 import type { TickReport } from '@/types/tick'
 import { ROUTE_IDS } from '@/renderer/app/routes'
 import { openDecision } from '@/renderer/decision/controller'
 import { openReviewDialog } from '@/renderer/gate/controller'
-import { itemActionState, runItemAction, subscribeItemActions } from '@/renderer/board/actions'
-import { actionButtonLabel, actionPendingLabel, actionResultCopy, decisionButtonLabel, openPrLinkLabel, openTicketLinkLabel, reviewPlanButtonLabel, writeHistoryLinkLabel } from '@/renderer/board/copy'
+import { useItemAction } from '@/renderer/board/actions'
+import {
+  ACTION_BUTTON_LABELS,
+  ACTION_PENDING_LABELS,
+  CLOSE_DETAILS_LABEL,
+  DECISION_BUTTON_LABELS,
+  OPEN_TICKET_LABEL,
+  PAST_SESSIONS_UNREADABLE,
+  REVIEW_PLAN_LABEL,
+  WRITE_HISTORY_LABEL,
+  YOUR_SESSIONS_LABEL,
+  actionInProgressTooltip,
+  openPrLinkLabel,
+} from '@/renderer/board/copy'
 import { BlockedOnDetail } from '@/renderer/board/blocked-on-detail'
-import { yourSessionsLabel } from '@/renderer/board/session-copy'
 import { actionNoteFor, agentSummaryOf, decisionNoteFor, phaseLabelFor, phaseToneFor, stageTargetsOf } from '@/renderer/board/row-model'
 import { itemDetailLines } from '@/renderer/board/tick'
 import { phaseDetailsFor } from '@/renderer/board/phase-history'
@@ -44,7 +52,7 @@ interface ItemPaneProps {
 export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
   const { item, ticket } = row
   const navigate = useNavigate()
-  const state = useSyncExternalStore(subscribeItemActions, () => itemActionState(item.repoId, item.number))
+  const { state, run } = useItemAction(row)
   const pendingAction = state?.kind === 'pending' ? state.action : null
 
   const heldLines = report !== undefined ? itemDetailLines(report, item.number, owner) : []
@@ -87,24 +95,6 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
     })
   }
 
-  async function handleAction(action: OperatorAction): Promise<void> {
-    await runItemAction({ repoId: item.repoId, kind: item.kind, number: item.number, action, expectedStage: row.stageLabel?.key ?? null })
-    const result = itemActionState(item.repoId, item.number)
-    if (result?.kind === 'result' && !result.result.ok) {
-      const availability = row.actions[action]
-      toast(
-        actionResultCopy({
-          action,
-          number: ticket.ref.number,
-          plan: availability.available ? availability.plan : null,
-          currentStageName: row.stageLabel?.name ?? null,
-          result: result.result,
-          now: new Date(),
-        }),
-      )
-    }
-  }
-
   const note = actionNoteFor(row, state)
   const decisionNote = decisionNoteFor(row)
   const prSuffix = prSuffixOf(ticket.ref)
@@ -114,7 +104,7 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
       <div className="flex flex-col gap-1">
         <div className="flex items-start justify-between gap-2">
           <h2 className="text-title font-semibold text-foreground">{ticket.ref.title}</h2>
-          <PaneCloseButton label="Close details" onClick={onClose} />
+          <PaneCloseButton label={CLOSE_DETAILS_LABEL} onClick={onClose} />
         </div>
         <div className="flex flex-wrap items-center gap-2 text-small text-muted-foreground">
           <span>
@@ -128,7 +118,7 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
         <div className="flex items-center gap-3 text-small">
           {ticket.issue !== null ? (
             <a href={ticket.issue.url} target="_blank" rel="noreferrer" className="text-primary-text hover:underline">
-              {openTicketLinkLabel()}
+              {OPEN_TICKET_LABEL}
             </a>
           ) : null}
           {ticket.pullRequest !== null ? (
@@ -144,13 +134,13 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
             <Tooltip key={action}>
               <TooltipTrigger asChild>
                 <span>
-                  <Button variant="outline" size="small" disabled={pendingAction !== null} onClick={() => void handleAction(action)}>
+                  <Button variant="outline" size="small" disabled={pendingAction !== null} onClick={() => void run(action)}>
                     {pendingAction === action ? <Loader2 aria-hidden="true" className="size-3.5 animate-spin" /> : null}
-                    {pendingAction === action ? actionPendingLabel(action) : actionButtonLabel(action)}
+                    {pendingAction === action ? ACTION_PENDING_LABELS[action] : ACTION_BUTTON_LABELS[action]}
                   </Button>
                 </span>
               </TooltipTrigger>
-              {pendingAction !== null && pendingAction !== action ? <TooltipContent>Another action on #{ticket.ref.number} is already in progress.</TooltipContent> : null}
+              {pendingAction !== null && pendingAction !== action ? <TooltipContent>{actionInProgressTooltip(ticket.ref.number)}</TooltipContent> : null}
             </Tooltip>
           ))}
           {availableDecisions.map((decision) => {
@@ -163,13 +153,13 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
                 size="small"
                 onClick={() => openDecision({ repoId: item.repoId, number: item.number, decision, expectedStage: row.stageLabel?.key ?? null, context: availability.context })}
               >
-                {decisionButtonLabel(decision)}
+                {DECISION_BUTTON_LABELS[decision]}
               </Button>
             )
           })}
           {item.kind === 'issue' && needsYouKindOf(view, false) === 'plan-review' ? (
             <Button variant="outline" size="small" onClick={() => openReviewDialog(item.repoId, item.number)}>
-              {reviewPlanButtonLabel()}
+              {REVIEW_PLAN_LABEL}
             </Button>
           ) : null}
         </div>
@@ -186,10 +176,10 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
         onOpenSession={openSession}
       />
       {sessionIndex.isPending ? <Skeleton className="h-3 w-32" /> : null}
-      {sessionIndex.isError ? <ErrorBanner message="Couldn't load past sessions. Live sessions still show." /> : null}
+      {sessionIndex.isError ? <ErrorBanner message={PAST_SESSIONS_UNREADABLE} /> : null}
       {ticketSessions.unplaced.length > 0 ? (
         <div className="flex flex-col gap-0.5">
-          <span className="text-meta text-muted-foreground">{yourSessionsLabel()}</span>
+          <span className="text-meta text-muted-foreground">{YOUR_SESSIONS_LABEL}</span>
           {ticketSessions.unplaced.map((link) => (
             <SessionLinkRow key={link.key} link={link} now={now} onOpen={openSession} />
           ))}
@@ -197,7 +187,7 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
       ) : null}
       <Button variant="ghost" size="small" className="self-start" onClick={() => void navigate({ to: ROUTE_IDS.settings, search: { section: 'audit', repo: item.repoId, number: item.number } })}>
         <ScrollText aria-hidden="true" className="size-3.5" />
-        {writeHistoryLinkLabel()}
+        {WRITE_HISTORY_LABEL}
       </Button>
       {heldLines.length > 0 ? (
         <div className="flex flex-col gap-1 rounded-md bg-muted px-3 py-2 text-meta text-muted-foreground">

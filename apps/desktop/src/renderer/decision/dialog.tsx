@@ -1,7 +1,7 @@
 import { Dialog, DialogContent } from '@/renderer/components/ui/dialog'
 import { ConfirmDialog } from '@/renderer/components/confirm-dialog'
 import { useDecideItem } from '@/renderer/actions/decide-item'
-import { decisionButtonLabel } from '@/renderer/board/copy'
+import { DECISION_BUTTON_LABELS } from '@/renderer/board/copy'
 import { closeDecisionDialog, useDecisionTarget } from '@/renderer/decision/controller'
 import { dialogTitle, grantConsequence } from '@/renderer/decision/copy'
 import { ConfirmReviseStep, ConfirmUnblockStep } from '@/renderer/decision/dialog-steps'
@@ -18,7 +18,7 @@ function GrantConfirm({ target }: { readonly target: GrantTarget }) {
     void decide.perform({ repoId, number, expectedStage, decision: 'grant', route: null, note: null, skipComment: false, picks: null })
   }
 
-  return <ConfirmDialog open title={dialogTitle('grant', number)} description={grantConsequence(context, number)} confirmLabel={decisionButtonLabel('grant')} onCancel={closeDecisionDialog} onConfirm={confirm} />
+  return <ConfirmDialog open title={dialogTitle('grant', number)} description={grantConsequence(context, number)} confirmLabel={DECISION_BUTTON_LABELS.grant} onCancel={closeDecisionDialog} onConfirm={confirm} />
 }
 
 function DecisionForm({ target }: { readonly target: Exclude<DecisionTarget, { readonly decision: 'grant' }> }) {

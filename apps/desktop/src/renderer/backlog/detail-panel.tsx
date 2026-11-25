@@ -5,7 +5,7 @@ import type { LucideIcon } from 'lucide-react'
 import { DetailPane } from '@/renderer/components/detail-pane'
 import { PaneCloseButton } from '@/renderer/components/pane-close-button'
 import { ErrorBanner } from '@/renderer/components/error-banner'
-import { openTicketLinkLabel } from '@/renderer/board/copy'
+import { OPEN_TICKET_LABEL } from '@/renderer/board/copy'
 import { Markdown } from '@/renderer/components/markdown'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
@@ -255,7 +255,7 @@ export function BacklogDetailPane({ row, epic, now, onClose }: BacklogDetailPane
         </div>
         <div className="flex items-center gap-3 text-small">
           <a href={row.url} target="_blank" rel="noreferrer" className="text-primary-text hover:underline">
-            {openTicketLinkLabel()}
+            {OPEN_TICKET_LABEL}
           </a>
         </div>
       </div>

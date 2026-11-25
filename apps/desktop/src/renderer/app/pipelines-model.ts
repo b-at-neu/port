@@ -10,9 +10,8 @@ import { repoNeedsYou } from '@/renderer/board/needs-you'
 import { ticketIndex, ticketLabel } from '@/utils/tickets/ticket'
 import type { PhaseTone, PillStatus } from '@/types/components'
 import type { PipelineRow, PipelineSessionRow, RunStateDisplay, SidebarModel } from '@/types/shell'
-import { stageAgentPhaseName } from '@/renderer/board/copy'
 import { ticketViewOf, viewOfKey } from '@/renderer/lib/ticket-view'
-import { stageNameOf } from '@/utils/pipeline/stages'
+import { agentStageName, stageNameOf } from '@/utils/pipeline/stages'
 import { phaseTone } from '@/renderer/lib/phase-tone'
 import { classifyHandbackText } from '@/utils/stage/handback-text'
 
@@ -64,7 +63,7 @@ function stageRowFor(repoId: RepoId, session: HostedSessionSnapshot, index: Tick
   const ticket = index.byNumber.get(stage.number)
   const label = session.title ?? (ticket !== undefined ? ticketLabel(ticket.ref) : `#${String(stage.number)}`)
   const tone = runningTone(phaseTone({ view: viewOfKey(stage.trigger, stage.kind), active: true, waitingOnYou: false, operatorNeeded: operatorNeeded(session) }))
-  const phaseName = stageAgentPhaseName(stage.agent)
+  const phaseName = agentStageName(stage.agent)
   return { key: session.sessionKey, repoId, number: ticketNumberOf(stage, index), label, tone, statusText: statusTextOf(tone, phaseName), phaseName, sessionKey: session.sessionKey, transcript: null }
 }
 

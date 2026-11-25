@@ -1,49 +1,65 @@
-// Every union the board renders gets its copy here, one `switch` each — a
-// new variant is a compile error rather than a silently blank row (#80),
-// the same rule `worktrees.ts`'s own header states. Pure string functions;
-// no DOM here.
+// Every string the Board renders. A union's copy is an exhaustive record or switch, so a new variant is a compile error rather than a blank row.
 import type { ItemStatus, RepositoryFreshness, RepositoryState } from '@/types/state'
-import type { BoardColumnKey, BoardSnapshot, SourceHealth, SourceKind } from '@/types/board'
+import type { BlockedOnTag, BoardColumnKey, BoardSnapshot, SourceHealth, SourceKind, TicketSessionLink } from '@/types/board'
 import type { BoardView } from '@/types/router'
 import { SOURCE_KINDS, isDeferred } from '@/types/board'
-import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
+import { labelNameOf } from '@/utils/labels/defaults'
 import { RETRY_TRIGGER } from '@/utils/actions/plan'
 import type { ActionPlan, ActionRefusal, ItemActionResult, OperatorAction, OperatorDecision } from '@/types/actions'
 import type { Conflict } from '@/types/writes'
+import type { HaltItemOutcome, HaltReport } from '@/types/dispatch'
+import type { RepoProblem } from '@/utils/repos'
 import type { StageAgent } from '@/types/tick'
-import { worstHealth } from '@/renderer/board/project'
 import type { LabelKey } from '@/utils/labels/vocabulary'
+import { worstHealth } from '@/renderer/board/project'
 import { stageNameOfKey } from '@/renderer/lib/ticket-view'
-import { agentStageName } from '@/utils/pipeline/stages'
 import { mirrorReason } from '@/renderer/lib/mirror-reason'
+import { formatAgoSeconds, formatAgoSince, formatShortTime } from '@/renderer/lib/time'
+import { formatCost } from '@/utils/hosting/usage'
+import { BACKLOG_BLOCKED_TOOLTIP_HEADING, backlogBlockerLine } from '@/renderer/backlog/copy'
 
-/** The phase name a dispatched stage shows before its agent has swapped a label. */
-export function stageAgentPhaseName(agent: StageAgent): string {
-  return agentStageName(agent)
+export { BACKLOG_BLOCKED_TOOLTIP_HEADING as BLOCKED_DEPENDENCY_HEADING, backlogBlockerLine as blockedDependencyLine, backlogBlockerTruncatedCopy as blockedTruncatedCopy } from '@/renderer/backlog/copy'
+
+export const BOARD_TITLE = 'Board'
+export const ALL_REPOSITORIES = 'All repositories'
+export const REFRESH_LABEL = 'Refresh'
+export const BOARD_LAYOUT_LABEL = 'Board layout'
+export const BOARD_UNREACHABLE = "Couldn't reach the main process to read the board. Restart port to try again."
+export const NO_REPOSITORIES_EMPTY = 'Add a repository to see its pipeline.'
+export const OPEN_REPOSITORIES_LABEL = 'Open Repositories'
+export const SHOW_ALL_REPOSITORIES_LABEL = 'Show all repositories'
+export const EMPTY_COLUMN_LABEL = 'No tickets'
+export const CLOSE_DETAILS_LABEL = 'Close details'
+export const PAST_SESSIONS_UNREADABLE = "Couldn't load past sessions. Live sessions still show."
+
+export function nothingAssignedEmpty(scoped: boolean): string {
+  return scoped ? "Nothing assigned to you in this repository's pipeline." : 'Nothing assigned to you in the pipeline.'
 }
 
-function timeOf(iso: string): string {
-  const parsed = new Date(iso)
-  return Number.isNaN(parsed.getTime()) ? iso : parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+const MARKER_NAME = labelNameOf('marker')
+
+export const UNGATED_TAG_LABEL = 'Ungated'
+export const UNGATED_TAG_TITLE = `Carries a pipeline label but not "${MARKER_NAME}", so CI can't tell it from a human PR and the merge gate is inactive.`
+export const UNGATED_BANNER_NOTE = `These carry a pipeline label but not "${MARKER_NAME}", so CI can't tell them from a human pull request and the merge gate is inactive.`
+
+export function ungatedBannerHeading(count: number): string {
+  return `Ungated pull requests · ${String(count)}`
 }
 
+export const OPERATOR_JOINED_TAG_LABEL = 'Operator joined'
+export const OPERATOR_JOINED_TAG_TITLE = "A person typed into this ticket's stage session"
+export const DISPATCHED_TAG_LABEL = 'Dispatched'
+export const DISPATCHED_TAG_TITLE = 'port started this stage. The label updates when the agent claims it.'
+export const AUTO_PLAN_TAG_LABEL = 'Auto-plan'
+export const AUTO_PLAN_TAG_TITLE = 'Opted in with auto-approve: its plan is approved without a review.'
+export const AUTO_APPROVING_PHASE_LABEL = 'Plan auto-approving'
+export const NO_TICKET_TAG_LABEL = 'No ticket'
+export const NO_TICKET_TAG_TITLE = "This PR doesn't close a ticket. Add `Closes #N` to its description to link it."
 
-const COLUMN_NAMES: Readonly<Record<BoardColumnKey, string>> = {
-  queued: 'Queued',
-  plan: 'Plan',
-  implement: 'Implement',
-  review: 'Review',
-  revise: 'Revise',
-  'needs-you': 'Needs you',
-}
+const COLUMN_NAMES: Readonly<Record<BoardColumnKey, string>> = { queued: 'Queued', plan: 'Plan', implement: 'Implement', review: 'Review', revise: 'Revise', 'needs-you': 'Needs you' }
 
-/** A kanban column's header name. */
 export function columnName(key: BoardColumnKey): string {
   return COLUMN_NAMES[key]
-}
-
-export function emptyColumnLabel(): string {
-  return 'No tickets'
 }
 
 /** The accessible name of a swimlane's collapse toggle. */
@@ -51,81 +67,20 @@ export function laneToggleAria(name: string, collapsed: boolean): string {
   return `${collapsed ? 'Expand' : 'Collapse'} ${name}`
 }
 
-export function ungatedTagLabel(): string {
-  return 'Ungated'
-}
-
-export function ungatedTagTitle(): string {
-  const markerName = LABEL_DEFAULTS.find((def) => def.key === 'marker')?.name ?? 'marker'
-  return `Carries a pipeline label but not "${markerName}", so CI can't tell it from a human PR and the merge gate is inactive.`
-}
-
-export function boardLayoutLabel(): string {
-  return 'Board layout'
-}
-
 export function boardViewLabel(view: BoardView): string {
   return view === 'board' ? 'Board' : 'List'
 }
 
-/** The board row's "Operator joined" pill label and its accessible tooltip. */
-export function operatorJoinedTagLabel(): string {
-  return 'Operator joined'
-}
-
-export function operatorJoinedTagTitle(): string {
-  return "A person typed into this ticket's stage session"
-}
-
-/** The board row's "Dispatched" tag label and its accessible tooltip. */
-export function dispatchedTagLabel(): string {
-  return 'Dispatched'
-}
-
-export function dispatchedTagTitle(): string {
-  return 'port started this stage. The label updates when the agent claims it.'
-}
-
-export function statusWord(status: ItemStatus): string {
-  switch (status) {
-    case 'waiting':
-      return 'Waiting'
-    case 'in-flight':
-      return 'In flight'
-    case 'stalled':
-      return 'Stalled'
-    case 'gated':
-      return 'Awaiting human'
-    case 'terminal':
-      return 'Terminal'
-    case 'unstaged':
-      return 'Unstaged'
-    case 'interrupted':
-      return 'Interrupted'
-  }
-}
+export const STATUS_WORDS: Readonly<Record<ItemStatus, string>> = { waiting: 'Waiting', 'in-flight': 'In flight', stalled: 'Stalled', gated: 'Awaiting human', terminal: 'Terminal', unstaged: 'Unstaged', interrupted: 'Interrupted' }
 
 const SOURCE_NAMES: Readonly<Record<SourceKind, string>> = { github: 'GitHub', sessions: 'Sessions', worktrees: 'Worktrees', denials: 'Denials' }
 
-export function sourceName(kind: SourceKind): string {
-  return SOURCE_NAMES[kind]
-}
-
 function ageCopy(at: string | null, now: Date): string {
-  if (at === null) return 'never read'
-  const ms = now.getTime() - Date.parse(at)
-  if (Number.isNaN(ms) || ms < 0) return 'just now'
-  const seconds = Math.round(ms / 1000)
-  if (seconds < 60) return `${seconds}s ago`
-  const minutes = Math.round(seconds / 60)
-  if (minutes < 60) return `${minutes}m ago`
-  return `${Math.round(minutes / 60)}h ago`
+  return at === null ? 'never read' : formatAgoSeconds(now.getTime() - Date.parse(at))
 }
 
-/** One source's own freshness-strip clause — healthy, retrying, or never
- *  read, following the plan's own three example lines. */
 export function sourceHealthCopy(kind: SourceKind, health: SourceHealth, now: Date): string {
-  const name = sourceName(kind)
+  const name = SOURCE_NAMES[kind]
   if (health.lastSuccessAt === null && health.consecutiveFailures === 0) return `${name} — reading…`
   if (health.consecutiveFailures === 0) return `${name} ${ageCopy(health.lastSuccessAt, now)}`
   if (health.lastSuccessAt === null) return `${name} — never read. ${health.lastError ?? ''}`.trim()
@@ -135,9 +90,7 @@ export function sourceHealthCopy(kind: SourceKind, health: SourceHealth, now: Da
 export function rateLimitCopy(freshness: RepositoryFreshness | null, remaining: number | null, resetAt: string | null): string | null {
   void freshness
   if (remaining === null || resetAt === null) return null
-  const resetTime = new Date(resetAt)
-  const label = Number.isNaN(resetTime.getTime()) ? resetAt : resetTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  return `${remaining.toLocaleString()} API points left, resets ${label}`
+  return `${remaining.toLocaleString()} API points left, resets ${formatShortTime(resetAt)}`
 }
 
 /** The earliest rate-limit deferral still in the future across every repository, `null` when none. */
@@ -149,14 +102,14 @@ function earliestDeferral(snapshot: BoardSnapshot, now: Date): string | null {
 
 type IndicatorTone = 'muted' | 'attention'
 
-/** The head of the Board header's label — GitHub's own state, first matching rule wins. A rate-limited read also counts as a failure, so the deferral is checked before the failing rule. */
+/** The head of the Board header's label: GitHub's own state, first matching rule wins. A rate-limited read also counts as a failure, so the deferral is checked first. */
 function githubClause(snapshot: BoardSnapshot, github: SourceHealth, now: Date): { readonly text: string; readonly tone: IndicatorTone } {
   const lastSuccessAt = github.lastSuccessAt
   if (lastSuccessAt === null && github.consecutiveFailures === 0) return { text: 'Checking GitHub…', tone: 'muted' }
 
   const deferredUntil = earliestDeferral(snapshot, now)
   if (deferredUntil !== null) {
-    const wait = `waiting for GitHub's rate limit until ${timeOf(deferredUntil)}`
+    const wait = `waiting for GitHub's rate limit until ${formatShortTime(deferredUntil)}`
     return { text: lastSuccessAt !== null ? `Checked GitHub ${ageCopy(lastSuccessAt, now)} · ${wait}` : `Checking GitHub — ${wait}`, tone: 'muted' }
   }
 
@@ -170,14 +123,14 @@ function githubClause(snapshot: BoardSnapshot, github: SourceHealth, now: Date):
   return { text: `Checked GitHub ${ageCopy(lastSuccessAt, now)}`, tone: stale ? 'attention' : 'muted' }
 }
 
-/** The Board header's always-on timing label — `null` only when there is no repository health to read. */
+/** The Board header's always-on timing label; `null` only when there is no repository health to read. */
 export function freshnessIndicator(snapshot: BoardSnapshot, now: Date): { readonly label: string; readonly tone: IndicatorTone; readonly lines: readonly string[] } | null {
   const github = worstHealth(snapshot.health, 'github')
   if (github === null) return null
 
   const head = githubClause(snapshot, github, now)
   const failing = SOURCE_KINDS.filter((kind) => kind !== 'github' && (worstHealth(snapshot.health, kind)?.consecutiveFailures ?? 0) > 0)
-  const label = failing.length > 0 ? `${head.text} · ${failing.map(sourceName).join(', ')} failing` : head.text
+  const label = failing.length > 0 ? `${head.text} · ${failing.map((kind) => SOURCE_NAMES[kind]).join(', ')} failing` : head.text
   const tone = failing.length > 0 ? 'attention' : head.tone
 
   const sourceLines = SOURCE_KINDS.map((kind) => {
@@ -190,7 +143,7 @@ export function freshnessIndicator(snapshot: BoardSnapshot, now: Date): { readon
   return { label, tone, lines: rateLimitText !== null ? [...sourceLines, rateLimitText] : sourceLines }
 }
 
-// --- The phase list's history lines (R6) -----------------------------------
+// --- Phase history ----------------------------------------------------------
 
 const PHASE_EVENT_VERB: Readonly<Partial<Record<LabelKey, string>>> = {
   ready: 'Queued for planning',
@@ -210,7 +163,7 @@ const PHASE_EVENT_VERB: Readonly<Partial<Record<LabelKey, string>>> = {
   blocked: 'Blocked',
 }
 
-/** One phase history line's leading verb — falls back to the stage table's name for a key with no dedicated event phrasing. */
+/** One phase history line's leading verb; a key with no dedicated phrasing falls back to the stage table's name. */
 export function phaseEventVerb(key: LabelKey): string {
   return PHASE_EVENT_VERB[key] ?? stageNameOfKey(key) ?? key
 }
@@ -220,122 +173,37 @@ export function actorName(actor: string, viewer: string | null): string {
   return viewer !== null && actor.toLowerCase() === viewer.toLowerCase() ? 'you' : `@${actor}`
 }
 
-// --- The plan gate (#92) ----------------------------------------------------
+// --- The plan gate ------------------------------------------------------------
 
-export function reviewPlanButtonLabel(): string {
-  return 'Review plan'
-}
-
-export function openPrButtonLabel(): string {
-  return 'Open PR'
-}
-
-export function openTicketLinkLabel(): string {
-  return 'Open ticket'
-}
-
-export function writeHistoryLinkLabel(): string {
-  return 'History of writes'
-}
+export const REVIEW_PLAN_LABEL = 'Review plan'
+export const OPEN_PR_LABEL = 'Open PR'
+export const OPEN_TICKET_LABEL = 'Open ticket'
+export const WRITE_HISTORY_LABEL = 'History of writes'
 
 /** `Open PR #<n>` beside a ticket link, bare `Open PR` for a pull request that is the whole item. */
 export function openPrLinkLabel(number: number | null): string {
-  return number === null ? openPrButtonLabel() : `${openPrButtonLabel()} #${String(number)}`
+  return number === null ? OPEN_PR_LABEL : `${OPEN_PR_LABEL} #${String(number)}`
 }
 
-/** The row tag for an `autoPlan` issue, at any phase — `docs/DESIGN.md` §6's own "Auto-plan" tag sentence. */
-export function autoPlanTagLabel(): string {
-  return 'Auto-plan'
-}
+export const DECISION_BUTTON_LABELS: Readonly<Record<OperatorDecision, string>> = { unblock: 'Unblock', revise: 'Request changes', grant: 'Grant one more cycle' }
 
-export function autoPlanTagTitle(): string {
-  return 'Opted in with auto-approve: its plan is approved without a review.'
-}
-
-/** The phase name for an `autoPlan` ticket at plan review that the app is about to approve — `docs/DESIGN.md` §6's own "Plan auto-approving" sentence. */
-export function autoApprovingPhaseLabel(): string {
-  return 'Plan auto-approving'
-}
-
-/** The tag on a pull request that closes no ticket — `docs/DESIGN.md` §6's own "No ticket" tag sentence. */
-export function noTicketTagLabel(): string {
-  return 'No ticket'
-}
-
-export function noTicketTagTitle(): string {
-  return "This PR doesn't close a ticket. Add `Closes #N` to its description to link it."
-}
-
-// --- The operator decisions --------------------------------------------
-
-export function decisionButtonLabel(decision: OperatorDecision): string {
-  switch (decision) {
-    case 'unblock':
-      return 'Unblock'
-    case 'revise':
-      return 'Request changes'
-    case 'grant':
-      return 'Grant one more cycle'
-  }
-}
-
-/** The row's own note for a `cycle-cap`/`rebase-decisions`/`agent-live` refusal — every
- *  other refusal is silent, the same as `actionRefusalNote`'s own rule. */
-export function decisionRefusalNote(decision: OperatorDecision, reason: string, number: number): string | null {
+/** The row's note for a `cycle-cap`, `rebase-decisions` or `agent-live` refusal; every other refusal is silent. */
+export function decisionRefusalNote(reason: string, number: number): string | null {
   const n = String(number)
-  if (reason === 'agent-live') {
-    return `#${n}'s agent is still waiting in its session. Answer it there and it clears the block itself.`
-  }
-  if (reason === 'cycle-cap') {
-    return `PR #${n} has used all its review cycles. Sending it back would escalate straight to "${labelNameOf('needsHuman')}". Merge it and open a follow-up, or raise reviewCycleCap.`
-  }
-  if (reason === 'rebase-decisions') {
-    return `PR #${n} is waiting on rebase decisions port couldn't read — answer them with unblock #${n} in the cockpit.`
-  }
-  void decision
+  if (reason === 'agent-live') return `#${n}'s agent is still waiting in its session. Answer it there and it clears the block itself.`
+  if (reason === 'cycle-cap') return `PR #${n} has used all its review cycles. Sending it back would escalate straight to "${labelNameOf('needsHuman')}". Merge it and open a follow-up, or raise reviewCycleCap.`
+  if (reason === 'rebase-decisions') return `PR #${n} is waiting on rebase decisions port couldn't read — answer them with unblock #${n} in the cockpit.`
   return null
 }
 
-// --- The single-label operator actions (#94) -------------------------------
+export const ACTION_BUTTON_LABELS: Readonly<Record<OperatorAction, string>> = { pause: 'Pause', resume: 'Resume', retry: 'Retry', stop: 'Stop', gate: 'Add gate label', refresh: REFRESH_LABEL }
+export const ACTION_PENDING_LABELS: Readonly<Record<OperatorAction, string>> = { pause: 'Pausing…', resume: 'Resuming…', retry: 'Retrying…', stop: 'Stopping…', gate: 'Adding…', refresh: 'Refreshing…' }
 
-export function actionButtonLabel(action: OperatorAction): string {
-  switch (action) {
-    case 'pause':
-      return 'Pause'
-    case 'resume':
-      return 'Resume'
-    case 'retry':
-      return 'Retry'
-    case 'stop':
-      return 'Stop'
-    case 'gate':
-      return 'Add gate label'
-    case 'refresh':
-      return 'Refresh'
-  }
+export function actionInProgressTooltip(number: number): string {
+  return `Another action on #${String(number)} is already in progress.`
 }
 
-export function actionPendingLabel(action: OperatorAction): string {
-  switch (action) {
-    case 'pause':
-      return 'Pausing…'
-    case 'resume':
-      return 'Resuming…'
-    case 'retry':
-      return 'Retrying…'
-    case 'stop':
-      return 'Stopping…'
-    case 'gate':
-      return 'Adding…'
-    case 'refresh':
-      return 'Refreshing…'
-  }
-}
-
-/** The row's ownership note before anything has been clicked — `null` for
- *  `not-applicable`, since a button that does not apply here has nothing to
- *  say (COORDINATION.md's rule that a reason is on screen, never in a
- *  tooltip, only applies once there is a reason to give). */
+/** The row's ownership note before anything has been clicked; `null` for `not-applicable`, which has nothing to say. */
 export function actionRefusalNote(reason: ActionRefusal, item: { readonly number: number; readonly assignees: readonly string[] }): string | null {
   if (reason === 'viewer-unknown') return "Can't tell which account you're signed in as, so ownership can't be checked."
   if (reason === 'not-owned') {
@@ -345,35 +213,21 @@ export function actionRefusalNote(reason: ActionRefusal, item: { readonly number
   return null
 }
 
-function labelNameOf(key: string): string {
-  return LABEL_DEFAULTS.find((def) => def.key === key)?.name ?? key
-}
-
-/** One line per action verb. `WriteOutcome`'s own `applied` arm deliberately
- *  carries no resulting label set (`gh` exiting 0 is evidence the call
- *  landed, never a licence to synthesize state), so the names come from the
- *  row's own already-computed `plan` instead — pause/retry/gate know theirs
- *  before the click; resume's own `add` is a placeholder there (the
- *  recovered trigger is only known once the audit log is read, server-side),
- *  so its copy reads back the row's *current* stage name instead, valid the
- *  moment the post-write board refresh lands. */
+/** `applied` carries no resulting label set, so the names come from the row's own `plan`; resume's plan holds a placeholder, so it reads the row's current stage name instead. */
 function appliedCopy(action: OperatorAction, number: number, plan: ActionPlan | null, currentStageName: string | null): string {
   const n = String(number)
+  const removed = plan?.remove[0]
+  const removedName = removed !== undefined ? labelNameOf(removed) : ''
   switch (action) {
-    case 'pause': {
-      const removed = plan?.remove[0]
-      return `Paused #${n} — removed "${removed !== undefined ? labelNameOf(removed) : ''}". No agent will pick it up now.`
-    }
+    case 'pause':
+      return `Paused #${n} — removed "${removedName}". No agent will pick it up now.`
     case 'retry': {
-      const removed = plan?.remove[0]
       const added = plan?.add[0]
-      return `Retrying #${n} — "${removed !== undefined ? labelNameOf(removed) : ''}" → "${added !== undefined ? labelNameOf(added) : ''}". The next tick picks it up.`
+      return `Retrying #${n} — "${removedName}" → "${added !== undefined ? labelNameOf(added) : ''}". The next tick picks it up.`
     }
     case 'resume':
       return `Resumed #${n} — restored "${currentStageName ?? ''}".`
     case 'stop': {
-      const removed = plan?.remove[0]
-      const removedName = removed !== undefined ? labelNameOf(removed) : ''
       const restoreKey = removed !== undefined ? RETRY_TRIGGER[removed] : undefined
       const restoreName = restoreKey !== undefined ? labelNameOf(restoreKey) : null
       return restoreName !== null
@@ -387,9 +241,7 @@ function appliedCopy(action: OperatorAction, number: number, plan: ActionPlan | 
   }
 }
 
-/** `pause`'s own absent-key guard reads back as `not <name>` in the
- *  conflict's `expected` list (`main/github/writes/scope.ts`'s `absentLabelName`)
- *  — detected here rather than duplicated, so the two can never drift. */
+/** `pause`'s absent-key guard reads back as `not <name>` in the conflict's `expected` list. */
 function preconditionFailedCopy(action: OperatorAction, number: number, conflict: Conflict, now: Date): string {
   const n = String(number)
   if (conflict.kind === 'precondition-failed') {
@@ -404,15 +256,7 @@ function preconditionFailedCopy(action: OperatorAction, number: number, conflict
   return `#${n} moved while you were deciding. Nothing was written.`
 }
 
-/** One switch over `WriteOutcome['kind']` (the plan's own **UX states**),
- *  plus the `ok: false` refusal reasons `applyItemAction` can return before
- *  ever calling `applyLabels` — a new variant on either union is a compile
- *  error here, never a silently blank note. `plan` is the row's own
- *  already-computed `ActionAvailability.plan` at click time — `null` only
- *  when the caller cannot supply one (never reachable from the board
- *  controller itself, which only ever calls this for an action it just
- *  ran). `currentStageName` is the row's own `stageLabel?.name` at render
- *  time — only `resume`'s `applied` copy reads it. */
+/** One line per refusal reason and per `WriteOutcome` kind. `currentStageName` is only read by `resume`'s `applied` copy. */
 export function actionResultCopy(params: {
   readonly action: OperatorAction
   readonly number: number
@@ -470,4 +314,175 @@ export function actionResultCopy(params: {
       return `#${n} moved to ${phase}, but its GitHub label couldn't be updated — ${mirrorReason(outcome.mirror)}. The next write will correct it.`
     }
   }
+}
+
+// --- The stop report ----------------------------------------------------------
+
+function skippedLine(outcome: Extract<HaltItemOutcome, { readonly kind: 'skipped' }>): string {
+  const n = String(outcome.number)
+  switch (outcome.reason) {
+    case 'session-required':
+      return `#${n} skipped — session required; your own /port:implement session owns it.`
+    case 'not-owned':
+      return `#${n} skipped — @${outcome.owner ?? 'someone else'} owns it.`
+    case 'viewer-unknown':
+      return `#${n} skipped — can't tell which account you're signed in as.`
+  }
+}
+
+/** A stage name (`review-agent`) shortens to `review`; an operator's `/port:implement session` is left as is. */
+function agentLabel(attachedAgent: string | null): string {
+  if (attachedAgent === null) return ''
+  return attachedAgent.endsWith('-agent') ? attachedAgent.slice(0, -'-agent'.length) : attachedAgent
+}
+
+/** One line per outcome. A refused item reuses the row action's own result copy. */
+export function haltItemLine(outcome: HaltItemOutcome, now: Date): string {
+  const n = String(outcome.number)
+  switch (outcome.kind) {
+    case 'stopped': {
+      if (outcome.stoppedTask) {
+        const agent = agentLabel(outcome.attachedAgent)
+        return `#${n} ${outcome.removedLabel} → no stage. Stopped${agent ? ` ${agent}` : ''} #${n}.`
+      }
+      const attached = outcome.attachedAgent !== null ? ` ${outcome.attachedAgent} still attached — this app can't stop it.` : ''
+      return `#${n} ${outcome.removedLabel} → no stage.${attached}`
+    }
+    case 'skipped':
+      return skippedLine(outcome)
+    case 'refused':
+      return `#${n} not stopped — ${actionResultCopy({ action: 'stop', number: outcome.number, plan: null, currentStageName: null, result: outcome.result, now })}`
+  }
+}
+
+/** `N stopped, M skipped`, plus a `, K not stopped` clause only when a refusal happened. */
+export function haltHeadingCopy(report: Extract<HaltReport, { readonly kind: 'completed' }>, leadingWord = 'Halted'): string {
+  const stopped = report.items.filter((item) => item.kind === 'stopped').length
+  const skipped = report.items.filter((item) => item.kind === 'skipped').length
+  const refused = report.items.filter((item) => item.kind === 'refused').length
+  const refusedPart = refused > 0 ? `, ${String(refused)} not stopped` : ''
+  return `${leadingWord} · ${String(stopped)} stopped, ${String(skipped)} skipped${refusedPart}`
+}
+
+// --- Repository problems ------------------------------------------------------
+
+export function repoProblemCopy(problem: RepoProblem): string {
+  switch (problem.kind) {
+    case 'directory-missing':
+      return "That folder is gone. It may have moved, or be on a drive that isn't mounted."
+    case 'not-a-git-repository':
+      return "Not a git repository. Pick the repository's root folder."
+    case 'not-port-managed':
+      return problem.carriedBy.length > 0
+        ? `Not port-managed on ${problem.ref}. ${problem.carriedBy.join(', ')} carry the harness — merge one into the default branch, then rescan.`
+        : "Not port-managed. There's no .claude/port.config.json on any branch here."
+    case 'config-ref-unreadable':
+      return `Can't read the default branch at origin/HEAD — ${problem.message}.`
+    case 'config-malformed':
+      return `.claude/port.config.json isn't valid JSON — ${problem.message}.`
+    case 'config-invalid':
+      return `.claude/port.config.json has no usable repo: ${problem.violations[0]?.message ?? 'invalid'}.`
+    case 'config-unreadable':
+      return `Can't read .claude/port.config.json — ${problem.message}.`
+    case 'effective-config-unreadable':
+      return `Can't read ${problem.file} — ${problem.message}.`
+  }
+}
+
+export function notReadyCopy(state: Extract<RepositoryState, { readonly ok: false }>): string {
+  if (state.reason === 'not-ready') return repoProblemCopy(state.problem)
+  return `Couldn't reach GitHub: ${state.message}. Retrying automatically.`
+}
+
+// --- Blocked tickets ----------------------------------------------------------
+
+export const BLOCKED_SECTION_HEADING = 'Blocked on'
+export const BLOCKED_AGENT_SAYS = 'The agent says:'
+export const BLOCKED_FROM_TICKET = 'From the ticket:'
+export const BLOCKED_OPEN_COMMENT = 'Open comment'
+export const BLOCKED_FALLBACK_COPY = 'An agent marked this blocked. Its reason is on the ticket.'
+export const BLOCKER_ANSWER_LABEL = 'Your answer'
+export const BLOCKER_SEND_LABEL = 'Send to agent'
+
+export function blockedUnreadableCopy(reason: string): string {
+  return `Couldn't read this ticket's blocked-by links: ${reason}.`
+}
+
+/** The row tag's visible text. */
+export function blockedTagLabel(tag: BlockedOnTag): string {
+  switch (tag.kind) {
+    case 'dependency': {
+      const first = tag.open[0]
+      const more = tag.open.length - 1
+      return `Waiting on #${String(first?.number ?? 0)}${more > 0 ? ` +${String(more)}` : ''}`
+    }
+    case 'session':
+    case 'comment':
+      return tag.text
+    case 'unreadable':
+      return 'Blockers unknown'
+    case 'fallback':
+      return 'Reason on ticket'
+  }
+}
+
+/** The tag's tooltip and accessible name as one string; a dependency tag's tooltip also lists each blocker. */
+export function blockedTagSummary(tag: BlockedOnTag): string {
+  switch (tag.kind) {
+    case 'dependency':
+      return `${BACKLOG_BLOCKED_TOOLTIP_HEADING} ${tag.open.map(backlogBlockerLine).join(', ')}`
+    case 'session':
+    case 'comment':
+      return `Blocked: ${tag.text}`
+    case 'unreadable':
+      return blockedUnreadableCopy(tag.reason)
+    case 'fallback':
+      return BLOCKED_FALLBACK_COPY
+  }
+}
+
+export function blockerSentToast(number: number | null): string {
+  return `Sent your answer to ${number !== null ? `#${String(number)}'s` : 'the'} agent. It clears "Blocked" itself and carries on.`
+}
+
+export function blockerSendError(error: 'unknown-session' | 'blocked-command' | 'unreachable', number: number | null): string {
+  if (error === 'unreachable') return "Couldn't reach the main process. Nothing was sent."
+  if (error === 'blocked-command') return "That text is a command the session can't run here. Reword your answer."
+  return `That session has ended. Unblock ${number !== null ? `#${String(number)}` : 'the item'} from its row once the board catches up.`
+}
+
+// --- Session links ------------------------------------------------------------
+
+export const YOUR_SESSIONS_LABEL = 'Your sessions'
+
+const SESSION_LINK_NAME: Readonly<Record<StageAgent, string>> = { plan: 'Plan agent', impl: 'Implement agent', review: 'Review agent', revise: 'Revise agent' }
+
+/** A session link's own name: its agent, or `Your session`. */
+export function sessionLinkName(who: TicketSessionLink['who']): string {
+  return who.kind === 'stage' ? SESSION_LINK_NAME[who.agent] : 'Your session'
+}
+
+function stateSegment(link: TicketSessionLink, now: Date): string {
+  switch (link.state) {
+    case 'live':
+      return `Live · started ${formatAgoSince(link.at, now)}`
+    case 'ended':
+      return `Ended ${formatAgoSince(link.endedAt ?? link.at, now)}`
+    case 'started':
+      return `Started ${formatAgoSince(link.at, now)}`
+    case 'seen':
+      return `Last active ${formatAgoSince(link.at, now)}`
+  }
+}
+
+/** `Live · started 12m ago · $0.42`, `Ended 2h ago · $1.18`; the cost segment is omitted when unknown, never `$0.00`. */
+export function sessionLinkMeta(link: TicketSessionLink, now: Date): string {
+  const segments = [stateSegment(link, now)]
+  if (link.costUsd !== null) segments.push(formatCost(link.costUsd))
+  if (link.operatorJoined) segments.push('you joined')
+  return segments.join(' · ')
+}
+
+export function sessionLinkAccessibleName(link: TicketSessionLink, now: Date): string {
+  return `Open ${sessionLinkName(link.who)}, ${sessionLinkMeta(link, now)}`
 }
