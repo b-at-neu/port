@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '@/utils/repos'
 import { claimApply, claimPreflight } from '@/main/pipeline/claim'
 import { createTestContext } from '../../support/context'
 import { operatorRig, REPO_ID, type OperatorRigOptions } from '../../support/operator-rig'
@@ -13,7 +12,7 @@ const apply = (rig: Awaited<ReturnType<typeof operatorRig>>, overrides: Partial<
 describe('claimPreflight', () => {
   it.each([
     { name: 'not registered', repositories: [], message: "claim found no repository registered with id 'repo-a'" },
-    { name: 'not ready', repositories: [{ id: REPO_ID as RepoId, path: '/repo', displayName: 'widgets', problem: { kind: 'directory-missing' as const }, diagnostics: [] }], message: "claim requires a 'ready' repository, got 'directory-missing'" },
+    { name: 'not ready', repositories: [{ id: REPO_ID, path: '/repo', displayName: 'widgets', problem: { kind: 'directory-missing' as const }, diagnostics: [] }], message: "claim requires a 'ready' repository, got 'directory-missing'" },
   ])('rejects a repository that is $name', async ({ repositories, message }) => {
     await expect(claimPreflight(createTestContext({ repositories }), { repoId: REPO_ID, number: 93 })).rejects.toThrow(message)
   })

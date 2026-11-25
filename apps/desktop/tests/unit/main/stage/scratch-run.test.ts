@@ -34,10 +34,9 @@ import { fakeGit, fakeSdk } from '../../../support/fake-platform'
 import { httpOk } from '../../../fixtures/github-http'
 import { hostingCtx } from '../../../fixtures/hosting/store'
 import type { CreateStageWorktreeResult, RemoveSessionWorktreeOutcome } from '@/types/workspace'
-
 // The writer is the one stand-in here: `labelMapStore` moves the label maps this test drives the tick from, which the real writer would not.
-const writer = vi.hoisted(() => ({ writeEvent: (_params: unknown): Promise<unknown> => Promise.reject(new Error('writer not bound')) }))
-vi.mock('@/main/pipeline/state/writer', () => ({ writeEvent: (_ctx: unknown, params: unknown) => writer.writeEvent(params) }))
+const writer = vi.hoisted(() => ({ writeEvent: null as ((params: unknown) => Promise<unknown>) | null }))
+vi.mock('@/main/pipeline/state/writer', () => ({ writeEvent: (_ctx: unknown, params: unknown) => writer.writeEvent?.(params) }))
 
 const REPO_ID = 'repo-scratch' as RepoId
 const VIEWER = 'op'

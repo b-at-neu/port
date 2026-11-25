@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { finishPipelineState, retryMirrors } from '@/main/pipeline/state/finish'
 import { readAuditLog } from '@/main/github/writes/audit'
+import { isLabelAuditEntry } from '@/types/writes'
 import type { Ticket } from '@/utils/pipeline/ticket'
 import type { RepoId } from '@/utils/repos'
 import { createTestContext } from '../../../support/context'
@@ -30,7 +31,7 @@ async function rig(tickets: readonly Ticket[] | null, items: readonly FakeItem[]
   const retried = new Map<string, number>()
   const retries = async () => {
     const read = await readAuditLog(auditDir)
-    return read.ok ? read.entries.filter((entry) => entry.action === 'mirror-retry').map((entry) => entry.number) : []
+    return read.ok ? read.entries.filter(isLabelAuditEntry).filter((entry) => entry.action === 'mirror-retry').map((entry) => entry.number) : []
   }
   return {
     ctx,

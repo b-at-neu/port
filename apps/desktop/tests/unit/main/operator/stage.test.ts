@@ -191,10 +191,10 @@ describe('applyStageTransition — pr-opened', () => {
 })
 
 describe('applyStageTransition — other events', () => {
-  it.each([
-    { name: 'a rollback re-queues the ticket', event: { kind: 'rollback' } as StageEvent, from: at('implement', running), after: { status: { kind: 'queued' } } },
-    { name: 'an error outcome resets the ticket', event: { kind: 'outcome', outcome: 'error', handback: null, plan: null } as StageEvent, from: at('implement', running), after: { status: { kind: 'queued' } } },
-    { name: 'the next turn unblocks the ticket', event: { kind: 'resumed-turn' } as StageEvent, from: at('implement', { kind: 'blocked', on: [], reason: '' }), after: { status: { kind: 'running' } } },
+  it.each<{ name: string; event: StageEvent; from: Ticket; after: { status: { kind: string } } }>([
+    { name: 'a rollback re-queues the ticket', event: { kind: 'rollback' }, from: at('implement', running), after: { status: { kind: 'queued' } } },
+    { name: 'an error outcome resets the ticket', event: { kind: 'outcome', outcome: 'error', handback: null, plan: null }, from: at('implement', running), after: { status: { kind: 'queued' } } },
+    { name: 'the next turn unblocks the ticket', event: { kind: 'resumed-turn' }, from: at('implement', { kind: 'blocked', on: [], reason: '' }), after: { status: { kind: 'running' } } },
   ])('$name', async ({ event, from, after }) => {
     const rig = await stage([issue], [from])
     expect(await rig.transition(IMPL, event)).toEqual({ kind: 'applied' })

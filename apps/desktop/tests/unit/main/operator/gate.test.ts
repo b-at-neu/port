@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { autoApprovePlan, gateAnswer, gatePreflight } from '@/main/pipeline/operator/gate'
 import type { GateAnswerParams } from '@/types/actions'
-import type { RepoId } from '@/utils/repos'
 import { createTestContext } from '../../../support/context'
 import { operatorRig, REPO_ID, type OperatorRigOptions } from '../../../support/operator-rig'
 import { ticketOf } from '../../../support/tickets'
@@ -19,7 +18,7 @@ describe('gatePreflight', () => {
     { name: 'a repository that is not ready', repositories: [{ id: REPO_ID, path: '/repo', displayName: 'widgets', problem: { kind: 'directory-missing' as const }, diagnostics: [] }], repoId: REPO_ID, message: "gate requires a 'ready' repository, got 'directory-missing'" },
   ])('rejects $name', async ({ repositories, repoId, message }) => {
     const ctx = createTestContext({ repositories })
-    await expect(gatePreflight(ctx, { repoId: repoId as RepoId, number: 148 })).rejects.toThrow(message)
+    await expect(gatePreflight(ctx, { repoId: repoId, number: 148 })).rejects.toThrow(message)
   })
 
   it('carries ownership on a fetch failure', async () => {

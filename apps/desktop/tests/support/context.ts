@@ -70,7 +70,7 @@ function memoryRepos(seed: readonly RepositoryEntry[], platform: Platform): Omit
 
 export function createTestContext(options: TestContextOptions = {}): TestContext {
   const fake = createFakePlatform()
-  const platform: FakePlatform = { ...fake, ...options.platform, clock: fake.clock }
+  const platform: FakePlatform = { ...fake, ...options.platform, clock: (options.platform?.clock as FakePlatform['clock'] | undefined) ?? fake.clock }
   const emitted: TestContext['emitted'] = []
 
   const repos = { ...memoryRepos(options.repositories ?? [], platform), ...options.repos } as Repos
@@ -113,13 +113,15 @@ export function createTestContext(options: TestContextOptions = {}): TestContext
   }
 }
 
-const IDLE_DISPATCHER = {
+type IdleDispatcher = Pick<AppContext['live']['dispatcher'], 'status' | 'liveStages' | 'holdsSessionRequired' | 'stageLiveness' | 'endedStages'>
+
+const IDLE_DISPATCHER: IdleDispatcher = {
   status: () => [],
   liveStages: () => [],
   holdsSessionRequired: () => true,
   stageLiveness: () => null,
   endedStages: () => [],
-} satisfies Pick<AppContext['live']['dispatcher'], 'status' | 'liveStages' | 'holdsSessionRequired' | 'stageLiveness' | 'endedStages'>
+}
 
 const EMPTY_PROJECTION = { repositories: [], sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: '2026-01-01T00:00:00.000Z' }, readAt: '2026-01-01T00:00:00.000Z' } as const
 
@@ -143,12 +145,12 @@ export function scriptedEngine(overrides: Partial<StateEngine> = {}): StateEngin
     tailClose: unscripted('tailClose'),
     forgetRepo: unscripted('forgetRepo'),
     ...overrides,
-  } as StateEngine
+  }
 }
 
 export interface WatcherContextOptions extends TestContextOptions {
   readonly engine?: Partial<StateEngine>
-  readonly dispatcher?: Partial<typeof IDLE_DISPATCHER>
+  readonly dispatcher?: Partial<IdleDispatcher>
 }
 
 /** A test context whose `live` holds what the watcher reads: a scripted engine, an idle dispatcher, fresh memos. */

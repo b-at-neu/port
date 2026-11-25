@@ -6,7 +6,7 @@ import { mirrorItem, writeEvent, writeState } from '@/main/pipeline/state/writer
 import { readAuditLog } from '@/main/github/writes/audit'
 import type { IncidentDraft, IncidentIntent } from '@/types/incidents'
 import type { MirrorFailure } from '@/types/pipeline-state'
-import type { EventWriteRequest, LabelWriteRequest } from '@/types/writes'
+import { isLabelAuditEntry, type EventWriteRequest, type LabelWriteRequest } from '@/types/writes'
 import { resolveDisplayVocabulary, type MirrorVocabulary } from '@/utils/labels/display'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { Ticket } from '@/utils/pipeline/ticket'
@@ -175,7 +175,7 @@ describe('writeState — outcomes', () => {
     const outcome = await r.state(request({ expect: { present: ['ready'], absent: [], assignees: { kind: 'any' } } }))
     expect(outcome).toMatchObject({ kind: 'precondition-failed', conflict: { expected: ['ready'], observed: ['claude', 'plan approved'] } })
     expect(r.github.labels(7)).toEqual(['port'])
-    expect((await r.audits()).map((entry) => ('result' in entry ? entry.result.kind : null))).toEqual(['precondition-failed'])
+    expect((await r.audits()).filter(isLabelAuditEntry).map((entry) => entry.result.kind)).toEqual(['precondition-failed'])
   })
 
   it('reports state-unsaved, nothing changed, when the store cannot persist', async () => {

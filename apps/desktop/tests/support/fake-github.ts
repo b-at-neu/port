@@ -2,7 +2,6 @@
 import { readFileSync } from 'node:fs'
 import type { Platform } from '@/main/platform'
 import type { CommandResult, GhResult, GitHubHttpResult } from '@/types/platform'
-import { httpOk } from '../fixtures/github-http'
 
 export interface FakeItem {
   readonly number: number
@@ -95,7 +94,7 @@ export function createFakeGitHub({ viewer = 'viewer', items }: { readonly viewer
       repository[match[1] ?? ''] = found === undefined ? null : nodeOf(found)
     }
     if (Object.keys(repository).length === 0) throw new Error(`fake GitHub does not answer this query: ${query.slice(0, 80)}`)
-    return Promise.resolve(httpOk(JSON.stringify({ data: { repository, viewer: { login: viewer } } })))
+    return Promise.resolve<GitHubHttpResult>({ ok: true, status: 200, headers: {}, body: JSON.stringify({ data: { repository, viewer: { login: viewer } } }) })
   }
 
   const ghWrite: Platform['ghWrite'] = (argv) => {

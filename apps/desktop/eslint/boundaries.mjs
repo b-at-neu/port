@@ -84,8 +84,8 @@ export const RESTRICTIONS = [
   },
   {
     id: 'apply-labels',
-    except: ['src/main/pipeline/state/default.ts', 'src/main/github/writes/**'],
-    paths: [{ name: '@/main/github/writes/apply', importNames: ['applyLabels'], message: 'Only the pipeline-state composition applies labels, so no transition bypasses the store.' }],
+    except: ['src/main/pipeline/state/writer.ts', 'src/main/github/writes/**'],
+    paths: [{ name: '@/main/github/writes/apply', importNames: ['applyLabels'], message: 'Only the state writer applies labels, so no transition bypasses the store.' }],
   },
   {
     id: 'fetch',
