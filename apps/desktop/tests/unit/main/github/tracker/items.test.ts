@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { fetchClaimPreflight, fetchItemsByNumber } from '@/main/github/adapter'
+import { fetchClaimPreflight, fetchItemsByNumber } from '@/main/github/tracker/items'
 import type { ItemsByNumberFetch, ResolvedItem } from '@/types/github'
-import { fakeTransport, githubCtx, graphqlBodyOf, httpFail, httpOk, recordingTransport } from '../../../fixtures/github-http'
+import { fakeTransport, githubCtx, graphqlBodyOf, httpFail, httpOk, recordingTransport } from '../../../../fixtures/github-http'
 
 const REPO = { owner: 'o', name: 'r' }
 

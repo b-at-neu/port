@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { createEtagCache } from '@/main/github/conditional'
-import { precheckIssues, precheckRequest } from '@/main/github/precheck'
+import { precheckIssues, precheckRequest } from '@/main/github/tracker/precheck'
 import type { ConditionalRequest } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
-import { createFakePlatform } from '../../../support/fake-platform'
-import { scriptedConditional } from '../../../fixtures/watcher-harness'
+import { createFakePlatform } from '../../../../support/fake-platform'
+import { scriptedConditional } from '../../../../fixtures/watcher-harness'
 
 const repoId = 'repo-1' as RepoId
 const repo = { owner: 'o', name: 'a' }

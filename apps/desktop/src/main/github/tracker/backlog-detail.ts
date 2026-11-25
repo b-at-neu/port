@@ -3,9 +3,10 @@ import type { GitHubReadContext } from '@/main/github/context'
 import type { BacklogDetailResponse, BacklogLinkList, BacklogParentRead } from '@/types/backlog'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
-import { blockedByField } from '@/main/github/query'
+import { blockedByField } from '@/main/github/tracker/query'
 import { repoGraphqlRequest } from '@/main/github/request'
-import type { ClaimBlocker, GitHubRepoRef } from '@/types/github'
+import type { ClaimBlocker } from '@/types/github'
+import type { ItemNumberParams } from '@/types/tracker'
 
 const ASSIGNEE_PAGE_SIZE = 20
 const LINK_PAGE_SIZE = 20
@@ -56,13 +57,8 @@ function toParentRead(value: unknown, errored: boolean): BacklogParentRead {
   return parent === undefined ? { ok: false, reason: "GitHub reported an error reading this issue's parent" } : { ok: true, parent }
 }
 
-interface FetchBacklogDetailParams {
-  readonly repo: GitHubRepoRef
-  readonly number: number
-}
-
 // A failed read is a distinct value; an unreadable issue is `no-data`, never `issue-missing`.
-export async function fetchBacklogDetail(ctx: GitHubReadContext, params: FetchBacklogDetailParams): Promise<BacklogDetailResponse> {
+export async function fetchBacklogDetail(ctx: GitHubReadContext, params: ItemNumberParams): Promise<BacklogDetailResponse> {
   const fetchedAt = ctx.clock.now().toISOString()
   const { number } = params
   const slug = `${params.repo.owner}/${params.repo.name}`

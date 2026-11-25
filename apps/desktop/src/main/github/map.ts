@@ -2,6 +2,8 @@
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import { integrationChecksOf } from '@/utils/pipeline/checks'
 import type { CheckContext, ClosingPullRequest, IntegrationChecks, IssueCommentNode, ItemDetail, LabelEventNode, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, ReviewNode } from '@/types/github'
+import type { BacklogLabel } from '@/types/backlog'
+import { isHexColor } from '@/utils/hex-color'
 import { toBlockerRead } from '@/main/github/blockers'
 
 interface ConnectionLike {
@@ -56,6 +58,19 @@ export function fieldListOf(value: unknown, field: 'login' | 'name'): readonly s
     if (typeof node !== 'object' || node === null) continue
     const raw = (node as Record<string, unknown>)[field]
     if (typeof raw === 'string') out.push(raw)
+  }
+  return out
+}
+
+export function labelsOf(value: unknown): readonly BacklogLabel[] {
+  const nodes = (value as { nodes?: unknown } | null | undefined)?.nodes
+  if (!Array.isArray(nodes)) return []
+  const out: BacklogLabel[] = []
+  for (const node of nodes) {
+    if (typeof node !== 'object' || node === null) continue
+    const { name, color } = node as Record<string, unknown>
+    if (typeof name !== 'string') continue
+    out.push({ name, color: typeof color === 'string' && isHexColor(color) ? color.toLowerCase() : null })
   }
   return out
 }

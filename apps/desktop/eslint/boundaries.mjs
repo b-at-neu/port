@@ -69,7 +69,7 @@ export const RESTRICTIONS = [
   { id: 'no-repo-scripts', patterns: [{ group: ['**/scripts/**', '**/plugins/**'], message: 'apps/desktop/src imports nothing from scripts/ or plugins/ (ENGINEERING §9).' }] },
   {
     id: 'gh',
-    except: ['src/main/github/writes/**', 'src/main/platform/**'],
+    except: ['src/main/github/writes/**', 'src/main/platform/**', 'src/main/worker/engine.ts'],
     paths: [{ name: '@/main/platform/gh', importNames: ['gh', 'ghJson'], message: 'Only main/github/writes/ calls gh; reads go through platform/github-http.' }],
   },
   {

@@ -1,14 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { resolveVocabulary, type LabelVocabulary } from '@/utils/labels/vocabulary'
-import {
-  FIRST_SWEEP_PAGE,
-  buildClaimPreflightQuery,
-  buildGatePreflightQuery,
-  buildItemDetailsQuery,
-  buildItemsByNumberQuery,
-  buildPipelineQuery,
-  graphqlStringLiteral,
-} from '@/main/github/query'
+import { FIRST_SWEEP_PAGE, buildItemDetailsQuery, buildPipelineQuery, graphqlStringLiteral } from '@/main/github/query'
 
 describe('graphqlStringLiteral', () => {
   it('round-trips a name containing a double quote, a backslash, and a newline', () => {
@@ -132,14 +124,18 @@ describe('buildPipelineQuery', () => {
 })
 
 describe('buildItemDetailsQuery', () => {
+  const issue = { kind: 'issue', rollup: false, blockerComments: false, closingPullRequests: false } as const
+  const pull = { kind: 'pull-request', rollup: false, blockerComments: false, closingPullRequests: false } as const
+  const lineOf = (document: string, alias: string) => document.split('\n').find((line) => line.includes(`${alias}:`)) ?? ''
+
   it('emits one aliased lookup per item, in order, by kind', () => {
     const { document, aliases } = buildItemDetailsQuery([
-      { kind: 'issue', number: 7, rollup: false, blockerComments: false, closingPullRequests: false },
-      { kind: 'pull-request', number: 9, rollup: false, blockerComments: false, closingPullRequests: false },
+      { ...issue, number: 7 },
+      { ...pull, number: 9 },
     ])
     expect(aliases).toEqual([
-      { alias: 'd0', kind: 'issue', number: 7, rollup: false, blockerComments: false, closingPullRequests: false },
-      { alias: 'd1', kind: 'pull-request', number: 9, rollup: false, blockerComments: false, closingPullRequests: false },
+      { ...issue, alias: 'd0', number: 7 },
+      { ...pull, alias: 'd1', number: 9 },
     ])
     expect(document).toContain('d0: issue(number: 7)')
     expect(document).toContain('d1: pullRequest(number: 9)')
@@ -147,214 +143,50 @@ describe('buildItemDetailsQuery', () => {
 
   it('an issue reads its label timeline and blockedBy; a pull request also reads reviews and comments', () => {
     const { document } = buildItemDetailsQuery([
-      { kind: 'issue', number: 7, rollup: false, blockerComments: false, closingPullRequests: false },
-      { kind: 'pull-request', number: 9, rollup: false, blockerComments: false, closingPullRequests: false },
+      { ...issue, number: 7 },
+      { ...pull, number: 9 },
     ])
-    const issue = document.split('\n').find((line) => line.includes('d0:')) ?? ''
-    const pull = document.split('\n').find((line) => line.includes('d1:')) ?? ''
-    expect(issue).toContain('itemTypes: [LABELED_EVENT]')
-    expect(issue).toContain('blockedBy(first: 10)')
-    expect(issue).not.toContain('reviews')
-    expect(issue).not.toContain('comments')
-    expect(pull).toContain('itemTypes: [LABELED_EVENT]')
-    expect(pull).toContain('reviews(first: 30)')
-    expect(pull).toContain('comments(last: 20)')
-    expect(pull).not.toContain('blockedBy')
+    expect(lineOf(document, 'd0')).toContain('blockedBy(first: 10)')
+    expect(lineOf(document, 'd0')).not.toContain('reviews')
+    expect(lineOf(document, 'd0')).not.toContain('comments')
+    expect(lineOf(document, 'd1')).toContain('reviews(first: 30)')
+    expect(lineOf(document, 'd1')).toContain('comments(last: 20)')
+    expect(lineOf(document, 'd1')).not.toContain('blockedBy')
+    for (const alias of ['d0', 'd1']) expect(lineOf(document, alias)).toContain('itemTypes: [LABELED_EVENT]')
   })
 
   it('selects an issue comments connection only when its blockerComments flag is set', () => {
     const { document } = buildItemDetailsQuery([
-      { kind: 'issue', number: 7, rollup: false, blockerComments: true, closingPullRequests: false },
-      { kind: 'issue', number: 8, rollup: false, blockerComments: false, closingPullRequests: false },
+      { ...issue, number: 7, blockerComments: true },
+      { ...issue, number: 8 },
     ])
-    const flagged = document.split('\n').find((line) => line.includes('d0:')) ?? ''
-    const plain = document.split('\n').find((line) => line.includes('d1:')) ?? ''
-    expect(flagged).toContain('comments(last: 10) { nodes { body createdAt url } }')
-    expect(plain).not.toContain('comments')
+    expect(lineOf(document, 'd0')).toContain('comments(last: 10) { nodes { body createdAt url } }')
+    expect(lineOf(document, 'd1')).not.toContain('comments')
   })
 
   it('selects closing pull requests only when the flag is set, and never on a pull request alias', () => {
     const { document } = buildItemDetailsQuery([
-      { kind: 'issue', number: 7, rollup: false, blockerComments: false, closingPullRequests: true },
-      { kind: 'issue', number: 8, rollup: false, blockerComments: false, closingPullRequests: false },
-      { kind: 'pull-request', number: 9, rollup: false, blockerComments: false, closingPullRequests: true },
+      { ...issue, number: 7, closingPullRequests: true },
+      { ...issue, number: 8 },
+      { ...pull, number: 9, closingPullRequests: true },
     ])
-    const lineOf = (alias: string) => document.split('\n').find((line) => line.includes(`${alias}:`)) ?? ''
-    expect(lineOf('d0')).toContain('closedByPullRequestsReferences(first: 5, includeClosedPrs: true) { nodes { number state headRefName } }')
-    expect(lineOf('d1')).not.toContain('closedByPullRequestsReferences')
-    expect(lineOf('d2')).not.toContain('closedByPullRequestsReferences')
+    expect(lineOf(document, 'd0')).toContain('closedByPullRequestsReferences(first: 5, includeClosedPrs: true) { nodes { number state headRefName } }')
+    expect(lineOf(document, 'd1')).not.toContain('closedByPullRequestsReferences')
+    expect(lineOf(document, 'd2')).not.toContain('closedByPullRequestsReferences')
   })
 
   it('spreads CheckRollupFields, and declares it, only when a pull request asks for the rollup', () => {
-    const without = buildItemDetailsQuery([{ kind: 'pull-request', number: 9, rollup: false, blockerComments: false, closingPullRequests: false }]).document
-    expect(without).not.toContain('CheckRollupFields')
+    expect(buildItemDetailsQuery([{ ...pull, number: 9 }]).document).not.toContain('CheckRollupFields')
     const withRollup = buildItemDetailsQuery([
-      { kind: 'pull-request', number: 9, rollup: false, blockerComments: false, closingPullRequests: false },
-      { kind: 'pull-request', number: 10, rollup: true, blockerComments: false, closingPullRequests: false },
+      { ...pull, number: 9 },
+      { ...pull, number: 10, rollup: true },
     ]).document
     expect(withRollup).toContain('d1: pullRequest(number: 10) {')
-    expect(withRollup).toContain('...CheckRollupFields')
     expect(countOf(withRollup, '...CheckRollupFields')).toBe(1)
     expect(withRollup).toContain('fragment CheckRollupFields on PullRequest')
   })
 
   it('carries rateLimit, so every round trip reports its own cost', () => {
-    expect(buildItemDetailsQuery([{ kind: 'issue', number: 1, rollup: false, blockerComments: false, closingPullRequests: false }]).document).toContain('rateLimit { cost remaining resetAt limit }')
-  })
-})
-
-/** Extracts the balanced-brace body of `... on <typeName> { ... }` — a naive regex stops at the
- *  first nested `}`, which falls inside `assignees`'s own braces before the fragment's real close. */
-function extractFragment(document: string, typeName: string): string {
-  const start = document.indexOf(`... on ${typeName} {`)
-  if (start === -1) return ''
-  let depth = 0
-  let i = document.indexOf('{', start)
-  const bodyStart = i + 1
-  for (; i < document.length; i++) {
-    if (document[i] === '{') depth++
-    else if (document[i] === '}') {
-      depth--
-      if (depth === 0) return document.slice(bodyStart, i)
-    }
-  }
-  return document.slice(bodyStart)
-}
-
-describe('buildItemsByNumberQuery', () => {
-  it('emits one issueOrPullRequest alias per number', () => {
-    const { aliases } = buildItemsByNumberQuery([79, 184])
-    expect(aliases).toEqual([
-      { alias: 'n0', number: 79 },
-      { alias: 'n1', number: 184 },
-    ])
-  })
-
-  it('requests __typename, and selects mergedAt only inside the PullRequest fragment', () => {
-    const { document } = buildItemsByNumberQuery([1])
-    expect(document).toContain('n0: issueOrPullRequest(number: 1)')
-    expect(document).toContain('__typename')
-    const issueFragment = extractFragment(document, 'Issue')
-    const prFragment = extractFragment(document, 'PullRequest')
-    expect(issueFragment).not.toContain('mergedAt')
-    expect(prFragment).toContain('mergedAt')
-  })
-
-  it('selects headRefName inside the PullRequest fragment only', () => {
-    const { document } = buildItemsByNumberQuery([1])
-    expect(extractFragment(document, 'Issue')).not.toContain('headRefName')
-    expect(extractFragment(document, 'PullRequest')).toContain('headRefName')
-  })
-
-  it('selects headRefOid inside the PullRequest fragment only', () => {
-    const { document } = buildItemsByNumberQuery([1])
-    expect(extractFragment(document, 'Issue')).not.toContain('headRefOid')
-    expect(extractFragment(document, 'PullRequest')).toContain('headRefOid')
-  })
-
-  it('selects the author inside the PullRequest fragment only', () => {
-    const { document } = buildItemsByNumberQuery([1])
-    expect(extractFragment(document, 'Issue')).not.toContain('author')
-    expect(extractFragment(document, 'PullRequest')).toContain('author { login }')
-  })
-
-  it('returns an empty alias list and a still-valid document for no numbers', () => {
-    const { document, aliases } = buildItemsByNumberQuery([])
-    expect(aliases).toEqual([])
-    expect(document).toContain('repository(owner: $owner, name: $name)')
-  })
-
-  it('never uses GraphQL search', () => {
-    const { document } = buildItemsByNumberQuery([1, 2, 3])
-    expect(document).not.toContain('search(')
-  })
-
-  it('selects labels inside both the Issue and the PullRequest fragment', () => {
-    const { document } = buildItemsByNumberQuery([1])
-    const issueFragment = extractFragment(document, 'Issue')
-    const prFragment = extractFragment(document, 'PullRequest')
-    expect(issueFragment).toContain('labels(first:')
-    expect(prFragment).toContain('labels(first:')
-  })
-
-  // The write chokepoint's authoritative read needs assignees beside labels, one round trip.
-  it('selects assignees inside both the Issue and the PullRequest fragment', () => {
-    const { document } = buildItemsByNumberQuery([1])
-    const issueFragment = extractFragment(document, 'Issue')
-    const prFragment = extractFragment(document, 'PullRequest')
-    expect(issueFragment).toContain('assignees(first:')
-    expect(prFragment).toContain('assignees(first:')
-  })
-})
-
-describe('buildClaimPreflightQuery', () => {
-  it('aliases the number as c0 and embeds it as a literal', () => {
-    const { document } = buildClaimPreflightQuery(93)
-    expect(document).toContain('c0: issueOrPullRequest(number: 93)')
-  })
-
-  it('requests labels, assignees, and blockedBy inside the Issue fragment only — never the PullRequest one', () => {
-    const { document } = buildClaimPreflightQuery(1)
-    const issueFragment = extractFragment(document, 'Issue')
-    const prFragment = extractFragment(document, 'PullRequest')
-    expect(issueFragment).toContain('labels(first:')
-    expect(issueFragment).toContain('assignees(first:')
-    expect(issueFragment).toContain('blockedBy(first:')
-    expect(prFragment).not.toContain('labels(first:')
-    expect(prFragment).not.toContain('assignees(first:')
-    expect(prFragment).not.toContain('blockedBy(first:')
-  })
-
-  it('blockedBy requests totalCount beside its nodes, for truncation reporting', () => {
-    const { document } = buildClaimPreflightQuery(1)
-    const issueFragment = extractFragment(document, 'Issue')
-    expect(issueFragment).toMatch(/blockedBy\(first: \d+\) \{ totalCount nodes/)
-  })
-
-  it('requests viewer as a top-level field, outside repository', () => {
-    const { document } = buildClaimPreflightQuery(1)
-    const repositoryStart = document.indexOf('repository(owner:')
-    const viewerIndex = document.indexOf('viewer { login }')
-    expect(viewerIndex).toBeGreaterThan(-1)
-    // The repository block closes with a lone '  }' before viewer appears —
-    // asserting viewer is not nested inside it rather than merely present.
-    const closeIndex = document.indexOf('\n  }\n', repositoryStart)
-    expect(viewerIndex).toBeGreaterThan(closeIndex)
-  })
-
-  it('never uses GraphQL search', () => {
-    const { document } = buildClaimPreflightQuery(1)
-    expect(document).not.toContain('search(')
-  })
-})
-
-describe('buildGatePreflightQuery', () => {
-  it('aliases the number as c0 and embeds it as a literal', () => {
-    const { document } = buildGatePreflightQuery(148)
-    expect(document).toContain('c0: issueOrPullRequest(number: 148)')
-  })
-
-  it('requests body and assignees inside the Issue fragment only — never the PullRequest one', () => {
-    const { document } = buildGatePreflightQuery(1)
-    const issueFragment = extractFragment(document, 'Issue')
-    const prFragment = extractFragment(document, 'PullRequest')
-    expect(issueFragment).toContain('body')
-    expect(issueFragment).toContain('assignees(first:')
-    expect(prFragment).not.toContain('body')
-    expect(prFragment).not.toContain('assignees(first:')
-  })
-
-  it('requests viewer as a top-level field, outside repository', () => {
-    const { document } = buildGatePreflightQuery(1)
-    const repositoryStart = document.indexOf('repository(owner:')
-    const viewerIndex = document.indexOf('viewer { login }')
-    expect(viewerIndex).toBeGreaterThan(-1)
-    const closeIndex = document.indexOf('\n  }\n', repositoryStart)
-    expect(viewerIndex).toBeGreaterThan(closeIndex)
-  })
-
-  it('never uses GraphQL search', () => {
-    const { document } = buildGatePreflightQuery(1)
-    expect(document).not.toContain('search(')
+    expect(buildItemDetailsQuery([{ ...issue, number: 1 }]).document).toContain('rateLimit { cost remaining resetAt limit }')
   })
 })

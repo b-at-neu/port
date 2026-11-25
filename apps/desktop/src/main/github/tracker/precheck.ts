@@ -6,13 +6,9 @@ import { describeHttp } from '@/main/github/envelope'
 import type { EtagCache } from '@/types/github'
 import type { ConditionalRequest } from '@/types/platform'
 import type { GithubPrecheckOutcome } from '@/types/state'
-import type { RepoId } from '@/utils/repos'
+import type { TrackerPrecheckParams } from '@/types/tracker'
 
-interface PrecheckParams {
-  readonly cache: EtagCache
-  readonly repoId: RepoId
-  readonly repo: { readonly owner: string; readonly name: string }
-}
+type PrecheckParams = TrackerPrecheckParams & { readonly cache: EtagCache }
 
 export function precheckRequest(repo: PrecheckParams['repo']): Omit<ConditionalRequest, 'ifNoneMatch'> {
   return { method: 'GET', path: `repos/${repo.owner}/${repo.name}/issues?state=all&sort=updated&direction=desc&per_page=1` }

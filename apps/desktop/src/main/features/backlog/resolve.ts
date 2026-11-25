@@ -1,8 +1,8 @@
 // `'backlog:list'`'s composition: registry lookup, then the list read and per-epic children read `fetchBacklog` makes.
 import type { BacklogDetailResponse, BacklogResponse } from '@/types/backlog'
-import { fetchBacklog } from '@/main/github/backlog'
+import { fetchBacklog } from '@/main/github/tracker/backlog'
 import type { GitHubReadContext } from '@/main/github/context'
-import { fetchBacklogDetail } from '@/main/github/backlog-detail'
+import { fetchBacklogDetail } from '@/main/github/tracker/backlog-detail'
 import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/repos'
 import type { RegistryDeps } from '@/types/registry'
 import type { TrackedRef } from '@/types/pipeline-state'

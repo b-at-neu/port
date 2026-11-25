@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { fetchBacklogDetail } from '@/main/github/backlog-detail'
-import { fakeTransport, githubCtx, graphqlBodyOf, httpFail, httpOk, recordingTransport } from '../../../fixtures/github-http'
+import { fetchBacklogDetail } from '@/main/github/tracker/backlog-detail'
+import { fakeTransport, githubCtx, graphqlBodyOf, httpFail, httpOk, recordingTransport } from '../../../../fixtures/github-http'
 
 const REPO = { owner: 'o', name: 'r' }
 
