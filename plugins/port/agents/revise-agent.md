@@ -86,6 +86,7 @@ Revise-agent specifics, identical in intent to `impl-agent`:
 
 - **Stay in your worktree.** Do all work in place. **Never** `cd` out of it, use `git -C`, run `git worktree list`/`add`/`remove`/`prune`, use `--ignore-other-worktrees`, or force anything. If a branch is locked to another worktree, **stop and emit `BLOCKED:`**.
 - **Toolchain: only what `commands` and `extraAllow` give you.** Do not reach for an undeclared package runner or global binary; it will auto-deny.
+- **Keep context small.** Every request re-sends everything read so far. Find code with Grep, then Read only the lines you need with `offset` and `limit`; read a whole file only when you will edit most of it. Do not re-read a file that is already in context and unchanged. Never use `git stash`: it is denied, because every worktree shares one stash stack. Set work aside with a WIP commit instead.
 - **Sync first, clean code only.** `git fetch origin` and rebase onto the pull request's base branch before anything else. No dead scaffolding or shims, and do not reintroduce problems `docs.engineering` or `docs.design` calls out.
 
 ## Pre-flight

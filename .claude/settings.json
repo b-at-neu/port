@@ -64,7 +64,11 @@
       "Bash(find -execdir *)",
       "Bash(find -delete*)",
       "Bash(find -ok *)",
-      "Bash(find -okdir *)"
+      "Bash(find -okdir *)",
+      "Bash(git stash)",
+      "Bash(git stash *)",
+      "Bash(git -C * stash)",
+      "Bash(git -C * stash *)"
     ]
   }
 }
