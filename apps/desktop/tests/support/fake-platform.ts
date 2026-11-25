@@ -1,6 +1,7 @@
 // In-memory platform adapters. Anything not scripted throws, so a test fails loudly instead of reaching a host binary or the network.
 import type { Platform } from '@/main/platform'
-import type { Clock, CommandResult, DirEntry, FileResult, GhResult, PlatformFs } from '@/types/platform'
+import type { SdkModule } from '@/main/platform/sdk'
+import type { Clock, CommandResult, DirEntry, FileResult, GhResult, PlatformFs, WhichResult } from '@/types/platform'
 
 export interface FakeClock extends Clock {
   readonly advance: (ms: number) => void
@@ -117,6 +118,19 @@ export const fakeGit = (handler?: Platform['git']): Platform['git'] => handler ?
 
 export const fakeRun = (handler?: Platform['run']): Platform['run'] => handler ?? ((command, args) => unscripted(command, args) as Promise<CommandResult>)
 
+export const fakeWhich = (handler?: Platform['which']): Platform['which'] => handler ?? ((command) => unscripted('which', [command]) as Promise<WhichResult>)
+
+/** An `Sdk` whose unscripted members throw, so a test names only the calls its scenario makes. */
+export function fakeSdk(module: Partial<SdkModule> = {}): Platform['sdk'] {
+  const scripted: SdkModule = {
+    query: (params) => unscripted('sdk.query', [JSON.stringify(params.options?.cwd ?? null)]),
+    renameSession: (sessionId) => unscripted('sdk.renameSession', [sessionId]),
+    listSessions: () => unscripted('sdk.listSessions', []),
+    ...module,
+  }
+  return { load: () => Promise.resolve(scripted) }
+}
+
 export interface FakePlatform extends Platform {
   readonly clock: FakeClock
 }
@@ -142,5 +156,8 @@ export function createFakePlatform(): FakePlatform {
       chooseSavePath: (defaultName) => unscripted('dialogs.chooseSavePath', [defaultName]),
     },
     notify: { focused: () => unscripted('notify.focused', []), show: (notice) => unscripted('notify.show', [notice.title]) },
+    which: fakeWhich(),
+    env: {},
+    claudeHome: '/test/claude',
   }
 }

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { createPathOps } from '@/main/platform/paths'
 import { bundledSdkPackageDir, resolveClaudeExecutable } from '@/main/sessions/runtime/locate'
+import type { WhichResult } from '@/types/platform'
+import { fakeWhich } from '../../../support/fake-platform'
 
 const posixOps = createPathOps('posix', { home: '/home/operator' })
 const win32Ops = createPathOps('win32', { home: 'C:\\Users\\operator' })
@@ -42,30 +44,13 @@ describe('bundledSdkPackageDir', () => {
 })
 
 describe('resolveClaudeExecutable', () => {
-  it('returns not-found when which cannot resolve claude', async () => {
-    const result = await resolveClaudeExecutable({
-      env: {},
-      platform: 'linux',
-      which: () => Promise.resolve({ ok: false, kind: 'not-found', command: 'claude', searched: ['/usr/bin/claude'] }),
-    })
-    expect(result).toEqual({ ok: false, kind: 'not-found', searched: ['/usr/bin/claude'] })
-  })
+  const BUNDLED = '/repo/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude'
 
-  it('returns ok for a real operator install', async () => {
-    const result = await resolveClaudeExecutable({
-      env: {},
-      platform: 'linux',
-      which: () => Promise.resolve({ ok: true, path: '/home/operator/.local/bin/claude' }),
-    })
-    expect(result).toEqual({ ok: true, path: '/home/operator/.local/bin/claude' })
-  })
-
-  it('refuses the SDK bundled binary as bundled-fallback', async () => {
-    const result = await resolveClaudeExecutable({
-      env: {},
-      platform: 'linux',
-      which: () => Promise.resolve({ ok: true, path: '/repo/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude' }),
-    })
-    expect(result).toEqual({ ok: false, kind: 'bundled-fallback', path: '/repo/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude' })
+  it.each<{ readonly name: string; readonly which: WhichResult; readonly expected: unknown }>([
+    { name: 'returns not-found when which cannot resolve claude', which: { ok: false, kind: 'not-found', command: 'claude', searched: ['/usr/bin/claude'] }, expected: { ok: false, kind: 'not-found', searched: ['/usr/bin/claude'] } },
+    { name: 'returns ok for a real operator install', which: { ok: true, path: '/home/operator/.local/bin/claude' }, expected: { ok: true, path: '/home/operator/.local/bin/claude' } },
+    { name: 'refuses the SDK bundled binary as bundled-fallback', which: { ok: true, path: BUNDLED }, expected: { ok: false, kind: 'bundled-fallback', path: BUNDLED } },
+  ])('$name', async ({ which, expected }) => {
+    await expect(resolveClaudeExecutable({ which: fakeWhich(() => Promise.resolve(which)) })).resolves.toEqual(expected)
   })
 })

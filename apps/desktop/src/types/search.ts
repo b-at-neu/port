@@ -73,8 +73,6 @@ export interface RunSearchParams {
   readonly indexDir: string
   readonly query: string
   readonly scope: SearchScope
-  readonly claudeHome?: string
-  readonly now?: () => Date
 }
 
 // Keyed by `sessionId` or `sessionId#agentId`; this module only ever sees the key as an opaque string.

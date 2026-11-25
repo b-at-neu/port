@@ -1,10 +1,9 @@
 // A pure consumer of the caller's repository list: reads no config, enumerates no worktrees, reconciles nothing against labels.
-import { listDirectory, readJsonFile, statPath } from '@/main/platform/files'
+import type { Platform } from '@/main/platform'
 import { pathOps } from '@/main/platform/paths'
 import type { AgentRecord, MetaProblem, SessionRecord, SessionRef, SessionScan } from '@/types/sessions'
 import { activityOf, attributeSession, itemNumberOf, parseAgentMeta, sessionRole, stageOf } from '@/main/sessions/classify'
-import { buildProjectIndex, defaultClaudeHome, resolveSessionDir } from '@/main/sessions/locate'
-import { createSdkSessionReader } from '@/main/sessions/reader'
+import { buildProjectIndex, resolveSessionDir } from '@/main/sessions/locate'
 
 import type { ReadSessionStateParams } from '@/types/sessions'
 
@@ -13,13 +12,14 @@ const AGENT_ID_PREFIX = /^agent-/
 
 /** Never throws on a malformed file — it lands in `unreadable` and every other agent in the same directory is still read. */
 async function readAgents(
+  fs: Platform['fs'],
   sessionId: string,
   repoId: AgentRecord['repoId'],
   subagentsDir: string,
   now: Date,
   sessionLastModified: string,
 ): Promise<{ readonly agents: readonly AgentRecord[]; readonly unreadable: readonly MetaProblem[] }> {
-  const listing = await listDirectory(subagentsDir)
+  const listing = await fs.list(subagentsDir)
   if (!listing.ok) return { agents: [], unreadable: [] }
 
   const agents: AgentRecord[] = []
@@ -31,7 +31,7 @@ async function readAgents(
     const metaPath = pathOps.join(subagentsDir, entry.name)
     const jsonlPath = pathOps.join(subagentsDir, `agent-${agentId}.jsonl`)
 
-    const metaResult = await readJsonFile<unknown>(metaPath)
+    const metaResult = await fs.readJson<unknown>(metaPath)
     if (!metaResult.ok) {
       unreadable.push({ sessionId, agentId, kind: metaResult.kind, message: metaResult.message })
       continue
@@ -43,7 +43,7 @@ async function readAgents(
     }
 
     // A stat hiccup on the sibling `.jsonl` falls back to the session's last-modified time rather than dropping the record.
-    const stat = await statPath(jsonlPath)
+    const stat = await fs.stat(jsonlPath)
     const lastActivityAt = stat.ok ? stat.value.modifiedAt : sessionLastModified
     const { idleMs, activity } = activityOf(lastActivityAt, now)
 
@@ -68,19 +68,17 @@ async function readAgents(
   return { agents, unreadable }
 }
 
-export async function readSessionState(params: ReadSessionStateParams): Promise<SessionScan> {
-  const now = params.now ?? (() => new Date())
+export async function readSessionState(ctx: Pick<Platform, 'fs' | 'clock' | 'claudeHome'>, params: ReadSessionStateParams): Promise<SessionScan> {
+  const now = (): Date => ctx.clock.now()
   const scannedAt = now().toISOString()
-  const start = Date.now()
-  const claudeHome = params.claudeHome ?? defaultClaudeHome()
-  const reader = params.reader ?? createSdkSessionReader()
+  const start = now().getTime()
 
-  const rawResult = await reader()
+  const rawResult = await params.reader()
   if (!rawResult.ok) {
     return { ok: false, kind: rawResult.kind, message: rawResult.message, scannedAt }
   }
 
-  const indexResult = await buildProjectIndex(claudeHome)
+  const indexResult = await buildProjectIndex(ctx)
   if (!indexResult.ok) {
     return { ok: false, kind: indexResult.kind, message: indexResult.message, scannedAt }
   }
@@ -107,7 +105,7 @@ export async function readSessionState(params: ReadSessionStateParams): Promise<
     const agentTypes: string[] = []
     if (attribution.repoId !== null) {
       const subagentsDir = pathOps.join(sessionDir, 'subagents')
-      const read = await readAgents(raw.sessionId, attribution.repoId, subagentsDir, now(), raw.lastModified)
+      const read = await readAgents(ctx.fs, raw.sessionId, attribution.repoId, subagentsDir, now(), raw.lastModified)
       for (const agent of read.agents) {
         agents.push(agent)
         agentIds.push(agent.agentId)
@@ -146,7 +144,7 @@ export async function readSessionState(params: ReadSessionStateParams): Promise<
     unresolved,
     unreadable,
     scannedProjects: indexResult.scannedProjects,
-    scanMs: Date.now() - start,
+    scanMs: now().getTime() - start,
     scannedAt,
   }
 }

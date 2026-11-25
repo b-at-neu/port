@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { editAllowGlobs, readStageEditAllow } from '@/main/sessions/hosting/stage-allow'
 import { pathOps } from '@/main/platform/paths'
+import { createFakeFs } from '../../../support/fake-platform'
 
 describe('editAllowGlobs', () => {
   it('reads a bare edit tool as every path', () => {
@@ -26,23 +27,16 @@ describe('editAllowGlobs', () => {
 })
 
 describe('readStageEditAllow', () => {
-  it('reads permissions.allow from the worktree settings file', async () => {
-    const readJsonFile = (path: string) => {
-      expect(path).toBe(pathOps.join('/repo', '.claude', 'settings.json'))
-      return Promise.resolve({ ok: true, value: { permissions: { allow: ['Edit(apps/**)', 'Bash(git *)'] } } } as never)
-    }
-    await expect(readStageEditAllow('/repo', { readJsonFile })).resolves.toEqual(['apps/**'])
-  })
+  const settingsPath = pathOps.join('/repo', '.claude', 'settings.json')
 
-  it('reads a missing or unparseable file as no rules', async () => {
-    const missing = () => Promise.resolve({ ok: false, kind: 'not-found', message: 'x' } as never)
-    const unparseable = () => Promise.resolve({ ok: false, kind: 'unparseable', message: 'x' } as never)
-    await expect(readStageEditAllow('/repo', { readJsonFile: missing })).resolves.toEqual([])
-    await expect(readStageEditAllow('/repo', { readJsonFile: unparseable })).resolves.toEqual([])
-  })
-
-  it('reads a settings file without permissions as no rules', async () => {
-    const readJsonFile = () => Promise.resolve({ ok: true, value: {} } as never)
-    await expect(readStageEditAllow('/repo', { readJsonFile })).resolves.toEqual([])
+  it.each([
+    { name: 'reads permissions.allow from the worktree settings file', text: JSON.stringify({ permissions: { allow: ['Edit(apps/**)', 'Bash(git *)'] } }), expected: ['apps/**'] },
+    { name: 'reads a missing file as no rules', text: null, expected: [] },
+    { name: 'reads an unparseable file as no rules', text: '{', expected: [] },
+    { name: 'reads a settings file without permissions as no rules', text: '{}', expected: [] },
+  ])('$name', async ({ text, expected }) => {
+    const fs = createFakeFs()
+    if (text !== null) await fs.writeText(settingsPath, text)
+    await expect(readStageEditAllow({ fs }, '/repo')).resolves.toEqual(expected)
   })
 })

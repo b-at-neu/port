@@ -36,7 +36,7 @@ export function defaultHostingChannelDeps(
     listRepositories,
     store,
     sessionIndex,
-    listSessionFiles,
+    listSessionFiles: (cwd) => listSessionFiles(ctx, cwd),
     resolveStartTarget,
     targetCtx: ctx,
     targetSources: sources,

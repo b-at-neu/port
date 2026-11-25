@@ -26,6 +26,8 @@ import type { ReadyEntry } from '@/types/actions'
 import type { PostCommentParams, WriteOutcome } from '@/types/writes'
 import { applyStageClaim, applyStageTransition } from '@/main/pipeline/operator/stage'
 import { labelMapStore } from '../../../support/label-map-store'
+import { fakeGit, fakeSdk } from '../../../support/fake-platform'
+import { hostingCtx } from '../../../fixtures/hosting/store'
 import type { CreateStageWorktreeResult, RemoveSessionWorktreeOutcome } from '@/types/workspace'
 
 const REPO_ID = 'repo-scratch' as RepoId
@@ -280,25 +282,20 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
     // stageLauncher's onOutcome/onDenial close over dispatcherRef — both assigned right after.
     let dispatcherRef: Dispatcher | null = null
 
-    const store = createHostedStore({
-      getSdk: () => Promise.resolve(createFakeSdk(seen, prs)),
-      resolveClaudeExecutable: () => Promise.resolve({ ok: true, path: '/usr/local/bin/claude' }),
-      listSessionsForFork: () => Promise.resolve({ ok: true, sessions: [] }),
-      env: {},
-      platform: 'linux',
-      now: () => Date.now(),
-      onEvent: () => undefined,
+    const store = createHostedStore(hostingCtx({
+      sdk: fakeSdk(createFakeSdk(seen, prs)),
+      git: fakeGit((args) => {
+        if (args[0] === 'rev-parse') return Promise.resolve({ ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'not a repository' })
+        removedWorktrees.push({ path: args[args.length - 1] ?? '', force: args.includes('--force') })
+        return Promise.resolve({ ok: true, stdout: '', stderr: '' })
+      }),
+    }), {
+      listSessions: () => Promise.resolve({ ok: true, sessions: [] }),
+      persistence: createInMemoryHostingPersistence(),
       onStatus: (snapshot) => {
         listedSnapshots.push(snapshot)
         stageLauncher.observe(snapshot)
       },
-      onEntries: () => undefined,
-      readStageEditAllow: () => Promise.resolve([]),
-      readStageDisabledPlugins: () => Promise.resolve([]),
-      samePath: (a, b) => a === b,
-      persistence: createInMemoryHostingPersistence(),
-      removeWorktree,
-      readHistory: () => Promise.resolve({ kind: 'none' }),
     })
 
     const { runs, store: stateStore } = memoryRuns(REPO_ID, { at: NOW_ISO, tickets: [stateTicketOf({ repo: REPO_ID, ticket: 7, stage: 'plan' })] })

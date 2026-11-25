@@ -7,7 +7,7 @@ import type { StateEngine } from '@/types/offload'
 import type { PipelineState, RepositoryState } from '@/types/state'
 import { createInProcessEngine } from '@/main/worker/engine'
 import { createPipelineWatcher } from '@/main/pipeline/board/watcher'
-import { fakeGit, makeFakeTimer, readyEntry } from '../../../fixtures/watcher-harness'
+import { engineCtx, fakeGit, makeFakeTimer, readyEntry } from '../../../fixtures/watcher-harness'
 import { reconciledItem, repositoryState } from '../../../support/board-snapshot'
 
 const now = () => new Date('2026-01-01T00:00:00.000Z')
@@ -15,7 +15,7 @@ const TRACKED: TrackedRef[] = [{ kind: 'issue', number: 1, keys: ['marker', 'rea
 
 async function rig(options: { readonly view: PipelineView; readonly state?: RepositoryState; readonly closed?: readonly number[]; readonly merged?: readonly number[]; readonly retryFails?: boolean }) {
   const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
-  const inner = createInProcessEngine({ now, git: fakeGit({ worktreeList: 0 }), sessionReader: () => Promise.resolve({ ok: true, sessions: [] }) })
+  const inner = createInProcessEngine(engineCtx({ git: fakeGit({ worktreeList: 0 }) }), () => Promise.resolve({ ok: true, sessions: [] }))
   const log: string[] = []
   const projected: unknown[] = []
   const github: unknown[] = []

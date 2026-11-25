@@ -1,5 +1,5 @@
 // A git worktree's project directory carries a hash suffix no mangling of its `cwd` can derive, so the directory is resolved by listing, never mangled.
-import { listDirectory } from '@/main/platform/files'
+import type { Platform } from '@/main/platform'
 import { pathOps } from '@/main/platform/paths'
 import type { SessionFailureKind } from '@/types/sessions'
 import type { ProjectIndex } from '@/types/sessions'
@@ -17,9 +17,9 @@ type BuildProjectIndexResult =
   | { readonly ok: false; readonly kind: SessionFailureKind; readonly message: string }
 
 /** An individual project directory that fails to list is skipped rather than failing the whole index. */
-export async function buildProjectIndex(claudeHome: string): Promise<BuildProjectIndexResult> {
-  const projectsDir = pathOps.join(claudeHome, 'projects')
-  const top = await listDirectory(projectsDir)
+export async function buildProjectIndex(ctx: Pick<Platform, 'fs' | 'claudeHome'>): Promise<BuildProjectIndexResult> {
+  const projectsDir = pathOps.join(ctx.claudeHome, 'projects')
+  const top = await ctx.fs.list(projectsDir)
   if (!top.ok) {
     if (top.kind === 'not-found') {
       return { ok: false, kind: 'claude-home-missing', message: `${projectsDir} does not exist` }
@@ -32,7 +32,7 @@ export async function buildProjectIndex(claudeHome: string): Promise<BuildProjec
   for (const entry of top.value) {
     if (entry.kind !== 'directory') continue
     const projectDir = pathOps.join(projectsDir, entry.name)
-    const listing = await listDirectory(projectDir)
+    const listing = await ctx.fs.list(projectDir)
     scannedProjects += 1
     if (!listing.ok) continue
     for (const child of listing.value) {
@@ -51,13 +51,6 @@ export function resolveSessionDir(sessionId: string, index: ProjectIndex): strin
   const projectDir = index.get(sessionId)
   if (projectDir === undefined) return undefined
   return pathOps.join(projectDir, sessionId)
-}
-
-/** The one place `CLAUDE_CONFIG_DIR` is read. */
-export function defaultClaudeHome(): string {
-  const fromEnv = process.env['CLAUDE_CONFIG_DIR']
-  if (typeof fromEnv === 'string' && fromEnv !== '') return fromEnv
-  return pathOps.expandHome('~/.claude')
 }
 
 type ResolveTranscriptPathResult =

@@ -3,7 +3,7 @@ import type { SourceCache, RepoSessionSlice } from '@/types/state'
 // `watcher.ts` calls the same two primitives (`refreshGithub` and friends, `projectFromCache`) on its own cadence rather than a second copy of this composition.
 import type { GitHubTransport } from '@/types/platform'
 import { githubHttp } from '@/main/platform/github-http'
-import { readSessionState } from '@/main/sessions/adapter'
+import type { SessionReader } from '@/types/sessions'
 import type { GitRunner } from '@/types/platform'
 import type { RepositoryEntry } from '@/utils/repos'
 import { verifiableVocabularyOf } from '@/utils/labels/display'
@@ -18,7 +18,7 @@ interface ReadPipelineStateParams {
   readonly repositories: readonly RepositoryEntry[]
   readonly github?: GitHubTransport
   readonly git?: GitRunner
-  readonly sessionReader?: Parameters<typeof readSessionState>[0]['reader']
+  readonly sessionReader?: SessionReader
   /** Forwarded verbatim to `readSessionState`, so `read.test.ts` can attribute a fake session without touching the real machine's transcripts. */
   readonly claudeHome?: string
   readonly now?: () => Date

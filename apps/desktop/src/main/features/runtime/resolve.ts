@@ -1,6 +1,5 @@
 import type { RuntimeProbe } from '@/types/runtime'
 import { runtimeProbe } from '@/main/sessions/runtime/preflight'
-import type { RegistryDeps } from '@/types/registry'
 import type { RepoId } from '@/utils/repos'
 
 /** `repoId` must be a non-empty string or exactly `null` — explicit, so a caller can't drop the key by accident. */
@@ -11,7 +10,7 @@ function requireRepoIdOrNull(repoId: unknown, channel: string): RepoId | null {
 }
 
 /** Repository-free mode (`repoId: null`) never touches the registry at all. */
-export async function resolveRuntimeProbe(registryDeps: RegistryDeps, request: { readonly repoId: RepoId | null }, probeDir: string): Promise<RuntimeProbe> {
+export async function resolveRuntimeProbe(ctx: Parameters<typeof runtimeProbe>[0], request: { readonly repoId: RepoId | null }, probeDir: string): Promise<RuntimeProbe> {
   const repoId = requireRepoIdOrNull(request?.repoId, "'runtime:probe'")
-  return runtimeProbe({ registryDeps, repoId, probeDir })
+  return runtimeProbe(ctx, { repoId, probeDir })
 }

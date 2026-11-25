@@ -1,6 +1,6 @@
 // A fork is renamed away from its parent's title so the two never show as identical rows in the resumable list.
-import { createSdkSessionReader } from '@/main/sessions/reader'
-import type { SessionReader } from '@/types/sessions'
+import type { SdkModule } from '@/main/platform/sdk'
+import type { ListSessionsResult, SessionReader } from '@/types/sessions'
 
 /** Bounded to 80 characters so a very long parent title never produces an unreadable row. */
 const MAX_TITLE_LENGTH = 80
@@ -20,30 +20,32 @@ interface TitleForkParams {
   readonly cwd: string
 }
 
-export interface TitleForkDeps {
-  readonly listSessions: SessionReader
-  readonly renameSession: (sessionId: string, title: string, options?: { readonly dir?: string }) => Promise<void>
+type ForkRename = { readonly kind: 'titled' } | { readonly kind: 'rename'; readonly title: string } | { readonly kind: 'none' }
+
+/** Decides what titling a fork needs from the session list alone. */
+export function forkRename(list: ListSessionsResult, params: Pick<TitleForkParams, 'parentSessionId' | 'forkedSessionId'>): ForkRename {
+  if (!list.ok) return { kind: 'none' }
+
+  const forked = list.sessions.find((session) => session.sessionId === params.forkedSessionId)
+  if (forked?.customTitle) return { kind: 'titled' }
+
+  const parent = list.sessions.find((session) => session.sessionId === params.parentSessionId)
+  const parentTitle = parent?.customTitle ?? parent?.summary ?? parent?.firstPrompt ?? null
+  if (parentTitle === null) return { kind: 'none' }
+  return { kind: 'rename', title: forkTitle(parentTitle) }
 }
 
 /** Returns `false`, never throws, when nothing resolves a title or the rename itself fails. */
-export async function titleFork(params: TitleForkParams, deps: TitleForkDeps): Promise<boolean> {
+export async function titleFork(sdk: Pick<SdkModule, 'renameSession'>, listSessions: SessionReader, params: TitleForkParams): Promise<boolean> {
   try {
-    const result = await deps.listSessions()
-    if (!result.ok) return false
+    const decision = forkRename(await listSessions(), params)
+    if (decision.kind === 'titled') return true
+    if (decision.kind === 'none') return false
 
-    const forked = result.sessions.find((session) => session.sessionId === params.forkedSessionId)
-    if (forked?.customTitle) return true
-
-    const parent = result.sessions.find((session) => session.sessionId === params.parentSessionId)
-    const parentTitle = parent?.customTitle ?? parent?.summary ?? parent?.firstPrompt ?? null
-    if (parentTitle === null) return false
-
-    await deps.renameSession(params.forkedSessionId, forkTitle(parentTitle), { dir: params.cwd })
+    await sdk.renameSession(params.forkedSessionId, decision.title, { dir: params.cwd })
     return true
   } catch (error) {
     console.error(`[hosting] fork titling failed for '${params.forkedSessionId}':`, error)
     return false
   }
 }
-
-export const defaultForkListSessions: SessionReader = createSdkSessionReader()

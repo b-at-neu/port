@@ -5,14 +5,14 @@ import { describe, expect, it, vi } from 'vitest'
 import type { StateEngine } from '@/types/offload'
 import { createInProcessEngine } from '@/main/worker/engine'
 import { createPipelineWatcher } from '@/main/pipeline/board/watcher'
-import { fakeGit, makeFakeTimer, readyEntry } from '../../../fixtures/watcher-harness'
+import { engineCtx, fakeGit, makeFakeTimer, offlineGithub, readyEntry } from '../../../fixtures/watcher-harness'
 
 const now = () => new Date('2026-01-01T00:00:00.000Z')
 
 describe('createPipelineWatcher — engine injection', () => {
   it('reads every source and the projection through the injected engine', async () => {
     const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
-    const inner = createInProcessEngine({ now, git: fakeGit({ worktreeList: 0 }), sessionReader: () => Promise.resolve({ ok: true, sessions: [] }) })
+    const inner = createInProcessEngine(engineCtx({ git: fakeGit({ worktreeList: 0 }), githubHttp: offlineGithub }), () => Promise.resolve({ ok: true, sessions: [] }))
     const calls: string[] = []
     const engine: StateEngine = {
       ...inner,
@@ -27,7 +27,7 @@ describe('createPipelineWatcher — engine injection', () => {
 
   it('a failed projection keeps the previous snapshot, fires nothing, and still reschedules', async () => {
     const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
-    const inner = createInProcessEngine({ now, git: fakeGit({ worktreeList: 0 }), sessionReader: () => Promise.resolve({ ok: true, sessions: [] }) })
+    const inner = createInProcessEngine(engineCtx({ git: fakeGit({ worktreeList: 0 }), githubHttp: offlineGithub }), () => Promise.resolve({ ok: true, sessions: [] }))
     let failing = false
     const engine: StateEngine = { ...inner, project: (params) => (failing ? Promise.reject(new Error('worker stopped')) : inner.project(params)) }
     const onSnapshot = vi.fn()

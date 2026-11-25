@@ -4,9 +4,13 @@ import { join, resolve, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { pathOps } from '@/main/platform/paths'
 import type { LocalRepoRef as RepoRef } from '@/types/github'
+import { hostFs } from '@/main/platform'
 import { readSessionState } from '@/main/sessions/adapter'
+import { createSdkSessionReader } from '@/main/sessions/reader'
 import type { RawSession } from '@/types/sessions'
 import { makeTempDir } from '../../../fixtures/fs'
+
+const ctxOf = (claudeHome: string) => ({ fs: hostFs, clock: { now: () => new Date() }, claudeHome })
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -74,9 +78,8 @@ describe('readSessionState', () => {
       { id: pathOps.pathKey(repoBRoot) as unknown as RepoRef['id'], root: repoBRoot },
     ]
 
-    const result = await readSessionState({
+    const result = await readSessionState(ctxOf(claudeHome), {
       repos,
-      claudeHome,
       reader: () =>
         Promise.resolve({
           ok: true,
@@ -108,9 +111,8 @@ describe('readSessionState', () => {
     await makeSession(claudeHome, 'project-x', SESSION_UNATTRIBUTED)
 
     const repos: readonly RepoRef[] = [{ id: pathOps.pathKey(repoRoot) as unknown as RepoRef['id'], root: repoRoot }]
-    const result = await readSessionState({
+    const result = await readSessionState(ctxOf(claudeHome), {
       repos,
-      claudeHome,
       reader: () => Promise.resolve({ ok: true, sessions: [rawSession({ sessionId: SESSION_UNATTRIBUTED, cwd: unregisteredCwd })] }),
     })
 
@@ -127,9 +129,8 @@ describe('readSessionState', () => {
     // A populated projects/ tree that simply never mentions this session id
     // — the index builds fine, but the ladder still finds nothing for it.
     await makeSession(claudeHome, 'project-other', SESSION_UNATTRIBUTED)
-    const result = await readSessionState({
+    const result = await readSessionState(ctxOf(claudeHome), {
       repos: [{ id: pathOps.pathKey(repoRoot) as unknown as RepoRef['id'], root: repoRoot }],
-      claudeHome,
       reader: () => Promise.resolve({ ok: true, sessions: [rawSession({ sessionId: SESSION_GHOST, cwd: repoRoot })] }),
     })
 
@@ -148,9 +149,8 @@ describe('readSessionState', () => {
       { agentId: 'bad', meta: 'malformed' },
     ])
 
-    const result = await readSessionState({
+    const result = await readSessionState(ctxOf(claudeHome), {
       repos: [{ id: pathOps.pathKey(repoRoot) as unknown as RepoRef['id'], root: repoRoot }],
-      claudeHome,
       reader: () => Promise.resolve({ ok: true, sessions: [rawSession({ sessionId: SESSION_WITH_AGENTS, cwd: repoRoot })] }),
     })
 
@@ -179,9 +179,8 @@ describe('readSessionState', () => {
     )
 
     const sessionLastModified = '2020-01-01T00:00:00.000Z'
-    const result = await readSessionState({
+    const result = await readSessionState(ctxOf(claudeHome), {
       repos: [{ id: pathOps.pathKey(repoRoot) as unknown as RepoRef['id'], root: repoRoot }],
-      claudeHome,
       reader: () =>
         Promise.resolve({ ok: true, sessions: [rawSession({ sessionId: SESSION_WITH_AGENTS, cwd: repoRoot, lastModified: sessionLastModified })] }),
     })
@@ -195,9 +194,8 @@ describe('readSessionState', () => {
   it('each ok: false kind carries no sessions field at all', async () => {
     const claudeHome = await makeTempDir('port-sessions-adapter-')
 
-    const sdkUnavailable = await readSessionState({
+    const sdkUnavailable = await readSessionState(ctxOf(claudeHome), {
       repos: [],
-      claudeHome,
       reader: () => Promise.resolve({ ok: false, kind: 'sdk-unavailable', message: 'no sdk' }),
     })
     expect(sdkUnavailable.ok).toBe(false)
@@ -207,16 +205,14 @@ describe('readSessionState', () => {
     expect(typeof sdkUnavailable.scannedAt).toBe('string')
     expect('sessions' in sdkUnavailable).toBe(false)
 
-    const sdkFailed = await readSessionState({
+    const sdkFailed = await readSessionState(ctxOf(claudeHome), {
       repos: [],
-      claudeHome,
       reader: () => Promise.resolve({ ok: false, kind: 'sdk-failed', message: 'boom' }),
     })
     expect('sessions' in sdkFailed).toBe(false)
 
-    const claudeHomeMissing = await readSessionState({
+    const claudeHomeMissing = await readSessionState(ctxOf(join(claudeHome, 'does-not-exist')), {
       repos: [],
-      claudeHome: join(claudeHome, 'does-not-exist'),
       reader: () => Promise.resolve({ ok: true, sessions: [] }),
     })
     expect(claudeHomeMissing.ok).toBe(false)
@@ -229,9 +225,9 @@ describe('readSessionState', () => {
   it('no failure path produces ok: true with an empty sessions array', async () => {
     const claudeHome = await makeTempDir('port-sessions-adapter-')
     const results = await Promise.all([
-      readSessionState({ repos: [], claudeHome, reader: () => Promise.resolve({ ok: false, kind: 'sdk-unavailable', message: 'x' }) }),
-      readSessionState({ repos: [], claudeHome, reader: () => Promise.resolve({ ok: false, kind: 'sdk-failed', message: 'x' }) }),
-      readSessionState({ repos: [], claudeHome: join(claudeHome, 'missing'), reader: () => Promise.resolve({ ok: true, sessions: [] }) }),
+      readSessionState(ctxOf(claudeHome), { repos: [], reader: () => Promise.resolve({ ok: false, kind: 'sdk-unavailable', message: 'x' }) }),
+      readSessionState(ctxOf(claudeHome), { repos: [], reader: () => Promise.resolve({ ok: false, kind: 'sdk-failed', message: 'x' }) }),
+      readSessionState(ctxOf(join(claudeHome, 'missing')), { repos: [], reader: () => Promise.resolve({ ok: true, sessions: [] }) }),
     ])
     for (const result of results) {
       if (result.ok) {
@@ -263,7 +259,7 @@ describe.skipIf(!hasRealProjects)('readSessionState — live', () => {
         id: pathOps.pathKey(root) as unknown as RepoRef['id'],
         root,
       }))
-      const result = await readSessionState({ repos })
+      const result = await readSessionState(ctxOf(REAL_CLAUDE_HOME), { repos, reader: createSdkSessionReader() })
 
       expect(result.ok).toBe(true)
       if (!result.ok) throw new Error('unreachable')

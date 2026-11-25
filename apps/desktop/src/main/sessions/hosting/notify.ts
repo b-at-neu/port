@@ -1,14 +1,12 @@
 // The one notification decider. Fires only when no port window is focused — a missing nudge
 // costs one glance, a spurious one trains the operator to ignore them.
-import { BrowserWindow, Notification } from 'electron'
-import { focusFirstWindow } from '@/main/platform/notify'
+import type { Platform } from '@/main/platform'
+import type { Repos } from '@/main/repos'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import type { NeedsYouNotification } from '@/types/settings'
 import type { AppCommand } from '@/utils/shell/commands'
-import type { RegistryDeps } from '@/types/registry'
 import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'
 import type { NotificationPrefs } from '@/types/settings'
-import { listRepositories } from '@/main/repos'
 import { sessionDisplayLabel } from '@/utils/hosting/label'
 import { folderLabel, repoDisplayLabel } from '@/utils/workspace/label'
 
@@ -47,16 +45,6 @@ export function notificationFor(previous: HostedSessionSnapshot | null, next: Ho
   return null
 }
 
-interface CreateNotifierParams {
-  readonly isAppFocused: () => boolean
-  readonly show: (notification: SessionNotification, snapshot: HostedSessionSnapshot) => void
-  /** Resolved only when a notification is actually about to fire — a registry lookup is too
-   *  slow to run on every snapshot, and most snapshots notify nothing. */
-  readonly repoLabel: (snapshot: HostedSessionSnapshot) => Promise<string>
-  /** Read only when a notification is about to fire; a rejection reads as everything on. */
-  readonly prefs: () => Promise<NotificationPrefs>
-}
-
 async function readPrefs(prefs: () => Promise<NotificationPrefs>): Promise<NotificationPrefs> {
   try {
     return await prefs()
@@ -65,13 +53,33 @@ async function readPrefs(prefs: () => Promise<NotificationPrefs>): Promise<Notif
   }
 }
 
-interface SessionNotifier {
-  /** Calls `show` only when unfocused; a focused transition still updates the baseline, so focusing then blurring never replays it. */
-  observe(snapshot: HostedSessionSnapshot): void
+interface NotifierContext extends Pick<Platform, 'notify'> {
+  readonly repos: Pick<Repos, 'list'>
+  readonly emit: (event: 'app.command', payload: AppCommand) => void
 }
 
-export function createNotifier(params: CreateNotifierParams): SessionNotifier {
+interface Notifier {
+  /** Shows only when unfocused; a focused transition still updates the baseline, so focusing then blurring never replays it. */
+  observe(snapshot: HostedSessionSnapshot): void
+  /** Shows nothing while a port window is focused. A click opens Needs you with `focus` selected. */
+  showNeedsYou(notification: NeedsYouNotification): void
+}
+
+/** A click focuses (and restores) the first window and asks it to open the session. `prefs` is read only when a notification is about to fire; a rejection reads as everything on. */
+export function createNotifier(ctx: NotifierContext, prefs: () => Promise<NotificationPrefs>): Notifier {
   const lastSeen = new Map<string, HostedSessionSnapshot>()
+
+  // Resolved only when a notification is actually about to fire — a registry lookup is too slow to run on every snapshot.
+  async function repoLabel(snapshot: HostedSessionSnapshot): Promise<string> {
+    if (snapshot.repoId === null) return folderLabel(snapshot.workspace.folder)
+    const list = await ctx.repos.list()
+    const entry = list.ok ? list.repositories.find((r) => r.id === snapshot.repoId) : undefined
+    return repoDisplayLabel(entry, snapshot.workspace.folder)
+  }
+
+  function show(notification: SessionNotification, snapshot: HostedSessionSnapshot): void {
+    ctx.notify.show({ title: notification.title, body: notification.body }, () => ctx.emit('app.command', { kind: 'open-session', sessionKey: snapshot.sessionKey }))
+  }
 
   return {
     observe(snapshot) {
@@ -82,70 +90,27 @@ export function createNotifier(params: CreateNotifierParams): SessionNotifier {
       // A placeholder label decides only whether something would fire; the real label is
       // resolved below, only on that path, and used for the title that's actually shown.
       const wouldNotify = notificationFor(previous, snapshot, '') !== null
-      if (!wouldNotify || params.isAppFocused()) return
+      if (!wouldNotify || ctx.notify.focused()) return
 
-      void readPrefs(params.prefs).then((prefs) => {
-        if (!prefs.sessions) return
-        return params.repoLabel(snapshot).then(
+      void readPrefs(prefs).then((resolved) => {
+        if (!resolved.sessions) return
+        return repoLabel(snapshot).then(
           (label) => {
             const notification = notificationFor(previous, snapshot, label)
-            if (notification !== null) params.show(notification, snapshot)
+            if (notification !== null) show(notification, snapshot)
           },
           () => {
             const notification = notificationFor(previous, snapshot, folderLabel(snapshot.workspace.folder))
-            if (notification !== null) params.show(notification, snapshot)
+            if (notification !== null) show(notification, snapshot)
           }
         )
       })
     },
-  }
-}
-
-interface AppNotifier extends SessionNotifier {
-  /** Shows nothing while a port window is focused. A click opens Needs you with `focus` selected. */
-  showNeedsYou(notification: NeedsYouNotification): void
-}
-
-/** The real notifier wired to Electron and the repo registry, kept out of `ipc.ts` for its size.
- *  A click focuses (and restores) the first window and asks it to open the session. */
-export function createAppNotifier(params: {
-  readonly registryDeps: RegistryDeps
-  readonly broadcast: (command: AppCommand) => void
-  readonly prefs: () => Promise<NotificationPrefs>
-}): AppNotifier {
-  const isAppFocused = (): boolean => BrowserWindow.getFocusedWindow() !== null
-  const sessionNotifier = createNotifier({
-    isAppFocused,
-    prefs: params.prefs,
-    repoLabel: async (snapshot) => {
-      if (snapshot.repoId === null) return folderLabel(snapshot.workspace.folder)
-      const list = await listRepositories(params.registryDeps)
-      const entry = list.ok ? list.repositories.find((r) => r.id === snapshot.repoId) : undefined
-      return repoDisplayLabel(entry, snapshot.workspace.folder)
-    },
-    show: (notification, snapshot) => {
-      if (!Notification.isSupported()) return
-      const native = new Notification({ title: notification.title, body: notification.body })
-      native.on('click', () => {
-        focusFirstWindow()
-        params.broadcast({ kind: 'open-session', sessionKey: snapshot.sessionKey })
-      })
-      native.show()
-    },
-  })
-
-  return {
-    observe: (snapshot) => sessionNotifier.observe(snapshot),
     showNeedsYou: ({ title, body, focus }) => {
-      if (isAppFocused() || !Notification.isSupported()) return
-      void readPrefs(params.prefs).then((prefs) => {
-        if (!prefs.needsYou) return
-        const native = new Notification({ title, body })
-        native.on('click', () => {
-          focusFirstWindow()
-          params.broadcast({ kind: 'open-needs-you', focus })
-        })
-        native.show()
+      if (ctx.notify.focused()) return
+      void readPrefs(prefs).then((resolved) => {
+        if (!resolved.needsYou) return
+        ctx.notify.show({ title, body }, () => ctx.emit('app.command', { kind: 'open-needs-you', focus }))
       })
     },
   }

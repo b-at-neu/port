@@ -2,8 +2,21 @@ import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepositoryEntry } from '@/utils/repos'
 import type { CommandResult, ConditionalTransport, GitHubTransport } from '@/types/platform'
 import type { TimerFactory, TimerHandle } from '@/types/state'
+import type { createInProcessEngine } from '@/main/worker/engine'
+import { createFakePlatform } from '../support/fake-platform'
 import { queryOf } from './github-http'
 import { RATE_LIMIT_REPLY, connection } from './pipeline-reply'
+
+type EngineCtx = Parameters<typeof createInProcessEngine>[0]
+
+/** A GitHub transport that is down, so a refresh reports a failure value instead of reaching the network. */
+export const offlineGithub: GitHubTransport = () => Promise.resolve({ ok: false, kind: 'network', status: null, body: '', message: 'offline' })
+
+/** The adapters an in-process engine reads, all unscripted fakes until a test passes its own. */
+export function engineCtx(overrides: Partial<EngineCtx> = {}): EngineCtx {
+  const { git, ghWrite, githubHttp, githubConditional, sdk, fs, clock, claudeHome } = createFakePlatform()
+  return { git, ghWrite, githubHttp, githubConditional, sdk, fs, clock, claudeHome, ...overrides }
+}
 
 /** One ready issue: the sweep reply names it, and the detail read (`d0`) answers with an empty timeline. */
 export function readyItemTransport(signedInLogin: string, assignees: readonly string[], rateLimit: unknown = RATE_LIMIT_REPLY, labels: readonly string[] = ['ready']): GitHubTransport {

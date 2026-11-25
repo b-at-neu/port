@@ -54,5 +54,3 @@ export interface ProbeOutcome {
   readonly diagnosis: RuntimeDiagnosis
   readonly detail: string | null
 }
-
-export type RuntimeProbeFn = (params: RunProbeParams) => Promise<ProbeOutcome>

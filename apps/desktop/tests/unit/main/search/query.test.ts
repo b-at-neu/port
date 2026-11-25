@@ -6,8 +6,12 @@ import type { RepoId } from '@/utils/repos'
 import type { SessionRecord, SessionScan } from '@/types/sessions'
 import { MAX_HITS_PER_TRANSCRIPT, MAX_TOTAL_HITS, SCAN_BUDGET_MS } from '@/types/search'
 import type { SearchScope } from '@/types/search'
+import { hostFs } from '@/main/platform'
 import { runSearch } from '@/main/sessions/search/query'
+import type { Clock } from '@/types/platform'
 import { makeClaudeHome } from '../../../fixtures/fs'
+
+const ctxOf = (claudeHome: string, clock: Clock = { now: () => new Date() }) => ({ fs: hostFs, clock, claudeHome })
 
 const REPO_A = 'repo-a' as RepoId
 const REPO_B = 'repo-b' as RepoId
@@ -79,13 +83,13 @@ const ALL_SCOPE: SearchScope = { kind: 'all' }
 
 describe('runSearch', () => {
   it('returns invalid-query for a query under MIN_TERM_CHARS', async () => {
-    const result = await runSearch({ scan: scanOf([]), indexDir: await makeIndexDir(), query: 'ab', scope: ALL_SCOPE, claudeHome: await makeClaudeHome() })
+    const result = await runSearch(ctxOf(await makeClaudeHome()), { scan: scanOf([]), indexDir: await makeIndexDir(), query: 'ab', scope: ALL_SCOPE })
     expect(result).toEqual({ ok: false, kind: 'invalid-query' })
   })
 
   it('passes through a failed scan as sessions-unavailable', async () => {
     const scan: SessionScan = { ok: false, kind: 'sdk-unavailable', message: 'no sdk', scannedAt: new Date(0).toISOString() }
-    const result = await runSearch({ scan, indexDir: await makeIndexDir(), query: 'needle', scope: ALL_SCOPE, claudeHome: await makeClaudeHome() })
+    const result = await runSearch(ctxOf(await makeClaudeHome()), { scan, indexDir: await makeIndexDir(), query: 'needle', scope: ALL_SCOPE })
     expect(result).toEqual({ ok: false, kind: 'sessions-unavailable', sessionsKind: 'sdk-unavailable', message: 'no sdk' })
   })
 
@@ -94,7 +98,7 @@ describe('runSearch', () => {
     await writeSessionTranscript(claudeHome, 'project-a', SESSION_A, 'the answer contains needle-term right here')
     const scan = scanOf([session()])
 
-    const result = await runSearch({ scan, indexDir: await makeIndexDir(), query: 'needle-term', scope: REPO_SCOPE, claudeHome })
+    const result = await runSearch(ctxOf(claudeHome), { scan, indexDir: await makeIndexDir(), query: 'needle-term', scope: REPO_SCOPE })
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error('unreachable')
     expect(result.inScope).toBe(1)
@@ -110,13 +114,13 @@ describe('runSearch', () => {
     await writeSessionTranscript(claudeHome, 'project-b', SESSION_B, 'a needle-term over here too')
     const scan = scanOf([session({ sessionId: SESSION_B, repoId: REPO_B })])
 
-    const scoped = await runSearch({ scan, indexDir: await makeIndexDir(), query: 'needle-term', scope: REPO_SCOPE, claudeHome })
+    const scoped = await runSearch(ctxOf(claudeHome), { scan, indexDir: await makeIndexDir(), query: 'needle-term', scope: REPO_SCOPE })
     expect(scoped.ok).toBe(true)
     if (!scoped.ok) throw new Error('unreachable')
     expect(scoped.inScope).toBe(0)
     expect(scoped.groups).toHaveLength(0)
 
-    const all = await runSearch({ scan, indexDir: await makeIndexDir(), query: 'needle-term', scope: ALL_SCOPE, claudeHome })
+    const all = await runSearch(ctxOf(claudeHome), { scan, indexDir: await makeIndexDir(), query: 'needle-term', scope: ALL_SCOPE })
     expect(all.ok).toBe(true)
     if (!all.ok) throw new Error('unreachable')
     expect(all.inScope).toBe(1)
@@ -129,10 +133,10 @@ describe('runSearch', () => {
     const scan = scanOf([session()])
     const indexDir = await makeIndexDir()
 
-    const first = await runSearch({ scan, indexDir, query: 'needle-term', scope: REPO_SCOPE, claudeHome })
+    const first = await runSearch(ctxOf(claudeHome), { scan, indexDir, query: 'needle-term', scope: REPO_SCOPE })
     expect(first.ok && first.read).toBe(1)
 
-    const second = await runSearch({ scan, indexDir, query: 'needle-term', scope: REPO_SCOPE, claudeHome })
+    const second = await runSearch(ctxOf(claudeHome), { scan, indexDir, query: 'needle-term', scope: REPO_SCOPE })
     expect(second.ok).toBe(true)
     if (!second.ok) throw new Error('unreachable')
     expect(second.read).toBe(1)
@@ -146,8 +150,8 @@ describe('runSearch', () => {
     const scan = scanOf([session()])
     const indexDir = await makeIndexDir()
 
-    await runSearch({ scan, indexDir, query: 'needle-term', scope: REPO_SCOPE, claudeHome })
-    const second = await runSearch({ scan, indexDir, query: 'zzzqqqxxx', scope: REPO_SCOPE, claudeHome })
+    await runSearch(ctxOf(claudeHome), { scan, indexDir, query: 'needle-term', scope: REPO_SCOPE })
+    const second = await runSearch(ctxOf(claudeHome), { scan, indexDir, query: 'zzzqqqxxx', scope: REPO_SCOPE })
     expect(second.ok).toBe(true)
     if (!second.ok) throw new Error('unreachable')
     expect(second.read).toBe(0)
@@ -167,7 +171,7 @@ describe('runSearch', () => {
       return new Date(calls <= 2 ? 0 : SCAN_BUDGET_MS)
     }
 
-    const result = await runSearch({ scan, indexDir: await makeIndexDir(), query: 'needle-term', scope: REPO_SCOPE, claudeHome, now })
+    const result = await runSearch(ctxOf(claudeHome, { now }), { scan, indexDir: await makeIndexDir(), query: 'needle-term', scope: REPO_SCOPE })
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error('unreachable')
     expect(result.read).toBe(1)
@@ -181,7 +185,7 @@ describe('runSearch', () => {
     await writeSessionTranscript(claudeHome, 'project-a', '99999999-9999-9999-9999-999999999999', 'unrelated text')
     const scan = scanOf([session()])
 
-    const result = await runSearch({ scan, indexDir: await makeIndexDir(), query: 'needle-term', scope: REPO_SCOPE, claudeHome })
+    const result = await runSearch(ctxOf(claudeHome), { scan, indexDir: await makeIndexDir(), query: 'needle-term', scope: REPO_SCOPE })
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error('unreachable')
     expect(result.read).toBe(0)
@@ -204,7 +208,7 @@ describe('runSearch', () => {
     sessions.push(session({ sessionId: oneMoreId, idleMs: transcriptsToFill }))
 
     const scan = scanOf(sessions)
-    const result = await runSearch({ scan, indexDir: await makeIndexDir(), query: 'needle-term', scope: REPO_SCOPE, claudeHome })
+    const result = await runSearch(ctxOf(claudeHome), { scan, indexDir: await makeIndexDir(), query: 'needle-term', scope: REPO_SCOPE })
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error('unreachable')
     expect(result.read).toBe(transcriptsToFill)
