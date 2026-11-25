@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { createRuntimeProbe } from '@/main/sessions/runtime/probe'
-import type { HostedQueryFn, SdkSource } from '@/main/platform/sdk'
+import { runProbe } from '@/main/sessions/runtime/probe'
+import type { Platform } from '@/main/platform'
+import type { HostedQueryFn } from '@/main/platform/sdk'
+import { fakeSdk } from '../../../support/fake-platform'
 
 /** Mirrors the probe's own message shape, so this fixture stays faithful without pulling in every field of the real `SDKResultMessage` union. */
 interface FakeMessage {
@@ -16,62 +18,52 @@ async function* messages(...items: readonly FakeMessage[]): AsyncGenerator<FakeM
   for (const item of items) yield item
 }
 
-function sourceOf(query: () => AsyncIterable<FakeMessage>): SdkSource<'query'> {
-  return { load: () => Promise.resolve({ query: query as unknown as HostedQueryFn }) }
+function sdkOf(query: () => AsyncIterable<FakeMessage>): Pick<Platform, 'sdk'> {
+  return { sdk: fakeSdk({ query: query as unknown as HostedQueryFn }) }
 }
 
 const BASE_PARAMS = { executablePath: '/home/operator/.local/bin/claude', cwd: '/repo' }
 
-describe('createRuntimeProbe — no SDK ever loaded', () => {
-  it('a successful, non-error result is verified', async () => {
-    const probe = createRuntimeProbe(sourceOf(() => messages({ type: 'assistant' }, { type: 'result', subtype: 'success', is_error: false, result: 'ok' })))
-    const outcome = await probe(BASE_PARAMS)
-    expect(outcome).toEqual({ diagnosis: 'verified', detail: null })
-  })
-
-  it('a success result with is_error true is classified from its result text, not reported verified', async () => {
-    const probe = createRuntimeProbe(sourceOf(() => messages({ type: 'result', subtype: 'success', is_error: true, result: 'not logged in' })))
-    const outcome = await probe(BASE_PARAMS)
-    expect(outcome).toEqual({ diagnosis: 'unauthenticated', detail: 'not logged in' })
-  })
-
-  it('an error-subtype result is classified from its joined errors', async () => {
-    const probe = createRuntimeProbe(sourceOf(() => messages({ type: 'result', subtype: 'error_max_turns', is_error: true, errors: ['stopped: max turns reached'] })))
-    const outcome = await probe(BASE_PARAMS)
-    expect(outcome).toEqual({ diagnosis: 'probe-failed', detail: 'stopped: max turns reached' })
-  })
-
-  it('a stream with no result message at all is probe-failed, never an open await', async () => {
-    const probe = createRuntimeProbe(sourceOf(() => messages({ type: 'assistant' }, { type: 'system' })))
-    const outcome = await probe(BASE_PARAMS)
-    expect(outcome.diagnosis).toBe('probe-failed')
+describe('runProbe — no SDK ever loaded', () => {
+  it.each([
+    { name: 'a successful, non-error result is verified', stream: [{ type: 'assistant' }, { type: 'result', subtype: 'success', is_error: false, result: 'ok' }], expected: { diagnosis: 'verified', detail: null } },
+    {
+      name: 'a success result with is_error true is classified from its result text, not reported verified',
+      stream: [{ type: 'result', subtype: 'success', is_error: true, result: 'not logged in' }],
+      expected: { diagnosis: 'unauthenticated', detail: 'not logged in' },
+    },
+    {
+      name: 'an error-subtype result is classified from its joined errors',
+      stream: [{ type: 'result', subtype: 'error_max_turns', is_error: true, errors: ['stopped: max turns reached'] }],
+      expected: { diagnosis: 'probe-failed', detail: 'stopped: max turns reached' },
+    },
+    { name: 'a stream with no result message at all is probe-failed, never an open await', stream: [{ type: 'assistant' }, { type: 'system' }], expected: { diagnosis: 'probe-failed' } },
+    {
+      name: 'a result whose errors name a failed token refresh is token-stale',
+      stream: [{ type: 'result', subtype: 'error_during_execution', is_error: true, errors: ['Failed to refresh OAuth token'] }],
+      expected: { diagnosis: 'token-stale' },
+    },
+    {
+      name: 'an unrelated error is probe-failed, never token-stale',
+      stream: [{ type: 'result', subtype: 'error_during_execution', is_error: true, errors: ['connection reset'] }],
+      expected: { diagnosis: 'probe-failed' },
+    },
+  ] satisfies { name: string; stream: FakeMessage[]; expected: object }[])('$name', async ({ stream, expected }) => {
+    await expect(runProbe(sdkOf(() => messages(...stream)), BASE_PARAMS)).resolves.toMatchObject(expected)
   })
 
   it('a rejected import() is probe-failed, never a throw', async () => {
-    const probe = createRuntimeProbe({ load: () => Promise.reject(new Error('module not found')) })
-    const outcome = await probe(BASE_PARAMS)
+    const outcome = await runProbe({ sdk: { load: () => Promise.reject(new Error('module not found')) } }, BASE_PARAMS)
     expect(outcome).toEqual({ diagnosis: 'probe-failed', detail: 'module not found' })
   })
 
   it('query() throwing synchronously is probe-failed, never a throw out of the probe', async () => {
-    const probe = createRuntimeProbe(
-      sourceOf(() => {
+    const outcome = await runProbe(
+      sdkOf(() => {
         throw new Error('spawn failed')
       }),
+      BASE_PARAMS,
     )
-    const outcome = await probe(BASE_PARAMS)
     expect(outcome).toEqual({ diagnosis: 'probe-failed', detail: 'spawn failed' })
-  })
-
-  it('a result whose errors name a failed token refresh is token-stale', async () => {
-    const probe = createRuntimeProbe(sourceOf(() => messages({ type: 'result', subtype: 'error_during_execution', is_error: true, errors: ['Failed to refresh OAuth token'] })))
-    const outcome = await probe(BASE_PARAMS)
-    expect(outcome.diagnosis).toBe('token-stale')
-  })
-
-  it('an unrelated error is probe-failed, never token-stale', async () => {
-    const probe = createRuntimeProbe(sourceOf(() => messages({ type: 'result', subtype: 'error_during_execution', is_error: true, errors: ['connection reset'] })))
-    const outcome = await probe(BASE_PARAMS)
-    expect(outcome.diagnosis).toBe('probe-failed')
   })
 })

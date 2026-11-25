@@ -9,7 +9,8 @@ import { createRecentsStore } from '@/main/features/folders/recents'
 import { removeSessionWorktreeAt } from '@/main/repos/worktree/worktree'
 import { releaseStageBranch } from '@/main/repos/worktree/stage-worktree'
 import { createDefaultStageLauncher } from '@/main/dispatch/stage/default'
-import { createOffload } from '@/main/worker/deps'
+import { createWorkerEngine } from '@/main/worker/client'
+import { resolveSessionsScan } from '@/main/features/history/resolve'
 import { bindOperator } from '@/main/app/operator'
 import { createPipelineState } from '@/main/pipeline/state/default'
 import { defaultHostingChannelDeps } from '@/main/features/session/resolve'
@@ -19,15 +20,16 @@ import { readAllowBase } from '@/main/github/allow'
 import { proposeAllowRule } from '@/main/github/writes/allow'
 import type { FetchItemsByNumberParams } from '@/types/github'
 import { readOwnership, takeOwnership } from '@/main/repos/ownership'
-import type { GateChannelDeps, HostingChannelDeps, IncidentChannelDeps, StageChannelDeps } from '@/main/app/seams'
+import type { GateChannelDeps, HostingChannelDeps, IncidentChannelDeps, SearchQueryDeps, SessionsScanDeps, StageChannelDeps, TranscriptTailDeps } from '@/main/app/seams'
+import type { StateEngine } from '@/types/offload'
 import { createPlatform, type Platform } from '@/main/platform'
 import { nativeNotify } from '@/main/platform/notify'
 import { createRepos, listRepositories, type Repos } from '@/main/repos'
 import { createPipelineWatcher } from '@/main/pipeline/board/watcher'
-import { createHostedStore, defaultHostedStoreDeps } from '@/main/sessions/hosting/store'
+import { createHostedStore } from '@/main/sessions/hosting/store'
 import { createHostingPersistence } from '@/main/sessions/hosting/persist'
 import { createSessionIndex } from '@/main/sessions/hosting/session-index'
-import { createAppNotifier } from '@/main/sessions/hosting/notify'
+import { createNotifier } from '@/main/sessions/hosting/notify'
 import { createStageSweeper } from '@/main/features/stage/resolve'
 import { createUsageLedger } from '@/main/sessions/hosting/usage-ledger'
 import { createSessionMenuRefresher } from '@/main/app/shell/session-menu'
@@ -45,8 +47,6 @@ import type { UsageLedger } from '@/types/settings'
 import type { WorkspaceChannelDeps } from '@/main/features/folders/resolve'
 import type { SessionKey } from '@/types/hosting'
 import type { AppCommand } from '@/utils/shell/commands'
-
-type Offload = ReturnType<typeof createOffload>
 
 export type AppContext = Platform & {
   /** The one broadcast to every renderer window. */
@@ -66,9 +66,9 @@ export type AppContext = Platform & {
     readonly hostedStore: HostedStore
     readonly dispatcher: Dispatcher
     readonly stageLauncher: StageLauncherHandle
-    readonly offload: Omit<Offload, 'engine' | 'close'>
-    readonly engine: Offload['engine']
-    readonly notifier: ReturnType<typeof createAppNotifier>
+    readonly offload: { readonly sessionsScan: SessionsScanDeps; readonly search: SearchQueryDeps; readonly tail: TranscriptTailDeps }
+    readonly engine: StateEngine
+    readonly notifier: ReturnType<typeof createNotifier>
     readonly sessionMenu: ReturnType<typeof createSessionMenuRefresher>
     readonly update: ReturnType<typeof createDefaultUpdate>
     readonly forceDispatch: ForceDispatch
@@ -128,18 +128,31 @@ export function createAppContext(restart: RestartSeams): AppContext {
   const usageLedger = createUsageLedger({ path: join(userData, 'usage-ledger.json'), readJson: platform.fs.readJson, writeJsonAtomic: platform.fs.writeJsonAtomic, now: platform.clock.now, bootId: globalThis.crypto.randomUUID() })
   void usageLedger.load()
 
-  const { engine, close: closeOffload, ...offload } = createOffload({ onRespawn: () => void watcher.refresh() })
+  const { close: closeOffload, ...engine } = createWorkerEngine(platform, { onRespawn: () => void watcher.refresh() })
+  const sessionsScan: SessionsScanDeps = { listRepositories, readSessionState: ({ repos: scanRepos }) => engine.scanSessions({ repos: scanRepos }) }
+  const offload: AppContext['live']['offload'] = {
+    sessionsScan,
+    search: {
+      resolveSessionsScan: (registryDeps) => resolveSessionsScan(registryDeps, sessionsScan),
+      runSearch: ({ scan, indexDir, query, scope }) => engine.search({ scan, indexDir, query, scope }),
+    },
+    tail: {
+      openTail: (params) => engine.tailOpen(params),
+      pollTail: (params) => engine.tailPoll(params),
+      closeTail: (params) => void engine.tailClose(params),
+    },
+  }
 
   const actions = bindOperator(platform, pipelineState, ownership.read)
 
-  const notifier = createAppNotifier({ registryDeps: repos.deps, broadcast: (command) => emit('app.command', command), prefs: () => hostedStore.notificationPrefs() })
+  const notifier = createNotifier({ notify: platform.notify, repos, emit }, () => hostedStore.notificationPrefs())
 
   // Assigned right after createDispatchRuntime below — stageLauncher's onOutcome closes over it, so construction order stays acyclic.
   let dispatcherRef: Dispatcher | null = null
 
-  const hostedStore = createHostedStore({
-    ...defaultHostedStoreDeps,
-    listSessionsForFork: () => engine.listSessions(),
+  const hostedStore = createHostedStore(platform, {
+    listSessions: () => engine.listSessions(),
+    persistence: createHostingPersistence({ dir: userData }),
     onStatus: (snapshot) => {
       emit('session.status', snapshot)
       sessionIndex.observe(snapshot)
@@ -149,9 +162,8 @@ export function createAppContext(restart: RestartSeams): AppContext {
       sessionMenu.refresh()
     },
     onEntries: (delta) => emit('session.entries', delta),
-    persistence: createHostingPersistence({ dir: userData }),
   })
-  const sessionMenu = createSessionMenuRefresher({ store: hostedStore, platform: process.platform, isPackaged: app.isPackaged, send: broadcastAppCommand })
+  const sessionMenu = createSessionMenuRefresher({ emit }, hostedStore)
   const stageLauncher: StageLauncherHandle = createDefaultStageLauncher({
     store: hostedStore,
     runs,

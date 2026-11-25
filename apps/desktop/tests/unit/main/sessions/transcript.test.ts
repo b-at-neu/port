@@ -1,6 +1,7 @@
 import { appendFile, mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { hostFs } from '@/main/platform'
 import { advanceTranscript, openTranscript } from '@/main/sessions/transcript'
 import type { TranscriptCursor } from '@/types/sessions'
 import { makeClaudeHome } from '../../../fixtures/fs'
@@ -43,7 +44,7 @@ describe('openTranscript', () => {
     ]
     await writeFile(join(projectDir, `${SESSION_ID}.jsonl`), jsonl(records))
 
-    const { read, cursor } = await openTranscript({ sessionId: SESSION_ID, agentId: null, claudeHome })
+    const { read, cursor } = await openTranscript({ fs: hostFs, claudeHome }, { sessionId: SESSION_ID, agentId: null })
     expect(read.ok).toBe(true)
     if (!read.ok) throw new Error('unreachable')
     expect(read.source.sessionId).toBe(SESSION_ID)
@@ -67,7 +68,7 @@ describe('openTranscript', () => {
     const records = [{ uuid: 'u1', timestamp: '2026-01-01T00:00:00.000Z', type: 'user', message: { role: 'user', content: 'subagent prompt' } }]
     await writeFile(join(subagentsDir, `agent-${AGENT_ID}.jsonl`), jsonl(records))
 
-    const { read } = await openTranscript({ sessionId: SESSION_ID, agentId: AGENT_ID, claudeHome })
+    const { read } = await openTranscript({ fs: hostFs, claudeHome }, { sessionId: SESSION_ID, agentId: AGENT_ID })
     expect(read.ok).toBe(true)
     if (!read.ok) throw new Error('unreachable')
     expect(read.source.agentId).toBe(AGENT_ID)
@@ -76,7 +77,7 @@ describe('openTranscript', () => {
 
   it('reports invalid-id before touching the filesystem', async () => {
     const claudeHome = await makeClaudeHome()
-    const { read, cursor } = await openTranscript({ sessionId: 'not-a-uuid', agentId: null, claudeHome })
+    const { read, cursor } = await openTranscript({ fs: hostFs, claudeHome }, { sessionId: 'not-a-uuid', agentId: null })
     expect(read.ok).toBe(false)
     if (read.ok) throw new Error('unreachable')
     expect(read.kind).toBe('invalid-id')
@@ -87,7 +88,7 @@ describe('openTranscript', () => {
 
   it('reports session-unresolved when no project directory carries the session', async () => {
     const claudeHome = await makeClaudeHome()
-    const { read } = await openTranscript({ sessionId: SESSION_ID, agentId: null, claudeHome })
+    const { read } = await openTranscript({ fs: hostFs, claudeHome }, { sessionId: SESSION_ID, agentId: null })
     expect(read.ok).toBe(false)
     if (read.ok) throw new Error('unreachable')
     expect(read.kind).toBe('session-unresolved')
@@ -101,7 +102,7 @@ describe('openTranscript', () => {
     // The session's own file exists (so the locate ladder resolves it), but
     // no subagent transcript was ever written for this agent id.
 
-    const { read } = await openTranscript({ sessionId: SESSION_ID, agentId: AGENT_ID, claudeHome })
+    const { read } = await openTranscript({ fs: hostFs, claudeHome }, { sessionId: SESSION_ID, agentId: AGENT_ID })
     expect(read.ok).toBe(false)
     if (read.ok) throw new Error('unreachable')
     expect(read.kind).toBe('not-found')
@@ -116,7 +117,7 @@ describe('openTranscript', () => {
     const good2 = JSON.stringify({ uuid: 'u2', timestamp: '2026-01-01T00:00:01.000Z', type: 'user', message: { role: 'user', content: 'b' } })
     await writeFile(join(projectDir, `${SESSION_ID}.jsonl`), `${good1}\n{not valid json\n${good2}\n`)
 
-    const { read } = await openTranscript({ sessionId: SESSION_ID, agentId: null, claudeHome })
+    const { read } = await openTranscript({ fs: hostFs, claudeHome }, { sessionId: SESSION_ID, agentId: null })
     expect(read.ok).toBe(true)
     if (!read.ok) throw new Error('unreachable')
     expect(read.source.malformedLines).toBe(1)
@@ -130,7 +131,7 @@ describe('openTranscript', () => {
     await mkdir(projectDir, { recursive: true })
     await writeFile(join(projectDir, `${SESSION_ID}.jsonl`), 'x'.repeat(65 * 1024 * 1024))
 
-    const { read } = await openTranscript({ sessionId: SESSION_ID, agentId: null, claudeHome })
+    const { read } = await openTranscript({ fs: hostFs, claudeHome }, { sessionId: SESSION_ID, agentId: null })
     expect(read.ok).toBe(false)
     if (read.ok) throw new Error('unreachable')
     expect(read.kind).toBe('too-large')
@@ -149,7 +150,7 @@ describe('openTranscript', () => {
     ]
     await writeFile(join(projectDir, `${SESSION_ID}.jsonl`), jsonl(records))
 
-    const { read } = await openTranscript({ sessionId: SESSION_ID, agentId: null, claudeHome })
+    const { read } = await openTranscript({ fs: hostFs, claudeHome }, { sessionId: SESSION_ID, agentId: null })
     expect(read.ok).toBe(true)
     if (!read.ok) throw new Error('unreachable')
     expect(read.source.recordCount).toBe(2)
@@ -165,7 +166,7 @@ describe('advanceTranscript', () => {
     await mkdir(projectDir, { recursive: true })
     const path = join(projectDir, `${SESSION_ID}.jsonl`)
     await writeFile(path, jsonl([record('u1', '2026-01-01T00:00:00.000Z', 'hello')]))
-    const { cursor } = await openTranscript({ sessionId: SESSION_ID, agentId: null, claudeHome })
+    const { cursor } = await openTranscript({ fs: hostFs, claudeHome }, { sessionId: SESSION_ID, agentId: null })
     return { path, cursor: requireCursor(cursor) }
   }
 
@@ -173,7 +174,7 @@ describe('advanceTranscript', () => {
     const claudeHome = await makeClaudeHome()
     const { cursor } = await openAt(claudeHome)
 
-    const advanced = await advanceTranscript(cursor)
+    const advanced = await advanceTranscript({ fs: hostFs }, cursor)
     expect(advanced.ok).toBe(true)
     if (!advanced.ok) throw new Error('unreachable')
     expect(advanced.appended).toHaveLength(0)
@@ -187,7 +188,7 @@ describe('advanceTranscript', () => {
     const { path, cursor } = await openAt(claudeHome)
 
     await appendFile(path, jsonl([record('u2', '2026-01-01T00:00:01.000Z', 'world')]))
-    const advanced = await advanceTranscript(cursor)
+    const advanced = await advanceTranscript({ fs: hostFs }, cursor)
     expect(advanced.ok).toBe(true)
     if (!advanced.ok) throw new Error('unreachable')
     expect(advanced.appended).toHaveLength(1)
@@ -202,13 +203,13 @@ describe('advanceTranscript', () => {
 
     const wholeLine = JSON.stringify(record('u2', '2026-01-01T00:00:01.000Z', 'partial'))
     await appendFile(path, wholeLine) // no trailing newline yet
-    const firstAdvance = await advanceTranscript(cursor)
+    const firstAdvance = await advanceTranscript({ fs: hostFs }, cursor)
     expect(firstAdvance.ok).toBe(true)
     if (!firstAdvance.ok) throw new Error('unreachable')
     expect(firstAdvance.appended).toHaveLength(0)
 
     await appendFile(path, '\n')
-    const secondAdvance = await advanceTranscript(firstAdvance.cursor)
+    const secondAdvance = await advanceTranscript({ fs: hostFs }, firstAdvance.cursor)
     expect(secondAdvance.ok).toBe(true)
     if (!secondAdvance.ok) throw new Error('unreachable')
     expect(secondAdvance.appended).toHaveLength(1)
@@ -220,7 +221,7 @@ describe('advanceTranscript', () => {
     const { path, cursor } = await openAt(claudeHome)
 
     await writeFile(path, '')
-    const advanced = await advanceTranscript(cursor)
+    const advanced = await advanceTranscript({ fs: hostFs }, cursor)
     expect(advanced.ok).toBe(false)
     if (advanced.ok) throw new Error('unreachable')
     expect(advanced.kind).toBe('truncated')
@@ -242,7 +243,7 @@ describe('advanceTranscript', () => {
         },
       ]),
     )
-    const afterUse = await advanceTranscript(cursor)
+    const afterUse = await advanceTranscript({ fs: hostFs }, cursor)
     expect(afterUse.ok).toBe(true)
     if (!afterUse.ok) throw new Error('unreachable')
     expect(afterUse.appended[0]).toMatchObject({ type: 'tool-call', result: null })
@@ -258,7 +259,7 @@ describe('advanceTranscript', () => {
         },
       ]),
     )
-    const afterResult = await advanceTranscript(afterUse.cursor)
+    const afterResult = await advanceTranscript({ fs: hostFs }, afterUse.cursor)
     expect(afterResult.ok).toBe(true)
     if (!afterResult.ok) throw new Error('unreachable')
     expect(afterResult.appended).toHaveLength(0)
@@ -273,7 +274,7 @@ describe('advanceTranscript', () => {
     // The deriver caps rendered payload text at MAX_PAYLOAD_CHARS, so assert on a leading marker rather than the whole content.
     const bigContent = 'START-MARKER-' + 'x'.repeat(20 * 1024 * 1024)
     await appendFile(path, jsonl([record('u2', '2026-01-01T00:00:01.000Z', bigContent)]))
-    const advanced = await advanceTranscript(cursor)
+    const advanced = await advanceTranscript({ fs: hostFs }, cursor)
     expect(advanced.ok).toBe(true)
     if (!advanced.ok) throw new Error('unreachable')
     expect(advanced.appended).toHaveLength(1)

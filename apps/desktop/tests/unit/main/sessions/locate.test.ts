@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { hostFs } from '@/main/platform'
 import { buildProjectIndex, resolveSessionDir, resolveTranscriptPath } from '@/main/sessions/locate'
 import { makeClaudeHome } from '../../../fixtures/fs'
 
@@ -22,7 +23,7 @@ describe('buildProjectIndex', () => {
     const claudeHome = await makeClaudeHome()
     const projectDir = await makeProjectDir(claudeHome, '-home-user-project--claude-worktrees-issue-42-a1b2c3', [SESSION_A])
 
-    const result = await buildProjectIndex(claudeHome)
+    const result = await buildProjectIndex({ fs: hostFs, claudeHome })
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error('unreachable')
     expect(resolveSessionDir(SESSION_A, result.index)).toBe(join(projectDir, SESSION_A))
@@ -33,7 +34,7 @@ describe('buildProjectIndex', () => {
     const dirA = await makeProjectDir(claudeHome, 'project-a', [SESSION_A])
     const dirB = await makeProjectDir(claudeHome, 'project-b', [SESSION_B])
 
-    const result = await buildProjectIndex(claudeHome)
+    const result = await buildProjectIndex({ fs: hostFs, claudeHome })
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error('unreachable')
     expect(resolveSessionDir(SESSION_A, result.index)).toBe(join(dirA, SESSION_A))
@@ -45,7 +46,7 @@ describe('buildProjectIndex', () => {
     const claudeHome = await makeClaudeHome()
     await makeProjectDir(claudeHome, 'project-a', [SESSION_A])
 
-    const result = await buildProjectIndex(claudeHome)
+    const result = await buildProjectIndex({ fs: hostFs, claudeHome })
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error('unreachable')
     expect(resolveSessionDir(SESSION_B, result.index)).toBeUndefined()
@@ -53,7 +54,7 @@ describe('buildProjectIndex', () => {
 
   it('a projects/ directory that does not exist yields claude-home-missing', async () => {
     const claudeHome = await makeClaudeHome()
-    const result = await buildProjectIndex(join(claudeHome, 'nonexistent'))
+    const result = await buildProjectIndex({ fs: hostFs, claudeHome: join(claudeHome, 'nonexistent') })
     expect(result.ok).toBe(false)
     if (result.ok) throw new Error('unreachable')
     expect(result.kind).toBe('claude-home-missing')
@@ -65,7 +66,7 @@ describe('resolveTranscriptPath', () => {
   it('resolves a session transcript path under the project directory', async () => {
     const claudeHome = await makeClaudeHome()
     const projectDir = await makeProjectDir(claudeHome, 'project-a', [SESSION_A])
-    const indexResult = await buildProjectIndex(claudeHome)
+    const indexResult = await buildProjectIndex({ fs: hostFs, claudeHome })
     if (!indexResult.ok) throw new Error('unreachable')
 
     const result = resolveTranscriptPath(SESSION_A, null, indexResult.index)
@@ -75,7 +76,7 @@ describe('resolveTranscriptPath', () => {
   it('resolves a subagent transcript path beneath subagents/', async () => {
     const claudeHome = await makeClaudeHome()
     const projectDir = await makeProjectDir(claudeHome, 'project-a', [SESSION_A])
-    const indexResult = await buildProjectIndex(claudeHome)
+    const indexResult = await buildProjectIndex({ fs: hostFs, claudeHome })
     if (!indexResult.ok) throw new Error('unreachable')
 
     const result = resolveTranscriptPath(SESSION_A, 'a1b2c3', indexResult.index)
@@ -85,7 +86,7 @@ describe('resolveTranscriptPath', () => {
   it('reports session-unresolved for a session absent from the index', async () => {
     const claudeHome = await makeClaudeHome()
     await makeProjectDir(claudeHome, 'project-a', [SESSION_A])
-    const indexResult = await buildProjectIndex(claudeHome)
+    const indexResult = await buildProjectIndex({ fs: hostFs, claudeHome })
     if (!indexResult.ok) throw new Error('unreachable')
 
     const result = resolveTranscriptPath(SESSION_B, null, indexResult.index)
@@ -95,7 +96,7 @@ describe('resolveTranscriptPath', () => {
   it('reports invalid-id for a traversal-shaped agentId that would escape the claimed directory', async () => {
     const claudeHome = await makeClaudeHome()
     await makeProjectDir(claudeHome, 'project-a', [SESSION_A])
-    const indexResult = await buildProjectIndex(claudeHome)
+    const indexResult = await buildProjectIndex({ fs: hostFs, claudeHome })
     if (!indexResult.ok) throw new Error('unreachable')
 
     const result = resolveTranscriptPath(SESSION_A, '../../../../etc/passwd', indexResult.index)

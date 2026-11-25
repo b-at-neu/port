@@ -1,10 +1,9 @@
 // The process-lifetime hosted-session store main/ipc.ts binds: the session lifecycle over the live handle registry and the persisted settings.
 // A start past the current limit returns at-capacity, counted against live handles only.
-import { defaultSdk, type HostedQueryFn, type HostedSdk } from '@/main/platform/sdk'
-import type { WhichEnv, WhichOptions, WhichResult } from '@/types/platform'
-import type { RemoveSessionWorktreeOutcome, SessionWorkspace } from '@/types/workspace'
-import type { OpenTranscriptParams, SessionReader, TranscriptCursor } from '@/types/sessions'
-import type { TranscriptRead } from '@/utils/sessions/transcript'
+import type { Platform } from '@/main/platform'
+import type { HostedQueryFn } from '@/main/platform/sdk'
+import type { SessionWorkspace } from '@/types/workspace'
+import type { SessionReader } from '@/types/sessions'
 import type { RepoId } from '@/utils/repos'
 import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SetControlsResult } from '@/utils/hosting/controls'
 import type { ComposerAttachment } from '@/utils/hosting/attachments'
@@ -19,7 +18,6 @@ import type {
   SessionDismissResult,
   SessionEntriesDelta,
   SessionEventEnvelope,
-  SessionHistory,
   SessionInterruptResult,
   SessionInvokeResult,
   SessionKey,
@@ -27,7 +25,6 @@ import type {
   SessionRenameResult,
   SessionRestoreResult,
   SessionSendResult,
-  SessionStartMode,
   SessionStartResult,
   SessionTaskStopResult,
   StartSessionParams,
@@ -37,70 +34,39 @@ import { createHostedHandle } from '@/main/sessions/hosting/handle'
 import { createHandleRegistry } from '@/main/sessions/hosting/handles'
 import { createHostingSettings } from '@/main/sessions/hosting/settings'
 import { readHistory } from '@/main/sessions/hosting/history'
-import { defaultForkListSessions, titleFork } from '@/main/sessions/hosting/fork'
+import { titleFork } from '@/main/sessions/hosting/fork'
 import { readStageEditAllow } from '@/main/sessions/hosting/stage-allow'
 import { readStageDisabledPlugins } from '@/main/sessions/hosting/stage-plugins'
 import { resolveStartTitle } from '@/main/sessions/hosting/title'
-import { createInMemoryHostingPersistence } from '@/main/sessions/hosting/persist'
 import { resolveClaudeExecutable } from '@/main/sessions/runtime/locate'
 import { pathOps } from '@/main/platform/paths'
-import { defaultGitRunner } from '@/main/platform/git'
 import { removeSessionWorktreeAt } from '@/main/repos/worktree/worktree'
 
-export interface HostedStoreDeps {
-  readonly getSdk: () => Promise<HostedSdk>
-  readonly resolveClaudeExecutable: (options: { readonly env: WhichEnv; readonly platform: NodeJS.Platform; readonly which?: (options: WhichOptions) => Promise<WhichResult> }) => Promise<
-    { readonly ok: true; readonly path: string } | { readonly ok: false; readonly kind: 'not-found'; readonly searched: readonly string[] } | { readonly ok: false; readonly kind: 'bundled-fallback'; readonly path: string }
-  >
-  readonly listSessionsForFork: SessionReader
-  readonly env: NodeJS.ProcessEnv
-  readonly platform: NodeJS.Platform
-  readonly now: () => number
-  readonly onEvent: (envelope: SessionEventEnvelope) => void
-  readonly onStatus: (snapshot: HostedSessionSnapshot) => void
-  /** Forwarded verbatim to every handle's own `onEntries`. */
-  readonly onEntries: (delta: SessionEntriesDelta) => void
-  /** A stage start's own edit-allow globs, read from the stage worktree. */
-  readonly readStageEditAllow: (cwd: string) => Promise<readonly string[]>
-  /** The operator's own plugins a stage start turns off, read against the stage worktree's settings. */
-  readonly readStageDisabledPlugins: (cwd: string) => Promise<readonly string[]>
-  readonly samePath: (a: string, b: string) => boolean
-  /** `main/ipc.ts` supplies the real file-backed one; the default here is disk-free, for tests. */
+export interface HostedStoreOptions {
+  /** The engine-routed session list, used for fork titling and a resumed session's start title. */
+  readonly listSessions: SessionReader
   readonly persistence: HostingPersistence
-  /** Removes a worktree on an explicit `dismiss` choice — the default wraps `removeSessionWorktreeAt` with a real `GitRunner`. */
-  readonly removeWorktree: (path: string, force: boolean) => Promise<RemoveSessionWorktreeOutcome>
-  readonly readHistory: (mode: SessionStartMode, deps?: { readonly openTranscript: (params: OpenTranscriptParams) => Promise<{ readonly read: TranscriptRead; readonly cursor: TranscriptCursor | null }> }) => Promise<SessionHistory>
-}
-
-export const defaultHostedStoreDeps: HostedStoreDeps = {
-  getSdk: defaultSdk.load,
-  resolveClaudeExecutable,
-  listSessionsForFork: defaultForkListSessions,
-  env: process.env,
-  platform: process.platform,
-  now: () => Date.now(),
-  onEvent: () => undefined,
-  onStatus: () => undefined,
-  onEntries: () => undefined,
-  readStageEditAllow: (cwd: string) => readStageEditAllow(cwd),
-  readStageDisabledPlugins: (cwd: string) => readStageDisabledPlugins(cwd),
-  samePath: (a: string, b: string) => pathOps.samePath(a, b),
-  persistence: createInMemoryHostingPersistence(),
-  removeWorktree: (path, force) => removeSessionWorktreeAt({ git: defaultGitRunner() }, { path, force }),
-  readHistory,
+  readonly onEvent?: (envelope: SessionEventEnvelope) => void
+  readonly onStatus?: (snapshot: HostedSessionSnapshot) => void
+  /** Forwarded verbatim to every handle's own `onEntries`. */
+  readonly onEntries?: (delta: SessionEntriesDelta) => void
 }
 
 function toSessionKey(n: number): SessionKey {
   return `hosted-${String(n)}` as SessionKey
 }
 
-export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps): HostedStore {
+export function createHostedStore(ctx: Pick<Platform, 'sdk' | 'which' | 'git' | 'fs' | 'clock' | 'claudeHome'>, options: HostedStoreOptions): HostedStore {
   const handles = createHandleRegistry()
-  const settings = createHostingSettings(deps.persistence, handles.list)
+  const settings = createHostingSettings(options.persistence, handles.list)
+  const now = (): number => ctx.clock.now().getTime()
+  const onEvent = options.onEvent ?? (() => undefined)
+  const onStatus = options.onStatus ?? (() => undefined)
+  const onEntries = options.onEntries ?? (() => undefined)
   let nextId = 1
 
   function onHandleStatus(snapshot: HostedSessionSnapshot): void {
-    deps.onStatus(snapshot)
+    onStatus(snapshot)
     handles.noteStatus(snapshot)
     settings.save()
   }
@@ -114,7 +80,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     }
 
     if (params.workspace.worktree === null) {
-      const busy = handles.findFolderBusy(params.workspace.folder, deps.samePath)
+      const busy = handles.findFolderBusy(params.workspace.folder, (a, b) => pathOps.samePath(a, b))
       if (busy !== null) return { ok: false, kind: 'folder-busy', sessionKey: busy.sessionKey }
     }
 
@@ -123,7 +89,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
       return { ok: false, kind: 'at-capacity', limit }
     }
 
-    const located = await deps.resolveClaudeExecutable({ env: deps.env, platform: deps.platform })
+    const located = await resolveClaudeExecutable(ctx)
     if (!located.ok) {
       return {
         ok: false,
@@ -135,9 +101,9 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
 
     const cwd = params.workspace.folder
     const stageParams = params.stage ?? null
-    const editAllowRead: Promise<readonly string[]> = stageParams === null ? Promise.resolve([]) : deps.readStageEditAllow(cwd)
-    const disabledPluginsRead: Promise<readonly string[]> = stageParams === null ? Promise.resolve([]) : deps.readStageDisabledPlugins(cwd)
-    const [sdk, history, editAllow, disabledPlugins] = await Promise.all([deps.getSdk(), deps.readHistory(params.mode), editAllowRead, disabledPluginsRead])
+    const editAllowRead: Promise<readonly string[]> = stageParams === null ? Promise.resolve([]) : readStageEditAllow(ctx, cwd)
+    const disabledPluginsRead: Promise<readonly string[]> = stageParams === null ? Promise.resolve([]) : readStageDisabledPlugins(ctx, cwd)
+    const [sdk, history, editAllow, disabledPlugins] = await Promise.all([ctx.sdk.load(), readHistory(ctx, params.mode), editAllowRead, disabledPluginsRead])
     const sessionKey = toSessionKey(nextId)
     nextId += 1
     const mode = params.mode
@@ -148,10 +114,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     function onSessionId(claudeSessionId: string): void {
       settings.dropAdopted(claudeSessionId)
       if (mode.kind === 'fork') {
-        void titleFork(
-          { parentSessionId: mode.sessionId, forkedSessionId: claudeSessionId, cwd },
-          { listSessions: deps.listSessionsForFork, renameSession: sdk.renameSession },
-        ).then((titled) => handles.get(sessionKey)?.setTitled(titled))
+        void titleFork(sdk, options.listSessions, { parentSessionId: mode.sessionId, forkedSessionId: claudeSessionId, cwd }).then((titled) => handles.get(sessionKey)?.setTitled(titled))
       }
       if (stage !== null && initialTitle !== null) {
         void sdk.renameSession(claudeSessionId, initialTitle, { dir: cwd }).then(
@@ -170,11 +133,11 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
         mode,
         cwd,
         executablePath: located.path,
-        now: deps.now,
-        onEvent: deps.onEvent,
+        now,
+        onEvent,
         onStatus: onHandleStatus,
         onSessionId,
-        onEntries: deps.onEntries,
+        onEntries,
         initialTitle,
         defaults: settings.sessionDefaults(),
         history,
@@ -186,7 +149,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     settings.save()
 
     if (initialTitle === null && mode.kind !== 'fresh') {
-      void resolveStartTitle(mode, deps.listSessionsForFork).then((title) => {
+      void resolveStartTitle(mode, options.listSessions).then((title) => {
         if (title !== null) handles.get(sessionKey)?.setTitle(title)
       })
     }
@@ -232,7 +195,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
 
   async function closeAll(): Promise<void> {
     // Freezing first keeps the 'closing' phase quitting causes from erasing the persisted set.
-    deps.persistence.freeze()
+    options.persistence.freeze()
     await Promise.all(handles.all().map((handle) => handle.close()))
   }
 
@@ -273,7 +236,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
 
     const sessionWorktree = handle.snapshot().workspace.worktree
     if (sessionWorktree !== null && worktree !== 'keep') {
-      const outcome = await deps.removeWorktree(sessionWorktree.path, worktree === 'force')
+      const outcome = await removeSessionWorktreeAt(ctx, { path: sessionWorktree.path, force: worktree === 'force' })
       if (outcome.outcome === 'dirty') return { ok: false, kind: 'worktree-dirty' }
       if (outcome.outcome === 'failed') return { ok: false, kind: 'worktree-remove-failed', message: outcome.message }
     }
@@ -289,7 +252,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     const claudeSessionId = handle.snapshot().claudeSessionId
     if (claudeSessionId === null) return { ok: false, kind: 'not-ready' }
     try {
-      const sdk = await deps.getSdk()
+      const sdk = await ctx.sdk.load()
       await sdk.renameSession(claudeSessionId, title, { dir: handle.cwd })
       handle.rename(title)
       return { ok: true }

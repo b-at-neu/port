@@ -1,7 +1,6 @@
 // The `@` suggestion list's own file source: git's own listing when `cwd` is a work tree, a bounded walk otherwise.
-import { listDirectory } from '@/main/platform/files'
-import { gitLines } from '@/main/platform/git'
-import type { GitLinesResult } from '@/types/platform'
+import type { Platform } from '@/main/platform'
+import type { CommandResult, GitLinesResult } from '@/types/platform'
 
 export const MAX_FILES = 20_000
 
@@ -12,20 +11,13 @@ const MAX_WALK_DEPTH = 8
 
 type FileListingResult = { readonly ok: true; readonly files: readonly string[]; readonly truncated: boolean } | { readonly ok: false; readonly message: string }
 
-export interface FileListingDeps {
-  readonly gitLines: typeof gitLines
-  readonly listDirectory: typeof listDirectory
-}
-
-export const defaultFileListingDeps: FileListingDeps = { gitLines, listDirectory }
-
-async function walk(root: string, deps: FileListingDeps): Promise<FileListingResult> {
+async function walk(root: string, fs: Platform['fs']): Promise<FileListingResult> {
   const files: string[] = []
   let truncated = false
 
   async function visit(absolute: string, relative: string, depth: number): Promise<void> {
     if (truncated || depth > MAX_WALK_DEPTH) return
-    const result = await deps.listDirectory(absolute)
+    const result = await fs.list(absolute)
     if (!result.ok) throw new Error(result.message)
     for (const entry of result.value) {
       if (truncated) return
@@ -51,6 +43,12 @@ async function walk(root: string, deps: FileListingDeps): Promise<FileListingRes
   }
 }
 
+function linesOf(result: CommandResult): GitLinesResult {
+  if (!result.ok) return result
+  const trimmed = result.stdout.replace(/\r?\n$/, '')
+  return { ok: true, lines: trimmed === '' ? [] : trimmed.split(/\r?\n/) }
+}
+
 function fromGitLines(result: GitLinesResult): FileListingResult | null {
   if (!result.ok) return null
   const truncated = result.lines.length > MAX_FILES
@@ -59,9 +57,9 @@ function fromGitLines(result: GitLinesResult): FileListingResult | null {
 
 /** Lists every file under `cwd`, relative and forward-slashed — git's own
  *  listing when `cwd` is a work tree, a bounded walk otherwise. */
-export async function listSessionFiles(cwd: string, deps: FileListingDeps = defaultFileListingDeps): Promise<FileListingResult> {
-  const git = await deps.gitLines(['ls-files', '--cached', '--others', '--exclude-standard'], { cwd })
-  const fromGit = fromGitLines(git)
+export async function listSessionFiles(ctx: Pick<Platform, 'git' | 'fs'>, cwd: string): Promise<FileListingResult> {
+  const result = await ctx.git(['ls-files', '--cached', '--others', '--exclude-standard'], cwd)
+  const fromGit = fromGitLines(linesOf(result))
   if (fromGit !== null) return fromGit
-  return walk(cwd, deps)
+  return walk(cwd, ctx.fs)
 }

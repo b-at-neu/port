@@ -1,261 +1,120 @@
 import { describe, expect, it } from 'vitest'
+import { pathOps } from '@/main/platform/paths'
+import type { HostedQueryFn } from '@/main/platform/sdk'
 import { runtimePreflight, runtimeProbe } from '@/main/sessions/runtime/preflight'
-import type { RuntimeProbeDeps } from '@/main/sessions/runtime/preflight'
-import type { RegistryDeps } from '@/types/registry'
-import type { RepoId } from '@/utils/repos'
+import type { CommandResult, WhichResult } from '@/types/platform'
+import type { RuntimePreflight } from '@/types/runtime'
+import type { RepoId, RepositoryEntry } from '@/utils/repos'
+import { createFakePlatform, fakeRun, fakeSdk, fakeWhich } from '../../../support/fake-platform'
+import { createTestContext } from '../../../support/context'
+import { readyEntry } from '../../../support/repo-config'
 
-const NOW = 1_700_000_000_000
-const REPO_ID = 'repo-1' as unknown as RepoId
+const REPO_ID = 'repo-1' as RepoId
+const PROBE_DIR = '/userdata/runtime-probe'
+const CLAUDE = '/usr/bin/claude'
+const BUNDLED = '/repo/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude'
 
-const registryDeps: RegistryDeps = {
-  registryDir: '/registry',
-  git: () => {
-    throw new Error('git should not be invoked directly by runtimeProbe')
-  },
-  chooseDirectory: () => Promise.resolve(null),
-}
-
-const READY_ENTRY = {
-  id: REPO_ID,
-  path: '/repo',
-  displayName: 'widgets',
-  status: 'ready' as const,
-  config: {
-    repo: 'acme/widgets',
-    owner: 'acme',
-    name: 'widgets',
-    branches: { integration: 'dev', production: 'main' },
-    models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
-    modules: { approvalGate: true, release: true, scope: true },
-    reviewCycleCap: 3,
-    concurrency: { sharedFiles: [], overlapThreshold: 2 },
-    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
-    checkDispositions: {},
-    overrides: [],
-    vocabulary: {} as never,
-    commands: { worktrees: null, budget: null },
-  },
-  diagnostics: [],
-}
+const FOUND: WhichResult = { ok: true, path: CLAUDE }
+const MISSING: WhichResult = { ok: false, kind: 'not-found', command: 'claude', searched: [CLAUDE] }
+const printed = (stdout: string): CommandResult => ({ ok: true, stdout, stderr: '' })
+const UNUSABLE: CommandResult = { ok: false, kind: 'not-found', command: 'claude', searched: [] }
+const credentials = (expiresAt: number) => ({ claudeAiOauth: { accessToken: 'a', refreshToken: 'r', expiresAt } })
 
 describe('runtimePreflight', () => {
-  it('cli-missing when locate fails to find claude, and reads no version or credentials', async () => {
-    let versionCalled = false
-    let credentialsCalled = false
-    const result = await runtimePreflight({
-      resolveClaudeExecutable: () => Promise.resolve({ ok: false, kind: 'not-found', searched: ['/usr/bin/claude'] }),
-      readClaudeVersion: () => {
-        versionCalled = true
-        return Promise.resolve({ ok: true, raw: '2.1.0', belowMinimum: false })
-      },
-      readCredentialsTell: () => {
-        credentialsCalled = true
-        return Promise.resolve({ present: false, expiresAt: null, hasRefreshToken: false })
-      },
-      env: {},
-      platform: 'linux',
-      now: () => NOW,
-    })
-    expect(result.diagnosis).toBe('cli-missing')
-    expect(result.executable).toBeNull()
-    expect(result.version).toBeNull()
-    expect(result.credentials).toBeNull()
-    expect(versionCalled).toBe(false)
-    expect(credentialsCalled).toBe(false)
-  })
-
-  it('bundled-fallback carries the refused path in both executable and detail', async () => {
-    const result = await runtimePreflight({
-      resolveClaudeExecutable: () => Promise.resolve({ ok: false, kind: 'bundled-fallback', path: '/repo/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude' }),
-      readClaudeVersion: () => Promise.resolve({ ok: true, raw: '2.1.0', belowMinimum: false }),
-      readCredentialsTell: () => Promise.resolve({ present: false, expiresAt: null, hasRefreshToken: false }),
-      env: {},
-      platform: 'linux',
-      now: () => NOW,
-    })
-    expect(result.diagnosis).toBe('bundled-fallback')
-    expect(result.executable).toEqual({ path: '/repo/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude' })
-    expect(result.detail).toBe('/repo/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude')
-  })
-
-  it('cli-unusable when the version read fails, with version reported null', async () => {
-    const result = await runtimePreflight({
-      resolveClaudeExecutable: () => Promise.resolve({ ok: true, path: '/usr/bin/claude' }),
-      readClaudeVersion: () => Promise.resolve({ ok: false }),
-      readCredentialsTell: () => Promise.resolve({ present: false, expiresAt: null, hasRefreshToken: false }),
-      env: {},
-      platform: 'linux',
-      now: () => NOW,
-    })
-    expect(result.diagnosis).toBe('cli-unusable')
-    expect(result.version).toBeNull()
-  })
-
-  it('#677: an expired access token with a refresh token is unverified, never token-stale', async () => {
-    const result = await runtimePreflight({
-      resolveClaudeExecutable: () => Promise.resolve({ ok: true, path: '/usr/bin/claude' }),
-      readClaudeVersion: () => Promise.resolve({ ok: true, raw: '2.1.0', belowMinimum: false }),
-      readCredentialsTell: () => Promise.resolve({ present: true, expiresAt: 0, hasRefreshToken: true }),
-      env: {},
-      platform: 'linux',
-      now: () => NOW,
-    })
-    expect(result.diagnosis).toBe('unverified')
-  })
-
-  it('a healthy install is unverified, carrying the resolved path and version', async () => {
-    const result = await runtimePreflight({
-      resolveClaudeExecutable: () => Promise.resolve({ ok: true, path: '/home/operator/.local/bin/claude' }),
-      readClaudeVersion: () => Promise.resolve({ ok: true, raw: '2.1.0', belowMinimum: false }),
-      readCredentialsTell: () => Promise.resolve({ present: true, expiresAt: NOW + 100_000, hasRefreshToken: true }),
-      env: {},
-      platform: 'linux',
-      now: () => NOW,
-    })
-    expect(result.diagnosis).toBe('unverified')
-    expect(result.executable).toEqual({ path: '/home/operator/.local/bin/claude' })
-    expect(result.version).toEqual({ raw: '2.1.0', belowMinimum: false })
-  })
-
-  it('reports apiKeyInEnvironment true only when ANTHROPIC_API_KEY is a non-empty string', async () => {
-    const withKey = await runtimePreflight({
-      resolveClaudeExecutable: () => Promise.resolve({ ok: false, kind: 'not-found', searched: [] }),
-      readClaudeVersion: () => Promise.resolve({ ok: false }),
-      readCredentialsTell: () => Promise.resolve({ present: false, expiresAt: null, hasRefreshToken: false }),
-      env: { ANTHROPIC_API_KEY: 'sk-ant-dummy' },
-      platform: 'linux',
-      now: () => NOW,
-    })
-    expect(withKey.apiKeyInEnvironment).toBe(true)
-
-    const withoutKey = await runtimePreflight({
-      resolveClaudeExecutable: () => Promise.resolve({ ok: false, kind: 'not-found', searched: [] }),
-      readClaudeVersion: () => Promise.resolve({ ok: false }),
-      readCredentialsTell: () => Promise.resolve({ present: false, expiresAt: null, hasRefreshToken: false }),
-      env: { ANTHROPIC_API_KEY: '' },
-      platform: 'linux',
-      now: () => NOW,
-    })
-    expect(withoutKey.apiKeyInEnvironment).toBe(false)
+  it.each<{
+    readonly name: string
+    readonly which: WhichResult
+    readonly run?: CommandResult
+    readonly credentials?: unknown
+    readonly env?: Record<string, string>
+    readonly expected: Partial<RuntimePreflight>
+  }>([
+    { name: 'cli-missing when claude is not found, reading no version or credentials', which: MISSING, expected: { diagnosis: 'cli-missing', executable: null, version: null, credentials: null } },
+    { name: 'bundled-fallback carries the refused path in both executable and detail', which: { ok: true, path: BUNDLED }, expected: { diagnosis: 'bundled-fallback', executable: { path: BUNDLED }, detail: BUNDLED } },
+    { name: 'cli-unusable when the version read fails, with version reported null', which: FOUND, run: UNUSABLE, expected: { diagnosis: 'cli-unusable', version: null } },
+    { name: '#677: an expired access token with a refresh token is unverified, never token-stale', which: FOUND, run: printed('9.9.9\n'), credentials: credentials(0), expected: { diagnosis: 'unverified' } },
+    {
+      name: 'a healthy install is unverified, carrying the resolved path and version',
+      which: FOUND,
+      run: printed('9.9.9\n'),
+      credentials: credentials(4_102_444_800_000),
+      expected: { diagnosis: 'unverified', executable: { path: CLAUDE }, version: { raw: '9.9.9', belowMinimum: false } },
+    },
+    { name: 'reports apiKeyInEnvironment for a non-empty ANTHROPIC_API_KEY', which: MISSING, env: { ANTHROPIC_API_KEY: 'sk-ant-dummy' }, expected: { apiKeyInEnvironment: true } },
+    { name: 'reports no apiKeyInEnvironment for an empty ANTHROPIC_API_KEY', which: MISSING, env: { ANTHROPIC_API_KEY: '' }, expected: { apiKeyInEnvironment: false } },
+  ])('$name', async ({ which, run, credentials: tell, env, expected }) => {
+    const platform = createFakePlatform()
+    if (tell !== undefined) await platform.fs.writeJsonAtomic(pathOps.join(platform.claudeHome, '.credentials.json'), tell)
+    const ctx = { ...platform, which: fakeWhich(() => Promise.resolve(which)), run: fakeRun(run === undefined ? undefined : () => Promise.resolve(run)), env: env ?? {} }
+    expect(await runtimePreflight(ctx)).toMatchObject(expected)
   })
 })
 
-function probeDeps(overrides: Partial<RuntimeProbeDeps>): RuntimeProbeDeps {
-  return {
-    listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-    resolveClaudeExecutable: () => Promise.resolve({ ok: true, path: '/usr/bin/claude' }),
-    probe: () => Promise.resolve({ diagnosis: 'verified', detail: null }),
-    ensureDirectory: () => Promise.resolve({ ok: true, value: undefined }),
-    env: {},
-    platform: 'linux',
-    now: () => NOW,
-    ...overrides,
-  }
-}
-
-const PROBE_DIR = '/userdata/runtime-probe'
-
 describe('runtimeProbe', () => {
-  it('rejects a repository id that does not resolve', async () => {
-    await expect(
-      runtimeProbe({ registryDeps, repoId: REPO_ID, probeDir: PROBE_DIR }, probeDeps({ listRepositories: () => Promise.resolve({ ok: true, repositories: [] }) })),
-    ).rejects.toThrow(`'runtime:probe' found no repository registered with id '${REPO_ID}'`)
+  async function* verdict() {
+    await Promise.resolve()
+    yield { type: 'result', subtype: 'success', is_error: false, result: 'ok' }
+  }
+  const verified = (() => verdict()) as unknown as HostedQueryFn
+
+  function probeContext(options: { readonly repositories?: readonly RepositoryEntry[]; readonly which?: WhichResult; readonly query?: HostedQueryFn; readonly env?: Record<string, string> } = {}) {
+    return createTestContext({
+      repositories: options.repositories ?? [readyEntry({ id: REPO_ID }, { repo: 'acme/widgets' })],
+      platform: { which: fakeWhich(() => Promise.resolve(options.which ?? FOUND)), sdk: fakeSdk({ query: options.query ?? verified }), env: options.env ?? {} },
+    })
+  }
+
+  it.each([
+    { name: 'a repository id that does not resolve', repositories: [], message: `'runtime:probe' no repository is registered with id '${REPO_ID}'` },
+    {
+      name: 'a repository that is not ready',
+      repositories: [{ id: REPO_ID, path: '/repo', displayName: 'widgets', problem: { kind: 'directory-missing' as const }, diagnostics: [] }],
+      message: `'runtime:probe' repository '${REPO_ID}' is 'directory-missing', not ready`,
+    },
+  ])('rejects $name', async ({ repositories, message }) => {
+    await expect(runtimeProbe(probeContext({ repositories }), { repoId: REPO_ID, probeDir: PROBE_DIR })).rejects.toThrow(message)
   })
 
-  it('rejects a repository that is not ready', async () => {
-    const notReady = { id: REPO_ID, path: '/repo', displayName: 'widgets', problem: { kind: 'directory-missing' as const }, diagnostics: [] }
-    await expect(
-      runtimeProbe({ registryDeps, repoId: REPO_ID, probeDir: PROBE_DIR }, probeDeps({ listRepositories: () => Promise.resolve({ ok: true, repositories: [notReady] }) })),
-    ).rejects.toThrow("'runtime:probe' requires a 'ready' repository, got 'directory-missing'")
-  })
-
-  it('names the resolved repository, even on a locate failure', async () => {
-    const result = await runtimeProbe(
-      { registryDeps, repoId: REPO_ID, probeDir: PROBE_DIR },
-      probeDeps({ resolveClaudeExecutable: () => Promise.resolve({ ok: false, kind: 'not-found', searched: [] }) }),
-    )
-    expect(result.repo).toBe('acme/widgets')
-    expect(result.diagnosis).toBe('cli-missing')
-  })
-
-  it('never calls the probe when locate fails', async () => {
-    let probeCalled = false
-    await runtimeProbe(
-      { registryDeps, repoId: REPO_ID, probeDir: PROBE_DIR },
-      probeDeps({
-        resolveClaudeExecutable: () => Promise.resolve({ ok: false, kind: 'not-found', searched: [] }),
-        probe: () => {
-          probeCalled = true
-          return Promise.resolve({ diagnosis: 'verified', detail: null })
-        },
-      }),
-    )
-    expect(probeCalled).toBe(false)
-  })
-
-  it('a successful probe reports verified and elapsed time', async () => {
-    const result = await runtimeProbe({ registryDeps, repoId: REPO_ID, probeDir: PROBE_DIR }, probeDeps({}))
-    expect(result.diagnosis).toBe('verified')
-    expect(result.detail).toBeNull()
-    expect(result.elapsedMs).toBeGreaterThanOrEqual(0)
+  it.each([
+    { name: 'a successful probe reports verified', which: FOUND, expected: { repo: 'acme/widgets', diagnosis: 'verified', detail: null } },
+    { name: 'a missing executable still names the resolved repository', which: MISSING, expected: { repo: 'acme/widgets', diagnosis: 'cli-missing' } },
+    { name: 'the bundled binary is refused, naming its path', which: { ok: true, path: BUNDLED } as WhichResult, expected: { diagnosis: 'bundled-fallback', detail: BUNDLED } },
+  ])('with a repository, $name', async ({ which, expected }) => {
+    const result = await runtimeProbe(probeContext({ which }), { repoId: REPO_ID, probeDir: PROBE_DIR })
+    expect(result).toMatchObject(expected)
   })
 
   it('carries the api key flag through to the probe response', async () => {
-    const result = await runtimeProbe({ registryDeps, repoId: REPO_ID, probeDir: PROBE_DIR }, probeDeps({ env: { ANTHROPIC_API_KEY: 'sk-ant-dummy' } }))
+    const result = await runtimeProbe(probeContext({ env: { ANTHROPIC_API_KEY: 'sk-ant-dummy' } }), { repoId: REPO_ID, probeDir: PROBE_DIR })
     expect(result.apiKeyInEnvironment).toBe(true)
   })
 
   describe('repository-free mode (repoId: null)', () => {
-    it('never calls listRepositories', async () => {
-      let listCalled = false
-      const result = await runtimeProbe(
-        { registryDeps, repoId: null, probeDir: PROBE_DIR },
-        probeDeps({
-          listRepositories: () => {
-            listCalled = true
-            return Promise.resolve({ ok: true, repositories: [READY_ENTRY] })
+    it('creates the probe directory, runs the turn there and names no repository, without reading the registry', async () => {
+      let cwdUsed: string | undefined
+      const query = ((params: { options?: { cwd?: string } }) => {
+        cwdUsed = params.options?.cwd
+        return verified(params as never)
+      }) as unknown as HostedQueryFn
+      const ctx = createTestContext({
+        platform: { which: fakeWhich(() => Promise.resolve(FOUND)), sdk: fakeSdk({ query }), env: {} },
+        repos: {
+          resolve: () => {
+            throw new Error('the registry must not be read')
           },
-        }),
-      )
-      expect(listCalled).toBe(false)
-      expect(result.repo).toBeNull()
-    })
+        },
+      })
 
-    it('creates the probe directory before locating claude', async () => {
-      let ensured: string | null = null
-      await runtimeProbe(
-        { registryDeps, repoId: null, probeDir: PROBE_DIR },
-        probeDeps({
-          ensureDirectory: (path) => {
-            ensured = path
-            return Promise.resolve({ ok: true, value: undefined })
-          },
-        }),
-      )
-      expect(ensured).toBe(PROBE_DIR)
-    })
+      const result = await runtimeProbe(ctx, { repoId: null, probeDir: PROBE_DIR })
 
-    it('runs the probe turn with cwd set to the probe directory', async () => {
-      let cwdUsed: string | null = null
-      await runtimeProbe(
-        { registryDeps, repoId: null, probeDir: PROBE_DIR },
-        probeDeps({
-          probe: (params) => {
-            cwdUsed = params.cwd
-            return Promise.resolve({ diagnosis: 'verified', detail: null })
-          },
-        }),
-      )
+      expect(result).toMatchObject({ repo: null, diagnosis: 'verified' })
       expect(cwdUsed).toBe(PROBE_DIR)
+      expect(await ctx.fs.exists(PROBE_DIR)).toBe(true)
     })
 
     it('a missing executable still returns cli-missing, never throws', async () => {
-      const result = await runtimeProbe(
-        { registryDeps, repoId: null, probeDir: PROBE_DIR },
-        probeDeps({ resolveClaudeExecutable: () => Promise.resolve({ ok: false, kind: 'not-found', searched: [] }) }),
-      )
-      expect(result.diagnosis).toBe('cli-missing')
-      expect(result.repo).toBeNull()
+      const result = await runtimeProbe(probeContext({ which: MISSING }), { repoId: null, probeDir: PROBE_DIR })
+      expect(result).toMatchObject({ diagnosis: 'cli-missing', repo: null })
     })
   })
 })

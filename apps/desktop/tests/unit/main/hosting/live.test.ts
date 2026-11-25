@@ -4,13 +4,22 @@ import { access, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
-import { createHostedStore, defaultHostedStoreDeps } from '@/main/sessions/hosting/store'
+import { createPlatform, headlessHost } from '@/main/platform'
+import { createHostedStore, type HostedStoreOptions } from '@/main/sessions/hosting/store'
+import { createInMemoryHostingPersistence } from '@/main/sessions/hosting/persist'
+import { createSdkSessionReader } from '@/main/sessions/reader'
 import type { RepoId } from '@/utils/repos'
-import type { HostedSessionSnapshot, PendingPermission, SessionEntriesDelta, SessionKey } from '@/types/hosting'
+import type { HostedSessionSnapshot, HostedStore, PendingPermission, SessionEntriesDelta, SessionKey } from '@/types/hosting'
 import type { SessionWorkspace } from '@/types/workspace'
 
 const live = process.env['PORT_LIVE_SDK'] === '1'
 const cwd = process.env['PORT_LIVE_SDK_CWD']
+
+const platform = createPlatform(headlessHost({ userData: tmpdir(), temp: tmpdir(), logs: tmpdir() }))
+
+function liveStore(options: Partial<HostedStoreOptions> = {}): HostedStore {
+  return createHostedStore(platform, { listSessions: createSdkSessionReader(platform.sdk), persistence: createInMemoryHostingPersistence(), ...options })
+}
 
 function workspaceFor(folder: string): SessionWorkspace {
   return { folder, root: null, worktree: null, base: null }
@@ -19,7 +28,7 @@ function workspaceFor(folder: string): SessionWorkspace {
 describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1)', () => {
   it('starts, streams a turn, interrupts, closes, resumes, and forks', async () => {
     if (!cwd) throw new Error('PORT_LIVE_SDK=1 requires PORT_LIVE_SDK_CWD to name a registered, ready repository')
-    const store = createHostedStore(defaultHostedStoreDeps)
+    const store = liveStore()
     const repoId = 'live-acceptance' as RepoId
 
     const started = await store.start({ repoId, mode: { kind: 'fresh' }, workspace: workspaceFor(cwd) })
@@ -58,7 +67,7 @@ describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1
     await rm(target, { force: true })
 
     let latest: HostedSessionSnapshot | null = null
-    const store = createHostedStore({ ...defaultHostedStoreDeps, onStatus: (snapshot) => (latest = snapshot) })
+    const store = liveStore({ onStatus: (snapshot) => (latest = snapshot) })
     const repoId = 'live-permission-acceptance' as RepoId
 
     try {
@@ -92,8 +101,7 @@ describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1
     if (!cwd) throw new Error('PORT_LIVE_SDK=1 requires PORT_LIVE_SDK_CWD to name a registered, ready repository')
     const entries: SessionEntriesDelta[] = []
     const statuses: HostedSessionSnapshot['phase'][] = []
-    const store = createHostedStore({
-      ...defaultHostedStoreDeps,
+    const store = liveStore({
       onEntries: (delta) => entries.push(delta),
       onStatus: (snapshot) => statuses.push(snapshot.phase),
     })
@@ -129,7 +137,7 @@ describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1
   it('#101: capabilities reach ready before any send, then loaded/complete after one turn, naming the repository copy', async () => {
     if (!cwd) throw new Error('PORT_LIVE_SDK=1 requires PORT_LIVE_SDK_CWD to name a registered, ready repository')
     let latest: HostedSessionSnapshot | null = null
-    const store = createHostedStore({ ...defaultHostedStoreDeps, onStatus: (snapshot) => (latest = snapshot) })
+    const store = liveStore({ onStatus: (snapshot) => (latest = snapshot) })
     const repoId = 'live-capabilities-acceptance' as RepoId
 
     const started = await store.start({ repoId, mode: { kind: 'fresh' }, workspace: workspaceFor(cwd) })
@@ -159,7 +167,7 @@ describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1
   it('#103: two concurrent sessions route independently, and a second resume of a live id is refused', async () => {
     if (!cwd) throw new Error('PORT_LIVE_SDK=1 requires PORT_LIVE_SDK_CWD to name a registered, ready repository')
     const envelopes: { sessionKey: SessionKey }[] = []
-    const store = createHostedStore({ ...defaultHostedStoreDeps, onEvent: (envelope) => envelopes.push(envelope) })
+    const store = liveStore({ onEvent: (envelope) => envelopes.push(envelope) })
     const repoId = 'live-concurrent-acceptance' as RepoId
 
     const first = await store.start({ repoId, mode: { kind: 'fresh' }, workspace: workspaceFor(cwd) })

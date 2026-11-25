@@ -3,8 +3,8 @@ import type { SignatureIndexEntry } from '@/types/search'
 
 // scope -> index skip -> budgeted scan -> warm-on-read. Indexing is not a separate pass -- it is
 // the side effect of scanning.
-import { statPath } from '@/main/platform/files'
-import { buildProjectIndex, defaultClaudeHome, resolveTranscriptPath } from '@/main/sessions/locate'
+import type { Platform } from '@/main/platform'
+import { buildProjectIndex, resolveTranscriptPath } from '@/main/sessions/locate'
 import { openTranscript } from '@/main/sessions/transcript'
 
 import type { AgentRecord, SessionRecord, SessionScan } from '@/types/sessions'
@@ -56,8 +56,8 @@ function groupFor(candidate: Candidate, hits: readonly SearchHit[]): SearchGroup
   return { sessionId: candidate.sessionId, agentId: candidate.agentId, repoId: candidate.repoId, label: candidate.label, itemNumber: candidate.itemNumber, idleMs: candidate.idleMs, hitCount: hits.length, hits }
 }
 
-export async function runSearch(params: RunSearchParams): Promise<SearchResult> {
-  const now = params.now ?? (() => new Date())
+export async function runSearch(ctx: Pick<Platform, 'fs' | 'clock' | 'claudeHome'>, params: RunSearchParams): Promise<SearchResult> {
+  const now = (): Date => ctx.clock.now()
   const start = now().getTime()
   const { scan } = params
 
@@ -66,11 +66,10 @@ export async function runSearch(params: RunSearchParams): Promise<SearchResult> 
 
   if (!scan.ok) return { ok: false, kind: 'sessions-unavailable', sessionsKind: scan.kind, message: scan.message }
 
-  const claudeHome = params.claudeHome ?? defaultClaudeHome()
   const candidates = candidatesFor(scan, params.scope)
   const inScope = candidates.length
 
-  const indexResult = await buildProjectIndex(claudeHome)
+  const indexResult = await buildProjectIndex(ctx)
   if (!indexResult.ok) return { ok: false, kind: 'sessions-unavailable', sessionsKind: indexResult.kind, message: indexResult.message }
   const projectIndex: ProjectIndex = indexResult.index
 
@@ -92,7 +91,7 @@ export async function runSearch(params: RunSearchParams): Promise<SearchResult> 
       continue
     }
 
-    const stat = await statPath(resolved.path)
+    const stat = await ctx.fs.stat(resolved.path)
     if (!stat.ok) {
       unreached += 1
       continue
@@ -120,7 +119,7 @@ export async function runSearch(params: RunSearchParams): Promise<SearchResult> 
       continue
     }
 
-    const opened = await openTranscript({ sessionId: candidate.sessionId, agentId: candidate.agentId, claudeHome, index: projectIndex })
+    const opened = await openTranscript(ctx, { sessionId: candidate.sessionId, agentId: candidate.agentId, index: projectIndex })
     read += 1
     if (!opened.read.ok) continue
 

@@ -6,14 +6,8 @@ import type { RepoId } from '@/utils/repos'
 import type { HostedSessionSnapshot, HostedStore, SessionStartTarget, SessionStartMode } from '@/types/hosting'
 import type { Platform } from '@/main/platform'
 import type { StartTargetSources, ReleaseBranchOutcome, RemoveSessionWorktreeOutcome, ResolvedStartTarget } from '@/types/workspace'
-import type { DirEntry, FileResult, GitLinesResult, RunCommandOptions } from '@/types/platform'
+import type { FileResult } from '@/types/platform'
 
-/** `main/sessions/hosting/files.ts`'s own injectable seam, inlined here since a `types/` file may not import a
- *  value from `main/` — this is the whole real shape, not an approximation. */
-type FileListingDeps = {
-  readonly gitLines: (args: readonly string[], options: Omit<RunCommandOptions, 'whichEnv' | 'platform'>) => Promise<GitLinesResult>
-  readonly listDirectory: (path: string) => Promise<FileResult<readonly DirEntry[]>>
-}
 type FileListingResult = { readonly ok: true; readonly files: readonly string[]; readonly truncated: boolean } | { readonly ok: false; readonly message: string }
 import type { RegistryDeps } from '@/types/registry'
 import type { SessionIndex } from '@/types/session-index'
@@ -53,8 +47,7 @@ export interface HostingChannelDeps {
   readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
   readonly store: HostedStore
   readonly sessionIndex: SessionIndex
-  /** Injectable so a test never touches a real `git` subprocess or filesystem. */
-  readonly listSessionFiles: (cwd: string, deps?: FileListingDeps) => Promise<FileListingResult>
+  readonly listSessionFiles: (cwd: string) => Promise<FileListingResult>
   readonly resolveStartTarget: (ctx: Pick<Platform, 'git' | 'fs'>, target: SessionStartTarget, mode: SessionStartMode, sources: StartTargetSources) => Promise<ResolvedStartTarget>
   readonly targetCtx: Pick<Platform, 'git' | 'fs'>
   readonly targetSources: Omit<StartTargetSources, 'repositories'>
@@ -80,7 +73,7 @@ export interface TranscriptTailDeps {
 
 export interface SessionsScanDeps {
   readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
-  readonly readSessionState: (params: ReadSessionStateParams) => Promise<SessionScan>
+  readonly readSessionState: (params: Pick<ReadSessionStateParams, 'repos'>) => Promise<SessionScan>
 }
 
 export interface SearchQueryDeps {

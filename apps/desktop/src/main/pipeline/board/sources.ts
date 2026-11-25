@@ -6,13 +6,15 @@ import { collectOrphanNumbers } from '@/main/pipeline/board/attach'
 import { readDenials } from '@/main/repos/local/denials'
 import { readWorktrees } from '@/main/repos/local/worktrees'
 import type { GitRunner } from '@/types/platform'
-import { hostFs } from '@/main/platform'
+import { claudeHomeDir, hostFs } from '@/main/platform'
 import { defaultGitRunner } from '@/main/platform/git'
+import { defaultSdk } from '@/main/platform/sdk'
 import { readSessionState } from '@/main/sessions/adapter'
+import { createSdkSessionReader } from '@/main/sessions/reader'
 import type { RepoId } from '@/utils/repos'
 import type { LabelVocabulary, VerifiableVocabulary } from '@/utils/labels/vocabulary'
 import type { WorktreeEntry } from '@/types/local'
-import type { AgentRecord } from '@/types/sessions'
+import type { AgentRecord, ReadSessionStateParams } from '@/types/sessions'
 import type { RefreshOutcome, SourceCache } from '@/types/state'
 import type { TrackedRef } from '@/types/pipeline-state'
 
@@ -88,15 +90,16 @@ export async function refreshDenials(cache: SourceCache, params: RefreshDenialsP
 }
 
 interface RefreshSessionsParams {
-  readonly repos: Parameters<typeof readSessionState>[0]['repos']
-  readonly reader?: Parameters<typeof readSessionState>[0]['reader']
+  readonly repos: ReadSessionStateParams['repos']
+  readonly reader?: ReadSessionStateParams['reader']
   readonly claudeHome?: string
   readonly now?: () => Date
 }
 
 /** The one machine-wide call — every repository shares this cache slot. */
 export async function refreshSessions(cache: SourceCache, params: RefreshSessionsParams): Promise<RefreshOutcome> {
-  const scan = await readSessionState({ repos: params.repos, reader: params.reader, claudeHome: params.claudeHome, now: params.now })
+  const now = params.now ?? (() => new Date())
+  const scan = await readSessionState({ fs: hostFs, clock: { now }, claudeHome: params.claudeHome ?? claudeHomeDir() }, { repos: params.repos, reader: params.reader ?? createSdkSessionReader(defaultSdk) })
   cache.sessions = projectOk(cache.sessions, scan)
   return scan.ok ? { ok: true, at: scan.scannedAt } : { ok: false, at: scan.scannedAt, error: scan.message }
 }

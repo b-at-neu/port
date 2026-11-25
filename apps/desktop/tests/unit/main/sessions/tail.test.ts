@@ -2,7 +2,8 @@ import { appendFile, mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { createTailStore } from '@/main/sessions/tail'
-import { advanceTranscript, openTranscript } from '@/main/sessions/transcript'
+import { hostFs } from '@/main/platform'
+import { createFakeClock } from '../../../support/fake-platform'
 import { makeClaudeHome } from '../../../fixtures/fs'
 
 function jsonl(records: readonly unknown[]): string {
@@ -32,9 +33,9 @@ describe('tail store', () => {
     const claudeHome = await makeClaudeHome()
     const sessionId = nextSessionId()
     const path = await makeSession(claudeHome, sessionId, [record('u1', 'hello')])
-    const store = createTailStore()
+    const store = createTailStore({ fs: hostFs, clock: createFakeClock(), claudeHome })
 
-    const opened = await store.openTail({ sessionId, agentId: null, claudeHome })
+    const opened = await store.openTail({ sessionId, agentId: null })
     expect(opened.ok).toBe(true)
     if (!opened.ok) throw new Error('unreachable')
     expect(opened.entries).toHaveLength(1)
@@ -48,7 +49,7 @@ describe('tail store', () => {
   })
 
   it('reports unknown-tail for an id that was never opened', async () => {
-    const store = createTailStore()
+    const store = createTailStore({ fs: hostFs, clock: createFakeClock(), claudeHome: '/unused' })
     const polled = await store.pollTail({ tailId: 'tail-999' })
     expect(polled.ok).toBe(false)
     if (polled.ok) throw new Error('unreachable')
@@ -61,9 +62,9 @@ describe('tail store', () => {
     const claudeHome = await makeClaudeHome()
     const sessionId = nextSessionId()
     const path = await makeSession(claudeHome, sessionId, [record('u1', 'hello')])
-    const store = createTailStore()
+    const store = createTailStore({ fs: hostFs, clock: createFakeClock(), claudeHome })
 
-    const opened = await store.openTail({ sessionId, agentId: null, claudeHome })
+    const opened = await store.openTail({ sessionId, agentId: null })
     if (!opened.ok) throw new Error('unreachable')
 
     await writeFile(path, '')
@@ -82,9 +83,9 @@ describe('tail store', () => {
     const claudeHome = await makeClaudeHome()
     const sessionId = nextSessionId()
     await makeSession(claudeHome, sessionId, [record('u1', 'hello')])
-    const store = createTailStore()
+    const store = createTailStore({ fs: hostFs, clock: createFakeClock(), claudeHome })
 
-    const opened = await store.openTail({ sessionId, agentId: null, claudeHome })
+    const opened = await store.openTail({ sessionId, agentId: null })
     if (!opened.ok) throw new Error('unreachable')
     store.closeTail({ tailId: opened.tailId })
 
@@ -94,15 +95,15 @@ describe('tail store', () => {
 
   it('evicts the least-recently-touched tail once the open cap is reached', async () => {
     const claudeHome = await makeClaudeHome()
-    let clock = 0
-    const store = createTailStore({ openTranscript, advanceTranscript, now: () => clock })
+    const clock = createFakeClock()
+    const store = createTailStore({ fs: hostFs, clock, claudeHome })
 
     const ids: string[] = []
     for (let i = 0; i < 8; i++) {
       const sessionId = nextSessionId()
       await makeSession(claudeHome, sessionId, [record('u1', 'hello')])
-      clock += 1
-      const opened = await store.openTail({ sessionId, agentId: null, claudeHome })
+      clock.advance(1)
+      const opened = await store.openTail({ sessionId, agentId: null })
       if (!opened.ok) throw new Error('unreachable')
       ids.push(opened.tailId)
     }
@@ -111,8 +112,8 @@ describe('tail store', () => {
     // A 9th open must evict the oldest (ids[0]) rather than growing past the cap.
     const sessionId = nextSessionId()
     await makeSession(claudeHome, sessionId, [record('u1', 'hello')])
-    clock += 1
-    const opened = await store.openTail({ sessionId, agentId: null, claudeHome })
+    clock.advance(1)
+    const opened = await store.openTail({ sessionId, agentId: null })
     if (!opened.ok) throw new Error('unreachable')
 
     expect(store.size).toBe(8)

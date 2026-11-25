@@ -8,5 +8,5 @@ export const runtimeProbe = defineAction({
   name: 'runtime.probe',
   kind: 'mutation',
   input: z.object({ repoId: repoId.nullable() }),
-  run: (ctx, input) => resolveRuntimeProbe(ctx.repos.deps, input, join(ctx.paths.userData, 'runtime-probe')),
+  run: (ctx, input) => resolveRuntimeProbe(ctx, input, join(ctx.paths.userData, 'runtime-probe')),
 })

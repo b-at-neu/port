@@ -3,12 +3,12 @@ import type { Run } from '@/utils/pipeline/ticket'
 import type { PipelineState, RefreshOutcome, RepositoryState } from '@/types/state'
 import type { PipelineView, TrackedRef } from '@/types/pipeline-state'
 import type { StateEngine } from '@/types/offload'
+import type { SessionReader } from '@/types/sessions'
 
 // The only clock in main — one timer, rescheduled to the earliest `nextDueAt`. `schedule.ts` decides *when*; this file is the only place under `src/main/` allowed to name `setTimeout`.
 import type { ConditionalTransport, GitHubTransport } from '@/types/platform'
 import type { GitRunner } from '@/types/platform'
 import type { PipelineItemKind, RateLimitInfo } from '@/types/github'
-import { readSessionState } from '@/main/sessions/adapter'
 import { verifiableVocabularyOf } from '@/utils/labels/display'
 import type { RepoId } from '@/utils/repos'
 import type { RepositoryEntry } from '@/utils/repos'
@@ -22,7 +22,7 @@ import { autoPlanStatusOf } from '@/main/pipeline/tick/auto-plan'
 import type { EndedStage } from '@/types/tick'
 import { isReady } from '@/main/pipeline/board/read'
 import { afterFailure, afterSuccess, budgetedIntervalMs, deferredUntil, dueSources, githubSweepGapMs, nextDueAt } from '@/main/pipeline/board/schedule'
-import { createInProcessEngine } from '@/main/worker/engine'
+import { createHostEngine } from '@/main/worker/engine'
 import { createGithubPrecheck } from '@/main/pipeline/board/precheck'
 
 import type { PipelineWatcher, RefreshRequest, TimerFactory, TimerHandle } from '@/types/state'
@@ -44,7 +44,7 @@ interface CreatePipelineWatcherParams {
   /** Used by the default engine's issues-list pre-check; tests inject one so a clock past 10s never reaches the network. */
   readonly conditional?: ConditionalTransport
   readonly git?: GitRunner
-  readonly sessionReader?: Parameters<typeof readSessionState>[0]['reader']
+  readonly sessionReader?: SessionReader
   readonly claudeHome?: string
   readonly now?: () => Date
   readonly setTimer?: TimerFactory
@@ -101,7 +101,7 @@ function isForced(request: RefreshRequest | undefined, kind: SourceKind, repoId?
 export function createPipelineWatcher(params: CreatePipelineWatcherParams): PipelineWatcher {
   const now = params.now ?? (() => new Date())
   const setTimer = params.setTimer ?? defaultSetTimer
-  const engine = params.engine ?? createInProcessEngine({ github: params.github, conditional: params.conditional, git: params.git, sessionReader: params.sessionReader, claudeHome: params.claudeHome, now })
+  const engine = params.engine ?? createHostEngine({ github: params.github, conditional: params.conditional, git: params.git, claudeHome: params.claudeHome, now }, params.sessionReader)
   const precheck = createGithubPrecheck({ engine, now })
   const githubCost = new Map<RepoId, number>()
   const githubRateLimit = new Map<RepoId, RateLimitInfo>()

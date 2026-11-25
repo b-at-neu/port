@@ -1,6 +1,5 @@
-import { readJsonFile } from '@/main/platform/files'
+import type { Platform } from '@/main/platform'
 import { pathOps } from '@/main/platform/paths'
-import type { FileResult } from '@/types/platform'
 
 interface SettingsShape {
   readonly permissions?: { readonly allow?: unknown }
@@ -25,8 +24,8 @@ export function editAllowGlobs(rules: unknown): readonly string[] {
 }
 
 /** Reads the stage worktree's own `.claude/settings.json` — the file Claude Code applies to the session; missing or unparseable reads as no rules. */
-export async function readStageEditAllow(cwd: string, deps: { readonly readJsonFile: <T>(path: string) => Promise<FileResult<T>> } = { readJsonFile }): Promise<readonly string[]> {
-  const result = await deps.readJsonFile<SettingsShape>(pathOps.join(cwd, '.claude', 'settings.json'))
+export async function readStageEditAllow(ctx: Pick<Platform, 'fs'>, cwd: string): Promise<readonly string[]> {
+  const result = await ctx.fs.readJson<SettingsShape>(pathOps.join(cwd, '.claude', 'settings.json'))
   if (!result.ok) return []
   return editAllowGlobs(result.value.permissions?.allow)
 }

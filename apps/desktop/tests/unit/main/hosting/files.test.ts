@@ -1,59 +1,30 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { listSessionFiles, MAX_FILES } from '@/main/sessions/hosting/files'
-import type { FileListingDeps } from '@/main/sessions/hosting/files'
-import type { DirEntry } from '@/types/platform'
+import type { CommandResult } from '@/types/platform'
+import { createFakeFs, fakeGit } from '../../../support/fake-platform'
 
-function depsWithGit(lines: readonly string[]): FileListingDeps {
-  return {
-    gitLines: vi.fn().mockResolvedValue({ ok: true, lines }),
-    listDirectory: vi.fn(),
-  }
-}
+const NOT_A_REPO: CommandResult = { ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'not a git repository' }
 
-function depsWithoutGit(tree: Record<string, readonly DirEntry[]>): FileListingDeps {
-  return {
-    gitLines: vi.fn().mockResolvedValue({ ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'not a git repository' }),
-    listDirectory: vi.fn((path: string) => Promise.resolve(tree[path] !== undefined ? { ok: true, value: tree[path] } : { ok: false, kind: 'not-found', message: 'nope' })),
-  } as unknown as FileListingDeps
-}
+const gitListing = (lines: readonly string[]): CommandResult => ({ ok: true, stdout: `${lines.join('\n')}\n`, stderr: '' })
 
 describe('listSessionFiles', () => {
-  it('lists git-tracked and untracked files via git ls-files', async () => {
-    const deps = depsWithGit(['src/a.ts', 'src/b.ts'])
-    const result = await listSessionFiles('/repo', deps)
-    expect(result).toEqual({ ok: true, files: ['src/a.ts', 'src/b.ts'], truncated: false })
-  })
+  const manyFiles = Array.from({ length: MAX_FILES + 5 }, (_, i) => `file-${i}.ts`)
 
-  it('truncates a git listing over MAX_FILES', async () => {
-    const lines = Array.from({ length: MAX_FILES + 5 }, (_, i) => `file-${i}.ts`)
-    const deps = depsWithGit(lines)
-    const result = await listSessionFiles('/repo', deps)
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.files).toHaveLength(MAX_FILES)
-    expect(result.truncated).toBe(true)
-  })
-
-  it('falls back to a bounded directory walk when cwd is not a git work tree, skipping dot-directories and node_modules', async () => {
-    const deps = depsWithoutGit({
-      '/repo': [
-        { name: 'a.ts', kind: 'file' },
-        { name: '.git', kind: 'directory' },
-        { name: 'node_modules', kind: 'directory' },
-        { name: 'src', kind: 'directory' },
-      ],
-      '/repo/src': [{ name: 'b.ts', kind: 'file' }],
-    })
-    const result = await listSessionFiles('/repo', deps)
-    expect(result).toEqual({ ok: true, files: ['a.ts', 'src/b.ts'], truncated: false })
-  })
-
-  it('reports unreadable rather than an empty list when the walk fails', async () => {
-    const deps: FileListingDeps = {
-      gitLines: vi.fn().mockResolvedValue({ ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'not a git repository' }),
-      listDirectory: vi.fn().mockResolvedValue({ ok: false, kind: 'permission-denied', message: 'denied' }),
-    }
-    const result = await listSessionFiles('/repo', deps)
-    expect(result).toEqual({ ok: false, message: 'denied' })
+  it.each([
+    { name: 'lists git-tracked and untracked files', git: gitListing(['src/a.ts', 'src/b.ts']), files: [] as string[], expected: { ok: true, files: ['src/a.ts', 'src/b.ts'], truncated: false } },
+    { name: 'reads an empty git listing as no files', git: { ok: true, stdout: '', stderr: '' } as CommandResult, files: [], expected: { ok: true, files: [], truncated: false } },
+    { name: 'truncates a git listing over MAX_FILES', git: gitListing(manyFiles), files: [], expected: { ok: true, files: manyFiles.slice(0, MAX_FILES), truncated: true } },
+    {
+      name: 'falls back to a walk outside a work tree, skipping dot-directories and node_modules',
+      git: NOT_A_REPO,
+      files: ['/repo/a.ts', '/repo/.git/HEAD', '/repo/node_modules/x/index.js', '/repo/src/b.ts'],
+      expected: { ok: true, files: ['a.ts', 'src/b.ts'], truncated: false },
+    },
+    { name: 'reports unreadable rather than an empty list when the walk fails', git: NOT_A_REPO, files: [], expected: { ok: false, message: '/repo does not exist' } },
+  ])('$name', async ({ git, files, expected }) => {
+    const fs = createFakeFs()
+    for (const file of files) await fs.writeText(file, '')
+    const result = await listSessionFiles({ git: fakeGit(() => Promise.resolve(git)), fs }, '/repo')
+    expect(result).toEqual(expected)
   })
 })
