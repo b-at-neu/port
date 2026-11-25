@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { GitHubHttpResult } from '@/types/platform'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
-import { fetchBacklog as fetchBacklogWith } from '@/main/github/backlog'
+import { fetchBacklog as fetchBacklogWith } from '@/main/github/tracker/backlog'
 import type { GitHubTransport } from '@/types/platform'
-import { fakeTransport, githubCtx, httpFail, httpOk, queryOf, recordingTransport } from '../../../fixtures/github-http'
+import { fakeTransport, githubCtx, httpFail, httpOk, queryOf, recordingTransport } from '../../../../fixtures/github-http'
 
 const fetchBacklog = (params: { readonly repo: { readonly owner: string; readonly name: string }; readonly tracked: ReadonlySet<number>; readonly github: GitHubTransport }) =>
   fetchBacklogWith(githubCtx(params.github), { repo: params.repo, tracked: params.tracked })

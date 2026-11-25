@@ -3,9 +3,9 @@ import type { GatePreflightFetch, GatePreflightItem } from '@/types/github'
 import type { GitHubReadContext } from '@/main/github/context'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
-import { buildGatePreflightQuery } from '@/main/github/query'
+import { buildGatePreflightQuery } from '@/main/github/tracker/query'
 import { repoGraphqlRequest } from '@/main/github/request'
-import type { GitHubRepoRef } from '@/types/github'
+import type { ItemNumberParams } from '@/types/tracker'
 
 function kindOfTypename(typename: unknown): 'issue' | 'pull-request' | undefined {
   if (typename === 'Issue') return 'issue'
@@ -13,14 +13,9 @@ function kindOfTypename(typename: unknown): 'issue' | 'pull-request' | undefined
   return undefined
 }
 
-interface FetchGatePreflightParams {
-  readonly repo: GitHubRepoRef
-  readonly number: number
-}
-
 /** The plan gate's one round trip: one issue's identity, labels, assignees, body, and the
  *  signed-in account's login. `item: null` covers "does not exist" or "alias errored", neither a failure. */
-export async function fetchGatePreflight(ctx: GitHubReadContext, params: FetchGatePreflightParams): Promise<GatePreflightFetch> {
+export async function fetchGatePreflight(ctx: GitHubReadContext, params: ItemNumberParams): Promise<GatePreflightFetch> {
   const fetchedAt = ctx.clock.now().toISOString()
 
   const { document } = buildGatePreflightQuery(params.number)

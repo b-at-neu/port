@@ -6,7 +6,8 @@ import { readAtDefaultRef } from '@/main/repos/config/harness'
 import { CONFIG_PATH } from '@/main/repos/config/paths'
 import { BUDGET_SESSION } from '@/main/dispatch/budget'
 import type { GitHubReadContext, LedgerWriteContext } from '@/main/github/context'
-import { issueForPr, readLedger } from '@/main/github/ledger-read'
+import { issueForPr } from '@/main/github/ledger-read'
+import { readLedger } from '@/main/github/tracker/ledger'
 import { writeLedger } from '@/main/github/writes/ledger-comment'
 import {
   allowLine,

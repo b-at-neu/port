@@ -1,5 +1,7 @@
 import type { ConditionalTransport, GitHubTransport, GitRunner } from '@/types/platform'
-import { precheckIssues } from '@/main/github/precheck'
+import { createGithubTracker } from '@/main/github/tracker'
+import { gh } from '@/main/platform/gh'
+import { defaultGitRunner } from '@/main/platform/git'
 import { githubConditional, githubHttp } from '@/main/platform/github-http'
 import type { StateEngine } from '@/types/offload'
 import type { SessionReader } from '@/types/sessions'
@@ -27,7 +29,7 @@ export function createInProcessEngine(params: InProcessEngineParams = {}): State
   const reader = params.sessionReader ?? createSdkSessionReader()
   const clock = { now }
   const read = { githubHttp: params.github ?? githubHttp, clock }
-  const conditional = { githubConditional: params.conditional ?? githubConditional, clock }
+  const tracker = createGithubTracker({ githubHttp: read.githubHttp, githubConditional: params.conditional ?? githubConditional, ghWrite: gh, git: params.git ?? defaultGitRunner(), clock })
 
   return {
     refreshSessions: ({ repos }) => refreshSessions(cache, { repos, reader: params.sessionReader, claudeHome: params.claudeHome, now }),
@@ -39,7 +41,7 @@ export function createInProcessEngine(params: InProcessEngineParams = {}): State
       const agents = cache.sessions?.ok ? cache.sessions.agents.filter((agent) => agent.repoId === repoId) : []
       return refreshGithub(cache, { repoId, repo, vocabulary, verify, integration, tracked, worktreeEntries, agents, ctx: read })
     },
-    precheckGithub: ({ repoId, repo }) => precheckIssues(conditional, { cache: cache.etags, repoId, repo }),
+    precheckGithub: (params) => tracker.precheck(params),
     project: ({ repositories, views }) => Promise.resolve(projectFromCache(cache, repositories, now, views)),
     scanSessions: ({ repos }) => readSessionState({ repos, reader: params.sessionReader, claudeHome: params.claudeHome, now }),
     listSessions: () => reader(),
@@ -51,7 +53,7 @@ export function createInProcessEngine(params: InProcessEngineParams = {}): State
       return Promise.resolve()
     },
     forgetRepo: ({ repoId }) => {
-      cache.etags.forget(repoId)
+      tracker.forget(repoId)
       return Promise.resolve()
     },
   }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { fetchGatePreflight } from '@/main/github/gate'
+import { fetchGatePreflight } from '@/main/github/tracker/gate'
 import type { GitHubHttpResult } from '@/types/platform'
-import { fakeTransport, githubCtx, httpFail, httpOk } from '../../../fixtures/github-http'
+import { fakeTransport, githubCtx, httpFail, httpOk } from '../../../../fixtures/github-http'
 
 const viewer = { login: 'alice' }
 const preflight = (reply: GitHubHttpResult, number = 1) => fetchGatePreflight(githubCtx(fakeTransport(reply)), { repo: { owner: 'o', name: 'r' }, number })

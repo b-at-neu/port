@@ -4,7 +4,7 @@ import type { BacklogChild, ChildrenRead } from '@/types/backlog'
 import type { GitHubRepoRef, GraphQLErrorEntry } from '@/types/github'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { toChildBlockerRead } from '@/main/github/blockers'
-import { blockedByField } from '@/main/github/query'
+import { blockedByField } from '@/main/github/tracker/query'
 import { repoGraphqlRequest } from '@/main/github/request'
 
 const CHILD_PAGE_SIZE = 50

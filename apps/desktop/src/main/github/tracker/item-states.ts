@@ -1,13 +1,9 @@
 // readItemStates — the state of many issues or pull requests in one aliased round trip.
-import type { GitHubRepoRef, ItemStateName, ItemStatesRead } from '@/types/github'
+import type { ItemStateName, ItemStatesRead } from '@/types/github'
+import type { ItemStatesParams } from '@/types/tracker'
 import type { GitHubReadContext } from '@/main/github/context'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { repoGraphqlRequest } from '@/main/github/request'
-
-interface ReadItemStatesParams {
-  readonly repo: GitHubRepoRef
-  readonly numbers: readonly number[]
-}
 
 function stateOf(node: unknown): ItemStateName | null {
   if (typeof node !== 'object' || node === null) return null
@@ -16,7 +12,7 @@ function stateOf(node: unknown): ItemStateName | null {
 }
 
 /** An alias named in `errors[].path`, or one that came back absent, maps to `null` — a failure to read an item never reads as done. */
-export async function readItemStates(ctx: GitHubReadContext, params: ReadItemStatesParams): Promise<ItemStatesRead> {
+export async function readItemStates(ctx: GitHubReadContext, params: ItemStatesParams): Promise<ItemStatesRead> {
   const states = new Map<number, ItemStateName | null>()
   if (params.numbers.length === 0) return { ok: true, states }
 

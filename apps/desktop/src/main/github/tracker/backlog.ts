@@ -1,34 +1,20 @@
 // fetchBacklog: every open issue, dropping what the store tracks.
 import type { GitHubReadContext } from '@/main/github/context'
-import type { BacklogItem, BacklogLabel, BacklogResponse, ParentRead } from '@/types/backlog'
+import type { BacklogItem, BacklogResponse, ParentRead } from '@/types/backlog'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
-import { fieldListOf } from '@/main/github/map'
+import { fieldListOf, labelsOf } from '@/main/github/map'
 import { toBlockerRead } from '@/main/github/blockers'
-import { EMPTY_CHILDREN, fetchChildren } from '@/main/github/backlog-children'
-import { blockedByField, blockingField } from '@/main/github/query'
+import { EMPTY_CHILDREN, fetchChildren } from '@/main/github/tracker/backlog-children'
+import { blockedByField, blockingField } from '@/main/github/tracker/query'
 import { repoGraphqlRequest } from '@/main/github/request'
-import type { GitHubRepoRef, GraphQLErrorEntry } from '@/types/github'
-import { isHexColor } from '@/utils/hex-color'
-
+import type { GraphQLErrorEntry } from '@/types/github'
+import type { BacklogListParams } from '@/types/tracker'
 
 const PAGE_SIZE = 100
 const ASSIGNEE_PAGE_SIZE = 10
 const ITEM_LABEL_PAGE_SIZE = 20
 const BLOCKER_PAGE_SIZE = 10
 const BLOCKING_PAGE_SIZE = 10
-
-export function labelsOf(value: unknown): readonly BacklogLabel[] {
-  const nodes = (value as { nodes?: unknown } | null | undefined)?.nodes
-  if (!Array.isArray(nodes)) return []
-  const out: BacklogLabel[] = []
-  for (const node of nodes) {
-    if (typeof node !== 'object' || node === null) continue
-    const { name, color } = node as Record<string, unknown>
-    if (typeof name !== 'string') continue
-    out.push({ name, color: typeof color === 'string' && isHexColor(color) ? color.toLowerCase() : null })
-  }
-  return out
-}
 
 function subIssueCountOf(value: unknown): number {
   const total = (value as { totalCount?: unknown } | null | undefined)?.totalCount
@@ -77,14 +63,8 @@ function buildBacklogQuery(): string {
   ].join('\n')
 }
 
-interface FetchBacklogParams {
-  readonly repo: GitHubRepoRef
-  /** The store's tracked issue numbers; empty for an unseeded repository until the first poll seeds it. */
-  readonly tracked: ReadonlySet<number>
-}
-
 // `scanned`/`total` diverging means the page was truncated; a viewer-query error is never itself a failure.
-export async function fetchBacklog(ctx: GitHubReadContext, params: FetchBacklogParams): Promise<BacklogResponse> {
+export async function fetchBacklog(ctx: GitHubReadContext, params: BacklogListParams): Promise<BacklogResponse> {
   const fetchedAt = ctx.clock.now().toISOString()
 
   const document = buildBacklogQuery()
