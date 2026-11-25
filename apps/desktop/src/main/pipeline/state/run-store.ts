@@ -26,6 +26,10 @@ export function createRunStore({ store, newId, now }: CreateRunStoreParams): Run
     return (store.tickets(repoId) ?? []).flatMap((ticket) => ticket.runs.map((run) => ({ ticket, run })))
   }
 
+  async function clearRule(repoId: RepoId, rule: string): Promise<void> {
+    for (const { run } of repoRuns(repoId).filter(({ run: candidate }) => candidate.denials.some((denial) => denial.rule === rule))) await change(repoId, run.id, { kind: 'denials-cleared', rule })
+  }
+
   return {
     start: (repoId, run) => log(`run ${run.id}`, store.startRun(repoId, run)),
     launchFailed: (repoId, failure) => {
@@ -66,11 +70,9 @@ export function createRunStore({ store, newId, now }: CreateRunStoreParams): Run
       const rule = repoRuns(repoId)
         .flatMap(({ run }) => run.denials)
         .find((denial) => denial.id === id)?.rule
-      if (rule !== undefined) await this.clearRule(repoId, rule)
+      if (rule !== undefined) await clearRule(repoId, rule)
     },
-    async clearRule(repoId, rule) {
-      for (const { run } of repoRuns(repoId).filter(({ run: candidate }) => candidate.denials.some((denial) => denial.rule === rule))) await change(repoId, run.id, { kind: 'denials-cleared', rule })
-    },
+    clearRule,
     quitAll: () => store.quitRuns(),
     list: (repoId) => interruptedRuns(store.allTickets()).filter((entry) => repoId === undefined || entry.repoId === repoId),
     running: () => openRuns(store.allTickets()),

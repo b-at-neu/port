@@ -61,7 +61,7 @@ function changed(run: Run, change: RunChange, at: string): Run {
 }
 
 /** Keeps the newest `RUN_CAP` runs; an open or interrupted run is never dropped. */
-function capped(runs: Run[]): Run[] {
+export function capped(runs: Run[]): Run[] {
   let excess = runs.length - RUN_CAP
   if (excess <= 0) return runs
   return runs.filter((run) => {

@@ -1,8 +1,9 @@
 // Pure: the version 3 file, from the version 2 pipeline state and the three run files it replaces.
+import { capped } from '@/main/pipeline/runs'
 import { ticketOfKeys } from '@/main/pipeline/state/migrate'
 import { RUN_STATES } from '@/types/dispatch'
 import type { DispatchEntry } from '@/types/pipeline-state'
-import { INTERRUPTED_REASONS, RUN_CAP, runSchema, STAGE_AGENTS, type Run, type Stage } from '@/utils/pipeline/ticket'
+import { INTERRUPTED_REASONS, runSchema, STAGE_AGENTS, type Run, type Stage } from '@/utils/pipeline/ticket'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 
@@ -215,7 +216,7 @@ export function migrateRuns(v2: unknown, files: RunFiles): unknown {
   }
 
   const repositories = Object.fromEntries(
-    Object.entries(repos).map(([repoId, repo]) => [repoId, { seededAt: repo.seededAt, tickets: Object.fromEntries(Object.entries(repo.tickets).map(([key, ticket]) => [key, { ...ticket, runs: runsOf(ticket).slice(-RUN_CAP) }])) }]),
+    Object.entries(repos).map(([repoId, repo]) => [repoId, { seededAt: repo.seededAt, tickets: Object.fromEntries(Object.entries(repo.tickets).map(([key, ticket]) => [key, { ...ticket, runs: capped(runsOf(ticket)) }])) }]),
   )
   return { version: 3, dispatch: dispatchOf(files.dispatch), repositories }
 }
