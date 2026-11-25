@@ -102,9 +102,8 @@ function run(read: ReleaseRead, request: Parameters<typeof resolveReleaseRun>[2]
 }
 
 describe('resolveReleaseStatus', () => {
-  it('rejects a missing repoId and a repository that is not ready', async () => {
+  it('rejects a repository that is not ready', async () => {
     const deps = depsFor(readOf({ kind: 'idle' }), newCalls())
-    await expect(resolveReleaseStatus(ctx, registryDeps, { repoId: undefined as unknown as RepoId }, deps)).rejects.toThrow("'release:status' requires a non-empty 'repoId'")
     const notReady = { ...deps, listRepositories: () => Promise.resolve({ ok: true, repositories: [{ id: REPO_ID, path: '/repo', displayName: 'w', problem: { kind: 'directory-missing' as const }, diagnostics: [] }] } as ReposListResponse) }
     await expect(resolveReleaseStatus(ctx, registryDeps, { repoId: REPO_ID }, notReady)).rejects.toThrow("requires a 'ready' repository")
   })
@@ -125,10 +124,9 @@ describe('resolveReleaseStatus', () => {
 describe('resolveReleaseIssues', () => {
   const issues = { ok: true as const, issues: [{ number: 12, title: 'Add dark mode', url: 'https://github.com/acme/widgets/issues/12', labels: [] }], note: null }
 
-  it('rejects a missing repoId, a malformed tag or previousTag, and a repository that is not ready', async () => {
+  it('rejects a malformed tag or previousTag, and a repository that is not ready', async () => {
     const deps = depsFor(readOf({ kind: 'idle' }), newCalls())
     const good = { repoId: REPO_ID, tag: 'v0.2.0', previousTag: 'v0.1.0' }
-    await expect(resolveReleaseIssues(ctx, registryDeps, { ...good, repoId: undefined as unknown as RepoId }, deps)).rejects.toThrow("'release:issues' requires a non-empty 'repoId'")
     await expect(resolveReleaseIssues(ctx, registryDeps, { ...good, tag: 'v1 --upload' }, deps)).rejects.toThrow("'release:issues' requires a 'tag'")
     await expect(resolveReleaseIssues(ctx, registryDeps, { ...good, tag: 5 as unknown as string }, deps)).rejects.toThrow("'release:issues' requires a 'tag'")
     await expect(resolveReleaseIssues(ctx, registryDeps, { ...good, previousTag: '../x?y' }, deps)).rejects.toThrow("'release:issues' requires 'previousTag'")

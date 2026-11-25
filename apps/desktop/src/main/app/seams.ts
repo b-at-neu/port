@@ -3,7 +3,6 @@ import type { BoardSnapshot } from '@/types/board'
 import type { HostedStore, SessionStartTarget, SessionStartMode } from '@/types/hosting'
 import type { Platform } from '@/main/platform'
 import type { StartTargetSources, ReleaseBranchOutcome, RemoveSessionWorktreeOutcome, ResolvedStartTarget } from '@/types/workspace'
-import type { FileResult } from '@/types/platform'
 
 type FileListingResult = { readonly ok: true; readonly files: readonly string[]; readonly truncated: boolean } | { readonly ok: false; readonly message: string }
 import type { RegistryDeps } from '@/types/registry'

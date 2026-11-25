@@ -61,12 +61,6 @@ function depsWith(overrides: Partial<WorktreesReclaimDeps>): WorktreesReclaimDep
 }
 
 describe('resolveWorktreesReclaim', () => {
-  it('rejects a missing id', async () => {
-    await expect(resolveWorktreesReclaim(registryDeps, { id: undefined as unknown as RepoId, issue: null, force: null }, '/audit', depsWith({}))).rejects.toThrow(
-      "'worktrees:reclaim' requires a non-empty 'repoId'",
-    )
-  })
-
   it('rejects a negative issue', async () => {
     await expect(resolveWorktreesReclaim(registryDeps, { id: REPO_ID, issue: -1, force: null }, '/audit', depsWith({}))).rejects.toThrow(
       "'worktrees:reclaim' requires 'issue' to be null or a positive integer",
@@ -241,13 +235,6 @@ describe('resolveWorktreesPurge', () => {
     await expect(resolveWorktreesPurge(registryDeps, { id: REPO_ID, path }, '/audit', purgeDeps(seen, deleted))).rejects.toThrow(message)
     expect(seen.params).toBeUndefined()
     expect(seen.audited).toEqual([])
-  })
-
-  it('rejects a missing id', async () => {
-    const seen = { audited: [] as PurgeAuditEntry[] }
-    await expect(resolveWorktreesPurge(registryDeps, { id: undefined as unknown as RepoId, path: PATH }, '/audit', purgeDeps(seen, deleted))).rejects.toThrow(
-      "'worktrees:purge' requires a non-empty 'repoId'",
-    )
   })
 
   it('runs the purge for the one path and audits its basename once', async () => {

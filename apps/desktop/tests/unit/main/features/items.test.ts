@@ -1,405 +1,102 @@
 import { describe, expect, it } from 'vitest'
+import { itemDecide } from '@/main/features/item/actions/decide'
 import type { RepoId } from '@/utils/repos'
-import type { ReposListResponse } from '@/types/ipc'
-import type { BoardSnapshot } from '@/types/board'
-import { resolveItemAction, resolveItemDecision } from '@/main/features/item/resolve'
-import type { ItemActionDeps } from '@/main/features/item/resolve'
-import type { ItemDecisionDeps } from '@/main/app/seams'
-import type { RegistryDeps } from '@/types/registry'
+import type { StageLabel } from '@/types/state'
+import { boardSnapshot, reconciledItem, repositoryState } from '../../../support/board-snapshot'
+import { callAction, createTestContext } from '../../../support/context'
+import { operatorRig, recordingWatcher, REPO_ID, type OperatorRigOptions } from '../../../support/operator-rig'
 import { stageSession } from '../../../support/session-snapshot'
+import { ticketOf } from '../../../support/tickets'
 
-const REPO_ID = 'repo-1' as unknown as RepoId
+const BASE = { repoId: REPO_ID, number: 1, expectedStage: null, route: null, note: null, skipComment: false, picks: null }
+const stageLabel: StageLabel = { key: 'needsHuman', name: 'needsHuman', role: 'gate' }
 
-const registryDeps: RegistryDeps = {
-  registryDir: '/registry',
-  git: () => {
-    throw new Error('git should not be invoked directly')
-  },
-  chooseDirectory: () => Promise.resolve(null),
-}
-
-const READY_ENTRY = {
-  id: REPO_ID,
-  path: '/repo',
-  displayName: 'widgets',
-  status: 'ready' as const,
-  config: {
-    repo: 'acme/widgets',
-    owner: 'acme',
-    name: 'widgets',
-    branches: { integration: 'dev', production: 'main' },
-    models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
-    modules: { approvalGate: true, release: true, scope: true },
-    reviewCycleCap: 3,
-    vocabulary: {} as never,
-    commands: { worktrees: 'node scripts/worktrees.mjs', budget: null },
-    concurrency: { sharedFiles: [], overlapThreshold: 2 },
-    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
-    checkDispositions: {},
-    overrides: [],
-  },
-  diagnostics: [],
-}
-
-const NOT_READY_ENTRY = {
-  id: REPO_ID,
-  path: '/repo',
-  displayName: 'widgets',
-  problem: { kind: 'directory-missing' as const },
-  diagnostics: [],
-}
-
-const EMPTY_SNAPSHOT: BoardSnapshot = {
-  state: { repositories: [], sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: 't' }, readAt: 't' },
-  health: [],
-  policy: { baseIntervalMs: { github: 60_000, sessions: 15_000, worktrees: 15_000, denials: 15_000 }, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: 30_000 },
-  tick: [],
-  runStates: { store: { kind: 'loaded' }, repositories: [] },
-  nextWakeupAt: null,
-  emittedAt: 't',
-  dispatch: [],
-  autoPlan: [],
-}
-
-function itemActionDepsWith(overrides: Partial<ItemActionDeps>): ItemActionDeps {
-  return {
-    listRepositories: () => Promise.resolve({ ok: true, repositories: [] } as ReposListResponse),
-    applyItemAction: () => {
-      throw new Error('applyItemAction should not be invoked in this case')
-    },
-    snapshot: () => EMPTY_SNAPSHOT,
-    refresh: () => {
-      throw new Error('refresh should not be invoked in this case')
-    },
-    ...overrides,
-  }
-}
-
-describe('resolveItemAction', () => {
-  it('rejects a missing repoId', async () => {
-    await expect(
-      resolveItemAction(registryDeps, { repoId: undefined as unknown as RepoId, kind: 'issue', number: 1, action: 'pause', expectedStage: null }, '/audit', itemActionDepsWith({})),
-    ).rejects.toThrow("'item:action' requires a non-empty 'repoId'")
-  })
-
-  it('rejects a kind outside issue/pull-request', async () => {
-    await expect(
-      resolveItemAction(registryDeps, { repoId: REPO_ID, kind: 'bogus' as never, number: 1, action: 'pause', expectedStage: null }, '/audit', itemActionDepsWith({})),
-    ).rejects.toThrow("'item:action' requires 'kind' to be 'issue' or 'pull-request'")
-  })
-
-  it('rejects a non-positive number', async () => {
-    await expect(
-      resolveItemAction(registryDeps, { repoId: REPO_ID, kind: 'issue', number: 0, action: 'pause', expectedStage: null }, '/audit', itemActionDepsWith({})),
-    ).rejects.toThrow("'item:action' requires 'number' to be a positive integer")
-  })
-
-  it('rejects an action outside OPERATOR_ACTIONS', async () => {
-    await expect(
-      resolveItemAction(registryDeps, { repoId: REPO_ID, kind: 'issue', number: 1, action: 'bogus' as never, expectedStage: null }, '/audit', itemActionDepsWith({})),
-    ).rejects.toThrow("'item:action' requires 'action' to be one of pause, resume, retry, stop, gate, refresh")
-  })
-
-  it('rejects an empty-string expectedStage', async () => {
-    await expect(
-      resolveItemAction(registryDeps, { repoId: REPO_ID, kind: 'issue', number: 1, action: 'pause', expectedStage: '' as never }, '/audit', itemActionDepsWith({})),
-    ).rejects.toThrow("'item:action' requires 'expectedStage' to be a non-empty string or null")
-  })
-
-  it('rejects an unregistered repoId', async () => {
-    await expect(
-      resolveItemAction(registryDeps, { repoId: REPO_ID, kind: 'issue', number: 1, action: 'pause', expectedStage: null }, '/audit', itemActionDepsWith({})),
-    ).rejects.toThrow(`'item:action' found no repository registered with id '${REPO_ID}'`)
-  })
-
-  it('rejects a non-ready repository', async () => {
-    const deps = itemActionDepsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [NOT_READY_ENTRY] }) })
-    await expect(resolveItemAction(registryDeps, { repoId: REPO_ID, kind: 'issue', number: 1, action: 'pause', expectedStage: null }, '/audit', deps)).rejects.toThrow(
-      "'item:action' requires a 'ready' repository, got 'directory-missing'",
-    )
-  })
-
-  it('passes a valid request through to applyItemAction, and does not refresh on a non-applied outcome', async () => {
-    let refreshCalls = 0
-    const deps = itemActionDepsWith({
-      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      applyItemAction: () => Promise.resolve({ ok: true, outcome: { kind: 'no-op' } }),
-      refresh: () => {
-        refreshCalls++
-        return Promise.resolve(EMPTY_SNAPSHOT)
-      },
-    })
-    const result = await resolveItemAction(registryDeps, { repoId: REPO_ID, kind: 'issue', number: 148, action: 'pause', expectedStage: 'planApproved' }, '/audit', deps)
-    expect(result).toEqual({ ok: true, outcome: { kind: 'no-op' } })
-    expect(refreshCalls).toBe(0)
-  })
-
-  it('forces a github refresh after an applied outcome, before returning', async () => {
-    let refreshCalls = 0
-    const deps = itemActionDepsWith({
-      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      applyItemAction: () => Promise.resolve({ ok: true, outcome: { kind: 'applied', argv: [] } }),
-      refresh: (request) => {
-        refreshCalls++
-        expect(request).toEqual({ repoId: REPO_ID, source: 'github' })
-        return Promise.resolve(EMPTY_SNAPSHOT)
-      },
-    })
-    const result = await resolveItemAction(registryDeps, { repoId: REPO_ID, kind: 'issue', number: 148, action: 'pause', expectedStage: 'planApproved' }, '/audit', deps)
-    expect(result).toEqual({ ok: true, outcome: { kind: 'applied', argv: [] } })
-    expect(refreshCalls).toBe(1)
+describe('item.decide input', () => {
+  it.each([
+    { name: 'unblock with a route', input: { ...BASE, decision: 'unblock', route: 'revision' }, ok: true },
+    { name: 'unblock with well-formed picks', input: { ...BASE, decision: 'unblock', route: 'revision', picks: [{ id: 'D1', letter: 'B' }] }, ok: true },
+    { name: 'unblock with no route', input: { ...BASE, decision: 'unblock' }, ok: false },
+    { name: 'unblock carrying a note', input: { ...BASE, decision: 'unblock', route: 'revision', note: 'oops' }, ok: false },
+    { name: 'unblock with a malformed pick', input: { ...BASE, decision: 'unblock', route: 'revision', picks: [{ id: 'one', letter: 'A' }] }, ok: false },
+    { name: 'grant with nothing else', input: { ...BASE, decision: 'grant' }, ok: true },
+    { name: 'grant carrying a route', input: { ...BASE, decision: 'grant', route: 'revision' }, ok: false },
+    { name: 'grant carrying a note', input: { ...BASE, decision: 'grant', note: 'hi' }, ok: false },
+    { name: 'grant carrying picks', input: { ...BASE, decision: 'grant', picks: [{ id: 'D1', letter: 'A' }] }, ok: false },
+    { name: 'grant skipping the comment', input: { ...BASE, decision: 'grant', skipComment: true }, ok: false },
+    { name: 'revise with a note', input: { ...BASE, decision: 'revise', note: 'change this' }, ok: true },
+    { name: 'revise without a note', input: { ...BASE, decision: 'revise' }, ok: false },
+    { name: 'revise carrying a route', input: { ...BASE, decision: 'revise', note: 'x', route: 'revision' }, ok: false },
+    { name: 'revise carrying picks', input: { ...BASE, decision: 'revise', note: 'x', picks: [{ id: 'D1', letter: 'A' }] }, ok: false },
+  ])('$name', ({ input, ok }) => {
+    expect(itemDecide.input.safeParse(input).success).toBe(ok)
   })
 })
 
-function itemDecisionDepsWith(overrides: Partial<ItemDecisionDeps>): ItemDecisionDeps {
-  return {
-    listRepositories: () => Promise.resolve({ ok: true, repositories: [] } as ReposListResponse),
-    applyItemDecision: () => {
-      throw new Error('applyItemDecision should not be invoked in this case')
-    },
-    sessions: () => [],
-    snapshot: () => EMPTY_SNAPSHOT,
-    refresh: () => {
-      throw new Error('refresh should not be invoked in this case')
-    },
-    ...overrides,
+describe('item.action', () => {
+  const request = { repoId: REPO_ID, kind: 'issue' as const, number: 148, action: 'pause' as const, expectedStage: null }
+
+  it('rejects an unregistered repository', async () => {
+    const ctx = createTestContext({ live: { watcher: recordingWatcher().watcher } })
+    await expect(callAction(ctx, 'item.action', request)).rejects.toThrow(`'item:action' found no repository registered with id '${REPO_ID}'`)
+  })
+
+  it('rejects a repository that is not ready', async () => {
+    const entry = { id: REPO_ID, path: '/repo', displayName: 'widgets', problem: { kind: 'directory-missing' as const }, diagnostics: [] }
+    const ctx = createTestContext({ repositories: [entry], live: { watcher: recordingWatcher().watcher } })
+    await expect(callAction(ctx, 'item.action', request)).rejects.toThrow("'item:action' requires a 'ready' repository, got 'directory-missing'")
+  })
+
+  it('records no refresh for a refusal', async () => {
+    const { watcher, refreshes } = recordingWatcher()
+    const rig = await operatorRig({ live: { watcher } })
+    expect(await callAction(rig.ctx, 'item.action', request)).toEqual({ ok: false, reason: 'repo-unavailable' })
+    expect(refreshes).toEqual([])
+  })
+})
+
+describe('item.decide', () => {
+  const ESCALATED: OperatorRigOptions = {
+    viewer: 'op',
+    items: [
+      { number: 51, labels: ['port'], assignees: ['op'] },
+      { number: 300, kind: 'pull-request', labels: ['port', 'needs human'], assignees: ['op'], headRefName: '51-fix', headRefOid: 'a'.repeat(40) },
+    ],
+    tickets: [ticketOf({ repo: REPO_ID, ticket: 51, pr: { number: 300, approvedAt: null }, stage: 'review', status: { kind: 'waiting-on-you', gate: 'escalation', detail: '' } })],
   }
-}
+  const pullRequest = reconciledItem({ repoId: REPO_ID, kind: 'pull-request', number: 300, stage: 'gate', stages: [stageLabel], status: 'gated', matchedKeys: ['needsHuman'], headRefOid: 'a'.repeat(40), mergeable: 'MERGEABLE', reviewCycleCount: 0 })
+  const snapshot = boardSnapshot([repositoryState([pullRequest], { repoId: REPO_ID })])
+  const unblock = { repoId: REPO_ID, number: 300, decision: 'unblock' as const, expectedStage: 'needsHuman' as const, route: 'revision' as const, note: null, skipComment: true, picks: null }
 
-describe('resolveItemDecision', () => {
-  it('rejects a missing repoId', async () => {
-    await expect(
-      resolveItemDecision(
-        registryDeps,
-        { repoId: undefined as unknown as RepoId, number: 1, decision: 'unblock', expectedStage: null, route: 'revision', note: null, skipComment: false, picks: null },
-        '/audit',
-        '/scratch',
-        itemDecisionDepsWith({}),
-      ),
-    ).rejects.toThrow("'item:decide' requires a non-empty 'repoId'")
+  it('forces one github refresh after an applied unblock', async () => {
+    const { live, refreshes } = recordingWatcher({ snapshot })
+    const rig = await operatorRig({ ...ESCALATED, live })
+    expect(await callAction(rig.ctx, 'item.decide', unblock)).toMatchObject({ ok: true, labels: { kind: 'applied' } })
+    expect(refreshes).toEqual([{ repoId: REPO_ID, source: 'github' }])
   })
 
-  it('rejects a decision outside OPERATOR_DECISIONS', async () => {
-    await expect(
-      resolveItemDecision(
-        registryDeps,
-        { repoId: REPO_ID, number: 1, decision: 'bogus' as never, expectedStage: null, route: null, note: null, skipComment: false, picks: null },
-        '/audit',
-        '/scratch',
-        itemDecisionDepsWith({}),
-      ),
-    ).rejects.toThrow("'item:decide' requires 'decision' to be one of unblock, revise, grant")
+  it('still returns the applied result when the refresh throws', async () => {
+    const { live } = recordingWatcher({ snapshot, failRefresh: true })
+    const rig = await operatorRig({ ...ESCALATED, live })
+    expect(await callAction(rig.ctx, 'item.decide', unblock)).toMatchObject({ ok: true, labels: { kind: 'applied' } })
+  })
+
+  it('records no refresh when the label outcome is not applied', async () => {
+    const { live, refreshes } = recordingWatcher({ snapshot })
+    const rig = await operatorRig({ ...ESCALATED, tickets: null, live })
+    expect(await callAction(rig.ctx, 'item.decide', unblock)).toMatchObject({ ok: true, labels: { kind: 'state-unsaved' } })
+    expect(refreshes).toEqual([])
   })
 
   it.each([
-    ['a route', { route: 'revision' as const }, "'route' to be null for 'grant'"],
-    ['a note', { note: 'hi' }, "'note' to be null for 'grant'"],
-    ['picks', { picks: [{ id: 'D1', letter: 'A' }] }, "'picks' to be null for 'grant'"],
-    ['skipComment', { skipComment: true }, "'skipComment' to be false for 'grant'"],
-  ])('rejects grant carrying %s', async (_name, extra, message) => {
-    await expect(
-      resolveItemDecision(
-        registryDeps,
-        { repoId: REPO_ID, number: 1, decision: 'grant', expectedStage: null, route: null, note: null, skipComment: false, picks: null, ...extra },
-        '/audit',
-        '/scratch',
-        itemDecisionDepsWith({}),
-      ),
-    ).rejects.toThrow(message)
-  })
-
-  it('rejects unblock with a route outside UNBLOCK_ROUTES', async () => {
-    await expect(
-      resolveItemDecision(
-        registryDeps,
-        { repoId: REPO_ID, number: 1, decision: 'unblock', expectedStage: null, route: 'bogus' as never, note: null, skipComment: false, picks: null },
-        '/audit',
-        '/scratch',
-        itemDecisionDepsWith({}),
-      ),
-    ).rejects.toThrow("'item:decide' requires 'route' to be one of revision, review, implementation for 'unblock'")
-  })
-
-  it('accepts the implementation route', async () => {
-    let forwarded: unknown = null
-    const deps = itemDecisionDepsWith({
-      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      applyItemDecision: (params) => {
-        forwarded = params.request.route
-        return Promise.resolve({ ok: true, comment: null, labels: { kind: 'no-op' } })
-      },
-    })
-    await resolveItemDecision(
-      registryDeps,
-      { repoId: REPO_ID, number: 51, decision: 'unblock', expectedStage: 'blocked', route: 'implementation', note: null, skipComment: false, picks: null },
-      '/audit',
-      '/scratch',
-      deps,
-    )
-    expect(forwarded).toBe('implementation')
-  })
-
-  it.each([
-    ['a live session for this number', [stageSession({ repoId: REPO_ID, stage: { agent: 'impl', number: 51, kind: 'issue', trigger: 'planApproved' } })], true],
-    ['an ended session for this number', [stageSession({ repoId: REPO_ID, phase: 'ended', stage: { agent: 'impl', number: 51, kind: 'issue', trigger: 'planApproved' } })], false],
-    ['a live session for another number', [stageSession({ repoId: REPO_ID, stage: { agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved' } })], false],
-    ['a live session in another repository', [stageSession({ repoId: 'repo-2' as unknown as RepoId, stage: { agent: 'impl', number: 51, kind: 'issue', trigger: 'planApproved' } })], false],
-  ])('reads liveStage from the hosted store: %s', async (_name, sessions, expected) => {
-    let liveStage: boolean | null = null
-    const deps = itemDecisionDepsWith({
-      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      sessions: () => sessions,
-      applyItemDecision: (params) => {
-        liveStage = params.liveStage
-        return Promise.resolve({ ok: true, comment: null, labels: { kind: 'no-op' } })
-      },
-    })
-    await resolveItemDecision(
-      registryDeps,
-      { repoId: REPO_ID, number: 51, decision: 'unblock', expectedStage: 'blocked', route: 'implementation', note: null, skipComment: false, picks: null },
-      '/audit',
-      '/scratch',
-      deps,
-    )
-    expect(liveStage).toBe(expected)
-  })
-
-  it('rejects unblock carrying a note', async () => {
-    await expect(
-      resolveItemDecision(
-        registryDeps,
-        { repoId: REPO_ID, number: 1, decision: 'unblock', expectedStage: null, route: 'revision', note: 'oops', skipComment: false, picks: null },
-        '/audit',
-        '/scratch',
-        itemDecisionDepsWith({}),
-      ),
-    ).rejects.toThrow("'item:decide' requires 'note' to be null for 'unblock'")
-  })
-
-  it('rejects revise carrying a route', async () => {
-    await expect(
-      resolveItemDecision(
-        registryDeps,
-        { repoId: REPO_ID, number: 1, decision: 'revise', expectedStage: null, route: 'revision', note: 'change this', skipComment: false, picks: null },
-        '/audit',
-        '/scratch',
-        itemDecisionDepsWith({}),
-      ),
-    ).rejects.toThrow("'item:decide' requires 'route' to be null for 'revise'")
-  })
-
-  it('rejects revise without a string note', async () => {
-    await expect(
-      resolveItemDecision(
-        registryDeps,
-        { repoId: REPO_ID, number: 1, decision: 'revise', expectedStage: null, route: null, note: null, skipComment: false, picks: null },
-        '/audit',
-        '/scratch',
-        itemDecisionDepsWith({}),
-      ),
-    ).rejects.toThrow("'item:decide' requires 'note' to be a string of at most 10000 characters for 'revise'")
-  })
-
-  it.each([
-    ['a non-array', 'D1' as never],
-    ['an entry with a malformed id', [{ id: 'one', letter: 'A' }] as never],
-    ['an entry with a lowercase letter', [{ id: 'D1', letter: 'a' }] as never],
-    ['more than twenty entries', Array.from({ length: 21 }, (_, i) => ({ id: `D${String(i + 1)}`, letter: 'A' })) as never],
-  ])('rejects unblock with picks that are %s', async (_name, picks) => {
-    await expect(
-      resolveItemDecision(
-        registryDeps,
-        { repoId: REPO_ID, number: 1, decision: 'unblock', expectedStage: null, route: 'revision', note: null, skipComment: false, picks },
-        '/audit',
-        '/scratch',
-        itemDecisionDepsWith({}),
-      ),
-    ).rejects.toThrow("'item:decide' requires 'picks' to be null or at most 20")
-  })
-
-  it('rejects revise carrying picks', async () => {
-    await expect(
-      resolveItemDecision(
-        registryDeps,
-        { repoId: REPO_ID, number: 1, decision: 'revise', expectedStage: null, route: null, note: 'change this', skipComment: false, picks: [{ id: 'D1', letter: 'A' }] },
-        '/audit',
-        '/scratch',
-        itemDecisionDepsWith({}),
-      ),
-    ).rejects.toThrow("'item:decide' requires 'picks' to be null for 'revise'")
-  })
-
-  it('forwards well-formed picks to applyItemDecision', async () => {
-    let forwarded: unknown = null
-    const deps = itemDecisionDepsWith({
-      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      applyItemDecision: (params) => {
-        forwarded = params.request.picks
-        return Promise.resolve({ ok: true, comment: null, labels: { kind: 'no-op' } })
-      },
-    })
-    await resolveItemDecision(
-      registryDeps,
-      { repoId: REPO_ID, number: 148, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: [{ id: 'D1', letter: 'B' }] },
-      '/audit',
-      '/scratch',
-      deps,
-    )
-    expect(forwarded).toEqual([{ id: 'D1', letter: 'B' }])
-  })
-
-  it('rejects a non-ready repository', async () => {
-    const deps = itemDecisionDepsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [NOT_READY_ENTRY] }) })
-    await expect(
-      resolveItemDecision(
-        registryDeps,
-        { repoId: REPO_ID, number: 1, decision: 'unblock', expectedStage: null, route: 'revision', note: null, skipComment: false, picks: null },
-        '/audit',
-        '/scratch',
-        deps,
-      ),
-    ).rejects.toThrow("'item:decide' requires a 'ready' repository, got 'directory-missing'")
-  })
-
-  it('forces a github refresh after an applied label outcome, before returning', async () => {
-    let refreshCalls = 0
-    const deps = itemDecisionDepsWith({
-      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      applyItemDecision: () => Promise.resolve({ ok: true, comment: { kind: 'applied', argv: [] }, labels: { kind: 'applied', argv: [] } }),
-      refresh: (request) => {
-        refreshCalls++
-        expect(request).toEqual({ repoId: REPO_ID, source: 'github' })
-        return Promise.resolve(EMPTY_SNAPSHOT)
-      },
-    })
-    const result = await resolveItemDecision(
-      registryDeps,
-      { repoId: REPO_ID, number: 148, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null },
-      '/audit',
-      '/scratch',
-      deps,
-    )
-    expect(result.ok).toBe(true)
-    expect(refreshCalls).toBe(1)
-  })
-
-  it('does not refresh when the label outcome is not applied', async () => {
-    let refreshCalls = 0
-    const deps = itemDecisionDepsWith({
-      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      applyItemDecision: () => Promise.resolve({ ok: true, comment: null, labels: { kind: 'no-op' } }),
-      refresh: () => {
-        refreshCalls++
-        return Promise.resolve(EMPTY_SNAPSHOT)
-      },
-    })
-    await resolveItemDecision(
-      registryDeps,
-      { repoId: REPO_ID, number: 148, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null },
-      '/audit',
-      '/scratch',
-      deps,
-    )
-    expect(refreshCalls).toBe(0)
+    { name: 'a live session for this number', sessions: [stageSession({ repoId: REPO_ID, stage: { agent: 'impl', number: 300, kind: 'issue', trigger: 'planApproved' } })], live: true },
+    { name: 'an ended session for this number', sessions: [stageSession({ repoId: REPO_ID, phase: 'ended', stage: { agent: 'impl', number: 300, kind: 'issue', trigger: 'planApproved' } })], live: false },
+    { name: 'a live session for another number', sessions: [stageSession({ repoId: REPO_ID, stage: { agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved' } })], live: false },
+    { name: 'a live session in another repository', sessions: [stageSession({ repoId: 'repo-2' as RepoId, stage: { agent: 'impl', number: 300, kind: 'issue', trigger: 'planApproved' } })], live: false },
+  ])('treats $name as liveStage=$live', async ({ sessions, live: refused }) => {
+    const blocked = reconciledItem({ repoId: REPO_ID, kind: 'issue', number: 300, stage: 'gate', stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }], matchedKeys: ['blocked'], assignees: ['op'] })
+    const { live } = recordingWatcher({ snapshot: boardSnapshot([repositoryState([blocked], { repoId: REPO_ID })]), sessions })
+    const rig = await operatorRig({ ...ESCALATED, live })
+    const result = await callAction(rig.ctx, 'item.decide', { ...unblock, expectedStage: 'blocked', route: 'implementation' })
+    expect(result.ok === false && result.reason === 'refused' && result.refusal === 'agent-live').toBe(refused)
   })
 })
