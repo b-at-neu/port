@@ -72,7 +72,9 @@ export function createFakeGit(options: FakeGitOptions): FakeGit {
     return locals.get(name) ?? (/^[0-9a-f]{40}$/.test(name) && parents.has(name) ? name : undefined)
   }
 
-  const treeAt = (path: string): FakeWorktree | undefined => trees.find((tree) => tree.path === path)
+  const same = (left: string, right: string): boolean => left.replaceAll('\\', '/') === right.replaceAll('\\', '/')
+  const isDirty = (path: string): boolean => [...dirty].some((entry) => same(entry, path))
+  const treeAt = (path: string): FakeWorktree | undefined => trees.find((tree) => same(tree.path, path))
   const worktreeOf = (branch: string): string => trees.find((tree) => tree.branch === branch)?.path ?? ''
 
   const addWorktree = async (path: string, branch: string | null, sha: string): Promise<void> => {
@@ -142,7 +144,7 @@ export function createFakeGit(options: FakeGitOptions): FakeGit {
         return ok()
       }
       case 'status':
-        return ok(dirty.has(cwd) ? ' M file.ts\n' : '')
+        return ok(isDirty(cwd) ?' M file.ts\n' : '')
       case 'branch': {
         if (rest[0] === '-D' || rest[0] === '-d') {
           locals.delete(rest[1] ?? '')
@@ -173,11 +175,11 @@ export function createFakeGit(options: FakeGitOptions): FakeGit {
     }
     if (action === 'remove') {
       const path = operands.at(-1) ?? ''
-      const index = trees.findIndex((tree) => tree.path === path)
+      const index = trees.findIndex((tree) => same(tree.path, path))
       if (index === -1) return nonzero(128, `fatal: '${path}' is not a working tree`)
-      if (dirty.has(path) && !operands.includes('--force')) return nonzero(128, 'fatal: contains modified or untracked files, use --force to delete it')
+      if (isDirty(path) && !operands.includes('--force')) return nonzero(128, 'fatal: contains modified or untracked files, use --force to delete it')
       trees.splice(index, 1)
-      dirty.delete(path)
+      for (const entry of [...dirty]) if (same(entry, path)) dirty.delete(entry)
       await fs.removeDirectory(path)
       return ok()
     }

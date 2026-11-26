@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { FileDownload, FileDownloadResult } from '@/types/update'
 import type { GitHubHttpResult } from '@/types/platform'
 import { createUpdate } from '@/main/features/update/create'
+import { pathOps } from '@/main/platform/paths'
 import { callAction, createTestContext } from '../support/context'
 import { createFakeClock, fakeUpdates } from '../support/fake-platform'
 
@@ -36,7 +37,7 @@ describe('updating the app', () => {
     expect(await callAction(app.ctx, 'update.check')).toMatchObject({ kind: 'available', release: { version: '1.5.0' } })
     expect(await callAction(app.ctx, 'update.download')).toMatchObject({ kind: 'ready', version: '1.5.0', assetName: INSTALLER, opened: 'opened' })
     expect(app.updates.downloads.map((download) => download.url)).toEqual([`https://github.com/${REPO}/releases/download/v1.5.0/${INSTALLER}`])
-    expect(app.updates.opened).toEqual([`/downloads/${INSTALLER}`])
+    expect(app.updates.opened).toEqual([pathOps.join('/downloads', INSTALLER)])
     expect(await callAction(app.ctx, 'update.downloadState')).toMatchObject({ kind: 'ready' })
   })
 
@@ -46,7 +47,7 @@ describe('updating the app', () => {
     await callAction(app.ctx, 'update.download')
 
     await callAction(app.ctx, 'update.open', { reveal: true })
-    expect(app.updates.revealed).toEqual([`/downloads/${INSTALLER}`])
+    expect(app.updates.revealed).toEqual([pathOps.join('/downloads', INSTALLER)])
   })
 
   it('says it is up to date when the newest release is the one running', async () => {
