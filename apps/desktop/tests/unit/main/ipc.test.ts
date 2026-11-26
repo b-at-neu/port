@@ -1,23 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RepoId } from '@/utils/repos'
-import type { ReposListResponse } from '@/types/ipc'
 import type { WorktreesReport } from '@/types/reclaimer'
-import { resolveWorktreesReport } from '@/main/features/worktrees/resolve'
-import type { WorktreesReportDeps } from '@/main/app/seams'
-import type { RegistryDeps } from '@/types/registry'
+import { readWorktreeReport } from '@/main/features/worktrees/report'
 import { callAction, createTestContext } from '../../support/context'
 import { recordingWatcher } from '../../support/operator-rig'
 import { readyEntry } from '../../support/repo-config'
 
-const REPO_ID = 'repo-1' as unknown as RepoId
+vi.mock('@/main/features/worktrees/report', () => ({ readWorktreeReport: vi.fn() }))
 
-const registryDeps: RegistryDeps = {
-  registryDir: '/registry',
-  git: () => {
-    throw new Error('git should not be invoked directly by resolveWorktreesReport')
-  },
-  chooseDirectory: () => Promise.resolve(null),
-}
+const REPO_ID = 'repo-1' as unknown as RepoId
 
 const READY_ENTRY = readyEntry(
   { id: REPO_ID, displayName: 'widgets' },
@@ -32,70 +23,40 @@ const NOT_READY_ENTRY = {
   diagnostics: [],
 }
 
-function depsWith(overrides: Partial<WorktreesReportDeps>): WorktreesReportDeps {
-  return {
-    listRepositories: () => Promise.resolve({ ok: true, repositories: [] } as ReposListResponse),
-    readWorktreeReport: () => {
-      throw new Error('readWorktreeReport should not be invoked in this case')
-    },
-    ...overrides,
-  }
-}
+const read = vi.mocked(readWorktreeReport)
 
-describe('resolveWorktreesReport', () => {
-  it('rejects a missing id', async () => {
-    await expect(resolveWorktreesReport(registryDeps, { id: undefined as unknown as RepoId }, depsWith({}))).rejects.toThrow(
-      "'worktrees:report' requires a non-empty 'id'",
-    )
+describe('worktrees.report', () => {
+  beforeEach(() => {
+    read.mockReset()
   })
 
-  it('rejects an empty id', async () => {
-    await expect(resolveWorktreesReport(registryDeps, { id: '' as unknown as RepoId }, depsWith({}))).rejects.toThrow(
-      "'worktrees:report' requires a non-empty 'id'",
-    )
+  it.each([undefined, ''])('rejects the id %j', async (id) => {
+    await expect(callAction(createTestContext(), 'worktrees.report', { id } as never)).rejects.toThrow()
+    expect(read).not.toHaveBeenCalled()
   })
 
   it('surfaces a registry that could not be listed', async () => {
-    const deps = depsWith({
-      listRepositories: () => Promise.resolve({ ok: false, kind: 'registry-unreadable', message: 'disk on fire' }),
-    })
-    await expect(resolveWorktreesReport(registryDeps, { id: REPO_ID }, deps)).rejects.toThrow(
-      "'worktrees:report' could not list repositories: disk on fire",
-    )
+    const ctx = createTestContext({ repos: { list: () => Promise.resolve({ ok: false, kind: 'registry-unreadable', message: 'disk on fire' }) } })
+    await expect(callAction(ctx, 'worktrees.report', { id: REPO_ID })).rejects.toThrow("'worktrees:report' could not list repositories: disk on fire")
   })
 
   it('rejects an id with no matching repository', async () => {
-    const deps = depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [] }) })
-    await expect(resolveWorktreesReport(registryDeps, { id: REPO_ID }, deps)).rejects.toThrow(
+    await expect(callAction(createTestContext(), 'worktrees.report', { id: REPO_ID })).rejects.toThrow(
       `'worktrees:report' found no repository registered with id '${REPO_ID}'`,
     )
   })
 
   it('rejects a repository that is not ready', async () => {
-    const deps = depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [NOT_READY_ENTRY] }) })
-    await expect(resolveWorktreesReport(registryDeps, { id: REPO_ID }, deps)).rejects.toThrow(
-      "'worktrees:report' requires a 'ready' repository, got 'directory-missing'",
-    )
+    const ctx = createTestContext({ repositories: [NOT_READY_ENTRY] })
+    await expect(callAction(ctx, 'worktrees.report', { id: REPO_ID })).rejects.toThrow("'worktrees:report' requires a 'ready' repository, got 'directory-missing'")
   })
 
   it('reads the report for a ready repository, passing its resolved path, repo and integration branch through', async () => {
     const report: WorktreesReport = { ok: false, kind: 'timeout', message: 'node timed out after 60000ms', readAt: '2026-01-01T00:00:00.000Z' }
-    let received: unknown
-    const deps = depsWith({
-      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      readWorktreeReport: (params) => {
-        received = params
-        return Promise.resolve(report)
-      },
-    })
-    const result = await resolveWorktreesReport(registryDeps, { id: REPO_ID }, deps)
+    read.mockResolvedValue(report)
+    const result = await callAction(createTestContext({ repositories: [READY_ENTRY] }), 'worktrees.report', { id: REPO_ID })
     expect(result).toBe(report)
-    expect(received).toEqual({
-      repoRoot: '/repo',
-      repo: 'acme/widgets',
-      integration: 'dev',
-      git: registryDeps.git,
-    })
+    expect(read.mock.calls[0]?.[1]).toEqual({ repoRoot: '/repo', repo: 'acme/widgets', integration: 'dev' })
   })
 })
 
@@ -123,5 +84,3 @@ describe('board.refresh', () => {
     expect(refreshes).toEqual([{}])
   })
 })
-
-

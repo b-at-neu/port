@@ -1,172 +1,165 @@
-import { describe, expect, it } from 'vitest'
-import type { RepoId } from '@/utils/repos'
-import type { ReposListResponse } from '@/types/ipc'
-import type { RegistryDeps } from '@/types/registry'
-import type { ReleasePhase, ReleaseRead, ReleaseStatus } from '@/types/release'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { RepoId, RepositoryEntry } from '@/utils/repos'
+import type { HookOutcome, ReleaseConfigRead, ReleasePhase, ReleaseRead, ReleaseStatus, ReleaseWriteResult } from '@/types/release'
+import { fetchReleaseStatus, readFileAtRef } from '@/main/github/release'
+import { fetchReleaseIssues } from '@/main/github/release-issues'
+import { createBumpBranch, openBumpPr, openReleasePr, publishRelease, recordHook } from '@/main/github/writes/release'
+import { readReleaseConfig } from '@/main/features/release/config'
+import { runPostPublishHook } from '@/main/features/release/hook'
+import { callAction, createTestContext } from '../../../support/context'
+import { readyEntry } from '../../../support/repo-config'
 
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
-import { resolveReleaseIssues, resolveReleaseRun, resolveReleaseStatus } from '@/main/features/release/resolve'
-import type { ReleaseChannelDeps } from '@/main/features/release/resolve'
-import { createFakePlatform } from '../../../support/fake-platform'
+vi.mock('@/main/github/release', () => ({ fetchReleaseStatus: vi.fn(), readFileAtRef: vi.fn() }))
+vi.mock('@/main/github/release-issues', () => ({ fetchReleaseIssues: vi.fn() }))
+vi.mock('@/main/github/writes/release', () => ({ createBumpBranch: vi.fn(), openBumpPr: vi.fn(), openReleasePr: vi.fn(), publishRelease: vi.fn(), recordHook: vi.fn() }))
+vi.mock('@/main/features/release/config', () => ({ readReleaseConfig: vi.fn() }))
+vi.mock('@/main/features/release/hook', () => ({ runPostPublishHook: vi.fn() }))
 
 const REPO_ID = 'repo-1' as unknown as RepoId
-const ctx = createFakePlatform()
+const READY_ENTRY = readyEntry({ id: REPO_ID, path: '/repo' }, { repo: 'acme/widgets', owner: 'acme', name: 'widgets' })
+const NOT_READY: RepositoryEntry = { id: REPO_ID, path: '/repo', displayName: 'w', problem: { kind: 'directory-missing' }, diagnostics: [] }
 
-const registryDeps: RegistryDeps = {
-  registryDir: '/registry',
-  git: () => {
-    throw new Error('git should not be invoked directly')
-  },
-  chooseDirectory: () => Promise.resolve(null),
-}
-
-const READY_ENTRY = {
-  id: REPO_ID,
-  path: '/repo',
-  displayName: 'acme/widgets',
-  status: 'ready' as const,
-  config: {
-    repo: 'acme/widgets',
-    owner: 'acme',
-    name: 'widgets',
-    branches: { integration: 'dev', production: 'main' },
-    models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
-    modules: { approvalGate: true, release: true, scope: true },
-    reviewCycleCap: 3,
-    vocabulary: resolveVocabulary({}),
-    commands: { worktrees: null, budget: null },
-    concurrency: { sharedFiles: [], overlapThreshold: 2 },
-    sessionRequiredPaths: [],
-    checkDispositions: {},
-    overrides: [],
-  },
-  diagnostics: [],
+const mocks = {
+  status: vi.mocked(fetchReleaseStatus),
+  file: vi.mocked(readFileAtRef),
+  issues: vi.mocked(fetchReleaseIssues),
+  config: vi.mocked(readReleaseConfig),
+  hook: vi.mocked(runPostPublishHook),
+  bump: vi.mocked(createBumpBranch),
+  bumpPr: vi.mocked(openBumpPr),
+  releasePr: vi.mocked(openReleasePr),
+  publish: vi.mocked(publishRelease),
+  record: vi.mocked(recordHook),
 }
 
 function status(phase: ReleasePhase, overrides: Partial<ReleaseStatus> = {}): ReleaseStatus {
   return { phase, versionSource: 'package', production: 'main', integration: 'dev', currentVersion: '0.2.0', sinceTag: 'v0.2.0', entries: [{ number: 12, title: 'Add dark mode', url: 'https://github.com/acme/widgets/pull/12', labels: [], mergedAt: '2026-08-02T00:00:00Z', dependency: false }], truncatedNote: null, releases: [], productionHead: 'prod-oid', postPublishHook: 'node scripts/dev-window.ts', readAt: 't', ...overrides }
 }
 
+const HEAD = { oid: 'int-oid', tree: 'int-tree' }
+function readOf(phase: ReleasePhase, overrides: Partial<ReleaseStatus> = {}): ReleaseRead {
+  return { ok: true, status: status(phase, overrides), integrationHead: HEAD, viewer: 'octo-operator' }
+}
+
+const PACKAGE_CONFIG: ReleaseConfigRead = { ok: true, config: { versionSource: 'package', versionFiles: ['package.json'], versionCommand: null, postPublishHook: 'node scripts/dev-window.ts' } }
+const WRITE_OK: ReleaseWriteResult = { ok: true, stdout: '' }
+
 interface Calls {
   readonly names: string[]
   readonly seen: Record<string, unknown>
 }
 
-function depsFor(read: ReleaseRead, calls: Calls, overrides: Partial<ReleaseChannelDeps> = {}): ReleaseChannelDeps {
+/** Scripts every collaborator to succeed, recording the order of the writes; a test then overrides the one it cares about. */
+function arrange(read: ReleaseRead): Calls {
+  const calls: Calls = { names: [], seen: {} }
   const record = (name: string, value: unknown = null) => {
     calls.names.push(name)
     calls.seen[name] = value
   }
-  return {
-    listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] } as ReposListResponse),
-    readConfig: () => Promise.resolve({ ok: true, config: { versionSource: 'package', versionFiles: ['package.json'], versionCommand: null, postPublishHook: 'node scripts/dev-window.ts' } }),
-    fetchStatus: () => Promise.resolve(read),
-    fetchIssues: () => Promise.resolve({ ok: true, issues: [], note: null }),
-    readFile: () => Promise.resolve({ ok: true, text: JSON.stringify({ name: 'x', version: '0.2.1-dev' }) }),
-    createBumpBranch: (_ctx, request, params) => {
-      record('bump', { ...params, root: request.root })
-      return Promise.resolve({ ok: true, stdout: '' })
-    },
-    openBumpPr: () => {
-      record('bump-pr')
-      return Promise.resolve({ ok: true, stdout: '' })
-    },
-    openReleasePr: (_ctx, _request, params) => {
-      record('release-pr', params)
-      return Promise.resolve({ ok: true, stdout: '' })
-    },
-    publishRelease: (_ctx, _request, params) => {
-      record('publish', params)
-      return Promise.resolve({ ok: true, stdout: 'https://github.com/acme/widgets/releases/tag/v0.3.0\n' })
-    },
-    runHook: () => Promise.resolve({ kind: 'ok', stdout: 'done' }),
-    recordHook: () => {
-      record('hook-audit')
-      return Promise.resolve({ ok: true, stdout: '' })
-    },
-    now: () => new Date('2026-09-05T14:00:00.000Z'),
-    ...overrides,
-  }
+  mocks.config.mockResolvedValue(PACKAGE_CONFIG)
+  mocks.status.mockResolvedValue(read)
+  mocks.issues.mockResolvedValue({ ok: true, issues: [], note: null })
+  mocks.file.mockResolvedValue({ ok: true, text: JSON.stringify({ name: 'x', version: '0.2.1-dev' }) })
+  mocks.bump.mockImplementation((_ctx, write, params) => {
+    record('bump', { ...params, root: write.root })
+    return Promise.resolve(WRITE_OK)
+  })
+  mocks.bumpPr.mockImplementation(() => {
+    record('bump-pr')
+    return Promise.resolve(WRITE_OK)
+  })
+  mocks.releasePr.mockImplementation((_ctx, _write, params) => {
+    record('release-pr', params)
+    return Promise.resolve(WRITE_OK)
+  })
+  mocks.publish.mockImplementation((_ctx, _write, params) => {
+    record('publish', params)
+    return Promise.resolve({ ok: true, stdout: 'https://github.com/acme/widgets/releases/tag/v0.3.0\n' })
+  })
+  mocks.hook.mockResolvedValue({ kind: 'ok', stdout: 'done' })
+  mocks.record.mockImplementation(() => {
+    record('hook-audit')
+    return Promise.resolve(WRITE_OK)
+  })
+  return calls
 }
 
-const HEAD = { oid: 'int-oid', tree: 'int-tree' }
-function readOf(phase: ReleasePhase, overrides: Partial<ReleaseStatus> = {}): ReleaseRead {
-  return { ok: true, status: status(phase, overrides), integrationHead: HEAD, viewer: 'octo-operator' }
-}
-function newCalls(): Calls {
-  return { names: [], seen: {} }
-}
+const ctxWith = (repositories: readonly RepositoryEntry[] = [READY_ENTRY]) => createTestContext({ repositories })
 
-function run(read: ReleaseRead, request: Parameters<typeof resolveReleaseRun>[2], calls: Calls, overrides: Partial<ReleaseChannelDeps> = {}) {
-  return resolveReleaseRun(ctx, registryDeps, request, '/audit', '/tmp', depsFor(read, calls, overrides))
-}
+type RunRequest = Parameters<typeof callAction<'release.run'>>[2]
+const run = (request: RunRequest, ctx = ctxWith()) => callAction(ctx, 'release.run', request)
 
-describe('resolveReleaseStatus', () => {
+beforeEach(() => {
+  for (const mock of Object.values(mocks)) mock.mockReset()
+})
+
+describe('release.status', () => {
   it('rejects a repository that is not ready', async () => {
-    const deps = depsFor(readOf({ kind: 'idle' }), newCalls())
-    const notReady = { ...deps, listRepositories: () => Promise.resolve({ ok: true, repositories: [{ id: REPO_ID, path: '/repo', displayName: 'w', problem: { kind: 'directory-missing' as const }, diagnostics: [] }] } as ReposListResponse) }
-    await expect(resolveReleaseStatus(ctx, registryDeps, { repoId: REPO_ID }, notReady)).rejects.toThrow("requires a 'ready' repository")
+    arrange(readOf({ kind: 'idle' }))
+    await expect(callAction(ctxWith([NOT_READY]), 'release.status', { repoId: REPO_ID })).rejects.toThrow("requires a 'ready' repository")
   })
 
   it('returns the status without the integration head, and a read failure as data', async () => {
-    const calls = newCalls()
-    expect(await resolveReleaseStatus(ctx, registryDeps, { repoId: REPO_ID }, depsFor(readOf({ kind: 'idle' }), calls))).toEqual({ ok: true, status: status({ kind: 'idle' }) })
+    arrange(readOf({ kind: 'idle' }))
+    expect(await callAction(ctxWith(), 'release.status', { repoId: REPO_ID })).toEqual({ ok: true, status: status({ kind: 'idle' }) })
     const failed: ReleaseRead = { ok: false, message: 'gh is signed out', readAt: 't' }
-    expect(await resolveReleaseStatus(ctx, registryDeps, { repoId: REPO_ID }, depsFor(failed, calls))).toEqual(failed)
+    mocks.status.mockResolvedValue(failed)
+    expect(await callAction(ctxWith(), 'release.status', { repoId: REPO_ID })).toEqual(failed)
   })
 
   it('fails the read, offering no action, when the config is unreadable', async () => {
-    const deps = depsFor(readOf({ kind: 'idle' }), newCalls(), { readConfig: () => Promise.resolve({ ok: false, message: 'no config' }) })
-    expect(await resolveReleaseStatus(ctx, registryDeps, { repoId: REPO_ID }, deps)).toMatchObject({ ok: false, message: 'no config' })
+    arrange(readOf({ kind: 'idle' }))
+    mocks.config.mockResolvedValue({ ok: false, message: 'no config' })
+    expect(await callAction(ctxWith(), 'release.status', { repoId: REPO_ID })).toMatchObject({ ok: false, message: 'no config' })
   })
 })
 
-describe('resolveReleaseIssues', () => {
+describe('release.issues', () => {
   const issues = { ok: true as const, issues: [{ number: 12, title: 'Add dark mode', url: 'https://github.com/acme/widgets/issues/12', labels: [] }], note: null }
+  const good = { repoId: REPO_ID, tag: 'v0.2.0', previousTag: 'v0.1.0' }
 
-  it('rejects a malformed tag or previousTag, and a repository that is not ready', async () => {
-    const deps = depsFor(readOf({ kind: 'idle' }), newCalls())
-    const good = { repoId: REPO_ID, tag: 'v0.2.0', previousTag: 'v0.1.0' }
-    await expect(resolveReleaseIssues(ctx, registryDeps, { ...good, tag: 'v1 --upload' }, deps)).rejects.toThrow("'release:issues' requires a 'tag'")
-    await expect(resolveReleaseIssues(ctx, registryDeps, { ...good, tag: 5 as unknown as string }, deps)).rejects.toThrow("'release:issues' requires a 'tag'")
-    await expect(resolveReleaseIssues(ctx, registryDeps, { ...good, previousTag: '../x?y' }, deps)).rejects.toThrow("'release:issues' requires 'previousTag'")
-    await expect(resolveReleaseIssues(ctx, registryDeps, { ...good, previousTag: undefined as unknown as null }, deps)).rejects.toThrow("'release:issues' requires 'previousTag'")
-    const notReady = { ...deps, listRepositories: () => Promise.resolve({ ok: true, repositories: [{ id: REPO_ID, path: '/repo', displayName: 'w', problem: { kind: 'directory-missing' as const }, diagnostics: [] }] } as ReposListResponse) }
-    await expect(resolveReleaseIssues(ctx, registryDeps, good, notReady)).rejects.toThrow("requires a 'ready' repository")
+  it.each([
+    ['a malformed tag', { ...good, tag: 'v1 --upload' }],
+    ['a non-string tag', { ...good, tag: 5 }],
+    ['a malformed previousTag', { ...good, previousTag: '../x?y' }],
+    ['a missing previousTag', { ...good, previousTag: undefined }],
+  ])('rejects %s', async (_label, request) => {
+    await expect(callAction(ctxWith(), 'release.issues', request as never)).rejects.toThrow()
+    expect(mocks.issues).not.toHaveBeenCalled()
+  })
+
+  it('rejects a repository that is not ready', async () => {
+    await expect(callAction(ctxWith([NOT_READY]), 'release.issues', good)).rejects.toThrow("requires a 'ready' repository")
   })
 
   it("reads only the registered repository's own tags, and passes the response through", async () => {
-    let seen: unknown = null
-    const deps = depsFor(readOf({ kind: 'idle' }), newCalls(), {
-      fetchIssues: (_ctx, params) => {
-        seen = params
-        return Promise.resolve(issues)
-      },
-    })
-    expect(await resolveReleaseIssues(ctx, registryDeps, { repoId: REPO_ID, tag: 'v0.2.0', previousTag: null }, deps)).toEqual(issues)
-    expect(seen).toEqual({ repo: { owner: 'acme', name: 'widgets' }, tag: 'v0.2.0', previousTag: null })
+    mocks.issues.mockResolvedValue(issues)
+    expect(await callAction(ctxWith(), 'release.issues', { repoId: REPO_ID, tag: 'v0.2.0', previousTag: null })).toEqual(issues)
+    expect(mocks.issues.mock.calls[0]?.[1]).toEqual({ repo: { owner: 'acme', name: 'widgets' }, tag: 'v0.2.0', previousTag: null })
   })
 })
 
-describe('resolveReleaseRun validation', () => {
-  it('throws on a bad step or oversized or blank notes', async () => {
-    await expect(run(readOf({ kind: 'idle' }), { repoId: REPO_ID, step: 'merge' as 'open', version: '0.3.0' }, newCalls())).rejects.toThrow("'release:run' step must be 'open' or 'publish'")
-    await expect(run(readOf({ kind: 'ready-to-publish', version: '0.3.0' }), { repoId: REPO_ID, step: 'publish', version: '0.3.0', notes: '  \n' }, newCalls())).rejects.toThrow('notes of 1 to 125000 characters')
-    await expect(run(readOf({ kind: 'ready-to-publish', version: '0.3.0' }), { repoId: REPO_ID, step: 'publish', version: '0.3.0', notes: 'x'.repeat(125_001) }, newCalls())).rejects.toThrow('notes of 1 to 125000')
+describe('release.run validation', () => {
+  it.each([
+    ['a bad step', { repoId: REPO_ID, step: 'merge', version: '0.3.0' }],
+    ['blank notes', { repoId: REPO_ID, step: 'publish', version: '0.3.0', notes: '  \n' }],
+    ['oversized notes', { repoId: REPO_ID, step: 'publish', version: '0.3.0', notes: 'x'.repeat(125_001) }],
+  ])('throws on %s', async (_label, request) => {
+    arrange(readOf({ kind: 'idle' }))
+    await expect(run(request as never)).rejects.toThrow()
   })
 
   it('refuses an unparseable version before reading anything', async () => {
-    const calls = newCalls()
-    const result = await run(readOf({ kind: 'idle' }), { repoId: REPO_ID, step: 'open', version: '1.5' }, calls, { listRepositories: () => Promise.reject(new Error('must not list')) })
-    expect(result).toMatchObject({ kind: 'refused', reason: 'invalid-version' })
+    arrange(readOf({ kind: 'idle' }))
+    const ctx = createTestContext({ repos: { list: () => Promise.reject(new Error('must not list')) } })
+    expect(await run({ repoId: REPO_ID, step: 'open', version: '1.5' }, ctx)).toMatchObject({ kind: 'refused', reason: 'invalid-version' })
   })
 })
 
-describe('resolveReleaseRun open', () => {
+describe('release.run open', () => {
   it('bumps, opens both pull requests in order and re-serializes the version files', async () => {
-    const calls = newCalls()
-    const result = await run(readOf({ kind: 'idle' }), { repoId: REPO_ID, step: 'open', version: 'v0.3.0' }, calls)
-    expect(result).toEqual({ kind: 'opened' })
+    const calls = arrange(readOf({ kind: 'idle' }))
+    expect(await run({ repoId: REPO_ID, step: 'open', version: 'v0.3.0' })).toEqual({ kind: 'opened' })
     expect(calls.names).toEqual(['bump', 'bump-pr', 'release-pr'])
     expect(calls.seen['bump']).toEqual({ head: HEAD, files: [{ path: 'package.json', content: '{\n  "name": "x",\n  "version": "0.3.0"\n}\n' }], integration: 'dev', root: '/repo' })
     expect(calls.seen['release-pr']).toMatchObject({ production: 'main', integration: 'dev', assignee: 'octo-operator' })
@@ -174,93 +167,96 @@ describe('resolveReleaseRun open', () => {
   })
 
   it('skips the bump for tags', async () => {
-    const calls = newCalls()
-    const result = await run(readOf({ kind: 'idle' }, { versionSource: 'tags' }), { repoId: REPO_ID, step: 'open', version: '0.3.0' }, calls, {
-      readConfig: () => Promise.resolve({ ok: true, config: { versionSource: 'tags', versionFiles: [], versionCommand: null, postPublishHook: null } }),
-    })
-    expect(result).toEqual({ kind: 'opened' })
+    const calls = arrange(readOf({ kind: 'idle' }, { versionSource: 'tags' }))
+    mocks.config.mockResolvedValue({ ok: true, config: { versionSource: 'tags', versionFiles: [], versionCommand: null, postPublishHook: null } })
+    expect(await run({ repoId: REPO_ID, step: 'open', version: '0.3.0' })).toEqual({ kind: 'opened' })
     expect(calls.names).toEqual(['release-pr'])
   })
 
   it('only opens the release pull request when dev already carries the bump', async () => {
-    const calls = newCalls()
-    await run(readOf({ kind: 'bumped', version: '0.3.0' }), { repoId: REPO_ID, step: 'open', version: '0.3.0' }, calls)
+    const calls = arrange(readOf({ kind: 'bumped', version: '0.3.0' }))
+    await run({ repoId: REPO_ID, step: 'open', version: '0.3.0' })
     expect(calls.names).toEqual(['release-pr'])
   })
 
   it('resumes from the missing pull requests while waiting on the bump', async () => {
-    const calls = newCalls()
-    await run(readOf({ kind: 'waiting-bump', version: '0.3.0', bumpPr: null, releasePr: null }), { repoId: REPO_ID, step: 'open', version: '0.3.0' }, calls)
+    const calls = arrange(readOf({ kind: 'waiting-bump', version: '0.3.0', bumpPr: null, releasePr: null }))
+    await run({ repoId: REPO_ID, step: 'open', version: '0.3.0' })
     expect(calls.names).toEqual(['bump-pr', 'release-pr'])
-    const done = newCalls()
-    await run(readOf({ kind: 'waiting-bump', version: '0.3.0', bumpPr: { number: 1, url: 'u' }, releasePr: { number: 2, url: 'u' } }), { repoId: REPO_ID, step: 'open', version: '0.3.0' }, done)
+    const done = arrange(readOf({ kind: 'waiting-bump', version: '0.3.0', bumpPr: { number: 1, url: 'u' }, releasePr: { number: 2, url: 'u' } }))
+    await run({ repoId: REPO_ID, step: 'open', version: '0.3.0' })
     expect(done.names).toEqual([])
   })
 
   it('refuses a stale screen: another phase, another version, an existing tag', async () => {
-    const waiting = readOf({ kind: 'waiting-merge', version: '0.3.0', releasePr: { number: 612, url: 'u' } })
-    expect(await run(waiting, { repoId: REPO_ID, step: 'open', version: '0.3.0' }, newCalls())).toMatchObject({ kind: 'refused', reason: 'state-changed' })
-    expect(await run(readOf({ kind: 'bumped', version: '0.3.0' }), { repoId: REPO_ID, step: 'open', version: '0.4.0' }, newCalls())).toMatchObject({ kind: 'refused', reason: 'state-changed' })
-    const tagged = readOf({ kind: 'idle' }, { releases: [{ tagName: 'v0.3.0', name: 'v0.3.0', url: 'u', publishedAt: null, isPrerelease: false, isLatest: false, description: '', previousTag: null }] })
-    expect(await run(tagged, { repoId: REPO_ID, step: 'open', version: '0.3.0' }, newCalls())).toMatchObject({ kind: 'refused', reason: 'tag-exists' })
+    arrange(readOf({ kind: 'waiting-merge', version: '0.3.0', releasePr: { number: 612, url: 'u' } }))
+    expect(await run({ repoId: REPO_ID, step: 'open', version: '0.3.0' })).toMatchObject({ kind: 'refused', reason: 'state-changed' })
+    arrange(readOf({ kind: 'bumped', version: '0.3.0' }))
+    expect(await run({ repoId: REPO_ID, step: 'open', version: '0.4.0' })).toMatchObject({ kind: 'refused', reason: 'state-changed' })
+    arrange(readOf({ kind: 'idle' }, { releases: [{ tagName: 'v0.3.0', name: 'v0.3.0', url: 'u', publishedAt: null, isPrerelease: false, isLatest: false, description: '', previousTag: null }] }))
+    expect(await run({ repoId: REPO_ID, step: 'open', version: '0.3.0' })).toMatchObject({ kind: 'refused', reason: 'tag-exists' })
   })
 
   it('refuses an unsupported repository and a version file it cannot bump', async () => {
-    expect(await run(readOf({ kind: 'needs-terminal' }), { repoId: REPO_ID, step: 'open', version: '0.3.0' }, newCalls())).toMatchObject({ kind: 'refused', reason: 'unsupported' })
-    const calls = newCalls()
-    const result = await run(readOf({ kind: 'idle' }), { repoId: REPO_ID, step: 'open', version: '0.3.0' }, calls, { readFile: () => Promise.resolve({ ok: true, text: 'version = "0.2.0"' }) })
-    expect(result).toMatchObject({ kind: 'refused', reason: 'unsupported' })
+    arrange(readOf({ kind: 'needs-terminal' }))
+    expect(await run({ repoId: REPO_ID, step: 'open', version: '0.3.0' })).toMatchObject({ kind: 'refused', reason: 'unsupported' })
+    const calls = arrange(readOf({ kind: 'idle' }))
+    mocks.file.mockResolvedValue({ ok: true, text: 'version = "0.2.0"' })
+    expect(await run({ repoId: REPO_ID, step: 'open', version: '0.3.0' })).toMatchObject({ kind: 'refused', reason: 'unsupported' })
     expect(calls.names).toEqual([])
   })
 
   it('reports the failing step and writes nothing after it', async () => {
-    const calls = newCalls()
-    const result = await run(readOf({ kind: 'idle' }), { repoId: REPO_ID, step: 'open', version: '0.3.0' }, calls, { openBumpPr: () => Promise.resolve({ ok: false, stderr: 'rate limited' }) })
-    expect(result).toEqual({ kind: 'failed', step: 'bump-pr', stderr: 'rate limited' })
+    const calls = arrange(readOf({ kind: 'idle' }))
+    mocks.bumpPr.mockResolvedValue({ ok: false, stderr: 'rate limited' })
+    expect(await run({ repoId: REPO_ID, step: 'open', version: '0.3.0' })).toEqual({ kind: 'failed', step: 'bump-pr', stderr: 'rate limited' })
     expect(calls.names).toEqual(['bump'])
   })
 
   it('refuses rather than writing when the state cannot be re-read', async () => {
-    const calls = newCalls()
-    const result = await run({ ok: false, message: 'offline', readAt: 't' }, { repoId: REPO_ID, step: 'open', version: '0.3.0' }, calls)
-    expect(result).toMatchObject({ kind: 'refused', reason: 'state-changed' })
+    const calls = arrange({ ok: false, message: 'offline', readAt: 't' })
+    expect(await run({ repoId: REPO_ID, step: 'open', version: '0.3.0' })).toMatchObject({ kind: 'refused', reason: 'state-changed' })
     expect(calls.names).toEqual([])
   })
 })
 
-describe('resolveReleaseRun publish', () => {
-  const ready = readOf({ kind: 'ready-to-publish', version: '0.3.0' })
+describe('release.run publish', () => {
+  const ready = () => readOf({ kind: 'ready-to-publish', version: '0.3.0' })
+  const publishRequest = { repoId: REPO_ID, step: 'publish', version: '0.3.0', notes: 'n' } as const
 
   it('publishes at the production head, then runs and audits the hook', async () => {
-    const calls = newCalls()
-    const result = await run(ready, { repoId: REPO_ID, step: 'publish', version: '0.3.0', notes: '- A thing\n' }, calls)
+    const calls = arrange(ready())
+    const result = await run({ ...publishRequest, notes: '- A thing\n' })
     expect(result).toEqual({ kind: 'published', url: 'https://github.com/acme/widgets/releases/tag/v0.3.0', hook: { kind: 'ok', stdout: 'done' } })
     expect(calls.seen['publish']).toEqual({ target: 'prod-oid', notes: '- A thing\n' })
     expect(calls.names).toEqual(['publish', 'hook-audit'])
   })
 
   it('never undoes a publish when the hook fails', async () => {
-    const calls = newCalls()
-    const result = await run(ready, { repoId: REPO_ID, step: 'publish', version: '0.3.0', notes: 'n' }, calls, { runHook: () => Promise.resolve({ kind: 'failed', exitCode: 1, stderr: 'dirty' }) })
-    expect(result).toMatchObject({ kind: 'published', hook: { kind: 'failed', exitCode: 1 } })
+    arrange(ready())
+    const failedHook: HookOutcome = { kind: 'failed', exitCode: 1, stderr: 'dirty' }
+    mocks.hook.mockResolvedValue(failedHook)
+    expect(await run(publishRequest)).toMatchObject({ kind: 'published', hook: { kind: 'failed', exitCode: 1 } })
   })
 
   it('does not audit a skipped hook', async () => {
-    const calls = newCalls()
-    await run(ready, { repoId: REPO_ID, step: 'publish', version: '0.3.0', notes: 'n' }, calls, { runHook: () => Promise.resolve({ kind: 'skipped' }) })
+    const calls = arrange(ready())
+    mocks.hook.mockResolvedValue({ kind: 'skipped' })
+    await run(publishRequest)
     expect(calls.names).toEqual(['publish'])
   })
 
   it('refuses early publishing and a different version', async () => {
-    const early = readOf({ kind: 'waiting-merge', version: '0.3.0', releasePr: { number: 612, url: 'u' } })
-    expect(await run(early, { repoId: REPO_ID, step: 'publish', version: '0.3.0', notes: 'n' }, newCalls())).toMatchObject({ kind: 'refused', reason: 'state-changed' })
-    expect(await run(ready, { repoId: REPO_ID, step: 'publish', version: '0.4.0', notes: 'n' }, newCalls())).toMatchObject({ kind: 'refused', reason: 'state-changed' })
+    arrange(readOf({ kind: 'waiting-merge', version: '0.3.0', releasePr: { number: 612, url: 'u' } }))
+    expect(await run(publishRequest)).toMatchObject({ kind: 'refused', reason: 'state-changed' })
+    arrange(ready())
+    expect(await run({ ...publishRequest, version: '0.4.0' })).toMatchObject({ kind: 'refused', reason: 'state-changed' })
   })
 
   it('reports a failed release creation without running the hook', async () => {
-    const calls = newCalls()
-    const result = await run(ready, { repoId: REPO_ID, step: 'publish', version: '0.3.0', notes: 'n' }, calls, { publishRelease: () => Promise.resolve({ ok: false, stderr: 'tag exists' }) })
-    expect(result).toEqual({ kind: 'failed', step: 'publish', stderr: 'tag exists' })
+    const calls = arrange(ready())
+    mocks.publish.mockResolvedValue({ ok: false, stderr: 'tag exists' })
+    expect(await run(publishRequest)).toEqual({ kind: 'failed', step: 'publish', stderr: 'tag exists' })
     expect(calls.names).toEqual([])
   })
 })

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createInPlaceUpdater } from '@/main/features/update/in-place'
 import type { AvailableRelease, NativeUpdateInfo, NativeUpdater, UpdateDownloader, UpdateDownloadState } from '@/types/update'
+import { createFakeClock, fakeUpdates } from '../../../support/fake-platform'
 
 const RELEASE: AvailableRelease = { version: '0.2.0', tag: 'v0.2.0', notesUrl: 'https://example.test/notes', publishedAt: null, assets: [] }
 const NOW = new Date('2026-05-01T12:00:00Z')
@@ -16,7 +17,7 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-function setup(options: { release?: AvailableRelease | null; confirm?: boolean; now?: () => Date } = {}) {
+function setup(options: { release?: AvailableRelease | null; confirm?: boolean } = {}) {
   const check = deferred<NativeUpdateInfo | null>()
   const download = deferred<void>()
   let errorListener: (message: string) => void = () => undefined
@@ -41,8 +42,9 @@ function setup(options: { release?: AvailableRelease | null; confirm?: boolean; 
   const confirmRestart = vi.fn(() => Promise.resolve(options.confirm ?? true))
   const cancelRestart = vi.fn()
   const release = options.release === undefined ? RELEASE : options.release
-  const updater = createInPlaceUpdater({ release: () => release, native: nativeFactory, fallback, confirmRestart, cancelRestart, now: options.now ?? (() => NOW) })
-  return { updater, native, nativeFactory, fallback, confirmRestart, cancelRestart, check, download, emitError: (m: string) => errorListener(m), emitProgress: (t: number, total: number) => progress(t, total) }
+  const clock = createFakeClock(NOW)
+  const updater = createInPlaceUpdater({ updates: fakeUpdates({ native: nativeFactory }), clock }, { release: () => release, fallback, restart: { confirm: confirmRestart, cancel: cancelRestart } })
+  return { updater, clock, native, nativeFactory, fallback, confirmRestart, cancelRestart, check, download, emitError: (m: string) => errorListener(m), emitProgress: (t: number, total: number) => progress(t, total) }
 }
 
 const MATCH: NativeUpdateInfo = { version: '0.2.0', fileName: 'port-0.2.0-win-x64.exe' }
@@ -185,11 +187,10 @@ describe('createInPlaceUpdater', () => {
   })
 
   it('a restart that never quits becomes restart-pending again, and a later start retries it', async () => {
-    let clock = NOW
-    const s = setup({ now: () => clock })
+    const s = setup()
     await toRestarting(s)
     expect(s.updater.state().kind).toBe('restarting')
-    clock = new Date(NOW.getTime() + 121_000)
+    s.clock.advance(121_000)
     expect(s.updater.state().kind).toBe('restart-pending')
     const again = await s.updater.start()
     expect(again.kind).toBe('restarting')

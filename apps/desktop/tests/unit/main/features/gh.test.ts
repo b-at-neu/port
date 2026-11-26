@@ -1,11 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { parseGhAuthStatus, resolveGhStatus } from '@/main/features/gh/resolve'
-import type { GhStatusDeps } from '@/main/features/gh/resolve'
-import type { GhAuthStatusResult } from '@/types/platform'
-
-function depsWith(result: GhAuthStatusResult): GhStatusDeps {
-  return { ghAuthStatus: () => Promise.resolve(result), now: () => 1_700_000_000_000 }
-}
+import { parseGhAuthStatus } from '@/main/features/gh/resolve'
+import type { CommandResult } from '@/types/platform'
+import { createTestContext, callAction } from '../../../support/context'
+import { createFakeClock } from '../../../support/fake-platform'
 
 const CHECKED_AT = new Date(1_700_000_000_000).toISOString()
 
@@ -55,13 +52,22 @@ describe('parseGhAuthStatus', () => {
   })
 })
 
-describe('resolveGhStatus', () => {
-  it('rejects a payload', async () => {
-    await expect(resolveGhStatus({} as unknown as undefined, depsWith({ ok: true, authenticated: true, output: '' }))).rejects.toThrow("'gh:status' takes no payload")
-  })
+describe('gh.status', () => {
+  const status = (result: CommandResult, onRun?: (command: string, args: readonly string[], options: unknown) => void) => {
+    const ctx = createTestContext({
+      platform: {
+        clock: createFakeClock(CHECKED_AT),
+        run: (command, args, options) => {
+          onRun?.(command, args, options)
+          return Promise.resolve(result)
+        },
+      },
+    })
+    return callAction(ctx, 'gh.status')
+  }
 
-  it('maps ok+authenticated to signed-in with the parsed account and scopes', async () => {
-    await expect(resolveGhStatus(undefined, depsWith({ ok: true, authenticated: true, output: SINGLE_ACCOUNT }))).resolves.toEqual({
+  it('maps a successful run to signed-in with the parsed account and scopes', async () => {
+    await expect(status({ ok: true, stdout: SINGLE_ACCOUNT, stderr: '' })).resolves.toEqual({
       kind: 'signed-in',
       checkedAt: CHECKED_AT,
       account: 'octo',
@@ -69,44 +75,32 @@ describe('resolveGhStatus', () => {
     })
   })
 
-  it('keeps signed-in with a null account when the output cannot be parsed', async () => {
-    await expect(resolveGhStatus(undefined, depsWith({ ok: true, authenticated: true, output: 'garbage' }))).resolves.toEqual({ kind: 'signed-in', checkedAt: CHECKED_AT, account: null, scopes: null })
+  it('reads the account from stderr, where older gh versions print it', async () => {
+    await expect(status({ ok: true, stdout: '', stderr: SINGLE_ACCOUNT })).resolves.toMatchObject({ kind: 'signed-in', account: 'octo' })
   })
 
-  it('maps ok+unauthenticated to signed-out', async () => {
-    await expect(resolveGhStatus(undefined, depsWith({ ok: true, authenticated: false, output: '' }))).resolves.toEqual({ kind: 'signed-out', checkedAt: CHECKED_AT })
+  it('keeps signed-in with a null account when the output cannot be parsed', async () => {
+    await expect(status({ ok: true, stdout: 'garbage', stderr: '' })).resolves.toEqual({ kind: 'signed-in', checkedAt: CHECKED_AT, account: null, scopes: null })
+  })
+
+  it('maps a nonzero exit to signed-out', async () => {
+    await expect(status({ ok: false, kind: 'nonzero', code: 1, stdout: '', stderr: '' })).resolves.toEqual({ kind: 'signed-out', checkedAt: CHECKED_AT })
   })
 
   it('maps not-found to missing', async () => {
-    await expect(resolveGhStatus(undefined, depsWith({ ok: false, kind: 'not-found', command: 'gh', searched: ['/usr/bin'] }))).resolves.toEqual({
-      kind: 'missing',
-      checkedAt: CHECKED_AT,
-    })
+    await expect(status({ ok: false, kind: 'not-found', command: 'gh', searched: ['/usr/bin'] })).resolves.toEqual({ kind: 'missing', checkedAt: CHECKED_AT })
   })
 
   it('maps every other failure to unknown, carrying a one-line message', async () => {
-    await expect(resolveGhStatus(undefined, depsWith({ ok: false, kind: 'timeout', timeoutMs: 8_000, stderr: '' }))).resolves.toEqual({
-      kind: 'unknown',
-      message: 'gh timed out after 8000ms',
-      checkedAt: CHECKED_AT,
-    })
-    await expect(resolveGhStatus(undefined, depsWith({ ok: false, kind: 'spawn-failed', message: 'boom' }))).resolves.toEqual({
-      kind: 'unknown',
-      message: 'boom',
-      checkedAt: CHECKED_AT,
-    })
+    await expect(status({ ok: false, kind: 'timeout', timeoutMs: 8_000, stderr: '' })).resolves.toEqual({ kind: 'unknown', message: 'gh timed out after 8000ms', checkedAt: CHECKED_AT })
+    await expect(status({ ok: false, kind: 'spawn-failed', message: 'boom' })).resolves.toEqual({ kind: 'unknown', message: 'boom', checkedAt: CHECKED_AT })
   })
 
-  it('calls ghAuthStatus with an 8 second timeout', async () => {
-    let captured: { timeoutMs?: number } | undefined
-    const deps: GhStatusDeps = {
-      ghAuthStatus: (options) => {
-        captured = options
-        return Promise.resolve({ ok: true, authenticated: true, output: '' })
-      },
-      now: () => 1_700_000_000_000,
-    }
-    await resolveGhStatus(undefined, deps)
-    expect(captured?.timeoutMs).toBe(8_000)
+  it('runs `gh auth status` with an 8 second timeout', async () => {
+    let captured: { command: string; args: readonly string[]; options: unknown } | undefined
+    await status({ ok: true, stdout: '', stderr: '' }, (command, args, options) => {
+      captured = { command, args, options }
+    })
+    expect(captured).toEqual({ command: 'gh', args: ['auth', 'status'], options: { timeoutMs: 8_000 } })
   })
 })

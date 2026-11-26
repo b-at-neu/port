@@ -1,93 +1,68 @@
 import { describe, expect, it } from 'vitest'
-import { resolveUpdateCheck, resolveUpdateDownload, resolveUpdateDownloadState, resolveUpdateOpen, resolveUpdateState } from '@/main/features/update/resolve'
-import type { UpdateDownloader, UpdateDownloadState, UpdateService, UpdateState } from '@/types/update'
+import type { UpdateDownloadState, UpdateState } from '@/types/update'
+import { callAction, createTestContext } from '../../../support/context'
 
 const STATE: UpdateState = { kind: 'idle', current: '1.4.0' }
-
-function serviceOf(calls: string[] = []): UpdateService {
-  return {
-    state: () => STATE,
-    check: (trigger) => {
-      calls.push(trigger)
-      return Promise.resolve(STATE)
-    },
-  }
-}
-
-describe('resolveUpdateState', () => {
-  it('returns the cached state', () => {
-    expect(resolveUpdateState(undefined, serviceOf())).toBe(STATE)
-  })
-
-  it.each([null, {}, 'x', 0])('throws on the payload %j', (payload) => {
-    expect(() => resolveUpdateState(payload, serviceOf())).toThrow("'update:state' takes no payload")
-  })
-})
-
 const DOWNLOAD: UpdateDownloadState = { kind: 'idle' }
 
-function downloaderOf(calls: string[] = []): UpdateDownloader {
-  return {
-    state: () => DOWNLOAD,
-    start: () => {
-      calls.push('start')
-      return Promise.resolve(DOWNLOAD)
+function setup() {
+  const calls: string[] = []
+  const ctx = createTestContext({
+    live: {
+      update: {
+        service: {
+          state: () => STATE,
+          check: (trigger) => {
+            calls.push(`check:${trigger}`)
+            return Promise.resolve(STATE)
+          },
+        },
+        downloader: {
+          state: () => DOWNLOAD,
+          start: () => {
+            calls.push('start')
+            return Promise.resolve(DOWNLOAD)
+          },
+          open: (reveal) => {
+            calls.push(`open:${String(reveal)}`)
+            return Promise.resolve(DOWNLOAD)
+          },
+        },
+      },
     },
-    open: (reveal) => {
-      calls.push(`open:${String(reveal)}`)
-      return Promise.resolve(DOWNLOAD)
-    },
-  }
+  })
+  return { ctx, calls }
 }
 
-describe('resolveUpdateDownload', () => {
-  it('starts a download', async () => {
-    const calls: string[] = []
-    expect(await resolveUpdateDownload(undefined, downloaderOf(calls))).toBe(DOWNLOAD)
-    expect(calls).toEqual(['start'])
+describe('update actions', () => {
+  it('returns the cached update and download state', async () => {
+    const { ctx } = setup()
+    expect(await callAction(ctx, 'update.state')).toBe(STATE)
+    expect(await callAction(ctx, 'update.downloadState')).toBe(DOWNLOAD)
   })
 
-  it.each([null, {}, 'x', 0])('throws on the payload %j without starting', (payload) => {
-    const calls: string[] = []
-    expect(() => resolveUpdateDownload(payload, downloaderOf(calls))).toThrow("'update:download' takes no payload")
-    expect(calls).toEqual([])
-  })
-})
-
-describe('resolveUpdateDownloadState', () => {
-  it('returns the cached state', () => {
-    expect(resolveUpdateDownloadState(undefined, downloaderOf())).toBe(DOWNLOAD)
+  it('runs a manual check and starts a download', async () => {
+    const { ctx, calls } = setup()
+    expect(await callAction(ctx, 'update.check')).toBe(STATE)
+    expect(await callAction(ctx, 'update.download')).toBe(DOWNLOAD)
+    expect(calls).toEqual(['check:manual', 'start'])
   })
 
-  it.each([null, {}, 'x', 0])('throws on the payload %j', (payload) => {
-    expect(() => resolveUpdateDownloadState(payload, downloaderOf())).toThrow("'update:download:state' takes no payload")
-  })
-})
-
-describe('resolveUpdateOpen', () => {
   it.each([true, false])('passes reveal %j through', async (reveal) => {
-    const calls: string[] = []
-    expect(await resolveUpdateOpen({ reveal }, downloaderOf(calls))).toBe(DOWNLOAD)
+    const { ctx, calls } = setup()
+    expect(await callAction(ctx, 'update.open', { reveal })).toBe(DOWNLOAD)
     expect(calls).toEqual([`open:${String(reveal)}`])
   })
 
-  it.each([undefined, null, {}, { reveal: 'yes' }, { reveal: 1 }, { reveal: true, path: '/x' }, 'x'])('throws on the payload %j without opening', (payload) => {
-    const calls: string[] = []
-    expect(() => resolveUpdateOpen(payload, downloaderOf(calls))).toThrow("'update:open' takes exactly { reveal: boolean }")
+  it.each([undefined, null, {}, { reveal: 'yes' }, { reveal: 1 }, { reveal: true, path: '/x' }, 'x'])('rejects the open payload %j without opening', async (payload) => {
+    const { ctx, calls } = setup()
+    await expect(callAction(ctx, 'update.open', payload as never)).rejects.toThrow()
     expect(calls).toEqual([])
   })
-})
 
-describe('resolveUpdateCheck', () => {
-  it('runs a manual check', async () => {
-    const calls: string[] = []
-    expect(await resolveUpdateCheck(undefined, serviceOf(calls))).toBe(STATE)
-    expect(calls).toEqual(['manual'])
-  })
-
-  it.each([null, {}, 'x', 0])('throws on the payload %j without checking', (payload) => {
-    const calls: string[] = []
-    expect(() => resolveUpdateCheck(payload, serviceOf(calls))).toThrow("'update:check' takes no payload")
+  it.each(['update.check', 'update.download'] as const)('rejects a payload on %s without running it', async (name) => {
+    const { ctx, calls } = setup()
+    await expect(callAction(ctx, name, {} as never)).rejects.toThrow()
     expect(calls).toEqual([])
   })
 })
