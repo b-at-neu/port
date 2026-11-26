@@ -2,9 +2,14 @@
 import { eventWrites, stageModeFor } from '@/main/pipeline/transitions'
 import { draftOf, handoffRefusalIntent, noRelated } from '@/main/pipeline/incidents/raise'
 import type { ReadyEntry } from '@/types/actions'
-import type { RecordIncident } from '@/types/incidents'
+import type { StageSnapshot } from '@/types/dispatch'
 import type { SessionKey } from '@/types/hosting'
 import type { StageEvent, StageLabelResult, StagePlanFile, StageTransitionResult } from '@/types/stage-labels'
+import type { StateWriteContext } from '@/main/pipeline/context'
+import { applyStageTransition } from '@/main/pipeline/operator/stage'
+import type { Platform } from '@/main/platform'
+import { requestRead } from '@/main/dispatch/context'
+import type { DispatchContext } from '@/main/dispatch/context'
 import type { StageOutcome } from '@/types/stage-session'
 import type { TickActionable } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
@@ -28,16 +33,7 @@ interface PendingWrite {
   firstAttemptAt: number | null
 }
 
-interface StageHandoffDeps {
-  readonly write: (params: { readonly entry: ReadyEntry; readonly record: HandoffRecord; readonly event: StageEvent; readonly auditDir: string; readonly scratchDir: string }) => Promise<StageTransitionResult>
-  readonly auditDir: string
-  readonly scratchDir: string
-  readonly onChange: () => void
-  readonly recordIncident: RecordIncident
-  /** Asks for one GitHub read of this repository alone, so the next stage sees the label just written. */
-  readonly requestRead: (repoId: RepoId) => void
-  readonly now: () => Date
-}
+type HandoffContext = StateWriteContext & Pick<Platform, 'clock' | 'paths'> & { readonly live: Pick<DispatchContext['live'], 'watcher'> }
 
 export interface StageHandoff {
   /** Called once per pass, so a retry has the repository's current entry. */
@@ -54,7 +50,8 @@ export interface StageHandoff {
   pendingNumbers(repoId: RepoId): ReadonlySet<number>
 }
 
-export function createStageHandoff(deps: StageHandoffDeps): StageHandoff {
+/** `snapshotOf` is the tick's view of one ticket, kept for the incident a blocked or escalated hand-back may raise. */
+export function createStageHandoff(ctx: HandoffContext, snapshotOf: (repoId: RepoId, number: number) => StageSnapshot): StageHandoff {
   const entries = new Map<RepoId, ReadyEntry>()
   const pending = new Map<string, PendingWrite>()
   const results = new Map<SessionKey, StageLabelResult>()
@@ -70,24 +67,24 @@ export function createStageHandoff(deps: StageHandoffDeps): StageHandoff {
     const entry = entries.get(write.repoId)
     if (entry === undefined || pending.get(id) !== write) return
     write.attempts += 1
-    write.firstAttemptAt ??= deps.now().getTime()
+    write.firstAttemptAt ??= ctx.clock.now().getTime()
     let result: StageTransitionResult
     try {
-      result = await deps.write({ entry, record: write.record, event: write.event, auditDir: deps.auditDir, scratchDir: deps.scratchDir })
+      result = await applyStageTransition(ctx, { entry, record: write.record, event: write.event, auditDir: ctx.paths.userData, scratchDir: ctx.paths.temp, snapshot: snapshotOf(entry.id, write.record.number) })
     } catch (error) {
       result = { kind: 'refused', reason: 'write-failed', retryable: true, detail: error instanceof Error ? error.message : String(error) }
     }
-    const windowOpen = deps.now().getTime() - write.firstAttemptAt < HANDOFF_RETRY_WINDOW_MS
+    const windowOpen = ctx.clock.now().getTime() - write.firstAttemptAt < HANDOFF_RETRY_WINDOW_MS
     if (result.kind === 'refused' && result.retryable && (write.attempts < HANDOFF_ATTEMPTS || windowOpen)) return
     pending.delete(id)
     if (result.kind === 'refused') {
       const { record } = write
       const intent = handoffRefusalIntent(record, result.reason, write.attempts, result.retryable)
-      void deps.recordIncident(draftOf(intent, { repo: entry.config.repo, kind: record.kind, number: record.number }, { kind: result.reason }, noRelated())).catch(() => undefined)
+      void ctx.stores.incidentLog.record(draftOf(intent, { repo: entry.config.repo, kind: record.kind, number: record.number }, { kind: result.reason }, noRelated())).catch(() => undefined)
     }
     if (write.resultKey !== null) results.set(write.resultKey, result.kind === 'applied' ? { kind: 'applied' } : { kind: 'refused', reason: result.reason, detail: result.detail })
-    if (write.event.kind === 'outcome' && write.event.outcome === 'completed') deps.requestRead(write.repoId)
-    deps.onChange()
+    if (write.event.kind === 'outcome' && write.event.outcome === 'completed') requestRead(ctx, write.repoId)
+    ctx.live.watcher.republish()
   }
 
   function enqueue(id: string, write: PendingWrite): void {

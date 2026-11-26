@@ -9,17 +9,16 @@ import { createRunStore } from '@/main/pipeline/state/run-store'
 import { createPipelineStateStore, PIPELINE_STATE_FILE } from '@/main/pipeline/state/store'
 import { pathOps } from '@/main/platform/paths'
 import { createRecentsStore } from '@/main/features/folders/recents'
-import { removeSessionWorktreeAt } from '@/main/repos/worktree/worktree'
-import { releaseStageBranch } from '@/main/repos/worktree/stage-worktree'
-import { createDefaultStageLauncher } from '@/main/dispatch/stage/default'
+import { createForceDispatch, createRefreshMemo, createRerunMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
+import type { PipelineMemos } from '@/main/pipeline/context'
 import { createWorkerEngine } from '@/main/worker/client'
-import { bindOperator } from '@/main/app/operator'
-import { createDispatchRuntime } from '@/main/dispatch/runtime'
-import { fetchItemsByNumber } from '@/main/github/tracker/items'
+import { createAutoPlanner } from '@/main/dispatch/auto-plan'
+import { createDispatcher } from '@/main/dispatch/dispatcher'
+import { stageBundleRoot } from '@/main/dispatch/stage/bundle'
+import { createStageLauncher } from '@/main/dispatch/stage/launcher'
+import { createInterruptedSweeper } from '@/main/dispatch/stage/sweep'
 import { readAllowBase } from '@/main/github/allow'
 import { proposeAllowRule } from '@/main/github/writes/allow'
-import type { FetchItemsByNumberParams } from '@/types/github'
-import { readOwnership, takeOwnership } from '@/main/repos/ownership'
 import type { StageChannelDeps } from '@/main/app/seams'
 import type { StateEngine } from '@/types/offload'
 import { createPlatform, type Platform } from '@/main/platform'
@@ -30,16 +29,14 @@ import { createHostedStore } from '@/main/sessions/hosting/store'
 import { createHostingPersistence } from '@/main/sessions/hosting/persist'
 import { createSessionIndex } from '@/main/sessions/hosting/session-index'
 import { createNotifier } from '@/main/sessions/hosting/notify'
-import { createStageSweeper } from '@/main/features/stage/resolve'
 import { createUsageLedger } from '@/main/sessions/hosting/usage-ledger'
 import { createSessionMenuRefresher } from '@/main/app/shell/session-menu'
 import { createDefaultUpdate } from '@/main/features/update/default'
 import type { RestartSeams } from '@/types/update'
-import type { AutoPlanner, Dispatcher, OwnershipParams, RunStateStore } from '@/types/dispatch'
+import type { AutoPlanner, Dispatcher, RunStateStore } from '@/types/dispatch'
 import type { HostedStore } from '@/types/hosting'
 import type { PipelineStateStore } from '@/types/pipeline-state'
 import type { PipelineWatcher } from '@/types/state'
-import type { ForceDispatch, RefreshMemo, RerunMemo, UnknownStreaks } from '@/types/tick'
 import type { SessionIndex } from '@/types/session-index'
 import type { RunStore, StageLauncherHandle } from '@/types/stage'
 import type { IncidentLog } from '@/types/incidents'
@@ -69,11 +66,9 @@ export type AppContext = Platform & {
     readonly notifier: ReturnType<typeof createNotifier>
     readonly sessionMenu: ReturnType<typeof createSessionMenuRefresher>
     readonly update: ReturnType<typeof createDefaultUpdate>
-    readonly forceDispatch: ForceDispatch
     readonly autoPlanner: AutoPlanner
-    readonly memos: { readonly unknownStreaks: UnknownStreaks; readonly refreshMemo: RefreshMemo; readonly rerunMemo: RerunMemo }
-    readonly actions: ReturnType<typeof bindOperator>
-    readonly stageSweeper: ReturnType<typeof createStageSweeper>
+    readonly memos: PipelineMemos
+    readonly stageSweeper: ReturnType<typeof createInterruptedSweeper>
     /** Stops the dispatcher and closes the worker. */
     readonly shutdown: () => void
   }
@@ -107,13 +102,6 @@ export function createAppContext(restart: RestartSeams): AppContext {
 
   const incidentLog = createIncidentLog(platform)
 
-  const ownership = {
-    read: (params: OwnershipParams) => readOwnership(platform, params),
-    take: (params: OwnershipParams) => takeOwnership(platform, params),
-  }
-
-  const fetchItems = (params: FetchItemsByNumberParams) => fetchItemsByNumber(platform, params)
-
   // Loading it once at boot marks every run a lost process left open `crash`.
   const pipelineState = createPipelineStateStore(platform)
   const runs = createRunStore({ store: pipelineState, newId: () => globalThis.crypto.randomUUID(), now: platform.clock.now })
@@ -145,7 +133,6 @@ export function createAppContext(restart: RestartSeams): AppContext {
   }
 
   const { close: closeOffload, ...engine } = createWorkerEngine(platform, { onRespawn: () => void ctx.live.watcher.refresh() })
-  const actions = bindOperator(ctx)
 
   const notifier = createNotifier({ notify: platform.notify, repos, emit }, () => hostedStore.notificationPrefs())
 
@@ -163,32 +150,11 @@ export function createAppContext(restart: RestartSeams): AppContext {
     onEntries: (delta) => emit('session.entries', delta),
   })
   const sessionMenu = createSessionMenuRefresher({ emit }, hostedStore)
-  const stageLauncher: StageLauncherHandle = createDefaultStageLauncher({
-    store: hostedStore,
-    runs,
-    onOutcome: (repoId, sessionKey, outcome, plan) => ctx.live.dispatcher.recordOutcome(repoId, sessionKey, outcome, plan),
-    onResumedTurn: (repoId, sessionKey) => ctx.live.dispatcher.recordResumedTurn(repoId, sessionKey),
-    bundle: { isPackaged: app.isPackaged, mainDir: __dirname, resourcesPath: process.resourcesPath },
-    userData,
-  })
-
-  const { unknownStreaks, refreshMemo, rerunMemo, dispatcher, forceDispatch, autoPlanner, bindWatcher, shutdown } = createDispatchRuntime({
-    store: hostedStore,
-    runs,
-    launch: stageLauncher,
-    runState: (repoId) => runStates.current(repoId).state,
-    readOwnership: ownership.read,
-    takeOwnership: ownership.take,
-    fetchItemsByNumber: fetchItems,
-    platform,
-    listRepositories,
-    registryDeps: repos.deps,
-    actions,
-    stateLabels: actions.stateLabels,
-    dirs: { audit: userData, scratch: platform.paths.temp },
-    now: platform.clock.now,
-    recordIncident: incidentLog.record,
-  })
+  const memos: PipelineMemos = { unknownStreaks: createUnknownStreaks(), refreshMemo: createRefreshMemo(), rerunMemo: createRerunMemo(), forceDispatch: createForceDispatch() }
+  const stageLauncher = createStageLauncher(ctx, stageBundleRoot({ isPackaged: app.isPackaged, mainDir: __dirname, resourcesPath: process.resourcesPath }))
+  const dispatcher = createDispatcher(ctx)
+  const autoPlanner = createAutoPlanner(ctx)
+  const stageSweeper = createInterruptedSweeper(ctx)
 
   // One watcher for the process lifetime. `onTick` fires only on a fresh poll, never awaited.
   const watcher = createPipelineWatcher(ctx, {
@@ -201,23 +167,14 @@ export function createAppContext(restart: RestartSeams): AppContext {
       void stageSweeper.consider(snapshot, dispatcher.status())
     },
   })
-  bindWatcher(watcher)
 
   const stage: StageChannelDeps = {
     listRepositories,
-    runs,
     dispatcher,
-    store: hostedStore,
-    launcher: stageLauncher,
-    removeWorktree: (path, force) => removeSessionWorktreeAt(platform, { path, force }),
-    releaseBranch: (root, branch, baseSha) => releaseStageBranch(platform, { root, branch, baseSha }),
-    applyItemAction: actions.applyItemAction,
-    snapshot: watcher.snapshot,
     auditDir: userData,
     scratchDir: platform.paths.temp,
     allow: { read: (params) => readAllowBase(platform, params), propose: (request, params) => proposeAllowRule(platform, request, params) },
   }
-  const stageSweeper = createStageSweeper(repos.deps, stage, { fetchItemsByNumber: fetchItems, onChange: () => watcher.republish() })
 
   const update = createDefaultUpdate(platform, restart)
 
@@ -232,13 +189,11 @@ export function createAppContext(restart: RestartSeams): AppContext {
     notifier,
     sessionMenu,
     update,
-    forceDispatch,
     autoPlanner,
-    memos: { unknownStreaks, refreshMemo, rerunMemo },
-    actions,
+    memos,
     stageSweeper,
     shutdown: () => {
-      shutdown()
+      dispatcher.shutdown()
       void closeOffload()
     },
   }

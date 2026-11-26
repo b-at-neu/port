@@ -1,20 +1,10 @@
-import type { ResolvedStageRoot, RecoverDeps } from '@/types/stage'
-
-// `stage:allow`, `stage:dismiss-denial`, `stage:resume`, `stage:restart` — the renderer's own
-// seam into `main/dispatch/stage/`'s allow/resume/restart compositions. Nothing else may call these.
-import type { StageAllowResult, StageDenial, StageResumeResult, StageRestartResult } from '@/types/stage'
+// `stage:allow` and `stage:dismiss-denial` — the renderer's own seam into `main/dispatch/stage/`'s allow composition.
+import type { StageAllowResult, StageDenial } from '@/types/stage'
 import type { RegistryDeps } from '@/types/registry'
 import { requireReadyRepo } from '@/main/repos'
 import { mergeRule } from '@/main/dispatch/stage/allowlist'
 import { validateRule } from '@/main/dispatch/stage/rule'
 import { allowBranchName } from '@/main/github/writes/allow'
-import { resumeStage, restartStage } from '@/main/dispatch/stage/recover'
-import { createInterruptedSweeper } from '@/main/dispatch/stage/sweep'
-import { pathExists } from '@/main/platform/files'
-import { pathOps } from '@/main/platform/paths'
-
-
-
 import type { RepoId } from '@/utils/repos'
 import type { StageChannelDeps } from '@/main/app/seams'
 
@@ -69,63 +59,3 @@ export function resolveStageDismissDenial(request: { readonly repoId: RepoId; re
   deps.dispatcher.dismissDenial(request.repoId, request.denialId)
 }
 
-async function readyRootsOf(registryDeps: RegistryDeps, deps: Pick<StageChannelDeps, 'listRepositories'>): Promise<ReadonlyMap<RepoId, ResolvedStageRoot>> {
-  const list = await deps.listRepositories(registryDeps)
-  const map = new Map<RepoId, ResolvedStageRoot>()
-  if (!list.ok) return map
-  for (const entry of list.repositories) {
-    if ('config' in entry) map.set(entry.id, { path: entry.path, sessionRequiredPaths: entry.config.sessionRequiredPaths })
-  }
-  return map
-}
-
-function recoverDepsOf(registryDeps: RegistryDeps, roots: ReadonlyMap<RepoId, ResolvedStageRoot>, deps: StageChannelDeps): RecoverDeps {
-  return {
-    runs: deps.runs,
-    store: deps.store,
-    resume: deps.launcher.resume,
-    removeWorktree: deps.removeWorktree,
-    releaseBranch: deps.releaseBranch,
-    resolveEntry: (repoId) => roots.get(repoId) ?? null,
-    applyRetry: async (interrupted) => {
-      const found = await requireReadyRepo(registryDeps, "'stage:restart'", interrupted.repoId, deps.listRepositories)
-      return deps.applyItemAction({
-        request: { repoId: interrupted.repoId, kind: interrupted.kind, number: interrupted.number, action: 'retry', expectedStage: interrupted.inFlight },
-        snapshot: deps.snapshot(),
-        entry: found,
-        auditDir: deps.auditDir,
-      })
-    },
-    capacity: async () => {
-      const c = await deps.store.capacity()
-      return { limit: c.limit }
-    },
-  }
-}
-
-export async function resolveStageResume(registryDeps: RegistryDeps, request: { readonly id: string }, deps: StageChannelDeps): Promise<StageResumeResult> {
-  if (typeof request?.id !== 'string' || request.id === '') throw new Error("'stage:resume' requires a non-empty 'id'")
-  const roots = await readyRootsOf(registryDeps, deps)
-  return resumeStage(recoverDepsOf(registryDeps, roots, deps), request.id)
-}
-
-/** The sweeper resumes through `resolveStageResume`, so the capacity and root checks exist once. */
-export function createStageSweeper(registryDeps: RegistryDeps, deps: StageChannelDeps, hooks: Pick<Parameters<typeof createInterruptedSweeper>[0], 'fetchItemsByNumber' | 'onChange'>): ReturnType<typeof createInterruptedSweeper> {
-  return createInterruptedSweeper({
-    runs: deps.runs,
-    removeWorktree: deps.removeWorktree,
-    pathExists,
-    resume: (id) => resolveStageResume(registryDeps, { id }, deps),
-    restart: (id) => resolveStageRestart(registryDeps, { id }, deps),
-    liveWorktreePaths: () => deps.store.list().flatMap((snapshot) => (snapshot.phase !== 'ended' && snapshot.workspace.worktree !== null ? [snapshot.workspace.worktree.path] : [])),
-    samePath: (a, b) => pathOps.samePath(a, b),
-    now: () => new Date(),
-    ...hooks,
-  })
-}
-
-export async function resolveStageRestart(registryDeps: RegistryDeps, request: { readonly id: string }, deps: StageChannelDeps): Promise<StageRestartResult> {
-  if (typeof request?.id !== 'string' || request.id === '') throw new Error("'stage:restart' requires a non-empty 'id'")
-  const roots = await readyRootsOf(registryDeps, deps)
-  return restartStage(recoverDepsOf(registryDeps, roots, deps), request.id)
-}

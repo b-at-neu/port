@@ -7,11 +7,5 @@ export const heldForceDispatch = defineAction({
   name: 'held.forceDispatch',
   kind: 'mutation',
   input: z.object({ repoId, number: positiveInt }),
-  run: (ctx, input) =>
-    resolveForceDispatch(input, {
-      snapshot: ctx.live.watcher.snapshot,
-      dispatcherStatus: () => ctx.live.dispatcher.status(),
-      forceDispatch: ctx.live.forceDispatch,
-      republish: () => ctx.live.watcher.republish(),
-    }),
+  run: (ctx, input) => resolveForceDispatch(ctx, input),
 })

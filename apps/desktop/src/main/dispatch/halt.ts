@@ -3,9 +3,21 @@
 import { actionsFor, stageKeyOf } from '@/utils/actions/plan'
 import { labelName } from '@/utils/labels/vocabulary'
 import type { HaltItemOutcome, HaltReport } from '@/types/dispatch'
+import type { BoardSnapshot } from '@/types/board'
+import type { ReadyEntry } from '@/types/actions'
 import type { ReconciledItem } from '@/types/state'
+import type { RepoId } from '@/utils/repos'
+import { applyItemAction } from '@/main/pipeline/operator/apply'
+import type { HaltContext } from '@/main/dispatch/context'
 
-import type { HaltDispatchDeps, HaltDispatchParams } from '@/types/dispatch'
+interface HaltDispatchParams {
+  readonly snapshot: BoardSnapshot
+  /** One repository for `pause`, every ready repository for `halt`. An entry missing for a
+   *  repository means every item there is skipped, never stopped. */
+  readonly entries: readonly ReadyEntry[]
+  /** Written to the run state first, regardless of whether `entries` carries a ready entry for each. */
+  readonly repoIds: readonly RepoId[]
+}
 
 /** The one attached-agent or attached-session name a halt outcome reports — never a liveness
  *  claim, only what this app found on disk. An item with more than one attachment reports its first. */
@@ -18,9 +30,10 @@ function attachedAgentName(item: ReconciledItem): string | null {
 
 /** Order is load-bearing: `runStates.set` runs first, and a failed write aborts the halt entirely.
  *  Every in-flight item is then visited sequentially; `standDown` runs last, once per ready entry. */
-export async function haltDispatch(params: HaltDispatchParams, deps: HaltDispatchDeps): Promise<HaltReport> {
-  const { snapshot, entries, runStates, repoIds, auditDir, now } = params
-  const written = await runStates.set(repoIds, 'paused', now().toISOString())
+export async function haltDispatch(ctx: HaltContext, params: HaltDispatchParams): Promise<HaltReport> {
+  const { snapshot, entries, repoIds } = params
+  const { runStates } = ctx.stores
+  const written = await runStates.set(repoIds, 'paused', ctx.clock.now().toISOString())
   if (!written.ok) return { kind: 'aborted', reason: 'run-state-unwritable', message: written.message, path: runStates.path }
 
   const entryById = new Map(entries.map((entry) => [entry.id, entry] as const))
@@ -53,13 +66,13 @@ export async function haltDispatch(params: HaltDispatchParams, deps: HaltDispatc
       }
 
       // This app's own per-item stop, before the label write, so the session is asked to stop first.
-      const stoppedTask = (await deps.stopFor?.(repoState.repoId, item.number)) ?? false
+      const stoppedTask = await ctx.live.dispatcher.stopFor(repoState.repoId, item.number)
 
-      const result = await deps.applyItemAction({
+      const result = await applyItemAction(ctx, {
         request: { repoId: repoState.repoId, kind: item.kind, number: item.number, action: 'stop', expectedStage: inFlight },
         snapshot,
         entry,
-        auditDir,
+        auditDir: ctx.paths.userData,
       })
 
       if (result.ok && (result.outcome.kind === 'applied' || result.outcome.kind === 'mirror-failed')) {
@@ -74,7 +87,7 @@ export async function haltDispatch(params: HaltDispatchParams, deps: HaltDispatc
 
   // This app's own whole-repository stand-down, after every item has been visited.
   for (const entry of entries) {
-    await deps.standDown?.(entry.id)
+    await ctx.live.dispatcher.standDown(entry.id)
   }
 
   return { kind: 'completed', items }

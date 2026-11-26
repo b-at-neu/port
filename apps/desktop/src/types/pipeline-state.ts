@@ -1,6 +1,6 @@
 // Contract for the app-owned pipeline state store: plain JSON, safe to cross the state worker boundary.
 import type { ReadyEntry } from '@/types/actions'
-import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { PipelineItemKind } from '@/types/github'
 import type { RepositoryState } from '@/types/state'
@@ -68,8 +68,6 @@ export interface UnsettledRun {
   readonly run: Run
 }
 
-/** The store's label names for one item: `null` for an unseeded repository, `[]` for an untracked item in a seeded one. */
-export type StateLabelsReader = (repoId: RepoId, kind: PipelineItemKind, number: number, vocabulary: LabelVocabulary) => readonly string[] | null
 
 /** Every stored key, markers included. */
 export function fullKeysOf(item: Pick<StoredItem, 'keys' | 'marked' | 'autoPlan'>): readonly LabelKey[] {

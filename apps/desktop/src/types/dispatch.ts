@@ -1,14 +1,8 @@
 import type { BoardSnapshot } from '@/types/board'
-import type { RegistryDeps } from '@/types/registry'
-import type { AutoApprovePlanParams, ReadyEntry, EscalateToHumanParams, EscalateToHumanResult, ApplyObservationParams, ApplyObservationResult, ApplyItemActionParams, RerunChecksParams } from '@/types/actions'
-import type { TickActionable, EndedStage, RefreshMemo, RerunMemo, TickObservation, ForceDispatch } from '@/types/tick'
-import type { HostedStore } from '@/types/hosting'
-import type { FetchItemsByNumberParams, ItemsByNumberFetch, ResolvedItem } from '@/types/github'
-import type { StageEvent, StagePlanFile, StageTransitionResult } from '@/types/stage-labels'
-import type { ReposListResponse } from '@/types/ipc'
+import type { ReadyEntry } from '@/types/actions'
+import type { EndedStage, TickObservation } from '@/types/tick'
+import type { StagePlanFile } from '@/types/stage-labels'
 import type { LabelKey } from '@/utils/labels/vocabulary'
-import type { StateLabelsReader } from '@/types/pipeline-state'
-import type { RecordIncident } from '@/types/incidents'
 import type { ReconciledItem } from '@/types/state'
 
 export type BudgetGateFailure = { readonly ok: false; readonly kind: 'unavailable' | 'failed'; readonly message: string }
@@ -23,7 +17,7 @@ import type { StageAgent, TickObservationKind } from '@/types/tick'
 import type { WriteOutcome } from '@/types/writes'
 import type { StageOutcome } from '@/types/stage-session'
 import type { SessionKey } from '@/types/hosting'
-import type { InterruptedStage, RunStore, StageDenial } from '@/types/stage'
+import type { InterruptedStage, StageDenial } from '@/types/stage'
 import type { StageWorktreeTarget } from '@/types/workspace'
 import type { ReviewDispatchFacts } from '@/utils/pipeline/gates'
 
@@ -115,13 +109,12 @@ export interface DispatchRecord {
   readonly operatorJoinedAt: string | null
 }
 
-/** This app's own dispatch state for one ready repository, rendered only while `owner === 'app'`. `idle` covers both "nothing launched yet" and "nothing to report"; `no-launcher` holds while candidates exist but no `StageLauncher` is wired. */
+/** This app's own dispatch state for one ready repository, rendered only while `owner === 'app'`. `idle` covers both "nothing launched yet" and "nothing to report". */
 export type DispatcherState =
   | { readonly kind: 'idle' }
   | { readonly kind: 'active'; readonly recent: readonly DispatchRecord[] }
   /** `commands.budget` is set, but the budget gate can't run (its ceiling or session log is unreadable). Nothing dispatches while this holds — the gate that can't run must fail closed. */
   | { readonly kind: 'budget-unavailable'; readonly message: string }
-  | { readonly kind: 'no-launcher' }
   | { readonly kind: 'at-capacity'; readonly limit: number; readonly waiting: number }
 
 /** One candidate the budget gate acted on this pass, rendered as its own line, never folded into `DispatcherState` since several notes can coexist with one state. */
@@ -178,29 +171,6 @@ export interface AutoPlanner {
   refused(repoId: RepoId): ReadonlySet<number>
 }
 
-export interface AutoPlannerDeps {
-  readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
-  readonly registryDeps: RegistryDeps
-  readonly readOwnership: (params: OwnershipParams) => Promise<OwnershipRead>
-  /** The same per-repository run state `main/dispatch/dispatcher.ts` reads, never a second store. */
-  readonly runState: (repoId: RepoId) => RunState
-  readonly autoApprove: (params: AutoApprovePlanParams) => Promise<WriteOutcome>
-  /** Asks for one GitHub read of this repository alone, so the next stage sees the label just written. */
-  readonly requestRead: (repoId: RepoId) => void
-  /** Fired once per pass when the refused set changed, so the board can republish. */
-  readonly onChange: () => void
-  readonly auditDir: string
-  readonly now: () => Date
-}
-
-export interface BudgetGate {
-  readonly reset: (entry: ReadyEntry) => Promise<BudgetResetResult>
-  readonly sweep: (entry: ReadyEntry, sets: { readonly live: readonly string[]; readonly completed: readonly string[] }) => Promise<BudgetSweepResult>
-  readonly check: (entry: ReadyEntry, candidate: Pick<TickActionable, 'kind' | 'number' | 'agent'>, model: string) => Promise<BudgetCheckResult>
-  /** The ticket's rendered cost ledger and its verdict. No caller yet. */
-  readonly report: (entry: ReadyEntry, issue: number) => Promise<BudgetReportResult>
-}
-
 export type BudgetReportResult = { readonly ok: true; readonly markdown: string; readonly verdict: Exclude<BudgetVerdict, 'hold'> } | BudgetGateFailure
 
 /** Never a `BudgetGateFailure` — a sweep failure must never block dispatch, only report it. */
@@ -244,81 +214,10 @@ export interface Dispatcher {
   clearDenialsFor(repoId: RepoId, rule: string): void
 }
 
-export interface CreateDispatcherParams {
-  readonly store: HostedStore
-  readonly runs: RunStore
-  /** `null` is the honest state until a real launcher exists; a candidate sits visibly at `no-launcher`. */
-  readonly launch: StageLauncher | null
-  /** Read fresh every pass, never cached. */
-  readonly runState: (repoId: RepoId) => RunState
-  readonly readOwnership: (params: OwnershipParams) => Promise<OwnershipRead>
-  /** The re-take-on-relaunch rule: a persisted `run`/`draining` state with an `absent` ownership
-   *  record takes ownership itself. */
-  readonly takeOwnership: (params: OwnershipParams) => Promise<TakeOwnershipResult>
-  readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
-  readonly listRepositories: (registryDeps: RegistryDeps) => Promise<ReposListResponse>
-  readonly registryDeps: RegistryDeps
-  readonly budget: BudgetGate
-  readonly escalate: (params: EscalateToHumanParams) => Promise<EscalateToHumanResult>
-  readonly writeObservation: (params: ApplyObservationParams) => Promise<ApplyObservationResult>
-  readonly rerunChecks: (params: RerunChecksParams) => Promise<'applied' | 'failed'>
-  /** Shared with the tick's own `rerun-checks` observation, never a second instance that would disagree on which head was re-run. */
-  readonly rerunMemo: RerunMemo
-  /** Every label write a stage needs: the claim before launch, and rollback, hand-back and next-turn writes through `transition`. */
-  readonly stageLabels: StageLabelWrites
-  /** Where a candidate's labels come from at the survivor test; `null` for an unseeded repository launches nothing. */
-  readonly stateLabels: StateLabelsReader
-  readonly refreshMemo: RefreshMemo
-  /** Cleared for `(repoId, candidate.number)` once a forced launch succeeds — `main/pipeline/tick/plan.ts`'s own consumer of the same memo, never a second instance. */
-  readonly forceDispatch: ForceDispatch
-  /** Asks for one GitHub read of this repository alone — never another source, never another repository. Fired once a hand-back's label write has settled. */
-  readonly requestRead: (repoId: RepoId) => void
-  readonly dirs: { readonly audit: string; readonly scratch: string }
-  readonly onChange: () => void
-  readonly now: () => Date
-  /** Best-effort: never rejects, and no call site depends on it landing. */
-  readonly recordIncident: RecordIncident
-}
-
-/** The writes the dispatch runtime hands to the dispatcher and the auto-planner, already bound to the state writer. */
-export interface DispatchActions {
-  readonly stageLabels: StageLabelWrites
-  readonly escalateToHuman: (params: EscalateToHumanParams) => Promise<EscalateToHumanResult>
-  readonly applyObservation: (params: ApplyObservationParams) => Promise<ApplyObservationResult>
-  readonly rerunChecks: (params: RerunChecksParams) => Promise<'applied' | 'failed'>
-  readonly autoApprovePlan: (params: AutoApprovePlanParams) => Promise<WriteOutcome>
-}
-
-export interface StageLabelWrites {
-  readonly claim: (params: { readonly entry: ReadyEntry; readonly candidate: Pick<TickActionable, 'number' | 'kind' | 'agent' | 'trigger'>; readonly resolved: ResolvedItem; readonly auditDir: string }) => Promise<StageTransitionResult>
-  readonly transition: (params: { readonly entry: ReadyEntry; readonly record: Pick<TickActionable, 'number' | 'kind' | 'agent' | 'trigger'>; readonly event: StageEvent; readonly auditDir: string; readonly scratchDir: string; readonly snapshot?: StageSnapshot }) => Promise<StageTransitionResult>
-}
-
 /** The tick's own view of a ticket when a hand-back decision was made, kept for the incident it may raise. */
 export interface StageSnapshot {
   readonly item: ReconciledItem | null
   readonly at: string | null
-}
-
-export interface HaltDispatchDeps {
-  readonly applyItemAction: (params: ApplyItemActionParams) => Promise<ItemActionResult>
-  /** This app's own per-item stop, called before every `applyItemAction` so the session is asked
-   *  to stop before its label is touched. A no-op default for a caller with no dispatch loop. */
-  readonly stopFor?: (repoId: RepoId, number: number) => Promise<boolean>
-  /** This app's own whole-repository stand-down, once per in-scope ready entry after the per-item loop. */
-  readonly standDown?: (repoId: RepoId) => Promise<boolean>
-}
-
-export interface HaltDispatchParams {
-  readonly snapshot: BoardSnapshot
-  /** One repository for `pause`, every ready repository for `halt`. An entry missing for a
-   *  repository means every item there is skipped, never stopped. */
-  readonly entries: readonly ReadyEntry[]
-  readonly runStates: RunStateStore
-  /** Written to `runStates` first, regardless of whether `entries` carries a ready entry for each. */
-  readonly repoIds: readonly RepoId[]
-  readonly auditDir: string
-  readonly now: () => Date
 }
 
 /** A run as the dispatch loop reads it: one stage-session launch attempt, projected from `Ticket.runs`. */
