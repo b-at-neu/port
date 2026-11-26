@@ -241,7 +241,7 @@ export type BoardPullsFetch =
     })
   | BoardHalfFailure
 
-/** `fetchItemsByNumber`'s per-number result —`kind` comes from the response's own `__typename`, never assumed. `assignees` is the second fact the write chokepoint needs beside `labels`; one round trip covers both. */
+/** `fetchItemsByNumber`'s per-number result — `kind` comes from the response's own `__typename`, never assumed. `assignees` is the second fact the write chokepoint needs beside `labels`; one round trip covers both. */
 export interface ResolvedItem {
   readonly number: number
   readonly kind: PipelineItemKind
