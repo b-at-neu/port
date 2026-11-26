@@ -1,5 +1,6 @@
 import { gh } from '@/main/platform/gh'
 import { git } from '@/main/platform/git'
+import { directorySize } from '@/main/platform/disk'
 import { runCommand } from '@/main/platform/run'
 import { defaultSdk, type Sdk } from '@/main/platform/sdk'
 import { githubConditional, githubHttp, githubPublic } from '@/main/platform/github-http'
@@ -21,7 +22,8 @@ import {
 import { pathOps } from '@/main/platform/paths'
 import { which } from '@/main/platform/which'
 import type { AppInfo } from '@/types/settings'
-import type { Clock, CommandRunner, ConditionalTransport, GhRunner, GitHubTransport, GitRunner, NativeNotify, PlatformDialogs, PlatformFs, PlatformPaths, WhichEnv, WhichResult } from '@/types/platform'
+import type { Clock, CommandRunner, ConditionalTransport, DirectorySizeResult, GhRunner, GitHubTransport, GitRunner, NativeNotify, PlatformDialogs, PlatformFs, PlatformPaths, PlatformUpdates, WhichEnv, WhichResult } from '@/types/platform'
+import type { InstallTargetInput } from '@/types/update'
 
 /** Every host adapter, bound once; an action reaches I/O only through these. */
 export interface Platform {
@@ -42,10 +44,12 @@ export interface Platform {
   readonly which: (command: string) => Promise<WhichResult>
   readonly env: WhichEnv
   readonly claudeHome: string
+  readonly directorySize: (path: string) => Promise<DirectorySizeResult>
+  readonly updates: PlatformUpdates
 }
 
 /** The Electron-bound facts, passed in by the composition root so this file imports no `electron`. */
-export type PlatformHost = Pick<Platform, 'paths' | 'info' | 'dialogs' | 'notify'>
+export type PlatformHost = Pick<Platform, 'paths' | 'info' | 'dialogs' | 'notify' | 'updates'>
 
 /** The one place `CLAUDE_CONFIG_DIR` is read. */
 export function claudeHomeDir(): string {
@@ -71,6 +75,19 @@ export function headlessHost(paths: PlatformPaths): PlatformHost {
     notify: {
       focused: () => unavailable('notify.focused'),
       show: () => unavailable('notify.show'),
+    },
+    updates: {
+      get isPackaged(): boolean {
+        return unavailable('updates.isPackaged')
+      },
+      get installHost(): InstallTargetInput {
+        return unavailable('updates.installHost')
+      },
+      downloadsDir: () => unavailable('updates.downloadsDir'),
+      download: () => unavailable('updates.download'),
+      open: () => unavailable('updates.open'),
+      reveal: () => unavailable('updates.reveal'),
+      native: () => unavailable('updates.native'),
     },
   }
 }
@@ -106,6 +123,7 @@ export function createPlatform(host: PlatformHost): Platform {
     which: (command) => which({ command, env: process.env, platform: process.platform }),
     env: process.env,
     claudeHome: claudeHomeDir(),
+    directorySize: (path) => directorySize(path),
     ...host,
   }
 }

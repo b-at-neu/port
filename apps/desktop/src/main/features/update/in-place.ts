@@ -1,21 +1,18 @@
 // Updates in place through the native updater, and falls back to the downloader on any failure.
-import type { AvailableRelease, NativeUpdater, UpdateDownloader, UpdateDownloadState } from '@/types/update'
+import type { AppContext } from '@/main/app/context'
+import type { AvailableRelease, NativeUpdater, RestartSeams, UpdateDownloader, UpdateDownloadState } from '@/types/update'
 
-export interface InPlaceUpdaterDeps {
+export interface InPlaceUpdaterParams {
   readonly release: () => AvailableRelease | null
-  /** Called lazily, at most once. */
-  readonly native: () => NativeUpdater
   readonly fallback: UpdateDownloader
-  /** Resolves false when the operator declines to quit. */
-  readonly confirmRestart: () => Promise<boolean>
-  readonly cancelRestart: () => void
-  readonly now: () => Date
+  readonly restart: RestartSeams
 }
 
 /** A restart the app has not quit for within this long is treated as stuck and offered again. */
 const RESTART_TIMEOUT_MS = 120_000
 
-export function createInPlaceUpdater(deps: InPlaceUpdaterDeps): UpdateDownloader {
+export function createInPlaceUpdater(ctx: Pick<AppContext, 'updates' | 'clock'>, params: InPlaceUpdaterParams): UpdateDownloader {
+  const { release: currentRelease, fallback, restart: restartSeams } = params
   let own: UpdateDownloadState = { kind: 'idle' }
   let fallbackVersion: string | null = null
   let inFlight: Promise<UpdateDownloadState> | null = null
@@ -23,11 +20,11 @@ export function createInPlaceUpdater(deps: InPlaceUpdaterDeps): UpdateDownloader
 
   function native(): NativeUpdater {
     if (nativeUpdater !== null) return nativeUpdater
-    const created = deps.native()
+    const created = ctx.updates.native()
     created.onError((message) => {
       if (own.kind !== 'restarting') return
-      const release = deps.release()
-      deps.cancelRestart()
+      const release = currentRelease()
+      restartSeams.cancel()
       if (release !== null) void fallBack(release, message)
     })
     nativeUpdater = created
@@ -36,32 +33,32 @@ export function createInPlaceUpdater(deps: InPlaceUpdaterDeps): UpdateDownloader
 
   function expireRestart(): void {
     if (own.kind !== 'restarting') return
-    if (deps.now().getTime() - Date.parse(own.startedAt) < RESTART_TIMEOUT_MS) return
-    own = { kind: 'restart-pending', version: own.version, notesUrl: own.notesUrl, finishedAt: deps.now().toISOString() }
+    if (ctx.clock.now().getTime() - Date.parse(own.startedAt) < RESTART_TIMEOUT_MS) return
+    own = { kind: 'restart-pending', version: own.version, notesUrl: own.notesUrl, finishedAt: ctx.clock.now().toISOString() }
   }
 
   function state(): UpdateDownloadState {
     expireRestart()
-    return deps.release()?.version === fallbackVersion && fallbackVersion !== null ? deps.fallback.state() : own
+    return currentRelease()?.version === fallbackVersion && fallbackVersion !== null ? fallback.state() : own
   }
 
   function fallBack(release: AvailableRelease, reason: string): Promise<UpdateDownloadState> {
     console.warn('[update] in-place update failed, falling back', reason)
     fallbackVersion = release.version
     own = { kind: 'idle' }
-    return deps.fallback.start()
+    return fallback.start()
   }
 
   async function restart(release: AvailableRelease): Promise<UpdateDownloadState> {
-    if (!(await deps.confirmRestart())) {
-      own = { kind: 'restart-pending', version: release.version, notesUrl: release.notesUrl, finishedAt: deps.now().toISOString() }
+    if (!(await restartSeams.confirm())) {
+      own = { kind: 'restart-pending', version: release.version, notesUrl: release.notesUrl, finishedAt: ctx.clock.now().toISOString() }
       return own
     }
-    own = { kind: 'restarting', version: release.version, notesUrl: release.notesUrl, startedAt: deps.now().toISOString() }
+    own = { kind: 'restarting', version: release.version, notesUrl: release.notesUrl, startedAt: ctx.clock.now().toISOString() }
     try {
       native().install()
     } catch (error) {
-      deps.cancelRestart()
+      restartSeams.cancel()
       return fallBack(release, error instanceof Error ? error.message : String(error))
     }
     return own
@@ -95,9 +92,9 @@ export function createInPlaceUpdater(deps: InPlaceUpdaterDeps): UpdateDownloader
   function start(): Promise<UpdateDownloadState> {
     if (inFlight !== null) return inFlight
     expireRestart()
-    const release = deps.release()
+    const release = currentRelease()
     if (release === null) return Promise.resolve(state())
-    if (fallbackVersion === release.version) return deps.fallback.start()
+    if (fallbackVersion === release.version) return fallback.start()
     if (own.kind === 'restarting' && own.version === release.version) return Promise.resolve(own)
     if (own.kind === 'restart-pending' && own.version === release.version) return settle(restart(release))
     const downloading: Extract<UpdateDownloadState, { kind: 'downloading' }> = {
@@ -107,11 +104,11 @@ export function createInPlaceUpdater(deps: InPlaceUpdaterDeps): UpdateDownloader
       assetName: '',
       receivedBytes: 0,
       totalBytes: 0,
-      startedAt: deps.now().toISOString(),
+      startedAt: ctx.clock.now().toISOString(),
     }
     own = downloading
     return settle(run(release, downloading))
   }
 
-  return { state, start, open: (reveal) => deps.fallback.open(reveal) }
+  return { state, start, open: (reveal) => fallback.open(reveal) }
 }

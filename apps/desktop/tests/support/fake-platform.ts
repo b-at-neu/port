@@ -1,7 +1,8 @@
 // In-memory platform adapters. Anything not scripted throws, so a test fails loudly instead of reaching a host binary or the network.
 import type { Platform } from '@/main/platform'
 import type { SdkModule } from '@/main/platform/sdk'
-import type { Clock, CommandResult, DirEntry, FileResult, GhResult, PlatformFs, WhichResult } from '@/types/platform'
+import type { Clock, CommandResult, DirEntry, FileResult, GhResult, PlatformFs, PlatformUpdates, WhichResult } from '@/types/platform'
+import type { FileDownloadRequest } from '@/types/update'
 
 export interface FakeClock extends Clock {
   readonly advance: (ms: number) => void
@@ -143,6 +144,41 @@ export function fakeSdk(module: Partial<SdkModule> = {}): Platform['sdk'] {
   return { load: () => Promise.resolve(scripted) }
 }
 
+export interface FakeUpdates extends PlatformUpdates {
+  readonly opened: string[]
+  readonly revealed: string[]
+  readonly downloads: FileDownloadRequest[]
+}
+
+/** `Platform['updates']` whose unscripted members throw; opens, reveals and downloads are recorded. */
+export function fakeUpdates(given: Partial<PlatformUpdates> = {}): FakeUpdates {
+  const opened: string[] = []
+  const revealed: string[] = []
+  const downloads: FileDownloadRequest[] = []
+  return {
+    isPackaged: true,
+    installHost: { platform: 'linux', arch: 'x64', appImage: undefined, arm64Translation: false },
+    downloadsDir: () => unscripted('updates.downloadsDir', []),
+    native: () => unscripted('updates.native', []),
+    ...given,
+    opened,
+    revealed,
+    downloads,
+    download: (request) => {
+      downloads.push(request)
+      return given.download === undefined ? unscripted('updates.download', [request.url]) : given.download(request)
+    },
+    open: (path) => {
+      opened.push(path)
+      return given.open === undefined ? Promise.resolve('') : given.open(path)
+    },
+    reveal: (path) => {
+      revealed.push(path)
+      given.reveal?.(path)
+    },
+  }
+}
+
 export interface FakePlatform extends Platform {
   readonly clock: FakeClock
 }
@@ -171,5 +207,7 @@ export function createFakePlatform(): FakePlatform {
     which: fakeWhich(),
     env: {},
     claudeHome: '/test/claude',
+    directorySize: (path) => unscripted('directorySize', [path]),
+    updates: fakeUpdates(),
   }
 }

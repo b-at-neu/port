@@ -41,7 +41,6 @@ export interface TestContextOptions {
   readonly repos?: Partial<Repos>
   readonly stores?: Partial<AppContext['stores']>
   readonly live?: Partial<AppContext['live']>
-  readonly seams?: Partial<AppContext['seams']>
 }
 
 export type TestContext = AppContext & {
@@ -129,7 +128,6 @@ export function createTestContext(options: TestContextOptions = {}): TestContext
     repos,
     stores: unscriptedGroup('stores', stores),
     live: unscriptedGroup('live', options.live ?? {}),
-    seams: unscriptedGroup('seams', options.seams ?? {}),
   }
 }
 

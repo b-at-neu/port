@@ -114,22 +114,6 @@ export function isReadyEntry(entry: RepositoryEntry): entry is ReadyEntry {
   return 'config' in entry
 }
 
-/** "Find a registered, ready repository by id, or throw" — every repository-scoped channel composes this. `notListableMessage` lets a caller keep its own original wording. */
-export async function requireReadyRepo(
-  registryDeps: RegistryDeps,
-  subject: string,
-  repoId: RepoId,
-  list: typeof listRepositories,
-  notListableMessage: (message: string) => string = (message) => `${subject} could not list repositories: ${message}`,
-): Promise<ReadyEntry> {
-  const result = await list(registryDeps)
-  if (!result.ok) throw new Error(notListableMessage(result.message))
-  const entry = result.repositories.find((repository) => repository.id === repoId)
-  if (!entry) throw new Error(`${subject} found no repository registered with id '${repoId}'`)
-  if (!isReadyEntry(entry)) throw new Error(`${subject} requires a 'ready' repository, got '${entry.problem.kind}'`)
-  return entry
-}
-
 export type RepoResolution =
   | { readonly ok: true; readonly entry: ReadyEntry }
   | { readonly ok: false; readonly kind: 'unlistable' | 'not-registered' | 'not-ready'; readonly message: string }

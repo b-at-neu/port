@@ -11,7 +11,7 @@ const OPEN = `${WORKTREES}/impl-41`
 async function report(repoOptions: FakeRepoOptions, ghOptions: FakeGithubOptions = {}) {
   const repo = createFakeRepo(repoOptions)
   const gh = createFakeGithub(ghOptions)
-  const result = await readWorktreeReport({ repoRoot: MAIN, repo: 'acme/widgets', integration: 'dev', github: gh.github, ...repo.seams })
+  const result = await readWorktreeReport({ ...repo.ctx, githubHttp: gh.github }, { repoRoot: MAIN, repo: 'acme/widgets', integration: 'dev' })
   return { result, repo, gh }
 }
 
@@ -140,11 +140,13 @@ describe('readWorktreeReport', () => {
 
   it('maps a failed worktree list straight through', async () => {
     const repo = createFakeRepo()
-    const failing = { ...repo.seams, git: () => Promise.resolve({ ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'fatal: not a git repository' } as const) }
-    const result = await readWorktreeReport({ repoRoot: MAIN, repo: 'acme/widgets', integration: 'dev', ...failing })
+    const params = { repoRoot: MAIN, repo: 'acme/widgets', integration: 'dev' }
+    const base = { ...repo.ctx, githubHttp: createFakeGithub().github }
+    const failing = { ...base, git: () => Promise.resolve({ ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'fatal: not a git repository' } as const) }
+    const result = await readWorktreeReport(failing, params)
     expect(result).toMatchObject({ ok: false, kind: 'not-a-repository', message: 'fatal: not a git repository' })
 
-    const missing = await readWorktreeReport({ repoRoot: MAIN, repo: 'acme/widgets', integration: 'dev', ...repo.seams, git: () => Promise.resolve({ ok: false, kind: 'timeout', timeoutMs: 5, stderr: '' }) })
+    const missing = await readWorktreeReport({ ...base, git: () => Promise.resolve({ ok: false, kind: 'timeout', timeoutMs: 5, stderr: '' }) }, params)
     expect(missing).toMatchObject({ ok: false, kind: 'timeout' })
   })
 })

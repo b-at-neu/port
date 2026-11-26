@@ -1,5 +1,5 @@
 // The composition root: everything an action may touch, built once at startup, one block per service.
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, session, shell } from 'electron'
 import { join } from 'node:path'
 import type { EventMap, EventName } from '@/main/app/events'
 import { chooseDirectory, chooseFolder, chooseSavePath } from '@/main/app/shell/dialogs'
@@ -17,13 +17,10 @@ import { createDispatcher } from '@/main/dispatch/dispatcher'
 import { stageBundleRoot } from '@/main/dispatch/stage/bundle'
 import { createStageLauncher } from '@/main/dispatch/stage/launcher'
 import { createInterruptedSweeper } from '@/main/dispatch/stage/sweep'
-import { readAllowBase } from '@/main/github/allow'
-import { proposeAllowRule } from '@/main/github/writes/allow'
-import type { StageChannelDeps } from '@/main/app/seams'
 import type { StateEngine } from '@/types/offload'
 import { createPlatform, type Platform } from '@/main/platform'
 import { nativeNotify } from '@/main/platform/notify'
-import { createRepos, listRepositories, type Repos } from '@/main/repos'
+import { createRepos, type Repos } from '@/main/repos'
 import { createPipelineWatcher } from '@/main/pipeline/board/watcher'
 import { createHostedStore } from '@/main/sessions/hosting/store'
 import { createHostingPersistence } from '@/main/sessions/hosting/persist'
@@ -31,7 +28,9 @@ import { createSessionIndex } from '@/main/sessions/hosting/session-index'
 import { createNotifier } from '@/main/sessions/hosting/notify'
 import { createUsageLedger } from '@/main/sessions/hosting/usage-ledger'
 import { createSessionMenuRefresher } from '@/main/app/shell/session-menu'
-import { createDefaultUpdate } from '@/main/features/update/default'
+import { createUpdate } from '@/main/features/update/create'
+import { createFileDownloader } from '@/main/platform/download'
+import { createNativeUpdater } from '@/main/platform/native-updater'
 import type { RestartSeams } from '@/types/update'
 import type { AutoPlanner, Dispatcher, RunStateStore } from '@/types/dispatch'
 import type { HostedStore } from '@/types/hosting'
@@ -65,15 +64,12 @@ export type AppContext = Platform & {
     readonly engine: StateEngine
     readonly notifier: ReturnType<typeof createNotifier>
     readonly sessionMenu: ReturnType<typeof createSessionMenuRefresher>
-    readonly update: ReturnType<typeof createDefaultUpdate>
+    readonly update: ReturnType<typeof createUpdate>
     readonly autoPlanner: AutoPlanner
     readonly memos: PipelineMemos
     readonly stageSweeper: ReturnType<typeof createInterruptedSweeper>
     /** Stops the dispatcher and closes the worker. */
     readonly shutdown: () => void
-  }
-  readonly seams: {
-    readonly stage: StageChannelDeps
   }
 }
 
@@ -95,6 +91,15 @@ export function createAppContext(restart: RestartSeams): AppContext {
     info: () => ({ app: app.getVersion(), electron: process.versions.electron, node: process.versions.node, chromium: process.versions.chrome, commit: __PORT_BUILD_COMMIT__ }),
     dialogs: { chooseDirectory, chooseFolder, chooseSavePath },
     notify: nativeNotify,
+    updates: {
+      isPackaged: app.isPackaged,
+      installHost: { platform: process.platform, arch: process.arch, appImage: process.env['APPIMAGE'], arm64Translation: app.runningUnderARM64Translation },
+      downloadsDir: () => app.getPath('downloads'),
+      download: (request) => createFileDownloader(session.defaultSession)(request),
+      open: (path) => shell.openPath(path),
+      reveal: (path) => shell.showItemInFolder(path),
+      native: createNativeUpdater,
+    },
   })
   const repos = createRepos(platform)
 
@@ -113,9 +118,8 @@ export function createAppContext(restart: RestartSeams): AppContext {
   const usageLedger = createUsageLedger({ path: join(userData, 'usage-ledger.json'), readJson: platform.fs.readJson, writeJsonAtomic: platform.fs.writeJsonAtomic, now: platform.clock.now, bootId: globalThis.crypto.randomUUID() })
   void usageLedger.load()
 
-  // `live` and `seams` are assigned once every service exists; a read before then is a construction-order bug.
+  // `live` is assigned once every service exists; a read before then is a construction-order bug.
   let live: AppContext['live'] | null = null
-  let seams: AppContext['seams'] | null = null
   const stores: AppContext['stores'] = { runStates, sessionIndex, usageLedger, runs, recents, pipelineState, incidentLog }
   const ctx: AppContext = {
     ...platform,
@@ -125,10 +129,6 @@ export function createAppContext(restart: RestartSeams): AppContext {
     get live() {
       if (live === null) throw new Error('ctx.live read during construction')
       return live
-    },
-    get seams() {
-      if (seams === null) throw new Error('ctx.seams read during construction')
-      return seams
     },
   }
 
@@ -168,17 +168,7 @@ export function createAppContext(restart: RestartSeams): AppContext {
     },
   })
 
-  const stage: StageChannelDeps = {
-    listRepositories,
-    dispatcher,
-    auditDir: userData,
-    scratchDir: platform.paths.temp,
-    allow: { read: (params) => readAllowBase(platform, params), propose: (request, params) => proposeAllowRule(platform, request, params) },
-  }
-
-  const update = createDefaultUpdate(platform, restart)
-
-  seams = { stage }
+  const update = createUpdate(platform, restart)
 
   live = {
     watcher,

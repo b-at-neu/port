@@ -10,7 +10,7 @@ const finished = (n: number, overrides: Partial<FakeWorktree> = {}): FakeWorktre
 async function reclaim(repoOptions: FakeRepoOptions, ghOptions: FakeGithubOptions, scope: { issue?: number | null; force?: ForcedReclaim | null } = {}) {
   const repo = createFakeRepo(repoOptions)
   const gh = createFakeGithub(ghOptions)
-  const result = await runReclaim({ repoRoot: MAIN, repo: 'acme/widgets', integration: 'dev', github: gh.github, ...repo.seams, issue: scope.issue ?? null, force: scope.force ?? null })
+  const result = await runReclaim({ ...repo.ctx, githubHttp: gh.github }, { repoRoot: MAIN, repo: 'acme/widgets', integration: 'dev', issue: scope.issue ?? null, force: scope.force ?? null })
   return { result, repo }
 }
 
@@ -74,15 +74,10 @@ describe('runReclaim — every reclaimable worktree', () => {
 
   it('fails with the git kind when the repository cannot be read', async () => {
     const repo = createFakeRepo()
-    const result = await runReclaim({
-      repoRoot: MAIN,
-      repo: 'acme/widgets',
-      integration: 'dev',
-      ...repo.seams,
-      git: () => Promise.resolve({ ok: false, kind: 'cwd-missing', cwd: MAIN }),
-      issue: null,
-      force: null,
-    })
+    const result = await runReclaim(
+      { ...repo.ctx, githubHttp: createFakeGithub().github, git: () => Promise.resolve({ ok: false, kind: 'cwd-missing', cwd: MAIN }) },
+      { repoRoot: MAIN, repo: 'acme/widgets', integration: 'dev', issue: null, force: null },
+    )
     expect(result).toMatchObject({ ok: false, kind: 'cwd-missing', call: ['reclaim'] })
   })
 

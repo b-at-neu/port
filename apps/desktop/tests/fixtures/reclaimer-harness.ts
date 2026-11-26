@@ -1,8 +1,8 @@
 // An in-memory repository for the reclaimer tests: a fake `git`, `gh` and filesystem that stay consistent with each other.
 import { posix } from 'node:path'
-import { createPathOps } from '@/main/platform/paths'
-import type { CommandResult, GitHubHttpResult, GitHubRequest, GitHubTransport, GitRunner } from '@/types/platform'
-import type { ReclaimerFs, ReclaimerSeams } from '@/types/reclaimer'
+import type { CommandResult, GitHubHttpResult, GitHubRequest, GitHubTransport, GitRunner, PlatformFs } from '@/types/platform'
+import type { Platform } from '@/main/platform'
+import { createFakeClock, createFakeFs } from '../support/fake-platform'
 import { queryOf, recordingTransport } from './github-http'
 
 export const MAIN = '/repo'
@@ -42,7 +42,7 @@ export interface FakeRepoOptions {
 }
 
 export interface FakeRepo {
-  readonly seams: ReclaimerSeams
+  readonly ctx: Pick<Platform, 'git' | 'fs' | 'clock'>
   /** Every git call with the `-c core.longpaths=true` prefix stripped. */
   readonly calls: string[][]
   /** Every git call exactly as the runner received it. */
@@ -130,21 +130,22 @@ export function createFakeRepo(options: FakeRepoOptions = {}): FakeRepo {
     return Promise.reject(new Error(`unexpected git call: ${argv.join(' ')}`))
   }
 
-  const fs: ReclaimerFs = {
-    listDirectory: (path) => {
+  const fs: PlatformFs = {
+    ...createFakeFs(),
+    list: (path) => {
       if (nodes.get(path)?.kind !== 'directory') return Promise.resolve({ ok: false, kind: 'not-found', message: path })
       const entries = [...nodes.entries()].filter(([key]) => key !== path && posix.dirname(key) === path).map(([key, node]) => ({ name: posix.basename(key), kind: node.kind }))
       return Promise.resolve({ ok: true, value: entries })
     },
-    statPath: (path) => {
+    stat: (path) => {
       const node = nodes.get(path)
       return Promise.resolve(node === undefined ? { ok: false, kind: 'not-found', message: path } : { ok: true, value: { kind: node.kind, size: 0, modifiedAt: node.modifiedAt } })
     },
-    readTextFile: (path) => {
+    readText: (path) => {
       const node = nodes.get(path)
       return Promise.resolve(node?.kind === 'file' ? { ok: true, value: node.text } : { ok: false, kind: 'not-found', message: path })
     },
-    pathExists: (path) => Promise.resolve(nodes.has(path)),
+    exists: (path) => Promise.resolve(nodes.has(path)),
     removeDirectory: (path) => {
       const code = options.fsRemoveFails?.[path]
       if (code !== undefined) return Promise.resolve({ ok: false, code, message: `${code}: resource busy or locked, rm '${path}'` })
@@ -153,8 +154,7 @@ export function createFakeRepo(options: FakeRepoOptions = {}): FakeRepo {
     },
   }
 
-  const seams: ReclaimerSeams = { git, fs, pathOps: createPathOps('posix', { home: '/home/u' }), now: () => new Date('2026-02-01T00:00:00.000Z') }
-  return { seams, calls, rawCalls, branchesDeleted, nodes }
+  return { ctx: { git, fs, clock: createFakeClock('2026-02-01T00:00:00.000Z') }, calls, rawCalls, branchesDeleted, nodes }
 }
 
 export interface FakeGithubOptions {

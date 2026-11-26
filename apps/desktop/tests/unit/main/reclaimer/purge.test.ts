@@ -7,7 +7,7 @@ const STALE = `${WORKTREES}/impl-29-stale`
 
 async function purge(options: FakeRepoOptions, path: string) {
   const repo = createFakeRepo(options)
-  const result = await runPurge({ repoRoot: MAIN, path, ...repo.seams })
+  const result = await runPurge(repo.ctx, { repoRoot: MAIN, path })
   return { result, repo }
 }
 
@@ -35,7 +35,7 @@ describe('runPurge', () => {
     const independent = `${WORKTREES}/clone`
     const repo = createFakeRepo({ orphanDirs: [independent] })
     repo.nodes.set(`${independent}/.git`, { kind: 'directory', text: '', modifiedAt: 't' })
-    const result = await runPurge({ repoRoot: MAIN, path: independent, ...repo.seams })
+    const result = await runPurge(repo.ctx, { repoRoot: MAIN, path: independent })
     expect(result).toMatchObject({ ok: true, outcome: 'refused' })
     expect(repo.nodes.has(independent)).toBe(true)
   })
@@ -53,12 +53,10 @@ describe('runPurge', () => {
 
   it('fails with the git kind when the repository cannot be read, deleting nothing', async () => {
     const repo = createFakeRepo({ orphanDirs: [STALE] })
-    const result = await runPurge({
-      repoRoot: MAIN,
-      path: STALE,
-      ...repo.seams,
-      git: () => Promise.resolve({ ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'fatal: not a git repository' }),
-    })
+    const result = await runPurge(
+      { ...repo.ctx, git: () => Promise.resolve({ ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'fatal: not a git repository' }) },
+      { repoRoot: MAIN, path: STALE },
+    )
     expect(result).toMatchObject({ ok: false, kind: 'not-a-repository', call: ['purge', '--orphan', STALE] })
     expect(repo.nodes.has(STALE)).toBe(true)
   })
