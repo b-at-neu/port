@@ -10,12 +10,12 @@ import type { DecisionTarget } from '@/types/decision'
 type GrantTarget = Extract<DecisionTarget, { readonly decision: 'grant' }>
 
 function GrantConfirm({ target }: { readonly target: GrantTarget }) {
-  const { repoId, number, expectedStage, context } = target
+  const { repoId, number, expected, context } = target
   const decide = useDecideItem({ cap: context.cap })
 
   function confirm(): void {
     closeDecisionDialog()
-    void decide.perform({ repoId, number, expectedStage, decision: 'grant', route: null, note: null, skipComment: false, picks: null })
+    void decide.perform({ repoId, number, expected, decision: 'grant', route: null, note: null, skipComment: false, picks: null })
   }
 
   return <ConfirmDialog open title={dialogTitle('grant', number)} description={grantConsequence(context, number)} confirmLabel={DECISION_BUTTON_LABELS.grant} onCancel={closeDecisionDialog} onConfirm={confirm} />

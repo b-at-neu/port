@@ -22,7 +22,7 @@ describe('gateStepOf', () => {
     ['an unresolved issue', { data: { kind: 'unresolved', ownership: OWNERSHIP }, isError: false, isFetching: false }, 'refused'],
     ['a not-found verdict', { data: resolved({ kind: 'not-found' }), isError: false, isFetching: false }, 'refused'],
     ['a not-an-issue verdict', { data: resolved({ kind: 'not-an-issue' }), isError: false, isFetching: false }, 'refused'],
-    ['a not-at-plan-review verdict', { data: resolved({ kind: 'not-at-plan-review', observed: [] }), isError: false, isFetching: false }, 'refused'],
+    ['a not-at-plan-review verdict', { data: resolved({ kind: 'not-at-plan-review', observed: null }), isError: false, isFetching: false }, 'refused'],
     ['an answerable verdict', { data: resolved(ANSWERABLE), isError: false, isFetching: false }, 'reviewing'],
   ] as const)('%s is %s', (_name, query, kind) => {
     expect(gateStepOf(query).kind).toBe(kind)

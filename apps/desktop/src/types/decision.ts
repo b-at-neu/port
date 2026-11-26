@@ -1,11 +1,11 @@
 import type { GrantContext, ReviseContext, UnblockContext } from '@/types/actions'
-import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { TicketView } from '@/utils/pipeline/stages'
 import type { RepoId } from '@/utils/repos'
 
 export type DecisionTarget = {
   readonly repoId: RepoId
   readonly number: number
-  readonly expectedStage: LabelKey | null
+  readonly expected: TicketView | null
 } & (
   | { readonly decision: 'unblock'; readonly context: UnblockContext }
   | { readonly decision: 'revise'; readonly context: ReviseContext }

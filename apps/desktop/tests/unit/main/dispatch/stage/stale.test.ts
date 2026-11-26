@@ -6,6 +6,7 @@ import type { InterruptedStage } from '@/types/stage'
 import type { RepositoryState } from '@/types/state'
 import type { RepoId } from '@/utils/repos'
 import { reconciledItem, repositoryState } from '../../../../support/board-snapshot'
+import { queuedAt, ticketAt } from '../../../../support/tickets'
 
 const REPO = 'repo-a' as RepoId
 const INTERRUPTED_AT = '2026-01-01T00:10:00.000Z'
@@ -20,7 +21,7 @@ function entry(overrides: Partial<InterruptedStage> = {}): InterruptedStage {
     number: 38,
     kind: 'issue',
     trigger: 'planApproved',
-    inFlight: 'inProgress',
+    stage: 'implement',
     model: 'sonnet',
     claudeSessionId: 'c1',
     worktree: { path: '/wt', branch: 'b', baseSha: 's' },
@@ -39,7 +40,9 @@ function record(overrides: Partial<DispatchRecord> = {}): DispatchRecord {
   return { agent: 'impl', number: 38, kind: 'issue', trigger: 'planApproved', state: 'started', at: AFTER, detail: null, outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null, ...overrides }
 }
 
-const inFlightItem = reconciledItem({ number: 38, kind: 'issue', matchedKeys: ['inProgress'] })
+const running = (number: number) => reconciledItem({ number, kind: 'issue', ticket: ticketAt('implement', { kind: 'running', runId: 'run-1' }, { ticket: number }) })
+const movedItem = () => reconciledItem({ number: 38, ticket: ticketAt('review', queuedAt(), { ticket: 38 }) })
+const inFlightItem = running(38)
 
 const NOT_READY: RepositoryState = { ok: false, repoId: REPO, displayName: 'o/a', reason: 'not-ready', problem: { kind: 'directory-missing' } }
 
@@ -87,14 +90,14 @@ describe('staleInterrupted — one survivor per ticket', () => {
   })
 
   it('leaves entries of different tickets alone', () => {
-    const verdict = staleInterrupted({ entries: [entry({ id: 'a' }), entry({ id: 'b', number: 39 })], repo: repoWith([inFlightItem, reconciledItem({ number: 39, matchedKeys: ['inProgress'] })]), recent: [] })
+    const verdict = staleInterrupted({ entries: [entry({ id: 'a' }), entry({ id: 'b', number: 39 })], repo: repoWith([inFlightItem, running(39)]), recent: [] })
     expect(verdict.clear).toEqual([])
   })
 })
 
 describe('staleInterrupted — the label moved', () => {
   it('clears when the ticket no longer carries the entry’s in-flight label', () => {
-    const moved = reconciledItem({ number: 38, matchedKeys: ['prOpened'] })
+    const moved = movedItem()
     expect(staleInterrupted({ entries: [entry()], repo: repoWith([moved]), recent: [] })).toEqual({ clear: ['e1'], recheck: [] })
   })
 
@@ -113,7 +116,7 @@ describe('staleInterrupted — the label moved', () => {
 })
 
 describe('staleInterrupted — a read that cannot be trusted clears nothing', () => {
-  const moved = reconciledItem({ number: 38, matchedKeys: ['prOpened'] })
+  const moved = movedItem()
 
   it('ignores a repository that is not ready', () => {
     expect(staleInterrupted({ entries: [entry()], repo: NOT_READY, recent: [] })).toEqual({ clear: [], recheck: [] })

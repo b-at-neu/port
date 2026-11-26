@@ -69,7 +69,7 @@ export function staleInterrupted(input: StaleInput): StaleVerdict {
     if (!cleanReadAfter(repo, entry.interruptedAt)) return
     const item = repo.items.find((candidate) => candidate.kind === entry.kind && candidate.number === entry.number)
     if (item === undefined) recheck.add(entry.number)
-    else if (!item.matchedKeys.includes(entry.inFlight)) clear.push(entry.id)
+    else if (item.ticket?.stage !== entry.stage || item.ticket.status.kind !== 'running') clear.push(entry.id)
   })
 
   return { clear, recheck: [...recheck] }

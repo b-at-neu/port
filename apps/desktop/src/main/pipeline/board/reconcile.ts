@@ -22,11 +22,12 @@ import type {
   WaitingOn,
 } from '@/types/state'
 import type { LabelEventNode } from '@/types/github'
-import { fullKeysOf, type PipelineView, type StoredItem } from '@/types/pipeline-state'
+import { fullKeysOf, type PipelineView, type TrackedItem } from '@/types/pipeline-state'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers, indexWorkSessions, workSessionsFor } from '@/main/pipeline/board/attach'
 import { closingReference, planPresentIn, sessionRequiredAt } from '@/main/pipeline/board/link'
-import { stageOf } from '@/main/pipeline/board/stage'
+import { roleOfTicket, stageOf } from '@/main/pipeline/board/stage'
+import type { Ticket } from '@/utils/pipeline/ticket'
 import { CLAIM_SCAN_GRACE_MS } from '@/types/board'
 import { codeReviewCount } from '@/utils/pipeline/gates'
 import { parseFilesBlock } from '@/utils/pipeline/contention'
@@ -43,7 +44,7 @@ interface ReconcileRepositoryInput {
 }
 
 /** Every added key becomes a stage entry, oldest first — a marker is never a stage. */
-function storedHistoryOf(stored: StoredItem): readonly StageEntry[] {
+function storedHistoryOf(stored: TrackedItem): readonly StageEntry[] {
   const out: StageEntry[] = []
   for (const row of stored.history) {
     for (const key of row.add) {
@@ -51,6 +52,12 @@ function storedHistoryOf(stored: StoredItem): readonly StageEntry[] {
     }
   }
   return out.sort((a, b) => a.at.localeCompare(b.at))
+}
+
+/** When the ticket's current run began: the open run's start, else the newest history row that entered `running`. */
+export function claimedAtOf(ticket: Ticket): string | null {
+  const open = ticket.runs.findLast((run) => run.endedAt === null)
+  return open?.startedAt ?? ticket.history.findLast((event) => event.to?.status === 'running')?.at ?? null
 }
 
 function itemStatesFreshness(fetch: ItemsByNumberFetch | null): FreshnessEntry {
@@ -162,7 +169,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
   }
 
   const items: ReconciledItem[] = fetchedItems.map((item) => {
-    const own: StoredItem | undefined = stored.get(`${item.kind}:${String(item.number)}`)
+    const own: TrackedItem | undefined = stored.get(`${item.kind}:${String(item.number)}`)
     const matchedKeys = own === undefined ? item.matchedKeys : fullKeysOf(own)
     const stageResult = stageOf(matchedKeys, vocabulary)
     const linked = item.kind === 'pull-request' ? (prLinks.get(item.number) ?? null) : (issueLinks.get(item.number) ?? null)
@@ -184,11 +191,12 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     const workSessions = workSessionsFor(workSessionIndex, item)
 
     const stageHistory = own === undefined ? stageHistoryOf(item.labelEvents, labelsByName) : storedHistoryOf(own)
+    const ticket = own?.ticket ?? null
     const inFlightKey = stageResult.stages.find((s) => s.role === 'in-flight')?.key
-    const claimedAt = stageHistory.findLast((entry) => entry.key === inFlightKey)?.at ?? null
+    const claimedAt = ticket === null ? (stageHistory.findLast((entry) => entry.key === inFlightKey)?.at ?? null) : claimedAtOf(ticket)
     const sessionsScannedAt = 'at' in repoSessions.freshness ? repoSessions.freshness.at : null
 
-    const { status, statusEvidence } = statusOf(stageResult.stage, repoSessions.available, agents, sessions, claimedAt, sessionsScannedAt)
+    const { status, statusEvidence } = statusOf(ticket === null ? stageResult.stage : roleOfTicket(ticket), repoSessions.available, agents, sessions, claimedAt, sessionsScannedAt)
     const waitingOn: WaitingOn | null =
       status !== 'waiting' ? null : item.assignees.length === 0 ? 'nobody' : sessionRequired ? 'operator-session' : 'cockpit'
 
@@ -213,6 +221,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
       title: item.title,
       url: item.url,
       assignees: item.assignees,
+      ticket,
       stage: stageResult.stage,
       stages: stageResult.stages,
       stageAmbiguous: stageResult.stageAmbiguous,

@@ -6,12 +6,13 @@ import type { RepoDispatchStatus } from '@/types/dispatch'
 import type { SessionKey } from '@/types/hosting'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS, type BoardSnapshot } from '@/types/board'
 import { needsYouCount, needsYouItems, repoNeedsYou, waitsOnYou } from '@/renderer/board/needs-you'
+import { reconciledItem } from '../../../support/board-snapshot'
 import { stageSession } from '../../../support/session-snapshot'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
-  return {
+  return reconciledItem({
     repoId: 'repo-a' as RepoId,
     repo: 'o/a',
     kind: 'issue',
@@ -52,7 +53,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     blockerComments: null,
     closingPullRequests: null,
     ...overrides,
-  }
+  })
 }
 
 function readyRepo(overrides: Partial<Extract<RepositoryState, { ok: true }>> = {}): Extract<RepositoryState, { ok: true }> {
@@ -183,8 +184,8 @@ describe('needsYouItems', () => {
 
   it('held items keep only conflicting, contended and cycle-cap', () => {
     const held = [
-      { number: 1, kind: 'pull-request' as const, trigger: 'readyForReview' as const, reason: 'conflicting' as const, contention: null, escalation: null },
-      { number: 2, kind: 'pull-request' as const, trigger: 'readyForReview' as const, reason: 'unowned' as const, contention: null, escalation: null },
+      { number: 1, kind: 'pull-request' as const, stage: 'review' as const, trigger: 'readyForReview' as const, reason: 'conflicting' as const, contention: null, escalation: null },
+      { number: 2, kind: 'pull-request' as const, stage: 'review' as const, trigger: 'readyForReview' as const, reason: 'unowned' as const, contention: null, escalation: null },
     ]
     const items = needsYouItems(snapshotOf([], { tick: [tickReport({ held })] }), NOW)
     expect(items).toHaveLength(1)
@@ -193,8 +194,8 @@ describe('needsYouItems', () => {
 
   it('claims keep only stalled-confirmed', () => {
     const claims = [
-      { number: 3, kind: 'issue' as const, inFlight: 'inProgress' as const, class: 'stalled-confirmed' as const, retryKey: 'inProgress' as const },
-      { number: 4, kind: 'issue' as const, inFlight: 'inProgress' as const, class: 'matched' as const, retryKey: null },
+      { number: 3, kind: 'issue' as const, stage: 'implement' as const, class: 'stalled-confirmed' as const, retryable: true },
+      { number: 4, kind: 'issue' as const, stage: 'implement' as const, class: 'matched' as const, retryable: false },
     ]
     const items = needsYouItems(snapshotOf([], { tick: [tickReport({ claims })] }), NOW)
     expect(items).toHaveLength(1)
@@ -202,7 +203,7 @@ describe('needsYouItems', () => {
   })
 
   it('surfaces every reported labelRepair as a half-labelled item', () => {
-    const labelRepairs = [{ number: 9, kind: 'issue' as const, shape: 'plan-missing-approved' as const, labels: ['planApproved' as const], agent: null, reason: null, mirror: null }]
+    const labelRepairs = [{ number: 9, kind: 'issue' as const, shape: 'plan-missing-approved' as const, view: { stage: 'implement' as const, status: { kind: 'queued' as const, reason: 'new' as const } }, agent: null, reason: null, mirror: null }]
     const items = needsYouItems(snapshotOf([], { tick: [tickReport({ labelRepairs })] }), NOW)
     expect(items).toHaveLength(1)
     expect(items[0]).toMatchObject({ kind: 'half-labelled', number: 9 })
@@ -235,7 +236,7 @@ describe('needsYouItems', () => {
       number: 301,
       kind: 'issue' as const,
       trigger: 'ready' as const,
-      inFlight: 'planning' as const,
+      stage: 'plan' as const,
       model: 'opus',
       claudeSessionId: null,
       worktree: { path: '/wt', branch: 'b', baseSha: 's' },
@@ -312,9 +313,9 @@ describe('needsYouItems', () => {
   })
 
   describe('a ticket with a linked pull request', () => {
-    const pair = (issueOverrides: Partial<ReconciledItem> = {}) => [
+    const pair = (issueOverrides: Partial<ReconciledItem> = {}, prOverrides: Partial<ReconciledItem> = {}) => [
       item({ number: 464, title: 'the ticket', linked: 537, ...issueOverrides }),
-      item({ number: 537, kind: 'pull-request', title: 'the pull request', url: 'https://github.com/o/a/pull/537', linked: 464, stage: 'trigger', stages: [{ key: 'reviewing', name: 'reviewing', role: 'trigger' }], status: 'in-flight' }),
+      item({ number: 537, kind: 'pull-request', title: 'the pull request', url: 'https://github.com/o/a/pull/537', linked: 464, stage: 'trigger', stages: [{ key: 'reviewing', name: 'reviewing', role: 'trigger' }], status: 'in-flight', ...prOverrides }),
     ]
     const reviewSession = (text: string) =>
       stageSession({
@@ -333,14 +334,12 @@ describe('needsYouItems', () => {
     })
 
     it("produces one blocked row for a blocked label on the ticket with its review session's BLOCKED: hand-back", () => {
-      const blocked = pair({ stage: 'gate', stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }], matchedKeys: ['blocked'] })
-      blocked[1] = { ...blocked[1], stage: 'gate', stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }] } as ReconciledItem
+      const blocked = pair({ stage: 'gate', stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }], matchedKeys: ['blocked'] }, { stage: 'gate', stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }] })
       expect(needsYouItems(snapshotOf([readyRepo({ items: blocked })]), NOW, [reviewSession('BLOCKED: no checks ran')]).map((i) => i.kind)).toEqual(['blocked'])
     })
 
     it('carries the ticket on a label-keyed row, whose number stays the pull request it writes to', () => {
-      const approved = pair()
-      approved[1] = { ...approved[1], stage: 'terminal', stages: [{ key: 'approved', name: 'approved', role: 'terminal' }] } as ReconciledItem
+      const approved = pair({}, { stage: 'terminal', stages: [{ key: 'approved', name: 'approved', role: 'terminal' }] })
       const [row] = needsYouItems(snapshotOf([readyRepo({ items: approved })]), NOW)
       expect(row).toMatchObject({ kind: 'ready-to-merge', number: 537 })
       expect(row?.ticket?.number).toBe(464)
@@ -454,8 +453,8 @@ describe('needsYouItems sort order', () => {
     const row = item({ number: 10, updatedAt: '2026-01-01T00:30:00.000Z', stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }] })
     const heldMatch = item({ number: 11, updatedAt: '2026-01-01T00:45:00.000Z', stage: 'trigger', stages: [{ key: 'readyForReview', name: 'ready for review', role: 'trigger' }] })
     const repo = readyRepo({ items: [row, heldMatch] })
-    const held = [{ number: 11, kind: 'pull-request' as const, trigger: 'readyForReview' as const, reason: 'conflicting' as const, contention: null, escalation: null }]
-    const claims = [{ number: 12, kind: 'issue' as const, inFlight: 'inProgress' as const, class: 'stalled-confirmed' as const, retryKey: 'inProgress' as const }]
+    const held = [{ number: 11, kind: 'pull-request' as const, stage: 'review' as const, trigger: 'readyForReview' as const, reason: 'conflicting' as const, contention: null, escalation: null }]
+    const claims = [{ number: 12, kind: 'issue' as const, stage: 'implement' as const, class: 'stalled-confirmed' as const, retryable: true }]
     const denial = { id: 'd1', repoId: 'repo-a' as RepoId, agent: 'impl' as const, number: 300, toolName: 'Bash', inputSummary: 'x', rule: 'Bash(x)', at: '2026-01-01T00:50:00.000Z', sessionKey: 'hosted-300' as SessionKey }
     const stage = { agent: 'impl' as const, number: 300, kind: 'issue' as const, trigger: 'planApproved' as const }
     const live = stageSession({ key: 'hosted-300', repoId: 'repo-a' as RepoId, stage, phase: 'ready', lastResult: { subtype: 'success', isError: false, text: 'stopped', at: '2026-01-01T00:55:00.000Z' } })
@@ -478,8 +477,8 @@ describe('needsYouItems sort order', () => {
   })
 
   it('held and stalled items with no matched row keep at: null', () => {
-    const held = [{ number: 1, kind: 'pull-request' as const, trigger: 'readyForReview' as const, reason: 'conflicting' as const, contention: null, escalation: null }]
-    const claims = [{ number: 2, kind: 'issue' as const, inFlight: 'inProgress' as const, class: 'stalled-confirmed' as const, retryKey: 'inProgress' as const }]
+    const held = [{ number: 1, kind: 'pull-request' as const, stage: 'review' as const, trigger: 'readyForReview' as const, reason: 'conflicting' as const, contention: null, escalation: null }]
+    const claims = [{ number: 2, kind: 'issue' as const, stage: 'implement' as const, class: 'stalled-confirmed' as const, retryable: true }]
     const items = needsYouItems(snapshotOf([], { tick: [tickReport({ held, claims })] }), NOW)
     expect(items.every((i) => i.at === null)).toBe(true)
   })

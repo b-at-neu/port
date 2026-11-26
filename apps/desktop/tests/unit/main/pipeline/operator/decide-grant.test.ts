@@ -1,22 +1,24 @@
 import { describe, expect, it } from 'vitest'
-import type { ReconciledItem, StageLabel } from '@/types/state'
+import type { ReconciledItem } from '@/types/state'
 import type { ItemDecisionRequest } from '@/types/actions'
 import { applyItemDecision } from '@/main/pipeline/operator/decide'
+import { ticketViewOf } from '@/utils/pipeline/stages'
 import { boardSnapshot as snapshotOf, reconciledItem, repositoryState } from '../../../../support/board-snapshot'
 import { operatorRig, REPO_ID, type OperatorRigOptions } from '../../../../support/operator-rig'
-import { ticketOf } from '../../../../support/tickets'
+import { queuedAt, ticketOf } from '../../../../support/tickets'
 
-const REQUEST: ItemDecisionRequest = { repoId: REPO_ID, number: 300, decision: 'grant', expectedStage: 'needsRevision', route: null, note: null, skipComment: false, picks: null }
+const PR = { number: 300, approvedAt: null }
+const CHANGES_REQUESTED = ticketOf({ repo: REPO_ID, ticket: 51, pr: PR, stage: 'revise', status: queuedAt('changes-requested') })
 
-const stageLabel = (key: StageLabel['key'], role: StageLabel['role']): StageLabel => ({ key, name: key, role })
+const REQUEST: ItemDecisionRequest = { repoId: REPO_ID, number: 300, decision: 'grant', expected: ticketViewOf(CHANGES_REQUESTED), route: null, note: null, skipComment: false, picks: null }
 
 const cappedItem = (overrides: Partial<ReconciledItem> = {}): ReconciledItem =>
-  reconciledItem({ repoId: REPO_ID, kind: 'pull-request', number: 300, stage: 'trigger', stages: [stageLabel('needsRevision', 'trigger')], status: 'waiting', matchedKeys: ['needsRevision'], headRefOid: 'a'.repeat(40), reviewCycleCount: 5, ...overrides })
+  reconciledItem({ repoId: REPO_ID, kind: 'pull-request', number: 300, ticket: null, headRefOid: 'a'.repeat(40), reviewCycleCount: 5, ...overrides })
 
 const AT_CAP: OperatorRigOptions = {
   viewer: 'op',
-  items: [{ number: 51, labels: ['port'], assignees: ['op'] }, { number: 300, kind: 'pull-request', labels: ['port', 'needs revision'], assignees: ['op'], headRefName: '51-fix', headRefOid: 'a'.repeat(40) }],
-  tickets: [ticketOf({ repo: REPO_ID, ticket: 51, pr: { number: 300, approvedAt: null }, stage: 'revise', status: { kind: 'queued', reason: 'new', since: '2026-11-23T12:00:00.000Z' } })],
+  items: [{ number: 51, labels: ['port'], assignees: ['op'] }, { number: 300, kind: 'pull-request', labels: ['port'], assignees: ['op'], headRefName: '51-fix', headRefOid: 'a'.repeat(40) }],
+  tickets: [CHANGES_REQUESTED],
 }
 
 async function grant(options: { readonly rig?: OperatorRigOptions; readonly item?: ReconciledItem; readonly liveStage?: boolean } = {}) {

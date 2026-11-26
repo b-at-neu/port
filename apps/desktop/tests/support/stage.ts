@@ -1,8 +1,6 @@
-import { stageModeFor } from '@/main/pipeline/transitions'
 import type { StageLauncher, StageLaunchRequest } from '@/types/dispatch'
 import type { HostedSessionSnapshot, HostedStore, SessionKey } from '@/types/hosting'
 import type { RunStore } from '@/types/stage'
-import { stageOfMode } from '@/types/stage-labels'
 import type { StageOutcome } from '@/types/stage-session'
 import type { RepoId } from '@/utils/repos'
 import { sessionSnapshot } from './session-snapshot'
@@ -27,7 +25,7 @@ export function scriptedStage(runs: RunStore, repoId: RepoId, now: () => Date) {
       sessions.set(sessionKey, sessionSnapshot({ sessionKey, repoId, phase: 'streaming' }))
       await runs.start(repoId, {
         id: `run-${String(launches.length)}`,
-        stage: stageOfMode(stageModeFor(request.agent, request.trigger)),
+        stage: request.stage,
         item: { kind: request.kind, number: request.number },
         agent: request.agent,
         trigger: request.trigger,

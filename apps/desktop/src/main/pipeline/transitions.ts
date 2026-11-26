@@ -1,13 +1,13 @@
 // Pure: the (ticket, event) → ticket table. No I/O — the store commits what this returns, and only after it is persisted.
-import { HISTORY_CAP, ticketOfKeys } from '@/main/pipeline/state/migrate'
-import { legacyKeysOf } from '@/main/pipeline/state/mirror'
+import { HISTORY_CAP } from '@/main/pipeline/state/migrate'
+import { applyLabels, legacyDiffOf } from '@/main/pipeline/state/legacy-event'
+import { applyMove } from '@/main/pipeline/moves'
 import { applyRunChange } from '@/main/pipeline/runs'
 import type { PipelineItemKind } from '@/types/github'
 import type { TicketRef } from '@/types/pipeline-state'
 import { stageOfMode, type StageEvent, type StageMode, type StateEvent, type TableResult, type TicketEvent } from '@/types/stage-labels'
 import type { StageHandback } from '@/types/stage-session'
-import type { HandoffRefusal, StageAgent } from '@/types/tick'
-import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { HandoffRefusal } from '@/types/tick'
 import type { Event, Stage, Status, Ticket } from '@/utils/pipeline/ticket'
 import type { RepoId } from '@/utils/repos'
 
@@ -22,10 +22,6 @@ export const HANDBACK_TOKENS: Readonly<Record<StageMode, readonly string[]>> = {
 
 // A review hand-back that is a verdict on the head ends one review cycle; the other tokens re-queue the same head.
 const NON_VERDICT_TOKENS: readonly string[] = ['rebase-required', 'head-moved']
-
-export function stageModeFor(agent: StageAgent, trigger: LabelKey): StageMode {
-  return trigger === 'refreshBranch' ? 'refresh' : agent
-}
 
 export function itemKindFor(mode: StageMode): PipelineItemKind {
   return mode === 'plan' || mode === 'impl' ? 'issue' : 'pull-request'
@@ -136,6 +132,8 @@ export function actionOf(event: StateEvent): string {
       return 'mirror-merged'
     case 'labels':
       return event.action
+    case 'operator':
+      return event.move.kind
     case 'handback': {
       const prefix = event.via === 'adopt' ? 'stage-adopt' : 'stage-handback'
       return `${prefix}-${event.token}${event.token === 'refreshed' ? `-${event.arg ?? ''}` : ''}`
@@ -184,7 +182,7 @@ function settles(ticket: Ticket, event: Extract<StateEvent, { kind: 'handback' }
   return status.kind === 'queued' && status.reason === 'retry'
 }
 
-function stageEventNext(ticket: Ticket, event: Exclude<StateEvent, { kind: 'labels' | 'merged' }>, at: string): Next | TableResult {
+function stageEventNext(ticket: Ticket, event: Exclude<StateEvent, { kind: 'labels' | 'merged' | 'operator' }>, at: string): Next | TableResult {
   const { status } = ticket
   switch (event.kind) {
     case 'claim':
@@ -205,22 +203,14 @@ function stageEventNext(ticket: Ticket, event: Exclude<StateEvent, { kind: 'labe
   }
 }
 
-const prefixedKeys = (ticket: Ticket): Set<string> => {
-  const halves = (['issue', 'pull-request'] as const).flatMap((kind) => (legacyKeysOf(ticket, kind) ?? []).map((key) => `${kind}:${key}`))
-  return new Set(halves)
-}
-
 function isVerdict(event: StateEvent): boolean {
   return event.kind === 'handback' && event.via === 'session' && event.stage === 'review' && HANDBACK_TOKENS.review.includes(event.token) && !NON_VERDICT_TOKENS.includes(event.token)
 }
 
 /** Records one change on the ticket: its `rev`, its history row with the label diff of both halves, and a review verdict's cycle. A `null` ticket is a creation. */
 function commit(ticket: Ticket | null, next: Ticket, event: StateEvent, ctx: TableContext): TableResult {
-  const before = ticket === null ? new Set<string>() : prefixedKeys(ticket)
-  const after = prefixedKeys(next)
-  const add = [...after].filter((key) => !before.has(key))
-  const remove = [...before].filter((key) => !after.has(key))
-  const row: Event = { at: ctx.at, action: actionOf(event), actor: ctx.actor, to: { stage: next.stage, status: next.status.kind }, legacy: add.length === 0 && remove.length === 0 ? null : { add, remove } }
+  const actor = event.kind === 'operator' ? event.actor : ctx.actor
+  const row: Event = { at: ctx.at, action: actionOf(event), actor, to: { stage: next.stage, status: next.status.kind }, legacy: legacyDiffOf(ticket, next) }
   return {
     ok: true,
     changed: true,
@@ -228,33 +218,17 @@ function commit(ticket: Ticket | null, next: Ticket, event: StateEvent, ctx: Tab
   }
 }
 
-function applyLabels(ticket: Ticket | null, event: Extract<StateEvent, { kind: 'labels' }>, ctx: TableContext): TableResult {
-  const { itemKind } = event
-  const current = ticket === null ? [] : (legacyKeysOf(ticket, itemKind) ?? [])
-  if (!event.expect.present.every((key) => current.includes(key)) || event.expect.absent.some((key) => current.includes(key))) return MOVED
-  const keys: LabelKey[] = current.filter((key) => !event.remove.includes(key))
-  for (const key of event.add) if (!keys.includes(key)) keys.push(key)
+function labelsResult(ticket: Ticket | null, event: Extract<StateEvent, { kind: 'labels' }>, ctx: TableContext): TableResult {
+  const result = applyLabels(ticket, event, ctx)
+  if (result.kind === 'moved') return MOVED
+  if (result.kind === 'unchanged' && ticket !== null) return { ok: true, ticket, changed: false }
+  return result.kind === 'next' ? commit(ticket, result.ticket, event, ctx) : MOVED
+}
 
-  const otherKind = itemKind === 'issue' ? 'pull-request' : 'issue'
-  const other = ticket === null ? null : legacyKeysOf(ticket, otherKind)
-  const issueKeys = itemKind === 'issue' ? keys : (other ?? [])
-  const prNumber = itemKind === 'pull-request' ? ctx.ref.number : (ticket?.pr?.number ?? null)
-  const prKeys = itemKind === 'pull-request' ? keys : other
-  const resolved = ticketOfKeys({
-    repo: ctx.repo,
-    ticket: ticket?.ticket ?? (itemKind === 'issue' ? ctx.ref.number : (event.issue ?? ctx.ref.number)),
-    issueKeys,
-    pr: prNumber === null ? null : { number: prNumber, keys: prKeys ?? [], approvedAt: ticket?.pr?.number === prNumber ? ticket.pr.approvedAt : null },
-    history: ticket?.history ?? [],
-    at: ctx.at,
-    mirrorFailure: ticket?.mirror.failure ?? null,
-    reviewCycles: ticket?.reviewCycles ?? 0,
-    stageHint: ticket?.stage ?? null,
-  }).ticket
-  const next: Ticket = ticket === null ? resolved : { ...ticket, stage: resolved.stage, status: resolved.status, pr: resolved.pr, autoPlan: resolved.autoPlan }
-  if (ticket === null) return commit(null, next, event, ctx)
-  const unchanged = [...prefixedKeys(ticket)].sort().join() === [...prefixedKeys(next)].sort().join()
-  return unchanged ? { ok: true, ticket, changed: false } : commit(ticket, next, event, ctx)
+function operatorResult(ticket: Ticket, event: Extract<StateEvent, { kind: 'operator' }>, ctx: TableContext): TableResult {
+  const next = applyMove(ticket, event.move, ctx.at)
+  if (next === null) return MOVED
+  return commit(ticket, { ...ticket, stage: next.stage, status: next.status, pr: next.pr === undefined ? ticket.pr : next.pr }, event, ctx)
 }
 
 /** Whether the table would take the event from where the ticket stands now; nothing is committed. */
@@ -264,8 +238,9 @@ export function accepts(ticket: Ticket | null, event: TicketEvent, ref: TicketRe
 
 /** What the table makes of one event: the next ticket, or a refusal when the ticket is not where the event expects it. A missing ticket exists only for a `labels` event, which creates it. */
 export function applyEvent(ticket: Ticket | null, event: TicketEvent, ctx: TableContext): TableResult {
-  if (event.kind === 'labels') return applyLabels(ticket, event, ctx)
+  if (event.kind === 'labels') return labelsResult(ticket, event, ctx)
   if (ticket === null) return MOVED
+  if (event.kind === 'operator') return operatorResult(ticket, event, ctx)
   if (event.kind === 'run-start' || event.kind === 'run') return applyRunChange(ticket, event, ctx.at)
   if (event.kind === 'merged') {
     return ticket.status.kind === 'done' ? { ok: true, ticket, changed: false } : commit(ticket, { ...ticket, stage: 'merge', status: { kind: 'done', at: ctx.at } }, event, ctx)

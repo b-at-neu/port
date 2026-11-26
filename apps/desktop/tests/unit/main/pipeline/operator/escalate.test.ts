@@ -8,7 +8,7 @@ const READY: OperatorRigOptions = { items: [{ number: 52, labels: ['port', 'clau
 
 async function escalate(options: OperatorRigOptions = READY, overrides: Partial<EscalateToHumanParams> = {}) {
   const rig = await operatorRig(options)
-  const result = await escalateToHuman(rig.ctx, { entry: rig.entry, kind: 'issue', number: 52, trigger: 'planApproved', viewer: 'op', body: '## Pipeline Escalation\nover budget', action: 'budget-escalate', auditDir: rig.auditDir, scratchDir: rig.scratchDir, ...overrides })
+  const result = await escalateToHuman(rig.ctx, { entry: rig.entry, kind: 'issue', number: 52, viewer: 'op', body: '## Pipeline Escalation\nover budget', action: 'budget-escalate', auditDir: rig.auditDir, scratchDir: rig.scratchDir, ...overrides })
   return { rig, result }
 }
 
@@ -24,13 +24,13 @@ describe('escalateToHuman', () => {
   it('comments when the state moved but its label mirror failed', async () => {
     const rig = await operatorRig(READY)
     rig.github.failWrites(null, 'offline')
-    const result = await escalateToHuman(rig.ctx, { entry: rig.entry, kind: 'issue', number: 52, trigger: 'planApproved', viewer: 'op', body: 'over budget', action: 'budget-escalate', auditDir: rig.auditDir, scratchDir: rig.scratchDir })
+    const result = await escalateToHuman(rig.ctx, { entry: rig.entry, kind: 'issue', number: 52, viewer: 'op', body: 'over budget', action: 'budget-escalate', auditDir: rig.auditDir, scratchDir: rig.scratchDir })
     expect(result.labels.kind).toBe('mirror-failed')
     expect(result.comment?.kind).toBe('applied')
   })
 
   it.each([
-    { name: 'the state did not save', options: { ...READY, tickets: null } satisfies OperatorRigOptions, kind: 'state-unsaved' },
+    { name: 'the record holds no ticket', options: { ...READY, tickets: null } satisfies OperatorRigOptions, kind: 'item-unavailable' },
     { name: 'ownership is unreadable', options: { ...READY, unreadableOwnership: true } satisfies OperatorRigOptions, kind: 'ownership-unreadable' },
   ])('never comments when $name', async ({ options, kind }) => {
     const { rig, result } = await escalate(options)
@@ -49,7 +49,7 @@ describe('escalateToHuman', () => {
   it('reports a failed comment without discarding the successful swap', async () => {
     const rig = await operatorRig(READY)
     rig.github.failComments('boom')
-    const result = await escalateToHuman(rig.ctx, { entry: rig.entry, kind: 'issue', number: 52, trigger: 'planApproved', viewer: 'op', body: 'over budget', action: 'budget-escalate', auditDir: rig.auditDir, scratchDir: rig.scratchDir })
+    const result = await escalateToHuman(rig.ctx, { entry: rig.entry, kind: 'issue', number: 52, viewer: 'op', body: 'over budget', action: 'budget-escalate', auditDir: rig.auditDir, scratchDir: rig.scratchDir })
     expect(result.labels.kind).toBe('applied')
     expect(result.comment).toMatchObject({ kind: 'write-failed', stderr: 'boom' })
   })

@@ -1,21 +1,10 @@
 // The quit warning's own pure copy and guard — no electron import.
-import type { StageAgent } from '@/types/tick'
-import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { QuitWarningCopy, StageSessionSummary } from '@/types/dispatch'
+import { STAGE_TABLE } from '@/utils/pipeline/stages'
+import type { Stage } from '@/utils/pipeline/ticket'
 
-// `refreshing` when the trigger is `refreshBranch`, regardless of agent.
-export function stagePhaseName(agent: StageAgent, trigger: LabelKey): string {
-  if (trigger === 'refreshBranch') return 'refreshing'
-  switch (agent) {
-    case 'plan':
-      return 'planning'
-    case 'impl':
-      return 'implementing'
-    case 'review':
-      return 'reviewing'
-    case 'revise':
-      return 'revising'
-  }
+export function stagePhaseName(stage: Stage): string {
+  return STAGE_TABLE[stage].running.name.toLowerCase()
 }
 
 function sortKey(s: StageSessionSummary): string {
@@ -29,7 +18,7 @@ export function quitWarningCopy(sessions: readonly StageSessionSummary[]): QuitW
   const plural = sessions.length !== 1
 
   const message = plural ? `Quit port and stop ${String(sessions.length)} stage sessions?` : 'Quit port and stop 1 stage session?'
-  const lines = sorted.map((s) => `#${String(s.number)} ${stagePhaseName(s.agent, s.trigger)} · ${s.repoName}`)
+  const lines = sorted.map((s) => `#${String(s.number)} ${stagePhaseName(s.stage)} · ${s.repoName}`)
   const closing = plural
     ? 'Quitting interrupts them where they are. Their tickets keep their current labels.'
     : 'Quitting interrupts it where it is. Its ticket keeps its current label.'

@@ -11,14 +11,12 @@ import { createRecentsStore } from '@/main/features/folders/recents'
 import { createSessionIndex } from '@/main/sessions/hosting/session-index'
 import { createUsageLedger } from '@/main/sessions/hosting/usage-ledger'
 import { vi, type Mock } from 'vitest'
-import { stageModeFor } from '@/main/pipeline/transitions'
 import type { Platform } from '@/main/platform'
 import { pathOps } from '@/main/platform/paths'
 import { isReadyEntry, readyOf, type Repos } from '@/main/repos'
 import type { BoardSnapshot } from '@/types/board'
 import type { RunState, StageLaunchRequest, StageLaunchResult } from '@/types/dispatch'
 import type { HostedStore } from '@/types/hosting'
-import { stageOfMode } from '@/types/stage-labels'
 import { DISPATCH_STORE_DEFAULTS, storeStub } from '../fixtures/store'
 import { boardSnapshot } from './board-snapshot'
 import { createFakeGitHub, type FakeGitHub, type FakeItem } from './fake-github'
@@ -221,7 +219,7 @@ export async function dispatchContext(options: DispatchContextOptions = {}): Pro
     ;(live as { stageLauncher: unknown }).stageLauncher = {
       launch: async (request: StageLaunchRequest) => {
         const result = await launch(request)
-        if (result.ok) await ctx.stores.runs.start(repoId, runOf({ id: `run-of-${result.sessionKey}`, stage: stageOfMode(stageModeFor(request.agent, request.trigger)), item: { kind: request.kind, number: request.number }, agent: request.agent, trigger: request.trigger, model: request.model, title: request.title, sessionKey: result.sessionKey, startedAt: ctx.clock.now().toISOString() }))
+        if (result.ok) await ctx.stores.runs.start(repoId, runOf({ id: `run-of-${result.sessionKey}`, stage: request.stage, item: { kind: request.kind, number: request.number }, agent: request.agent, trigger: request.trigger, model: request.model, title: request.title, sessionKey: result.sessionKey, startedAt: ctx.clock.now().toISOString() }))
         return result
       },
     }

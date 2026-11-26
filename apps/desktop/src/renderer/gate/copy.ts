@@ -129,7 +129,7 @@ export function refusedVerdictCopy(number: number, verdict: Exclude<GateVerdict,
     case 'not-an-issue':
       return { line: `#${n} is a pull request now.`, note: null }
     case 'not-at-plan-review':
-      return { line: `#${n} is no longer at \`plan review\`.`, note: `GitHub has ${verdict.observed.join(', ') || 'no labels'}.` }
+      return { line: `#${n} is no longer at \`plan review\`.`, note: verdict.observed === null ? 'The ticket is not tracked.' : `It is at ${verdict.observed}.` }
   }
 }
 

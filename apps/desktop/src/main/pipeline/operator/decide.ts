@@ -1,24 +1,12 @@
-import { mirrorVocabularyOf } from '@/utils/labels/display'
-import type { ReadyEntry, RebaseDecision, RebasePick } from '@/types/actions'
-
-// applyItemDecision — unblock, revise and grant, the comment-then-swap write
-// `main/actions/gate.ts`'s own `gateAnswer` already establishes.
 import { decisionPlan, decisionsFor, isCycleCapEscalation, picksProblem, reviseNoteProblem } from '@/utils/actions/decide'
 import { changesRequestedBody, gateClearedBody } from '@/utils/actions/bodies'
-import type { ItemDecisionResult } from '@/types/actions'
-import { stageKeyOf } from '@/utils/actions/plan'
-import { labelName } from '@/utils/labels/vocabulary'
+import type { ApplyItemDecisionParams, ItemDecisionResult, RebaseDecision, RebasePick } from '@/types/actions'
+import { ticketViewOf } from '@/utils/pipeline/stages'
 import type { ReconciledItem } from '@/types/state'
-import type { LabelWriteRequest, ObservedItem, WriteOutcome } from '@/types/writes'
-import { evaluate } from '@/main/github/writes/scope'
-import { storedLabels, UNSEEDED_MESSAGE } from '@/main/pipeline/state/labels'
-import { writeState } from '@/main/pipeline/state/writer'
-import { fetchItemsByNumber } from '@/main/github/tracker/items'
+import type { WriteOutcome } from '@/types/writes'
 import { postComment } from '@/main/github/writes/apply'
 import type { StateWriteContext } from '@/main/pipeline/context'
-import { findRepoState, movedResult } from '@/main/pipeline/operator/apply'
-
-import type { ApplyItemDecisionParams } from '@/types/actions'
+import { findRepoState, liveTicketOf, movedResult, viewMatches, writeMove } from '@/main/pipeline/operator/apply'
 
 function findItem(repoState: ReturnType<typeof findRepoState>, number: number): ReconciledItem | null {
   if (repoState === null) return null
@@ -26,19 +14,20 @@ function findItem(repoState: ReturnType<typeof findRepoState>, number: number): 
 }
 
 // Fixed order: find the item, refuse moved, check availability, validate a
-// revise note, re-read fresh, post the comment, then swap the labels.
+// revise note, post the comment, then write the move.
 export async function applyItemDecision(ctx: StateWriteContext, params: ApplyItemDecisionParams): Promise<ItemDecisionResult> {
   const { request, snapshot, entry, auditDir, scratchDir, liveStage } = params
   const repoState = findRepoState(snapshot, entry.id)
   if (repoState === null) return { ok: false, reason: 'repo-unavailable' }
 
-  const item = findItem(repoState, request.number)
-  if (item === null) return movedResult(entry.config.vocabulary, request.expectedStage, 'gone')
+  const found = findItem(repoState, request.number)
+  if (found === null) return movedResult(request.expected, 'gone')
 
-  const currentStage = stageKeyOf(item)
-  if (currentStage !== request.expectedStage) return movedResult(entry.config.vocabulary, request.expectedStage, currentStage)
+  const ticket = liveTicketOf(ctx, entry.id, found.kind, request.number)
+  if (ticket === null || !viewMatches(request.expected, ticket)) return movedResult(request.expected, ticket === null ? null : ticketViewOf(ticket))
+  const item: ReconciledItem = { ...found, ticket }
 
-  const availability = decisionsFor({ item, viewer: repoState.viewer, reviewCycleCap: repoState.reviewCycleCap, liveStage })[request.decision]
+  const availability = decisionsFor({ view: ticketViewOf(ticket), item, viewer: repoState.viewer, reviewCycleCap: repoState.reviewCycleCap, liveStage })[request.decision]
   if (!availability.available) {
     if (availability.reason === 'viewer-unknown') return { ok: false, reason: 'viewer-unknown' }
     if (availability.reason === 'not-owned') return { ok: false, reason: 'not-owned', owners: item.assignees }
@@ -70,23 +59,6 @@ export async function applyItemDecision(ctx: StateWriteContext, params: ApplyIte
   const viewer = repoState.viewer
   if (viewer === null) return { ok: false, reason: 'viewer-unknown' }
 
-  const plan = decisionPlan(request.decision, item, request.route, viewer)
-
-  const fetch = await fetchItemsByNumber(ctx, { repo: { owner: entry.config.owner, name: entry.config.name }, numbers: [request.number] })
-  if (!fetch.ok) return { ok: false, reason: 'verify-failed', message: fetch.message }
-  const fresh = fetch.resolved.find((resolved) => resolved.number === request.number)
-  if (fresh === undefined) return movedResult(entry.config.vocabulary, request.expectedStage, 'gone')
-
-  const presentNames = plan.expect.present.map((key) => labelName(entry.config.vocabulary, key)).filter((name): name is string => name !== undefined)
-  const absentNames = plan.expect.absent.map((key) => labelName(entry.config.vocabulary, key)).filter((name): name is string => name !== undefined)
-  const stored = storedLabels(ctx, entry.id, item.kind, request.number, entry.config.vocabulary)
-  if (stored === null) return { ok: true, comment: null, labels: { kind: 'state-unsaved', message: UNSEEDED_MESSAGE } }
-  const observed: ObservedItem = { labels: stored, assignees: fresh.assignees, readAt: fetch.fetchedAt }
-  const verdict = evaluate({ presentNames, absentNames, assignees: plan.expect.assignees }, observed)
-  if (!verdict.satisfied) {
-    return { ok: false, reason: 'moved', expected: verdict.expected.join(', ') || 'nothing', observed: verdict.observed.join(', ') || 'nothing' }
-  }
-
   let comment: WriteOutcome | null = null
   if (!request.skipComment) {
     const body = commentBody(request, item, decisions, picks, headRefOid)
@@ -100,9 +72,15 @@ export async function applyItemDecision(ctx: StateWriteContext, params: ApplyIte
     }
   }
 
-  const labels = await writeState(ctx, {
-    request: buildWriteRequest(entry, item.kind, request.number, plan),
-    repoRoot: entry.path,
+  const labels = await writeMove(ctx, {
+    entry,
+    kind: item.kind,
+    number: request.number,
+    ticket,
+    move: decisionPlan(request.decision, request.route),
+    actor: viewer,
+    assignees: { kind: 'exactly', logins: [viewer] },
+    addAssignees: [],
     auditDir,
   })
   return { ok: true, comment, labels }
@@ -128,21 +106,4 @@ function chosenOptions(decisions: readonly RebaseDecision[], picks: readonly Reb
     const letter = picks.find((pick) => pick.id === decision.id)?.letter ?? ''
     return { id: decision.id, path: decision.path, letter, label: decision.options.find((option) => option.letter === letter)?.label ?? '' }
   })
-}
-
-function buildWriteRequest(entry: ReadyEntry, kind: ReconciledItem['kind'], number: number, plan: ReturnType<typeof decisionPlan>): LabelWriteRequest {
-  return {
-    repoId: entry.id,
-    repo: entry.config.repo,
-    kind,
-    number,
-    vocabulary: entry.config.vocabulary,
-    mirror: mirrorVocabularyOf(entry.config),
-    add: plan.add,
-    remove: plan.remove,
-    addAssignees: [],
-    removeAssignees: [],
-    expect: plan.expect,
-    action: plan.action,
-  }
 }

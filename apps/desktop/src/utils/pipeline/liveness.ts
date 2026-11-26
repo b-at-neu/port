@@ -19,15 +19,6 @@ export function buildLivenessExpected(actionable: Record<string, { mine: { reado
   return specs.flatMap(([alias, labelKey, stage]) => (actionable[alias]?.mine ?? []).map((n) => ({ item: n.number, labelKey, label: labels[labelKey] ?? labelKey, stage })))
 }
 
-/** The retry mapping from an in-flight label key back to its trigger label key. */
-export const RETRY_TRIGGER: Readonly<Record<string, string>> = {
-  planning: 'ready',
-  inProgress: 'planApproved',
-  reviewing: 'readyForReview',
-  revising: 'needsRevision',
-  refreshing: 'refreshBranch',
-}
-
 /** A session-limit message takes precedence over ordinary stalling. */
 export function isUsageLimitMessage(text: string | null | undefined): boolean {
   return /session limit|resets at/i.test(text ?? '')

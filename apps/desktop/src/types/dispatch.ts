@@ -20,6 +20,7 @@ import type { SessionKey } from '@/types/hosting'
 import type { InterruptedStage, StageDenial } from '@/types/stage'
 import type { StageWorktreeTarget } from '@/types/workspace'
 import type { ReviewDispatchFacts } from '@/utils/pipeline/gates'
+import type { Stage } from '@/utils/pipeline/ticket'
 
 /** The per-repository run state the pipeline state file's `dispatch` section holds — `dispatching`, `draining` (scoped to one repository), or `paused` (the hard stop: the transition into it also stops every in-flight agent). */
 export const RUN_STATES = ['dispatching', 'draining', 'paused'] as const
@@ -226,6 +227,7 @@ export interface StageRecord {
   // `null` for a `failed` record — no session was ever created to key.
   readonly sessionKey: SessionKey | null
   readonly agent: StageAgent
+  readonly stage: Stage
   readonly number: number
   readonly kind: PipelineItemKind
   readonly trigger: LabelKey
@@ -253,6 +255,7 @@ export type StageLaunchResult = { readonly ok: true; readonly sessionKey: Sessio
 export interface StageLaunchRequest {
   readonly entry: ReadyEntry
   readonly agent: StageAgent
+  readonly stage: Stage
   readonly number: number
   readonly kind: PipelineItemKind
   readonly trigger: LabelKey
@@ -293,9 +296,8 @@ export interface QuitWarningCopy {
 // One live stage session, as the quit guard needs it — `repoName` is the
 // display name (`owner/name`), printed verbatim by the copy below.
 export interface StageSessionSummary {
-  readonly agent: StageAgent
+  readonly stage: Stage
   readonly number: number
-  readonly trigger: LabelKey
   readonly repoName: string
 }
 

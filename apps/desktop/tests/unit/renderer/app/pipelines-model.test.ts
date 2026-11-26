@@ -8,6 +8,7 @@ import type { PipelineRow, ReadyPipelineRow } from '@/types/shell'
 import type { TickClaim, TickReport } from '@/types/tick'
 import { displayRunState, phaseLineOf, pipelinesModel as pipelinesModelOf } from '@/renderer/app/pipelines-model'
 import { needsYouItems } from '@/renderer/board/needs-you'
+import { reconciledItem } from '../../../support/board-snapshot'
 import { stageSession } from '../../../support/session-snapshot'
 
 function assertReady(row: PipelineRow | undefined): ReadyPipelineRow {
@@ -32,7 +33,7 @@ function agent(overrides: Partial<AttachedAgent> = {}): AttachedAgent {
 }
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
-  return {
+  return reconciledItem({
     repoId: REPO_ID,
     repo: 'o/a',
     kind: 'issue',
@@ -73,7 +74,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     blockerComments: null,
     closingPullRequests: null,
     ...overrides,
-  }
+  })
 }
 
 function pendingPermission(): HostedSessionSnapshot['pendingPermissions'][number] {
@@ -405,7 +406,7 @@ describe('pipelinesModel', () => {
 
 describe('displayRunState', () => {
   const STAGE = { agent: 'impl', number: 42, kind: 'issue', trigger: 'planApproved' } as const
-  const CLAIM: TickClaim = { number: 42, kind: 'issue', inFlight: 'inProgress', class: 'matched', retryKey: null }
+  const CLAIM: TickClaim = { number: 42, kind: 'issue', stage: 'implement', class: 'matched', retryable: false }
 
   function tickOf(overrides: Partial<TickReport> = {}): TickReport {
     return { repoId: REPO_ID, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], autoApprovals: [], disabledStages: [], nextTickAt: null, observations: [], labelRepairs: [], ...overrides }

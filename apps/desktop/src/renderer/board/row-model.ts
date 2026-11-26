@@ -99,12 +99,10 @@ export function stopAttachedAgentNote(row: BoardItemRow): string | null {
 
 export function actionNoteFor(row: BoardItemRow, state: ItemActionState | undefined): string | null {
   if (state?.kind === 'result') {
-    const availability = row.actions[state.action]
     const base = actionResultCopy({
       action: state.action,
       number: row.ticket.ref.number,
-      plan: availability.available ? availability.plan : null,
-      currentStageName: row.stageLabel?.name ?? null,
+      currentStageName: row.item.ticket === null ? null : stageNameOf(ticketViewOf(row.item)),
       result: state.result,
       now: new Date(),
     })

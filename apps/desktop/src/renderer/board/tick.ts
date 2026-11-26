@@ -1,14 +1,9 @@
 // The Board's tick detail copy — one switch per union, so a new variant is a compile error.
 import type { DispatchOwner, RunStatesSnapshot } from '@/types/dispatch'
-import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
-import type { LabelKey } from '@/utils/labels/vocabulary'
-import { stageNameOfKey } from '@/renderer/lib/ticket-view'
+import { STAGE_TABLE, stageNameOf } from '@/utils/pipeline/stages'
+import type { TicketView } from '@/utils/pipeline/stages'
 import type { PipelineItemKind } from '@/types/github'
 import type { TickActionable, TickClaim, TickHeld, TickObservation, TickReport } from '@/types/tick'
-
-function labelNameOf(key: LabelKey): string {
-  return LABEL_DEFAULTS.find((def) => def.key === key)?.name ?? key
-}
 
 /** `null` unless the run-state store can't be read — the transient `unread` state needs no banner. The full path stays reachable in the sentence itself. */
 export function storeBannerCopy(store: RunStatesSnapshot['store']): string | null {
@@ -93,8 +88,6 @@ export function heldDetailCopy(held: TickHeld, owner: DispatchOwner = 'none'): s
       return byApp
         ? `#${n} held — the integration branch is green again, so this app is refreshing it (rebase + force-push) to resume review.`
         : `#${n} held — the integration branch is green again. The cockpit's refresh sweep rebases it; this app doesn't.`
-    case 'refresh-wins':
-      return `#${n} held — a branch refresh claims it (refresh branch).`
     case 'conflicting':
       return byApp
         ? `#${n} conflicts — this app is refreshing it (rebase + force-push).`
@@ -125,8 +118,6 @@ export function heldTagLabel(held: TickHeld): string {
       return 'Held · integration red'
     case 'integration-green':
       return 'Held · refreshing'
-    case 'refresh-wins':
-      return 'Held · refresh first'
     case 'conflicting':
       return 'Held · conflicts'
     case 'mergeability-unknown':
@@ -167,14 +158,13 @@ export function uncheckedDetailCopy(actionable: TickActionable): string {
  *  hover". */
 export function stalledDetailCopy(claim: TickClaim, owner: DispatchOwner = 'none'): string | null {
   const n = String(claim.number)
-  const name = labelNameOf(claim.inFlight)
+  const name = STAGE_TABLE[claim.stage].running.name
   switch (claim.class) {
     case 'stalled-confirmed': {
-      const retryName = claim.retryKey !== null ? labelNameOf(claim.retryKey) : null
-      if (retryName === null) return `#${n} ${name} — no claim, and this app dispatched it.`
+      if (!claim.retryable) return `#${n} ${name} — no claim, and this app dispatched it.`
       return owner === 'app'
-        ? `#${n} ${name} — no agent, and this app dispatched it. Resetting to ${retryName}.`
-        : `#${n} ${name} — no claim, and this app dispatched it. Retry re-applies "${retryName}".`
+        ? `#${n} ${name} — no agent, and this app dispatched it. Queueing it again.`
+        : `#${n} ${name} — no claim, and this app dispatched it. Retry queues it again.`
     }
     case 'no-record':
       return `#${n} ${name} — no claim, and this app didn't dispatch it, so it can't tell.`
@@ -189,18 +179,18 @@ export function stalledDetailCopy(claim: TickClaim, owner: DispatchOwner = 'none
   }
 }
 
-/** The label an adopted hand-back lands on, keyed `<agent>:<token>`. */
-const ADOPTED_LANDING: Readonly<Record<string, LabelKey>> = {
-  'plan:plan-written': 'planReview',
-  'impl:pr-opened': 'readyForReview',
-  'review:approved': 'approved',
-  'review:needs-revision': 'needsRevision',
-  'revise:revised': 'readyForReview',
+/** Where an adopted hand-back lands the ticket, keyed `<agent>:<token>`. */
+const ADOPTED_LANDING: Readonly<Record<string, TicketView>> = {
+  'plan:plan-written': { stage: 'plan', status: { kind: 'waiting-on-you', gate: 'plan-approval' } },
+  'impl:pr-opened': { stage: 'review', status: { kind: 'queued', reason: 'new' } },
+  'review:approved': { stage: 'merge', status: { kind: 'queued', reason: 'new' } },
+  'review:needs-revision': { stage: 'revise', status: { kind: 'queued', reason: 'changes-requested' } },
+  'revise:revised': { stage: 'review', status: { kind: 'queued', reason: 'new' } },
 }
 
 function adoptedPhaseName(observation: Extract<TickObservation, { readonly kind: 'adopt' }>): string {
   const landing = ADOPTED_LANDING[`${observation.agent}:${observation.handback.token}`]
-  return (landing !== undefined ? stageNameOfKey(landing) : null) ?? 'its next stage'
+  return landing === undefined ? 'its next stage' : stageNameOf(landing)
 }
 
 /** #292: hover detail for the one report-only observation kind —

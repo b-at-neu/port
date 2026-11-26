@@ -7,7 +7,7 @@ import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 
 const VIEWER = 'octo-dev'
 
-function labelNameOf(key: 'marker' | 'planReview' | 'ready'): string {
+function labelNameOf(key: 'ready'): string {
   return LABEL_DEFAULTS.find((def) => def.key === key)?.name ?? key
 }
 
@@ -46,7 +46,6 @@ export function fixtureGatePreflight(now: Date): GatePreflightResponse {
       title: 'Add CSV export to the reports page',
       url: 'https://github.com/acme/widgets/issues/41',
       state: 'OPEN',
-      labels: [labelNameOf('marker'), labelNameOf('planReview')],
       assignees: [VIEWER],
       viewer: VIEWER,
       ticketMarkdown: 'Operators keep asking for a CSV download beside the existing PDF export.',

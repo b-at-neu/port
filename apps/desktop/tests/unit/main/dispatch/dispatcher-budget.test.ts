@@ -28,7 +28,7 @@ vi.mock('@/main/pipeline/operator/stage', () => ({
 
 const REPO_ID = 'repo-a' as RepoId
 const ENTRY = readyEntry({}, { commands: { worktrees: null, budget: 'node scripts/budget.mjs' } })
-const IMPL_CANDIDATE = { number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }
+const IMPL_CANDIDATE = { number: 52, kind: 'issue' as const, stage: 'implement' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }
 const HOLD_LINE = "⏳ Couldn't read #52's cost ledger (unparseable table) — holding its dispatch one tick rather than dispatching blind."
 
 function tickReport(overrides: Partial<TickReport> = {}): TickReport {
@@ -136,7 +136,7 @@ describe('createDispatcher — the budget gate itself', () => {
     const { dispatcher } = await setup()
     await dispatcher.consider(withCandidate())
     expect(escalate).toHaveBeenCalledTimes(1)
-    expect(escalate.mock.calls[0]?.[0]).toMatchObject({ trigger: 'planApproved', number: 52, body: expect.stringContaining(line) as unknown })
+    expect(escalate.mock.calls[0]?.[0]).toMatchObject({ number: 52, body: expect.stringContaining(line) as unknown })
     expect(dispatcher.status()[0]?.budget?.notes).toEqual([{ kind: 'escalated', number: 52, needsHumanLabel: 'needs human', commentFailedMessage: null }])
     expect(dispatcher.status()[0]?.state).toEqual({ kind: 'idle' })
   })

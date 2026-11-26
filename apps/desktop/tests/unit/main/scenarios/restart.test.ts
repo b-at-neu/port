@@ -17,28 +17,26 @@ import { createFakeFs } from '../../../support/fake-platform'
 import { createFakeGitHub } from '../../../support/fake-github'
 import { readyEntry } from '../../../support/repo-config'
 import { scriptedStage } from '../../../support/stage'
-import { ticketOf } from '../../../support/tickets'
+import { queuedAt, ticketAt, ticketOf } from '../../../support/tickets'
 
 const hoisted = vi.hoisted(() => ({ events: [] as StageEvent[] }))
-vi.mock('@/main/pipeline/operator/stage', () => ({
-  applyStageClaim: () => Promise.resolve({ kind: 'applied' }),
+vi.mock('@/main/pipeline/operator/stage', async (original) => ({
+  ...(await original<object>()),
   applyStageTransition: (_ctx: unknown, params: { event: StageEvent }) => {
     hoisted.events.push(params.event)
     return Promise.resolve({ kind: 'applied' })
   },
 }))
 
-vi.mock('@/main/pipeline/state/labels', async (original) => ({ ...(await original<object>()), storedLabels: () => ['plan approved'] }))
-
 const REPO = 'repo-a' as RepoId
 const STATE_FILE = '/test/userData/pipeline-state.json'
-const ACTIONABLE = [{ number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }]
+const ACTIONABLE = [{ number: 52, kind: 'issue' as const, stage: 'implement' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }]
 const COMPLETED: StageOutcome = { kind: 'completed', detail: null, costUsd: 1, resetsAt: null, worktree: 'removed', operatorJoined: false, handback: { token: 'pr-opened', arg: '#8' } }
 
-/** The disk an app run leaves behind: ticket 52 claimed and running, no run recorded yet. */
+/** The disk an app run leaves behind: ticket 52 queued at implement, no run recorded yet. */
 async function diskWithClaimedTicket(): Promise<PlatformFs> {
   const fs = createFakeFs()
-  const ticket = ticketOf({ repo: REPO, ticket: 52, stage: 'implement', status: { kind: 'running', runId: null } })
+  const ticket = ticketOf({ repo: REPO, ticket: 52, stage: 'implement', status: queuedAt() })
   await fs.writeJsonAtomic(STATE_FILE, { version: 3, dispatch: {}, repositories: { [REPO]: { seededAt: '2026-01-01T00:00:00.000Z', tickets: { '52': ticket } } } })
   return fs
 }
@@ -65,7 +63,7 @@ const snapshotWith = (...tick: TickReport[]): BoardSnapshot => boardSnapshot([re
 
 /** What the tick makes of ticket 52 still claimed, given the dispatcher's liveness and the runs on disk. */
 function tickOver(app: Awaited<ReturnType<typeof boot>>, readAt: string): TickReport {
-  const claimed = reconciledItem({ number: 52, kind: 'issue', stage: 'in-flight', stages: [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }], stageHistory: [{ key: 'inProgress', actor: null, at: '2026-01-01T00:00:00.000Z' }] })
+  const claimed = reconciledItem({ number: 52, kind: 'issue', ticket: ticketAt('implement', { kind: 'running', runId: 'run-1' }, { ticket: 52 }) })
   return planTick({
     repository: repositoryState([claimed], {}, readAt),
     runsOf: (repoId, kind, number) => app.runs.runsOf(repoId, kind, number),

@@ -1,4 +1,5 @@
 // Renderer-safe shapes for the state writes the app makes on a stage session's behalf: claim, rollback, hand-back and the next turn after a block.
+import type { OperatorMove } from '@/types/actions'
 import type { PipelineItemKind } from '@/types/github'
 import type { SessionKey } from '@/types/hosting'
 import type { StageHandback, StageOutcome, StageOutcomeKind } from '@/types/stage-session'
@@ -12,6 +13,11 @@ export type StageMode = StageAgent | 'refresh'
 /** The ticket stage a mode works on. */
 export function stageOfMode(mode: StageMode): Stage {
   return mode === 'impl' ? 'implement' : mode
+}
+
+/** The mode an agent works in at a stage: only a refresh runs the revise agent under its own mode. */
+export function modeOfStage(agent: StageAgent, stage: Stage): StageMode {
+  return stage === 'refresh' ? 'refresh' : agent
 }
 
 /** The plan file a completed `plan-written` hand-back left behind, read before the worktree was removed. */
@@ -52,7 +58,9 @@ export type StateEvent =
   | { readonly kind: 'resumed-turn'; readonly stage: 'implement' }
   | { readonly kind: 'handback'; readonly stage: Stage; readonly token: string; readonly arg: string | null; readonly pr: number | null; readonly via: 'session' | 'adopt' }
   | { readonly kind: 'merged' }
-  /** A label add/remove request an operator path still sends; the table re-derives the ticket from the keys. */
+  /** An operator's typed move; `moves.ts` says what it makes of the ticket. */
+  | { readonly kind: 'operator'; readonly move: OperatorMove; readonly actor: string | null }
+  /** A label add/remove request that survives for claim, an untracked pull request's gate marker and adopt's existing path; the table re-derives the ticket from the keys. */
   | {
       readonly kind: 'labels'
       readonly itemKind: PipelineItemKind

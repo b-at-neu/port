@@ -6,6 +6,8 @@ import type { RepoId } from '@/utils/repos'
 import type { StageHandback, StageOutcomeKind } from '@/types/stage-session'
 import type { StageLabelResult } from '@/types/stage-labels'
 import type { RefreshMemoEntry } from '@/utils/pipeline/gates'
+import type { Stage } from '@/utils/pipeline/ticket'
+import type { TicketView } from '@/utils/pipeline/stages'
 
 /** A bare four-way key, never the session index's hyphenated `PortStageAgent` — this one names *what to dispatch next*, matching `models.<key>`, not *what already ran*. */
 export type StageAgent = 'plan' | 'impl' | 'review' | 'revise'
@@ -34,7 +36,6 @@ export type TickHeldReason =
   | 'check-hold'
   | 'integration-red'
   | 'integration-green'
-  | 'refresh-wins'
   | 'conflicting'
   | 'mergeability-unknown'
 
@@ -57,6 +58,9 @@ export interface TickContention {
 export interface TickActionable {
   readonly number: number
   readonly kind: PipelineItemKind
+  /** The ticket stage this candidate runs. */
+  readonly stage: Stage
+  /** Run provenance only — no decision reads it. */
   readonly trigger: LabelKey
   readonly agent: StageAgent
   /** `true` when this candidate's plan carried no ` ```files ` fence at all — it dispatches unchecked rather than held, since holding every pre-contract plan would stall the pipeline harder than the collision the gate prevents. */
@@ -68,6 +72,8 @@ export interface TickActionable {
 export interface TickHeld {
   readonly number: number
   readonly kind: PipelineItemKind
+  readonly stage: Stage
+  /** Run provenance only — no decision reads it. */
   readonly trigger: LabelKey
   readonly reason: TickHeldReason
   readonly contention: TickContention | null
@@ -82,10 +88,10 @@ export type TickClaimClass = 'session-required' | 'matched' | 'no-record' | 'sus
 export interface TickClaim {
   readonly number: number
   readonly kind: PipelineItemKind
-  readonly inFlight: LabelKey
+  readonly stage: Stage
   readonly class: TickClaimClass
-  /** `RETRY_TRIGGER`'s own target for this claim's in-flight key — set only for `stalled-confirmed`, so a retry is never offered on a class the operator cannot yet act on. */
-  readonly retryKey: LabelKey | null
+  /** `true` only for `stalled-confirmed`, so a retry is never offered on a class the operator cannot yet act on. */
+  readonly retryable: boolean
 }
 
 /** Why a repository's tick could not decide anything this pass. A blind repository reports **no** actionable/held/claims counts, since an empty array would be indistinguishable from a genuinely quiet repository. */
@@ -107,13 +113,13 @@ interface TickObservationBase {
 }
 
 export type TickObservation =
-  | (TickObservationBase & { readonly kind: 'liveness-reset'; readonly inFlight: LabelKey; readonly retryKey: LabelKey })
+  | (TickObservationBase & { readonly kind: 'liveness-reset'; readonly stage: Stage })
   | (TickObservationBase & { readonly kind: 'cycle-cap'; readonly count: number; readonly cap: number })
   | (TickObservationBase & { readonly kind: 'zero-diff'; readonly count: number; readonly headRefOid: string })
   | (TickObservationBase & { readonly kind: 'integration-red'; readonly checks: readonly string[]; readonly headRefOid: string })
   | (TickObservationBase & {
       readonly kind: 'refresh'
-      readonly sourceLabel: LabelKey
+      readonly from: Stage
       readonly headRefOid: string
       readonly count: number
       /** `'integration-green'` is a refresh that resumes review, not one that clears a conflict, so it posts no `## Rebase required` comment. */
@@ -121,7 +127,7 @@ export type TickObservation =
     })
   | (TickObservationBase & {
       readonly kind: 'refresh-stuck'
-      readonly sourceLabel: LabelKey
+      readonly from: Stage
       readonly reason: 'same-sha' | 'consecutive-cap'
       readonly sha: string
       readonly count: number
@@ -136,7 +142,7 @@ export type TickObservation =
     })
   | (TickObservationBase & { readonly kind: 'plan-missing' })
   /** `trigger` is the stage's own trigger label, which with `agent` names the hand-back table row `main/pipeline/transitions.ts` applies. */
-  | (TickObservationBase & { readonly kind: 'adopt'; readonly agent: StageAgent; readonly trigger: LabelKey; readonly handback: StageHandback; readonly evidence: AdoptionEvidence })
+  | (TickObservationBase & { readonly kind: 'adopt'; readonly agent: StageAgent; readonly stage: Stage; readonly trigger: LabelKey; readonly handback: StageHandback; readonly evidence: AdoptionEvidence })
   | (TickObservationBase & { readonly kind: 'rerun-checks'; readonly runs: readonly { readonly check: string; readonly runId: string }[]; readonly headRefOid: string })
 
 /** One `autoPlan` issue at `planReview` alone, assigned to the viewer — the app's own auto-plan swap acts on this set while it owns the repository. */
@@ -151,7 +157,8 @@ export interface TickLabelRepair {
   readonly number: number
   readonly kind: PipelineItemKind
   readonly shape: TickLabelRepairShape
-  readonly labels: readonly LabelKey[]
+  /** Where the ticket stood; `null` when it is not tracked. */
+  readonly view: TicketView | null
   readonly agent: StageAgent | null
   /** Why the app's own hand-back write was refused — `null` for every shape that does not come from one. */
   readonly reason: HandoffRefusal | null

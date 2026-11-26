@@ -114,7 +114,7 @@ describe('interrupted entries', () => {
       number: 301,
       kind: 'issue',
       trigger: 'ready',
-      inFlight: 'planning',
+      stage: 'plan',
       model: 'opus',
       claudeSessionId: null,
       worktree: { path: '/wt', branch: 'b', baseSha: 's' },

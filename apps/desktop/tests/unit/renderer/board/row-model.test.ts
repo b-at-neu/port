@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { OPERATOR_ACTIONS, OPERATOR_DECISIONS } from '@/types/actions'
 import type { ActionAvailability, DecisionAvailability, OperatorAction, OperatorDecision } from '@/types/actions'
 import type { BoardItemRow, ItemActionState, LiveStage } from '@/types/board'
-import type { AttachedAgent, AttachedSession, ReconciledItem, StageLabel } from '@/types/state'
+import type { AttachedAgent, AttachedSession, StageLabel } from '@/types/state'
 import type { RepoId } from '@/utils/repos'
 import type { SessionKey } from '@/types/hosting'
 import type { DispatchRecord } from '@/types/dispatch'
 import type { Ticket } from '@/types/ticket'
 import { ticketIndex } from '@/utils/tickets/ticket'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
+import { reconciledItem } from '../../../support/board-snapshot'
 import { actionNoteFor, agentSummaryOf, decisionNoteFor, isDispatchedRow, nextActionFor, operatorJoinedOf, ownershipNoteFor, phaseLabelFor, phaseToneFor, stopAttachedAgentNote } from '@/renderer/board/row-model'
 
 const LIVE_PLAN: LiveStage = { agent: 'plan', trigger: 'ready', sessionKey: 'hosted-1' as SessionKey }
@@ -28,45 +29,20 @@ function row(overrides: {
   readonly autoApproving?: boolean
 }): BoardItemRow {
   const stageLabel: StageLabel | null = overrides.stageKey != null ? { key: overrides.stageKey as never, name: overrides.stageKey, role: LABEL_DEFAULTS.find((def) => def.key === overrides.stageKey)?.role ?? 'trigger' } : null
-  const item = {
+  const item = reconciledItem({
     repoId: 'repo-a' as RepoId,
-    repo: 'o/a',
     kind: overrides.kind ?? 'issue',
     number: 41,
-    title: 't',
     url: 'https://github.com/o/a/pull/41',
-    assignees: ['op'],
     stage: stageLabel?.role ?? null,
     stages: stageLabel !== null ? [stageLabel] : [],
-    stageAmbiguous: false,
-    marked: true,
-    autoPlan: false,
     status: overrides.status ?? 'waiting',
-    statusEvidence: null,
     waitingOn: null,
-    sessionRequired: false,
-    linked: null,
-    linkReason: null,
     agents: overrides.agents ?? [],
     sessions: overrides.sessions ?? [],
-    worktrees: [],
-    workSessions: [],
-    state: 'OPEN',
-    mergedAt: null,
     matchedKeys: [],
-    sources: ['github'],
-    claimedFiles: null,
-    headRefOid: null,
-    mergeable: null,
-    reviews: null,
-    comments: null,
-    reviewCycleCount: null,
-    checkRollup: null,
-    planPresent: null,
-    blockers: null,
-    blockerComments: null,
-    closingPullRequests: null,
-  } as unknown as ReconciledItem
+    ...(stageLabel === null ? { ticket: null } : {}),
+  })
   return {
     item,
     ticket: ticketIndex([item]).tickets[0] as Ticket,
@@ -144,7 +120,7 @@ describe('actionNoteFor', () => {
   it('names the ticket number in an action result', () => {
     const base = row({ kind: 'pull-request' })
     const r: BoardItemRow = { ...base, ticket: { ...base.ticket, ref: { ...base.ticket.ref, number: 464 } } }
-    const state = { kind: 'result', action: 'retry', result: { ok: false, reason: 'no-pause-record' } } as unknown as ItemActionState
+    const state = { kind: 'result', action: 'retry', result: { ok: false, reason: 'moved', expected: 'Queued', observed: 'Running' } } as unknown as ItemActionState
     expect(actionNoteFor(r, state)).toContain('#464')
   })
 })

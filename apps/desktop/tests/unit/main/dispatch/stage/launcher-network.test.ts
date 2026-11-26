@@ -25,7 +25,7 @@ vi.mock('@/main/dispatch/stage/instructions', async (original) => ({
 }))
 vi.mock('@/main/sessions/hosting/stage-prompt-store', async (original) => ({ ...(await original<object>()), readStagePrompt: () => Promise.resolve(null) }))
 
-const request: StageLaunchRequest = { entry: ENTRY, agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', model: 'sonnet', prompt: 'Run.', title: '#52 Impl', target: { kind: 'issue', title: 'Impl' }, review: null }
+const request: StageLaunchRequest = { entry: ENTRY, agent: 'impl', stage: 'implement', number: 52, kind: 'issue', trigger: 'planApproved', model: 'sonnet', prompt: 'Run.', title: '#52 Impl', target: { kind: 'issue', title: 'Impl' }, review: null }
 
 function errored(text: string): HostedSessionSnapshot {
   return {

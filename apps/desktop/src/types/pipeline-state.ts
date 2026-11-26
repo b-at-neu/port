@@ -40,6 +40,11 @@ export interface StoredItem {
   readonly mirrorFailure: MirrorFailure | null
 }
 
+/** A tracked half with the ticket both halves share. */
+export interface TrackedItem extends StoredItem {
+  readonly ticket: Ticket
+}
+
 export interface RepoRecord {
   readonly seededAt: string
   /** Keyed by `String(ticket.ticket)`. */
@@ -75,7 +80,7 @@ export function fullKeysOf(item: Pick<StoredItem, 'keys' | 'marked' | 'autoPlan'
 }
 
 /** `unseeded` means the repository has no record yet and reseeds once from labels; `store` means the stored items decide stage. */
-export type PipelineView = { readonly kind: 'unseeded' } | { readonly kind: 'store'; readonly items: readonly StoredItem[] }
+export type PipelineView = { readonly kind: 'unseeded' } | { readonly kind: 'store'; readonly items: readonly TrackedItem[] }
 
 /** One mirror write with no transition: whatever the store holds for the ticket. */
 export interface MirrorItemParams {

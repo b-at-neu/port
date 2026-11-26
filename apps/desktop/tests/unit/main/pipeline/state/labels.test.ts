@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { stateLabelsOf } from '@/main/pipeline/state/labels'
 import type { PipelineView } from '@/types/pipeline-state'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import { queuedAt, ticketAt } from '../../../../support/tickets'
 
 const VOCABULARY = resolveVocabulary({})
 const STORE: PipelineView = {
   kind: 'store',
-  items: [{ kind: 'issue', number: 7, keys: ['planApproved'], marked: true, autoPlan: true, claimedAt: null, reviewCycles: 0, history: [], updatedAt: 't', issue: null, mirrorFailure: null }],
+  items: [{ kind: 'issue', number: 7, keys: ['planApproved'], marked: true, autoPlan: true, claimedAt: null, reviewCycles: 0, history: [], updatedAt: 't', issue: null, mirrorFailure: null, ticket: ticketAt('implement', queuedAt(), { ticket: 7 }) }],
 }
 
 describe('stateLabelsOf', () => {

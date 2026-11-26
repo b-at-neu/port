@@ -5,7 +5,9 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { RepoDispatchStatus } from '@/types/dispatch'
 import type { BoardSnapshot } from '@/types/board'
+import type { Ticket } from '@/utils/pipeline/ticket'
 import { RATE_LIMIT_REPLY } from '../../../../fixtures/pipeline-reply'
+import { ticketAt } from '../../../../support/tickets'
 import { readyEntry, readyItemTransport, watcherRig } from '../../../../fixtures/watcher-harness'
 
 const AUTO_PLAN_LABELS = ['claude', 'auto plan', 'plan review']
@@ -21,6 +23,7 @@ async function build(options: { readonly dispatch: () => readonly RepoDispatchSt
     repositories: [readyEntry('repo-a', root, 'o/a')],
     github: readyItemTransport('op', ['op'], RATE_LIMIT_REPLY, AUTO_PLAN_LABELS),
     dispatcher: { status: options.dispatch },
+    tickets: { repoId: 'repo-a' as RepoId, tickets: [ticketAt('plan', { kind: 'waiting-on-you', gate: 'plan-approval', detail: '' }, { repo: 'o/a' as Ticket['repo'], ticket: 42, autoPlan: true })] },
     refused: options.refused,
   })
   return { watcher: rig.watch({ onSnapshot: (snapshot) => snapshots.push(snapshot) }), snapshots }

@@ -1,35 +1,29 @@
-import { mirrorVocabularyOf } from '@/utils/labels/display'
-
-// Swaps the trigger label for `needsHuman`, then comments — a failed swap never posts a
+// Moves the ticket to its escalation gate, then comments — a failed move never posts a
 // comment that would repeat on every poll.
-import type { LabelWriteRequest } from '@/types/writes'
 import { stateMoved } from '@/types/writes'
 import { postComment } from '@/main/github/writes/apply'
 import type { StateWriteContext } from '@/main/pipeline/context'
-import { writeState } from '@/main/pipeline/state/writer'
+import { liveTicketOf, writeMove } from '@/main/pipeline/operator/apply'
 
 import type { EscalateToHumanResult, EscalateToHumanParams } from '@/types/actions'
 
-function buildWriteRequest(params: EscalateToHumanParams): LabelWriteRequest {
-  return {
-    repoId: params.entry.id,
-    repo: params.entry.config.repo,
+export async function escalateToHuman(ctx: StateWriteContext, params: EscalateToHumanParams): Promise<EscalateToHumanResult> {
+  const ticket = liveTicketOf(ctx, params.entry.id, params.kind, params.number)
+  if (ticket === null) return { labels: { kind: 'item-unavailable' }, comment: null }
+
+  const labels = await writeMove(ctx, {
+    ...(params.incident === undefined ? {} : { incident: params.incident }),
+    entry: params.entry,
     kind: params.kind,
     number: params.number,
-    vocabulary: params.entry.config.vocabulary,
-    mirror: mirrorVocabularyOf(params.entry.config),
-    add: ['needsHuman'],
-    remove: [params.trigger],
+    ticket,
+    move: { kind: 'escalate', detail: params.action },
+    actor: params.viewer,
+    assignees: { kind: 'exactly', logins: [params.viewer] },
     addAssignees: [],
-    removeAssignees: [],
-    expect: { present: [params.trigger], absent: ['needsHuman'], assignees: { kind: 'exactly', logins: [params.viewer] } },
     action: params.action,
-    ...(params.incident === undefined ? {} : { incident: params.incident }),
-  }
-}
-
-export async function escalateToHuman(ctx: StateWriteContext, params: EscalateToHumanParams): Promise<EscalateToHumanResult> {
-  const labels = await writeState(ctx, { request: buildWriteRequest(params), repoRoot: params.entry.path, auditDir: params.auditDir })
+    auditDir: params.auditDir,
+  })
   if (!stateMoved(labels) || params.body === null) return { labels, comment: null }
 
   const comment = await postComment(ctx, {

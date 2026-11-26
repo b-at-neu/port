@@ -107,15 +107,17 @@ describe('dismissKeyOf — dispatch and tick kinds', () => {
     expect(dismissKeyOf(budget('escalated', 't1'))).not.toBe(dismissKeyOf(budget('escalated', 't2')))
   })
 
-  it('half-labelled: keyed by the shape and the sorted labels', () => {
-    const repair = (labels: readonly string[], shape = 'plan-missing-approved') => asItem({ ...base(), kind: 'half-labelled', repair: { shape, labels } })
-    expect(dismissKeyOf(repair(['a', 'b']))).toBe(dismissKeyOf(repair(['b', 'a'])))
-    expect(dismissKeyOf(repair(['a', 'b']))).not.toBe(dismissKeyOf(repair(['a', 'c'])))
-    expect(dismissKeyOf(repair(['a', 'b']))).not.toBe(dismissKeyOf(repair(['a', 'b'], 'pr-missing')))
+  it('half-labelled: keyed by the shape and where the ticket stands', () => {
+    const queued = { stage: 'implement', status: { kind: 'queued', reason: 'new' } }
+    const running = { stage: 'implement', status: { kind: 'running' } }
+    const repair = (view: object, shape = 'plan-missing-approved') => asItem({ ...base(), kind: 'half-labelled', repair: { shape, view } })
+    expect(dismissKeyOf(repair(queued))).toBe(dismissKeyOf(repair(queued)))
+    expect(dismissKeyOf(repair(queued))).not.toBe(dismissKeyOf(repair(running)))
+    expect(dismissKeyOf(repair(queued))).not.toBe(dismissKeyOf(repair(queued, 'pr-missing')))
   })
 
   it('half-labelled mirror-failed: keyed by the failure instant, so a new failure brings the row back', () => {
-    const mirror = (at: string) => asItem({ ...base(), kind: 'half-labelled', repair: { shape: 'mirror-failed', labels: [], mirror: { at, outcome: { kind: 'item-unavailable' } } } })
+    const mirror = (at: string) => asItem({ ...base(), kind: 'half-labelled', repair: { shape: 'mirror-failed', view: null, mirror: { at, outcome: { kind: 'item-unavailable' } } } })
     expect(dismissKeyOf(mirror('t1'))).toBe(dismissKeyOf(mirror('t1')))
     expect(dismissKeyOf(mirror('t1'))).not.toBe(dismissKeyOf(mirror('t2')))
     expect(dismissKeyOf(mirror('t1'))).toContain('mirror-failed|t1')

@@ -1,7 +1,7 @@
 // Pause-then-stop-every-claim. Every write goes through applyItemAction, the same chokepoint
 // the board's own row buttons use.
-import { actionsFor, stageKeyOf } from '@/utils/actions/plan'
-import { labelName } from '@/utils/labels/vocabulary'
+import { actionsFor } from '@/utils/actions/plan'
+import { stageNameOf, ticketViewOf } from '@/utils/pipeline/stages'
 import type { HaltItemOutcome, HaltReport } from '@/types/dispatch'
 import type { BoardSnapshot } from '@/types/board'
 import type { ReadyEntry } from '@/types/actions'
@@ -45,16 +45,16 @@ export async function haltDispatch(ctx: HaltContext, params: HaltDispatchParams)
     if (entry === undefined) continue
 
     for (const item of repoState.items) {
-      if (item.stage !== 'in-flight') continue
-      const inFlight = stageKeyOf(item)
-      if (inFlight === null) continue
+      const ticket = item.ticket
+      if (ticket === null || ticket.status.kind !== 'running') continue
+      const view = ticketViewOf(ticket)
 
       if (item.sessionRequired) {
         items.push({ kind: 'skipped', number: item.number, itemKind: item.kind, repoId: repoState.repoId, reason: 'session-required', owner: null })
         continue
       }
 
-      const availability = actionsFor({ item, viewer: repoState.viewer, approvalGate: repoState.approvalGate }).stop
+      const availability = actionsFor({ view, item, viewer: repoState.viewer, approvalGate: repoState.approvalGate }).stop
       if (!availability.available) {
         if (availability.reason === 'not-owned') {
           items.push({ kind: 'skipped', number: item.number, itemKind: item.kind, repoId: repoState.repoId, reason: 'not-owned', owner: item.assignees[0] ?? null })
@@ -69,15 +69,14 @@ export async function haltDispatch(ctx: HaltContext, params: HaltDispatchParams)
       const stoppedTask = await ctx.live.dispatcher.stopFor(repoState.repoId, item.number)
 
       const result = await applyItemAction(ctx, {
-        request: { repoId: repoState.repoId, kind: item.kind, number: item.number, action: 'stop', expectedStage: inFlight },
+        request: { repoId: repoState.repoId, kind: item.kind, number: item.number, action: 'stop', expected: view },
         snapshot,
         entry,
         auditDir: ctx.paths.userData,
       })
 
       if (result.ok && (result.outcome.kind === 'applied' || result.outcome.kind === 'mirror-failed')) {
-        const removedKey = availability.plan.remove[0] ?? inFlight
-        const removedLabel = labelName(entry.config.vocabulary, removedKey) ?? removedKey
+        const removedLabel = stageNameOf(view)
         items.push({ kind: 'stopped', number: item.number, itemKind: item.kind, repoId: repoState.repoId, removedLabel, attachedAgent: attachedAgentName(item), stoppedTask })
       } else {
         items.push({ kind: 'refused', number: item.number, itemKind: item.kind, repoId: repoState.repoId, result })

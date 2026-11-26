@@ -20,7 +20,7 @@ vi.mock('@/main/pipeline/operator/stage', () => ({
 const REPO_ID = 'repo-a' as RepoId
 const KEY = 'hosted-1' as SessionKey
 const RUN_ID = `run-of-${KEY}`
-const ACTIONABLE = [{ number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }]
+const ACTIONABLE = [{ number: 52, kind: 'issue' as const, stage: 'implement' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }]
 const APPLIED = { kind: 'applied' as const }
 const refused = (reason: 'moved' | 'write-failed', detail: string | null = null) => ({ kind: 'refused' as const, reason, retryable: false, detail })
 

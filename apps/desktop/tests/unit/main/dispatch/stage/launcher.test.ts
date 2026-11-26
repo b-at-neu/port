@@ -30,7 +30,7 @@ const KEPT = '/repo/.claude/worktrees/session-abc123'
 const AT = '2026-01-01T00:00:00.000Z'
 
 function request(overrides: Partial<StageLaunchRequest> = {}): StageLaunchRequest {
-  return { entry: ENTRY, agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', model: 'sonnet', prompt: 'Run your pipeline stage for #52.', title: '#52 Add a dark-mode icon for the tray', target: { kind: 'issue', title: 'Add a dark-mode icon for the tray' }, review: null, ...overrides }
+  return { entry: ENTRY, agent: 'impl', stage: 'implement', number: 52, kind: 'issue', trigger: 'planApproved', model: 'sonnet', prompt: 'Run your pipeline stage for #52.', title: '#52 Add a dark-mode icon for the tray', target: { kind: 'issue', title: 'Add a dark-mode icon for the tray' }, review: null, ...overrides }
 }
 
 function baseSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSessionSnapshot {
@@ -139,7 +139,7 @@ describe('createStageLauncher.launch', () => {
 
   it('titles a review launch with the ticket label it was given', async () => {
     const deps = await rig()
-    await deps.launcher.launch(request({ agent: 'review', number: 47, kind: 'pull-request', trigger: 'readyForReview', title: '#46 Show the last sync time in the header' }))
+    await deps.launcher.launch(request({ agent: 'review', stage: 'review', number: 47, kind: 'pull-request', trigger: 'readyForReview', title: '#46 Show the last sync time in the header' }))
     expect(deps.start).toHaveBeenCalledWith(expect.objectContaining({ initialTitle: '#46 Show the last sync time in the header' }))
   })
 
@@ -237,7 +237,7 @@ describe('createStageLauncher.launch', () => {
   it('records no branch for a detached worktree and releases nothing', async () => {
     const deps = await rig({ start: { ok: false, kind: 'not-git' } })
     wt.create.mockResolvedValue({ ...CREATED, path: '/repo/.claude/worktrees/plan-52', branch: null, baseLabel: 'origin/dev' })
-    await deps.launcher.launch(request({ agent: 'plan', trigger: 'ready' }))
+    await deps.launcher.launch(request({ agent: 'plan', stage: 'plan', trigger: 'ready' }))
     expect(wt.remove).toHaveBeenCalled()
     expect(wt.release).not.toHaveBeenCalled()
   })
@@ -268,7 +268,7 @@ const INTERRUPTED: InterruptedStage = {
   number: 52,
   kind: 'issue',
   trigger: 'planApproved',
-  inFlight: 'inProgress',
+  stage: 'implement',
   model: 'sonnet',
   claudeSessionId: 'sdk-1',
   worktree: { path: KEPT, branch: 'session/abc123', baseSha: 'abc' },

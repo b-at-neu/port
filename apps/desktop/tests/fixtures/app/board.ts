@@ -14,6 +14,7 @@ import { reconcileRepository } from '@/main/pipeline/board/reconcile'
 import { createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
 import type { Run } from '@/utils/pipeline/ticket'
 import { planTick } from '@/main/pipeline/tick/plan'
+import { seedFrom, viewOf } from '@/main/pipeline/state/model'
 import { FIXTURE_REPOSITORIES, GADGETS_ID, GADGETS_VOCABULARY_REPORT, LEGACY_SITE_ID, WIDGETS_ID, WIDGETS_VOCABULARY_REPORT } from './repos'
 import type { RepoId } from '@/utils/repos'
 import type { FixtureScenario } from '@/types/fixtures'
@@ -130,14 +131,17 @@ function readyRepositoryState(now: Date, scenario: FixtureScenario): RepositoryS
     activity: 'active',
   }
 
-  const state = reconcileRepository({
+  const reconcileInput = {
     entry,
     pipelineFetch,
     itemsByNumberFetch: null,
     repoSessions: { agents: [agent], sessions: scenario === 'empty' ? [] : [operatorSession(now)], available: true, freshness: { at: now.toISOString() } },
-    worktrees: { ok: true, mainPath: '/home/you/src/widgets', entries: scenario === 'empty' ? [] : [OPERATOR_WORKTREE], subjectsAvailable: true, readAt: now.toISOString() },
+    worktrees: { ok: true as const, mainPath: '/home/you/src/widgets', entries: scenario === 'empty' ? [] : [OPERATOR_WORKTREE], subjectsAvailable: true, readAt: now.toISOString() },
     denials: widgetsDenialsRead(now, '/home/you/src/widgets/.agents/denials.log'),
-  })
+  }
+  // The real app reconciles once unseeded, seeds the store from that read, then reads through the store, so every item carries its ticket record.
+  const unseeded = reconcileRepository(reconcileInput)
+  const state = unseeded.ok ? reconcileRepository({ ...reconcileInput, view: viewOf(seedFrom(WIDGETS_ID, unseeded, now.toISOString())) }) : unseeded
   return scenario === 'attention' && state.ok ? withMirrorFailure(state, MIRROR_FAILED_NUMBER, now) : state
 }
 
@@ -376,7 +380,7 @@ function interruptedStages(now: Date): readonly InterruptedStage[] {
     number,
     kind: agent === 'revise' ? 'pull-request' : 'issue',
     trigger: agent === 'plan' ? 'ready' : agent === 'revise' ? 'needsRevision' : 'planApproved',
-    inFlight: agent === 'plan' ? 'planning' : agent === 'revise' ? 'revising' : 'inProgress',
+    stage: agent === 'plan' ? 'plan' : agent === 'revise' ? 'revise' : 'implement',
     model: agent === 'plan' ? 'opus' : 'sonnet',
     claudeSessionId: `fixture-session-${id}`,
     worktree: { path: `/home/you/src/widgets/.claude/worktrees/session-${id}`, branch: `session/${id}`, baseSha: 'abc1234' },

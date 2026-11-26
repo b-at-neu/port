@@ -1,8 +1,7 @@
 import type { PipelineItemKind } from '@/types/github'
 import type { ReconciledItem } from '@/types/state'
-import { stageKeyOf } from '@/utils/actions/plan'
 import type { LabelKey } from '@/utils/labels/vocabulary'
-import { stageNameOf } from '@/utils/pipeline/stages'
+import { stageNameOf, ticketViewOf as ticketViewOfTicket } from '@/utils/pipeline/stages'
 import type { StageStatus, TicketView } from '@/utils/pipeline/stages'
 import { V1_KEY_MEANING } from '@/utils/pipeline/ticket'
 import type { Gate, QueueReason, Stage, StatusKind } from '@/utils/pipeline/ticket'
@@ -32,10 +31,10 @@ export function viewOfKey(key: LabelKey, kind: PipelineItemKind): TicketView | n
   }
 }
 
-export function ticketViewOf(item: Pick<ReconciledItem, 'stage' | 'stages' | 'kind' | 'mergedAt'>): TicketView | null {
+/** Where the item's ticket stands, `null` for an untracked one. A merged item still reads `done` while its ticket has not yet caught up. */
+export function ticketViewOf(item: Pick<ReconciledItem, 'ticket' | 'mergedAt'>): TicketView | null {
   if (item.mergedAt !== null) return { stage: 'merge', status: { kind: 'done' } }
-  const key = stageKeyOf(item)
-  return key === null ? null : viewOfKey(key, item.kind)
+  return item.ticket === null ? null : ticketViewOfTicket(item.ticket)
 }
 
 export function stageNameOfKey(key: LabelKey): string | null {

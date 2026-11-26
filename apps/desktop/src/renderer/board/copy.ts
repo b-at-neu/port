@@ -4,8 +4,7 @@ import type { BlockedOnTag, BoardColumnKey, BoardSnapshot, SourceHealth, SourceK
 import type { BoardView } from '@/types/router'
 import { SOURCE_KINDS, isDeferred } from '@/types/board'
 import { labelNameOf } from '@/utils/labels/defaults'
-import { RETRY_TRIGGER } from '@/utils/actions/plan'
-import type { ActionPlan, ActionRefusal, ItemActionResult, OperatorAction, OperatorDecision } from '@/types/actions'
+import type { ActionRefusal, ItemActionResult, OperatorAction, OperatorDecision } from '@/types/actions'
 import type { Conflict } from '@/types/writes'
 import type { HaltItemOutcome, HaltReport } from '@/types/dispatch'
 import type { RepoProblem } from '@/utils/repos'
@@ -213,31 +212,23 @@ export function actionRefusalNote(reason: ActionRefusal, item: { readonly number
   return null
 }
 
-/** `applied` carries no resulting label set, so the names come from the row's own `plan`; resume's plan holds a placeholder, so it reads the row's current stage name instead. */
-function appliedCopy(action: OperatorAction, number: number, plan: ActionPlan | null, currentStageName: string | null): string {
+/** `currentStageName` is the stage the row showed when the action was taken. */
+function appliedCopy(action: OperatorAction, number: number, currentStageName: string | null): string {
   const n = String(number)
-  const removed = plan?.remove[0]
-  const removedName = removed !== undefined ? labelNameOf(removed) : ''
+  const stage = currentStageName ?? 'its stage'
   switch (action) {
     case 'pause':
-      return `Paused #${n} — removed "${removedName}". No agent will pick it up now.`
-    case 'retry': {
-      const added = plan?.add[0]
-      return `Retrying #${n} — "${removedName}" → "${added !== undefined ? labelNameOf(added) : ''}". The next tick picks it up.`
-    }
+      return `Paused #${n} at "${stage}". No agent will pick it up now.`
+    case 'retry':
+      return `Retrying #${n} — queued at "${stage}" again. The next tick picks it up.`
     case 'resume':
-      return `Resumed #${n} — restored "${currentStageName ?? ''}".`
-    case 'stop': {
-      const restoreKey = removed !== undefined ? RETRY_TRIGGER[removed] : undefined
-      const restoreName = restoreKey !== undefined ? labelNameOf(restoreKey) : null
-      return restoreName !== null
-        ? `Stopped #${n} — removed "${removedName}". Nothing will dispatch it now; Resume restores "${restoreName}".`
-        : `Stopped #${n} — removed "${removedName}". Nothing will dispatch it now.`
-    }
+      return `Resumed #${n} — back to "${stage}".`
+    case 'stop':
+      return `Stopped #${n} at "${stage}". Nothing will dispatch it now; Resume puts it back.`
     case 'gate':
       return `Gate label added to #${n}. The "labeled" event re-runs the approval check, so the gate is live on that run.`
     case 'refresh':
-      return `Refreshing #${n} — added "${labelNameOf('refreshBranch')}". The next tick rebases it onto its base and force-pushes.`
+      return `Refreshing #${n} — queued to rebase onto its base and force-push on the next tick.`
   }
 }
 
@@ -260,12 +251,11 @@ function preconditionFailedCopy(action: OperatorAction, number: number, conflict
 export function actionResultCopy(params: {
   readonly action: OperatorAction
   readonly number: number
-  readonly plan: ActionPlan | null
   readonly currentStageName: string | null
   readonly result: ItemActionResult
   readonly now: Date
 }): string {
-  const { action, number, plan, currentStageName, result, now } = params
+  const { action, number, currentStageName, result, now } = params
   const n = String(number)
 
   if (!result.ok) {
@@ -278,17 +268,13 @@ export function actionResultCopy(params: {
         return "Can't tell which account you're signed in as, so ownership can't be checked."
       case 'repo-unavailable':
         return "Can't read this repository right now. Nothing was written."
-      case 'no-pause-record':
-        return `This app has no record of pausing #${n}, so it can't know which trigger to restore. Use resume #${n} in the cockpit.`
-      case 'pause-record-unresolvable':
-        return `The pause recorded for #${n} no longer matches a known label. Use resume #${n} in the cockpit.`
     }
   }
 
   const { outcome } = result
   switch (outcome.kind) {
     case 'applied':
-      return appliedCopy(action, number, plan, currentStageName)
+      return appliedCopy(action, number, currentStageName)
     case 'no-op':
       return `#${n} already reads that way. Nothing was written.`
     case 'precondition-failed':
@@ -308,11 +294,8 @@ export function actionResultCopy(params: {
     }
     case 'state-unsaved':
       return `port couldn't save its pipeline state for #${n}, so nothing changed — ${outcome.message}. Try again.`
-    case 'mirror-failed': {
-      const added = plan?.add[0]
-      const phase = added === undefined ? 'its new state' : (stageNameOfKey(added) ?? labelNameOf(added))
-      return `#${n} moved to ${phase}, but its GitHub label couldn't be updated — ${mirrorReason(outcome.mirror)}. The next write will correct it.`
-    }
+    case 'mirror-failed':
+      return `#${n} moved, but its GitHub label couldn't be updated — ${mirrorReason(outcome.mirror)}. The next write will correct it.`
   }
 }
 
@@ -351,7 +334,7 @@ export function haltItemLine(outcome: HaltItemOutcome, now: Date): string {
     case 'skipped':
       return skippedLine(outcome)
     case 'refused':
-      return `#${n} not stopped — ${actionResultCopy({ action: 'stop', number: outcome.number, plan: null, currentStageName: null, result: outcome.result, now })}`
+      return `#${n} not stopped — ${actionResultCopy({ action: 'stop', number: outcome.number, currentStageName: null, result: outcome.result, now })}`
   }
 }
 

@@ -6,7 +6,7 @@ import { INCIDENT_BUCKETS, type IncidentBucket } from '@/types/incidents'
 import type { StageOutcome } from '@/types/stage-session'
 import { ENTRY, item, writerRig } from './fixtures'
 
-const PLAN = { add: ['needsHuman'], remove: ['readyForReview'], action: 'observe-zero-diff' } as const
+const PLAN = { action: 'observe-zero-diff' } as const
 const RECORD = { agent: 'impl', trigger: 'planApproved', sessionKey: 'hosted-1', claudeSessionId: 'claude-1', at: '2026-11-16T10:00:00.000Z' } as const
 
 function outcome(kind: StageOutcome['kind'], detail: string | null = null): StageOutcome {
@@ -26,8 +26,8 @@ const RAISED = {
     return rig.incidents.map((draft) => draft.bucket)
   },
   'liveness-reset': () => {
-    const observation: WriteObservation = { kind: 'liveness-reset', number: 789, itemKind: 'pull-request', inFlight: 'inProgress', retryKey: 'planApproved' }
-    return bucketsOf([observationIntent(observation, item(), { add: ['planApproved'], remove: ['inProgress'], action: 'observe-liveness-reset' }, null)].filter((intent) => intent !== null))
+    const observation: WriteObservation = { kind: 'liveness-reset', number: 789, itemKind: 'pull-request', stage: 'implement' }
+    return bucketsOf([observationIntent(observation, item(), { action: 'observe-liveness-reset' }, null)].filter((intent) => intent !== null))
   },
   'duplicate-head': () => {
     const observation: WriteObservation = { kind: 'zero-diff', number: 789, itemKind: 'pull-request', count: 2, headRefOid: 'f19c6d5' }
@@ -40,7 +40,7 @@ const RAISED = {
   'launch-failed': () => bucketsOf([launchFailedIntent(RECORD, 'start')]),
   escalation: () => {
     const observation: WriteObservation = { kind: 'cycle-cap', number: 789, itemKind: 'pull-request', count: 5, cap: 5 }
-    return bucketsOf([observationIntent(observation, item(), { add: ['needsHuman'], remove: ['needsRevision'], action: 'observe-cycle-cap' }, null)].filter((intent) => intent !== null))
+    return bucketsOf([observationIntent(observation, item(), { action: 'observe-cycle-cap' }, null)].filter((intent) => intent !== null))
   },
   unknown: () => bucketsOf(endedIntents(RECORD, outcome('error', 'boom'), Date.parse('2026-11-16T11:00:00.000Z'))),
 } satisfies Record<IncidentBucket, () => readonly IncidentBucket[] | Promise<readonly IncidentBucket[]>>
@@ -60,21 +60,21 @@ describe('signatureOf', () => {
 describe('observationIntent', () => {
   it('raises nothing for a routine observation', () => {
     const observation: WriteObservation = { kind: 'plan-missing', number: 52, itemKind: 'issue' }
-    expect(observationIntent(observation, item(), { add: ['ready'], remove: ['planReview'], action: 'observe-plan-missing' }, null)).toBeNull()
+    expect(observationIntent(observation, item(), { action: 'observe-plan-missing' }, null)).toBeNull()
   })
 
   it('raises nothing when an approval withdrawal goes back to revision, and an escalation when it goes to a human', () => {
     const red = [{ name: 'ci', conclusion: 'FAILURE', url: null }]
     const toRevision: WriteObservation = { kind: 'withdraw-approval', number: 789, itemKind: 'pull-request', headRefOid: 'f19c6d5', red, route: 'revise' }
     const toHuman: WriteObservation = { ...toRevision, route: 'human' }
-    const plan = { add: ['needsHuman'], remove: ['approved'], action: 'observe-withdraw-approval' }
+    const plan = { action: 'observe-withdraw-approval' }
     expect(observationIntent(toRevision, item(), plan, null)).toBeNull()
     expect(observationIntent(toHuman, item(), plan, null)).toMatchObject({ bucket: 'escalation', condition: 'withdraw-approval' })
   })
 
   it('keeps the observation kind out of the signature condition for a stage that did not move', () => {
-    const observation: WriteObservation = { kind: 'refresh-stuck', number: 789, itemKind: 'pull-request', sourceLabel: 'readyForReview', reason: 'same-sha', sha: 'f19c6d5', count: 2 }
-    expect(observationIntent(observation, item(), { add: ['needsHuman'], remove: ['readyForReview'], action: 'observe-refresh-stuck' }, 'tick-1')).toMatchObject({ bucket: 'escalation', stage: 'needsHuman', condition: 'refresh-stuck', inputs: { observedHead: 'f19c6d5', snapshotAt: 'tick-1' } })
+    const observation: WriteObservation = { kind: 'refresh-stuck', number: 789, itemKind: 'pull-request', from: 'review', reason: 'same-sha', sha: 'f19c6d5', count: 2 }
+    expect(observationIntent(observation, item(), { action: 'observe-refresh-stuck' }, 'tick-1')).toMatchObject({ bucket: 'escalation', stage: 'needsHuman', condition: 'refresh-stuck', inputs: { observedHead: 'f19c6d5', snapshotAt: 'tick-1' } })
   })
 })
 

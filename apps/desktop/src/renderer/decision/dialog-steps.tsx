@@ -40,7 +40,7 @@ function RebaseDecisionFields({ decisions, picks, onPick }: { readonly decisions
 }
 
 export function ConfirmUnblockStep({ target }: { readonly target: Extract<DecisionTarget, { readonly decision: 'unblock' }> }) {
-  const { repoId, number, expectedStage, context } = target
+  const { repoId, number, expected, context } = target
   const { decisions } = context
   const [picks, setPicks] = useState<Picks>(() => Object.fromEntries(decisions.flatMap((d) => (d.recommended === null ? [] : [[d.id, d.recommended]]))))
   const decide = useDecideItem({})
@@ -52,7 +52,7 @@ export function ConfirmUnblockStep({ target }: { readonly target: Extract<Decisi
     const chosen = decisions.length === 0 ? null : pickList(decisions, picks)
     if (chosen !== null && picksProblem(decisions, chosen) !== null) return
     closeDecisionDialog()
-    void decide.perform({ repoId, number, expectedStage, decision: 'unblock', route, note: null, skipComment: false, picks: chosen })
+    void decide.perform({ repoId, number, expected, decision: 'unblock', route, note: null, skipComment: false, picks: chosen })
   }
 
   return (
@@ -89,7 +89,7 @@ export function ConfirmUnblockStep({ target }: { readonly target: Extract<Decisi
 }
 
 export function ConfirmReviseStep({ target }: { readonly target: Extract<DecisionTarget, { readonly decision: 'revise' }> }) {
-  const { repoId, number, expectedStage, context } = target
+  const { repoId, number, expected, context } = target
   const [text, setText] = useState('')
   const decide = useDecideItem({})
   const problem = reviseNoteProblem(text, context.headRefOid)
@@ -98,7 +98,7 @@ export function ConfirmReviseStep({ target }: { readonly target: Extract<Decisio
   function submit(): void {
     if (problem !== null) return
     closeDecisionDialog()
-    void decide.perform({ repoId, number, expectedStage, decision: 'revise', route: null, note: text, skipComment: false, picks: null })
+    void decide.perform({ repoId, number, expected, decision: 'revise', route: null, note: text, skipComment: false, picks: null })
   }
 
   return (

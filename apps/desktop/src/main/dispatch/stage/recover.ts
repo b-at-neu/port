@@ -55,7 +55,7 @@ export async function restartStage(ctx: RecoverContext, id: string): Promise<Sta
 
   const ready = await readyEntryOf(ctx, "'stage:restart'", entry.repoId, (message) => `'stage:restart' could not list repositories: ${message}`)
   const retried = await applyItemAction(ctx, {
-    request: { repoId: entry.repoId, kind: entry.kind, number: entry.number, action: 'retry', expectedStage: entry.inFlight },
+    request: { repoId: entry.repoId, kind: entry.kind, number: entry.number, action: 'retry', expected: { stage: entry.stage, status: { kind: 'running' } } },
     snapshot: ctx.live.watcher.snapshot(),
     entry: ready,
     auditDir: ctx.paths.userData,

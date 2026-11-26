@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { reconcileRepository } from '@/main/pipeline/board/reconcile'
-import type { PipelineView, StoredItem } from '@/types/pipeline-state'
+import type { PipelineView, TrackedItem } from '@/types/pipeline-state'
+import { ticketAt } from '../../../../support/tickets'
 import { denialsOf, entry, fetchOf, item, sessionsOf, worktreesOf } from './reconcile-fixtures'
 
-function stored(overrides: Partial<StoredItem> = {}): StoredItem {
-  return { kind: 'issue', number: 79, keys: ['planReview'], marked: true, autoPlan: false, claimedAt: null, reviewCycles: 0, history: [], updatedAt: 't', issue: null, mirrorFailure: null, ...overrides }
+function stored(overrides: Partial<TrackedItem> = {}): TrackedItem {
+  const ticket = ticketAt('plan', { kind: 'waiting-on-you', gate: 'plan-approval', detail: '' }, { ticket: overrides.number ?? 79 })
+  return { kind: 'issue', number: 79, keys: ['planReview'], marked: true, autoPlan: false, claimedAt: null, reviewCycles: 0, history: [], updatedAt: 't', issue: null, mirrorFailure: null, ticket, ...overrides }
 }
 
 function reconcile(items: Parameters<typeof fetchOf>[0], view: PipelineView | undefined) {

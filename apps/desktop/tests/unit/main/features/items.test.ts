@@ -1,15 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { itemDecide } from '@/main/features/item/actions/decide'
 import type { RepoId } from '@/utils/repos'
-import type { StageLabel } from '@/types/state'
+import { ticketViewOf } from '@/utils/pipeline/stages'
 import { boardSnapshot, reconciledItem, repositoryState } from '../../../support/board-snapshot'
 import { callAction, createTestContext } from '../../../support/context'
 import { operatorRig, recordingWatcher, REPO_ID, type OperatorRigOptions } from '../../../support/operator-rig'
 import { stageSession } from '../../../support/session-snapshot'
 import { ticketOf } from '../../../support/tickets'
 
-const BASE = { repoId: REPO_ID, number: 1, expectedStage: null, route: null, note: null, skipComment: false, picks: null }
-const stageLabel: StageLabel = { key: 'needsHuman', name: 'needsHuman', role: 'gate' }
+const BASE = { repoId: REPO_ID, number: 1, expected: null, route: null, note: null, skipComment: false, picks: null }
 
 describe('item.decide input', () => {
   it.each([
@@ -33,7 +32,7 @@ describe('item.decide input', () => {
 })
 
 describe('item.action', () => {
-  const request = { repoId: REPO_ID, kind: 'issue' as const, number: 148, action: 'pause' as const, expectedStage: null }
+  const request = { repoId: REPO_ID, kind: 'issue' as const, number: 148, action: 'pause' as const, expected: null }
 
   it('rejects an unregistered repository', async () => {
     const ctx = createTestContext({ live: { watcher: recordingWatcher().watcher } })
@@ -63,9 +62,10 @@ describe('item.decide', () => {
     ],
     tickets: [ticketOf({ repo: REPO_ID, ticket: 51, pr: { number: 300, approvedAt: null }, stage: 'review', status: { kind: 'waiting-on-you', gate: 'escalation', detail: '' } })],
   }
-  const pullRequest = reconciledItem({ repoId: REPO_ID, kind: 'pull-request', number: 300, stage: 'gate', stages: [stageLabel], status: 'gated', matchedKeys: ['needsHuman'], headRefOid: 'a'.repeat(40), mergeable: 'MERGEABLE', reviewCycleCount: 0 })
+  const escalated = ticketOf({ repo: REPO_ID, ticket: 51, pr: { number: 300, approvedAt: null }, stage: 'review', status: { kind: 'waiting-on-you', gate: 'escalation', detail: '' } })
+  const pullRequest = reconciledItem({ repoId: REPO_ID, kind: 'pull-request', number: 300, ticket: escalated, headRefOid: 'a'.repeat(40), mergeable: 'MERGEABLE', reviewCycleCount: 0 })
   const snapshot = boardSnapshot([repositoryState([pullRequest], { repoId: REPO_ID })])
-  const unblock = { repoId: REPO_ID, number: 300, decision: 'unblock' as const, expectedStage: 'needsHuman' as const, route: 'revision' as const, note: null, skipComment: true, picks: null }
+  const unblock = { repoId: REPO_ID, number: 300, decision: 'unblock' as const, expected: ticketViewOf(escalated), route: 'revision' as const, note: null, skipComment: true, picks: null }
 
   it('forces one github refresh after an applied unblock', async () => {
     const { live, refreshes } = recordingWatcher({ snapshot })
@@ -80,10 +80,10 @@ describe('item.decide', () => {
     expect(await callAction(rig.ctx, 'item.decide', unblock)).toMatchObject({ ok: true, labels: { kind: 'applied' } })
   })
 
-  it('records no refresh when the label outcome is not applied', async () => {
+  it('refuses as moved and records no refresh when the record holds no ticket', async () => {
     const { live, refreshes } = recordingWatcher({ snapshot })
-    const rig = await operatorRig({ ...ESCALATED, tickets: null, live })
-    expect(await callAction(rig.ctx, 'item.decide', unblock)).toMatchObject({ ok: true, labels: { kind: 'state-unsaved' } })
+    const rig = await operatorRig({ ...ESCALATED, tickets: [], live })
+    expect(await callAction(rig.ctx, 'item.decide', unblock)).toMatchObject({ ok: false, reason: 'moved' })
     expect(refreshes).toEqual([])
   })
 
@@ -93,10 +93,11 @@ describe('item.decide', () => {
     { name: 'a live session for another number', sessions: [stageSession({ repoId: REPO_ID, stage: { agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved' } })], live: false },
     { name: 'a live session in another repository', sessions: [stageSession({ repoId: 'repo-2' as RepoId, stage: { agent: 'impl', number: 300, kind: 'issue', trigger: 'planApproved' } })], live: false },
   ])('treats $name as liveStage=$live', async ({ sessions, live: refused }) => {
-    const blocked = reconciledItem({ repoId: REPO_ID, kind: 'issue', number: 300, stage: 'gate', stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }], matchedKeys: ['blocked'], assignees: ['op'] })
+    const blockedTicket = ticketOf({ repo: REPO_ID, ticket: 300, stage: 'implement', status: { kind: 'blocked', on: [], reason: 'stuck' } })
+    const blocked = reconciledItem({ repoId: REPO_ID, kind: 'issue', number: 300, assignees: ['op'], ticket: blockedTicket })
     const { live } = recordingWatcher({ snapshot: boardSnapshot([repositoryState([blocked], { repoId: REPO_ID })]), sessions })
-    const rig = await operatorRig({ ...ESCALATED, live })
-    const result = await callAction(rig.ctx, 'item.decide', { ...unblock, expectedStage: 'blocked', route: 'implementation' })
+    const rig = await operatorRig({ viewer: 'op', items: [{ number: 300, labels: ['port'], assignees: ['op'] }], tickets: [blockedTicket], live })
+    const result = await callAction(rig.ctx, 'item.decide', { ...unblock, expected: ticketViewOf(blockedTicket), route: 'implementation' })
     expect(result.ok === false && result.reason === 'refused' && result.refusal === 'agent-live').toBe(refused)
   })
 })

@@ -9,7 +9,10 @@ import { autoApprovableFrom } from '@/main/pipeline/tick/dispatchable'
 
 /** Qualifies when carrying `autoPlan`, `stages` is exactly one entry at `planReview`, and the viewer is an assignee. */
 export function autoApprovalsOf(items: readonly ReconciledItem[], viewer: string | null): readonly TickAutoApproval[] {
-  const candidates = items.filter((item) => item.kind === 'issue' && item.autoPlan && item.stages.length === 1 && item.stages[0]?.key === 'planReview')
+  const candidates = items.filter((item) => {
+    const { ticket } = item
+    return item.kind === 'issue' && ticket !== null && ticket.autoPlan && ticket.stage === 'plan' && ticket.status.kind === 'waiting-on-you' && ticket.status.gate === 'plan-approval'
+  })
   const { mine } = partitionOwnership(candidates, viewer, (item) => item.assignees)
   return mine.map((item) => ({ number: item.number }))
 }

@@ -55,7 +55,7 @@ async function applyOwnWrite(ctx: ObservationContext, entry: ReadyEntry, observa
     ctx.live.memos.rerunMemo.set(entry.id, observation.number, observation.headRefOid)
     return result === 'applied' ? 'written' : 'failed'
   }
-  const record = { number: observation.number, kind: observation.itemKind, agent: observation.agent, trigger: observation.trigger }
+  const record = { number: observation.number, kind: observation.itemKind, agent: observation.agent, stage: observation.stage }
   const result = await applyStageTransition(ctx, { entry, record, event: { kind: 'adopt', handback: observation.handback }, auditDir: ctx.paths.userData, scratchDir: ctx.paths.temp })
   if (result.kind === 'applied') return 'written'
   if (result.reason === 'moved') return 'moved'

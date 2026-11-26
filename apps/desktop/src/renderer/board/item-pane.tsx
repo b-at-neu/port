@@ -151,7 +151,7 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
                 key={decision}
                 variant="outline"
                 size="small"
-                onClick={() => openDecision({ repoId: item.repoId, number: item.number, decision, expectedStage: row.stageLabel?.key ?? null, context: availability.context })}
+                onClick={() => openDecision({ repoId: item.repoId, number: item.number, decision, expected: view, context: availability.context })}
               >
                 {DECISION_BUTTON_LABELS[decision]}
               </Button>

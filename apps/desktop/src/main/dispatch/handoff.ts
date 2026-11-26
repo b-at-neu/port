@@ -1,5 +1,6 @@
 // Per-repository pending stage label writes: serialized, retried a bounded number of times, and reported rather than guessed.
-import { eventWrites, stageModeFor } from '@/main/pipeline/transitions'
+import { eventWrites } from '@/main/pipeline/transitions'
+import { modeOfStage } from '@/types/stage-labels'
 import { draftOf, handoffRefusalIntent, noRelated } from '@/main/pipeline/incidents/raise'
 import type { ReadyEntry } from '@/types/actions'
 import type { StageSnapshot } from '@/types/dispatch'
@@ -20,7 +21,7 @@ export const HANDOFF_ATTEMPTS = 3
 /** A retryable refusal keeps retrying this long after its first attempt, so a write that fails while DNS comes back after a wake still lands. */
 export const HANDOFF_RETRY_WINDOW_MS = 600_000
 
-type HandoffRecord = Pick<TickActionable, 'number' | 'kind' | 'agent' | 'trigger'> & { readonly sessionKey: SessionKey }
+type HandoffRecord = Pick<TickActionable, 'number' | 'kind' | 'agent' | 'stage' | 'trigger'> & { readonly sessionKey: SessionKey }
 
 interface PendingWrite {
   readonly repoId: RepoId
@@ -98,7 +99,7 @@ export function createStageHandoff(ctx: HandoffContext, snapshotOf: (repoId: Rep
     },
     settle(repoId, record, outcome, plan) {
       const event: StageEvent = { kind: 'outcome', outcome: outcome.kind, handback: outcome.handback, plan }
-      if (!eventWrites(event, stageModeFor(record.agent, record.trigger))) return
+      if (!eventWrites(event, modeOfStage(record.agent, record.stage))) return
       results.delete(record.sessionKey)
       enqueue(record.sessionKey, { repoId, record, event, resultKey: record.sessionKey, attempts: 0, firstAttemptAt: null })
     },

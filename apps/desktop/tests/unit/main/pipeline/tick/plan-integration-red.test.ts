@@ -46,6 +46,7 @@ describe('planTick — integration-red hold', () => {
       {
         number: 642,
         kind: 'pull-request',
+        stage: 'review',
         trigger: 'readyForReview',
         reason: 'integration-red',
         contention: null,
@@ -64,7 +65,7 @@ describe('planTick — integration-red hold', () => {
     const report = plan(reviewItem(), { test: 'green' }, '2026-01-01T01:00:00.000Z')
     expect(report.actionable).toEqual([])
     expect(report.held[0]?.reason).toBe('integration-green')
-    expect(report.observations).toEqual([{ kind: 'refresh', number: 642, itemKind: 'pull-request', sourceLabel: 'readyForReview', headRefOid: 'abc1234def', count: 1, cause: 'integration-green' }])
+    expect(report.observations).toEqual([{ kind: 'refresh', number: 642, itemKind: 'pull-request', from: 'review', headRefOid: 'abc1234def', count: 1, cause: 'integration-green' }])
   })
 
   it('escalates once the hold window has elapsed with the check still red', () => {

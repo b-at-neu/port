@@ -25,16 +25,6 @@ describe('autoApprovalsOf', () => {
     expect(autoApprovalsOf([item({ autoPlan: false })], 'op')).toEqual([])
   })
 
-  it('leaves a contradictory item (more than one stage label) untouched', () => {
-    const contradictory = item({
-      stages: [
-        { key: 'planReview', name: 'plan review', role: 'gate' },
-        { key: 'planApproved', name: 'plan approved', role: 'trigger' },
-      ],
-    })
-    expect(autoApprovalsOf([contradictory], 'op')).toEqual([])
-  })
-
   it('leaves a pull request untouched, even with autoPlan set', () => {
     expect(autoApprovalsOf([item({ kind: 'pull-request' })], 'op')).toEqual([])
   })

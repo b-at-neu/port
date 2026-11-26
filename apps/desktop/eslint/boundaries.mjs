@@ -224,7 +224,7 @@ export const RESTRICTIONS = [
     files: ['tests/fixtures/app/**'],
     patterns: [
       {
-        regex: '^(?!(?:electron|node:path|\\./[\\w-]+|@/types/.+|@/utils/.+|@/main/repos/config/schema|@/main/pipeline/board/reconcile|@/main/pipeline/tick/ledger|@/main/pipeline/tick/plan)$)',
+        regex: '^(?!(?:electron|node:path|\\./[\\w-]+|@/types/.+|@/utils/.+|@/main/repos/config/schema|@/main/pipeline/board/reconcile|@/main/pipeline/state/model|@/main/pipeline/tick/ledger|@/main/pipeline/tick/plan)$)',
         message: 'Fixture mode may import only these modules — it must never reach gh or claude.',
       },
     ],

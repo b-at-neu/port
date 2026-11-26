@@ -128,7 +128,7 @@ describe('applyRunChange — the table', () => {
 describe('the projections', () => {
   it('interruptedOf reads a run as the Needs-you row: a run with no interruption reads as crash, a failed launch has none', () => {
     const ticket = running('run-1')
-    expect(interruptedOf(ticket, runOf({ title: '#1 x', costUsd: 2 }))).toMatchObject({ id: 'run-1', repoId: REPO, reason: 'crash', inFlight: 'inProgress', title: '#1 x', interruptedAt: NOW, networkRetries: 0 })
+    expect(interruptedOf(ticket, runOf({ title: '#1 x', costUsd: 2 }))).toMatchObject({ id: 'run-1', repoId: REPO, reason: 'crash', title: '#1 x', interruptedAt: NOW, networkRetries: 0 })
     expect(interruptedOf(ticket, runOf({ interruption: { reason: 'network', detail: 'd', at: LATER, resetsAt: LATER }, networkRetries: 2 }))).toMatchObject({ reason: 'network', detail: 'd', resetsAt: LATER, interruptedAt: LATER, networkRetries: 2 })
     expect(interruptedOf(ticket, runOf({ worktree: null }))).toBeNull()
   })

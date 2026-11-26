@@ -1,6 +1,6 @@
 // Pure: the legacy projection of a ticket and the label names GitHub should show for it. Nothing here reads a label or touches I/O.
 import type { PipelineItemKind } from '@/types/github'
-import type { StoredHistoryRow, StoredItem, TicketRef } from '@/types/pipeline-state'
+import type { StoredHistoryRow, TicketRef, TrackedItem } from '@/types/pipeline-state'
 import type { DisplayKey, DisplayVocabulary } from '@/utils/labels/display'
 import { LABEL_KEYS, labelName, type LabelKey, type LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { Stage, Ticket } from '@/utils/pipeline/ticket'
@@ -32,6 +32,11 @@ export function stateKeyOf(ticket: Pick<Ticket, 'stage' | 'status'>): LabelKey |
     case 'done':
       return 'approved'
   }
+}
+
+/** The stage key a run is recorded under as provenance; a stored status with no key of its own reads `marker`. */
+export function triggerKeyOf(ticket: Pick<Ticket, 'stage' | 'status'>): LabelKey {
+  return stateKeyOf(ticket) ?? 'marker'
 }
 
 /** The label keys one half of a ticket carries, markers included; `null` when that half is not tracked. */
@@ -74,10 +79,10 @@ function rowsOf(ticket: Ticket, kind: PipelineItemKind): StoredHistoryRow[] {
 }
 
 /** The legacy per-item shape the readers still consume: one entry per tracked half. */
-export function itemsOf(ticket: Ticket): StoredItem[] {
+export function itemsOf(ticket: Ticket): TrackedItem[] {
   const updatedAt = ticket.history.at(-1)?.at ?? ticket.mirror.failure?.at ?? ''
   const claimedAt = ticket.history.findLast((event) => event.to?.status === 'running')?.at ?? null
-  return (['issue', 'pull-request'] as const).flatMap((kind): StoredItem[] => {
+  return (['issue', 'pull-request'] as const).flatMap((kind): TrackedItem[] => {
     const keys = legacyKeysOf(ticket, kind)
     const number = numberOf(ticket, kind)
     if (keys === null || number === null) return []
@@ -94,6 +99,7 @@ export function itemsOf(ticket: Ticket): StoredItem[] {
         updatedAt,
         issue: kind === 'pull-request' && ticket.pr?.number !== ticket.ticket ? ticket.ticket : null,
         mirrorFailure: ticket.mirror.failure,
+        ticket,
       },
     ]
   })

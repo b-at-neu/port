@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { stageNameOfKey, ticketViewOf, viewOfKey } from '@/renderer/lib/ticket-view'
 import type { TicketView } from '@/utils/pipeline/stages'
 import type { LabelKey } from '@/utils/labels/vocabulary'
-import type { PipelineItemKind } from '@/types/github'
+import { queuedAt, ticketAt } from '../../../support/tickets'
 
 const queued = (stage: TicketView['stage'], reason: 'new' | 'changes-requested' = 'new'): TicketView => ({ stage, status: { kind: 'queued', reason } })
 const running = (stage: TicketView['stage']): TicketView => ({ stage, status: { kind: 'running' } })
@@ -37,21 +37,18 @@ describe('viewOfKey', () => {
 })
 
 describe('ticketViewOf', () => {
-  function item(overrides: { readonly key?: LabelKey; readonly mergedAt?: string | null; readonly kind?: PipelineItemKind }) {
-    const stages = overrides.key === undefined ? [] : [{ key: overrides.key, name: overrides.key, role: 'gate' as const }]
-    return { kind: overrides.kind ?? 'issue', mergedAt: overrides.mergedAt ?? null, stage: overrides.key === undefined ? null : ('gate' as const), stages }
-  }
+  const MERGE_GATE = ticketAt('merge', { kind: 'waiting-on-you', gate: 'merge', detail: '' })
 
-  it('a merged item is merge · done whatever its label says', () => {
-    expect(ticketViewOf(item({ key: 'approved', mergedAt: '2026-01-01T00:00:00Z' }))).toEqual({ stage: 'merge', status: { kind: 'done' } })
+  it('a merged item is merge · done whatever its ticket says', () => {
+    expect(ticketViewOf({ ticket: ticketAt('review', queuedAt()), mergedAt: '2026-01-01T00:00:00Z' })).toEqual({ stage: 'merge', status: { kind: 'done' } })
   })
 
-  it('an item with no stage has no view', () => {
-    expect(ticketViewOf(item({}))).toBeNull()
+  it('an item with no ticket has no view', () => {
+    expect(ticketViewOf({ ticket: null, mergedAt: null })).toBeNull()
   })
 
-  it('an item reads its winning stage label through the item kind', () => {
-    expect(ticketViewOf(item({ key: 'needsHuman', kind: 'pull-request' }))).toEqual(waiting('review', 'escalation'))
+  it('an item reads its ticket’s stage and status', () => {
+    expect(ticketViewOf({ ticket: MERGE_GATE, mergedAt: null })).toEqual(waiting('merge', 'merge'))
   })
 })
 
