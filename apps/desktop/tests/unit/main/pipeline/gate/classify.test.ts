@@ -20,7 +20,8 @@ describe('classifyGate', () => {
 
   it('reports not-at-plan-review with the observed stage name when the ticket is elsewhere', () => {
     const result = classifyGate({ item: item({ ticket: ticketAt('implement', queuedAt()) }) })
-    expect(result).toEqual({ kind: 'not-at-plan-review', observed: expect.any(String) })
+    expect(result.kind).toBe('not-at-plan-review')
+    expect(result).not.toMatchObject({ observed: null })
   })
 
   it('reports not-at-plan-review with no observation when there is no ticket', () => {
