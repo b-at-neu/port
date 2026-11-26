@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { reconcileRepository } from '@/main/pipeline/board/reconcile'
 import type { PipelineView, TrackedItem } from '@/types/pipeline-state'
-import { ticketAt } from '../../../support/tickets'
+import { ticketAt } from '../../../../support/tickets'
 import { denialsOf, entry, fetchOf, item, sessionsOf, worktreesOf } from './reconcile-fixtures'
 
 function stored(overrides: Partial<TrackedItem> = {}): TrackedItem {

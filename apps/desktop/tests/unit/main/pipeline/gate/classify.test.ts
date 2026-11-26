@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { classifyGate } from '@/main/pipeline/gate/classify'
 import type { GateClassifyItem } from '@/types/gate'
-import { queuedAt, ticketAt } from '../../../support/tickets'
+import { queuedAt, ticketAt } from '../../../../support/tickets'
 
 const AT_GATE = ticketAt('plan', { kind: 'waiting-on-you', gate: 'plan-approval', detail: '' })
 

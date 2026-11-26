@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { stateLabelsOf } from '@/main/pipeline/state/labels'
 import type { PipelineView } from '@/types/pipeline-state'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
-import { queuedAt, ticketAt } from '../../../support/tickets'
+import { queuedAt, ticketAt } from '../../../../support/tickets'
 
 const VOCABULARY = resolveVocabulary({})
 const STORE: PipelineView = {
