@@ -1,63 +1,30 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '@/utils/repos'
 import type { PullRequestCommentNode } from '@/types/github'
-import type { ReconciledItem, StageLabel } from '@/types/state'
+import type { ReconciledItem } from '@/types/state'
 import { decisionPlan, decisionsFor, escalationOf, pickList, picksProblem, rebaseDecisionsOf, reviseNoteProblem } from '@/utils/actions/decide'
+import type { DecisionsForParams } from '@/utils/actions/decide'
+import { ticketViewOf } from '@/utils/pipeline/stages'
+import { reconciledItem } from '../../../support/board-snapshot'
+import { queuedAt, ticketAt } from '../../../support/tickets'
+
+const ESCALATION = ticketAt('review', { kind: 'waiting-on-you', gate: 'escalation', detail: '' })
+const MERGE_GATE = ticketAt('merge', { kind: 'waiting-on-you', gate: 'merge', detail: '' })
+const CHANGES_REQUESTED = ticketAt('revise', queuedAt('changes-requested'))
+const BLOCKED = ticketAt('implement', { kind: 'blocked', on: [], reason: 'stuck' })
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
-  return {
-    repoId: 'repo-a' as RepoId,
-    repo: 'o/a',
-    kind: 'pull-request',
-    number: 300,
-    title: 'a pull request',
-    url: 'https://github.com/o/a/pull/300',
-    assignees: ['op'],
-    stage: 'gate',
-    stages: [],
-    stageAmbiguous: false,
-    marked: true,
-    autoPlan: false,
-    status: 'gated',
-    statusEvidence: null,
-    waitingOn: null,
-    sessionRequired: false,
-    linked: null,
-    linkReason: null,
-    agents: [],
-    sessions: [],
-    worktrees: [],
-    workSessions: [],
-    state: 'OPEN',
-    mergedAt: null,
-    updatedAt: null,
-    stageHistory: [],
-    matchedKeys: [],
-    sources: ['github'],
-    claimedFiles: null,
-    headRefOid: 'a'.repeat(40),
-    mergeable: 'MERGEABLE',
-    reviews: null,
-    comments: null,
-    reviewCycleCount: 0,
-    checkRollup: null,
-    planPresent: null,
-    blockers: null,
-    blockerComments: null,
-    closingPullRequests: null,
-    ...overrides,
-  }
+  return reconciledItem({ kind: 'pull-request', number: 300, headRefOid: 'a'.repeat(40), mergeable: 'MERGEABLE', reviewCycleCount: 0, ...overrides })
 }
 
-function stageLabel(key: StageLabel['key'], role: StageLabel['role']): StageLabel {
-  return { key, name: key, role }
+type Ticket = ReturnType<typeof ticketAt>
+
+function decide(ticket: Ticket | null, it1: ReconciledItem, overrides: Partial<DecisionsForParams> = {}) {
+  return decisionsFor({ view: ticket === null ? null : ticketViewOf(ticket), item: it1, viewer: 'op', reviewCycleCap: 5, liveStage: false, ...overrides })
 }
 
 describe('decisionsFor — unblock', () => {
-  it('is available on a pull request whose only role-bearing label is needsHuman', () => {
-    const it1 = item({ stages: [stageLabel('needsHuman', 'gate')] })
-    const result = decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5, liveStage: false })
-    expect(result.unblock).toEqual({ available: true, context: { target: 'pull-request', reason: null, cyclesUsed: 0, cap: 5, decisions: [], routes: ['review', 'revision'] } })
+  it('is available on a pull request waiting on its escalation gate', () => {
+    expect(decide(ESCALATION, item()).unblock).toEqual({ available: true, context: { target: 'pull-request', reason: null, cyclesUsed: 0, cap: 5, decisions: [], routes: ['review', 'revision'] } })
   })
 
   it.each([
@@ -65,9 +32,7 @@ describe('decisionsFor — unblock', () => {
     ['a cycle-cap marker', 'cycle-cap', ['review', 'revision']],
   ])('offers the routes for %s', (_name, cause, routes) => {
     const comments: readonly PullRequestCommentNode[] = [{ body: `## Pipeline Escalation\nreason\n<!-- port:escalation ${cause} abc -->`, createdAt: '2026-01-01T00:00:00Z' }]
-    const it1 = item({ stages: [stageLabel('needsHuman', 'gate')], comments })
-    const result = decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5, liveStage: false })
-    expect(result.unblock).toMatchObject({ available: true, context: { routes } })
+    expect(decide(ESCALATION, item({ comments })).unblock).toMatchObject({ available: true, context: { routes } })
   })
 
   it('carries the newest escalation reason', () => {
@@ -75,21 +40,17 @@ describe('decisionsFor — unblock', () => {
       { body: '## Pipeline Escalation\nolder reason', createdAt: '2026-01-01T00:00:00Z' },
       { body: '## Pipeline Escalation\nnewer reason', createdAt: '2026-01-02T00:00:00Z' },
     ]
-    const it1 = item({ stages: [stageLabel('needsHuman', 'gate')], comments })
-    const result = decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5, liveStage: false })
-    expect(result.unblock).toEqual({ available: true, context: { target: 'pull-request', reason: 'newer reason', cyclesUsed: 0, cap: 5, decisions: [], routes: ['review', 'revision'] } })
+    expect(decide(ESCALATION, item({ comments })).unblock).toEqual({ available: true, context: { target: 'pull-request', reason: 'newer reason', cyclesUsed: 0, cap: 5, decisions: [], routes: ['review', 'revision'] } })
   })
 
   it('refuses rebase-decisions when the escalation carries D<n> blocks it cannot parse', () => {
     const comments: readonly PullRequestCommentNode[] = [{ body: '## Pipeline Escalation\n2 conflicts\n### D1 — `a.ts`\n### D2 — `b.ts`', createdAt: '2026-01-01T00:00:00Z' }]
-    const it1 = item({ stages: [stageLabel('needsHuman', 'gate')], comments })
-    expect(decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5, liveStage: false }).unblock).toEqual({ available: false, reason: 'rebase-decisions' })
+    expect(decide(ESCALATION, item({ comments })).unblock).toEqual({ available: false, reason: 'rebase-decisions' })
   })
 
   it('is available with the parsed decisions when every D<n> block parses', () => {
     const comments: readonly PullRequestCommentNode[] = [{ body: TWO_DECISIONS, createdAt: '2026-01-01T00:00:00Z' }]
-    const it1 = item({ stages: [stageLabel('needsHuman', 'gate')], comments })
-    const result = decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5, liveStage: false })
+    const result = decide(ESCALATION, item({ comments }))
     expect(result.unblock).toMatchObject({ available: true, context: { reason: '3 conflicts — 1 resolved automatically, 2 need a decision', routes: ['revision'] } })
     if (result.unblock.available && 'decisions' in result.unblock.context) expect(result.unblock.context.decisions.map((d) => d.id)).toEqual(['D1', 'D2'])
   })
@@ -98,80 +59,77 @@ describe('decisionsFor — unblock', () => {
     const comments: readonly PullRequestCommentNode[] = [
       { body: '## Gate cleared\nCleared by the operator in port: back to revision.\n\n### Cycle grant\nOne extra review cycle for this PR only; reviewCycleCap is unchanged.', createdAt: '2026-01-01T00:00:00Z' },
     ]
-    const it1 = item({ stages: [stageLabel('needsHuman', 'gate')], comments })
-    const result = decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5, liveStage: false })
-    expect(result.unblock).toEqual({ available: true, context: { target: 'pull-request', reason: null, cyclesUsed: 0, cap: 6, decisions: [], routes: ['review', 'revision'] } })
+    expect(decide(ESCALATION, item({ comments })).unblock).toEqual({ available: true, context: { target: 'pull-request', reason: null, cyclesUsed: 0, cap: 6, decisions: [], routes: ['review', 'revision'] } })
   })
 
-  it('is not-applicable on an issue at needsHuman, or with a second role-bearing label present', () => {
-    const issue = item({ kind: 'issue', stages: [stageLabel('needsHuman', 'gate')] })
-    expect(decisionsFor({ item: issue, viewer: 'op', reviewCycleCap: 5, liveStage: false }).unblock).toEqual({ available: false, reason: 'not-applicable' })
-
-    const second = item({ stages: [stageLabel('needsHuman', 'gate'), stageLabel('refreshing', 'in-flight')] })
-    expect(decisionsFor({ item: second, viewer: 'op', reviewCycleCap: 5, liveStage: false }).unblock).toEqual({ available: false, reason: 'not-applicable' })
+  it.each([
+    ['an issue at an escalation gate', ESCALATION, { kind: 'issue' as const }],
+    ['a pull request running', ticketAt('review', { kind: 'running', runId: 'run-1' }), {}],
+    ['a pull request at the merge gate', MERGE_GATE, {}],
+    ['an item with no ticket', null, {}],
+  ])('is not-applicable on %s', (_name, ticket, overrides) => {
+    expect(decide(ticket, item(overrides)).unblock).toEqual({ available: false, reason: 'not-applicable' })
   })
 })
 
 describe('decisionsFor — unblock on a blocked issue', () => {
-  const blocked = (overrides: Partial<ReconciledItem> = {}) => item({ kind: 'issue', stages: [stageLabel('blocked', 'gate')], ...overrides })
+  const blocked = (overrides: Partial<ReconciledItem> = {}) => item({ kind: 'issue', ...overrides })
 
   it('is available with an issue target when no stage session is live', () => {
-    expect(decisionsFor({ item: blocked(), viewer: 'op', reviewCycleCap: 5, liveStage: false }).unblock).toEqual({
+    expect(decide(BLOCKED, blocked()).unblock).toEqual({
       available: true,
       context: { target: 'issue', reason: null, cyclesUsed: 0, cap: 0, decisions: [], routes: ['implementation'] },
     })
   })
 
   it('refuses agent-live while a stage session is live', () => {
-    expect(decisionsFor({ item: blocked(), viewer: 'op', reviewCycleCap: 5, liveStage: true }).unblock).toEqual({ available: false, reason: 'agent-live' })
+    expect(decide(BLOCKED, blocked(), { liveStage: true }).unblock).toEqual({ available: false, reason: 'agent-live' })
   })
 
   it('refuses not-owned for another assignee, ahead of agent-live', () => {
-    expect(decisionsFor({ item: blocked({ assignees: ['other'] }), viewer: 'op', reviewCycleCap: 5, liveStage: true }).unblock).toEqual({ available: false, reason: 'not-owned' })
+    expect(decide(BLOCKED, blocked({ assignees: ['other'] }), { liveStage: true }).unblock).toEqual({ available: false, reason: 'not-owned' })
   })
 
-  it('is not-applicable with a second role-bearing label present', () => {
-    const second = blocked({ stages: [stageLabel('blocked', 'gate'), stageLabel('inProgress', 'in-flight')] })
-    expect(decisionsFor({ item: second, viewer: 'op', reviewCycleCap: 5, liveStage: false }).unblock).toEqual({ available: false, reason: 'not-applicable' })
+  it('is not-applicable once the issue is no longer blocked', () => {
+    expect(decide(ticketAt('implement', queuedAt()), blocked()).unblock).toEqual({ available: false, reason: 'not-applicable' })
   })
 })
 
 describe('decisionsFor — revise', () => {
-  it('is available on an approved pull request with a headRefOid', () => {
-    const it1 = item({ stage: 'terminal', stages: [stageLabel('approved', 'terminal')], reviewCycleCount: 2 })
-    expect(decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5, liveStage: false }).revise).toEqual({
+  it('is available on a pull request at the merge gate with a headRefOid', () => {
+    expect(decide(MERGE_GATE, item({ reviewCycleCount: 2 })).revise).toEqual({
       available: true,
       context: { headRefOid: 'a'.repeat(40), cyclesUsed: 2, cap: 5 },
     })
   })
 
   it('refuses cycle-cap once cyclesUsed reaches the cap', () => {
-    const it1 = item({ stage: 'terminal', stages: [stageLabel('approved', 'terminal')], reviewCycleCount: 5 })
-    expect(decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5, liveStage: false }).revise).toEqual({ available: false, reason: 'cycle-cap' })
+    expect(decide(MERGE_GATE, item({ reviewCycleCount: 5 })).revise).toEqual({ available: false, reason: 'cycle-cap' })
   })
 
   it('is not-applicable with a null headRefOid', () => {
-    const it1 = item({ stage: 'terminal', stages: [stageLabel('approved', 'terminal')], headRefOid: null })
-    expect(decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5, liveStage: false }).revise).toEqual({ available: false, reason: 'not-applicable' })
+    expect(decide(MERGE_GATE, item({ headRefOid: null })).revise).toEqual({ available: false, reason: 'not-applicable' })
+  })
+
+  it('is not-applicable away from the merge gate', () => {
+    expect(decide(ESCALATION, item()).revise).toEqual({ available: false, reason: 'not-applicable' })
   })
 })
 
 describe('decisionsFor — ownership', () => {
-  it('refuses viewer-unknown for both decisions', () => {
-    const it1 = item({ stages: [stageLabel('needsHuman', 'gate')] })
-    const result = decisionsFor({ item: it1, viewer: null, reviewCycleCap: 5, liveStage: false })
+  it('refuses viewer-unknown for every decision', () => {
+    const result = decide(ESCALATION, item(), { viewer: null })
     expect(result.unblock).toEqual({ available: false, reason: 'viewer-unknown' })
     expect(result.revise).toEqual({ available: false, reason: 'viewer-unknown' })
+    expect(result.grant).toEqual({ available: false, reason: 'viewer-unknown' })
   })
 
   it('refuses not-owned for an unassigned item — unlike actionsFor, there is no unassigned exception', () => {
-    const it1 = item({ assignees: [], stages: [stageLabel('needsHuman', 'gate')] })
-    expect(decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5, liveStage: false }).unblock).toEqual({ available: false, reason: 'not-owned' })
+    expect(decide(ESCALATION, item({ assignees: [] })).unblock).toEqual({ available: false, reason: 'not-owned' })
   })
 
   it('refuses not-owned when assigned to someone else', () => {
-    const it1 = item({ assignees: ['other'], stages: [stageLabel('needsHuman', 'gate')] })
-    expect(decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5, liveStage: false }).unblock).toEqual({ available: false, reason: 'not-owned' })
+    expect(decide(ESCALATION, item({ assignees: ['other'] })).unblock).toEqual({ available: false, reason: 'not-owned' })
   })
 })
 
@@ -334,79 +292,44 @@ describe('reviseNoteProblem', () => {
 })
 
 describe('decisionPlan', () => {
-  it('unblock to revision', () => {
-    const it1 = item({ stages: [stageLabel('needsHuman', 'gate')] })
-    expect(decisionPlan('unblock', it1, 'revision', 'op')).toEqual({
-      add: ['needsRevision'],
-      remove: ['needsHuman'],
-      expect: { present: ['needsHuman'], absent: [], assignees: { kind: 'exactly', logins: ['op'] } },
-      action: 'unblock',
-    })
-  })
-
-  it('unblock to review', () => {
-    const it1 = item({ stages: [stageLabel('needsHuman', 'gate')] })
-    expect(decisionPlan('unblock', it1, 'review', 'op').add).toEqual(['readyForReview'])
-  })
-
-  it('unblock to implementation', () => {
-    const issue = item({ kind: 'issue', stages: [stageLabel('blocked', 'gate')] })
-    expect(decisionPlan('unblock', issue, 'implementation', 'op')).toEqual({
-      add: ['planApproved'],
-      remove: ['blocked'],
-      expect: { present: ['blocked'], absent: [], assignees: { kind: 'exactly', logins: ['op'] } },
-      action: 'unblock',
-    })
-  })
-
-  it('revise', () => {
-    const it1 = item({ stage: 'terminal', stages: [stageLabel('approved', 'terminal')] })
-    expect(decisionPlan('revise', it1, null, 'op')).toEqual({
-      add: ['needsRevision'],
-      remove: ['approved'],
-      expect: { present: ['approved'], absent: [], assignees: { kind: 'exactly', logins: ['op'] } },
-      action: 'revise',
-    })
-  })
-
-  it('grant keeps the label set and guards the neighbouring gates', () => {
-    const it1 = item({ stages: [stageLabel('needsRevision', 'trigger')] })
-    expect(decisionPlan('grant', it1, null, 'op')).toEqual({
-      add: ['needsRevision'],
-      remove: [],
-      expect: { present: ['needsRevision'], absent: ['needsHuman', 'refreshBranch', 'refreshing'], assignees: { kind: 'exactly', logins: ['op'] } },
-      action: 'grant',
-    })
+  it.each([
+    ['unblock to revision', 'unblock', 'revision', { kind: 'unblock', route: 'revision' }],
+    ['unblock to review', 'unblock', 'review', { kind: 'unblock', route: 'review' }],
+    ['unblock to implementation', 'unblock', 'implementation', { kind: 'unblock', route: 'implementation' }],
+    ['unblock with no route defaults to review', 'unblock', null, { kind: 'unblock', route: 'review' }],
+    ['revise', 'revise', null, { kind: 'revise' }],
+    ['grant', 'grant', null, { kind: 'grant' }],
+  ] as const)('%s', (_name, decision, route, move) => {
+    expect(decisionPlan(decision, route)).toEqual(move)
   })
 })
 
 describe('decisionsFor — grant', () => {
-  const capped = (overrides: Partial<ReconciledItem> = {}) => item({ stage: 'trigger', stages: [stageLabel('needsRevision', 'trigger')], reviewCycleCount: 5, ...overrides })
+  const capped = (overrides: Partial<ReconciledItem> = {}) => item({ reviewCycleCount: 5, ...overrides })
 
-  it('is available on a needsRevision PR at the cap, carrying the cycles used and the cap', () => {
-    expect(decisionsFor({ item: capped(), viewer: 'op', reviewCycleCap: 5, liveStage: false }).grant).toEqual({ available: true, context: { cyclesUsed: 5, cap: 5 } })
+  it('is available on a revision queued for changes at the cap, carrying the cycles used and the cap', () => {
+    expect(decide(CHANGES_REQUESTED, capped()).grant).toEqual({ available: true, context: { cyclesUsed: 5, cap: 5 } })
   })
 
   it('is not-applicable below the cap', () => {
-    expect(decisionsFor({ item: capped({ reviewCycleCount: 4 }), viewer: 'op', reviewCycleCap: 5, liveStage: false }).grant).toEqual({ available: false, reason: 'not-applicable' })
+    expect(decide(CHANGES_REQUESTED, capped({ reviewCycleCount: 4 })).grant).toEqual({ available: false, reason: 'not-applicable' })
   })
 
-  it('is not-applicable when another stage label rides along', () => {
-    const both = capped({ stages: [stageLabel('needsRevision', 'trigger'), stageLabel('refreshBranch', 'trigger')] })
-    expect(decisionsFor({ item: both, viewer: 'op', reviewCycleCap: 5, liveStage: false }).grant).toEqual({ available: false, reason: 'not-applicable' })
+  it('is not-applicable for a revision queued for any other reason', () => {
+    expect(decide(ticketAt('revise', queuedAt('retry')), capped()).grant).toEqual({ available: false, reason: 'not-applicable' })
   })
 
   it('refuses agent-live while a stage session is live', () => {
-    expect(decisionsFor({ item: capped(), viewer: 'op', reviewCycleCap: 5, liveStage: true }).grant).toEqual({ available: false, reason: 'agent-live' })
+    expect(decide(CHANGES_REQUESTED, capped(), { liveStage: true }).grant).toEqual({ available: false, reason: 'agent-live' })
   })
 
   it('refuses not-owned and viewer-unknown ahead of everything else', () => {
-    expect(decisionsFor({ item: capped({ assignees: ['other'] }), viewer: 'op', reviewCycleCap: 5, liveStage: false }).grant).toEqual({ available: false, reason: 'not-owned' })
-    expect(decisionsFor({ item: capped(), viewer: null, reviewCycleCap: 5, liveStage: false }).grant).toEqual({ available: false, reason: 'viewer-unknown' })
+    expect(decide(CHANGES_REQUESTED, capped({ assignees: ['other'] })).grant).toEqual({ available: false, reason: 'not-owned' })
+    expect(decide(CHANGES_REQUESTED, capped(), { viewer: null }).grant).toEqual({ available: false, reason: 'viewer-unknown' })
   })
 
   it('counts an earlier grant toward the effective cap', () => {
     const comments = [{ body: '## Gate cleared\n\n### Cycle grant\nOne extra review cycle for this PR only; reviewCycleCap is unchanged.', createdAt: '2026-01-01T00:00:00Z' }]
-    expect(decisionsFor({ item: capped({ comments }), viewer: 'op', reviewCycleCap: 5, liveStage: false }).grant).toEqual({ available: false, reason: 'not-applicable' })
+    expect(decide(CHANGES_REQUESTED, capped({ comments })).grant).toEqual({ available: false, reason: 'not-applicable' })
   })
 })

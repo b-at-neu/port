@@ -17,9 +17,9 @@ const queued: Status = { kind: 'queued', reason: 'new', since: NOW }
 const running: Status = { kind: 'running', runId: null }
 const at = (stage: Stage, status: Status, overrides: Partial<Ticket> = {}): Ticket => ticketOf({ repo: REPO_ID, ticket: 52, stage, status, ...overrides })
 
-const IMPL = { number: 52, kind: 'issue', agent: 'impl', trigger: 'planApproved' } as const
-const PLAN = { number: 52, kind: 'issue', agent: 'plan', trigger: 'ready' } as const
-const REVIEW = { number: 52, kind: 'pull-request', agent: 'review', trigger: 'readyForReview' } as const
+const IMPL = { number: 52, kind: 'issue', agent: 'impl', trigger: 'planApproved', stage: 'implement' } as const
+const PLAN = { number: 52, kind: 'issue', agent: 'plan', trigger: 'ready', stage: 'plan' } as const
+const REVIEW = { number: 52, kind: 'pull-request', agent: 'review', trigger: 'readyForReview', stage: 'review' } as const
 const PR_OPENED: StageEvent = { kind: 'outcome', outcome: 'completed', handback: { token: 'pr-opened', arg: '#8' }, plan: null }
 const planWritten = (plan: StagePlanFile | null): StageEvent => ({ kind: 'outcome', outcome: 'completed', handback: { token: 'plan-written', arg: null }, plan })
 const READ_PLAN = planWritten({ kind: 'read', body: '## Implementation Plan' })
@@ -209,7 +209,7 @@ describe('applyStageTransition — other events', () => {
 
   it('a refresh hand-back names the refresh stage and its argument', async () => {
     const rig = await stage([pr(52)], [at('refresh', running, { pr: { number: 52, approvedAt: NOW } })])
-    const record = { number: 52, kind: 'pull-request', agent: 'revise', trigger: 'refreshBranch' } as const
+    const record = { number: 52, kind: 'pull-request', agent: 'revise', trigger: 'refreshBranch', stage: 'refresh' } as const
     expect(await rig.transition(record, { kind: 'outcome', outcome: 'completed', handback: { token: 'refreshed', arg: 'clean' }, plan: null })).toEqual({ kind: 'applied' })
     expect(rig.ticket(52, 'pull-request')?.rev).toBe(1)
   })

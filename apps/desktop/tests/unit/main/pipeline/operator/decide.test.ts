@@ -1,32 +1,36 @@
 import { describe, expect, it } from 'vitest'
 import type { ItemDecisionRequest } from '@/types/actions'
-import type { ReconciledItem, StageLabel } from '@/types/state'
+import type { ReconciledItem } from '@/types/state'
 import { applyItemDecision } from '@/main/pipeline/operator/decide'
 import { readAuditLog } from '@/main/github/writes/audit'
 import { isLabelAuditEntry } from '@/types/writes'
 import { boardSnapshot as snapshotOf, reconciledItem, repositoryState } from '../../../../support/board-snapshot'
 import { operatorRig, REPO_ID, type OperatorRigOptions } from '../../../../support/operator-rig'
+import { ticketViewOf } from '@/utils/pipeline/stages'
 import { ticketOf } from '../../../../support/tickets'
 
-const stageLabel = (key: StageLabel['key'], role: StageLabel['role']): StageLabel => ({ key, name: key, role })
 const comment = (body: string) => [{ body, createdAt: '2026-01-01T00:00:00Z' }]
 const CYCLE_CAP = comment('## Pipeline Escalation\n5 review cycles reached the cap of 5 without merging.')
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
-  return reconciledItem({ repoId: REPO_ID, kind: 'pull-request', number: 300, stage: 'gate', stages: [stageLabel('needsHuman', 'gate')], status: 'gated', matchedKeys: ['needsHuman'], headRefOid: 'a'.repeat(40), mergeable: 'MERGEABLE', reviewCycleCount: 0, ...overrides })
+  return reconciledItem({ repoId: REPO_ID, kind: 'pull-request', number: 300, ticket: null, headRefOid: 'a'.repeat(40), mergeable: 'MERGEABLE', reviewCycleCount: 0, ...overrides })
 }
+
+const PR = { number: 300, approvedAt: null }
+const ESCALATION = ticketOf({ repo: REPO_ID, ticket: 51, pr: PR, stage: 'review', status: { kind: 'waiting-on-you', gate: 'escalation', detail: '' } })
+const MERGE_GATE = ticketOf({ repo: REPO_ID, ticket: 51, pr: PR, stage: 'merge', status: { kind: 'waiting-on-you', gate: 'merge', detail: '' } })
+
+const GITHUB_ITEMS: OperatorRigOptions['items'] = [
+  { number: 51, labels: ['port'], assignees: ['op'] },
+  { number: 300, kind: 'pull-request', labels: ['port'], assignees: ['op'], headRefName: '51-fix', headRefOid: 'a'.repeat(40) },
+]
 
 /** A pull request waiting on a human, with its issue. */
-const ESCALATED: OperatorRigOptions = {
-  viewer: 'op',
-  items: [
-    { number: 51, labels: ['port'], assignees: ['op'] },
-    { number: 300, kind: 'pull-request', labels: ['port', 'needs human'], assignees: ['op'], headRefName: '51-fix', headRefOid: 'a'.repeat(40) },
-  ],
-  tickets: [ticketOf({ repo: REPO_ID, ticket: 51, pr: { number: 300, approvedAt: null }, stage: 'review', status: { kind: 'waiting-on-you', gate: 'escalation', detail: '' } })],
-}
+const ESCALATED: OperatorRigOptions = { viewer: 'op', items: GITHUB_ITEMS, tickets: [ESCALATION] }
+const AT_MERGE: OperatorRigOptions = { viewer: 'op', items: GITHUB_ITEMS, tickets: [MERGE_GATE] }
 
-const unblock = (overrides: Partial<ItemDecisionRequest> = {}): ItemDecisionRequest => ({ repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null, ...overrides })
+const unblock = (overrides: Partial<ItemDecisionRequest> = {}): ItemDecisionRequest => ({ repoId: REPO_ID, number: 300, decision: 'unblock', expected: ticketViewOf(ESCALATION), route: 'revision', note: null, skipComment: false, picks: null, ...overrides })
+const revise = (note: string): ItemDecisionRequest => unblock({ decision: 'revise', expected: ticketViewOf(MERGE_GATE), route: null, note })
 
 async function decide(options: { readonly rig?: OperatorRigOptions; readonly item?: ReconciledItem; readonly request?: ItemDecisionRequest; readonly liveStage?: boolean; readonly reviewCycleCap?: number; readonly viewer?: string | null } = {}) {
   const rig = await operatorRig(options.rig ?? ESCALATED)
@@ -37,34 +41,36 @@ async function decide(options: { readonly rig?: OperatorRigOptions; readonly ite
 
 describe('applyItemDecision — refusals', () => {
   it.each([
-    { name: 'moved when the item is gone from the snapshot', snapshot: snapshotOf([repositoryState([], { repoId: REPO_ID })]), request: unblock(), expected: { ok: false, reason: 'moved', expected: 'needs human', observed: 'no longer tracked' } },
-    { name: 'moved when the current stage disagrees with expectedStage', snapshot: snapshotOf([repositoryState([item({ stages: [stageLabel('approved', 'terminal')], stage: 'terminal' })], { repoId: REPO_ID })]), request: unblock(), expected: { ok: false, reason: 'moved', expected: 'needs human', observed: 'approved' } },
-    { name: 'not-owned', snapshot: snapshotOf([repositoryState([item({ assignees: ['other'] })], { repoId: REPO_ID, viewer: 'op' })]), request: unblock(), expected: { ok: false, reason: 'not-owned', owners: ['other'] } },
-    { name: 'cycle-cap for revise at the cap', snapshot: snapshotOf([repositoryState([item({ stage: 'terminal', stages: [stageLabel('approved', 'terminal')], reviewCycleCount: 5 })], { repoId: REPO_ID, reviewCycleCap: 5 })]), request: unblock({ decision: 'revise', expectedStage: 'approved', route: null, note: 'change it' }), expected: { ok: false, reason: 'refused', refusal: 'cycle-cap' } },
-    { name: 'note-invalid for an empty revise note', snapshot: snapshotOf([repositoryState([item({ stage: 'terminal', stages: [stageLabel('approved', 'terminal')] })], { repoId: REPO_ID })]), request: unblock({ decision: 'revise', expectedStage: 'approved', route: null, note: '  ' }), expected: { ok: false, reason: 'refused', refusal: 'note-invalid', problem: 'empty' } },
-  ])('refuses $name, before any read or write', async ({ snapshot, request, expected }) => {
-    const rig = await operatorRig(ESCALATED)
+    { name: 'moved when the item is gone from the snapshot', rig: ESCALATED, snapshot: snapshotOf([repositoryState([], { repoId: REPO_ID })]), request: unblock(), expected: { ok: false, reason: 'moved', observed: 'no longer tracked' } },
+    { name: 'moved when the stored ticket disagrees with the expected view', rig: AT_MERGE, snapshot: snapshotOf([repositoryState([item()], { repoId: REPO_ID })]), request: unblock(), expected: { ok: false, reason: 'moved' } },
+    { name: 'moved when the record holds no ticket', rig: { ...ESCALATED, tickets: [] }, snapshot: snapshotOf([repositoryState([item()], { repoId: REPO_ID })]), request: unblock(), expected: { ok: false, reason: 'moved' } },
+    { name: 'not-owned', rig: ESCALATED, snapshot: snapshotOf([repositoryState([item({ assignees: ['other'] })], { repoId: REPO_ID, viewer: 'op' })]), request: unblock(), expected: { ok: false, reason: 'not-owned', owners: ['other'] } },
+    { name: 'cycle-cap for revise at the cap', rig: AT_MERGE, snapshot: snapshotOf([repositoryState([item({ reviewCycleCount: 5 })], { repoId: REPO_ID, reviewCycleCap: 5 })]), request: revise('change it'), expected: { ok: false, reason: 'refused', refusal: 'cycle-cap' } },
+    { name: 'note-invalid for an empty revise note', rig: AT_MERGE, snapshot: snapshotOf([repositoryState([item()], { repoId: REPO_ID })]), request: revise('  '), expected: { ok: false, reason: 'refused', refusal: 'note-invalid', problem: 'empty' } },
+  ])('refuses $name, before any read or write', async ({ rig: options, snapshot, request, expected }) => {
+    const rig = await operatorRig(options)
     rig.github.failNextRead('must not be read')
-    expect(await applyItemDecision(rig.ctx, { request, snapshot, entry: rig.entry, auditDir: rig.auditDir, scratchDir: rig.scratchDir, liveStage: false })).toEqual(expected)
+    expect(await applyItemDecision(rig.ctx, { request, snapshot, entry: rig.entry, auditDir: rig.auditDir, scratchDir: rig.scratchDir, liveStage: false })).toMatchObject(expected)
     expect(rig.github.comments(300)).toEqual([])
   })
 
-  it('refuses moved when the fresh re-read disagrees, and posts no comment', async () => {
+  it('fails the write on a precondition when the fresh re-read disagrees, and posts no comment', async () => {
     const { rig, result } = await decide({ rig: { ...ESCALATED, items: [{ number: 51, labels: ['port'], assignees: ['op'] }, { number: 300, kind: 'pull-request', labels: ['port', 'needs human'], assignees: ['someone-else'], headRefName: '51-fix' }] } })
-    expect(result).toMatchObject({ ok: false, reason: 'moved' })
+    expect(result).toMatchObject({ ok: true, labels: { kind: 'precondition-failed' } })
     expect(rig.github.comments(300)).toEqual([])
+    expect(rig.ticket(51)?.rev).toBe(0)
   })
 
   it('reports verify-failed when the re-read fails', async () => {
     const rig = await operatorRig(ESCALATED)
     rig.github.failNextRead('offline')
     const result = await applyItemDecision(rig.ctx, { request: unblock(), snapshot: snapshotOf([repositoryState([item()], { repoId: REPO_ID })]), entry: rig.entry, auditDir: rig.auditDir, scratchDir: rig.scratchDir, liveStage: false })
-    expect(result).toMatchObject({ ok: false, reason: 'verify-failed' })
+    expect(result).toMatchObject({ ok: true, labels: { kind: 'verify-failed' } })
   })
 
-  it('reports an unseeded repository as state-unsaved, with nothing posted', async () => {
+  it('refuses an unseeded repository as moved, with nothing posted', async () => {
     const { rig, result } = await decide({ rig: { ...ESCALATED, tickets: null } })
-    expect(result).toMatchObject({ ok: true, comment: null, labels: { kind: 'state-unsaved' } })
+    expect(result).toMatchObject({ ok: false, reason: 'moved' })
     expect(rig.github.comments(300)).toEqual([])
   })
 })
@@ -171,13 +177,14 @@ describe('applyItemDecision — rebase decisions', () => {
 })
 
 describe('applyItemDecision — blocked issue', () => {
+  const BLOCKED_TICKET = ticketOf({ repo: REPO_ID, ticket: 51, stage: 'implement', status: { kind: 'blocked', on: [], reason: '' } })
   const BLOCKED: OperatorRigOptions = {
     viewer: 'op',
     items: [{ number: 51, labels: ['port', 'blocked'], assignees: ['op'] }],
-    tickets: [ticketOf({ repo: REPO_ID, ticket: 51, stage: 'implement', status: { kind: 'blocked', on: [], reason: '' } })],
+    tickets: [BLOCKED_TICKET],
   }
-  const blockedIssue = () => item({ kind: 'issue', number: 51, stage: 'gate', stages: [stageLabel('blocked', 'gate')], matchedKeys: ['blocked'], headRefOid: null })
-  const request = (overrides: Partial<ItemDecisionRequest> = {}) => unblock({ number: 51, expectedStage: 'blocked', route: 'implementation', ...overrides })
+  const blockedIssue = () => item({ kind: 'issue', number: 51, headRefOid: null })
+  const request = (overrides: Partial<ItemDecisionRequest> = {}) => unblock({ number: 51, expected: ticketViewOf(BLOCKED_TICKET), route: 'implementation', ...overrides })
 
   it('posts on the issue, then moves the ticket back to implementation', async () => {
     const { rig, result } = await decide({ rig: BLOCKED, item: blockedIssue(), request: request() })

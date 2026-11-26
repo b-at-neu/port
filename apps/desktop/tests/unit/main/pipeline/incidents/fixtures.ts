@@ -26,6 +26,7 @@ export function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     title: 'a pull request',
     url: 'https://github.com/o/r/pull/789',
     assignees: ['op'],
+    ticket: null,
     stage: 'trigger',
     stages: [{ key: 'readyForReview', name: 'ready for review', role: 'trigger' }],
     stageAmbiguous: false,
