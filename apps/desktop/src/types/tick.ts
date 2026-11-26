@@ -36,7 +36,6 @@ export type TickHeldReason =
   | 'check-hold'
   | 'integration-red'
   | 'integration-green'
-  | 'refresh-wins'
   | 'conflicting'
   | 'mergeability-unknown'
 

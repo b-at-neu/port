@@ -88,8 +88,6 @@ export function heldDetailCopy(held: TickHeld, owner: DispatchOwner = 'none'): s
       return byApp
         ? `#${n} held — the integration branch is green again, so this app is refreshing it (rebase + force-push) to resume review.`
         : `#${n} held — the integration branch is green again. The cockpit's refresh sweep rebases it; this app doesn't.`
-    case 'refresh-wins':
-      return `#${n} held — a branch refresh claims it (refresh branch).`
     case 'conflicting':
       return byApp
         ? `#${n} conflicts — this app is refreshing it (rebase + force-push).`
@@ -120,8 +118,6 @@ export function heldTagLabel(held: TickHeld): string {
       return 'Held · integration red'
     case 'integration-green':
       return 'Held · refreshing'
-    case 'refresh-wins':
-      return 'Held · refresh first'
     case 'conflicting':
       return 'Held · conflicts'
     case 'mergeability-unknown':

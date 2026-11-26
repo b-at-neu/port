@@ -5,7 +5,7 @@ import { createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/le
 import { planTick } from '@/main/pipeline/tick/plan'
 import type { Run } from '@/utils/pipeline/ticket'
 import { reconciledItem as item, repositoryState } from '../../../../support/board-snapshot'
-import { runOf } from '../../../../support/tickets'
+import { queuedAt, runOf, ticketAt } from '../../../../support/tickets'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 
@@ -33,9 +33,7 @@ describe('planTick — a stage that finished while the app was away', () => {
     item({
       number: 779,
       kind: 'pull-request',
-      stage: 'in-flight',
-      stages: [{ key: 'reviewing', name: 'reviewing', role: 'in-flight' }],
-      stageHistory: [{ key: 'reviewing', actor: null, at: '2026-01-01T00:30:00.000Z' }],
+      ticket: ticketAt('review', { kind: 'running', runId: 'run-1' }, { ticket: 749, pr: { number: 779, approvedAt: null }, history: [{ at: '2026-01-01T00:30:00.000Z', action: 'claim', actor: null, to: { stage: 'review', status: 'running' }, legacy: null }] }),
       headRefOid: '6a95c2c',
       reviews: [{ body: '## Code Review — Cycle 2 · approved\n0 open', submittedAt: '2026-01-01T00:59:00.000Z', commitOid: '6a95c2c' }],
       mergeable: 'MERGEABLE',
@@ -59,18 +57,18 @@ describe('planTick — a stage that finished while the app was away', () => {
 
   it('a settling session is a live one, so its claim is matched and nothing is adopted or reset', () => {
     const report = plan([reviewing()], [], { live: ['review #779'], interrupted: [] })
-    expect(report.claims).toEqual([{ number: 779, kind: 'pull-request', inFlight: 'reviewing', class: 'matched', retryKey: null }])
+    expect(report.claims).toEqual([{ number: 779, kind: 'pull-request', stage: 'review', class: 'matched', retryable: false }])
     expect(report.observations).toEqual([])
   })
 })
 
 describe('planTick — impl on an issue whose pull request is already open', () => {
-  const planApproved = (overrides: Partial<ReconciledItem> = {}) => item({ number: 749, stages: [{ key: 'planApproved', name: 'plan approved', role: 'trigger' }], ...overrides })
+  const planApproved = (overrides: Partial<ReconciledItem> = {}) => item({ number: 749, ticket: ticketAt('implement', queuedAt(), { ticket: 749 }), ...overrides })
 
   it('adopts one open pull request on the issue’s own branch and dispatches no impl', () => {
     const report = plan([planApproved({ closingPullRequests: [{ number: 780, state: 'OPEN', headRefName: '749-the-thing' }] })])
     expect(report.actionable).toEqual([])
-    expect(report.observations).toEqual([{ kind: 'adopt', number: 749, itemKind: 'issue', agent: 'impl', trigger: 'planApproved', handback: { token: 'pr-opened', arg: '#780' }, evidence: 'pr' }])
+    expect(report.observations).toEqual([{ kind: 'adopt', number: 749, itemKind: 'issue', agent: 'impl', stage: 'implement', trigger: 'planApproved', handback: { token: 'pr-opened', arg: '#780' }, evidence: 'pr' }])
   })
 
   it('dispatches when there are two open pull requests', () => {
