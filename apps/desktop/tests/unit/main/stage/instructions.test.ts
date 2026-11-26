@@ -1,8 +1,8 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { buildStageContext, createStageInstructionsLoader, extractSection, loadStageInstructions, readStageConfigPointers, STAGE_PIPELINE_SECTIONS } from '@/main/dispatch/stage/instructions'
-import { readTextFile } from '@/main/platform/files'
+import { buildStageContext, extractSection, loadStageInstructions, loadStageLaunch, readStageConfigPointers, STAGE_PIPELINE_SECTIONS } from '@/main/dispatch/stage/instructions'
+import { hostFs } from '@/main/platform'
 import { pathOps } from '@/main/platform/paths'
 import { FIXTURE_REPOSITORIES, WIDGETS_ID } from '../../../fixtures/app/repos'
 import type { ReadyEntry } from '@/types/actions'
@@ -21,15 +21,17 @@ function fakeFiles(files: Readonly<Record<string, string>>) {
     const value = files[pathOps.toPosix(path)]
     return Promise.resolve(value === undefined ? { ok: false, kind: 'not-found', message: `${path} not found` } : { ok: true, value })
   }
-  return { readTextFile: readTextFake }
+  return { fs: { ...hostFs, readText: readTextFake } }
 }
 
-function fakeGit(config: string | null, calls: { cwd: string; args: readonly string[] }[] = []): GitRunner {
-  return (args, cwd) => {
-    calls.push({ cwd, args })
-    if (args[0] !== 'show') return Promise.resolve({ ok: true, stdout: '', stderr: '' })
-    if (config === null) return Promise.resolve({ ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: `fatal: path '${args[1] ?? ''}' does not exist in 'refs/remotes/origin/HEAD'` })
-    return Promise.resolve({ ok: true, stdout: config, stderr: '' })
+function fakeGit(config: string | null, calls: { cwd: string; args: readonly string[] }[] = []): { readonly git: GitRunner } {
+  return {
+    git: (args, cwd) => {
+      calls.push({ cwd, args })
+      if (args[0] !== 'show') return Promise.resolve({ ok: true, stdout: '', stderr: '' })
+      if (config === null) return Promise.resolve({ ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: `fatal: path '${args[1] ?? ''}' does not exist in 'refs/remotes/origin/HEAD'` })
+      return Promise.resolve({ ok: true, stdout: config, stderr: '' })
+    },
   }
 }
 
@@ -70,7 +72,7 @@ describe('loadStageInstructions', () => {
   ].join('\n')
 
   function load(files: Record<string, string>) {
-    return loadStageInstructions({ pluginRoot: ROOT, agent: 'impl', ops: pathOps, readTextFile: fakeFiles(files).readTextFile })
+    return loadStageInstructions(fakeFiles(files), ROOT, 'impl')
   }
 
   it('strips frontmatter, fills the bundle root everywhere, and drops marker blocks the body already carries', async () => {
@@ -105,7 +107,7 @@ describe('loadStageInstructions against the bundled stage prompts', () => {
   const REAL_ROOT = join(__dirname, '../../../../stage-prompts')
 
   it.each<StageAgent>(['plan', 'impl', 'review', 'revise'])('resolves every section for the %s agent and leaves no plugin-root variable behind', async (agent) => {
-    const result = await loadStageInstructions({ pluginRoot: REAL_ROOT, agent, ops: pathOps, readTextFile })
+    const result = await loadStageInstructions({ fs: hostFs }, REAL_ROOT, agent)
     expect(result.ok).toBe(true)
     const text = result.ok ? result.text : ''
     expect(text).not.toContain('${CLAUDE_PLUGIN_ROOT}')
@@ -119,7 +121,7 @@ describe('loadStageInstructions against the bundled stage prompts', () => {
   })
 
   it('has the review agent read both review facts from the stage context and derive neither itself', async () => {
-    const result = await loadStageInstructions({ pluginRoot: REAL_ROOT, agent: 'review', ops: pathOps, readTextFile })
+    const result = await loadStageInstructions({ fs: hostFs }, REAL_ROOT, 'review')
     const text = result.ok ? result.text : ''
     expect(text).toContain('review.cycle')
     expect(text).toContain('review.selfAuthored')
@@ -131,19 +133,19 @@ describe('readStageConfigPointers', () => {
   it('reads docs and every configured command from the default branch, skipping nulls', async () => {
     const config = { docs: { engineering: 'docs/ENGINEERING.md', design: null }, commands: { bootstrap: ['pnpm install'], checks: [{ run: 'node scripts/checks.ts', fix: null }], artifacts: 'node a.mjs', tick: null } }
     const calls: { cwd: string; args: readonly string[] }[] = []
-    const result = await readStageConfigPointers(REPO, fakeGit(JSON.stringify(config), calls))
+    const result = await readStageConfigPointers(fakeGit(JSON.stringify(config), calls), REPO)
     expect(result).toEqual({ ok: true, docs: { engineering: 'docs/ENGINEERING.md', design: null }, commands: { bootstrap: '["pnpm install"]', checks: '[{"run":"node scripts/checks.ts","fix":null}]', artifacts: 'node a.mjs' } })
     expect(calls.find((call) => call.args[0] === 'show')).toEqual({ cwd: REPO, args: ['show', 'refs/remotes/origin/HEAD:.claude/port.config.json'] })
   })
 
   it('fails when the config is not on the default branch', async () => {
-    const result = await readStageConfigPointers(REPO, fakeGit(null))
+    const result = await readStageConfigPointers(fakeGit(null), REPO)
     expect(result).toMatchObject({ ok: false })
     expect(result.ok ? '' : result.message).toContain('default branch')
   })
 
   it.each(['not json', 'null', '[]'])('fails on a config that is not a JSON object: %s', async (text) => {
-    const result = await readStageConfigPointers(REPO, fakeGit(text))
+    const result = await readStageConfigPointers(fakeGit(text), REPO)
     expect(result.ok).toBe(false)
   })
 })
@@ -190,7 +192,7 @@ describe('buildStageContext', () => {
   })
 })
 
-describe('createStageInstructionsLoader', () => {
+describe('loadStageLaunch', () => {
   const ROOT = '/bundle/stage-prompts'
   const files = {
     [`${ROOT}/agents/impl-agent.md`]: '---\nname: impl-agent\ndescription: Implements a plan\ndisallowedTools: Agent\n---\nYou are the Impl agent.',
@@ -199,8 +201,7 @@ describe('createStageInstructionsLoader', () => {
   const defaultBranchConfig = JSON.stringify({ docs: { engineering: null, design: null }, commands: { artifacts: 'node default.mjs' } })
 
   it('keeps only the dispatch line in the first message and puts the context and instructions in the inline agent’s system prompt', async () => {
-    const load = createStageInstructionsLoader({ bundleRoot: ROOT, ops: pathOps, ...fakeFiles(files), git: fakeGit(defaultBranchConfig) })
-    const result = await load(launchRequest(), WORKTREE)
+    const result = await loadStageLaunch({ ...fakeFiles(files), ...fakeGit(defaultBranchConfig) }, ROOT, launchRequest(), WORKTREE)
     expect(result.ok).toBe(true)
     expect(result.ok ? result.text : '').toBe(launchRequest().prompt)
     const prompt = result.ok ? result.agent.definition.prompt : ''
@@ -214,36 +215,31 @@ describe('createStageInstructionsLoader', () => {
 
   it('takes commands from the default branch even when the worktree carries a different config', async () => {
     const worktreeConfig = JSON.stringify({ commands: { artifacts: 'node hijack.mjs' } })
-    const load = createStageInstructionsLoader({ bundleRoot: ROOT, ops: pathOps, ...fakeFiles({ ...files, [`${WORKTREE}/.claude/port.config.json`]: worktreeConfig }), git: fakeGit(defaultBranchConfig) })
-    const result = await load(launchRequest(), WORKTREE)
+    const result = await loadStageLaunch({ ...fakeFiles({ ...files, [`${WORKTREE}/.claude/port.config.json`]: worktreeConfig }), ...fakeGit(defaultBranchConfig) }, ROOT, launchRequest(), WORKTREE)
     const text = result.ok ? result.agent.definition.prompt : ''
     expect(text).toContain('commands.artifacts: node default.mjs')
     expect(text).not.toContain('hijack')
   })
 
   it('fails, naming the file, when the bundled agent file is missing', async () => {
-    const load = createStageInstructionsLoader({ bundleRoot: ROOT, ops: pathOps, ...fakeFiles({}), git: fakeGit(defaultBranchConfig) })
-    const result = await load(launchRequest(), WORKTREE)
+    const result = await loadStageLaunch({ ...fakeFiles({}), ...fakeGit(defaultBranchConfig) }, ROOT, launchRequest(), WORKTREE)
     expect(result.ok ? '' : result.message).toContain('impl-agent.md')
   })
 
   it('fails on a missing PIPELINE.md section without blaming an install', async () => {
-    const load = createStageInstructionsLoader({ bundleRoot: ROOT, ops: pathOps, ...fakeFiles({ ...files, [`${ROOT}/docs/PIPELINE.md`]: '## Quick start\nq\n' }), git: fakeGit(defaultBranchConfig) })
-    const result = await load(launchRequest(), WORKTREE)
+    const result = await loadStageLaunch({ ...fakeFiles({ ...files, [`${ROOT}/docs/PIPELINE.md`]: '## Quick start\nq\n' }), ...fakeGit(defaultBranchConfig) }, ROOT, launchRequest(), WORKTREE)
     expect(result.ok ? '' : result.message).toContain('has no "CLAUDE.md overrides" section')
     expect(result.ok ? '' : result.message).not.toContain('out of date')
   })
 
   it('refuses a bundle root inside the stage worktree', async () => {
     const inside = `${WORKTREE}/stage-prompts`
-    const load = createStageInstructionsLoader({ bundleRoot: inside, ops: pathOps, ...fakeFiles({}), git: fakeGit(defaultBranchConfig) })
-    const result = await load(launchRequest(), WORKTREE)
+    const result = await loadStageLaunch({ ...fakeFiles({}), ...fakeGit(defaultBranchConfig) }, inside, launchRequest(), WORKTREE)
     expect(result.ok ? '' : result.message).toContain('inside the stage worktree')
   })
 
   it('fails when the default branch has no config', async () => {
-    const load = createStageInstructionsLoader({ bundleRoot: ROOT, ops: pathOps, ...fakeFiles(files), git: fakeGit(null) })
-    const result = await load(launchRequest(), WORKTREE)
+    const result = await loadStageLaunch({ ...fakeFiles(files), ...fakeGit(null) }, ROOT, launchRequest(), WORKTREE)
     expect(result).toMatchObject({ ok: false })
   })
 
@@ -253,8 +249,7 @@ describe('createStageInstructionsLoader', () => {
     await mkdir(join(bundle, 'docs'), { recursive: true })
     await writeFile(join(bundle, 'agents', 'impl-agent.md'), '---\nname: impl-agent\ndescription: Implements a plan\n---\nYou are the Impl agent.', 'utf8')
     await writeFile(join(bundle, 'docs', 'PIPELINE.md'), files[`${ROOT}/docs/PIPELINE.md`], 'utf8')
-    const real = createStageInstructionsLoader({ bundleRoot: bundle, ops: pathOps, readTextFile, git: fakeGit(defaultBranchConfig) })
-    const result = await real(launchRequest(), WORKTREE)
+    const result = await loadStageLaunch({ fs: hostFs, ...fakeGit(defaultBranchConfig) }, bundle, launchRequest(), WORKTREE)
     expect(result.ok).toBe(true)
     expect(result.ok ? result.agent.definition.prompt : '').toContain('You are the Impl agent.')
   })

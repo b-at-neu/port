@@ -1,15 +1,22 @@
 import { describe, expect, it, vi } from 'vitest'
 import { resumeStage, restartStage, RESUME_PROMPT } from '@/main/dispatch/stage/recover'
+import type { AppContext } from '@/main/app/context'
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import type { StageLaunchResult } from '@/types/dispatch'
+import type { ReadyEntry } from '@/types/actions'
 import type { ReleaseBranchOutcome, RemoveSessionWorktreeOutcome } from '@/types/workspace'
-import type { ResolvedStageRoot, StageResumeRequest } from '@/types/stage'
+import type { StageResumeRequest } from '@/types/stage'
 import type { Run } from '@/utils/pipeline/ticket'
-import type { RepoId } from '@/utils/repos'
-import { memoryRuns } from '../../../support/state-store'
+import { WIDGETS_ID, FIXTURE_REPOSITORIES } from '../../../fixtures/app/repos'
+import { createTestContext } from '../../../support/context'
 import { runOf, ticketOf } from '../../../support/tickets'
 
-const REPO = 'repo1' as RepoId
+const hoisted = vi.hoisted(() => ({ remove: vi.fn(), release: vi.fn(), apply: vi.fn() }))
+vi.mock('@/main/repos/worktree/worktree', async (original) => ({ ...(await original<object>()), removeSessionWorktreeAt: (_ctx: unknown, params: { path: string; force: boolean }) => hoisted.remove(params.path, params.force) as unknown }))
+vi.mock('@/main/repos/worktree/stage-worktree', async (original) => ({ ...(await original<object>()), releaseStageBranch: (_ctx: unknown, params: { root: string; branch: string; baseSha: string }) => hoisted.release(params.root, params.branch, params.baseSha) as unknown }))
+vi.mock('@/main/pipeline/operator/apply', async (original) => ({ ...(await original<object>()), applyItemAction: () => hoisted.apply() as unknown }))
+
+const ENTRY = FIXTURE_REPOSITORIES.find((r) => r.id === WIDGETS_ID) as ReadyEntry
 
 const interrupted = (overrides: Partial<Run> = {}): Run =>
   runOf({
@@ -24,39 +31,42 @@ const interrupted = (overrides: Partial<Run> = {}): Run =>
   })
 
 async function setup(overrides: Partial<Run> = {}) {
-  const { runs, store: state } = memoryRuns(REPO, { tickets: [ticketOf({ repo: REPO, ticket: 300, stage: 'implement', runs: [interrupted(overrides)] })] })
-  await state.ready
-
-  const store = { list: vi.fn((): readonly HostedSessionSnapshot[] => []) }
+  const list = vi.fn((): readonly HostedSessionSnapshot[] => [])
+  const capacity = vi.fn(() => Promise.resolve({ limit: 4 }))
   const resume = vi.fn((request: StageResumeRequest): Promise<StageLaunchResult> => {
     void request
     return Promise.resolve({ ok: true, sessionKey: 'hosted-1' as SessionKey })
   })
-  const removeWorktree = vi.fn((): Promise<RemoveSessionWorktreeOutcome> => Promise.resolve({ outcome: 'removed' }))
-  const applyRetry = vi.fn(() => Promise.resolve({ ok: true as const, outcome: { kind: 'applied' as const, argv: [] } }))
-  const releaseBranch = vi.fn((): Promise<ReleaseBranchOutcome> => Promise.resolve('deleted'))
-  const resolveEntry = vi.fn((): ResolvedStageRoot | null => ({ path: '/repo', sessionRequiredPaths: ['CLAUDE.md'] }))
-  const capacity = vi.fn(() => Promise.resolve({ limit: 4 }))
-  return { runs, store, resume, removeWorktree, releaseBranch, applyRetry, resolveEntry, capacity }
+  const live = {
+    hostedStore: { list, capacity } as unknown as AppContext['live']['hostedStore'],
+    stageLauncher: { resume } as unknown as AppContext['live']['stageLauncher'],
+    watcher: { snapshot: () => ({}) } as unknown as AppContext['live']['watcher'],
+  }
+  const ctx = createTestContext({ tickets: { repoId: WIDGETS_ID, tickets: [ticketOf({ repo: WIDGETS_ID, ticket: 300, stage: 'implement', runs: [interrupted(overrides)] })] }, repositories: [ENTRY], live })
+  await ctx.ready
+  hoisted.remove.mockReset().mockResolvedValue({ outcome: 'removed' } satisfies RemoveSessionWorktreeOutcome)
+  hoisted.release.mockReset().mockResolvedValue('deleted' satisfies ReleaseBranchOutcome)
+  hoisted.apply.mockReset().mockResolvedValue({ ok: true, outcome: { kind: 'applied', argv: [] } })
+  return { ctx, runs: ctx.stores.runs, list, capacity, resume }
 }
 
 describe('resumeStage', () => {
   it('hands the entry, its repository root and RESUME_PROMPT to the launcher', async () => {
     const deps = await setup()
-    const result = await resumeStage(deps, 's1')
+    const result = await resumeStage(deps.ctx, 's1')
     expect(result).toEqual({ kind: 'ok', sessionKey: 'hosted-1' })
     expect(deps.resume).toHaveBeenCalledTimes(1)
     const request = deps.resume.mock.calls[0]?.[0]
     expect(request?.entry).toMatchObject({ id: 's1', claudeSessionId: 'claude-session-1', worktree: { path: '/tmp/wt' } })
-    expect(request?.root).toEqual({ path: '/repo', sessionRequiredPaths: ['CLAUDE.md'] })
+    expect(request?.root).toEqual({ path: ENTRY.path, sessionRequiredPaths: ENTRY.config.sessionRequiredPaths })
     expect(request?.prompt).toBe(RESUME_PROMPT.replace('<n>', '300'))
   })
 
   it('reports at-capacity when no slot is free', async () => {
     const deps = await setup()
     deps.capacity.mockResolvedValue({ limit: 1 })
-    deps.store.list.mockReturnValue([{ phase: 'streaming' } as HostedSessionSnapshot])
-    const result = await resumeStage(deps, 's1')
+    deps.list.mockReturnValue([{ phase: 'streaming' } as HostedSessionSnapshot])
+    const result = await resumeStage(deps.ctx, 's1')
     expect(result).toEqual({ kind: 'at-capacity', limit: 1 })
     expect(deps.resume).not.toHaveBeenCalled()
   })
@@ -64,31 +74,31 @@ describe('resumeStage', () => {
   it('maps the launcher refusing for capacity and for any other failure', async () => {
     const full = await setup()
     full.resume.mockResolvedValue({ ok: false, kind: 'at-capacity', limit: 2 })
-    expect(await resumeStage(full, 's1')).toEqual({ kind: 'at-capacity', limit: 2 })
+    expect(await resumeStage(full.ctx, 's1')).toEqual({ kind: 'at-capacity', limit: 2 })
 
     const failed = await setup()
     failed.resume.mockResolvedValue({ ok: false, kind: 'failed', message: 'runtime problem', cause: 'resume' })
-    expect(await resumeStage(failed, 's1')).toEqual({ kind: 'start-failed', message: 'runtime problem' })
+    expect(await resumeStage(failed.ctx, 's1')).toEqual({ kind: 'start-failed', message: 'runtime problem' })
   })
 
   it('reports start-failed when the repository is no longer configured', async () => {
     const deps = await setup()
-    deps.resolveEntry.mockReturnValue(null)
-    const result = await resumeStage(deps, 's1')
+    vi.spyOn(deps.ctx.repos, 'list').mockResolvedValue({ ok: true, repositories: [] })
+    const result = await resumeStage(deps.ctx, 's1')
     expect(result).toMatchObject({ kind: 'start-failed' })
     expect(deps.resume).not.toHaveBeenCalled()
   })
 
   it('reports no-session-id when the session died before init', async () => {
     const deps = await setup({ claudeSessionId: null })
-    const result = await resumeStage(deps, 's1')
+    const result = await resumeStage(deps.ctx, 's1')
     expect(result).toEqual({ kind: 'no-session-id' })
     expect(deps.resume).not.toHaveBeenCalled()
   })
 
   it('reports unknown-stage for an id with no interrupted run', async () => {
     const deps = await setup()
-    const result = await resumeStage(deps, 'nope')
+    const result = await resumeStage(deps.ctx, 'nope')
     expect(result).toEqual({ kind: 'unknown-stage' })
   })
 })
@@ -96,35 +106,35 @@ describe('resumeStage', () => {
 describe('restartStage', () => {
   it('removes the worktree, applies retry, then clears the interruption and keeps the run as history', async () => {
     const deps = await setup()
-    const result = await restartStage(deps, 's1')
+    const result = await restartStage(deps.ctx, 's1')
     expect(result).toEqual({ kind: 'ok' })
-    expect(deps.removeWorktree).toHaveBeenCalledWith('/tmp/wt', false)
-    expect(deps.releaseBranch).toHaveBeenCalledWith('/repo', 'b', 'sha')
-    expect(deps.applyRetry).toHaveBeenCalled()
+    expect(hoisted.remove).toHaveBeenCalledWith('/tmp/wt', false)
+    expect(hoisted.release).toHaveBeenCalledWith(ENTRY.path, 'b', 'sha')
+    expect(hoisted.apply).toHaveBeenCalled()
     expect(deps.runs.list()).toHaveLength(0)
-    expect(deps.runs.runsOf(REPO, 'issue', 300)).toHaveLength(1)
+    expect(deps.runs.runsOf(WIDGETS_ID, 'issue', 300)).toHaveLength(1)
   })
 
   it('releases no branch for a detached worktree', async () => {
     const deps = await setup({ worktree: { path: '/tmp/wt', branch: null, baseSha: 'sha' } })
-    const result = await restartStage(deps, 's1')
+    const result = await restartStage(deps.ctx, 's1')
     expect(result).toEqual({ kind: 'ok' })
-    expect(deps.releaseBranch).not.toHaveBeenCalled()
+    expect(hoisted.release).not.toHaveBeenCalled()
   })
 
   it('stops at a dirty worktree and applies no label', async () => {
     const deps = await setup()
-    deps.removeWorktree.mockResolvedValue({ outcome: 'dirty' })
-    const result = await restartStage(deps, 's1')
+    hoisted.remove.mockResolvedValue({ outcome: 'dirty' })
+    const result = await restartStage(deps.ctx, 's1')
     expect(result).toEqual({ kind: 'worktree-dirty' })
-    expect(deps.releaseBranch).not.toHaveBeenCalled()
-    expect(deps.applyRetry).not.toHaveBeenCalled()
+    expect(hoisted.release).not.toHaveBeenCalled()
+    expect(hoisted.apply).not.toHaveBeenCalled()
     expect(deps.runs.list()).toHaveLength(1)
   })
 
   it('reports unknown-stage for an id with no interrupted run', async () => {
     const deps = await setup()
-    const result = await restartStage(deps, 'nope')
+    const result = await restartStage(deps.ctx, 'nope')
     expect(result).toEqual({ kind: 'unknown-stage' })
   })
 })

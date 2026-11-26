@@ -65,7 +65,7 @@ async function rig(options: DispatchContextOptions & { phase?: () => 'ready' | '
     },
     ...rest,
   })
-  const record = vi.spyOn(ctx.stores.incidentLog, 'record').mockResolvedValue(undefined as never)
+  const record = vi.spyOn(ctx.stores.incidentLog, 'record').mockResolvedValue(undefined)
   const dispatcher = createDispatcher(ctx)
   return { ctx, dispatcher, record, runs: ctx.stores.runs, incidents: () => record.mock.calls.map(([draft]) => draft) }
 }

@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { readTextFile } from '@/main/platform/files'
+import { hostFs } from '@/main/platform'
 import { pathOps } from '@/main/platform/paths'
 import { loadStageAgentDefinition, stageBundleRoot } from '@/main/dispatch/stage/bundle'
 import { extractSection, STAGE_PIPELINE_SECTIONS } from '@/main/dispatch/stage/instructions'
@@ -12,7 +13,7 @@ const PROMPT = 'system prompt'
 
 function load(file: string | null, agent: StageAgent = 'impl') {
   const readFake = (path: string): Promise<FileResult<string>> => Promise.resolve(file === null ? { ok: false, kind: 'not-found', message: `ENOENT ${path}` } : { ok: true, value: file })
-  return loadStageAgentDefinition({ root: ROOT, agent, prompt: PROMPT, ops: pathOps, readTextFile: readFake })
+  return loadStageAgentDefinition({ fs: { ...hostFs, readText: readFake } }, { root: ROOT, agent, prompt: PROMPT })
 }
 
 describe('stageBundleRoot', () => {
@@ -61,7 +62,7 @@ describe('the real bundled stage prompts', () => {
   const REAL_ROOT = join(__dirname, '../../../../stage-prompts')
 
   it.each<StageAgent>(['plan', 'impl', 'review', 'revise'])('loads the %s agent', async (agent) => {
-    const result = await loadStageAgentDefinition({ root: REAL_ROOT, agent, prompt: PROMPT, ops: pathOps, readTextFile })
+    const result = await loadStageAgentDefinition({ fs: hostFs }, { root: REAL_ROOT, agent, prompt: PROMPT })
     expect(result.ok).toBe(true)
     expect(result.ok ? result.name : '').toBe(`${agent}-agent`)
     expect(result.ok ? result.definition.prompt.length : 0).toBeGreaterThan(0)

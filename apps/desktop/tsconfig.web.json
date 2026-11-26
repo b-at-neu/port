@@ -21,6 +21,7 @@
     "src/preload/index.d.ts",
     "tests/unit/renderer/**/*",
     "tests/unit/utils/**/*",
-    "tests/support/**/*"
+    "tests/support/**/*",
+    "tests/fixtures/**/*"
   ]
 }

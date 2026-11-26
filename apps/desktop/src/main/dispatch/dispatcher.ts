@@ -2,7 +2,7 @@
 // stage launcher. `consider` is the one entry point main/ipc.ts wires to `onTick`.
 import type { ReadyEntry } from '@/types/actions'
 import type { BoardSnapshot } from '@/types/board'
-import type { Dispatcher, DispatchOwner, DispatcherState, RepoDispatchStatus, RunState, StageRecord, StageSnapshot } from '@/types/dispatch'
+import type { Dispatcher, DispatchOwner, DispatcherState, RepoDispatchStatus, RunState, StageRecord } from '@/types/dispatch'
 import { RUN_TARGET } from '@/types/dispatch'
 import type { SessionKey } from '@/types/hosting'
 import type { StagePlanFile } from '@/types/stage-labels'

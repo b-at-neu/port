@@ -32,7 +32,7 @@ function snapshotWith(tick: readonly TickReport[]): BoardSnapshot {
   return boardSnapshot([repositoryState([])], undefined, { tick })
 }
 
-/** An owned repository holding issue #52 at plan approved, with a launcher that starts `hosted-1`. */
+/** An owned repository whose one ticket sits at plan approved, with a launcher that starts `hosted-1`. */
 async function owned(overrides: DispatchContextOptions = {}) {
   const launches: unknown[] = []
   const ctx = await dispatchContext({

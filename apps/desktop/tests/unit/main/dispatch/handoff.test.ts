@@ -30,7 +30,7 @@ async function rig(results: readonly StageTransitionResult[] = [APPLIED], { reme
   const queue = [...results]
   apply.mockReset().mockImplementation(() => Promise.resolve(queue.shift() ?? APPLIED))
   const ctx = await dispatchContext()
-  const recordIncident = vi.spyOn(ctx.stores.incidentLog, 'record').mockResolvedValue(undefined as never)
+  const recordIncident = vi.spyOn(ctx.stores.incidentLog, 'record').mockResolvedValue(undefined)
   const handoff = createStageHandoff(ctx, () => SNAPSHOT)
   if (remember) handoff.remember(ENTRY)
   return { ctx, handoff, recordIncident }

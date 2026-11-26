@@ -237,7 +237,7 @@ export function createStageLauncher(ctx: StageLaunchContext, bundleRoot: string)
 
   function observe(snapshot: HostedSessionSnapshot): void {
     const entry = tracked.get(snapshot.sessionKey)
-    if (entry === undefined) return
+    if (entry === undefined || entry.lastOutcome === 'completed') return
 
     if (!entry.sawSessionId && snapshot.claudeSessionId !== null) {
       entry.sawSessionId = true
@@ -295,7 +295,7 @@ export function createStageLauncher(ctx: StageLaunchContext, bundleRoot: string)
 
       if (outcome.kind === 'completed') {
         await ctx.live.hostedStore.close(sessionKey)
-        const plan =await readPlanFile(sessionKey, outcome)
+        const plan = await readPlanFile(sessionKey, outcome)
         const dismissResult = await ctx.live.hostedStore.dismiss(sessionKey, 'remove')
         const held = tracked.get(sessionKey)
         if (dismissResult.ok && held !== undefined && held.branch !== null) await releaseStageBranch(ctx, { root: held.root, branch: held.branch, baseSha: held.baseSha })

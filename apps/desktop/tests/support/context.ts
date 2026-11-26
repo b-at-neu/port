@@ -242,7 +242,7 @@ export async function dispatchContext(options: DispatchContextOptions = {}): Pro
     if (owner !== 'none') await ctx.fs.writeText(pathOps.join(entry.path, '.agents', 'cockpit.json'), JSON.stringify({ repo: entry.config.repo, owner: owner === 'app' ? 'app' : 'terminal', since: '2026-01-01T00:00:00.000Z' }))
     await ctx.stores.runStates.set([entry.id], options.runState ?? 'dispatching', ctx.clock.now().toISOString())
   }
-  return Object.assign(ctx, { github, watcher, wire: live as DispatchTestContext['wire'] })
+  return Object.assign(ctx, { github, watcher, wire: live })
 }
 
 /** Runs an action exactly as the router does: parse the raw request, then `run`. */
