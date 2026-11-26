@@ -14,7 +14,7 @@ vi.mock('@/main/pipeline/operator/stage', () => ({ applyStageTransition: (_ctx: 
 const REPO = 'repo-a' as RepoId
 const OTHER_REPO = 'repo-b' as RepoId
 const KEY = 'hosted-1' as SessionKey
-const RECORD = { sessionKey: KEY, number: 52, kind: 'issue', agent: 'impl', trigger: 'planApproved' } as const
+const RECORD = { sessionKey: KEY, number: 52, kind: 'issue', agent: 'impl', stage: 'implement', trigger: 'planApproved' } as const
 const ENTRY = readyEntry()
 const SNAPSHOT = {} as unknown as StageSnapshot
 

@@ -3,19 +3,16 @@ import { createQuitGuard, quitWarningCopy, stagePhaseName } from '@/main/dispatc
 import type { StageSessionSummary } from '@/types/dispatch'
 
 function session(overrides: Partial<StageSessionSummary> = {}): StageSessionSummary {
-  return { agent: 'impl', number: 300, trigger: 'planApproved', repoName: 'acme/widgets', ...overrides }
+  return { stage: 'implement', number: 300, repoName: 'acme/widgets', ...overrides }
 }
 
 describe('stagePhaseName', () => {
-  it('names every agent', () => {
-    expect(stagePhaseName('plan', 'planChangesRequested')).toBe('planning')
-    expect(stagePhaseName('impl', 'planApproved')).toBe('implementing')
-    expect(stagePhaseName('review', 'readyForReview')).toBe('reviewing')
-    expect(stagePhaseName('revise', 'needsHuman')).toBe('revising')
-  })
-
-  it('a refreshBranch trigger is always refreshing, regardless of agent', () => {
-    expect(stagePhaseName('impl', 'refreshBranch')).toBe('refreshing')
+  it('names every stage', () => {
+    expect(stagePhaseName('plan')).toBe('planning')
+    expect(stagePhaseName('implement')).toBe('implementing')
+    expect(stagePhaseName('review')).toBe('reviewing')
+    expect(stagePhaseName('revise')).toBe('revising')
+    expect(stagePhaseName('refresh')).toBe('refreshing')
   })
 })
 
@@ -33,7 +30,7 @@ describe('quitWarningCopy', () => {
   })
 
   it('uses plural copy and sorts by repo then number for several sessions', () => {
-    const copy = quitWarningCopy([session({ number: 312, repoName: 'acme/widgets', agent: 'review' }), session({ number: 52, repoName: 'acme/api', agent: 'impl' })])
+    const copy = quitWarningCopy([session({ number: 312, repoName: 'acme/widgets', stage: 'review' }), session({ number: 52, repoName: 'acme/api', stage: 'implement' })])
     expect(copy?.message).toContain('2')
     const lines = copy?.detail.split('\n') ?? []
     expect(lines[0]).toBe('#52 implementing · acme/api')

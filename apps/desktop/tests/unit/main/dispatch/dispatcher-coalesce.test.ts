@@ -22,7 +22,7 @@ function outcome(kind: StageOutcome['kind']): StageOutcome {
 }
 
 function candidate(number: number): TickActionable {
-  return { number, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null }
+  return { number, kind: 'issue', stage: 'implement', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null }
 }
 
 function snapshotCarrying(...numbers: readonly number[]): BoardSnapshot {

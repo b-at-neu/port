@@ -7,6 +7,7 @@ import type { ItemActionResult, ReadyEntry } from '@/types/actions'
 import type { RunStateStore } from '@/types/dispatch'
 import { haltDispatch } from '@/main/dispatch/halt'
 import { createTestContext } from '../../../support/context'
+import { ticketAt } from '../../../support/tickets'
 
 const apply = vi.hoisted(() => vi.fn<(params: unknown) => Promise<ItemActionResult>>())
 vi.mock('@/main/pipeline/operator/apply', () => ({ applyItemAction: (_ctx: unknown, params: unknown) => apply(params) }))
@@ -49,6 +50,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     title: 'a ticket',
     url: 'https://github.com/o/a/issues/148',
     assignees: ['op'],
+    ticket: ticketAt('review', { kind: 'running', runId: 'run-1' }),
     stage: 'in-flight',
     stages: [{ key: 'reviewing', name: 'reviewing', role: 'in-flight' }],
     stageAmbiguous: false,
@@ -171,7 +173,7 @@ describe('haltDispatch', () => {
     const attached = item({ agents: [{ agentId: 'a1', agentType: 'review-agent', stage: 'review-agent', model: null, activity: 'active', idleMs: 1000, lastActivityAt: '2026-01-01T00:00:00Z', match: 'direct', sessionId: 's1' }] })
     const report = await halt(ctx, [attached])
     expect(ctx.stores.runStates.current(REPO_ID).state).toBe('paused')
-    expect(report).toEqual({ kind: 'completed', items: [{ kind: 'stopped', number: 148, itemKind: 'issue', repoId: REPO_ID, removedLabel: 'reviewing', attachedAgent: 'review-agent', stoppedTask: false }] })
+    expect(report).toEqual({ kind: 'completed', items: [{ kind: 'stopped', number: 148, itemKind: 'issue', repoId: REPO_ID, removedLabel: 'Reviewing', attachedAgent: 'review-agent', stoppedTask: false }] })
   })
 
   it('calls stopFor before the label write, and standDown after the loop', async () => {

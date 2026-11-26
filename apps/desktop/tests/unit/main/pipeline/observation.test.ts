@@ -1,150 +1,77 @@
 import { describe, expect, it } from 'vitest'
-import type { LabelKey, LabelVocabulary, ResolvedLabel } from '@/utils/labels/vocabulary'
-import type { ReconciledItem } from '@/types/state'
 import type { TickObservation } from '@/types/tick'
 import { observationWrite } from '@/main/pipeline/observation'
 import type { WriteObservation } from '@/types/dispatch'
+import { reconciledItem } from '../../../support/board-snapshot'
 
-const REPO_ID = 'repo-a' as ReconciledItem['repoId']
-
-function customVocabulary(overrides: Readonly<Partial<Record<LabelKey, string>>>): LabelVocabulary {
-  const keys: readonly LabelKey[] = ['ready', 'planReview', 'planApproved', 'inProgress', 'needsHuman', 'approved', 'needsRevision', 'readyForReview', 'refreshBranch']
-  const labels: ResolvedLabel[] = keys.map((key) => ({ key, name: overrides[key] ?? key, source: overrides[key] !== undefined ? 'config' : 'default', module: 'core', role: 'trigger' }))
-  return { labels, disabled: [], problems: [] }
-}
-
-function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
-  return {
-    repoId: REPO_ID,
-    repo: 'o/r',
-    kind: 'issue',
-    number: 52,
-    title: 'a ticket',
-    url: 'https://github.com/o/r/issues/52',
-    assignees: ['op'],
-    stage: 'gate',
-    stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }],
-    stageAmbiguous: false,
-    marked: true,
-    autoPlan: false,
-    status: 'gated',
-    statusEvidence: null,
-    waitingOn: null,
-    sessionRequired: false,
-    linked: null,
-    linkReason: null,
-    agents: [],
-    sessions: [],
-    worktrees: [],
-    workSessions: [],
-    state: 'OPEN',
-    mergedAt: null,
-    updatedAt: null,
-    stageHistory: [],
-    matchedKeys: ['planReview'],
-    sources: ['github'],
-    claimedFiles: null,
-    headRefOid: null,
-    mergeable: null,
-    reviews: null,
-    comments: null,
-    reviewCycleCount: null,
-    checkRollup: null,
-    planPresent: false,
-    blockers: null,
-    blockerComments: null,
-    closingPullRequests: null,
-    ...overrides,
-  }
-}
+const item = (number = 52) => reconciledItem({ number })
+const red = [{ name: 'audit', conclusion: 'FAILURE', url: null }]
 
 describe('observationWrite — plan-missing', () => {
-  it('moves planReview back to ready and uses the repository\'s own resolved label names in the comment', () => {
-    const vocabulary = customVocabulary({ planReview: 'needs plan review', ready: 'go' })
+  it('sends the plan back with the operator move and a plain comment', () => {
     const observation: WriteObservation = { kind: 'plan-missing', number: 52, itemKind: 'issue' }
-    const plan = observationWrite(observation, item(), vocabulary, 'dev')
-    expect(plan.add).toEqual(['ready'])
-    expect(plan.remove).toEqual(['planReview'])
+    const plan = observationWrite(observation, item(), 'dev')
+    expect(plan.move).toEqual({ kind: 'request-plan-changes' })
     expect(plan.action).toBe('observe-plan-missing')
-    expect(plan.comment).toContain('`needs plan review`')
-    expect(plan.comment).toContain('`go`')
-  })
-
-  it('falls back to the bare key when a label is missing from the vocabulary', () => {
-    const vocabulary: LabelVocabulary = { labels: [], disabled: [], problems: [] }
-    const observation: WriteObservation = { kind: 'plan-missing', number: 52, itemKind: 'issue' }
-    const plan = observationWrite(observation, item(), vocabulary, 'dev')
-    expect(plan.comment).toContain('`planReview`')
-    expect(plan.comment).toContain('`ready`')
+    expect(plan.comment).toContain('## Implementation Plan')
   })
 })
 
 describe('observationWrite — withdraw-approval route', () => {
-  const vocabulary = customVocabulary({ needsHuman: 'needs human' })
-  const approved = item({ kind: 'pull-request', stage: 'terminal', stages: [{ key: 'approved', name: 'approved', role: 'terminal' }], matchedKeys: ['approved'] })
-  const red = [{ name: 'audit', conclusion: 'FAILURE', url: null }]
-
-  it('a revise route swaps approved for needsRevision with the plain comment', () => {
+  it('a revise route revises with the plain comment', () => {
     const observation: TickObservation = { kind: 'withdraw-approval', route: 'revise', number: 52, itemKind: 'pull-request', red, headRefOid: 'abc1234' }
-    const plan = observationWrite(observation, approved, vocabulary, 'dev')
-    expect(plan.add).toEqual(['needsRevision'])
-    expect(plan.remove).toEqual(['approved'])
+    const plan = observationWrite(observation, item(), 'dev')
+    expect(plan.move).toEqual({ kind: 'revise' })
     expect(plan.comment).not.toContain('instead of revision')
   })
 
-  it('a human route swaps approved for needsHuman and names the label in the comment', () => {
+  it('a human route escalates and says so in the comment', () => {
     const observation: TickObservation = { kind: 'withdraw-approval', route: 'human', number: 52, itemKind: 'pull-request', red, headRefOid: 'abc1234' }
-    const plan = observationWrite(observation, approved, vocabulary, 'dev')
-    expect(plan.add).toEqual(['needsHuman'])
-    expect(plan.remove).toEqual(['approved'])
+    const plan = observationWrite(observation, item(), 'dev')
+    expect(plan.move).toEqual({ kind: 'escalate', detail: 'approval-withdrawn' })
     expect(plan.comment).toMatch(/^## Approval withdrawn\n/)
-    expect(plan.comment).toContain('moved to `needs human` instead of revision. A new head is the way past it.')
+    expect(plan.comment).toContain('escalated to you instead of revision. A new head is the way past it.')
   })
 })
 
 describe('observationWrite — zero-diff observation', () => {
-  const vocabulary = customVocabulary({})
-  const pr = item({ kind: 'pull-request', stage: 'trigger', stages: [{ key: 'readyForReview', name: 'readyForReview', role: 'trigger' }], matchedKeys: ['readyForReview'] })
+  const observation: TickObservation = { kind: 'zero-diff', number: 52, itemKind: 'pull-request', count: 3, headRefOid: 'abc1234' }
 
   it('a sha-cap escalation names the head and that a new head is the way past it', () => {
-    const observation: TickObservation = { kind: 'zero-diff', number: 52, itemKind: 'pull-request', count: 3, headRefOid: 'abc1234' }
-    const plan = observationWrite(observation, pr, vocabulary, 'dev')
-    expect(plan.add).toEqual(['needsHuman'])
-    expect(plan.remove).toEqual(['readyForReview'])
+    const plan = observationWrite(observation, item(), 'dev')
+    expect(plan.move).toEqual({ kind: 'escalate', detail: 'sha-cap' })
     expect(plan.comment).toContain('Cycle 3 was the second review of `abc1234`, the most one head gets. A new head is the way past it.')
   })
 
   it('ends the escalation with the sha-cap marker and head', () => {
-    const observation: TickObservation = { kind: 'zero-diff', number: 52, itemKind: 'pull-request', count: 3, headRefOid: 'abc1234' }
-    const comment = observationWrite(observation, pr, vocabulary, 'dev').comment
-    expect(comment?.endsWith('\n<!-- port:escalation sha-cap abc1234 -->')).toBe(true)
+    expect(observationWrite(observation, item(), 'dev').comment?.endsWith('\n<!-- port:escalation sha-cap abc1234 -->')).toBe(true)
   })
 })
 
 describe('observationWrite — escalation markers', () => {
-  const vocabulary = customVocabulary({})
-  const pr = item({ kind: 'pull-request', headRefOid: 'def5678', stage: 'trigger', stages: [{ key: 'needsRevision', name: 'needsRevision', role: 'trigger' }], matchedKeys: ['needsRevision'] })
+  const pr = reconciledItem({ kind: 'pull-request', number: 52, headRefOid: 'def5678' })
 
   it('marks the cycle-cap escalation with the item head', () => {
     const observation: TickObservation = { kind: 'cycle-cap', number: 52, itemKind: 'pull-request', count: 5, cap: 5 }
-    expect(observationWrite(observation, pr, vocabulary, 'dev').comment?.endsWith('\n<!-- port:escalation cycle-cap def5678 -->')).toBe(true)
+    const plan = observationWrite(observation, pr, 'dev')
+    expect(plan.move).toEqual({ kind: 'escalate', detail: 'cycle-cap' })
+    expect(plan.comment?.endsWith('\n<!-- port:escalation cycle-cap def5678 -->')).toBe(true)
   })
 
   it('marks the integration-red escalation with its head', () => {
     const observation: TickObservation = { kind: 'integration-red', number: 52, itemKind: 'pull-request', checks: ['test'], headRefOid: 'abc1234' }
-    expect(observationWrite(observation, pr, vocabulary, 'dev').comment?.endsWith('\n<!-- port:escalation integration-red abc1234 -->')).toBe(true)
+    const plan = observationWrite(observation, pr, 'dev')
+    expect(plan.move).toEqual({ kind: 'escalate', detail: 'integration-red' })
+    expect(plan.comment?.endsWith('\n<!-- port:escalation integration-red abc1234 -->')).toBe(true)
   })
 })
 
 describe('observationWrite — liveness-reset', () => {
-  const vocabulary = customVocabulary({})
-  const base = item({ stage: 'in-flight', stages: [{ key: 'inProgress', name: 'inProgress', role: 'in-flight' }], matchedKeys: ['inProgress'] })
-
-  it('writes the retry trigger in place of the in-flight label', () => {
-    const observation: TickObservation = { kind: 'liveness-reset', number: 52, itemKind: 'issue', inFlight: 'inProgress', retryKey: 'planApproved' }
-    const plan = observationWrite(observation, base, vocabulary, 'dev')
+  it('retries the stage in place of the stale running status', () => {
+    const observation: TickObservation = { kind: 'liveness-reset', number: 52, itemKind: 'issue', stage: 'implement' }
+    const plan = observationWrite(observation, item(), 'dev')
     expect(plan.action).toBe('observe-liveness-reset')
-    expect(plan.add).toEqual(['planApproved'])
-    expect(plan.remove).toEqual(['inProgress'])
+    expect(plan.move).toEqual({ kind: 'retry' })
+    expect(plan.comment).toBeNull()
   })
 })

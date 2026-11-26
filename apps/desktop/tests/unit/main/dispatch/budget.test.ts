@@ -15,6 +15,7 @@ function record(overrides: Partial<StageRecord> = {}): StageRecord {
     runId: 'run-1',
     sessionKey: 'hosted-1' as SessionKey,
     agent: 'impl',
+    stage: 'implement',
     number: 52,
     kind: 'issue',
     trigger: 'planApproved',
@@ -98,7 +99,7 @@ describe('sumCostUsd', () => {
 
 describe('escalateOverBudget', () => {
   const entry = { config: { vocabulary: resolveVocabulary({}) } } as unknown as ReadyEntry
-  const candidate = (overrides: Partial<TickActionable> = {}): TickActionable => ({ number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null, ...overrides })
+  const candidate = (overrides: Partial<TickActionable> = {}): TickActionable => ({ number: 52, kind: 'issue', stage: 'implement', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null, ...overrides })
 
   beforeEach(() => {
     escalate.mockReset().mockResolvedValue({ labels: { kind: 'applied', argv: [] }, comment: null })
@@ -108,7 +109,7 @@ describe('escalateOverBudget', () => {
     const ctx = createTestContext()
     const notes: BudgetNote[] = []
     await escalateOverBudget(ctx, { entry, candidate: candidate(), line: 'over', notes, viewer: 'op', item: undefined })
-    expect(escalate.mock.calls[0]?.[0]).toMatchObject({ kind: 'issue', number: 52, trigger: 'planApproved', viewer: 'op', action: 'budget-escalate', auditDir: ctx.paths.userData, scratchDir: ctx.paths.temp, body: escalationBody('over', null) })
+    expect(escalate.mock.calls[0]?.[0]).toMatchObject({ kind: 'issue', number: 52, viewer: 'op', action: 'budget-escalate', auditDir: ctx.paths.userData, scratchDir: ctx.paths.temp, body: escalationBody('over', null) })
     expect(notes).toEqual([{ kind: 'escalated', number: 52, needsHumanLabel: 'needs human', commentFailedMessage: null }])
   })
 
@@ -122,7 +123,7 @@ describe('escalateOverBudget', () => {
 
   it('carries the head sha on a pull request, and skips the comment body when that escalation already repeats', async () => {
     const ctx = createTestContext()
-    const review = candidate({ kind: 'pull-request', trigger: 'readyForReview', agent: 'review' })
+    const review = candidate({ kind: 'pull-request', stage: 'review', trigger: 'readyForReview', agent: 'review' })
     await escalateOverBudget(ctx, { entry, candidate: review, line: 'over', notes: [], viewer: 'op', item: { headRefOid: 'abc123', comments: [] } })
     expect(escalate.mock.calls[0]?.[0].body).toBe(escalationBody('over', 'abc123'))
 

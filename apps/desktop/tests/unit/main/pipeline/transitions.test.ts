@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HANDBACK_TOKENS, accepts, actionOf, applyEvent, eventWrites, handbackRefusal, itemKindFor, pullRequestNumberOf, stageModeFor, ticketEventOf, type TableContext } from '@/main/pipeline/transitions'
+import { HANDBACK_TOKENS, accepts, actionOf, applyEvent, eventWrites, handbackRefusal, itemKindFor, pullRequestNumberOf, ticketEventOf, type TableContext } from '@/main/pipeline/transitions'
 import { stageOfMode, type StageEvent, type StageMode, type StagePlanFile, type StateEvent, type TicketEvent } from '@/types/stage-labels'
 import type { Stage, Status, Ticket } from '@/utils/pipeline/ticket'
 import { NOW, REPO, ticketOf } from '../../../support/tickets'
@@ -321,12 +321,6 @@ describe('helpers', () => {
   it('the vocabulary covers every stage mode, and refresh shares escalated with revise', () => {
     expect(Object.keys(HANDBACK_TOKENS).sort()).toEqual(['impl', 'plan', 'refresh', 'review', 'revise'])
     expect(HANDBACK_TOKENS.refresh).toContain('escalated')
-  })
-
-  it('refresh mode follows the refreshBranch trigger', () => {
-    expect(stageModeFor('revise', 'refreshBranch')).toBe('refresh')
-    expect(stageModeFor('revise', 'needsRevision')).toBe('revise')
-    expect(stageModeFor('impl', 'planApproved')).toBe('impl')
   })
 
   it('plan and impl write issues, the rest pull requests, and every mode has a stage', () => {

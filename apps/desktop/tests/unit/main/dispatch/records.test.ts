@@ -37,7 +37,7 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
 }
 
 function actionable(overrides: Partial<TickActionable> = {}): TickActionable {
-  return { number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null, ...overrides }
+  return { number: 52, kind: 'issue', stage: 'implement', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null, ...overrides }
 }
 
 function record(overrides: Partial<StageRecord> = {}): StageRecord {
@@ -45,6 +45,7 @@ function record(overrides: Partial<StageRecord> = {}): StageRecord {
     runId: 'run-1',
     sessionKey: 'hosted-1' as SessionKey,
     agent: 'impl',
+    stage: 'implement',
     number: 52,
     kind: 'issue',
     trigger: 'planApproved',

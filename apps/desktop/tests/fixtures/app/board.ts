@@ -376,7 +376,7 @@ function interruptedStages(now: Date): readonly InterruptedStage[] {
     number,
     kind: agent === 'revise' ? 'pull-request' : 'issue',
     trigger: agent === 'plan' ? 'ready' : agent === 'revise' ? 'needsRevision' : 'planApproved',
-    inFlight: agent === 'plan' ? 'planning' : agent === 'revise' ? 'revising' : 'inProgress',
+    stage: agent === 'plan' ? 'plan' : agent === 'revise' ? 'revise' : 'implement',
     model: agent === 'plan' ? 'opus' : 'sonnet',
     claudeSessionId: `fixture-session-${id}`,
     worktree: { path: `/home/you/src/widgets/.claude/worktrees/session-${id}`, branch: `session/${id}`, baseSha: 'abc1234' },

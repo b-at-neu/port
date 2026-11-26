@@ -21,7 +21,7 @@ vi.mock('@/main/pipeline/operator/stage', () => ({
 const REPO_ID = 'repo-a' as RepoId
 const WITH_TICKETS = { repoId: REPO_ID, tickets: [ticketOf({ repo: REPO_ID, ticket: 52, stage: 'implement' }), ticketOf({ repo: REPO_ID, ticket: 46, pr: { number: 47, approvedAt: null }, stage: 'review' })] }
 const ISSUE_52 = { number: 52, title: 't', labels: ['plan approved'], assignees: ['op'] }
-const ACTIONABLE = [{ number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }]
+const ACTIONABLE = [{ number: 52, kind: 'issue' as const, stage: 'implement' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }]
 const OK_LAUNCH: StageLaunchResult = { ok: true, sessionKey: 'hosted-1' as SessionKey }
 
 function tickReport(overrides: Partial<TickReport> = {}): TickReport {
@@ -133,14 +133,14 @@ describe('createDispatcher — launching', () => {
   })
 
   it("builds a pull request launch's target from the re-read head branch and hands a review its cycle", async () => {
-    const review = [{ number: 47, kind: 'pull-request' as const, trigger: 'readyForReview' as const, agent: 'review' as const, unchecked: false, cycle: { count: 2, cap: 5 } }]
+    const review = [{ number: 47, kind: 'pull-request' as const, stage: 'review' as const, trigger: 'readyForReview' as const, agent: 'review' as const, unchecked: false, cycle: { count: 2, cap: 5 } }]
     const { dispatcher, launches } = await owned({ items: [{ number: 47, kind: 'pull-request', labels: ['ready for review'], assignees: ['op'], headRefName: '46-sync-time' }] })
     await dispatcher.consider(snapshotWith([tickReport({ actionable: review })]))
     expect(launches[0]).toMatchObject({ target: { kind: 'pr', headRefName: '46-sync-time' }, review: { cycle: 3, selfAuthored: false } })
   })
 
   it('records a failed launch for a review with no cycle count, without launching', async () => {
-    const review = [{ number: 47, kind: 'pull-request' as const, trigger: 'readyForReview' as const, agent: 'review' as const, unchecked: false, cycle: null }]
+    const review = [{ number: 47, kind: 'pull-request' as const, stage: 'review' as const, trigger: 'readyForReview' as const, agent: 'review' as const, unchecked: false, cycle: null }]
     const { dispatcher, launches } = await owned({ items: [{ number: 47, kind: 'pull-request', labels: ['ready for review'], assignees: ['op'] }] })
     await dispatcher.consider(snapshotWith([tickReport({ actionable: review })]))
     expect(launches).toHaveLength(0)
@@ -204,7 +204,7 @@ describe('createDispatcher — shutdown', () => {
 })
 
 function actionableOf(overrides: Partial<TickActionable> = {}): TickActionable {
-  return { number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null, ...overrides }
+  return { number: 52, kind: 'issue', stage: 'implement', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null, ...overrides }
 }
 
 describe('promptFor', () => {
@@ -227,7 +227,7 @@ describe('promptFor', () => {
   })
 
   it('names the refresh stage for a refreshBranch trigger, with the number twice', () => {
-    const prompt = promptFor(actionableOf({ kind: 'pull-request', trigger: 'refreshBranch', agent: 'revise' }))
+    const prompt = promptFor(actionableOf({ kind: 'pull-request', stage: 'refresh', trigger: 'refreshBranch', agent: 'revise' }))
     expect(prompt).toBe('Refresh stage for pull request #52. Run your pipeline stage for pull request #52 in refresh mode.')
     expect(REFRESH_PROMPT.split('<n>')).toHaveLength(3)
   })

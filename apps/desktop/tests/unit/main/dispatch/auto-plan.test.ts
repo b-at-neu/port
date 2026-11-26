@@ -6,6 +6,7 @@ import type { ReconciledItem } from '@/types/state'
 import type { TickReport } from '@/types/tick'
 import { createAutoPlanner } from '@/main/dispatch/auto-plan'
 import { dispatchContext, type DispatchContextOptions } from '../../../support/context'
+import { ticketAt } from '../../../support/tickets'
 
 const approve = vi.hoisted(() => vi.fn<(params: unknown) => Promise<WriteOutcome>>())
 vi.mock('@/main/pipeline/operator/gate', () => ({ autoApprovePlan: (_ctx: unknown, params: unknown) => approve(params) }))
@@ -23,6 +24,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     title: 'a ticket',
     url: 'https://github.com/o/a/issues/7',
     assignees: ['op'],
+    ticket: ticketAt('plan', { kind: 'waiting-on-you', gate: 'plan-approval', detail: '' }, { autoPlan: true }),
     stage: 'gate',
     stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }],
     stageAmbiguous: false,
