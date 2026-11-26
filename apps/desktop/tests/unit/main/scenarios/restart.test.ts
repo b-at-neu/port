@@ -1,10 +1,10 @@
 // An app restart and a system sleep during an active run, ending with no finished work re-dispatched.
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDispatcher } from '@/main/dispatch/dispatcher'
 import { planTick } from '@/main/pipeline/tick/plan'
 import { createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
 import type { BoardSnapshot } from '@/types/board'
-import type { OwnershipRead } from '@/types/dispatch'
+import type { AppContext } from '@/main/app/context'
 import type { SessionKey } from '@/types/hosting'
 import type { StageEvent } from '@/types/stage-labels'
 import type { StageOutcome } from '@/types/stage-session'
@@ -12,18 +12,28 @@ import type { TickReport } from '@/types/tick'
 import type { PlatformFs } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
 import { boardSnapshot, reconciledItem, repositoryState } from '../../../support/board-snapshot'
-import { createTestContext } from '../../../support/context'
+import { createTestContext, freshMemos } from '../../../support/context'
 import { createFakeFs } from '../../../support/fake-platform'
+import { createFakeGitHub } from '../../../support/fake-github'
 import { readyEntry } from '../../../support/repo-config'
 import { scriptedStage } from '../../../support/stage'
 import { ticketOf } from '../../../support/tickets'
 
+const hoisted = vi.hoisted(() => ({ events: [] as StageEvent[] }))
+vi.mock('@/main/pipeline/operator/stage', () => ({
+  applyStageClaim: () => Promise.resolve({ kind: 'applied' }),
+  applyStageTransition: (_ctx: unknown, params: { event: StageEvent }) => {
+    hoisted.events.push(params.event)
+    return Promise.resolve({ kind: 'applied' })
+  },
+}))
+
+vi.mock('@/main/pipeline/state/labels', async (original) => ({ ...(await original<object>()), storedLabels: () => ['plan approved'] }))
+
 const REPO = 'repo-a' as RepoId
 const STATE_FILE = '/test/userData/pipeline-state.json'
-const OWNED: OwnershipRead = { kind: 'app', since: '2026-01-01T00:00:00Z', path: '/repo/.agents/cockpit.json', readAt: 'r' }
 const ACTIONABLE = [{ number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }]
 const COMPLETED: StageOutcome = { kind: 'completed', detail: null, costUsd: 1, resetsAt: null, worktree: 'removed', operatorJoined: false, handback: { token: 'pr-opened', arg: '#8' } }
-const APPLIED = { kind: 'applied' } as const
 
 /** The disk an app run leaves behind: ticket 52 claimed and running, no run recorded yet. */
 async function diskWithClaimedTicket(): Promise<PlatformFs> {
@@ -35,42 +45,19 @@ async function diskWithClaimedTicket(): Promise<PlatformFs> {
 
 /** One run of the app over `fs`: a restart is a second call over the same disk. */
 async function boot(fs: PlatformFs) {
-  const ctx = createTestContext({ platform: { fs } })
+  const github = createFakeGitHub({ viewer: 'viewer', items: [{ number: 52, title: 't', labels: ['plan approved'], assignees: ['op'] }] })
+  const watcher = { republish: vi.fn(), refresh: vi.fn(() => Promise.resolve({} as BoardSnapshot)), snapshot: () => boardSnapshot() }
+  const live: { -readonly [K in keyof AppContext['live']]?: AppContext['live'][K] } = { memos: freshMemos(), watcher: watcher as unknown as AppContext['live']['watcher'] }
+  const entry = readyEntry()
+  const ctx = createTestContext({ platform: { ...github.platform, fs }, repositories: [entry], live })
   await ctx.ready
+  await ctx.fs.writeText(`${entry.path}/.agents/cockpit.json`, JSON.stringify({ repo: entry.config.repo, owner: 'app', since: '2026-01-01T00:00:00Z' }))
+  await ctx.stores.runStates.set([REPO], 'dispatching', ctx.clock.now().toISOString())
   const stage = scriptedStage(ctx.stores.runs, REPO, ctx.clock.now)
-  const events: StageEvent[] = []
-  const dispatcher = createDispatcher({
-    store: stage.store,
-    runs: ctx.stores.runs,
-    launch: stage.launcher,
-    runState: () => 'dispatching',
-    readOwnership: () => Promise.resolve(OWNED),
-    takeOwnership: () => Promise.resolve({ ok: true, path: 'p' }),
-    stateLabels: () => ['plan approved'],
-    fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'], headRefName: null, author: null }], unavailable: [], fetchedAt: 'r' }),
-    listRepositories: () => Promise.resolve({ ok: true, repositories: [readyEntry()] }),
-    registryDeps: { registryDir: '/registry', git: () => Promise.reject(new Error('unused')), chooseDirectory: () => Promise.resolve(null) },
-    budget: { reset: vi.fn(), sweep: vi.fn(), check: vi.fn(), report: vi.fn() },
-    escalate: () => Promise.reject(new Error('unused')),
-    writeObservation: () => Promise.reject(new Error('unused')),
-    rerunChecks: () => Promise.resolve('applied'),
-    rerunMemo: { get: () => undefined, set: () => undefined },
-    refreshMemo: createRefreshMemo(),
-    forceDispatch: { has: () => false, set: () => undefined, clear: () => undefined, prune: () => undefined },
-    stageLabels: {
-      claim: () => Promise.resolve(APPLIED),
-      transition: (params) => {
-        events.push(params.event)
-        return Promise.resolve(APPLIED)
-      },
-    },
-    requestRead: () => undefined,
-    recordIncident: () => Promise.resolve(),
-    dirs: { audit: '/audit', scratch: '/scratch' },
-    onChange: () => undefined,
-    now: ctx.clock.now,
-  })
-  return { ctx, stage, dispatcher, events, runs: ctx.stores.runs }
+  live.hostedStore = stage.store
+  live.stageLauncher = stage.launcher as unknown as AppContext['live']['stageLauncher']
+  const dispatcher = createDispatcher(ctx)
+  return { ctx, stage, dispatcher, events: hoisted.events, runs: ctx.stores.runs }
 }
 
 const tickReport = (overrides: Partial<TickReport> = {}): TickReport => ({ repoId: REPO, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [], autoApprovals: [], labelRepairs: [], ...overrides })
@@ -99,6 +86,10 @@ const settled = async (): Promise<void> => {
 }
 
 describe('restart and sleep during an active run', () => {
+  beforeEach(() => {
+    hoisted.events.length = 0
+  })
+
   it('a restart mid-run reads the run as a crash, keeps its claim interrupted, and launches nothing', async () => {
     const fs = await diskWithClaimedTicket()
     const before = await boot(fs)

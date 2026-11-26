@@ -4,9 +4,11 @@ import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { CommandResult, FileResult, GhResult, GhRunner, GitHubHttpResult, GitHubRequest, GitHubTransport, GitRunner } from '@/types/platform'
 import type { ReadyEntry } from '@/types/actions'
-import { createBudgetGate } from '@/main/dispatch/budget-gate'
+import { budgetCheck, budgetReport, budgetReset, budgetSweep } from '@/main/dispatch/budget-gate'
 import { renderLedger } from '@/main/github/budget-ledger'
 import type { LedgerRow } from '@/types/budget'
+import type { TickActionable } from '@/types/tick'
+import { createTestContext } from '../../../support/context'
 import { createFakePlatform } from '../../../support/fake-platform'
 
 const NOW = new Date('2026-09-05T14:02:00.000Z')
@@ -50,7 +52,12 @@ function ledgerEnvelope(rows: readonly LedgerRow[], login = 'me'): GitHubHttpRes
 }
 
 interface Harness {
-  readonly gate: ReturnType<typeof createBudgetGate>
+  readonly gate: {
+    readonly reset: (e: ReadyEntry) => ReturnType<typeof budgetReset>
+    readonly sweep: (e: ReadyEntry, sets: { readonly live: readonly string[]; readonly completed: readonly string[] }) => ReturnType<typeof budgetSweep>
+    readonly check: (e: ReadyEntry, candidate: Pick<TickActionable, 'kind' | 'number' | 'agent'>, model: string) => ReturnType<typeof budgetCheck>
+    readonly report: (e: ReadyEntry, issue: number) => ReturnType<typeof budgetReport>
+  }
   readonly ghCalls: (readonly string[])[]
   readonly githubCalls: GitHubRequest[]
   readonly files: Map<string, string>
@@ -101,29 +108,30 @@ function harness(options: HarnessOptions = {}): Harness {
     return Promise.resolve({ ok: true, value: undefined })
   }
   const base = createFakePlatform()
-  const platform = {
-    ...base,
-    ghWrite: gh,
-    githubHttp: github,
-    clock: { now: () => NOW },
-    fs: {
-      ...base.fs,
-      writeText: writeTextFile,
-      remove: (path: string) => {
-        files.delete(path)
-        return Promise.resolve({ ok: true, value: undefined } as const)
+  const ctx = createTestContext({
+    platform: {
+      ghWrite: gh,
+      githubHttp: github,
+      git,
+      clock: { now: () => NOW },
+      fs: {
+        ...base.fs,
+        readText: readTextFile,
+        writeText: writeTextFile,
+        ensureDir: () => Promise.resolve({ ok: true, value: undefined }),
+        remove: (path: string) => {
+          files.delete(path)
+          return Promise.resolve({ ok: true, value: undefined } as const)
+        },
       },
     },
-  }
-  const gate = createBudgetGate({
-    platform,
-    git,
-    readTextFile,
-    writeTextFile,
-    ensureDirectory: () => Promise.resolve({ ok: true, value: undefined }),
-    now: () => NOW,
-    scratchDir: '/scratch',
   })
+  const gate = {
+    reset: (e: ReadyEntry) => budgetReset(ctx, e),
+    sweep: (e: ReadyEntry, sets: { readonly live: readonly string[]; readonly completed: readonly string[] }) => budgetSweep(ctx, e, sets),
+    check: (e: ReadyEntry, candidate: Pick<TickActionable, 'kind' | 'number' | 'agent'>, model: string) => budgetCheck(ctx, e, candidate, model),
+    report: (e: ReadyEntry, issue: number) => budgetReport(ctx, e, issue),
+  }
   return { gate, ghCalls, githubCalls, files }
 }
 

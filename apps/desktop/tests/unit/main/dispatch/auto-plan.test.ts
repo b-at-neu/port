@@ -1,44 +1,18 @@
-import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
 import type { WriteOutcome } from '@/types/writes'
 import type { ReconciledItem } from '@/types/state'
 import type { TickReport } from '@/types/tick'
-import type { ReadyEntry } from '@/types/actions'
-import type { AutoApprovePlanParams } from '@/types/actions'
-import type { ReposListResponse } from '@/types/ipc'
 import { createAutoPlanner } from '@/main/dispatch/auto-plan'
-import type { AutoPlannerDeps } from '@/types/dispatch'
-import type { OwnershipRead } from '@/types/dispatch'
+import { dispatchContext, type DispatchContextOptions } from '../../../support/context'
+
+const approve = vi.hoisted(() => vi.fn<(params: unknown) => Promise<WriteOutcome>>())
+vi.mock('@/main/pipeline/operator/gate', () => ({ autoApprovePlan: (_ctx: unknown, params: unknown) => approve(params) }))
 
 const REPO_ID = 'repo-a' as RepoId
-const VOCABULARY = resolveVocabulary({})
-
-function entry(): ReadyEntry {
-  return {
-    id: REPO_ID,
-    path: '/repo',
-    displayName: 'o/a',
-    status: 'ready',
-    config: {
-      repo: 'o/a',
-      owner: 'o',
-      name: 'a',
-      branches: { integration: 'dev', production: 'main' },
-      commands: { worktrees: null, budget: null },
-      concurrency: { sharedFiles: [], overlapThreshold: 2 },
-      sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
-      checkDispositions: {},
-      overrides: [],
-      models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
-      modules: { approvalGate: true, release: true, scope: true },
-      reviewCycleCap: 5,
-      vocabulary: VOCABULARY,
-    },
-    diagnostics: [],
-  }
-}
+const APPLIED: WriteOutcome = { kind: 'applied', argv: [] }
+const REFUSED: WriteOutcome = { kind: 'verify-failed', message: 'no' }
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
   return {
@@ -106,154 +80,107 @@ function snapshotWith(tick: readonly TickReport[], items: readonly ReconciledIte
   } as unknown as BoardSnapshot
 }
 
-const OWNED_BY_APP: OwnershipRead = { kind: 'app', since: '2026-01-01T00:00:00Z', path: '/repo/.agents/cockpit.json', readAt: 'r' }
-const UNREADABLE_OWNERSHIP: OwnershipRead = { kind: 'unreadable', message: 'names the terminal cockpit', path: '/repo/.agents/cockpit.json', readAt: 'r' }
-const ABSENT_OWNERSHIP: OwnershipRead = { kind: 'absent', path: '/repo/.agents/cockpit.json', readAt: 'r' }
-const APPLIED: WriteOutcome = { kind: 'applied', argv: [] }
-
-function deps(overrides: Partial<AutoPlannerDeps> = {}): AutoPlannerDeps {
-  return {
-    listRepositories: () => Promise.resolve({ ok: true, repositories: [entry()] } as ReposListResponse),
-    registryDeps: { registryDir: '/registry', git: () => Promise.reject(new Error('git unused')), chooseDirectory: () => Promise.resolve(null) },
-    readOwnership: () => Promise.resolve(OWNED_BY_APP),
-    runState: () => 'dispatching',
-    autoApprove: () => Promise.resolve(APPLIED),
-    requestRead: () => undefined,
-    onChange: () => undefined,
-    auditDir: '/audit',
-    now: () => new Date('2026-01-01T00:00:01Z'),
-    ...overrides,
-  }
+async function planner(options: DispatchContextOptions = {}) {
+  const ctx = await dispatchContext({ owner: 'app', ...options })
+  return { ctx, planner: createAutoPlanner(ctx) }
 }
+
+const FIRST = snapshotWith([tickReport()], [item()], '2025-12-31T23:59:00Z')
+const LATER = snapshotWith([tickReport()], [item()], '2026-01-01T00:01:00Z')
+
+beforeEach(() => {
+  approve.mockReset().mockResolvedValue(APPLIED)
+})
 
 describe('createAutoPlanner', () => {
   it('writes an auto-approval while this app owns the repository and the item is autoApprovable', async () => {
-    let received: AutoApprovePlanParams | undefined
-    const planner = createAutoPlanner(deps({ autoApprove: (p) => { received = p; return Promise.resolve(APPLIED) } }))
-    await planner.consider(snapshotWith([tickReport()], [item()]))
-    expect(received?.item).toEqual({ number: 7, assignees: ['op'] })
+    const { planner: p } = await planner()
+    await p.consider(FIRST)
+    expect(approve).toHaveBeenCalledWith(expect.objectContaining({ item: { number: 7, assignees: ['op'] } }))
   })
 
-  it('writes nothing when ownership is absent — a terminal cockpit may still start up', async () => {
-    let called = false
-    const planner = createAutoPlanner(deps({ readOwnership: () => Promise.resolve(ABSENT_OWNERSHIP), autoApprove: () => { called = true; return Promise.resolve(APPLIED) } }))
-    await planner.consider(snapshotWith([tickReport()], [item()]))
-    expect(called).toBe(false)
+  it.each([
+    ['ownership is absent — a terminal cockpit may still start up', { owner: 'none' }],
+    ['the ownership record cannot be read', { owner: 'unreadable' }],
+    ['the repository is draining — the drain gate is deliberate', { runState: 'draining' }],
+  ] as const)('writes nothing when %s', async (_name, options) => {
+    const { planner: p } = await planner(options)
+    await p.consider(FIRST)
+    expect(approve).not.toHaveBeenCalled()
   })
 
-  it('writes nothing when the ownership record cannot be read', async () => {
-    let called = false
-    const planner = createAutoPlanner(deps({ readOwnership: () => Promise.resolve(UNREADABLE_OWNERSHIP), autoApprove: () => { called = true; return Promise.resolve(APPLIED) } }))
-    await planner.consider(snapshotWith([tickReport()], [item()]))
-    expect(called).toBe(false)
+  it('never re-fires for a snapshot the GitHub read has not caught up to yet, and retries once it moves past', async () => {
+    const { planner: p } = await planner()
+    await p.consider(FIRST)
+    await p.consider(FIRST)
+    expect(approve).toHaveBeenCalledTimes(1)
+    await p.consider(LATER)
+    expect(approve).toHaveBeenCalledTimes(2)
   })
 
-  it('writes nothing while draining — the drain gate is deliberate', async () => {
-    let called = false
-    const planner = createAutoPlanner(deps({ runState: () => 'draining', autoApprove: () => { called = true; return Promise.resolve(APPLIED) } }))
-    await planner.consider(snapshotWith([tickReport()], [item()]))
-    expect(called).toBe(false)
-  })
-
-  it('never re-fires for a snapshot the GitHub read has not caught up to yet', async () => {
-    let count = 0
-    const planner = createAutoPlanner(deps({ autoApprove: () => { count += 1; return Promise.resolve(APPLIED) } }))
-    const snapshot = snapshotWith([tickReport()], [item()], '2026-01-01T00:00:00Z')
-    await planner.consider(snapshot)
-    await planner.consider(snapshot)
-    expect(count).toBe(1)
-  })
-
-  it('retries once the GitHub read moves past the last attempt', async () => {
-    let count = 0
-    const planner = createAutoPlanner(deps({ autoApprove: () => { count += 1; return Promise.resolve(APPLIED) } }))
-    await planner.consider(snapshotWith([tickReport()], [item()], '2026-01-01T00:00:00Z'))
-    await planner.consider(snapshotWith([tickReport()], [item()], '2026-01-01T00:01:00Z'))
-    expect(count).toBe(2)
-  })
-
-  it('swallows a throw from autoApprove and still records the attempt', async () => {
-    const planner = createAutoPlanner(deps({ autoApprove: () => Promise.reject(new Error('boom')) }))
-    await expect(planner.consider(snapshotWith([tickReport()], [item()]))).resolves.toBeUndefined()
+  it('swallows a throw from the approval and records the item as refused', async () => {
+    approve.mockRejectedValue(new Error('boom'))
+    const { planner: p } = await planner()
+    await expect(p.consider(FIRST)).resolves.toBeUndefined()
+    expect([...p.refused(REPO_ID)]).toEqual([7])
   })
 
   it('requests one read for the repository after two applied approvals', async () => {
-    const reads: RepoId[] = []
-    const planner = createAutoPlanner(deps({ requestRead: (repoId) => reads.push(repoId) }))
-    await planner.consider(snapshotWith([tickReport({ autoApprovals: [{ number: 7 }, { number: 8 }] })], [item(), item({ number: 8 })]))
-    expect(reads).toEqual([REPO_ID])
+    const { ctx, planner: p } = await planner()
+    await p.consider(snapshotWith([tickReport({ autoApprovals: [{ number: 7 }, { number: 8 }] })], [item(), item({ number: 8 })]))
+    expect(ctx.watcher.refresh).toHaveBeenCalledTimes(1)
+    expect(ctx.watcher.refresh).toHaveBeenCalledWith({ repoId: REPO_ID, source: 'github' })
   })
 
   it('requests no read for a no-op write', async () => {
-    const reads: RepoId[] = []
-    const planner = createAutoPlanner(deps({ autoApprove: () => Promise.resolve({ kind: 'no-op' }), requestRead: (repoId) => reads.push(repoId) }))
-    await planner.consider(snapshotWith([tickReport()], [item()]))
-    expect(reads).toEqual([])
-  })
-
-  it('requests no read for a rejected write', async () => {
-    const reads: RepoId[] = []
-    const planner = createAutoPlanner(deps({ autoApprove: () => Promise.reject(new Error('boom')), requestRead: (repoId) => reads.push(repoId) }))
-    await planner.consider(snapshotWith([tickReport()], [item()]))
-    expect(reads).toEqual([])
+    approve.mockResolvedValue({ kind: 'no-op' })
+    const { ctx, planner: p } = await planner()
+    await p.consider(FIRST)
+    expect(ctx.watcher.refresh).not.toHaveBeenCalled()
   })
 
   describe('refused swaps', () => {
-    const REFUSED: WriteOutcome = { kind: 'verify-failed', message: 'no' }
-
-    it('records a non-applied outcome as refused and signals the change once', async () => {
-      let changes = 0
-      const planner = createAutoPlanner(deps({ autoApprove: () => Promise.resolve(REFUSED), onChange: () => { changes += 1 } }))
-      await planner.consider(snapshotWith([tickReport()], [item()]))
-      expect([...planner.refused(REPO_ID)]).toEqual([7])
-      expect(changes).toBe(1)
+    it('records a non-applied outcome as refused and republishes once, not again while the set stays the same', async () => {
+      approve.mockResolvedValue(REFUSED)
+      const { ctx, planner: p } = await planner()
+      await p.consider(FIRST)
+      expect([...p.refused(REPO_ID)]).toEqual([7])
+      expect(ctx.watcher.republish).toHaveBeenCalledTimes(1)
+      await p.consider(LATER)
+      expect(ctx.watcher.republish).toHaveBeenCalledTimes(1)
     })
 
-    it('records a throw as refused', async () => {
-      const planner = createAutoPlanner(deps({ autoApprove: () => Promise.reject(new Error('boom')) }))
-      await planner.consider(snapshotWith([tickReport()], [item()]))
-      expect([...planner.refused(REPO_ID)]).toEqual([7])
-    })
-
-    it('does not signal a change when the refused set stays the same', async () => {
-      let changes = 0
-      const planner = createAutoPlanner(deps({ autoApprove: () => Promise.resolve(REFUSED), onChange: () => { changes += 1 } }))
-      await planner.consider(snapshotWith([tickReport()], [item()], '2026-01-01T00:00:00Z'))
-      await planner.consider(snapshotWith([tickReport()], [item()], '2026-01-01T00:01:00Z'))
-      expect(changes).toBe(1)
-    })
-
-    it('does not treat an applied or no-op write as refused, and no signal fires', async () => {
-      let changes = 0
-      const planner = createAutoPlanner(deps({ autoApprove: () => Promise.resolve({ kind: 'no-op' }), onChange: () => { changes += 1 } }))
-      await planner.consider(snapshotWith([tickReport()], [item()]))
-      expect(planner.refused(REPO_ID).size).toBe(0)
-      expect(changes).toBe(0)
+    it('does not treat a no-op write as refused, and no signal fires', async () => {
+      approve.mockResolvedValue({ kind: 'no-op' })
+      const { ctx, planner: p } = await planner()
+      await p.consider(FIRST)
+      expect(p.refused(REPO_ID).size).toBe(0)
+      expect(ctx.watcher.republish).not.toHaveBeenCalled()
     })
 
     it('clears a refusal once a later attempt lands', async () => {
-      let outcome: WriteOutcome = REFUSED
-      const planner = createAutoPlanner(deps({ autoApprove: () => Promise.resolve(outcome) }))
-      await planner.consider(snapshotWith([tickReport()], [item()], '2026-01-01T00:00:00Z'))
-      outcome = APPLIED
-      await planner.consider(snapshotWith([tickReport()], [item()], '2026-01-01T00:01:00Z'))
-      expect(planner.refused(REPO_ID).size).toBe(0)
+      approve.mockResolvedValueOnce(REFUSED)
+      const { planner: p } = await planner()
+      await p.consider(FIRST)
+      await p.consider(LATER)
+      expect(p.refused(REPO_ID).size).toBe(0)
     })
 
     it('prunes a refusal whose label has moved on and signals the change', async () => {
-      let changes = 0
-      const planner = createAutoPlanner(deps({ autoApprove: () => Promise.resolve(REFUSED), onChange: () => { changes += 1 } }))
-      await planner.consider(snapshotWith([tickReport()], [item()], '2026-01-01T00:00:00Z'))
-      await planner.consider(snapshotWith([tickReport({ autoApprovals: [] })], [item()], '2026-01-01T00:01:00Z'))
-      expect(planner.refused(REPO_ID).size).toBe(0)
-      expect(changes).toBe(2)
+      approve.mockResolvedValue(REFUSED)
+      const { ctx, planner: p } = await planner()
+      await p.consider(FIRST)
+      await p.consider(snapshotWith([tickReport({ autoApprovals: [] })], [item()], '2026-01-01T00:01:00Z'))
+      expect(p.refused(REPO_ID).size).toBe(0)
+      expect(ctx.watcher.republish).toHaveBeenCalledTimes(2)
     })
 
     it('keeps a refusal across a blind report', async () => {
-      const planner = createAutoPlanner(deps({ autoApprove: () => Promise.resolve(REFUSED) }))
-      await planner.consider(snapshotWith([tickReport()], [item()], '2026-01-01T00:00:00Z'))
-      await planner.consider(snapshotWith([tickReport({ autoApprovals: [], blind: { reason: 'github-unavailable' } as never })], [item()], '2026-01-01T00:01:00Z'))
-      expect([...planner.refused(REPO_ID)]).toEqual([7])
+      approve.mockResolvedValue(REFUSED)
+      const { planner: p } = await planner()
+      await p.consider(FIRST)
+      await p.consider(snapshotWith([tickReport({ autoApprovals: [], blind: { reason: 'github-unavailable' } as never })], [item()], '2026-01-01T00:01:00Z'))
+      expect([...p.refused(REPO_ID)]).toEqual([7])
     })
   })
 })

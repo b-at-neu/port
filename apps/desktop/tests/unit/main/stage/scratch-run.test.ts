@@ -1,7 +1,7 @@
 import type { HostedQuery, HostedSdk, Options } from '@/main/platform/sdk'
-import type { StageLauncherHandle } from '@/types/stage'
+import type { AppContext } from '@/main/app/context'
 
-// A scratch-repo run takes one ticket from `ready` to an opened PR entirely through stage sessions, against a fake SDK; only the outer edges (SDK, git, worktrees, GitHub, ownership, the budget gate) are faked.
+// A scratch-repo run takes one ticket from `ready` to an opened PR entirely through stage sessions, against a fake SDK; only the outer edges (SDK, git, worktrees, GitHub) are faked.
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -10,25 +10,21 @@ import { labelName, resolveVocabulary, verifyVocabulary } from '@/utils/labels/v
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { PipelineFetch, PipelineItem, QueriedLabel, ResolvedItem } from '@/types/github'
-import { memoryRuns } from '../../../support/state-store'
 import { ticketOf as stateTicketOf } from '../../../support/tickets'
 import { DEFAULT_POLL_POLICY } from '@/types/board'
 import type { BoardSnapshot } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import { createHostedStore } from '@/main/sessions/hosting/store'
 import { createInMemoryHostingPersistence } from '@/main/sessions/hosting/persist'
-import { pathOps } from '@/main/platform/paths'
 import { createStageLauncher } from '@/main/dispatch/stage/launcher'
 import { createDispatcher } from '@/main/dispatch/dispatcher'
-import type { Dispatcher } from '@/types/dispatch'
-import { createForceDispatch, createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
 import { planTick } from '@/main/pipeline/tick/plan'
 import { reconcileRepository } from '@/main/pipeline/board/reconcile'
 import type { ReadyEntry } from '@/types/actions'
 import type { WriteEventParams } from '@/types/writes'
-import { applyStageClaim, applyStageTransition } from '@/main/pipeline/operator/stage'
+import { boardSnapshot } from '../../../support/board-snapshot'
 import { labelMapStore } from '../../../support/label-map-store'
-import { createTestContext } from '../../../support/context'
+import { createTestContext, freshMemos } from '../../../support/context'
 import { fakeGit, fakeSdk } from '../../../support/fake-platform'
 import { httpOk } from '../../../fixtures/github-http'
 import { hostingCtx } from '../../../fixtures/hosting/store'
@@ -36,6 +32,26 @@ import type { CreateStageWorktreeResult, RemoveSessionWorktreeOutcome } from '@/
 // The writer is the one stand-in here: `labelMapStore` moves the label maps this test drives the tick from, which the real writer would not.
 const writer = vi.hoisted(() => ({ writeEvent: null as ((params: unknown) => Promise<unknown>) | null }))
 vi.mock('@/main/pipeline/state/writer', () => ({ writeEvent: (_ctx: unknown, params: unknown) => writer.writeEvent?.(params) }))
+const labelsRead = vi.hoisted(() => ({ of: null as ((kind: 'issue' | 'pull-request', number: number) => readonly string[]) | null }))
+vi.mock('@/main/pipeline/state/labels', async (original) => ({ ...(await original<object>()), storedLabels: (_ctx: unknown, _repoId: unknown, kind: 'issue' | 'pull-request', number: number) => labelsRead.of?.(kind, number) ?? null }))
+// Worktrees and their branches are the outer edge here, so they are faked at the worktree modules.
+const worktrees = vi.hoisted(() => ({ create: null as (() => Promise<unknown>) | null, remove: null as ((path: string, force: boolean) => Promise<unknown>) | null }))
+vi.mock('@/main/repos/worktree/stage-worktree', async (original) => ({
+  ...(await original<object>()),
+  createStageWorktree: () => worktrees.create?.(),
+  releaseStageBranch: () => Promise.resolve('deleted'),
+  sweepSessionBranches: () => Promise.resolve({ done: true, deleted: [] }),
+}))
+// The run scripts only plan and impl, so a review of the opened pull request is skipped the way a moved claim is.
+vi.mock('@/main/pipeline/operator/stage', async (original) => {
+  const actual = await original<typeof import('@/main/pipeline/operator/stage')>()
+  return { ...actual, applyStageClaim: (ctx: Parameters<typeof actual.applyStageClaim>[0], params: Parameters<typeof actual.applyStageClaim>[1]) => (params.candidate.agent === 'review' ? Promise.resolve({ kind: 'refused', reason: 'moved', retryable: false, detail: null }) : actual.applyStageClaim(ctx, params)) }
+})
+vi.mock('@/main/repos/worktree/worktree', async (original) => ({ ...(await original<object>()), removeSessionWorktreeAt: (_ctx: unknown, params: { path: string; force: boolean }) => worktrees.remove?.(params.path, params.force) }))
+vi.mock('@/main/dispatch/stage/instructions', async (original) => ({
+  ...(await original<object>()),
+  loadStageLaunch: (_ctx: unknown, _root: unknown, launchRequest: { agent: string; prompt: string }) => Promise.resolve({ ok: true, text: launchRequest.prompt, agent: { name: `${launchRequest.agent}-agent`, definition: { description: launchRequest.agent, prompt: 'body' }, selfContained: true } }),
+}))
 
 const REPO_ID = 'repo-scratch' as RepoId
 const VIEWER = 'op'
@@ -249,11 +265,12 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
     const removedWorktrees: { path: string; force: boolean }[] = []
     let worktreeCounter = 0
 
-    function createWorktree(): Promise<CreateStageWorktreeResult> {
+    async function createWorktree(): Promise<CreateStageWorktreeResult> {
       worktreeCounter += 1
       const path = `/scratch/session-${String(worktreeCounter)}`
       createdWorktrees.push(path)
-      return Promise.resolve({ ok: true, path, branch: `session-${String(worktreeCounter)}`, baseSha: 'base-sha', baseLabel: `session-${String(worktreeCounter)}`, reclaimed: null })
+      await ctx.fs.writeText(`${path}/.temp/plan-7.md`, '## Implementation Plan')
+      return ({ ok: true, path, branch: `session-${String(worktreeCounter)}`, baseSha: 'base-sha', baseLabel: `session-${String(worktreeCounter)}`, reclaimed: null })
     }
     function removeWorktree(path: string, force: boolean): Promise<RemoveSessionWorktreeOutcome> {
       removedWorktrees.push({ path, force })
@@ -279,10 +296,17 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
 
     const { ticketOf, writeEvent, labelWrites } = labelMapStore(labels, prs, entry.id, NOW_ISO)
     writer.writeEvent = (params) => writeEvent(params as WriteEventParams)
-    const stateLabels = (_repoId: unknown, kind: 'issue' | 'pull-request', number: number): readonly string[] => namesOf(VOCABULARY, (kind === 'issue' ? labels.get(number) : prs.get(number)?.labels) ?? new Set<LabelKey>())
-    const dir = await mkdtemp(join(tmpdir(), 'port-scratch-run-'))
-    const stageCtx = createTestContext({
+    labelsRead.of = (kind, number) => namesOf(VOCABULARY, (kind === 'issue' ? labels.get(number) : prs.get(number)?.labels) ?? new Set<LabelKey>())
+    worktrees.create = createWorktree
+    worktrees.remove = removeWorktree
+    // Late-binding, the way the composition root assigns `live`: onStatus closes over the launcher, whose outcomes reach the dispatcher.
+    const wired: { -readonly [K in keyof AppContext['live']]?: AppContext['live'][K] } = { memos: freshMemos(), watcher: { republish: vi.fn(), refresh: vi.fn(() => Promise.resolve()), snapshot: () => boardSnapshot() } as unknown as AppContext['live']['watcher'] }
+    const ctx = createTestContext({
+      live: wired,
+      repositories: [entry],
+      tickets: { repoId: REPO_ID, tickets: [stateTicketOf({ repo: REPO_ID, ticket: 7, stage: 'plan' })] },
       platform: {
+        paths: { userData: '/test/userData', temp: await mkdtemp(join(tmpdir(), 'scratch-run-')), logs: '/test/logs' },
         git: () => Promise.resolve({ ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'not a repository' }),
         githubHttp: async (request) => {
           const query = (JSON.parse(request.body ?? '{}') as { query?: string }).query ?? ''
@@ -302,10 +326,6 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       stores: { pipelineState: { ticket: (repoId: RepoId, ref: { readonly kind: 'issue' | 'pull-request'; readonly number: number }) => ticketOf(repoId, ref.kind, ref.number) } as never },
     })
 
-    // Late-binding, the same construction order `main/ipc.ts` uses: onStatus closes over stageLauncher,
-    // stageLauncher's onOutcome/onDenial close over dispatcherRef — both assigned right after.
-    let dispatcherRef: Dispatcher | null = null
-
     const store = createHostedStore(hostingCtx({
       sdk: fakeSdk(createFakeSdk(seen, prs)),
       git: fakeGit((args) => {
@@ -322,77 +342,16 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       },
     })
 
-    const { runs, store: stateStore } = memoryRuns(REPO_ID, { at: NOW_ISO, tickets: [stateTicketOf({ repo: REPO_ID, ticket: 7, stage: 'plan' })] })
-    await stateStore.ready
+    await ctx.ready
+    await ctx.fs.writeText('/repo/.agents/cockpit.json', JSON.stringify({ repo: 'o/scratch', owner: 'app', since: NOW_ISO }))
+    await ctx.stores.runStates.set([REPO_ID], 'dispatching', NOW_ISO)
 
-    const stageLauncher: StageLauncherHandle = createStageLauncher({
-      store,
-      git: () => Promise.reject(new Error('git should not be invoked in this test')),
-      createWorktree,
-      removeWorktree,
-      releaseBranch: () => Promise.resolve('deleted'),
-      sweepBranches: () => Promise.resolve(undefined),
-      now: () => new Date(NOW_ISO),
-      onOutcome: (repoId, sessionKey, outcome, plan) => dispatcherRef?.recordOutcome(repoId, sessionKey, outcome, plan),
-      onResumedTurn: (repoId, sessionKey) => dispatcherRef?.recordResumedTurn(repoId, sessionKey),
-      pathExists: () => Promise.resolve(false),
-      runs,
-      newId: () => `id-${String(Math.random())}`,
-      readStagePrompt: () => Promise.resolve(null),
-      loadInstructions: (launchRequest) => Promise.resolve({ ok: true, text: launchRequest.prompt, agent: { name: `${launchRequest.agent}-agent`, definition: { description: launchRequest.agent, prompt: 'body' }, selfContained: true } }),
-      bundleRoot: '/bundle',
-      ops: pathOps,
-      readTextFile: (path) => Promise.resolve(path.endsWith('plan-7.md') ? { ok: true, value: '## Implementation Plan' } : { ok: false, kind: 'not-found', message: 'unused' }),
-    })
-
-    const unknownStreaks = createUnknownStreaks()
-    const refreshMemo = createRefreshMemo()
-    const forceDispatch = createForceDispatch()
-
-    const dispatcher = createDispatcher({
-      store,
-      runs,
-      launch: stageLauncher,
-      runState: () => 'dispatching',
-      readOwnership: () => Promise.resolve({ kind: 'app', since: NOW_ISO, path: '/repo/.agents/cockpit.json', readAt: NOW_ISO }),
-      takeOwnership: () => Promise.resolve({ ok: true, path: '/repo/.agents/cockpit.json' }),
-      stateLabels,
-      fetchItemsByNumber,
-      listRepositories: () => Promise.resolve({ ok: true, repositories: [entry] }),
-      registryDeps: { registryDir: '/registry', git: () => Promise.reject(new Error('unused')), chooseDirectory: () => Promise.resolve(null) },
-      budget: {
-        reset: () => {
-          throw new Error('budget.reset should not be invoked when commands.budget is null')
-        },
-        sweep: () => {
-          throw new Error('budget.sweep should not be invoked when commands.budget is null')
-        },
-        check: () => {
-          throw new Error('budget.check should not be invoked when commands.budget is null')
-        },
-        report: () => {
-          throw new Error('budget.report should not be invoked')
-        },
-      },
-      escalate: () => {
-        throw new Error('escalate should not be invoked when commands.budget is null')
-      },
-      writeObservation: () => {
-        throw new Error('writeObservation should not be invoked in this scenario')
-      },
-      // The run scripts only plan and impl, so a review of the opened pull request is skipped the way a moved claim is.
-      stageLabels: {
-        claim: (claimParams) => (claimParams.candidate.agent === 'review' ? Promise.resolve({ kind: 'refused', reason: 'moved', retryable: false, detail: null }) : applyStageClaim(stageCtx, claimParams)),
-        transition: (transitionParams) => applyStageTransition(stageCtx, transitionParams),
-      },
-      refreshMemo, rerunMemo: { get: () => undefined, set: () => undefined }, rerunChecks: () => Promise.resolve('applied'),
-      forceDispatch,
-      requestRead: () => undefined, recordIncident: () => Promise.resolve(),
-      dirs: { audit: dir, scratch: dir },
-      onChange: () => undefined,
-      now: () => new Date(NOW_ISO),
-    })
-    dispatcherRef = dispatcher
+    wired.hostedStore = store
+    const stageLauncher = createStageLauncher(ctx, '/bundle')
+    wired.stageLauncher = stageLauncher
+    const dispatcher = createDispatcher(ctx)
+    wired.dispatcher = dispatcher
+    const { unknownStreaks, refreshMemo } = ctx.live.memos
 
     async function tick(): Promise<void> {
       const pipelineFetch = buildPipelineFetch(VOCABULARY, labels, prs)
@@ -406,7 +365,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       })
       const tickReport = planTick({
         repository: repoState,
-        runsOf: (repoId, kind, number) => runs.runsOf(repoId, kind, number),
+        runsOf: (repoId, kind, number) => ctx.stores.runs.runsOf(repoId, kind, number),
         unknownStreaks,
         nextDecisionAt: new Date(NOW_ISO),
         now: () => new Date(NOW_ISO),

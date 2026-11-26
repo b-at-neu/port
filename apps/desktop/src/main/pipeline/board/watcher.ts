@@ -178,7 +178,7 @@ export function createPipelineWatcher(ctx: WatcherContext, sinks: WatcherSinks):
           holdSessionRequired: ctx.live.dispatcher.holdsSessionRequired(repository.repoId),
           stageLiveness: ctx.live.dispatcher.stageLiveness(repository.repoId),
           endedStages: ctx.live.dispatcher.endedStages(repository.repoId),
-          forceDispatch: ctx.live.forceDispatch,
+          forceDispatch: ctx.live.memos.forceDispatch,
         })
       })
 

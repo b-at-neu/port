@@ -1,9 +1,7 @@
-import type { StageLaunchRequest, StageLauncher, StageLaunchResult, StageRecord } from '@/types/dispatch'
-import type { HostedSessionSnapshot, HostedStore, SessionKey } from '@/types/hosting'
+import type { StageLauncher, StageLaunchResult, StageRecord } from '@/types/dispatch'
+import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import type { StageOutcome } from '@/types/stage-session'
 import type { InterruptedReason, Run, RunDenial, Stage } from '@/utils/pipeline/ticket'
-import type { ReleaseBranchOutcome, RemoveSessionWorktreeOutcome } from '@/types/workspace'
-import type { ItemActionResult } from '@/types/actions'
 import type { GitHubRepoRef } from '@/types/github'
 import type { BranchHead } from '@/types/release'
 import type { AllowWriteContext, AllowWriteResult } from '@/types/writes'
@@ -131,10 +129,7 @@ export interface StageAgentLaunch {
   readonly selfContained: boolean
 }
 
-type StageLoadedInstructions = { readonly ok: true; readonly text: string; readonly agent: StageAgentLaunch } | { readonly ok: false; readonly message: string }
-
-/** Resolves to the first message — only the dispatch line — and the inline agent, whose system prompt carries the stage context and the bundled instructions. */
-export type StageInstructionsLoader = (request: StageLaunchRequest, worktreePath: string) => Promise<StageLoadedInstructions>
+export type StageLoadedInstructions = { readonly ok: true; readonly text: string; readonly agent: StageAgentLaunch } | { readonly ok: false; readonly message: string }
 
 export interface StageResumeRequest {
   readonly entry: InterruptedStage
@@ -147,17 +142,6 @@ export interface StageLauncherHandle extends StageLauncher {
   observe(snapshot: HostedSessionSnapshot): void
   /** Resumes an interrupted entry's kept worktree as a tracked session — its hand-back settles the same run, which opens again in place. */
   resume(request: StageResumeRequest): Promise<StageLaunchResult>
-}
-
-export interface RecoverDeps {
-  readonly runs: RunStore
-  readonly store: Pick<HostedStore, 'list'>
-  readonly resume: StageLauncherHandle['resume']
-  readonly removeWorktree: (path: string, force: boolean) => Promise<RemoveSessionWorktreeOutcome>
-  readonly releaseBranch: (root: string, branch: string, baseSha: string) => Promise<ReleaseBranchOutcome>
-  readonly resolveEntry: (repoId: InterruptedStage['repoId']) => ResolvedStageRoot | null
-  readonly applyRetry: (interrupted: InterruptedStage) => Promise<ItemActionResult>
-  readonly capacity: () => Promise<{ readonly limit: number }>
 }
 
 export interface ResolvedStageRoot {

@@ -1,10 +1,14 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { budgetLiveSets, budgetRoute, escalateOverBudget, escalationBody, sumCostUsd } from '@/main/dispatch/budget'
 import type { EscalateToHumanParams, EscalateToHumanResult, ReadyEntry } from '@/types/actions'
+import { createTestContext } from '../../../support/context'
 import type { BudgetNote, StageRecord } from '@/types/dispatch'
 import type { SessionKey } from '@/types/hosting'
 import type { TickActionable } from '@/types/tick'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
+
+const escalate = vi.hoisted(() => vi.fn<(params: EscalateToHumanParams) => Promise<EscalateToHumanResult>>())
+vi.mock('@/main/pipeline/operator/escalate', () => ({ escalateToHuman: (_ctx: unknown, params: EscalateToHumanParams) => escalate(params) }))
 
 function record(overrides: Partial<StageRecord> = {}): StageRecord {
   return {
@@ -95,30 +99,35 @@ describe('sumCostUsd', () => {
 describe('escalateOverBudget', () => {
   const entry = { config: { vocabulary: resolveVocabulary({}) } } as unknown as ReadyEntry
   const candidate = (overrides: Partial<TickActionable> = {}): TickActionable => ({ number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null, ...overrides })
-  const dirs = { audit: '/audit', scratch: '/scratch' }
+
+  beforeEach(() => {
+    escalate.mockReset().mockResolvedValue({ labels: { kind: 'applied', argv: [] }, comment: null })
+  })
 
   it('records an escalated note when the swap applies, passing the budget body and action', async () => {
+    const ctx = createTestContext()
     const notes: BudgetNote[] = []
-    const escalate = vi.fn<(params: EscalateToHumanParams) => Promise<EscalateToHumanResult>>(() => Promise.resolve({ labels: { kind: 'applied', argv: [] }, comment: null }))
-    await escalateOverBudget({ entry, candidate: candidate(), line: 'over', notes, viewer: 'op', item: undefined, escalate, dirs })
-    expect(escalate.mock.calls[0]?.[0]).toMatchObject({ kind: 'issue', number: 52, trigger: 'planApproved', viewer: 'op', action: 'budget-escalate', auditDir: '/audit', scratchDir: '/scratch', body: escalationBody('over', null) })
+    await escalateOverBudget(ctx, { entry, candidate: candidate(), line: 'over', notes, viewer: 'op', item: undefined })
+    expect(escalate.mock.calls[0]?.[0]).toMatchObject({ kind: 'issue', number: 52, trigger: 'planApproved', viewer: 'op', action: 'budget-escalate', auditDir: ctx.paths.userData, scratchDir: ctx.paths.temp, body: escalationBody('over', null) })
     expect(notes).toEqual([{ kind: 'escalated', number: 52, needsHumanLabel: 'needs human', commentFailedMessage: null }])
   })
 
   it('records an escalation-failed note naming both labels when the swap is refused', async () => {
     const notes: BudgetNote[] = []
     const outcome = { kind: 'item-unavailable' } as const
-    await escalateOverBudget({ entry, candidate: candidate(), line: 'over', notes, viewer: 'op', item: undefined, escalate: () => Promise.resolve({ labels: outcome, comment: null }), dirs })
+    escalate.mockResolvedValue({ labels: outcome, comment: null })
+    await escalateOverBudget(createTestContext(), { entry, candidate: candidate(), line: 'over', notes, viewer: 'op', item: undefined })
     expect(notes).toEqual([{ kind: 'escalation-failed', number: 52, needsHumanLabel: 'needs human', triggerLabel: 'plan approved', outcome }])
   })
 
   it('carries the head sha on a pull request, and skips the comment body when that escalation already repeats', async () => {
-    const escalate = vi.fn<(params: EscalateToHumanParams) => Promise<EscalateToHumanResult>>(() => Promise.resolve({ labels: { kind: 'applied', argv: [] }, comment: null }))
-    await escalateOverBudget({ entry, candidate: candidate({ kind: 'pull-request', trigger: 'readyForReview', agent: 'review' }), line: 'over', notes: [], viewer: 'op', item: { headRefOid: 'abc123', comments: [] }, escalate, dirs })
+    const ctx = createTestContext()
+    const review = candidate({ kind: 'pull-request', trigger: 'readyForReview', agent: 'review' })
+    await escalateOverBudget(ctx, { entry, candidate: review, line: 'over', notes: [], viewer: 'op', item: { headRefOid: 'abc123', comments: [] } })
     expect(escalate.mock.calls[0]?.[0].body).toBe(escalationBody('over', 'abc123'))
 
     const repeated = [{ body: escalationBody('over', 'abc123'), createdAt: '2026-01-01T00:00:00Z', author: 'op' }]
-    await escalateOverBudget({ entry, candidate: candidate({ kind: 'pull-request', trigger: 'readyForReview', agent: 'review' }), line: 'over', notes: [], viewer: 'op', item: { headRefOid: 'abc123', comments: repeated }, escalate, dirs })
+    await escalateOverBudget(ctx, { entry, candidate: review, line: 'over', notes: [], viewer: 'op', item: { headRefOid: 'abc123', comments: repeated } })
     expect(escalate.mock.calls[1]?.[0].body).toBeNull()
   })
 })

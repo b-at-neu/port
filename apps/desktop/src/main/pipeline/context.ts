@@ -27,6 +27,14 @@ export type StateWriteContext = GitHubReadContext & GitHubWriteContext & Pick<Pl
 
 export type OperatorContext = StateWriteContext & { readonly repos: Pick<Repos, 'list'> }
 
+/** The process-lifetime memos the tick, the dispatch loop and the Needs-you override share. */
+export interface PipelineMemos {
+  readonly unknownStreaks: UnknownStreaks
+  readonly refreshMemo: RefreshMemo
+  readonly rerunMemo: RerunMemo
+  readonly forceDispatch: ForceDispatch
+}
+
 export type WatcherContext = StateWriteContext &
   Pick<Platform, 'paths'> & {
     readonly repos: Pick<Repos, 'list'>
@@ -38,8 +46,7 @@ export type WatcherContext = StateWriteContext &
       readonly engine: StateEngine
       readonly dispatcher: Pick<Dispatcher, 'status' | 'liveStages' | 'holdsSessionRequired' | 'stageLiveness' | 'endedStages'>
       readonly autoPlanner: Pick<AutoPlanner, 'refused'>
-      readonly memos: { readonly unknownStreaks: UnknownStreaks; readonly refreshMemo: RefreshMemo; readonly rerunMemo: RerunMemo }
-      readonly forceDispatch: ForceDispatch
+      readonly memos: PipelineMemos
     }
   }
 

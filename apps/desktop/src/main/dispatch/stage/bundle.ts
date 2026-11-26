@@ -1,6 +1,7 @@
 // Locates the app's own copy of the stage prompts and turns an agent file into an inline SDK agent definition — no `electron` import, so it is testable without a running app.
 import { join } from 'node:path'
-import type { FileResult, PathOps } from '@/types/platform'
+import type { Platform } from '@/main/platform'
+import { pathOps } from '@/main/platform/paths'
 import type { StageAgentDefinition, StageBundleRootInput } from '@/types/stage'
 import type { StageAgent } from '@/types/tick'
 
@@ -13,8 +14,6 @@ interface LoadStageAgentDefinitionParams {
   readonly agent: StageAgent
   /** Becomes the agent's system prompt. */
   readonly prompt: string
-  readonly ops: Pick<PathOps, 'join'>
-  readonly readTextFile: (path: string) => Promise<FileResult<string>>
 }
 
 type StageAgentDefinitionResult =
@@ -42,9 +41,9 @@ function parseFrontmatter(text: string): { readonly fields: ReadonlyMap<string, 
 export const LEGACY_STAGE_SYSTEM_PROMPT = 'You are a port pipeline stage agent. Your full instructions are the `<port-stage-instructions>` block in your first message. Follow them exactly.'
 
 /** Never throws: a missing file or a frontmatter without `name`/`description` is a typed failure naming the file. */
-export async function loadStageAgentDefinition(params: LoadStageAgentDefinitionParams): Promise<StageAgentDefinitionResult> {
-  const file = params.ops.join(params.root, 'agents', `${params.agent}-agent.md`)
-  const read = await params.readTextFile(file)
+export async function loadStageAgentDefinition(ctx: Pick<Platform, 'fs'>, params: LoadStageAgentDefinitionParams): Promise<StageAgentDefinitionResult> {
+  const file = pathOps.join(params.root, 'agents', `${params.agent}-agent.md`)
+  const read = await ctx.fs.readText(file)
   if (!read.ok) return { ok: false, message: `couldn't read ${file}: ${read.message}` }
   const parsed = parseFrontmatter(read.value.replaceAll('\r\n', '\n'))
   const name = parsed?.fields.get('name')

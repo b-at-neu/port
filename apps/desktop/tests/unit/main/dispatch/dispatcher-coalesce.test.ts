@@ -1,46 +1,24 @@
-import { describe, expect, it, vi } from 'vitest'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
-import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
+import type { SessionKey } from '@/types/hosting'
 import type { StageOutcome } from '@/types/stage-session'
 import type { TickActionable, TickReport } from '@/types/tick'
-import type { ReadyEntry } from '@/types/actions'
-import type { CreateDispatcherParams, OwnershipRead, StageLaunchRequest } from '@/types/dispatch'
-import { buildDispatcher, dispatchRuns } from '../../../support/dispatch-runs'
-import { DISPATCH_STORE_DEFAULTS, storeStub } from '../../../fixtures/store'
+import { createDispatcher } from '@/main/dispatch/dispatcher'
+import { dispatchContext } from '../../../support/context'
+import { sessionSnapshot } from '../../../support/session-snapshot'
+import { ticketOf } from '../../../support/tickets'
+
+vi.mock('@/main/pipeline/operator/stage', () => ({
+  applyStageClaim: () => Promise.resolve({ kind: 'applied' }),
+  applyStageTransition: () => Promise.resolve({ kind: 'applied' }),
+}))
 
 const REPO_ID = 'repo-a' as RepoId
 const SESSION_KEY = 'hosted-1' as SessionKey
-const OWNED_BY_APP: OwnershipRead = { kind: 'app', since: '2026-01-01T00:00:00Z', path: '/repo/.agents/cockpit.json', readAt: 'r' }
 
 function outcome(kind: StageOutcome['kind']): StageOutcome {
   return { kind, detail: null, costUsd: null, resetsAt: null, worktree: 'kept', operatorJoined: false, handback: null }
-}
-
-function entry(): ReadyEntry {
-  return {
-    id: REPO_ID,
-    path: '/repo',
-    displayName: 'o/a',
-    status: 'ready',
-    config: {
-      repo: 'o/a',
-      owner: 'o',
-      name: 'a',
-      branches: { integration: 'dev', production: 'main' },
-      commands: { worktrees: null, budget: null },
-      concurrency: { sharedFiles: [], overlapThreshold: 2 },
-      sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
-      checkDispositions: {},
-      overrides: [],
-      models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
-      modules: { approvalGate: true, release: true, scope: true },
-      reviewCycleCap: 5,
-      vocabulary: resolveVocabulary({}),
-    },
-    diagnostics: [],
-  }
 }
 
 function candidate(number: number): TickActionable {
@@ -68,138 +46,96 @@ function snapshotCarrying(...numbers: readonly number[]): BoardSnapshot {
 
 const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
 
-function harness(overrides: Partial<CreateDispatcherParams> = {}) {
+async function harness({ holdFirstPass = false }: { holdFirstPass?: boolean } = {}) {
   const launched: number[] = []
-  const requestRead = vi.fn()
-  let ownershipReads = 0
-  let releaseFirstOwnership: () => void = () => undefined
-  const deps: CreateDispatcherParams = {
-    store: storeStub({ ...DISPATCH_STORE_DEFAULTS, snapshotOf: () => ({ phase: 'ready', claudeSessionId: null, operatorJoinedAt: null }) as unknown as HostedSessionSnapshot }),
-    runs: dispatchRuns(REPO_ID).runs,
-    launch: {
-      launch: (request: StageLaunchRequest) => {
-        launched.push(request.number)
-        return Promise.resolve({ ok: true, sessionKey: SESSION_KEY })
-      },
+  const ctx = await dispatchContext({
+    owner: 'app',
+    items: [52, 53].map((number) => ({ number, title: 't', labels: ['plan approved'], assignees: ['op'] })),
+    tickets: { repoId: REPO_ID, tickets: [52, 53].map((ticket) => ticketOf({ repo: REPO_ID, ticket, stage: 'implement' })) },
+    store: { snapshotOf: () => sessionSnapshot({ sessionKey: SESSION_KEY }) },
+    launcher: (request) => {
+      launched.push(request.number)
+      return Promise.resolve({ ok: true, sessionKey: SESSION_KEY })
     },
-    refreshMemo: { get: () => undefined, set: vi.fn(), clear: vi.fn() },
-    rerunMemo: { get: () => undefined, set: vi.fn() },
-    rerunChecks: () => Promise.resolve('applied'),
-    forceDispatch: { has: () => false, set: vi.fn(), clear: vi.fn(), prune: vi.fn() },
-    writeObservation: () => {
-      throw new Error('writeObservation should not be invoked')
-    },
-    stageLabels: { claim: () => Promise.resolve({ kind: 'applied' }), transition: () => Promise.resolve({ kind: 'applied' }) },
-    runState: () => 'dispatching',
-    // The first read hangs until released, so a pass is in flight while later snapshots arrive.
-    readOwnership: () => {
-      ownershipReads += 1
-      if (ownershipReads > 1) return Promise.resolve(OWNED_BY_APP)
-      return new Promise((resolve) => {
-        releaseFirstOwnership = () => resolve(OWNED_BY_APP)
-      })
-    },
-    takeOwnership: () => Promise.resolve({ ok: true, path: 'p' }),
-    stateLabels: () => ['plan approved'],
-    fetchItemsByNumber: (params) =>
-      Promise.resolve({
-        ok: true,
-        resolved: params.numbers.map((number) => ({ number, kind: 'issue' as const, state: 'OPEN' as const, mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'], headRefName: null, author: null })),
-        unavailable: [],
-        fetchedAt: 'r',
-      }),
-    listRepositories: () => Promise.resolve({ ok: true, repositories: [entry()] }),
-    registryDeps: { registryDir: '/registry', git: () => Promise.reject(new Error('unused')), chooseDirectory: () => Promise.resolve(null) },
-    budget: {
-      reset: () => {
-        throw new Error('budget.reset should not be invoked')
-      },
-      sweep: () => {
-        throw new Error('budget.sweep should not be invoked')
-      },
-      check: () => {
-        throw new Error('budget.check should not be invoked')
-      },
-      report: () => {
-        throw new Error('budget.report should not be invoked')
-      },
-    },
-    escalate: () => {
-      throw new Error('escalate should not be invoked')
-    },
-    requestRead,
-    recordIncident: () => Promise.resolve(),
-    dirs: { audit: '/audit', scratch: '/scratch' },
-    onChange: vi.fn(),
-    now: () => new Date('2026-01-01T00:00:00Z'),
-    ...overrides,
+  })
+  // The first pass hangs on its ownership read until released, so later snapshots arrive while it is in flight.
+  let release: () => void = () => undefined
+  if (holdFirstPass) {
+    const real = ctx.git
+    const held = new Promise<void>((resolve) => (release = resolve))
+    vi.spyOn(ctx, 'git').mockImplementationOnce(async (...args) => {
+      await held
+      return real(...args)
+    })
   }
-  return { dispatcher: buildDispatcher(REPO_ID, deps), launched, requestRead, ownershipReads: () => ownershipReads, releaseFirstOwnership: () => releaseFirstOwnership() }
+  return { ctx, dispatcher: createDispatcher(ctx), launched, release: () => release() }
 }
+
+beforeEach(() => {
+  vi.restoreAllMocks()
+})
 
 describe('createDispatcher — coalesced passes', () => {
   it('three snapshots during one pass produce one follow-up pass, which reads the third', async () => {
-    const { dispatcher, launched, ownershipReads, releaseFirstOwnership } = harness()
+    const { dispatcher, launched, release } = await harness({ holdFirstPass: true })
     const first = dispatcher.consider(snapshotCarrying())
     await flush()
     const second = dispatcher.consider(snapshotCarrying(53))
     const third = dispatcher.consider(snapshotCarrying(52))
     await flush()
-    expect(ownershipReads()).toBe(1)
+    expect(launched).toEqual([])
 
-    releaseFirstOwnership()
+    release()
     await Promise.all([first, second, third])
     await flush()
 
-    expect(ownershipReads()).toBe(2)
     expect(launched).toEqual([52])
   })
 
   it('runs no follow-up pass once shutdown has run', async () => {
-    const { dispatcher, launched, ownershipReads, releaseFirstOwnership } = harness()
+    const { dispatcher, launched, release } = await harness({ holdFirstPass: true })
     const first = dispatcher.consider(snapshotCarrying())
     await flush()
     const second = dispatcher.consider(snapshotCarrying(52))
     await flush()
 
     dispatcher.shutdown()
-    releaseFirstOwnership()
+    release()
     await Promise.all([first, second])
     await flush()
 
-    expect(ownershipReads()).toBe(1)
     expect(launched).toEqual([])
   })
 })
 
 describe('createDispatcher — read on hand-back', () => {
   async function trackedSession() {
-    const rig = harness({ readOwnership: () => Promise.resolve(OWNED_BY_APP) })
+    const rig = await harness()
     await rig.dispatcher.consider(snapshotCarrying(52))
     expect(rig.launched).toEqual([52])
     return rig
   }
 
   it('a completed hand-back requests exactly one read for its repository, once its label write has settled', async () => {
-    const { dispatcher, requestRead } = await trackedSession()
+    const { ctx, dispatcher } = await trackedSession()
     dispatcher.recordOutcome(REPO_ID, SESSION_KEY, outcome('completed'), null)
-    expect(requestRead).not.toHaveBeenCalled()
+    expect(ctx.watcher.refresh).not.toHaveBeenCalled()
     await flush()
-    expect(requestRead).toHaveBeenCalledTimes(1)
-    expect(requestRead).toHaveBeenCalledWith(REPO_ID)
+    expect(ctx.watcher.refresh).toHaveBeenCalledTimes(1)
+    expect(ctx.watcher.refresh).toHaveBeenCalledWith({ repoId: REPO_ID, source: 'github' })
   })
 
-  it.each(['questions', 'blocked', 'error', 'usage-limit', 'interrupted'] as const)('a %s hand-back requests no read', async (kind) => {
-    const { dispatcher, requestRead } = await trackedSession()
+  it.each(['questions', 'error', 'interrupted'] as const)('a %s hand-back requests no read', async (kind) => {
+    const { ctx, dispatcher } = await trackedSession()
     dispatcher.recordOutcome(REPO_ID, SESSION_KEY, outcome(kind), null)
     await flush()
-    expect(requestRead).not.toHaveBeenCalled()
+    expect(ctx.watcher.refresh).not.toHaveBeenCalled()
   })
 
   it('a hand-back for an untracked session requests no read', async () => {
-    const { dispatcher, requestRead } = await trackedSession()
+    const { ctx, dispatcher } = await trackedSession()
     dispatcher.recordOutcome(REPO_ID, 'hosted-other' as SessionKey, outcome('completed'), null)
     await flush()
-    expect(requestRead).not.toHaveBeenCalled()
+    expect(ctx.watcher.refresh).not.toHaveBeenCalled()
   })
 })

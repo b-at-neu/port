@@ -1,18 +1,21 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
 import type { ReconciledItem, RepositoryState } from '@/types/state'
-import type { ItemActionResult } from '@/types/actions'
-
-import type { RunStateStore, SetRunStateResult } from '@/types/dispatch'
+import type { ItemActionResult, ReadyEntry } from '@/types/actions'
+import type { RunStateStore } from '@/types/dispatch'
 import { haltDispatch } from '@/main/dispatch/halt'
-import type { ReadyEntry } from '@/types/actions'
+import { createTestContext } from '../../../support/context'
+
+const apply = vi.hoisted(() => vi.fn<(params: unknown) => Promise<ItemActionResult>>())
+vi.mock('@/main/pipeline/operator/apply', () => ({ applyItemAction: (_ctx: unknown, params: unknown) => apply(params) }))
 
 const VOCABULARY = resolveVocabulary({})
 const REPO_ID = 'repo-a' as RepoId
+const APPLIED: ItemActionResult = { ok: true, outcome: { kind: 'applied', argv: [] } }
 
-function entry(overrides: Partial<ReadyEntry> = {}): ReadyEntry {
+function entry(): ReadyEntry {
   return {
     id: REPO_ID,
     path: '/repo',
@@ -34,7 +37,6 @@ function entry(overrides: Partial<ReadyEntry> = {}): ReadyEntry {
       vocabulary: VOCABULARY,
     },
     diagnostics: [],
-    ...overrides,
   }
 }
 
@@ -130,189 +132,88 @@ function snapshotOf(repositories: readonly RepositoryState[]): BoardSnapshot {
   }
 }
 
-function fakeRunStates(setResult: SetRunStateResult = { ok: true }): { readonly runStates: RunStateStore; readonly setCalls: (readonly [readonly RepoId[], string])[] } {
-  const setCalls: (readonly [readonly RepoId[], string])[] = []
-  const runStates: RunStateStore = {
-    current: (repoId) => ({ repoId, state: 'paused', since: '2026-01-01T00:00:00Z' }),
-    status: () => ({ kind: 'loaded' }),
-    snapshot: () => ({ store: { kind: 'loaded' }, repositories: [] }),
-    set: (repoIds, state) => {
-      setCalls.push([repoIds, state])
-      return Promise.resolve(setResult)
+function setup(dispatcher: { stopFor?: (repoId: RepoId, number: number) => Promise<boolean>; standDown?: (repoId: RepoId) => Promise<boolean> } = {}) {
+  const calls: string[] = []
+  const live = {
+    dispatcher: {
+      stopFor: (repoId: RepoId, number: number) => {
+        calls.push('stopFor')
+        return (dispatcher.stopFor ?? (() => Promise.resolve(false)))(repoId, number)
+      },
+      standDown: (repoId: RepoId) => {
+        calls.push(`standDown ${repoId}`)
+        return (dispatcher.standDown ?? (() => Promise.resolve(false)))(repoId)
+      },
     },
-    forget: () => Promise.resolve({ ok: true }),
-    path: '/userData/dispatch.json',
   }
-  return { runStates, setCalls }
+  return { ctx: createTestContext({ live: live as never }), calls }
 }
 
-const NOW = () => new Date('2026-01-01T00:00:00Z')
+function halt(ctx: ReturnType<typeof createTestContext>, items: readonly ReconciledItem[], state: Partial<Extract<RepositoryState, { readonly ok: true }>> = {}) {
+  return haltDispatch(ctx, { snapshot: snapshotOf([repoState(items, state)]), entries: [entry()], repoIds: [REPO_ID] })
+}
+
+beforeEach(() => {
+  apply.mockReset().mockResolvedValue(APPLIED)
+})
 
 describe('haltDispatch', () => {
   it('aborts entirely when the run-state write fails, before touching a single item', async () => {
-    const { runStates } = fakeRunStates({ ok: false, reason: 'unwritable', message: 'disk full' })
-    let called = false
-    const report = await haltDispatch(
-      { snapshot: snapshotOf([repoState([item()])]), entries: [entry()], runStates, repoIds: [REPO_ID], auditDir: '/audit', now: NOW },
-      { applyItemAction: () => { called = true; return Promise.resolve({ ok: true, outcome: { kind: 'applied', argv: [] } }) } },
-    )
+    const runStates = { set: () => Promise.resolve({ ok: false, reason: 'unwritable', message: 'disk full' }), path: '/userData/dispatch.json' } as unknown as RunStateStore
+    const ctx = createTestContext({ stores: { runStates }, live: {} })
+    const report = await halt(ctx, [item()])
     expect(report).toEqual({ kind: 'aborted', reason: 'run-state-unwritable', message: 'disk full', path: '/userData/dispatch.json' })
-    expect(called).toBe(false)
+    expect(apply).not.toHaveBeenCalled()
   })
 
-  it('stops every in-flight item and reports the removed label', async () => {
-    const { runStates } = fakeRunStates()
-    const report = await haltDispatch(
-      { snapshot: snapshotOf([repoState([item()])]), entries: [entry()], runStates, repoIds: [REPO_ID], auditDir: '/audit', now: NOW },
-      { applyItemAction: () => Promise.resolve({ ok: true, outcome: { kind: 'applied', argv: [] } }) },
-    )
-    expect(report).toEqual({
-      kind: 'completed',
-      items: [{ kind: 'stopped', number: 148, itemKind: 'issue', repoId: REPO_ID, removedLabel: 'reviewing', attachedAgent: null, stoppedTask: false }],
-    })
-  })
-
-  it('names an attached agent without failing the stop itself', async () => {
-    const { runStates } = fakeRunStates()
+  it('pauses first, stops every in-flight item and reports the removed label and attached agent', async () => {
+    const { ctx } = setup()
     const attached = item({ agents: [{ agentId: 'a1', agentType: 'review-agent', stage: 'review-agent', model: null, activity: 'active', idleMs: 1000, lastActivityAt: '2026-01-01T00:00:00Z', match: 'direct', sessionId: 's1' }] })
-    const report = await haltDispatch(
-      { snapshot: snapshotOf([repoState([attached])]), entries: [entry()], runStates, repoIds: [REPO_ID], auditDir: '/audit', now: NOW },
-      { applyItemAction: () => Promise.resolve({ ok: true, outcome: { kind: 'applied', argv: [] } }) },
-    )
-    expect(report).toEqual({
-      kind: 'completed',
-      items: [{ kind: 'stopped', number: 148, itemKind: 'issue', repoId: REPO_ID, removedLabel: 'reviewing', attachedAgent: 'review-agent', stoppedTask: false }],
+    const report = await halt(ctx, [attached])
+    expect(ctx.stores.runStates.current(REPO_ID).state).toBe('paused')
+    expect(report).toEqual({ kind: 'completed', items: [{ kind: 'stopped', number: 148, itemKind: 'issue', repoId: REPO_ID, removedLabel: 'reviewing', attachedAgent: 'review-agent', stoppedTask: false }] })
+  })
+
+  it('calls stopFor before the label write, and standDown after the loop', async () => {
+    const { ctx, calls } = setup({ stopFor: () => Promise.resolve(true) })
+    apply.mockImplementation(() => {
+      calls.push('apply')
+      return Promise.resolve(APPLIED)
     })
+    const report = await halt(ctx, [item()])
+    expect(calls).toEqual(['stopFor', 'apply', `standDown ${REPO_ID}`])
+    expect(report).toMatchObject({ kind: 'completed', items: [{ kind: 'stopped', stoppedTask: true }] })
   })
 
-  it('calls stopFor before applyItemAction, and standDown after the loop (#265, #314)', async () => {
-    const { runStates } = fakeRunStates()
-    const order: string[] = []
-    const report = await haltDispatch(
-      { snapshot: snapshotOf([repoState([item()])]), entries: [entry()], runStates, repoIds: [REPO_ID], auditDir: '/audit', now: NOW },
-      {
-        stopFor: (repoId, number) => {
-          order.push('stopFor')
-          expect(repoId).toBe(REPO_ID)
-          expect(number).toBe(148)
-          return Promise.resolve(true)
-        },
-        applyItemAction: () => {
-          order.push('applyItemAction')
-          return Promise.resolve({ ok: true, outcome: { kind: 'applied', argv: [] } })
-        },
-        standDown: (repoId) => {
-          order.push('standDown')
-          expect(repoId).toBe(REPO_ID)
-          return Promise.resolve(true)
-        },
-      },
-    )
-    expect(order).toEqual(['stopFor', 'applyItemAction', 'standDown'])
-    expect(report).toEqual({
-      kind: 'completed',
-      items: [{ kind: 'stopped', number: 148, itemKind: 'issue', repoId: REPO_ID, removedLabel: 'reviewing', attachedAgent: null, stoppedTask: true }],
-    })
+  it('stands down every in-scope ready entry even when nothing was in flight', async () => {
+    const { ctx, calls } = setup()
+    expect(await halt(ctx, [])).toEqual({ kind: 'completed', items: [] })
+    expect(calls).toEqual([`standDown ${REPO_ID}`])
   })
 
-  it('calls standDown for every in-scope ready entry even when nothing was in flight', async () => {
-    const { runStates } = fakeRunStates()
-    const standDownCalls: RepoId[] = []
-    await haltDispatch(
-      { snapshot: snapshotOf([repoState([])]), entries: [entry()], runStates, repoIds: [REPO_ID], auditDir: '/audit', now: NOW },
-      { applyItemAction: () => Promise.resolve({ ok: true, outcome: { kind: 'applied', argv: [] } }), standDown: (repoId) => { standDownCalls.push(repoId); return Promise.resolve(false) } },
-    )
-    expect(standDownCalls).toEqual([REPO_ID])
-  })
-
-  it('defaults stoppedTask to false when no stopFor is wired at all', async () => {
-    const { runStates } = fakeRunStates()
-    const report = await haltDispatch(
-      { snapshot: snapshotOf([repoState([item()])]), entries: [entry()], runStates, repoIds: [REPO_ID], auditDir: '/audit', now: NOW },
-      { applyItemAction: () => Promise.resolve({ ok: true, outcome: { kind: 'applied', argv: [] } }) },
-    )
-    expect(report.kind).toBe('completed')
-    if (report.kind !== 'completed') return
-    expect(report.items[0]).toMatchObject({ stoppedTask: false })
-  })
-
-  it('skips a session-required item without ever calling applyItemAction', async () => {
-    const { runStates } = fakeRunStates()
-    let called = false
-    const report = await haltDispatch(
-      { snapshot: snapshotOf([repoState([item({ sessionRequired: true })])]), entries: [entry()], runStates, repoIds: [REPO_ID], auditDir: '/audit', now: NOW },
-      { applyItemAction: () => { called = true; return Promise.resolve({ ok: true, outcome: { kind: 'applied', argv: [] } }) } },
-    )
-    expect(report).toEqual({ kind: 'completed', items: [{ kind: 'skipped', number: 148, itemKind: 'issue', repoId: REPO_ID, reason: 'session-required', owner: null }] })
-    expect(called).toBe(false)
-  })
-
-  it('skips a not-owned item, naming the owner, without ever calling applyItemAction', async () => {
-    const { runStates } = fakeRunStates()
-    let called = false
-    const report = await haltDispatch(
-      { snapshot: snapshotOf([repoState([item({ assignees: ['other'] })])]), entries: [entry()], runStates, repoIds: [REPO_ID], auditDir: '/audit', now: NOW },
-      { applyItemAction: () => { called = true; return Promise.resolve({ ok: true, outcome: { kind: 'applied', argv: [] } }) } },
-    )
-    expect(report).toEqual({ kind: 'completed', items: [{ kind: 'skipped', number: 148, itemKind: 'issue', repoId: REPO_ID, reason: 'not-owned', owner: 'other' }] })
-    expect(called).toBe(false)
-  })
-
-  it('skips viewer-unknown without ever calling applyItemAction', async () => {
-    const { runStates } = fakeRunStates()
-    let called = false
-    const report = await haltDispatch(
-      { snapshot: snapshotOf([repoState([item()], { viewer: null })]), entries: [entry()], runStates, repoIds: [REPO_ID], auditDir: '/audit', now: NOW },
-      { applyItemAction: () => { called = true; return Promise.resolve({ ok: true, outcome: { kind: 'applied', argv: [] } }) } },
-    )
-    expect(report).toEqual({ kind: 'completed', items: [{ kind: 'skipped', number: 148, itemKind: 'issue', repoId: REPO_ID, reason: 'viewer-unknown', owner: null }] })
-    expect(called).toBe(false)
+  it.each([
+    ['a session-required item', item({ sessionRequired: true }), {}, { reason: 'session-required', owner: null }],
+    ['a not-owned item, naming the owner', item({ assignees: ['other'] }), {}, { reason: 'not-owned', owner: 'other' }],
+    ['an unknown viewer', item(), { viewer: null }, { reason: 'viewer-unknown', owner: null }],
+  ] as const)('skips %s without ever writing', async (_name, skipped, state, expected) => {
+    const { ctx } = setup()
+    const report = await halt(ctx, [skipped], state)
+    expect(report).toEqual({ kind: 'completed', items: [{ kind: 'skipped', number: 148, itemKind: 'issue', repoId: REPO_ID, ...expected }] })
+    expect(apply).not.toHaveBeenCalled()
   })
 
   it('carries a refused ItemActionResult straight into the report', async () => {
-    const { runStates } = fakeRunStates()
     const refusal: ItemActionResult = { ok: false, reason: 'moved', expected: 'reviewing', observed: 'no longer tracked' }
-    const report = await haltDispatch(
-      { snapshot: snapshotOf([repoState([item()])]), entries: [entry()], runStates, repoIds: [REPO_ID], auditDir: '/audit', now: NOW },
-      { applyItemAction: () => Promise.resolve(refusal) },
-    )
-    expect(report).toEqual({ kind: 'completed', items: [{ kind: 'refused', number: 148, itemKind: 'issue', repoId: REPO_ID, result: refusal }] })
+    apply.mockResolvedValue(refusal)
+    const { ctx } = setup()
+    expect(await halt(ctx, [item()])).toEqual({ kind: 'completed', items: [{ kind: 'refused', number: 148, itemKind: 'issue', repoId: REPO_ID, result: refusal }] })
   })
 
-  it('reports an empty completed set when nothing is in flight', async () => {
-    const { runStates } = fakeRunStates()
-    const report = await haltDispatch(
-      { snapshot: snapshotOf([repoState([])]), entries: [entry()], runStates, repoIds: [REPO_ID], auditDir: '/audit', now: NOW },
-      { applyItemAction: () => Promise.resolve({ ok: true, outcome: { kind: 'applied', argv: [] } }) },
-    )
-    expect(report).toEqual({ kind: 'completed', items: [] })
-  })
-
-  it('pauses before it stops — set() is called even when nothing ends up in flight', async () => {
-    const { runStates, setCalls } = fakeRunStates()
-    await haltDispatch(
-      { snapshot: snapshotOf([repoState([])]), entries: [entry()], runStates, repoIds: [REPO_ID], auditDir: '/audit', now: NOW },
-      { applyItemAction: () => Promise.resolve({ ok: true, outcome: { kind: 'applied', argv: [] } }) },
-    )
-    expect(setCalls).toEqual([[[REPO_ID], 'paused']])
-  })
-
-  it('skips items for a repository with no entry in scope (pause scoped to one repository)', async () => {
+  it('skips items for a repository with no entry in scope', async () => {
+    const { ctx } = setup()
     const other = 'repo-b' as RepoId
-    const { runStates } = fakeRunStates()
-    let called = false
-    const report = await haltDispatch(
-      {
-        snapshot: snapshotOf([repoState([item()], { repoId: other, repo: 'o/b' })]),
-        entries: [entry()],
-        runStates,
-        repoIds: [REPO_ID],
-        auditDir: '/audit',
-        now: NOW,
-      },
-      { applyItemAction: () => { called = true; return Promise.resolve({ ok: true, outcome: { kind: 'applied', argv: [] } }) } },
-    )
+    const report = await haltDispatch(ctx, { snapshot: snapshotOf([repoState([item()], { repoId: other, repo: 'o/b' })]), entries: [entry()], repoIds: [REPO_ID] })
     expect(report).toEqual({ kind: 'completed', items: [] })
-    expect(called).toBe(false)
+    expect(apply).not.toHaveBeenCalled()
   })
 })

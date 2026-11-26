@@ -1,9 +1,5 @@
-import type { HostedStore } from '@/types/hosting'
-import type { RunStore } from '@/types/stage'
-
 // The real StageLauncher: a worktree, a hosted session, a send, and the hand-back watcher that closes and removes it.
-import type { FileResult, GitRunner, PathOps } from '@/types/platform'
-import type { CreateStageWorktreeParams, CreateStageWorktreeResult, ReleaseBranchOutcome, RemoveSessionWorktreeOutcome } from '@/types/workspace'
+import type { RemoveSessionWorktreeOutcome } from '@/types/workspace'
 import type { StageLaunchRequest, StageLaunchResult } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionDismissResult, SessionKey, SessionStartResult } from '@/types/hosting'
 
@@ -11,9 +7,15 @@ import type { StageOutcome, StageOutcomeKind } from '@/types/stage-session'
 import { stageOfMode, type StagePlanFile } from '@/types/stage-labels'
 import type { StageAgent } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
-import type { StageInstructionsLoader, StageResumeRequest } from '@/types/stage'
+import type { StageResumeRequest } from '@/types/stage'
 import type { Run } from '@/utils/pipeline/ticket'
+import type { StageLaunchContext } from '@/main/dispatch/context'
 import { RESUME_PROMPT } from '@/main/dispatch/stage/recover'
+import { loadStageLaunch } from '@/main/dispatch/stage/instructions'
+import { pathOps } from '@/main/platform/paths'
+import { readStagePrompt, stagePromptsDir } from '@/main/sessions/hosting/stage-prompt-store'
+import { createStageWorktree, releaseStageBranch, sweepSessionBranches } from '@/main/repos/worktree/stage-worktree'
+import { removeSessionWorktreeAt } from '@/main/repos/worktree/worktree'
 import { stageModeFor } from '@/main/pipeline/transitions'
 import { isTransientNetworkFailure, SETTLE_FAILED_DETAIL } from '@/main/pipeline/handback'
 import { proposedRule } from '@/main/dispatch/stage/rule'
@@ -29,33 +31,6 @@ const DENIAL_INPUT_SUMMARY_CAP = 200
 function inputSummaryOf(input: Readonly<Record<string, unknown>>): string {
   const text = typeof input.command === 'string' ? input.command : JSON.stringify(input)
   return text.length > DENIAL_INPUT_SUMMARY_CAP ? `${text.slice(0, DENIAL_INPUT_SUMMARY_CAP)}…` : text
-}
-
-interface CreateStageLauncherParams {
-  readonly store: HostedStore
-  readonly git: GitRunner
-  readonly createWorktree: (params: CreateStageWorktreeParams) => Promise<CreateStageWorktreeResult>
-  readonly removeWorktree: (path: string, force: boolean) => Promise<RemoveSessionWorktreeOutcome>
-  readonly releaseBranch: (root: string, branch: string, baseSha: string) => Promise<ReleaseBranchOutcome>
-  /** Runs once per repository root per process, never awaited as a gate. */
-  readonly sweepBranches: (root: string) => Promise<unknown>
-  readonly now: () => Date
-  /** `plan` is non-null only for a completed `plan-written` hand-back. */
-  readonly onOutcome: (repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome, plan: StagePlanFile | null) => void
-  /** Fired once when a session that handed back `blocked` starts its next turn. */
-  readonly onResumedTurn: (repoId: RepoId, sessionKey: SessionKey) => void
-  /** Every launch starts a run here, and every hand-back ends or interrupts it, a denial lands on it too. */
-  readonly runs: RunStore
-  readonly newId: () => string
-  /** The dispatch line and the inline agent, loaded from the bundled stage prompts; a failure fails the launch. */
-  readonly loadInstructions: StageInstructionsLoader
-  /** The system prompt a fresh session was started with, or `null` for one that predates it. */
-  readonly readStagePrompt: (claudeSessionId: string) => Promise<string | null>
-  /** The app's own `stage-prompts` folder, which a stage session may read. */
-  readonly bundleRoot: string
-  readonly readTextFile: (path: string) => Promise<FileResult<string>>
-  readonly pathExists: (path: string) => Promise<boolean>
-  readonly ops: Pick<PathOps, 'join' | 'samePath'>
 }
 
 /** The one place a failed `SessionStartResult` becomes a message for a dispatch record — never re-derived at a second call site. */
@@ -90,13 +65,15 @@ function cleanupFailureDetail(result: Exclude<SessionDismissResult, { readonly o
   }
 }
 
-export function createStageLauncher(params: CreateStageLauncherParams): StageLauncherHandle {
+/** `bundleRoot` is the app's own `stage-prompts` folder, which a stage session may read. */
+export function createStageLauncher(ctx: StageLaunchContext, bundleRoot: string): StageLauncherHandle {
+  const runs = ctx.stores.runs
   const tracked = new Map<SessionKey, { readonly repoId: RepoId; readonly runId: string; readonly agent: StageAgent; readonly number: number; readonly path: string; readonly root: string; readonly branch: string | null; readonly baseSha: string; lastSeenResultAt: string | null; sawSessionId: boolean; lastOutcome: StageOutcomeKind | null; blockedIdle: boolean }>()
   const swept = new Set<string>()
 
   async function removeAndRelease(root: string, path: string, branch: string | null, baseSha: string): Promise<RemoveSessionWorktreeOutcome> {
-    const removed = await params.removeWorktree(path, false)
-    if (removed.outcome === 'removed' && branch !== null) await params.releaseBranch(root, branch, baseSha)
+    const removed = await removeSessionWorktreeAt(ctx, { path, force: false })
+    if (removed.outcome === 'removed' && branch !== null) await releaseStageBranch(ctx, { root, branch, baseSha })
     return removed
   }
   // Serializes observe() per session key so two status pushes for the same session never race the hand-back.
@@ -109,7 +86,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
   /** A denial can only fire once the session exists, and lands on its run. */
   function denialRecorder(repoId: RepoId, runId: string) {
     return (toolName: string, input: Readonly<Record<string, unknown>>): void => {
-      void params.runs.denied(repoId, runId, { id: params.newId(), toolName, inputSummary: inputSummaryOf(input), rule: proposedRule(toolName, input), at: params.now().toISOString() })
+      void runs.denied(repoId, runId, { id: globalThis.crypto.randomUUID(), toolName, inputSummary: inputSummaryOf(input), rule: proposedRule(toolName, input), at: ctx.clock.now().toISOString() })
     }
   }
 
@@ -119,11 +96,11 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     if (entry.claudeSessionId === null) return { ok: false, kind: 'failed', message: 'the session ended before Claude started it', cause: 'resume' }
 
     // Never rebuilt from the live bundle and config: that would change a running session's stage context.
-    const saved = await params.readStagePrompt(entry.claudeSessionId)
-    const definition = await loadStageAgentDefinition({ root: params.bundleRoot, agent: entry.agent, prompt: saved ?? LEGACY_STAGE_SYSTEM_PROMPT, ops: params.ops, readTextFile: params.readTextFile })
+    const saved = await readStagePrompt(ctx.fs, stagePromptsDir(ctx.paths.userData), entry.claudeSessionId)
+    const definition = await loadStageAgentDefinition(ctx, { root: bundleRoot, agent: entry.agent, prompt: saved ?? LEGACY_STAGE_SYSTEM_PROMPT })
     if (!definition.ok) return { ok: false, kind: 'failed', message: definition.message, cause: 'resume' }
 
-    const startResult = await params.store.start({
+    const startResult = await ctx.live.hostedStore.start({
       repoId: entry.repoId,
       mode: { kind: 'resume', sessionId: entry.claudeSessionId },
       initialTitle: stageTitle(entry.title ?? bareTicketLabel(entry.number, entry.kind)),
@@ -136,7 +113,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       stage: {
         tag: { agent: entry.agent, number: entry.number, kind: entry.kind, trigger: entry.trigger },
         agent: { name: definition.name, definition: definition.definition, selfContained: saved !== null },
-        instructionsRoot: params.bundleRoot,
+        instructionsRoot: bundleRoot,
         model: entry.model,
         sessionRequiredPaths: root.sessionRequiredPaths,
         onDeny: denialRecorder(entry.repoId, entry.id),
@@ -148,21 +125,21 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     }
 
     const sessionKey = startResult.snapshot.sessionKey
-    const sendResult = params.store.send(sessionKey, prompt)
+    const sendResult = ctx.live.hostedStore.send(sessionKey, prompt)
     if (!sendResult.ok) {
-      await params.store.close(sessionKey)
+      await ctx.live.hostedStore.close(sessionKey)
       return { ok: false, kind: 'failed', message: `could not send the resume prompt: ${sendResult.kind}`, cause: 'resume' }
     }
 
     tracked.set(sessionKey, { repoId: entry.repoId, runId: entry.id, agent: entry.agent, number: entry.number, path: entry.worktree.path, root: root.path, branch: entry.worktree.branch, baseSha: entry.worktree.baseSha, lastSeenResultAt: null, sawSessionId: false, lastOutcome: null, blockedIdle: false })
-    await params.runs.resumed(entry.repoId, entry.id, sessionKey)
+    await runs.resumed(entry.repoId, entry.id, sessionKey)
     return { ok: true, sessionKey }
   }
 
   /** An interrupted entry for this ticket and agent, with its session and worktree intact and no reset still pending, is resumed instead of launched fresh — its work is kept. `null` falls through to a fresh launch. */
   async function resumeInterrupted(request: StageLaunchRequest): Promise<StageLaunchResult | null> {
-    const entry = params.runs.list(request.entry.id).find((e) => e.repoId === request.entry.id && e.number === request.number && e.agent === request.agent && e.claudeSessionId !== null && (e.resetsAt === null || Date.parse(e.resetsAt) <= params.now().getTime()))
-    if (entry === undefined || !(await params.pathExists(entry.worktree.path))) return null
+    const entry = runs.list(request.entry.id).find((e) => e.repoId === request.entry.id && e.number === request.number && e.agent === request.agent && e.claudeSessionId !== null && (e.resetsAt === null || Date.parse(e.resetsAt) <= ctx.clock.now().getTime()))
+    if (entry === undefined || !(await ctx.fs.exists(entry.worktree.path))) return null
     const result = await resume({ entry, root: { path: request.entry.path, sessionRequiredPaths: request.entry.config.sessionRequiredPaths }, prompt: RESUME_PROMPT.replace('<n>', String(entry.number)) })
     return result.ok ? result : null
   }
@@ -171,7 +148,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     const root = request.entry.path
     if (!swept.has(root)) {
       swept.add(root)
-      void params.sweepBranches(root).catch(() => undefined)
+      void sweepSessionBranches(ctx, root).catch(() => undefined)
     }
 
     const resumed = await resumeInterrupted(request)
@@ -179,30 +156,30 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
 
     // Only a live hosted session holds a worktree: an open run whose session died must not block the reclaim.
     const liveWorktrees = new Set<string>()
-    for (const snapshot of params.store.list()) {
+    for (const snapshot of ctx.live.hostedStore.list()) {
       if (snapshot.phase !== 'ended' && snapshot.workspace.worktree !== null) liveWorktrees.add(snapshot.workspace.worktree.path)
     }
 
-    const wt = await params.createWorktree({ root, agent: request.agent, number: request.number, integration: request.entry.config.branches.integration, target: request.target, liveWorktrees })
+    const wt = await createStageWorktree(ctx, { root, agent: request.agent, number: request.number, integration: request.entry.config.branches.integration, target: request.target, liveWorktrees })
     if (!wt.ok) return { ok: false, kind: 'failed', message: `Couldn't create the stage worktree: ${wt.message}`, cause: wt.leftover === true ? 'leftover-worktree' : 'worktree' }
 
     const reclaimed = wt.reclaimed
     if (reclaimed !== null) {
-      for (const superseded of params.runs.list()) {
-        if (params.ops.samePath(superseded.worktree.path, reclaimed)) await params.runs.cleared(superseded.repoId, superseded.id)
+      for (const superseded of runs.list()) {
+        if (pathOps.samePath(superseded.worktree.path, reclaimed)) await runs.cleared(superseded.repoId, superseded.id)
       }
     }
 
-    const instructions = await params.loadInstructions(request, wt.path)
+    const instructions = await loadStageLaunch(ctx, bundleRoot, request, wt.path)
     if (!instructions.ok) {
       await removeAndRelease(root, wt.path, wt.branch, wt.baseSha)
       return { ok: false, kind: 'failed', message: `Couldn't load the stage instructions from the app's bundled stage prompts: ${instructions.message}`, cause: 'instructions' }
     }
 
-    const runId = params.newId()
+    const runId = globalThis.crypto.randomUUID()
     const onDeny = denialRecorder(request.entry.id, runId)
 
-    const startResult = await params.store.start({
+    const startResult = await ctx.live.hostedStore.start({
       repoId: request.entry.id,
       mode: { kind: 'fresh' },
       initialTitle: stageTitle(request.title),
@@ -210,7 +187,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       stage: {
         tag: { agent: request.agent, number: request.number, kind: request.kind, trigger: request.trigger },
         agent: instructions.agent,
-        instructionsRoot: params.bundleRoot,
+        instructionsRoot: bundleRoot,
         model: request.model,
         sessionRequiredPaths: request.entry.config.sessionRequiredPaths,
         onDeny,
@@ -224,9 +201,9 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     }
 
     const sessionKey = startResult.snapshot.sessionKey
-    const sendResult = params.store.send(sessionKey, instructions.text)
+    const sendResult = ctx.live.hostedStore.send(sessionKey, instructions.text)
     if (!sendResult.ok) {
-      await params.store.close(sessionKey)
+      await ctx.live.hostedStore.close(sessionKey)
       await removeAndRelease(root, wt.path, wt.branch, wt.baseSha)
       return { ok: false, kind: 'failed', message: `could not send the stage prompt: ${sendResult.kind}`, cause: 'prompt' }
     }
@@ -243,7 +220,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       sessionKey,
       claudeSessionId: null,
       worktree: { path: wt.path, branch: wt.branch, baseSha: wt.baseSha },
-      startedAt: params.now().toISOString(),
+      startedAt: ctx.clock.now().toISOString(),
       endedAt: null,
       outcome: null,
       handback: null,
@@ -254,17 +231,17 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       networkRetries: 0,
       denials: [],
     }
-    await params.runs.start(request.entry.id, run)
+    await runs.start(request.entry.id, run)
     return { ok: true, sessionKey }
   }
 
   function observe(snapshot: HostedSessionSnapshot): void {
     const entry = tracked.get(snapshot.sessionKey)
-    if (entry === undefined) return
+    if (entry === undefined || entry.lastOutcome === 'completed') return
 
     if (!entry.sawSessionId && snapshot.claudeSessionId !== null) {
       entry.sawSessionId = true
-      void params.runs.session(entry.repoId, entry.runId, snapshot.claudeSessionId)
+      void runs.session(entry.repoId, entry.runId, snapshot.claudeSessionId)
     }
 
     const resultAt = snapshot.lastResult?.at ?? null
@@ -276,7 +253,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       else if (entry.blockedIdle) {
         entry.lastOutcome = null
         entry.blockedIdle = false
-        params.onResumedTurn(entry.repoId, snapshot.sessionKey)
+        ctx.live.dispatcher.recordResumedTurn(entry.repoId, snapshot.sessionKey)
       }
       return
     }
@@ -301,7 +278,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
   async function readPlanFile(sessionKey: SessionKey, outcome: StageOutcome): Promise<StagePlanFile | null> {
     const held = tracked.get(sessionKey)
     if (held === undefined || held.agent !== 'plan' || outcome.handback?.token !== 'plan-written') return null
-    const read = await params.readTextFile(params.ops.join(held.path, '.temp', `plan-${String(held.number)}.md`))
+    const read = await ctx.fs.readText(pathOps.join(held.path, '.temp', `plan-${String(held.number)}.md`))
     if (!read.ok) return { kind: 'missing', detail: read.kind === 'not-found' ? null : read.message }
     return read.value.trim() === '' ? { kind: 'empty' } : { kind: 'read', body: read.value }
   }
@@ -311,39 +288,39 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     try {
       if (outcome.kind === 'questions' || outcome.kind === 'blocked') {
         // The session is still open — the run stays open.
-        await params.runs.handback(repoId, runId, outcome)
-        params.onOutcome(repoId, sessionKey, outcome, null)
+        await runs.handback(repoId, runId, outcome)
+        ctx.live.dispatcher.recordOutcome(repoId, sessionKey, outcome, null)
         return
       }
 
       if (outcome.kind === 'completed') {
-        await params.store.close(sessionKey)
+        await ctx.live.hostedStore.close(sessionKey)
         const plan = await readPlanFile(sessionKey, outcome)
-        const dismissResult = await params.store.dismiss(sessionKey, 'remove')
+        const dismissResult = await ctx.live.hostedStore.dismiss(sessionKey, 'remove')
         const held = tracked.get(sessionKey)
-        if (dismissResult.ok && held !== undefined && held.branch !== null) await params.releaseBranch(held.root, held.branch, held.baseSha)
+        if (dismissResult.ok && held !== undefined && held.branch !== null) await releaseStageBranch(ctx, { root: held.root, branch: held.branch, baseSha: held.baseSha })
         const worktree = dismissResult.ok ? 'removed' : dismissResult.kind === 'worktree-dirty' ? 'kept-dirty' : dismissResult.kind === 'worktree-remove-failed' ? 'remove-failed' : outcome.worktree
         tracked.delete(sessionKey)
         const finished = { ...outcome, worktree }
-        if (dismissResult.ok) await params.runs.ended(repoId, runId, finished)
-        else await params.runs.interrupt(repoId, runId, { reason: 'cleanup-failed', detail: cleanupFailureDetail(dismissResult), resetsAt: null, costUsd: outcome.costUsd, outcome: finished })
-        params.onOutcome(repoId, sessionKey, finished, plan)
+        if (dismissResult.ok) await runs.ended(repoId, runId, finished)
+        else await runs.interrupt(repoId, runId, { reason: 'cleanup-failed', detail: cleanupFailureDetail(dismissResult), resetsAt: null, costUsd: outcome.costUsd, outcome: finished })
+        ctx.live.dispatcher.recordOutcome(repoId, sessionKey, finished, plan)
         return
       }
 
       // error, usage-limit, interrupted: close the session where needed, keep the worktree, and mark it.
-      if (outcome.kind === 'error' || outcome.kind === 'usage-limit' || outcome.kind === 'interrupted') await params.store.close(sessionKey)
+      if (outcome.kind === 'error' || outcome.kind === 'usage-limit' || outcome.kind === 'interrupted') await ctx.live.hostedStore.close(sessionKey)
       tracked.delete(sessionKey)
       // `crash`/`quit` are reserved for a boot-time find and the quit path's own `quitAll`.
       const reason = outcome.kind === 'usage-limit' ? 'usage-limit' : outcome.kind === 'interrupted' && isTransientNetworkFailure(outcome.detail) ? 'network' : 'error'
-      await params.runs.interrupt(repoId, runId, { reason, detail: outcome.detail, resetsAt: outcome.resetsAt, costUsd: outcome.costUsd, outcome })
-      params.onOutcome(repoId, sessionKey, outcome, null)
+      await runs.interrupt(repoId, runId, { reason, detail: outcome.detail, resetsAt: outcome.resetsAt, costUsd: outcome.costUsd, outcome })
+      ctx.live.dispatcher.recordOutcome(repoId, sessionKey, outcome, null)
     } catch (error) {
       tracked.delete(sessionKey)
       const detail = `${SETTLE_FAILED_DETAIL}: ${error instanceof Error ? error.message : String(error)}`
       const failed: StageOutcome = { kind: 'error', detail, costUsd: outcome.costUsd, resetsAt: null, worktree: 'remove-failed', operatorJoined: outcome.operatorJoined, handback: null }
-      await params.runs.interrupt(repoId, runId, { reason: 'error', detail, resetsAt: null, costUsd: outcome.costUsd, outcome: failed })
-      params.onOutcome(repoId, sessionKey, failed, null)
+      await runs.interrupt(repoId, runId, { reason: 'error', detail, resetsAt: null, costUsd: outcome.costUsd, outcome: failed })
+      ctx.live.dispatcher.recordOutcome(repoId, sessionKey, failed, null)
     }
   }
 

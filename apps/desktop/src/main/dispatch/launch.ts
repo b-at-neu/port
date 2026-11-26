@@ -1,5 +1,5 @@
 import type { ReadyEntry } from '@/types/actions'
-import type { BudgetNote, CreateDispatcherParams, DispatchOwner, RunState, StageLaunchFailureCause, StageRecord } from '@/types/dispatch'
+import type { BudgetNote, DispatchOwner, RunState, StageLaunchFailureCause } from '@/types/dispatch'
 import { stageOfMode } from '@/types/stage-labels'
 import { stageModeFor } from '@/main/pipeline/transitions'
 import { RUN_TARGET } from '@/types/dispatch'
@@ -8,17 +8,17 @@ import type { HostedSessionSnapshot } from '@/types/hosting'
 import type { ReconciledItem } from '@/types/state'
 import type { TickActionable } from '@/types/tick'
 import type { StageWorktreeTarget } from '@/types/workspace'
-import type { RepoId } from '@/utils/repos'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import { reviewDispatchFacts } from '@/utils/pipeline/gates'
 import type { ReviewDispatchFacts } from '@/utils/pipeline/gates'
 import { KIND_PROMPT_NAMES, STAGE_PROMPT_NAMES } from '@/utils/stage/prompt'
 import { ticketIndex, ticketLabelFor } from '@/utils/tickets/ticket'
 import { budgetRoute, escalateOverBudget } from '@/main/dispatch/budget'
-import { activeOrIdle } from '@/main/dispatch/records'
+import { budgetCheck } from '@/main/dispatch/budget-gate'
+import type { DispatchContext } from '@/main/dispatch/context'
 import type { RepoDispatcherState } from '@/main/dispatch/records'
-import { launchFailedIntent } from '@/main/pipeline/incidents/raise'
-import type { createRaiser } from '@/main/pipeline/incidents/raise'
+import { applyStageClaim, applyStageTransition } from '@/main/pipeline/operator/stage'
+import { createRaiser, launchFailedIntent } from '@/main/pipeline/incidents/raise'
 
 const NOTE_LIMIT = 20
 
@@ -55,19 +55,7 @@ export function targetOf(kind: PipelineItemKind, resolved: ResolvedItem | undefi
   return { kind: 'issue', title: resolved?.title ?? '' }
 }
 
-/** What the dispatcher lends the launch section: its own state, never a second copy of it. */
-interface LaunchEnv {
-  readonly deps: CreateDispatcherParams
-  readonly raise: ReturnType<typeof createRaiser>
-  readonly isStopped: () => boolean
-  /** Runs `fn` after every earlier launch section, so two repositories never race for the same free slot. */
-  readonly serialize: <T>(fn: () => Promise<T>) => Promise<T>
-  readonly recordsOf: (repoId: RepoId) => readonly StageRecord[]
-  readonly report: (repoId: RepoId, owner: DispatchOwner, state: RepoDispatcherState['dispatcherState'], runState: RunState) => void
-  readonly itemsOf: (repoId: RepoId) => readonly ReconciledItem[]
-}
-
-interface LaunchPass {
+export interface LaunchPass {
   readonly entry: ReadyEntry
   readonly survivors: readonly TickActionable[]
   readonly resolvedByNumber: ReadonlyMap<number, ResolvedItem>
@@ -75,141 +63,124 @@ interface LaunchPass {
   readonly owner: DispatchOwner
   readonly runState: RunState
   readonly viewer: string
+  readonly items: readonly ReconciledItem[]
 }
 
-export function createLaunchSection(env: LaunchEnv): { readonly launchSurvivors: (pass: LaunchPass) => Promise<void> } {
-  const { deps, raise, report } = env
+/** A launch that never produced a session still shows as a run, ended the instant it started. */
+async function recordFailure(ctx: DispatchContext, entry: ReadyEntry, candidate: TickActionable, message: string): Promise<void> {
+  await ctx.stores.runs.launchFailed(entry.id, { stage: stageOfMode(stageModeFor(candidate.agent, candidate.trigger)), kind: candidate.kind, number: candidate.number, agent: candidate.agent, trigger: candidate.trigger, model: entry.config.models[candidate.agent], title: null, message })
+}
 
-  /** A launch that never produced a session still shows as a run, ended the instant it started. */
-  async function recordFailure(entry: ReadyEntry, candidate: TickActionable, message: string): Promise<void> {
-    await deps.runs.launchFailed(entry.id, { stage: stageOfMode(stageModeFor(candidate.agent, candidate.trigger)), kind: candidate.kind, number: candidate.number, agent: candidate.agent, trigger: candidate.trigger, model: entry.config.models[candidate.agent], title: null, message })
-  }
+/** Undoes a claim whose launch failed; a refused rollback is left to the stall ladder. */
+async function rollback(ctx: DispatchContext, entry: ReadyEntry, candidate: TickActionable): Promise<void> {
+  await applyStageTransition(ctx, { entry, record: candidate, event: { kind: 'rollback' }, auditDir: ctx.paths.userData, scratchDir: ctx.paths.temp })
+}
 
-  /** Trigger → in-flight before the session exists. `moved` skips silently, since the next read shows the truth; any other refusal is a launch failure. */
-  async function claim(entry: ReadyEntry, candidate: TickActionable, resolved: ResolvedItem | undefined): Promise<boolean> {
-    if (resolved === undefined) return false
-    const result = await deps.stageLabels.claim({ entry, candidate, resolved, auditDir: deps.dirs.audit })
-    if (result.kind === 'applied') return true
-    if (result.reason !== 'moved') await launchFailed(entry, candidate, `claim-${result.reason}`, `port couldn't move the label before starting: ${result.reason}${result.detail === null ? '' : ` (${result.detail})`}`, false)
-    return false
-  }
+/** A launch that never produced a session: undoes the claim when it made one, records the failure and raises its incident. */
+async function launchFailed(ctx: DispatchContext, entry: ReadyEntry, candidate: TickActionable, cause: StageLaunchFailureCause | `claim-${string}`, message: string, undo: boolean): Promise<void> {
+  if (undo) await rollback(ctx, entry, candidate)
+  await recordFailure(ctx, entry, candidate, message)
+  createRaiser(ctx.stores.incidentLog.record, () => entry.config.repo)(entry.id, candidate, launchFailedIntent(candidate, cause), { kind: 'failed' })
+}
 
-  /** A launch that never produced a session: undoes the claim when it made one, records the failure and raises its incident. */
-  async function launchFailed(entry: ReadyEntry, candidate: TickActionable, cause: StageLaunchFailureCause | `claim-${string}`, message: string, undo: boolean): Promise<void> {
-    if (undo) await rollback(entry, candidate)
-    await recordFailure(entry, candidate, message)
-    raise(entry.id, candidate, launchFailedIntent(candidate, cause), { kind: 'failed' })
-  }
+/** Trigger → in-flight before the session exists. `moved` skips silently, since the next read shows the truth; any other refusal is a launch failure. */
+async function claim(ctx: DispatchContext, entry: ReadyEntry, candidate: TickActionable, resolved: ResolvedItem | undefined): Promise<boolean> {
+  if (resolved === undefined) return false
+  const result = await applyStageClaim(ctx, { entry, candidate, resolved, auditDir: ctx.paths.userData })
+  if (result.kind === 'applied') return true
+  if (result.reason !== 'moved') await launchFailed(ctx, entry, candidate, `claim-${result.reason}`, `port couldn't move the label before starting: ${result.reason}${result.detail === null ? '' : ` (${result.detail})`}`, false)
+  return false
+}
 
-  /** Undoes a claim whose launch failed; a refused rollback is left to the stall ladder. */
-  async function rollback(entry: ReadyEntry, candidate: TickActionable): Promise<void> {
-    await deps.stageLabels.transition({ entry, record: candidate, event: { kind: 'rollback' }, auditDir: deps.dirs.audit, scratchDir: deps.dirs.scratch })
-  }
-
-  /** The budget gate per candidate: dispatched, held for one pass, or escalated to a human. */
-  async function budgetGated(pass: LaunchPass): Promise<readonly TickActionable[]> {
-    const { entry, survivors, state, viewer } = pass
-    const notes: BudgetNote[] = []
-    const kept: TickActionable[] = []
-    for (const candidate of survivors) {
-      const result = await deps.budget.check(entry, candidate, entry.config.models[candidate.agent])
-      if (!result.ok) {
-        notes.push({ kind: 'gate-failed', number: candidate.number, message: result.message })
-        continue
-      }
-      const priorHolds = state.budgetHolds.get(candidate.number) ?? 0
-      const route = budgetRoute(result.verdict, priorHolds)
-      if (route.holds === 0) state.budgetHolds.delete(candidate.number)
-      else state.budgetHolds.set(candidate.number, route.holds)
-
-      if (route.action === 'dispatch') {
-        kept.push(candidate)
-        if (priorHolds > 0) notes.push({ kind: 'held-dispatched', number: candidate.number })
-        continue
-      }
-      if (route.action === 'hold') {
-        notes.push({ kind: 'held', number: candidate.number, line: result.line })
-        continue
-      }
-      const item = candidate.kind === 'pull-request' ? env.itemsOf(entry.id).find((i) => i.number === candidate.number) : undefined
-      await escalateOverBudget({ entry, candidate, line: result.line, notes, viewer, item, escalate: deps.escalate, dirs: deps.dirs })
+/** The budget gate per candidate: dispatched, held for one pass, or escalated to a human. */
+export async function budgetGated(ctx: DispatchContext, pass: LaunchPass): Promise<readonly TickActionable[]> {
+  const { entry, survivors, state, viewer } = pass
+  const notes: BudgetNote[] = []
+  const kept: TickActionable[] = []
+  for (const candidate of survivors) {
+    const result = await budgetCheck(ctx, entry, candidate, entry.config.models[candidate.agent])
+    if (!result.ok) {
+      notes.push({ kind: 'gate-failed', number: candidate.number, message: result.message })
+      continue
     }
-    state.budget = { line: state.budget?.line ?? null, problem: state.budget?.problem ?? null, costUsd: state.budget?.costUsd ?? null, notes: notes.length > NOTE_LIMIT ? notes.slice(notes.length - NOTE_LIMIT) : notes }
-    return kept
-  }
+    const priorHolds = state.budgetHolds.get(candidate.number) ?? 0
+    const route = budgetRoute(result.verdict, priorHolds)
+    if (route.holds === 0) state.budgetHolds.delete(candidate.number)
+    else state.budgetHolds.set(candidate.number, route.holds)
 
-  async function launchSurvivors(pass: LaunchPass): Promise<void> {
-    const { entry, survivors, resolvedByNumber, owner, runState, viewer } = pass
-    const launch = deps.launch
-    if (launch === null) return
-
-    const gated = entry.config.commands.budget !== null ? await budgetGated(pass) : survivors
-    if (gated.length === 0) {
-      report(entry.id, owner, activeOrIdle(env.recordsOf(entry.id)), runState)
-      return
+    if (route.action === 'dispatch') {
+      kept.push(candidate)
+      if (priorHolds > 0) notes.push({ kind: 'held-dispatched', number: candidate.number })
+      continue
     }
+    if (route.action === 'hold') {
+      notes.push({ kind: 'held', number: candidate.number, line: result.line })
+      continue
+    }
+    const item = candidate.kind === 'pull-request' ? pass.items.find((i) => i.number === candidate.number) : undefined
+    await escalateOverBudget(ctx, { entry, candidate, line: result.line, notes, viewer, item })
+  }
+  state.budget = { line: state.budget?.line ?? null, problem: state.budget?.problem ?? null, costUsd: state.budget?.costUsd ?? null, notes: notes.length > NOTE_LIMIT ? notes.slice(notes.length - NOTE_LIMIT) : notes }
+  return kept
+}
 
-    const index = ticketIndex(env.itemsOf(entry.id))
-    let waiting = 0
-    await env.serialize(async () => {
-      const limit = (await deps.store.capacity()).limit
-      for (const candidate of gated) {
-        if (env.isStopped()) break
-        if (deps.runState(entry.id) !== RUN_TARGET.run) {
-          waiting += 1
+/** Launches each gated candidate in turn and returns how many had to wait for a slot. The caller serializes it, so two repositories never race for the same free slot. */
+export async function launchGated(ctx: DispatchContext, pass: LaunchPass, gated: readonly TickActionable[], isStopped: () => boolean): Promise<number> {
+  const { entry, resolvedByNumber, viewer } = pass
+  const { hostedStore, stageLauncher } = ctx.live
+  const index = ticketIndex(pass.items)
+  let waiting = 0
+  const limit = (await hostedStore.capacity()).limit
+  for (const candidate of gated) {
+    if (isStopped()) break
+    if (ctx.stores.runStates.current(entry.id).state !==RUN_TARGET.run) {
+      waiting += 1
+      continue
+    }
+    const free = freeSlots(limit, hostedStore.list())
+    if (free <= 0) {
+      waiting += 1
+      continue
+    }
+    let review: ReviewDispatchFacts | null = null
+    if (candidate.agent === 'review') {
+      if (candidate.cycle === null) {
+        const message = `Couldn't count the earlier reviews on pull request #${candidate.number}, so the review wasn't started.`
+        await recordFailure(ctx, entry, candidate, message)
+        continue
+      }
+      review = reviewDispatchFacts({ priorReviews: candidate.cycle.count, author: resolvedByNumber.get(candidate.number)?.author ?? null, viewer })
+    }
+    const claimed = await claim(ctx, entry, candidate, resolvedByNumber.get(candidate.number))
+    if (!claimed) continue
+    try {
+      const result = await stageLauncher.launch({
+        entry,
+        agent: candidate.agent,
+        number: candidate.number,
+        kind: candidate.kind,
+        trigger: candidate.trigger,
+        model: entry.config.models[candidate.agent],
+        prompt: promptFor(candidate),
+        title: ticketLabelFor(index, candidate.number, candidate.kind),
+        target: targetOf(candidate.kind, resolvedByNumber.get(candidate.number)),
+        review,
+      })
+      if (result.ok) {
+        if (isStopped()) {
+          void hostedStore.close(result.sessionKey)
           continue
         }
-        const free = freeSlots(limit, deps.store.list())
-        if (free <= 0) {
-          waiting += 1
-          continue
-        }
-        let review: ReviewDispatchFacts | null = null
-        if (candidate.agent === 'review') {
-          if (candidate.cycle === null) {
-            const message = `Couldn't count the earlier reviews on pull request #${candidate.number}, so the review wasn't started.`
-            await recordFailure(entry, candidate, message)
-            continue
-          }
-          review = reviewDispatchFacts({ priorReviews: candidate.cycle.count, author: resolvedByNumber.get(candidate.number)?.author ?? null, viewer })
-        }
-        const claimed = await claim(entry, candidate, resolvedByNumber.get(candidate.number))
-        if (!claimed) continue
-        try {
-          const result = await launch.launch({
-            entry,
-            agent: candidate.agent,
-            number: candidate.number,
-            kind: candidate.kind,
-            trigger: candidate.trigger,
-            model: entry.config.models[candidate.agent],
-            prompt: promptFor(candidate),
-            title: ticketLabelFor(index, candidate.number, candidate.kind),
-            target: targetOf(candidate.kind, resolvedByNumber.get(candidate.number)),
-            review,
-          })
-          if (result.ok) {
-            if (env.isStopped()) {
-              void deps.store.close(result.sessionKey)
-              continue
-            }
-            deps.forceDispatch.clear(entry.id, candidate.number)
-          } else if (result.kind === 'at-capacity') {
-            await rollback(entry, candidate)
-            waiting += 1
-          } else {
-            await launchFailed(entry, candidate, result.cause, result.message, true)
-          }
-        } catch (error) {
-          await launchFailed(entry, candidate, 'threw', error instanceof Error ? error.message : String(error), true)
-        }
+        ctx.live.memos.forceDispatch.clear(entry.id, candidate.number)
+      } else if (result.kind === 'at-capacity') {
+        await rollback(ctx, entry, candidate)
+        waiting += 1
+      } else {
+        await launchFailed(ctx, entry, candidate, result.cause, result.message, true)
       }
-    })
-
-    const limit = (await deps.store.capacity()).limit
-    if (waiting > 0) report(entry.id, owner, { kind: 'at-capacity', limit, waiting }, runState)
-    else report(entry.id, owner, activeOrIdle(env.recordsOf(entry.id)), runState)
+    } catch (error) {
+      await launchFailed(ctx, entry, candidate, 'threw', error instanceof Error ? error.message : String(error), true)
+    }
   }
-
-  return { launchSurvivors }
+  return waiting
 }

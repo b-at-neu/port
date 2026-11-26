@@ -1,18 +1,32 @@
 import { describe, expect, it, vi } from 'vitest'
 import { pathOps } from '@/main/platform/paths'
 import { createStageLauncher } from '@/main/dispatch/stage/launcher'
+import type { AppContext } from '@/main/app/context'
 import type { ReadyEntry } from '@/types/actions'
 import type { StageLaunchRequest } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionKey, StartSessionParams } from '@/types/hosting'
 import type { FileResult } from '@/types/platform'
-import type { StageInstructionsLoader } from '@/types/stage'
 import { WIDGETS_ID, FIXTURE_REPOSITORIES } from '../../../fixtures/app/repos'
-import { memoryRuns } from '../../../support/state-store'
+import { createTestContext } from '../../../support/context'
 import { ticketOf } from '../../../support/tickets'
 
 const ENTRY = FIXTURE_REPOSITORIES.find((r) => r.id === WIDGETS_ID) as ReadyEntry
 const WORKTREE = '/repo/.claude/worktrees/plan-52'
 const PLAN_PATH = pathOps.join(WORKTREE, '.temp', 'plan-52.md')
+
+const wt = vi.hoisted(() => ({ create: vi.fn() }))
+vi.mock('@/main/repos/worktree/stage-worktree', async (original) => ({
+  ...(await original<object>()),
+  createStageWorktree: (_ctx: unknown, params: unknown) => wt.create(params) as unknown,
+  releaseStageBranch: () => Promise.resolve('deleted'),
+  sweepSessionBranches: () => Promise.resolve({ done: true, deleted: [] }),
+}))
+vi.mock('@/main/repos/worktree/worktree', async (original) => ({ ...(await original<object>()), removeSessionWorktreeAt: () => Promise.resolve({ outcome: 'removed' }) }))
+vi.mock('@/main/dispatch/stage/instructions', async (original) => ({
+  ...(await original<object>()),
+  loadStageLaunch: () => Promise.resolve({ ok: true, text: 'prompt', agent: { name: 'plan-agent', definition: { description: 'plan', prompt: 'body' }, selfContained: true } }),
+}))
+vi.mock('@/main/sessions/hosting/stage-prompt-store', async (original) => ({ ...(await original<object>()), readStagePrompt: () => Promise.resolve(null) }))
 
 function request(agent: StageLaunchRequest['agent']): StageLaunchRequest {
   return { entry: ENTRY, agent, number: 52, kind: 'issue', trigger: 'ready', model: 'opus', prompt: 'Run your pipeline stage for #52.', title: '#52 Plan', target: { kind: 'issue', title: 'Plan' }, review: null }
@@ -45,32 +59,16 @@ function snapshot(text: string): HostedSessionSnapshot {
 }
 
 async function settle(read: FileResult<string>, text: string, agent: StageLaunchRequest['agent'] = 'plan') {
+  wt.create.mockReset().mockResolvedValue({ ok: true, path: WORKTREE, branch: '52-plan', baseSha: 'abc', baseLabel: '52-plan', reclaimed: null })
   const start = vi.fn<(params: StartSessionParams) => Promise<unknown>>().mockResolvedValue({ ok: true, snapshot: snapshot(text) })
   const dismiss = vi.fn().mockResolvedValue({ ok: true })
   const store = { start, send: vi.fn().mockReturnValue({ ok: true }), close: vi.fn().mockResolvedValue({ ok: true }), dismiss, list: vi.fn(() => []) }
-  const readTextFile = vi.fn((path: string) => Promise.resolve<FileResult<string>>(path === PLAN_PATH ? read : { ok: false, kind: 'not-found', message: `ENOENT ${path}` }))
   const onOutcome = vi.fn()
-  const loadInstructions = vi.fn<StageInstructionsLoader>().mockResolvedValue({ ok: true, text: 'prompt', agent: { name: 'plan-agent', definition: { description: 'plan', prompt: 'body' }, selfContained: true } })
-  const { runs } = memoryRuns(WIDGETS_ID, { tickets: [ticketOf({ repo: WIDGETS_ID, ticket: 52, stage: 'plan' })] })
-  const launcher = createStageLauncher({
-    store: store as never,
-    git: vi.fn() as never,
-    createWorktree: vi.fn().mockResolvedValue({ ok: true, path: WORKTREE, branch: '52-plan', baseSha: 'abc', baseLabel: '52-plan', reclaimed: null }),
-    removeWorktree: vi.fn().mockResolvedValue({ outcome: 'removed' }),
-    releaseBranch: vi.fn().mockResolvedValue('deleted'),
-    sweepBranches: vi.fn().mockResolvedValue(undefined),
-    now: () => new Date(),
-    onOutcome,
-    onResumedTurn: vi.fn(),
-    pathExists: () => Promise.resolve(true),
-    runs,
-    newId: () => 'id-1',
-    loadInstructions,
-    readStagePrompt: () => Promise.resolve(null),
-    bundleRoot: '/bundle',
-    ops: pathOps,
-    readTextFile,
-  })
+  const live = { hostedStore: store as unknown as AppContext['live']['hostedStore'], dispatcher: { recordOutcome: onOutcome, recordResumedTurn: vi.fn() } as unknown as AppContext['live']['dispatcher'] }
+  const ctx = createTestContext({ tickets: { repoId: WIDGETS_ID, tickets: [ticketOf({ repo: WIDGETS_ID, ticket: 52, stage: 'plan' })] }, live })
+  await ctx.ready
+  const readTextFile = vi.spyOn(ctx.fs, 'readText').mockImplementation((path: string) => Promise.resolve<FileResult<string>>(path === PLAN_PATH ? read : { ok: false, kind: 'not-found', message: `ENOENT ${path}` }))
+  const launcher = createStageLauncher(ctx, '/bundle')
   await launcher.launch(request(agent))
   launcher.observe(snapshot(text))
   await vi.waitFor(() => expect(onOutcome).toHaveBeenCalled())

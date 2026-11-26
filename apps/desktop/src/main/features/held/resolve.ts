@@ -2,23 +2,26 @@
 // snapshot and this repository's own dispatch status, never trusting what the renderer already saw.
 import type { RepoId } from '@/utils/repos'
 import type { HeldForceDispatchResult } from '@/types/dispatch'
-import type { HeldChannelDeps } from '@/main/app/seams'
+import type { DispatchLive } from '@/main/dispatch/context'
 
-export function resolveForceDispatch(request: { readonly repoId: RepoId; readonly number: number }, deps: HeldChannelDeps): HeldForceDispatchResult {
-  if (typeof request?.repoId !== 'string' || request.repoId === '') throw new Error("'held:force-dispatch' requires a non-empty 'repoId'")
-  if (!Number.isInteger(request.number) || request.number <= 0) {
-    throw new Error("'held:force-dispatch' requires 'number' to be a positive integer")
+export interface ForceDispatchContext {
+  readonly live: {
+    readonly dispatcher: Pick<DispatchLive['dispatcher'], 'status'>
+    readonly watcher: Pick<DispatchLive['watcher'], 'snapshot' | 'republish'>
+    readonly memos: Pick<DispatchLive['memos'], 'forceDispatch'>
   }
+}
 
+export function resolveForceDispatch(ctx: ForceDispatchContext, request: { readonly repoId: RepoId; readonly number: number }): HeldForceDispatchResult {
   const { repoId, number } = request
-  const owner = deps.dispatcherStatus().find((s) => s.repoId === repoId)?.owner ?? 'none'
+  const owner = ctx.live.dispatcher.status().find((s) => s.repoId === repoId)?.owner ?? 'none'
   if (owner !== 'app') return { kind: 'not-owned' }
 
-  const report = deps.snapshot().tick.find((t) => t.repoId === repoId)
+  const report = ctx.live.watcher.snapshot().tick.find((t) => t.repoId === repoId)
   const held = report?.held.find((h) => h.number === number)
   if (held === undefined || held.reason !== 'contended') return { kind: 'not-held' }
 
-  deps.forceDispatch.set(repoId, number)
-  deps.republish()
+  ctx.live.memos.forceDispatch.set(repoId, number)
+  ctx.live.watcher.republish()
   return { kind: 'ok' }
 }

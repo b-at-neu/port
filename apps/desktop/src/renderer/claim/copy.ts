@@ -53,8 +53,6 @@ export function dispatchLine(repo: string, status: RepoDispatchStatus | undefine
       return `All ${String(state.limit)} session slots are busy. Planning starts when one frees up.`
     case 'budget-unavailable':
       return `The budget gate can't run (${state.message}), so nothing dispatches until it can.`
-    case 'no-launcher':
-      return "This app can't launch stage sessions, so nothing plans it yet."
   }
 }
 

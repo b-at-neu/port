@@ -5,10 +5,14 @@ import type { ReadyEntry } from '@/types/actions'
 import { stateMoved } from '@/types/writes'
 import { autoApprovalCandidatesFrom } from '@/main/pipeline/tick/dispatchable'
 import { autoPlanSwapCandidatesOf } from '@/main/pipeline/tick/auto-plan'
+import { autoApprovePlan } from '@/main/pipeline/operator/gate'
+import { readOwnership } from '@/main/repos/ownership'
+import { isReadyEntry } from '@/main/repos'
+import { requestRead } from '@/main/dispatch/context'
+import type { AutoPlanContext } from '@/main/dispatch/context'
+import type { AutoPlanner } from '@/types/dispatch'
 
-import type { AutoPlanner, AutoPlannerDeps } from '@/types/dispatch'
-
-export function createAutoPlanner(deps: AutoPlannerDeps): AutoPlanner {
+export function createAutoPlanner(ctx: AutoPlanContext): AutoPlanner {
   const inFlight = new Set<RepoId>()
   // `(repoId, number) -> at` the last write attempted, so a stale snapshot never re-fires it.
   const attemptedAt = new Map<RepoId, Map<number, string>>()
@@ -47,11 +51,11 @@ export function createAutoPlanner(deps: AutoPlannerDeps): AutoPlanner {
         }
       }
 
-      const ownership = await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo })
+      const ownership = await readOwnership(ctx, { repoRoot: entry.path, repo: entry.config.repo })
       if (ownership.kind !== 'app') return
 
       if (tick === undefined) return
-      const candidates = autoPlanSwapCandidatesOf({ report: tick, owner: 'app', runState: deps.runState(entry.id) })
+      const candidates = autoPlanSwapCandidatesOf({ report: tick, owner: 'app', runState: ctx.stores.runStates.current(entry.id).state })
       if (candidates.length === 0) return
 
       const repoState = snapshot.state.repositories.find((r) => r.ok && r.repoId === entry.id)
@@ -68,10 +72,10 @@ export function createAutoPlanner(deps: AutoPlannerDeps): AutoPlanner {
         const item = itemsByNumber.get(number)
         if (item === undefined) continue
 
-        const at = deps.now().toISOString()
+        const at = ctx.clock.now().toISOString()
         let landed = false
         try {
-          const outcome = await deps.autoApprove({ entry, item: { number, assignees: item.assignees }, auditDir: deps.auditDir })
+          const outcome = await autoApprovePlan(ctx, { entry, item: { number, assignees: item.assignees }, auditDir: ctx.paths.userData })
           if (outcome.kind === 'applied' || outcome.kind === 'mirror-failed') applied += 1
           landed = stateMoved(outcome)
         } catch {
@@ -84,17 +88,17 @@ export function createAutoPlanner(deps: AutoPlannerDeps): AutoPlanner {
           changed = true
         }
       }
-      if (applied > 0) deps.requestRead(entry.id)
+      if (applied > 0) requestRead(ctx, entry.id)
     } finally {
       inFlight.delete(entry.id)
-      if (changed) deps.onChange()
+      if (changed) ctx.live.watcher.republish()
     }
   }
 
   async function consider(snapshot: BoardSnapshot): Promise<void> {
-    const list = await deps.listRepositories(deps.registryDeps)
+    const list = await ctx.repos.list()
     if (!list.ok) return
-    const readyEntries = list.repositories.filter((e): e is ReadyEntry => 'config' in e)
+    const readyEntries = list.repositories.filter(isReadyEntry)
     await Promise.all(readyEntries.map((entry) => considerRepo(entry, snapshot)))
   }
 

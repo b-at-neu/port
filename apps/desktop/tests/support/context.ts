@@ -1,5 +1,6 @@
 // An in-memory AppContext, and the call that runs an action exactly as the router does.
 import type { AppContext } from '@/main/app/context'
+import type { PipelineMemos } from '@/main/pipeline/context'
 import { actions } from '@/main/app/router'
 import { createRunStateStore } from '@/main/pipeline/state/run-state'
 import { createRunStore } from '@/main/pipeline/state/run-store'
@@ -9,8 +10,20 @@ import { createForceDispatch, createRefreshMemo, createRerunMemo, createUnknownS
 import { createRecentsStore } from '@/main/features/folders/recents'
 import { createSessionIndex } from '@/main/sessions/hosting/session-index'
 import { createUsageLedger } from '@/main/sessions/hosting/usage-ledger'
+import { vi, type Mock } from 'vitest'
+import { stageModeFor } from '@/main/pipeline/transitions'
 import type { Platform } from '@/main/platform'
-import { readyOf, type Repos } from '@/main/repos'
+import { pathOps } from '@/main/platform/paths'
+import { isReadyEntry, readyOf, type Repos } from '@/main/repos'
+import type { BoardSnapshot } from '@/types/board'
+import type { RunState, StageLaunchRequest, StageLaunchResult } from '@/types/dispatch'
+import type { HostedStore } from '@/types/hosting'
+import { stageOfMode } from '@/types/stage-labels'
+import { DISPATCH_STORE_DEFAULTS, storeStub } from '../fixtures/store'
+import { boardSnapshot } from './board-snapshot'
+import { createFakeGitHub, type FakeGitHub, type FakeItem } from './fake-github'
+import { readyEntry } from './repo-config'
+import { runOf } from './tickets'
 import type { EventMap, EventName } from '@/main/app/events'
 import type { StateEngine } from '@/types/offload'
 import type { ActionInput, ActionName, ActionOutput } from '@/types/ipc'
@@ -160,6 +173,10 @@ export interface WatcherContextOptions extends TestContextOptions {
   readonly dispatcher?: Partial<IdleDispatcher>
 }
 
+export function freshMemos(): PipelineMemos {
+  return { unknownStreaks: createUnknownStreaks(), refreshMemo: createRefreshMemo(), rerunMemo: createRerunMemo(), forceDispatch: createForceDispatch() }
+}
+
 /** A test context whose `live` holds what the watcher reads: a scripted engine, an idle dispatcher, fresh memos. */
 export function watcherContext(options: WatcherContextOptions = {}): TestContext {
   const { engine, dispatcher, ...rest } = options
@@ -169,11 +186,63 @@ export function watcherContext(options: WatcherContextOptions = {}): TestContext
       engine: scriptedEngine(engine),
       dispatcher: { ...IDLE_DISPATCHER, ...dispatcher } as unknown as AppContext['live']['dispatcher'],
       autoPlanner: { refused: () => new Set<number>() } as unknown as AppContext['live']['autoPlanner'],
-      memos: { unknownStreaks: createUnknownStreaks(), refreshMemo: createRefreshMemo(), rerunMemo: createRerunMemo() },
-      forceDispatch: createForceDispatch(),
+      memos: freshMemos(),
       ...rest.live,
     },
   })
+}
+
+export interface DispatchContextOptions {
+  readonly owner?: 'none' | 'app' | 'unreadable'
+  readonly runState?: RunState
+  /** What the fake GitHub holds, for every read and write the dispatch passes make. */
+  readonly items?: readonly FakeItem[]
+  readonly tickets?: TestContextOptions['tickets']
+  readonly repositories?: readonly RepositoryEntry[]
+  /** A launch that succeeds is recorded as the run a real launcher would start. */
+  readonly launcher?: (request: StageLaunchRequest) => Promise<StageLaunchResult>
+  readonly store?: Partial<HostedStore>
+  readonly live?: Partial<AppContext['live']>
+}
+
+export type DispatchTestContext = TestContext & {
+  readonly github: FakeGitHub
+  readonly watcher: { readonly republish: Mock; readonly refresh: Mock }
+  /** Assigns what `live` holds once a service exists, the way the composition root does. */
+  readonly wire: Partial<Record<keyof AppContext['live'], unknown>>
+}
+
+/** A test context for the dispatch passes: fake GitHub, the repository's owner on disk, a run state, and a scripted store and launcher. */
+export async function dispatchContext(options: DispatchContextOptions = {}): Promise<DispatchTestContext> {
+  const repositories = options.repositories ?? [readyEntry()]
+  const entry = repositories[0]
+  const github = createFakeGitHub({ viewer: 'viewer', items: options.items ?? [] })
+  const watcher = { republish: vi.fn(), refresh: vi.fn(() => Promise.resolve({} as BoardSnapshot)), snapshot: () => boardSnapshot() }
+  const live: Partial<AppContext['live']> = {
+    hostedStore: storeStub({ ...DISPATCH_STORE_DEFAULTS, ...options.store }),
+    watcher: watcher as unknown as AppContext['live']['watcher'],
+    memos: freshMemos(),
+    ...options.live,
+  }
+  const ctx = createTestContext({ platform: github.platform, repositories, tickets: options.tickets, live })
+  if (live.stageLauncher === undefined && options.launcher !== undefined) {
+    const launch = options.launcher
+    const repoId = entry?.id ?? ('repo-a' as RepoId)
+    ;(live as { stageLauncher: unknown }).stageLauncher = {
+      launch: async (request: StageLaunchRequest) => {
+        const result = await launch(request)
+        if (result.ok) await ctx.stores.runs.start(repoId, runOf({ id: `run-of-${result.sessionKey}`, stage: stageOfMode(stageModeFor(request.agent, request.trigger)), item: { kind: request.kind, number: request.number }, agent: request.agent, trigger: request.trigger, model: request.model, title: request.title, sessionKey: result.sessionKey, startedAt: ctx.clock.now().toISOString() }))
+        return result
+      },
+    }
+  }
+  await ctx.ready
+  if (entry !== undefined && isReadyEntry(entry)) {
+    const owner = options.owner ?? 'none'
+    if (owner !== 'none') await ctx.fs.writeText(pathOps.join(entry.path, '.agents', 'cockpit.json'), JSON.stringify({ repo: entry.config.repo, owner: owner === 'app' ? 'app' : 'terminal', since: '2026-01-01T00:00:00.000Z' }))
+    await ctx.stores.runStates.set([entry.id], options.runState ?? 'dispatching', ctx.clock.now().toISOString())
+  }
+  return Object.assign(ctx, { github, watcher, wire: live })
 }
 
 /** Runs an action exactly as the router does: parse the raw request, then `run`. */

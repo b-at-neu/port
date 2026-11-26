@@ -1,12 +1,10 @@
-import { readTextFile } from '@/main/platform/files'
-import { defaultGitRunner } from '@/main/platform/git'
+import type { Platform } from '@/main/platform'
 import { pathOps } from '@/main/platform/paths'
 import { readAtDefaultRef } from '@/main/repos/config/harness'
 import { CONFIG_PATH } from '@/main/repos/config/paths'
 import { loadStageAgentDefinition } from '@/main/dispatch/stage/bundle'
 import type { StageLaunchRequest } from '@/types/dispatch'
-import type { FileResult, GitRunner, PathOps } from '@/types/platform'
-import type { StageInstructionsLoader, StageInstructionsResult } from '@/types/stage'
+import type { StageInstructionsResult, StageLoadedInstructions } from '@/types/stage'
 import type { StageAgent } from '@/types/tick'
 import { KIND_PROMPT_NAMES, composeStageSystemPrompt, stageModeOf } from '@/utils/stage/prompt'
 
@@ -14,9 +12,6 @@ import { KIND_PROMPT_NAMES, composeStageSystemPrompt, stageModeOf } from '@/util
 export const STAGE_PIPELINE_SECTIONS = ['CLAUDE.md overrides', 'Operating rules (all stage agents)', 'Hand-back line'] as const
 
 const PLUGIN_ROOT_VARIABLE = '${CLAUDE_PLUGIN_ROOT}'
-
-type ReadTextFile = (path: string) => Promise<FileResult<string>>
-type PathReader = Pick<PathOps, 'join' | 'contains' | 'toPosix'>
 
 function stripFrontmatter(text: string): string {
   return text.replace(/^---\n[\s\S]*?\n---\n/, '').trim()
@@ -53,19 +48,12 @@ function withoutDuplicateBlocks(section: string, agentBody: string): string {
   return section.replace(MARKER_BLOCK, (block, name: string) => (agentBody.includes(`<!-- ${name}:begin -->`) ? '' : block))
 }
 
-export interface LoadStageInstructionsParams {
-  readonly pluginRoot: string
-  readonly agent: StageAgent
-  readonly ops: PathReader
-  readonly readTextFile: ReadTextFile
-}
-
-export async function loadStageInstructions(params: LoadStageInstructionsParams): Promise<StageInstructionsResult> {
-  const agentFile = params.ops.join(params.pluginRoot, 'agents', `${params.agent}-agent.md`)
-  const agent = await params.readTextFile(agentFile)
+export async function loadStageInstructions(ctx: Pick<Platform, 'fs'>, pluginRoot: string, agentName: StageAgent): Promise<StageInstructionsResult> {
+  const agentFile = pathOps.join(pluginRoot, 'agents', `${agentName}-agent.md`)
+  const agent = await ctx.fs.readText(agentFile)
   if (!agent.ok) return { ok: false, message: `couldn't read ${agentFile}: ${agent.message}` }
-  const pipelineFile = params.ops.join(params.pluginRoot, 'docs', 'PIPELINE.md')
-  const pipeline = await params.readTextFile(pipelineFile)
+  const pipelineFile = pathOps.join(pluginRoot, 'docs', 'PIPELINE.md')
+  const pipeline = await ctx.fs.readText(pipelineFile)
   if (!pipeline.ok) return { ok: false, message: `couldn't read ${pipelineFile}: ${pipeline.message}` }
 
   const body = stripFrontmatter(agent.value.replaceAll('\r\n', '\n'))
@@ -76,7 +64,7 @@ export async function loadStageInstructions(params: LoadStageInstructionsParams)
     if (section === null) return { ok: false, message: `${pipelineFile} has no "${title}" section` }
     sections.push(withoutDuplicateBlocks(section, body).replace(/\n{3,}/g, '\n\n').trim())
   }
-  const text = [body, ...sections].join('\n\n').replaceAll(PLUGIN_ROOT_VARIABLE, params.ops.toPosix(params.pluginRoot))
+  const text = [body, ...sections].join('\n\n').replaceAll(PLUGIN_ROOT_VARIABLE, pathOps.toPosix(pluginRoot))
   return { ok: true, text }
 }
 
@@ -100,8 +88,8 @@ function parseStageConfig(text: string): StageConfigFile | null {
 }
 
 /** `commands.*` stays schema-only: it is read from the default branch's config, never from the stage worktree, whose checkout a pull request can edit. */
-export async function readStageConfigPointers(root: string, git: GitRunner): Promise<StageConfigPointers> {
-  const read = await readAtDefaultRef({ git }, root, CONFIG_PATH)
+export async function readStageConfigPointers(ctx: Pick<Platform, 'git'>, root: string): Promise<StageConfigPointers> {
+  const read = await readAtDefaultRef(ctx, root, CONFIG_PATH)
   if (!read.ok) return { ok: false, message: `couldn't read ${CONFIG_PATH} on the default branch: ${read.message}` }
   const config = parseStageConfig(read.text)
   if (config === null) return { ok: false, message: `${CONFIG_PATH} on the default branch is not a JSON object` }
@@ -141,29 +129,16 @@ export function buildStageContext(request: StageLaunchRequest, pluginRoot: strin
   return context
 }
 
-export interface StageInstructionsLoaderDeps {
-  /** The app's own `stage-prompts` folder. */
-  readonly bundleRoot: string
-  readonly ops: PathReader
-  readonly readTextFile: ReadTextFile
-  readonly git: GitRunner
-}
-
-export function defaultStageInstructionsLoader(bundleRoot: string): StageInstructionsLoader {
-  return createStageInstructionsLoader({ bundleRoot, ops: pathOps, readTextFile, git: defaultGitRunner() })
-}
-
-export function createStageInstructionsLoader(deps: StageInstructionsLoaderDeps): StageInstructionsLoader {
-  return async (request, worktreePath) => {
-    if (deps.ops.contains(worktreePath, deps.bundleRoot)) return { ok: false, message: `the bundled stage prompts at ${deps.bundleRoot} are inside the stage worktree` }
-    const instructions = await loadStageInstructions({ pluginRoot: deps.bundleRoot, agent: request.agent, ops: deps.ops, readTextFile: deps.readTextFile })
-    if (!instructions.ok) return instructions
-    const pointers = await readStageConfigPointers(request.entry.path, deps.git)
-    if (!pointers.ok) return pointers
-    const root = deps.ops.toPosix(deps.bundleRoot)
-    const prompt = composeStageSystemPrompt({ context: buildStageContext(request, root, pointers), instructions: instructions.text, source: root })
-    const definition = await loadStageAgentDefinition({ root: deps.bundleRoot, agent: request.agent, prompt, ops: deps.ops, readTextFile: deps.readTextFile })
-    if (!definition.ok) return definition
-    return { ok: true, text: request.prompt, agent: { name: definition.name, definition: definition.definition, selfContained: true } }
-  }
+/** The first message — only the dispatch line — and the inline agent, whose system prompt carries the stage context and the bundled instructions. */
+export async function loadStageLaunch(ctx: Pick<Platform, 'fs' | 'git'>, bundleRoot: string, request: StageLaunchRequest, worktreePath: string): Promise<StageLoadedInstructions> {
+  if (pathOps.contains(worktreePath, bundleRoot)) return { ok: false, message: `the bundled stage prompts at ${bundleRoot} are inside the stage worktree` }
+  const instructions = await loadStageInstructions(ctx, bundleRoot, request.agent)
+  if (!instructions.ok) return instructions
+  const pointers = await readStageConfigPointers(ctx, request.entry.path)
+  if (!pointers.ok) return pointers
+  const root = pathOps.toPosix(bundleRoot)
+  const prompt = composeStageSystemPrompt({ context: buildStageContext(request, root, pointers), instructions: instructions.text, source: root })
+  const definition = await loadStageAgentDefinition(ctx, { root: bundleRoot, agent: request.agent, prompt })
+  if (!definition.ok) return definition
+  return { ok: true, text: request.prompt, agent: { name: definition.name, definition: definition.definition, selfContained: true } }
 }

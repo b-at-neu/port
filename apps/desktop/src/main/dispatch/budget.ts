@@ -1,14 +1,17 @@
 import type { StageRecord } from '@/types/dispatch'
 
 // Budget policy: session name, verdicts, the two-strike hold rule, ledger feeds and the over-budget escalation.
-// Writes arrive through an injected `escalate`; budget-gate.ts reads and writes the ledger.
+// budget-gate.ts reads and writes the ledger.
 
 import type { BudgetNote, BudgetVerdict } from '@/types/dispatch'
-import type { EscalateToHumanParams, EscalateToHumanResult, ReadyEntry } from '@/types/actions'
+import type { ReadyEntry } from '@/types/actions'
 import type { ReconciledItem } from '@/types/state'
 import type { TickActionable } from '@/types/tick'
 import type { WriteOutcome } from '@/types/writes'
 import { labelName } from '@/utils/labels/vocabulary'
+import type { Platform } from '@/main/platform'
+import type { StateWriteContext } from '@/main/pipeline/context'
+import { escalateToHuman } from '@/main/pipeline/operator/escalate'
 import { budgetIntent } from '@/main/pipeline/incidents/raise'
 import { escalationRepeats } from '@/utils/pipeline/gates'
 
@@ -62,18 +65,16 @@ interface EscalateOverBudgetParams {
   readonly viewer: string
   /** The candidate's board item, read only for a pull request's head and comments. */
   readonly item: Pick<ReconciledItem, 'headRefOid' | 'comments'> | undefined
-  readonly escalate: (params: EscalateToHumanParams) => Promise<EscalateToHumanResult>
-  readonly dirs: { readonly audit: string; readonly scratch: string }
 }
 
 /** Swaps the candidate to `needsHuman` and records the outcome as a budget note. */
-export async function escalateOverBudget(params: EscalateOverBudgetParams): Promise<void> {
-  const { entry, candidate, line, notes, viewer, item, dirs } = params
+export async function escalateOverBudget(ctx: StateWriteContext & Pick<Platform, 'paths'>, params: EscalateOverBudgetParams): Promise<void> {
+  const { entry, candidate, line, notes, viewer, item } = params
   const needsHumanLabel = labelName(entry.config.vocabulary, 'needsHuman') ?? 'needsHuman'
   const triggerLabel = labelName(entry.config.vocabulary, candidate.trigger) ?? candidate.trigger
   const sha = candidate.kind === 'pull-request' ? (item?.headRefOid ?? null) : null
   const repeats = sha !== null && escalationRepeats({ comments: item?.comments ?? undefined, cause: 'budget', sha })
-  const escalation = await params.escalate({
+  const escalation = await escalateToHuman(ctx, {
     entry,
     kind: candidate.kind,
     number: candidate.number,
@@ -82,8 +83,8 @@ export async function escalateOverBudget(params: EscalateOverBudgetParams): Prom
     body: repeats ? null : escalationBody(line, sha),
     action: 'budget-escalate',
     incident: budgetIntent(candidate.trigger, item?.headRefOid ?? null),
-    auditDir: dirs.audit,
-    scratchDir: dirs.scratch,
+    auditDir: ctx.paths.userData,
+    scratchDir: ctx.paths.temp,
   })
   if (escalation.labels.kind === 'applied') {
     notes.push({ kind: 'escalated', number: candidate.number, needsHumanLabel, commentFailedMessage: commentFailureMessage(escalation.comment) })

@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createInterruptedSweeper } from '@/main/dispatch/stage/sweep'
+import type { AppContext } from '@/main/app/context'
 import type { BoardSnapshot } from '@/types/board'
 import type { DispatchRecord, RepoDispatchStatus } from '@/types/dispatch'
 import type { ItemsByNumberFetch } from '@/types/github'
-import type { InterruptedStage, StageRestartResult, StageResumeResult } from '@/types/stage'
+import type { InterruptedStage, RunStore, StageRestartResult, StageResumeResult } from '@/types/stage'
 import type { RemoveSessionWorktreeOutcome } from '@/types/workspace'
 import type { RepoId } from '@/utils/repos'
 import { boardSnapshot, reconciledItem, repositoryState } from '../../../support/board-snapshot'
+import { createTestContext } from '../../../support/context'
 import { createFakeRuns, type NewRun } from '../../../support/fake-runs'
 
 const REPO = 'repo-a' as RepoId
@@ -55,25 +57,37 @@ function snapshotWith(...items: Parameters<typeof repositoryState>[0]): BoardSna
 const inFlight = reconciledItem({ number: 38, matchedKeys: ['inProgress'] })
 const moved = reconciledItem({ number: 38, matchedKeys: ['prOpened'] })
 
+const hoisted = vi.hoisted(() => ({ remove: vi.fn(), fetch: vi.fn(), resume: vi.fn(), restart: vi.fn() }))
+vi.mock('@/main/repos/worktree/worktree', async (original) => ({ ...(await original<object>()), removeSessionWorktreeAt: (_ctx: unknown, params: { path: string; force: boolean }) => hoisted.remove(params.path, params.force) as unknown }))
+vi.mock('@/main/github/tracker/items', async (original) => ({ ...(await original<object>()), fetchItemsByNumber: (_ctx: unknown, params: unknown) => hoisted.fetch(params) as unknown }))
+vi.mock('@/main/dispatch/stage/recover', async (original) => ({
+  ...(await original<object>()),
+  resumeStage: (_ctx: unknown, id: string) => hoisted.resume(id) as unknown,
+  restartStage: (_ctx: unknown, id: string) => hoisted.restart(id) as unknown,
+}))
+
+const CLOCK_START = Date.parse('2026-01-01T00:00:00.000Z')
+
 function setup(registry = freshRegistry(), now: Date = AFTER_RESET) {
-  const removeWorktree = vi.fn((): Promise<RemoveSessionWorktreeOutcome> => Promise.resolve({ outcome: 'removed' }))
-  const fetchItemsByNumber = vi.fn((): Promise<ItemsByNumberFetch> => Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: POLL_AT }))
-  const resume = vi.fn((id: string): Promise<StageResumeResult> => {
+  const removeWorktree = hoisted.remove.mockReset().mockImplementation((): Promise<RemoveSessionWorktreeOutcome> => Promise.resolve({ outcome: 'removed' }))
+  const fetchItemsByNumber = hoisted.fetch.mockReset().mockImplementation((): Promise<ItemsByNumberFetch> => Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: POLL_AT }))
+  const resume = hoisted.resume.mockReset().mockImplementation((id: string): Promise<StageResumeResult> => {
     void id
     return Promise.resolve({ kind: 'ok', sessionKey: 'hosted-1' })
   })
-  const pathExists = vi.fn((path: string): Promise<boolean> => {
-    void path
-    return Promise.resolve(true)
-  })
-  const onChange = vi.fn()
-  const live: string[] = []
-  const restart = vi.fn((id: string): Promise<StageRestartResult> => {
+  const restart = hoisted.restart.mockReset().mockImplementation((id: string): Promise<StageRestartResult> => {
     void id
     return Promise.resolve({ kind: 'ok' })
   })
-  const sweeper = createInterruptedSweeper({ runs: registry, fetchItemsByNumber, removeWorktree, pathExists, resume, restart, liveWorktreePaths: () => live, samePath: (a, b) => a === b, onChange, now: () => now })
-  return { registry, sweeper, removeWorktree, pathExists, fetchItemsByNumber, resume, restart, live, onChange }
+  const live: string[] = []
+  const republish = vi.fn()
+  const hostedStore = { list: () => live.map((path) => ({ phase: 'streaming', workspace: { worktree: { path } } })), capacity: () => Promise.resolve({ limit: 4 }) } as unknown as AppContext['live']['hostedStore']
+  const watcher = { republish, snapshot: vi.fn() } as unknown as AppContext['live']['watcher']
+  const ctx = createTestContext({ stores: { runs: registry as unknown as RunStore }, live: { hostedStore, watcher } })
+  ctx.clock.advance(now.getTime() - CLOCK_START)
+  const pathExists = vi.spyOn(ctx.fs, 'exists').mockResolvedValue(true)
+  const sweeper = createInterruptedSweeper(ctx)
+  return { registry, sweeper, removeWorktree, pathExists, fetchItemsByNumber, resume, restart, live, onChange: republish }
 }
 
 describe('createInterruptedSweeper — stale entries', () => {
@@ -229,7 +243,7 @@ describe('createInterruptedSweeper — usage-limit auto-resume', () => {
     const deps = setup(registry)
     const items = [reconciledItem({ number: 39, matchedKeys: ['inProgress'] }), reconciledItem({ number: 40, matchedKeys: ['inProgress'] })]
     await deps.sweeper.consider(snapshotWith(...items), [status()])
-    expect(deps.resume.mock.calls.map(([id]) => id)).toEqual(['early', 'late'])
+    expect(deps.resume.mock.calls.map((call: readonly unknown[]) => call[0])).toEqual(['early', 'late'])
     expect(deps.onChange).toHaveBeenCalledTimes(1)
   })
 
