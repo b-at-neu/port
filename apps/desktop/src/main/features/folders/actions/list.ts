@@ -1,5 +1,5 @@
 import { defineAction } from '@/main/app/define'
 import { noInput } from '@/main/app/schemas'
-import { resolveFoldersList } from '@/main/features/folders/resolve'
+import { listFolders } from '@/main/features/folders/resolve'
 
-export const foldersList = defineAction({ name: 'folders.list', kind: 'query', input: noInput, run: (ctx, input) => resolveFoldersList(ctx.repos.deps, input, ctx.seams.workspace) })
+export const foldersList = defineAction({ name: 'folders.list', kind: 'query', input: noInput, run: (ctx) => listFolders(ctx) })

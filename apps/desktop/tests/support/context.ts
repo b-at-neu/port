@@ -6,6 +6,7 @@ import { createRunStore } from '@/main/pipeline/state/run-store'
 import { createIncidentLog } from '@/main/pipeline/incidents/log'
 import { createPipelineStateStore, PIPELINE_STATE_FILE } from '@/main/pipeline/state/store'
 import { createForceDispatch, createRefreshMemo, createRerunMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
+import { createRecentsStore } from '@/main/features/folders/recents'
 import { createSessionIndex } from '@/main/sessions/hosting/session-index'
 import { createUsageLedger } from '@/main/sessions/hosting/usage-ledger'
 import type { Platform } from '@/main/platform'
@@ -46,6 +47,11 @@ function unscriptedGroup<T extends object>(group: string, given: Partial<T>): T 
       throw new Error(`ctx.${group}.${key} is not in this test context; pass it to createTestContext`)
     },
   }) as T
+}
+
+/** An engine whose unscripted members throw. */
+export function fakeEngine(given: Partial<StateEngine>): StateEngine {
+  return unscriptedGroup('live.engine', given)
 }
 
 function memoryRepos(seed: readonly RepositoryEntry[], platform: Platform): Omit<Repos, 'deps'> {
@@ -96,6 +102,7 @@ export function createTestContext(options: TestContextOptions = {}): TestContext
     incidentLog: createIncidentLog(platform),
     sessionIndex: createSessionIndex({ path: path('session-index.json'), readJson: platform.fs.readJson, writeJsonAtomic: platform.fs.writeJsonAtomic, now: platform.clock.now }),
     usageLedger: createUsageLedger({ path: path('usage-ledger.json'), readJson: platform.fs.readJson, writeJsonAtomic: platform.fs.writeJsonAtomic, now: platform.clock.now, bootId: 'test-boot' }),
+    recents: createRecentsStore(platform, { dir: platform.paths.userData }),
     ...options.stores,
   }
 

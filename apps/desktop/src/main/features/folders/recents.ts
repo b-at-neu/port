@@ -1,9 +1,9 @@
 // `folders.json`'s only writer — a recoverable recents store, cap 10, deduped by `samePath`.
 // `reset`: a malformed or newer-version file loads empty and the next record replaces it.
 import { z } from 'zod'
-import { createJsonStore, nodeStoreFs } from '@/main/platform/json-store'
-import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import type { PathOps } from '@/types/platform'
+import { createJsonStore } from '@/main/platform/json-store'
+import { pathOps } from '@/main/platform/paths'
+import type { Platform } from '@/main/platform'
 import type { RecentFolder, RecentsStore } from '@/types/workspace'
 
 const FOLDERS_FILE = 'folders.json'
@@ -13,21 +13,15 @@ export const RECENTS_CAP = 10
 const foldersSchema = z.object({ version: z.literal(CURRENT_VERSION), recents: z.array(z.unknown()) })
 const recentSchema = z.object({ path: z.string().min(1), lastUsedAt: z.string().min(1) })
 
-interface CreateRecentsStoreParams {
-  readonly dir: string
-  readonly pathOps?: PathOps
-}
-
-export function createRecentsStore(params: CreateRecentsStoreParams): RecentsStore {
-  const ops = params.pathOps ?? defaultPathOps
-  const filePath = ops.join(params.dir, FOLDERS_FILE)
+export function createRecentsStore(ctx: Pick<Platform, 'fs'>, params: { readonly dir: string }): RecentsStore {
+  const filePath = pathOps.join(params.dir, FOLDERS_FILE)
   const store = createJsonStore({
     file: filePath,
     version: CURRENT_VERSION,
     schema: foldersSchema,
     initial: { version: CURRENT_VERSION, recents: [] },
     unreadable: 'reset',
-    fs: nodeStoreFs,
+    fs: ctx.fs,
   })
 
   async function load(): Promise<readonly RecentFolder[]> {
@@ -45,7 +39,7 @@ export function createRecentsStore(params: CreateRecentsStoreParams): RecentsSto
 
   async function record(path: string, now: Date): Promise<void> {
     const existing = await load()
-    const withoutMatch = existing.filter((entry) => !ops.samePath(entry.path, path))
+    const withoutMatch = existing.filter((entry) => !pathOps.samePath(entry.path, path))
     const next = [{ path, lastUsedAt: now.toISOString() }, ...withoutMatch].slice(0, RECENTS_CAP)
     const written = await store.write({ version: CURRENT_VERSION, recents: next })
     if (!written.ok) console.error(`[workspace] could not write ${filePath}: ${written.message}`)

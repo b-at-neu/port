@@ -8,22 +8,19 @@ import { createRunStateStore } from '@/main/pipeline/state/run-state'
 import { createRunStore } from '@/main/pipeline/state/run-store'
 import { createPipelineStateStore, PIPELINE_STATE_FILE } from '@/main/pipeline/state/store'
 import { pathOps } from '@/main/platform/paths'
-import { defaultWorkspaceChannelDeps } from '@/main/features/folders/resolve'
 import { createRecentsStore } from '@/main/features/folders/recents'
 import { removeSessionWorktreeAt } from '@/main/repos/worktree/worktree'
 import { releaseStageBranch } from '@/main/repos/worktree/stage-worktree'
 import { createDefaultStageLauncher } from '@/main/dispatch/stage/default'
 import { createWorkerEngine } from '@/main/worker/client'
-import { resolveSessionsScan } from '@/main/features/history/resolve'
 import { bindOperator } from '@/main/app/operator'
-import { defaultHostingChannelDeps } from '@/main/features/session/resolve'
 import { createDispatchRuntime } from '@/main/dispatch/runtime'
 import { fetchItemsByNumber } from '@/main/github/tracker/items'
 import { readAllowBase } from '@/main/github/allow'
 import { proposeAllowRule } from '@/main/github/writes/allow'
 import type { FetchItemsByNumberParams } from '@/types/github'
 import { readOwnership, takeOwnership } from '@/main/repos/ownership'
-import type { HostingChannelDeps, SearchQueryDeps, SessionsScanDeps, StageChannelDeps, TranscriptTailDeps } from '@/main/app/seams'
+import type { StageChannelDeps } from '@/main/app/seams'
 import type { StateEngine } from '@/types/offload'
 import { createPlatform, type Platform } from '@/main/platform'
 import { nativeNotify } from '@/main/platform/notify'
@@ -48,8 +45,6 @@ import type { RunStore, StageLauncherHandle } from '@/types/stage'
 import type { IncidentLog } from '@/types/incidents'
 import type { RecentsStore } from '@/types/workspace'
 import type { UsageLedger } from '@/types/settings'
-import type { WorkspaceChannelDeps } from '@/main/features/folders/resolve'
-import type { SessionKey } from '@/types/hosting'
 import type { AppCommand } from '@/utils/shell/commands'
 
 export type AppContext = Platform & {
@@ -70,7 +65,6 @@ export type AppContext = Platform & {
     readonly hostedStore: HostedStore
     readonly dispatcher: Dispatcher
     readonly stageLauncher: StageLauncherHandle
-    readonly offload: { readonly sessionsScan: SessionsScanDeps; readonly search: SearchQueryDeps; readonly tail: TranscriptTailDeps }
     readonly engine: StateEngine
     readonly notifier: ReturnType<typeof createNotifier>
     readonly sessionMenu: ReturnType<typeof createSessionMenuRefresher>
@@ -84,8 +78,6 @@ export type AppContext = Platform & {
     readonly shutdown: () => void
   }
   readonly seams: {
-    readonly hosting: HostingChannelDeps
-    readonly workspace: WorkspaceChannelDeps
     readonly stage: StageChannelDeps
   }
 }
@@ -111,7 +103,7 @@ export function createAppContext(restart: RestartSeams): AppContext {
   })
   const repos = createRepos(platform)
 
-  const recents = createRecentsStore({ dir: userData })
+  const recents = createRecentsStore(platform, { dir: userData })
 
   const incidentLog = createIncidentLog(platform)
 
@@ -153,20 +145,6 @@ export function createAppContext(restart: RestartSeams): AppContext {
   }
 
   const { close: closeOffload, ...engine } = createWorkerEngine(platform, { onRespawn: () => void ctx.live.watcher.refresh() })
-  const sessionsScan: SessionsScanDeps = { listRepositories, readSessionState: ({ repos: scanRepos }) => engine.scanSessions({ repos: scanRepos }) }
-  const offload: AppContext['live']['offload'] = {
-    sessionsScan,
-    search: {
-      resolveSessionsScan: (registryDeps) => resolveSessionsScan(registryDeps, sessionsScan),
-      runSearch: ({ scan, indexDir, query, scope }) => engine.search({ scan, indexDir, query, scope }),
-    },
-    tail: {
-      openTail: (params) => engine.tailOpen(params),
-      pollTail: (params) => engine.tailPoll(params),
-      closeTail: (params) => void engine.tailClose(params),
-    },
-  }
-
   const actions = bindOperator(ctx)
 
   const notifier = createNotifier({ notify: platform.notify, repos, emit }, () => hostedStore.notificationPrefs())
@@ -193,7 +171,6 @@ export function createAppContext(restart: RestartSeams): AppContext {
     bundle: { isPackaged: app.isPackaged, mainDir: __dirname, resourcesPath: process.resourcesPath },
     userData,
   })
-  const hosting = defaultHostingChannelDeps(hostedStore, sessionIndex, { ctx: platform, recents, readSessions: () => engine.listSessions() })
 
   const { unknownStreaks, refreshMemo, rerunMemo, dispatcher, forceDispatch, autoPlanner, bindWatcher, shutdown } = createDispatchRuntime({
     store: hostedStore,
@@ -226,8 +203,6 @@ export function createAppContext(restart: RestartSeams): AppContext {
   })
   bindWatcher(watcher)
 
-  const workspaceOf = (sessionKey: string) => Promise.resolve(hostedStore.snapshotOf(sessionKey as SessionKey)?.workspace ?? null)
-
   const stage: StageChannelDeps = {
     listRepositories,
     runs,
@@ -246,18 +221,13 @@ export function createAppContext(restart: RestartSeams): AppContext {
 
   const update = createDefaultUpdate(platform, restart)
 
-  seams = {
-    hosting,
-    workspace: defaultWorkspaceChannelDeps(userData, workspaceOf, recents),
-    stage,
-  }
+  seams = { stage }
 
   live = {
     watcher,
     hostedStore,
     dispatcher,
     stageLauncher,
-    offload,
     engine,
     notifier,
     sessionMenu,
