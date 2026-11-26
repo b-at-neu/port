@@ -21,7 +21,7 @@ describe('taking over a repository', () => {
 
     await app.consider(WORK)
     expect(app.stage.launches).toHaveLength(1)
-    expect(await app.ticket(52)).toMatchObject({ stage: 'implement', status: { kind: 'running' } })
+    expect(app.ticket(52)).toMatchObject({ stage: 'implement', status: { kind: 'running' } })
   })
 
   it('a repository another session owns refuses the run, keeps that owner, and launches nothing', async () => {
@@ -33,7 +33,7 @@ describe('taking over a repository', () => {
 
     await app.consider(WORK)
     expect(app.stage.launches).toHaveLength(0)
-    expect(await app.ticket(52)).toMatchObject({ status: { kind: 'queued' } })
+    expect(app.ticket(52)).toMatchObject({ status: { kind: 'queued' } })
   })
 
   it('a restart that finds the record gone while dispatching takes the repository back', async () => {

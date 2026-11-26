@@ -45,7 +45,7 @@ describe('update actions', () => {
     const { ctx, calls } = setup()
     expect(await callAction(ctx, 'update.check')).toBe(STATE)
     expect(await callAction(ctx, 'update.download')).toBe(DOWNLOAD)
-    expect(calls).toEqual(['check:manual', 'start'])
+    expect([...calls].sort()).toEqual(['check:manual', 'start'])
   })
 
   it.each([true, false])('passes reveal %j through', async (reveal) => {

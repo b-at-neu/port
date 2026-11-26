@@ -24,11 +24,11 @@ describe('pause and drain', () => {
     const result = await callAction(app.ctx, 'dispatch.control', { command: 'pause', repoId: SCENARIO_REPO })
 
     expect(result).toMatchObject({ ok: true, runState: { state: 'paused' }, report: { kind: 'completed', items: [{ kind: 'stopped', number: 52 }] } })
-    expect(await app.ticket(52)).toMatchObject({ stage: 'implement', status: { kind: 'held' } })
+    expect(app.ticket(52)).toMatchObject({ stage: 'implement', status: { kind: 'held' } })
 
     await app.consider(tickReport({ actionable: [actionable(53, 'planApproved', 'impl')] }))
     expect(app.stage.launches).toHaveLength(1)
-    expect(await app.ticket(53)).toMatchObject({ status: { kind: 'queued' } })
+    expect(app.ticket(53)).toMatchObject({ status: { kind: 'queued' } })
   })
 
   it('drain lets the running stage hand back, and launches nothing new', async () => {
@@ -43,7 +43,7 @@ describe('pause and drain', () => {
 
     await app.finish('hosted-1' as SessionKey, COMPLETED)
     await app.consider(tickReport())
-    expect(await app.ticket(52)).toMatchObject({ stage: 'review', status: { kind: 'queued' } })
-    expect(await app.ticket(53)).toMatchObject({ stage: 'implement', status: { kind: 'queued' } })
+    expect(app.ticket(52)).toMatchObject({ stage: 'review', status: { kind: 'queued' } })
+    expect(app.ticket(53)).toMatchObject({ stage: 'implement', status: { kind: 'queued' } })
   })
 })

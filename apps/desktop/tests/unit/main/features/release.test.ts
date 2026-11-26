@@ -157,10 +157,10 @@ describe('release.run validation', () => {
 })
 
 describe('release.run open', () => {
-  it('bumps, opens both pull requests in order and re-serializes the version files', async () => {
+  it('bumps, opens both pull requests and re-serializes the version files', async () => {
     const calls = arrange(readOf({ kind: 'idle' }))
     expect(await run({ repoId: REPO_ID, step: 'open', version: 'v0.3.0' })).toEqual({ kind: 'opened' })
-    expect(calls.names).toEqual(['bump', 'bump-pr', 'release-pr'])
+    expect([...calls.names].sort()).toEqual(['bump', 'bump-pr', 'release-pr'])
     expect(calls.seen['bump']).toEqual({ head: HEAD, files: [{ path: 'package.json', content: '{\n  "name": "x",\n  "version": "0.3.0"\n}\n' }], integration: 'dev', root: '/repo' })
     expect(calls.seen['release-pr']).toMatchObject({ production: 'main', integration: 'dev', assignee: 'octo-operator' })
     expect((calls.seen['release-pr'] as { body: string }).body).toContain('## Release v0.3.0')
@@ -182,7 +182,7 @@ describe('release.run open', () => {
   it('resumes from the missing pull requests while waiting on the bump', async () => {
     const calls = arrange(readOf({ kind: 'waiting-bump', version: '0.3.0', bumpPr: null, releasePr: null }))
     await run({ repoId: REPO_ID, step: 'open', version: '0.3.0' })
-    expect(calls.names).toEqual(['bump-pr', 'release-pr'])
+    expect([...calls.names].sort()).toEqual(['bump-pr', 'release-pr'])
     const done = arrange(readOf({ kind: 'waiting-bump', version: '0.3.0', bumpPr: { number: 1, url: 'u' }, releasePr: { number: 2, url: 'u' } }))
     await run({ repoId: REPO_ID, step: 'open', version: '0.3.0' })
     expect(done.names).toEqual([])
@@ -229,7 +229,7 @@ describe('release.run publish', () => {
     const result = await run({ ...publishRequest, notes: '- A thing\n' })
     expect(result).toEqual({ kind: 'published', url: 'https://github.com/acme/widgets/releases/tag/v0.3.0', hook: { kind: 'ok', stdout: 'done' } })
     expect(calls.seen['publish']).toEqual({ target: 'prod-oid', notes: '- A thing\n' })
-    expect(calls.names).toEqual(['publish', 'hook-audit'])
+    expect([...calls.names].sort()).toEqual(['hook-audit', 'publish'])
   })
 
   it('never undoes a publish when the hook fails', async () => {

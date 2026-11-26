@@ -32,7 +32,7 @@ describe('restart and sleep during an active run', () => {
     expect(tick.claims).toMatchObject([{ number: 52, class: 'interrupted' }])
     await after.consider(tick)
     expect(after.stage.launches).toHaveLength(0)
-    expect(await after.ticket(52)).toMatchObject({ stage: 'implement', status: { kind: 'running' } })
+    expect(after.ticket(52)).toMatchObject({ stage: 'implement', status: { kind: 'running' } })
   })
 
   it('a restart after a hand-back that never reached its label settles it once, and launches nothing', async () => {
@@ -43,12 +43,12 @@ describe('restart and sleep during an active run', () => {
 
     const after = await scenarioRig({ fs, items: ITEMS })
     await after.consider(tickReport())
-    await vi.waitFor(async () => expect(await after.ticket(52)).toMatchObject({ stage: 'review', status: { kind: 'queued' } }))
-    const settledTicket = await after.ticket(52)
+    await vi.waitFor(() => expect(after.ticket(52)).toMatchObject({ stage: 'review', status: { kind: 'queued' } }))
+    const settledTicket = after.ticket(52)
 
     await after.consider(tickReport())
     await settled()
-    expect(await after.ticket(52)).toEqual(settledTicket)
+    expect(after.ticket(52)).toEqual(settledTicket)
     expect(after.stage.launches).toHaveLength(0)
     const tick = after.tickOver(after.claimedItem(52), '2026-01-01T01:00:00.000Z')
     expect(tick.claims).toMatchObject([{ number: 52, class: 'capped' }])
@@ -68,11 +68,11 @@ describe('restart and sleep during an active run', () => {
 
     await app.stage.handBack('hosted-1' as SessionKey, COMPLETED)
     app.dispatcher.recordOutcome(SCENARIO_REPO, 'hosted-1' as SessionKey, COMPLETED, null)
-    await vi.waitFor(async () => expect(await app.ticket(52)).toMatchObject({ stage: 'review', status: { kind: 'queued' } }))
-    const landed = await app.ticket(52)
+    await vi.waitFor(() => expect(app.ticket(52)).toMatchObject({ stage: 'review', status: { kind: 'queued' } }))
+    const landed = app.ticket(52)
     await app.consider(tickReport())
     await settled()
-    expect(await app.ticket(52)).toEqual(landed)
+    expect(app.ticket(52)).toEqual(landed)
     expect(app.github.labels(52)).toEqual(['port', 'reviewing'])
     expect(app.stage.launches).toHaveLength(1)
   })

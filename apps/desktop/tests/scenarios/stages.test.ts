@@ -20,10 +20,10 @@ describe('stages', () => {
 
     await app.consider(tickReport({ actionable: [actionable(52, 'ready', 'plan')] }))
     expect(app.stage.launches).toHaveLength(1)
-    expect(await app.ticket(52)).toMatchObject({ stage: 'plan', status: { kind: 'running' } })
+    expect(app.ticket(52)).toMatchObject({ stage: 'plan', status: { kind: 'running' } })
 
     await app.finish('hosted-1' as SessionKey, handback('plan-written', null), { kind: 'read', body: PLAN })
-    await vi.waitFor(async () => expect(await app.ticket(52)).toMatchObject({ stage: 'plan', status: { kind: 'waiting-on-you', gate: 'plan-approval' } }))
+    await vi.waitFor(() => expect(app.ticket(52)).toMatchObject({ stage: 'plan', status: { kind: 'waiting-on-you', gate: 'plan-approval' } }))
     expect(app.github.body(52)).toBe(PLAN)
     expect(app.github.labels(52)).toEqual(['port', 'planning', 'needs you'])
   })
@@ -34,10 +34,10 @@ describe('stages', () => {
 
     await app.consider(tickReport({ actionable: [actionable(52, 'planApproved', 'impl')] }))
     expect(app.stage.launches).toHaveLength(1)
-    expect(await app.ticket(52)).toMatchObject({ stage: 'implement', status: { kind: 'running' } })
+    expect(app.ticket(52)).toMatchObject({ stage: 'implement', status: { kind: 'running' } })
 
     await app.finish('hosted-1' as SessionKey, handback('pr-opened', '#8'))
-    await vi.waitFor(async () => expect(await app.ticket(52)).toMatchObject({ stage: 'review', status: { kind: 'queued' }, pr: { number: 8 } }))
+    await vi.waitFor(() => expect(app.ticket(52)).toMatchObject({ stage: 'review', status: { kind: 'queued' }, pr: { number: 8 } }))
 
     await app.consider(tickReport())
     expect(app.stage.launches).toHaveLength(1)
@@ -51,7 +51,7 @@ describe('stages', () => {
     await app.finish('hosted-1' as SessionKey, handback('pr-opened', '#99'))
     await app.consider(tickReport())
 
-    expect(await app.ticket(52)).toMatchObject({ stage: 'implement', status: { kind: 'running' } })
+    expect(app.ticket(52)).toMatchObject({ stage: 'implement', status: { kind: 'running' } })
     expect(app.github.labels(52)).not.toContain('reviewing')
   })
 })

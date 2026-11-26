@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { freeSlots, liveCount, survived } from '@/main/dispatch/launch'
+import { DISPATCH_PROMPT, freeSlots, liveCount, promptFor, REFRESH_PROMPT, survived } from '@/main/dispatch/launch'
 import type { ResolvedItem } from '@/types/github'
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import type { TickActionable } from '@/types/tick'
@@ -78,5 +78,35 @@ describe('survived — the ticket', () => {
 
   it('still takes the assignees from GitHub', () => {
     expect(survived(resolved([], ['someone-else']), CANDIDATE, 'op', queued)).toBe(false)
+  })
+})
+
+function actionableOf(overrides: Partial<TickActionable> = {}): TickActionable {
+  return { number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null, ...overrides }
+}
+
+describe('promptFor', () => {
+  const INSTRUCTION = 'Run your pipeline stage for #52. port has already moved its label. Follow your Pre-flight, Work, and Handoff steps exactly.'
+
+  it.each([
+    [{ trigger: 'ready', agent: 'plan' }, `Plan stage for issue #52. ${INSTRUCTION}`],
+    [{}, `Implementation stage for issue #52. ${INSTRUCTION}`],
+    [{ kind: 'pull-request', trigger: 'readyForReview', agent: 'review' }, `Review stage for pull request #52. ${INSTRUCTION}`],
+    [{ kind: 'pull-request', trigger: 'needsRevision', agent: 'revise' }, `Revision stage for pull request #52. ${INSTRUCTION}`],
+  ] as const)('names the stage and the item for %j', (overrides, expected) => {
+    expect(promptFor(actionableOf(overrides))).toBe(expected)
+  })
+
+  it('fills every placeholder, with the number twice', () => {
+    const prompt = promptFor(actionableOf())
+    expect(prompt).not.toMatch(/<[A-Za-z]+>/)
+    expect(prompt.split('#52')).toHaveLength(3)
+    expect(DISPATCH_PROMPT.split('<n>')).toHaveLength(3)
+  })
+
+  it('names the refresh stage for a refreshBranch trigger, with the number twice', () => {
+    const prompt = promptFor(actionableOf({ kind: 'pull-request', trigger: 'refreshBranch', agent: 'revise' }))
+    expect(prompt).toBe('Refresh stage for pull request #52. Run your pipeline stage for pull request #52 in refresh mode.')
+    expect(REFRESH_PROMPT.split('<n>')).toHaveLength(3)
   })
 })

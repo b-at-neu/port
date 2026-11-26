@@ -63,7 +63,7 @@ describe('cutting a release', () => {
     expect(await callAction(app.ctx, 'release.run', { repoId: 'repo-a' as never, step: 'open', version: '0.3.0' })).toEqual({ kind: 'opened' })
     expect(app.github.created).toHaveLength(1)
     expect(app.github.created[0]).toMatchObject({ kind: 'pull-request', base: 'main', head: 'dev', title: releasePrTitle('0.3.0'), assignee: 'octo' })
-    expect(app.github.created[0]).toMatchObject({ body: expect.stringContaining('Add dark mode') })
+    expect(app.github.created[0]).toHaveProperty('body', expect.stringContaining('Add dark mode') as string)
     expect(await app.audit()).toMatchObject([{ action: 'release-pr', result: 'applied' }])
   })
 
