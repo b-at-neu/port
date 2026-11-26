@@ -9,7 +9,7 @@ const AT = '2026-11-23T13:00:00.000Z'
 const paused = (detail: string): Ticket['status'] => ({ kind: 'held', on: 'paused', detail })
 const waiting = (gate: 'plan-approval' | 'merge' | 'escalation', detail = ''): Ticket['status'] => ({ kind: 'waiting-on-you', gate, detail })
 const running: Ticket['status'] = { kind: 'running', runId: 'run-1' }
-const queuedNow = (reason: 'new' | 'changes-requested' | 'retry') => ({ kind: 'queued', reason, since: AT })
+const queuedNow = (reason: 'new' | 'changes-requested' | 'retry'): Ticket['status'] => ({ kind: 'queued', reason, since: AT })
 
 type Row = readonly [name: string, ticket: Ticket, move: OperatorMove, next: ReturnType<typeof applyMove>]
 
