@@ -81,7 +81,9 @@ export function createFakeGit(options: FakeGitOptions): FakeGit {
     await fs.ensureDir(path)
   }
 
-  async function run(args: readonly string[], cwd: string): Promise<CommandResult> {
+  async function run(given: readonly string[], cwd: string): Promise<CommandResult> {
+    let args = given
+    while (args[0] === '-c') args = args.slice(2)
     const [sub = '', ...rest] = args
     const failure = failures.indexOf(sub)
     if (failure !== -1) {
@@ -93,6 +95,8 @@ export function createFakeGit(options: FakeGitOptions): FakeGit {
       case 'fetch':
         return ok()
       case 'check-ref-format':
+        return ok()
+      case 'log':
         return ok()
       case 'rev-parse': {
         if (rest[0] === '--show-toplevel') return ok(`${root}\n`)
