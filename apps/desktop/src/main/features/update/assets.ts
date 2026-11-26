@@ -1,14 +1,5 @@
 // Pure: which release asset fits this install, and how to hand it to the user.
-import type { AvailableRelease, InstallTarget, ReleaseAsset } from '@/types/update'
-
-export interface InstallTargetInput {
-  readonly platform: string
-  readonly arch: string
-  /** The `APPIMAGE` environment variable; set only when running from an AppImage. */
-  readonly appImage: string | undefined
-  /** True when an x64 build runs under Rosetta on Apple silicon. */
-  readonly arm64Translation: boolean
-}
+import type { AvailableRelease, InstallTarget, InstallTargetInput, ReleaseAsset } from '@/types/update'
 
 function archOf(arch: string): InstallTarget['arch'] | null {
   return arch === 'x64' || arch === 'arm64' ? arch : null

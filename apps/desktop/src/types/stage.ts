@@ -4,7 +4,6 @@ import type { StageOutcome } from '@/types/stage-session'
 import type { InterruptedReason, Run, RunDenial, Stage } from '@/utils/pipeline/ticket'
 import type { GitHubRepoRef } from '@/types/github'
 import type { BranchHead } from '@/types/release'
-import type { AllowWriteContext, AllowWriteResult } from '@/types/writes'
 
 // Renderer-safe types for stage-session "needs you" attention: a denied tool call waiting on an
 // allowlist decision, and a stage session interrupted before it reached a hand-back.
@@ -82,12 +81,6 @@ export interface ProposeAllowParams {
   readonly rule: string
   readonly denial: StageDenial
   readonly integration: string
-}
-
-/** The two GitHub seams "Allow from now on" composes through, injected at the composition root. */
-export interface StageAllowIo {
-  readonly read: (params: ReadAllowBaseParams) => Promise<AllowBaseRead>
-  readonly propose: (ctx: AllowWriteContext, params: ProposeAllowParams) => Promise<AllowWriteResult>
 }
 
 export type StageResumeResult =

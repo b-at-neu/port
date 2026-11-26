@@ -1,5 +1,4 @@
 // Renderer-safe shapes for the worktree inspector: the in-process classification and the local read's `prunable`/`producer` join. No import here may reach a Node builtin.
-import type { DirEntry, FileResult, GitHubTransport, GitRunner, PathOps, RemoveDirectoryResult, StatInfo } from '@/types/platform'
 import type { CorrelationRung, WorktreeCorrelation, WorktreeEntry, WorktreeProducer } from '@/types/local'
 import type { ItemStateName } from '@/types/github'
 
@@ -160,38 +159,12 @@ export type Inspection =
     }
   | ({ readonly ok: false } & ReclaimerFailure)
 
-/** The filesystem calls the reclaimer makes, injected so a test never touches a disk. */
-export interface ReclaimerFs {
-  listDirectory(path: string): Promise<FileResult<readonly DirEntry[]>>
-  statPath(path: string): Promise<FileResult<StatInfo>>
-  readTextFile(path: string): Promise<FileResult<string>>
-  pathExists(path: string): Promise<boolean>
-  removeDirectory(path: string): Promise<RemoveDirectoryResult>
-}
-
-/** Seams every reclaimer entry point takes; each defaults to its production implementation. */
-export interface ReclaimerSeams {
-  readonly git?: GitRunner
-  readonly fs?: ReclaimerFs
-  readonly now?: () => Date
-  readonly pathOps?: PathOps
-}
-
-/** `ReclaimerSeams` with every default filled in. */
-export interface ResolvedSeams {
-  readonly git: GitRunner
-  readonly fs: ReclaimerFs
-  readonly pathOps: PathOps
-  readonly now: () => Date
-}
-
-export interface ReadWorktreeReportParams extends ReclaimerSeams {
+export interface ReadWorktreeReportParams {
   readonly repoRoot: string
   /** `owner/name` off the effective config. */
   readonly repo: string
   /** The effective integration branch, not the checked-out config's. */
   readonly integration: string
-  readonly github?: GitHubTransport
 }
 
 export interface RunReclaimParams extends ReadWorktreeReportParams {
@@ -201,7 +174,7 @@ export interface RunReclaimParams extends ReadWorktreeReportParams {
   readonly force: ForcedReclaim | null
 }
 
-export interface RunPurgeParams extends ReclaimerSeams {
+export interface RunPurgeParams {
   readonly repoRoot: string
   readonly path: string
 }

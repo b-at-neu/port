@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createFakeGithub, createFakeRepo, MAIN, WORKTREES } from '../../../fixtures/reclaimer-harness'
 import type { FakeGithubOptions, FakeRepoOptions, FakeWorktree } from '../../../fixtures/reclaimer-harness'
 import { runReclaim } from '@/main/features/worktrees/reclaim'
 import type { ForcedReclaim, WorktreesReclaimResult } from '@/types/reclaimer'
+
+vi.mock('@/main/platform/paths', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/main/platform/paths')>()
+  return { ...original, pathOps: original.createPathOps('posix', { home: '/home/test' }) }
+})
 
 const path = (n: number): string => `${WORKTREES}/impl-${String(n)}`
 const finished = (n: number, overrides: Partial<FakeWorktree> = {}): FakeWorktree => ({ path: path(n), branch: `${String(n)}-ticket`, ...overrides })
@@ -10,7 +15,7 @@ const finished = (n: number, overrides: Partial<FakeWorktree> = {}): FakeWorktre
 async function reclaim(repoOptions: FakeRepoOptions, ghOptions: FakeGithubOptions, scope: { issue?: number | null; force?: ForcedReclaim | null } = {}) {
   const repo = createFakeRepo(repoOptions)
   const gh = createFakeGithub(ghOptions)
-  const result = await runReclaim({ repoRoot: MAIN, repo: 'acme/widgets', integration: 'dev', github: gh.github, ...repo.seams, issue: scope.issue ?? null, force: scope.force ?? null })
+  const result = await runReclaim({ ...repo.ctx, githubHttp: gh.github }, { repoRoot: MAIN, repo: 'acme/widgets', integration: 'dev', issue: scope.issue ?? null, force: scope.force ?? null })
   return { result, repo }
 }
 
@@ -74,15 +79,10 @@ describe('runReclaim — every reclaimable worktree', () => {
 
   it('fails with the git kind when the repository cannot be read', async () => {
     const repo = createFakeRepo()
-    const result = await runReclaim({
-      repoRoot: MAIN,
-      repo: 'acme/widgets',
-      integration: 'dev',
-      ...repo.seams,
-      git: () => Promise.resolve({ ok: false, kind: 'cwd-missing', cwd: MAIN }),
-      issue: null,
-      force: null,
-    })
+    const result = await runReclaim(
+      { ...repo.ctx, githubHttp: createFakeGithub().github, git: () => Promise.resolve({ ok: false, kind: 'cwd-missing', cwd: MAIN }) },
+      { repoRoot: MAIN, repo: 'acme/widgets', integration: 'dev', issue: null, force: null },
+    )
     expect(result).toMatchObject({ ok: false, kind: 'cwd-missing', call: ['reclaim'] })
   })
 

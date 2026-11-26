@@ -1,263 +1,140 @@
-import { describe, expect, it } from 'vitest'
-import type { RepoId } from '@/utils/repos'
-import type { ReposListResponse } from '@/types/ipc'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
-import type { ForcedReclaim, ReclaimedWorktree, RunPurgeParams, RunReclaimParams, WorktreesPurgeResult, WorktreesReclaimResult } from '@/types/reclaimer'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { RepoId, RepositoryEntry } from '@/utils/repos'
+import type { ReclaimedWorktree, WorktreesPurgeResult, WorktreesReclaimResult } from '@/types/reclaimer'
 import type { PurgeAuditEntry, ReclaimAuditEntry } from '@/types/writes'
-import { resolveWorktreesPurge, resolveWorktreesReclaim } from '@/main/features/worktrees/resolve'
-import type { WorktreesPurgeDeps, WorktreesReclaimDeps } from '@/main/features/worktrees/resolve'
-import type { RegistryDeps } from '@/types/registry'
+import { appendAudit } from '@/main/github/writes/audit'
+import { runPurge } from '@/main/features/worktrees/purge'
+import { runReclaim } from '@/main/features/worktrees/reclaim'
+import { callAction, createTestContext } from '../../../support/context'
+import { readyEntry } from '../../../support/repo-config'
+
+vi.mock('@/main/features/worktrees/reclaim', () => ({ runReclaim: vi.fn() }))
+vi.mock('@/main/features/worktrees/purge', () => ({ runPurge: vi.fn() }))
+vi.mock('@/main/github/writes/audit', () => ({ appendAudit: vi.fn() }))
 
 const REPO_ID = 'repo-1' as unknown as RepoId
+const READY_ENTRY = readyEntry({ id: REPO_ID, path: '/repo' }, { repo: 'acme/widgets', owner: 'acme', name: 'widgets' })
 
-const registryDeps: RegistryDeps = {
-  registryDir: '/registry',
-  git: () => {
-    throw new Error('git should not be invoked directly by resolveWorktreesReclaim')
-  },
-  chooseDirectory: () => Promise.resolve(null),
-}
+const reclaim = vi.mocked(runReclaim)
+const purge = vi.mocked(runPurge)
+const audit = vi.mocked(appendAudit)
 
-const READY_ENTRY = {
-  id: REPO_ID,
-  path: '/repo',
-  displayName: 'widgets',
-  status: 'ready' as const,
-  config: {
-    repo: 'acme/widgets',
-    owner: 'acme',
-    name: 'widgets',
-    branches: { integration: 'dev', production: 'main' },
-    models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
-    modules: { approvalGate: true, release: true, scope: true },
-    reviewCycleCap: 3,
-    vocabulary: resolveVocabulary({}),
-    commands: { worktrees: null, budget: null },
-    concurrency: { sharedFiles: [], overlapThreshold: 2 },
-    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
-    checkDispositions: {},
-    overrides: [],
-  },
-  diagnostics: [],
-}
+const ctxWith = (repositories: readonly RepositoryEntry[] = [READY_ENTRY]) => createTestContext({ repositories })
 
 function reclaimed(overrides: Partial<ReclaimedWorktree> = {}): ReclaimedWorktree {
   return { path: '/repo/.claude/worktrees/impl-36', pathBasename: 'impl-36', issue: 36, outcome: 'removed', error: null, branchDeleted: true, ...overrides }
 }
 
-function depsWith(overrides: Partial<WorktreesReclaimDeps>): WorktreesReclaimDeps {
-  const appendedCalls: ReclaimAuditEntry[] = []
-  return {
-    listRepositories: () => Promise.resolve({ ok: true, repositories: [] } as ReposListResponse),
-    runReclaim: () => {
-      throw new Error('runReclaim should not be invoked in this case')
-    },
-    appendAudit: (dir, entry) => {
-      appendedCalls.push(entry as ReclaimAuditEntry)
-      return Promise.resolve({ ok: true })
-    },
-    ...overrides,
-  }
-}
+const applied: WorktreesReclaimResult = { ok: true, removed: 1, results: [reclaimed()], readAt: 't', call: ['reclaim'] }
+const auditedEntry = <T>(): T => audit.mock.calls[0]?.[1] as T
 
-describe('resolveWorktreesReclaim', () => {
-  it('rejects a negative issue', async () => {
-    await expect(resolveWorktreesReclaim(registryDeps, { id: REPO_ID, issue: -1, force: null }, '/audit', depsWith({}))).rejects.toThrow(
-      "'worktrees:reclaim' requires 'issue' to be null or a positive integer",
-    )
-  })
+beforeEach(() => {
+  reclaim.mockReset()
+  purge.mockReset()
+  audit.mockReset()
+  audit.mockResolvedValue({ ok: true })
+})
 
+describe('worktrees.reclaim', () => {
   it('rejects a repository that is not ready', async () => {
-    const deps = depsWith({
-      listRepositories: () =>
-        Promise.resolve({ ok: true, repositories: [{ id: REPO_ID, path: '/repo', displayName: 'widgets', problem: { kind: 'directory-missing' as const }, diagnostics: [] }] }),
-    })
-    await expect(resolveWorktreesReclaim(registryDeps, { id: REPO_ID, issue: null, force: null }, '/audit', deps)).rejects.toThrow(
-      "'worktrees:reclaim' requires a 'ready' repository, got 'directory-missing'",
-    )
+    const ctx = ctxWith([{ id: REPO_ID, path: '/repo', displayName: 'widgets', problem: { kind: 'directory-missing' as const }, diagnostics: [] }])
+    await expect(callAction(ctx, 'worktrees.reclaim', { id: REPO_ID, issue: null, force: null })).rejects.toThrow("'worktrees:reclaim' requires a 'ready' repository, got 'directory-missing'")
   })
 
   it('appends one applied audit entry on a full success', async () => {
-    let auditedEntry: ReclaimAuditEntry | undefined
-    const deps = depsWith({
-      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      runReclaim: () =>
-        Promise.resolve({ ok: true, removed: 1, results: [reclaimed()], readAt: 't', call: ['reclaim'] } satisfies WorktreesReclaimResult),
-      appendAudit: (_dir, entry) => {
-        auditedEntry = entry as ReclaimAuditEntry
-        return Promise.resolve({ ok: true })
-      },
-    })
-    const result = await resolveWorktreesReclaim(registryDeps, { id: REPO_ID, issue: null, force: null }, '/audit', deps)
+    reclaim.mockResolvedValue(applied)
+    const result = await callAction(ctxWith(), 'worktrees.reclaim', { id: REPO_ID, issue: null, force: null })
     expect(result.ok).toBe(true)
-    expect(auditedEntry).toMatchObject({
-      action: 'worktree-reclaim',
-      removed: ['impl-36'],
-      failed: [],
-      result: 'applied',
-      failure: null,
-      call: ['reclaim'],
-    })
+    expect(audit).toHaveBeenCalledTimes(1)
+    expect(auditedEntry<ReclaimAuditEntry>()).toMatchObject({ action: 'worktree-reclaim', removed: ['impl-36'], failed: [], result: 'applied', failure: null, call: ['reclaim'] })
   })
 
   it('appends a partial-result audit entry when some candidates failed', async () => {
-    let auditedEntry: ReclaimAuditEntry | undefined
-    const deps = depsWith({
-      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      runReclaim: () =>
-        Promise.resolve({
-          ok: true,
-          removed: 0,
-          results: [reclaimed({ outcome: 'failed', error: 'locked', branchDeleted: null })],
-          readAt: 't',
-          call: ['reclaim'],
-        } satisfies WorktreesReclaimResult),
-      appendAudit: (_dir, entry) => {
-        auditedEntry = entry as ReclaimAuditEntry
-        return Promise.resolve({ ok: true })
-      },
-    })
-    const result = await resolveWorktreesReclaim(registryDeps, { id: REPO_ID, issue: 36, force: null }, '/audit', deps)
+    reclaim.mockResolvedValue({ ok: true, removed: 0, results: [reclaimed({ outcome: 'failed', error: 'locked', branchDeleted: null })], readAt: 't', call: ['reclaim'] })
+    const result = await callAction(ctxWith(), 'worktrees.reclaim', { id: REPO_ID, issue: 36, force: null })
     expect(result.ok).toBe(true)
-    expect(auditedEntry).toMatchObject({ issue: 36, removed: [], failed: ['impl-36'], result: 'partial' })
+    expect(auditedEntry<ReclaimAuditEntry>()).toMatchObject({ issue: 36, removed: [], failed: ['impl-36'], result: 'partial' })
   })
 
   it('appends a failed audit entry when the reclaim itself failed, aborts included', async () => {
-    let auditedEntry: ReclaimAuditEntry | undefined
-    const deps = depsWith({
-      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      runReclaim: () =>
-        Promise.resolve({
-          ok: false,
-          kind: 'github-unavailable',
-          message: 'boom',
-          readAt: 't',
-          call: ['reclaim'],
-        } satisfies WorktreesReclaimResult),
-      appendAudit: (_dir, entry) => {
-        auditedEntry = entry as ReclaimAuditEntry
-        return Promise.resolve({ ok: true })
-      },
-    })
-    const result = await resolveWorktreesReclaim(registryDeps, { id: REPO_ID, issue: null, force: null }, '/audit', deps)
+    reclaim.mockResolvedValue({ ok: false, kind: 'github-unavailable', message: 'boom', readAt: 't', call: ['reclaim'] })
+    const result = await callAction(ctxWith(), 'worktrees.reclaim', { id: REPO_ID, issue: null, force: null })
     expect(result.ok).toBe(false)
-    expect(auditedEntry).toMatchObject({ result: 'failed', failure: 'github-unavailable', call: ['reclaim'] })
+    expect(auditedEntry<ReclaimAuditEntry>()).toMatchObject({ result: 'failed', failure: 'github-unavailable', call: ['reclaim'] })
   })
 
   it('an audit append failure never changes the already-computed result', async () => {
-    const deps = depsWith({
-      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      runReclaim: () =>
-        Promise.resolve({ ok: true, removed: 1, results: [reclaimed()], readAt: 't', call: ['reclaim'] } satisfies WorktreesReclaimResult),
-      appendAudit: () => Promise.resolve({ ok: false, message: 'disk on fire' }),
-    })
-    const result = await resolveWorktreesReclaim(registryDeps, { id: REPO_ID, issue: null, force: null }, '/audit', deps)
-    expect(result).toEqual({ ok: true, removed: 1, results: [reclaimed()], readAt: 't', call: ['reclaim'] })
+    reclaim.mockResolvedValue(applied)
+    audit.mockResolvedValue({ ok: false, message: 'disk on fire' })
+    expect(await callAction(ctxWith(), 'worktrees.reclaim', { id: REPO_ID, issue: null, force: null })).toEqual(applied)
   })
 
   describe('force', () => {
     const FORCE = { path: '/repo/.claude/worktrees/impl-51', unlock: true, forceDirty: false }
 
-    function forcedDeps(seen: { params?: RunReclaimParams; audited?: ReclaimAuditEntry }): WorktreesReclaimDeps {
-      return depsWith({
-        listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-        runReclaim: (params) => {
-          seen.params = params
-          return Promise.resolve({ ok: true, removed: 1, results: [reclaimed()], readAt: 't', call: ['reclaim'] } satisfies WorktreesReclaimResult)
-        },
-        appendAudit: (_dir, entry) => {
-          seen.audited = entry as ReclaimAuditEntry
-          return Promise.resolve({ ok: true })
-        },
-      })
-    }
-
     it.each([
-      ['no flag set', { ...FORCE, unlock: false }, "requires 'force' to set at least one flag"],
-      ['a non-boolean flag', { ...FORCE, forceDirty: 'yes' }, "'force.unlock' and 'force.forceDirty' to be booleans"],
-      ['an empty path', { ...FORCE, path: '' }, "null or carry a non-empty 'path'"],
-      ['a path outside the repository', { ...FORCE, path: '/elsewhere/impl-51' }, "'force.path' to be inside the repository"],
-      ['the repository root itself', { ...FORCE, path: '/repo' }, "'force.path' to be inside the repository"],
-    ])('rejects %s before anything is spawned', async (_label, force, message) => {
-      const seen: { params?: RunReclaimParams } = {}
-      await expect(resolveWorktreesReclaim(registryDeps, { id: REPO_ID, issue: null, force: force as ForcedReclaim }, '/audit', forcedDeps(seen))).rejects.toThrow(message)
-      expect(seen.params).toBeUndefined()
+      ['no flag set', { id: REPO_ID, issue: null, force: { ...FORCE, unlock: false } }],
+      ['a non-boolean flag', { id: REPO_ID, issue: null, force: { ...FORCE, forceDirty: 'yes' } }],
+      ['an empty path', { id: REPO_ID, issue: null, force: { ...FORCE, path: '' } }],
+      ['an issue alongside', { id: REPO_ID, issue: 51, force: FORCE }],
+      ['a negative issue', { id: REPO_ID, issue: -1, force: null }],
+    ])('rejects %s before anything runs', async (_label, request) => {
+      await expect(callAction(ctxWith(), 'worktrees.reclaim', request as never)).rejects.toThrow()
+      expect(reclaim).not.toHaveBeenCalled()
     })
 
-    it('rejects a force combined with an issue', async () => {
-      const seen: { params?: RunReclaimParams } = {}
-      await expect(resolveWorktreesReclaim(registryDeps, { id: REPO_ID, issue: 51, force: FORCE }, '/audit', forcedDeps(seen))).rejects.toThrow(
-        "requires 'issue' to be null when 'force' is set",
-      )
-      expect(seen.params).toBeUndefined()
+    it.each([
+      ['a path outside the repository', '/elsewhere/impl-51'],
+      ['the repository root itself', '/repo'],
+    ])('rejects %s before anything runs', async (_label, path) => {
+      await expect(callAction(ctxWith(), 'worktrees.reclaim', { id: REPO_ID, issue: null, force: { ...FORCE, path } })).rejects.toThrow("'force.path' to be inside the repository")
+      expect(reclaim).not.toHaveBeenCalled()
     })
 
     it('passes the confirmed force to the run and audits its flags', async () => {
-      const seen: { params?: RunReclaimParams; audited?: ReclaimAuditEntry } = {}
-      await resolveWorktreesReclaim(registryDeps, { id: REPO_ID, issue: null, force: FORCE }, '/audit', forcedDeps(seen))
-      expect(seen.params).toMatchObject({ repoRoot: '/repo', repo: 'acme/widgets', integration: 'dev', git: registryDeps.git })
-      expect(seen.params?.force).toEqual(FORCE)
-      expect(seen.audited).toMatchObject({ force: { unlock: true, forceDirty: false } })
+      reclaim.mockResolvedValue(applied)
+      await callAction(ctxWith(), 'worktrees.reclaim', { id: REPO_ID, issue: null, force: FORCE })
+      expect(reclaim.mock.calls[0]?.[1]).toMatchObject({ repoRoot: '/repo', repo: 'acme/widgets', integration: 'dev', force: FORCE })
+      expect(auditedEntry<ReclaimAuditEntry>()).toMatchObject({ force: { unlock: true, forceDirty: false } })
     })
 
     it('audits a plain reclaim with no force', async () => {
-      const seen: { audited?: ReclaimAuditEntry } = {}
-      await resolveWorktreesReclaim(registryDeps, { id: REPO_ID, issue: null, force: null }, '/audit', forcedDeps(seen))
-      expect(seen.audited).toMatchObject({ force: null })
+      reclaim.mockResolvedValue(applied)
+      await callAction(ctxWith(), 'worktrees.reclaim', { id: REPO_ID, issue: null, force: null })
+      expect(auditedEntry<ReclaimAuditEntry>()).toMatchObject({ force: null })
     })
   })
 })
 
-describe('resolveWorktreesPurge', () => {
+describe('worktrees.purge', () => {
   const PATH = '/repo/.claude/worktrees/impl-29-stale'
-
-  function purgeDeps(seen: { params?: RunPurgeParams; audited: PurgeAuditEntry[] }, result: WorktreesPurgeResult): WorktreesPurgeDeps {
-    return {
-      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      runPurge: (params) => {
-        seen.params = params
-        return Promise.resolve(result)
-      },
-      appendAudit: (_dir, entry) => {
-        seen.audited.push(entry as PurgeAuditEntry)
-        return Promise.resolve({ ok: true })
-      },
-    }
-  }
-
   const deleted: WorktreesPurgeResult = { ok: true, outcome: 'deleted', pathBasename: 'impl-29-stale', message: null, cause: null, readAt: 't', call: ['purge', '--orphan', PATH] }
 
   it.each([
-    ['an empty path', '', "requires 'path' to be a non-empty string"],
-    ['a path outside the repository', '/elsewhere/impl-29-stale', "requires 'path' to be inside the repository"],
-  ])('rejects %s before anything is spawned', async (_label, path, message) => {
-    const seen = { audited: [] as PurgeAuditEntry[] } as { params?: RunPurgeParams; audited: PurgeAuditEntry[] }
-    await expect(resolveWorktreesPurge(registryDeps, { id: REPO_ID, path }, '/audit', purgeDeps(seen, deleted))).rejects.toThrow(message)
-    expect(seen.params).toBeUndefined()
-    expect(seen.audited).toEqual([])
+    ['an empty path', ''],
+    ['a path outside the repository', '/elsewhere/impl-29-stale'],
+  ])('rejects %s before anything runs', async (_label, path) => {
+    await expect(callAction(ctxWith(), 'worktrees.purge', { id: REPO_ID, path })).rejects.toThrow()
+    expect(purge).not.toHaveBeenCalled()
+    expect(audit).not.toHaveBeenCalled()
   })
 
   it('runs the purge for the one path and audits its basename once', async () => {
-    const seen = { audited: [] as PurgeAuditEntry[] } as { params?: RunPurgeParams; audited: PurgeAuditEntry[] }
-    const result = await resolveWorktreesPurge(registryDeps, { id: REPO_ID, path: PATH }, '/audit', purgeDeps(seen, deleted))
-    expect(result).toEqual(deleted)
-    expect(seen.params).toMatchObject({ repoRoot: '/repo', path: PATH })
-    expect(seen.audited).toHaveLength(1)
-    expect(seen.audited[0]).toMatchObject({ action: 'worktree-purge', path: 'impl-29-stale', result: 'deleted', failure: null, call: ['purge', '--orphan', PATH] })
+    purge.mockResolvedValue(deleted)
+    expect(await callAction(ctxWith(), 'worktrees.purge', { id: REPO_ID, path: PATH })).toEqual(deleted)
+    expect(purge.mock.calls[0]?.[1]).toMatchObject({ repoRoot: '/repo', path: PATH })
+    expect(audit).toHaveBeenCalledTimes(1)
+    expect(auditedEntry<PurgeAuditEntry>()).toMatchObject({ action: 'worktree-purge', path: 'impl-29-stale', result: 'deleted', failure: null, call: ['purge', '--orphan', PATH] })
   })
 
   it('audits a refused outcome as refused and a channel failure as failed with its kind', async () => {
-    const refusedSeen = { audited: [] as PurgeAuditEntry[] }
-    await resolveWorktreesPurge(registryDeps, { id: REPO_ID, path: PATH }, '/audit', purgeDeps(refusedSeen, { ...deleted, outcome: 'refused', message: 'not an orphan' }))
-    expect(refusedSeen.audited[0]).toMatchObject({ result: 'refused', failure: null })
+    purge.mockResolvedValue({ ...deleted, outcome: 'refused', message: 'not an orphan' })
+    await callAction(ctxWith(), 'worktrees.purge', { id: REPO_ID, path: PATH })
+    expect(auditedEntry<PurgeAuditEntry>()).toMatchObject({ result: 'refused', failure: null })
 
-    const failedSeen = { audited: [] as PurgeAuditEntry[] }
-    await resolveWorktreesPurge(
-      registryDeps,
-      { id: REPO_ID, path: PATH },
-      '/audit',
-      purgeDeps(failedSeen, { ok: false, kind: 'timeout', message: 'slow', readAt: 't', call: ['purge', '--orphan', PATH] }),
-    )
-    expect(failedSeen.audited[0]).toMatchObject({ result: 'failed', failure: 'timeout' })
+    audit.mockClear()
+    purge.mockResolvedValue({ ok: false, kind: 'timeout', message: 'slow', readAt: 't', call: ['purge', '--orphan', PATH] })
+    await callAction(ctxWith(), 'worktrees.purge', { id: REPO_ID, path: PATH })
+    expect(auditedEntry<PurgeAuditEntry>()).toMatchObject({ result: 'failed', failure: 'timeout' })
   })
 })

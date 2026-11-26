@@ -1,15 +1,13 @@
 // The one composition report, reclaim and purge share: enumerate, gather facts, resolve item states, classify.
 import { readItemStates } from '@/main/github/tracker/item-states'
 import { readWorktrees } from '@/main/repos/local/worktrees'
-import { listDirectory, pathExists, readTextFile, removeDirectory, statPath } from '@/main/platform/files'
-import { githubHttp } from '@/main/platform/github-http'
-import { defaultGitRunner } from '@/main/platform/git'
-import { pathOps as defaultPathOps } from '@/main/platform/paths'
+import { pathOps } from '@/main/platform/paths'
+import type { AppContext } from '@/main/app/context'
 import type { AssertEqual } from '@/types/assert-type'
 import type { ItemStateName } from '@/types/github'
 import type { WorktreeEntry } from '@/types/local'
 import type { CommandResult, GitRunner } from '@/types/platform'
-import type { InspectedCandidate, Inspection, ReadWorktreeReportParams, ReclaimerFailureKind, ReclaimerFs, ReclaimerSeams, ResolvedSeams } from '@/types/reclaimer'
+import type { InspectedCandidate, Inspection, ReadWorktreeReportParams, ReclaimerFailureKind } from '@/types/reclaimer'
 import { classifyCandidate, describeReason } from '@/main/features/worktrees/classify'
 import { findOrphanDirs } from '@/main/features/worktrees/orphans'
 
@@ -18,17 +16,12 @@ type CommandResultFailureKind = Exclude<CommandResult, { ok: true }>['kind']
 type ReclaimerOwnFailureKind = 'not-a-repository' | 'no-integration-ref' | 'path-not-registered' | 'github-unavailable'
 export const _kindsCoverCommandResult: AssertEqual<ReclaimerFailureKind, CommandResultFailureKind | ReclaimerOwnFailureKind> = true
 
-const defaultFs: ReclaimerFs = { listDirectory, statPath, readTextFile, pathExists, removeDirectory }
+/** What every reclaimer step reads and writes through. */
+export type ReclaimContext = Pick<AppContext, 'git' | 'fs' | 'clock' | 'githubHttp'>
 
 /** Every git call runs with `core.longpaths` on, which Windows needs and other platforms ignore. */
-export function resolveSeams(seams: ReclaimerSeams): ResolvedSeams {
-  const base = seams.git ?? defaultGitRunner()
-  return {
-    git: (args, cwd) => base(['-c', 'core.longpaths=true', ...args], cwd),
-    fs: seams.fs ?? defaultFs,
-    pathOps: seams.pathOps ?? defaultPathOps,
-    now: seams.now ?? (() => new Date()),
-  }
+export function longpathsGit(git: GitRunner): GitRunner {
+  return (args, cwd) => git(['-c', 'core.longpaths=true', ...args], cwd)
 }
 
 export interface InspectParams extends ReadWorktreeReportParams {
@@ -103,10 +96,10 @@ async function inspectEntry(entry: WorktreeEntry, isOutside: boolean, facts: Fac
 }
 
 /** Reads every linked worktree and decides what each is. A GitHub failure still returns `ok`, with `githubError` set and every item state unknown. */
-export async function inspectWorktrees(params: InspectParams): Promise<Inspection> {
-  const { git, fs, pathOps, now } = resolveSeams(params)
+export async function inspectWorktrees(ctx: ReclaimContext, params: InspectParams): Promise<Inspection> {
+  const git = longpathsGit(ctx.git)
 
-  const read = await readWorktrees({ git, clock: { now }, pathOps },params.repoRoot)
+  const read = await readWorktrees({ git, clock: ctx.clock, pathOps }, params.repoRoot)
   if (!read.ok) return { ok: false, kind: read.kind, message: read.message }
   const mainPath = read.mainPath
 
@@ -120,13 +113,13 @@ export async function inspectWorktrees(params: InspectParams): Promise<Inspectio
 
   const numbers = [...new Set(linked.flatMap(({ entry, isOutside }) => (isOutside || entry.correlation === null ? [] : [entry.correlation.number])))]
   const [owner = '', name = ''] = params.repo.split('/')
-  const stateRead = await readItemStates({ githubHttp: params.github ?? githubHttp, clock: { now } }, { repo: { owner, name }, numbers })
+  const stateRead = await readItemStates({ githubHttp: ctx.githubHttp, clock: ctx.clock }, { repo: { owner, name }, numbers })
   const states: ReadonlyMap<number, ItemStateName | null> = stateRead.ok ? stateRead.states : new Map()
   const githubError = stateRead.ok ? null : stateRead.message
 
   const facts: Facts = { git, mainPath, integrationRef, states, unlock: params.unlock, forceDirty: params.forceDirty }
   const candidates = await Promise.all(linked.map(({ entry, isOutside }) => inspectEntry(entry, isOutside, facts)))
-  const orphanDirs = await findOrphanDirs(mainPath, linked.map(({ entry, isOutside }) => ({ path: entry.path, isOutside })), fs, pathOps)
+  const orphanDirs = await findOrphanDirs(ctx, mainPath, linked.map(({ entry, isOutside }) => ({ path: entry.path, isOutside })))
 
   return { ok: true, mainPath, integrationRef, candidates, orphanDirs, githubError }
 }

@@ -1,19 +1,11 @@
 // `'gh:status'`'s composition — the footer's status dot. This file never
 // throws for a gh failure itself; every outcome is a value.
 import type { GhStatus } from '@/types/gh'
-import { ghAuthStatus } from '@/main/platform/gh'
-import type { GhAuthStatusResult } from '@/types/platform'
+import type { AppContext } from '@/main/app/context'
+import type { CommandResult } from '@/types/platform'
 
-export interface GhStatusDeps {
-  readonly ghAuthStatus: typeof ghAuthStatus
-  readonly now: () => number
-}
-
-export const defaultGhStatusDeps: GhStatusDeps = { ghAuthStatus, now: () => Date.now() }
-
-// Every failure branch `ghAuthStatus` can still return once 'not-found' and
-// the authenticated/unauthenticated reads are handled separately below.
-function messageFor(result: Exclude<GhAuthStatusResult, { ok: true } | { ok: false; kind: 'not-found' }>): string {
+// Every failure `ctx.run` can return once 'not-found' and 'nonzero' are handled separately below.
+function messageFor(result: Exclude<CommandResult, { ok: true } | { ok: false; kind: 'not-found' | 'nonzero' }>): string {
   switch (result.kind) {
     case 'cwd-missing':
       return `working directory not found: ${result.cwd}`
@@ -25,16 +17,6 @@ function messageFor(result: Exclude<GhAuthStatusResult, { ok: true } | { ok: fal
       return 'gh produced more output than this app will buffer'
     case 'spawn-failed':
       return result.message
-    // `ghAuthStatus` never classifies through `classifyGhExit`, so these can
-    // never actually occur — handled only because the type is shared.
-    case 'rate-limited':
-    case 'forbidden':
-    case 'http-not-found':
-    case 'network':
-    case 'unknown':
-      return result.stderr !== '' ? result.stderr : `gh reported ${result.kind}`
-    default:
-      return `gh reported ${(result as { kind: string }).kind}`
   }
 }
 
@@ -62,11 +44,11 @@ export function parseGhAuthStatus(output: string): ParsedGhAuth {
   return { account: block.account, scopes }
 }
 
-export async function resolveGhStatus(request: undefined, deps: GhStatusDeps = defaultGhStatusDeps): Promise<GhStatus> {
-  if (request !== undefined) throw new Error("'gh:status' takes no payload")
-  const checkedAt = new Date(deps.now()).toISOString()
-  const result = await deps.ghAuthStatus({ timeoutMs: 8_000 })
-  if (result.ok) return result.authenticated ? { kind: 'signed-in', checkedAt, ...parseGhAuthStatus(result.output) } : { kind: 'signed-out', checkedAt }
+export async function readGhStatus(ctx: Pick<AppContext, 'run' | 'clock'>): Promise<GhStatus> {
+  const checkedAt = ctx.clock.now().toISOString()
+  const result = await ctx.run('gh', ['auth', 'status'], { timeoutMs: 8_000 })
+  if (result.ok) return { kind: 'signed-in', checkedAt, ...parseGhAuthStatus(`${result.stdout}\n${result.stderr}`) }
+  if (result.kind === 'nonzero') return { kind: 'signed-out', checkedAt }
   if (result.kind === 'not-found') return { kind: 'missing', checkedAt }
   return { kind: 'unknown', message: messageFor(result), checkedAt }
 }

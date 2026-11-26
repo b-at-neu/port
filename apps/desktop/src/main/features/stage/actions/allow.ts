@@ -1,11 +1,11 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { repoId } from '@/main/app/schemas'
-import { resolveStageAllow } from '@/main/features/stage/resolve'
+import { allowDenial } from '@/main/features/stage/allow'
 
 export const stageAllow = defineAction({
   name: 'stage.allow',
   kind: 'mutation',
   input: z.object({ repoId, denialId: z.string().min(1), rule: z.string().min(1).max(300) }),
-  run: (ctx, input) => resolveStageAllow(ctx.repos.deps, input, ctx.seams.stage),
+  run: (ctx, input) => allowDenial(ctx, input),
 })

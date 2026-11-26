@@ -82,6 +82,15 @@ export interface NativeUpdateInfo {
   readonly fileName: string
 }
 
+export interface InstallTargetInput {
+  readonly platform: string
+  readonly arch: string
+  /** The `APPIMAGE` environment variable; set only when running from an AppImage. */
+  readonly appImage: string | undefined
+  /** True when an x64 build runs under Rosetta on Apple silicon. */
+  readonly arm64Translation: boolean
+}
+
 export interface NativeUpdater {
   /** Resolves `null` when the feed offers no update. */
   readonly check: () => Promise<NativeUpdateInfo | null>

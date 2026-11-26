@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { createPlatform } from '@/main/platform'
 import { githubConditional, githubHttp, githubPublic } from '@/main/platform/github-http'
 import { createJsonStore } from '@/main/platform/json-store'
-import { createFakeFs } from '../../../support/fake-platform'
+import { createFakeFs, fakeUpdates } from '../../../support/fake-platform'
 
 describe('createPlatform', () => {
   it('returns the host facts as given and the one set of GitHub transports', () => {
@@ -12,6 +12,7 @@ describe('createPlatform', () => {
       info: () => ({ app: '1', electron: '2', node: '3', chromium: '4', commit: null }),
       dialogs: { chooseDirectory: () => Promise.resolve(null), chooseFolder: () => Promise.resolve(null), chooseSavePath: () => Promise.resolve(null) },
       notify: { focused: () => false, show: () => undefined },
+      updates: fakeUpdates(),
     }
     const platform = createPlatform(host)
     expect([platform.paths, platform.info, platform.dialogs, platform.notify]).toEqual([host.paths, host.info, host.dialogs, host.notify])

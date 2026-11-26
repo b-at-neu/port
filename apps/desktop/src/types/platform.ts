@@ -1,4 +1,6 @@
-export type ClaudeOptions = Omit<RunCommandOptions, 'whichEnv' | 'platform'>
+import type { FileDownload, InstallTargetInput, NativeUpdater } from '@/types/update'
+
+export type ClaudeOptions =Omit<RunCommandOptions, 'whichEnv' | 'platform'>
 
 export type ReadLinesFromResult = FileResult<ReadLinesFromValue>
 
@@ -90,10 +92,6 @@ export type DirectorySizeResult =
 export type GitRunner = (args: readonly string[], cwd: string) => Promise<CommandResult>
 
 export type GitLinesResult = { readonly ok: true; readonly lines: readonly string[] } | Exclude<CommandResult, { ok: true }>
-
-export type NodeOptions = Omit<RunCommandOptions, 'whichEnv' | 'platform'>
-
-export type NodeRunner = (args: readonly string[], options: NodeOptions) => Promise<CommandResult>
 
 export type PathFlavour = 'posix' | 'win32'
 
@@ -194,6 +192,18 @@ export interface PlatformDialogs {
   readonly chooseDirectory: () => Promise<string | null>
   readonly chooseFolder: () => Promise<string | null>
   readonly chooseSavePath: (defaultName: string) => Promise<string | null>
+}
+
+/** The Electron-bound update I/O: where installers land, how they download and open, and the native updater. */
+export interface PlatformUpdates {
+  readonly isPackaged: boolean
+  readonly installHost: InstallTargetInput
+  readonly downloadsDir: () => string
+  readonly download: FileDownload
+  /** Resolves with an error string, empty on success, like Electron's `shell.openPath`. */
+  readonly open: (path: string) => Promise<string>
+  readonly reveal: (path: string) => void
+  readonly native: () => NativeUpdater
 }
 
 export interface NativeNotify {
