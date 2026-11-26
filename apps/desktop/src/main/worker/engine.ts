@@ -20,6 +20,7 @@ export function createInProcessEngine(ctx: EngineContext, reader: SessionReader 
   const tails = createTailStore(ctx, ctx.stagePromptsDir)
   const now = (): Date => ctx.clock.now()
   const tracker = createGithubTracker({ githubHttp: ctx.githubHttp, githubConditional: ctx.githubConditional, ghWrite: ctx.ghWrite, git: ctx.git, clock: ctx.clock })
+  const boardCtx = { githubHttp: ctx.githubHttp, clock: ctx.clock, tracker }
 
   return {
     refreshSessions: ({ repos }) => refreshSessions(ctx, cache, { repos, reader }),
@@ -29,7 +30,7 @@ export function createInProcessEngine(ctx: EngineContext, reader: SessionReader 
       const worktrees = cache.worktrees.get(repoId)
       const worktreeEntries = worktrees?.ok ? worktrees.entries : []
       const agents = cache.sessions?.ok ? cache.sessions.agents.filter((agent) => agent.repoId === repoId) : []
-      return refreshGithub(ctx, cache, { repoId, repo, vocabulary, verify, integration, tracked, worktreeEntries, agents })
+      return refreshGithub(boardCtx, cache, { repoId, repo, vocabulary, verify, integration, tracked, worktreeEntries, agents })
     },
     precheckGithub: (params) => tracker.precheck(params),
     project: ({ repositories, views }) => Promise.resolve(projectFromCache(cache, repositories, now, views)),

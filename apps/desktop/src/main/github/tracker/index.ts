@@ -2,6 +2,7 @@ import type { Tracker } from '@/types/tracker'
 import { createEtagCache } from '@/main/github/conditional'
 import type { GitHubTrackerContext } from '@/main/github/context'
 import { postIssueBody } from '@/main/github/writes/apply'
+import { readBoardIssues } from '@/main/github/tracker/board'
 import { fetchBacklog } from '@/main/github/tracker/backlog'
 import { fetchBacklogDetail } from '@/main/github/tracker/backlog-detail'
 import { fetchGatePreflight } from '@/main/github/tracker/gate'
@@ -14,6 +15,7 @@ import { precheckIssues } from '@/main/github/tracker/precheck'
 export function createGithubTracker(ctx: GitHubTrackerContext): Tracker {
   const cache = createEtagCache()
   return {
+    readBoardIssues: (params) => readBoardIssues(ctx, params),
     readItemsByNumber: (params) => fetchItemsByNumber(ctx, params),
     readItemStates: (params) => readItemStates(ctx, params),
     readClaimPreflight: (params) => fetchClaimPreflight(ctx, params),

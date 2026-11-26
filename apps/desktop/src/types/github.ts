@@ -120,12 +120,10 @@ export interface QueriedLabel {
 /** The two connections the pipeline sweep reads. */
 export type SweepAlias = 'issues' | 'pullRequests'
 
-/** Which sweep connections a page requests and where each resumes; a later page asks only for the surface still paging. */
+/** One page of a one-surface sweep: whether its connection is asked at all, and where it resumes. The first page is the one with `after === null`. */
 export interface SweepPage {
-  readonly issues: boolean
-  readonly pulls: boolean
-  readonly issuesAfter: string | null
-  readonly pullsAfter: string | null
+  readonly connection: boolean
+  readonly after: string | null
 }
 
 /** One detail-read alias's reply node, keyed by the item it was asked about. */
@@ -218,7 +216,32 @@ export type PipelineFetch =
       readonly fetchedAt: string
     }
 
-/** `fetchItemsByNumber`'s per-number result — `kind` comes from the response's own `__typename`, never assumed. `assignees` is the second fact the write chokepoint needs beside `labels`; one round trip covers both. */
+/** One half of the board read (the issues or the pull requests), its details already applied. `swept` holds the items the sweep found, `read` the tracked items read by number, in tracked-ref order. */
+export interface BoardHalf {
+  readonly ok: true
+  readonly swept: readonly PipelineItem[]
+  readonly read: readonly PipelineItem[]
+  readonly closed: readonly number[]
+  readonly unavailable: readonly UnavailableAlias[]
+  readonly truncated: readonly TruncatedSet[]
+  readonly rateLimit: RateLimitInfo
+}
+
+export interface BoardHalfFailure {
+  readonly ok: false
+  readonly kind: PipelineFailureKind
+  readonly message: string
+}
+
+export type BoardPullsFetch =
+  | (BoardHalf & {
+      /** The pull requests among `closed` that merged. */
+      readonly merged: readonly number[]
+      readonly integrationChecks: IntegrationChecks | null
+    })
+  | BoardHalfFailure
+
+/** `fetchItemsByNumber`'s per-number result —`kind` comes from the response's own `__typename`, never assumed. `assignees` is the second fact the write chokepoint needs beside `labels`; one round trip covers both. */
 export interface ResolvedItem {
   readonly number: number
   readonly kind: PipelineItemKind

@@ -9,6 +9,7 @@ import type { StateEngine } from '@/types/offload'
 import type { PipelineStateStore } from '@/types/pipeline-state'
 import type { RunStore } from '@/types/stage'
 import type { ForceDispatch, RefreshMemo, RerunMemo, UnknownStreaks } from '@/types/tick'
+import type { Tracker } from '@/types/tracker'
 import type { RepoId } from '@/utils/repos'
 
 export interface PipelineStores {
@@ -17,6 +18,9 @@ export interface PipelineStores {
     readonly incidentLog: Pick<IncidentLog, 'record'>
   }
 }
+
+/** The board read: the pull-request half reads GitHub directly, the issue half through the tracker. */
+export type BoardReadContext = GitHubReadContext & { readonly tracker: Pick<Tracker, 'readBoardIssues'> }
 
 /** Everything the state writer, the ownership read and the label and comment writes touch. */
 export type StateWriteContext = GitHubReadContext & GitHubWriteContext & Pick<Platform, 'fs'> & PipelineStores
