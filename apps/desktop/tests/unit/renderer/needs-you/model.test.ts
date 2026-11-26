@@ -15,6 +15,7 @@ import {
   secondaryIntentOf,
   staleForMs,
 } from '@/renderer/needs-you/model'
+import { ticketAt } from '../../../support/tickets'
 
 const RESET = '2026-01-01T14:05:00.000Z'
 const BEFORE = new Date('2026-01-01T13:00:00.000Z')
@@ -28,7 +29,8 @@ const interrupted = (reason: string, claudeSessionId: string | null = 'c1') => m
 const usageLimit = (resetsAt: string | null) => make('usage-limit', { entries: [{ id: 'a', number: 1 }], resetsAt })
 const held = (reason: string, fields: object = {}) => make('held', { held: { reason, contention: null }, owner: 'app', ...fields })
 const approval = make('stage-approval', { sessionKey: 'hosted-1', permissionId: 'p1', path: '.claude/x', agent: 'impl', toolName: 'Edit' })
-const row = (decisions: object) => ({ decisions, stageLabel: { key: 'approved' }, item: { kind: 'pull-request' } })
+const READY_TO_MERGE = { stage: 'merge', status: { kind: 'waiting-on-you', gate: 'merge' } }
+const row = (decisions: object) => ({ decisions, item: { kind: 'pull-request', mergedAt: null, ticket: ticketAt('merge', { kind: 'waiting-on-you', gate: 'merge', detail: '' }) } })
 const available = (context: object = {}) => ({ available: true, context })
 
 describe('actionFor', () => {
@@ -108,10 +110,10 @@ describe('intentOf', () => {
     ['resume all before the reset', usageLimit('2999-01-01T00:00:00.000Z'), null],
     ['force', held('contended'), { kind: 'force', repoId: 'repo-a', number: 7 }],
     ['force elsewhere', held('contended', { owner: 'cockpit' }), null],
-    ['unblock', make('blocked', { matchedRow: row({ unblock: available({ reason: 'r' }) }) }), { kind: 'decision', request: { repoId: 'repo-a', number: 7, decision: 'unblock', expectedStage: 'approved', context: { reason: 'r' } } }],
+    ['unblock', make('blocked', { matchedRow: row({ unblock: available({ reason: 'r' }) }) }), { kind: 'decision', request: { repoId: 'repo-a', number: 7, decision: 'unblock', expected: READY_TO_MERGE, context: { reason: 'r' } } }],
     ['unblock refused', make('blocked', { matchedRow: row({ unblock: { available: false, reason: 'agent-live' } }) }), null],
-    ['retry', make('stalled', { matchedRow: row({}) }), { kind: 'label', action: 'retry', input: { repoId: 'repo-a', kind: 'pull-request', number: 7, action: 'retry', expectedStage: 'approved' }, shown: '7' }],
-    ['refresh without a matched row', held('conflicting'), { kind: 'label', action: 'refresh', input: { repoId: 'repo-a', kind: 'pull-request', number: 7, action: 'refresh', expectedStage: null }, shown: '7' }],
+    ['retry', make('stalled', { matchedRow: row({}) }), { kind: 'label', action: 'retry', input: { repoId: 'repo-a', kind: 'pull-request', number: 7, action: 'retry', expected: READY_TO_MERGE }, shown: '7' }],
+    ['refresh without a matched row', held('conflicting'), { kind: 'label', action: 'refresh', input: { repoId: 'repo-a', kind: 'pull-request', number: 7, action: 'refresh', expected: null }, shown: '7' }],
   ])('%s', (_name, item, expected) => {
     expect(intentOf(item)).toEqual(expected)
   })
@@ -122,7 +124,7 @@ describe('secondaryIntentOf', () => {
     ['restart', interrupted('crash'), { kind: 'restart', id: 'e1' }],
     ['deny', approval, { kind: 'approve', decision: 'deny', sessionKey: 'hosted-1', permissionId: 'p1', path: '.claude/x' }],
     ['open the PR on a cycle-capped row', held('cycle-cap', { matchedRow: row({ grant: available() }) }), { kind: 'url', url: 'https://github.com/o/a/issues/7' }],
-    ['revise', make('ready-to-merge', { row: row({ revise: available({ cap: 5 }) }) }), { kind: 'decision', request: { repoId: 'repo-a', number: 7, decision: 'revise', expectedStage: 'approved', context: { cap: 5 } } }],
+    ['revise', make('ready-to-merge', { row: row({ revise: available({ cap: 5 }) }) }), { kind: 'decision', request: { repoId: 'repo-a', number: 7, decision: 'revise', expected: READY_TO_MERGE, context: { cap: 5 } } }],
     ['revise at the cap', make('ready-to-merge', { row: row({ revise: { available: false, reason: 'cycle-cap' } }) }), null],
     ['a row with no secondary', make('stalled'), null],
   ])('%s', (_name, item, expected) => {

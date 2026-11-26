@@ -4,53 +4,13 @@ import type { PipelineState, ReconciledItem, RepositoryState } from '@/types/sta
 import type { DispatchRecord, RepoDispatchStatus } from '@/types/dispatch'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS, type BoardSnapshot } from '@/types/board'
 import { needsYouItems } from '@/renderer/board/needs-you'
+import { reconciledItem } from '../../../support/board-snapshot'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 const REPO = 'repo-a' as RepoId
 
 function readyTicket(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
-  return {
-    repoId: REPO,
-    repo: 'o/a',
-    kind: 'issue',
-    number: 585,
-    title: 'a ticket',
-    url: 'https://github.com/o/a/issues/585',
-    assignees: ['op'],
-    stage: 'trigger',
-    stages: [{ key: 'ready', name: 'ready', role: 'trigger' }],
-    stageAmbiguous: false,
-    marked: true,
-    autoPlan: false,
-    status: 'waiting',
-    statusEvidence: null,
-    waitingOn: 'cockpit',
-    sessionRequired: false,
-    linked: null,
-    linkReason: null,
-    agents: [],
-    sessions: [],
-    worktrees: [],
-    workSessions: [],
-    state: 'OPEN',
-    mergedAt: null,
-    updatedAt: null,
-    stageHistory: [],
-    matchedKeys: ['ready'],
-    sources: ['github'],
-    claimedFiles: null,
-    headRefOid: null,
-    mergeable: null,
-    reviews: null,
-    comments: null,
-    reviewCycleCount: null,
-    checkRollup: null,
-    planPresent: null,
-    blockers: null,
-    blockerComments: null,
-    closingPullRequests: null,
-    ...overrides,
-  }
+  return reconciledItem({ repoId: REPO, number: 585, url: 'https://github.com/o/a/issues/585', ...overrides })
 }
 
 function repoWith(items: readonly ReconciledItem[]): Extract<RepositoryState, { ok: true }> {

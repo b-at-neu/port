@@ -11,8 +11,8 @@ const VIEWER = 'op'
 const READ_AT = '2026-01-01T01:00:00.000Z'
 
 const RUNNING = ticketAt('implement', { kind: 'running', runId: 'run-1' }, { ticket: 52 })
-const PLAN_REVIEW = (history: readonly Event[] = []) => ticketAt('plan', { kind: 'waiting-on-you', gate: 'plan-approval', detail: '' }, { ticket: 52, history })
-const APPROVED = (history: readonly Event[] = []) => ticketAt('implement', queuedAt('new'), { ticket: 52, history })
+const PLAN_REVIEW = (history: Event[] = []) => ticketAt('plan', { kind: 'waiting-on-you', gate: 'plan-approval', detail: '' }, { ticket: 52, history })
+const APPROVED = (history: Event[] = []) => ticketAt('implement', queuedAt('new'), { ticket: 52, history })
 
 function item(overrides: Partial<ReconciledItem> & { readonly ticket?: Ticket | null } = {}): ReconciledItem {
   return reconciledItem({

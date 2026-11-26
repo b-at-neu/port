@@ -6,12 +6,13 @@ import type { BoardSnapshot, RepositoryHealth } from '@/types/board'
 import type { TickHeld, TickReport } from '@/types/tick'
 import { boardSignature, displayStatus, projectBoard, stageLabelOf } from '@/renderer/board/project'
 import { boardSections } from '@/renderer/board/sections'
+import { reconciledItem } from '../../../support/board-snapshot'
 import { stageSession } from '../../../support/session-snapshot'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
-  return {
+  return reconciledItem({
     repoId: 'repo-a' as RepoId,
     repo: 'o/a',
     kind: 'issue',
@@ -52,7 +53,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     blockerComments: null,
     closingPullRequests: null,
     ...overrides,
-  }
+  })
 }
 
 function readyRepo(overrides: Partial<Extract<RepositoryState, { ok: true }>> = {}): Extract<RepositoryState, { ok: true }> {
@@ -248,7 +249,7 @@ describe('projectBoard — one row per ticket', () => {
 
   describe('a pr opened issue whose pull request is gone from the sweep', () => {
     const prOpened = (linkReason: ReconciledItem['linkReason']) =>
-      item({ number: 644, stage: 'terminal', stages: [{ key: 'prOpened', name: 'pr opened', role: 'terminal' }], matchedKeys: ['prOpened'], status: 'terminal', linkReason })
+      item({ number: 644, stage: 'terminal', stages: [{ key: 'prOpened', name: 'pr opened', role: 'terminal' }], matchedKeys: ['prOpened'], status: 'terminal', linkReason, ticket: null })
 
     it('is absent when its pull request merged in the gap, so it never lands under Unstaged', () => {
       const projection = project([prOpened('counterpart-merged')])
@@ -297,7 +298,7 @@ describe('projectBoard — one row per ticket', () => {
 
   describe('held', () => {
     const REPO_A = 'repo-a' as RepoId
-    const entry: TickHeld = { number: 5, kind: 'issue', trigger: 'ready', reason: 'check-hold', contention: null, escalation: { kind: 'check-hold', checks: ['e2e'], state: 'red', escalateAt: null } }
+    const entry: TickHeld = { number: 5, kind: 'issue', stage: 'plan', trigger: 'ready', reason: 'check-hold', contention: null, escalation: { kind: 'check-hold', checks: ['e2e'], state: 'red', escalateAt: null } }
     const tick = (overrides: Partial<TickReport>): TickReport => ({
       repoId: REPO_A,
       displayName: 'o/a',

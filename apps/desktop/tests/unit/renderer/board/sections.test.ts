@@ -9,6 +9,7 @@ import type { Ticket } from '@/types/ticket'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { ticketIndex } from '@/utils/tickets/ticket'
 import { boardSections } from '@/renderer/board/sections'
+import { reconciledItem } from '../../../support/board-snapshot'
 
 const NO_ACTIONS = Object.fromEntries(OPERATOR_ACTIONS.map((a): [OperatorAction, ActionAvailability] => [a, { available: false, reason: 'not-applicable' }])) as Record<OperatorAction, ActionAvailability>
 const NO_DECISIONS = Object.fromEntries(OPERATOR_DECISIONS.map((d): [OperatorDecision, DecisionAvailability] => [d, { available: false, reason: 'not-applicable' }])) as Record<OperatorDecision, DecisionAvailability>
@@ -24,45 +25,19 @@ function row(overrides: {
 }): BoardItemRow {
   const repoId = (overrides.repoId ?? 'repo-a') as RepoId
   const stageLabel: StageLabel | null = overrides.stageKey != null ? { key: overrides.stageKey, name: overrides.stageKey, role: LABEL_DEFAULTS.find((def) => def.key === overrides.stageKey)?.role ?? 'trigger' } : null
-  const item = {
+  const item = reconciledItem({
     repoId,
     repo: overrides.repo ?? 'o/a',
-    kind: 'issue',
     number: overrides.number ?? 1,
-    title: 't',
     url: 'https://example.com',
     assignees: [],
     stage: stageLabel?.role ?? null,
     stages: stageLabel !== null ? [stageLabel] : [],
-    stageAmbiguous: false,
-    marked: true,
-    autoPlan: false,
     status: overrides.status ?? 'waiting',
-    statusEvidence: null,
     waitingOn: null,
-    sessionRequired: false,
-    linked: null,
-    linkReason: null,
-    agents: [],
-    sessions: [],
-    worktrees: [],
-    workSessions: [],
-    state: 'OPEN',
-    mergedAt: null,
     matchedKeys: [],
-    sources: ['github'],
-    claimedFiles: null,
-    headRefOid: null,
-    mergeable: null,
-    reviews: null,
-    comments: null,
-    reviewCycleCount: null,
-    checkRollup: null,
-    planPresent: null,
-    blockers: null,
-    blockerComments: null,
-    closingPullRequests: null,
-  } as unknown as ReconciledItem
+    ...(stageLabel === null || overrides.stageKey === 'prOpened' ? { ticket: null } : {}),
+  })
   return {
     item,
     ticket: ticketIndex([item]).tickets[0] as Ticket,
