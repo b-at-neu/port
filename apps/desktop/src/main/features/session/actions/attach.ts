@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { sessionKey } from '@/main/app/schemas'
-import { resolveSessionAttach } from '@/main/features/session/resolve'
 
-export const sessionAttach = defineAction({ name: 'session.attach', kind: 'mutation', input: z.object({ sessionKey }), run: (ctx, input) => resolveSessionAttach(input, ctx.seams.hosting) })
+export const sessionAttach = defineAction({ name: 'session.attach', kind: 'mutation', input: z.object({ sessionKey }), run: (ctx, input) => ctx.live.hostedStore.attach(input.sessionKey) })

@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { sessionKey } from '@/main/app/schemas'
-import { resolveSessionControlsSet } from '@/main/features/session/resolve'
 import { SESSION_PERMISSION_MODES } from '@/types/hosting'
 import { SESSION_EFFORTS } from '@/utils/hosting/controls'
 
@@ -16,5 +15,5 @@ export const sessionControlsSet = defineAction({
       effort: z.enum(SESSION_EFFORTS).nullable().optional(),
     })
     .refine((value) => value.permissionMode !== undefined || value.model !== undefined || value.effort !== undefined, { message: "needs at least one of 'permissionMode', 'model' or 'effort'" }),
-  run: (ctx, input) => resolveSessionControlsSet(input, ctx.seams.hosting),
+  run: (ctx, input) => ctx.live.hostedStore.setControls(input.sessionKey, { permissionMode: input.permissionMode, model: input.model, effort: input.effort }),
 })

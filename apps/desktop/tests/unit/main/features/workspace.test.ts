@@ -1,14 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { CommandResult } from '@/types/platform'
-import type { GitRunner } from '@/types/platform'
-import type { RegistryDeps } from '@/types/registry'
-import type { RepoId, RepositoryEntry } from '@/utils/repos'
-import type { SessionWorkspace } from '@/types/workspace'
-import type { SessionKey } from '@/types/hosting'
-
-import { resolveFoldersChoose, resolveFoldersList, resolveSessionChanges } from '@/main/features/folders/resolve'
-import type { WorkspaceChannelDeps } from '@/main/features/folders/resolve'
+import type { CommandResult, GitRunner } from '@/types/platform'
 import type { RecentsStore } from '@/types/workspace'
+import type { RepoId, RepositoryEntry } from '@/utils/repos'
+import { storeStub } from '../../../fixtures/store'
+import { createFakeFs } from '../../../support/fake-platform'
+import { callAction, createTestContext } from '../../../support/context'
 
 function ok(stdout: string): CommandResult {
   return { ok: true, stdout, stderr: '' }
@@ -16,7 +12,7 @@ function ok(stdout: string): CommandResult {
 
 const NOT_A_REPO: CommandResult = { ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'not a git repository' }
 
-function fakeGit(root: string): GitRunner {
+function gitAt(root: string): GitRunner {
   return (args) => {
     if (args[0] === 'rev-parse' && args.includes('--show-toplevel')) return Promise.resolve(ok(`${root}\n`))
     if (args[0] === 'rev-parse' && args.includes('HEAD')) return Promise.resolve(ok('abc123\n'))
@@ -51,7 +47,7 @@ function readyRepo(path: string): RepositoryEntry {
   }
 }
 
-function fakeRecents(initial: readonly { path: string; lastUsedAt: string }[] = []): RecentsStore {
+function recentsOf(initial: readonly { path: string; lastUsedAt: string }[] = []): RecentsStore {
   let entries = initial
   return {
     load: () => Promise.resolve(entries),
@@ -62,93 +58,69 @@ function fakeRecents(initial: readonly { path: string; lastUsedAt: string }[] = 
   }
 }
 
-const REGISTRY_DEPS = {} as RegistryDeps
+const existing = { ...createFakeFs(), exists: () => Promise.resolve(true) }
 
-function depsFor(overrides: Partial<WorkspaceChannelDeps>): WorkspaceChannelDeps {
-  return {
-    listRepositories: () => Promise.resolve({ ok: true, repositories: [] }),
-    recents: fakeRecents(),
-    chooseFolder: () => Promise.resolve(null),
-    git: fakeGit('/repo'),
-    exists: () => Promise.resolve(true),
-    now: () => new Date('2026-01-01T00:00:00.000Z'),
-    workspaceOf: () => Promise.resolve(null),
-    computeSessionChanges: () => Promise.resolve({ ok: false, kind: 'not-git', message: 'unused' }),
-    ...overrides,
-  }
-}
-
-describe('resolveFoldersList', () => {
-
-  it('lists ready registry repos first', async () => {
-    const repositories = [readyRepo('/repo')]
-    const deps = depsFor({ listRepositories: () => Promise.resolve({ ok: true, repositories }) })
-    const result = await resolveFoldersList(REGISTRY_DEPS, undefined, deps)
-    expect(result.folders).toHaveLength(1)
-    expect(result.folders[0]?.path).toBe('/repo')
+describe('folders.list', () => {
+  it('lists ready registry repositories first', async () => {
+    const ctx = createTestContext({ repositories: [readyRepo('/repo')], stores: { recents: recentsOf() }, platform: { git: gitAt('/repo'), fs: existing } })
+    const { folders } = await callAction(ctx, 'folders.list')
+    expect(folders.map((folder) => folder.path)).toEqual(['/repo'])
   })
 
-  it('appends recents after registry repos, most recent first', async () => {
-    const recents = fakeRecents([
+  it('appends recents after registry repositories, most recent first', async () => {
+    const recents = recentsOf([
       { path: '/old', lastUsedAt: '2026-01-01T00:00:00.000Z' },
       { path: '/new', lastUsedAt: '2026-01-02T00:00:00.000Z' },
     ])
-    const deps = depsFor({ recents, git: fakeGit('/old') })
-    const result = await resolveFoldersList(REGISTRY_DEPS, undefined, deps)
-    expect(result.folders.map((folder) => folder.path)).toEqual(['/old', '/new'])
+    const ctx = createTestContext({ stores: { recents }, platform: { git: gitAt('/old'), fs: existing } })
+    const { folders } = await callAction(ctx, 'folders.list')
+    expect(folders.map((folder) => folder.path)).toEqual(['/old', '/new'])
   })
 
-  it('dedupes a recent entry that matches a registry repo path', async () => {
-    const repositories = [readyRepo('/repo')]
-    const recents = fakeRecents([{ path: '/repo', lastUsedAt: '2026-01-01T00:00:00.000Z' }])
-    const deps = depsFor({ listRepositories: () => Promise.resolve({ ok: true, repositories }), recents })
-    const result = await resolveFoldersList(REGISTRY_DEPS, undefined, deps)
-    expect(result.folders).toHaveLength(1)
+  it('shows a recent folder that is also a registry repository once', async () => {
+    const recents = recentsOf([{ path: '/repo', lastUsedAt: '2026-01-01T00:00:00.000Z' }])
+    const ctx = createTestContext({ repositories: [readyRepo('/repo')], stores: { recents }, platform: { git: gitAt('/repo'), fs: existing } })
+    const { folders } = await callAction(ctx, 'folders.list')
+    expect(folders).toHaveLength(1)
   })
 
   it('drops a recent folder that no longer exists', async () => {
-    const recents = fakeRecents([{ path: '/gone', lastUsedAt: '2026-01-01T00:00:00.000Z' }])
-    const deps = depsFor({ recents, exists: () => Promise.resolve(false) })
-    const result = await resolveFoldersList(REGISTRY_DEPS, undefined, deps)
-    expect(result.folders).toHaveLength(0)
+    const recents = recentsOf([{ path: '/gone', lastUsedAt: '2026-01-01T00:00:00.000Z' }])
+    const ctx = createTestContext({ stores: { recents }, platform: { git: gitAt('/gone'), fs: { ...existing, exists: () => Promise.resolve(false) } } })
+    const { folders } = await callAction(ctx, 'folders.list')
+    expect(folders).toEqual([])
   })
 })
 
-describe('resolveFoldersChoose', () => {
+describe('folders.choose', () => {
   it('returns cancelled when the picker is cancelled', async () => {
-    const result = await resolveFoldersChoose(REGISTRY_DEPS, undefined, depsFor({ chooseFolder: () => Promise.resolve(null) }))
-    expect(result).toEqual({ outcome: 'cancelled' })
+    const ctx = createTestContext({ platform: { dialogs: { chooseDirectory: () => Promise.resolve(null), chooseFolder: () => Promise.resolve(null), chooseSavePath: () => Promise.resolve(null) } } })
+    await expect(callAction(ctx, 'folders.choose')).resolves.toEqual({ outcome: 'cancelled' })
   })
 
-  it('records the chosen folder in recents and returns it as chosen', async () => {
-    const recents = fakeRecents()
-    const deps = depsFor({ chooseFolder: () => Promise.resolve('/picked'), recents, git: fakeGit('/picked') })
-    const result = await resolveFoldersChoose(REGISTRY_DEPS, undefined, deps)
+  it('records the chosen folder in recents and returns it', async () => {
+    const recents = recentsOf()
+    const ctx = createTestContext({
+      stores: { recents },
+      platform: { git: gitAt('/picked'), dialogs: { chooseDirectory: () => Promise.resolve(null), chooseFolder: () => Promise.resolve('/picked'), chooseSavePath: () => Promise.resolve(null) } },
+    })
+    const result = await callAction(ctx, 'folders.choose')
     expect(result.outcome).toBe('chosen')
-    await expect(recents.load()).resolves.toEqual([{ path: '/picked', lastUsedAt: '2026-01-01T00:00:00.000Z' }])
+    await expect(recents.load()).resolves.toEqual([{ path: '/picked', lastUsedAt: ctx.clock.now().toISOString() }])
   })
 })
 
-const SESSION_KEY = 'hosted-1' as SessionKey
-
-describe('resolveSessionChanges', () => {
-  it('throws for an empty sessionKey', async () => {
-    await expect(resolveSessionChanges({ sessionKey: '' as SessionKey }, depsFor({}))).rejects.toThrow("non-empty 'sessionKey'")
+describe('session.changes', () => {
+  it('reports unknown-session for a key naming no open session', async () => {
+    const ctx = createTestContext({ live: { hostedStore: storeStub({ snapshotOf: () => null }) } })
+    const result = await callAction(ctx, 'session.changes', { sessionKey: 'hosted-1' as never })
+    expect(result).toMatchObject({ ok: false, kind: 'unknown-session' })
   })
 
-  it('reports unknown-session when workspaceOf resolves null', async () => {
-    const result = await resolveSessionChanges({ sessionKey: SESSION_KEY }, depsFor({ workspaceOf: () => Promise.resolve(null) }))
-    expect(result.ok).toBe(false)
-    if (!result.ok) expect(result.kind).toBe('unknown-session')
-  })
-
-  it('delegates to computeSessionChanges for a resolved workspace', async () => {
-    const workspace: SessionWorkspace = { folder: '/repo', root: '/repo', worktree: null, base: { sha: 'abc', label: 'main' } }
-    const deps = depsFor({
-      workspaceOf: () => Promise.resolve(workspace),
-      computeSessionChanges: () => Promise.resolve({ ok: true, base: workspace.base, files: [], untracked: [], binary: [], summary: [], truncated: false, readAt: '2026-01-01T00:00:00.000Z' }),
-    })
-    const result = await resolveSessionChanges({ sessionKey: SESSION_KEY }, deps)
+  it('reads the changes of an open session through its workspace', async () => {
+    const workspace = { folder: '/repo', root: '/repo', worktree: null, base: { sha: 'abc', label: 'main' } }
+    const ctx = createTestContext({ live: { hostedStore: storeStub({ snapshotOf: () => ({ workspace }) as never }) }, platform: { git: () => Promise.resolve(ok('')) } })
+    const result = await callAction(ctx, 'session.changes', { sessionKey: 'hosted-1' as never })
     expect(result.ok).toBe(true)
   })
 })

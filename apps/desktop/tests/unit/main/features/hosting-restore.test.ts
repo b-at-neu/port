@@ -1,28 +1,18 @@
-// session:restore / :list / :discard.
-import { describe, expect, it, vi } from 'vitest'
-import type { RepoId } from '@/utils/repos'
-import type { RegistryDeps } from '@/types/registry'
-import type { StartTargetSources, ResolvedStartTarget } from '@/types/workspace'
-import { createFakeFs, fakeGit } from '../../../support/fake-platform'
-import { resolveSessionRestore, resolveSessionRestoreDiscard, resolveSessionRestoreList } from '@/main/features/session/resolve'
-import type { HostingChannelDeps } from '@/main/app/seams'
+// session.restore / session.restoreList / session.restoreDiscard.
+import { describe, expect, it } from 'vitest'
+import type { RepoId, RepositoryEntry } from '@/utils/repos'
+import type { ReposListResponse } from '@/types/ipc'
 import { storeStub } from '../../../fixtures/store'
+import { createFakeFs } from '../../../support/fake-platform'
+import { callAction, createTestContext } from '../../../support/context'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 
-const registryDeps: RegistryDeps = {
-  registryDir: '/registry',
-  git: () => {
-    throw new Error('git should not be invoked directly by the hosting channel')
-  },
-  chooseDirectory: () => Promise.resolve(null),
-}
-
-const READY_ENTRY = {
+const READY_ENTRY: RepositoryEntry = {
   id: REPO_ID,
   path: '/repo',
   displayName: 'widgets',
-  status: 'ready' as const,
+  status: 'ready',
   config: {
     repo: 'acme/widgets',
     owner: 'acme',
@@ -31,7 +21,7 @@ const READY_ENTRY = {
     models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
     modules: { approvalGate: true, release: true, scope: true },
     reviewCycleCap: 3,
-    vocabulary: {} as never,
+    vocabulary: { labels: [], disabled: [], problems: [] },
     commands: { worktrees: null, budget: null },
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
     sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
@@ -41,116 +31,81 @@ const READY_ENTRY = {
   diagnostics: [],
 }
 
-const NOT_READY_ENTRY = { id: REPO_ID, path: '/repo', displayName: 'widgets', problem: { kind: 'directory-missing' as const }, diagnostics: [] }
-const WORKSPACE = { folder: '/repo', root: '/repo', worktree: null, base: null }
+const NOT_READY_ENTRY: RepositoryEntry = { id: REPO_ID, path: '/repo', displayName: 'widgets', problem: { kind: 'directory-missing' }, diagnostics: [] }
 
-const targetSources: Omit<StartTargetSources, 'repositories'> = {
-  recents: { load: () => Promise.resolve([]), record: () => Promise.resolve() },
-  readSessions: () => Promise.resolve({ ok: true, sessions: [] }),
+const entry = { restoreId: 'restore-1', repoId: REPO_ID, claudeSessionId: 'session-1', title: null, startedAt: 't1' }
+const byCwd = { ...entry, repoId: null, cwd: '/gone' }
+
+const missing = { ...createFakeFs(), exists: () => Promise.resolve(false) }
+const NOT_A_REPO = { ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'not a repository' } as const
+
+function contextFor(restorable: readonly (typeof entry | typeof byCwd)[], repos: ReposListResponse, extra: { restore?: () => Promise<never> } = {}) {
+  return createTestContext({
+    repos: { list: () => Promise.resolve(repos) },
+    live: { hostedStore: storeStub({ restorable: () => Promise.resolve(restorable as never), ...extra }) },
+    platform: { fs: missing, git: () => Promise.resolve(NOT_A_REPO) },
+  })
 }
 
-function depsWith(overrides: Partial<HostingChannelDeps> = {}): HostingChannelDeps {
-  return {
-    listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-    store: storeStub(),
-    sessionIndex: { load: () => Promise.resolve(), observe: () => undefined, list: () => [] },
-    listSessionFiles: () => {
-      throw new Error('listSessionFiles should not be invoked in this case')
-    },
-    resolveStartTarget: () => Promise.resolve({ ok: true, cwd: '/repo', workspace: WORKSPACE, repoId: REPO_ID, createdWorktree: null, recordPath: '/repo' } satisfies ResolvedStartTarget),
-    targetCtx: { git: fakeGit(), fs: createFakeFs() },
-    targetSources,
-    now: () => new Date('2026-01-01T00:00:00.000Z'),
-    removeCreatedWorktree: () => Promise.resolve(),
-    ...overrides,
-  }
-}
+const registry = (repositories: readonly RepositoryEntry[]): ReposListResponse => ({ ok: true, repositories })
 
-describe('resolveSessionRestoreList', () => {
-
-  it('marks a ready repository available', async () => {
-    const restorable = vi.fn(() =>
-      Promise.resolve([{ restoreId: 'restore-1', repoId: REPO_ID, claudeSessionId: 'session-1', title: 'Title', startedAt: 't1' }]),
-    )
-    const result = await resolveSessionRestoreList(registryDeps, undefined, depsWith({ store: storeStub({ restorable }) }))
-    expect(result.entries).toEqual([
-      { restoreId: 'restore-1', repoId: REPO_ID, folder: null, title: 'Title', origin: { kind: 'resumed', from: 'session-1' }, startedAt: 't1', availability: { ok: true } },
-    ])
+describe('session.restoreList', () => {
+  it.each([
+    { name: 'a ready repository', entries: [entry], repos: registry([READY_ENTRY]), availability: { ok: true } },
+    { name: 'a not-ready repository', entries: [entry], repos: registry([NOT_READY_ENTRY]), availability: { ok: false, reason: 'its folder is gone' } },
+    { name: 'a failed listing', entries: [entry], repos: { ok: false, kind: 'registry-unreadable', message: 'nope' } as ReposListResponse, availability: { ok: false, reason: 'nope' } },
+    { name: 'an entry restoring by folder', entries: [byCwd], repos: registry([]), availability: { ok: false, reason: "This session's folder is gone." } },
+  ])('marks $name', async ({ entries, repos, availability }) => {
+    const { entries: listed } = await callAction(contextFor(entries, repos), 'session.restoreList')
+    expect(listed[0]?.availability).toEqual(availability)
   })
 
-  it('marks a not-ready repository unavailable with its problem reason', async () => {
-    const restorable = vi.fn(() =>
-      Promise.resolve([{ restoreId: 'restore-1', repoId: REPO_ID, claudeSessionId: 'session-1', title: null, startedAt: 't1' }]),
-    )
-    const deps = depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [NOT_READY_ENTRY] }), store: storeStub({ restorable }) })
-    const result = await resolveSessionRestoreList(registryDeps, undefined, deps)
-    expect(result.entries[0]?.availability).toEqual({ ok: false, reason: 'its folder is gone' })
-  })
-
-  it('marks every entry unavailable when the listing itself fails', async () => {
-    const restorable = vi.fn(() =>
-      Promise.resolve([{ restoreId: 'restore-1', repoId: REPO_ID, claudeSessionId: 'session-1', title: null, startedAt: 't1' }]),
-    )
-    const deps = depsWith({ listRepositories: () => Promise.resolve({ ok: false, kind: 'registry-unreadable', message: 'nope' }), store: storeStub({ restorable }) })
-    const result = await resolveSessionRestoreList(registryDeps, undefined, deps)
-    expect(result.entries[0]?.availability).toEqual({ ok: false, reason: 'nope' })
-  })
-
-  it('an entry carrying cwd restores by folder — availability is just exists(cwd)', async () => {
-    const restorable = vi.fn(() =>
-      Promise.resolve([{ restoreId: 'restore-1', repoId: null, claudeSessionId: 'session-1', title: null, startedAt: 't1', cwd: '/gone' }]),
-    )
-    const deps = depsWith({ store: storeStub({ restorable }) })
-    const result = await resolveSessionRestoreList(registryDeps, undefined, deps)
-    expect(result.entries[0]).toMatchObject({ folder: '/gone', availability: { ok: false, reason: "This session's folder is gone." } })
+  it('carries the entry through with its origin', async () => {
+    const ctx = createTestContext({ repos: { list: () => Promise.resolve(registry([READY_ENTRY])) }, live: { hostedStore: storeStub({ restorable: () => Promise.resolve([entry]) }) } })
+    const { entries } = await callAction(ctx, 'session.restoreList')
+    expect(entries).toEqual([{ restoreId: 'restore-1', repoId: REPO_ID, folder: null, title: null, origin: { kind: 'resumed', from: 'session-1' }, startedAt: 't1', availability: { ok: true } }])
   })
 })
 
-describe('resolveSessionRestore', () => {
-  it('rejects a missing restoreId', async () => {
-    await expect(resolveSessionRestore(registryDeps, { restoreId: '' }, depsWith())).rejects.toThrow("'session:restore' requires a non-empty 'restoreId'")
+describe('session.restore', () => {
+  it.each([
+    { name: 'an id no entry carries', entries: [], repos: registry([]), expected: { ok: false, kind: 'unknown-restore' } },
+    { name: 'a repository that is not ready', entries: [entry], repos: registry([NOT_READY_ENTRY]), expected: { ok: false, kind: 'repo-unavailable', reason: 'its folder is gone' } },
+    { name: 'a repository that is gone', entries: [entry], repos: registry([]), expected: { ok: false, kind: 'repo-unavailable', reason: 'This repository is no longer registered.' } },
+    { name: 'a folder that is gone', entries: [byCwd], repos: registry([]), expected: { ok: false, kind: 'folder-missing', path: '/gone' } },
+  ])('returns $name as a value', async ({ entries, repos, expected }) => {
+    await expect(callAction(contextFor(entries, repos), 'session.restore', { restoreId: 'restore-1' })).resolves.toEqual(expected)
   })
 
-  it('reports unknown-restore for an id no entry carries', async () => {
-    const deps = depsWith({ store: storeStub({ restorable: () => Promise.resolve([]) }) })
-    await expect(resolveSessionRestore(registryDeps, { restoreId: 'restore-1' }, deps)).resolves.toEqual({ ok: false, kind: 'unknown-restore' })
+  it('restores a ready repository through the store with its resolved workspace', async () => {
+    const restored: unknown[][] = []
+    const hostedStore = storeStub({
+      restorable: () => Promise.resolve([entry]),
+      restore: (...args) => {
+        restored.push(args)
+        return Promise.resolve({ ok: true as const, snapshot: {} as never })
+      },
+    })
+    const ctx = createTestContext({ repos: { list: () => Promise.resolve(registry([READY_ENTRY])) }, live: { hostedStore }, platform: { git: () => Promise.resolve(NOT_A_REPO) } })
+    await callAction(ctx, 'session.restore', { restoreId: 'restore-1' })
+    expect(restored).toEqual([['restore-1', { repoId: null, workspace: { folder: '/repo', root: null, worktree: null, base: null } }]])
   })
 
-  it('reports repo-unavailable rather than throwing when the repository is not ready', async () => {
-    const restorable = () => Promise.resolve([{ restoreId: 'restore-1', repoId: REPO_ID, claudeSessionId: 'session-1', title: null, startedAt: 't1' }])
-    const deps = depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [NOT_READY_ENTRY] }), store: storeStub({ restorable }) })
-    await expect(resolveSessionRestore(registryDeps, { restoreId: 'restore-1' }, deps)).resolves.toEqual({ ok: false, kind: 'repo-unavailable', reason: 'its folder is gone' })
-  })
-
-  it('resolves the ready path itself and delegates to the store', async () => {
-    const restorable = () => Promise.resolve([{ restoreId: 'restore-1', repoId: REPO_ID, claudeSessionId: 'session-1', title: null, startedAt: 't1' }])
-    const restore = vi.fn(() => Promise.resolve({ ok: true as const, snapshot: {} as never }))
-    const deps = depsWith({ store: storeStub({ restorable, restore }), targetCtx: { git: fakeGit(() => Promise.resolve({ ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'not a repository' })), fs: createFakeFs() } })
-    await resolveSessionRestore(registryDeps, { restoreId: 'restore-1' }, deps)
-    expect(restore).toHaveBeenCalledWith('restore-1', { repoId: null, workspace: { folder: '/repo', root: null, worktree: null, base: null } })
-  })
-
-  it('restores by cwd when the entry carries one, returning folder-missing when it is gone', async () => {
-    const restorable = () => Promise.resolve([{ restoreId: 'restore-1', repoId: null, claudeSessionId: 'session-1', title: null, startedAt: 't1', cwd: '/gone' }])
-    const deps = depsWith({ store: storeStub({ restorable }) })
-    await expect(resolveSessionRestore(registryDeps, { restoreId: 'restore-1' }, deps)).resolves.toEqual({ ok: false, kind: 'folder-missing', path: '/gone' })
+  it('rejects an empty restoreId', async () => {
+    await expect(callAction(contextFor([], registry([])), 'session.restore', { restoreId: '' })).rejects.toThrow()
   })
 })
 
-describe('resolveSessionRestoreDiscard', () => {
-  it('rejects an empty-string restoreId', () => {
-    expect(() => resolveSessionRestoreDiscard({ restoreId: '' }, depsWith())).toThrow("'session:restore:discard' requires 'restoreId' to be null or a non-empty string")
-  })
-
-  it('delegates null through to discard every entry', () => {
-    const discardRestorable = vi.fn(() => Promise.resolve({ ok: true as const }))
-    void resolveSessionRestoreDiscard({ restoreId: null }, depsWith({ store: storeStub({ discardRestorable }) }))
-    expect(discardRestorable).toHaveBeenCalledWith(null)
-  })
-
-  it('delegates a specific restoreId', () => {
-    const discardRestorable = vi.fn(() => Promise.resolve({ ok: true as const }))
-    void resolveSessionRestoreDiscard({ restoreId: 'restore-1' }, depsWith({ store: storeStub({ discardRestorable }) }))
-    expect(discardRestorable).toHaveBeenCalledWith('restore-1')
+describe('session.restoreDiscard', () => {
+  it.each([{ restoreId: null }, { restoreId: 'restore-1' }])('discards $restoreId through the store', async ({ restoreId }) => {
+    const discarded: unknown[] = []
+    const hostedStore = storeStub({
+      discardRestorable: (id) => {
+        discarded.push(id)
+        return Promise.resolve({ ok: true as const })
+      },
+    })
+    await callAction(createTestContext({ live: { hostedStore } }), 'session.restoreDiscard', { restoreId })
+    expect(discarded).toEqual([restoreId])
   })
 })
