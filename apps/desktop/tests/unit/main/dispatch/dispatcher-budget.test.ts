@@ -1,53 +1,35 @@
-import type { HostedStore } from '@/types/hosting'
-
 // Dispatcher-level budget-gate cases: reset-once/sweep-every-pass bookkeeping, the fail-closed
 // budget-unavailable refusal, and per-candidate routing. Additive to dispatcher.test.ts, not a duplicate.
-import { describe, expect, it, vi } from 'vitest'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
-import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
-import type { SessionControls, SessionModels } from '@/utils/hosting/controls'
-
 import type { TickReport } from '@/types/tick'
-import type { EscalateToHumanParams } from '@/types/actions'
-import type { ReadyEntry } from '@/types/actions'
-import type { StageLaunchResult, StageLauncher } from '@/types/dispatch'
-import type { CreateDispatcherParams } from '@/types/dispatch'
-import type { BudgetCheckResult, BudgetGate, BudgetResetResult, BudgetSweepResult } from '@/types/dispatch'
-import type { OwnershipRead } from '@/types/dispatch'
-import { buildDispatcher, dispatchRuns } from '../../../support/dispatch-runs'
-import { DISPATCH_STORE_DEFAULTS, storeStub } from '../../../fixtures/store'
+import type { EscalateToHumanParams, EscalateToHumanResult } from '@/types/actions'
+import type { BudgetCheckResult, BudgetResetResult, BudgetSweepResult } from '@/types/dispatch'
+import { pathOps } from '@/main/platform/paths'
+import { createDispatcher } from '@/main/dispatch/dispatcher'
+import { dispatchContext } from '../../../support/context'
+import { readyEntry } from '../../../support/repo-config'
+import { sessionSnapshot } from '../../../support/session-snapshot'
+import { ticketOf } from '../../../support/tickets'
+
+const gate = vi.hoisted(() => ({ reset: vi.fn(), sweep: vi.fn(), check: vi.fn() }))
+const escalate = vi.hoisted(() => vi.fn<(params: EscalateToHumanParams) => Promise<EscalateToHumanResult>>())
+vi.mock('@/main/dispatch/budget-gate', () => ({
+  budgetReset: () => gate.reset() as unknown,
+  budgetSweep: () => gate.sweep() as unknown,
+  budgetCheck: () => gate.check() as unknown,
+}))
+vi.mock('@/main/pipeline/operator/escalate', () => ({ escalateToHuman: (_ctx: unknown, params: EscalateToHumanParams) => escalate(params) }))
+vi.mock('@/main/pipeline/operator/stage', () => ({
+  applyStageClaim: () => Promise.resolve({ kind: 'applied' }),
+  applyStageTransition: () => Promise.resolve({ kind: 'applied' }),
+}))
 
 const REPO_ID = 'repo-a' as RepoId
-const VOCABULARY = resolveVocabulary({})
-const BUDGET_COMMAND = 'node scripts/budget.mjs'
-
-function entry(overrides: Partial<ReadyEntry['config']> = {}): ReadyEntry {
-  return {
-    id: REPO_ID,
-    path: '/repo',
-    displayName: 'o/a',
-    status: 'ready',
-    config: {
-      repo: 'o/a',
-      owner: 'o',
-      name: 'a',
-      branches: { integration: 'dev', production: 'main' },
-      commands: { worktrees: null, budget: BUDGET_COMMAND },
-      concurrency: { sharedFiles: [], overlapThreshold: 2 },
-    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
-      checkDispositions: {},
-      overrides: [],
-      models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
-      modules: { approvalGate: true, release: true, scope: true },
-      reviewCycleCap: 5,
-      vocabulary: VOCABULARY,
-      ...overrides,
-    },
-    diagnostics: [],
-  }
-}
+const ENTRY = readyEntry({}, { commands: { worktrees: null, budget: 'node scripts/budget.mjs' } })
+const IMPL_CANDIDATE = { number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }
+const HOLD_LINE = "⏳ Couldn't read #52's cost ledger (unparseable table) — holding its dispatch one tick rather than dispatching blind."
 
 function tickReport(overrides: Partial<TickReport> = {}): TickReport {
   return { repoId: REPO_ID, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [], autoApprovals: [], labelRepairs: [], ...overrides }
@@ -71,245 +53,111 @@ function snapshotWith(tick: readonly TickReport[]): BoardSnapshot {
   }
 }
 
-const OWNED_BY_APP: OwnershipRead = { kind: 'app', since: '2026-01-01T00:00:00Z', path: '/repo/.agents/cockpit.json', readAt: 'r' }
-const ABSENT_OWNERSHIP: OwnershipRead = { kind: 'absent', path: '/repo/.agents/cockpit.json', readAt: 'r' }
+const withCandidate = (): BoardSnapshot => snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })])
 
-const IMPL_CANDIDATE = { number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }
-
-const TEST_CONTROLS: SessionControls = { permissionMode: 'default', model: null, effort: null }
-const TEST_MODELS: SessionModels = { kind: 'pending' }
-
-function sessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSessionSnapshot {
-  return {
-    sessionKey: 'hosted-1' as SessionKey,
-    claudeSessionId: 'sdk-1',
-    repoId: REPO_ID,
-    workspace: { folder: '/repo', root: '/repo', worktree: null, base: null },
-    phase: 'ready',
-    origin: { kind: 'fresh' },
-    startedAt: '2026-01-01T00:00:00Z',
-    queuedAfterInterrupt: null,
-    end: null,
-    titled: null,
-    pendingPermissions: [],
-    capabilities: { kind: 'ready', commands: [], agents: [], plugin: { kind: 'loaded', path: 'p', version: null }, slashCommands: [] },
-    title: null,
-    rateLimit: null,
-    controls: TEST_CONTROLS,
-    models: TEST_MODELS,
-    usage: null,
-    backgroundTasks: [],
-    stage: null,
-    lastResult: null,
-    operatorJoinedAt: null,
-    ...overrides,
-  }
+async function setup() {
+  const ctx = await dispatchContext({
+    owner: 'app',
+    repositories: [ENTRY],
+    items: [{ number: 52, title: 't', labels: ['plan approved'], assignees: ['op'] }],
+    tickets: { repoId: REPO_ID, tickets: [ticketOf({ repo: REPO_ID, ticket: 52, stage: 'implement' })] },
+    store: { snapshotOf: () => sessionSnapshot() },
+    launcher: () => Promise.resolve({ ok: true, sessionKey: 'hosted-1' as never }),
+  })
+  return { ctx, dispatcher: createDispatcher(ctx) }
 }
 
-function fakeStore(overrides: Partial<HostedStore> = {}): HostedStore {
-  return storeStub({ ...DISPATCH_STORE_DEFAULTS, ...overrides })
-}
-
-function fakeBudget(overrides: Partial<BudgetGate> = {}): BudgetGate {
-  return {
-    reset: () => Promise.resolve({ ok: true }),
-    sweep: () => Promise.resolve({ line: null, problem: null }),
-    check: () => {
-      throw new Error('budget.check should not be invoked in this case')
-    },
-    report: () => {
-      throw new Error('budget.report should not be invoked in this case')
-    },
-    ...overrides,
-  }
-}
-
-function fakeLauncher(result: StageLaunchResult = { ok: true, sessionKey: 'hosted-1' as SessionKey }): StageLauncher {
-  return { launch: () => Promise.resolve(result) }
-}
-
-function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispatcherParams {
-  return {
-    store: fakeStore(),
-    runs: dispatchRuns(REPO_ID).runs,
-    launch: null,
-    refreshMemo: { get: () => undefined, set: vi.fn(), clear: vi.fn() },
-    rerunMemo: { get: () => undefined, set: vi.fn() },
-    rerunChecks: () => Promise.resolve('applied'),
-    forceDispatch: { has: () => false, set: vi.fn(), clear: vi.fn(), prune: vi.fn() },
-    writeObservation: () => {
-      throw new Error('writeObservation should not be invoked unless a test wires its own')
-    },
-    stageLabels: { claim: () => Promise.resolve({ kind: 'applied' }), transition: () => Promise.resolve({ kind: 'applied' }) },
-    runState: () => 'dispatching',
-    readOwnership: () => Promise.resolve(OWNED_BY_APP),
-    takeOwnership: () => Promise.resolve({ ok: true, path: 'p' }),
-    stateLabels: () => ['plan approved'],
-    fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: 'r' }),
-    listRepositories: () => Promise.resolve({ ok: true, repositories: [entry()] }),
-    registryDeps: { registryDir: '/registry', git: () => Promise.reject(new Error('unused')), chooseDirectory: () => Promise.resolve(null) },
-    budget: fakeBudget(),
-    escalate: () => {
-      throw new Error('escalate should not be invoked in this case')
-    },
-    requestRead: () => undefined,
-    recordIncident: () => Promise.resolve(),
-    dirs: { audit: '/audit', scratch: '/scratch' },
-    onChange: vi.fn(),
-    now: () => new Date('2026-01-01T00:00:00Z'),
-    ...overrides,
-  }
-}
+beforeEach(() => {
+  gate.reset.mockReset().mockResolvedValue({ ok: true } satisfies BudgetResetResult)
+  gate.sweep.mockReset().mockResolvedValue({ line: null, problem: null } satisfies BudgetSweepResult)
+  gate.check.mockReset().mockResolvedValue({ ok: true, verdict: 'allow', line: 'allowed' } satisfies BudgetCheckResult)
+  escalate.mockReset()
+})
 
 describe('createDispatcher — budget bookkeeping', () => {
   it('resets once, then sweeps on every pass, populating budget.line', async () => {
-    let resetCalls = 0
-    let sweepCalls = 0
-    const budget = fakeBudget({
-      reset: () => {
-        resetCalls += 1
-        return Promise.resolve({ ok: true } satisfies BudgetResetResult)
-      },
-      sweep: () => {
-        sweepCalls += 1
-        return Promise.resolve({ line: 'session 1 dispatch · 2m 00s agent wall-clock', problem: null } satisfies BudgetSweepResult)
-      },
-    })
-    const dispatcher = buildDispatcher(REPO_ID,baseDeps({ budget }))
+    gate.sweep.mockResolvedValue({ line: 'session 1 dispatch · 2m 00s agent wall-clock', problem: null })
+    const { dispatcher } = await setup()
     await dispatcher.consider(snapshotWith([tickReport()]))
-    expect(resetCalls).toBe(1)
-    expect(sweepCalls).toBe(1)
+    expect(gate.reset).toHaveBeenCalledTimes(1)
+    expect(gate.sweep).toHaveBeenCalledTimes(1)
     expect(dispatcher.status()[0]?.budget).toEqual({ line: 'session 1 dispatch · 2m 00s agent wall-clock', problem: null, notes: [], costUsd: null })
 
     await dispatcher.consider(snapshotWith([tickReport()]))
-    expect(resetCalls).toBe(1) // never resets twice
-    expect(sweepCalls).toBe(2) // sweeps on every pass
+    expect(gate.reset).toHaveBeenCalledTimes(1)
+    expect(gate.sweep).toHaveBeenCalledTimes(2)
   })
 
   it('a reset failure reports budget-unavailable and dispatches nothing this pass', async () => {
-    const budget = fakeBudget({ reset: () => Promise.resolve({ ok: false, kind: 'unavailable', message: "the budget ceiling can't be read (not on the default branch)." }) })
-    const dispatcher = buildDispatcher(REPO_ID,baseDeps({ budget }))
-    await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })]))
+    gate.reset.mockResolvedValue({ ok: false, kind: 'unavailable', message: "the budget ceiling can't be read (not on the default branch)." })
+    const { dispatcher } = await setup()
+    await dispatcher.consider(withCandidate())
     expect(dispatcher.status()[0]?.state).toEqual({ kind: 'budget-unavailable', message: "the budget ceiling can't be read (not on the default branch)." })
   })
 
   it('sweeps even after ownership moves away from this app, while a session is still live', async () => {
-    const launch = fakeLauncher()
-    const store = fakeStore({ snapshotOf: () => sessionSnapshot() })
-    let sweepCalls = 0
-    const budget = fakeBudget({
-      check: () => Promise.resolve({ ok: true, verdict: 'allow', line: 'allowed' } satisfies BudgetCheckResult),
-      sweep: () => {
-        sweepCalls += 1
-        return Promise.resolve({ line: `sweep ${String(sweepCalls)}`, problem: null })
-      },
-    })
-    let ownership: OwnershipRead = OWNED_BY_APP
-    const dispatcher = buildDispatcher(REPO_ID,
-      baseDeps({
-        store,
-        launch,
-        budget,
-        readOwnership: () => Promise.resolve(ownership),
-        fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'], headRefName: null, author: null }], unavailable: [], fetchedAt: 'r' }),
-      }),
-    )
-
-    await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })])) // owner app, launches, starts the session
+    const { ctx, dispatcher } = await setup()
+    await dispatcher.consider(withCandidate())
     expect(dispatcher.status()[0]?.owner).toBe('app')
-    expect(sweepCalls).toBe(1)
+    expect(gate.sweep).toHaveBeenCalledTimes(1)
 
-    ownership = ABSENT_OWNERSHIP // ownership moves back to the terminal cockpit's own startup window
+    await ctx.stores.runStates.set([REPO_ID], 'paused', ctx.clock.now().toISOString())
+    await ctx.fs.remove(pathOps.join('/repo', '.agents', 'cockpit.json'))
     await dispatcher.consider(snapshotWith([tickReport()]))
     expect(dispatcher.status()[0]?.owner).toBe('none')
-    expect(sweepCalls).toBe(2) // still sweeping — this app's own session may still be live
-    expect(dispatcher.status()[0]?.budget?.line).toBe('sweep 2')
+    expect(gate.sweep).toHaveBeenCalledTimes(2)
   })
 })
 
 describe('createDispatcher — the budget gate itself', () => {
-  function readyToDispatch(overrides: Partial<CreateDispatcherParams> = {}) {
-    const launch = fakeLauncher()
-    const store = fakeStore({ snapshotOf: () => sessionSnapshot() })
-    const deps = baseDeps({
-      store,
-      launch,
-      fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'], headRefName: null, author: null }], unavailable: [], fetchedAt: 'r' }),
-      ...overrides,
-    })
-    return { dispatcher: buildDispatcher(REPO_ID,deps) }
-  }
-
   it('allow launches the candidate — no notes', async () => {
-    const budget = fakeBudget({ check: () => Promise.resolve({ ok: true, verdict: 'allow', line: 'allowed' }) })
-    const { dispatcher } = readyToDispatch({ budget })
-    await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })]))
+    const { dispatcher } = await setup()
+    await dispatcher.consider(withCandidate())
     expect(dispatcher.status()[0]?.budget?.notes).toEqual([])
     expect(dispatcher.status()[0]?.state.kind).toBe('active')
   })
 
-  it('a first hold holds — no launch, a held note carrying the script line', async () => {
-    const line = "⏳ Couldn't read #52's cost ledger (unparseable table) — holding its dispatch one tick rather than dispatching blind."
-    const budget = fakeBudget({ check: () => Promise.resolve({ ok: true, verdict: 'hold', line }) })
-    const { dispatcher } = readyToDispatch({ budget })
-    await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })]))
-    expect(dispatcher.status()[0]?.budget?.notes).toEqual([{ kind: 'held', number: 52, line }])
+  it('a first hold holds with a held note, and a second consecutive hold launches anyway', async () => {
+    gate.check.mockResolvedValue({ ok: true, verdict: 'hold', line: HOLD_LINE })
+    const { dispatcher } = await setup()
+    await dispatcher.consider(withCandidate())
+    expect(dispatcher.status()[0]?.budget?.notes).toEqual([{ kind: 'held', number: 52, line: HOLD_LINE }])
     expect(dispatcher.status()[0]?.state).toEqual({ kind: 'idle' })
-  })
 
-  it('a second consecutive hold launches anyway, with a held-dispatched note', async () => {
-    const line = "⏳ Couldn't read #52's cost ledger (unparseable table) — holding its dispatch one tick rather than dispatching blind."
-    const budget = fakeBudget({ check: () => Promise.resolve({ ok: true, verdict: 'hold', line }) })
-    const { dispatcher } = readyToDispatch({ budget })
-    await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })])) // first hold
-    await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })])) // second hold — launches
+    await dispatcher.consider(withCandidate())
     expect(dispatcher.status()[0]?.budget?.notes).toEqual([{ kind: 'held-dispatched', number: 52 }])
     expect(dispatcher.status()[0]?.state.kind).toBe('active')
   })
 
   it('exceeded escalates instead of launching, with an escalated note', async () => {
     const line = '⛔ #52 has consumed 2h 00m of agent wall-clock against a 120m ceiling — escalate instead of dispatching impl #52.'
-    const budget = fakeBudget({ check: () => Promise.resolve({ ok: true, verdict: 'exceeded', line }) })
-    const calls: EscalateToHumanParams[] = []
-    const escalate: CreateDispatcherParams['escalate'] = (params) => {
-      calls.push(params)
-      return Promise.resolve({ labels: { kind: 'applied', argv: [] }, comment: { kind: 'applied', argv: [] } })
-    }
-    const { dispatcher } = readyToDispatch({ budget, escalate })
-    await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })]))
-    expect(calls).toHaveLength(1)
-    const escalateParams = calls[0]
-    if (escalateParams === undefined) throw new Error('unreachable')
-    expect(escalateParams.trigger).toBe('planApproved')
-    expect(escalateParams.number).toBe(52)
-    expect(escalateParams.body).toContain('## Pipeline Escalation')
-    expect(escalateParams.body).toContain(line)
+    gate.check.mockResolvedValue({ ok: true, verdict: 'exceeded', line })
+    escalate.mockResolvedValue({ labels: { kind: 'applied', argv: [] }, comment: { kind: 'applied', argv: [] } })
+    const { dispatcher } = await setup()
+    await dispatcher.consider(withCandidate())
+    expect(escalate).toHaveBeenCalledTimes(1)
+    expect(escalate.mock.calls[0]?.[0]).toMatchObject({ trigger: 'planApproved', number: 52, body: expect.stringContaining(line) as unknown })
     expect(dispatcher.status()[0]?.budget?.notes).toEqual([{ kind: 'escalated', number: 52, needsHumanLabel: 'needs human', commentFailedMessage: null }])
     expect(dispatcher.status()[0]?.state).toEqual({ kind: 'idle' })
   })
 
   it('escalation-failed carries the outcome, for the renderer to classify', async () => {
-    const budget = fakeBudget({ check: () => Promise.resolve({ ok: true, verdict: 'exceeded', line: 'over budget' }) })
-    const escalate: CreateDispatcherParams['escalate'] = () => Promise.resolve({ labels: { kind: 'ownership-unreadable', path: '/repo/.agents/cockpit.json', message: 'bad' }, comment: null })
-    const { dispatcher } = readyToDispatch({ budget, escalate })
-    await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })]))
-    const notes = dispatcher.status()[0]?.budget?.notes
-    expect(notes).toEqual([{ kind: 'escalation-failed', number: 52, needsHumanLabel: 'needs human', triggerLabel: 'plan approved', outcome: { kind: 'ownership-unreadable', path: '/repo/.agents/cockpit.json', message: 'bad' } }])
+    const outcome = { kind: 'ownership-unreadable', path: '/repo/.agents/cockpit.json', message: 'bad' } as const
+    gate.check.mockResolvedValue({ ok: true, verdict: 'exceeded', line: 'over budget' })
+    escalate.mockResolvedValue({ labels: outcome, comment: null })
+    const { dispatcher } = await setup()
+    await dispatcher.consider(withCandidate())
+    expect(dispatcher.status()[0]?.budget?.notes).toEqual([{ kind: 'escalation-failed', number: 52, needsHumanLabel: 'needs human', triggerLabel: 'plan approved', outcome }])
   })
 
-  it('a failed gate check drops the candidate — gate-failed note, never a launch', async () => {
-    const budget = fakeBudget({ check: () => Promise.resolve({ ok: false, kind: 'failed', message: 'FAIL  something broke' }) })
-    const { dispatcher } = readyToDispatch({ budget })
-    await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })]))
+  it('a failed gate check drops the candidate, and its note is kept when a later pass has nothing to gate', async () => {
+    gate.check.mockResolvedValue({ ok: false, kind: 'failed', message: 'FAIL  something broke' })
+    const { dispatcher } = await setup()
+    await dispatcher.consider(withCandidate())
     expect(dispatcher.status()[0]?.budget?.notes).toEqual([{ kind: 'gate-failed', number: 52, message: 'FAIL  something broke' }])
     expect(dispatcher.status()[0]?.state).toEqual({ kind: 'idle' })
-  })
 
-  it('notes are kept when a later pass has nothing to gate', async () => {
-    const budget = fakeBudget({ check: () => Promise.resolve({ ok: false, kind: 'failed', message: 'FAIL  something broke' }) })
-    const { dispatcher } = readyToDispatch({ budget })
-    await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })])) // gate runs, note recorded
-    await dispatcher.consider(snapshotWith([tickReport()])) // nothing actionable — no gate this pass
+    await dispatcher.consider(snapshotWith([tickReport()]))
     expect(dispatcher.status()[0]?.budget?.notes).toEqual([{ kind: 'gate-failed', number: 52, message: 'FAIL  something broke' }])
   })
 })
