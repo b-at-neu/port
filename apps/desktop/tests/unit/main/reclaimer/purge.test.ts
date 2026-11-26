@@ -1,7 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createFakeRepo, MAIN, WORKTREES } from '../../../fixtures/reclaimer-harness'
 import type { FakeRepoOptions } from '../../../fixtures/reclaimer-harness'
 import { runPurge } from '@/main/features/worktrees/purge'
+
+vi.mock('@/main/platform/paths', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/main/platform/paths')>()
+  return { ...original, pathOps: original.createPathOps('posix', { home: '/home/test' }) }
+})
 
 const STALE = `${WORKTREES}/impl-29-stale`
 

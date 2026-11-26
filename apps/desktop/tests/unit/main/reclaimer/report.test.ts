@@ -1,9 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createFakeGithub, createFakeRepo, MAIN, WORKTREES } from '../../../fixtures/reclaimer-harness'
 import type { FakeGithubOptions, FakeRepoOptions } from '../../../fixtures/reclaimer-harness'
 import { httpFail, queryOf } from '../../../fixtures/github-http'
 import { readWorktreeReport } from '@/main/features/worktrees/report'
 import type { WorktreesReport } from '@/types/reclaimer'
+
+vi.mock('@/main/platform/paths', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/main/platform/paths')>()
+  return { ...original, pathOps: original.createPathOps('posix', { home: '/home/test' }) }
+})
 
 const MERGED = `${WORKTREES}/impl-36`
 const OPEN = `${WORKTREES}/impl-41`

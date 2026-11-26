@@ -1,7 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { deleteMergedBranch, pruneWorktrees, removeWorktree, unlockWorktree } from '@/main/features/worktrees/remove'
 import type { CommandResult, GitRunner, PlatformFs, RemoveDirectoryResult } from '@/types/platform'
 import { createFakeClock, createFakeFs } from '../../../support/fake-platform'
+
+vi.mock('@/main/platform/paths', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/main/platform/paths')>()
+  return { ...original, pathOps: original.createPathOps('posix', { home: '/home/test' }) }
+})
 
 const TARGET = '/repo/.claude/worktrees/impl-36'
 const ok = (stdout = ''): CommandResult => ({ ok: true, stdout, stderr: '' })

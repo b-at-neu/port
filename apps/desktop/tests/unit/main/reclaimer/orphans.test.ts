@@ -1,9 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createFakeRepo, MAIN, WORKTREES } from '../../../fixtures/reclaimer-harness'
 import type { FakeRepoOptions } from '../../../fixtures/reclaimer-harness'
 import { findOrphanDirs } from '@/main/features/worktrees/orphans'
 import type { OrphanCandidate } from '@/main/features/worktrees/orphans'
 import type { PlatformFs } from '@/types/platform'
+
+vi.mock('@/main/platform/paths', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/main/platform/paths')>()
+  return { ...original, pathOps: original.createPathOps('posix', { home: '/home/test' }) }
+})
 
 const node = (kind: 'directory' | 'file', text = '') => ({ kind, text, modifiedAt: 't' })
 
