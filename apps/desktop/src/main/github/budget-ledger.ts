@@ -1,5 +1,43 @@
-// Pure: the budget ledger, session-log and verdict logic.
-import type { CeilingResult, ComputedVerdict, LedgerRow, SessionRow, TicketTotal } from '@/types/budget'
+// Pure: the budget ledger, session-log and verdict logic, and the ledger's own shapes shared with its GitHub store and the gate.
+
+/** One line of a ticket's `## Pipeline Cost` comment. */
+export interface LedgerRow {
+  readonly stage: string
+  readonly model: string
+  readonly startedAt: string
+  readonly seconds: number
+  readonly outcome: string
+}
+
+/** One dispatch in the local session log: `open` until its stage ends, `pending` until flushed to the ledger, then `closed`. */
+export interface SessionRow {
+  readonly issue: number
+  readonly dispatchNumber: number
+  readonly stage: string
+  readonly model: string
+  readonly startedAt: string
+  readonly state: 'open' | 'pending' | 'closed'
+  readonly seconds: number
+  readonly outcome: string
+}
+
+/** What one flush leaves a ticket at — the ledger is cumulative, so the last write wins. */
+export interface TicketTotal {
+  readonly issue: number
+  readonly secondsUsed: number
+  readonly ceilingSeconds: number | null
+}
+
+export type CeilingResult = { readonly ok: true; readonly ceilingSeconds: number | null } | { readonly ok: false; readonly offending: string }
+
+export type LedgerRead = { readonly ok: true; readonly rows: readonly LedgerRow[]; readonly seconds: number; readonly ref: number | null } | { readonly ok: false; readonly why: string }
+
+export type LedgerWrite = { readonly ok: true } | { readonly ok: false; readonly error: string }
+
+export type IssueForPr = { readonly ok: true; readonly issue: number } | { readonly ok: false; readonly why: string }
+
+/** `allow`/`exceeded` only: `hold` is a caller-level state for an unreadable ledger, never a computed one. */
+export type ComputedVerdict = 'allow' | 'exceeded'
 
 /** Whole seconds since `startedAt`, 0 for an unparseable one, which contributes nothing but is still closed. */
 function elapsed(startedAt: string, nowMs: number): number {

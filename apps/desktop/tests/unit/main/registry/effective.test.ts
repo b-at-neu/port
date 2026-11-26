@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { displayOverridesOf, foldDispositions, fromShape, labelOverridesOf, parseExcusedCheckName, toShape } from '@/main/repos/config/effective'
-import type { PortResolved } from '@/types/registry'
+import type { PortResolved } from '@/main/repos/config/effective'
 import type { AppliedOverride } from '@/utils/repos'
 
 const BASE: PortResolved = {

@@ -6,7 +6,7 @@ import { LABEL_KEYS, resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoDiagnostic, RepoId, RepoProblem, RepositoryEntry, ResolvedRepoConfig, SchemaViolation } from '@/utils/repos'
 import { defaultRefName, permissionsStateOf, readAtDefaultRef, refsCarryingConfig } from '@/main/repos/config/harness'
 import { resolveEffectiveConfig } from '@/main/repos/config/effective'
-import type { PortResolved, RefReader } from '@/types/registry'
+import type { PortResolved, RefReader } from '@/main/repos/config/effective'
 import { CONFIG_PATH, SETTINGS_PATH } from '@/main/repos/config/paths'
 import { CONFIG_DEFAULTS, validateConfig } from '@/main/repos/config/schema'
 

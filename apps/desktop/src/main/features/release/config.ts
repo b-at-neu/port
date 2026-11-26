@@ -1,7 +1,7 @@
 // The `release` block of `.claude/port.config.json` at the default ref — a violated path falls back to its default, an unreadable file fails the read.
 import { CONFIG_PATH } from '@/main/repos/config/paths'
 import { CONFIG_DEFAULTS, validateConfig } from '@/main/repos/config/schema'
-import type { RefReader } from '@/types/registry'
+import type { RefReader } from '@/main/repos/config/effective'
 import type { ReleaseConfigRead } from '@/types/release'
 
 interface LooseRelease {

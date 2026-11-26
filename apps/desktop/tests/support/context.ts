@@ -25,7 +25,7 @@ import { createFakeGitHub, type FakeGitHub, type FakeItem } from './fake-github'
 import { readyEntry } from './repo-config'
 import { runOf } from './tickets'
 import type { EventMap, EventName } from '@/main/app/events'
-import type { StateEngine } from '@/types/offload'
+import type { StateEngine } from '@/main/pipeline/context'
 import type { ActionInput, ActionName, ActionOutput } from '@/types/ipc'
 import type { Ticket } from '@/utils/pipeline/ticket'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
@@ -66,9 +66,9 @@ export function fakeEngine(given: Partial<StateEngine>): StateEngine {
   return unscriptedGroup('live.engine', given)
 }
 
-function memoryRepos(seed: readonly RepositoryEntry[], platform: Platform): Omit<Repos, 'deps'> {
+function memoryRepos(seed: readonly RepositoryEntry[], platform: Platform): Repos {
   let entries = [...seed]
-  const repos = {
+  const repos: Repos = {
     list: () => Promise.resolve({ ok: true as const, repositories: entries }),
     resolve: (repoId) => Promise.resolve(readyOf({ ok: true, repositories: entries }, repoId)),
     remove: (id) => {
@@ -82,7 +82,7 @@ function memoryRepos(seed: readonly RepositoryEntry[], platform: Platform): Omit
       if (picked === null) return { ok: true as const, outcome: 'cancelled' as const }
       throw new Error('repos.add picked a directory; pass repos.add to createTestContext')
     },
-  } satisfies Omit<Repos, 'deps'>
+  }
   return repos
 }
 
@@ -91,15 +91,7 @@ export function createTestContext(options: TestContextOptions = {}): TestContext
   const platform: FakePlatform = { ...fake, ...options.platform, clock: (options.platform?.clock as FakePlatform['clock'] | undefined) ?? fake.clock }
   const emitted: TestContext['emitted'] = []
 
-  const repos = { ...memoryRepos(options.repositories ?? [], platform), ...options.repos } as Repos
-  if (options.repos?.deps === undefined) {
-    Object.defineProperty(repos, 'deps', {
-      enumerable: true,
-      get: () => {
-        throw new Error('ctx.repos.deps reads the real registry file; pass repos to createTestContext')
-      },
-    })
-  }
+  const repos: Repos = { ...memoryRepos(options.repositories ?? [], platform), ...options.repos }
 
   const path = (file: string): string => `${platform.paths.userData}/${file}`
   if (options.tickets !== undefined) {

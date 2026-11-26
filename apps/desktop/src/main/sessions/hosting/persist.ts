@@ -5,7 +5,8 @@ import type { SessionDefaults, SessionMarks, SessionModel, SessionPermissionMode
 import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'
 import type { NotificationPrefs } from '@/types/settings'
 import { z } from 'zod'
-import { createJsonStore, nodeStoreFs } from '@/main/platform/json-store'
+import { createJsonStore } from '@/main/platform/json-store'
+import type { StoreFs } from '@/main/platform/json-store'
 import { pathOps } from '@/main/platform/paths'
 import type { HostingPersistedState, HostingPersistence, PersistedOpenEntry } from '@/types/hosting'
 
@@ -106,6 +107,7 @@ function emptyState(): HostingPersistedState {
 
 interface CreateHostingPersistenceParams {
   readonly dir: string
+  readonly fs: StoreFs
 }
 
 /** Missing, unparseable, wrong-shaped, or newer-versioned all resolve to `emptyState()`, logged once. */
@@ -117,7 +119,7 @@ export function createHostingPersistence(params: CreateHostingPersistenceParams)
     schema: hostingFileSchema,
     initial: { version: CURRENT_VERSION },
     unreadable: 'reset',
-    fs: nodeStoreFs,
+    fs: params.fs,
   })
   let frozen = false
   let writing: Promise<void> | null = null

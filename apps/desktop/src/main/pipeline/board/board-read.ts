@@ -5,7 +5,7 @@ import { mergeRateLimit } from '@/main/github/sweep'
 import type { BoardReadContext } from '@/main/pipeline/context'
 import type { BoardPullsFetch, GitHubRepoRef, PipelineFetch, PipelineItem, QueriedLabel } from '@/types/github'
 import type { TrackedRef } from '@/types/pipeline-state'
-import type { BoardIssuesFetch } from '@/types/tracker'
+import type { BoardIssuesFetch } from '@/main/github/tracker'
 import { verifyVocabulary } from '@/utils/labels/vocabulary'
 import type { LabelVocabulary, VerifiableVocabulary } from '@/utils/labels/vocabulary'
 

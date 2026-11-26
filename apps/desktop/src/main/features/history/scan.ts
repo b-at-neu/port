@@ -1,6 +1,6 @@
 import type { LocalRepoRef } from '@/types/github'
 import type { SessionScan } from '@/types/sessions'
-import type { StateEngine } from '@/types/offload'
+import type { StateEngine } from '@/main/pipeline/context'
 import { isReadyEntry, type Repos } from '@/main/repos'
 
 export async function scanSessions(ctx: { readonly repos: Pick<Repos, 'list'>; readonly live: { readonly engine: Pick<StateEngine, 'scanSessions'> } }): Promise<SessionScan> {

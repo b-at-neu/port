@@ -1,5 +1,6 @@
-import { OFFLOAD_OPS } from '@/types/offload'
-import type { OffloadOp, OffloadParams, OffloadRequest, OffloadResponse, StateEngine } from '@/types/offload'
+import { OFFLOAD_OPS } from '@/main/worker/protocol'
+import type { OffloadOp, OffloadParams, OffloadRequest, OffloadResponse } from '@/main/worker/protocol'
+import type { StateEngine } from '@/main/pipeline/context'
 
 function isOffloadOp(op: string): op is OffloadOp {
   return (OFFLOAD_OPS as readonly string[]).includes(op)

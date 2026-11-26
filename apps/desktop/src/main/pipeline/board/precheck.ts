@@ -1,7 +1,7 @@
 // Tracks the issues-list pre-check per repository and answers when it, or the sweep it triggered, is next due. It names no timer: the watcher's one clock reads `nextDueAt`.
 import { GITHUB_PRECHECK_INTERVAL_MS, initialHealth, isDeferred } from '@/types/board'
 import type { SourceHealth } from '@/types/board'
-import type { StateEngine } from '@/types/offload'
+import type { StateEngine } from '@/main/pipeline/context'
 import type { GithubPrecheckOutcome } from '@/types/state'
 import type { RepoId } from '@/utils/repos'
 import { afterFailure, nextDueAt as healthDueAt } from '@/main/pipeline/board/schedule'

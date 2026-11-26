@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { BoardPullsFetch, RateLimitInfo } from '@/types/github'
 import type { TrackedRef } from '@/types/pipeline-state'
-import type { BoardIssuesFetch } from '@/types/tracker'
+import type { BoardIssuesFetch } from '@/main/github/tracker'
 import { mergeBoard, readBoard } from '@/main/pipeline/board/board-read'
 import { ghAuthStatus, ghJson } from '@/main/platform/gh'
 import { githubHttp } from '@/main/platform/github-http'

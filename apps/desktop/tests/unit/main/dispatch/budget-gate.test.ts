@@ -6,7 +6,7 @@ import type { CommandResult, FileResult, GhResult, GhRunner, GitHubHttpResult, G
 import type { ReadyEntry } from '@/types/actions'
 import { budgetCheck, budgetReport, budgetReset, budgetSweep } from '@/main/dispatch/budget-gate'
 import { renderLedger } from '@/main/github/budget-ledger'
-import type { LedgerRow } from '@/types/budget'
+import type { LedgerRow } from '@/main/github/budget-ledger'
 import type { TickActionable } from '@/types/tick'
 import { createTestContext } from '../../../support/context'
 import { createFakePlatform } from '../../../support/fake-platform'

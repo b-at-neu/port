@@ -73,7 +73,7 @@ export async function runSearch(ctx: Pick<Platform, 'fs' | 'clock' | 'claudeHome
   if (!indexResult.ok) return { ok: false, kind: 'sessions-unavailable', sessionsKind: indexResult.kind, message: indexResult.message }
   const projectIndex: ProjectIndex = indexResult.index
 
-  const manifest = new Map<string, SignatureIndexEntry>(await readSignatureIndex(params.indexDir))
+  const manifest = new Map<string, SignatureIndexEntry>(await readSignatureIndex(ctx.fs, params.indexDir))
 
   const groups: SearchGroup[] = []
   let skippedByIndex = 0
@@ -143,7 +143,7 @@ export async function runSearch(ctx: Pick<Platform, 'fs' | 'clock' | 'claudeHome
     groups.push(groupFor(candidate, included))
   }
 
-  const written = await writeSignatureIndex(params.indexDir, manifest)
+  const written = await writeSignatureIndex(ctx.fs, params.indexDir, manifest)
 
   return {
     ok: true,

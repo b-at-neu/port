@@ -1,5 +1,5 @@
 import { parentPort, workerData } from 'node:worker_threads'
-import type { OffloadRequest } from '@/types/offload'
+import type { OffloadRequest } from '@/main/worker/protocol'
 import type { PlatformPaths } from '@/types/platform'
 import { createPlatform, headlessHost } from '@/main/platform'
 import { createInProcessEngine } from '@/main/worker/engine'

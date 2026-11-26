@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { RefRead } from '@/types/registry'
+import type { RefRead } from '@/main/repos/config/effective'
 import { readReleaseConfig } from '@/main/features/release/config'
 
 function reader(read: RefRead) {

@@ -1,7 +1,7 @@
 // The point reads by number: building the document, calling the transport on ctx, then composing
 // envelope.ts and map.ts. The pipeline sweep lives in pipeline.ts.
 import type { ClaimPreflightFetch, ClaimPreflightItem, FetchItemsByNumberParams, GraphQLErrorEntry, ItemsByNumberFetch, PipelineItemKind, ResolvedItem } from '@/types/github'
-import type { ItemNumberParams } from '@/types/tracker'
+import type { ItemNumberParams } from '@/main/github/tracker/types'
 import type { GitHubReadContext } from '@/main/github/context'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { toBlockerRead } from '@/main/github/blockers'

@@ -6,7 +6,7 @@ import { fieldListOf } from '@/main/github/map'
 import { blockedByField } from '@/main/github/tracker/query'
 import { repoGraphqlRequest } from '@/main/github/request'
 import type { ClaimBlocker } from '@/types/github'
-import type { ItemNumberParams } from '@/types/tracker'
+import type { ItemNumberParams } from '@/main/github/tracker/types'
 
 const ASSIGNEE_PAGE_SIZE = 20
 const LINK_PAGE_SIZE = 20

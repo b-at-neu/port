@@ -1,5 +1,5 @@
 import type { BacklogDetailResponse, BacklogResponse } from '@/types/backlog'
-import type { LedgerRead } from '@/types/budget'
+import type { LedgerRead } from '@/main/github/budget-ledger'
 import type { BoardHalf, BoardHalfFailure, ClaimPreflightFetch, FetchItemsByNumberParams, GatePreflightFetch, GitHubRepoRef, ItemsByNumberFetch, ItemStatesRead } from '@/types/github'
 import type { TrackedRef } from '@/types/pipeline-state'
 import type { GithubPrecheckOutcome } from '@/types/state'

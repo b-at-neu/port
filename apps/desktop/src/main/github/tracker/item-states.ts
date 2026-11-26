@@ -1,6 +1,6 @@
 // readItemStates — the state of many issues or pull requests in one aliased round trip.
 import type { ItemStateName, ItemStatesRead } from '@/types/github'
-import type { ItemStatesParams } from '@/types/tracker'
+import type { ItemStatesParams } from '@/main/github/tracker/types'
 import type { GitHubReadContext } from '@/main/github/context'
 import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { repoGraphqlRequest } from '@/main/github/request'

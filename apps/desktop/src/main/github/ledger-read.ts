@@ -3,7 +3,7 @@ import { describeHttp } from '@/main/github/envelope'
 import { restRequest } from '@/main/github/request'
 import { issueFromPrBody } from '@/main/github/budget-ledger'
 import type { GitHubReadContext } from '@/main/github/context'
-import type { IssueForPr } from '@/types/budget'
+import type { IssueForPr } from '@/main/github/budget-ledger'
 
 export async function issueForPr(ctx: GitHubReadContext, params: { readonly repo: string; readonly pr: number }): Promise<IssueForPr> {
   const pr = String(params.pr)

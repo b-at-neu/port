@@ -2,7 +2,8 @@ import { join } from 'node:path'
 import { Worker } from 'node:worker_threads'
 import type { Platform } from '@/main/platform'
 import type { PlatformPaths } from '@/types/platform'
-import type { OffloadOp, OffloadParams, OffloadRequest, OffloadResponse, OffloadValue, StateEngine } from '@/types/offload'
+import type { OffloadOp, OffloadParams, OffloadRequest, OffloadResponse, OffloadValue } from '@/main/worker/protocol'
+import type { StateEngine } from '@/main/pipeline/context'
 import type { RefreshOutcome } from '@/types/state'
 
 interface OffloadWorker {

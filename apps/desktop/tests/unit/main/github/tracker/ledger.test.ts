@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readLedger } from '@/main/github/tracker/ledger'
 import { renderLedger } from '@/main/github/budget-ledger'
-import type { LedgerRow } from '@/types/budget'
+import type { LedgerRow } from '@/main/github/budget-ledger'
 import type { GitHubHttpResult } from '@/types/platform'
 import { githubCtx, recordingTransport } from '../../../../fixtures/github-http'
 

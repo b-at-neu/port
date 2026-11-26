@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { CommandResult, PlatformFs } from '@/types/platform'
+import type { CommandResult } from '@/types/platform'
 import { pathOps } from '@/main/platform/paths'
 import type { GitRunner } from '@/types/platform'
-import { REPOSITORY_LIST_TTL_MS, addRepository, createRepos, listRepositories, readyOf, removeRepository } from '@/main/repos/index'
+import { REPOSITORY_LIST_TTL_MS, createRepos, readyOf } from '@/main/repos/index'
 import { readRegistry } from '@/main/repos/registry-store'
 import type { ReposListResponse } from '@/types/ipc'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
-import { createFakeFs, createFakePlatform } from '../../../support/fake-platform'
+import { createFakePlatform } from '../../../support/fake-platform'
 import { readyEntry } from '../../../support/repo-config'
 
 const REGISTRY_DIR = pathOps.toNative('/registry')
@@ -15,19 +15,13 @@ const SUB_DIR = pathOps.join(REPO_DIR, 'apps', 'desktop')
 const PLAIN_DIR = pathOps.toNative('/repos/not-a-repo')
 const REGISTRY_FILE = pathOps.join(REGISTRY_DIR, 'registry.json')
 
-async function makeFs(): Promise<PlatformFs> {
-  const fs = createFakeFs()
-  for (const dir of [REGISTRY_DIR, REPO_DIR, SUB_DIR, PLAIN_DIR]) await fs.ensureDir(dir)
-  return fs
-}
-
 function ok(stdout: string): CommandResult {
   return { ok: true, stdout, stderr: '' }
 }
 
-/** The fake runner echoes back whatever `cwd` it is asked about, so a subdirectory query resolves to the deepest repo root that contains it. */
 const NOT_FOUND: CommandResult = { ok: false, kind: 'not-found', command: 'git', searched: [] }
 
+/** The fake runner echoes back whatever `cwd` it is asked about, so a subdirectory query resolves to the deepest repo root that contains it. */
 function fakeGit(roots: readonly string[]): GitRunner {
   return (args, cwd) => {
     if (args[0] === 'rev-parse' && args.includes('--show-toplevel')) {
@@ -43,38 +37,32 @@ function fakeGit(roots: readonly string[]): GitRunner {
 
 type Pick = 'cancel' | 'repo' | 'subdirectory' | 'plain'
 
-const ADD_CASES: readonly { readonly name: string; readonly picks: readonly Pick[]; readonly outcome: string; readonly registered: number; readonly problem?: string }[] = [
-  { name: 'cancel leaves the registry untouched', picks: ['cancel'], outcome: 'cancelled', registered: 0 },
-  { name: 'adds a new repository', picks: ['repo'], outcome: 'added', registered: 1 },
-  { name: 'adding the same path again reports already-registered with one entry', picks: ['repo', 'repo'], outcome: 'already-registered', registered: 1 },
-  { name: 'adding a subdirectory of a registered repository reports already-registered', picks: ['repo', 'subdirectory'], outcome: 'already-registered', registered: 1 },
-  { name: 'a directory that is not a repository is still added, problem visible', picks: ['plain'], outcome: 'added', registered: 1, problem: 'not-a-git-repository' },
-]
+const PICKED: Record<Pick, string | null> = { cancel: null, repo: REPO_DIR, subdirectory: SUB_DIR, plain: PLAIN_DIR }
 
-describe('addRepository', () => {
-  it.each(ADD_CASES)('$name', async ({ picks, outcome, registered, problem }) => {
-    const fs = await makeFs()
-    const chosen: Record<Pick, string | null> = { cancel: null, repo: REPO_DIR, subdirectory: SUB_DIR, plain: PLAIN_DIR }
-
-    let last: Awaited<ReturnType<typeof addRepository>> | undefined
-    for (const pick of picks) last = await addRepository({ registryDir: REGISTRY_DIR, git: fakeGit([REPO_DIR]), fs, chooseDirectory: () => Promise.resolve(chosen[pick]) })
-
-    expect(last?.ok && last.outcome).toBe(outcome)
-    const stored = await readRegistry({ fs }, REGISTRY_DIR)
-    expect(stored.ok && stored.repositories).toHaveLength(registered)
-    if (problem !== undefined) {
-      const entry = last?.ok && last.outcome === 'added' ? last.repositories[0] : undefined
-      expect(entry && 'problem' in entry && entry.problem.kind).toBe(problem)
-    }
-  })
-})
-
-function countingGit(inner: GitRunner): { readonly git: GitRunner; readonly calls: () => number; readonly reset: () => void } {
+/** A registry service over fakes whose git calls are counted and whose directory picker answers `pick`. */
+async function rig(options: { readonly wrap?: (git: GitRunner) => GitRunner } = {}) {
+  const platform = createFakePlatform()
+  for (const dir of [REGISTRY_DIR, REPO_DIR, SUB_DIR, PLAIN_DIR]) await platform.fs.ensureDir(dir)
   let count = 0
+  const inner = fakeGit([REPO_DIR])
+  const counted: GitRunner = (args, cwd) => {
+    count++
+    return inner(args, cwd)
+  }
+  const state = { pick: 'repo' as Pick }
+  const repos = createRepos({
+    paths: { ...platform.paths, userData: REGISTRY_DIR },
+    git: options.wrap ? options.wrap(counted) : counted,
+    fs: platform.fs,
+    dialogs: { ...platform.dialogs, chooseDirectory: () => Promise.resolve(PICKED[state.pick]) },
+    clock: platform.clock,
+  })
   return {
-    git: (args, cwd) => {
-      count++
-      return inner(args, cwd)
+    repos,
+    fs: platform.fs,
+    clock: platform.clock,
+    pick: (next: Pick) => {
+      state.pick = next
     },
     calls: () => count,
     reset: () => {
@@ -83,71 +71,92 @@ function countingGit(inner: GitRunner): { readonly git: GitRunner; readonly call
   }
 }
 
-async function registeredDeps(extra: { readonly now?: () => number; readonly wrap?: (git: GitRunner) => GitRunner } = {}) {
-  const fs = await makeFs()
-  const counter = countingGit(fakeGit([REPO_DIR]))
-  const git = extra.wrap ? extra.wrap(counter.git) : counter.git
-  const deps = { registryDir: REGISTRY_DIR, git, fs, chooseDirectory: () => Promise.resolve(REPO_DIR), now: extra.now }
-  const added = await addRepository(deps)
+async function registered(options?: Parameters<typeof rig>[0]) {
+  const world = await rig(options)
+  const added = await world.repos.add()
   if (!added.ok || added.outcome !== 'added') throw new Error('unreachable')
-  return { deps, counter, fs, added: added.added }
+  return { ...world, added: added.added }
 }
 
-describe('listRepositories cache', () => {
+const ADD_CASES: readonly { readonly name: string; readonly picks: readonly Pick[]; readonly outcome: string; readonly registered: number; readonly problem?: string }[] = [
+  { name: 'cancel leaves the registry untouched', picks: ['cancel'], outcome: 'cancelled', registered: 0 },
+  { name: 'adds a new repository', picks: ['repo'], outcome: 'added', registered: 1 },
+  { name: 'adding the same path again reports already-registered with one entry', picks: ['repo', 'repo'], outcome: 'already-registered', registered: 1 },
+  { name: 'adding a subdirectory of a registered repository reports already-registered', picks: ['repo', 'subdirectory'], outcome: 'already-registered', registered: 1 },
+  { name: 'a directory that is not a repository is still added, problem visible', picks: ['plain'], outcome: 'added', registered: 1, problem: 'not-a-git-repository' },
+]
+
+describe('repos.add', () => {
+  it.each(ADD_CASES)('$name', async ({ picks, outcome, registered: count, problem }) => {
+    const world = await rig()
+
+    let last: Awaited<ReturnType<typeof world.repos.add>> | undefined
+    for (const pick of picks) {
+      world.pick(pick)
+      last = await world.repos.add()
+    }
+
+    expect(last?.ok && last.outcome).toBe(outcome)
+    const stored = await readRegistry({ fs: world.fs }, REGISTRY_DIR)
+    expect(stored.ok && stored.repositories).toHaveLength(count)
+    if (problem !== undefined) {
+      const entry = last?.ok && last.outcome === 'added' ? last.repositories[0] : undefined
+      expect(entry && 'problem' in entry && entry.problem.kind).toBe(problem)
+    }
+  })
+})
+
+describe('repos.list cache', () => {
   it('shares one inspection between concurrent callers', async () => {
-    let clock = 0
-    const { deps, counter } = await registeredDeps({ now: () => clock })
-    clock += REPOSITORY_LIST_TTL_MS
-    counter.reset()
-    const single = await listRepositories({ ...deps }, { fresh: true })
-    const perList = counter.calls()
+    const { repos, clock, calls, reset } = await registered()
+    clock.advance(REPOSITORY_LIST_TTL_MS)
+    reset()
+    const single = await repos.list({ fresh: true })
+    const perList = calls()
     expect(perList).toBeGreaterThan(0)
 
-    const other = { ...deps }
-    counter.reset()
-    const [a, b] = await Promise.all([listRepositories(other), listRepositories(other)])
-    expect(counter.calls()).toBe(perList)
+    clock.advance(REPOSITORY_LIST_TTL_MS)
+    reset()
+    const [a, b] = await Promise.all([repos.list(), repos.list()])
+    expect(calls()).toBe(perList)
     expect(a).toBe(b)
     expect(a).toEqual(single)
   })
 
   it('reuses the result within the TTL and re-inspects after it', async () => {
-    let clock = 0
-    const { deps, counter } = await registeredDeps({ now: () => clock })
-    clock += REPOSITORY_LIST_TTL_MS
-    await listRepositories(deps)
-    counter.reset()
-    clock += REPOSITORY_LIST_TTL_MS - 1
-    await listRepositories(deps)
-    expect(counter.calls()).toBe(0)
-    clock += 1
-    await listRepositories(deps)
-    expect(counter.calls()).toBeGreaterThan(0)
+    const { repos, clock, calls, reset } = await registered()
+    clock.advance(REPOSITORY_LIST_TTL_MS)
+    await repos.list()
+    reset()
+    clock.advance(REPOSITORY_LIST_TTL_MS - 1)
+    await repos.list()
+    expect(calls()).toBe(0)
+    clock.advance(1)
+    await repos.list()
+    expect(calls()).toBeGreaterThan(0)
   })
 
   it('fresh re-inspects inside the TTL and a following non-fresh call reuses it', async () => {
-    const { deps, counter } = await registeredDeps({ now: () => 0 })
-    counter.reset()
-    await listRepositories(deps, { fresh: true })
-    expect(counter.calls()).toBeGreaterThan(0)
-    counter.reset()
-    await listRepositories(deps)
-    expect(counter.calls()).toBe(0)
+    const { repos, calls, reset } = await registered()
+    reset()
+    await repos.list({ fresh: true })
+    expect(calls()).toBeGreaterThan(0)
+    reset()
+    await repos.list()
+    expect(calls()).toBe(0)
   })
 
   it('reflects an add and a remove immediately', async () => {
-    const fs = await makeFs()
-    const deps = { registryDir: REGISTRY_DIR, git: fakeGit([REPO_DIR]), fs, chooseDirectory: () => Promise.resolve(REPO_DIR), now: () => 0 }
-    const empty = await listRepositories(deps)
-    expect(empty).toEqual({ ok: true, repositories: [] })
+    const world = await rig()
+    expect(await world.repos.list()).toEqual({ ok: true, repositories: [] })
 
-    const added = await addRepository(deps)
+    const added = await world.repos.add()
     if (!added.ok || added.outcome !== 'added') throw new Error('unreachable')
-    const afterAdd = await listRepositories(deps)
+    const afterAdd = await world.repos.list()
     expect(afterAdd.ok && afterAdd.repositories.map((entry) => entry.id)).toEqual([added.added])
 
-    await removeRepository(deps, added.added)
-    expect(await listRepositories(deps)).toEqual({ ok: true, repositories: [] })
+    await world.repos.remove(added.added)
+    expect(await world.repos.list()).toEqual({ ok: true, repositories: [] })
   })
 
   it('a list in flight during a remove never re-caches the removed repository', async () => {
@@ -156,55 +165,42 @@ describe('listRepositories cache', () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve
     })
-    const { deps, added } = await registeredDeps({
-      now: () => 0,
-      wrap: (git) => (args, cwd) => (gated ? gate.then(() => git(args, cwd)) : git(args, cwd)),
-    })
+    const { repos, added } = await registered({ wrap: (git) => (args, cwd) => (gated ? gate.then(() => git(args, cwd)) : git(args, cwd)) })
     gated = true
-    const stale = listRepositories(deps, { fresh: true })
+    const stale = repos.list({ fresh: true })
     gated = false
-    await removeRepository(deps, added)
+    await repos.remove(added)
     release()
     const staleResult = await stale
     expect(staleResult.ok && staleResult.repositories).toHaveLength(1)
-    expect(await listRepositories(deps)).toEqual({ ok: true, repositories: [] })
+    expect(await repos.list()).toEqual({ ok: true, repositories: [] })
   })
 
   it('does not cache a failed read', async () => {
-    let clock = 0
-    const { deps, fs } = await registeredDeps({ now: () => clock })
+    const { repos, fs, clock } = await registered()
     await fs.writeText(REGISTRY_FILE, '{ not json')
-    const failed = await listRepositories(deps, { fresh: true })
+    const failed = await repos.list({ fresh: true })
     expect(failed.ok).toBe(false)
     await fs.writeText(REGISTRY_FILE, JSON.stringify({ version: 1, repositories: [] }))
-    clock += REPOSITORY_LIST_TTL_MS
-    expect(await listRepositories(deps)).toEqual({ ok: true, repositories: [] })
-  })
-
-  it('never shares a cache between separate deps objects', async () => {
-    const first = await registeredDeps({ now: () => 0 })
-    const second = await registeredDeps({ now: () => 0 })
-    await listRepositories(first.deps)
-    second.counter.reset()
-    await listRepositories(second.deps, { fresh: true })
-    expect(second.counter.calls()).toBeGreaterThan(0)
+    clock.advance(REPOSITORY_LIST_TTL_MS)
+    expect(await repos.list()).toEqual({ ok: true, repositories: [] })
   })
 })
 
-describe('removeRepository', () => {
+describe('repos.remove', () => {
   it.each([
     { name: 'removes a registered repository by id', known: true },
     { name: 'reports not-registered for an unknown id, list unchanged', known: false },
   ])('$name', async ({ known }) => {
-    const { deps, added } = await registeredDeps({ now: () => 0 })
-    const before = await listRepositories(deps)
-    const result = await removeRepository(deps, known ? added : ('not-a-real-id' as RepoId))
+    const { repos, added } = await registered()
+    const before = await repos.list()
+    const result = await repos.remove(known ? added : ('not-a-real-id' as RepoId))
     if (known) {
       expect(result).toEqual({ ok: true, repositories: [] })
       return
     }
     expect(result.ok === false && result.kind).toBe('not-registered')
-    expect(await listRepositories(deps)).toEqual(before)
+    expect(await repos.list()).toEqual(before)
   })
 })
 
@@ -220,25 +216,5 @@ describe('readyOf', () => {
     { name: 'an unlistable registry carries its own message', list: { ok: false, kind: 'registry-unreadable', message: 'disk on fire' } as ReposListResponse, id: ready.id, expected: { ok: false, kind: 'unlistable', message: 'disk on fire' } },
   ])('$name', ({ list: given, id, expected }) => {
     expect(readyOf(given, id)).toEqual(expected)
-  })
-})
-
-describe('createRepos', () => {
-  it('shares one cache between the service and the legacy deps handle', async () => {
-    const counter = countingGit(fakeGit([REPO_DIR]))
-    const platform = createFakePlatform()
-    await platform.fs.ensureDir(REPO_DIR)
-    const repos = createRepos({
-      paths: { ...platform.paths, userData: REGISTRY_DIR },
-      git: counter.git,
-      fs: platform.fs,
-      dialogs: { ...platform.dialogs, chooseDirectory: () => Promise.resolve(REPO_DIR) },
-      clock: platform.clock,
-    })
-    const added = await repos.add()
-    expect(added.ok && added.outcome).toBe('added')
-    counter.reset()
-    await listRepositories(repos.deps)
-    expect(counter.calls()).toBe(0)
   })
 })

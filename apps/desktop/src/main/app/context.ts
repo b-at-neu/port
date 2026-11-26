@@ -17,7 +17,7 @@ import { createDispatcher } from '@/main/dispatch/dispatcher'
 import { stageBundleRoot } from '@/main/dispatch/stage/bundle'
 import { createStageLauncher } from '@/main/dispatch/stage/launcher'
 import { createInterruptedSweeper } from '@/main/dispatch/stage/sweep'
-import type { StateEngine } from '@/types/offload'
+import type { StateEngine } from '@/main/pipeline/context'
 import { createPlatform, type Platform } from '@/main/platform'
 import { nativeNotify } from '@/main/platform/notify'
 import { createRepos, type Repos } from '@/main/repos'
@@ -138,7 +138,7 @@ export function createAppContext(restart: RestartSeams): AppContext {
 
   const hostedStore = createHostedStore(platform, {
     listSessions: () => engine.listSessions(),
-    persistence: createHostingPersistence({ dir: userData }),
+    persistence: createHostingPersistence({ dir: userData, fs: platform.fs }),
     onStatus: (snapshot) => {
       emit('session.status', snapshot)
       sessionIndex.observe(snapshot)
