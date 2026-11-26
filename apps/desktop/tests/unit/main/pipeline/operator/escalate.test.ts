@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { escalateToHuman } from '@/main/pipeline/operator/escalate'
 import type { EscalateToHumanParams } from '@/types/actions'
-import { operatorRig, REPO_ID, type OperatorRigOptions } from '../../../support/operator-rig'
-import { ticketOf } from '../../../support/tickets'
+import { operatorRig, REPO_ID, type OperatorRigOptions } from '../../../../support/operator-rig'
+import { ticketOf } from '../../../../support/tickets'
 
 const READY: OperatorRigOptions = { items: [{ number: 52, labels: ['port', 'claude', 'plan approved'], assignees: ['op'] }], tickets: [ticketOf({ repo: REPO_ID, ticket: 52, stage: 'implement' })] }
 

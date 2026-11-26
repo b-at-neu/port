@@ -5,7 +5,7 @@ import type { ItemsByNumberFetch, ResolvedItem } from '@/types/github'
 import type { InterruptedStage } from '@/types/stage'
 import type { RepositoryState } from '@/types/state'
 import type { RepoId } from '@/utils/repos'
-import { reconciledItem, repositoryState } from '../../../support/board-snapshot'
+import { reconciledItem, repositoryState } from '../../../../support/board-snapshot'
 
 const REPO = 'repo-a' as RepoId
 const INTERRUPTED_AT = '2026-01-01T00:10:00.000Z'

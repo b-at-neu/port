@@ -4,9 +4,9 @@ import type { ResolvedItem } from '@/types/github'
 import type { StageEvent, StagePlanFile } from '@/types/stage-labels'
 import type { WriteOutcome } from '@/types/writes'
 import type { Stage, Status, Ticket } from '@/utils/pipeline/ticket'
-import type { FakeItem } from '../../../support/fake-github'
-import { operatorRig, REPO_ID } from '../../../support/operator-rig'
-import { NOW, ticketOf } from '../../../support/tickets'
+import type { FakeItem } from '../../../../support/fake-github'
+import { operatorRig, REPO_ID } from '../../../../support/operator-rig'
+import { NOW, ticketOf } from '../../../../support/tickets'
 import { item as reconciled } from '../incidents/fixtures'
 
 const issue: FakeItem = { number: 52, assignees: ['op'], labels: ['port'] }

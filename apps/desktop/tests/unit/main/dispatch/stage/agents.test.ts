@@ -6,7 +6,7 @@ import { HANDBACK_TOKENS } from '@/main/pipeline/transitions'
 import { STAGE_AGENT_NAMES } from '@/main/dispatch/stage/agents'
 import { BLOCKED_PREFIX, HANDBACK_PREFIX, QUESTIONS_PREFIX } from '@/utils/stage/handback-text'
 
-const BUNDLE_ROOT = join(__dirname, '../../../../stage-prompts')
+const BUNDLE_ROOT = join(__dirname, '../../../../../stage-prompts')
 
 async function frontmatterName(file: string): Promise<string> {
   const text = await readFile(join(BUNDLE_ROOT, 'agents', file), 'utf8')

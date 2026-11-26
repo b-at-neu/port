@@ -1,7 +1,7 @@
 // A handle's title, rateLimit and resumeTarget.
 import { describe, expect, it, vi } from 'vitest'
 import { createHostedHandle } from '@/main/sessions/hosting/handle'
-import { baseParams, fakeQuery, flush } from '../../../fixtures/hosting/handle'
+import { baseParams, fakeQuery, flush } from '../../../../fixtures/hosting/handle'
 
 describe('title (#103)', () => {
   it('starts with initialTitle, and the first send() never overwrites it', () => {

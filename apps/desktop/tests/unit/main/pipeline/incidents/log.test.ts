@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createIncidentLog, INCIDENT_LIMITS } from '@/main/pipeline/incidents/log'
 import type { Platform } from '@/main/platform'
 import type { IncidentDraft } from '@/types/incidents'
-import { createFakeClock, createFakePlatform } from '../../../support/fake-platform'
+import { createFakeClock, createFakePlatform } from '../../../../support/fake-platform'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const START = '2026-11-16T12:00:00.000Z'

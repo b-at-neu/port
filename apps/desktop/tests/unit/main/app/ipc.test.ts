@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { WorktreesReport } from '@/types/reclaimer'
 import { readWorktreeReport } from '@/main/features/worktrees/report'
-import { callAction, createTestContext } from '../../support/context'
-import { recordingWatcher } from '../../support/operator-rig'
-import { readyEntry } from '../../support/repo-config'
+import { callAction, createTestContext } from '../../../support/context'
+import { recordingWatcher } from '../../../support/operator-rig'
+import { readyEntry } from '../../../support/repo-config'
 
 vi.mock('@/main/features/worktrees/report', () => ({ readWorktreeReport: vi.fn() }))
 

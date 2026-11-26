@@ -10,7 +10,7 @@ import { RATE_LIMIT_REPLY, connection } from '../../../../fixtures/pipeline-repl
 import { REPO, VOCABULARY, issueSweepBody, node, ok, pullSweepBody, scriptedBoard } from '../../../../fixtures/board-script'
 import { boardCtx, httpFail } from '../../../../fixtures/github-http'
 import { dryRunCostRecorder } from '../../../../support/graphql-cost'
-import { item } from '../../state/reconcile-fixtures'
+import { item } from './reconcile-fixtures'
 
 const rate = (cost: number, remaining: number, resetAt = 'r', limit = 5000): RateLimitInfo => ({ cost, remaining, resetAt, limit })
 

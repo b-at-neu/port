@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { makeTempDir } from '../../../fixtures/fs'
+import { makeTempDir } from '../../../../fixtures/fs'
 import { hostFs } from '@/main/platform'
 import { createRecentsStore, pruneMissing, RECENTS_CAP } from '@/main/features/folders/recents'
 

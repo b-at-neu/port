@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { migrateRuns, NO_RUN_FILES, type RunFiles } from '@/main/pipeline/state/migrate-runs'
 import { parseFile } from '@/main/pipeline/state/model'
 import type { Run, Ticket } from '@/utils/pipeline/ticket'
-import dispatch from '../../../fixtures/pipeline-state/v2/dispatch.json'
-import denials from '../../../fixtures/pipeline-state/v2/stage-denials.json'
-import v2 from '../../../fixtures/pipeline-state/v2/pipeline-state.json'
-import sessions from '../../../fixtures/pipeline-state/v2/stage-sessions.json'
+import dispatch from '../../../../fixtures/pipeline-state/v2/dispatch.json'
+import denials from '../../../../fixtures/pipeline-state/v2/stage-denials.json'
+import v2 from '../../../../fixtures/pipeline-state/v2/pipeline-state.json'
+import sessions from '../../../../fixtures/pipeline-state/v2/stage-sessions.json'
 
 const files: RunFiles = { dispatch, sessions, denials }
 const migrate = (overrides: Partial<RunFiles> = {}) => parseFile(migrateRuns(v2, { ...files, ...overrides }))

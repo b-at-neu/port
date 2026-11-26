@@ -4,7 +4,7 @@ import type { IntegrationChecks } from '@/types/github'
 import type { ReconciledItem } from '@/types/state'
 import { createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
 import { planTick } from '@/main/pipeline/tick/plan'
-import { reconciledItem as item, repositoryState } from '../../../support/board-snapshot'
+import { reconciledItem as item, repositoryState } from '../../../../support/board-snapshot'
 
 const COMMENT_AT = '2026-01-01T00:00:00Z'
 const RED_BODY = '## Integration red\nHead `abc1234` · `dev` is already red on these checks, so the failure isn\'t from this diff:\n- `test` — FAILURE on `def5678` · https://example.test/run/1'

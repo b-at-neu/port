@@ -5,11 +5,11 @@ import { describe, expect, it, vi } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { PipelineState, RepositoryState } from '@/types/state'
 import type { Ticket } from '@/utils/pipeline/ticket'
-import { createFakeGitHub, type FakeItem } from '../../../support/fake-github'
-import { reconciledItem, repositoryState } from '../../../support/board-snapshot'
-import { AT } from '../../../support/state-store'
-import { ticketOf } from '../../../support/tickets'
-import { readyEntry, watcherRig } from '../../../fixtures/watcher-harness'
+import { createFakeGitHub, type FakeItem } from '../../../../support/fake-github'
+import { reconciledItem, repositoryState } from '../../../../support/board-snapshot'
+import { AT } from '../../../../support/state-store'
+import { ticketOf } from '../../../../support/tickets'
+import { readyEntry, watcherRig } from '../../../../fixtures/watcher-harness'
 
 const REPO = 'repo-a' as RepoId
 const SESSIONS = { ok: true as const, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: AT }

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ReconciledItem } from '@/types/state'
 import type { EndedStage } from '@/types/tick'
 import { repairsOf } from '@/main/pipeline/tick/repair'
-import { reconciledItem } from '../../../support/board-snapshot'
+import { reconciledItem } from '../../../../support/board-snapshot'
 
 const VIEWER = 'op'
 const READ_AT = '2026-01-01T01:00:00.000Z'

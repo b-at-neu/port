@@ -9,7 +9,7 @@ import type { SearchScope } from '@/types/search'
 import { hostFs } from '@/main/platform'
 import { runSearch } from '@/main/sessions/search/query'
 import type { Clock } from '@/types/platform'
-import { makeClaudeHome } from '../../../fixtures/fs'
+import { makeClaudeHome } from '../../../../fixtures/fs'
 
 const ctxOf = (claudeHome: string, clock: Clock = { now: () => new Date() }) => ({ fs: hostFs, clock, claudeHome })
 

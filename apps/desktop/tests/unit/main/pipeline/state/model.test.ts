@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { emptyFile, parseFile, prune, recordMirror, seedFrom, ticketFor, trackedOf, viewOf, withTicket } from '@/main/pipeline/state/model'
 import type { MirrorFailure, RepoRecord } from '@/types/pipeline-state'
 import type { Ticket } from '@/utils/pipeline/ticket'
-import { reconciledItem, repositoryState } from '../../../support/board-snapshot'
-import { NOW as AT, REPO, runOf, ticketOf } from '../../../support/tickets'
+import { reconciledItem, repositoryState } from '../../../../support/board-snapshot'
+import { NOW as AT, REPO, runOf, ticketOf } from '../../../../support/tickets'
 
 function recordOf(...tickets: Ticket[]): RepoRecord {
   return tickets.reduce((record, ticket) => withTicket(record, ticket), { seededAt: AT, tickets: {} } as RepoRecord)

@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { ReconciledItem, StageLabel } from '@/types/state'
 import type { ItemDecisionRequest } from '@/types/actions'
 import { applyItemDecision } from '@/main/pipeline/operator/decide'
-import { boardSnapshot as snapshotOf, reconciledItem, repositoryState } from '../../../support/board-snapshot'
-import { operatorRig, REPO_ID, type OperatorRigOptions } from '../../../support/operator-rig'
-import { ticketOf } from '../../../support/tickets'
+import { boardSnapshot as snapshotOf, reconciledItem, repositoryState } from '../../../../support/board-snapshot'
+import { operatorRig, REPO_ID, type OperatorRigOptions } from '../../../../support/operator-rig'
+import { ticketOf } from '../../../../support/tickets'
 
 const REQUEST: ItemDecisionRequest = { repoId: REPO_ID, number: 300, decision: 'grant', expectedStage: 'needsRevision', route: null, note: null, skipComment: false, picks: null }
 

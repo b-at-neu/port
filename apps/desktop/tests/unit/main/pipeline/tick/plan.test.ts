@@ -4,8 +4,8 @@ import type { ReconciledItem, RepositoryState } from '@/types/state'
 import { createForceDispatch, createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
 import { planTick } from '@/main/pipeline/tick/plan'
 import type { Run } from '@/utils/pipeline/ticket'
-import { reconciledItem as item, repositoryState } from '../../../support/board-snapshot'
-import { runOf } from '../../../support/tickets'
+import { reconciledItem as item, repositoryState } from '../../../../support/board-snapshot'
+import { runOf } from '../../../../support/tickets'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 const NEXT_DECISION_AT = new Date('2026-01-01T01:01:00.000Z')

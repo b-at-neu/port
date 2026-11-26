@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createFakeRepo, MAIN, WORKTREES } from '../../../fixtures/reclaimer-harness'
-import type { FakeRepoOptions } from '../../../fixtures/reclaimer-harness'
+import { createFakeRepo, MAIN, WORKTREES } from '../../../../fixtures/reclaimer-harness'
+import type { FakeRepoOptions } from '../../../../fixtures/reclaimer-harness'
 import { findOrphanDirs } from '@/main/features/worktrees/orphans'
 import type { OrphanCandidate } from '@/main/features/worktrees/orphans'
 import type { PlatformFs } from '@/types/platform'

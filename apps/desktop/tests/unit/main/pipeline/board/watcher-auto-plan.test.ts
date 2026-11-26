@@ -5,8 +5,8 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { RepoDispatchStatus } from '@/types/dispatch'
 import type { BoardSnapshot } from '@/types/board'
-import { RATE_LIMIT_REPLY } from '../../../fixtures/pipeline-reply'
-import { readyEntry, readyItemTransport, watcherRig } from '../../../fixtures/watcher-harness'
+import { RATE_LIMIT_REPLY } from '../../../../fixtures/pipeline-reply'
+import { readyEntry, readyItemTransport, watcherRig } from '../../../../fixtures/watcher-harness'
 
 const AUTO_PLAN_LABELS = ['claude', 'auto plan', 'plan review']
 

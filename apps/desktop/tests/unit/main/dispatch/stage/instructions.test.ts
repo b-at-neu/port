@@ -4,11 +4,11 @@ import { describe, expect, it } from 'vitest'
 import { buildStageContext, extractSection, loadStageInstructions, loadStageLaunch, readStageConfigPointers, STAGE_PIPELINE_SECTIONS } from '@/main/dispatch/stage/instructions'
 import { hostFs } from '@/main/platform'
 import { pathOps } from '@/main/platform/paths'
-import { FIXTURE_REPOSITORIES, WIDGETS_ID } from '../../../fixtures/app/repos'
+import { FIXTURE_REPOSITORIES, WIDGETS_ID } from '../../../../fixtures/app/repos'
 import type { ReadyEntry } from '@/types/actions'
 import type { StageLaunchRequest } from '@/types/dispatch'
 import type { FileResult, GitRunner } from '@/types/platform'
-import { makeTempDir } from '../../../fixtures/fs'
+import { makeTempDir } from '../../../../fixtures/fs'
 import type { StageAgent } from '@/types/tick'
 import { parseStagePrompt, STAGE_SYSTEM_PREAMBLE } from '@/utils/stage/prompt'
 
@@ -104,7 +104,7 @@ describe('loadStageInstructions', () => {
 })
 
 describe('loadStageInstructions against the bundled stage prompts', () => {
-  const REAL_ROOT = join(__dirname, '../../../../stage-prompts')
+  const REAL_ROOT = join(__dirname, '../../../../../stage-prompts')
 
   it.each<StageAgent>(['plan', 'impl', 'review', 'revise'])('resolves every section for the %s agent and leaves no plugin-root variable behind', async (agent) => {
     const result = await loadStageInstructions({ fs: hostFs }, REAL_ROOT, agent)

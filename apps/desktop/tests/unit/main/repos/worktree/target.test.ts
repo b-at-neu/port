@@ -5,8 +5,8 @@ import { toFolderId } from '@/main/repos/worktree/resolve'
 import { pathOps } from '@/main/platform/paths'
 import type { CommandResult, GitRunner } from '@/types/platform'
 import type { SessionStartMode, SessionStartTarget } from '@/types/hosting'
-import { createFakeFs } from '../../../support/fake-platform'
-import { readyEntry } from '../../../support/repo-config'
+import { createFakeFs } from '../../../../support/fake-platform'
+import { readyEntry } from '../../../../support/repo-config'
 
 const REPO_PATH = '/home/you/src/widgets'
 const NOT_A_REPO: CommandResult = { ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'not a repository' }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readStagePrompt, stagePromptsDir, writeStagePrompt } from '@/main/sessions/hosting/stage-prompt-store'
-import { createFakeFs } from '../../../support/fake-platform'
+import { createFakeFs } from '../../../../support/fake-platform'
 
 const DIR = stagePromptsDir('/data')
 

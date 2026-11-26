@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { pathOps } from '@/main/platform/paths'
 import { readStageDisabledPlugins, readStageSkills, userOnlyPlugins } from '@/main/sessions/hosting/stage-plugins'
-import { createFakeFs } from '../../../support/fake-platform'
+import { createFakeFs } from '../../../../support/fake-platform'
 
 describe('userOnlyPlugins', () => {
   it('keeps a user plugin the repository also enables and drops one it does not', () => {

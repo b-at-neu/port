@@ -7,9 +7,9 @@ import type { CommandResult } from '@/types/platform'
 import type { RepositoryEntry } from '@/utils/repos'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import { readPipelineState } from '@/main/pipeline/board/read'
-import { makeTempDir } from '../../../fixtures/fs'
-import { graphqlBodyOf, httpFail, httpOk } from '../../../fixtures/github-http'
-import { EMPTY_PIPELINE_BODY } from '../../../fixtures/pipeline-reply'
+import { makeTempDir } from '../../../../fixtures/fs'
+import { graphqlBodyOf, httpFail, httpOk } from '../../../../fixtures/github-http'
+import { EMPTY_PIPELINE_BODY } from '../../../../fixtures/pipeline-reply'
 
 async function pathExists(path: string): Promise<boolean> {
   try {

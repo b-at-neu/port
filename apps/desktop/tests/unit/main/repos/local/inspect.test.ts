@@ -7,7 +7,7 @@ import type { CommandResult } from '@/types/platform'
 import { inspectDenials } from '@/renderer/local/inspect'
 import { pathOps } from '@/main/platform/paths'
 import { readDenials } from '@/main/repos/local/denials'
-import { createFakeClock, createFakeFs, fakeGit } from '../../../support/fake-platform'
+import { createFakeClock, createFakeFs, fakeGit } from '../../../../support/fake-platform'
 
 // Reproduces the scope mismatch between a capped `entries` and the whole-file `summary`.
 describe('inspectDenials — capped real-shaped fixture', () => {

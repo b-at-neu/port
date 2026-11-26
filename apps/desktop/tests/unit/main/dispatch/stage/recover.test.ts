@@ -7,9 +7,9 @@ import type { ReadyEntry } from '@/types/actions'
 import type { ReleaseBranchOutcome, RemoveSessionWorktreeOutcome } from '@/types/workspace'
 import type { StageResumeRequest } from '@/types/stage'
 import type { Run } from '@/utils/pipeline/ticket'
-import { WIDGETS_ID, FIXTURE_REPOSITORIES } from '../../../fixtures/app/repos'
-import { createTestContext } from '../../../support/context'
-import { runOf, ticketOf } from '../../../support/tickets'
+import { WIDGETS_ID, FIXTURE_REPOSITORIES } from '../../../../fixtures/app/repos'
+import { createTestContext } from '../../../../support/context'
+import { runOf, ticketOf } from '../../../../support/tickets'
 
 const hoisted = vi.hoisted(() => ({ remove: vi.fn(), release: vi.fn(), apply: vi.fn() }))
 vi.mock('@/main/repos/worktree/worktree', async (original) => ({ ...(await original<object>()), removeSessionWorktreeAt: (_ctx: unknown, params: { path: string; force: boolean }) => hoisted.remove(params.path, params.force) as unknown }))

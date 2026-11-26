@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { listSessionFiles, MAX_FILES } from '@/main/sessions/hosting/files'
 import type { CommandResult } from '@/types/platform'
-import { createFakeFs, fakeGit } from '../../../support/fake-platform'
+import { createFakeFs, fakeGit } from '../../../../support/fake-platform'
 
 const NOT_A_REPO: CommandResult = { ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'not a git repository' }
 

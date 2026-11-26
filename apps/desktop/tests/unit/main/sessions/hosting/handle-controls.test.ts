@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createHostedHandle } from '@/main/sessions/hosting/handle'
-import { baseParams, fakeQuery, flush } from '../../../fixtures/hosting/handle'
+import { baseParams, fakeQuery, flush } from '../../../../fixtures/hosting/handle'
 
 describe('setControls / answerQuestion / answerPlan', () => {
   it('setControls reports not-ready before init', async () => {

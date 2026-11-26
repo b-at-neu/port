@@ -4,8 +4,8 @@ import { createHostedStore } from '@/main/sessions/hosting/store'
 import type { SessionDismissResult, WorktreeChoice } from '@/types/hosting'
 import type { CommandResult } from '@/types/platform'
 import type { SessionWorkspace } from '@/types/workspace'
-import { fakeGit } from '../../../support/fake-platform'
-import { REPO_ID, endedQuery, flush, hostingCtx, sdkWith, storeOptions } from '../../../fixtures/hosting/store'
+import { fakeGit } from '../../../../support/fake-platform'
+import { REPO_ID, endedQuery, flush, hostingCtx, sdkWith, storeOptions } from '../../../../fixtures/hosting/store'
 
 const PLAIN_WORKSPACE: SessionWorkspace = { folder: '/repo', root: '/repo', worktree: null, base: null }
 const WORKTREE_WORKSPACE: SessionWorkspace = { folder: '/repo/.claude/worktrees/session-a', root: '/repo', worktree: { path: '/repo/.claude/worktrees/session-a', branch: 'session/a' }, base: null }

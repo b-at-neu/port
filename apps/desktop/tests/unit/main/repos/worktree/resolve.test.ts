@@ -4,7 +4,7 @@ import type { GitRunner } from '@/types/platform'
 import { pathOps } from '@/main/platform/paths'
 import { resolveWorkspace, toFolderEntry } from '@/main/repos/worktree/resolve'
 import type { RepoId } from '@/utils/repos'
-import { readyEntry } from '../../../support/repo-config'
+import { readyEntry } from '../../../../support/repo-config'
 
 function ok(stdout: string): CommandResult {
   return { ok: true, stdout, stderr: '' }

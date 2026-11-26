@@ -4,7 +4,7 @@ import type { RepoDispatchStatus } from '@/types/dispatch'
 import type { TickReport } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
 import { autoApprovalsOf, autoPlanApprovingOf, autoPlanStatusOf, autoPlanSwapCandidatesOf } from '@/main/pipeline/tick/auto-plan'
-import { reconciledItem } from '../../../support/board-snapshot'
+import { reconciledItem } from '../../../../support/board-snapshot'
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
   return reconciledItem({

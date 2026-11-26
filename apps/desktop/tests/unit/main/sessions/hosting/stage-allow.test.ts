@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { editAllowGlobs, readStageEditAllow } from '@/main/sessions/hosting/stage-allow'
 import { pathOps } from '@/main/platform/paths'
-import { createFakeFs } from '../../../support/fake-platform'
+import { createFakeFs } from '../../../../support/fake-platform'
 
 describe('editAllowGlobs', () => {
   it('reads a bare edit tool as every path', () => {

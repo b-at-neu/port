@@ -7,11 +7,11 @@ import { readAuditLog } from '@/main/github/writes/audit'
 import { isLabelAuditEntry } from '@/types/writes'
 import type { Ticket } from '@/utils/pipeline/ticket'
 import type { RepoId } from '@/utils/repos'
-import { createTestContext } from '../../../support/context'
-import { createFakeGitHub, type FakeItem } from '../../../support/fake-github'
-import { readyEntry } from '../../../support/repo-config'
-import { AT } from '../../../support/state-store'
-import { ticketOf } from '../../../support/tickets'
+import { createTestContext } from '../../../../support/context'
+import { createFakeGitHub, type FakeItem } from '../../../../support/fake-github'
+import { readyEntry } from '../../../../support/repo-config'
+import { AT } from '../../../../support/state-store'
+import { ticketOf } from '../../../../support/tickets'
 
 const REPO = 'repo-a' as RepoId
 const ENTRY = readyEntry({ id: REPO })

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createFakeRepo, MAIN, WORKTREES } from '../../../fixtures/reclaimer-harness'
-import type { FakeRepoOptions } from '../../../fixtures/reclaimer-harness'
+import { createFakeRepo, MAIN, WORKTREES } from '../../../../fixtures/reclaimer-harness'
+import type { FakeRepoOptions } from '../../../../fixtures/reclaimer-harness'
 import { runPurge } from '@/main/features/worktrees/purge'
 
 vi.mock('@/main/platform/paths', async (importOriginal) => {

@@ -7,8 +7,8 @@ import { pathOps } from '@/main/platform/paths'
 import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
 import { DEFAULT_NOTIFICATION_PREFS } from '@/types/settings'
 import type { SessionWorkspace } from '@/types/workspace'
-import { fakeWhich } from '../../../support/fake-platform'
-import { REPO_ID, endedQuery, flush, hostingCtx, idleQuery, sdkWith, storeOptions } from '../../../fixtures/hosting/store'
+import { fakeWhich } from '../../../../support/fake-platform'
+import { REPO_ID, endedQuery, flush, hostingCtx, idleQuery, sdkWith, storeOptions } from '../../../../fixtures/hosting/store'
 
 // Worktree-shaped so repeated starts against it never trip folder-busy, exercised separately below.
 const WORKSPACE: SessionWorkspace = { folder: '/repo', root: '/repo', worktree: { path: '/repo', branch: 'session/shared' }, base: null }

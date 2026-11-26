@@ -4,8 +4,8 @@ import { NO_RUN_FILES, migrateRuns } from '@/main/pipeline/state/migrate-runs'
 import { legacyKeysOf } from '@/main/pipeline/state/mirror'
 import { parseFile } from '@/main/pipeline/state/model'
 import type { Ticket } from '@/utils/pipeline/ticket'
-import v1 from '../../../fixtures/pipeline-state/v1.json'
-import { NOW, REPO, ticketOf } from '../../../support/tickets'
+import v1 from '../../../../fixtures/pipeline-state/v1.json'
+import { NOW, REPO, ticketOf } from '../../../../support/tickets'
 
 const toV3 = (raw: unknown): unknown => migrateRuns(migrateV1(1, raw), NO_RUN_FILES)
 const file = parseFile(toV3(v1))

@@ -4,9 +4,9 @@ import type { ReconciledItem, StageLabel } from '@/types/state'
 import { applyItemDecision } from '@/main/pipeline/operator/decide'
 import { readAuditLog } from '@/main/github/writes/audit'
 import { isLabelAuditEntry } from '@/types/writes'
-import { boardSnapshot as snapshotOf, reconciledItem, repositoryState } from '../../../support/board-snapshot'
-import { operatorRig, REPO_ID, type OperatorRigOptions } from '../../../support/operator-rig'
-import { ticketOf } from '../../../support/tickets'
+import { boardSnapshot as snapshotOf, reconciledItem, repositoryState } from '../../../../support/board-snapshot'
+import { operatorRig, REPO_ID, type OperatorRigOptions } from '../../../../support/operator-rig'
+import { ticketOf } from '../../../../support/tickets'
 
 const stageLabel = (key: StageLabel['key'], role: StageLabel['role']): StageLabel => ({ key, name: key, role })
 const comment = (body: string) => [{ body, createdAt: '2026-01-01T00:00:00Z' }]

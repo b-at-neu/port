@@ -3,7 +3,7 @@ import type { CommandResult } from '@/types/platform'
 import type { GitRunner } from '@/types/platform'
 import type { SessionWorkspace } from '@/types/workspace'
 import { computeSessionChanges } from '@/main/repos/worktree/changes'
-import { createFakeClock } from '../../../support/fake-platform'
+import { createFakeClock } from '../../../../support/fake-platform'
 
 const clock = createFakeClock()
 

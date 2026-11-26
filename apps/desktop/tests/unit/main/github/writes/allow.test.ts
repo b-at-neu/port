@@ -9,7 +9,7 @@ import type { AllowWriteContext } from '@/types/writes'
 import { readAuditLog } from '@/main/github/writes/audit'
 import { allowBranchName, proposeAllowRule } from '@/main/github/writes/allow'
 import type { GitHubWriteContext } from '@/main/github/context'
-import { createFakeClock, createFakePlatform } from '../../../support/fake-platform'
+import { createFakeClock, createFakePlatform } from '../../../../support/fake-platform'
 
 const OK = (stdout: string): GhResult => ({ ok: true, stdout, stderr: '' })
 

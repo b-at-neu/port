@@ -10,8 +10,8 @@ import { applyLabels, postComment, postIssueBody } from '@/main/github/writes/ap
 import { readAuditLog } from '@/main/github/writes/audit'
 import { hostFs } from '@/main/platform'
 import { takeOwnership } from '@/main/repos/ownership'
-import { createFakePlatform } from '../../../support/fake-platform'
-import { httpOk } from '../../../fixtures/github-http'
+import { createFakePlatform } from '../../../../support/fake-platform'
+import { httpOk } from '../../../../fixtures/github-http'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 const NOT_A_REPO: CommandResult = { ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'fatal: not a git repository' }

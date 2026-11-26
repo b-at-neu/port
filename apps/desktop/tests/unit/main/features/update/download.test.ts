@@ -4,7 +4,7 @@ import { createUpdateDownloader } from '@/main/features/update/download'
 import type { UpdateDownloaderParams } from '@/main/features/update/download'
 import type { PlatformUpdates } from '@/types/platform'
 import type { AvailableRelease, FileDownloadResult, InstallTarget } from '@/types/update'
-import { createFakeClock, fakeUpdates } from '../../../support/fake-platform'
+import { createFakeClock, fakeUpdates } from '../../../../support/fake-platform'
 
 const REPO = 'acme/port'
 const DMG = 'port-1.5.0-mac-arm64.dmg'

@@ -59,7 +59,7 @@ describe('loadStageAgentDefinition', () => {
 })
 
 describe('the real bundled stage prompts', () => {
-  const REAL_ROOT = join(__dirname, '../../../../stage-prompts')
+  const REAL_ROOT = join(__dirname, '../../../../../stage-prompts')
 
   it.each<StageAgent>(['plan', 'impl', 'review', 'revise'])('loads the %s agent', async (agent) => {
     const result = await loadStageAgentDefinition({ fs: hostFs }, { root: REAL_ROOT, agent, prompt: PROMPT })

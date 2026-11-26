@@ -3,7 +3,7 @@ import type { CommandResult } from '@/types/platform'
 import { readWorktrees } from '@/main/repos/local/worktrees'
 import { createPathOps } from '@/main/platform/paths'
 import type { GitRunner } from '@/types/platform'
-import { createFakeClock } from '../../../support/fake-platform'
+import { createFakeClock } from '../../../../support/fake-platform'
 
 function ok(stdout: string): CommandResult {
   return { ok: true, stdout, stderr: '' }

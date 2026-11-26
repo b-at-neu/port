@@ -4,7 +4,7 @@ import { applyEvent } from '@/main/pipeline/transitions'
 import type { RunChange } from '@/types/stage-labels'
 import type { StageOutcome } from '@/types/stage-session'
 import { RUN_CAP, type Run, type Ticket } from '@/utils/pipeline/ticket'
-import { NOW, REPO, runOf, ticketOf } from '../../../support/tickets'
+import { NOW, REPO, runOf, ticketOf } from '../../../../support/tickets'
 
 const LATER = '2026-11-23T13:00:00.000Z'
 const OUTCOME: StageOutcome = { kind: 'completed', detail: null, costUsd: 0.5, resetsAt: null, worktree: 'removed', operatorJoined: false, handback: { token: 'pr-opened', arg: '#8' } }

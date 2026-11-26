@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { buildConfigJsonSchema, validateConfig } from '@/main/repos/config/schema'
 
-const ROOT = join(__dirname, '../../../../../..')
+const ROOT = join(__dirname, '../../../../../../..')
 const SCHEMA_PATH = join(ROOT, 'schema/port.config.schema.json')
 const FIXTURES = join(ROOT, 'schema/fixtures')
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { hostFs } from '@/main/platform'
 import { readCredentialsTell } from '@/main/sessions/runtime/credentials'
-import { makeClaudeHome } from '../../../fixtures/fs'
+import { makeClaudeHome } from '../../../../fixtures/fs'
 
 describe('readCredentialsTell', () => {
   it('a healthy token reports present, its expiresAt, and hasRefreshToken', async () => {

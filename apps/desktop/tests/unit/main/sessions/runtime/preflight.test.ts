@@ -5,9 +5,9 @@ import { runtimePreflight, runtimeProbe } from '@/main/sessions/runtime/prefligh
 import type { CommandResult, WhichResult } from '@/types/platform'
 import type { RuntimePreflight } from '@/types/runtime'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
-import { createFakePlatform, fakeRun, fakeSdk, fakeWhich } from '../../../support/fake-platform'
-import { createTestContext } from '../../../support/context'
-import { readyEntry } from '../../../support/repo-config'
+import { createFakePlatform, fakeRun, fakeSdk, fakeWhich } from '../../../../support/fake-platform'
+import { createTestContext } from '../../../../support/context'
+import { readyEntry } from '../../../../support/repo-config'
 
 const REPO_ID = 'repo-1' as RepoId
 const PROBE_DIR = '/userdata/runtime-probe'

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readClaudeVersion } from '@/main/sessions/runtime/version'
 import type { CommandResult } from '@/types/platform'
-import { fakeRun } from '../../../support/fake-platform'
+import { fakeRun } from '../../../../support/fake-platform'
 
 const printed = (stdout: string): CommandResult => ({ ok: true, stdout, stderr: '' })
 

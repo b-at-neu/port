@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { CommandResult, GitRunner } from '@/types/platform'
 import type { CreateStageWorktreeParams } from '@/types/workspace'
 import { createStageWorktree } from '@/main/repos/worktree/stage-worktree'
-import { createFakeFs } from '../../../support/fake-platform'
+import { createFakeFs } from '../../../../support/fake-platform'
 
 const START_SHA = 'cafe0001'
 const DERIVED = '467-stage-worktrees-use-the-issue-branch'

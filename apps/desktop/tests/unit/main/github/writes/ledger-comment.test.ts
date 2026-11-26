@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { writeLedger } from '@/main/github/writes/ledger-comment'
 import type { GhResult, GhRunner } from '@/types/platform'
-import { createFakeFs, createFakePlatform } from '../../../support/fake-platform'
+import { createFakeFs, createFakePlatform } from '../../../../support/fake-platform'
 
 function setup(result: GhResult) {
   const fs = createFakeFs()

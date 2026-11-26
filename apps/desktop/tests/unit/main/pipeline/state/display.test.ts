@@ -3,7 +3,7 @@ import { displayOf } from '@/main/pipeline/state/display'
 import { ticketOfKeys } from '@/main/pipeline/state/migrate'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { Ticket } from '@/utils/pipeline/ticket'
-import { NOW, REPO, ticketOf } from '../../../support/tickets'
+import { NOW, REPO, ticketOf } from '../../../../support/tickets'
 
 function fromKeys(issueKeys: readonly LabelKey[], prKeys: readonly LabelKey[] | null = null): Ticket {
   return ticketOfKeys({ repo: REPO, ticket: 1, issueKeys, pr: prKeys === null ? null : { number: 2, keys: prKeys, approvedAt: null }, history: [], at: NOW, mirrorFailure: null, reviewCycles: 0, stageHint: null }).ticket

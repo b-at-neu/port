@@ -7,9 +7,9 @@ import type { ItemsByNumberFetch } from '@/types/github'
 import type { InterruptedStage, RunStore, StageRestartResult, StageResumeResult } from '@/types/stage'
 import type { RemoveSessionWorktreeOutcome } from '@/types/workspace'
 import type { RepoId } from '@/utils/repos'
-import { boardSnapshot, reconciledItem, repositoryState } from '../../../support/board-snapshot'
-import { createTestContext } from '../../../support/context'
-import { createFakeRuns, type NewRun } from '../../../support/fake-runs'
+import { boardSnapshot, reconciledItem, repositoryState } from '../../../../support/board-snapshot'
+import { createTestContext } from '../../../../support/context'
+import { createFakeRuns, type NewRun } from '../../../../support/fake-runs'
 
 const REPO = 'repo-a' as RepoId
 const INTERRUPTED_AT = new Date('2026-01-01T00:10:00.000Z')

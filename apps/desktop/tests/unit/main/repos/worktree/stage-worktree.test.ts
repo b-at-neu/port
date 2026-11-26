@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { CommandResult, GitRunner, PlatformFs } from '@/types/platform'
 import type { CreateStageWorktreeParams } from '@/types/workspace'
 import { branchSlug, createStageWorktree, releaseStageBranch, sweepSessionBranches } from '@/main/repos/worktree/stage-worktree'
-import { createFakeFs } from '../../../support/fake-platform'
+import { createFakeFs } from '../../../../support/fake-platform'
 
 function ok(stdout = ''): CommandResult {
   return { ok: true, stdout, stderr: '' }

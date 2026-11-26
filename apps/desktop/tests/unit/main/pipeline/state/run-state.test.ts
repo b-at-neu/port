@@ -3,7 +3,7 @@ import { createRunStateStore } from '@/main/pipeline/state/run-state'
 import { createPipelineStateStore } from '@/main/pipeline/state/store'
 import type { FileResult } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
-import { AT, STATE_PATH, storeCtx } from '../../../support/state-store'
+import { AT, STATE_PATH, storeCtx } from '../../../../support/state-store'
 
 const A = 'repo-a' as RepoId
 const B = 'repo-b' as RepoId

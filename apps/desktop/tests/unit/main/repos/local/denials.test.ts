@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { CommandResult } from '@/types/platform'
 import { pathOps } from '@/main/platform/paths'
 import { readDenials } from '@/main/repos/local/denials'
-import { createFakeClock, createFakeFs, fakeGit } from '../../../support/fake-platform'
+import { createFakeClock, createFakeFs, fakeGit } from '../../../../support/fake-platform'
 
 const NOT_A_REPO: CommandResult = { ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'fatal: not a git repository' }
 const ROOT = pathOps.toNative('/repo')

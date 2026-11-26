@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fetchAppReleases } from '@/main/github/app-releases'
 import { createUpdateService } from '@/main/features/update/service'
 import type { AppRelease, FetchReleasesResult } from '@/types/update'
-import { createFakeClock, createFakePlatform, fakeUpdates } from '../../../support/fake-platform'
+import { createFakeClock, createFakePlatform, fakeUpdates } from '../../../../support/fake-platform'
 
 vi.mock('@/main/github/app-releases', () => ({ fetchAppReleases: vi.fn() }))
 

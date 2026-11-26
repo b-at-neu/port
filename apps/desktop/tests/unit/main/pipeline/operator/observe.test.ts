@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { ReconciledItem } from '@/types/state'
 import type { ApplyObservationParams } from '@/types/actions'
 import { applyObservation } from '@/main/pipeline/operator/observe'
-import { reconciledItem } from '../../../support/board-snapshot'
-import { operatorRig, REPO_ID, type OperatorRigOptions } from '../../../support/operator-rig'
-import { ticketOf } from '../../../support/tickets'
+import { reconciledItem } from '../../../../support/board-snapshot'
+import { operatorRig, REPO_ID, type OperatorRigOptions } from '../../../../support/operator-rig'
+import { ticketOf } from '../../../../support/tickets'
 
 const pullRequestRig = (): OperatorRigOptions => ({
   items: [{ number: 7, labels: ['port'], assignees: ['op'] }, { number: 52, kind: 'pull-request', labels: ['port'], assignees: ['op'], headRefName: '7-fix', headRefOid: 'abc1234' }],

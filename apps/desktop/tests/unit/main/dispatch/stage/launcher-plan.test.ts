@@ -6,9 +6,9 @@ import type { ReadyEntry } from '@/types/actions'
 import type { StageLaunchRequest } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionKey, StartSessionParams } from '@/types/hosting'
 import type { FileResult } from '@/types/platform'
-import { WIDGETS_ID, FIXTURE_REPOSITORIES } from '../../../fixtures/app/repos'
-import { createTestContext } from '../../../support/context'
-import { ticketOf } from '../../../support/tickets'
+import { WIDGETS_ID, FIXTURE_REPOSITORIES } from '../../../../fixtures/app/repos'
+import { createTestContext } from '../../../../support/context'
+import { ticketOf } from '../../../../support/tickets'
 
 const ENTRY = FIXTURE_REPOSITORIES.find((r) => r.id === WIDGETS_ID) as ReadyEntry
 const WORKTREE = '/repo/.claude/worktrees/plan-52'

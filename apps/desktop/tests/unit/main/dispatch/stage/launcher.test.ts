@@ -9,9 +9,9 @@ import type { ReadyEntry } from '@/types/actions'
 import type { InterruptedStage, StageResumeRequest } from '@/types/stage'
 import type { CreateStageWorktreeResult } from '@/types/workspace'
 import type { Run } from '@/utils/pipeline/ticket'
-import { WIDGETS_ID, FIXTURE_REPOSITORIES } from '../../../fixtures/app/repos'
-import { createTestContext } from '../../../support/context'
-import { runOf, ticketOf } from '../../../support/tickets'
+import { WIDGETS_ID, FIXTURE_REPOSITORIES } from '../../../../fixtures/app/repos'
+import { createTestContext } from '../../../../support/context'
+import { runOf, ticketOf } from '../../../../support/tickets'
 
 const wt = vi.hoisted(() => ({ create: vi.fn(), remove: vi.fn(), release: vi.fn(), sweep: vi.fn(), load: vi.fn(), readPrompt: vi.fn() }))
 vi.mock('@/main/repos/worktree/stage-worktree', async (original) => ({

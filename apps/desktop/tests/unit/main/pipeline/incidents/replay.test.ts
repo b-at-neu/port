@@ -6,7 +6,7 @@ import { createIncidentLog } from '@/main/pipeline/incidents/log'
 import { draftOf, noRelated, observationIntent, stageHandbackIntent } from '@/main/pipeline/incidents/raise'
 import type { WriteObservation } from '@/types/dispatch'
 import type { IncidentDraft } from '@/types/incidents'
-import { createFakePlatform } from '../../../support/fake-platform'
+import { createFakePlatform } from '../../../../support/fake-platform'
 import { ENTRY, item, writerRig } from './fixtures'
 
 async function observe(number: number, headAtDecision: string, headAtWrite: string, observation: WriteObservation) {

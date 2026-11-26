@@ -7,9 +7,9 @@ import type { GitHubHttpResult } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
 import { hostFs } from '@/main/platform'
 import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/pipeline/board/sources'
-import { boardCtx, httpFail, httpOk, queryOf } from '../../../fixtures/github-http'
-import { EMPTY_PIPELINE_BODY } from '../../../fixtures/pipeline-reply'
-import { createFakePlatform } from '../../../support/fake-platform'
+import { boardCtx, httpFail, httpOk, queryOf } from '../../../../fixtures/github-http'
+import { EMPTY_PIPELINE_BODY } from '../../../../fixtures/pipeline-reply'
+import { createFakePlatform } from '../../../../support/fake-platform'
 
 const REPO_1 = 'repo-1' as RepoId
 const REPO_2 = 'repo-2' as RepoId

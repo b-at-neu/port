@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createPathOps } from '@/main/platform/paths'
 import { bundledSdkPackageDir, resolveClaudeExecutable } from '@/main/sessions/runtime/locate'
 import type { WhichResult } from '@/types/platform'
-import { fakeWhich } from '../../../support/fake-platform'
+import { fakeWhich } from '../../../../support/fake-platform'
 
 const posixOps = createPathOps('posix', { home: '/home/operator' })
 const win32Ops = createPathOps('win32', { home: 'C:\\Users\\operator' })

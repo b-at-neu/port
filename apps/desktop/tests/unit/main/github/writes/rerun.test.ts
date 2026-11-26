@@ -5,7 +5,7 @@ import type { RepoId } from '@/utils/repos'
 import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createFakeClock, createFakePlatform } from '../../../support/fake-platform'
+import { createFakeClock, createFakePlatform } from '../../../../support/fake-platform'
 
 const REPO_ID = 'repo-a' as RepoId
 const PARAMS = { number: 780, runId: '777', check: 'run-e2e' }

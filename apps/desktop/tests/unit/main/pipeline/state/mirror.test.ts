@@ -3,7 +3,7 @@ import { displayNamesOf, halvesOf, issueNumberOfBranch, itemsOf, legacyKeysOf, m
 import { resolveDisplayVocabulary } from '@/utils/labels/display'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { Event, Ticket } from '@/utils/pipeline/ticket'
-import { NOW, ticketOf } from '../../../support/tickets'
+import { NOW, ticketOf } from '../../../../support/tickets'
 
 const waiting = (gate: 'plan-approval' | 'merge' | 'escalation') => ({ kind: 'waiting-on-you' as const, gate, detail: '' })
 const running = { kind: 'running' as const, runId: null }

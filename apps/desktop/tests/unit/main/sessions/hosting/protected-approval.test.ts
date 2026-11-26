@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { createHostedHandle } from '@/main/sessions/hosting/handle'
 import { pathOps } from '@/main/platform/paths'
 import { needsYouItems } from '@/renderer/board/needs-you'
-import { boardSnapshot } from '../../../support/board-snapshot'
-import { baseParams, fakeQuery, flush } from '../../../fixtures/hosting/handle'
+import { boardSnapshot } from '../../../../support/board-snapshot'
+import { baseParams, fakeQuery, flush } from '../../../../fixtures/hosting/handle'
 
 type CanUseTool = (toolName: string, input: Record<string, unknown>, options: unknown) => Promise<unknown>
 

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { hostFs } from '@/main/platform'
 import { readSignatureIndex, writeSignatureIndex } from '@/main/sessions/search/store'
 import type { SignatureIndexEntry } from '@/types/search'
-import { makeTempDir } from '../../../fixtures/fs'
+import { makeTempDir } from '../../../../fixtures/fs'
 
 const ENTRY_A: SignatureIndexEntry = { path: '/a.jsonl', sizeBytes: 10, modifiedAt: '2026-01-01T00:00:00.000Z', bits: 1024, signature: 'AAAA' }
 

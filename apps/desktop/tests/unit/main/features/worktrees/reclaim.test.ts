@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createFakeGithub, createFakeRepo, MAIN, WORKTREES } from '../../../fixtures/reclaimer-harness'
-import type { FakeGithubOptions, FakeRepoOptions, FakeWorktree } from '../../../fixtures/reclaimer-harness'
+import { createFakeGithub, createFakeRepo, MAIN, WORKTREES } from '../../../../fixtures/reclaimer-harness'
+import type { FakeGithubOptions, FakeRepoOptions, FakeWorktree } from '../../../../fixtures/reclaimer-harness'
 import { runReclaim } from '@/main/features/worktrees/reclaim'
 import type { ForcedReclaim, WorktreesReclaimResult } from '@/types/reclaimer'
 

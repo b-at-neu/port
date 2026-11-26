@@ -5,9 +5,9 @@ import { describe, expect, it, vi } from 'vitest'
 import type { RepositoryEntry } from '@/utils/repos'
 import type { GitHubHttpResult, GitHubRequest } from '@/types/platform'
 import type { BoardSnapshot } from '@/types/board'
-import { httpOk, queryOf } from '../../../fixtures/github-http'
-import { EMPTY_PIPELINE_BODY, RATE_LIMIT_REPLY, connection } from '../../../fixtures/pipeline-reply'
-import { fakeGit, readyEntry, readyItemTransport, scriptedConditional, watcherRig, type WatcherRigOptions } from '../../../fixtures/watcher-harness'
+import { httpOk, queryOf } from '../../../../fixtures/github-http'
+import { EMPTY_PIPELINE_BODY, RATE_LIMIT_REPLY, connection } from '../../../../fixtures/pipeline-reply'
+import { fakeGit, readyEntry, readyItemTransport, scriptedConditional, watcherRig, type WatcherRigOptions } from '../../../../fixtures/watcher-harness'
 
 function makeSnapshotWaiter(): { readonly onSnapshot: (snapshot: BoardSnapshot) => void; readonly next: () => Promise<BoardSnapshot> } {
   let resolvers: ((snapshot: BoardSnapshot) => void)[] = []

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createHostedStore } from '@/main/sessions/hosting/store'
 import type { HostedQuery } from '@/main/sessions/hosting/handle'
 import type { SessionWorkspace } from '@/types/workspace'
-import { REPO_ID, flush, hostingCtx, sdkWith, storeOptions } from '../../../fixtures/hosting/store'
+import { REPO_ID, flush, hostingCtx, sdkWith, storeOptions } from '../../../../fixtures/hosting/store'
 
 const WORKSPACE: SessionWorkspace = { folder: '/repo', root: '/repo', worktree: { path: '/repo', branch: 'session/shared' }, base: null }
 

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { autoApprovePlan, gateAnswer, gatePreflight } from '@/main/pipeline/operator/gate'
 import type { GateAnswerParams } from '@/types/actions'
-import { createTestContext } from '../../../support/context'
-import { operatorRig, REPO_ID, type OperatorRigOptions } from '../../../support/operator-rig'
-import { ticketOf } from '../../../support/tickets'
+import { createTestContext } from '../../../../support/context'
+import { operatorRig, REPO_ID, type OperatorRigOptions } from '../../../../support/operator-rig'
+import { ticketOf } from '../../../../support/tickets'
 
 const BODY = 'Ticket body.\n\n## Implementation Plan\n\nPlan text.'
 const atPlanReview = ticketOf({ repo: REPO_ID, ticket: 148, stage: 'plan', status: { kind: 'waiting-on-you', gate: 'plan-approval', detail: '' } })

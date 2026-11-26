@@ -6,8 +6,8 @@ import type { BoardSnapshot } from '@/types/board'
 import type { GitHubTransport } from '@/types/platform'
 import { budgetedIntervalMs } from '@/main/pipeline/board/schedule'
 import { GITHUB_PRECHECK_INTERVAL_MS } from '@/types/board'
-import { RATE_LIMIT_REPLY } from '../../../fixtures/pipeline-reply'
-import { readyEntry, readyItemTransport, scriptedConditional, watcherRig } from '../../../fixtures/watcher-harness'
+import { RATE_LIMIT_REPLY } from '../../../../fixtures/pipeline-reply'
+import { readyEntry, readyItemTransport, scriptedConditional, watcherRig } from '../../../../fixtures/watcher-harness'
 
 const T0 = Date.parse('2026-01-01T00:00:00.000Z')
 

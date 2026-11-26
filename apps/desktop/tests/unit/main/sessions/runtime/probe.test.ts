@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { runProbe } from '@/main/sessions/runtime/probe'
 import type { Platform } from '@/main/platform'
 import type { HostedQueryFn } from '@/main/platform/sdk'
-import { fakeSdk } from '../../../support/fake-platform'
+import { fakeSdk } from '../../../../support/fake-platform'
 
 /** Mirrors the probe's own message shape, so this fixture stays faithful without pulling in every field of the real `SDKResultMessage` union. */
 interface FakeMessage {

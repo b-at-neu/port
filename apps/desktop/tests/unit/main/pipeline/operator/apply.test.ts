@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import type { RepositoryState, ReconciledItem } from '@/types/state'
 import { applyItemAction } from '@/main/pipeline/operator/apply'
 import type { ItemActionRequest } from '@/types/actions'
-import { boardSnapshot as snapshotOf, reconciledItem, repositoryState as repoState } from '../../../support/board-snapshot'
-import { operatorRig, REPO_ID } from '../../../support/operator-rig'
-import { AT } from '../../../support/state-store'
-import { ticketOf } from '../../../support/tickets'
+import { boardSnapshot as snapshotOf, reconciledItem, repositoryState as repoState } from '../../../../support/board-snapshot'
+import { operatorRig, REPO_ID } from '../../../../support/operator-rig'
+import { AT } from '../../../../support/state-store'
+import { ticketOf } from '../../../../support/tickets'
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
   return reconciledItem({

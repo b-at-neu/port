@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { HISTORY_LIMIT, readHistory } from '@/main/sessions/hosting/history'
 import { pathOps } from '@/main/platform/paths'
 import type { SessionStartMode } from '@/types/hosting'
-import { createFakeFs } from '../../../support/fake-platform'
+import { createFakeFs } from '../../../../support/fake-platform'
 
 const SESSION_ID = '3f2a9c10-1b2c-4d3e-8f4a-5b6c7d8e9f01'
 const CLAUDE_HOME = '/test/claude'

@@ -8,7 +8,7 @@ import type { RepoId } from '@/utils/repos'
 import type { SessionKey } from '@/types/hosting'
 import type { SessionWorkspace } from '@/types/workspace'
 import type { Repos } from '@/main/repos'
-import { readyEntry } from '../../../support/repo-config'
+import { readyEntry } from '../../../../support/repo-config'
 
 const TEST_CONTROLS: SessionControls = { permissionMode: 'default', model: null, effort: null }
 const TEST_MODELS: SessionModels = { kind: 'pending' }

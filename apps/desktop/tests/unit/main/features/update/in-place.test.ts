@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createInPlaceUpdater } from '@/main/features/update/in-place'
 import type { AvailableRelease, NativeUpdateInfo, NativeUpdater, UpdateDownloader, UpdateDownloadState } from '@/types/update'
-import { createFakeClock, fakeUpdates } from '../../../support/fake-platform'
+import { createFakeClock, fakeUpdates } from '../../../../support/fake-platform'
 
 const RELEASE: AvailableRelease = { version: '0.2.0', tag: 'v0.2.0', notesUrl: 'https://example.test/notes', publishedAt: null, assets: [] }
 const NOW = new Date('2026-05-01T12:00:00Z')
