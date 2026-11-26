@@ -65,7 +65,7 @@ export function createFakeGit(options: FakeGitOptions): FakeGit {
 
   const resolve = (ref: string): string | undefined => {
     const name = ref.replace(/\^\{commit\}$/, '')
-    if (name === 'HEAD' || name === 'origin/HEAD') return remotes.get(integration)
+    if (name === 'HEAD' || name === 'origin/HEAD' || name === 'refs/remotes/origin/HEAD') return remotes.get(integration)
     if (name.startsWith('refs/remotes/origin/')) return remotes.get(name.slice('refs/remotes/origin/'.length))
     if (name.startsWith('refs/heads/')) return locals.get(name.slice('refs/heads/'.length))
     if (name.startsWith('origin/')) return remotes.get(name.slice('origin/'.length))

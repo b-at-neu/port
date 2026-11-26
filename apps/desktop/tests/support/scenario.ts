@@ -9,6 +9,7 @@ import { pathOps } from '@/main/platform/paths'
 import { createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
 import { planTick } from '@/main/pipeline/tick/plan'
 import type { BoardSnapshot } from '@/types/board'
+import type { RunState } from '@/types/dispatch'
 import type { PlatformFs } from '@/types/platform'
 import type { SessionKey } from '@/types/hosting'
 import type { StagePlanFile } from '@/types/stage-labels'
@@ -33,6 +34,9 @@ const AT = '2026-01-01T00:00:00.000Z'
 export interface ScenarioOptions {
   readonly fs?: PlatformFs
   readonly items?: readonly FakeItem[]
+  /** Who the repository's ownership record names: the app, another session, or nobody. */
+  readonly owner?: 'app' | 'terminal' | 'none'
+  readonly runState?: RunState
 }
 
 /** The disk an earlier app run left behind: these tickets seeded in the pipeline state file. */
@@ -59,8 +63,10 @@ export async function scenarioRig(options: ScenarioOptions = {}) {
   const entry = readyEntry()
   const ctx = createTestContext({ platform: { ...github.platform, fs, paths: { userData: SCRATCH, temp: SCRATCH, logs: SCRATCH } }, repositories: [entry], live })
   await ctx.ready
-  await ctx.fs.writeText(pathOps.join(entry.path, '.agents', 'cockpit.json'), JSON.stringify({ repo: entry.config.repo, owner: 'app', since: AT }))
-  await ctx.stores.runStates.set([SCENARIO_REPO], 'dispatching', ctx.clock.now().toISOString())
+  const ownershipFile = pathOps.join(entry.path, '.agents', 'cockpit.json')
+  const owner = options.owner ?? 'app'
+  if (owner !== 'none') await ctx.fs.writeText(ownershipFile, JSON.stringify({ repo: entry.config.repo, owner: owner === 'app' ? 'app' : 'terminal', since: AT }))
+  await ctx.stores.runStates.set([SCENARIO_REPO], options.runState ?? 'dispatching', ctx.clock.now().toISOString())
   const stage = scriptedStage(ctx.stores.runs, SCENARIO_REPO, ctx.clock.now)
   live.hostedStore = stage.store
   live.stageLauncher = stage.launcher as unknown as AppContext['live']['stageLauncher']
@@ -97,6 +103,11 @@ export async function scenarioRig(options: ScenarioOptions = {}) {
       dispatcher.recordOutcome(SCENARIO_REPO, key, outcome, plan)
     },
     tickOver,
+    /** The `owner` the repository's ownership record holds now, `null` when there is none. */
+    ownerOnDisk: async (): Promise<string | null> => {
+      const read = await ctx.fs.readJson<{ readonly owner: string }>(ownershipFile)
+      return read.ok ? read.value.owner : null
+    },
     /** What the watcher's snapshot reads from now on: the board the operator's controls act on. */
     showBoard: (...items: readonly ReconciledItem[]) => {
       board = boardSnapshot([repositoryState(items)])

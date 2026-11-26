@@ -1,7 +1,7 @@
 // An in-memory GitHub at the transport level: the reads answer from `items`, the `gh` writes mutate them. Anything else throws.
 import { readFileSync } from 'node:fs'
 import type { Platform } from '@/main/platform'
-import type { CommandResult, GhResult, GitHubHttpResult } from '@/types/platform'
+import type { CommandResult, GhResult, GitHubHttpResult, GitHubRequest } from '@/types/platform'
 
 export interface FakeItem {
   readonly number: number
@@ -28,8 +28,17 @@ interface HeldItem {
   comments: string[]
 }
 
+/** What a `gh pr create` or `gh release create` made; the fake keeps no item for them. */
+export type CreatedOnGitHub =
+  | { readonly kind: 'pull-request'; readonly base: string; readonly head: string; readonly title: string; readonly body: string; readonly assignee: string | null }
+  | { readonly kind: 'release'; readonly tag: string; readonly target: string; readonly notes: string }
+
+/** Answers a transport read the item model does not cover (release state, update feeds); `undefined` falls through to the item model. */
+export type FakeRoute = (request: GitHubRequest, graphql: { readonly query: string; readonly variables: Readonly<Record<string, unknown>> }) => GitHubHttpResult | undefined
+
 export interface FakeGitHub {
   readonly platform: Pick<Platform, 'githubHttp' | 'ghWrite' | 'git'>
+  readonly created: readonly CreatedOnGitHub[]
   readonly labels: (number: number) => readonly string[]
   readonly assignees: (number: number) => readonly string[]
   readonly comments: (number: number) => readonly string[]
@@ -63,7 +72,8 @@ function nodeOf(item: HeldItem): Record<string, unknown> {
   }
 }
 
-export function createFakeGitHub({ viewer = 'viewer', items }: { readonly viewer?: string; readonly items: readonly FakeItem[] }): FakeGitHub {
+export function createFakeGitHub({ viewer = 'viewer', items, routes }: { readonly viewer?: string; readonly items: readonly FakeItem[]; readonly routes?: FakeRoute }): FakeGitHub {
+  const created: CreatedOnGitHub[] = []
   const held = new Map<number, HeldItem>(
     items.map((item) => {
       const kind = item.kind ?? 'issue'
@@ -87,7 +97,10 @@ export function createFakeGitHub({ viewer = 'viewer', items }: { readonly viewer
       readFailure = null
       return Promise.resolve<GitHubHttpResult>({ ok: false, kind: 'unknown', status: 500, body: '', message })
     }
-    const query = (JSON.parse(request.body ?? '{}') as { query?: string }).query ?? ''
+    const sent = JSON.parse(request.body ?? '{}') as { query?: string; variables?: Record<string, unknown> }
+    const routed = routes?.(request, { query: sent.query ?? '', variables: sent.variables ?? {} })
+    if (routed !== undefined) return Promise.resolve(routed)
+    const query = sent.query ?? ''
     const repository: Record<string, unknown> = {}
     for (const match of query.matchAll(/(\w+): issueOrPullRequest\(number: (\d+)\)/g)) {
       const found = held.get(Number(match[2]))
@@ -99,6 +112,13 @@ export function createFakeGitHub({ viewer = 'viewer', items }: { readonly viewer
 
   const ghWrite: Platform['ghWrite'] = (argv) => {
     const [subcommand, verb, rawNumber, ...flags] = argv
+    if (verb === 'create' && (subcommand === 'pr' || subcommand === 'release')) {
+      const flag = (name: string): string => argv[argv.indexOf(name) + 1] ?? ''
+      const bodyFile = flag(subcommand === 'pr' ? '--body-file' : '--notes-file')
+      const text = readFileSync(bodyFile, 'utf8')
+      created.push(subcommand === 'pr' ? { kind: 'pull-request', base: flag('--base'), head: flag('--head'), title: flag('--title'), body: text, assignee: flag('--assignee') || null } : { kind: 'release', tag: String(rawNumber), target: flag('--target'), notes: text })
+      return Promise.resolve({ ok: true, stdout: subcommand === 'pr' ? `https://github.com/o/r/pull/${String(1000 + created.length)}\n` : `https://github.com/o/r/releases/tag/${String(rawNumber)}\n`, stderr: '' })
+    }
     if ((subcommand !== 'issue' && subcommand !== 'pr') || rawNumber === undefined) throw new Error(`fake GitHub does not answer gh ${argv.join(' ')}`)
     const failure = nextWriteFailure ?? failingWrites.get(Number(rawNumber)) ?? (verb === 'comment' ? commentFailure : null)
     nextWriteFailure = null
@@ -120,6 +140,7 @@ export function createFakeGitHub({ viewer = 'viewer', items }: { readonly viewer
 
   return {
     platform: { githubHttp, ghWrite, git: () => Promise.resolve(NOT_A_REPOSITORY) },
+    created,
     labels: (number) => need(number).labels,
     assignees: (number) => need(number).assignees,
     comments: (number) => need(number).comments,
