@@ -2,8 +2,10 @@ import type { RefreshMemo, RerunMemo } from '@/types/tick'
 
 // Pure: turns the report pieces planTick already computed into the four machine-observation write
 // families. Every observation needs the viewer among the item's assignees.
-import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
+import type { Stage } from '@/utils/pipeline/ticket'
+import { actsOn } from '@/main/pipeline/tick/holds'
+import type { TrackedReconciled } from '@/main/pipeline/tick/holds'
 import type { ReconciledItem } from '@/types/state'
 import type { TickClaim, TickHeld, TickObservation } from '@/types/tick'
 import { approvedReverify, capRefreshes, refreshDecision } from '@/utils/pipeline/gates'
@@ -30,8 +32,9 @@ function eligible(item: Pick<ReconciledItem, 'assignees'>, viewer: string): bool
   return item.assignees.includes(viewer)
 }
 
-function carries(item: ReconciledItem, key: LabelKey): boolean {
-  return item.stages.some((s) => s.key === key)
+/** An approved pull request: the merge stage waiting on a person for the merge itself. */
+function approvedOn(item: ReconciledItem): item is TrackedReconciled {
+  return actsOn(item) && item.ticket.stage === 'merge' && item.ticket.status.kind === 'waiting-on-you' && item.ticket.status.gate === 'merge'
 }
 
 function livenessResetObservations(
@@ -42,10 +45,10 @@ function livenessResetObservations(
 ): readonly TickObservation[] {
   const out: TickObservation[] = []
   for (const claim of claims) {
-    if (claim.class !== 'stalled-confirmed' || claim.retryKey === null || adopted.has(claim.number)) continue
+    if (claim.class !== 'stalled-confirmed' || !claim.retryable || adopted.has(claim.number)) continue
     const item = itemByNumber.get(claim.number)
     if (item === undefined || !eligible(item, viewer)) continue
-    out.push({ kind: 'liveness-reset', number: claim.number, itemKind: claim.kind, inFlight: claim.inFlight, retryKey: claim.retryKey })
+    out.push({ kind: 'liveness-reset', number: claim.number, itemKind: claim.kind, stage: claim.stage })
   }
   return out
 }
@@ -94,7 +97,7 @@ function rerunObservations(held: readonly TickHeld[], itemByNumber: ReadonlyMap<
 interface RefreshCandidate {
   readonly number: number
   readonly itemKind: ReconciledItem['kind']
-  readonly sourceLabel: 'readyForReview' | 'approved'
+  readonly from: Stage
   readonly headRefOid: string
   readonly cause: 'conflict' | 'integration-green'
 }
@@ -106,17 +109,16 @@ function refreshCandidatesOf(held: readonly TickHeld[], items: readonly Reconcil
     if (h.reason !== 'conflicting' && h.reason !== 'integration-green') continue
     const item = items.find((i) => i.number === h.number)
     if (item === undefined || !eligible(item, viewer) || item.headRefOid === null) continue
-    candidates.push({ number: h.number, itemKind: h.kind, sourceLabel: 'readyForReview', headRefOid: item.headRefOid, cause: h.reason === 'conflicting' ? 'conflict' : 'integration-green' })
+    candidates.push({ number: h.number, itemKind: h.kind, from: 'review', headRefOid: item.headRefOid, cause: h.reason === 'conflicting' ? 'conflict' : 'integration-green' })
   }
 
   for (const item of items) {
-    if (!carries(item, 'approved') || !eligible(item, viewer)) continue
-    if (carries(item, 'refreshBranch') || carries(item, 'refreshing')) continue
+    if (!approvedOn(item) || !eligible(item, viewer)) continue
     if (item.headRefOid === null) continue
     const verdict = rollupVerdict(item.checkRollup, dispositions)
     const reverify = approvedReverify({ verdict, mergeable: item.mergeable })
     if (reverify.action !== 'refresh-in-place') continue
-    candidates.push({ number: item.number, itemKind: item.kind, sourceLabel: 'approved', headRefOid: item.headRefOid, cause: 'conflict' })
+    candidates.push({ number: item.number, itemKind: item.kind, from: 'merge', headRefOid: item.headRefOid, cause: 'conflict' })
   }
 
   return candidates
@@ -136,13 +138,13 @@ function refreshObservations(held: readonly TickHeld[], items: readonly Reconcil
   for (const candidate of toRefresh) {
     const decision = refreshDecision(refreshMemo.get(repoId, candidate.number), candidate.headRefOid)
     if (decision.action === 'refresh') {
-      out.push({ kind: 'refresh', number: candidate.number, itemKind: candidate.itemKind, sourceLabel: candidate.sourceLabel, headRefOid: candidate.headRefOid, count: decision.count, cause: candidate.cause })
+      out.push({ kind: 'refresh', number: candidate.number, itemKind: candidate.itemKind, from: candidate.from, headRefOid: candidate.headRefOid, count: decision.count, cause: candidate.cause })
     } else {
       out.push({
         kind: 'refresh-stuck',
         number: candidate.number,
         itemKind: candidate.itemKind,
-        sourceLabel: candidate.sourceLabel,
+        from: candidate.from,
         reason: decision.reason,
         sha: candidate.headRefOid,
         count: decision.count,
@@ -156,8 +158,7 @@ function refreshObservations(held: readonly TickHeld[], items: readonly Reconcil
 function withdrawApprovalObservations(items: readonly ReconciledItem[], viewer: string, dispositions: Readonly<Record<string, Disposition>>): readonly TickObservation[] {
   const out: TickObservation[] = []
   for (const item of items) {
-    if (!carries(item, 'approved') || !eligible(item, viewer)) continue
-    if (carries(item, 'refreshBranch') || carries(item, 'refreshing')) continue
+    if (!approvedOn(item) || !eligible(item, viewer)) continue
     if (item.headRefOid === null) continue
     const verdict = rollupVerdict(item.checkRollup, dispositions)
     const reverify = approvedReverify({ verdict, mergeable: item.mergeable, historyDerived: historyDerivedChecks(dispositions) })

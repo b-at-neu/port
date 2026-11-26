@@ -2,9 +2,26 @@
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { LabelRole } from '@/utils/labels/defaults'
 import type { StageResult } from '@/types/state'
+import type { Ticket } from '@/utils/pipeline/ticket'
 
 /** First hit wins: in-flight (something is running) beats gate (stopped, not queued) beats trigger beats terminal (the fallback). */
 export const STAGE_PRECEDENCE: readonly LabelRole[] = ['in-flight', 'gate', 'trigger', 'terminal']
+
+/** The role a ticket's own status stands for: running is in flight, queued and held are a trigger, waiting and blocked are a gate. */
+export function roleOfTicket(ticket: Pick<Ticket, 'status'>): LabelRole {
+  switch (ticket.status.kind) {
+    case 'running':
+      return 'in-flight'
+    case 'queued':
+    case 'held':
+      return 'trigger'
+    case 'waiting-on-you':
+    case 'blocked':
+      return 'gate'
+    case 'done':
+      return 'terminal'
+  }
+}
 
 /** A key the vocabulary does not resolve (module-disabled) is silently skipped. Marker labels never enter `stages` or the precedence — they surface as the dedicated booleans instead. */
 export function stageOf(matchedKeys: readonly LabelKey[], vocabulary: LabelVocabulary): StageResult {

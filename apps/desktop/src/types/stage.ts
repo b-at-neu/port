@@ -37,7 +37,7 @@ export interface InterruptedStage {
   readonly number: number
   readonly kind: PipelineItemKind
   readonly trigger: LabelKey
-  readonly inFlight: LabelKey
+  readonly stage: Stage
   readonly model: string
   /** The dispatcher's `#<n> <title>` label; absent on entries written before it was recorded. */
   readonly title?: string

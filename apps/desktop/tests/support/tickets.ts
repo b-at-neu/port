@@ -30,6 +30,14 @@ export function runOf(overrides: Partial<Run> = {}): Run {
   }
 }
 
+/** A ticket at one stage and status; the `pr` defaults to open for a stage that acts on a pull request. */
+export function ticketAt(stage: Ticket['stage'], status: Ticket['status'], overrides: Partial<Ticket> = {}): Ticket {
+  const onPr = stage === 'review' || stage === 'revise' || stage === 'refresh' || stage === 'merge'
+  return ticketOf({ stage, status, pr: onPr ? { number: 900, approvedAt: null } : null, ...overrides })
+}
+
+export const queuedAt = (reason: 'new' | 'changes-requested' | 'retry' = 'new'): Ticket['status'] => ({ kind: 'queued', reason, since: NOW })
+
 export function ticketOf(overrides: Partial<Ticket> = {}): Ticket {
   return {
     rev: 0,

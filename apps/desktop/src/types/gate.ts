@@ -1,6 +1,5 @@
-import type { LabelPrecondition } from '@/types/writes'
 import type { PipelineItemKind } from '@/types/github'
-import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { Ticket } from '@/utils/pipeline/ticket'
 
 // Renderer-safe contract for the plan gate dialog. No import here may reach a Node builtin — only `main/actions/gate.ts` resolves a repository, spawns `gh`, or reads `.agents/cockpit.json`.
 import type { OwnershipSummary, WriteOutcome } from '@/types/writes'
@@ -13,13 +12,12 @@ export type GateDecision = (typeof GATE_DECISIONS)[number]
 export const GATE_ACTIONS = ['approve-plan', 'request-plan-changes', 'auto-approve-plan'] as const
 export type GateAction = (typeof GATE_ACTIONS)[number]
 
-/** The preflight `main/actions/gate.ts` composes: the item's identity and labels, the ticket body split at `IMPLEMENTATION_PLAN_HEADING`, the session-required reason, and whether the issue opted into `auto plan`. */
+/** The preflight `main/actions/gate.ts` composes: the item's identity, the ticket body split at `IMPLEMENTATION_PLAN_HEADING`, the session-required reason, and whether the issue opted into `auto plan`. */
 export interface GatePreflight {
   readonly number: number
   readonly title: string
   readonly url: string
   readonly state: string
-  readonly labels: readonly string[]
   readonly assignees: readonly string[]
   readonly viewer: string
   /** The body above `## Implementation Plan` — rendered when there is no
@@ -34,11 +32,11 @@ export interface GatePreflight {
   readonly readAt: string
 }
 
-/** `classifyGate`'s verdict. `not-at-plan-review` carries the labels actually observed. `assignedElsewhere` is advisory only, never a second refusal. */
+/** `classifyGate`'s verdict. `not-at-plan-review` carries the stage name the ticket actually stands at, or `null` when it is untracked. `assignedElsewhere` is advisory only, never a second refusal. */
 export type GateVerdict =
   | { readonly kind: 'not-found' }
   | { readonly kind: 'not-an-issue' }
-  | { readonly kind: 'not-at-plan-review'; readonly observed: readonly string[] }
+  | { readonly kind: 'not-at-plan-review'; readonly observed: string | null }
   | { readonly kind: 'answerable'; readonly noPlanBlock: boolean; readonly assignedElsewhere: readonly string[] }
 
 /** `'gate:preflight'`'s response — `ownership` rides along on every arm, since the dialog disables its actions under `terminal`/`unreadable` regardless of whether the item resolved. */
@@ -54,16 +52,10 @@ export type GateAnswerResponse =
   | { readonly kind: 'comment-failed'; readonly comment: WriteOutcome }
   | { readonly kind: 'answered'; readonly comment: WriteOutcome | null; readonly labels: WriteOutcome }
 
-export interface GatePlan {
-  readonly add: readonly LabelKey[]
-  readonly remove: readonly LabelKey[]
-  readonly expect: LabelPrecondition
-}
-
 export interface GateClassifyItem {
   readonly kind: PipelineItemKind
   readonly number: number
-  readonly labels: readonly string[]
+  readonly ticket: Ticket | null
   readonly assignees: readonly string[]
   readonly viewer: string
   /** Computed by `main/actions/gate.ts` from the item's own body — this module never parses one. */

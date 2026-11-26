@@ -1,7 +1,8 @@
 // Every state write a stage session needs — claim, rollback, hand-back, next turn — as one typed ticket event through `writeEvent` and nowhere else.
-import { accepts, actionOf, handbackRefusal, pullRequestNumberOf, stageModeFor, ticketEventOf } from '@/main/pipeline/transitions'
+import { accepts, actionOf, handbackRefusal, pullRequestNumberOf, ticketEventOf } from '@/main/pipeline/transitions'
 import type { ReadyEntry } from '@/types/actions'
 import type { ResolvedItem } from '@/types/github'
+import { modeOfStage } from '@/types/stage-labels'
 import type { StageEvent, StageTransitionResult, StateEvent } from '@/types/stage-labels'
 import type { HandoffRefusal, TickActionable } from '@/types/tick'
 import { stageHandbackIntent } from '@/main/pipeline/incidents/raise'
@@ -16,7 +17,7 @@ import { postIssueBody } from '@/main/github/writes/apply'
 import type { StateWriteContext } from '@/main/pipeline/context'
 import { writeEvent } from '@/main/pipeline/state/writer'
 
-type StageSubject = Pick<TickActionable, 'number' | 'kind' | 'agent' | 'trigger'>
+type StageSubject = Pick<TickActionable, 'number' | 'kind' | 'agent' | 'stage'>
 
 interface ApplyStageClaimParams {
   readonly entry: ReadyEntry
@@ -92,7 +93,7 @@ function requestFor(entry: ReadyEntry, subject: StageSubject, event: StateEvent,
 /** Trigger → in-flight, from the dispatcher's own re-read so the claim never makes a second read. */
 export async function applyStageClaim(ctx: StateWriteContext, params: ApplyStageClaimParams): Promise<StageTransitionResult> {
   const { entry, candidate, resolved } = params
-  const event = ticketEventOf({ kind: 'claim' }, stageModeFor(candidate.agent, candidate.trigger))
+  const event = ticketEventOf({ kind: 'claim' }, modeOfStage(candidate.agent, candidate.stage))
   if (event === null) return { kind: 'applied' }
   const ticket = ctx.stores.pipelineState.ticket(entry.id, { kind: candidate.kind, number: candidate.number })
   const outcome = await writeEvent(ctx, { request: requestFor(entry, candidate, event, ticket, resolved, null), repoRoot: entry.path, auditDir: params.auditDir })
@@ -106,7 +107,7 @@ function isOpenPullRequestOn(resolved: ResolvedItem | undefined, issueNumber: nu
 /** Rollback, hand-back and next-turn writes: a fresh read first, then the table. A `pr-opened` hand-back is verified against the pull request it names before anything is written. */
 export async function applyStageTransition(ctx: StateWriteContext, params: ApplyStageTransitionParams): Promise<StageTransitionResult> {
   const { entry, record, event } = params
-  const mode = stageModeFor(record.agent, record.trigger)
+  const mode = modeOfStage(record.agent, record.stage)
   const unusable = handbackRefusal(event, mode)
   if (unusable !== null) return refused(unusable, false, event.kind === 'outcome' && event.plan?.kind === 'missing' ? event.plan.detail : null)
   const handback = event.kind === 'outcome' || event.kind === 'adopt' ? event.handback : null

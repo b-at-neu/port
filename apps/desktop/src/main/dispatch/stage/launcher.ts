@@ -4,7 +4,7 @@ import type { StageLaunchRequest, StageLaunchResult } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionDismissResult, SessionKey, SessionStartResult } from '@/types/hosting'
 
 import type { StageOutcome, StageOutcomeKind } from '@/types/stage-session'
-import { stageOfMode, type StagePlanFile } from '@/types/stage-labels'
+import type { StagePlanFile } from '@/types/stage-labels'
 import type { StageAgent } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
 import type { StageResumeRequest } from '@/types/stage'
@@ -16,7 +16,6 @@ import { pathOps } from '@/main/platform/paths'
 import { readStagePrompt, stagePromptsDir } from '@/main/sessions/hosting/stage-prompt-store'
 import { createStageWorktree, releaseStageBranch, sweepSessionBranches } from '@/main/repos/worktree/stage-worktree'
 import { removeSessionWorktreeAt } from '@/main/repos/worktree/worktree'
-import { stageModeFor } from '@/main/pipeline/transitions'
 import { isTransientNetworkFailure, SETTLE_FAILED_DETAIL } from '@/main/pipeline/handback'
 import { proposedRule } from '@/main/dispatch/stage/rule'
 import { LEGACY_STAGE_SYSTEM_PROMPT, loadStageAgentDefinition } from '@/main/dispatch/stage/bundle'
@@ -211,7 +210,7 @@ export function createStageLauncher(ctx: StageLaunchContext, bundleRoot: string)
     tracked.set(sessionKey, { repoId: request.entry.id, runId, agent: request.agent, number: request.number, path: wt.path, root, branch: wt.branch, baseSha: wt.baseSha, lastSeenResultAt: null, sawSessionId: false, lastOutcome: null, blockedIdle: false })
     const run: Run = {
       id: runId,
-      stage: stageOfMode(stageModeFor(request.agent, request.trigger)),
+      stage: request.stage,
       item: { kind: request.kind, number: request.number },
       agent: request.agent,
       trigger: request.trigger,

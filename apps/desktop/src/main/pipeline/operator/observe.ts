@@ -1,13 +1,11 @@
-import { mirrorVocabularyOf } from '@/utils/labels/display'
-
 // State-first, then (only once the state moved, and only when the plan carries one) the comment —
 // a failed comment must still leave the state write standing.
-import type { LabelWriteRequest, WriteOutcome } from '@/types/writes'
+import type { WriteOutcome } from '@/types/writes'
 import { stateMoved } from '@/types/writes'
 import { fetchGatePreflight } from '@/main/github/tracker/gate'
 import { postComment } from '@/main/github/writes/apply'
 import type { StateWriteContext } from '@/main/pipeline/context'
-import { writeState } from '@/main/pipeline/state/writer'
+import { writeMove } from '@/main/pipeline/operator/apply'
 
 import { observationWrite } from '@/main/pipeline/observation'
 import { observationIntent } from '@/main/pipeline/incidents/raise'
@@ -31,39 +29,39 @@ export async function applyObservation(ctx: StateWriteContext, params: ApplyObse
     if (stopped !== null) return { labels: stopped, comment: null }
   }
 
-  const plan = observationWrite(params.observation, params.item, params.entry.config.vocabulary, params.entry.config.branches.integration)
-  const incident = observationIntent(params.observation, params.item, plan, params.snapshotAt ?? null)
-  const request: LabelWriteRequest = {
-    ...(incident === null ? {} : { incident }),
-    repoId: params.entry.id,
-    repo: params.entry.config.repo,
-    kind: params.observation.itemKind,
-    number: params.observation.number,
-    vocabulary: params.entry.config.vocabulary,
-    mirror: mirrorVocabularyOf(params.entry.config),
-    add: plan.add,
-    remove: plan.remove,
-    addAssignees: [],
-    removeAssignees: [],
-    expect: plan.expect,
-    action: plan.action,
-  }
+  const { entry, item, observation } = params
+  const ticket = ctx.stores.pipelineState.ticket(entry.id, { kind: observation.itemKind, number: observation.number })
+  if (ticket === null) return { labels: { kind: 'item-unavailable' }, comment: null }
 
-  const labels = await writeState(ctx, { request, repoRoot: params.entry.path, auditDir: params.auditDir })
+  const plan = observationWrite(observation, item, entry.config.branches.integration)
+  const incident = observationIntent(observation, item, plan, params.snapshotAt ?? null)
+  const labels = await writeMove(ctx, {
+    ...(incident === null ? {} : { incident }),
+    entry,
+    kind: observation.itemKind,
+    number: observation.number,
+    ticket,
+    move: plan.move,
+    actor: null,
+    assignees: { kind: 'exactly', logins: item.assignees },
+    addAssignees: [],
+    action: plan.action,
+    auditDir: params.auditDir,
+  })
   if (!stateMoved(labels) || plan.comment === null) return { labels, comment: null }
-  if (commentRepeats({ body: plan.comment, comments: params.item.comments ?? undefined, headRefOid: params.item.headRefOid ?? '' })) return { labels, comment: null }
+  if (commentRepeats({ body: plan.comment, comments: item.comments ?? undefined, headRefOid: item.headRefOid ?? '' })) return { labels, comment: null }
 
   const comment = await postComment(ctx, {
     request: {
-      repoId: params.entry.id,
-      repo: params.entry.config.repo,
-      kind: params.observation.itemKind,
-      number: params.observation.number,
+      repoId: entry.id,
+      repo: entry.config.repo,
+      kind: observation.itemKind,
+      number: observation.number,
       body: plan.comment,
       action: plan.action,
       scratchDir: params.scratchDir,
     },
-    repoRoot: params.entry.path,
+    repoRoot: entry.path,
     auditDir: params.auditDir,
   })
   return { labels, comment }

@@ -1,5 +1,6 @@
 // Pure: reads GitHub evidence and decides which hand-back a finished stage already implies. Fails toward today's path — missing, partial or ambiguous evidence adopts nothing.
-import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { Ticket } from '@/utils/pipeline/ticket'
+import { claimedAtOf } from '@/main/pipeline/board/reconcile'
 import type { ClosingPullRequest, ReviewNode } from '@/types/github'
 import type { ReconciledItem } from '@/types/state'
 import type { TickClaim, TickObservation } from '@/types/tick'
@@ -43,43 +44,46 @@ export function ownBranchPullRequestOf(item: Pick<ReconciledItem, 'number' | 'cl
 export function openPullRequestAdoption(item: ReconciledItem): Adoption | null {
   const pr = ownBranchPullRequestOf(item)
   if (pr === null) return null
-  return { kind: 'adopt', number: item.number, itemKind: item.kind, agent: 'impl', trigger: 'planApproved', handback: { token: 'pr-opened', arg: `#${String(pr.number)}` }, evidence: 'pr' }
+  return { kind: 'adopt', number: item.number, itemKind: item.kind, agent: 'impl', stage: 'implement', trigger: 'planApproved', handback: { token: 'pr-opened', arg: `#${String(pr.number)}` }, evidence: 'pr' }
 }
 
 /** What a `readyForReview` pull request whose head already has an approving review adopts instead of a second review. */
 export function heldVerdictAdoption(item: ReconciledItem): Adoption | null {
   if (heldVerdictOf(item) === null) return null
-  return { kind: 'adopt', number: item.number, itemKind: item.kind, agent: 'review', trigger: 'readyForReview', handback: { token: 'approved', arg: null }, evidence: 'held-verdict' }
+  return { kind: 'adopt', number: item.number, itemKind: item.kind, agent: 'review', stage: 'review', trigger: 'readyForReview', handback: { token: 'approved', arg: null }, evidence: 'held-verdict' }
 }
 
-function claimedAt(item: ReconciledItem, inFlight: LabelKey): string | null {
-  return item.stageHistory.findLast((entry) => entry.key === inFlight)?.at ?? null
+/** A plan the author queued fresh adopts; one queued by a request for changes goes back through the agent. */
+function planQueuedFresh(ticket: Ticket): boolean {
+  const queued = ticket.history.findLast((event) => event.to?.stage === 'plan' && event.to.status === 'queued')
+  return queued !== undefined && queued.action !== 'request-plan-changes'
 }
 
-function adoptionOf(item: ReconciledItem, claim: TickClaim): Pick<Adoption, 'agent' | 'trigger' | 'handback' | 'evidence'> | null {
-  const at = claimedAt(item, claim.inFlight)
+function adoptionOf(item: ReconciledItem, claim: TickClaim): Pick<Adoption, 'agent' | 'stage' | 'trigger' | 'handback' | 'evidence'> | null {
+  const { ticket } = item
+  if (ticket === null) return null
+  const at = claimedAtOf(ticket)
   if (at === null) return null
-  switch (claim.inFlight) {
-    case 'planning': {
-      if (item.planPresent !== true) return null
-      const trigger = item.stageHistory.findLast((entry) => (entry.key === 'ready' || entry.key === 'planChangesRequested') && entry.at <= at)?.key
-      return trigger === 'ready' ? { agent: 'plan', trigger, handback: { token: 'plan-written', arg: null }, evidence: 'plan' } : null
+  switch (claim.stage) {
+    case 'plan': {
+      if (item.planPresent !== true || !planQueuedFresh(ticket)) return null
+      return { agent: 'plan', stage: 'plan', trigger: 'ready', handback: { token: 'plan-written', arg: null }, evidence: 'plan' }
     }
-    case 'inProgress': {
+    case 'implement': {
       const pr = ownBranchPullRequestOf(item)
-      return pr === null ? null : { agent: 'impl', trigger: 'planApproved', handback: { token: 'pr-opened', arg: `#${String(pr.number)}` }, evidence: 'pr' }
+      return pr === null ? null : { agent: 'impl', stage: 'implement', trigger: 'planApproved', handback: { token: 'pr-opened', arg: `#${String(pr.number)}` }, evidence: 'pr' }
     }
-    case 'reviewing': {
+    case 'review': {
       const newest = newestCodeReview(item.reviews)
       if (newest === null || item.headRefOid === null || newest.commitOid !== item.headRefOid || newest.submittedAt < at) return null
       // A review title spells the verdict with spaces; the hand-back token spells it with hyphens.
       const token = verdictOf(newest)?.replaceAll(' ', '-')
-      return token === 'approved' || token === 'needs-revision' ? { agent: 'review', trigger: 'readyForReview', handback: { token, arg: null }, evidence: 'review' } : null
+      return token === 'approved' || token === 'needs-revision' ? { agent: 'review', stage: 'review', trigger: 'readyForReview', handback: { token, arg: null }, evidence: 'review' } : null
     }
-    case 'revising': {
+    case 'revise': {
       const newest = newestCodeReview(item.reviews)
       if (newest === null || item.headRefOid === null || newest.commitOid === item.headRefOid) return null
-      return { agent: 'revise', trigger: 'needsRevision', handback: { token: 'revised', arg: null }, evidence: 'head-moved' }
+      return { agent: 'revise', stage: 'revise', trigger: 'needsRevision', handback: { token: 'revised', arg: null }, evidence: 'head-moved' }
     }
     default:
       return null

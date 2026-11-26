@@ -27,25 +27,28 @@ function targetStage(plan: Pick<PlannedLabels, 'add' | 'remove'>): string {
   return plan.add[0] ?? plan.remove[0] ?? 'none'
 }
 
+/** The signature stage every observation escalation files under. */
+const ESCALATED_STAGE = 'needsHuman'
+
 function observedInputs(item: ReconciledItem, snapshotAt: string | null): IncidentInputs {
   return { ...itemInputs(item), observedHead: item.headRefOid, snapshotAt }
 }
 
 /** `null` for an observation that is routine, not an anomaly. */
-export function observationIntent(observation: WriteObservation, item: ReconciledItem, plan: PlannedLabels, snapshotAt: string | null): IncidentIntent | null {
+export function observationIntent(observation: WriteObservation, item: ReconciledItem, plan: { readonly action: string }, snapshotAt: string | null): IncidentIntent | null {
   const inputs = observedInputs(item, snapshotAt)
   const decision = { action: plan.action, detail: observation.kind, intended: null }
   switch (observation.kind) {
     case 'liveness-reset':
-      return { bucket: 'liveness-reset', stage: observation.inFlight, condition: 'stalled-confirmed', decision, inputs }
+      return { bucket: 'liveness-reset', stage: observation.stage, condition: 'stalled-confirmed', decision, inputs }
     case 'zero-diff':
-      return { bucket: 'duplicate-head', stage: targetStage(plan), condition: 'zero-diff', decision, inputs }
+      return { bucket: 'duplicate-head', stage: ESCALATED_STAGE, condition: 'zero-diff', decision, inputs }
     case 'cycle-cap':
     case 'integration-red':
     case 'refresh-stuck':
-      return { bucket: 'escalation', stage: targetStage(plan), condition: observation.kind, decision, inputs }
+      return { bucket: 'escalation', stage: ESCALATED_STAGE, condition: observation.kind, decision, inputs }
     case 'withdraw-approval':
-      return observation.route === 'human' ? { bucket: 'escalation', stage: targetStage(plan), condition: observation.kind, decision, inputs } : null
+      return observation.route === 'human' ? { bucket: 'escalation', stage: ESCALATED_STAGE, condition: observation.kind, decision, inputs } : null
     default:
       return null
   }

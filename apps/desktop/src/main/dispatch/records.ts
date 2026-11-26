@@ -137,7 +137,7 @@ export function liveStageSessionsOf(repoIds: readonly RepoId[], recordsOf: (repo
   return repoIds.flatMap((repoId) =>
     recordsOf(repoId)
       .filter((record) => record.state === 'started')
-      .map((record) => ({ agent: record.agent, number: record.number, trigger: record.trigger, repoName: nameOf(repoId) })),
+      .map((record) => ({ stage: record.stage, number: record.number, repoName: nameOf(repoId) })),
   )
 }
 

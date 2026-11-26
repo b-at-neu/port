@@ -1,5 +1,4 @@
 // Pure: the run half of the transition table, the projections over `Ticket.runs`, boot recovery and the unmatched-claim ladder. No I/O.
-import { inFlightKeyFor } from '@/main/pipeline/tick/routing'
 import { SOURCE_BASE_INTERVAL_MS } from '@/types/board'
 import type { StageRecord } from '@/types/dispatch'
 import type { InterruptedStage, StageDenial } from '@/types/stage'
@@ -110,7 +109,7 @@ export function interruptedOf(ticket: Ticket, run: Run): InterruptedStage | null
     number: run.item.number,
     kind: run.item.kind,
     trigger: run.trigger,
-    inFlight: inFlightKeyFor(run.agent, run.trigger),
+    stage: run.stage,
     model: run.model,
     ...(run.title === null ? {} : { title: run.title }),
     claudeSessionId: run.claudeSessionId,
@@ -155,6 +154,7 @@ export function dispatchRecordOf(run: Run): StageRecord {
     runId: run.id,
     sessionKey: run.sessionKey,
     agent: run.agent,
+    stage: run.stage,
     number: run.item.number,
     kind: run.item.kind,
     trigger: run.trigger,

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
-import { expectedStage, positiveInt, repoId } from '@/main/app/schemas'
+import { expectedView, positiveInt, repoId } from '@/main/app/schemas'
 import { refreshAfterWrite } from '@/main/features/board'
 import { readyEntryOf } from '@/main/pipeline/context'
 import { applyItemDecision } from '@/main/pipeline/operator/decide'
@@ -16,7 +16,7 @@ const input = z
     repoId,
     number: positiveInt,
     decision: z.enum(OPERATOR_DECISIONS),
-    expectedStage,
+    expected: expectedView,
     route: z.enum(UNBLOCK_ROUTES).nullable(),
     note: z.string().max(MAX_REVISE_NOTE_CHARS).nullable(),
     skipComment: z.boolean(),

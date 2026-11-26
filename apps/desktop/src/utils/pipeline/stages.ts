@@ -185,6 +185,14 @@ export function stageGroupOf(view: TicketView | null): { readonly key: string; r
   }
 }
 
+/** The view of a ticket — its stage and the identifying part of its status, which is all an operator action's `expected` compares. */
+export function ticketViewOf(ticket: { readonly stage: Stage; readonly status: Status }): TicketView {
+  const { stage, status } = ticket
+  if (status.kind === 'queued') return { stage, status: { kind: 'queued', reason: status.reason } }
+  if (status.kind === 'waiting-on-you') return { stage, status: { kind: 'waiting-on-you', gate: status.gate } }
+  return { stage, status: { kind: status.kind } }
+}
+
 export function agentStage(agent: StageAgent): Stage {
   return STAGES.find((stage) => STAGE_TABLE[stage].running.agent === agent) ?? 'plan'
 }

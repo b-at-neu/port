@@ -1,12 +1,12 @@
 // Pure operator-decision derivation — the sibling `decisionsFor` to
 // `plan.ts`'s own `actionsFor`.
-import type { LabelKey } from '@/utils/labels/vocabulary'
-import type { AssigneeExpectation, LabelPrecondition } from '@/types/writes'
 import type { PullRequestCommentNode } from '@/types/github'
 import type { ReconciledItem } from '@/types/state'
 import { cycleGrantCount } from '@/utils/pipeline/gates'
+import type { TicketView } from '@/utils/pipeline/stages'
+import type { Gate, Stage } from '@/utils/pipeline/ticket'
 import { CYCLE_CAP_ESCALATION_MARKER, PIPELINE_ESCALATION_HEADING } from '@/utils/actions/bodies'
-import type { DecisionAvailability, DecisionRefusal, OperatorDecision, RebaseDecision, RebaseOption, RebasePick, UnblockRoute } from '@/types/actions'
+import type { DecisionAvailability, DecisionRefusal, OperatorDecision, OperatorMove, RebaseDecision, RebaseOption, RebasePick, UnblockRoute } from '@/types/actions'
 import { MAX_REVISE_NOTE_CHARS } from '@/types/actions'
 
 export interface Escalation {
@@ -120,8 +120,8 @@ export function reviseNoteProblem(note: string, headRefOid: string): 'empty' | '
   return null
 }
 
-function onlyStage(item: Pick<ReconciledItem, 'stages'>, key: LabelKey): boolean {
-  return item.stages.length === 1 && item.stages[0]?.key === key
+function atGate(view: TicketView | null, stage: Stage, gate: Gate): boolean {
+  return view?.stage === stage && view.status.kind === 'waiting-on-you' && view.status.gate === gate
 }
 
 function refused(reason: DecisionRefusal): DecisionAvailability {
@@ -129,6 +129,7 @@ function refused(reason: DecisionRefusal): DecisionAvailability {
 }
 
 export interface DecisionsForParams {
+  readonly view: TicketView | null
   readonly item: ReconciledItem
   readonly viewer: string | null
   readonly reviewCycleCap: number
@@ -139,7 +140,7 @@ export interface DecisionsForParams {
 /** Ownership requires exactly `[viewer]` — unlike `actionsFor`, no
  *  unassigned exception for these two consequential writes. */
 export function decisionsFor(params: DecisionsForParams): Readonly<Record<OperatorDecision, DecisionAvailability>> {
-  const { item, viewer, reviewCycleCap, liveStage } = params
+  const { view, item, viewer, reviewCycleCap, liveStage } = params
   if (viewer === null) return { unblock: refused('viewer-unknown'), revise: refused('viewer-unknown'), grant: refused('viewer-unknown') }
   if (!(item.assignees.length === 1 && item.assignees[0] === viewer)) return { unblock: refused('not-owned'), revise: refused('not-owned'), grant: refused('not-owned') }
 
@@ -147,9 +148,9 @@ export function decisionsFor(params: DecisionsForParams): Readonly<Record<Operat
   const effectiveCap = reviewCycleCap + cycleGrantCount(item.comments ?? undefined)
 
   let unblock: DecisionAvailability
-  if (item.kind === 'issue' && onlyStage(item, 'blocked')) {
+  if (item.kind === 'issue' && view?.stage === 'implement' && view.status.kind === 'blocked') {
     unblock = liveStage ? refused('agent-live') : { available: true, context: { target: 'issue', reason: null, cyclesUsed: 0, cap: 0, decisions: [], routes: ['implementation'] } }
-  } else if (item.kind !== 'pull-request' || !onlyStage(item, 'needsHuman')) {
+  } else if (item.kind !== 'pull-request' || view?.status.kind !== 'waiting-on-you' || view.status.gate !== 'escalation') {
     unblock = refused('not-applicable')
   } else {
     const escalation = escalationOf(item.comments)
@@ -160,14 +161,15 @@ export function decisionsFor(params: DecisionsForParams): Readonly<Record<Operat
   }
 
   let revise: DecisionAvailability
-  if (item.kind !== 'pull-request' || !onlyStage(item, 'approved') || item.headRefOid === null) {
+  if (item.kind !== 'pull-request' || !atGate(view, 'merge', 'merge') || item.headRefOid === null) {
     revise = refused('not-applicable')
   } else {
     revise = cyclesUsed >= effectiveCap ? refused('cycle-cap') : { available: true, context: { headRefOid: item.headRefOid, cyclesUsed, cap: effectiveCap } }
   }
 
   let grant: DecisionAvailability
-  if (item.kind !== 'pull-request' || !onlyStage(item, 'needsRevision') || cyclesUsed < effectiveCap) {
+  const queuedRevision = view?.stage === 'revise' && view.status.kind === 'queued' && view.status.reason === 'changes-requested'
+  if (item.kind !== 'pull-request' || !queuedRevision || cyclesUsed < effectiveCap) {
     grant = refused('not-applicable')
   } else {
     grant = liveStage ? refused('agent-live') : { available: true, context: { cyclesUsed, cap: effectiveCap } }
@@ -176,28 +178,8 @@ export function decisionsFor(params: DecisionsForParams): Readonly<Record<Operat
   return { unblock, revise, grant }
 }
 
-export interface DecisionPlan {
-  readonly add: readonly LabelKey[]
-  readonly remove: readonly LabelKey[]
-  readonly expect: LabelPrecondition
-  readonly action: string
-}
-
-function exactAssignees(viewer: string): AssigneeExpectation {
-  return { kind: 'exactly', logins: [viewer] }
-}
-
 /** Call only once `decisionsFor` reports `available: true` for this item. */
-export function decisionPlan(decision: OperatorDecision, item: ReconciledItem, route: UnblockRoute | null, viewer: string): DecisionPlan {
-  if (decision === 'unblock') {
-    if (route === 'implementation') {
-      return { add: ['planApproved'], remove: ['blocked'], expect: { present: ['blocked'], absent: [], assignees: exactAssignees(viewer) }, action: 'unblock' }
-    }
-    const add: LabelKey = route === 'revision' ? 'needsRevision' : 'readyForReview'
-    return { add: [add], remove: ['needsHuman'], expect: { present: ['needsHuman'], absent: [], assignees: exactAssignees(viewer) }, action: 'unblock' }
-  }
-  if (decision === 'grant') {
-    return { add: ['needsRevision'], remove: [], expect: { present: ['needsRevision'], absent: ['needsHuman', 'refreshBranch', 'refreshing'], assignees: exactAssignees(viewer) }, action: 'grant' }
-  }
-  return { add: ['needsRevision'], remove: ['approved'], expect: { present: ['approved'], absent: [], assignees: exactAssignees(viewer) }, action: 'revise' }
+export function decisionPlan(decision: OperatorDecision, route: UnblockRoute | null): OperatorMove {
+  if (decision === 'unblock') return { kind: 'unblock', route: route ?? 'review' }
+  return { kind: decision }
 }

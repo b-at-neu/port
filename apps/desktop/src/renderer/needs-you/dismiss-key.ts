@@ -1,6 +1,7 @@
 // One key per event, so a dismissal hides that event for good while a new event on the same ticket
 // still shows. The switch is exhaustive: a new kind is a compile error, never an undismissable row.
 import type { BoardItemRow, NeedsYouItem } from '@/types/board'
+import { stageGroupOf } from '@/utils/pipeline/stages'
 
 function newestStageAt(row: BoardItemRow | null, stageKey?: string): string {
   const history = row?.item.stageHistory ?? []
@@ -33,7 +34,7 @@ function eventOf(item: NeedsYouItem): string {
     case 'budget':
       return `${item.note.kind}|${newestStageAt(item.matchedRow)}`
     case 'half-labelled':
-      return item.repair.shape === 'mirror-failed' ? `mirror-failed|${item.repair.mirror?.at ?? ''}` : `${item.repair.shape}|${[...item.repair.labels].sort().join(',')}`
+      return item.repair.shape === 'mirror-failed' ? `mirror-failed|${item.repair.mirror?.at ?? ''}` : `${item.repair.shape}|${stageGroupOf(item.repair.view).key}`
     case 'dispatch-failed':
       return `${item.record.agent}|${item.record.detail ?? ''}`
   }

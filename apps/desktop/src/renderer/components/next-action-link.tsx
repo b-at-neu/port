@@ -4,6 +4,7 @@ import type { BoardItemRow } from '@/types/board'
 import { nextActionFor } from '@/renderer/board/row-model'
 import { openReviewDialog } from '@/renderer/gate/controller'
 import { openDecision } from '@/renderer/decision/controller'
+import { ticketViewOf } from '@/renderer/lib/ticket-view'
 
 export function NextActionLink({ row }: { readonly row: BoardItemRow }) {
   const action = nextActionFor(row)
@@ -22,7 +23,7 @@ export function NextActionLink({ row }: { readonly row: BoardItemRow }) {
       case 'decision': {
         const availability = row.decisions[action.decision]
         if (!availability.available) return
-        openDecision({ repoId: row.item.repoId, number: row.item.number, decision: action.decision, expectedStage: row.stageLabel?.key ?? null, context: availability.context })
+        openDecision({ repoId: row.item.repoId, number: row.item.number, decision: action.decision, expected: ticketViewOf(row.item), context: availability.context })
       }
     }
   }

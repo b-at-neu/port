@@ -3,27 +3,25 @@ import type { UnknownStreaks, RefreshMemo, RerunMemo, ForceDispatch } from '@/ty
 // planTick — one RepositoryState to one TickReport. Pure: no gh, no timer, no write. This app
 // computes the decision and the report; it never writes the escalation itself.
 import type { IntegrationChecks, PipelineItemKind } from '@/types/github'
-import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/types/board'
 import type { ReconciledItem, RepositoryState } from '@/types/state'
-import type { EndedStage, TickActionable, TickBlind, TickClaim, TickHeld, TickHeldReason, TickObservation, TickReport } from '@/types/tick'
+import type { EndedStage, TickActionable, TickBlind, TickHeld, TickObservation, TickReport } from '@/types/tick'
 import type { ClaimedItem, OccupiedEntry } from '@/utils/pipeline/contention'
 import { gateCandidates } from '@/utils/pipeline/contention'
 import type { Disposition } from '@/utils/pipeline/checks'
 import { zeroDiffChecksOf } from '@/utils/pipeline/checks'
-import { cycleGrantCount, integrationRedGate, mergeabilityRoute, refreshWins, zeroDiffGate } from '@/utils/pipeline/gates'
-
-import { RETRY_TRIGGER } from '@/utils/pipeline/liveness'
-import { unmatchedClaimOf } from '@/main/pipeline/runs'
-import { stageOfMode } from '@/types/stage-labels'
+import { cycleGrantCount, zeroDiffGate } from '@/utils/pipeline/gates'
+import { stageNameOf, stageRowOf } from '@/utils/pipeline/stages'
 import type { Run, Stage } from '@/utils/pipeline/ticket'
 import { observationsOf } from '@/main/pipeline/tick/observe'
 import { adoptionsOf, heldVerdictAdoption, openPullRequestAdoption } from '@/main/pipeline/tick/adopt'
 import { partitionOwnership } from '@/utils/pipeline/classify'
-import { AGENT_FOR_IN_FLIGHT, AGENT_FOR_TRIGGER } from '@/main/pipeline/tick/routing'
 import { autoApprovalsOf } from '@/main/pipeline/tick/auto-plan'
 import { repairsOf } from '@/main/pipeline/tick/repair'
+import { claimsOf } from '@/main/pipeline/tick/claims'
+import { actsOn, entryOf, escalatedAtOf, heldReasonOf, integrationRedHeld, mergeabilityHeld } from '@/main/pipeline/tick/holds'
+import type { TrackedReconciled } from '@/main/pipeline/tick/holds'
 
 interface PlanTickParams {
   readonly repository: RepositoryState
@@ -60,118 +58,70 @@ function emptyReport(repoId: RepoId, displayName: string, blind: TickBlind): Tic
   return { repoId, displayName, blind, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [], autoApprovals: [], labelRepairs: [] }
 }
 
-/** The winning `StageLabel`'s own key — `null` only when `item.stage` is `null`. A local copy
- *  rather than an import from `utils/actions/plan.ts`, since that module answers a different question. */
-function stageKeyOf(item: Pick<ReconciledItem, 'stage' | 'stages'>): LabelKey | null {
-  if (item.stage === null) return null
-  return item.stages.find((label) => label.role === item.stage)?.key ?? null
-}
-
-/** Held reasons, first hit wins: unowned before other-operator before session-required. `contended`
- *  is the file-contention gate's own reason, applied afterward, never returned here. */
-function heldReasonOf(
-  item: ReconciledItem,
-  unowned: ReadonlySet<number>,
-  others: ReadonlySet<number>,
-  holdSessionRequired: boolean,
-): Exclude<TickHeld['reason'], 'contended' | 'cycle-cap' | 'zero-diff' | 'check-hold' | 'integration-red' | 'integration-green'> | null {
-  if (unowned.has(item.number)) return 'unowned'
-  if (others.has(item.number)) return 'other-operator'
-  if (holdSessionRequired && item.sessionRequired) return 'session-required'
-  return null
-}
-
 /** `TickActionable.cycle` — populated only for a `revise`/`review` candidate; `null` for every other agent. */
 function cycleOf(item: ReconciledItem, cap: number): { readonly count: number; readonly cap: number } | null {
   return item.reviewCycleCount !== null ? { count: item.reviewCycleCount, cap } : null
 }
 
-/** Every item number carrying `key` among its (plural) `stages` — not filtered to the viewer or
- *  to `item.stage`'s own single winning role, since `refreshBranch` can sit alongside another trigger. */
-function numbersCarrying(items: readonly ReconciledItem[], key: LabelKey): readonly number[] {
-  return items.filter((item) => item.stages.some((label) => label.key === key)).map((item) => item.number)
-}
-
-/** The mergeability gate's own held reason, or `null` to proceed — `readyForReview` only.
- *  `UNKNOWN` holds once before dispatching on the second consecutive poll; `null` holds every poll. */
-function mergeabilityHeld(item: ReconciledItem, repoId: RepoId, unknownStreaks: UnknownStreaks): TickHeldReason | null {
-  const mergeable = item.mergeable
-  if (mergeable === 'CONFLICTING') {
-    unknownStreaks.clear(repoId, item.number)
-    return 'conflicting'
-  }
-  if (mergeable === 'UNKNOWN') {
-    const route = mergeabilityRoute(mergeable, unknownStreaks.get(repoId, item.number))
-    if (route.action === 'hold') {
-      unknownStreaks.set(repoId, item.number, route.unknownStreak)
-      return 'mergeability-unknown'
-    }
-    unknownStreaks.clear(repoId, item.number)
-    return null
-  }
-  if (mergeable === null) return 'mergeability-unknown'
-  unknownStreaks.clear(repoId, item.number) // 'MERGEABLE'
-  return null
-}
-
-/** When `needsHuman` was added — a plain unblock leaves no comment, so the gates read the label event. */
-function escalatedAtOf(item: ReconciledItem): string[] {
-  return item.stageHistory.filter((entry) => entry.key === 'needsHuman').map((entry) => entry.at)
-}
-
-/** The integration-red gate's held entry, or `null` to proceed. `refresh` is held as `integration-green` so `observe.ts` hands it to the refresh path; an unreadable `integrationChecks` holds rather than refreshes. */
-function integrationRedHeld(item: ReconciledItem, trigger: LabelKey, integrationChecks: IntegrationChecks | null, now: Date): TickHeld | null {
-  const gate = integrationRedGate({
-    comments: item.comments ?? undefined,
-    headRefOid: item.headRefOid ?? '',
-    integration: integrationChecks === null ? null : new Map(Object.entries(integrationChecks)),
-    now: now.toISOString(),
-    escalatedAt: escalatedAtOf(item),
-  })
-  if (gate.action === 'none' || gate.facts === undefined) return null
-  const base = { number: item.number, kind: item.kind, trigger, contention: null }
-  if (gate.action === 'refresh') return { ...base, reason: 'integration-green', escalation: null }
-  const { checks, state, escalateAt } = gate.facts
-  return { ...base, reason: 'integration-red', escalation: { kind: 'integration-red', checks, state, escalateAt: escalateAt ?? null, expired: gate.action === 'escalate' } }
-}
-
+/** Tickets holding the repository's working slot: an implementation running, or a pull request open. One entry per ticket, read off its issue half. */
 function occupiedSetOf(items: readonly ReconciledItem[]): readonly OccupiedEntry[] {
   const occupied: OccupiedEntry[] = []
   for (const item of items) {
-    const key = stageKeyOf(item)
-    if (key !== 'inProgress' && key !== 'prOpened') continue
-    const label = item.stages.find((s) => s.key === key)?.name ?? key
-    occupied.push({ item: item.number, label, paths: item.claimedFiles ?? [] })
+    const { ticket } = item
+    if (item.kind !== 'issue' || ticket === null) continue
+    if (!((ticket.stage === 'implement' && ticket.status.kind === 'running') || ticket.pr !== null)) continue
+    occupied.push({ item: item.number, label: stageNameOf(ticket), paths: item.claimedFiles ?? [] })
   }
   return occupied
 }
 
+interface Concurrency {
+  readonly sharedFiles: readonly string[]
+  readonly overlapThreshold: number
+}
+
+interface TriggerParams {
+  readonly items: readonly ReconciledItem[]
+  readonly viewer: string
+  readonly concurrency: Concurrency
+  readonly reviewCycleCap: number
+  readonly repoId: RepoId
+  readonly unknownStreaks: UnknownStreaks
+  readonly holdSessionRequired: boolean
+  readonly forceDispatch: ForceDispatch | undefined
+  readonly checkDispositions: Readonly<Record<string, Disposition>>
+  readonly now: Date
+  readonly integrationChecks: IntegrationChecks | null
+}
+
+/** The review-only gates, first hit wins: mergeability, integration-red, a verdict already on the head, then zero-diff. */
+function reviewGate(item: TrackedReconciled, p: TriggerParams): { readonly held: TickHeld } | { readonly adoption: TickObservation } | null {
+  const entry = { ...entryOf(item), contention: null }
+  const mergeHeld = mergeabilityHeld(item, p.repoId, p.unknownStreaks)
+  if (mergeHeld !== null) return { held: { ...entry, reason: mergeHeld, escalation: null } }
+  const redHeld = integrationRedHeld(item, p.integrationChecks, p.now)
+  if (redHeld !== null) return { held: redHeld }
+  const adoption = heldVerdictAdoption(item)
+  if (adoption !== null) return { adoption }
+  // A null rollup was never selected, so the gate gets no check input and escalates.
+  const checks = item.checkRollup === null ? undefined : zeroDiffChecksOf(item.checkRollup, p.checkDispositions, p.now.toISOString())
+  const gate = zeroDiffGate({ reviews: item.reviews ?? undefined, comments: item.comments ?? undefined, headRefOid: item.headRefOid ?? '', checks, escalatedAt: escalatedAtOf(item.ticket) })
+  // Only the per-head review cap (a second review of one head) is held; any other zero-diff result gets one more review.
+  if (gate.action === 'escalate' && gate.reason === 'sha-cap') return { held: { ...entry, reason: 'zero-diff', escalation: { kind: 'zero-diff' } } }
+  if (gate.action === 'hold-checks' && gate.facts !== undefined) {
+    return { held: { ...entry, reason: 'check-hold', escalation: { kind: 'check-hold', checks: gate.facts.checks, state: gate.facts.state, escalateAt: gate.facts.escalateAt ?? null } } }
+  }
+  return null
+}
+
 /** Splits into `held` (ownership/session-required, `contended` appended after) and `actionable`:
  *  ungated agents first, then structured `impl` survivors in fewest-conflicts-first order. */
-function actionableAndHeld(
-  items: readonly ReconciledItem[],
-  viewer: string,
-  concurrency: { readonly sharedFiles: readonly string[]; readonly overlapThreshold: number },
-  reviewCycleCap: number,
-  repoId: RepoId,
-  unknownStreaks: UnknownStreaks,
-  holdSessionRequired: boolean,
-  forceDispatch: ForceDispatch | undefined,
-  checkDispositions: Readonly<Record<string, Disposition>>,
-  now: Date,
-  integrationChecks: IntegrationChecks | null,
-): { readonly actionable: readonly TickActionable[]; readonly held: readonly TickHeld[]; readonly adoptions: readonly TickObservation[] } {
+function actionableAndHeld(p: TriggerParams): { readonly actionable: readonly TickActionable[]; readonly held: readonly TickHeld[]; readonly adoptions: readonly TickObservation[] } {
+  const { items, viewer, concurrency, reviewCycleCap, repoId, holdSessionRequired, forceDispatch } = p
   const held: TickHeld[] = []
   const adoptions: TickObservation[] = []
-  const refreshBranchNumbers = numbersCarrying(items, 'refreshBranch')
-  const refreshingNumbers = numbersCarrying(items, 'refreshing')
 
-  const triggerItems = items.filter(
-    (item) =>
-      item.stage === 'trigger' &&
-      // Defensive: STAGE_PRECEDENCE already ranks in-flight above trigger, checked anyway.
-      !item.stages.some((label) => label.role === 'in-flight'),
-  )
+  const triggerItems = items.filter((item): item is TrackedReconciled => actsOn(item) && item.ticket.status.kind === 'queued' && stageRowOf(item.ticket).agent !== null)
   const { unowned, others } = partitionOwnership(triggerItems, viewer, (item) => item.assignees)
   const unownedNumbers = new Set(unowned.map((i) => i.number))
   const othersNumbers = new Set(others.map((i) => i.number))
@@ -180,91 +130,32 @@ function actionableAndHeld(
 
   const ungated: TickActionable[] = []
   const structuredCandidates: ClaimedItem[] = []
-  const structuredMeta = new Map<number, { readonly kind: PipelineItemKind; readonly trigger: LabelKey }>()
+  const structuredMeta = new Map<number, { readonly kind: PipelineItemKind; readonly stage: Stage; readonly trigger: TickActionable['trigger'] }>()
 
   for (const item of triggerItems) {
-    const trigger = stageKeyOf(item)
-    if (trigger === null) continue
+    const entry = entryOf(item)
+    const { stage } = entry
+    const agent = stageRowOf(item.ticket).agent
+    if (agent === null) continue
+    const heldEntry = { ...entry, contention: null, escalation: null }
 
     const reason = heldReasonOf(item, unownedNumbers, othersNumbers, holdSessionRequired)
-
-    // A refreshBranch trigger co-present with another trigger label never wins stageKeyOf's own
-    // first-match resolution, so this yields a second, independent entry for refreshBranch itself.
-    if (trigger !== 'refreshBranch' && item.stages.some((label) => label.key === 'refreshBranch')) {
-      if (reason !== null) {
-        held.push({ number: item.number, kind: item.kind, trigger: 'refreshBranch', reason, contention: null, escalation: null })
-      } else {
-        ungated.push({ number: item.number, kind: item.kind, trigger: 'refreshBranch', agent: 'revise', unchecked: false, cycle: null })
-      }
-    }
-
     if (reason !== null) {
-      held.push({ number: item.number, kind: item.kind, trigger, reason, contention: null, escalation: null })
+      held.push({ ...heldEntry, reason })
       continue
-    }
-    const agent = AGENT_FOR_TRIGGER[trigger]
-    if (agent === undefined) continue
-
-    // The refresh-wins veto: a pull request already claimed by a refresh must never also be
-    // dispatched to review or revision in the same tick.
-    if (trigger === 'needsRevision' && refreshWins({ number: item.number, refreshBranch: refreshBranchNumbers, refreshing: refreshingNumbers }).action === 'veto') {
-      held.push({ number: item.number, kind: item.kind, trigger, reason: 'refresh-wins', contention: null, escalation: null })
-      continue
-    }
-    if (agent === 'review') {
-      if (refreshWins({ number: item.number, refreshBranch: refreshBranchNumbers, refreshing: refreshingNumbers }).action === 'veto') {
-        held.push({ number: item.number, kind: item.kind, trigger, reason: 'refresh-wins', contention: null, escalation: null })
-        continue
-      }
-      const mergeHeld = mergeabilityHeld(item, repoId, unknownStreaks)
-      if (mergeHeld !== null) {
-        held.push({ number: item.number, kind: item.kind, trigger, reason: mergeHeld, contention: null, escalation: null })
-        continue
-      }
     }
 
-    // The cycle-cap gate: unconditional for a revision, fires whatever the latest review said. A refresh is a rebase, never a review cycle. The effective cap
-    // folds in any operator-granted cycles.
-    if (trigger === 'needsRevision' && (item.reviewCycleCount ?? 0) >= reviewCycleCap + cycleGrantCount(item.comments ?? undefined)) {
-      held.push({
-        number: item.number,
-        kind: item.kind,
-        trigger,
-        reason: 'cycle-cap',
-        contention: null,
-        escalation: { kind: 'cycle-cap', count: item.reviewCycleCount ?? 0, cap: reviewCycleCap + cycleGrantCount(item.comments ?? undefined) },
-      })
+    // The cycle-cap gate: a revision fires whatever the latest review said. A refresh is a rebase, never a review cycle, so it is never capped. The effective cap folds in any operator-granted cycles.
+    const effectiveCap = reviewCycleCap + cycleGrantCount(item.comments ?? undefined)
+    if (stage === 'revise' && item.ticket.status.kind === 'queued' && item.ticket.status.reason === 'changes-requested' && (item.reviewCycleCount ?? 0) >= effectiveCap) {
+      held.push({ ...heldEntry, reason: 'cycle-cap', escalation: { kind: 'cycle-cap', count: item.reviewCycleCount ?? 0, cap: effectiveCap } })
       continue
     }
-    // The integration-red hold runs before the zero-diff gate: a first review can be held too.
-    if (agent === 'review') {
-      const redHeld = integrationRedHeld(item, trigger, integrationChecks, now)
-      if (redHeld !== null) {
-        held.push(redHeld)
-        continue
-      }
-    }
-    // A head that already has an approving verdict adopts it: neither held nor reviewed again.
-    if (agent === 'review') {
-      const adoption = heldVerdictAdoption(item)
-      if (adoption !== null) {
-        adoptions.push(adoption)
-        continue
-      }
-    }
-    // The zero-diff gate: the one-time re-review permission is inherent in the label state itself.
-    if (agent === 'review') {
-      // A null rollup was never selected, so the gate gets no check input and escalates.
-      const checks = item.checkRollup === null ? undefined : zeroDiffChecksOf(item.checkRollup, checkDispositions, now.toISOString())
-      const gate = zeroDiffGate({ reviews: item.reviews ?? undefined, comments: item.comments ?? undefined, headRefOid: item.headRefOid ?? '', checks, escalatedAt: escalatedAtOf(item) })
-      // Only the per-head review cap (a second review of one head) is held; any other zero-diff result gets one more review.
-      if (gate.action === 'escalate' && gate.reason === 'sha-cap') {
-        held.push({ number: item.number, kind: item.kind, trigger, reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } })
-        continue
-      }
-      if (gate.action === 'hold-checks' && gate.facts !== undefined) {
-        const escalation = { kind: 'check-hold', checks: gate.facts.checks, state: gate.facts.state, escalateAt: gate.facts.escalateAt ?? null } as const
-        held.push({ number: item.number, kind: item.kind, trigger, reason: 'check-hold', contention: null, escalation })
+    if (stage === 'review') {
+      const gated = reviewGate(item, p)
+      if (gated !== null) {
+        if ('held' in gated) held.push(gated.held)
+        else adoptions.push(gated.adoption)
         continue
       }
     }
@@ -278,42 +169,36 @@ function actionableAndHeld(
       }
     }
 
-    const cycle = trigger === 'refreshBranch' ? null : cycleOf(item, agent === 'revise' ? reviewCycleCap + cycleGrantCount(item.comments ?? undefined) : reviewCycleCap)
+    const cycle = stage === 'refresh' ? null : cycleOf(item, agent === 'revise' ? effectiveCap : reviewCycleCap)
 
     if (agent !== 'impl' || item.claimedFiles === null) {
-      ungated.push({ number: item.number, kind: item.kind, trigger, agent, unchecked: agent === 'impl' && item.claimedFiles === null, cycle })
+      ungated.push({ ...entry, agent, unchecked: agent === 'impl' && item.claimedFiles === null, cycle })
       continue
     }
 
     structuredCandidates.push({ item: item.number, paths: item.claimedFiles })
-    structuredMeta.set(item.number, { kind: item.kind, trigger })
+    structuredMeta.set(item.number, { kind: item.kind, stage, trigger: entry.trigger })
   }
 
   const forcedNumbers = new Set(structuredCandidates.filter((c) => forceDispatch?.has(repoId, c.item) ?? false).map((c) => c.item))
   const gateInput = structuredCandidates.filter((c) => !forcedNumbers.has(c.item))
 
-  const forcedActionable: TickActionable[] = [...forcedNumbers].map((number) => {
+  const metaOf = (number: number, source: string): NonNullable<ReturnType<typeof structuredMeta.get>> => {
     const meta = structuredMeta.get(number)
-    if (meta === undefined) throw new Error(`forceDispatch carried #${String(number)}, which was never a structured candidate`)
-    return { number, kind: meta.kind, trigger: meta.trigger, agent: 'impl', unchecked: false, cycle: null }
-  })
+    if (meta === undefined) throw new Error(`${source} carried #${String(number)}, which was never a structured candidate`)
+    return meta
+  }
+
+  // Always `null` cycle: every structured candidate is an impl candidate over an issue.
+  const forcedActionable: TickActionable[] = [...forcedNumbers].map((number) => ({ number, ...metaOf(number, 'forceDispatch'), agent: 'impl', unchecked: false, cycle: null }))
 
   const gated = gateCandidates(gateInput, occupiedSet, concurrency.sharedFiles, concurrency.overlapThreshold)
-
-  const gatedActionable: TickActionable[] = gated.dispatch.map((number) => {
-    const meta = structuredMeta.get(number)
-    if (meta === undefined) throw new Error(`gateCandidates dispatched #${String(number)}, which was never a structured candidate`)
-    // Always `null`: every structured candidate is an impl trigger over an issue.
-    return { number, kind: meta.kind, trigger: meta.trigger, agent: 'impl', unchecked: false, cycle: null }
-  })
+  const gatedActionable: TickActionable[] = gated.dispatch.map((number) => ({ number, ...metaOf(number, 'gateCandidates dispatched'), agent: 'impl', unchecked: false, cycle: null }))
 
   for (const h of gated.held) {
-    const meta = structuredMeta.get(h.item)
-    if (meta === undefined) throw new Error(`gateCandidates held #${String(h.item)}, which was never a structured candidate`)
     held.push({
       number: h.item,
-      kind: meta.kind,
-      trigger: meta.trigger,
+      ...metaOf(h.item, 'gateCandidates held'),
       reason: 'contended',
       contention: { blocker: h.blocker, blockerStage: h.blockerLabel, depth: h.depth, paths: h.contendedPaths },
       escalation: null,
@@ -323,66 +208,6 @@ function actionableAndHeld(
   forceDispatch?.prune(repoId, new Set(structuredCandidates.map((c) => c.item)))
 
   return { actionable: [...ungated, ...forcedActionable, ...gatedActionable], held, adoptions }
-}
-
-/** The ticket stage an in-flight claim belongs to. */
-function stageOfInFlight(inFlight: LabelKey): Stage | null {
-  if (inFlight === 'refreshing') return 'refresh'
-  const agent = AGENT_FOR_IN_FLIGHT[inFlight]
-  return agent === undefined ? null : stageOfMode(agent)
-}
-
-function claimsOf(
-  items: readonly ReconciledItem[],
-  repoId: RepoId,
-  runsOf: (repoId: RepoId, kind: PipelineItemKind, number: number) => readonly Run[],
-  startedTasks: readonly string[],
-  readAt: string | null,
-  holdSessionRequired: boolean,
-  stageLiveness: { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null,
-): readonly TickClaim[] {
-  const claims: TickClaim[] = []
-  for (const item of items) {
-    if (item.stage !== 'in-flight') continue
-    const inFlight = stageKeyOf(item)
-    if (inFlight === null) continue
-
-    if (holdSessionRequired && item.sessionRequired) {
-      claims.push({ number: item.number, kind: item.kind, inFlight, class: 'session-required', retryKey: null })
-      continue
-    }
-
-    const agentForInFlight = AGENT_FOR_IN_FLIGHT[inFlight]
-    const description = agentForInFlight !== undefined ? `${agentForInFlight} #${String(item.number)}` : null
-
-    if (stageLiveness !== null) {
-      if (description !== null && stageLiveness.live.includes(description)) {
-        claims.push({ number: item.number, kind: item.kind, inFlight, class: 'matched', retryKey: null })
-        continue
-      }
-      if (description !== null && stageLiveness.interrupted.includes(description)) {
-        claims.push({ number: item.number, kind: item.kind, inFlight, class: 'interrupted', retryKey: null })
-        continue
-      }
-      // A transcript `in-flight` status alone is no longer matched once this app owns liveness.
-    } else {
-      // Either source is enough to hold a reset back, so a reset never fires against an agent this
-      // process itself just dispatched before the session scan has caught up to it.
-      const matchedByTask = description !== null && startedTasks.includes(description)
-      if (item.status === 'in-flight' || matchedByTask) {
-        claims.push({ number: item.number, kind: item.kind, inFlight, class: 'matched', retryKey: null })
-        continue
-      }
-    }
-
-    const stage = stageOfInFlight(inFlight)
-    const result = stage === null ? 'no-record' : unmatchedClaimOf(runsOf(repoId, item.kind, item.number), stage, readAt)
-    const cls = result === 'reset' ? 'stalled-confirmed' : result
-    // RETRY_TRIGGER's engine type is a bare Record<string, string>; this caller narrows it to LabelKey.
-    const retryKey = cls === 'stalled-confirmed' ? ((RETRY_TRIGGER[inFlight] as LabelKey | undefined) ?? null) : null
-    claims.push({ number: item.number, kind: item.kind, inFlight, class: cls, retryKey })
-  }
-  return claims
 }
 
 export function planTick(params: PlanTickParams): TickReport {
@@ -410,8 +235,20 @@ export function planTick(params: PlanTickParams): TickReport {
     }
   }
 
-  const { actionable, held, adoptions: triggerAdoptions } = actionableAndHeld(repository.items, repository.viewer, repository.concurrency, reviewCycleCap, repository.repoId, unknownStreaks, holdSessionRequired, params.forceDispatch, checkDispositions, now(), repository.integrationChecks)
-  const claims = claimsOf(repository.items, repository.repoId, params.runsOf ?? (() => []), startedTasks, readAt, holdSessionRequired, stageLiveness)
+  const { actionable, held, adoptions: triggerAdoptions } = actionableAndHeld({
+    items: repository.items,
+    viewer: repository.viewer,
+    concurrency: repository.concurrency,
+    reviewCycleCap,
+    repoId: repository.repoId,
+    unknownStreaks,
+    holdSessionRequired,
+    forceDispatch: params.forceDispatch,
+    checkDispositions,
+    now: now(),
+    integrationChecks: repository.integrationChecks,
+  })
+  const claims = claimsOf({ items: repository.items, repoId: repository.repoId, runsOf: params.runsOf ?? (() => []), startedTasks, readAt, holdSessionRequired, stageLiveness })
   const claimAdoptions = adoptionsOf({ items: repository.items, claims, viewer: repository.viewer })
   const adopted = new Set(claimAdoptions.map((adoption) => adoption.number))
 

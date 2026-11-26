@@ -1,14 +1,12 @@
 import type { ReadyEntry } from '@/types/actions'
 import type { BudgetNote, DispatchOwner, RunState, StageLaunchFailureCause } from '@/types/dispatch'
-import { stageOfMode } from '@/types/stage-labels'
-import { stageModeFor } from '@/main/pipeline/transitions'
 import { RUN_TARGET } from '@/types/dispatch'
 import type { PipelineItemKind, ResolvedItem } from '@/types/github'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import type { ReconciledItem } from '@/types/state'
 import type { TickActionable } from '@/types/tick'
 import type { StageWorktreeTarget } from '@/types/workspace'
-import type { LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { Ticket } from '@/utils/pipeline/ticket'
 import { reviewDispatchFacts } from '@/utils/pipeline/gates'
 import type { ReviewDispatchFacts } from '@/utils/pipeline/gates'
 import { KIND_PROMPT_NAMES, STAGE_PROMPT_NAMES } from '@/utils/stage/prompt'
@@ -27,17 +25,15 @@ export const DISPATCH_PROMPT = '<Stage> stage for <kind> #<n>. Run your pipeline
 export const REFRESH_PROMPT = 'Refresh stage for pull request #<n>. Run your pipeline stage for pull request #<n> in refresh mode.'
 
 /** A `StageLaunchRequest.prompt` is filled from this, never re-derived at the launcher. */
-export function promptFor(actionable: Pick<TickActionable, 'trigger' | 'number' | 'agent' | 'kind'>): string {
+export function promptFor(actionable: Pick<TickActionable, 'stage' | 'number' | 'agent' | 'kind'>): string {
   const n = String(actionable.number)
-  if (actionable.trigger === 'refreshBranch') return REFRESH_PROMPT.replaceAll('<n>', n)
+  if (actionable.stage === 'refresh') return REFRESH_PROMPT.replaceAll('<n>', n)
   return DISPATCH_PROMPT.replaceAll('<Stage>', STAGE_PROMPT_NAMES[actionable.agent]).replaceAll('<kind>', KIND_PROMPT_NAMES[actionable.kind]).replaceAll('<n>', n)
 }
 
-/** The re-read survivor test: the trigger's resolved name is still present and the viewer is still an assignee. `stateLabels` are the store's names; `null` is an unseeded repository, which launches nothing this tick. */
-export function survived(resolved: ResolvedItem, candidate: TickActionable, vocabulary: LabelVocabulary, viewer: string, stateLabels: readonly string[] | null): boolean {
-  if (stateLabels === null) return false
-  const triggerLabel = vocabulary.labels.find((l) => l.key === candidate.trigger)
-  if (triggerLabel === undefined || !stateLabels.includes(triggerLabel.name)) return false
+/** The re-read survivor test: the ticket is still queued at the candidate's stage and the viewer is still an assignee. A missing ticket launches nothing this tick. */
+export function survived(resolved: ResolvedItem, candidate: TickActionable, viewer: string, ticket: Pick<Ticket, 'stage' | 'status'> | null): boolean {
+  if (ticket === null || ticket.stage !== candidate.stage || ticket.status.kind !== 'queued') return false
   return resolved.assignees.includes(viewer)
 }
 
@@ -68,7 +64,7 @@ export interface LaunchPass {
 
 /** A launch that never produced a session still shows as a run, ended the instant it started. */
 async function recordFailure(ctx: DispatchContext, entry: ReadyEntry, candidate: TickActionable, message: string): Promise<void> {
-  await ctx.stores.runs.launchFailed(entry.id, { stage: stageOfMode(stageModeFor(candidate.agent, candidate.trigger)), kind: candidate.kind, number: candidate.number, agent: candidate.agent, trigger: candidate.trigger, model: entry.config.models[candidate.agent], title: null, message })
+  await ctx.stores.runs.launchFailed(entry.id, { stage: candidate.stage, kind: candidate.kind, number: candidate.number, agent: candidate.agent, trigger: candidate.trigger, model: entry.config.models[candidate.agent], title: null, message })
 }
 
 /** Undoes a claim whose launch failed; a refused rollback is left to the stall ladder. */
@@ -157,6 +153,7 @@ export async function launchGated(ctx: DispatchContext, pass: LaunchPass, gated:
       const result = await stageLauncher.launch({
         entry,
         agent: candidate.agent,
+        stage: candidate.stage,
         number: candidate.number,
         kind: candidate.kind,
         trigger: candidate.trigger,

@@ -2,13 +2,11 @@ import type { BoardSnapshot } from '@/types/board'
 import type { GateDecision } from '@/types/gate'
 import type { ReconciledItem } from '@/types/state'
 import type { WriteObservation } from '@/types/dispatch'
-import type { AuditRead } from '@/types/writes'
 import type { RepositoryEntry, RepoId } from '@/utils/repos'
-import type { LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { TicketView } from '@/utils/pipeline/stages'
 
-// Renderer-safe contract for the single-label operator actions: pause, resume, retry, stop, gate. No import here may reach a Node builtin.
-import type { LabelKey } from '@/utils/labels/vocabulary'
-import type { LabelPrecondition, WriteOutcome } from '@/types/writes'
+// Renderer-safe contract for the operator actions: pause, resume, retry, stop, gate. No import here may reach a Node builtin.
+import type { WriteOutcome } from '@/types/writes'
 import type { IncidentIntent } from '@/types/incidents'
 
 /** Recorded verbatim as `AuditEntry.action`; `refresh` needs no comment or operator choice, so it stays out of `OperatorDecision` below. */
@@ -23,13 +21,27 @@ export type OperatorDecision = (typeof OPERATOR_DECISIONS)[number]
 export const UNBLOCK_ROUTES = ['revision', 'review', 'implementation'] as const
 export type UnblockRoute = (typeof UNBLOCK_ROUTES)[number]
 
+/** One typed operator write; `moves.ts` says what each does to a ticket. */
+export type OperatorMove =
+  | { readonly kind: 'pause' }
+  | { readonly kind: 'resume' }
+  | { readonly kind: 'retry' }
+  | { readonly kind: 'stop' }
+  | { readonly kind: 'refresh' }
+  | { readonly kind: 'unblock'; readonly route: UnblockRoute }
+  | { readonly kind: 'revise' }
+  | { readonly kind: 'grant' }
+  | { readonly kind: 'approve-plan' }
+  | { readonly kind: 'request-plan-changes' }
+  | { readonly kind: 'escalate'; readonly detail: string }
+
 export interface ItemActionRequest {
   readonly repoId: RepoId
   readonly kind: 'issue' | 'pull-request'
   readonly number: number
   readonly action: OperatorAction
-  /** `null` when the row showed no stage (resume). A mismatch against a fresh read refuses. */
-  readonly expectedStage: LabelKey | null
+  /** `null` when the row showed no stage. A mismatch against a fresh read refuses. */
+  readonly expected: TicketView | null
 }
 
 /** One option of a rebase decision, as the escalation's options table lists it. */
@@ -57,7 +69,7 @@ export interface ItemDecisionRequest {
   readonly repoId: RepoId
   readonly number: number
   readonly decision: OperatorDecision
-  readonly expectedStage: LabelKey | null
+  readonly expected: TicketView | null
   readonly route: UnblockRoute | null
   readonly note: string | null
   readonly skipComment: boolean
@@ -65,15 +77,11 @@ export interface ItemDecisionRequest {
   readonly picks: readonly RebasePick[] | null
 }
 
-/** The `LabelWriteRequest` key-level shape; the main side supplies the rest from the registry entry, never from a plan a caller could forge. */
+/** What an available action does: the move the table applies, and the assignees it adds. The main side supplies the rest from the registry entry, never from a plan a caller could forge. */
 export interface ActionPlan {
-  readonly add: readonly LabelKey[]
-  readonly remove: readonly LabelKey[]
+  /** `null` is the gate marker on an untracked pull request, the one operator write that stays a label write. */
+  readonly move: OperatorMove | null
   readonly addAssignees: readonly string[]
-  readonly removeAssignees: readonly string[]
-  readonly expect: LabelPrecondition
-  /** Forwarded to `LabelWriteRequest.action` unchanged. */
-  readonly action: string
 }
 
 /** Why an action is unavailable: `not-applicable` is a role/marker mismatch; `not-owned` and `viewer-unknown` are ownership refusals applied ahead of every plan. */
@@ -88,8 +96,6 @@ export type ItemActionResult =
   | { readonly ok: false; readonly reason: 'not-owned'; readonly owners: readonly string[] }
   | { readonly ok: false; readonly reason: 'viewer-unknown' }
   | { readonly ok: false; readonly reason: 'repo-unavailable' }
-  | { readonly ok: false; readonly reason: 'no-pause-record' }
-  | { readonly ok: false; readonly reason: 'pause-record-unresolvable' }
 
 /** `cycle-cap`: revise would only escalate straight back. `rebase-decisions`: an escalation whose decision blocks port can't parse. `agent-live`: a stage session is still waiting on this blocked issue, so the answer belongs in that session. */
 export type DecisionRefusal = ActionRefusal | 'cycle-cap' | 'rebase-decisions' | 'agent-live'
@@ -162,9 +168,8 @@ export interface EscalateToHumanParams {
   readonly entry: ReadyEntry
   readonly kind: 'issue' | 'pull-request'
   readonly number: number
-  readonly trigger: LabelKey
   readonly viewer: string
-  /** `null` swaps the labels and posts nothing — the escalation this repeats is already on the item. */
+  /** `null` moves the ticket and posts nothing — the escalation this repeats is already on the item. */
   readonly body: string | null
   readonly action: string
   /** The anomaly this escalation records. */
@@ -219,12 +224,3 @@ export interface RerunChecksParams {
   readonly auditDir: string
 }
 
-export interface RecoverPausedTriggerParams {
-  readonly auditDir: string
-  readonly repo: string
-  readonly number: number
-  readonly vocabulary: LabelVocabulary
-  readonly readAuditLog?: (dir: string, params: { readonly repo?: string; readonly number?: number }) => Promise<AuditRead>
-}
-
-export type RecoverPausedTriggerResult = { readonly kind: 'recovered'; readonly trigger: LabelKey } | { readonly kind: 'no-record' } | { readonly kind: 'unresolvable' }

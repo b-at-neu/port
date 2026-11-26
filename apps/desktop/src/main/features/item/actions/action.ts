@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
-import { expectedStage, positiveInt, repoId } from '@/main/app/schemas'
+import { expectedView, positiveInt, repoId } from '@/main/app/schemas'
 import { refreshAfterWrite } from '@/main/features/board'
 import { readyEntryOf } from '@/main/pipeline/context'
 import { applyItemAction } from '@/main/pipeline/operator/apply'
@@ -11,7 +11,7 @@ const SUBJECT = "'item:action'"
 export const itemAction = defineAction({
   name: 'item.action',
   kind: 'mutation',
-  input: z.object({ repoId, kind: z.enum(['issue', 'pull-request']), number: positiveInt, action: z.enum(OPERATOR_ACTIONS), expectedStage }),
+  input: z.object({ repoId, kind: z.enum(['issue', 'pull-request']), number: positiveInt, action: z.enum(OPERATOR_ACTIONS), expected: expectedView }),
   run: async (ctx, input) => {
     const entry = await readyEntryOf(ctx, SUBJECT, input.repoId, (message) => `${SUBJECT} could not list repositories: ${message}`)
     const result = await applyItemAction(ctx, { request: input, snapshot: ctx.live.watcher.snapshot(), entry, auditDir: ctx.paths.userData })

@@ -150,10 +150,11 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
       if (repo.viewer !== null && !ticketAssignedTo(ticket, repo.viewer)) continue
       const item = ticket.primary
       const members = [ticket.issue, ticket.pullRequest].filter((member): member is ReconciledItem => member !== null)
-      const actions = actionsFor({ item, viewer: repo.viewer, approvalGate: repo.approvalGate })
+      const view = ticketViewOf(item)
+      const actions = actionsFor({ view, item, viewer: repo.viewer, approvalGate: repo.approvalGate })
       const found = newestLive(members.map((member) => liveStages.get(liveStageKey(repo.repoId, member.kind, member.number))))
       const liveStage: LiveStage | null = found === undefined ? null : { agent: found.agent, trigger: found.trigger, sessionKey: found.sessionKey }
-      const decisions = decisionsFor({ item, viewer: repo.viewer, reviewCycleCap: repo.reviewCycleCap, liveStage: liveStage !== null })
+      const decisions = decisionsFor({ view, item, viewer: repo.viewer, reviewCycleCap: repo.reviewCycleCap, liveStage: liveStage !== null })
       let ds: DisplayStatus
       if (members.some((member) => interruptedKeys.has(`${repo.repoId}:${String(member.number)}`))) ds = { status: 'interrupted', staleGithub: false, githubAgeMs: null }
       else if (found !== undefined && (item.status === 'stalled' || (found.working && item.status === 'waiting'))) ds = { status: 'in-flight', staleGithub: false, githubAgeMs: null }

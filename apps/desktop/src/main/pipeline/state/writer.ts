@@ -57,6 +57,7 @@ function settled(outcome: WriteOutcome): boolean {
 function plannedOf(request: EventWriteRequest): { readonly add: readonly string[]; readonly remove: readonly string[]; readonly action: string } {
   const { event } = request
   if (event.kind === 'labels') return { add: event.add, remove: event.remove, action: request.action }
+  if (event.kind === 'operator') return { add: [event.move.kind], remove: [], action: request.action }
   return { add: [event.kind === 'merged' ? 'merge' : event.stage], remove: [], action: request.action }
 }
 

@@ -11,6 +11,7 @@ import type { BlockerRead, CheckContext, ClosingPullRequest, IntegrationChecks, 
 import type { RepoDiagnostic, RepoId, RepoProblem } from '@/utils/repos'
 import type { DenialsRead, UnresolvedReason } from '@/types/local'
 import type { PortStageAgent, SessionScan } from '@/types/sessions'
+import type { Ticket } from '@/utils/pipeline/ticket'
 
 /** One role-bearing label this item carries — every co-present label stays here even though `stage` resolves a single winner. Markers are excluded — they surface separately as `marked`/`autoPlan`. */
 export interface StageLabel {
@@ -112,6 +113,8 @@ export interface ReconciledItem {
   readonly title: string
   readonly url: string
   readonly assignees: readonly string[]
+  /** The ticket record this item belongs to; `null` while the repository is unseeded or the item is untracked. Every decision reads it. */
+  readonly ticket: Ticket | null
   readonly stage: LabelRole | null
   readonly stages: readonly StageLabel[]
   readonly stageAmbiguous: boolean

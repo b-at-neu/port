@@ -12,7 +12,6 @@ import type { RepoId } from '@/utils/repos'
 import { isReadyEntry } from '@/main/repos'
 import { readOwnership, takeOwnership } from '@/main/repos/ownership'
 import { fetchItemsByNumber } from '@/main/github/tracker/items'
-import { storedLabels } from '@/main/pipeline/state/labels'
 import { dispatchableFrom, observableFrom } from '@/main/pipeline/tick/dispatchable'
 import { createRaiser, endedIntents, stageSnapshotOf } from '@/main/pipeline/incidents/raise'
 import { budgetLiveSets, sumCostUsd } from '@/main/dispatch/budget'
@@ -196,7 +195,7 @@ export function createDispatcher(ctx: DispatchContext): Dispatcher {
       const resolvedByNumber = new Map(reread.resolved.map((r) => [r.number, r] as const))
       const survivors = candidates.filter((c) => {
         const resolved = resolvedByNumber.get(c.number)
-        return resolved !== undefined && !reread.unavailable.includes(c.number) && survived(resolved, c, entry.config.vocabulary, viewer, storedLabels(ctx, entry.id, c.kind, c.number, entry.config.vocabulary))
+        return resolved !== undefined && !reread.unavailable.includes(c.number) && survived(resolved, c, viewer, ctx.stores.pipelineState.ticket(entry.id, { kind: c.kind, number: c.number }))
       })
       if (survivors.length === 0) {
         report(entry.id, owner, activeOrIdle(records), runState)
