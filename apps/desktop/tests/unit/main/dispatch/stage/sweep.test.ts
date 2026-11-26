@@ -10,6 +10,7 @@ import type { RepoId } from '@/utils/repos'
 import { boardSnapshot, reconciledItem, repositoryState } from '../../../../support/board-snapshot'
 import { createTestContext } from '../../../../support/context'
 import { createFakeRuns, type NewRun } from '../../../../support/fake-runs'
+import { queuedAt, ticketAt } from '../../../../support/tickets'
 
 const REPO = 'repo-a' as RepoId
 const INTERRUPTED_AT = new Date('2026-01-01T00:10:00.000Z')
@@ -31,7 +32,7 @@ function newEntry(overrides: Partial<NewEntry> = {}): NewEntry {
     number: 38,
     kind: 'issue',
     trigger: 'planApproved',
-    inFlight: 'inProgress',
+    stage: 'implement',
     model: 'sonnet',
     claudeSessionId: 'c1',
     worktree: { path: '/wt/e1', branch: 'b', baseSha: 's' },
@@ -54,8 +55,9 @@ function snapshotWith(...items: Parameters<typeof repositoryState>[0]): BoardSna
   return boardSnapshot([repositoryState(items, { freshness: { github: { at: POLL_AT }, itemStates: { at: POLL_AT }, sessions: { at: POLL_AT }, worktrees: { at: POLL_AT }, denials: { at: POLL_AT } } })], POLL_AT)
 }
 
-const inFlight = reconciledItem({ number: 38, matchedKeys: ['inProgress'] })
-const moved = reconciledItem({ number: 38, matchedKeys: ['prOpened'] })
+const running = (number: number) => reconciledItem({ number, ticket: ticketAt('implement', { kind: 'running', runId: 'run-1' }, { ticket: number }) })
+const inFlight = running(38)
+const moved = reconciledItem({ number: 38, ticket: ticketAt('review', queuedAt(), { ticket: 38 }) })
 
 const hoisted = vi.hoisted(() => ({ remove: vi.fn(), fetch: vi.fn(), resume: vi.fn(), restart: vi.fn() }))
 vi.mock('@/main/repos/worktree/worktree', async (original) => ({ ...(await original<object>()), removeSessionWorktreeAt: (_ctx: unknown, params: { path: string; force: boolean }) => hoisted.remove(params.path, params.force) as unknown }))
@@ -241,7 +243,7 @@ describe('createInterruptedSweeper — usage-limit auto-resume', () => {
     clock.now = new Date('2026-01-01T00:10:00.000Z')
     interrupt(registry, { id: 'early', number: 39 }, 'usage-limit', RESET)
     const deps = setup(registry)
-    const items = [reconciledItem({ number: 39, matchedKeys: ['inProgress'] }), reconciledItem({ number: 40, matchedKeys: ['inProgress'] })]
+    const items = [running(39), running(40)]
     await deps.sweeper.consider(snapshotWith(...items), [status()])
     expect(deps.resume.mock.calls.map((call: readonly unknown[]) => call[0])).toEqual(['early', 'late'])
     expect(deps.onChange).toHaveBeenCalledTimes(1)
@@ -268,7 +270,7 @@ describe('createInterruptedSweeper — usage-limit auto-resume', () => {
     interrupt(registry, { id: 'b', number: 39 }, 'usage-limit', RESET)
     const deps = setup(registry)
     deps.resume.mockResolvedValue({ kind: 'at-capacity', limit: 1 })
-    await deps.sweeper.consider(snapshotWith(inFlight, reconciledItem({ number: 39, matchedKeys: ['inProgress'] })), [status()])
+    await deps.sweeper.consider(snapshotWith(inFlight, running(39)), [status()])
     expect(deps.resume).toHaveBeenCalledTimes(1)
     expect(registry.list().map((e) => e.reason)).toEqual(['usage-limit', 'usage-limit'])
     expect(deps.onChange).not.toHaveBeenCalled()

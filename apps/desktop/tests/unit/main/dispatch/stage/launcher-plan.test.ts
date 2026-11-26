@@ -29,7 +29,7 @@ vi.mock('@/main/dispatch/stage/instructions', async (original) => ({
 vi.mock('@/main/sessions/hosting/stage-prompt-store', async (original) => ({ ...(await original<object>()), readStagePrompt: () => Promise.resolve(null) }))
 
 function request(agent: StageLaunchRequest['agent']): StageLaunchRequest {
-  return { entry: ENTRY, agent, number: 52, kind: 'issue', trigger: 'ready', model: 'opus', prompt: 'Run your pipeline stage for #52.', title: '#52 Plan', target: { kind: 'issue', title: 'Plan' }, review: null }
+  return { entry: ENTRY, agent, stage: 'plan', number: 52, kind: 'issue', trigger: 'ready', model: 'opus', prompt: 'Run your pipeline stage for #52.', title: '#52 Plan', target: { kind: 'issue', title: 'Plan' }, review: null }
 }
 
 function snapshot(text: string): HostedSessionSnapshot {
