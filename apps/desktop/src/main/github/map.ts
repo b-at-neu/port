@@ -271,7 +271,7 @@ export function mapTrackedItem(node: unknown, kind: PipelineItemKind, vocabulary
 }
 
 /** Overlays the detail read onto the swept items. An item with no detail keeps its placeholders —
- *  `fetchPipelineItems` fails the whole read before that can reach a caller. */
+ *  `readBoard` fails the whole read before that can reach a caller. */
 export function applyItemDetails(items: readonly PipelineItem[], details: readonly ItemDetail[]): readonly PipelineItem[] {
   const byKey = new Map(details.map((detail) => [`${detail.kind}:${detail.number}`, detail]))
   return items.map((item) => {

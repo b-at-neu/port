@@ -1,9 +1,21 @@
 import type { BacklogDetailResponse, BacklogResponse } from '@/types/backlog'
 import type { LedgerRead } from '@/types/budget'
-import type { ClaimPreflightFetch, FetchItemsByNumberParams, GatePreflightFetch, GitHubRepoRef, ItemsByNumberFetch, ItemStatesRead } from '@/types/github'
+import type { BoardHalf, BoardHalfFailure, ClaimPreflightFetch, FetchItemsByNumberParams, GatePreflightFetch, GitHubRepoRef, ItemsByNumberFetch, ItemStatesRead } from '@/types/github'
+import type { TrackedRef } from '@/types/pipeline-state'
 import type { GithubPrecheckOutcome } from '@/types/state'
 import type { PostCommentParams, WriteOutcome } from '@/types/writes'
+import type { LabelVocabulary, RepoLabels } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
+
+export interface BoardIssuesParams {
+  readonly repo: GitHubRepoRef
+  readonly vocabulary: LabelVocabulary
+  /** The store's issue refs: non-null makes them, not the swept labels, the set of issues read. `null` is the label path. */
+  readonly tracked: readonly TrackedRef[] | null
+}
+
+/** The issue half of the board read, plus the repository's real label list and the signed-in login — labels and assignment belong to the tracker. */
+export type BoardIssuesFetch = (BoardHalf & { readonly repoLabels: RepoLabels; readonly viewer: string | null }) | BoardHalfFailure
 
 export interface ItemNumberParams {
   readonly repo: GitHubRepoRef
@@ -34,6 +46,7 @@ export interface TrackerPrecheckParams {
 
 /** The vendor-neutral issue tracker. Params carry no transport: an implementation binds its own context when it is built. The by-number reads and both preflights may resolve a pull request, because GitHub gives issues and pull requests one number space. */
 export interface Tracker {
+  readonly readBoardIssues: (params: BoardIssuesParams) => Promise<BoardIssuesFetch>
   readonly readItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
   readonly readItemStates: (params: ItemStatesParams) => Promise<ItemStatesRead>
   readonly readClaimPreflight: (params: ItemNumberParams) => Promise<ClaimPreflightFetch>

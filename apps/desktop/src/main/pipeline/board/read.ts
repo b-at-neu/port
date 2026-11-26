@@ -4,7 +4,9 @@ import type { SourceCache, RepoSessionSlice } from '@/types/state'
 import type { GitHubTransport } from '@/types/platform'
 import { claudeHomeDir, hostFs } from '@/main/platform'
 import { defaultGitRunner } from '@/main/platform/git'
+import { readBoardIssues } from '@/main/github/tracker/board'
 import { githubHttp } from '@/main/platform/github-http'
+import type { BoardIssuesParams } from '@/types/tracker'
 import { defaultSdk } from '@/main/platform/sdk'
 import type { SessionReader } from '@/types/sessions'
 import type { GitRunner } from '@/types/platform'
@@ -69,7 +71,12 @@ export async function readPipelineState(params: ReadPipelineStateParams): Promis
   const now = params.now ?? (() => new Date())
   const cache = createSourceCache()
   const readyEntries = params.repositories.filter(isReady)
-  const ctx = { githubHttp: params.github ?? githubHttp, git: params.git ?? defaultGitRunner(), fs: hostFs, sdk: defaultSdk, claudeHome: params.claudeHome ?? claudeHomeDir(), clock: { now } }
+  const git = params.git ?? defaultGitRunner()
+  const clock = { now }
+  const transport = params.github ?? githubHttp
+  const readCtx = { githubHttp: transport, clock }
+  const tracker = { readBoardIssues: (boardParams: BoardIssuesParams) => readBoardIssues(readCtx, boardParams) }
+  const ctx = { githubHttp: transport, git, fs: hostFs, sdk: defaultSdk, claudeHome: params.claudeHome ?? claudeHomeDir(), clock, tracker }
 
   await refreshSessions(ctx, cache, { repos: readyEntries.map((entry) => ({ id: entry.id, root: entry.path })), reader: params.sessionReader })
 

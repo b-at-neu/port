@@ -1,8 +1,8 @@
 // One refresh primitive per source, each keeping the previous good value in place on a failed attempt. `watcher.ts` decides *when* to call these; no file here names a timer.
 import { fetchItemsByNumber } from '@/main/github/tracker/items'
-import { fetchPipelineItems } from '@/main/github/pipeline'
-import type { GitHubReadContext } from '@/main/github/context'
 import { collectOrphanNumbers } from '@/main/pipeline/board/attach'
+import { readBoard } from '@/main/pipeline/board/board-read'
+import type { BoardReadContext } from '@/main/pipeline/context'
 import { readDenials } from '@/main/repos/local/denials'
 import { readWorktrees } from '@/main/repos/local/worktrees'
 import type { Platform } from '@/main/platform'
@@ -37,8 +37,8 @@ interface RefreshGithubParams {
 }
 
 /** Fires the conditional `fetchItemsByNumber` re-check itself whenever the fresh sweep leaves orphan numbers, so `itemStates` stays dependent on a GitHub refresh. */
-export async function refreshGithub(ctx: GitHubReadContext, cache: SourceCache, params: RefreshGithubParams): Promise<RefreshOutcome> {
-  const fetch = await fetchPipelineItems(ctx, { repo: params.repo, vocabulary: params.vocabulary, verify: params.verify, integration: params.integration, tracked: params.tracked })
+export async function refreshGithub(ctx: BoardReadContext, cache: SourceCache, params: RefreshGithubParams): Promise<RefreshOutcome> {
+  const fetch = await readBoard(ctx, { repo: params.repo, vocabulary: params.vocabulary, verify: params.verify, integration: params.integration, tracked: params.tracked })
   const previous = cache.github.get(params.repoId) ?? null
   cache.github.set(params.repoId, projectOk(previous, fetch))
 

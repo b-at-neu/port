@@ -1,33 +1,27 @@
-// Pure GraphQL document builders — no network, no config read, no gh. GraphQL `search` is never
-// used since it is index-backed with ingestion lag.
+// Pure GraphQL builders for the pull-request half of the board read and the pieces both halves share.
+// `search` is never used: it is index-backed and lags.
 import type { LabelVocabulary, ResolvedLabel } from '@/utils/labels/vocabulary'
-import type { ItemRef, PipelineItemKind, SweepAlias, SweepPage } from '@/types/github'
-import { ASSIGNEE_PAGE_SIZE, blockedByField } from '@/main/github/tracker/query'
+import type { SweepAlias, SweepPage } from '@/types/github'
 
+export const ASSIGNEE_PAGE_SIZE = 20
 const PAGE_SIZE = 100
-const REPO_LABEL_PAGE_SIZE = 100
 const SWEEP_LABEL_PAGE_SIZE = 100
 const LABEL_EVENT_PAGE_SIZE = 20
-const DETAIL_BLOCKER_PAGE_SIZE = 10
-const BLOCKER_COMMENT_PAGE_SIZE = 10
+const INTEGRATION_HISTORY_SIZE = 5
 
 /** A valid GraphQL StringValue for every escape `JSON.stringify` emits. */
 export function graphqlStringLiteral(value: string): string {
   return JSON.stringify(value)
 }
 
-// Shared by both fragments — Needs you's newest-first sort key, and the stage-move history
+// Shared by both detail reads — Needs you's newest-first sort key, and the stage-move history
 // reconcile.ts resolves into stageHistory.
-const LABEL_EVENTS_FIELD = `timelineItems(last: ${LABEL_EVENT_PAGE_SIZE}, itemTypes: [LABELED_EVENT]) { nodes { ... on LabeledEvent { createdAt actor { login } label { name } } } }`
+export const LABEL_EVENTS_FIELD = `timelineItems(last: ${LABEL_EVENT_PAGE_SIZE}, itemTypes: [LABELED_EVENT]) { nodes { ... on LabeledEvent { createdAt actor { login } label { name } } } }`
 
-const ISSUE_SWEEP_FIELDS = `number title url body state updatedAt assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } } labels(first: ${SWEEP_LABEL_PAGE_SIZE}) { totalCount nodes { name } }`
-
-const BLOCKER_COMMENTS_FIELD = `comments(last: ${BLOCKER_COMMENT_PAGE_SIZE}) { nodes { body createdAt url } }`
-const CLOSING_PULL_REQUEST_PAGE_SIZE = 5
-const CLOSING_PULL_REQUESTS_FIELD = `closedByPullRequestsReferences(first: ${CLOSING_PULL_REQUEST_PAGE_SIZE}, includeClosedPrs: true) { nodes { number state headRefName } }`
+export const ITEM_SWEEP_FIELDS = `number title url body state updatedAt assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } } labels(first: ${SWEEP_LABEL_PAGE_SIZE}) { totalCount nodes { name } }`
 
 // mergeable is the mergeability precondition mergeabilityRoute reads.
-const PULL_REQUEST_SWEEP_FIELDS = `${ISSUE_SWEEP_FIELDS} mergedAt headRefOid mergeable`
+const PULL_REQUEST_SWEEP_FIELDS = `${ITEM_SWEEP_FIELDS} mergedAt headRefOid mergeable`
 
 // reviews/comments page sizes bound the cycle cap and zero-diff gate.
 const PULL_REQUEST_DETAIL_FIELDS = `reviews(first: 30) { totalCount nodes { body submittedAt commit { oid } } } comments(last: 20) { totalCount nodes { body createdAt } } ${LABEL_EVENTS_FIELD}`
@@ -53,121 +47,62 @@ const CHECK_ROLLUP_FRAGMENT = `fragment CheckRollupFields on PullRequest {
   }
 }`
 
-export const FIRST_SWEEP_PAGE: SweepPage = { issues: true, pulls: true, issuesAfter: null, pullsAfter: null }
+export const FIRST_SWEEP_PAGE: SweepPage = { connection: true, after: null }
 
-function sweepConnection(alias: SweepAlias, field: string, names: string, after: string | null, fields: string): string {
-  const cursor = after === null ? 'null' : graphqlStringLiteral(after)
-  return `  ${alias}: ${field}(states: OPEN, first: ${PAGE_SIZE}, labels: [${names}], after: ${cursor}, orderBy: {field: CREATED_AT, direction: ASC}) { totalCount pageInfo { hasNextPage endCursor } nodes { ${fields} } }`
-}
-
-/** One connection per surface whatever the label count; `labels:` matches any listed name. Only
- *  page one carries `repoLabels`/`viewer`, and `rateLimit` rides every page so cost sums. */
-export function buildPipelineQuery(vocabulary: LabelVocabulary, page: SweepPage): string {
-  const names = vocabulary.labels.map((label: ResolvedLabel) => graphqlStringLiteral(label.name)).join(', ')
-  const first = page.issuesAfter === null && page.pullsAfter === null
-  const repositoryFields = [
-    ...(page.issues ? [sweepConnection('issues', 'issues', names, page.issuesAfter, ISSUE_SWEEP_FIELDS)] : []),
-    ...(page.pulls ? [sweepConnection('pullRequests', 'pullRequests', names, page.pullsAfter, PULL_REQUEST_SWEEP_FIELDS)] : []),
-    ...(first ? [`    repoLabels: labels(first: ${REPO_LABEL_PAGE_SIZE}) { totalCount nodes { name } }`] : []),
-  ]
-  // Top-level, deliberately outside repository — resolving the signed-in login is never scoped
-  // to one repository.
-  return [
-    'query($owner: String!, $name: String!) {',
-    '  repository(owner: $owner, name: $name) {',
-    ...repositoryFields,
-    '  }',
-    '  rateLimit { cost remaining resetAt limit }',
-    ...(first ? ['  viewer { login }'] : []),
-    '}',
-  ].join('\n')
-}
-
-interface TrackedItemsAlias {
+/** One aliased read by number, keyed by the document's own `<alias>` and the number it asked about. */
+export interface NumberedAlias {
   readonly alias: string
-  readonly kind: PipelineItemKind
   readonly number: number
 }
 
-interface TrackedItemsQuery {
+export interface NumberedQuery {
   readonly document: string
-  readonly aliases: readonly TrackedItemsAlias[]
+  readonly aliases: readonly NumberedAlias[]
 }
 
-/** The sweep's own fields for tracked items by number, so an item whose labels are gone still reads. `<idx>` is the position, since the number alone cannot name an issue and a pull request. */
-export function buildTrackedItemsQuery(refs: readonly ItemRef[]): TrackedItemsQuery {
-  const aliases: TrackedItemsAlias[] = []
-  const fields: string[] = []
-  refs.forEach((ref, idx) => {
-    const alias = `t${idx}`
-    if (ref.kind === 'issue') fields.push(`  ${alias}: issue(number: ${ref.number}) { ${ISSUE_SWEEP_FIELDS} }`)
-    else fields.push(`  ${alias}: pullRequest(number: ${ref.number}) { ${PULL_REQUEST_SWEEP_FIELDS} }`)
-    aliases.push({ alias, kind: ref.kind, number: ref.number })
-  })
-  const document = ['query($owner: String!, $name: String!) {', '  repository(owner: $owner, name: $name) {', ...fields, '  }', '  rateLimit { cost remaining resetAt limit }', '}'].join('\n')
-  return { document, aliases }
+/** `repository { <fields> }` plus `rateLimit` on every document, so cost sums across round trips. */
+export function repositoryDocument(fields: readonly string[], topLevel: readonly string[] = [], trailer: readonly string[] = []): string {
+  return ['query($owner: String!, $name: String!) {', '  repository(owner: $owner, name: $name) {', ...fields, '  }', '  rateLimit { cost remaining resetAt limit }', ...topLevel, '}', ...trailer].join('\n')
+}
+
+/** One connection per surface whatever the label count; `labels:` matches any listed name. */
+export function sweepConnection(alias: SweepAlias, vocabulary: LabelVocabulary, page: SweepPage, fields: string): string {
+  const names = vocabulary.labels.map((label: ResolvedLabel) => graphqlStringLiteral(label.name)).join(', ')
+  const cursor = page.after === null ? 'null' : graphqlStringLiteral(page.after)
+  return `  ${alias}: ${alias}(states: OPEN, first: ${PAGE_SIZE}, labels: [${names}], after: ${cursor}, orderBy: {field: CREATED_AT, direction: ASC}) { totalCount pageInfo { hasNextPage endCursor } nodes { ${fields} } }`
+}
+
+const CONTEXTS_FIELD = `contexts(first: 50) { nodes { __typename ... on CheckRun { name conclusion status startedAt completedAt detailsUrl } ... on StatusContext { context state createdAt targetUrl } } }`
+
+/** The integration branch's recent commits with their rollups, for the integration-red gate. */
+function integrationHistoryField(integration: string): string {
+  const ref = `ref(qualifiedName: ${graphqlStringLiteral(`refs/heads/${integration}`)}) { target { ... on Commit { history(first: ${INTEGRATION_HISTORY_SIZE}) { nodes { oid statusCheckRollup { ${CONTEXTS_FIELD} } } } } } }`
+  return `    integrationHistory: ${ref}`
+}
+
+/** The pull-request sweep page. Only page one carries `integrationHistory`, so the integration-red gate costs no round trip of its own. */
+export function buildPullSweepQuery(vocabulary: LabelVocabulary, page: SweepPage, integration: string): string {
+  const first = page.after === null
+  return repositoryDocument([...(page.connection ? [sweepConnection('pullRequests', vocabulary, page, PULL_REQUEST_SWEEP_FIELDS)] : []), ...(first ? [integrationHistoryField(integration)] : [])])
+}
+
+/** The sweep's own fields for tracked pull requests by number, so one whose labels are gone still reads. `<idx>` is the position in `numbers`. */
+export function buildTrackedPullsQuery(numbers: readonly number[]): NumberedQuery {
+  const aliases = numbers.map((number, idx) => ({ alias: `t${idx}`, number }))
+  return { document: repositoryDocument(aliases.map(({ alias, number }) => `  ${alias}: pullRequest(number: ${number}) { ${PULL_REQUEST_SWEEP_FIELDS} }`)), aliases }
 }
 
 /** `rollup` is true only for a pull request at the approved or ready-for-review stage. */
-export interface ItemDetailRef {
-  readonly kind: PipelineItemKind
+export interface PullDetailRef {
   readonly number: number
   readonly rollup: boolean
-  /** True only for an issue at the blocked stage — its newest comments carry the blocker's reason. */
-  readonly blockerComments: boolean
-  /** True only for an issue at `pr opened` — the pull requests closing it, whatever their state, since the open-only sweep cannot see a merged one. */
-  readonly closingPullRequests: boolean
 }
 
-interface ItemDetailAlias extends ItemDetailRef {
-  readonly alias: string
-}
-
-interface ItemDetailsQuery {
-  readonly document: string
-  readonly aliases: readonly ItemDetailAlias[]
-}
-
-/** The heavy fields the sweep leaves out, one aliased lookup per item — priced per real item, not
- *  per page. `<idx>` is the position, since the number alone cannot name an issue and a pull request. */
-export function buildItemDetailsQuery(refs: readonly ItemDetailRef[]): ItemDetailsQuery {
-  const aliases: ItemDetailAlias[] = []
-  const fields: string[] = []
-
-  refs.forEach((ref, idx) => {
-    const alias = `d${idx}`
-    if (ref.kind === 'issue') {
-      const comments = ref.blockerComments ? ` ${BLOCKER_COMMENTS_FIELD}` : ''
-      const closing = ref.closingPullRequests ? ` ${CLOSING_PULL_REQUESTS_FIELD}` : ''
-      fields.push(`  ${alias}: issue(number: ${ref.number}) { ${LABEL_EVENTS_FIELD} ${blockedByField(DETAIL_BLOCKER_PAGE_SIZE)}${comments}${closing} }`)
-    } else {
-      const rollup = ref.rollup ? ' ...CheckRollupFields' : ''
-      fields.push(`  ${alias}: pullRequest(number: ${ref.number}) { ${PULL_REQUEST_DETAIL_FIELDS}${rollup} }`)
-    }
-    aliases.push({ ...ref, alias })
-  })
-
+/** The heavy fields the sweep leaves out, one aliased lookup per pull request — priced per real item, not per page. */
+export function buildPullDetailsQuery(refs: readonly PullDetailRef[]): NumberedQuery {
+  const aliases = refs.map((ref, idx) => ({ alias: `d${idx}`, number: ref.number }))
+  const fields = refs.map((ref, idx) => `  d${idx}: pullRequest(number: ${ref.number}) { ${PULL_REQUEST_DETAIL_FIELDS}${ref.rollup ? ' ...CheckRollupFields' : ''} }`)
   // GraphQL rejects a document declaring a fragment nothing spreads.
   const usesCheckRollup = refs.some((ref) => ref.rollup)
-  const document = [
-    'query($owner: String!, $name: String!) {',
-    '  repository(owner: $owner, name: $name) {',
-    ...fields,
-    '  }',
-    '  rateLimit { cost remaining resetAt limit }',
-    '}',
-    ...(usesCheckRollup ? ['', CHECK_ROLLUP_FRAGMENT] : []),
-  ].join('\n')
-
-  return { document, aliases }
+  return { document: repositoryDocument(fields, [], usesCheckRollup ? ['', CHECK_ROLLUP_FRAGMENT] : []), aliases }
 }
-
-const INTEGRATION_HISTORY_SIZE = 5
-
-/** The integration branch's recent commits with their rollups, for the integration-red gate. */
-export function buildIntegrationChecksQuery(integration: string): string {
-  const contexts = `contexts(first: 50) { nodes { __typename ... on CheckRun { name conclusion status startedAt completedAt detailsUrl } ... on StatusContext { context state createdAt targetUrl } } }`
-  const ref = `ref(qualifiedName: ${graphqlStringLiteral(`refs/heads/${integration}`)}) { target { ... on Commit { history(first: ${INTEGRATION_HISTORY_SIZE}) { nodes { oid statusCheckRollup { ${contexts} } } } } } }`
-  return ['query($owner: String!, $name: String!) {', '  repository(owner: $owner, name: $name) {', `    integrationHistory: ${ref}`, '  }', '  rateLimit { cost remaining resetAt limit }', '}'].join('\n')
-}
-

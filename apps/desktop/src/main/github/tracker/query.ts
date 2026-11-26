@@ -1,7 +1,52 @@
-// Pure GraphQL document builders for the tracker's point reads — no network, no config read, no gh.
-export const ASSIGNEE_PAGE_SIZE = 20
+// Pure GraphQL document builders for the tracker's reads — no network, no config read, no gh.
+import type { SweepPage } from '@/types/github'
+import type { LabelVocabulary } from '@/utils/labels/vocabulary'
+import { ASSIGNEE_PAGE_SIZE, ITEM_SWEEP_FIELDS, LABEL_EVENTS_FIELD, repositoryDocument, sweepConnection } from '@/main/github/query'
+import type { NumberedQuery } from '@/main/github/query'
+
 const ITEM_LABEL_PAGE_SIZE = 20
 const BLOCKER_PAGE_SIZE = 20
+const REPO_LABEL_PAGE_SIZE = 100
+const DETAIL_BLOCKER_PAGE_SIZE = 10
+const BLOCKER_COMMENT_PAGE_SIZE = 10
+const CLOSING_PULL_REQUEST_PAGE_SIZE = 5
+
+const BLOCKER_COMMENTS_FIELD = `comments(last: ${BLOCKER_COMMENT_PAGE_SIZE}) { nodes { body createdAt url } }`
+const CLOSING_PULL_REQUESTS_FIELD = `closedByPullRequestsReferences(first: ${CLOSING_PULL_REQUEST_PAGE_SIZE}, includeClosedPrs: true) { nodes { number state headRefName } }`
+
+/** The issue sweep page. Only page one carries `repoLabels` and `viewer`. The viewer is top-level, deliberately outside `repository`: resolving the signed-in login is never scoped to one repository. */
+export function buildIssueSweepQuery(vocabulary: LabelVocabulary, page: SweepPage): string {
+  const first = page.after === null
+  return repositoryDocument(
+    [...(page.connection ? [sweepConnection('issues', vocabulary, page, ITEM_SWEEP_FIELDS)] : []), ...(first ? [`    repoLabels: labels(first: ${REPO_LABEL_PAGE_SIZE}) { totalCount nodes { name } }`] : [])],
+    first ? ['  viewer { login }'] : [],
+  )
+}
+
+/** The sweep's own fields for tracked issues by number, so one whose labels are gone still reads. `<idx>` is the position in `numbers`. */
+export function buildTrackedIssuesQuery(numbers: readonly number[]): NumberedQuery {
+  const aliases = numbers.map((number, idx) => ({ alias: `t${idx}`, number }))
+  return { document: repositoryDocument(aliases.map(({ alias, number }) => `  ${alias}: issue(number: ${number}) { ${ITEM_SWEEP_FIELDS} }`)), aliases }
+}
+
+export interface IssueDetailRef {
+  readonly number: number
+  /** True only for an issue at the blocked stage — its newest comments carry the blocker's reason. */
+  readonly blockerComments: boolean
+  /** True only for an issue that may already have opened its pull request — the pull requests closing it, whatever their state, since the open-only sweep cannot see a merged one. */
+  readonly closingPullRequests: boolean
+}
+
+/** The heavy fields the sweep leaves out, one aliased lookup per issue — priced per real item, not per page. */
+export function buildIssueDetailsQuery(refs: readonly IssueDetailRef[]): NumberedQuery {
+  const aliases = refs.map((ref, idx) => ({ alias: `d${idx}`, number: ref.number }))
+  const fields = refs.map((ref, idx) => {
+    const comments = ref.blockerComments ? ` ${BLOCKER_COMMENTS_FIELD}` : ''
+    const closing = ref.closingPullRequests ? ` ${CLOSING_PULL_REQUESTS_FIELD}` : ''
+    return `  d${idx}: issue(number: ${ref.number}) { ${LABEL_EVENTS_FIELD} ${blockedByField(DETAIL_BLOCKER_PAGE_SIZE)}${comments}${closing} }`
+  })
+  return { document: repositoryDocument(fields), aliases }
+}
 
 interface ItemsByNumberAlias {
   readonly alias: string

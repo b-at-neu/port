@@ -7,7 +7,7 @@ import type { GitHubHttpResult } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
 import { hostFs } from '@/main/platform'
 import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/pipeline/board/sources'
-import { githubCtx, httpFail, httpOk, queryOf } from '../../../fixtures/github-http'
+import { boardCtx, httpFail, httpOk, queryOf } from '../../../fixtures/github-http'
 import { EMPTY_PIPELINE_BODY } from '../../../fixtures/pipeline-reply'
 import { createFakePlatform } from '../../../support/fake-platform'
 
@@ -37,15 +37,15 @@ const GITHUB = { repoId: REPO_1, repo: REPO, vocabulary: VOCAB, integration: 'de
 describe('refreshGithub — Decision 4', () => {
   it('a failing attempt keeps the previous good fetch in the cache', async () => {
     const cache = createSourceCache()
-    await refreshGithub(githubCtx(() => Promise.resolve(okGh())), cache, GITHUB)
-    const outcome = await refreshGithub(githubCtx(() => Promise.resolve(failGh())), cache, GITHUB)
+    await refreshGithub(boardCtx(() => Promise.resolve(okGh())), cache, GITHUB)
+    const outcome = await refreshGithub(boardCtx(() => Promise.resolve(failGh())), cache, GITHUB)
     expect(outcome.ok).toBe(false)
     expect(cache.github.get(REPO_1)?.ok).toBe(true)
   })
 
   it('a never-succeeded source projects its own failure, never an empty read', async () => {
     const cache = createSourceCache()
-    await refreshGithub(githubCtx(() => Promise.resolve(failGh())), cache, GITHUB)
+    await refreshGithub(boardCtx(() => Promise.resolve(failGh())), cache, GITHUB)
     expect(cache.github.get(REPO_1)?.ok).toBe(false)
   })
 
@@ -53,7 +53,7 @@ describe('refreshGithub — Decision 4', () => {
     const cache = createSourceCache()
     let sawItemsByNumberCall = false
     await refreshGithub(
-      githubCtx((request) => {
+      boardCtx((request) => {
         if (queryOf(request).includes('issueOrPullRequest')) sawItemsByNumberCall = true
         return Promise.resolve(okGh())
       }),

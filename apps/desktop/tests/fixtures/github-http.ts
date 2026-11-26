@@ -1,9 +1,16 @@
 import type { ConditionalHttpResult, ConditionalRequest, ConditionalTransport, GhClassification, GitHubHttpResult, GitHubRequest, GitHubTransport } from '@/types/platform'
+import { createGithubTracker } from '@/main/github/tracker'
 import { createFakePlatform } from '../support/fake-platform'
 
 /** A fake platform whose GitHub read transport is `transport`; every other adapter throws when called. */
 export function githubCtx(transport: GitHubTransport) {
   return { ...createFakePlatform(), githubHttp: transport }
+}
+
+/** `githubCtx` plus a real GitHub tracker bound to the same transport, for the board read. */
+export function boardCtx(transport: GitHubTransport) {
+  const ctx = githubCtx(transport)
+  return { ...ctx, tracker: createGithubTracker(ctx) }
 }
 
 export function httpOk(body: string, headers: Readonly<Record<string, string>> = {}): GitHubHttpResult {
