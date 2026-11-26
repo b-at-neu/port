@@ -1,10 +1,23 @@
 import { describe, expect, it } from 'vitest'
+import { LAYER_CASES, MEMBER_CASES, layerViolations, memberFlagged } from '../../../eslint/boundaries.mjs'
 import { CASES, isParentImport } from '../../../eslint/no-parent-import.mjs'
 import { COLOUR_PATTERNS, CSS_COLOUR_PATTERNS } from '../../../eslint/no-raw-colour.mjs'
 
 describe('port/no-parent-import', () => {
   it.each(CASES)('isParentImport($file, $spec) is $flagged', ({ file, spec, flagged }) => {
     expect(isParentImport(file, spec)).toBe(flagged)
+  })
+})
+
+describe('main layer rules', () => {
+  it.each(LAYER_CASES)('$file importing $spec is allowed: $allowed', ({ file, spec, allowed }) => {
+    expect(layerViolations(file, spec).length === 0).toBe(allowed)
+  })
+})
+
+describe('main member rules', () => {
+  it.each(MEMBER_CASES)('$rule on .$name is flagged: $flagged', ({ name, rule, flagged }) => {
+    expect(memberFlagged(rule, name)).toBe(flagged)
   })
 })
 

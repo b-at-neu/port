@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { OFFLOAD_OPS } from '@/types/offload'
-import type { StateEngine } from '@/types/offload'
+import { OFFLOAD_OPS } from '@/main/worker/protocol'
+import type { StateEngine } from '@/main/pipeline/context'
 import { createInProcessEngine } from '@/main/worker/engine'
 import { handleRequest } from '@/main/worker/dispatch'
 import { engineCtx, fakeGit, readyEntry } from '../../../fixtures/watcher-harness'

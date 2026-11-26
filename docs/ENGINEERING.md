@@ -124,6 +124,15 @@ Applies to everything under `apps/desktop`. Older code is migrated by the simpli
 Each rule is an ESLint rule in `apps/desktop/eslint.config.mjs`.
 
 - Main-process features in `main/features/<feature>/`, platform adapters in `main/platform/`, the composition root in `main/app/`.
+- `main/<dir>/` imports only the layers listed for it; `app/` and `main/index.ts` are the only composition roots and import anything. The `LAYERS` table in `eslint/boundaries.mjs` is the source, and each row is the `layer-<dir>` rule:
+  - `platform` imports `platform`.
+  - `repos` imports `platform`, `repos`.
+  - `github` imports `platform`, `repos`, `github`.
+  - `sessions` imports `platform`, `repos`, `sessions`.
+  - `pipeline` imports `platform`, `repos`, `github`, `sessions`, `pipeline`.
+  - `dispatch` imports everything `pipeline` does, plus `dispatch`.
+  - `worker` imports everything `pipeline` does, plus `worker`.
+  - `features` imports every layer except `worker`; from `app` only `define`, `schemas` and `context`, and from `platform` only `paths`, `json-store` and the index type.
 - Renderer screens in `renderer/pages/<page>/`; shared pieces in `renderer/components/` and `renderer/data/`.
 - Code shared by both processes is pure and lives in `utils/`. `types/` holds only types with no runtime schema.
 - Cross-folder imports use `@/<top-level>/…`, never `../`.
@@ -155,6 +164,7 @@ Each rule is an ESLint rule in `apps/desktop/eslint.config.mjs`.
 ### Checks
 
 - No new `scripts/checks` module asserts on `apps/desktop` source text; layering rules go in ESLint.
+- `ghWrite` is read only in `main/github/writes/`, `main/platform/` and `main/worker/engine.ts`; the `githubHttp`, `githubConditional` and `githubPublic` members only in `main/github/`, `main/platform/` and `main/worker/engine.ts`. Everything else takes a narrow ctx.
 - Remove duplication rather than pinning it. An unavoidable copy (bundled data) is pinned by a test or a type.
 - Only the safety properties below may be checked by desktop path.
 

@@ -27,8 +27,60 @@ export const RENDERER_SYNTAX = [
   { selector: "CallExpression[callee.property.name='insertAdjacentHTML']", message: 'insertAdjacentHTML is banned here — a tool result or repository text is untrusted.' },
 ]
 
+/** Each `src/main/<dir>` and the `src/main/<dir>` layers it may import. `app/` and `src/main/index.ts` are the composition roots and have no row. */
+export const LAYERS = {
+  platform: ['platform'],
+  repos: ['platform', 'repos'],
+  github: ['platform', 'repos', 'github'],
+  sessions: ['platform', 'repos', 'sessions'],
+  pipeline: ['platform', 'repos', 'github', 'sessions', 'pipeline'],
+  dispatch: ['platform', 'repos', 'github', 'sessions', 'pipeline', 'dispatch'],
+  worker: ['platform', 'repos', 'github', 'sessions', 'pipeline', 'worker'],
+  // `app` is listed so the carve-out below can name the three modules features may take from it.
+  features: ['platform', 'repos', 'github', 'sessions', 'pipeline', 'dispatch', 'features', 'app'],
+}
+
+const MAIN_DIRS = [...Object.keys(LAYERS), 'app']
+const LAYER_MESSAGE = `Layer order is platform, repos, then github and sessions, then pipeline, then dispatch or worker, then features; only app/ composes all of them (ENGINEERING §9).`
+const FEATURES_PATTERNS = [
+  { regex: '^@/main/app(?:/(?!(?:define|schemas|context)$).*)?$', message: 'features/ imports from app/ only define, schemas and context.' },
+  { regex: '^@/main/platform/(?!(?:paths|json-store)$)', message: 'features/ reaches platform through ctx; only platform/paths and platform/json-store are importable.' },
+]
+
+const layerRestriction = (dir) => ({
+  id: `layer-${dir}`,
+  files: [`src/main/${dir}/**`],
+  patterns: [
+    {
+      regex: `^@/main/(?:${MAIN_DIRS.filter((other) => !LAYERS[dir].includes(other)).join('|')})(?:/.*)?$`,
+      message: `main/${dir}/ may import only ${LAYERS[dir].join(', ')}. ${LAYER_MESSAGE}`,
+    },
+    ...(dir === 'features' ? FEATURES_PATTERNS : []),
+  ],
+  ...(dir === 'features' ? { paths: [{ name: 'electron', message: 'Only main/app/ and main/platform/ reach Electron.' }] } : {}),
+})
+
+const GH_WRITE_NAME = '^ghWrite$'
+const GITHUB_HTTP_NAME = '^github(?:Http|Conditional|Public)$'
+
+const memberSyntax = (name, message) => [
+  { selector: `MemberExpression[property.name=/${name}/]`, message },
+  { selector: `ObjectPattern > Property[key.name=/${name}/]`, message },
+]
+
 /** One restriction: where it applies (`files` minus `except`, repo-relative to apps/desktop) and what it bans. */
 export const RESTRICTIONS = [
+  ...Object.keys(LAYERS).map(layerRestriction),
+  {
+    id: 'gh-write',
+    except: ['src/main/github/writes/**', 'src/main/platform/**', 'src/main/worker/engine.ts'],
+    syntax: memberSyntax(GH_WRITE_NAME, 'Writes go through `github/writes`; take a narrow ctx instead.'),
+  },
+  {
+    id: 'github-http-member',
+    except: ['src/main/github/**', 'src/main/platform/**', 'src/main/worker/engine.ts'],
+    syntax: memberSyntax(GITHUB_HTTP_NAME, 'GitHub reads go through the tracker in `github/`; take a narrow ctx instead.'),
+  },
   {
     id: 'child-process',
     except: ['src/main/platform/run.ts'],
@@ -69,7 +121,7 @@ export const RESTRICTIONS = [
   { id: 'no-repo-scripts', patterns: [{ group: ['**/scripts/**', '**/plugins/**'], message: 'apps/desktop/src imports nothing from scripts/ or plugins/ (ENGINEERING §9).' }] },
   {
     id: 'gh',
-    except: ['src/main/github/writes/**', 'src/main/platform/**', 'src/main/worker/engine.ts'],
+    except: ['src/main/github/writes/**', 'src/main/platform/**'],
     paths: [{ name: '@/main/platform/gh', importNames: ['gh', 'ghJson'], message: 'Only main/github/writes/ calls gh; reads go through platform/github-http.' }],
   },
   {
@@ -198,6 +250,49 @@ function globToRegExp(glob) {
 
 const matchesAny = (globs, file) => globs.some((g) => globToRegExp(g).test(file))
 const applies = (r, file) => matchesAny(r.files ?? SRC, file) && !matchesAny(r.except ?? [], file)
+
+/** The `layer-*` restrictions that flag `file` importing `spec`. */
+export function layerViolations(file, spec) {
+  return RESTRICTIONS.filter((r) => r.id.startsWith('layer-') && applies(r, file) && (r.patterns ?? []).some((p) => new RegExp(p.regex).test(spec))).map((r) => r.id)
+}
+
+const MEMBER_RULES = { 'gh-write': GH_WRITE_NAME, 'github-http-member': GITHUB_HTTP_NAME }
+
+/** Whether the member rule `rule` flags a property named `name`. */
+export const memberFlagged = (rule, name) => new RegExp(MEMBER_RULES[rule]).test(name)
+
+export const LAYER_CASES = [
+  { file: 'src/main/sessions/x.ts', spec: '@/main/github/y', allowed: false },
+  { file: 'src/main/sessions/x.ts', spec: '@/main/pipeline/context', allowed: false },
+  { file: 'src/main/sessions/x.ts', spec: '@/main/repos', allowed: true },
+  { file: 'src/main/github/x.ts', spec: '@/main/sessions/locate', allowed: false },
+  { file: 'src/main/platform/x.ts', spec: '@/main/repos', allowed: false },
+  { file: 'src/main/repos/x.ts', spec: '@/main/platform/paths', allowed: true },
+  { file: 'src/main/pipeline/x.ts', spec: '@/main/github/tracker', allowed: true },
+  { file: 'src/main/pipeline/x.ts', spec: '@/main/dispatch/context', allowed: false },
+  { file: 'src/main/dispatch/x.ts', spec: '@/main/pipeline/context', allowed: true },
+  { file: 'src/main/dispatch/x.ts', spec: '@/main/worker/client', allowed: false },
+  { file: 'src/main/worker/x.ts', spec: '@/main/dispatch/launch', allowed: false },
+  { file: 'src/main/worker/x.ts', spec: '@/main/pipeline/context', allowed: true },
+  { file: 'src/main/features/x.ts', spec: '@/main/app/router', allowed: false },
+  { file: 'src/main/features/x.ts', spec: '@/main/app/context', allowed: true },
+  { file: 'src/main/features/x.ts', spec: '@/main/worker/client', allowed: false },
+  { file: 'src/main/features/x.ts', spec: '@/main/platform/gh', allowed: false },
+  { file: 'src/main/features/x.ts', spec: '@/main/platform/paths', allowed: true },
+  { file: 'src/main/features/x.ts', spec: '@/main/platform', allowed: true },
+  { file: 'src/main/app/x.ts', spec: '@/main/worker/client', allowed: true },
+  { file: 'src/main/index.ts', spec: '@/main/app/router', allowed: true },
+]
+
+export const MEMBER_CASES = [
+  { name: 'ghWrite', rule: 'gh-write', flagged: true },
+  { name: 'gh', rule: 'gh-write', flagged: false },
+  { name: 'githubHttp', rule: 'github-http-member', flagged: true },
+  { name: 'githubConditional', rule: 'github-http-member', flagged: true },
+  { name: 'githubPublic', rule: 'github-http-member', flagged: true },
+  { name: 'github', rule: 'github-http-member', flagged: false },
+  { name: 'githubTracker', rule: 'github-http-member', flagged: false },
+]
 
 /** One config block per distinct set of restrictions, each listing its files by exact path. */
 export function boundaryBlocks(files) {

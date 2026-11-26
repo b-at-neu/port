@@ -6,7 +6,7 @@ import { describeHttp } from '@/main/github/envelope'
 import type { EtagCache } from '@/types/github'
 import type { ConditionalRequest } from '@/types/platform'
 import type { GithubPrecheckOutcome } from '@/types/state'
-import type { TrackerPrecheckParams } from '@/types/tracker'
+import type { TrackerPrecheckParams } from '@/main/github/tracker/types'
 
 type PrecheckParams = TrackerPrecheckParams & { readonly cache: EtagCache }
 

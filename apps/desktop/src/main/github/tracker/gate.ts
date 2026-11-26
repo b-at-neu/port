@@ -5,7 +5,7 @@ import { bodyOf, classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
 import { buildGatePreflightQuery } from '@/main/github/tracker/query'
 import { repoGraphqlRequest } from '@/main/github/request'
-import type { ItemNumberParams } from '@/types/tracker'
+import type { ItemNumberParams } from '@/main/github/tracker/types'
 
 function kindOfTypename(typename: unknown): 'issue' | 'pull-request' | undefined {
   if (typename === 'Issue') return 'issue'

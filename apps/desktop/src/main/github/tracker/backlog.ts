@@ -8,7 +8,7 @@ import { EMPTY_CHILDREN, fetchChildren } from '@/main/github/tracker/backlog-chi
 import { blockedByField, blockingField } from '@/main/github/tracker/query'
 import { repoGraphqlRequest } from '@/main/github/request'
 import type { GraphQLErrorEntry } from '@/types/github'
-import type { BacklogListParams } from '@/types/tracker'
+import type { BacklogListParams } from '@/main/github/tracker/types'
 
 const PAGE_SIZE = 100
 const ASSIGNEE_PAGE_SIZE = 10

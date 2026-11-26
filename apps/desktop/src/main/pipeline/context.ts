@@ -1,16 +1,63 @@
 // The narrow ctx picks pipeline modules take; a full AppContext satisfies each one structurally.
 import type { GitHubReadContext, GitHubWriteContext } from '@/main/github/context'
+import type { Tracker } from '@/main/github/tracker'
 import type { Platform } from '@/main/platform'
 import { isReadyEntry, type Repos } from '@/main/repos'
 import type { ReadyEntry } from '@/types/actions'
 import type { AutoPlanner, Dispatcher, RunStateStore } from '@/types/dispatch'
+import type { LocalRepoRef } from '@/types/github'
 import type { IncidentLog } from '@/types/incidents'
-import type { StateEngine } from '@/types/offload'
-import type { PipelineStateStore } from '@/types/pipeline-state'
+import type { PipelineStateStore, PipelineView, TrackedRef } from '@/types/pipeline-state'
+import type { RunSearchParams, SearchResult } from '@/types/search'
+import type { ListSessionsResult, OpenTailParams, PollTailParams, CloseTailParams, SessionScan } from '@/types/sessions'
+import type { GithubPrecheckOutcome, PipelineState, RefreshOutcome } from '@/types/state'
 import type { RunStore } from '@/types/stage'
 import type { ForceDispatch, RefreshMemo, RerunMemo, UnknownStreaks } from '@/types/tick'
-import type { Tracker } from '@/types/tracker'
-import type { RepoId } from '@/utils/repos'
+import type { LabelVocabulary, VerifiableVocabulary } from '@/utils/labels/vocabulary'
+import type { RepoId, RepositoryEntry } from '@/utils/repos'
+import type { TranscriptTailOpen, TranscriptTailPoll } from '@/utils/sessions/transcript'
+
+interface RepoRoot {
+  readonly repoId: RepoId
+  readonly repoRoot: string
+}
+
+interface RepoIdParams {
+  readonly repoId: RepoId
+}
+
+interface ReposParams {
+  readonly repos: readonly LocalRepoRef[]
+}
+
+interface GithubParams {
+  readonly repoId: RepoId
+  readonly repo: { readonly owner: string; readonly name: string }
+  readonly vocabulary: LabelVocabulary
+  readonly verify?: VerifiableVocabulary
+  readonly integration: string
+  /** The store's tracked items; `null` or absent sweeps GitHub for the seed read. */
+  readonly tracked?: readonly TrackedRef[] | null
+}
+
+type SearchParams = Pick<RunSearchParams, 'scan' | 'indexDir' | 'query' | 'scope'>
+
+/** Every method returns a Promise and takes only structured-cloneable data, so the same shape runs in-process or across a worker boundary. */
+export interface StateEngine {
+  refreshSessions(params: ReposParams): Promise<RefreshOutcome>
+  refreshWorktrees(params: RepoRoot): Promise<RefreshOutcome>
+  refreshDenials(params: RepoRoot): Promise<RefreshOutcome>
+  refreshGithub(params: GithubParams): Promise<RefreshOutcome>
+  precheckGithub(params: Pick<GithubParams, 'repoId' | 'repo'>): Promise<GithubPrecheckOutcome>
+  project(params: { readonly repositories: readonly RepositoryEntry[]; readonly views?: Readonly<Record<string, PipelineView>> }): Promise<PipelineState>
+  scanSessions(params: ReposParams): Promise<SessionScan>
+  listSessions(): Promise<ListSessionsResult>
+  search(params: SearchParams): Promise<SearchResult>
+  tailOpen(params: OpenTailParams): Promise<TranscriptTailOpen>
+  tailPoll(params: PollTailParams): Promise<TranscriptTailPoll>
+  tailClose(params: CloseTailParams): Promise<void>
+  forgetRepo(params: RepoIdParams): Promise<void>
+}
 
 export interface PipelineStores {
   readonly stores: {

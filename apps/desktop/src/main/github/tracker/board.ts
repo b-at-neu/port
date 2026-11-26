@@ -5,7 +5,7 @@ import { applyItemDetails, mapPipelineItems } from '@/main/github/map'
 import { asRecord, readDetailChunks, readTrackedChunks, selectTracked, sweepSurface } from '@/main/github/sweep'
 import { buildIssueDetailsQuery, buildIssueSweepQuery, buildTrackedIssuesQuery } from '@/main/github/tracker/query'
 import type { GraphQLErrorEntry, PipelineItem } from '@/types/github'
-import type { BoardIssuesFetch, BoardIssuesParams } from '@/types/tracker'
+import type { BoardIssuesFetch, BoardIssuesParams } from '@/main/github/tracker/types'
 import type { LabelKey, RepoLabels } from '@/utils/labels/vocabulary'
 
 // Only an issue alias's own blockedBy/comments/closedByPullRequestsReferences error is per-field: it costs a tag, never the board.

@@ -1,7 +1,7 @@
 // What a registered repository looks like to the harness that would actually dispatch agents in it: the default branch at origin/HEAD, never the checked-out files. Every step degrades to a diagnostic rather than a failure.
 import type { Platform } from '@/main/platform'
 import type { CommandResult } from '@/types/platform'
-import type { RefRead } from '@/types/registry'
+import type { RefRead } from '@/main/repos/config/effective'
 import { CONFIG_PATH } from '@/main/repos/config/paths'
 
 const DEFAULT_REF = 'refs/remotes/origin/HEAD'

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { OffloadRequest, OffloadResponse } from '@/types/offload'
+import type { OffloadRequest, OffloadResponse } from '@/main/worker/protocol'
 import { createWorkerEngine } from '@/main/worker/client'
 
 type Listener = (value: never) => void

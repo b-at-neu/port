@@ -1,6 +1,6 @@
 import type { Platform } from '@/main/platform'
 import { createGithubTracker } from '@/main/github/tracker'
-import type { StateEngine } from '@/types/offload'
+import type { StateEngine } from '@/main/pipeline/context'
 import type { SessionReader } from '@/types/sessions'
 import { readSessionState } from '@/main/sessions/adapter'
 import { createSdkSessionReader } from '@/main/sessions/reader'

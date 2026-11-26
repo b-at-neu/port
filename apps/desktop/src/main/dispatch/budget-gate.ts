@@ -23,7 +23,7 @@ import {
   sessionTotals,
   verdict,
 } from '@/main/github/budget-ledger'
-import type { LedgerRow, SessionRow, TicketTotal } from '@/types/budget'
+import type { LedgerRow, SessionRow, TicketTotal } from '@/main/github/budget-ledger'
 import type { ReadyEntry } from '@/types/actions'
 import type { BudgetCheckResult, BudgetGateFailure, BudgetReportResult, BudgetResetResult, BudgetSweepResult } from '@/types/dispatch'
 import type { TickActionable } from '@/types/tick'

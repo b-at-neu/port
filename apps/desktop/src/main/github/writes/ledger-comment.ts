@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto'
 import type { LedgerWriteContext } from '@/main/github/context'
 import { pathOps } from '@/main/platform/paths'
-import type { LedgerWrite } from '@/types/budget'
+import type { LedgerWrite } from '@/main/github/budget-ledger'
 
 const firstLine = (text: string, fallback: string): string => text.trim().split('\n')[0] || fallback
 

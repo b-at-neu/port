@@ -4,8 +4,8 @@ import { graphqlRequest } from '@/main/github/request'
 import { parseLedger } from '@/main/github/budget-ledger'
 import type { GitHubReadContext } from '@/main/github/context'
 import type { GraphQLErrorEntry } from '@/types/github'
-import type { LedgerRead } from '@/types/budget'
-import type { LedgerParams } from '@/types/tracker'
+import type { LedgerRead } from '@/main/github/budget-ledger'
+import type { LedgerParams } from '@/main/github/tracker/types'
 
 const LEDGER_HEADING = '## Pipeline Cost'
 

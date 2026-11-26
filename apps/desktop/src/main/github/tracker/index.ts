@@ -1,4 +1,4 @@
-import type { Tracker } from '@/types/tracker'
+import type { Tracker } from '@/main/github/tracker/types'
 import { createEtagCache } from '@/main/github/conditional'
 import type { GitHubTrackerContext } from '@/main/github/context'
 import { postIssueBody } from '@/main/github/writes/apply'
@@ -10,6 +10,8 @@ import { fetchClaimPreflight, fetchItemsByNumber } from '@/main/github/tracker/i
 import { readItemStates } from '@/main/github/tracker/item-states'
 import { readLedger } from '@/main/github/tracker/ledger'
 import { precheckIssues } from '@/main/github/tracker/precheck'
+
+export type { BacklogListParams, BoardIssuesFetch, BoardIssuesParams, ItemNumberParams, ItemStatesParams, LedgerParams, Tracker, TrackerPrecheckParams } from '@/main/github/tracker/types'
 
 /** Binds the GitHub context slices once and owns the ETag cache the issues-list pre-check compares against. */
 export function createGithubTracker(ctx: GitHubTrackerContext): Tracker {

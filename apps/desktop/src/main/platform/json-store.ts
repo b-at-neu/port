@@ -1,5 +1,4 @@
 import type { z } from 'zod'
-import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
 import { pathOps } from '@/main/platform/paths'
 import type { FileResult } from '@/types/platform'
 
@@ -9,8 +8,6 @@ export interface StoreFs {
   /** Omitted when the directory is known to exist. */
   readonly ensureDir?: (path: string) => Promise<FileResult<void>>
 }
-
-export const nodeStoreFs: StoreFs = { readJson: readJsonFile<unknown>, writeJsonAtomic: writeJsonFileAtomic, ensureDir: ensureDirectory }
 
 export type UnreadableReason = 'malformed' | 'newer-version' | 'io'
 
@@ -31,7 +28,7 @@ export interface JsonStoreOptions<T, Env> {
   readonly initial: T
   /** `read-only` never overwrites a file this build could not read; `reset` lets the next write replace it. */
   readonly unreadable: 'read-only' | 'reset'
-  readonly fs?: StoreFs
+  readonly fs: StoreFs
 }
 
 /** `written` is true only when a migrated file was written back; the old file is still the one on disk otherwise. */
@@ -57,7 +54,7 @@ function versionOf(raw: unknown): number | null {
 }
 
 export function createJsonStore<T, Env = void>(options: JsonStoreOptions<T, Env>): JsonStore<T, Env> {
-  const fs = options.fs ?? nodeStoreFs
+  const { fs } = options
   let current = options.initial
   let state: StoreStatus = { kind: 'loaded' }
   let tail: Promise<void> | null = null
