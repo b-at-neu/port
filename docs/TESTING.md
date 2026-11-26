@@ -28,7 +28,8 @@ The script reports full schema validation as **skipped**, because a draft 2020-1
 
 - Unit tests mirror `src/` under `apps/desktop/tests/unit/`: `src/main/sessions/reader.ts` → `tests/unit/main/sessions/reader.test.ts`.
 - Shared data, fakes and helpers used by more than one test live in `apps/desktop/tests/fixtures/`. A helper used by one test stays in that test.
-- Tests import source with `@/…`, never `../`. vitest reads tests only from `tests/unit/`.
+- Tests import source with `@/…`, never `../`. vitest reads tests from two roots: `tests/unit/` and `tests/scenarios/`.
+- A scenario in `tests/scenarios/` drives one flow through `createTestContext` and real `src/main` code. It fakes only the adapters (GitHub, git, the hosted-session store, the clock) and asserts the final ticket record, its label mirror and the fake-side effects, never the order of calls. Nothing under `src/main` is mocked.
 
 ## Desktop E2E flows
 

@@ -11,7 +11,7 @@ export default defineConfig({
   define: { __PORT_BUILD_COMMIT__: 'null', __PORT_RELEASE_REPO__: JSON.stringify('octo/port'), __PORT_E2E__: 'false' },
   test: {
     environment: 'node',
-    include: ['tests/unit/**/*.test.ts'],
+    include: ['tests/unit/**/*.test.ts', 'tests/scenarios/**/*.test.ts'],
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx}'],
