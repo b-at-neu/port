@@ -4,9 +4,8 @@ import { pathOps } from '@/main/platform/paths'
 import { readAtDefaultRef } from '@/main/repos/config/harness'
 import { CONFIG_PATH } from '@/main/repos/config/paths'
 import { BUDGET_SESSION } from '@/main/dispatch/budget'
-import type { GitHubReadContext, LedgerWriteContext } from '@/main/github/context'
+import type { GitHubReadContext, LedgerWriteContext, TrackerContext } from '@/main/github/context'
 import { issueForPr } from '@/main/github/ledger-read'
-import { readLedger } from '@/main/github/tracker/ledger'
 import { writeLedger } from '@/main/github/writes/ledger-comment'
 import {
   allowLine,
@@ -28,7 +27,7 @@ import type { ReadyEntry } from '@/types/actions'
 import type { BudgetCheckResult, BudgetGateFailure, BudgetReportResult, BudgetResetResult, BudgetSweepResult } from '@/types/dispatch'
 import type { TickActionable } from '@/types/tick'
 
-export type BudgetContext = Pick<Platform, 'git' | 'fs' | 'clock' | 'paths'> & GitHubReadContext & LedgerWriteContext
+export type BudgetContext = Pick<Platform, 'git' | 'fs' | 'clock' | 'paths'> & GitHubReadContext & LedgerWriteContext & TrackerContext
 
 type Ceiling = { readonly ok: true; readonly ceilingSeconds: number | null } | BudgetGateFailure
 type SessionLog = { readonly ok: true; readonly rows: readonly SessionRow[] } | BudgetGateFailure
@@ -47,7 +46,7 @@ const messageOf = (error: unknown): string => (error instanceof Error ? error.me
 
 /** Reads first, so a concurrent write never clobbers rows not just produced. `null` on an unreadable or unwritable ledger. */
 async function appendToLedger(ctx: BudgetContext, entry: ReadyEntry, issue: number, row: LedgerRow, ceilingSeconds: number | null): Promise<readonly LedgerRow[] | null> {
-  const existing = await readLedger(ctx, { owner: entry.config.owner, name: entry.config.name, issue })
+  const existing = await ctx.tracker.readLedger({ owner: entry.config.owner, name: entry.config.name, issue })
   if (!existing.ok) return null
   const rows = [...existing.rows, row]
   const written = await writeLedger(ctx, { repo: entry.config.repo, issue, ref: existing.ref, body: renderLedger(rows, ceilingSeconds), scratchDir: ctx.paths.temp })
@@ -164,7 +163,7 @@ async function check(ctx: BudgetContext, entry: ReadyEntry, candidate: Pick<Tick
     issue = resolved.issue
   }
 
-  const ledger = await readLedger(ctx, { owner: entry.config.owner, name: entry.config.name, issue })
+  const ledger = await ctx.tracker.readLedger({ owner: entry.config.owner, name: entry.config.name, issue })
   if (!ledger.ok) return { ok: true, verdict: 'hold', line: holdLine(issue, ledger.why) }
 
   const secondsUsed = ledger.seconds
@@ -185,7 +184,7 @@ async function check(ctx: BudgetContext, entry: ReadyEntry, candidate: Pick<Tick
 async function report(ctx: BudgetContext, entry: ReadyEntry, issue: number): Promise<BudgetReportResult> {
   const ceiling = await resolveCeiling(ctx, entry)
   if (!ceiling.ok) return ceiling
-  const ledger = await readLedger(ctx, { owner: entry.config.owner, name: entry.config.name, issue })
+  const ledger = await ctx.tracker.readLedger({ owner: entry.config.owner, name: entry.config.name, issue })
   if (!ledger.ok) return failed(`could not read #${String(issue)}'s cost ledger: ${ledger.why}`)
   return { ok: true, ...reportLedger(ledger.rows, ceiling.ceilingSeconds) }
 }

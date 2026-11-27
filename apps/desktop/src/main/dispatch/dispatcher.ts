@@ -11,7 +11,6 @@ import type { EndedStage } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
 import { isReadyEntry } from '@/main/repos'
 import { readOwnership, takeOwnership } from '@/main/repos/ownership'
-import { fetchItemsByNumber } from '@/main/github/tracker/items'
 import { dispatchableFrom, observableFrom } from '@/main/pipeline/tick/dispatchable'
 import { createRaiser, endedIntents, stageSnapshotOf } from '@/main/pipeline/incidents/raise'
 import { budgetLiveSets, sumCostUsd } from '@/main/dispatch/budget'
@@ -189,7 +188,7 @@ export function createDispatcher(ctx: DispatchContext): Dispatcher {
         return
       }
 
-      const reread = await fetchItemsByNumber(ctx, { repo: { owner: entry.config.owner, name: entry.config.name }, numbers: candidates.map((c) => c.number) })
+      const reread = await ctx.tracker.readItemsByNumber({ repo: { owner: entry.config.owner, name: entry.config.name }, numbers: candidates.map((c) => c.number) })
       if (!reread.ok) return // a failed re-read dispatches nothing this pass
 
       const resolvedByNumber = new Map(reread.resolved.map((r) => [r.number, r] as const))

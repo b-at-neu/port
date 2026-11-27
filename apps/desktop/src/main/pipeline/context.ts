@@ -1,5 +1,5 @@
 // The narrow ctx picks pipeline modules take; a full AppContext satisfies each one structurally.
-import type { GitHubReadContext, GitHubWriteContext } from '@/main/github/context'
+import type { GitHubReadContext, GitHubWriteContext, TrackerContext } from '@/main/github/context'
 import type { Tracker } from '@/main/github/tracker'
 import type { Platform } from '@/main/platform'
 import { isReadyEntry, type Repos } from '@/main/repos'
@@ -67,10 +67,10 @@ export interface PipelineStores {
 }
 
 /** The board read: the pull-request half reads GitHub directly, the issue half through the tracker. */
-export type BoardReadContext = GitHubReadContext & { readonly tracker: Pick<Tracker, 'readBoardIssues'> }
+export type BoardReadContext = GitHubReadContext & { readonly tracker: Pick<Tracker, 'readBoardIssues' | 'readItemsByNumber'> }
 
 /** Everything the state writer, the ownership read and the label and comment writes touch. */
-export type StateWriteContext = GitHubReadContext & GitHubWriteContext & Pick<Platform, 'fs'> & PipelineStores
+export type StateWriteContext = GitHubWriteContext & TrackerContext & Pick<Platform, 'fs'> & PipelineStores
 
 export type OperatorContext = StateWriteContext & { readonly repos: Pick<Repos, 'list'> }
 

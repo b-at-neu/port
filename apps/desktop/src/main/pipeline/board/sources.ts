@@ -1,5 +1,4 @@
 // One refresh primitive per source, each keeping the previous good value in place on a failed attempt. `watcher.ts` decides *when* to call these; no file here names a timer.
-import { fetchItemsByNumber } from '@/main/github/tracker/items'
 import { collectOrphanNumbers } from '@/main/pipeline/board/attach'
 import { readBoard } from '@/main/pipeline/board/board-read'
 import type { BoardReadContext } from '@/main/pipeline/context'
@@ -36,7 +35,7 @@ interface RefreshGithubParams {
   readonly agents: readonly AgentRecord[]
 }
 
-/** Fires the conditional `fetchItemsByNumber` re-check itself whenever the fresh sweep leaves orphan numbers, so `itemStates` stays dependent on a GitHub refresh. */
+/** Fires the `ctx.tracker.readItemsByNumber` re-check itself whenever the fresh sweep leaves orphan numbers, so `itemStates` stays dependent on a GitHub refresh. */
 export async function refreshGithub(ctx: BoardReadContext, cache: SourceCache, params: RefreshGithubParams): Promise<RefreshOutcome> {
   const fetch = await readBoard(ctx, { repo: params.repo, vocabulary: params.vocabulary, verify: params.verify, integration: params.integration, tracked: params.tracked })
   const previous = cache.github.get(params.repoId) ?? null
@@ -44,7 +43,7 @@ export async function refreshGithub(ctx: BoardReadContext, cache: SourceCache, p
 
   if (fetch.ok) {
     const orphanNumbers = collectOrphanNumbers(fetch.items, params.worktreeEntries, params.agents)
-    cache.itemStates.set(params.repoId, orphanNumbers.length === 0 ? null : await fetchItemsByNumber(ctx, { repo: params.repo, numbers: orphanNumbers }))
+    cache.itemStates.set(params.repoId, orphanNumbers.length === 0 ? null : await ctx.tracker.readItemsByNumber({ repo: params.repo, numbers: orphanNumbers }))
   }
 
   return fetch.ok

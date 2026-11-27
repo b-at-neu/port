@@ -10,6 +10,7 @@ import type { RepoId } from '@/utils/repos'
 import { boardSnapshot, reconciledItem, repositoryState } from '../../../../support/board-snapshot'
 import { createTestContext } from '../../../../support/context'
 import { createFakeRuns, type NewRun } from '../../../../support/fake-runs'
+import { createFakeTracker } from '../../../../support/fake-tracker'
 import { queuedAt, ticketAt } from '../../../../support/tickets'
 
 const REPO = 'repo-a' as RepoId
@@ -61,7 +62,6 @@ const moved = reconciledItem({ number: 38, ticket: ticketAt('review', queuedAt()
 
 const hoisted = vi.hoisted(() => ({ remove: vi.fn(), fetch: vi.fn(), resume: vi.fn(), restart: vi.fn() }))
 vi.mock('@/main/repos/worktree/worktree', async (original) => ({ ...(await original<object>()), removeSessionWorktreeAt: (_ctx: unknown, params: { path: string; force: boolean }) => hoisted.remove(params.path, params.force) as unknown }))
-vi.mock('@/main/github/tracker/items', async (original) => ({ ...(await original<object>()), fetchItemsByNumber: (_ctx: unknown, params: unknown) => hoisted.fetch(params) as unknown }))
 vi.mock('@/main/dispatch/stage/recover', async (original) => ({
   ...(await original<object>()),
   resumeStage: (_ctx: unknown, id: string) => hoisted.resume(id) as unknown,
@@ -85,7 +85,8 @@ function setup(registry = freshRegistry(), now: Date = AFTER_RESET) {
   const republish = vi.fn()
   const hostedStore = { list: () => live.map((path) => ({ phase: 'streaming', workspace: { worktree: { path } } })), capacity: () => Promise.resolve({ limit: 4 }) } as unknown as AppContext['live']['hostedStore']
   const watcher = { republish, snapshot: vi.fn() } as unknown as AppContext['live']['watcher']
-  const ctx = createTestContext({ stores: { runs: registry as unknown as RunStore }, live: { hostedStore, watcher } })
+  const tracker = createFakeTracker({ readItemsByNumber: (params) => hoisted.fetch(params) as Promise<ItemsByNumberFetch> })
+  const ctx = createTestContext({ tracker, stores: { runs: registry as unknown as RunStore }, live: { hostedStore, watcher } })
   ctx.clock.advance(now.getTime() - CLOCK_START)
   const pathExists = vi.spyOn(ctx.fs, 'exists').mockResolvedValue(true)
   const sweeper = createInterruptedSweeper(ctx)

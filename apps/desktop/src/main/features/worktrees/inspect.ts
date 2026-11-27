@@ -1,5 +1,4 @@
 // The one composition report, reclaim and purge share: enumerate, gather facts, resolve item states, classify.
-import { readItemStates } from '@/main/github/tracker/item-states'
 import { readWorktrees } from '@/main/repos/local/worktrees'
 import { pathOps } from '@/main/platform/paths'
 import type { AppContext } from '@/main/app/context'
@@ -17,7 +16,7 @@ type ReclaimerOwnFailureKind = 'not-a-repository' | 'no-integration-ref' | 'path
 export const _kindsCoverCommandResult: AssertEqual<ReclaimerFailureKind, CommandResultFailureKind | ReclaimerOwnFailureKind> = true
 
 /** What every reclaimer step reads and writes through. */
-export type ReclaimContext = Pick<AppContext, 'git' | 'fs' | 'clock' | 'githubHttp'>
+export type ReclaimContext = Pick<AppContext, 'git' | 'fs' | 'clock' | 'tracker'>
 
 /** Every git call runs with `core.longpaths` on, which Windows needs and other platforms ignore. */
 export function longpathsGit(git: GitRunner): GitRunner {
@@ -113,7 +112,7 @@ export async function inspectWorktrees(ctx: ReclaimContext, params: InspectParam
 
   const numbers = [...new Set(linked.flatMap(({ entry, isOutside }) => (isOutside || entry.correlation === null ? [] : [entry.correlation.number])))]
   const [owner = '', name = ''] = params.repo.split('/')
-  const stateRead = await readItemStates(ctx,{ repo: { owner, name }, numbers })
+  const stateRead = await ctx.tracker.readItemStates({ repo: { owner, name }, numbers })
   const states: ReadonlyMap<number, ItemStateName | null> = stateRead.ok ? stateRead.states : new Map()
   const githubError = stateRead.ok ? null : stateRead.message
 

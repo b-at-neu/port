@@ -11,6 +11,7 @@ import { createRecentsStore } from '@/main/features/folders/recents'
 import { createSessionIndex } from '@/main/sessions/hosting/session-index'
 import { createUsageLedger } from '@/main/sessions/hosting/usage-ledger'
 import { vi, type Mock } from 'vitest'
+import { createGithubTracker, type Tracker } from '@/main/github/tracker'
 import type { Platform } from '@/main/platform'
 import { pathOps } from '@/main/platform/paths'
 import { isReadyEntry, readyOf, type Repos } from '@/main/repos'
@@ -37,6 +38,8 @@ export interface TestContextOptions {
   /** Seeds the pipeline state file with these tickets for one repository, so it reads as seeded. */
   readonly tickets?: { readonly repoId: RepoId; readonly tickets: readonly Ticket[] }
   readonly repos?: Partial<Repos>
+  /** Defaults to the real tracker over `platform`'s fake transports. */
+  readonly tracker?: Tracker
   readonly stores?: Partial<AppContext['stores']>
   readonly live?: Partial<AppContext['live']>
 }
@@ -116,6 +119,7 @@ export function createTestContext(options: TestContextOptions = {}): TestContext
     emitted,
     ready: state.ready,
     repos,
+    tracker: options.tracker ?? createGithubTracker(platform),
     stores: unscriptedGroup('stores', stores),
     live: unscriptedGroup('live', options.live ?? {}),
   }

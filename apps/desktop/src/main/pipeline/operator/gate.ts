@@ -1,7 +1,7 @@
 import type { GateClassifyItem } from '@/types/gate'
 import type { OperatorMove, ReadyEntry } from '@/types/actions'
 
-// No `gh` import here — the read comes from `../github`, the write from `../writes`.
+// No `gh` import here — the read comes from `ctx.tracker`, the write from `../writes`.
 import { classifyGate } from '@/main/pipeline/gate/classify'
 
 import type { GateAnswerResponse, GatePreflight, GatePreflightResponse } from '@/types/gate'
@@ -11,7 +11,6 @@ import type { RepoId } from '@/utils/repos'
 import type { OwnershipSummary, WriteOutcome } from '@/types/writes'
 import { IMPLEMENTATION_PLAN_HEADING, sessionRequiredMarkerAt } from '@/main/pipeline/board/link'
 import { readyEntryOf, type OperatorContext, type StateWriteContext } from '@/main/pipeline/context'
-import { fetchGatePreflight } from '@/main/github/tracker/gate'
 import { postComment } from '@/main/github/writes/apply'
 
 import { readOwnership, toOwnershipSummary } from '@/main/repos/ownership'
@@ -71,7 +70,7 @@ export async function gatePreflight(ctx: OperatorContext, params: GatePreflightP
   const entry = await resolveReadyEntry(ctx, params.repoId)
   const ownership: OwnershipSummary = toOwnershipSummary(await readOwnership(ctx, { repoRoot: entry.path, repo: entry.config.repo }))
 
-  const fetch = await fetchGatePreflight(ctx, { repo: { owner: entry.config.owner, name: entry.config.name }, number: params.number })
+  const fetch = await ctx.tracker.readGatePreflight({ repo: { owner: entry.config.owner, name: entry.config.name }, number: params.number })
   if (!fetch.ok) return { kind: 'failed', message: fetch.message, ownership }
 
   if (!seeded(ctx, entry)) return { kind: 'failed', message: UNSEEDED_MESSAGE, ownership }
@@ -85,7 +84,7 @@ export async function gatePreflight(ctx: OperatorContext, params: GatePreflightP
 // A non-`applied` comment outcome aborts as `comment-failed`, with no label ever touched.
 export async function gateAnswer(ctx: OperatorContext, params: GateAnswerParams): Promise<GateAnswerResponse> {
   const entry = await resolveReadyEntry(ctx, params.repoId)
-  const fetch = await fetchGatePreflight(ctx, { repo: { owner: entry.config.owner, name: entry.config.name }, number: params.number })
+  const fetch = await ctx.tracker.readGatePreflight({ repo: { owner: entry.config.owner, name: entry.config.name }, number: params.number })
   if (!fetch.ok) return { kind: 'preflight-failed', message: fetch.message }
 
   if (!seeded(ctx, entry)) return { kind: 'answered', comment: null, labels: { kind: 'state-unsaved', message: UNSEEDED_MESSAGE } }

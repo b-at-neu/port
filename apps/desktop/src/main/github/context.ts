@@ -1,4 +1,7 @@
+import type { Tracker } from '@/main/github/tracker'
 import type { Platform } from '@/main/platform'
+
+export type TrackerContext = { readonly tracker: Tracker }
 
 export type GitHubReadContext = Pick<Platform, 'githubHttp' | 'clock'>
 

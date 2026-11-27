@@ -13,7 +13,7 @@ export const AUTO_RESUME_GRACE_MS = 60_000
 export interface StaleVerdict {
   /** Registry ids that have moved on. */
   readonly clear: readonly string[]
-  /** Numbers the open-only sweep no longer returns — the caller resolves them with one `fetchItemsByNumber`. */
+  /** Numbers the open-only sweep no longer returns — the caller resolves them with one `ctx.tracker.readItemsByNumber`. */
   readonly recheck: readonly number[]
 }
 

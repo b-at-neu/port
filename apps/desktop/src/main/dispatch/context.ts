@@ -18,6 +18,7 @@ export interface DispatchLive {
 }
 
 export type DispatchContext = StateWriteContext &
+  GitHubReadContext &
   LedgerWriteContext &
   Pick<Platform, 'paths' | 'git' | 'clock'> & {
     readonly repos: Pick<Repos, 'list'>
@@ -57,10 +58,9 @@ export type RecoverContext = StateWriteContext &
     }
   }
 
-export type SweepContext = RecoverContext &
-  GitHubReadContext & {
-    readonly live: { readonly watcher: Pick<PipelineWatcher, 'republish'> }
-  }
+export type SweepContext = RecoverContext & {
+  readonly live: { readonly watcher: Pick<PipelineWatcher, 'republish'> }
+}
 
 /** A failed read is retried by the scheduled poll, so it is never surfaced here. */
 export function requestRead(ctx: { readonly live: { readonly watcher: Pick<PipelineWatcher, 'refresh'> } }, repoId: RepoId): void {

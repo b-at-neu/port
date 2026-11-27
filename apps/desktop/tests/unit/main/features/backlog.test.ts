@@ -1,12 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import type { BacklogListParams } from '@/main/github/tracker'
+import type { BacklogDetailResponse, BacklogResponse } from '@/types/backlog'
 import { readyEntry } from '../../../support/repo-config'
 import { callAction, createTestContext } from '../../../support/context'
-import { fakeTransport, httpOk } from '../../../fixtures/github-http'
+import { createFakeTracker } from '../../../support/fake-tracker'
 import { ticketOf } from '../../../support/tickets'
 
 const REPO_ID = readyEntry().id
-const NO_BLOCKERS = { totalCount: 0, nodes: [] }
-const node = (number: number) => ({ number, title: `t${String(number)}`, url: `u${String(number)}`, createdAt: 'x', labels: { nodes: [] }, assignees: { nodes: [] }, blockedBy: NO_BLOCKERS, blocking: NO_BLOCKERS, parent: null })
 
 describe('backlog actions', () => {
   it.each(['backlog.list', 'backlog.detail'] as const)('%s rejects a repository that is not registered', async (name) => {
@@ -24,20 +24,22 @@ describe('backlog actions', () => {
     await expect(callAction(ctx, 'backlog.list', { repoId: REPO_ID })).rejects.toThrow("'backlog:list' could not list repositories: disk on fire")
   })
 
-  it('list omits the issues the store already tracks', async () => {
-    const body = JSON.stringify({ data: { repository: { issues: { totalCount: 3, nodes: [node(12), node(13), node(40)] } }, viewer: { login: 'octo-dev' } } })
+  it('list hands the tracker the issues the store already tracks and returns its reply', async () => {
+    const reply: BacklogResponse = { ok: true, items: [], scanned: 0, total: 0, viewer: null, fetchedAt: 'x' }
+    const listBacklog = vi.fn<(params: BacklogListParams) => Promise<BacklogResponse>>(() => Promise.resolve(reply))
     const ctx = createTestContext({
-      platform: { githubHttp: fakeTransport(httpOk(body)) },
+      tracker: createFakeTracker({ listBacklog }),
       repositories: [readyEntry()],
       tickets: { repoId: REPO_ID, tickets: [ticketOf({ repo: REPO_ID, ticket: 12 })] },
     })
     await ctx.ready
-    const result = await callAction(ctx, 'backlog.list', { repoId: REPO_ID })
-    expect(result.ok && result.items.map((item) => item.number)).toEqual([13, 40])
+    expect(await callAction(ctx, 'backlog.list', { repoId: REPO_ID })).toBe(reply)
+    expect(listBacklog).toHaveBeenCalledWith({ repo: { owner: 'o', name: 'a' }, tracked: new Set([12]) })
   })
 
-  it('detail passes a typed issue-missing outcome through', async () => {
-    const ctx = createTestContext({ platform: { githubHttp: fakeTransport(httpOk(JSON.stringify({ data: { repository: { detail: null } } }))) }, repositories: [readyEntry()] })
-    expect(await callAction(ctx, 'backlog.detail', { repoId: REPO_ID, number: 45 })).toMatchObject({ ok: false, kind: 'issue-missing' })
+  it('detail passes the tracker outcome through', async () => {
+    const reply: BacklogDetailResponse = { ok: false, kind: 'issue-missing', message: 'gone', fetchedAt: 'x' }
+    const ctx = createTestContext({ tracker: createFakeTracker({ readTicket: () => Promise.resolve(reply) }), repositories: [readyEntry()] })
+    expect(await callAction(ctx, 'backlog.detail', { repoId: REPO_ID, number: 45 })).toBe(reply)
   })
 })
