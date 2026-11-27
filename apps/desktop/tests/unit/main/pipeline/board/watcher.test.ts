@@ -64,10 +64,10 @@ describe('createPipelineWatcher — cadence', () => {
 
 describe('createPipelineWatcher — budgeted interval', () => {
   it.each([
-    { cost: 73, expected: 315_360 },
+    { cost: 73, expected: 210_240 },
     { cost: 1, expected: 60_000 },
   ])('a poll costing $cost stretches the GitHub interval to $expected ms', async ({ cost, expected }) => {
-    // Three round trips per poll (sweep, detail, then the integration history) each report the cost, so a poll costs three times it.
+    // Two round trips per poll each report the cost, so a poll costs twice it.
     const rig = await rigOn({ github: readyItemTransport('op', ['op'], { ...RATE_LIMIT_REPLY, cost, resetAt: '2026-01-01T00:00:10Z' }) })
     const watcher = rig.watch()
     const snap = await watcher.refresh()
@@ -264,8 +264,8 @@ describe('createPipelineWatcher — registry re-list', () => {
 
 describe('createPipelineWatcher — tick wiring', () => {
   it.each([
-    { name: 'carries a real ready repository through to an actionable dispatch', assignees: ['op'], actionable: [{ number: 42, kind: 'issue', stage: 'plan', trigger: 'ready', agent: 'plan', unchecked: false, cycle: null }], held: [] },
-    { name: 'holds a ready item not assigned to the viewer, unowned, in the same TickReport', assignees: [], actionable: [], held: [{ number: 42, kind: 'issue', stage: 'plan', trigger: 'ready', reason: 'unowned', contention: null, escalation: null }] },
+    { name: 'carries a real ready repository through to an actionable dispatch', assignees: ['op'], actionable: [{ number: 42, kind: 'issue', stage: 'plan', mode: 'fresh', agent: 'plan', unchecked: false, cycle: null }], held: [] },
+    { name: 'holds a ready item not assigned to the viewer, unowned, in the same TickReport', assignees: [], actionable: [], held: [{ number: 42, kind: 'issue', stage: 'plan', reason: 'unowned', contention: null, escalation: null }] },
   ])('$name', async ({ assignees, actionable, held }) => {
     const rig = await rigOn({ github: readyItemTransport('op', assignees), tickets: { repoId: 'repo-a' as RepoId, tickets: [ticketAt('plan', queuedAt(), { repo: 'o/a' as Ticket['repo'], ticket: 42 })] } })
     const snap = await rig.watch().refresh()

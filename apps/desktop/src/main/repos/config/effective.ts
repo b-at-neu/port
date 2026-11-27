@@ -54,8 +54,8 @@ function isNonBlankString(value: unknown): value is string {
 }
 
 /** The two maps the vocabulary splits across: `labels` holds the marker and the gate, `states` the rest. */
-const APP_LABEL_KEYS: readonly DisplayKey[] = ['port', 'needsYou']
-const APP_STATE_KEYS: readonly DisplayKey[] = DISPLAY_KEYS.filter((key) => !APP_LABEL_KEYS.includes(key))
+const MARKER_KEYS: readonly DisplayKey[] = ['port', 'needsYou']
+const APP_STATE_KEYS: readonly DisplayKey[] = DISPLAY_KEYS.filter((key) => !MARKER_KEYS.includes(key))
 
 function namesOf(keys: readonly string[], defaults: readonly { readonly key: string; readonly name: string }[], raw: Readonly<Record<string, unknown>>): Record<string, string> {
   const out: Record<string, string> = {}
@@ -69,7 +69,7 @@ function namesOf(keys: readonly string[], defaults: readonly { readonly key: str
 
 /** Each map holds its keys' non-blank `raw` value, else the default name, so an override's `portDefault` reads the real value. */
 export function toShape(portResolved: PortResolved, rawLabels: Readonly<Record<string, unknown>>, rawStates: Readonly<Record<string, unknown>> = {}): EffectiveConfigShape {
-  const labels = namesOf(APP_LABEL_KEYS, DISPLAY_DEFAULTS, rawLabels)
+  const labels = namesOf(MARKER_KEYS, DISPLAY_DEFAULTS, rawLabels)
   const states = namesOf(APP_STATE_KEYS, DISPLAY_DEFAULTS, rawStates)
   return {
     integration: portResolved.branches.integration,
@@ -141,7 +141,7 @@ export async function resolveEffectiveConfig(
   }
 
   const parsed = parseOverrides(claudeMdText)
-  const keys = { labelKeys: [...APP_LABEL_KEYS], stateKeys: [...APP_STATE_KEYS] }
+  const keys = { labelKeys: [...MARKER_KEYS], stateKeys: [...APP_STATE_KEYS] }
   const { cfg, applied, refused } = applyOverrides(toShape(portResolved, rawLabels, rawStates), parsed, keys)
 
   let excusedCheckName: string | null = null

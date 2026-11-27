@@ -164,12 +164,11 @@ describe('inspectRepository', () => {
     expect(entry.diagnostics.some((d) => d.kind === 'schema-violations')).toBe(false)
   })
 
-  it('still reports an unknown labels key beside the legacy ones as a schema violation', async () => {
+  it('reports any labels key outside the display labels as legacy, an unknown one too', async () => {
     const repo = await makeRepo()
     writeConfig(repo, JSON.stringify({ repo: 'o/n', labels: { ready: 'go', bogus: 'x' } }))
     const entry = await readyEntry(repo)
-    expect(entry.diagnostics).toContainEqual({ kind: 'legacy-label-overrides', keys: ['ready'] })
-    expect(entry.diagnostics.filter((d) => d.kind === 'schema-violations')).toHaveLength(1)
+    expect(entry.diagnostics).toContainEqual({ kind: 'legacy-label-overrides', keys: ['ready', 'bogus'] })
   })
 
   it('resolves an app-only repository to the seven display labels', async () => {
@@ -193,13 +192,13 @@ describe('inspectRepository', () => {
     expect(entry.diagnostics.filter((d) => d.kind === 'override-refused')).toHaveLength(1)
   })
 
-  it('a non-app-only repository refuses a states.<key> CLAUDE.md override', async () => {
+  it('applies a states.<key> CLAUDE.md override whether or not the repository is app-only', async () => {
     const repo = await makeRepo()
     writeConfig(repo, JSON.stringify({ repo: 'o/n' }))
-    writeClaudeMd(repo, '<!-- port-overrides:begin -->\n```port-overrides\nstates.approved = shipped  # not app-only\n```\n<!-- port-overrides:end -->\n')
+    writeClaudeMd(repo, '<!-- port-overrides:begin -->\n```port-overrides\nstates.approved = shipped  # we call it shipped\n```\n<!-- port-overrides:end -->\n')
     const entry = await readyEntry(repo)
-    expect(entry.config.overrides).toEqual([])
-    expect(entry.diagnostics.filter((d) => d.kind === 'override-refused')).toHaveLength(1)
+    expect(entry.config.displayVocabulary.labels.find((l) => l.key === 'approved')).toMatchObject({ name: 'shipped', source: 'CLAUDE.md' })
+    expect(entry.diagnostics.filter((d) => d.kind === 'override-refused')).toEqual([])
   })
 
   it('reports config-malformed for invalid JSON', async () => {

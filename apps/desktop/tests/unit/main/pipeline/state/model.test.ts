@@ -133,10 +133,10 @@ describe('view and tracked', () => {
     const record = recordOf(withPr(7, 70))
     expect(viewOf(undefined)).toEqual({ kind: 'unseeded' })
     expect(trackedOf(undefined)).toBeNull()
-    expect(viewOf(record)).toMatchObject({ kind: 'store', items: [{ kind: 'issue', number: 7, keys: ['prOpened'] }, { kind: 'pull-request', number: 70, issue: 7, keys: ['readyForReview'] }] })
+    expect(viewOf(record)).toMatchObject({ kind: 'store', items: [{ kind: 'issue', number: 7 }, { kind: 'pull-request', number: 70 }] })
     expect(trackedOf(record)).toEqual([
-      { kind: 'issue', number: 7, keys: ['marker', 'prOpened'] },
-      { kind: 'pull-request', number: 70, keys: ['marker', 'readyForReview'] },
+      { kind: 'issue', number: 7 },
+      { kind: 'pull-request', number: 70 },
     ])
   })
 })

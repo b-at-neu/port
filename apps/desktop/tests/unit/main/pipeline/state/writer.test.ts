@@ -199,7 +199,7 @@ describe('writeEvent — the counterpart', () => {
   })
 
   it('records a counterpart failure but returns the target outcome', async () => {
-    const r = await rig({ tickets: [withPr({ status: queued })], items: [issueItem(['port', 'implementing']), { ...PR_ITEM, labels: ['port', 'reviewing'] }] })
+    const r = await rig({ tickets: [withPr({ status: queued })], items: [issueItem(['port', 'implementing']), { ...PR_ITEM, labels: ['approved'] }] })
     r.github.failWrites(7, 'offline')
     expect((await r.event(prRequest())).kind).toBe('applied')
     expect(r.ticket(9, 'pull-request')?.mirror.failure?.outcome).toMatchObject({ kind: 'write-failed', stderr: 'offline' })

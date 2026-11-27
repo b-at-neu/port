@@ -11,7 +11,7 @@ test.beforeEach(async () => {
     state: sandboxState({
       viewer: 'octocat',
       repo: 'acme/widgets',
-      pulls: [{ number: 202, title: 'Add the thing', labels: ['approved'], assignees: ['octocat'], headRefOid: 'abc1234def5678' }],
+      pulls: [{ number: 202, title: 'Add the thing', labels: ['port', 'approved'], assignees: ['octocat'], headRefOid: 'abc1234def5678' }],
     }),
   })
 })
@@ -35,7 +35,7 @@ test('sends an approved PR back to revision, posting the note before swapping la
   await page.getByRole('button', { name: 'Send back to revision' }).click()
 
   await expect(page.getByRole('dialog')).toBeHidden()
-  await expect(page.locator('[data-sonner-toast]')).toContainText('needs revision', { timeout: 15_000 })
+  await expect(page.locator('[data-sonner-toast]')).toContainText('revision queue', { timeout: 15_000 })
 
   const calls = await harness.calls()
   const commentIndex = calls.findIndex((call) => call.command === 'gh' && call.args[0] === 'pr' && call.args[1] === 'comment' && call.args[2] === '202')

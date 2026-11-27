@@ -25,6 +25,6 @@ describe('stateLabelsOf', () => {
   })
 
   it('follows a renamed label', () => {
-    expect(stateLabelsOf(STORE, 'issue', 7, resolveDisplayVocabulary({ labels: { implementing: 'go' } }))).toContain('go')
+    expect(stateLabelsOf(STORE, 'issue', 7, resolveDisplayVocabulary({ states: { implementing: 'go' } }))).toContain('go')
   })
 })

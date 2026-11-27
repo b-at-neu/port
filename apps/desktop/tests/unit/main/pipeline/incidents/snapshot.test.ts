@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { boundInputs, itemInputs } from '@/main/pipeline/incidents/snapshot'
 import { INCIDENT_INPUTS_MAX_BYTES } from '@/types/incidents'
+import { runOf, ticketAt } from '../../../../support/tickets'
 import { item } from './fixtures'
 
 const bytes = (value: unknown): number => new TextEncoder().encode(JSON.stringify(value)).length
@@ -11,13 +12,14 @@ describe('itemInputs', () => {
     const inputs = itemInputs(
       item({
         title: secret,
+        ticket: ticketAt('review', { kind: 'running', runId: 'run-1' }, { runs: [runOf({ id: 'run-1', stage: 'review', startedAt: '2026-11-16T10:00:00.000Z' })] }),
         reviews: [{ body: `## Code Review — Cycle 1 · approved\n${secret}`, submittedAt: '2026-11-16T09:00:00Z', commitOid: 'f19c6d5' }],
         comments: [{ body: secret, createdAt: '2026-11-16T09:00:00Z' }],
         blockerComments: [{ body: secret, createdAt: '2026-11-16T09:00:00Z' } as never],
       }),
     )
     expect(JSON.stringify(inputs)).not.toContain(secret)
-    expect(inputs).toMatchObject({ labels: ['readyForReview'], assignees: ['op'], headRefOid: 'f19c6d5', claim: { key: 'readyForReview', at: '2026-11-16T10:00:00.000Z' } })
+    expect(inputs).toMatchObject({ stage: 'review', status: 'running', assignees: ['op'], headRefOid: 'f19c6d5', claim: { stage: 'review', at: '2026-11-16T10:00:00.000Z' } })
     expect(inputs.reviews).toEqual([{ id: '2026-11-16T09:00:00Z', verdict: 'approved', commitOid: 'f19c6d5' }])
   })
 

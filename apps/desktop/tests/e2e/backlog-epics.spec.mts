@@ -16,7 +16,7 @@ test.beforeEach(async () => {
       issues: [
         { number: 200, title: 'Ship the thing', labels: [], createdAt: '2024-02-01T00:00:00Z' },
         { number: 201, title: 'First step', labels: [], parent: 200 },
-        { number: 202, title: 'Second step', labels: ['claude', 'in progress'], parent: 200, blockedBy: [issue(201)] },
+        { number: 202, title: 'Second step', labels: ['port', 'implementing'], parent: 200, blockedBy: [issue(201)] },
         { number: 203, title: 'Third step', labels: [], parent: 200, blockedBy: [issue(202)] },
         { number: 205, title: 'Already done', labels: [], state: 'CLOSED', parent: 200 },
         { number: 210, title: 'Unrelated', labels: [] },

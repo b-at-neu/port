@@ -11,7 +11,7 @@ test.beforeEach(async () => {
     state: sandboxState({
       viewer: 'octocat',
       repo: 'acme/widgets',
-      pulls: [{ number: 202, title: 'Add the thing', labels: ['needs human'], assignees: ['octocat'] }],
+      pulls: [{ number: 202, title: 'Add the thing', labels: ['port', 'needs you'], assignees: ['octocat'] }],
     }),
   })
 })
@@ -47,6 +47,6 @@ test('unblocks a needs-human PR, removing the label and posting no comment', asy
 
   const state = await harness.state()
   const pull = state.pulls.find((p) => p.number === 202)
-  expect(pull?.labels).not.toContain('needs human')
+  expect(pull?.labels).not.toContain('needs you')
   expect(pull?.comments ?? []).toEqual([])
 })

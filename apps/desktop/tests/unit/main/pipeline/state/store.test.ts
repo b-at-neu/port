@@ -64,11 +64,11 @@ describe('createPipelineStateStore — loading', () => {
   it('is unseeded until a repository is seeded, then the store, which survives a restart', async () => {
     const first = rig()
     await first.store.seed(REPO, READY)
-    expect(first.store.view(REPO)).toMatchObject({ kind: 'store', items: [{ number: 7, keys: ['ready'] }] })
+    expect(first.store.view(REPO)).toMatchObject({ kind: 'store', items: [{ number: 7 }] })
 
     const restarted = rig({ file: { ok: true, value: first.writes.at(-1) } })
     await restarted.store.ready
-    expect(restarted.store.view(REPO)).toMatchObject({ kind: 'store', items: [{ number: 7, keys: ['ready'] }] })
+    expect(restarted.store.view(REPO)).toMatchObject({ kind: 'store', items: [{ number: 7 }] })
   })
 
   it('loads a version-1 file as version 3, and writes the migrated file back', async () => {

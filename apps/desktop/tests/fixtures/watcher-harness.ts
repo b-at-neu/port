@@ -69,9 +69,11 @@ export function readyItemTransport(signedInLogin: string, assignees: readonly st
   }
   const sweep = { repository: { issues: connection([issue]), pullRequests: connection([]), repoLabels: { totalCount: 0, nodes: [] } }, rateLimit, viewer: { login: signedInLogin } }
   const detail = { repository: { d0: { timelineItems: { nodes: [] } } }, rateLimit }
+  const tracked = { repository: { t0: issue }, rateLimit }
   return (request) => {
     const document = queryOf(request)
-    return Promise.resolve({ ok: true, status: 200, headers: {}, body: JSON.stringify({ data: document.includes('d0:') ? detail : sweep }) })
+    const data = document.includes('d0:') ? detail : document.includes('t0: issue(') ? tracked : sweep
+    return Promise.resolve({ ok: true, status: 200, headers: {}, body: JSON.stringify({ data }) })
   }
 }
 

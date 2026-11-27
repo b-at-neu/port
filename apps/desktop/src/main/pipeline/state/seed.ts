@@ -30,7 +30,7 @@ export function ticketOfDisplay(params: TicketOfDisplayParams): Ticket | null {
     if (keys.includes('needsYou')) return [inFlight?.stage ?? fallback, { kind: 'waiting-on-you', gate: 'escalation', detail: '' }]
     if (inFlight !== undefined) return [inFlight.stage, { kind: 'running', runId: null }]
     if (keys.includes('approved')) return ['merge', { kind: 'waiting-on-you', gate: 'merge', detail: '' }]
-    return [fallback, { kind: 'held', on: 'paused', detail: 'stopped' }]
+    return [fallback, { kind: 'queued', reason: 'new', since: params.at }]
   })()
   return {
     rev: 0,
