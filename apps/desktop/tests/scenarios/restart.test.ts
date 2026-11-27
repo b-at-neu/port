@@ -73,7 +73,7 @@ describe('restart and sleep during an active run', () => {
     await app.consider(tickReport())
     await settled()
     expect(app.ticket(52)).toEqual(landed)
-    expect(app.github.labels(52)).toEqual(['port', 'reviewing'])
+    expect(app.github.labels(52)).toEqual(['plan approved', 'port', 'reviewing'])
     expect(app.stage.launches).toHaveLength(1)
   })
 })
