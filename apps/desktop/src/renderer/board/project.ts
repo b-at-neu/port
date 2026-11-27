@@ -5,13 +5,13 @@ import { actionsFor } from '@/utils/actions/plan'
 import { decisionsFor } from '@/utils/actions/decide'
 import type { RepoId } from '@/utils/repos'
 import { ticketAssignedTo, ticketIndex } from '@/utils/tickets/ticket'
-import type { ReconciledItem, RepositoryFreshness, RepositoryState, StageLabel } from '@/types/state'
+import type { ReconciledItem, RepositoryFreshness, RepositoryState } from '@/types/state'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/types/board'
 import type { BoardItemRow, BoardProjection, BoardRepositorySummary, BoardSnapshot, DisplayStatus, LiveStage, RepositoryHealth, RowHeld, SourceHealth, SourceKind } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import { blockedOnOf } from '@/renderer/board/blocked-on'
 import { heldEntriesFor } from '@/renderer/board/tick'
-import { ticketViewOf } from '@/renderer/lib/ticket-view'
+import { ticketViewOfItem } from '@/utils/pipeline/stages'
 import type { DispatchOwner } from '@/types/dispatch'
 import type { TickReport } from '@/types/tick'
 
@@ -36,12 +36,6 @@ export function displayStatus(item: { readonly status: string }, repoHealth: Rep
     return { status: 'stalled', staleGithub: false, githubAgeMs }
   }
   return { status: 'in-flight', staleGithub: true, githubAgeMs }
-}
-
-/** The first entry of `item.stages` whose `role === item.stage`, `null` when `stage` is `null`. */
-export function stageLabelOf(item: { readonly stage: string | null; readonly stages: readonly StageLabel[] }): StageLabel | null {
-  if (item.stage === null) return null
-  return item.stages.find((label) => label.role === item.stage) ?? null
 }
 
 /** `a` is strictly worse than `b`: more consecutive failures first, then the older or never-succeeded last read. */
@@ -106,7 +100,7 @@ function liveStagesOf(sessions: readonly HostedSessionSnapshot[]): ReadonlyMap<s
     const key = liveStageKey(s.repoId, s.stage.kind, s.stage.number)
     const current = live.get(key)
     if (current === undefined || Date.parse(s.startedAt) > Date.parse(current.startedAt)) {
-      live.set(key, { agent: s.stage.agent, trigger: s.stage.trigger, sessionKey: s.sessionKey, startedAt: s.startedAt, working: s.phase === 'starting' || s.phase === 'streaming' })
+      live.set(key, { agent: s.stage.agent, sessionKey: s.sessionKey, startedAt: s.startedAt, working: s.phase === 'starting' || s.phase === 'streaming' })
     }
   }
   return live
@@ -150,19 +144,18 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
       if (repo.viewer !== null && !ticketAssignedTo(ticket, repo.viewer)) continue
       const item = ticket.primary
       const members = [ticket.issue, ticket.pullRequest].filter((member): member is ReconciledItem => member !== null)
-      const view = ticketViewOf(item)
+      const view = ticketViewOfItem(item)
       const actions = actionsFor({ view, item, viewer: repo.viewer, approvalGate: repo.approvalGate })
       const found = newestLive(members.map((member) => liveStages.get(liveStageKey(repo.repoId, member.kind, member.number))))
-      const liveStage: LiveStage | null = found === undefined ? null : { agent: found.agent, trigger: found.trigger, sessionKey: found.sessionKey }
+      const liveStage: LiveStage | null = found === undefined ? null : { agent: found.agent, sessionKey: found.sessionKey }
       const decisions = decisionsFor({ view, item, viewer: repo.viewer, reviewCycleCap: repo.reviewCycleCap, liveStage: liveStage !== null })
       let ds: DisplayStatus
       if (members.some((member) => interruptedKeys.has(`${repo.repoId}:${String(member.number)}`))) ds = { status: 'interrupted', staleGithub: false, githubAgeMs: null }
       else if (found !== undefined && (item.status === 'stalled' || (found.working && item.status === 'waiting'))) ds = { status: 'in-flight', staleGithub: false, githubAgeMs: null }
       else ds = displayStatus(item, health, repo.freshness, now)
-      const stageLabel = stageLabelOf(item)
       const autoApproving = autoApprovingKeys.has(`${repo.repoId}:${String(item.number)}`)
-      const blockedOn = blockedOnOf({ ticket, blocked: ticketViewOf(item)?.status.kind === 'blocked', sessions, repoId: repo.repoId })
-      rows.push({ item, ticket, displayStatus: ds, liveStage, stageLabel, actions, decisions, viewer: repo.viewer, autoApproving, blockedOn, held: rowHeldOf(reportByRepo.get(repo.repoId), ownerByRepo.get(repo.repoId), item) })
+      const blockedOn = blockedOnOf({ ticket, blocked: view?.status.kind === 'blocked', sessions, repoId: repo.repoId })
+      rows.push({ item, ticket, displayStatus: ds, liveStage, actions, decisions, viewer: repo.viewer, autoApproving, blockedOn, held: rowHeldOf(reportByRepo.get(repo.repoId), ownerByRepo.get(repo.repoId), item) })
     }
   }
   rows.sort((a, b) => compareRows(a, b, displayNameOf))

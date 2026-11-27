@@ -4,12 +4,13 @@ import type { BoardHalf, BoardHalfFailure, ClaimPreflightFetch, FetchItemsByNumb
 import type { TrackedRef } from '@/types/pipeline-state'
 import type { GithubPrecheckOutcome } from '@/types/state'
 import type { PostCommentParams, WriteOutcome } from '@/types/writes'
-import type { LabelVocabulary, RepoLabels } from '@/utils/labels/vocabulary'
+import type { DisplayVocabulary } from '@/utils/labels/display'
+import type { RepoLabels } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 
 export interface BoardIssuesParams {
   readonly repo: GitHubRepoRef
-  readonly vocabulary: LabelVocabulary
+  readonly vocabulary: DisplayVocabulary
   /** The store's issue refs: non-null makes them, not the swept labels, the set of issues read. `null` is the label path. */
   readonly tracked: readonly TrackedRef[] | null
 }

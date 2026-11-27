@@ -6,14 +6,12 @@ import type { BoardReadContext } from '@/main/pipeline/context'
 import type { BoardPullsFetch, GitHubRepoRef, PipelineFetch, PipelineItem, QueriedLabel } from '@/types/github'
 import type { TrackedRef } from '@/types/pipeline-state'
 import type { BoardIssuesFetch } from '@/main/github/tracker'
+import type { DisplayVocabulary } from '@/utils/labels/display'
 import { verifyVocabulary } from '@/utils/labels/vocabulary'
-import type { LabelVocabulary, VerifiableVocabulary } from '@/utils/labels/vocabulary'
 
 interface ReadBoardParams {
   readonly repo: GitHubRepoRef
-  readonly vocabulary: LabelVocabulary
-  /** What the repository's label list is checked against: the display vocabulary on an app-only repository. Absent means `vocabulary`. */
-  readonly verify?: VerifiableVocabulary
+  readonly vocabulary: DisplayVocabulary
   readonly integration: string
   /** The store's items: non-null makes them, not the swept labels, the set of items read. `null` is the label path. */
   readonly tracked?: readonly TrackedRef[] | null
@@ -23,12 +21,11 @@ interface MergeBoardParams {
   readonly issues: BoardIssuesFetch
   readonly pulls: BoardPullsFetch
   readonly tracked: readonly TrackedRef[] | null
-  readonly vocabulary: LabelVocabulary
-  readonly verify?: VerifiableVocabulary
+  readonly vocabulary: DisplayVocabulary
   readonly fetchedAt: string
 }
 
-function queriedLabelsOf(vocabulary: LabelVocabulary): readonly QueriedLabel[] {
+function queriedLabelsOf(vocabulary: DisplayVocabulary): readonly QueriedLabel[] {
   return vocabulary.labels.map((label) => ({ key: label.key, name: label.name, source: label.source }))
 }
 
@@ -54,8 +51,7 @@ export function mergeBoard(params: MergeBoardParams): PipelineFetch {
     closed: (tracked ?? []).map((ref) => ref.number).filter((number) => closedNumbers.has(number)),
     merged: pulls.merged,
     queried: queriedLabelsOf(vocabulary),
-    disabled: vocabulary.disabled,
-    vocabulary: verifyVocabulary(params.verify ?? vocabulary, issues.repoLabels),
+    vocabulary: verifyVocabulary(vocabulary, issues.repoLabels),
     unavailable: [...issues.unavailable, ...pulls.unavailable],
     truncated: [...issues.truncated, ...pulls.truncated],
     rateLimit: mergeRateLimit(issues.rateLimit, pulls.rateLimit),
@@ -73,5 +69,5 @@ export async function readBoard(ctx: BoardReadContext, params: ReadBoardParams):
     ctx.tracker.readBoardIssues({ repo: params.repo, vocabulary: params.vocabulary, tracked: tracked?.filter((ref) => ref.kind === 'issue') ?? null }),
     fetchBoardPulls(ctx, { repo: params.repo, vocabulary: params.vocabulary, integration: params.integration, tracked: tracked?.filter((ref) => ref.kind === 'pull-request') ?? null }),
   ])
-  return mergeBoard({ issues, pulls, tracked, vocabulary: params.vocabulary, verify: params.verify, fetchedAt })
+  return mergeBoard({ issues, pulls, tracked, vocabulary: params.vocabulary, fetchedAt })
 }

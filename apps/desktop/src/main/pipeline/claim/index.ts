@@ -6,7 +6,7 @@ import { mirrorVocabularyOf } from '@/utils/labels/display'
 import type { RepoId } from '@/utils/repos'
 import type { ReadyEntry } from '@/types/actions'
 import { storedLabels, UNSEEDED_MESSAGE } from '@/main/pipeline/state/labels'
-import { writeState } from '@/main/pipeline/state/writer'
+import { writeEvent } from '@/main/pipeline/state/writer'
 import { readyEntryOf, type OperatorContext } from '@/main/pipeline/context'
 
 function resolveReadyEntry(ctx: OperatorContext, repoId: RepoId) {
@@ -16,7 +16,7 @@ function resolveReadyEntry(ctx: OperatorContext, repoId: RepoId) {
 // `null` passes straight through so `classifyPreflight` reports `not-found` itself; `'unseeded'` means the store holds no labels to read yet.
 function toClaimPreflight(ctx: OperatorContext, fetch: Extract<ClaimPreflightFetch, { readonly ok: true }>, entry: ReadyEntry): ClaimPreflight | null | 'unseeded' {
   if (fetch.item === null) return null
-  const labels = storedLabels(ctx, entry.id, fetch.item.kind, fetch.item.number, entry.config.vocabulary)
+  const labels = storedLabels(ctx, entry.id, fetch.item.kind, fetch.item.number, mirrorVocabularyOf(entry.config).labels)
   if (labels === null) return 'unseeded'
   return { ...fetch.item, labels, viewer: fetch.viewer, readAt: fetch.fetchedAt }
 }
@@ -28,7 +28,7 @@ export async function claimPreflight(ctx: OperatorContext, { repoId, number }: {
 
   const preflight = toClaimPreflight(ctx, fetch, entry)
   if (preflight === 'unseeded') return { kind: 'failed', message: UNSEEDED_MESSAGE }
-  const verdict = classifyPreflight({ item: preflight, vocabulary: entry.config.vocabulary })
+  const verdict = classifyPreflight({ item: preflight, mirror: mirrorVocabularyOf(entry.config) })
   if (preflight === null) return { kind: 'unresolved' }
   return { kind: 'resolved', preflight, verdict }
 }
@@ -57,7 +57,7 @@ export async function claimApply(ctx: OperatorContext, params: ClaimApplyParams)
 
   const preflight = toClaimPreflight(ctx, fetch, entry)
   if (preflight === 'unseeded') return { kind: 'write', outcome: { kind: 'state-unsaved', message: UNSEEDED_MESSAGE } }
-  const verdict = classifyPreflight({ item: preflight, vocabulary: entry.config.vocabulary })
+  const verdict = classifyPreflight({ item: preflight, mirror: mirrorVocabularyOf(entry.config) })
   if (verdict.kind !== 'claimable') {
     return { kind: 'refused', verdict }
   }
@@ -73,13 +73,12 @@ export async function claimApply(ctx: OperatorContext, params: ClaimApplyParams)
   const request = buildClaimRequest({
     preflight,
     verdict,
-    vocabulary: entry.config.vocabulary,
     mirror: mirrorVocabularyOf(entry.config),
     repoId: params.repoId,
     repo: entry.config.repo,
     planGate: params.planGate,
   })
 
-  const outcome = await writeState(ctx, { request, repoRoot: entry.path, auditDir: params.auditDir })
+  const outcome = await writeEvent(ctx, { request, repoRoot: entry.path, auditDir: params.auditDir })
   return { kind: 'write', outcome }
 }

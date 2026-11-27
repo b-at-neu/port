@@ -1,6 +1,6 @@
 // Pure GraphQL builders for the pull-request half of the board read and the pieces both halves share.
 // `search` is never used: it is index-backed and lags.
-import type { LabelVocabulary, ResolvedLabel } from '@/utils/labels/vocabulary'
+import type { DisplayVocabulary } from '@/utils/labels/display'
 import type { SweepAlias, SweepPage } from '@/types/github'
 
 export const ASSIGNEE_PAGE_SIZE = 20
@@ -66,8 +66,8 @@ export function repositoryDocument(fields: readonly string[], topLevel: readonly
 }
 
 /** One connection per surface whatever the label count; `labels:` matches any listed name. */
-export function sweepConnection(alias: SweepAlias, vocabulary: LabelVocabulary, page: SweepPage, fields: string): string {
-  const names = vocabulary.labels.map((label: ResolvedLabel) => graphqlStringLiteral(label.name)).join(', ')
+export function sweepConnection(alias: SweepAlias, vocabulary: DisplayVocabulary, page: SweepPage, fields: string): string {
+  const names = vocabulary.labels.map((label) =>graphqlStringLiteral(label.name)).join(', ')
   const cursor = page.after === null ? 'null' : graphqlStringLiteral(page.after)
   return `  ${alias}: ${alias}(states: OPEN, first: ${PAGE_SIZE}, labels: [${names}], after: ${cursor}, orderBy: {field: CREATED_AT, direction: ASC}) { totalCount pageInfo { hasNextPage endCursor } nodes { ${fields} } }`
 }
@@ -81,7 +81,7 @@ function integrationHistoryField(integration: string): string {
 }
 
 /** The pull-request sweep page. Only page one carries `integrationHistory`, so the integration-red gate costs no round trip of its own. */
-export function buildPullSweepQuery(vocabulary: LabelVocabulary, page: SweepPage, integration: string): string {
+export function buildPullSweepQuery(vocabulary: DisplayVocabulary, page: SweepPage, integration: string): string {
   const first = page.after === null
   return repositoryDocument([...(page.connection ? [sweepConnection('pullRequests', vocabulary, page, PULL_REQUEST_SWEEP_FIELDS)] : []), ...(first ? [integrationHistoryField(integration)] : [])])
 }

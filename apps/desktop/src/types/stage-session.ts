@@ -1,6 +1,5 @@
 // Renderer-safe types for a stage session — a hosted session the app itself launched to run a pipeline stage, never an operator's own.
 import type { PipelineItemKind } from '@/types/github'
-import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { StageAgent } from '@/types/tick'
 
 /** Carried on a stage session's snapshot so the renderer can tell it apart from an operator session without a second lookup. */
@@ -8,7 +7,6 @@ export interface StageTag {
   readonly agent: StageAgent
   readonly number: number
   readonly kind: PipelineItemKind
-  readonly trigger: LabelKey
 }
 
 /** A structural read of the SDK's final `result` message. `text` is capped at `SESSION_RESULT_TEXT_CAP` chars, keeping the tail, since the hand-back prefix (`QUESTIONS FOR HUMAN:`/`BLOCKED:`) sits at the end. */

@@ -6,7 +6,7 @@ import type { ActionToast } from '@/types/toast'
 import { useActionMutation } from '@/renderer/actions/use-action-mutation'
 import { actionResultCopy } from '@/renderer/board/copy'
 import { createStore, useStore } from '@/renderer/lib/store'
-import { ticketViewOf } from '@/renderer/lib/ticket-view'
+import { ticketViewOfItem } from '@/utils/pipeline/stages'
 import { stageNameOf } from '@/utils/pipeline/stages'
 
 type ItemActionStates = ReadonlyMap<string, ItemActionState>
@@ -53,7 +53,7 @@ export function useItemAction(row: BoardItemRow) {
           title: actionResultCopy({
             action: input.action,
             number: row.ticket.ref.number,
-            currentStageName: row.item.ticket === null ? null : stageNameOf(ticketViewOf(row.item)),
+            currentStageName: row.item.ticket === null ? null : stageNameOf(ticketViewOfItem(row.item)),
             result: output,
             now: new Date(),
           }),
@@ -68,7 +68,7 @@ export function useItemAction(row: BoardItemRow) {
   async function run(action: OperatorAction): Promise<void> {
     if (itemActions.get().get(key)?.kind === 'pending') return
     setItemActionState(key, { kind: 'pending', action })
-    const result = await mutation.perform({ repoId, kind, number, action, expected: ticketViewOf(row.item) })
+    const result = await mutation.perform({ repoId, kind, number, action, expected: ticketViewOfItem(row.item) })
     setItemActionState(key, result === 'unreachable' ? undefined : { kind: 'result', action, result })
   }
 

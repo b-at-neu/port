@@ -9,7 +9,7 @@ import type { DispatchRecord } from '@/types/dispatch'
 import type { AttachedAgent, AttachedSession } from '@/types/state'
 import type { PhaseTone } from '@/types/components'
 import { phaseTone } from '@/renderer/lib/phase-tone'
-import { ticketViewOf } from '@/renderer/lib/ticket-view'
+import { ticketViewOfItem } from '@/utils/pipeline/stages'
 import { agentStageName, needsYouKindOf, stageNameOf } from '@/utils/pipeline/stages'
 import type { ItemActionState, StageLinkTarget } from '@/types/board'
 import { actionRefusalNote, actionResultCopy, AUTO_APPROVING_PHASE_LABEL, DECISION_BUTTON_LABELS, decisionRefusalNote, OPEN_PR_LABEL, REVIEW_PLAN_LABEL, STATUS_WORDS } from '@/renderer/board/copy'
@@ -19,7 +19,7 @@ import { actionRefusalNote, actionResultCopy, AUTO_APPROVING_PHASE_LABEL, DECISI
 export function phaseToneFor(row: BoardItemRow): PhaseTone {
   const status = row.displayStatus.status
   return phaseTone({
-    view: ticketViewOf(row.item),
+    view: ticketViewOfItem(row.item),
     active: status === 'in-flight',
     waitingOnYou: waitsOnYou(row),
     operatorNeeded: status === 'interrupted' || status === 'stalled',
@@ -36,7 +36,7 @@ export function phaseLabelFor(row: BoardItemRow): string {
   if (status === 'interrupted' || status === 'stalled') return STATUS_WORDS[status]
   if (row.autoApproving) return AUTO_APPROVING_PHASE_LABEL
   if (row.liveStage !== null && isDispatchedRow(row)) return agentStageName(row.liveStage.agent)
-  return stageNameOf(ticketViewOf(row.item))
+  return stageNameOf(ticketViewOfItem(row.item))
 }
 
 /** Every (number, kind) the row's ticket answers to — its issue and its pull request. */
@@ -102,7 +102,7 @@ export function actionNoteFor(row: BoardItemRow, state: ItemActionState | undefi
     const base = actionResultCopy({
       action: state.action,
       number: row.ticket.ref.number,
-      currentStageName: row.item.ticket === null ? null : stageNameOf(ticketViewOf(row.item)),
+      currentStageName: row.item.ticket === null ? null : stageNameOf(ticketViewOfItem(row.item)),
       result: state.result,
       now: new Date(),
     })
@@ -123,7 +123,7 @@ type NextAction =
 // First hit wins: review the plan, open a ready-to-merge pull request, then
 // the first available decision.
 export function nextActionFor(row: BoardItemRow): NextAction | null {
-  const kind = needsYouKindOf(ticketViewOf(row.item), false)
+  const kind = needsYouKindOf(ticketViewOfItem(row.item), false)
   if (row.item.kind === 'issue' && kind === 'plan-review' && !row.autoApproving) {
     return { kind: 'review-plan', label: REVIEW_PLAN_LABEL }
   }

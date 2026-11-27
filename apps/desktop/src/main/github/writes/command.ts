@@ -1,23 +1,4 @@
 // The only file in the app allowed to name `--add-label`/`--remove-label`. Pure: no `gh`, no filesystem.
-import { labelName } from '@/utils/labels/vocabulary'
-import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
-
-interface KeyResolution {
-  readonly names: string[]
-  readonly unresolved: LabelKey[]
-}
-
-// Resolution failure aborts the whole request rather than dropping the unresolved key silently.
-export function resolveKeys(vocabulary: LabelVocabulary, keys: readonly LabelKey[]): KeyResolution {
-  const names: string[] = []
-  const unresolved: LabelKey[] = []
-  for (const key of keys) {
-    const name = labelName(vocabulary, key)
-    if (name === undefined) unresolved.push(key)
-    else names.push(name)
-  }
-  return { names, unresolved }
-}
 
 interface BuildCommandParams {
   readonly kind: 'issue' | 'pull-request'

@@ -20,7 +20,7 @@ interface RepairsOfResult {
 }
 
 function eligible(item: ReconciledItem, viewer: string, liveNumbers: ReadonlySet<number>): boolean {
-  return item.marked && item.assignees.includes(viewer) && !liveNumbers.has(item.number) && item.state === 'OPEN'
+  return item.ticket !== null && item.assignees.includes(viewer) && !liveNumbers.has(item.number) && item.state === 'OPEN'
 }
 
 /** A failed label write is reported even while a session is live: it says what GitHub shows, not what the stage is doing. */

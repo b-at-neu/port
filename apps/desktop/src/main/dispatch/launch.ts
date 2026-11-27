@@ -64,7 +64,7 @@ export interface LaunchPass {
 
 /** A launch that never produced a session still shows as a run, ended the instant it started. */
 async function recordFailure(ctx: DispatchContext, entry: ReadyEntry, candidate: TickActionable, message: string): Promise<void> {
-  await ctx.stores.runs.launchFailed(entry.id, { stage: candidate.stage, kind: candidate.kind, number: candidate.number, agent: candidate.agent, trigger: candidate.trigger, model: entry.config.models[candidate.agent], title: null, message })
+  await ctx.stores.runs.launchFailed(entry.id, { stage: candidate.stage, kind: candidate.kind, number: candidate.number, agent: candidate.agent, model: entry.config.models[candidate.agent], title: null, message })
 }
 
 /** Undoes a claim whose launch failed; a refused rollback is left to the stall ladder. */
@@ -156,7 +156,7 @@ export async function launchGated(ctx: DispatchContext, pass: LaunchPass, gated:
         stage: candidate.stage,
         number: candidate.number,
         kind: candidate.kind,
-        trigger: candidate.trigger,
+        mode: candidate.mode,
         model: entry.config.models[candidate.agent],
         prompt: promptFor(candidate),
         title: ticketLabelFor(index, candidate.number, candidate.kind),

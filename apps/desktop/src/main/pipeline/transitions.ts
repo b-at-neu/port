@@ -1,6 +1,5 @@
 // Pure: the (ticket, event) → ticket table. No I/O — the store commits what this returns, and only after it is persisted.
 import { HISTORY_CAP } from '@/main/pipeline/state/migrate'
-import { applyLabels, legacyDiffOf } from '@/main/pipeline/state/legacy-event'
 import { applyMove } from '@/main/pipeline/moves'
 import { applyRunChange } from '@/main/pipeline/runs'
 import type { PipelineItemKind } from '@/types/github'
@@ -130,8 +129,10 @@ export function actionOf(event: StateEvent): string {
       return 'stage-unblocked'
     case 'merged':
       return 'mirror-merged'
-    case 'labels':
-      return event.action
+    case 'track':
+      return 'claim-issue'
+    case 'gate':
+      return 'gate-pull-request'
     case 'operator':
       return event.move.kind
     case 'handback': {
@@ -182,7 +183,7 @@ function settles(ticket: Ticket, event: Extract<StateEvent, { kind: 'handback' }
   return status.kind === 'queued' && status.reason === 'retry'
 }
 
-function stageEventNext(ticket: Ticket, event: Exclude<StateEvent, { kind: 'labels' | 'merged' | 'operator' }>, at: string): Next | TableResult {
+function stageEventNext(ticket: Ticket, event: Exclude<StateEvent, { kind: 'track' | 'gate' | 'merged' | 'operator' }>, at: string): Next | TableResult {
   const { status } = ticket
   switch (event.kind) {
     case 'claim':
@@ -207,10 +208,10 @@ function isVerdict(event: StateEvent): boolean {
   return event.kind === 'handback' && event.via === 'session' && event.stage === 'review' && HANDBACK_TOKENS.review.includes(event.token) && !NON_VERDICT_TOKENS.includes(event.token)
 }
 
-/** Records one change on the ticket: its `rev`, its history row with the label diff of both halves, and a review verdict's cycle. A `null` ticket is a creation. */
+/** Records one change on the ticket: its `rev`, its history row, and a review verdict's cycle. A `null` ticket is a creation. */
 function commit(ticket: Ticket | null, next: Ticket, event: StateEvent, ctx: TableContext): TableResult {
   const actor = event.kind === 'operator' ? event.actor : ctx.actor
-  const row: Event = { at: ctx.at, action: actionOf(event), actor, to: { stage: next.stage, status: next.status.kind }, legacy: legacyDiffOf(ticket, next) }
+  const row: Event = { at: ctx.at, action: actionOf(event), actor, to: { stage: next.stage, status: next.status.kind }, legacy: null }
   return {
     ok: true,
     changed: true,
@@ -218,11 +219,15 @@ function commit(ticket: Ticket | null, next: Ticket, event: StateEvent, ctx: Tab
   }
 }
 
-function labelsResult(ticket: Ticket | null, event: Extract<StateEvent, { kind: 'labels' }>, ctx: TableContext): TableResult {
-  const result = applyLabels(ticket, event, ctx)
-  if (result.kind === 'moved') return MOVED
-  if (result.kind === 'unchanged' && ticket !== null) return { ok: true, ticket, changed: false }
-  return result.kind === 'next' ? commit(ticket, result.ticket, event, ctx) : MOVED
+/** A ticket's creation: only an untracked item takes it. */
+function creationResult(ticket: Ticket | null, event: Extract<StateEvent, { kind: 'track' | 'gate' }>, ctx: TableContext): TableResult {
+  if (ticket !== null) return MOVED
+  const base = { repo: ctx.repo, rev: 0, reviewCycles: 0, history: [], runs: [], mirror: { written: [], failure: null } }
+  const created: Ticket =
+    event.kind === 'track'
+      ? { ...base, ticket: ctx.ref.number, stage: 'plan', status: queued(ctx.at), pr: null, autoPlan: event.autoPlan }
+      : { ...base, ticket: event.issue ?? ctx.ref.number, stage: 'review', status: { kind: 'held', on: 'paused', detail: 'stopped' }, pr: { number: ctx.ref.number, approvedAt: null }, autoPlan: false }
+  return commit(null, created, event, ctx)
 }
 
 function operatorResult(ticket: Ticket, event: Extract<StateEvent, { kind: 'operator' }>, ctx: TableContext): TableResult {
@@ -236,9 +241,9 @@ export function accepts(ticket: Ticket | null, event: TicketEvent, ref: TicketRe
   return applyEvent(ticket, event, { at: '1970-01-01T00:00:00.000Z', actor: null, repo, ref }).ok
 }
 
-/** What the table makes of one event: the next ticket, or a refusal when the ticket is not where the event expects it. A missing ticket exists only for a `labels` event, which creates it. */
+/** What the table makes of one event: the next ticket, or a refusal when the ticket is not where the event expects it. A missing ticket exists only for a `track` or `gate` event, which creates it. */
 export function applyEvent(ticket: Ticket | null, event: TicketEvent, ctx: TableContext): TableResult {
-  if (event.kind === 'labels') return labelsResult(ticket, event, ctx)
+  if (event.kind === 'track' || event.kind === 'gate') return creationResult(ticket, event, ctx)
   if (ticket === null) return MOVED
   if (event.kind === 'operator') return operatorResult(ticket, event, ctx)
   if (event.kind === 'run-start' || event.kind === 'run') return applyRunChange(ticket, event, ctx.at)

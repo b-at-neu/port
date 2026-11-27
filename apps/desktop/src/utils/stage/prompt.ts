@@ -1,24 +1,27 @@
 import type { PipelineItemKind } from '@/types/github'
 import type { StageAgent } from '@/types/tick'
-import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { TicketView } from '@/utils/pipeline/stages'
 
 export const STAGE_PROMPT_NAMES: Readonly<Record<StageAgent, string>> = { plan: 'Plan', impl: 'Implementation', review: 'Review', revise: 'Revision' }
 export const KIND_PROMPT_NAMES: Readonly<Record<PipelineItemKind, string>> = { issue: 'issue', 'pull-request': 'pull request' }
 
 export type StageMode = 'fresh' | 'revision' | 'implement' | 'review' | 'revise' | 'refresh'
 
-/** A trigger label's mode is a hint only — every pre-flight still reads the labels. */
-const STAGE_MODES: Readonly<Partial<Record<LabelKey, StageMode>>> = {
-  ready: 'fresh',
-  planChangesRequested: 'revision',
-  planApproved: 'implement',
-  readyForReview: 'review',
-  needsRevision: 'revise',
-  refreshBranch: 'refresh',
-}
-
-export function stageModeOf(trigger: LabelKey): StageMode | null {
-  return STAGE_MODES[trigger] ?? null
+/** The prompt mode of a dispatched ticket, from its stage and status; a hint only, since every pre-flight still reads the ticket. `merge` is never dispatched. */
+export function stageModeOf(view: TicketView): StageMode {
+  switch (view.stage) {
+    case 'plan':
+      return view.status.kind === 'queued' && view.status.reason === 'changes-requested' ? 'revision' : 'fresh'
+    case 'implement':
+      return 'implement'
+    case 'review':
+    case 'merge':
+      return 'review'
+    case 'revise':
+      return 'revise'
+    case 'refresh':
+      return 'refresh'
+  }
 }
 
 const CONTEXT_OPEN = '<port-stage-context>'

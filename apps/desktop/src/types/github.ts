@@ -1,7 +1,8 @@
 import type { GitHubHttpResult } from '@/types/platform'
 
 // Renderer-safe result and item shapes for the GitHub adapter. No import here may reach a Node builtin — only `main/github/` spawns `gh`.
-import type { LabelKey, LabelSource, VocabularyReport } from '@/utils/labels/vocabulary'
+import type { DisplayKey } from '@/utils/labels/display'
+import type { LabelSource, VocabularyReport } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { IntegrationStatus } from '@/utils/pipeline/gates'
 
@@ -55,7 +56,7 @@ export interface IssueCommentNode {
   readonly url: string
 }
 
-/** One `timelineItems` `LabeledEvent` node — the raw label name, unresolved; `reconcile.ts` is the one place it becomes a `LabelKey`. */
+/** One `timelineItems` `LabeledEvent` node — the raw label name, unresolved. */
 export interface LabelEventNode {
   readonly label: string
   readonly actor: string | null
@@ -93,8 +94,8 @@ export interface PipelineItem {
   readonly updatedAt: string | null
   readonly assignees: readonly string[]
   readonly labels: readonly string[]
-  readonly matchedKeys: readonly LabelKey[]
-  /** Raw `LABELED_EVENT` timeline nodes, newest-truncated at 20 — `reconcile.ts` resolves names to keys and drops non-vocabulary entries. */
+  readonly matchedKeys: readonly DisplayKey[]
+  /** Raw `LABELED_EVENT` timeline nodes, newest-truncated at 20. */
   readonly labelEvents: readonly LabelEventNode[]
   readonly headRefOid: string | null
   readonly mergeable: Mergeable
@@ -112,7 +113,7 @@ export interface PipelineItem {
 
 /** One entry per enabled label, reported beside the results so an empty `items` is attributable rather than ambiguous with a wrong query. */
 export interface QueriedLabel {
-  readonly key: LabelKey
+  readonly key: DisplayKey
   readonly name: string
   readonly source: LabelSource
 }
@@ -198,7 +199,6 @@ export type PipelineFetch =
       /** The pull requests among `closed` that merged — empty on the label path. */
       readonly merged: readonly number[]
       readonly queried: readonly QueriedLabel[]
-      readonly disabled: readonly LabelKey[]
       readonly vocabulary: VocabularyReport
       readonly unavailable: readonly UnavailableAlias[]
       readonly truncated: readonly TruncatedSet[]

@@ -3,12 +3,12 @@ import type { HostedSessionSnapshot } from '@/types/hosting'
 import type { SessionIndexEntry } from '@/types/session-index'
 import type { PhaseKey, StageLinkTarget, TicketSessionLink, TicketSessions } from '@/types/board'
 import type { PortStageAgent } from '@/types/sessions'
-import type { ReconciledItem, StageEntry, WorkSession } from '@/types/state'
+import type { ReconciledItem, WorkSession } from '@/types/state'
 import type { StageTag } from '@/types/stage-session'
 import type { StageAgent } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
-import { viewOfKey } from '@/renderer/lib/ticket-view'
-import { agentPhase, phaseOf } from '@/utils/pipeline/stages'
+import type { Event } from '@/utils/pipeline/ticket'
+import { agentPhase, phaseOfEvent } from '@/utils/pipeline/stages'
 
 interface TicketSessionsParams {
   readonly repoId: RepoId
@@ -31,7 +31,7 @@ function targeted(tag: StageTag, targets: readonly StageLinkTarget[]): boolean {
 }
 
 function stagePhase(tag: StageTag): PhaseKey {
-  return phaseOf(viewOfKey(tag.trigger, tag.kind)) ?? agentPhase(tag.agent)
+  return agentPhase(tag.agent)
 }
 
 function byTime(a: PlacedLink, b: PlacedLink): number {
@@ -99,24 +99,20 @@ function stageLinks(params: TicketSessionsParams, liveById: ReadonlyMap<string, 
   return { placed, usedIds }
 }
 
-function historyOf(item: ReconciledItem | null): readonly (StageEntry & { readonly itemKind: ReconciledItem['kind'] })[] {
-  return (item?.stageHistory ?? []).map((entry) => ({ ...entry, itemKind: item?.kind ?? 'issue' }))
-}
-
-/** The phase the ticket was in when a session ran: the latest stage entry at or before it, across both items. */
-function phaseAt(time: number, history: readonly (StageEntry & { readonly itemKind: ReconciledItem['kind'] })[]): PhaseKey | null {
-  let latest: (typeof history)[number] | null = null
-  for (const entry of history) {
-    const at = Date.parse(entry.at)
-    if (Number.isNaN(at) || at > time) continue
-    if (latest === null || at >= Date.parse(latest.at)) latest = entry
+/** The phase the ticket was in when a session ran: the latest history event that moved it, at or before that time. */
+function phaseAt(time: number, history: readonly Event[]): PhaseKey | null {
+  let latest: Event | null = null
+  for (const event of history) {
+    const at = Date.parse(event.at)
+    if (event.to === null || Number.isNaN(at) || at > time) continue
+    if (latest === null || at >= Date.parse(latest.at)) latest = event
   }
-  return latest === null ? null : phaseOf(viewOfKey(latest.key, latest.itemKind))
+  return latest === null ? null : phaseOfEvent(latest)
 }
 
 function manualLinks(params: TicketSessionsParams, liveById: ReadonlyMap<string, HostedSessionSnapshot>, usedIds: ReadonlySet<string>): PlacedLink[] {
   const indexById = new Map(params.index.map((entry) => [entry.claudeSessionId, entry] as const))
-  const history = [...historyOf(params.issue), ...historyOf(params.pullRequest)]
+  const history = [...(params.issue?.ticket?.history ?? []), ...(params.pullRequest?.ticket?.history ?? [])]
   const seen = new Set<string>()
   const placed: PlacedLink[] = []
   const sessions: readonly WorkSession[] = [...(params.issue?.workSessions ?? []), ...(params.pullRequest?.workSessions ?? [])]

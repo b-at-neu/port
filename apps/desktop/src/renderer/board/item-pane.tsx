@@ -36,7 +36,7 @@ import { BlockedOnDetail } from '@/renderer/board/blocked-on-detail'
 import { actionNoteFor, agentSummaryOf, decisionNoteFor, phaseLabelFor, phaseToneFor, stageTargetsOf } from '@/renderer/board/row-model'
 import { itemDetailLines } from '@/renderer/board/tick'
 import { phaseDetailsFor } from '@/renderer/board/phase-history'
-import { ticketViewOf } from '@/renderer/lib/ticket-view'
+import { ticketViewOfItem } from '@/utils/pipeline/stages'
 import { needsYouKindOf, phaseOf } from '@/utils/pipeline/stages'
 import { ticketSessionsFor } from '@/renderer/board/ticket-sessions'
 import { useIpcQuery } from '@/renderer/data/query'
@@ -71,12 +71,11 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
     issue: ticket.issue,
     pullRequest: ticket.pullRequest,
   })
-  const view = ticketViewOf(item)
+  const view = ticketViewOfItem(item)
   const currentPhase = phaseOf(view)
   const liveStageLink = currentPhase === null ? undefined : (ticketSessions.byPhase[currentPhase] ?? []).findLast((link) => link.state === 'live' && link.who.kind === 'stage')
   const phaseDetails = phaseDetailsFor({
-    history: item.stageHistory,
-    kind: item.kind,
+    history: item.ticket?.history ?? [],
     view,
     viewer: row.viewer,
     now,

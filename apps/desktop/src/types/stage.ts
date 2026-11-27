@@ -8,7 +8,6 @@ import type { BranchHead } from '@/types/release'
 // Renderer-safe types for stage-session "needs you" attention: a denied tool call waiting on an
 // allowlist decision, and a stage session interrupted before it reached a hand-back.
 import type { PipelineItemKind } from '@/types/github'
-import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { StageAgent } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
 
@@ -36,7 +35,6 @@ export interface InterruptedStage {
   readonly agent: StageAgent
   readonly number: number
   readonly kind: PipelineItemKind
-  readonly trigger: LabelKey
   readonly stage: Stage
   readonly model: string
   /** The dispatcher's `#<n> <title>` label; absent on entries written before it was recorded. */
@@ -154,7 +152,6 @@ export interface LaunchFailure {
   readonly kind: PipelineItemKind
   readonly number: number
   readonly agent: StageAgent
-  readonly trigger: LabelKey
   readonly model: string
   readonly title: string | null
   readonly message: string

@@ -1,22 +1,17 @@
 // Pure claim-scope classification and request-building — no `gh`, no filesystem. The caller supplies the already-fetched `ClaimPreflight`.
-import { labelName } from '@/utils/labels/vocabulary'
-import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
-import type { LabelWriteRequest } from '@/types/writes'
+import type { EventWriteRequest } from '@/types/writes'
+import { displayNamesOf } from '@/main/pipeline/state/mirror'
 import type { MirrorVocabulary } from '@/utils/labels/display'
 import type { RepoId } from '@/utils/repos'
 import type { ClaimPreflight, ClaimVerdict, PlanGateChoice } from '@/types/claim'
 
-/** `autoPlan` is kept separate from `CLAIM_LABEL_KEYS`, conditional on the operator's plan-review choice while the other two never are. */
-export const CLAIM_LABEL_KEYS: readonly LabelKey[] = ['marker', 'ready']
-export const AUTO_PLAN_KEY: LabelKey = 'autoPlan'
-
 /** `item: null` is "the number does not exist or its alias errored", passed through as `not-found` — never a thrown error. */
-export function classifyPreflight(params: { readonly item: ClaimPreflight | null; readonly vocabulary: LabelVocabulary }): ClaimVerdict {
-  const { item, vocabulary } = params
+export function classifyPreflight(params: { readonly item: ClaimPreflight | null; readonly mirror: MirrorVocabulary }): ClaimVerdict {
+  const { item, mirror } = params
   if (item === null) return { kind: 'not-found' }
   if (item.kind === 'pull-request') return { kind: 'not-an-issue' }
 
-  const marker = labelName(vocabulary, 'marker')
+  const [marker] = displayNamesOf(mirror.labels, ['port'])
   if (marker !== undefined && item.labels.includes(marker)) {
     return { kind: 'already-claimed', markerName: marker }
   }
@@ -31,14 +26,12 @@ export function classifyPreflight(params: { readonly item: ClaimPreflight | null
 export function buildClaimRequest(params: {
   readonly preflight: ClaimPreflight
   readonly verdict: Extract<ClaimVerdict, { kind: 'claimable' }>
-  readonly vocabulary: LabelVocabulary
   readonly mirror: MirrorVocabulary
   readonly repoId: RepoId
   readonly repo: string
   readonly planGate: PlanGateChoice
-}): LabelWriteRequest {
-  const { preflight, verdict, vocabulary, mirror, repoId, repo, planGate } = params
-  const add: LabelKey[] = planGate === 'auto' ? [...CLAIM_LABEL_KEYS, AUTO_PLAN_KEY] : [...CLAIM_LABEL_KEYS]
+}): EventWriteRequest {
+  const { preflight, verdict, mirror, repoId, repo, planGate } = params
   const viewer = preflight.viewer
   const addAssignees = preflight.assignees.includes(viewer) ? [] : [viewer]
   const removeAssignees = preflight.assignees.filter((login) => login !== viewer)
@@ -49,17 +42,12 @@ export function buildClaimRequest(params: {
     repo,
     kind: 'issue',
     number: preflight.number,
-    vocabulary,
     mirror,
-    add,
-    remove: [],
+    event: { kind: 'track', autoPlan: planGate === 'auto' },
+    expectedRev: null,
+    assignees: verdict.assigneeSituation === 'unassigned' ? { kind: 'unassigned' } : { kind: 'exactly', logins: preflight.assignees },
     addAssignees,
     removeAssignees,
-    expect: {
-      present: [],
-      absent: ['marker'],
-      assignees: verdict.assigneeSituation === 'unassigned' ? { kind: 'unassigned' } : { kind: 'exactly', logins: preflight.assignees },
-    },
     action,
   }
 }

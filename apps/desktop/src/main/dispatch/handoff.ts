@@ -21,7 +21,7 @@ export const HANDOFF_ATTEMPTS = 3
 /** A retryable refusal keeps retrying this long after its first attempt, so a write that fails while DNS comes back after a wake still lands. */
 export const HANDOFF_RETRY_WINDOW_MS = 600_000
 
-type HandoffRecord = Pick<TickActionable, 'number' | 'kind' | 'agent' | 'stage' | 'trigger'> & { readonly sessionKey: SessionKey }
+type HandoffRecord = Pick<TickActionable, 'number' | 'kind' | 'agent' | 'stage'> & { readonly sessionKey: SessionKey }
 
 interface PendingWrite {
   readonly repoId: RepoId

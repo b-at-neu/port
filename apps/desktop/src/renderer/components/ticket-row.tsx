@@ -17,7 +17,7 @@ import { prSuffixOf } from '@/utils/tickets/ticket'
 import { isDispatchedRow, phaseLabelFor, phaseToneFor } from '@/renderer/board/row-model'
 import { NextActionLink } from '@/renderer/components/next-action-link'
 import { PhaseBar } from '@/renderer/components/phase-bar'
-import { ticketViewOf } from '@/renderer/lib/ticket-view'
+import { ticketViewOfItem } from '@/utils/pipeline/stages'
 import { PhasePill } from '@/renderer/components/phase-pill'
 import { BlockedOnTag } from '@/renderer/components/blocked-on-tag'
 import { HeldTag } from '@/renderer/components/held-tag'
@@ -59,7 +59,7 @@ export function TicketRow({ row, rowProps, operatorJoined = false }: TicketRowPr
           {AUTO_PLAN_TAG_LABEL}
         </span>
       ) : null}
-      <PhaseBar view={ticketViewOf(item)} className="shrink-0" />
+      <PhaseBar view={ticketViewOfItem(item)} className="shrink-0" />
       <PhasePill tone={phaseToneFor(row)} label={phaseLabelFor(row)} className="shrink-0" />
       {row.held !== null ? <HeldTag held={row.held} /> : null}
       {row.blockedOn !== null ? <BlockedOnTag blockedOn={row.blockedOn} /> : null}

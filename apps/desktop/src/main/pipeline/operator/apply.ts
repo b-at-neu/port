@@ -1,6 +1,6 @@
 import { mirrorVocabularyOf } from '@/utils/labels/display'
 import type { StateWriteContext } from '@/main/pipeline/context'
-import { writeEvent, writeState } from '@/main/pipeline/state/writer'
+import { writeEvent } from '@/main/pipeline/state/writer'
 import { actionsFor } from '@/utils/actions/plan'
 import type { ItemActionResult, OperatorMove } from '@/types/actions'
 import { stageNameOf, ticketViewOf } from '@/utils/pipeline/stages'
@@ -75,7 +75,6 @@ export function writeMove(ctx: StateWriteContext, p: MoveWrite): Promise<WriteOu
       repo: p.entry.config.repo,
       kind: p.kind,
       number: p.number,
-      vocabulary: p.entry.config.vocabulary,
       mirror: mirrorVocabularyOf(p.entry.config),
       event: { kind: 'operator', move: p.move, actor: p.actor },
       expectedRev: p.ticket.rev,
@@ -89,21 +88,20 @@ export function writeMove(ctx: StateWriteContext, p: MoveWrite): Promise<WriteOu
   })
 }
 
-/** The one operator write that stays a label write: the marker that gates an untracked pull request. */
+/** The one operator write with no ticket to move: it takes an untracked pull request into the pipeline. */
 function writeGate(ctx: StateWriteContext, entry: ReadyEntry, request: ItemActionRequest, auditDir: string): Promise<WriteOutcome> {
-  return writeState(ctx, {
+  return writeEvent(ctx, {
     request: {
       repoId: entry.id,
       repo: entry.config.repo,
       kind: request.kind,
       number: request.number,
-      vocabulary: entry.config.vocabulary,
       mirror: mirrorVocabularyOf(entry.config),
-      add: ['marker'],
-      remove: [],
+      event: { kind: 'gate', issue: null },
+      expectedRev: null,
+      assignees: { kind: 'any' },
       addAssignees: [],
       removeAssignees: [],
-      expect: { present: [], absent: ['marker'], assignees: { kind: 'any' } },
       action: 'gate',
     },
     repoRoot: entry.path,

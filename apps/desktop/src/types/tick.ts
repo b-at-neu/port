@@ -1,7 +1,7 @@
 // Renderer-safe shapes for the tick engine — what one repository's tick would dispatch, what it holds back and why, and what each in-flight claim resolves to. No import here may reach a Node builtin — only `main/pipeline/tick/` computes these.
 import type { PipelineItemKind } from '@/types/github'
 import type { MirrorFailure } from '@/types/pipeline-state'
-import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { StageMode } from '@/utils/stage/prompt'
 import type { RepoId } from '@/utils/repos'
 import type { StageHandback, StageOutcomeKind } from '@/types/stage-session'
 import type { StageLabelResult } from '@/types/stage-labels'
@@ -60,8 +60,8 @@ export interface TickActionable {
   readonly kind: PipelineItemKind
   /** The ticket stage this candidate runs. */
   readonly stage: Stage
-  /** Run provenance only — no decision reads it. */
-  readonly trigger: LabelKey
+  /** The prompt mode the stage runs in. */
+  readonly mode: StageMode
   readonly agent: StageAgent
   /** `true` when this candidate's plan carried no ` ```files ` fence at all — it dispatches unchecked rather than held, since holding every pre-contract plan would stall the pipeline harder than the collision the gate prevents. */
   readonly unchecked: boolean
@@ -73,8 +73,6 @@ export interface TickHeld {
   readonly number: number
   readonly kind: PipelineItemKind
   readonly stage: Stage
-  /** Run provenance only — no decision reads it. */
-  readonly trigger: LabelKey
   readonly reason: TickHeldReason
   readonly contention: TickContention | null
   /** Populated only for `reason: 'cycle-cap'` / `'zero-diff'` / `'check-hold'` / `'integration-red'`, `null` for every other reason. */
@@ -141,8 +139,7 @@ export type TickObservation =
       readonly headRefOid: string
     })
   | (TickObservationBase & { readonly kind: 'plan-missing' })
-  /** `trigger` is the stage's own trigger label, which with `agent` names the hand-back table row `main/pipeline/transitions.ts` applies. */
-  | (TickObservationBase & { readonly kind: 'adopt'; readonly agent: StageAgent; readonly stage: Stage; readonly trigger: LabelKey; readonly handback: StageHandback; readonly evidence: AdoptionEvidence })
+  | (TickObservationBase & { readonly kind: 'adopt'; readonly agent: StageAgent; readonly stage: Stage; readonly handback: StageHandback; readonly evidence: AdoptionEvidence })
   | (TickObservationBase & { readonly kind: 'rerun-checks'; readonly runs: readonly { readonly check: string; readonly runId: string }[]; readonly headRefOid: string })
 
 /** One `autoPlan` issue at `planReview` alone, assigned to the viewer — the app's own auto-plan swap acts on this set while it owns the repository. */
@@ -166,7 +163,7 @@ export interface TickLabelRepair {
   readonly mirror: MirrorFailure | null
 }
 
-/** One repository's own tick — `planTick`'s whole result. `disabledStages` is always `[]` on a blind repository. */
+/** One repository's own tick — `planTick`'s whole result. */
 export interface TickReport {
   readonly repoId: RepoId
   readonly displayName: string
@@ -176,8 +173,6 @@ export interface TickReport {
   readonly claims: readonly TickClaim[]
   /** Every `autoPlan` issue at `planReview` alone, assigned to the viewer — `[]` on a blind report. `main/pipeline/tick/dispatchable.ts`'s `autoApprovableFrom` is the only reader under `main/`. */
   readonly autoApprovals: readonly TickAutoApproval[]
-  /** Every module-gated stage key this repository's config currently turns off — a gated stage is absent from the UI, never a stage rendered at zero. */
-  readonly disabledStages: readonly LabelKey[]
   /** This repository's own GitHub source's next-due instant — `null` on a blind report: a repository this tick could not decide anything for has no decision instant to report either. */
   readonly nextTickAt: string | null
   /** The machine-observation writes the app would make (or has made) this pass, under the `dispatch` claim — always `[]` on a blind report. */

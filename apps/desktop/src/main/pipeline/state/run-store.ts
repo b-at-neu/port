@@ -39,7 +39,6 @@ export function createRunStore({ store, newId, now }: CreateRunStoreParams): Run
         stage: failure.stage,
         item: { kind: failure.kind, number: failure.number },
         agent: failure.agent,
-        trigger: failure.trigger,
         model: failure.model,
         title: failure.title,
         sessionKey: null,

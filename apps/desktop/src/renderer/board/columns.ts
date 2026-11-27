@@ -1,6 +1,6 @@
 // The Board's kanban projection — each ticket lands in exactly one of six columns.
 import { columnName } from '@/renderer/board/copy'
-import { ticketViewOf } from '@/renderer/lib/ticket-view'
+import { ticketViewOfItem } from '@/utils/pipeline/stages'
 import { columnOf, stageGroupOf } from '@/utils/pipeline/stages'
 import type { BoardColumn, BoardColumnCard, BoardColumnKey, BoardItemRow } from '@/types/board'
 import type { PhaseTone } from '@/types/components'
@@ -23,11 +23,11 @@ const COLUMN_PALETTE: Readonly<Record<BoardColumnKey, PhaseTone['palette']>> = {
 }
 
 function cardColumnOf(row: BoardItemRow): BoardColumnKey {
-  return columnOf(ticketViewOf(row.item), { autoApproving: row.autoApproving, blocked: row.blockedOn !== null })
+  return columnOf(ticketViewOfItem(row.item), { autoApproving: row.autoApproving, blocked: row.blockedOn !== null })
 }
 
 function pipelineRank(row: BoardItemRow): number {
-  return stageGroupOf(ticketViewOf(row.item)).rank
+  return stageGroupOf(ticketViewOfItem(row.item)).rank
 }
 
 export function boardColumns(rows: readonly BoardItemRow[], ungated: readonly BoardItemRow[], params: BoardColumnsParams): readonly BoardColumn[] {

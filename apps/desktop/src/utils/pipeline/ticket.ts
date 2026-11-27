@@ -3,7 +3,6 @@ import { repoId, sessionKey } from '@/utils/schemas'
 import { STAGE_OUTCOME_KINDS } from '@/types/stage-session'
 import type { AssertEqual } from '@/types/assert-type'
 import type { WriteOutcome } from '@/types/writes'
-import { LABEL_KEYS, type LabelKey } from '@/utils/labels/vocabulary'
 
 const timestamp = z.iso.datetime()
 
@@ -78,7 +77,6 @@ export const runSchema = z.object({
   stage: stageSchema,
   item: z.object({ kind: z.enum(['issue', 'pull-request']), number: z.int().positive() }),
   agent: z.enum(STAGE_AGENTS),
-  trigger: z.enum(LABEL_KEYS),
   model: z.string(),
   title: z.string().nullable(),
   sessionKey: sessionKey.nullable(),
@@ -123,30 +121,3 @@ export const ticketSchema = z.object({
 })
 export type Ticket = z.infer<typeof ticketSchema>
 
-export type V1KeyMeaning =
-  | { readonly kind: 'state'; readonly stage: Stage; readonly status: StatusKind; readonly reason?: QueueReason; readonly gate?: Gate; readonly approved?: true }
-  | { readonly kind: 'escalation'; readonly status: 'waiting-on-you'; readonly gate: 'escalation' }
-  | { readonly kind: 'pull-request' }
-  | { readonly kind: 'record' }
-  | { readonly kind: 'auto-plan' }
-
-export const V1_KEY_MEANING = {
-  ready: { kind: 'state', stage: 'plan', status: 'queued', reason: 'new' },
-  planChangesRequested: { kind: 'state', stage: 'plan', status: 'queued', reason: 'changes-requested' },
-  planning: { kind: 'state', stage: 'plan', status: 'running' },
-  planReview: { kind: 'state', stage: 'plan', status: 'waiting-on-you', gate: 'plan-approval' },
-  planApproved: { kind: 'state', stage: 'implement', status: 'queued', reason: 'new' },
-  inProgress: { kind: 'state', stage: 'implement', status: 'running' },
-  blocked: { kind: 'state', stage: 'implement', status: 'blocked' },
-  readyForReview: { kind: 'state', stage: 'review', status: 'queued', reason: 'new' },
-  reviewing: { kind: 'state', stage: 'review', status: 'running' },
-  needsRevision: { kind: 'state', stage: 'revise', status: 'queued', reason: 'changes-requested' },
-  revising: { kind: 'state', stage: 'revise', status: 'running' },
-  refreshBranch: { kind: 'state', stage: 'refresh', status: 'queued', reason: 'new' },
-  refreshing: { kind: 'state', stage: 'refresh', status: 'running' },
-  approved: { kind: 'state', stage: 'merge', status: 'waiting-on-you', gate: 'merge', approved: true },
-  needsHuman: { kind: 'escalation', status: 'waiting-on-you', gate: 'escalation' },
-  prOpened: { kind: 'pull-request' },
-  marker: { kind: 'record' },
-  autoPlan: { kind: 'auto-plan' },
-} as const satisfies Readonly<Record<LabelKey, V1KeyMeaning>>

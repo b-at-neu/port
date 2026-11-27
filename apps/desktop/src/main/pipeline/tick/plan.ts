@@ -12,8 +12,10 @@ import { gateCandidates } from '@/utils/pipeline/contention'
 import type { Disposition } from '@/utils/pipeline/checks'
 import { zeroDiffChecksOf } from '@/utils/pipeline/checks'
 import { cycleGrantCount, zeroDiffGate } from '@/utils/pipeline/gates'
-import { stageNameOf, stageRowOf } from '@/utils/pipeline/stages'
+import { stageNameOf, stageRowOf, ticketViewOf } from '@/utils/pipeline/stages'
 import type { Run, Stage } from '@/utils/pipeline/ticket'
+import { stageModeOf } from '@/utils/stage/prompt'
+import type { StageMode } from '@/utils/stage/prompt'
 import { observationsOf } from '@/main/pipeline/tick/observe'
 import { adoptionsOf, heldVerdictAdoption, openPullRequestAdoption } from '@/main/pipeline/tick/adopt'
 import { partitionOwnership } from '@/utils/pipeline/classify'
@@ -55,7 +57,7 @@ interface PlanTickParams {
 }
 
 function emptyReport(repoId: RepoId, displayName: string, blind: TickBlind): TickReport {
-  return { repoId, displayName, blind, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [], autoApprovals: [], labelRepairs: [] }
+  return { repoId, displayName, blind, actionable: [], held: [], claims: [], nextTickAt: null, observations: [], autoApprovals: [], labelRepairs: [] }
 }
 
 /** `TickActionable.cycle` — populated only for a `revise`/`review` candidate; `null` for every other agent. */
@@ -130,7 +132,7 @@ function actionableAndHeld(p: TriggerParams): { readonly actionable: readonly Ti
 
   const ungated: TickActionable[] = []
   const structuredCandidates: ClaimedItem[] = []
-  const structuredMeta = new Map<number, { readonly kind: PipelineItemKind; readonly stage: Stage; readonly trigger: TickActionable['trigger'] }>()
+  const structuredMeta = new Map<number, { readonly kind: PipelineItemKind; readonly stage: Stage; readonly mode: StageMode }>()
 
   for (const item of triggerItems) {
     const entry = entryOf(item)
@@ -170,14 +172,15 @@ function actionableAndHeld(p: TriggerParams): { readonly actionable: readonly Ti
     }
 
     const cycle = stage === 'refresh' ? null : cycleOf(item, agent === 'revise' ? effectiveCap : reviewCycleCap)
+    const mode = stageModeOf(ticketViewOf(item.ticket))
 
     if (agent !== 'impl' || item.claimedFiles === null) {
-      ungated.push({ ...entry, agent, unchecked: agent === 'impl' && item.claimedFiles === null, cycle })
+      ungated.push({ ...entry, mode, agent, unchecked: agent === 'impl' && item.claimedFiles === null, cycle })
       continue
     }
 
     structuredCandidates.push({ item: item.number, paths: item.claimedFiles })
-    structuredMeta.set(item.number, { kind: item.kind, stage, trigger: entry.trigger })
+    structuredMeta.set(item.number, { kind: item.kind, stage, mode })
   }
 
   const forcedNumbers = new Set(structuredCandidates.filter((c) => forceDispatch?.has(repoId, c.item) ?? false).map((c) => c.item))
@@ -285,7 +288,6 @@ export function planTick(params: PlanTickParams): TickReport {
     actionable,
     held,
     claims,
-    disabledStages: repository.disabled,
     nextTickAt: nextDecisionAt.toISOString(),
     observations,
     autoApprovals: autoApprovalsOf(repository.items, repository.viewer),

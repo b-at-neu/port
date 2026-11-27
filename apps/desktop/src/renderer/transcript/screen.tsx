@@ -12,7 +12,7 @@ import { ConversationList } from '@/renderer/components/conversation-list'
 import { PhaseList } from '@/renderer/components/phase-list'
 import { useIpcQuery } from '@/renderer/data/query'
 import { agentSummaryOf } from '@/renderer/board/row-model'
-import { ticketViewOf } from '@/renderer/lib/ticket-view'
+import { ticketViewOfItem } from '@/utils/pipeline/stages'
 import type { RepoId } from '@/utils/repos'
 import { ROUTE_IDS } from '@/renderer/app/routes'
 import { useTranscript } from '@/renderer/data/transcript'
@@ -61,7 +61,7 @@ function TicketAside({ repoId, number }: { readonly repoId: RepoId; readonly num
       <p className="mb-3 text-small font-medium">
         #{ticket.number} {ticket.title}
       </p>
-      <PhaseList view={ticketViewOf(ticket)} details={{}} extraCurrentLine={agentSummaryOf(ticket.agents, ticket.sessions)} />
+      <PhaseList view={ticketViewOfItem(ticket)} details={{}} extraCurrentLine={agentSummaryOf(ticket.agents, ticket.sessions)} />
     </div>
   )
 }

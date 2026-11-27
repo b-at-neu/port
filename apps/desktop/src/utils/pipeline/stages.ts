@@ -1,10 +1,9 @@
 import { gateSchema, queueReasonSchema, STAGES, STATUS_KINDS } from '@/utils/pipeline/ticket'
-import type { Gate, QueueReason, Stage, Status, StatusKind } from '@/utils/pipeline/ticket'
+import type { Gate, QueueReason, Stage, Status, StatusKind, Ticket } from '@/utils/pipeline/ticket'
 import { PHASE_KEYS } from '@/types/board'
-import type { BoardColumnKey, BoardSectionKey, PhaseKey, PhaseSegment, RowNeedsYouKind } from '@/types/board'
+import type { BoardColumnKey, BoardSectionKey, Palette, PhaseKey, PhaseSegment, RowNeedsYouKind } from '@/types/board'
 import type { StageAgent } from '@/types/tick'
 import type { AssertEqual } from '@/types/assert-type'
-import type { LabelPalette } from '@/utils/labels/defaults'
 
 export type StageStatus =
   | { readonly kind: 'queued'; readonly reason: QueueReason }
@@ -21,14 +20,14 @@ export interface StageRow {
   readonly phase: PhaseKey | null
   readonly column: BoardColumnKey
   readonly needsYou: RowNeedsYouKind | null
-  readonly palette: LabelPalette | null
+  readonly palette: Palette | null
   readonly agent: StageAgent | null
   readonly attention: boolean
 }
 
 export const _statusAssignableToStageStatus: AssertEqual<[Status] extends [StageStatus] ? true : false, true> = true
 
-function row(name: string, phase: PhaseKey, column: BoardColumnKey, needsYou: RowNeedsYouKind | null, palette: LabelPalette, agent: StageAgent | null, attention = false): StageRow {
+function row(name: string, phase: PhaseKey, column: BoardColumnKey, needsYou: RowNeedsYouKind | null, palette: Palette, agent: StageAgent | null, attention = false): StageRow {
   return { name, phase, column, needsYou, palette, agent, attention }
 }
 
@@ -102,7 +101,7 @@ const GATE_REFINE: Readonly<Record<Gate, Partial<StageRow>>> = {
   interrupted: { name: 'Needs you', needsYou: null, palette: 'needs-you', attention: true },
 }
 
-export const PHASE_TABLE: Readonly<Record<PhaseKey, { readonly name: string; readonly palette: LabelPalette }>> = {
+export const PHASE_TABLE: Readonly<Record<PhaseKey, { readonly name: string; readonly palette: Palette }>> = {
   plan: { name: 'Planning', palette: 'plan' },
   implement: { name: 'Implementing', palette: 'implement' },
   review: { name: 'Reviewing', palette: 'review' },
@@ -127,6 +126,11 @@ export function stageNameOf(view: TicketView | null): string {
 
 export function phaseOf(view: TicketView | null): PhaseKey | null {
   return stageRowOf(view).phase
+}
+
+/** The phase a history event moved the ticket into, `null` for an event that did not move it. */
+export function phaseOfEvent(event: { readonly to: { readonly stage: Stage; readonly status: StatusKind } | null }): PhaseKey | null {
+  return event.to === null ? null : STAGE_TABLE[event.to.stage][event.to.status].phase
 }
 
 export function waitsOnYou(view: TicketView | null, autoApproving: boolean): boolean {
@@ -191,6 +195,12 @@ export function ticketViewOf(ticket: { readonly stage: Stage; readonly status: S
   if (status.kind === 'queued') return { stage, status: { kind: 'queued', reason: status.reason } }
   if (status.kind === 'waiting-on-you') return { stage, status: { kind: 'waiting-on-you', gate: status.gate } }
   return { stage, status: { kind: status.kind } }
+}
+
+/** Where an item's ticket stands, `null` for an untracked one. A merged item still reads `done` while its ticket has not yet caught up. */
+export function ticketViewOfItem(item: { readonly ticket: Ticket | null; readonly mergedAt: string | null }): TicketView | null {
+  if (item.mergedAt !== null) return { stage: 'merge', status: { kind: 'done' } }
+  return item.ticket === null ? null : ticketViewOf(item.ticket)
 }
 
 export function agentStage(agent: StageAgent): Stage {

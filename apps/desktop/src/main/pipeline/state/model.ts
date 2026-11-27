@@ -1,20 +1,14 @@
 // Pure: no I/O. The store file's validation, seeding, pruning and the legacy views of its tickets.
 import { isOpen } from '@/main/pipeline/runs'
-import { ticketsOfItems } from '@/main/pipeline/state/migrate'
 import { itemsOf } from '@/main/pipeline/state/mirror'
 import { RUN_STATES } from '@/types/dispatch'
-import { fullKeysOf, type DispatchEntry, type MirrorFailure, type PipelineStateFile, type PipelineView, type RepoRecord, type StoredHistoryRow, type StoredItem, type TicketRef, type TrackedRef } from '@/types/pipeline-state'
+import type { DispatchEntry, MirrorFailure, PipelineStateFile, PipelineView, RepoRecord, TicketRef, TrackedRef } from '@/types/pipeline-state'
 import type { RepositoryState } from '@/types/state'
 import type { WriteOutcome } from '@/types/writes'
-import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
-import type { LabelKey } from '@/utils/labels/vocabulary'
 import { ticketSchema, type Ticket } from '@/utils/pipeline/ticket'
 import type { RepoId } from '@/utils/repos'
 
 export const FILE_VERSION = 3
-
-const HISTORY_ROWS = 50
-const IN_FLIGHT: ReadonlySet<LabelKey> = new Set(LABEL_DEFAULTS.filter((label) => label.role === 'in-flight').map((label) => label.key))
 
 export function emptyFile(): PipelineStateFile {
   return { version: FILE_VERSION, dispatch: {}, repositories: {} }
@@ -56,23 +50,15 @@ export function parseFile(value: unknown): PipelineStateFile {
   return { version: FILE_VERSION, dispatch: dispatchOf(value.dispatch), repositories }
 }
 
-/** One ticket per reconciled change, from what the board just showed. */
-export function seedFrom(repoId: RepoId, state: Extract<RepositoryState, { readonly ok: true }>, at: string): RepoRecord {
-  const items: StoredItem[] = state.items.map((item) => ({
-    kind: item.kind,
-    number: item.number,
-    keys: item.matchedKeys.filter((key) => key !== 'marker' && key !== 'autoPlan'),
-    marked: item.matchedKeys.includes('marker'),
-    autoPlan: item.matchedKeys.includes('autoPlan'),
-    claimedAt: item.stageHistory.findLast((entry) => IN_FLIGHT.has(entry.key))?.at ?? null,
-    reviewCycles: item.reviewCycleCount ?? 0,
-    history: item.stageHistory.map((entry): StoredHistoryRow => ({ at: entry.at, action: 'seed', add: [entry.key], remove: [], actor: entry.actor })).slice(-HISTORY_ROWS),
-    updatedAt: at,
-    issue: item.kind === 'pull-request' ? item.linked : null,
-    mirrorFailure: null,
-  }))
-  const tickets = ticketsOfItems(repoId, items, 'seed')
-  return { seededAt: at, tickets: Object.fromEntries(tickets.map((ticket) => [String(ticket.ticket), ticket])) }
+/** One ticket per reconciled change, from the tickets the board just derived; a pull request's ticket wins over the issue it names. */
+export function seedFrom(state: Extract<RepositoryState, { readonly ok: true }>, at: string): RepoRecord {
+  const tickets: Record<string, Ticket> = {}
+  for (const item of state.items) {
+    if (item.ticket === null) continue
+    const held = tickets[String(item.ticket.ticket)]
+    if (held === undefined || (held.pr === null && item.ticket.pr !== null)) tickets[String(item.ticket.ticket)] = item.ticket
+  }
+  return { seededAt: at, tickets }
 }
 
 /** The ticket a half belongs to: an issue by its number, a pull request by its own or, while new, by the issue its branch names. */
@@ -121,5 +107,5 @@ export function trackedOf(record: RepoRecord | undefined): readonly TrackedRef[]
   if (record === undefined) return null
   return Object.values(record.tickets)
     .flatMap(itemsOf)
-    .map((item) => ({ kind: item.kind, number: item.number, keys: fullKeysOf(item) }))
+    .map((item) => ({ kind: item.kind, number: item.number }))
 }

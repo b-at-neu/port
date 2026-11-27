@@ -13,7 +13,7 @@ import type { ListSessionsResult, OpenTailParams, PollTailParams, CloseTailParam
 import type { GithubPrecheckOutcome, PipelineState, RefreshOutcome } from '@/types/state'
 import type { RunStore } from '@/types/stage'
 import type { ForceDispatch, RefreshMemo, RerunMemo, UnknownStreaks } from '@/types/tick'
-import type { LabelVocabulary, VerifiableVocabulary } from '@/utils/labels/vocabulary'
+import type { DisplayVocabulary } from '@/utils/labels/display'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import type { TranscriptTailOpen, TranscriptTailPoll } from '@/utils/sessions/transcript'
 
@@ -33,8 +33,7 @@ interface ReposParams {
 interface GithubParams {
   readonly repoId: RepoId
   readonly repo: { readonly owner: string; readonly name: string }
-  readonly vocabulary: LabelVocabulary
-  readonly verify?: VerifiableVocabulary
+  readonly vocabulary: DisplayVocabulary
   readonly integration: string
   /** The store's tracked items; `null` or absent sweeps GitHub for the seed read. */
   readonly tracked?: readonly TrackedRef[] | null

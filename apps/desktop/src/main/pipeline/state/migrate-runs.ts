@@ -4,7 +4,6 @@ import { ticketOfKeys } from '@/main/pipeline/state/migrate'
 import { RUN_STATES } from '@/types/dispatch'
 import type { DispatchEntry } from '@/types/pipeline-state'
 import { INTERRUPTED_REASONS, runSchema, STAGE_AGENTS, type Run, type Stage } from '@/utils/pipeline/ticket'
-import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 
 /** The raw JSON of the three files, `null` for one that was missing or unparseable. */
@@ -30,7 +29,6 @@ interface Denial {
 }
 
 const STAGE_OF_AGENT: Readonly<Record<Agent, Stage>> = { plan: 'plan', impl: 'implement', review: 'review', revise: 'revise' }
-const TRIGGER_OF_AGENT: Readonly<Record<Agent, LabelKey>> = { plan: 'ready', impl: 'planApproved', review: 'readyForReview', revise: 'needsRevision' }
 const KIND_OF_AGENT: Readonly<Record<Agent, 'issue' | 'pull-request'>> = { plan: 'issue', impl: 'issue', review: 'pull-request', revise: 'pull-request' }
 const DENIAL_LIMIT = 20
 
@@ -68,7 +66,6 @@ function registryRun(raw: unknown): { readonly repoId: string; readonly run: Run
     stage,
     item: { kind: raw.kind, number: raw.number },
     agent: raw.agent,
-    trigger: raw.trigger,
     model: raw.model,
     title: text(raw.title),
     sessionKey: null,
@@ -116,8 +113,7 @@ function ticketFor(repo: Repo, kind: 'issue' | 'pull-request', number: number): 
 
 function stubFor(repoId: string, run: Run): Json {
   const { item } = run
-  const keys: LabelKey[] = []
-  const pr = item.kind === 'pull-request' ? { number: item.number, keys, approvedAt: null } : null
+  const pr = item.kind === 'pull-request' ? { number: item.number, keys: [], approvedAt: null } : null
   const { ticket } = ticketOfKeys({ repo: repoId as RepoId, ticket: item.number, issueKeys: [], pr, history: [], at: run.startedAt, mirrorFailure: null, reviewCycles: 0, stageHint: run.stage })
   return ticket
 }
@@ -139,7 +135,6 @@ function denialRun(denials: readonly Denial[], first: Denial): Run {
     stage: STAGE_OF_AGENT[first.agent],
     item: { kind: KIND_OF_AGENT[first.agent], number: first.number },
     agent: first.agent,
-    trigger: TRIGGER_OF_AGENT[first.agent],
     model: '',
     title: null,
     sessionKey: null,

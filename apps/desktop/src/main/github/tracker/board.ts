@@ -6,13 +6,14 @@ import { asRecord, readDetailChunks, readTrackedChunks, selectTracked, sweepSurf
 import { buildIssueDetailsQuery, buildIssueSweepQuery, buildTrackedIssuesQuery } from '@/main/github/tracker/query'
 import type { GraphQLErrorEntry, PipelineItem } from '@/types/github'
 import type { BoardIssuesFetch, BoardIssuesParams } from '@/main/github/tracker/types'
-import type { LabelKey, RepoLabels } from '@/utils/labels/vocabulary'
+import type { DisplayKey } from '@/utils/labels/display'
+import type { RepoLabels } from '@/utils/labels/vocabulary'
 
 // Only an issue alias's own blockedBy/comments/closedByPullRequestsReferences error is per-field: it costs a tag, never the board.
 const PER_FIELD_ERRORS: ReadonlySet<unknown> = new Set(['blockedBy', 'comments', 'closedByPullRequestsReferences'])
 
 /** The issue stages whose closing pull requests are read: one that already opened its pull request can be adopted instead of re-dispatched. */
-const CLOSING_READ_KEYS: readonly LabelKey[] = ['planApproved', 'inProgress', 'blocked', 'prOpened']
+const CLOSING_READ_KEYS: readonly DisplayKey[] = ['implementing', 'reviewing', 'revising', 'approved', 'needsYou']
 
 /** `null`, never a guess, when the alias is absent, malformed, or named in `errors[].path`.
  *  Unlike `fetchClaimPreflight`'s `viewerLogin`, this never fails the whole fetch. */
@@ -72,7 +73,7 @@ export async function readBoardIssues(ctx: GitHubReadContext, params: BoardIssue
     kind: 'issue',
     items: [...swept, ...read],
     perField: PER_FIELD_ERRORS,
-    build: (chunk) => buildIssueDetailsQuery(chunk.map((item) => ({ number: item.number, blockerComments: item.matchedKeys.includes('blocked'), closingPullRequests: CLOSING_READ_KEYS.some((key) => item.matchedKeys.includes(key)) }))),
+    build: (chunk) => buildIssueDetailsQuery(chunk.map((item) => ({ number: item.number, blockerComments: item.matchedKeys.includes('needsYou'), closingPullRequests: CLOSING_READ_KEYS.some((key) => item.matchedKeys.includes(key)) }))),
   })
   if (!detailed.ok) return detailed
 

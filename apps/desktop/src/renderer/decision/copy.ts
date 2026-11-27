@@ -1,13 +1,11 @@
 // Every string the decision dialog renders — one function per union, pure.
-import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
+import { defaultNameOf } from '@/utils/labels/display'
 import { mirrorReason } from '@/renderer/lib/mirror-reason'
 import type { GrantContext, ItemDecisionResult, OperatorDecision, RebaseDecision, RebaseOption, RebasePick, ReviseContext, UnblockContext, UnblockRoute } from '@/types/actions'
 
-function labelNameOf(key: string): string {
-  return LABEL_DEFAULTS.find((def) => def.key === key)?.name ?? key
-}
+const NEEDS_YOU = defaultNameOf('needsYou')
 
-const UNBLOCK_TARGET_LABEL: Readonly<Record<UnblockRoute, string>> = { revision: 'needsRevision', review: 'readyForReview', implementation: 'planApproved' }
+const UNBLOCK_TARGET: Readonly<Record<UnblockRoute, string>> = { revision: 'revision', review: 'review', implementation: 'implementation' }
 
 export function dialogTitle(decision: OperatorDecision, number: number, target: UnblockContext['target'] = 'pull-request'): string {
   if (target === 'issue') return `Unblock #${String(number)}`
@@ -27,15 +25,15 @@ export function unblockReasonLine(context: UnblockContext): string {
 
 export function unblockConsequence(context: UnblockContext): string {
   if (context.target === 'issue') {
-    return `Unblocking posts "## Gate cleared" on the ticket and moves it from "${labelNameOf('blocked')}" to "${labelNameOf('planApproved')}". Implementation starts again on the next tick and picks up the branch the last run pushed. A fresh run reads the plan, not comments, so put any answer it needs into the plan first.`
+    return `Unblocking posts "## Gate cleared" on the ticket and puts it back in the queue for implementation. Implementation starts again on the next tick and picks up the branch the last run pushed. A fresh run reads the plan, not comments, so put any answer it needs into the plan first.`
   }
   if (context.decisions.length > 0) {
-    return `Unblocking records your choices on the PR as "## Gate cleared", removes "${labelNameOf('needsHuman')}", and sends it to revision. Revision redoes the rebase with them on the next tick.`
+    return `Unblocking records your choices on the PR as "## Gate cleared", removes "${NEEDS_YOU}", and sends it to revision. Revision redoes the rebase with them on the next tick.`
   }
   if (context.routes.length === 1 && context.routes[0] === 'revision') {
-    return `Unblocking removes "${labelNameOf('needsHuman')}" and sends it to revision. This head has had its two reviews, so it is only reviewed again once revision pushes a new one.`
+    return `Unblocking removes "${NEEDS_YOU}" and sends it to revision. This head has had its two reviews, so it is only reviewed again once revision pushes a new one.`
   }
-  return `Unblocking removes "${labelNameOf('needsHuman')}" and the next tick picks it up. No comment is posted — the label change is the record.`
+  return `Unblocking removes "${NEEDS_YOU}" and the next tick picks it up. No comment is posted — the label change is the record.`
 }
 
 export function rebaseLegend(decision: RebaseDecision): string {
@@ -147,14 +145,14 @@ function decisionResultLines(params: DecisionResultParams): DecisionResultLines 
   const { comment, labels } = response
   if (labels.kind === 'applied') {
     if (decision === 'unblock') {
-      const target = `"${labelNameOf(UNBLOCK_TARGET_LABEL[route ?? 'review'])}"`
+      const target = `the ${UNBLOCK_TARGET[route ?? 'review']} queue`
       const verb = `dispatches ${route ?? 'review'}`
       const chosen = picks !== null && picks.length > 0 ? ` with ${picksChosenLine(picks)}` : ''
       const line = comment === null ? `${n} is unblocked and at ${target}${chosen}. The next tick ${verb}.` : `${n} is unblocked and at ${target}${chosen}. "## Gate cleared" is posted; the next tick ${verb}.`
       return { line, note: null, offerLabelOnly: false }
     }
     return {
-      line: `${n} is back at "${labelNameOf('needsRevision')}". Your note is posted as "## Changes requested" and the approval is off. The next tick dispatches revision.`,
+      line: `${n} is back in the revision queue. Your note is posted as "## Changes requested" and the approval is off. The next tick dispatches revision.`,
       note: null,
       offerLabelOnly: false,
     }

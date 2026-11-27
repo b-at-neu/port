@@ -1,23 +1,20 @@
 // The one writer every pipeline transition goes through: the table commit, then the display mirror of both halves of the ticket.
 import { displayOf } from '@/main/pipeline/state/display'
-import { halvesOf, issueNumberOfBranch, mirrorDiff, mirrorNamesOf } from '@/main/pipeline/state/mirror'
+import { displayNamesOf, halvesOf, issueNumberOfBranch, mirrorDiff, mirrorNamesOf } from '@/main/pipeline/state/mirror'
 import { stateLabelsOf, UNSEEDED_MESSAGE } from '@/main/pipeline/state/labels'
 import { draftOf, refusedWriteIntent } from '@/main/pipeline/incidents/raise'
 import type { StateWriteContext } from '@/main/pipeline/context'
 import type { IncidentInputs, IncidentIntent } from '@/types/incidents'
 import { applyLabels } from '@/main/github/writes/apply'
 import { appendAudit } from '@/main/github/writes/audit'
-import { resolveKeys } from '@/main/github/writes/command'
 import { evaluate } from '@/main/github/writes/scope'
 import { readOwnership } from '@/main/repos/ownership'
 import type { OwnershipRead } from '@/types/dispatch'
 import type { GitHubRepoRef, ItemsByNumberFetch } from '@/types/github'
 import type { MirrorItemParams, TicketRef } from '@/types/pipeline-state'
-import type { StateEvent } from '@/types/stage-labels'
-import type { EventWriteRequest, LabelAuditEntry, ObservedItem, OwnershipKind, WriteEventParams, WriteOutcome, WriteStateParams } from '@/types/writes'
+import type { EventWriteRequest, LabelAuditEntry, ObservedItem, OwnershipKind, WriteEventParams, WriteOutcome } from '@/types/writes'
 import { stateMoved } from '@/types/writes'
 import { mirrorVocabularyOf, type MirrorVocabulary } from '@/utils/labels/display'
-import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { Ticket } from '@/utils/pipeline/ticket'
 import type { RepoId } from '@/utils/repos'
 
@@ -30,7 +27,6 @@ interface WriteFacts {
 interface MirrorContext {
   readonly repo: string
   readonly repoId: RepoId
-  readonly vocabulary: LabelVocabulary
   readonly mirror: MirrorVocabulary
   readonly repoRoot: string
   readonly auditDir: string
@@ -55,18 +51,13 @@ function settled(outcome: WriteOutcome): boolean {
 /** The labels an event plans, for the incident signature of a refused write. */
 function plannedOf(request: EventWriteRequest): { readonly add: readonly string[]; readonly remove: readonly string[]; readonly action: string } {
   const { event } = request
-  if (event.kind === 'labels') return { add: event.add, remove: event.remove, action: request.action }
   if (event.kind === 'operator') return { add: [event.move.kind], remove: [], action: request.action }
+  if (event.kind === 'track' || event.kind === 'gate') return { add: [event.kind], remove: [], action: request.action }
   return { add: [event.kind === 'merged' ? 'merge' : event.stage], remove: [], action: request.action }
 }
 
 function preconditionOf(request: EventWriteRequest): IncidentInputs {
-  const { event } = request
-  return event.kind === 'labels' ? { present: event.expect.present, absent: event.expect.absent, assignees: request.assignees } : { expectedRev: request.expectedRev, assignees: request.assignees }
-}
-
-function expectedKeysOf(event: StateEvent): { readonly present: readonly LabelKey[]; readonly absent: readonly LabelKey[] } {
-  return event.kind === 'labels' ? event.expect : { present: [], absent: [] }
+  return { expectedRev: request.expectedRev, assignees: request.assignees }
 }
 
 async function audit(ctx: StateWriteContext, mc: MirrorContext, target: TicketRef, action: string, ownership: OwnershipKind, precondition: LabelAuditEntry['precondition'], observed: ObservedItem | null, outcome: WriteOutcome): Promise<WriteOutcome> {
@@ -124,7 +115,7 @@ async function raiseIncident(ctx: StateWriteContext, request: EventWriteRequest,
 
 /** Writes what the ticket shows onto one half, from a read the caller already holds. */
 function mirrorHalf(ctx: StateWriteContext, mc: MirrorContext, ticket: Ticket, half: TicketRef, action: string, observed: ObservedItem, assignees: { readonly add: readonly string[]; readonly remove: readonly string[] }): Promise<WriteOutcome> {
-  const names = mirrorNamesOf(displayOf(ticket), mc.mirror.labels, mc.vocabulary)
+  const names = mirrorNamesOf(displayOf(ticket), mc.mirror.labels)
   return labelsCall(ctx, mc, half, action, mirrorDiff(names.desired, names.all, observed.labels), assignees, observed)
 }
 
@@ -132,7 +123,7 @@ function mirrorHalf(ctx: StateWriteContext, mc: MirrorContext, ticket: Ticket, h
 async function mirrorCounterpart(ctx: StateWriteContext, mc: MirrorContext, ticket: Ticket, counterpart: TicketRef, action: string, known: ObservedItem | null): Promise<WriteOutcome[]> {
   const observed = known ?? observedOf(await ctx.tracker.readItemsByNumber({ repo: splitRepo(mc.repo), numbers: [counterpart.number] }), counterpart.number)
   if (observed === null) return []
-  const names = mirrorNamesOf(displayOf(ticket), mc.mirror.labels, mc.vocabulary)
+  const names = mirrorNamesOf(displayOf(ticket), mc.mirror.labels)
   const diff = mirrorDiff(names.desired, names.all, observed.labels)
   if (diff.addNames.length === 0 && diff.removeNames.length === 0) return []
   return [await labelsCall(ctx, mc, counterpart, action, diff, { add: [], remove: [] }, observed)]
@@ -142,12 +133,11 @@ async function attemptWrite(ctx: StateWriteContext, params: WriteEventParams, wr
   const { request } = params
   const store = ctx.stores.pipelineState
   await store.ready
-  const mc: MirrorContext = { repo: request.repo, repoId: request.repoId, vocabulary: request.vocabulary, mirror: request.mirror, repoRoot: params.repoRoot, auditDir: params.auditDir, writeId }
+  const mc: MirrorContext = { repo: request.repo, repoId: request.repoId, mirror: request.mirror, repoRoot: params.repoRoot, auditDir: params.auditDir, writeId }
   const target: TicketRef = { kind: request.kind, number: request.number }
-  const expected = expectedKeysOf(request.event)
-  const present = resolveKeys(request.vocabulary, expected.present)
-  const absent = resolveKeys(request.vocabulary, expected.absent)
-  const precondition: LabelAuditEntry['precondition'] = { present: present.names, absent: absent.names, assignees: request.assignees }
+  // An event that creates a ticket is only valid while the item does not wear the marker.
+  const absentNames = request.event.kind === 'track' || request.event.kind === 'gate' ? displayNamesOf(request.mirror.labels, ['port']) : []
+  const precondition: LabelAuditEntry['precondition'] = { present: [], absent: absentNames, assignees: request.assignees }
 
   const ownership = await readOwner(ctx, mc)
   if (ownership.kind === 'unreadable') return audit(ctx, mc, target, request.action, 'unreadable', precondition, null, { kind: 'ownership-unreadable', path: ownership.path, message: ownership.message })
@@ -155,11 +145,6 @@ async function attemptWrite(ctx: StateWriteContext, params: WriteEventParams, wr
     seen.observed = observed
     return audit(ctx, mc, target, request.action, ownership.kind, precondition, observed, outcome)
   }
-
-  const { event } = request
-  const keysToResolve = event.kind === 'labels' ? [event.add, event.remove] : []
-  const unresolved = [...new Set([...present.unresolved, ...absent.unresolved, ...keysToResolve.flatMap((list) => resolveKeys(request.vocabulary, list).unresolved)])]
-  if (unresolved.length > 0) return log(null, { kind: 'unresolvable-label', keys: unresolved })
 
   const stored = store.ticket(request.repoId, target)
   if (store.tickets(request.repoId) === null) return log(null, { kind: 'state-unsaved', message: UNSEEDED_MESSAGE })
@@ -178,14 +163,14 @@ async function attemptWrite(ctx: StateWriteContext, params: WriteEventParams, wr
     return log(githubSide, { kind: 'precondition-failed', conflict: { kind: 'precondition-failed', expected: assignees.expected, observed: assignees.observed, readAt: read.fetchedAt } })
   }
 
-  const applied: StateEvent = event.kind === 'labels' && request.kind === 'pull-request' ? { ...event, issue: issueNumberOfBranch(item.headRefName) } : event
-  const moved = await store.apply(request.repoId, target, applied, request.expectedRev)
+  const event = request.event.kind === 'gate' && request.event.issue === null ? { ...request.event, issue: issueNumberOfBranch(item.headRefName) } : request.event
+  const moved = await store.apply(request.repoId, target, event, request.expectedRev)
   if (!moved.ok) {
     if (moved.reason === 'persist-failed') return log(githubSide, { kind: 'state-unsaved', message: moved.message })
     if (moved.reason === 'unseeded') return log(null, { kind: 'state-unsaved', message: UNSEEDED_MESSAGE })
-    const names = stateLabelsOf(store.view(request.repoId), request.kind, request.number, request.vocabulary) ?? []
+    const names = stateLabelsOf(store.view(request.repoId), request.kind, request.number, request.mirror.labels) ?? []
     const observed: ObservedItem = { labels: names, assignees: item.assignees, readAt: read.fetchedAt }
-    const verdict = evaluate({ presentNames: present.names, absentNames: absent.names, assignees: { kind: 'any' } }, observed)
+    const verdict = evaluate({ presentNames: [], absentNames, assignees: { kind: 'any' } }, observed)
     return log(observed, { kind: 'precondition-failed', conflict: { kind: 'precondition-failed', expected: verdict.satisfied ? [] : verdict.expected, observed: names, readAt: read.fetchedAt } })
   }
 
@@ -204,36 +189,12 @@ export async function writeEvent(ctx: StateWriteContext, params: WriteEventParam
   return outcome
 }
 
-/** An operator path's label request, wrapped in one transitional `labels` event. */
-export function writeState(ctx: StateWriteContext, params: WriteStateParams): Promise<WriteOutcome> {
-  const { request } = params
-  const event: StateEvent = { kind: 'labels', itemKind: request.kind, add: request.add, remove: request.remove, expect: { present: request.expect.present, absent: request.expect.absent }, action: request.action, issue: null }
-  return writeEvent(ctx, {
-    ...params,
-    request: {
-      repoId: request.repoId,
-      repo: request.repo,
-      kind: request.kind,
-      number: request.number,
-      vocabulary: request.vocabulary,
-      mirror: request.mirror,
-      event,
-      expectedRev: null,
-      assignees: request.expect.assignees,
-      addAssignees: request.addAssignees,
-      removeAssignees: request.removeAssignees,
-      action: request.action,
-      ...(request.incident === undefined ? {} : { incident: request.incident }),
-    },
-  })
-}
-
 /** Mirrors both halves of the ticket `ref` names, as the store holds it. */
 export async function mirrorItem(ctx: StateWriteContext, params: MirrorItemParams): Promise<WriteOutcome> {
   const { entry, ref, action } = params
   const store = ctx.stores.pipelineState
   await store.ready
-  const mc: MirrorContext = { repo: entry.config.repo, repoId: entry.id, vocabulary: entry.config.vocabulary, mirror: mirrorVocabularyOf(entry.config), repoRoot: entry.path, auditDir: params.auditDir }
+  const mc: MirrorContext = { repo: entry.config.repo, repoId: entry.id, mirror: mirrorVocabularyOf(entry.config), repoRoot: entry.path, auditDir: params.auditDir }
   const ownership = await readOwner(ctx, mc)
   if (ownership.kind === 'unreadable') return audit(ctx, mc, ref, action, 'unreadable', null, null, { kind: 'ownership-unreadable', path: ownership.path, message: ownership.message })
 

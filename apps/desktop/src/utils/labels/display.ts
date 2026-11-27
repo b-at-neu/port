@@ -1,4 +1,4 @@
-// The display vocabulary: the seven labels the app shows on GitHub. The stage keys the app decides by stay in `defaults.ts`.
+// The display vocabulary: the seven labels the app shows on GitHub and reads back.
 import template from './labels.json'
 import type { LabelSource, VerifiableVocabulary, VocabularyProblem } from '@/utils/labels/vocabulary'
 
@@ -44,6 +44,11 @@ function isDisplayDefault(entry: unknown): entry is DisplayDefault {
 }
 
 export const DISPLAY_DEFAULTS: readonly DisplayDefault[] = (template.labels as unknown[]).filter(isDisplayDefault)
+
+/** The shipped name of a display label, for copy that cannot see the repository's own vocabulary. */
+export function defaultNameOf(key: DisplayKey): string {
+  return DISPLAY_DEFAULTS.find((def) => def.key === key)?.name ?? key
+}
 
 export interface DisplayLabel {
   readonly key: DisplayKey
@@ -120,12 +125,7 @@ export interface MirrorVocabulary {
   readonly labels: DisplayVocabulary
 }
 
-/** The repository's resolved display vocabulary, or the defaults when it has none. */
-export function mirrorVocabularyOf(config: { readonly displayVocabulary?: DisplayVocabulary }): MirrorVocabulary {
-  return { kind: 'display', labels: config.displayVocabulary ?? resolveDisplayVocabulary({}) }
-}
-
-/** The vocabulary the repository's label list is checked against: the seven display labels. */
-export function verifiableVocabularyOf(config: { readonly displayVocabulary?: DisplayVocabulary }): VerifiableVocabulary {
-  return mirrorVocabularyOf(config).labels
+/** The repository's resolved display vocabulary. */
+export function mirrorVocabularyOf(config: { readonly displayVocabulary: DisplayVocabulary }): MirrorVocabulary {
+  return { kind: 'display', labels: config.displayVocabulary }
 }

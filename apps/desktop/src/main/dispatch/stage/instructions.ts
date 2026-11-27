@@ -6,7 +6,7 @@ import { loadStageAgentDefinition } from '@/main/dispatch/stage/bundle'
 import type { StageLaunchRequest } from '@/types/dispatch'
 import type { StageInstructionsResult, StageLoadedInstructions } from '@/types/stage'
 import type { StageAgent } from '@/types/tick'
-import { KIND_PROMPT_NAMES, composeStageSystemPrompt, stageModeOf } from '@/utils/stage/prompt'
+import { KIND_PROMPT_NAMES, composeStageSystemPrompt } from '@/utils/stage/prompt'
 
 /** Every agent file is told to follow these `PIPELINE.md` sections, so they travel with its body. */
 export const STAGE_PIPELINE_SECTIONS = ['CLAUDE.md overrides', 'Operating rules (all stage agents)', 'Hand-back line'] as const
@@ -110,7 +110,7 @@ export function buildStageContext(request: StageLaunchRequest, pluginRoot: strin
   const context: [string, string][] = [
     ['stage', request.agent],
     ['item', `${KIND_PROMPT_NAMES[request.kind]} #${String(request.number)}`],
-    ['mode', stageModeOf(request.trigger) ?? 'unknown'],
+    ['mode', request.mode],
     [`models.${request.agent}`, request.model],
     ['plugin-root', pluginRoot],
     ['repo', config.repo],

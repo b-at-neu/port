@@ -1,5 +1,4 @@
 // The types every process shares for the repo registry — the renderer never manipulates a path, only displays what main resolved and hands `id` back verbatim. Types only: inspection and persistence live in src/main/repos/.
-import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { DisplayVocabulary } from '@/utils/labels/display'
 import type { AppliedOverride, OverrideValue } from '@/utils/pipeline/overrides'
 export type { AppliedOverride, OverrideValue }
@@ -60,12 +59,10 @@ export interface ResolvedRepoConfig {
     readonly scope: boolean
   }
   readonly reviewCycleCap: number
-  /** The 17 stage keys the app decides by. Unchanged by `appOnly`; what GitHub shows is `displayVocabulary`. */
-  readonly vocabulary: LabelVocabulary
-  /** `appOnly` in `.claude/port.config.json`: the repository is on the app's seven labels, and the terminal cockpit refuses it. Absent reads as `false`; `inspectRepository` always sets it. */
+  /** `appOnly` in `.claude/port.config.json`: the terminal cockpit refuses the repository. Absent reads as `false`; `inspectRepository` always sets it. */
   readonly appOnly?: boolean
-  /** The seven labels the app shows, resolved from `labels`/`states` and the `CLAUDE.md` overrides. Read only when `appOnly`. */
-  readonly displayVocabulary?: DisplayVocabulary
+  /** The seven labels the app shows and reads, resolved from `labels`/`states` and the `CLAUDE.md` overrides. */
+  readonly displayVocabulary: DisplayVocabulary
   /** `worktrees` is the full `commands.worktrees` prefix, `null` meaning the repository has not installed the reclamation script. `budget` is an on/off switch for this app, which reads it as such and never runs it: `null` means nothing measures or bounds ticket cost. */
   readonly commands: { readonly worktrees: string | null; readonly budget: string | null }
   /** The file-contention gate's own tuning — `sharedFiles` never contributes to a hold, `overlapThreshold` is how many non-shared paths an in-flight item must share with a candidate before it holds. */

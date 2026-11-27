@@ -45,9 +45,9 @@ function reasonLineOf(body: string): string | null {
   return capHandbackText(stripped === '' ? decision : stripped)
 }
 
-/** The newest issue comment at or before the latest `blocked` label event — no event means no comment, never an unrelated one. */
+/** The newest issue comment at or before the ticket's latest move into `blocked` — no such move means no comment, never an unrelated one. */
 function commentReasonOf(issue: ReconciledItem | null): BlockedOn['comment'] {
-  const blockedAt = issue?.stageHistory.filter((entry) => entry.key === 'blocked').map((entry) => Date.parse(entry.at)).sort((a, b) => b - a)[0]
+  const blockedAt = issue?.ticket?.history.filter((event) => event.to?.status === 'blocked').map((event) => Date.parse(event.at)).sort((a, b) => b - a)[0]
   if (issue === null || blockedAt === undefined || issue.blockerComments === null) return null
   let picked: { readonly node: IssueCommentNode; readonly at: number } | null = null
   for (const node of issue.blockerComments) {

@@ -8,7 +8,7 @@ import type { ReadyEntry } from '@/types/actions'
 import type { ReconciledItem } from '@/types/state'
 import type { TickActionable } from '@/types/tick'
 import type { WriteOutcome } from '@/types/writes'
-import { labelName } from '@/utils/labels/vocabulary'
+import { displayNamesOf } from '@/main/pipeline/state/mirror'
 import type { Platform } from '@/main/platform'
 import type { StateWriteContext } from '@/main/pipeline/context'
 import { escalateToHuman } from '@/main/pipeline/operator/escalate'
@@ -70,8 +70,7 @@ interface EscalateOverBudgetParams {
 /** Swaps the candidate to `needsHuman` and records the outcome as a budget note. */
 export async function escalateOverBudget(ctx: StateWriteContext & Pick<Platform, 'paths'>, params: EscalateOverBudgetParams): Promise<void> {
   const { entry, candidate, line, notes, viewer, item } = params
-  const needsHumanLabel = labelName(entry.config.vocabulary, 'needsHuman') ?? 'needsHuman'
-  const triggerLabel = labelName(entry.config.vocabulary, candidate.trigger) ?? candidate.trigger
+  const needsHumanLabel = displayNamesOf(entry.config.displayVocabulary, ['needsYou'])[0] ?? 'needsYou'
   const sha = candidate.kind === 'pull-request' ? (item?.headRefOid ?? null) : null
   const repeats = sha !== null && escalationRepeats({ comments: item?.comments ?? undefined, cause: 'budget', sha })
   const escalation = await escalateToHuman(ctx, {
@@ -81,14 +80,14 @@ export async function escalateOverBudget(ctx: StateWriteContext & Pick<Platform,
     viewer,
     body: repeats ? null : escalationBody(line, sha),
     action: 'budget-escalate',
-    incident: budgetIntent(candidate.trigger, item?.headRefOid ?? null),
+    incident: budgetIntent(candidate.stage, item?.headRefOid ?? null),
     auditDir: ctx.paths.userData,
     scratchDir: ctx.paths.temp,
   })
   if (escalation.labels.kind === 'applied') {
     notes.push({ kind: 'escalated', number: candidate.number, needsHumanLabel, commentFailedMessage: commentFailureMessage(escalation.comment) })
   } else {
-    notes.push({ kind: 'escalation-failed', number: candidate.number, needsHumanLabel, triggerLabel, outcome: escalation.labels })
+    notes.push({ kind: 'escalation-failed', number: candidate.number, needsHumanLabel, outcome: escalation.labels })
   }
 }
 
