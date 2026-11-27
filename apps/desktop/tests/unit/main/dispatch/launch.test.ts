@@ -82,17 +82,17 @@ describe('survived — the ticket', () => {
 })
 
 function actionableOf(overrides: Partial<TickActionable> = {}): TickActionable {
-  return { number: 52, kind: 'issue', stage: 'implement', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null, ...overrides }
+  return { number: 52, kind: 'issue', stage: 'implement', mode: 'implement', agent: 'impl', unchecked: false, cycle: null, ...overrides }
 }
 
 describe('promptFor', () => {
   const INSTRUCTION = 'Run your pipeline stage for #52. port has already moved its label. Follow your Pre-flight, Work, and Handoff steps exactly.'
 
   it.each([
-    [{ trigger: 'ready', agent: 'plan' }, `Plan stage for issue #52. ${INSTRUCTION}`],
+    [{ stage: 'plan', mode: 'fresh', agent: 'plan' }, `Plan stage for issue #52. ${INSTRUCTION}`],
     [{}, `Implementation stage for issue #52. ${INSTRUCTION}`],
-    [{ kind: 'pull-request', trigger: 'readyForReview', agent: 'review' }, `Review stage for pull request #52. ${INSTRUCTION}`],
-    [{ kind: 'pull-request', trigger: 'needsRevision', agent: 'revise' }, `Revision stage for pull request #52. ${INSTRUCTION}`],
+    [{ kind: 'pull-request', stage: 'review', mode: 'review', agent: 'review' }, `Review stage for pull request #52. ${INSTRUCTION}`],
+    [{ kind: 'pull-request', stage: 'revise', mode: 'revise', agent: 'revise' }, `Revision stage for pull request #52. ${INSTRUCTION}`],
   ] as const)('names the stage and the item for %j', (overrides, expected) => {
     expect(promptFor(actionableOf(overrides))).toBe(expected)
   })
@@ -104,8 +104,8 @@ describe('promptFor', () => {
     expect(DISPATCH_PROMPT.split('<n>')).toHaveLength(3)
   })
 
-  it('names the refresh stage for a refreshBranch trigger, with the number twice', () => {
-    const prompt = promptFor(actionableOf({ kind: 'pull-request', trigger: 'refreshBranch', agent: 'revise', stage: 'refresh' }))
+  it('names the refresh stage for a refresh candidate, with the number twice', () => {
+    const prompt = promptFor(actionableOf({ kind: 'pull-request', agent: 'revise', stage: 'refresh', mode: 'refresh' }))
     expect(prompt).toBe('Refresh stage for pull request #52. Run your pipeline stage for pull request #52 in refresh mode.')
     expect(REFRESH_PROMPT.split('<n>')).toHaveLength(3)
   })

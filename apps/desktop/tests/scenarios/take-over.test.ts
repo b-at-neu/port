@@ -7,7 +7,7 @@ import { ticketOf } from '../support/tickets'
 const AT = '2026-01-01T00:00:00.000Z'
 const ITEMS = [{ number: 52, title: 'first', labels: ['port', 'planApproved'], assignees: ['op'] }]
 const queued = ticketOf({ repo: SCENARIO_REPO, ticket: 52, stage: 'implement', status: { kind: 'queued', reason: 'new', since: AT } })
-const WORK = tickReport({ actionable: [actionable(52, 'planApproved', 'impl')] })
+const WORK = tickReport({ actionable: [actionable(52, 'impl')] })
 
 describe('taking over a repository', () => {
   it('a paused, unowned repository launches nothing until the operator runs it, then launches once', async () => {

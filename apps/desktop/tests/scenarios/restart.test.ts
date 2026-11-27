@@ -5,7 +5,7 @@ import type { StageOutcome } from '@/types/stage-session'
 import { actionable, diskWith, SCENARIO_REPO, scenarioRig, tickReport } from '../support/scenario'
 import { ticketOf } from '../support/tickets'
 
-const IMPL = [actionable(52, 'planApproved', 'impl')]
+const IMPL = [actionable(52, 'impl')]
 const COMPLETED: StageOutcome = { kind: 'completed', detail: null, costUsd: 1, resetsAt: null, worktree: 'removed', operatorJoined: false, handback: { token: 'pr-opened', arg: '#8' } }
 const ITEMS = [
   { number: 52, title: 't', labels: ['plan approved'], assignees: ['op'] },
