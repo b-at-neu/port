@@ -187,7 +187,7 @@ You write the config and the allowlist in the same run, so you are the only thin
 
 A command matches only if it **starts with an allowlisted binary**. `Bash(npm *)` does not cover `npx` — they are different binaries, and this exact pair has already shipped a repository whose every check prompted on every run. In `default` mode the operator approves them forever; for a dispatched agent the guard hook **denies** them outright, so the agent can never reach a green check and never pushes.
 
-**Every allow entry you add for a `commands.*` command carries a trailing ` *`, never the bare form (#205).** The trailing wildcard matches both the bare command and the command with any suffix; the bare form matches only itself. This has already shipped wrong once: `Bash(node <check-script>)` with no wildcard matched the configured check and nothing else, so every `2>&1 | tail -N` an agent appended to limit output was denied outright. §7 and §7.5 below are instances of this same rule — they already write `Bash(node scripts/port-artifacts.mjs *)` and `Bash(node scripts/port-worktrees.mjs *)` with the wildcard.
+**Every allow entry you add for a `commands.*` command carries a trailing ` *`, never the bare form (#205).** The trailing wildcard matches both the bare command and the command with any suffix; the bare form matches only itself. This has already shipped wrong once: `Bash(node <check-script>)` with no wildcard matched the configured check and nothing else, so every `2>&1 | tail -N` an agent appended to limit output was denied outright. §7, §7.5 and §7.7 below are instances of this same rule — they already write `Bash(node scripts/port-artifacts.mjs *)` and `Bash(node scripts/port-worktrees.mjs *)` with the wildcard.
 
 **An unmatched command is a hard stop**, resolved one of two ways:
 
@@ -309,6 +309,18 @@ node --version
 - Set `commands.budget` to `"node scripts/port-budget.mjs"` in `.claude/port.config.json`.
 - Add `Bash(node scripts/port-budget.mjs *)` to **both** `.claude/settings.json`'s `permissions.allow` and `.claude/port.config.json`'s `extraAllow`, so a later reconcile keeps it.
 
+## 7.7. Install the tracker CLI
+
+`commands.tracker` gives `/port:scope` one vendor-neutral way to create tickets, so the skill never names a vendor. Installing it needs Node, under the **same gate** as step 7 — do not ask about Node twice; reuse the answer from that step.
+
+**No Node, or the operator declined step 7** → leave `commands.tracker` null, install nothing, and say plainly in step 10's report that `/port:scope` refuses to create tickets until it is installed.
+
+**Node present and the operator accepts:**
+
+- Copy `${CLAUDE_PLUGIN_ROOT}/bin/tracker.mjs` to `scripts/port-tracker.mjs`. If it already exists, diff it rather than overwriting, and ask.
+- Set `commands.tracker` to `"node scripts/port-tracker.mjs"` in `.claude/port.config.json`.
+- Add `Bash(node scripts/port-tracker.mjs *)` to **both** `.claude/settings.json`'s `permissions.allow` and `.claude/port.config.json`'s `extraAllow`, so a later reconcile keeps it.
+
 ## 8. Bootstrap ignores
 
 Ensure `.gitignore` covers `.agents/`, `.temp/`, and the worktree root `.claude/worktrees/`. Append only what is missing.
@@ -382,6 +394,8 @@ Never let the operator walk away believing they have a merge gate they do not ha
 **If `commands.worktrees` was left null** — say so here too: the pipeline creates a worktree per ticket regardless, and with no reclamation script installed they will accumulate under `.claude/worktrees/` with no automatic cleanup; `/port:worktree-clean` is manual-only without it.
 
 **If `commands.budget` was left null** — say so here too: nothing measures or bounds ticket cost, and `reviewCycleCap` still bounds review loops only.
+
+**If `commands.tracker` was left null** — say so here too: `/port:scope` refuses to create tickets until it's installed.
 
 **In single-branch mode**, say instead of the warning below about the default branch differing from the integration branch (it is unreachable when there is only one branch, since single-branch mode sets `integration` to the default branch by construction): "Single-branch mode: `<default>` is both the integration branch and the default branch, so this config reaches dispatched agents on the merge that lands it. `/port:release` is unavailable. If you enabled the approval gate, it covers every pipeline pull request — there is no release pull request to exempt."
 

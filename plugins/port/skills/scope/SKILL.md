@@ -2,7 +2,7 @@
 name: scope
 description: Stage 0 — interactive decomposition of a major feature into an epic with dependency-ordered sub-issues, before any per-ticket planning. Runs on the session model; use a strong one. Usage: /port:scope <feature description>
 argument-hint: "<feature description>"
-allowed-tools: Bash(gh issue create *) Bash(gh issue view *) Bash(gh issue edit *) Bash(gh api repos/*) Bash(gh api graphql *) Read Grep Glob AskUserQuestion
+allowed-tools: Read Write Grep Glob AskUserQuestion
 ---
 
 # Scope — Stage 0: epic decomposition
@@ -17,7 +17,9 @@ Small bug fixes and single-scope tickets do **not** need this stage — file an 
 
 ## Read the configuration first
 
-Read `.claude/port.config.json` for `repo` (written `<repo>` below, and `<owner>`/`<name>` where a call needs them split) and `docs.engineering`. If it is missing, stop — this repository is not port-managed.
+Read `.claude/port.config.json` for `repo`, `commands.tracker` and `docs.engineering`. If it is missing, stop — this repository is not port-managed.
+
+If `commands.tracker` is null, stop before brainstorming and say: "This repository has no tracker CLI installed, so I can't create tickets. Run `/port:init` and choose **Reconcile** to install it."
 
 ## 1. Brainstorm
 
@@ -36,34 +38,35 @@ Show the epic summary, the sub-tickets with a two-to-three sentence scope each, 
 
 ## 3. Create the issues
 
-Create the parent epic, then each sub-issue:
-
-```bash
-gh issue create --repo <repo> --title "<Epic Title>" --body-file .temp/epic.md
-gh issue create --repo <repo> --title "<Sub-Ticket Title>" --body-file .temp/sub-<k>.md
-```
+Tickets go to the repository's configured tracker, through `<commands.tracker>` only. Never call a vendor's CLI or API directly.
 
 Write each body with the Write tool rather than passing it inline — bodies contain markdown and backticks, and inline quoting fails cross-platform. Each sub-ticket body ends with a `## Size` section giving its estimated files and lines, so the plan stage can check it.
 
-Link each child to the epic. This uses the REST API and the **database `id`**, not the issue number:
+Create the parent epic, then each sub-ticket, keeping the key each call prints:
 
 ```bash
-gh api repos/<repo>/issues/<child-number> --jq '.id'
-gh api repos/<repo>/issues/<epic-number>/sub_issues -X POST -F sub_issue_id=<database-id>
+<commands.tracker> create --title "<Epic Title>" --body-file .temp/epic.md
+<commands.tracker> create --title "<Sub-Ticket Title>" --body-file .temp/sub-<k>.md
 ```
 
-Where order matters, add blocked-by relationships. This uses GraphQL and **node IDs**, a third kind of identifier — do not mix the three up:
+Link each child to the epic:
 
 ```bash
-gh api repos/<repo>/issues/<number> --jq '.node_id'
-# issueId = the blocked issue; blockingIssueId = the blocker
-gh api graphql -f query='mutation { addBlockedBy(input: { issueId: "BLOCKED_NODE_ID", blockingIssueId: "BLOCKER_NODE_ID" }) { clientMutationId } }'
+<commands.tracker> link-child --parent <epic-key> --child <key>
 ```
+
+Where order matters, add a blocked-by relation for every dependency, covering every transitive dependency rather than just one:
+
+```bash
+<commands.tracker> block --blocked <key> --by <key>
+```
+
+On any `FAIL` line, stop. Report the keys already created and the links already made, and never re-run `create` for a ticket that already printed a key.
 
 **Leave every ticket unassigned and unlabelled.** Opt-in is what claims a ticket, and it assigns as well as labels. Until then the cockpit's unowned sweep is what keeps these visible — which is why they must carry no trigger label either.
 
 ## 4. Hand back
 
-List the created issue numbers — epic and sub-tickets, in dependency order. Then remind the human:
+List the created ticket keys — epic and sub-tickets, in dependency order. Then remind the human:
 
 > Nothing is opted in yet — in `/port:pipeline`, say "work on #N" to start a sub-ticket. The cockpit will warn if its blockers aren't merged.

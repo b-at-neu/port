@@ -95,6 +95,12 @@
           "examples": ["node scripts/port-budget.mjs"],
           "type": ["string", "null"]
         },
+        "tracker": {
+          "default": null,
+          "description": "Command prefix `/port:scope` appends `create`/`link-child`/`block` to, which creates tickets on whichever vendor `tracker` names. Null means `/port:scope` refuses to create tickets.",
+          "examples": ["node scripts/port-tracker.mjs"],
+          "type": ["string", "null"]
+        },
         "tick": {
           "default": null,
           "description": "Command prefix the cockpit appends `start`/`plan`/`commit`/`resolve` to for the tick engine, which moves the tick's decisions (query build, envelope classification, ownership partition, label classification, mergeability/contention/cycle-cap/liveness routing, and the pacing ladder) out of prose and into a deterministic script. Null means the cockpit follows the prose tick procedure in `TICK-PROSE.md` instead.",

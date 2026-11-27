@@ -12,6 +12,7 @@
     "artifacts": null,
     "worktrees": null,
     "budget": null,
+    "tracker": null,
     "tick": null,
     "forensics": null,
     "screenshots": null
