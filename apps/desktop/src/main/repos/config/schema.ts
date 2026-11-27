@@ -9,7 +9,7 @@ export const CONFIG_DEFAULTS = {
   models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
   modules: { approvalGate: true, release: true, scope: true },
   reviewCycleCap: 5,
-  commands: { worktrees: null, budget: null },
+  commands: { worktrees: null, budget: null, tracker: null },
   concurrency: { sharedFiles: [] as readonly string[], overlapThreshold: 2 },
   /** The port's own seed for a `sessionRequiredPaths +=` override — nothing else in the app consumes the resolved list. */
   sessionRequiredPaths: ['CLAUDE.md', '.claude/**'] as readonly string[],
@@ -52,6 +52,10 @@ const commandsSchema = z
     budget: nullableString(
       'Command prefix the cockpit appends `reset`/`dispatch`/`sweep`/`report` to for per-ticket dispatch cost accounting. Null means nothing measures or bounds ticket cost, and the cockpit skips it silently — `reviewCycleCap` still bounds review loops only.',
       'node scripts/port-budget.mjs',
+    ),
+    tracker: nullableString(
+      'Command prefix `/port:scope` appends `create`/`link-child`/`block` to, which creates tickets on whichever vendor `tracker` names. Null means `/port:scope` refuses to create tickets.',
+      'node scripts/port-tracker.mjs',
     ),
     tick: nullableString(
       "Command prefix the cockpit appends `start`/`plan`/`commit`/`resolve` to for the tick engine, which moves the tick's decisions (query build, envelope classification, ownership partition, label classification, mergeability/contention/cycle-cap/liveness routing, and the pacing ladder) out of prose and into a deterministic script. Null means the cockpit follows the prose tick procedure in `TICK-PROSE.md` instead.",
