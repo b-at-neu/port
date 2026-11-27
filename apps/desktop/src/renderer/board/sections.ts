@@ -1,6 +1,6 @@
 // The Board's four-section split — Waiting on you, In progress, Blocked, Queued —
 // each broken into phase sub-groups.
-import { ticketViewOf } from '@/renderer/lib/ticket-view'
+import { ticketViewOfItem } from '@/utils/pipeline/stages'
 import type { BoardItemRow, BoardSectionKey } from '@/types/board'
 import type { RepoId } from '@/utils/repos'
 import { sectionOf, stageGroupOf, stageNameOf } from '@/utils/pipeline/stages'
@@ -32,13 +32,13 @@ const SECTION_NAMES: Readonly<Record<BoardSectionKey, string>> = {
 
 function rowSectionOf(row: BoardItemRow): BoardSectionKey {
   const { status } = row.displayStatus
-  return sectionOf(ticketViewOf(row.item), { autoApproving: row.autoApproving, blocked: row.blockedOn !== null, working: status === 'in-flight' || status === 'stalled' })
+  return sectionOf(ticketViewOfItem(row.item), { autoApproving: row.autoApproving, blocked: row.blockedOn !== null, working: status === 'in-flight' || status === 'stalled' })
 }
 
 function subGroupsOf(rows: readonly BoardItemRow[]): readonly BoardSubGroup[] {
   const groups = new Map<string, { readonly rank: number; readonly name: string; readonly rows: BoardItemRow[] }>()
   for (const row of rows) {
-    const view = ticketViewOf(row.item)
+    const view = ticketViewOfItem(row.item)
     const { key, rank } = stageGroupOf(view)
     const group = groups.get(key) ?? { rank, name: stageNameOf(view), rows: [] }
     group.rows.push(row)

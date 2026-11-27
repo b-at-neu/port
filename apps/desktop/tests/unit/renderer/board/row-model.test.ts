@@ -2,24 +2,36 @@ import { describe, expect, it } from 'vitest'
 import { OPERATOR_ACTIONS, OPERATOR_DECISIONS } from '@/types/actions'
 import type { ActionAvailability, DecisionAvailability, OperatorAction, OperatorDecision } from '@/types/actions'
 import type { BoardItemRow, ItemActionState, LiveStage } from '@/types/board'
-import type { AttachedAgent, AttachedSession, StageLabel } from '@/types/state'
+import type { AttachedAgent, AttachedSession } from '@/types/state'
 import type { RepoId } from '@/utils/repos'
 import type { SessionKey } from '@/types/hosting'
 import type { DispatchRecord } from '@/types/dispatch'
 import type { Ticket } from '@/types/ticket'
+import type { Stage, Status } from '@/utils/pipeline/ticket'
 import { ticketIndex } from '@/utils/tickets/ticket'
-import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { reconciledItem } from '../../../support/board-snapshot'
+import { queuedAt, ticketAt } from '../../../support/tickets'
 import { actionNoteFor, agentSummaryOf, decisionNoteFor, isDispatchedRow, nextActionFor, operatorJoinedOf, ownershipNoteFor, phaseLabelFor, phaseToneFor, stopAttachedAgentNote } from '@/renderer/board/row-model'
 
-const LIVE_PLAN: LiveStage = { agent: 'plan', trigger: 'ready', sessionKey: 'hosted-1' as SessionKey }
+const LIVE_PLAN: LiveStage = { agent: 'plan', sessionKey: 'hosted-1' as SessionKey }
+
+interface At {
+  readonly stage: Stage
+  readonly status: Status
+}
+
+const RUNNING: Status = { kind: 'running', runId: null }
+const waiting = (gate: 'plan-approval' | 'merge' | 'escalation'): Status => ({ kind: 'waiting-on-you', gate, detail: '' })
+const PLAN_QUEUED: At = { stage: 'plan', status: queuedAt('new') }
+const PLAN_GATE: At = { stage: 'plan', status: waiting('plan-approval') }
+const IMPLEMENTING: At = { stage: 'implement', status: RUNNING }
 
 const NO_ACTIONS = Object.fromEntries(OPERATOR_ACTIONS.map((a): [OperatorAction, ActionAvailability] => [a, { available: false, reason: 'not-applicable' }])) as Record<OperatorAction, ActionAvailability>
 const NO_DECISIONS = Object.fromEntries(OPERATOR_DECISIONS.map((d): [OperatorDecision, DecisionAvailability] => [d, { available: false, reason: 'not-applicable' }])) as Record<OperatorDecision, DecisionAvailability>
 
 function row(overrides: {
   readonly kind?: 'issue' | 'pull-request'
-  readonly stageKey?: string | null
+  readonly at?: At | null
   readonly status?: 'waiting' | 'in-flight' | 'stalled' | 'interrupted' | 'gated' | 'terminal' | 'unstaged'
   readonly actions?: Partial<Record<OperatorAction, ActionAvailability>>
   readonly decisions?: Partial<Record<OperatorDecision, DecisionAvailability>>
@@ -28,27 +40,23 @@ function row(overrides: {
   readonly liveStage?: LiveStage | null
   readonly autoApproving?: boolean
 }): BoardItemRow {
-  const stageLabel: StageLabel | null = overrides.stageKey != null ? { key: overrides.stageKey as never, name: overrides.stageKey, role: LABEL_DEFAULTS.find((def) => def.key === overrides.stageKey)?.role ?? 'trigger' } : null
+  const at = overrides.at === undefined ? PLAN_QUEUED : overrides.at
   const item = reconciledItem({
     repoId: 'repo-a' as RepoId,
     kind: overrides.kind ?? 'issue',
     number: 41,
     url: 'https://github.com/o/a/pull/41',
-    stage: stageLabel?.role ?? null,
-    stages: stageLabel !== null ? [stageLabel] : [],
     status: overrides.status ?? 'waiting',
     waitingOn: null,
     agents: overrides.agents ?? [],
     sessions: overrides.sessions ?? [],
-    matchedKeys: [],
-    ...(stageLabel === null ? { ticket: null } : {}),
+    ticket: at === null ? null : ticketAt(at.stage, at.status, { ticket: 41 }),
   })
   return {
     item,
     ticket: ticketIndex([item]).tickets[0] as Ticket,
     displayStatus: { status: overrides.status ?? 'waiting', staleGithub: false, githubAgeMs: null },
     liveStage: overrides.liveStage ?? null,
-    stageLabel,
     actions: { ...NO_ACTIONS, ...overrides.actions },
     decisions: { ...NO_DECISIONS, ...overrides.decisions },
     viewer: null,
@@ -59,7 +67,7 @@ function row(overrides: {
 }
 
 function dispatchRecord(overrides: Partial<DispatchRecord> = {}): DispatchRecord {
-  return { agent: 'impl', number: 41, kind: 'issue', trigger: 'planApproved', state: 'started', at: '2026-01-01T00:00:00.000Z', detail: null, outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null, ...overrides }
+  return { agent: 'impl', number: 41, kind: 'issue', state: 'started', at: '2026-01-01T00:00:00.000Z', detail: null, outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null, ...overrides }
 }
 
 describe('operatorJoinedOf', () => {
@@ -143,34 +151,34 @@ describe('decisionNoteFor', () => {
 
 describe('phaseLabelFor', () => {
   it('Interrupted wins over a live session', () => {
-    const base = row({ stageKey: 'ready', liveStage: LIVE_PLAN })
+    const base = row({ liveStage: LIVE_PLAN })
     expect(phaseLabelFor({ ...base, displayStatus: { status: 'interrupted', staleGithub: false, githubAgeMs: null } })).toBe('Interrupted')
   })
 
   it('names a stalled row Stalled, not its stage', () => {
-    expect(phaseLabelFor(row({ stageKey: 'planning', status: 'stalled' }))).toBe('Stalled')
+    expect(phaseLabelFor(row({ at: { stage: 'plan', status: RUNNING }, status: 'stalled' }))).toBe('Stalled')
   })
 
   it('names an auto-approving plan gate Plan auto-approving', () => {
-    expect(phaseLabelFor(row({ stageKey: 'planReview', autoApproving: true }))).not.toBe(phaseLabelFor(row({ stageKey: 'planReview' })))
+    expect(phaseLabelFor(row({ at: PLAN_GATE, autoApproving: true }))).not.toBe(phaseLabelFor(row({ at: PLAN_GATE })))
   })
 
-  it("names the dispatched stage while the label still says it's queued", () => {
-    expect(phaseLabelFor(row({ stageKey: 'ready', status: 'waiting', liveStage: LIVE_PLAN }))).toBe('Planning')
+  it("names the dispatched stage while the record still says it's queued", () => {
+    expect(phaseLabelFor(row({ at: PLAN_QUEUED, status: 'waiting', liveStage: LIVE_PLAN }))).toBe('Planning')
   })
 
-  it("falls back to the label's own phase once the item is in flight, or with no live session", () => {
-    expect(phaseLabelFor(row({ stageKey: 'inProgress', status: 'in-flight', liveStage: LIVE_PLAN }))).toBe('Implementing')
-    expect(phaseLabelFor(row({ stageKey: 'ready', status: 'waiting' }))).toBe('Queued')
-    expect(phaseLabelFor(row({ stageKey: null }))).toBe('Unstaged')
+  it("falls back to the ticket's own phase once the item is in flight, or with no live session", () => {
+    expect(phaseLabelFor(row({ at: IMPLEMENTING, status: 'in-flight', liveStage: LIVE_PLAN }))).toBe('Implementing')
+    expect(phaseLabelFor(row({ at: PLAN_QUEUED, status: 'waiting' }))).toBe('Queued')
+    expect(phaseLabelFor(row({ at: null }))).toBe('Unstaged')
   })
 })
 
 describe('isDispatchedRow', () => {
   it('is true only for a live session on a still-queued item', () => {
-    expect(isDispatchedRow(row({ stageKey: 'ready', status: 'waiting', liveStage: LIVE_PLAN }))).toBe(true)
-    expect(isDispatchedRow(row({ stageKey: 'inProgress', status: 'in-flight', liveStage: LIVE_PLAN }))).toBe(false)
-    expect(isDispatchedRow(row({ stageKey: 'ready', status: 'waiting' }))).toBe(false)
+    expect(isDispatchedRow(row({ at: PLAN_QUEUED, status: 'waiting', liveStage: LIVE_PLAN }))).toBe(true)
+    expect(isDispatchedRow(row({ at: IMPLEMENTING, status: 'in-flight', liveStage: LIVE_PLAN }))).toBe(false)
+    expect(isDispatchedRow(row({ at: PLAN_QUEUED, status: 'waiting' }))).toBe(false)
   })
 })
 
@@ -187,75 +195,74 @@ describe('stopAttachedAgentNote', () => {
 
 describe('phaseToneFor', () => {
   it('a plan gate pulses in the plan colour', () => {
-    expect(phaseToneFor(row({ stageKey: 'planReview' }))).toEqual({ palette: 'plan', fill: 'active', pulse: true })
+    expect(phaseToneFor(row({ at: PLAN_GATE }))).toEqual({ palette: 'plan', fill: 'active', pulse: true })
   })
 
   it('a ready-to-merge row pulses in the done colour', () => {
-    expect(phaseToneFor(row({ stageKey: 'approved', kind: 'pull-request' }))).toEqual({ palette: 'done', fill: 'active', pulse: true })
+    expect(phaseToneFor(row({ at: { stage: 'merge', status: waiting('merge') }, kind: 'pull-request' }))).toEqual({ palette: 'done', fill: 'active', pulse: true })
   })
 
-  it('needsHuman is red and pulsing', () => {
-    expect(phaseToneFor(row({ stageKey: 'needsHuman' }))).toEqual({ palette: 'needs-you', fill: 'active', pulse: true })
+  it('an escalation is red and pulsing', () => {
+    expect(phaseToneFor(row({ at: { stage: 'implement', status: waiting('escalation') } }))).toEqual({ palette: 'needs-you', fill: 'active', pulse: true })
   })
 
   it('blocked keeps the red palette but does not pulse, since it is held rather than waiting on you', () => {
-    expect(phaseToneFor(row({ stageKey: 'blocked' }))).toEqual({ palette: 'needs-you', fill: 'active', pulse: false })
+    expect(phaseToneFor(row({ at: { stage: 'implement', status: { kind: 'blocked', on: [], reason: 'x' } } }))).toEqual({ palette: 'needs-you', fill: 'active', pulse: false })
   })
 
   it('an in-flight stage is filled in its phase colour', () => {
-    expect(phaseToneFor(row({ stageKey: 'inProgress', status: 'in-flight' }))).toEqual({ palette: 'implement', fill: 'active', pulse: false })
+    expect(phaseToneFor(row({ at: IMPLEMENTING, status: 'in-flight' }))).toEqual({ palette: 'implement', fill: 'active', pulse: false })
   })
 
-  it('a queued trigger is a ring in its phase colour', () => {
-    expect(phaseToneFor(row({ stageKey: 'ready', status: 'waiting' }))).toEqual({ palette: 'plan', fill: 'queued', pulse: false })
+  it('a queued stage is a ring in its phase colour', () => {
+    expect(phaseToneFor(row({ at: PLAN_QUEUED, status: 'waiting' }))).toEqual({ palette: 'plan', fill: 'queued', pulse: false })
   })
 
-  it('a trigger whose agent is already running is filled', () => {
-    expect(phaseToneFor(row({ stageKey: 'readyForReview', status: 'in-flight' }))).toEqual({ palette: 'review', fill: 'active', pulse: false })
+  it('a stage whose agent is already running is filled', () => {
+    expect(phaseToneFor(row({ at: { stage: 'review', status: RUNNING }, status: 'in-flight' }))).toEqual({ palette: 'review', fill: 'active', pulse: false })
   })
 
   it('a refresh stage is grey and never pulses', () => {
-    expect(phaseToneFor(row({ stageKey: 'refreshBranch', kind: 'pull-request' }))).toEqual({ palette: 'refresh', fill: 'queued', pulse: false })
-    expect(phaseToneFor(row({ stageKey: 'refreshing', status: 'in-flight' }))).toEqual({ palette: 'refresh', fill: 'active', pulse: false })
+    expect(phaseToneFor(row({ at: { stage: 'refresh', status: queuedAt('new') }, kind: 'pull-request' }))).toEqual({ palette: 'refresh', fill: 'queued', pulse: false })
+    expect(phaseToneFor(row({ at: { stage: 'refresh', status: RUNNING }, status: 'in-flight' }))).toEqual({ palette: 'refresh', fill: 'active', pulse: false })
   })
 
   it.each(['stalled', 'interrupted'] as const)('a %s row is red and pulsing over its phase colour', (status) => {
-    expect(phaseToneFor(row({ stageKey: 'inProgress', status }))).toEqual({ palette: 'needs-you', fill: 'active', pulse: true })
+    expect(phaseToneFor(row({ at: IMPLEMENTING, status }))).toEqual({ palette: 'needs-you', fill: 'active', pulse: true })
   })
 
   it('an auto-approving plan gate is filled in the plan colour and does not pulse', () => {
-    expect(phaseToneFor(row({ stageKey: 'planReview', autoApproving: true }))).toEqual({ palette: 'plan', fill: 'active', pulse: false })
+    expect(phaseToneFor(row({ at: PLAN_GATE, autoApproving: true }))).toEqual({ palette: 'plan', fill: 'active', pulse: false })
   })
 
-  it('an unstaged row is the idle grey', () => {
-    expect(phaseToneFor(row({ stageKey: null, status: 'unstaged' }))).toEqual({ palette: 'unstaged', fill: 'active', pulse: false })
+  it('an untracked row is the idle grey', () => {
+    expect(phaseToneFor(row({ at: null, status: 'unstaged' }))).toEqual({ palette: 'unstaged', fill: 'active', pulse: false })
   })
 })
 
 describe('nextActionFor', () => {
-  it('Review plan for an issue at planReview', () => {
-    expect(nextActionFor(row({ kind: 'issue', stageKey: 'planReview' }))).toMatchObject({ kind: 'review-plan' })
+  it('Review plan for an issue at the plan gate', () => {
+    expect(nextActionFor(row({ kind: 'issue', at: PLAN_GATE }))).toMatchObject({ kind: 'review-plan' })
   })
 
   it('no Review plan action while the plan is auto-approving', () => {
-    expect(nextActionFor(row({ kind: 'issue', stageKey: 'planReview', autoApproving: true }))).toBeNull()
+    expect(nextActionFor(row({ kind: 'issue', at: PLAN_GATE, autoApproving: true }))).toBeNull()
   })
 
-  it('a pull request at planReview carries no Review plan action (issue-only)', () => {
-    expect(nextActionFor(row({ kind: 'pull-request', stageKey: 'planReview' }))).toBeNull()
+  it('a pull request at the plan gate carries no Review plan action (issue-only)', () => {
+    expect(nextActionFor(row({ kind: 'pull-request', at: PLAN_GATE }))).toBeNull()
   })
 
-
-  it('Open PR when the stage is approved', () => {
-    expect(nextActionFor(row({ kind: 'pull-request', stageKey: 'approved' }))).toEqual({ kind: 'open-pr', label: 'Open PR', url: 'https://github.com/o/a/pull/41' })
+  it('Open PR when the ticket waits on the merge', () => {
+    expect(nextActionFor(row({ kind: 'pull-request', at: { stage: 'merge', status: waiting('merge') } }))).toEqual({ kind: 'open-pr', label: 'Open PR', url: 'https://github.com/o/a/pull/41' })
   })
 
   it('the decision label when a decision is available', () => {
-    const r = row({ stageKey: 'needsHuman', decisions: { unblock: { available: true, context: { target: 'pull-request', reason: null, cyclesUsed: 1, cap: 5, decisions: [], routes: ['review', 'revision'] } } } })
+    const r = row({ at: { stage: 'implement', status: waiting('escalation') }, decisions: { unblock: { available: true, context: { target: 'pull-request', reason: null, cyclesUsed: 1, cap: 5, decisions: [], routes: ['review', 'revision'] } } } })
     expect(nextActionFor(r)).toEqual({ kind: 'decision', label: 'Unblock', decision: 'unblock' })
   })
 
   it('null when nothing applies', () => {
-    expect(nextActionFor(row({ kind: 'issue', stageKey: 'ready' }))).toBeNull()
+    expect(nextActionFor(row({ kind: 'issue', at: PLAN_QUEUED }))).toBeNull()
   })
 })

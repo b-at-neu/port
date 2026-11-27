@@ -9,7 +9,7 @@ import type { ActionToast } from '@/types/toast'
 import type { ConfirmSpec } from '@/renderer/components/confirm-dialog'
 import type { openDecision } from '@/renderer/decision/controller'
 import { DECISION_BUTTON_LABELS } from '@/renderer/board/copy'
-import { ticketViewOf } from '@/renderer/lib/ticket-view'
+import { ticketViewOfItem } from '@/utils/pipeline/stages'
 import {
   ACTION_LABELS,
   ALLOW_DISMISSED_TOAST,
@@ -161,13 +161,13 @@ function decisionIntent(item: NeedsYouItem, decision: 'unblock' | 'grant' | 'rev
   if (row === null || item.repoId === null || item.number === null) return null
   const availability = row.decisions[decision]
   if (!availability.available) return null
-  return { kind: 'decision', request: { repoId: item.repoId, number: item.number, decision, expected: ticketViewOf(row.item), context: availability.context } }
+  return { kind: 'decision', request: { repoId: item.repoId, number: item.number, decision, expected: ticketViewOfItem(row.item), context: availability.context } }
 }
 
 function labelIntent(item: NeedsYouItem, action: 'retry' | 'refresh'): NeedsYouIntent | null {
   if (item.repoId === null || item.number === null) return null
   const kind = item.matchedRow?.item.kind ?? 'pull-request'
-  const expected = item.matchedRow === null ? null : ticketViewOf(item.matchedRow.item)
+  const expected = item.matchedRow === null ? null : ticketViewOfItem(item.matchedRow.item)
   return { kind: 'label', action, input: { repoId: item.repoId, kind, number: item.number, action, expected },shown: String(item.ticket?.number ?? item.number) }
 }
 

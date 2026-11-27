@@ -10,7 +10,7 @@ import type { GitHubWriteContext } from '@/main/github/context'
 
 import type { GitHubRepoRef } from '@/types/github'
 import type { AssertEqual } from '@/types/assert-type'
-import type { GhWriteFailureKind, LabelAuditEntry, LabelWriteRequest, ObservedItem, OwnershipKind, WriteOutcome } from '@/types/writes'
+import type { GhWriteFailureKind, LabelAuditEntry, ObservedItem, OwnershipKind, WriteOutcome } from '@/types/writes'
 import { appendAudit } from '@/main/github/writes/audit'
 import { buildCommand } from '@/main/github/writes/command'
 import { readOwnership } from '@/main/repos/ownership'
@@ -44,7 +44,7 @@ function describeGhFailure(result: Exclude<GhResult, { ok: true }>): string {
 }
 
 interface AuditContext {
-  readonly request: Pick<LabelWriteRequest, 'repo' | 'repoId' | 'kind' | 'number' | 'action'>
+  readonly request: Pick<ApplyLabelsParams, 'repo' | 'repoId' | 'kind' | 'number' | 'action'>
   readonly ownership: OwnershipKind
   readonly observed: ObservedItem | null
   readonly call: readonly string[] | null

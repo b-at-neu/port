@@ -3,15 +3,15 @@ import type { ItemStatus, RepositoryFreshness, RepositoryState } from '@/types/s
 import type { BlockedOnTag, BoardColumnKey, BoardSnapshot, SourceHealth, SourceKind, TicketSessionLink } from '@/types/board'
 import type { BoardView } from '@/types/router'
 import { SOURCE_KINDS, isDeferred } from '@/types/board'
-import { labelNameOf } from '@/utils/labels/defaults'
+import { defaultNameOf } from '@/utils/labels/display'
+import type { Event, Stage } from '@/utils/pipeline/ticket'
+import { STAGE_TABLE } from '@/utils/pipeline/stages'
 import type { ActionRefusal, ItemActionResult, OperatorAction, OperatorDecision } from '@/types/actions'
 import type { Conflict } from '@/types/writes'
 import type { HaltItemOutcome, HaltReport } from '@/types/dispatch'
 import type { RepoProblem } from '@/utils/repos'
 import type { StageAgent } from '@/types/tick'
-import type { LabelKey } from '@/utils/labels/vocabulary'
 import { worstHealth } from '@/renderer/board/project'
-import { stageNameOfKey } from '@/renderer/lib/ticket-view'
 import { mirrorReason } from '@/renderer/lib/mirror-reason'
 import { formatAgoSeconds, formatAgoSince, formatShortTime } from '@/renderer/lib/time'
 import { formatCost } from '@/utils/hosting/usage'
@@ -35,11 +35,11 @@ export function nothingAssignedEmpty(scoped: boolean): string {
   return scoped ? "Nothing assigned to you in this repository's pipeline." : 'Nothing assigned to you in the pipeline.'
 }
 
-const MARKER_NAME = labelNameOf('marker')
+const MARKER_NAME = defaultNameOf('port')
 
 export const UNGATED_TAG_LABEL = 'Ungated'
-export const UNGATED_TAG_TITLE = `Carries a pipeline label but not "${MARKER_NAME}", so CI can't tell it from a human PR and the merge gate is inactive.`
-export const UNGATED_BANNER_NOTE = `These carry a pipeline label but not "${MARKER_NAME}", so CI can't tell them from a human pull request and the merge gate is inactive.`
+export const UNGATED_TAG_TITLE = `Not tracked by port and without "${MARKER_NAME}", so CI can't tell it from a human PR and the merge gate is inactive.`
+export const UNGATED_BANNER_NOTE = `These are not tracked by port and have no "${MARKER_NAME}" label, so CI can't tell them from a human pull request and the merge gate is inactive.`
 
 export function ungatedBannerHeading(count: number): string {
   return `Ungated pull requests · ${String(count)}`
@@ -144,27 +144,19 @@ export function freshnessIndicator(snapshot: BoardSnapshot, now: Date): { readon
 
 // --- Phase history ----------------------------------------------------------
 
-const PHASE_EVENT_VERB: Readonly<Partial<Record<LabelKey, string>>> = {
-  ready: 'Queued for planning',
-  planning: 'Planning started',
-  planChangesRequested: 'Plan changes requested',
-  planReview: 'Plan ready for review',
-  planApproved: 'Plan approved',
-  inProgress: 'Implementation started',
-  readyForReview: 'Ready for review',
-  reviewing: 'Review started',
-  needsRevision: 'Changes requested',
-  revising: 'Revision started',
-  approved: 'Approved',
-  refreshBranch: 'Branch refresh requested',
-  refreshing: 'Branch refresh started',
-  needsHuman: 'Escalated to you',
-  blocked: 'Blocked',
+const RUNNING_VERB: Readonly<Record<Stage, string>> = {
+  plan: 'Planning started',
+  implement: 'Implementation started',
+  review: 'Review started',
+  revise: 'Revision started',
+  refresh: 'Branch refresh started',
+  merge: 'Merge started',
 }
 
-/** One phase history line's leading verb; a key with no dedicated phrasing falls back to the stage table's name. */
-export function phaseEventVerb(key: LabelKey): string {
-  return PHASE_EVENT_VERB[key] ?? stageNameOfKey(key) ?? key
+/** One phase history line's leading verb: a stage entered running reads as its start, any other status as its stage-table name. */
+export function phaseEventVerb(event: Event): string {
+  if (event.to === null) return event.action
+  return event.to.status === 'running' ? RUNNING_VERB[event.to.stage] : STAGE_TABLE[event.to.stage][event.to.status].name
 }
 
 /** `you` when `actor` is the signed-in viewer (case-insensitive), else `@login`. */
@@ -190,7 +182,7 @@ export const DECISION_BUTTON_LABELS: Readonly<Record<OperatorDecision, string>> 
 export function decisionRefusalNote(reason: string, number: number): string | null {
   const n = String(number)
   if (reason === 'agent-live') return `#${n}'s agent is still waiting in its session. Answer it there and it clears the block itself.`
-  if (reason === 'cycle-cap') return `PR #${n} has used all its review cycles. Sending it back would escalate straight to "${labelNameOf('needsHuman')}". Merge it and open a follow-up, or raise reviewCycleCap.`
+  if (reason === 'cycle-cap') return `PR #${n} has used all its review cycles. Sending it back would escalate straight to "${defaultNameOf('needsYou')}". Merge it and open a follow-up, or raise reviewCycleCap.`
   if (reason === 'rebase-decisions') return `PR #${n} is waiting on rebase decisions port couldn't read — answer them with unblock #${n} in the cockpit.`
   return null
 }

@@ -5,6 +5,7 @@ import type { DispatchRecord, RepoDispatchStatus } from '@/types/dispatch'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS, type BoardSnapshot } from '@/types/board'
 import { needsYouItems } from '@/renderer/board/needs-you'
 import { reconciledItem } from '../../../support/board-snapshot'
+import { ticketAt } from '../../../support/tickets'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 const REPO = 'repo-a' as RepoId
@@ -33,14 +34,13 @@ function repoWith(items: readonly ReconciledItem[]): Extract<RepositoryState, { 
     viewer: 'op',
     integrationChecks: {},
     approvalGate: true,
-    disabled: [],
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
     reviewCycleCap: 5,
   }
 }
 
 function failedRecord(overrides: Partial<DispatchRecord> = {}): DispatchRecord {
-  return { agent: 'plan', number: 585, kind: 'issue', trigger: 'ready', state: 'failed', at: '2026-01-01T00:30:00.000Z', detail: 'no section', outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null, ...overrides }
+  return { agent: 'plan', number: 585, kind: 'issue', state: 'failed', at: '2026-01-01T00:30:00.000Z', detail: 'no section', outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null, ...overrides }
 }
 
 function snapshotWith(items: readonly ReconciledItem[], dispatch: Partial<RepoDispatchStatus>): BoardSnapshot {
@@ -70,8 +70,8 @@ describe('needsYouItems — dispatch-failed', () => {
     expect(items[0]).toMatchObject({ kind: 'dispatch-failed', number: 585, at: '2026-01-01T00:30:00.000Z', attempts: 2, record: { detail: 'no section' } })
   })
 
-  it('drops off once the ticket carries a different stage label than the failed trigger', () => {
-    const moved = readyTicket({ stage: 'in-flight', stages: [{ key: 'planning', name: 'planning', role: 'in-flight' }], matchedKeys: ['planning'] })
+  it('drops off once the ticket has moved past the stage that failed', () => {
+    const moved = readyTicket({ ticket: ticketAt('implement', { kind: 'running', runId: null }, { ticket: 585 }) })
     expect(failedItems(snapshotWith([moved], { state: { kind: 'active', recent: [failedRecord()] } }))).toEqual([])
   })
 

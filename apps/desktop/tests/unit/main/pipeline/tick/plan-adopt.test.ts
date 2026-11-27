@@ -10,7 +10,7 @@ import { queuedAt, runOf, ticketAt } from '../../../../support/tickets'
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 
 /** A review session that ended half an hour ago and never handed back. */
-const STALLED_REVIEW = runOf({ stage: 'review', agent: 'review', trigger: 'readyForReview', item: { kind: 'pull-request', number: 779 }, startedAt: '2026-01-01T00:20:00.000Z', endedAt: '2026-01-01T00:30:00.000Z' })
+const STALLED_REVIEW = runOf({ stage: 'review', agent: 'review', item: { kind: 'pull-request', number: 779 }, startedAt: '2026-01-01T00:20:00.000Z', endedAt: '2026-01-01T00:30:00.000Z' })
 
 function plan(items: readonly ReconciledItem[], runs: readonly Run[] = [], stageLiveness: { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null = { live: [], interrupted: [] }) {
   return planTick({
@@ -68,7 +68,7 @@ describe('planTick — impl on an issue whose pull request is already open', () 
   it('adopts one open pull request on the issue’s own branch and dispatches no impl', () => {
     const report = plan([planApproved({ closingPullRequests: [{ number: 780, state: 'OPEN', headRefName: '749-the-thing' }] })])
     expect(report.actionable).toEqual([])
-    expect(report.observations).toEqual([{ kind: 'adopt', number: 749, itemKind: 'issue', agent: 'impl', stage: 'implement', trigger: 'planApproved', handback: { token: 'pr-opened', arg: '#780' }, evidence: 'pr' }])
+    expect(report.observations).toEqual([{ kind: 'adopt', number: 749, itemKind: 'issue', agent: 'impl', stage: 'implement', handback: { token: 'pr-opened', arg: '#780' }, evidence: 'pr' }])
   })
 
   it('dispatches when there are two open pull requests', () => {

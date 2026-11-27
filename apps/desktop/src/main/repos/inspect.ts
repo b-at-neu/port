@@ -2,7 +2,6 @@
 import { pathOps } from '@/main/platform/paths'
 import type { Platform } from '@/main/platform'
 import { resolveDisplayVocabulary } from '@/utils/labels/display'
-import { LABEL_KEYS, resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoDiagnostic, RepoId, RepoProblem, RepositoryEntry, ResolvedRepoConfig, SchemaViolation } from '@/utils/repos'
 import { defaultRefName, permissionsStateOf, readAtDefaultRef, refsCarryingConfig } from '@/main/repos/config/harness'
 import { resolveEffectiveConfig } from '@/main/repos/config/effective'
@@ -145,13 +144,11 @@ export async function inspectRepository(ctx: Pick<Platform, 'git' | 'fs'>, path:
   // Folds a root CLAUDE.md's port-overrides block over the port-resolved values above — never a second, hand-rolled resolution.
   const portResolved: PortResolved = { branches, models, modules, reviewCycleCap, concurrency, sessionRequiredPaths }
   const appOnly = !violatedPaths.has('/appOnly') && cfg.appOnly === true
-  const effective = await resolveEffectiveConfig(read, portResolved, cfg.labels ?? {}, cfg.states ?? {}, appOnly)
+  const effective = await resolveEffectiveConfig(read, portResolved, cfg.labels ?? {}, cfg.states ?? {})
   if (!effective.ok) {
     return problemEntry(root, effective.problem)
   }
 
-  // An app-only repository's `labels` holds display keys, which the stage vocabulary has no use for.
-  const vocabulary = resolveVocabulary({ labels: appOnly ? {} : cfg.labels, modules: effective.modules, overrides: effective.labelOverrides })
   const displayVocabulary = resolveDisplayVocabulary({ labels: cfg.labels, states: cfg.states, overrides: effective.displayOverrides })
 
   const config: ResolvedRepoConfig = {
@@ -162,7 +159,6 @@ export async function inspectRepository(ctx: Pick<Platform, 'git' | 'fs'>, path:
     models: effective.models,
     modules: effective.modules,
     reviewCycleCap: effective.reviewCycleCap,
-    vocabulary,
     appOnly,
     displayVocabulary,
     commands,
@@ -177,7 +173,7 @@ export async function inspectRepository(ctx: Pick<Platform, 'git' | 'fs'>, path:
   if (permissions === 'missing') diagnostics.push({ kind: 'permissions-missing' })
   else if (permissions === 'empty') diagnostics.push({ kind: 'permissions-empty' })
 
-  const legacyKeys = appOnly ? [] : Object.keys(cfg.labels ?? {}).filter((key) => (LABEL_KEYS as readonly string[]).includes(key))
+  const legacyKeys = appOnly ? [] : Object.keys(cfg.labels ?? {}).filter((key) => key !== 'port' && key !== 'needsYou')
   const reportedViolations = foldLegacyLabelViolations(nonRepoViolations, legacyKeys.length)
   if (legacyKeys.length > 0) diagnostics.push({ kind: 'legacy-label-overrides', keys: legacyKeys })
   if (reportedViolations.length > 0) {

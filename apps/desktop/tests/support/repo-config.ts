@@ -1,4 +1,4 @@
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import { resolveDisplayVocabulary } from '@/utils/labels/display'
 import type { RepoId, ResolvedRepoConfig } from '@/utils/repos'
 import type { ReadyEntry } from '@/types/actions'
 
@@ -17,7 +17,7 @@ export function repoConfig(overrides: Partial<ResolvedRepoConfig> = {}): Resolve
     models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
     modules: { approvalGate: true, release: true, scope: true },
     reviewCycleCap: 5,
-    vocabulary: resolveVocabulary({}),
+    displayVocabulary: resolveDisplayVocabulary({}),
     ...overrides,
   }
 }

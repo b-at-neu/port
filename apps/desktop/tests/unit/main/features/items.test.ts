@@ -88,10 +88,10 @@ describe('item.decide', () => {
   })
 
   it.each([
-    { name: 'a live session for this number', sessions: [stageSession({ repoId: REPO_ID, stage: { agent: 'impl', number: 300, kind: 'issue', trigger: 'planApproved' } })], live: true },
-    { name: 'an ended session for this number', sessions: [stageSession({ repoId: REPO_ID, phase: 'ended', stage: { agent: 'impl', number: 300, kind: 'issue', trigger: 'planApproved' } })], live: false },
-    { name: 'a live session for another number', sessions: [stageSession({ repoId: REPO_ID, stage: { agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved' } })], live: false },
-    { name: 'a live session in another repository', sessions: [stageSession({ repoId: 'repo-2' as RepoId, stage: { agent: 'impl', number: 300, kind: 'issue', trigger: 'planApproved' } })], live: false },
+    { name: 'a live session for this number', sessions: [stageSession({ repoId: REPO_ID, stage: { agent: 'impl', number: 300, kind: 'issue' } })], live: true },
+    { name: 'an ended session for this number', sessions: [stageSession({ repoId: REPO_ID, phase: 'ended', stage: { agent: 'impl', number: 300, kind: 'issue' } })], live: false },
+    { name: 'a live session for another number', sessions: [stageSession({ repoId: REPO_ID, stage: { agent: 'impl', number: 52, kind: 'issue' } })], live: false },
+    { name: 'a live session in another repository', sessions: [stageSession({ repoId: 'repo-2' as RepoId, stage: { agent: 'impl', number: 300, kind: 'issue' } })], live: false },
   ])('treats $name as liveStage=$live', async ({ sessions, live: refused }) => {
     const blockedTicket = ticketOf({ repo: REPO_ID, ticket: 300, stage: 'implement', status: { kind: 'blocked', on: [], reason: 'stuck' } })
     const blocked = reconciledItem({ repoId: REPO_ID, kind: 'issue', number: 300, assignees: ['op'], ticket: blockedTicket })

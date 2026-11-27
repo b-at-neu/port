@@ -134,7 +134,7 @@ export function fixtureSessionSnapshots(now: Date, scenario: FixtureScenario = '
     models: FIXTURE_MODELS,
     usage: { ...FIXTURE_USAGE, costUsd: 0.42, observedAt: t(0) },
     backgroundTasks: [],
-    stage: { agent: 'impl', number: 38, kind: 'issue', trigger: 'inProgress' },
+    stage: { agent: 'impl', number: 38, kind: 'issue' },
     lastResult: null,
     operatorJoinedAt: t(1),
   }
@@ -316,7 +316,7 @@ export function fixtureSessionSnapshots(now: Date, scenario: FixtureScenario = '
             phase: 'ready',
             title: '#51 backfill order totals for Q3',
             usage: null,
-            stage: { agent: 'impl', number: 51, kind: 'issue', trigger: 'planApproved' },
+            stage: { agent: 'impl', number: 51, kind: 'issue' },
             lastResult: {
               subtype: 'success',
               isError: false,
@@ -334,7 +334,7 @@ export function fixtureSessionSnapshots(now: Date, scenario: FixtureScenario = '
       startedAt: t(0),
       title: '#44 show the build number in the footer',
       usage: null,
-      stage: { agent: 'plan', number: 44, kind: 'issue', trigger: 'ready' },
+      stage: { agent: 'plan', number: 44, kind: 'issue' },
       operatorJoinedAt: null,
     },
     {

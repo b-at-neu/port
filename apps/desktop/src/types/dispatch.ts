@@ -2,7 +2,7 @@ import type { BoardSnapshot } from '@/types/board'
 import type { ReadyEntry } from '@/types/actions'
 import type { EndedStage, TickObservation } from '@/types/tick'
 import type { StagePlanFile } from '@/types/stage-labels'
-import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { StageMode } from '@/utils/stage/prompt'
 import type { ReconciledItem } from '@/types/state'
 
 export type BudgetGateFailure = { readonly ok: false; readonly kind: 'unavailable' | 'failed'; readonly message: string }
@@ -98,7 +98,6 @@ export interface DispatchRecord {
   readonly agent: StageAgent
   readonly number: number
   readonly kind: PipelineItemKind
-  readonly trigger: LabelKey
   readonly state: 'started' | 'ended' | 'failed'
   readonly at: string
   readonly detail: string | null
@@ -123,7 +122,7 @@ export type BudgetNote =
   | { readonly kind: 'held'; readonly number: number; readonly line: string }
   | { readonly kind: 'held-dispatched'; readonly number: number }
   | { readonly kind: 'escalated'; readonly number: number; readonly needsHumanLabel: string; readonly commentFailedMessage: string | null }
-  | { readonly kind: 'escalation-failed'; readonly number: number; readonly needsHumanLabel: string; readonly triggerLabel: string; readonly outcome: WriteOutcome }
+  | { readonly kind: 'escalation-failed'; readonly number: number; readonly needsHumanLabel: string; readonly outcome: WriteOutcome }
   | { readonly kind: 'gate-failed'; readonly number: number; readonly message: string }
 
 /** One machine-observation write this app attempted this pass, bounded to the newest 20 per repository. `outcome` maps a raw `WriteOutcome`: `written`/`already`/`moved`/`refused`/`failed`. */
@@ -230,7 +229,6 @@ export interface StageRecord {
   readonly stage: Stage
   readonly number: number
   readonly kind: PipelineItemKind
-  readonly trigger: LabelKey
   readonly state: 'started' | 'ended' | 'failed'
   readonly at: string
   /** The first refresh that saw the session ended — `null` while started and for a `failed` record. */
@@ -258,7 +256,7 @@ export interface StageLaunchRequest {
   readonly stage: Stage
   readonly number: number
   readonly kind: PipelineItemKind
-  readonly trigger: LabelKey
+  readonly mode: StageMode
   readonly model: string
   readonly prompt: string
   /** The ticket label (`#<issue> <issue title>`) the session is titled with. */

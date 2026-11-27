@@ -1,10 +1,8 @@
 // Renderer-safe shapes for the state writes the app makes on a stage session's behalf: claim, rollback, hand-back and the next turn after a block.
 import type { OperatorMove } from '@/types/actions'
-import type { PipelineItemKind } from '@/types/github'
 import type { SessionKey } from '@/types/hosting'
 import type { StageHandback, StageOutcome, StageOutcomeKind } from '@/types/stage-session'
 import type { HandoffRefusal, StageAgent } from '@/types/tick'
-import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { InterruptedReason, Run, RunDenial, Stage, Ticket } from '@/utils/pipeline/ticket'
 
 /** `revise` split by its trigger: a refresh runs the same agent against a different set of labels and tokens. */
@@ -60,17 +58,10 @@ export type StateEvent =
   | { readonly kind: 'merged' }
   /** An operator's typed move; `moves.ts` says what it makes of the ticket. */
   | { readonly kind: 'operator'; readonly move: OperatorMove; readonly actor: string | null }
-  /** A label add/remove request that survives for claim, an untracked pull request's gate marker and adopt's existing path; the table re-derives the ticket from the keys. */
-  | {
-      readonly kind: 'labels'
-      readonly itemKind: PipelineItemKind
-      readonly add: readonly LabelKey[]
-      readonly remove: readonly LabelKey[]
-      readonly expect: { readonly present: readonly LabelKey[]; readonly absent: readonly LabelKey[] }
-      readonly action: string
-      /** The ticket a new pull request belongs to, when its branch names one. */
-      readonly issue: number | null
-    }
+  /** The claim of an untracked issue: it enters the pipeline queued for planning. */
+  | { readonly kind: 'track'; readonly autoPlan: boolean }
+  /** An untracked pull request taken into the pipeline, held at review; `issue` is the ticket its branch names. */
+  | { readonly kind: 'gate'; readonly issue: number | null }
 
 export type TicketEvent = StateEvent | RunEvent
 

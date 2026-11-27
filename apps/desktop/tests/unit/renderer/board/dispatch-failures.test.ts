@@ -3,7 +3,7 @@ import { failingDispatches, lastLaunchFailed } from '@/renderer/board/dispatch-f
 import type { DispatchRecord } from '@/types/dispatch'
 
 function record(overrides: Partial<DispatchRecord> = {}): DispatchRecord {
-  return { agent: 'plan', number: 585, kind: 'issue', trigger: 'ready', state: 'failed', at: '2026-01-01T00:00:00.000Z', detail: 'boom', outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null, ...overrides }
+  return { agent: 'plan', number: 585, kind: 'issue', state: 'failed', at: '2026-01-01T00:00:00.000Z', detail: 'boom', outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null, ...overrides }
 }
 
 describe('failingDispatches', () => {

@@ -1,11 +1,10 @@
 import { readFileSync, existsSync } from 'node:fs';
-import { join, sep } from 'node:path';
+import { join } from 'node:path';
 import { root, readJson, walk, relOf } from '#lib/files.ts';
 import type { Reporter } from '#lib/report.ts';
 import { message } from '#lib/errors.ts';
 
 const SHIPPED_LABELS_REL = 'plugins/port/data/labels.legacy.json';
-const DESKTOP_LABELS_REL = 'apps/desktop/src/utils/labels/labels.legacy.json';
 
 
 /** Substitutes every `{{name}}` in `text` with `subs[name]`. A multi-line value has its
@@ -153,48 +152,6 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     ok();
   }
 
-  // --- Desktop app's LABEL_ROLES matches labels.json's role field, both directions — hand-
-  // maintained in utils/labels/defaults.ts since TypeScript widens JSON strings, so it must agree with every distinct role labels.json uses. ---
-  {
-    const rel = 'apps/desktop/src/utils/labels/defaults.ts';
-    const text = readFileSync(join(root, rel), 'utf8');
-    const m = /LABEL_ROLES\s*=\s*\[([^\]]*)\]\s*as const/.exec(text);
-    if (!m) {
-      fail('labels', `${rel} has no 'LABEL_ROLES = [...] as const' array`);
-    } else {
-      const declaredRoles = new Set([...m[1].matchAll(/'([^']+)'/g)].map((t) => t[1]));
-      const realRoles = new Set<string>(readJson(DESKTOP_LABELS_REL).labels.map((l: any) => l.role));
-      for (const r of declaredRoles) {
-        if (!realRoles.has(r)) fail('labels', `${rel}'s LABEL_ROLES has '${r}', which no labels.json entry uses`);
-      }
-      for (const r of realRoles) {
-        if (!declaredRoles.has(r)) fail('labels', `labels.json uses role '${r}', missing from ${rel}'s LABEL_ROLES`);
-      }
-      ok();
-    }
-  }
-
-  // --- Desktop app's LABEL_PALETTES matches labels.json's palette field, both directions — hand-
-  // maintained in utils/labels/defaults.ts for the same widening reason, so it must agree with every distinct palette labels.json uses. ---
-  {
-    const rel = 'apps/desktop/src/utils/labels/defaults.ts';
-    const text = readFileSync(join(root, rel), 'utf8');
-    const m = /LABEL_PALETTES\s*=\s*\[([^\]]*)\]\s*as const/.exec(text);
-    if (!m) {
-      fail('labels', `${rel} has no 'LABEL_PALETTES = [...] as const' array`);
-    } else {
-      const declared = new Set([...m[1].matchAll(/'([^']+)'/g)].map((t) => t[1]));
-      const real = new Set<string>(readJson(DESKTOP_LABELS_REL).labels.map((l: any) => l.palette).filter((p: unknown) => p !== null));
-      for (const p of declared) {
-        if (!real.has(p)) fail('labels', `${rel}'s LABEL_PALETTES has '${p}', which no labels.json entry uses`);
-      }
-      for (const p of real) {
-        if (!declared.has(p)) fail('labels', `labels.json uses palette '${p}', missing from ${rel}'s LABEL_PALETTES`);
-      }
-      ok();
-    }
-  }
-
   // --- Label colours are well-formed and distinct — a shared colour collapses two labels pixel-identical, and previousColors entries must be well-formed too ---
   {
     const labels = readJson(SHIPPED_LABELS_REL).labels;
@@ -337,47 +294,5 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
         );
       }
     }
-  }
-
-  // pin: `apps/desktop`'s `LABEL_KEYS` ↔ `labels.json` — the one literal union that can't be
-  // derived from the JSON import (TypeScript widens JSON strings to `string`) must be diffed here instead.
-  {
-    const rel = 'apps/desktop/src/utils/labels/vocabulary.ts';
-    const text = readFileSync(join(root, rel), 'utf8');
-    const m = /LABEL_KEYS\s*=\s*\[([^\]]*)\]\s*as const/.exec(text);
-    if (!m) {
-      fail('desktop-label-defaults', `${rel} has no 'LABEL_KEYS = [...] as const' array`);
-    } else {
-      const desktopKeys = new Set([...m[1].matchAll(/'([^']+)'/g)].map((t) => t[1]));
-      const templateKeys = new Set<string>(readJson(DESKTOP_LABELS_REL).labels.map((l: any) => l.key));
-      for (const k of desktopKeys) {
-        if (!templateKeys.has(k)) fail('desktop-label-defaults', `${rel}'s LABEL_KEYS has '${k}', which is not in labels.json`);
-      }
-      for (const k of templateKeys) {
-        if (!desktopKeys.has(k)) fail('desktop-label-defaults', `labels.json has key '${k}', missing from ${rel}'s LABEL_KEYS`);
-      }
-      ok();
-    }
-  }
-
-  // --- Desktop app never retypes a resolved label name it should import — every string where
-  // `key !== name` must come from LABEL_DEFAULTS. `main/platform/`/`main/sessions/runtime/`/`types/platform.ts` excluded: their `'claude'` hits are the CLI binary name. ---
-  {
-    const mismatched = readJson(DESKTOP_LABELS_REL)
-      .labels.filter((l: any) => l.key !== l.name)
-      .map((l: any) => l.name);
-    const dir = join(root, 'apps/desktop/src');
-    const labelFreeDirs = [join(dir, 'main/platform'), join(dir, 'main/sessions/runtime')];
-    const labelFreeFiles = [join(dir, 'types/platform.ts')];
-    for (const f of walk(dir).filter((p) => p.endsWith('.ts') && !p.endsWith('.test.ts') && !labelFreeDirs.some((d) => p === d || p.startsWith(`${d}${sep}`)) && !labelFreeFiles.includes(p))) {
-      const rel = relOf(f);
-      const text = readFileSync(f, 'utf8');
-      for (const name of mismatched) {
-        if (text.includes(`'${name}'`) || text.includes(`"${name}"`)) {
-          fail('desktop-label-defaults', `${rel}: literal '${name}' must come from the LABEL_DEFAULTS import, not be retyped`);
-        }
-      }
-    }
-    ok();
   }
 }

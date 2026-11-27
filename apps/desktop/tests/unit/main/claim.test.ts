@@ -64,7 +64,7 @@ describe('claimApply', () => {
 
   it('refuses a ticket the store already tracks, even when GitHub shows no labels', async () => {
     const rig = await operatorRig({ ...UNCLAIMED, tickets: [ticketOf({ repo: REPO_ID, ticket: 93 })] })
-    expect(await apply(rig)).toEqual({ kind: 'refused', verdict: { kind: 'already-claimed', markerName: 'claude' } })
+    expect(await apply(rig)).toEqual({ kind: 'refused', verdict: { kind: 'already-claimed', markerName: 'port' } })
   })
 
   it('refuses with the unseeded state-unsaved outcome, and writes nothing, while the store holds no state', async () => {

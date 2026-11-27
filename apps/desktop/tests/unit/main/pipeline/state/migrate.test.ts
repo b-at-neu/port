@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { migrateV1, ticketOfKeys } from '@/main/pipeline/state/migrate'
+import { migrateV1 } from '@/main/pipeline/state/migrate'
 import { NO_RUN_FILES, migrateRuns } from '@/main/pipeline/state/migrate-runs'
-import { legacyKeysOf } from '@/main/pipeline/state/mirror'
 import { parseFile } from '@/main/pipeline/state/model'
 import type { Ticket } from '@/utils/pipeline/ticket'
 import v1 from '../../../../fixtures/pipeline-state/v1.json'
-import { NOW, REPO, ticketOf } from '../../../../support/tickets'
+import { NOW } from '../../../../support/tickets'
 
 const toV3 = (raw: unknown): unknown => migrateRuns(migrateV1(1, raw), NO_RUN_FILES)
 const file = parseFile(toV3(v1))
@@ -90,57 +89,5 @@ describe('migrate', () => {
   it('reads an in-flight and a blocked implementation', () => {
     expect(ticket('repo-b', 5)).toMatchObject({ stage: 'implement', status: { kind: 'running' } })
     expect(ticket('repo-b', 6)).toMatchObject({ stage: 'implement', status: { kind: 'blocked' } })
-  })
-})
-
-describe('ticketOfKeys is the inverse of legacyKeysOf', () => {
-  const queued = (reason: 'new' | 'changes-requested') => ({ kind: 'queued' as const, reason, since: NOW })
-  const waiting = (gate: 'plan-approval' | 'merge' | 'escalation') => ({ kind: 'waiting-on-you' as const, gate, detail: '' })
-  const withPr = (approvedAt: string | null): Partial<Ticket> => ({ pr: { number: 900, approvedAt } })
-
-  const SHAPES: readonly [string, Partial<Ticket>][] = [
-    ['plan queued', { stage: 'plan', status: queued('new') }],
-    ['plan changes requested', { stage: 'plan', status: queued('changes-requested') }],
-    ['plan running', { stage: 'plan', status: { kind: 'running', runId: null } }],
-    ['plan gate', { stage: 'plan', status: waiting('plan-approval'), autoPlan: true }],
-    ['implement queued', { stage: 'implement', status: queued('new') }],
-    ['implement running', { stage: 'implement', status: { kind: 'running', runId: null } }],
-    ['implement blocked', { stage: 'implement', status: { kind: 'blocked', on: [], reason: '' } }],
-    ['implement held', { stage: 'implement', status: { kind: 'held', on: 'paused', detail: 'stopped' } }],
-    ['plan escalation', { stage: 'plan', status: waiting('escalation') }],
-    ['review queued', { stage: 'review', status: queued('new'), ...withPr(null) }],
-    ['review running', { stage: 'review', status: { kind: 'running', runId: null }, ...withPr(null) }],
-    ['review escalation', { stage: 'review', status: waiting('escalation'), ...withPr(null) }],
-    ['revise queued', { stage: 'revise', status: queued('changes-requested'), ...withPr(null) }],
-    ['revise running', { stage: 'revise', status: { kind: 'running', runId: null }, ...withPr(null) }],
-    ['refresh queued', { stage: 'refresh', status: queued('new'), ...withPr(null) }],
-    ['refresh queued, approved', { stage: 'refresh', status: queued('new'), ...withPr(NOW) }],
-    ['refresh running, approved', { stage: 'refresh', status: { kind: 'running', runId: null }, ...withPr(NOW) }],
-    ['merge gate', { stage: 'merge', status: waiting('merge'), ...withPr(NOW) }],
-    ['review held', { stage: 'review', status: { kind: 'held', on: 'paused', detail: 'stopped' }, ...withPr(null) }],
-  ]
-
-  it.each(SHAPES)('%s', (_name, shape) => {
-    const original = ticketOf({ ticket: 843, ...shape })
-    const { ticket: restored } = ticketOfKeys({
-      repo: REPO,
-      ticket: original.ticket,
-      issueKeys: legacyKeysOf(original, 'issue') ?? [],
-      pr: original.pr === null ? null : { number: original.pr.number, keys: legacyKeysOf(original, 'pull-request') ?? [], approvedAt: original.pr.approvedAt },
-      history: [],
-      at: NOW,
-      mirrorFailure: null,
-      reviewCycles: 0,
-      stageHint: original.stage,
-    })
-    const summary = (t: Ticket) => ({
-      stage: t.stage,
-      kind: t.status.kind,
-      gate: t.status.kind === 'waiting-on-you' ? t.status.gate : null,
-      reason: t.status.kind === 'queued' ? t.status.reason : null,
-      approved: t.pr?.approvedAt !== null && t.pr !== null,
-      autoPlan: t.autoPlan,
-    })
-    expect(summary(restored)).toEqual(summary(original))
   })
 })

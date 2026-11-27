@@ -1,21 +1,53 @@
-// Pure: version 1 pipeline state, and the one rule that turns label keys into a ticket. Migration, label seeding and the `labels` event all use it.
+// Pure: version 1 pipeline state, and the one rule that turns its stored label keys into a ticket. Only migration reads the keys.
 import type { MirrorFailure, StoredHistoryRow, StoredItem } from '@/types/pipeline-state'
-import { LABEL_KEYS, type LabelKey } from '@/utils/labels/vocabulary'
-import { mirrorFailureSchema, V1_KEY_MEANING, type Event, type Stage, type Status, type Ticket, type V1KeyMeaning } from '@/utils/pipeline/ticket'
+import { mirrorFailureSchema, type Event, type Gate, type QueueReason, type Stage, type Status, type StatusKind, type Ticket } from '@/utils/pipeline/ticket'
 import type { RepoId } from '@/utils/repos'
 
 /** Two version-1 halves of 50 rows each. */
 export const HISTORY_CAP = 100
 
-const KEYS: ReadonlySet<string> = new Set(LABEL_KEYS)
+type V1KeyMeaning =
+  | { readonly kind: 'state'; readonly stage: Stage; readonly status: StatusKind; readonly reason?: QueueReason; readonly gate?: Gate; readonly approved?: true }
+  | { readonly kind: 'escalation'; readonly status: 'waiting-on-you'; readonly gate: 'escalation' }
+  | { readonly kind: 'pull-request' }
+  | { readonly kind: 'record' }
+  | { readonly kind: 'auto-plan' }
+
+/** What each key a version-1 file stored meant. Frozen: no new key is ever added, and nothing outside this file reads it. */
+const V1_KEY_MEANING = {
+  ready: { kind: 'state', stage: 'plan', status: 'queued', reason: 'new' },
+  planChangesRequested: { kind: 'state', stage: 'plan', status: 'queued', reason: 'changes-requested' },
+  planning: { kind: 'state', stage: 'plan', status: 'running' },
+  planReview: { kind: 'state', stage: 'plan', status: 'waiting-on-you', gate: 'plan-approval' },
+  planApproved: { kind: 'state', stage: 'implement', status: 'queued', reason: 'new' },
+  inProgress: { kind: 'state', stage: 'implement', status: 'running' },
+  blocked: { kind: 'state', stage: 'implement', status: 'blocked' },
+  readyForReview: { kind: 'state', stage: 'review', status: 'queued', reason: 'new' },
+  reviewing: { kind: 'state', stage: 'review', status: 'running' },
+  needsRevision: { kind: 'state', stage: 'revise', status: 'queued', reason: 'changes-requested' },
+  revising: { kind: 'state', stage: 'revise', status: 'running' },
+  refreshBranch: { kind: 'state', stage: 'refresh', status: 'queued', reason: 'new' },
+  refreshing: { kind: 'state', stage: 'refresh', status: 'running' },
+  approved: { kind: 'state', stage: 'merge', status: 'waiting-on-you', gate: 'merge', approved: true },
+  needsHuman: { kind: 'escalation', status: 'waiting-on-you', gate: 'escalation' },
+  prOpened: { kind: 'pull-request' },
+  marker: { kind: 'record' },
+  autoPlan: { kind: 'auto-plan' },
+} as const satisfies Readonly<Record<string, V1KeyMeaning>>
+
+type V1Key = keyof typeof V1_KEY_MEANING
+
+function isV1Key(value: string): value is V1Key {
+  return Object.hasOwn(V1_KEY_MEANING, value)
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function keysOf(value: unknown): LabelKey[] | null {
+function keysOf(value: unknown): V1Key[] | null {
   if (!Array.isArray(value)) return null
-  return value.every((entry): entry is LabelKey => typeof entry === 'string' && KEYS.has(entry)) ? [...value] : null
+  return value.every((entry): entry is V1Key => typeof entry === 'string' && isV1Key(entry)) ? [...value] : null
 }
 
 function rowOf(value: unknown): StoredHistoryRow | null {
@@ -69,7 +101,7 @@ function recordOf(value: unknown): V1Record | null {
   return { seededAt: value.seededAt, items: Object.values(value.items).flatMap((raw) => itemOf(raw) ?? []) }
 }
 
-function stateOf(key: LabelKey, at: string): { readonly stage: Stage; readonly status: Status } | null {
+function stateOf(key: V1Key, at: string): { readonly stage: Stage; readonly status: Status } | null {
   const meaning: V1KeyMeaning = V1_KEY_MEANING[key]
   if (meaning.kind !== 'state') return null
   switch (meaning.status) {
@@ -92,17 +124,17 @@ interface HalfState {
   /** `null` when only `needsHuman` names the state, so the stage has to come from elsewhere. */
   readonly stage: Stage | null
   readonly status: Status
-  readonly dropped: readonly LabelKey[]
+  readonly dropped: readonly V1Key[]
 }
 
 const escalation = (): Status => ({ kind: 'waiting-on-you', gate: 'escalation', detail: '' })
 
-function prefixed(half: 'issue' | 'pull-request', keys: readonly LabelKey[]): string[] {
+function prefixed(half: 'issue' | 'pull-request', keys: readonly string[]): string[] {
   return keys.map((key) => `${half}:${key}`)
 }
 
 /** In-flight beats `needsHuman`, which beats any other gate, which beats a trigger; the keys that lose are dropped. */
-function resolveHalf(keys: readonly LabelKey[], at: string): HalfState | null {
+function resolveHalf(keys: readonly V1Key[], at: string): HalfState | null {
   const candidates = keys.flatMap((key) => {
     const state = key === 'approved' ? null : stateOf(key, at)
     return state === null ? [] : [{ key, ...state }]
@@ -113,7 +145,7 @@ function resolveHalf(keys: readonly LabelKey[], at: string): HalfState | null {
     if (escalated) return { stage: null, status: escalation(), dropped: [] }
     return keys.includes('approved') ? { stage: 'merge', status: { kind: 'waiting-on-you', gate: 'merge', detail: '' }, dropped: [] } : null
   }
-  const dropped = (kept: LabelKey): LabelKey[] => candidates.map((candidate) => candidate.key).filter((key) => key !== kept)
+  const dropped = (kept: V1Key): V1Key[] => candidates.map((candidate) => candidate.key).filter((key) => key !== kept)
   const running = candidates.find((candidate) => candidate.status.kind === 'running')
   if (running !== undefined) return { stage: running.stage, status: running.status, dropped: [...dropped(running.key), ...(escalated ? (['needsHuman'] as const) : [])] }
   if (escalated) return { stage: first.stage, status: escalation(), dropped: candidates.map((candidate) => candidate.key) }
@@ -125,8 +157,8 @@ export interface TicketOfKeysParams {
   readonly repo: RepoId
   readonly ticket: number
   /** The issue half's keys; empty when that half is not tracked. */
-  readonly issueKeys: readonly LabelKey[]
-  readonly pr: { readonly number: number; readonly keys: readonly LabelKey[]; readonly approvedAt: string | null } | null
+  readonly issueKeys: readonly V1Key[]
+  readonly pr: { readonly number: number; readonly keys: readonly V1Key[]; readonly approvedAt: string | null } | null
   readonly history: readonly Event[]
   readonly at: string
   readonly mirrorFailure: MirrorFailure | null
@@ -166,7 +198,7 @@ export function ticketOfKeys(params: TicketOfKeysParams): { readonly ticket: Tic
 /** The stage of the newest row that added a state key. */
 function stageOfRows(rows: readonly StoredHistoryRow[]): Stage | null {
   for (const row of [...rows].sort((a, b) => a.at.localeCompare(b.at)).reverse()) {
-    for (const key of row.add) {
+    for (const key of row.add.filter(isV1Key)) {
       const meaning: V1KeyMeaning = V1_KEY_MEANING[key]
       if (meaning.kind === 'state') return meaning.stage
     }
@@ -178,8 +210,8 @@ function eventsOf(item: StoredItem): Event[] {
   return item.history.map((row) => ({ at: row.at, action: row.action, actor: row.actor, to: null, legacy: { add: prefixed(item.kind, row.add), remove: prefixed(item.kind, row.remove) } }))
 }
 
-function fullKeysOf(item: StoredItem): LabelKey[] {
-  return [...(item.marked ? (['marker'] as const) : []), ...(item.autoPlan ? (['autoPlan'] as const) : []), ...item.keys]
+function fullKeysOf(item: StoredItem): V1Key[] {
+  return [...(item.marked ? (['marker'] as const) : []), ...(item.autoPlan ? (['autoPlan'] as const) : []), ...item.keys.filter(isV1Key)]
 }
 
 function newer(a: StoredItem, b: StoredItem): StoredItem {

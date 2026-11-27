@@ -1,22 +1,19 @@
-import { ticketOfKeys } from '@/main/pipeline/state/migrate'
-import type { Ticket } from '@/utils/pipeline/ticket'
 import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
 import type { ReconciledItem, RepositoryState } from '@/types/state'
+import { ticketOf } from './tickets'
 
 /** Board-side fixtures at their idle defaults; override only what a test reads. */
-function ticketFromKeys(item: ReconciledItem): Ticket {
-  const keys = [...item.stages.map((label) => label.key), ...(item.autoPlan ? (['autoPlan'] as const) : [])]
-  const at = '2026-01-01T00:00:00.000Z'
-  const base = { repo: 'o/a' as Ticket['repo'], history: [], at, mirrorFailure: null, reviewCycles: item.reviewCycleCount ?? 0, stageHint: null }
-  if (item.kind === 'pull-request') return ticketOfKeys({ ...base, ticket: item.linked ?? item.number, issueKeys: [], pr: { number: item.number, keys, approvedAt: null } }).ticket
-  return ticketOfKeys({ ...base, ticket: item.number, issueKeys: keys, pr: null }).ticket
+function defaultTicketOf(item: ReconciledItem): NonNullable<ReconciledItem['ticket']> {
+  const repo = 'o/a' as NonNullable<ReconciledItem['ticket']>['repo']
+  if (item.kind === 'pull-request') return ticketOf({ repo, ticket: item.linked ?? item.number, pr: { number: item.number, approvedAt: null }, stage: 'review', reviewCycles: item.reviewCycleCount ?? 0 })
+  return ticketOf({ repo, ticket: item.number })
 }
 
-/** `ticket` defaults to the ticket the item's own `stages` stand for; pass `ticket: null` for an untracked item. */
+/** `ticket` defaults to a queued ticket at its first stage; pass `ticket: null` for an untracked item. */
 export function reconciledItem(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
   const item: ReconciledItem = reconciledItemBase(overrides)
-  return 'ticket' in overrides ? item : { ...item, ticket: ticketFromKeys(item) }
+  return 'ticket' in overrides ? item : { ...item, ticket: defaultTicketOf(item) }
 }
 
 function reconciledItemBase(overrides: Partial<ReconciledItem>): ReconciledItem {
@@ -29,11 +26,6 @@ function reconciledItemBase(overrides: Partial<ReconciledItem>): ReconciledItem 
     url: 'https://github.com/o/a/issues/1',
     assignees: ['op'],
     ticket: null,
-    stage: 'trigger',
-    stages: [{ key: 'ready', name: 'ready', role: 'trigger' }],
-    stageAmbiguous: false,
-    marked: true,
-    autoPlan: false,
     status: 'waiting',
     statusEvidence: null,
     waitingOn: 'cockpit',
@@ -47,8 +39,6 @@ function reconciledItemBase(overrides: Partial<ReconciledItem>): ReconciledItem 
     state: 'OPEN',
     mergedAt: null,
     updatedAt: null,
-    stageHistory: [],
-    matchedKeys: ['ready'],
     sources: ['github'],
     claimedFiles: null,
     headRefOid: null,
@@ -95,7 +85,6 @@ export function repositoryState(
     viewer: 'op',
     integrationChecks: {},
     approvalGate: true,
-    disabled: [],
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
     reviewCycleCap: 5,
     ...overrides,

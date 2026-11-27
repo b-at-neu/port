@@ -9,7 +9,7 @@ import { cycleDetailCopy, heldDetailCopy, heldEntriesFor, heldTagLabel, itemDeta
 const NOW = new Date('2026-01-01T00:00:00.000Z')
 
 function report(overrides: Partial<TickReport> = {}): TickReport {
-  return { repoId: 'repo-a' as RepoId, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: NOW.toISOString(), observations: [], autoApprovals: [], labelRepairs: [], ...overrides }
+  return { repoId: 'repo-a' as RepoId, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [],nextTickAt: NOW.toISOString(), observations: [], autoApprovals: [], labelRepairs: [], ...overrides }
 }
 
 describe('storeBannerCopy', () => {
@@ -29,7 +29,7 @@ describe('storeBannerCopy', () => {
 })
 
 describe('heldDetailCopy', () => {
-  const base: TickHeld = { number: 118, kind: 'issue', stage: 'plan', trigger: 'ready', reason: 'unowned', contention: null, escalation: null }
+  const base: TickHeld = { number: 118, kind: 'issue', stage: 'plan', reason: 'unowned', contention: null, escalation: null }
   it('covers all three ownership/session reasons', () => {
     expect(heldDetailCopy(base)).toBe('#118 unassigned — no cockpit will pick this up.')
     expect(heldDetailCopy({ ...base, reason: 'other-operator' })).toBe('#118 assigned to someone else.')
@@ -47,7 +47,6 @@ describe('heldDetailCopy', () => {
       number: 118,
       kind: 'issue',
       stage: 'implement',
-      trigger: 'planApproved',
       reason: 'contended',
       contention: { blocker: 67, blockerStage: 'in progress', depth: 2, paths: ['src/lib/auth.ts', 'src/lib/session.ts'] },
       escalation: null,
@@ -60,7 +59,6 @@ describe('heldDetailCopy', () => {
       number: 118,
       kind: 'issue',
       stage: 'implement',
-      trigger: 'planApproved',
       reason: 'contended',
       contention: { blocker: 67, blockerStage: 'in progress', depth: 5, paths: ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts', 'src/e.ts'] },
       escalation: null,
@@ -73,7 +71,6 @@ describe('heldDetailCopy', () => {
       number: 204,
       kind: 'pull-request',
       stage: 'revise',
-      trigger: 'needsRevision',
       reason: 'cycle-cap',
       contention: null,
       escalation: { kind: 'cycle-cap', count: 5, cap: 5 },
@@ -82,17 +79,17 @@ describe('heldDetailCopy', () => {
   })
 
   it('names the two-reviews rule for a zero-diff hold', () => {
-    const held: TickHeld = { number: 157, kind: 'pull-request', stage: 'review', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } }
+    const held: TickHeld = { number: 157, kind: 'pull-request', stage: 'review', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } }
     expect(heldDetailCopy(held)).toBe('#157 would escalate to needs human — this head has had its two reviews, so only a new head gets another.')
     expect(heldDetailCopy(held, 'app')).toBe('#157 escalating to needs human — this head has had its two reviews, so only a new head gets another.')
   })
 
   it('#292: owner "app" reads cycle-cap and zero-diff in the present tense, since this app is the one escalating', () => {
-    const capped: TickHeld = { number: 204, kind: 'pull-request', stage: 'revise', trigger: 'needsRevision', reason: 'cycle-cap', contention: null, escalation: { kind: 'cycle-cap', count: 5, cap: 5 } }
+    const capped: TickHeld = { number: 204, kind: 'pull-request', stage: 'revise', reason: 'cycle-cap', contention: null, escalation: { kind: 'cycle-cap', count: 5, cap: 5 } }
     expect(heldDetailCopy(capped, 'app')).toBe('#204 escalating to needs human — cycle 5 reached the cap of 5.')
     expect(heldDetailCopy(capped, 'none')).toBe('#204 would escalate to needs human — cycle 5 reached the cap of 5.')
 
-    const zeroDiff: TickHeld = { number: 157, kind: 'pull-request', stage: 'review', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } }
+    const zeroDiff: TickHeld = { number: 157, kind: 'pull-request', stage: 'review', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } }
     expect(heldDetailCopy(zeroDiff, 'app')).toBe('#157 escalating to needs human — this head has had its two reviews, so only a new head gets another.')
     expect(heldDetailCopy(zeroDiff, 'none')).toBe('#157 would escalate to needs human — this head has had its two reviews, so only a new head gets another.')
   })
@@ -102,7 +99,6 @@ describe('heldDetailCopy', () => {
       number: 594,
       kind: 'pull-request',
       stage: 'review',
-      trigger: 'readyForReview',
       reason: 'check-hold',
       contention: null,
       escalation: { kind: 'check-hold', checks: ['run-e2e (macos-latest)'], state: 'pending', escalateAt: null },
@@ -117,7 +113,6 @@ describe('heldDetailCopy', () => {
       number: 594,
       kind: 'pull-request',
       stage: 'review',
-      trigger: 'readyForReview',
       reason: 'check-hold',
       contention: null,
       escalation: { kind: 'check-hold', checks: ['a', 'b'], state: 'red', escalateAt },
@@ -134,7 +129,6 @@ describe('heldDetailCopy', () => {
       number: 594,
       kind: 'pull-request',
       stage: 'review',
-      trigger: 'readyForReview',
       reason: 'check-hold',
       contention: null,
       escalation: { kind: 'check-hold', checks: ['a', 'b'], state: 'red', escalateAt },
@@ -153,7 +147,6 @@ describe('heldDetailCopy', () => {
       number: 642,
       kind: 'pull-request',
       stage: 'review',
-      trigger: 'readyForReview',
       reason: 'integration-red',
       contention: null,
       escalation: { kind: 'integration-red', checks: ['test'], state: 'red', escalateAt, expired: false },
@@ -168,7 +161,6 @@ describe('heldDetailCopy', () => {
       number: 642,
       kind: 'pull-request',
       stage: 'review',
-      trigger: 'readyForReview',
       reason: 'integration-red',
       contention: null,
       escalation: { kind: 'integration-red', checks: ['test', 'lint'], state: 'red', escalateAt: null, expired: true },
@@ -178,13 +170,13 @@ describe('heldDetailCopy', () => {
   })
 
   it('reads an integration-green hold as the refresh that resumes review', () => {
-    const held: TickHeld = { number: 642, kind: 'pull-request', stage: 'review', trigger: 'readyForReview', reason: 'integration-green', contention: null, escalation: null }
+    const held: TickHeld = { number: 642, kind: 'pull-request', stage: 'review', reason: 'integration-green', contention: null, escalation: null }
     expect(heldDetailCopy(held, 'app')).toBe('#642 held — the integration branch is green again, so this app is refreshing it (rebase + force-push) to resume review.')
     expect(heldDetailCopy(held, 'none')).toBe("#642 held — the integration branch is green again. The cockpit's refresh sweep rebases it; this app doesn't.")
   })
 
   it('#292: a conflicting hold reads as this app actively refreshing it, instead of naming the cockpit\'s sweep', () => {
-    const held: TickHeld = { number: 88, kind: 'pull-request', stage: 'review', trigger: 'readyForReview', reason: 'conflicting', contention: null, escalation: null }
+    const held: TickHeld = { number: 88, kind: 'pull-request', stage: 'review', reason: 'conflicting', contention: null, escalation: null }
     expect(heldDetailCopy(held, 'app')).toBe('#88 conflicts — this app is refreshing it (rebase + force-push).')
     expect(heldDetailCopy(held, 'none')).toBe("#88 held — GitHub reports merge conflicts. The cockpit's refresh sweep rebases it; this app doesn't.")
     expect(heldDetailCopy(held)).toBe("#88 held — GitHub reports merge conflicts. The cockpit's refresh sweep rebases it; this app doesn't.")
@@ -193,19 +185,19 @@ describe('heldDetailCopy', () => {
 
 describe('uncheckedDetailCopy', () => {
   it('names the item and the reason it dispatches unchecked (#106)', () => {
-    const actionable: TickActionable = { number: 52, kind: 'issue', stage: 'implement', trigger: 'planApproved', agent: 'impl', unchecked: true, cycle: null }
+    const actionable: TickActionable = { number: 52, kind: 'issue', stage: 'implement', mode: 'implement', agent: 'impl', unchecked: true, cycle: null }
     expect(uncheckedDetailCopy(actionable)).toBe('#52 has no file list in its plan — dispatching unchecked.')
   })
 })
 
 describe('cycleDetailCopy', () => {
   it('names the cycle count and cap for a candidate that carries one (#108)', () => {
-    const actionable: TickActionable = { number: 204, kind: 'pull-request', stage: 'revise', trigger: 'needsRevision', agent: 'revise', unchecked: false, cycle: { count: 4, cap: 5 } }
+    const actionable: TickActionable = { number: 204, kind: 'pull-request', stage: 'revise', mode: 'revise', agent: 'revise', unchecked: false, cycle: { count: 4, cap: 5 } }
     expect(cycleDetailCopy(actionable)).toBe('#204 revise — cycle 4 of 5.')
   })
 
   it('is null for a candidate with no cycle count', () => {
-    const actionable: TickActionable = { number: 105, kind: 'issue', stage: 'plan', trigger: 'ready', agent: 'plan', unchecked: false, cycle: null }
+    const actionable: TickActionable = { number: 105, kind: 'issue', stage: 'plan', mode: 'fresh', agent: 'plan', unchecked: false, cycle: null }
     expect(cycleDetailCopy(actionable)).toBeNull()
   })
 })
@@ -243,8 +235,8 @@ describe('itemDetailLines', () => {
   it('narrows every source to one item number', () => {
     const rep = report({
       held: [
-        { number: 1, kind: 'issue', stage: 'plan', trigger: 'ready', reason: 'unowned', contention: null, escalation: null },
-        { number: 2, kind: 'issue', stage: 'plan', trigger: 'ready', reason: 'unowned', contention: null, escalation: null },
+        { number: 1, kind: 'issue', stage: 'plan', reason: 'unowned', contention: null, escalation: null },
+        { number: 2, kind: 'issue', stage: 'plan', reason: 'unowned', contention: null, escalation: null },
       ],
       claims: [{ number: 1, kind: 'issue', stage: 'implement', class: 'no-record', retryable: false }],
     })
@@ -258,8 +250,8 @@ describe('itemDetailLines', () => {
 
   it('prints the same held lines the card tag carries', () => {
     const entries = [
-      { number: 1, kind: 'issue', stage: 'plan', trigger: 'ready', reason: 'unowned', contention: null, escalation: null },
-      { number: 1, kind: 'issue', stage: 'plan', trigger: 'ready', reason: 'other-operator', contention: null, escalation: null },
+      { number: 1, kind: 'issue', stage: 'plan', reason: 'unowned', contention: null, escalation: null },
+      { number: 1, kind: 'issue', stage: 'plan', reason: 'other-operator', contention: null, escalation: null },
     ] satisfies TickHeld[]
     const rep = report({ held: entries })
     const tagLines = heldEntriesFor(rep, 1, 'issue').map((entry) => heldDetailCopy(entry, 'app'))
@@ -268,7 +260,7 @@ describe('itemDetailLines', () => {
 })
 
 describe('heldTagLabel', () => {
-  const base: TickHeld = { number: 7, kind: 'pull-request', stage: 'review', trigger: 'readyForReview', reason: 'unowned', contention: null, escalation: null }
+  const base: TickHeld = { number: 7, kind: 'pull-request', stage: 'review', reason: 'unowned', contention: null, escalation: null }
   const check = (state: 'pending' | 'red'): TickHeld => ({ ...base, reason: 'check-hold', escalation: { kind: 'check-hold', checks: ['a'], state, escalateAt: null } })
 
   it('labels each reason', () => {
@@ -292,8 +284,8 @@ describe('heldTagLabel', () => {
 })
 
 describe('heldEntriesFor', () => {
-  const issue: TickHeld = { number: 1, kind: 'issue', stage: 'plan', trigger: 'ready', reason: 'unowned', contention: null, escalation: null }
-  const pr: TickHeld = { ...issue, kind: 'pull-request', stage: 'refresh', trigger: 'refreshBranch', reason: 'conflicting' }
+  const issue: TickHeld = { number: 1, kind: 'issue', stage: 'plan', reason: 'unowned', contention: null, escalation: null }
+  const pr: TickHeld = { ...issue, kind: 'pull-request', stage: 'refresh', reason: 'conflicting' }
 
   it('is empty for an absent or blind report', () => {
     expect(heldEntriesFor(undefined, 1, 'issue')).toEqual([])
@@ -315,7 +307,7 @@ describe('observationDetailCopy', () => {
   })
 
   it('names an adoption by the phase it moves the ticket to', () => {
-    const adopt = (agent: 'review' | 'impl', token: string, arg: string | null = null): TickObservation => ({ kind: 'adopt', number: 779, itemKind: 'pull-request', agent, stage: agent === 'review' ? 'review' : 'implement', trigger: 'readyForReview', handback: { token, arg }, evidence: 'review' })
+    const adopt = (agent: 'review' | 'impl', token: string, arg: string | null = null): TickObservation => ({ kind: 'adopt', number: 779, itemKind: 'pull-request', agent, stage: agent === 'review' ? 'review' : 'implement', handback: { token, arg }, evidence: 'review' })
     expect(observationDetailCopy(adopt('review', 'approved'))).toBe('#779 already finished on GitHub — moving it to Ready to merge.')
     expect(observationDetailCopy(adopt('review', 'needs-revision'))).toBe('#779 already finished on GitHub — moving it to Needs revision.')
     expect(observationDetailCopy(adopt('impl', 'pr-opened', '#780'))).toBe('#779 already finished on GitHub — moving it to Waiting for review.')

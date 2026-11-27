@@ -1,6 +1,7 @@
 // session.restore / session.restoreList / session.restoreDiscard.
 import { describe, expect, it } from 'vitest'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
+import { resolveDisplayVocabulary } from '@/utils/labels/display'
 import type { ReposListResponse } from '@/types/ipc'
 import { storeStub } from '../../../fixtures/store'
 import { createFakeFs } from '../../../support/fake-platform'
@@ -21,7 +22,7 @@ const READY_ENTRY: RepositoryEntry = {
     models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
     modules: { approvalGate: true, release: true, scope: true },
     reviewCycleCap: 3,
-    vocabulary: { labels: [], disabled: [], problems: [] },
+    displayVocabulary: resolveDisplayVocabulary({}),
     commands: { worktrees: null, budget: null },
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
     sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],

@@ -26,11 +26,11 @@ export function createInProcessEngine(ctx: EngineContext, reader: SessionReader 
     refreshSessions: ({ repos }) => refreshSessions(ctx, cache, { repos, reader }),
     refreshWorktrees: ({ repoId, repoRoot }) => refreshWorktrees(ctx, cache, { repoId, repoRoot }),
     refreshDenials: ({ repoId, repoRoot }) => refreshDenials(ctx, cache, { repoId, repoRoot }),
-    refreshGithub: ({ repoId, repo, vocabulary, verify, integration, tracked }) => {
+    refreshGithub: ({ repoId, repo, vocabulary, integration, tracked }) => {
       const worktrees = cache.worktrees.get(repoId)
       const worktreeEntries = worktrees?.ok ? worktrees.entries : []
       const agents = cache.sessions?.ok ? cache.sessions.agents.filter((agent) => agent.repoId === repoId) : []
-      return refreshGithub(boardCtx, cache, { repoId, repo, vocabulary, verify, integration, tracked, worktreeEntries, agents })
+      return refreshGithub(boardCtx, cache, { repoId, repo, vocabulary, integration, tracked, worktreeEntries, agents })
     },
     precheckGithub: (params) => tracker.precheck(params),
     project: ({ repositories, views }) => Promise.resolve(projectFromCache(cache, repositories, now, views)),

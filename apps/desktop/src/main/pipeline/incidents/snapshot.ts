@@ -1,4 +1,5 @@
 // Pure: the bounded facts an incident carries. Typed fields only — never a body, a comment or transcript text.
+import { claimedAtOf } from '@/main/pipeline/board/reconcile'
 import { verdictOf } from '@/main/pipeline/tick/adopt'
 import { INCIDENT_INPUTS_MAX_BYTES, type IncidentInputs } from '@/types/incidents'
 import type { ReconciledItem } from '@/types/state'
@@ -39,17 +40,17 @@ export function boundInputs(inputs: IncidentInputs): IncidentInputs {
   }
 }
 
-function claimOf(item: ReconciledItem): { readonly key: string; readonly at: string } | null {
-  const [stage] = item.stages
-  if (stage === undefined) return null
-  const entry = item.stageHistory.findLast((candidate) => candidate.key === stage.key)
-  return entry === undefined ? null : { key: entry.key, at: entry.at }
+function claimOf(item: ReconciledItem): { readonly stage: string; readonly at: string } | null {
+  const { ticket } = item
+  const at = ticket === null ? null : claimedAtOf(ticket)
+  return ticket === null || at === null ? null : { stage: ticket.stage, at }
 }
 
 /** The allowed fields of one reconciled item. */
 export function itemInputs(item: ReconciledItem): Record<string, unknown> {
   return {
-    labels: item.stages.map((stage) => stage.key),
+    stage: item.ticket?.stage ?? null,
+    status: item.ticket?.status.kind ?? null,
     assignees: item.assignees,
     headRefOid: item.headRefOid,
     claim: claimOf(item),

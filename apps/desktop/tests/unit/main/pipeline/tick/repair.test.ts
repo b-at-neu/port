@@ -37,7 +37,6 @@ const RUNNING_VIEW = ticketViewOf(RUNNING)
 
 describe('repairsOf — guards', () => {
   it.each([
-    ['an unmarked item', () => repair([item({ marked: false })], [ended()])],
     ['an item not assigned to the viewer', () => repair([item({ assignees: ['someone-else'] })], [ended()])],
     ['a number with a live stage session', () => repair([item()], [ended()], { liveNumbers: new Set([52]) })],
     ['a closed item', () => repair([item({ state: 'CLOSED' })], [ended()])],
@@ -58,8 +57,8 @@ describe('repairsOf — mirror-failed', () => {
     expect(result.reports).toEqual([{ number: 52, kind: 'issue', shape: 'mirror-failed', view: RUNNING_VIEW, agent: null, reason: null, mirror: failure }])
   })
 
-  it('reports it for an unmarked item and while a stage session is live', () => {
-    expect(repair([item({ marked: false, mirrorFailure: failure })], [], { liveNumbers: new Set([52]) }).reports).toHaveLength(1)
+  it('reports it while a stage session is live', () => {
+    expect(repair([item({ mirrorFailure: failure })], [], { liveNumbers: new Set([52]) }).reports).toHaveLength(1)
   })
 
   it('skips a closed item, an item assigned to someone else and an item with no failure', () => {

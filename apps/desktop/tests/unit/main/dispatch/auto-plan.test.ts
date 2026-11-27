@@ -6,6 +6,7 @@ import type { ReconciledItem } from '@/types/state'
 import type { TickReport } from '@/types/tick'
 import { createAutoPlanner } from '@/main/dispatch/auto-plan'
 import { dispatchContext, type DispatchContextOptions } from '../../../support/context'
+import { reconciledItem } from '../../../support/board-snapshot'
 import { ticketAt } from '../../../support/tickets'
 
 const approve = vi.hoisted(() => vi.fn<(params: unknown) => Promise<WriteOutcome>>())
@@ -16,53 +17,17 @@ const APPLIED: WriteOutcome = { kind: 'applied', argv: [] }
 const REFUSED: WriteOutcome = { kind: 'verify-failed', message: 'no' }
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
-  return {
+  return reconciledItem({
     repoId: REPO_ID,
-    repo: 'o/a',
-    kind: 'issue',
     number: 7,
-    title: 'a ticket',
-    url: 'https://github.com/o/a/issues/7',
-    assignees: ['op'],
     ticket: ticketAt('plan', { kind: 'waiting-on-you', gate: 'plan-approval', detail: '' }, { autoPlan: true }),
-    stage: 'gate',
-    stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }],
-    stageAmbiguous: false,
-    marked: true,
-    autoPlan: true,
     status: 'gated',
-    statusEvidence: null,
-    waitingOn: 'cockpit',
-    sessionRequired: false,
-    linked: null,
-    linkReason: null,
-    agents: [],
-    sessions: [],
-    worktrees: [],
-    workSessions: [],
-    state: 'OPEN',
-    mergedAt: null,
-    updatedAt: null,
-    stageHistory: [],
-    matchedKeys: ['planReview'],
-    sources: ['github'],
-    claimedFiles: null,
-    headRefOid: null,
-    mergeable: null,
-    reviews: null,
-    comments: null,
-    reviewCycleCount: null,
-    checkRollup: null,
-    planPresent: null,
-    blockers: null,
-    blockerComments: null,
-    closingPullRequests: null,
     ...overrides,
-  }
+  })
 }
 
 function tickReport(overrides: Partial<TickReport> = {}): TickReport {
-  return { repoId: REPO_ID, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [], autoApprovals: [{ number: 7 }], labelRepairs: [], ...overrides }
+  return { repoId: REPO_ID, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [],nextTickAt: null, observations: [], autoApprovals: [{ number: 7 }], labelRepairs: [], ...overrides }
 }
 
 function snapshotWith(tick: readonly TickReport[], items: readonly ReconciledItem[], readAt = '2026-01-01T00:00:00Z'): BoardSnapshot {

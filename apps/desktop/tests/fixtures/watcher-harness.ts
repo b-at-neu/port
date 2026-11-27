@@ -1,4 +1,4 @@
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import { resolveDisplayVocabulary } from '@/utils/labels/display'
 import type { RepositoryEntry } from '@/utils/repos'
 import type { CommandResult, ConditionalTransport, GitHubTransport } from '@/types/platform'
 import type { BoardSnapshot } from '@/types/board'
@@ -69,9 +69,11 @@ export function readyItemTransport(signedInLogin: string, assignees: readonly st
   }
   const sweep = { repository: { issues: connection([issue]), pullRequests: connection([]), repoLabels: { totalCount: 0, nodes: [] } }, rateLimit, viewer: { login: signedInLogin } }
   const detail = { repository: { d0: { timelineItems: { nodes: [] } } }, rateLimit }
+  const tracked = { repository: { t0: issue }, rateLimit }
   return (request) => {
     const document = queryOf(request)
-    return Promise.resolve({ ok: true, status: 200, headers: {}, body: JSON.stringify({ data: document.includes('d0:') ? detail : sweep }) })
+    const data = document.includes('d0:') ? detail : document.includes('t0: issue(') ? tracked : sweep
+    return Promise.resolve({ ok: true, status: 200, headers: {}, body: JSON.stringify({ data }) })
   }
 }
 
@@ -124,7 +126,7 @@ export function readyEntry(id: string, path: string, repo: string): Extract<Repo
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
       modules: { approvalGate: true, release: true, scope: true },
       reviewCycleCap: 5,
-      vocabulary: resolveVocabulary({}),
+      displayVocabulary: resolveDisplayVocabulary({}),
     },
     diagnostics: [],
   }

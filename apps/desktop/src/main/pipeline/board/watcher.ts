@@ -3,7 +3,6 @@ import type { PipelineView } from '@/types/pipeline-state'
 
 // The only clock in main — one timer, rescheduled to the earliest `nextDueAt`. `schedule.ts` decides *when*; this file is the only place under `src/main/` allowed to name `setTimeout`.
 import type { RateLimitInfo } from '@/types/github'
-import { verifiableVocabularyOf } from '@/utils/labels/display'
 import type { RepoId } from '@/utils/repos'
 import type { RepositoryEntry } from '@/utils/repos'
 import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth, isDeferred } from '@/types/board'
@@ -244,7 +243,7 @@ export function createPipelineWatcher(ctx: WatcherContext, sinks: WatcherSinks):
       outcome = await ctx.live.engine.refreshDenials({ repoId: entry.id, repoRoot: entry.path })
     } else {
       const startedAt = now().toISOString()
-      outcome = await ctx.live.engine.refreshGithub({ repoId: entry.id, repo: repoRefOf(entry), vocabulary: entry.config.vocabulary, verify: verifiableVocabularyOf(entry.config), integration: entry.config.branches.integration, tracked: store.tracked(entry.id) })
+      outcome = await ctx.live.engine.refreshGithub({ repoId: entry.id, repo: repoRefOf(entry), vocabulary: entry.config.displayVocabulary, integration: entry.config.branches.integration, tracked: store.tracked(entry.id) })
       precheck.settled(entry.id, startedAt, outcome.ok)
       if (outcome.closed !== undefined && outcome.closed.length > 0) await finishPipelineState(ctx, entry, { closed: outcome.closed, merged: outcome.merged ?? [] }, ctx.paths.userData)
     }

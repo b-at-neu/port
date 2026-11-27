@@ -49,7 +49,7 @@ export function ownerOf(ownership: OwnershipRead): DispatchOwner {
 
 export function activeOrIdle(records: readonly StageRecord[]): DispatcherState {
   return records.length > 0
-    ? { kind: 'active', recent: records.map((r) => ({ agent: r.agent, number: r.number, kind: r.kind, trigger: r.trigger, state: r.state, at: r.at, detail: r.detail, outcome: r.outcome, sessionKey: r.sessionKey, claudeSessionId: r.claudeSessionId, operatorJoinedAt: r.operatorJoinedAt })) }
+    ? { kind: 'active', recent: records.map((r) => ({ agent: r.agent, number: r.number, kind: r.kind, state: r.state, at: r.at, detail: r.detail, outcome: r.outcome, sessionKey: r.sessionKey, claudeSessionId: r.claudeSessionId, operatorJoinedAt: r.operatorJoinedAt })) }
     : { kind: 'idle' }
 }
 

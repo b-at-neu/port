@@ -1,12 +1,12 @@
 // A scripted GitHub transport for the board read. It answers by the document's own content, never by
 // call order, because the issue and pull-request halves run in parallel.
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import { resolveDisplayVocabulary } from '@/utils/labels/display'
 import type { GitHubHttpResult, GitHubTransport } from '@/types/platform'
 import { RATE_LIMIT_REPLY, connection } from './pipeline-reply'
 import { httpOk, queryOf } from './github-http'
 
 export const REPO = { owner: 'o', name: 'r' }
-export const VOCABULARY = resolveVocabulary({})
+export const VOCABULARY = resolveDisplayVocabulary({})
 export const REPO_LABELS_OK = { totalCount: VOCABULARY.labels.length, nodes: VOCABULARY.labels.map((label) => ({ name: label.name })) }
 
 export function ok(body: unknown): GitHubHttpResult {

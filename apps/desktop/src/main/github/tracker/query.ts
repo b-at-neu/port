@@ -1,6 +1,6 @@
 // Pure GraphQL document builders for the tracker's reads — no network, no config read, no gh.
 import type { SweepPage } from '@/types/github'
-import type { LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { DisplayVocabulary } from '@/utils/labels/display'
 import { ASSIGNEE_PAGE_SIZE, ITEM_SWEEP_FIELDS, LABEL_EVENTS_FIELD, repositoryDocument, sweepConnection } from '@/main/github/query'
 import type { NumberedQuery } from '@/main/github/query'
 
@@ -15,7 +15,7 @@ const BLOCKER_COMMENTS_FIELD = `comments(last: ${BLOCKER_COMMENT_PAGE_SIZE}) { n
 const CLOSING_PULL_REQUESTS_FIELD = `closedByPullRequestsReferences(first: ${CLOSING_PULL_REQUEST_PAGE_SIZE}, includeClosedPrs: true) { nodes { number state headRefName } }`
 
 /** The issue sweep page. Only page one carries `repoLabels` and `viewer`. The viewer is top-level, deliberately outside `repository`: resolving the signed-in login is never scoped to one repository. */
-export function buildIssueSweepQuery(vocabulary: LabelVocabulary, page: SweepPage): string {
+export function buildIssueSweepQuery(vocabulary: DisplayVocabulary, page: SweepPage): string {
   const first = page.after === null
   return repositoryDocument(
     [...(page.connection ? [sweepConnection('issues', vocabulary, page, ITEM_SWEEP_FIELDS)] : []), ...(first ? [`    repoLabels: labels(first: ${REPO_LABEL_PAGE_SIZE}) { totalCount nodes { name } }`] : [])],

@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { displayOf } from '@/main/pipeline/state/display'
-import { ticketOfKeys } from '@/main/pipeline/state/migrate'
-import type { LabelKey } from '@/utils/labels/vocabulary'
+import { ticketOfKeys, type TicketOfKeysParams } from '@/main/pipeline/state/migrate'
 import type { Ticket } from '@/utils/pipeline/ticket'
 import { NOW, REPO, ticketOf } from '../../../../support/tickets'
 
-function fromKeys(issueKeys: readonly LabelKey[], prKeys: readonly LabelKey[] | null = null): Ticket {
+type V1Key = TicketOfKeysParams['issueKeys'][number]
+
+function fromKeys(issueKeys: readonly V1Key[], prKeys: readonly V1Key[] | null = null): Ticket {
   return ticketOfKeys({ repo: REPO, ticket: 1, issueKeys, pr: prKeys === null ? null : { number: 2, keys: prKeys, approvedAt: null }, history: [], at: NOW, mirrorFailure: null, reviewCycles: 0, stageHint: null }).ticket
 }
 

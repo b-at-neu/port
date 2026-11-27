@@ -19,7 +19,6 @@ function reviewItem(overrides: Partial<ReconciledItem>): ReconciledItem {
   return item({
     number: 594,
     kind: 'pull-request',
-    stages: [{ key: 'readyForReview', name: 'ready for review', role: 'trigger' }],
     headRefOid: 'sha1',
     mergeable: 'MERGEABLE',
     reviews: [{ body: MARKER_BODY, submittedAt: '2026-01-01T00:30:00Z', commitOid: 'sha1' }],
@@ -53,7 +52,6 @@ describe('planTick — check-hold on the zero-diff gate', () => {
         number: 594,
         kind: 'pull-request',
         stage: 'review',
-        trigger: 'readyForReview',
         reason: 'check-hold',
         contention: null,
         escalation: { kind: 'check-hold', checks: ['run-e2e'], state: 'pending', escalateAt: null },
@@ -70,7 +68,7 @@ describe('planTick — check-hold on the zero-diff gate', () => {
   it('dispatches one review once the check is green and the rollup is clear', () => {
     const report = plan(reviewItem({ checkRollup: [run('SUCCESS')] }))
     expect(report.held).toEqual([])
-    expect(report.actionable).toEqual([{ number: 594, kind: 'pull-request', stage: 'review', trigger: 'readyForReview', agent: 'review', unchecked: false, cycle: { count: 1, cap: 5 } }])
+    expect(report.actionable).toEqual([{ number: 594, kind: 'pull-request', stage: 'review', mode: 'review', agent: 'review', unchecked: false, cycle: { count: 1, cap: 5 } }])
   })
 
   it('dispatches one more review, never escalating, when the review carries no marker', () => {

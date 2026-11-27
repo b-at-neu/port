@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { applyItemDetails, mapPipelineItems } from '@/main/github/map'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import { resolveDisplayVocabulary } from '@/utils/labels/display'
 
-const VOCABULARY = resolveVocabulary({})
+const VOCABULARY = resolveDisplayVocabulary({})
 
 function issueNode(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return { number: 1, title: 'T', url: 'u', body: '', state: 'OPEN', assignees: { nodes: [] }, labels: { nodes: [{ name: 'ready' }] }, ...overrides }
+  return { number: 1, title: 'T', url: 'u', body: '', state: 'OPEN', assignees: { nodes: [] }, labels: { nodes: [{ name: 'planning' }] }, ...overrides }
 }
 
 function pullNode(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return { number: 5, title: 'PR', url: 'u', body: '', state: 'OPEN', mergedAt: null, assignees: { nodes: [] }, labels: { nodes: [{ name: 'ready for review' }] }, ...overrides }
+  return { number: 5, title: 'PR', url: 'u', body: '', state: 'OPEN', mergedAt: null, assignees: { nodes: [] }, labels: { nodes: [{ name: 'reviewing' }] }, ...overrides }
 }
 
 function mapIssues(nodes: readonly unknown[]): ReturnType<typeof mapPipelineItems> {
@@ -22,24 +22,24 @@ function mapPulls(nodes: readonly unknown[]): ReturnType<typeof mapPipelineItems
 
 describe('mapPipelineItems', () => {
   it('buckets an item carrying three vocabulary labels into three matchedKeys, in vocabulary order', () => {
-    const items = mapIssues([issueNode({ number: 76, labels: { nodes: [{ name: 'in progress' }, { name: 'plan approved' }, { name: 'ready' }] } })])
+    const items = mapIssues([issueNode({ number: 76, labels: { nodes: [{ name: 'approved' }, { name: 'needs you' }, { name: 'port' }] } })])
     expect(items).toHaveLength(1)
     const order = VOCABULARY.labels.map((label) => label.key)
-    const expected = order.filter((key) => ['inProgress', 'planApproved', 'ready'].includes(key))
+    const expected = order.filter((key) => ['approved', 'needsYou', 'port'].includes(key))
     expect(items[0]?.matchedKeys).toEqual(expected)
     expect(items[0]?.matchedKeys).toHaveLength(3)
   })
 
   it('matches a label name case-insensitively, the way GitHub filters', () => {
-    const items = mapIssues([issueNode({ labels: { nodes: [{ name: 'READY' }] } })])
-    expect(items[0]?.matchedKeys).toEqual(['ready'])
-    expect(items[0]?.labels).toEqual(['READY'])
+    const items = mapIssues([issueNode({ labels: { nodes: [{ name: 'PLANNING' }] } })])
+    expect(items[0]?.matchedKeys).toEqual(['planning'])
+    expect(items[0]?.labels).toEqual(['PLANNING'])
   })
 
   it('an item carrying a non-pipeline label keeps it in labels but not matchedKeys', () => {
-    const items = mapIssues([issueNode({ labels: { nodes: [{ name: 'ready' }, { name: 'bug' }] } })])
-    expect(items[0]?.labels).toEqual(['ready', 'bug'])
-    expect(items[0]?.matchedKeys).toEqual(['ready'])
+    const items = mapIssues([issueNode({ labels: { nodes: [{ name: 'planning' }, { name: 'bug' }] } })])
+    expect(items[0]?.labels).toEqual(['planning', 'bug'])
+    expect(items[0]?.matchedKeys).toEqual(['planning'])
   })
 
   it('drops a node matching no vocabulary label', () => {

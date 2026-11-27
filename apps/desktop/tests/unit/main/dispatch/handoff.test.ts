@@ -14,7 +14,7 @@ vi.mock('@/main/pipeline/operator/stage', () => ({ applyStageTransition: (_ctx: 
 const REPO = 'repo-a' as RepoId
 const OTHER_REPO = 'repo-b' as RepoId
 const KEY = 'hosted-1' as SessionKey
-const RECORD = { sessionKey: KEY, number: 52, kind: 'issue', agent: 'impl', stage: 'implement', trigger: 'planApproved' } as const
+const RECORD = { sessionKey: KEY, number: 52, kind: 'issue', agent: 'impl', stage: 'implement' } as const
 const ENTRY = readyEntry()
 const SNAPSHOT = {} as unknown as StageSnapshot
 
@@ -69,7 +69,7 @@ describe('createStageHandoff', () => {
     expect(apply).toHaveBeenCalledTimes(HANDOFF_ATTEMPTS)
     expect(handoff.resultFor(KEY)).toEqual({ kind: 'refused', reason: 'write-failed', detail: 'boom' })
     expect(recordIncident).toHaveBeenCalledTimes(1)
-    expect(recordIncident).toHaveBeenCalledWith(expect.objectContaining({ bucket: 'refused-write', stage: 'impl', condition: 'handoff-write-failed', repo: 'o/a', number: 52, inputs: { sessionKey: KEY, attempts: HANDOFF_ATTEMPTS, retryable: true, trigger: 'planApproved' } }))
+    expect(recordIncident).toHaveBeenCalledWith(expect.objectContaining({ bucket: 'refused-write', stage: 'impl', condition: 'handoff-write-failed', repo: 'o/a', number: 52, inputs: { sessionKey: KEY, attempts: HANDOFF_ATTEMPTS, retryable: true, stage: 'implement' } }))
     expect(ctx.watcher.refresh).toHaveBeenCalledTimes(1)
 
     await handoff.retryPending(REPO)
@@ -108,7 +108,7 @@ describe('createStageHandoff', () => {
   it('the captured plan rides the event across every retry', async () => {
     const plan = { kind: 'read', body: '## Implementation Plan' } as const
     const { handoff } = await rig([TRANSIENT, APPLIED])
-    handoff.settle(REPO, { ...RECORD, agent: 'plan', trigger: 'ready' }, outcome('completed', { token: 'plan-written', arg: null }), plan)
+    handoff.settle(REPO, { ...RECORD, agent: 'plan', stage: 'plan' }, outcome('completed', { token: 'plan-written', arg: null }), plan)
     await flush()
     await handoff.retryPending(REPO)
     expect(apply).toHaveBeenCalledTimes(2)
@@ -136,7 +136,7 @@ describe('createStageHandoff', () => {
   it('blocked writes for impl only', async () => {
     const { handoff } = await rig()
     handoff.settle(REPO, RECORD, outcome('blocked'), null)
-    handoff.settle(REPO, { ...RECORD, sessionKey: 'hosted-2' as SessionKey, agent: 'review', kind: 'pull-request', trigger: 'readyForReview' }, outcome('blocked'), null)
+    handoff.settle(REPO, { ...RECORD, sessionKey: 'hosted-2' as SessionKey, agent: 'review', kind: 'pull-request', stage: 'review' }, outcome('blocked'), null)
     await flush()
     expect(apply).toHaveBeenCalledTimes(1)
   })

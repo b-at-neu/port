@@ -2,11 +2,9 @@
 import type { IntegrationChecks, PipelineItemKind } from '@/types/github'
 import type { ReconciledItem } from '@/types/state'
 import type { TickHeld, TickHeldReason, UnknownStreaks } from '@/types/tick'
-import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { Stage, Ticket } from '@/utils/pipeline/ticket'
 import { integrationRedGate, mergeabilityRoute } from '@/utils/pipeline/gates'
-import { triggerKeyOf } from '@/main/pipeline/state/mirror'
 
 export type TrackedReconciled = ReconciledItem & { readonly ticket: Ticket }
 
@@ -21,8 +19,8 @@ export function actsOn(item: ReconciledItem): item is TrackedReconciled {
 }
 
 /** The fields every actionable, held and claim entry of one ticket shares. */
-export function entryOf(item: TrackedReconciled): { readonly number: number; readonly kind: PipelineItemKind; readonly stage: Stage; readonly trigger: LabelKey } {
-  return { number: item.number, kind: item.kind, stage: item.ticket.stage, trigger: triggerKeyOf(item.ticket) }
+export function entryOf(item: TrackedReconciled): { readonly number: number; readonly kind: PipelineItemKind; readonly stage: Stage } {
+  return { number: item.number, kind: item.kind, stage: item.ticket.stage }
 }
 
 /** Held reasons, first hit wins: unowned before other-operator before session-required. `contended` is the file-contention gate's own reason, applied afterward, never returned here. */

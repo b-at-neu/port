@@ -157,7 +157,7 @@ function launchRequest(overrides: Partial<StageLaunchRequest> = {}): StageLaunch
     config: { ...ENTRY.config, overrides: [{ path: 'reviewCycleCap', value: 3, reason: 'small team', portDefault: 5, source: 'CLAUDE.md' }] },
     diagnostics: [{ kind: 'override-refused', path: 'commands.checks', line: 'commands.checks = x', reason: 'permission surface' }],
   }
-  return { entry, agent: 'impl', stage: 'implement', number: 52, kind: 'issue', trigger: 'planApproved', model: 'sonnet', prompt: 'Implementation stage for issue #52. Run your pipeline stage for #52. port has already moved its label. Follow your Pre-flight, Work, and Handoff steps exactly.', title: '#52 x', target: { kind: 'issue', title: 'x' }, review: null, ...overrides }
+  return { entry, agent: 'impl', stage: 'implement', number: 52, kind: 'issue', mode: 'implement', model: 'sonnet', prompt: 'Implementation stage for issue #52. Run your pipeline stage for #52. port has already moved its label. Follow your Pre-flight, Work, and Handoff steps exactly.', title: '#52 x', target: { kind: 'issue', title: 'x' }, review: null, ...overrides }
 }
 
 describe('buildStageContext', () => {
@@ -179,7 +179,7 @@ describe('buildStageContext', () => {
   })
 
   it('emits the review facts directly after reviewCycleCap for a review request', () => {
-    const context = buildStageContext(launchRequest({ agent: 'review', stage: 'review', kind: 'pull-request', trigger: 'readyForReview', review: { cycle: 2, selfAuthored: true } }), '/bundle/stage-prompts', pointers)
+    const context = buildStageContext(launchRequest({ agent: 'review', stage: 'review', kind: 'pull-request', mode: 'review', review: { cycle: 2, selfAuthored: true } }), '/bundle/stage-prompts', pointers)
     const keys = context.map(([key]) => key)
     expect(keys.slice(keys.indexOf('reviewCycleCap'), keys.indexOf('reviewCycleCap') + 3)).toEqual(['reviewCycleCap', 'review.cycle', 'review.selfAuthored'])
     expect(context).toContainEqual(['review.cycle', '2'])

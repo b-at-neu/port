@@ -10,7 +10,6 @@ export function runOf(overrides: Partial<Run> = {}): Run {
     stage: 'implement',
     item: { kind: 'issue', number: 843 },
     agent: 'impl',
-    trigger: 'planApproved',
     model: 'sonnet',
     title: null,
     sessionKey: 'session-1' as Run['sessionKey'],

@@ -16,12 +16,12 @@ interface IndexSeed {
 }
 
 const SEEDS: readonly IndexSeed[] = [
-  { id: 'fixture-session-plan-38', tag: { agent: 'plan', number: 38, kind: 'issue', trigger: 'ready' }, title: '#38 retry failed webhook deliveries', branch: null, startedMinutesAgo: 52, endedMinutesAgo: 40, costUsd: 0.31 },
-  { id: 'fixture-session-impl-38', tag: { agent: 'impl', number: 38, kind: 'issue', trigger: 'planApproved' }, title: '#38 retry failed webhook deliveries', branch: '38-retry-webhooks', startedMinutesAgo: 2, endedMinutesAgo: null, costUsd: 0.42 },
-  { id: 'fixture-session-plan-46', tag: { agent: 'plan', number: 46, kind: 'issue', trigger: 'ready' }, title: '#46 show the last sync time in the header', branch: null, startedMinutesAgo: 172, endedMinutesAgo: 161, costUsd: 0.58 },
-  { id: 'fixture-session-impl-46', tag: { agent: 'impl', number: 46, kind: 'issue', trigger: 'planApproved' }, title: '#46 show the last sync time in the header', branch: '46-last-sync-time', startedMinutesAgo: 148, endedMinutesAgo: 92, costUsd: 1.84 },
-  { id: 'fixture-session-review-47', tag: { agent: 'review', number: 47, kind: 'pull-request', trigger: 'readyForReview' }, title: 'PR#47 show the last sync time in the header', branch: '46-last-sync-time', startedMinutesAgo: 85, endedMinutesAgo: 62, costUsd: 0.77 },
-  { id: 'fixture-session-revise-47', tag: { agent: 'revise', number: 47, kind: 'pull-request', trigger: 'needsRevision' }, title: 'PR#47 show the last sync time in the header', branch: '46-last-sync-time', startedMinutesAgo: 58, endedMinutesAgo: 32, costUsd: 0.96 },
+  { id: 'fixture-session-plan-38', tag: { agent: 'plan', number: 38, kind: 'issue' }, title: '#38 retry failed webhook deliveries', branch: null, startedMinutesAgo: 52, endedMinutesAgo: 40, costUsd: 0.31 },
+  { id: 'fixture-session-impl-38', tag: { agent: 'impl', number: 38, kind: 'issue' }, title: '#38 retry failed webhook deliveries', branch: '38-retry-webhooks', startedMinutesAgo: 2, endedMinutesAgo: null, costUsd: 0.42 },
+  { id: 'fixture-session-plan-46', tag: { agent: 'plan', number: 46, kind: 'issue' }, title: '#46 show the last sync time in the header', branch: null, startedMinutesAgo: 172, endedMinutesAgo: 161, costUsd: 0.58 },
+  { id: 'fixture-session-impl-46', tag: { agent: 'impl', number: 46, kind: 'issue' }, title: '#46 show the last sync time in the header', branch: '46-last-sync-time', startedMinutesAgo: 148, endedMinutesAgo: 92, costUsd: 1.84 },
+  { id: 'fixture-session-review-47', tag: { agent: 'review', number: 47, kind: 'pull-request' }, title: 'PR#47 show the last sync time in the header', branch: '46-last-sync-time', startedMinutesAgo: 85, endedMinutesAgo: 62, costUsd: 0.77 },
+  { id: 'fixture-session-revise-47', tag: { agent: 'revise', number: 47, kind: 'pull-request' }, title: 'PR#47 show the last sync time in the header', branch: '46-last-sync-time', startedMinutesAgo: 58, endedMinutesAgo: 32, costUsd: 0.96 },
 ]
 
 export function fixtureSessionIndex(now: Date): readonly SessionIndexEntry[] {

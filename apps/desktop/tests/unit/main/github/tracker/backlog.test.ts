@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { GitHubHttpResult } from '@/types/platform'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import { resolveDisplayVocabulary } from '@/utils/labels/display'
 import { fetchBacklog as fetchBacklogWith } from '@/main/github/tracker/backlog'
 import type { GitHubTransport } from '@/types/platform'
 import { fakeTransport, githubCtx, httpFail, httpOk, queryOf, recordingTransport } from '../../../../fixtures/github-http'
@@ -8,8 +8,8 @@ import { fakeTransport, githubCtx, httpFail, httpOk, queryOf, recordingTransport
 const fetchBacklog = (params: { readonly repo: { readonly owner: string; readonly name: string }; readonly tracked: ReadonlySet<number>; readonly github: GitHubTransport }) =>
   fetchBacklogWith(githubCtx(params.github), { repo: params.repo, tracked: params.tracked })
 
-const VOCABULARY = resolveVocabulary({})
-const READY_LABEL = VOCABULARY.labels.find((label) => label.key === 'ready')?.name ?? 'ready'
+const VOCABULARY = resolveDisplayVocabulary({})
+const READY_LABEL = VOCABULARY.labels.find((label) => label.key === 'planning')?.name ?? 'planning'
 const NO_BLOCKERS = { totalCount: 0, nodes: [] }
 const NO_LINKS = { ok: true, open: [], shown: 0, total: 0 }
 const CHILD_NO_LINKS = { ok: true, open: [], closed: [], shown: 0, total: 0 }

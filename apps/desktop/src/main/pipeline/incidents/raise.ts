@@ -55,8 +55,8 @@ export function observationIntent(observation: WriteObservation, item: Reconcile
 }
 
 /** An over-budget candidate sent to a human. `observedHead` is the head the decision read. */
-export function budgetIntent(trigger: string, headRefOid: string | null): IncidentIntent {
-  return { bucket: 'escalation', stage: 'needsHuman', condition: 'budget', decision: { action: 'budget-escalate', detail: 'budget', intended: null }, inputs: { trigger, observedHead: headRefOid, snapshotAt: null } }
+export function budgetIntent(stage: string, headRefOid: string | null): IncidentIntent {
+  return { bucket: 'escalation', stage: 'needsHuman', condition: 'budget', decision: { action: 'budget-escalate', detail: 'budget', intended: null }, inputs: { stage, observedHead: headRefOid, snapshotAt: null } }
 }
 
 /** A stage's hand-back write that leaves the ticket `blocked` or `needsHuman`. */
@@ -72,12 +72,12 @@ export function stageHandbackIntent(landed: { readonly key: 'blocked' | 'needsHu
 
 interface SessionRecord {
   readonly agent: StageAgent
-  readonly trigger: string
+  readonly stage: string
 }
 
 export function launchFailedIntent(record: SessionRecord, cause: StageLaunchFailureCause | `claim-${string}`): IncidentIntent {
   const bucket: IncidentBucket = cause === 'leftover-worktree' ? 'leftover-worktree' : 'launch-failed'
-  return { bucket, stage: record.agent, condition: cause, decision: { action: 'stage-launch', detail: cause, intended: null }, inputs: { agent: record.agent, trigger: record.trigger } }
+  return { bucket, stage: record.agent, condition: cause, decision: { action: 'stage-launch', detail: cause, intended: null }, inputs: { agent: record.agent, stage: record.stage } }
 }
 
 interface EndedSession extends SessionRecord {
@@ -87,7 +87,7 @@ interface EndedSession extends SessionRecord {
 }
 
 function sessionInputs(record: EndedSession, outcomeKind: StageOutcomeKind, handback: StageHandback | null): IncidentInputs {
-  return { sessionKey: record.sessionKey, claudeSessionId: record.claudeSessionId, agent: record.agent, trigger: record.trigger, outcome: outcomeKind, handback: handback?.token ?? null }
+  return { sessionKey: record.sessionKey, claudeSessionId: record.claudeSessionId, agent: record.agent, stage: record.stage, outcome: outcomeKind, handback: handback?.token ?? null }
 }
 
 /** A session that ended within `FAST_END_MS` of its start; `null` otherwise. */
@@ -120,12 +120,12 @@ export function endedIntents(record: EndedSession, outcome: StageOutcome, nowMs:
 interface HandoffRefused {
   readonly agent: StageAgent
   readonly sessionKey: string
-  readonly trigger: string
+  readonly stage: string
 }
 
 /** A hand-back write the app gave up on. The refusal's detail text is never carried. */
 export function handoffRefusalIntent(record: HandoffRefused, reason: HandoffRefusal, attempts: number, retryable: boolean): IncidentIntent {
-  return { bucket: 'refused-write', stage: record.agent, condition: `handoff-${reason}`, decision: { action: 'stage-handback', detail: reason, intended: null }, inputs: { sessionKey: record.sessionKey, attempts, retryable, trigger: record.trigger } }
+  return { bucket: 'refused-write', stage: record.agent, condition: `handoff-${reason}`, decision: { action: 'stage-handback', detail: reason, intended: null }, inputs: { sessionKey: record.sessionKey, attempts, retryable, stage: record.stage } }
 }
 
 /** A write `writeState` refused with no raising site of its own. */

@@ -8,7 +8,7 @@ import type { Platform } from '@/main/platform'
 import { readSessionState } from '@/main/sessions/adapter'
 import { createSdkSessionReader } from '@/main/sessions/reader'
 import type { RepoId } from '@/utils/repos'
-import type { LabelVocabulary, VerifiableVocabulary } from '@/utils/labels/vocabulary'
+import type { DisplayVocabulary } from '@/utils/labels/display'
 import type { WorktreeEntry } from '@/types/local'
 import type { AgentRecord, ReadSessionStateParams } from '@/types/sessions'
 import type { RefreshOutcome, SourceCache } from '@/types/state'
@@ -25,8 +25,7 @@ function projectOk<T extends { readonly ok: boolean }>(previous: T | null, attem
 interface RefreshGithubParams {
   readonly repoId: RepoId
   readonly repo: { readonly owner: string; readonly name: string }
-  readonly vocabulary: LabelVocabulary
-  readonly verify?: VerifiableVocabulary
+  readonly vocabulary: DisplayVocabulary
   /** `branches.integration`, whose recent check history the integration-red gate compares against. */
   readonly integration: string
   readonly tracked?: readonly TrackedRef[] | null
@@ -37,7 +36,7 @@ interface RefreshGithubParams {
 
 /** Fires the `ctx.tracker.readItemsByNumber` re-check itself whenever the fresh sweep leaves orphan numbers, so `itemStates` stays dependent on a GitHub refresh. */
 export async function refreshGithub(ctx: BoardReadContext, cache: SourceCache, params: RefreshGithubParams): Promise<RefreshOutcome> {
-  const fetch = await readBoard(ctx, { repo: params.repo, vocabulary: params.vocabulary, verify: params.verify, integration: params.integration, tracked: params.tracked })
+  const fetch = await readBoard(ctx, { repo: params.repo, vocabulary: params.vocabulary, integration: params.integration, tracked: params.tracked })
   const previous = cache.github.get(params.repoId) ?? null
   cache.github.set(params.repoId, projectOk(previous, fetch))
 

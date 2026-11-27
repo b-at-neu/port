@@ -5,7 +5,7 @@ import type { StageTag } from '@/types/stage-session'
 import type { FileResult } from '@/types/platform'
 
 const PATH = '/data/session-index.json'
-const TAG: StageTag = { agent: 'plan', number: 7, kind: 'issue', trigger: 'ready' }
+const TAG: StageTag = { agent: 'plan', number: 7, kind: 'issue' }
 
 function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSessionSnapshot {
   return {

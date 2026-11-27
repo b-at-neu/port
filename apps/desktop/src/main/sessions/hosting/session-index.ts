@@ -24,7 +24,7 @@ function isNullableString(value: unknown): boolean {
 function isStageTag(value: unknown): boolean {
   if (typeof value !== 'object' || value === null) return false
   const tag = value as Record<string, unknown>
-  return typeof tag.agent === 'string' && typeof tag.number === 'number' && typeof tag.kind === 'string' && typeof tag.trigger === 'string'
+  return typeof tag.agent === 'string' && typeof tag.number === 'number' && typeof tag.kind === 'string'
 }
 
 function isEntry(value: unknown): value is SessionIndexEntry {

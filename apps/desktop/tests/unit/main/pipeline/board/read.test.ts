@@ -6,7 +6,7 @@ import { pathOps } from '@/main/platform/paths'
 import type { CommandResult, GitHubTransport } from '@/types/platform'
 import type { SessionReader } from '@/types/sessions'
 import type { RepositoryEntry } from '@/utils/repos'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import { resolveDisplayVocabulary } from '@/utils/labels/display'
 import { readPipelineState } from '@/main/pipeline/board/read'
 import { claudeHomeDir, hostFs } from '@/main/platform'
 import { defaultSdk } from '@/main/platform/sdk'
@@ -53,7 +53,7 @@ function readyEntry(id: string, path: string, repo: string): Extract<RepositoryE
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
       modules: { approvalGate: true, release: true, scope: true },
       reviewCycleCap: 5,
-      vocabulary: resolveVocabulary({}),
+      displayVocabulary: resolveDisplayVocabulary({}),
     },
     diagnostics: [],
   }

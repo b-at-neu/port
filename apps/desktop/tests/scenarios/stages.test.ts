@@ -18,7 +18,7 @@ describe('stages', () => {
     const fs = await diskWith(ticketOf({ repo: SCENARIO_REPO, ticket: 52, stage: 'plan', status: { kind: 'queued', reason: 'new', since: AT } }))
     const app = await scenarioRig({ fs, items: ITEMS })
 
-    await app.consider(tickReport({ actionable: [actionable(52, 'ready', 'plan')] }))
+    await app.consider(tickReport({ actionable: [actionable(52, 'plan')] }))
     expect(app.stage.launches).toHaveLength(1)
     expect(app.ticket(52)).toMatchObject({ stage: 'plan', status: { kind: 'running' } })
 
@@ -32,7 +32,7 @@ describe('stages', () => {
     const fs = await diskWith(ticketOf({ repo: SCENARIO_REPO, ticket: 52, stage: 'implement', status: { kind: 'queued', reason: 'new', since: AT } }))
     const app = await scenarioRig({ fs, items: ITEMS })
 
-    await app.consider(tickReport({ actionable: [actionable(52, 'planApproved', 'impl')] }))
+    await app.consider(tickReport({ actionable: [actionable(52, 'impl')] }))
     expect(app.stage.launches).toHaveLength(1)
     expect(app.ticket(52)).toMatchObject({ stage: 'implement', status: { kind: 'running' } })
 
@@ -47,7 +47,7 @@ describe('stages', () => {
     const fs = await diskWith(ticketOf({ repo: SCENARIO_REPO, ticket: 52, stage: 'implement', status: { kind: 'queued', reason: 'new', since: AT } }))
     const app = await scenarioRig({ fs, items: ITEMS })
 
-    await app.consider(tickReport({ actionable: [actionable(52, 'planApproved', 'impl')] }))
+    await app.consider(tickReport({ actionable: [actionable(52, 'impl')] }))
     await app.finish('hosted-1' as SessionKey, handback('pr-opened', '#99'))
     await app.consider(tickReport())
 

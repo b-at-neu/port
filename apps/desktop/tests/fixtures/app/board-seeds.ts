@@ -1,12 +1,27 @@
 // The canned items behind `board.ts`'s fixture snapshot, one seed per row the screens need to show.
-import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { BlockerRead } from '@/types/github'
 import type { FixtureScenario } from '@/types/fixtures'
 
 export const VIEWER = 'octo-dev'
 
+/** Where a seed's ticket stands, named for the step of the pipeline it shows; `board.ts` maps each to a stage and status. */
+export type SeedPlace =
+  | 'ready'
+  | 'planning'
+  | 'planReview'
+  | 'planApproved'
+  | 'inProgress'
+  | 'prOpened'
+  | 'readyForReview'
+  | 'reviewing'
+  | 'needsRevision'
+  | 'revising'
+  | 'approved'
+  | 'needsHuman'
+  | 'blocked'
+
 interface StageMove {
-  readonly key: LabelKey
+  readonly key: SeedPlace
   readonly actor: string
   readonly offsetMinutes: number
 }
@@ -15,7 +30,7 @@ export interface ItemSeed {
   readonly kind: 'issue' | 'pull-request'
   readonly number: number
   readonly title: string
-  readonly stageKey: LabelKey
+  readonly stageKey: SeedPlace
   // Defaults to empty — a pull request's closing keyword is what links it to its issue.
   readonly body?: string
   // Defaults to [VIEWER] — only the unowned-held seed overrides it.

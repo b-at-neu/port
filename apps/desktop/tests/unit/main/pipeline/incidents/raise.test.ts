@@ -7,7 +7,7 @@ import type { StageOutcome } from '@/types/stage-session'
 import { ENTRY, item, writerRig } from './fixtures'
 
 const PLAN = { action: 'observe-zero-diff' } as const
-const RECORD = { agent: 'impl', trigger: 'planApproved', sessionKey: 'hosted-1', claudeSessionId: 'claude-1', at: '2026-11-16T10:00:00.000Z' } as const
+const RECORD = { agent: 'impl', stage: 'implement', sessionKey: 'hosted-1', claudeSessionId: 'claude-1', at: '2026-11-16T10:00:00.000Z' } as const
 
 function outcome(kind: StageOutcome['kind'], detail: string | null = null): StageOutcome {
   return { kind, detail, costUsd: null, resetsAt: null, worktree: 'kept', operatorJoined: false, handback: null }
@@ -36,7 +36,7 @@ const RAISED = {
   'existing-work': () => bucketsOf([stageHandbackIntent({ key: 'blocked', action: 'stage-handback-blocked' }, 'impl', 749, item({ kind: 'issue', number: 749, closingPullRequests: [{ number: 780, state: 'OPEN', headRefName: '749-the-fix' }] }), null)]),
   'leftover-worktree': () => bucketsOf([launchFailedIntent(RECORD, 'leftover-worktree')]),
   'network-interrupt': () => bucketsOf(endedIntents(RECORD, outcome('interrupted', 'getaddrinfo ENOTFOUND api.anthropic.com'), Date.parse('2026-11-16T11:00:00.000Z'))),
-  'refused-write': () => bucketsOf([handoffRefusalIntent({ agent: 'impl', sessionKey: 'hosted-1', trigger: 'planApproved' }, 'write-failed', 3, true)]),
+  'refused-write': () => bucketsOf([handoffRefusalIntent({ agent: 'impl', sessionKey: 'hosted-1', stage: 'implement' }, 'write-failed', 3, true)]),
   'launch-failed': () => bucketsOf([launchFailedIntent(RECORD, 'start')]),
   escalation: () => {
     const observation: WriteObservation = { kind: 'cycle-cap', number: 789, itemKind: 'pull-request', count: 5, cap: 5 }

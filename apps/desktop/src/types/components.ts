@@ -2,7 +2,7 @@
 import type { ReactNode } from 'react'
 import type { PipelineItemKind } from '@/types/github'
 import type { StageAgent } from '@/types/tick'
-import type { LabelPalette } from '@/utils/labels/defaults'
+import type { Palette } from '@/types/board'
 import type { FileDiff, ToolDetail, TranscriptEntry } from '@/utils/sessions/transcript'
 
 export interface ComposerAttachmentChip {
@@ -55,7 +55,7 @@ export type PillStatus = 'working' | 'attention' | 'success' | 'danger' | 'idle'
 
 /** How a phase indicator paints: a palette (or `unstaged`), a ring for queued versus filled for in flight, and whether it pulses for the operator. */
 export interface PhaseTone {
-  readonly palette: LabelPalette | 'unstaged'
+  readonly palette: Palette | 'unstaged'
   readonly fill: 'queued' | 'active'
   readonly pulse: boolean
 }

@@ -162,7 +162,7 @@ export function createPipelineStateStore(ctx: Pick<Platform, 'fs' | 'clock' | 'p
     seed: (repoId, state) =>
       serialize(async () => {
         await ready
-        await persistBestEffort(repoId, seedFrom(repoId, state, params.now().toISOString()))
+        await persistBestEffort(repoId, seedFrom(state,params.now().toISOString()))
       }),
     prune: (repoId, closed) =>
       serialize(async () => {
@@ -185,7 +185,7 @@ export function createPipelineStateStore(ctx: Pick<Platform, 'fs' | 'clock' | 'p
         await ready
         const record = file.repositories[repoId]
         if (record === undefined) return { ok: false, reason: 'unseeded' }
-        const existing = ticketFor(record, ref, event.kind === 'labels' ? event.issue : null)
+        const existing = ticketFor(record, ref, event.kind === 'gate' ? event.issue : null)
         if (expectedRev !== null && existing?.rev !== expectedRev) return { ok: false, reason: 'stale' }
         return applyTo(repoId, record, existing, event, ref)
       }),

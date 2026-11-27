@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import template from '@/utils/labels/labels.json'
-import { DISPLAY_DEFAULTS, DISPLAY_KEYS, mirrorVocabularyOf, resolveDisplayVocabulary, verifiableVocabularyOf } from '@/utils/labels/display'
+import { DISPLAY_DEFAULTS, DISPLAY_KEYS, mirrorVocabularyOf, resolveDisplayVocabulary } from '@/utils/labels/display'
 import { verifyVocabulary } from '@/utils/labels/vocabulary'
 
 describe('DISPLAY_KEYS / DISPLAY_DEFAULTS match the shipped display template', () => {
@@ -67,16 +67,9 @@ describe('verifying the display vocabulary against a repository', () => {
 describe('mirrorVocabularyOf', () => {
   const displayVocabulary = resolveDisplayVocabulary({})
 
-  it('mirrors the configured display labels, and the defaults when none resolved', () => {
-    expect(mirrorVocabularyOf({ displayVocabulary })).toEqual({ kind: 'display', labels: displayVocabulary })
-    expect(mirrorVocabularyOf({})).toEqual({ kind: 'display', labels: displayVocabulary })
-  })
-})
-
-describe('verifiableVocabularyOf', () => {
-  it('verifies the display vocabulary on every repository', () => {
+  it('mirrors the configured display labels', () => {
     const custom = resolveDisplayVocabulary({ states: { planning: 'thinking' } })
-    expect(verifiableVocabularyOf({ displayVocabulary: custom })).toBe(custom)
-    expect(verifiableVocabularyOf({}).labels.map((l) => l.name)).toContain('planning')
+    expect(mirrorVocabularyOf({ displayVocabulary })).toEqual({ kind: 'display', labels: displayVocabulary })
+    expect(mirrorVocabularyOf({ displayVocabulary: custom }).labels).toBe(custom)
   })
 })

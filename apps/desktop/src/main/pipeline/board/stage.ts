@@ -1,14 +1,10 @@
-// Reads `role` off each matched label's own resolved vocabulary entry, never a second key→stage table.
-import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
-import type { LabelRole } from '@/utils/labels/defaults'
-import type { StageResult } from '@/types/state'
 import type { Ticket } from '@/utils/pipeline/ticket'
 
-/** First hit wins: in-flight (something is running) beats gate (stopped, not queued) beats trigger beats terminal (the fallback). */
-export const STAGE_PRECEDENCE: readonly LabelRole[] = ['in-flight', 'gate', 'trigger', 'terminal']
+/** What a ticket's status stands for in the item-status ladder. */
+export type StageRole = 'trigger' | 'in-flight' | 'gate' | 'terminal'
 
 /** The role a ticket's own status stands for: running is in flight, queued and held are a trigger, waiting and blocked are a gate. */
-export function roleOfTicket(ticket: Pick<Ticket, 'status'>): LabelRole {
+export function roleOfTicket(ticket: Pick<Ticket, 'status'>): StageRole {
   switch (ticket.status.kind) {
     case 'running':
       return 'in-flight'
@@ -21,27 +17,4 @@ export function roleOfTicket(ticket: Pick<Ticket, 'status'>): LabelRole {
     case 'done':
       return 'terminal'
   }
-}
-
-/** A key the vocabulary does not resolve (module-disabled) is silently skipped. Marker labels never enter `stages` or the precedence — they surface as the dedicated booleans instead. */
-export function stageOf(matchedKeys: readonly LabelKey[], vocabulary: LabelVocabulary): StageResult {
-  const stages: StageResult['stages'][number][] = []
-  let marked = false
-  let autoPlan = false
-
-  for (const key of matchedKeys) {
-    const label = vocabulary.labels.find((l) => l.key === key)
-    if (!label) continue
-    if (label.role === 'marker') {
-      if (key === 'marker') marked = true
-      if (key === 'autoPlan') autoPlan = true
-      continue
-    }
-    stages.push({ key: label.key, name: label.name, role: label.role })
-  }
-
-  const distinctRoles = new Set(stages.map((s) => s.role))
-  const stage = STAGE_PRECEDENCE.find((role) => distinctRoles.has(role)) ?? null
-
-  return { stages, stage, stageAmbiguous: distinctRoles.size > 1, marked, autoPlan }
 }

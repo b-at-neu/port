@@ -4,8 +4,7 @@ import type { WorktreesRead } from '@/types/local'
 import type { BoardSnapshot, SourceKind } from '@/types/board'
 
 // Renderer-safe reconciled shapes for the unified state model. No import here may reach a Node builtin — only `main/pipeline/board/` joins the four adapters. A condition a human or the environment could cause is a value, never a throw.
-import type { LabelKey, VocabularyReport } from '@/utils/labels/vocabulary'
-import type { LabelRole } from '@/utils/labels/defaults'
+import type { VocabularyReport } from '@/utils/labels/vocabulary'
 import type { MirrorFailure } from '@/types/pipeline-state'
 import type { BlockerRead, CheckContext, ClosingPullRequest, IntegrationChecks, IssueCommentNode, Mergeable, PipelineFailureKind, PipelineItemKind, PullRequestCommentNode, RateLimitInfo, ReviewNode, TruncatedSet, UnavailableAlias } from '@/types/github'
 import type { RepoDiagnostic, RepoId, RepoProblem } from '@/utils/repos'
@@ -13,30 +12,7 @@ import type { DenialsRead, UnresolvedReason } from '@/types/local'
 import type { PortStageAgent, SessionScan } from '@/types/sessions'
 import type { Ticket } from '@/utils/pipeline/ticket'
 
-/** One role-bearing label this item carries — every co-present label stays here even though `stage` resolves a single winner. Markers are excluded — they surface separately as `marked`/`autoPlan`. */
-export interface StageLabel {
-  readonly key: LabelKey
-  readonly name: string
-  readonly role: LabelRole
-}
-
-/** One resolved label-add event, oldest first — keyed by `LabelKey`, never by phase, so `renderer/board/phase-model.ts` stays the one place a key becomes a phase. */
-export interface StageEntry {
-  readonly key: LabelKey
-  readonly actor: string | null
-  readonly at: string
-}
-
-/** `stageOf`'s result. `stage: null` is a real state, never an error. `stageAmbiguous` is `true` when more than one distinct role is present; the precedence still resolves `stage`, it never hides the co-presence. */
-export interface StageResult {
-  readonly stages: readonly StageLabel[]
-  readonly stage: LabelRole | null
-  readonly stageAmbiguous: boolean
-  readonly marked: boolean
-  readonly autoPlan: boolean
-}
-
-/** From `stage.role` plus the attachment ladder. `stalled` is a report, never a proof — a session scan that could not run is absence of evidence and never produces this verdict. */
+/** From the ticket's status plus the attachment ladder. `stalled` is a report, never a proof — a session scan that could not run is absence of evidence and never produces this verdict. */
 export type ItemStatus = 'waiting' | 'in-flight' | 'stalled' | 'gated' | 'terminal' | 'unstaged' | 'interrupted'
 
 /** Why `status` reads the way it does — distinguishes "nothing claims this" from "the transcript hasn't moved" from "the app couldn't even check". `awaiting-scan` means claimed on GitHub, and no session scan has run since then that could have seen the claimant. */
@@ -115,11 +91,6 @@ export interface ReconciledItem {
   readonly assignees: readonly string[]
   /** The ticket record this item belongs to; `null` while the repository is unseeded or the item is untracked. Every decision reads it. */
   readonly ticket: Ticket | null
-  readonly stage: LabelRole | null
-  readonly stages: readonly StageLabel[]
-  readonly stageAmbiguous: boolean
-  readonly marked: boolean
-  readonly autoPlan: boolean
   readonly status: ItemStatus
   readonly statusEvidence: StatusEvidence | null
   readonly waitingOn: WaitingOn | null
@@ -135,9 +106,6 @@ export interface ReconciledItem {
   readonly mergedAt: string | null
   /** Copied straight off `PipelineItem.updatedAt` — Needs you's own newest-first sort key. */
   readonly updatedAt: string | null
-  /** Resolved from `PipelineItem.labelEvents` against this repository's vocabulary, oldest first — unknown names and marker keys already dropped. */
-  readonly stageHistory: readonly StageEntry[]
-  readonly matchedKeys: readonly LabelKey[]
   readonly sources: readonly ('github' | 'itemStates' | 'sessions' | 'worktrees' | 'denials')[]
   /** The plan's own ` ```files ` fence, parsed for issues only. `null` is "no file list" (dispatches unchecked); `[]` is a fence that parsed to nothing — the two are never collapsed. */
   readonly claimedFiles: readonly string[] | null
@@ -205,8 +173,6 @@ export type RepositoryState =
       readonly integrationChecks: IntegrationChecks | null
       /** `entry.config.modules.approvalGate`, copied onto every item read so the ungated selection and `actionsFor` never need a second config read. */
       readonly approvalGate: boolean
-      /** Every module-gated label key this repository currently has turned off, so `planTick` never needs a second config read to report a gated stage as absent. */
-      readonly disabled: readonly LabelKey[]
       /** `entry.config.concurrency`, copied the same way `approvalGate` is, so `planTick`'s file-contention gate never needs a second config read. */
       readonly concurrency: { readonly sharedFiles: readonly string[]; readonly overlapThreshold: number }
       /** `entry.config.reviewCycleCap`, copied the same way `approvalGate` is, so `decisionsFor` never needs a second config read. */

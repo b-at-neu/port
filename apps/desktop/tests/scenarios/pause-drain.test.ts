@@ -17,7 +17,7 @@ const COMPLETED: StageOutcome = { kind: 'completed', detail: null, costUsd: 1, r
 describe('pause and drain', () => {
   it('pause stops the claimed ticket, stands the dispatcher down, and launches nothing afterwards', async () => {
     const app = await scenarioRig({ fs: await diskWith(queued(52), queued(53)), items: ITEMS })
-    await app.consider(tickReport({ actionable: [actionable(52, 'planApproved', 'impl')] }))
+    await app.consider(tickReport({ actionable: [actionable(52, 'impl')] }))
     expect(app.stage.launches).toHaveLength(1)
     app.showBoard(app.claimedItem(52))
 
@@ -26,19 +26,19 @@ describe('pause and drain', () => {
     expect(result).toMatchObject({ ok: true, runState: { state: 'paused' }, report: { kind: 'completed', items: [{ kind: 'stopped', number: 52 }] } })
     expect(app.ticket(52)).toMatchObject({ stage: 'implement', status: { kind: 'held' } })
 
-    await app.consider(tickReport({ actionable: [actionable(53, 'planApproved', 'impl')] }))
+    await app.consider(tickReport({ actionable: [actionable(53, 'impl')] }))
     expect(app.stage.launches).toHaveLength(1)
     expect(app.ticket(53)).toMatchObject({ status: { kind: 'queued' } })
   })
 
   it('drain lets the running stage hand back, and launches nothing new', async () => {
     const app = await scenarioRig({ fs: await diskWith(queued(52), queued(53)), items: [...ITEMS, { number: 8, kind: 'pull-request', title: 'first', headRefName: '52-first', assignees: ['op'] }] })
-    await app.consider(tickReport({ actionable: [actionable(52, 'planApproved', 'impl')] }))
+    await app.consider(tickReport({ actionable: [actionable(52, 'impl')] }))
 
     const result = await callAction(app.ctx, 'dispatch.control', { command: 'drain', repoId: SCENARIO_REPO })
     expect(result).toMatchObject({ ok: true, runState: { state: 'draining' } })
 
-    await app.consider(tickReport({ actionable: [actionable(53, 'planApproved', 'impl')] }))
+    await app.consider(tickReport({ actionable: [actionable(53, 'impl')] }))
     expect(app.stage.launches).toHaveLength(1)
 
     await app.finish('hosted-1' as SessionKey, COMPLETED)

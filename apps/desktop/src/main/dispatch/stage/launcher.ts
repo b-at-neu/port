@@ -110,7 +110,7 @@ export function createStageLauncher(ctx: StageLaunchContext, bundleRoot: string)
         base: { sha: entry.worktree.baseSha, label: entry.worktree.branch ?? 'detached' },
       },
       stage: {
-        tag: { agent: entry.agent, number: entry.number, kind: entry.kind, trigger: entry.trigger },
+        tag: { agent: entry.agent, number: entry.number, kind: entry.kind },
         agent: { name: definition.name, definition: definition.definition, selfContained: saved !== null },
         instructionsRoot: bundleRoot,
         model: entry.model,
@@ -184,7 +184,7 @@ export function createStageLauncher(ctx: StageLaunchContext, bundleRoot: string)
       initialTitle: stageTitle(request.title),
       workspace: { folder: wt.path, root: request.entry.path, worktree: { path: wt.path, branch: wt.branch }, base: { sha: wt.baseSha, label: wt.baseLabel } },
       stage: {
-        tag: { agent: request.agent, number: request.number, kind: request.kind, trigger: request.trigger },
+        tag: { agent: request.agent, number: request.number, kind: request.kind },
         agent: instructions.agent,
         instructionsRoot: bundleRoot,
         model: request.model,
@@ -213,7 +213,6 @@ export function createStageLauncher(ctx: StageLaunchContext, bundleRoot: string)
       stage: request.stage,
       item: { kind: request.kind, number: request.number },
       agent: request.agent,
-      trigger: request.trigger,
       model: request.model,
       title: request.title,
       sessionKey,

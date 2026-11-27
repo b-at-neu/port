@@ -3,7 +3,7 @@ import { emptyFile, parseFile, prune, recordMirror, seedFrom, ticketFor, tracked
 import type { MirrorFailure, RepoRecord } from '@/types/pipeline-state'
 import type { Ticket } from '@/utils/pipeline/ticket'
 import { reconciledItem, repositoryState } from '../../../../support/board-snapshot'
-import { NOW as AT, REPO, runOf, ticketOf } from '../../../../support/tickets'
+import { NOW as AT, runOf, ticketOf } from '../../../../support/tickets'
 
 function recordOf(...tickets: Ticket[]): RepoRecord {
   return tickets.reduce((record, ticket) => withTicket(record, ticket), { seededAt: AT, tickets: {} } as RepoRecord)
@@ -40,15 +40,18 @@ describe('parseFile', () => {
 
 describe('seedFrom', () => {
   it('stores one ticket per change, pairing a pull request with the issue it links', () => {
+    const issue = ticketOf({ ticket: 5, stage: 'plan', status: { kind: 'held', on: 'paused', detail: '' } })
+    const pr = ticketOf({ ticket: 5, pr: { number: 6, approvedAt: null }, stage: 'review', status: { kind: 'running', runId: null }, reviewCycles: 3 })
+    const lone = ticketOf({ ticket: 8, stage: 'implement', status: { kind: 'running', runId: null } })
     const state = repositoryState([
-      reconciledItem({ number: 5, linked: 6, matchedKeys: ['marker', 'autoPlan', 'prOpened'], stageHistory: [{ key: 'ready', actor: 'op', at: '2026-01-01T00:00:00Z' }] }),
-      reconciledItem({ number: 6, kind: 'pull-request', linked: 5, matchedKeys: ['marker', 'reviewing'], reviewCycleCount: 3, stageHistory: [] }),
-      reconciledItem({ number: 8, matchedKeys: ['inProgress'] }),
+      reconciledItem({ number: 5, linked: 6, ticket: issue }),
+      reconciledItem({ number: 6, kind: 'pull-request', linked: 5, ticket: pr }),
+      reconciledItem({ number: 8, ticket: lone }),
+      reconciledItem({ number: 9, ticket: null }),
     ])
-    const record = seedFrom(REPO, state, AT)
+    const record = seedFrom(state, AT)
     expect(Object.keys(record.tickets).sort()).toEqual(['5', '8'])
-    expect(record.tickets['5']).toMatchObject({ ticket: 5, pr: { number: 6, approvedAt: null }, autoPlan: true, stage: 'review', status: { kind: 'running' }, reviewCycles: 3 })
-    expect(record.tickets['5']?.history.map((event) => event.action)).toEqual(['seed'])
+    expect(record.tickets['5']).toMatchObject({ ticket: 5, pr: { number: 6, approvedAt: null }, stage: 'review', status: { kind: 'running' }, reviewCycles: 3 })
     expect(record.tickets['8']).toMatchObject({ pr: null, stage: 'implement', status: { kind: 'running' } })
   })
 })
@@ -130,10 +133,10 @@ describe('view and tracked', () => {
     const record = recordOf(withPr(7, 70))
     expect(viewOf(undefined)).toEqual({ kind: 'unseeded' })
     expect(trackedOf(undefined)).toBeNull()
-    expect(viewOf(record)).toMatchObject({ kind: 'store', items: [{ kind: 'issue', number: 7, keys: ['prOpened'] }, { kind: 'pull-request', number: 70, issue: 7, keys: ['readyForReview'] }] })
+    expect(viewOf(record)).toMatchObject({ kind: 'store', items: [{ kind: 'issue', number: 7 }, { kind: 'pull-request', number: 70 }] })
     expect(trackedOf(record)).toEqual([
-      { kind: 'issue', number: 7, keys: ['marker', 'prOpened'] },
-      { kind: 'pull-request', number: 70, keys: ['marker', 'readyForReview'] },
+      { kind: 'issue', number: 7 },
+      { kind: 'pull-request', number: 70 },
     ])
   })
 })

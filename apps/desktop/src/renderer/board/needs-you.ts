@@ -8,14 +8,14 @@ import type { RepositoryState } from '@/types/state'
 import type { TickHeld } from '@/types/tick'
 import { failingDispatches } from '@/renderer/board/dispatch-failures'
 import { projectBoard } from '@/renderer/board/project'
-import { ticketViewOf } from '@/renderer/lib/ticket-view'
+import { agentStage, ticketViewOfItem } from '@/utils/pipeline/stages'
 import { needsYouKindOf, waitsOnYou as stagesWaitsOnYou } from '@/utils/pipeline/stages'
 import type { BoardItemRow, BoardSnapshot, NeedsYouItem } from '@/types/board'
 import { capHandbackText, classifyHandbackText } from '@/utils/stage/handback-text'
 
 /** A row is the operator's only when its stage is a gate and no auto-approval is about to clear it. */
 export function waitsOnYou(row: BoardItemRow): boolean {
-  return stagesWaitsOnYou(ticketViewOf(row.item), row.autoApproving)
+  return stagesWaitsOnYou(ticketViewOfItem(row.item), row.autoApproving)
 }
 
 // A held reason outside this set is routine queueing, never something waiting on the operator.
@@ -193,7 +193,7 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
     if (dispatch.owner === 'app' && dispatch.state.kind === 'active') {
       for (const { record, attempts } of failingDispatches(dispatch.state.recent)) {
         const matched = rowByKey.get(rowKey(dispatch.repoId, record.number)) ?? null
-        if (matched?.stageLabel?.key !== record.trigger) continue
+        if (matched === null || matched.item.ticket?.stage !== agentStage(record.agent)) continue
         items.push({
           kind: 'dispatch-failed',
           repoId: dispatch.repoId,
@@ -234,7 +234,7 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
   if (usageLimit !== null) items.push(usageLimit)
 
   for (const row of rows) {
-    const kind = needsYouKindOf(ticketViewOf(row.item), row.autoApproving)
+    const kind = needsYouKindOf(ticketViewOfItem(row.item), row.autoApproving)
     if (kind === null) continue
     const viewer = viewerByRepo.get(row.item.repoId) ?? null
     if (viewer !== null && !row.item.assignees.includes(viewer)) continue

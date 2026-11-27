@@ -3,8 +3,10 @@ import { ticketSessionsFor } from '@/renderer/board/ticket-sessions'
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import type { SessionIndexEntry } from '@/types/session-index'
 import type { StageTag } from '@/types/stage-session'
-import type { AttachedAgent, ReconciledItem, StageEntry, WorkSession } from '@/types/state'
+import type { AttachedAgent, ReconciledItem, WorkSession } from '@/types/state'
+import type { Event, Stage, StatusKind } from '@/utils/pipeline/ticket'
 import type { RepoId } from '@/utils/repos'
+import { ticketOf } from '../../../support/tickets'
 
 const REPO = 'repo-1' as RepoId
 const ISSUE_TARGETS = [
@@ -12,16 +14,21 @@ const ISSUE_TARGETS = [
   { number: 47, kind: 'pull-request' as const },
 ]
 
-function item(kind: 'issue' | 'pull-request', number: number, extra: { stageHistory?: readonly StageEntry[]; workSessions?: readonly WorkSession[]; agents?: readonly AttachedAgent[] } = {}): ReconciledItem {
-  return { kind, number, stageHistory: [], workSessions: [], agents: [], ...extra } as unknown as ReconciledItem
+function item(kind: 'issue' | 'pull-request', number: number, extra: { history?: readonly Event[]; workSessions?: readonly WorkSession[]; agents?: readonly AttachedAgent[] } = {}): ReconciledItem {
+  const { history = [], ...rest } = extra
+  return { kind, number, ticket: ticketOf({ history: [...history] }), workSessions: [], agents: [], ...rest } as unknown as ReconciledItem
 }
 
 function entry(overrides: Partial<SessionIndexEntry> & { claudeSessionId: string }): SessionIndexEntry {
   return { repoId: REPO, cwd: '/w', branch: null, title: null, stage: null, startedAt: '2026-01-01T01:00:00.000Z', endedAt: '2026-01-01T01:30:00.000Z', costUsd: 1, operatorJoinedAt: null, ...overrides }
 }
 
-function tag(agent: StageTag['agent'], number: number, kind: StageTag['kind'], trigger: StageTag['trigger']): StageTag {
-  return { agent, number, kind, trigger }
+function tag(agent: StageTag['agent'], number: number, kind: StageTag['kind']): StageTag {
+  return { agent, number, kind }
+}
+
+function moved(at: string, stage: Stage, status: StatusKind): Event {
+  return { at, action: 'dispatch', actor: null, to: { stage, status }, legacy: null }
 }
 
 function snapshot(overrides: Partial<HostedSessionSnapshot>): HostedSessionSnapshot {
@@ -40,11 +47,11 @@ function run(overrides: Partial<Parameters<typeof ticketSessionsFor>[0]> = {}) {
 }
 
 describe('ticketSessionsFor', () => {
-  it('places a stage session in the phase of its trigger, with refreshBranch landing in Revision', () => {
+  it('places a stage session in the phase of its agent, with a revise agent landing in Revision', () => {
     const result = run({
       index: [
-        entry({ claudeSessionId: 'plan', stage: tag('plan', 46, 'issue', 'ready') }),
-        entry({ claudeSessionId: 'refresh', stage: tag('revise', 47, 'pull-request', 'refreshBranch') }),
+        entry({ claudeSessionId: 'plan', stage: tag('plan', 46, 'issue') }),
+        entry({ claudeSessionId: 'refresh', stage: tag('revise', 47, 'pull-request') }),
       ],
     })
     expect(result.byPhase.plan?.map((l) => l.key)).toEqual(['plan'])
@@ -62,33 +69,32 @@ describe('ticketSessionsFor', () => {
 
   it('lets a live snapshot beat its index entry and carries the live cost', () => {
     const result = run({
-      index: [entry({ claudeSessionId: 'impl', endedAt: null, costUsd: 0.1, stage: tag('impl', 46, 'issue', 'planApproved') })],
-      snapshots: [snapshot({ claudeSessionId: 'impl', stage: tag('impl', 46, 'issue', 'planApproved'), usage: { costUsd: 0.42 } as HostedSessionSnapshot['usage'] })],
+      index: [entry({ claudeSessionId: 'impl', endedAt: null, costUsd: 0.1, stage: tag('impl', 46, 'issue') })],
+      snapshots: [snapshot({ claudeSessionId: 'impl', stage: tag('impl', 46, 'issue'), usage: { costUsd: 0.42 } as HostedSessionSnapshot['usage'] })],
     })
     expect(result.byPhase.implement).toEqual([expect.objectContaining({ state: 'live', costUsd: 0.42, endedAt: null, open: { kind: 'session', sessionKey: 'hosted-1' } })])
   })
 
   it('lists a live stage snapshot that has no claudeSessionId yet', () => {
-    const result = run({ snapshots: [snapshot({ stage: tag('plan', 46, 'issue', 'ready') })] })
+    const result = run({ snapshots: [snapshot({ stage: tag('plan', 46, 'issue') })] })
     expect(result.byPhase.plan).toHaveLength(1)
     expect(result.byPhase.plan?.[0]?.state).toBe('live')
   })
 
   it('reports an index entry with no end and no live handle as started', () => {
-    const result = run({ index: [entry({ claudeSessionId: 'crashed', endedAt: null, stage: tag('impl', 46, 'issue', 'planApproved') })] })
+    const result = run({ index: [entry({ claudeSessionId: 'crashed', endedAt: null, stage: tag('impl', 46, 'issue') })] })
     expect(result.byPhase.implement?.[0]?.state).toBe('started')
   })
 
   it('places a manual session by the merged issue and pull request history', () => {
-    const history = (key: StageEntry['key'], at: string): StageEntry => ({ key, actor: null, at })
     const result = ticketSessionsFor({
       repoId: REPO,
       targets: ISSUE_TARGETS,
       index: [],
       snapshots: [],
-      issue: item('issue', 46, { stageHistory: [history('planning', '2026-01-01T00:00:00.000Z'), history('prOpened', '2026-01-01T01:00:00.000Z')] }),
+      issue: item('issue', 46, { history: [moved('2026-01-01T00:00:00.000Z', 'plan', 'running'), moved('2026-01-01T01:00:00.000Z', 'review', 'queued')] }),
       pullRequest: item('pull-request', 47, {
-        stageHistory: [history('needsRevision', '2026-01-01T02:00:00.000Z'), history('revising', '2026-01-01T03:00:00.000Z')],
+        history: [moved('2026-01-01T02:00:00.000Z', 'revise', 'queued'), moved('2026-01-01T03:00:00.000Z', 'revise', 'running')],
         workSessions: [work('manual', '2026-01-01T03:30:00.000Z')],
       }),
     })
@@ -103,7 +109,7 @@ describe('ticketSessionsFor', () => {
       targets: ISSUE_TARGETS,
       index: [],
       snapshots: [],
-      issue: item('issue', 46, { stageHistory: [{ key: 'planning', actor: null, at: '2026-01-02T00:00:00.000Z' }], workSessions: [work('early', '2026-01-01T00:00:00.000Z')] }),
+      issue: item('issue', 46, { history: [moved('2026-01-02T00:00:00.000Z', 'plan', 'running')], workSessions: [work('early', '2026-01-01T00:00:00.000Z')] }),
       pullRequest: null,
     })
     expect(result.unplaced.map((l) => l.key)).toEqual(['early'])
@@ -113,7 +119,7 @@ describe('ticketSessionsFor', () => {
     const result = ticketSessionsFor({
       repoId: REPO,
       targets: ISSUE_TARGETS,
-      index: [entry({ claudeSessionId: 'both', stage: tag('plan', 46, 'issue', 'ready') })],
+      index: [entry({ claudeSessionId: 'both', stage: tag('plan', 46, 'issue') })],
       snapshots: [],
       issue: item('issue', 46, { workSessions: [work('both', '2026-01-01T01:10:00.000Z')] }),
       pullRequest: null,
@@ -136,15 +142,15 @@ describe('ticketSessionsFor', () => {
   })
 
   it('ignores another repository’s index entries', () => {
-    const result = run({ index: [entry({ claudeSessionId: 'other', repoId: 'repo-2' as RepoId, stage: tag('plan', 46, 'issue', 'ready') })] })
+    const result = run({ index: [entry({ claudeSessionId: 'other', repoId: 'repo-2' as RepoId, stage: tag('plan', 46, 'issue') })] })
     expect(result.byPhase).toEqual({})
   })
 
   it('orders links within a phase oldest first', () => {
     const result = run({
       index: [
-        entry({ claudeSessionId: 'late', startedAt: '2026-01-01T05:00:00.000Z', stage: tag('plan', 46, 'issue', 'ready') }),
-        entry({ claudeSessionId: 'early', startedAt: '2026-01-01T01:00:00.000Z', stage: tag('plan', 46, 'issue', 'planChangesRequested') }),
+        entry({ claudeSessionId: 'late', startedAt: '2026-01-01T05:00:00.000Z', stage: tag('plan', 46, 'issue') }),
+        entry({ claudeSessionId: 'early', startedAt: '2026-01-01T01:00:00.000Z', stage: tag('plan', 46, 'issue') }),
       ],
     })
     expect(result.byPhase.plan?.map((l) => l.key)).toEqual(['early', 'late'])

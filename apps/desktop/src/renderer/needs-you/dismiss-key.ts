@@ -3,10 +3,11 @@
 import type { BoardItemRow, NeedsYouItem } from '@/types/board'
 import { stageGroupOf } from '@/utils/pipeline/stages'
 
-function newestStageAt(row: BoardItemRow | null, stageKey?: string): string {
-  const history = row?.item.stageHistory ?? []
-  const matching = stageKey === undefined ? history : history.filter((entry) => entry.key === stageKey)
-  return matching[matching.length - 1]?.at ?? ''
+/** When the ticket last moved, or last moved into its current stage when `inCurrentStage`. */
+function newestMoveAt(row: BoardItemRow | null, inCurrentStage = false): string {
+  const ticket = row?.item.ticket
+  const moves = (ticket?.history ?? []).filter((event) => event.to !== null && (!inCurrentStage || event.to.stage === ticket?.stage))
+  return moves[moves.length - 1]?.at ?? ''
 }
 
 function eventOf(item: NeedsYouItem): string {
@@ -15,7 +16,7 @@ function eventOf(item: NeedsYouItem): string {
     case 'ready-to-merge':
     case 'needs-human':
     case 'blocked':
-      return newestStageAt(item.row, item.row.stageLabel?.key)
+      return newestMoveAt(item.row, true)
     case 'stage-interrupted':
       return `${item.interrupted.id}@${item.interrupted.interruptedAt}`
     case 'usage-limit':
@@ -30,9 +31,9 @@ function eventOf(item: NeedsYouItem): string {
     case 'held':
       return `${item.held.reason}|${item.matchedRow?.item.headRefOid ?? ''}|${String(item.held.contention?.blocker ?? '')}`
     case 'stalled':
-      return `${item.claim.class}|${newestStageAt(item.matchedRow)}`
+      return `${item.claim.class}|${newestMoveAt(item.matchedRow)}`
     case 'budget':
-      return `${item.note.kind}|${newestStageAt(item.matchedRow)}`
+      return `${item.note.kind}|${newestMoveAt(item.matchedRow)}`
     case 'half-labelled':
       return item.repair.shape === 'mirror-failed' ? `mirror-failed|${item.repair.mirror?.at ?? ''}` : `${item.repair.shape}|${stageGroupOf(item.repair.view).key}`
     case 'dispatch-failed':

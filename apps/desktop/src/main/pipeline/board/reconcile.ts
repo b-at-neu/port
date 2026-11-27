@@ -1,5 +1,4 @@
 // No I/O, no `gh`, no `git`, no filesystem — main/pipeline/board/read.ts is the thin orchestrator that does the fetching this function composes.
-import type { LabelRole } from '@/utils/labels/defaults'
 import type { RepoSessionSlice } from '@/types/state'
 import type {
   ItemsByNumberFetch,
@@ -17,16 +16,14 @@ import type {
   OrphanReason,
   ReconciledItem,
   RepositoryState,
-  StageEntry,
   StatusEvidence,
   WaitingOn,
 } from '@/types/state'
-import type { LabelEventNode } from '@/types/github'
-import { fullKeysOf, type PipelineView, type TrackedItem } from '@/types/pipeline-state'
-import type { LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { PipelineView, TrackedItem } from '@/types/pipeline-state'
 import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers, indexWorkSessions, workSessionsFor } from '@/main/pipeline/board/attach'
 import { closingReference, planPresentIn, sessionRequiredAt } from '@/main/pipeline/board/link'
-import { roleOfTicket, stageOf } from '@/main/pipeline/board/stage'
+import { roleOfTicket, type StageRole } from '@/main/pipeline/board/stage'
+import { ticketOfDisplay } from '@/main/pipeline/state/seed'
 import type { Ticket } from '@/utils/pipeline/ticket'
 import { CLAIM_SCAN_GRACE_MS } from '@/types/board'
 import { codeReviewCount } from '@/utils/pipeline/gates'
@@ -39,19 +36,8 @@ interface ReconcileRepositoryInput {
   readonly repoSessions: RepoSessionSlice
   readonly worktrees: WorktreesRead
   readonly denials: DenialsRead
-  /** `undefined` or `labels` reads stage from GitHub's labels; `store` reads it from the stored items. */
+  /** `undefined` or unseeded seeds each ticket from GitHub's display labels; `store` reads the stored tickets. */
   readonly view?: PipelineView
-}
-
-/** Every added key becomes a stage entry, oldest first — a marker is never a stage. */
-function storedHistoryOf(stored: TrackedItem): readonly StageEntry[] {
-  const out: StageEntry[] = []
-  for (const row of stored.history) {
-    for (const key of row.add) {
-      if (key !== 'marker' && key !== 'autoPlan') out.push({ key, actor: row.actor, at: row.at })
-    }
-  }
-  return out.sort((a, b) => a.at.localeCompare(b.at))
 }
 
 /** When the ticket's current run began: the open run's start, else the newest history row that entered `running`. */
@@ -75,10 +61,10 @@ function denialsFreshness(denials: DenialsRead): FreshnessEntry {
 
 /**
  * First hit wins within the `in-flight` role: a session scan that could not run is `sessions-unavailable`, never `stalled`.
- * `no-claimant` is not reported until a scan has run at least `CLAIM_SCAN_GRACE_MS` after the in-flight label was added (`awaiting-scan`); a missing timestamp keeps `stalled`.
+ * `no-claimant` is not reported until a scan has run at least `CLAIM_SCAN_GRACE_MS` after the run began (`awaiting-scan`); a missing timestamp keeps `stalled`.
  */
 function statusOf(
-  role: LabelRole | null,
+  role: StageRole | null,
   sessionsAvailable: boolean,
   agents: readonly AttachedAgent[],
   sessions: readonly AttachedSession[],
@@ -97,17 +83,6 @@ function statusOf(
     return { status: 'in-flight', statusEvidence: 'awaiting-scan' }
   }
   return { status: 'stalled', statusEvidence: 'no-claimant' }
-}
-
-/** Resolves raw label names to keys against this repository's vocabulary, oldest first — an unrecognised name is dropped, and so are `marker`/`autoPlan`. */
-function stageHistoryOf(labelEvents: readonly LabelEventNode[], byName: ReadonlyMap<string, LabelVocabulary['labels'][number]['key']>): readonly StageEntry[] {
-  const out: StageEntry[] = []
-  for (const event of labelEvents) {
-    const key = byName.get(event.label)
-    if (key === undefined || key === 'marker' || key === 'autoPlan') continue
-    out.push({ key, actor: event.actor, at: event.at })
-  }
-  return out.sort((a, b) => a.at.localeCompare(b.at))
 }
 
 /** Whichever source named the number first. A failed re-check yields `recheck-unavailable`, never collapsed into `number-not-found`. */
@@ -148,8 +123,6 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     }
   }
 
-  const vocabulary = entry.config.vocabulary
-  const labelsByName = new Map(vocabulary.labels.map((label) => [label.name, label.key]))
   const worktreeEntries = worktrees.ok ? worktrees.entries : []
   // Under a store view the store, not the cached sweep, decides which items exist.
   const fetchedItems = view?.kind === 'store' ? pipelineFetch.items.filter((item) => stored.has(`${item.kind}:${String(item.number)}`)) : pipelineFetch.items
@@ -170,14 +143,22 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
 
   const items: ReconciledItem[] = fetchedItems.map((item) => {
     const own: TrackedItem | undefined = stored.get(`${item.kind}:${String(item.number)}`)
-    const matchedKeys = own === undefined ? item.matchedKeys : fullKeysOf(own)
-    const stageResult = stageOf(matchedKeys, vocabulary)
     const linked = item.kind === 'pull-request' ? (prLinks.get(item.number) ?? null) : (issueLinks.get(item.number) ?? null)
-    // An issue carrying `prOpened` with no link in the open sweep means that pull request is no longer open, never "awaiting merge"; only a positively read MERGED closer makes it `counterpart-merged`.
+    const ticket =
+      own?.ticket ??
+      ticketOfDisplay({
+        repo: repoId,
+        ticket: item.kind === 'pull-request' ? (linked ?? item.number) : item.number,
+        kind: item.kind,
+        keys: item.matchedKeys,
+        pr: item.kind === 'pull-request' ? { number: item.number } : null,
+        at: pipelineFetch.fetchedAt,
+      })
+    // An issue whose ticket tracks a pull request with no link in the open sweep means that pull request is no longer open, never "awaiting merge"; only a positively read MERGED closer makes it `counterpart-merged`.
     const linkReason: LinkReason | null =
       linked !== null
         ? null
-        : item.kind === 'pull-request' || !matchedKeys.includes('prOpened')
+        : item.kind === 'pull-request' || ticket?.pr === null || ticket === null
           ? 'no-closing-keyword'
           : item.closingPullRequests?.some((pr) => pr.state === 'MERGED')
             ? 'counterpart-merged'
@@ -190,13 +171,10 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     const worktreeAttachments = attachWorktrees(attachTarget, worktreeEntries)
     const workSessions = workSessionsFor(workSessionIndex, item)
 
-    const stageHistory = own === undefined ? stageHistoryOf(item.labelEvents, labelsByName) : storedHistoryOf(own)
-    const ticket = own?.ticket ?? null
-    const inFlightKey = stageResult.stages.find((s) => s.role === 'in-flight')?.key
-    const claimedAt = ticket === null ? (stageHistory.findLast((entry) => entry.key === inFlightKey)?.at ?? null) : claimedAtOf(ticket)
+    const claimedAt = ticket === null ? null : claimedAtOf(ticket)
     const sessionsScannedAt = 'at' in repoSessions.freshness ? repoSessions.freshness.at : null
 
-    const { status, statusEvidence } = statusOf(ticket === null ? stageResult.stage : roleOfTicket(ticket), repoSessions.available, agents, sessions, claimedAt, sessionsScannedAt)
+    const { status, statusEvidence } = statusOf(ticket === null ? null : roleOfTicket(ticket), repoSessions.available, agents, sessions, claimedAt, sessionsScannedAt)
     const waitingOn: WaitingOn | null =
       status !== 'waiting' ? null : item.assignees.length === 0 ? 'nobody' : sessionRequired ? 'operator-session' : 'cockpit'
 
@@ -208,7 +186,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     const claimedFiles = item.kind === 'issue' ? parseFilesBlock(item.body) : null
 
     // Precomputed so the renderer never re-derives it from raw review bodies; `null` for an issue. The stored count is a high-water mark, so it fails toward the cap.
-    const reviewCycleCount = item.kind === 'pull-request' ? Math.max(own?.reviewCycles ?? 0, codeReviewCount(item.reviews ?? undefined)) : null
+    const reviewCycleCount = item.kind === 'pull-request' ? Math.max(ticket?.reviewCycles ?? 0, codeReviewCount(item.reviews ?? undefined)) : null
 
     // `null` for a pull request — a `## Changes` block is prose, never this heading.
     const planPresent = item.kind === 'issue' ? planPresentIn(item.body) : null
@@ -222,11 +200,6 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
       url: item.url,
       assignees: item.assignees,
       ticket,
-      stage: stageResult.stage,
-      stages: stageResult.stages,
-      stageAmbiguous: stageResult.stageAmbiguous,
-      marked: stageResult.marked,
-      autoPlan: stageResult.autoPlan,
       status,
       statusEvidence,
       waitingOn,
@@ -240,8 +213,6 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
       state: item.state,
       mergedAt: item.mergedAt,
       updatedAt: item.updatedAt,
-      stageHistory,
-      matchedKeys,
       sources,
       claimedFiles,
       headRefOid: item.headRefOid,
@@ -254,7 +225,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
       blockers: item.blockers,
       blockerComments: item.blockerComments,
       closingPullRequests: item.closingPullRequests,
-      ...(own === undefined ? {} : { mirrorFailure: own.mirrorFailure }),
+      ...(own === undefined ? {} : { mirrorFailure: own.ticket.mirror.failure }),
     }
   })
 
@@ -293,7 +264,6 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     viewer: pipelineFetch.viewer,
     integrationChecks: pipelineFetch.integrationChecks,
     approvalGate: entry.config.modules.approvalGate,
-    disabled: pipelineFetch.disabled,
     concurrency: entry.config.concurrency,
     reviewCycleCap: entry.config.reviewCycleCap,
   }

@@ -1,24 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import { composeStageSystemPrompt, parseStagePrompt, stageModeOf, STAGE_SYSTEM_PREAMBLE, withStageInstructions } from '@/utils/stage/prompt'
-import type { LabelKey } from '@/utils/labels/vocabulary'
+import { ticketViewOf } from '@/utils/pipeline/stages'
+import { queuedAt, ticketAt } from '../../../support/tickets'
 
 const IMPL_HEADER = 'Implementation stage for issue #12. Run your pipeline stage for #12. Follow your Pre-flight, Label swap, Work, and Handoff steps exactly.'
 const SOURCE = '/home/u/.claude/plugins/cache/port/port/1.0.0'
 
 describe('stage mode', () => {
-  it.each<[LabelKey, string]>([
-    ['ready', 'fresh'],
-    ['planChangesRequested', 'revision'],
-    ['planApproved', 'implement'],
-    ['readyForReview', 'review'],
-    ['needsRevision', 'revise'],
-    ['refreshBranch', 'refresh'],
-  ])('maps the %s trigger to %s', (trigger, mode) => {
-    expect(stageModeOf(trigger)).toBe(mode)
-  })
-
-  it('has no mode for an in-flight label', () => {
-    expect(stageModeOf('inProgress')).toBeNull()
+  it.each([
+    ['plan', queuedAt('new'), 'fresh'],
+    ['plan', queuedAt('changes-requested'), 'revision'],
+    ['implement', queuedAt('new'), 'implement'],
+    ['implement', queuedAt('retry'), 'implement'],
+    ['review', queuedAt('new'), 'review'],
+    ['merge', { kind: 'waiting-on-you', gate: 'merge', detail: '' }, 'review'],
+    ['revise', queuedAt('changes-requested'), 'revise'],
+    ['refresh', queuedAt('new'), 'refresh'],
+  ] as const)('maps a %s ticket %j to %s', (stage, status, mode) => {
+    expect(stageModeOf(ticketViewOf(ticketAt(stage, status)))).toBe(mode)
   })
 })
 

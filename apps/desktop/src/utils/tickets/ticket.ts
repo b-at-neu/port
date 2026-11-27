@@ -2,9 +2,9 @@
 import type { ReconciledItem } from '@/types/state'
 import type { Ticket, TicketIndex, TicketRef } from '@/types/ticket'
 
-/** The pull request when it carries a stage label, else the issue when it does, else whichever exists — both unlabelled leaves the stranded pull request as the honest Unstaged. */
+/** The pull request when it has a ticket, else the issue when it does, else whichever exists — both untracked leaves the stranded pull request as the honest Unstaged. */
 function primaryOf(issue: ReconciledItem, pullRequest: ReconciledItem | null): ReconciledItem {
-  if (pullRequest !== null && (pullRequest.stage !== null || issue.stage === null)) return pullRequest
+  if (pullRequest !== null && (pullRequest.ticket !== null || issue.ticket === null)) return pullRequest
   return issue
 }
 

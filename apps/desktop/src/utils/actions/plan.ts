@@ -35,7 +35,7 @@ function runningPlan(view: TicketView | null, move: 'retry' | 'stop', assign: re
 function gatePlan(item: ReconciledItem, approvalGate: boolean): ActionAvailability {
   if (!approvalGate) return notApplicable()
   if (item.kind !== 'pull-request') return notApplicable()
-  if (item.marked || item.stages.length === 0) return notApplicable()
+  if (item.ticket !== null) return notApplicable()
   return available(null, [])
 }
 

@@ -13,7 +13,6 @@ function reviewItem(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
   return item({
     number: 642,
     kind: 'pull-request',
-    stages: [{ key: 'readyForReview', name: 'ready for review', role: 'trigger' }],
     headRefOid: 'abc1234def',
     mergeable: 'MERGEABLE',
     reviews: [],
@@ -47,7 +46,6 @@ describe('planTick — integration-red hold', () => {
         number: 642,
         kind: 'pull-request',
         stage: 'review',
-        trigger: 'readyForReview',
         reason: 'integration-red',
         contention: null,
         escalation: { kind: 'integration-red', checks: ['test'], state: 'red', escalateAt: '2026-01-02T00:00:00.000Z', expired: false },

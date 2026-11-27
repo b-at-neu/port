@@ -57,7 +57,7 @@ describe('applyItemAction — refusals', () => {
 describe('applyItemAction — writes', () => {
   it("applies the gate action and forwards the writer's outcome", async () => {
     const rig = await operatorRig({ items: [ISSUE_148], tickets: [QUEUED] })
-    const pr = item({ kind: 'pull-request', marked: false, assignees: [], stages: [{ key: 'reviewing', name: 'reviewing', role: 'in-flight' }] })
+    const pr = item({ kind: 'pull-request', assignees: [] })
     const result = await applyItemAction(rig.ctx, { request: request({ kind: 'pull-request', action: 'gate', expected: null }), snapshot: snapshotOf([repoState([{ ...pr, ticket: null }], { viewer: null })]), entry: rig.entry, auditDir: rig.auditDir })
     expect(result.ok).toBe(true)
   })

@@ -1,7 +1,7 @@
 // The read loops both halves of the board read share: the reply check, the rate-limit sum, a paged
 // one-surface sweep, and the chunked by-number and detail reads.
 import type { GitHubTransport } from '@/types/platform'
-import type { LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { DisplayVocabulary } from '@/utils/labels/display'
 import type { AliasInfo, GitHubRepoRef, GraphQLErrorEntry, ItemDetail, PipelineFailureKind, PipelineItem, PipelineItemKind, RateLimitInfo, SweepAlias, SweepPage, TruncatedSet, UnavailableAlias } from '@/types/github'
 import type { TrackedRef } from '@/types/pipeline-state'
 import { bodyOf, classifyFailure, collectUnavailable, parseEnvelope } from '@/main/github/envelope'
@@ -140,13 +140,10 @@ export async function sweepSurface(github: GitHubTransport, repo: GitHubRepoRef,
   return { ok: true, nodes, unavailable, truncated, rateLimit, first }
 }
 
-/** The tracked refs the sweep found, with the store's keys applied, and the ones it did not. */
+/** The swept items the store tracks, and the tracked refs the sweep did not find. */
 export function selectTracked(swept: readonly PipelineItem[], refs: readonly TrackedRef[]): { readonly kept: readonly PipelineItem[]; readonly missing: readonly TrackedRef[] } {
   const tracked = new Map(refs.map((ref) => [`${ref.kind}:${String(ref.number)}`, ref]))
-  const kept = swept.flatMap((item) => {
-    const ref = tracked.get(`${item.kind}:${String(item.number)}`)
-    return ref === undefined ? [] : [{ ...item, matchedKeys: ref.keys }]
-  })
+  const kept = swept.filter((item) => tracked.has(`${item.kind}:${String(item.number)}`))
   const seen = new Set(kept.map((item) => `${item.kind}:${String(item.number)}`))
   return { kept, missing: refs.filter((ref) => !seen.has(`${ref.kind}:${String(ref.number)}`)) }
 }
@@ -163,7 +160,7 @@ export interface TrackedRead {
 export async function readTrackedChunks(
   github: GitHubTransport,
   repo: GitHubRepoRef,
-  vocabulary: LabelVocabulary,
+  vocabulary: DisplayVocabulary,
   kind: PipelineItemKind,
   refs: readonly TrackedRef[],
   rateLimit: RateLimitInfo,
@@ -180,14 +177,14 @@ export async function readTrackedChunks(
     if (!reply.ok) return reply
     total = addRateLimit(total, reply.data.rateLimit)
     const errors = reply.errors ?? []
-    for (const [idx, alias] of aliases.entries()) {
+    for (const alias of aliases) {
       const node = asRecord(reply.repository[alias.alias])
       const own = errors.filter((error) => error.path?.[1] === alias.alias)
       if (node === undefined && own.length > 0 && own.every((error) => error.type === 'NOT_FOUND')) {
         closed.push(alias.number)
         continue
       }
-      const item = node === undefined || own.length > 0 ? undefined : mapTrackedItem(node, kind, vocabulary, `${repo.owner}/${repo.name}`, chunk[idx]?.keys ?? [])
+      const item = node === undefined || own.length > 0 ? undefined : mapTrackedItem(node, kind, vocabulary, `${repo.owner}/${repo.name}`)
       if (item === undefined) return { ok: false, kind: 'no-data', message: `the read of tracked ${kind} #${alias.number} came back empty` }
       if (item.state === 'OPEN') {
         items.push(item)

@@ -36,7 +36,7 @@ const revising = (overrides: Partial<ReconciledItem> = {}): ReconciledItem => it
 describe('adoptionsOf — claims no live session holds', () => {
   it('implement: exactly one open pull request on the issue’s own branch adopts pr-opened', () => {
     expect(adopt([implementing({ closingPullRequests: prs })], [claim('implement')])).toEqual([
-      { kind: 'adopt', number: 1, itemKind: 'issue', agent: 'impl', stage: 'implement', trigger: 'planApproved', handback: { token: 'pr-opened', arg: '#780' }, evidence: 'pr' },
+      { kind: 'adopt', number: 1, itemKind: 'issue', agent: 'impl', stage: 'implement', handback: { token: 'pr-opened', arg: '#780' }, evidence: 'pr' },
     ])
   })
 
@@ -54,7 +54,7 @@ describe('adoptionsOf — claims no live session holds', () => {
   it('plan: a plan in the body, queued fresh, adopts plan-written', () => {
     const planning = item({ ticket: claimedTicket('plan'), planPresent: true })
     expect(adopt([planning], [claim('plan')])).toEqual([
-      { kind: 'adopt', number: 1, itemKind: 'issue', agent: 'plan', stage: 'plan', trigger: 'ready', handback: { token: 'plan-written', arg: null }, evidence: 'plan' },
+      { kind: 'adopt', number: 1, itemKind: 'issue', agent: 'plan', stage: 'plan', handback: { token: 'plan-written', arg: null }, evidence: 'plan' },
     ])
   })
 
@@ -69,7 +69,7 @@ describe('adoptionsOf — claims no live session holds', () => {
 
   it('review: an approving review on the current head after the claim adopts approved', () => {
     expect(adopt([reviewing({ reviews: [review('approved', AFTER_CLAIM)] })], [claim('review', { number: 2 })])).toEqual([
-      { kind: 'adopt', number: 2, itemKind: 'pull-request', agent: 'review', stage: 'review', trigger: 'readyForReview', handback: { token: 'approved', arg: null }, evidence: 'review' },
+      { kind: 'adopt', number: 2, itemKind: 'pull-request', agent: 'review', stage: 'review', handback: { token: 'approved', arg: null }, evidence: 'review' },
     ])
   })
 
@@ -91,7 +91,7 @@ describe('adoptionsOf — claims no live session holds', () => {
   it('revise: a head that moved past the reviewed one adopts revised', () => {
     const moved = revising({ headRefOid: 'new', reviews: [review('needs revision', BEFORE_CLAIM, 'old')] })
     expect(adopt([moved], [claim('revise', { number: 3 })])).toEqual([
-      { kind: 'adopt', number: 3, itemKind: 'pull-request', agent: 'revise', stage: 'revise', trigger: 'needsRevision', handback: { token: 'revised', arg: null }, evidence: 'head-moved' },
+      { kind: 'adopt', number: 3, itemKind: 'pull-request', agent: 'revise', stage: 'revise', handback: { token: 'revised', arg: null }, evidence: 'head-moved' },
     ])
   })
 

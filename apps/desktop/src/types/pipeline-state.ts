@@ -1,6 +1,5 @@
 // Contract for the app-owned pipeline state store: plain JSON, safe to cross the state worker boundary.
 import type { ReadyEntry } from '@/types/actions'
-import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { PipelineItemKind } from '@/types/github'
 import type { RepositoryState } from '@/types/state'
@@ -10,11 +9,12 @@ import type { RunChange, TicketEvent } from '@/types/stage-labels'
 import type { WriteOutcome } from '@/types/writes'
 import type { Run, Ticket } from '@/utils/pipeline/ticket'
 
+/** A row of a version-1 file; `add` and `remove` are the raw keys it stored, which only the migration reads. */
 export interface StoredHistoryRow {
   readonly at: string
   readonly action: string
-  readonly add: readonly LabelKey[]
-  readonly remove: readonly LabelKey[]
+  readonly add: readonly string[]
+  readonly remove: readonly string[]
   readonly actor: string | null
 }
 
@@ -24,11 +24,11 @@ export interface MirrorFailure {
   readonly outcome: WriteOutcome
 }
 
-/** `keys` holds the role-bearing stage keys; `marked` and `autoPlan` carry the two marker keys. */
+/** An item of a version-1 file. `keys` holds the role-bearing stage keys as stored; `marked` and `autoPlan` carry the two marker keys. */
 export interface StoredItem {
   readonly kind: PipelineItemKind
   readonly number: number
-  readonly keys: readonly LabelKey[]
+  readonly keys: readonly string[]
   readonly marked: boolean
   readonly autoPlan: boolean
   readonly claimedAt: string | null
@@ -41,7 +41,9 @@ export interface StoredItem {
 }
 
 /** A tracked half with the ticket both halves share. */
-export interface TrackedItem extends StoredItem {
+export interface TrackedItem {
+  readonly kind: PipelineItemKind
+  readonly number: number
   readonly ticket: Ticket
 }
 
@@ -74,11 +76,6 @@ export interface UnsettledRun {
 }
 
 
-/** Every stored key, markers included. */
-export function fullKeysOf(item: Pick<StoredItem, 'keys' | 'marked' | 'autoPlan'>): readonly LabelKey[] {
-  return [...(item.marked ? (['marker'] as const) : []), ...(item.autoPlan ? (['autoPlan'] as const) : []), ...item.keys]
-}
-
 /** `unseeded` means the repository has no record yet and reseeds once from labels; `store` means the stored items decide stage. */
 export type PipelineView = { readonly kind: 'unseeded' } | { readonly kind: 'store'; readonly items: readonly TrackedItem[] }
 
@@ -96,11 +93,10 @@ export interface TicketRef {
   readonly number: number
 }
 
-/** A tracked item and the full key set (markers included) it carries in the store. */
+/** A tracked half the sweep reads by number. */
 export interface TrackedRef {
   readonly kind: PipelineItemKind
   readonly number: number
-  readonly keys: readonly LabelKey[]
 }
 
 export interface PipelineStateStore {

@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { stateLabelsOf } from '@/main/pipeline/state/labels'
 import type { PipelineView } from '@/types/pipeline-state'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import { resolveDisplayVocabulary } from '@/utils/labels/display'
 import { queuedAt, ticketAt } from '../../../../support/tickets'
 
-const VOCABULARY = resolveVocabulary({})
+const VOCABULARY = resolveDisplayVocabulary({})
 const STORE: PipelineView = {
   kind: 'store',
-  items: [{ kind: 'issue', number: 7, keys: ['planApproved'], marked: true, autoPlan: true, claimedAt: null, reviewCycles: 0, history: [], updatedAt: 't', issue: null, mirrorFailure: null, ticket: ticketAt('implement', queuedAt(), { ticket: 7 }) }],
+  items: [{ kind: 'issue', number: 7, ticket: ticketAt('implement', queuedAt(), { ticket: 7 }) }],
 }
 
 describe('stateLabelsOf', () => {
@@ -15,8 +15,8 @@ describe('stateLabelsOf', () => {
     expect(stateLabelsOf({ kind: 'unseeded' }, 'issue', 7, VOCABULARY)).toBeNull()
   })
 
-  it('names the stored keys, markers included, as configured', () => {
-    expect(stateLabelsOf(STORE, 'issue', 7, VOCABULARY)).toEqual(['claude', 'auto plan', 'plan approved'])
+  it('names the display labels the stored ticket shows, as configured', () => {
+    expect(stateLabelsOf(STORE, 'issue', 7, VOCABULARY)).toEqual(['port', 'implementing'])
   })
 
   it('is empty for an untracked item, and does not confuse an issue with a pull request of the same number', () => {
@@ -25,6 +25,6 @@ describe('stateLabelsOf', () => {
   })
 
   it('follows a renamed label', () => {
-    expect(stateLabelsOf(STORE, 'issue', 7, resolveVocabulary({ labels: { planApproved: 'go' } }))).toContain('go')
+    expect(stateLabelsOf(STORE, 'issue', 7, resolveDisplayVocabulary({ states: { implementing: 'go' } }))).toContain('go')
   })
 })

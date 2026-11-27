@@ -10,8 +10,7 @@ import { repoNeedsYou } from '@/renderer/board/needs-you'
 import { ticketIndex, ticketLabel } from '@/utils/tickets/ticket'
 import type { PhaseTone, PillStatus } from '@/types/components'
 import type { PipelineRow, PipelineSessionRow, RunStateDisplay, SidebarModel } from '@/types/shell'
-import { ticketViewOf, viewOfKey } from '@/renderer/lib/ticket-view'
-import { agentStageName, stageNameOf } from '@/utils/pipeline/stages'
+import { agentStage, agentStageName, stageNameOf, ticketViewOfItem } from '@/utils/pipeline/stages'
 import { phaseTone } from '@/renderer/lib/phase-tone'
 import { classifyHandbackText } from '@/utils/stage/handback-text'
 
@@ -36,12 +35,12 @@ function sessionsFor(repoId: RepoId, index: TicketIndex, needsYouNumbers: Readon
   const rows: PipelineSessionRow[] = []
   for (const ticket of index.tickets) {
     const item = ticket.primary
-    if (item.stage === 'gate' || item.stage === 'terminal' || needsYouNumbers.has(ticket.ref.number)) continue
+    const view = ticketViewOfItem(item)
+    if (view === null || view.status.kind === 'waiting-on-you' || view.status.kind === 'done' || needsYouNumbers.has(ticket.ref.number)) continue
     const liveAgent = item.agents.find((a) => a.activity === 'active')
     const liveSession = item.sessions.find((s) => s.activity === 'active')
     if (liveAgent === undefined && liveSession === undefined) continue
 
-    const view = ticketViewOf(item)
     const tone = runningTone(phaseTone({ view, active: true, waitingOnYou: false, operatorNeeded: false }))
     const transcript: PipelineSessionRow['transcript'] =
       liveAgent !== undefined ? { sessionId: liveAgent.sessionId, agentId: liveAgent.agentId } : liveSession !== undefined ? { sessionId: liveSession.sessionId, agentId: null } : null
@@ -62,7 +61,7 @@ function stageRowFor(repoId: RepoId, session: HostedSessionSnapshot, index: Tick
   if (stage === null) throw new Error('stageRowFor called with a non-stage snapshot')
   const ticket = index.byNumber.get(stage.number)
   const label = session.title ?? (ticket !== undefined ? ticketLabel(ticket.ref) : `#${String(stage.number)}`)
-  const tone = runningTone(phaseTone({ view: viewOfKey(stage.trigger, stage.kind), active: true, waitingOnYou: false, operatorNeeded: operatorNeeded(session) }))
+  const tone = runningTone(phaseTone({ view: { stage: agentStage(stage.agent), status: { kind: 'running' } }, active: true, waitingOnYou: false, operatorNeeded: operatorNeeded(session) }))
   const phaseName = agentStageName(stage.agent)
   return { key: session.sessionKey, repoId, number: ticketNumberOf(stage, index), label, tone, statusText: statusTextOf(tone, phaseName), phaseName, sessionKey: session.sessionKey, transcript: null }
 }

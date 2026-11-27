@@ -1,7 +1,7 @@
 // The pull-request half of the board read: a paged sweep whose first page also carries the
 // integration branch's check history, tracked pull requests by number, then the per-PR details.
 import type { GitHubReadContext } from '@/main/github/context'
-import type { LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { DisplayVocabulary } from '@/utils/labels/display'
 import type { BoardPullsFetch, GitHubRepoRef, PipelineItem } from '@/types/github'
 import type { TrackedRef } from '@/types/pipeline-state'
 import { applyItemDetails, mapPipelineItems, toIntegrationChecks } from '@/main/github/map'
@@ -10,7 +10,7 @@ import { readDetailChunks, readTrackedChunks, selectTracked, sweepSurface } from
 
 interface FetchBoardPullsParams {
   readonly repo: GitHubRepoRef
-  readonly vocabulary: LabelVocabulary
+  readonly vocabulary: DisplayVocabulary
   /** `branches.integration`, whose recent check history rides on the sweep's first page. */
   readonly integration: string
   /** The store's pull-request refs: non-null makes them, not the swept labels, the set read. `null` is the label path. */
@@ -49,7 +49,7 @@ export async function fetchBoardPulls(ctx: GitHubReadContext, params: FetchBoard
     kind: 'pull-request',
     items: [...swept, ...read],
     perField: new Set(),
-    build: (chunk) => buildPullDetailsQuery(chunk.map((item) => ({ number: item.number, rollup: item.matchedKeys.includes('approved') || item.matchedKeys.includes('readyForReview') }))),
+    build: (chunk) => buildPullDetailsQuery(chunk.map((item) => ({ number: item.number, rollup: item.matchedKeys.includes('approved') || item.matchedKeys.includes('reviewing') }))),
   })
   if (!detailed.ok) return detailed
 

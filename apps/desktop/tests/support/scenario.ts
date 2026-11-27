@@ -24,6 +24,7 @@ import { createFakeFs } from './fake-platform'
 import { createFakeGitHub, type FakeItem } from './fake-github'
 import { readyEntry } from './repo-config'
 import { scriptedStage } from './stage'
+import { ticketAt } from './tickets'
 
 export const SCENARIO_REPO = 'repo-a' as RepoId
 // The audit log and the body files go through the host filesystem, so this directory is real; everything else lives in the fake one.
@@ -50,9 +51,11 @@ type Actionable = TickReport['actionable'][number]
 
 const STAGE_OF_AGENT: Record<Actionable['agent'], Actionable['stage']> = { plan: 'plan', impl: 'implement', review: 'review', revise: 'revise' }
 
-export const actionable = (number: number, trigger: Actionable['trigger'], agent: Actionable['agent'], kind: Actionable['kind'] = 'issue'): Actionable => ({ number, kind, stage: STAGE_OF_AGENT[agent], trigger, agent, unchecked: false, cycle: null })
+const MODE_OF_AGENT: Record<Actionable['agent'], Actionable['mode']> = { plan: 'fresh', impl: 'implement', review: 'review', revise: 'revise' }
 
-export const tickReport = (overrides: Partial<TickReport> = {}): TickReport => ({ repoId: SCENARIO_REPO, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [], autoApprovals: [], labelRepairs: [], ...overrides })
+export const actionable =(number: number, agent: Actionable['agent'], kind: Actionable['kind'] = 'issue'): Actionable => ({ number, kind, stage: STAGE_OF_AGENT[agent], mode: MODE_OF_AGENT[agent], agent, unchecked: false, cycle: null })
+
+export const tickReport = (overrides: Partial<TickReport> = {}): TickReport => ({ repoId: SCENARIO_REPO, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], nextTickAt: null, observations: [], autoApprovals: [], labelRepairs: [], ...overrides })
 
 export const snapshotWith = (...tick: TickReport[]): BoardSnapshot => boardSnapshot([repositoryState([])], undefined, { tick })
 
@@ -114,6 +117,6 @@ export async function scenarioRig(options: ScenarioOptions = {}) {
     showBoard: (...items: readonly ReconciledItem[]) => {
       board = boardSnapshot([repositoryState(items)])
     },
-    claimedItem: (number: number) => reconciledItem({ number, kind: 'issue', stage: 'in-flight', stages: [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }], stageHistory: [{ key: 'inProgress', actor: null, at: AT }] }),
+    claimedItem: (number: number) => reconciledItem({ number, kind: 'issue', ticket: ticketAt('implement', { kind: 'running', runId: null }, { repo: 'o/a' as Ticket['repo'], ticket: number }) }),
   }
 }

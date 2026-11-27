@@ -5,7 +5,6 @@ import type { BoardReadContext } from '@/main/pipeline/context'
 import type { Platform } from '@/main/platform'
 import type { SessionReader } from '@/types/sessions'
 import type { RepositoryEntry } from '@/utils/repos'
-import { verifiableVocabularyOf } from '@/utils/labels/display'
 import type { PipelineView } from '@/types/pipeline-state'
 import type { FreshnessEntry, PipelineState, RepositoryState } from '@/types/state'
 import { reconcileRepository } from '@/main/pipeline/board/reconcile'
@@ -72,7 +71,7 @@ export async function readPipelineState(ctx: BoardReadContext & Pick<Platform, '
     const sessions = cache.sessions
     const agents = sessions?.ok ? sessions.agents.filter((a) => a.repoId === entry.id) : []
     const repo = splitRepo(entry.config.repo)
-    await refreshGithub(ctx, cache, { repoId: entry.id, repo, vocabulary: entry.config.vocabulary, verify: verifiableVocabularyOf(entry.config), integration: entry.config.branches.integration, worktreeEntries, agents })
+    await refreshGithub(ctx, cache, { repoId: entry.id, repo, vocabulary: entry.config.displayVocabulary, integration: entry.config.branches.integration, worktreeEntries, agents })
   }
 
   return projectFromCache(cache, params.repositories, now)

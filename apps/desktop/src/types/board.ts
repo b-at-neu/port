@@ -1,13 +1,11 @@
 // Pure types and constants for the board projection. No import here may reach a Node builtin or `src/main/`, so this file compiles under `typecheck:web`.
 import type { RepoId } from '@/utils/repos'
-import type { ItemStatus, PipelineState, ReconciledItem, RepositoryState, StageLabel } from '@/types/state'
+import type { ItemStatus, PipelineState, ReconciledItem, RepositoryState } from '@/types/state'
 import type { ActionAvailability, DecisionAvailability, ItemActionResult, OperatorAction, OperatorDecision } from '@/types/actions'
 import type { StageAgent, TickClaim, TickHeld, TickLabelRepair, TickReport } from '@/types/tick'
 import type { BudgetNote, DispatchOwner, DispatchRecord, RepoDispatchStatus, RunStatesSnapshot } from '@/types/dispatch'
 import type { SessionKey } from '@/types/hosting'
 import type { AskQuestion } from '@/utils/hosting/controls'
-import type { LabelKey } from '@/utils/labels/vocabulary'
-import type { LabelPalette } from '@/utils/labels/defaults'
 import type { StageDenial, InterruptedStage } from '@/types/stage'
 import type { Ticket, TicketRef } from '@/types/ticket'
 import type { PhaseTone } from '@/types/components'
@@ -131,7 +129,6 @@ export interface DisplayStatus {
 /** A live hosted stage session for this row's item — the app's own dispatch evidence, independent of whether the agent has swapped a label yet. */
 export interface LiveStage {
   readonly agent: StageAgent
-  readonly trigger: LabelKey
   readonly sessionKey: SessionKey
 }
 
@@ -142,7 +139,6 @@ export interface BoardItemRow {
   readonly displayStatus: DisplayStatus
   /** `null` when no live stage session matches this item's repository, kind and number. */
   readonly liveStage: LiveStage | null
-  readonly stageLabel: StageLabel | null
   /** `actionsFor`'s own result for this item, so the row renders from one already-computed value, never a second derivation client-side. */
   readonly actions: Readonly<Record<OperatorAction, ActionAvailability>>
   /** `decisionsFor`'s own result for this item, same rule as `actions` above. */
@@ -282,13 +278,16 @@ export const PHASE_KEYS = ['plan', 'implement', 'review', 'revision', 'merge'] a
 
 export type PhaseKey = (typeof PHASE_KEYS)[number]
 
+/** The colour family a stage row or phase segment paints with. */
+export type Palette = 'plan' | 'implement' | 'review' | 'revise' | 'refresh' | 'needs-you' | 'done'
+
 export type PhaseSegmentState = 'finished' | 'current-working' | 'current-attention' | 'complete' | 'pending'
 
 /** One of the five phases as `PhaseBar`/`PhaseList` paint it; `palette` is `null` for a pending phase, which has no colour yet. */
 export interface PhaseSegment {
   readonly phase: PhaseKey
   readonly state: PhaseSegmentState
-  readonly palette: LabelPalette | null
+  readonly palette: Palette | null
 }
 
 /** One phase's "who and when" line — `phase-history.ts`'s own result shape, `null` `at` for a current phase whose only line is a cost reading with no entry behind it. */
