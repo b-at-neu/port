@@ -126,8 +126,18 @@ export const RESTRICTIONS = [
   },
   {
     id: 'github-http',
-    except: ['src/main/github/**', 'src/main/platform/index.ts', 'src/main/worker/engine.ts', 'src/main/pipeline/board/read.ts', 'src/main/features/worktrees/inspect.ts'],
+    except: ['src/main/github/**', 'src/main/platform/index.ts', 'src/main/worker/engine.ts'],
     paths: [{ name: '@/main/platform/github-http', importNames: ['githubHttp', 'githubConditional', 'githubPublic'], message: 'Only main/github/ reads GitHub over HTTP.' }],
+  },
+  {
+    id: 'tracker-internal',
+    except: ['src/main/github/tracker/**'],
+    patterns: [{ group: ['@/main/github/tracker/*'], message: 'Issue queries stay inside main/github/tracker/ — read through ctx.tracker.' }],
+  },
+  {
+    id: 'tracker-root',
+    except: ['src/main/github/**', 'src/main/app/context.ts', 'src/main/worker/engine.ts'],
+    paths: [{ name: '@/main/github/tracker', importNames: ['createGithubTracker'], message: 'Only the composition roots build a tracker — take it from ctx.tracker.' }],
   },
   {
     id: 'run-command',

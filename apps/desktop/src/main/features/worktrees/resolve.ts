@@ -11,7 +11,7 @@ import { runReclaim } from '@/main/features/worktrees/reclaim'
 import { readWorktreeReport } from '@/main/features/worktrees/report'
 import { appendAudit } from '@/main/github/writes/audit'
 
-export type WorktreesContext = Pick<AppContext, 'repos' | 'paths' | 'git' | 'fs' | 'clock' | 'githubHttp'>
+export type WorktreesContext = Pick<AppContext, 'repos' | 'paths' | 'git' | 'fs' | 'clock' | 'tracker'>
 
 const unlistable = (subject: string) => (message: string) => `${subject} could not list repositories: ${message}`
 

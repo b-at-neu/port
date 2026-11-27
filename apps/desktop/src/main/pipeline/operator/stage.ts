@@ -12,8 +12,6 @@ import type { EventWriteRequest, WriteOutcome } from '@/types/writes'
 import { stateMoved } from '@/types/writes'
 import { mirrorVocabularyOf } from '@/utils/labels/display'
 import type { Ticket } from '@/utils/pipeline/ticket'
-import { fetchItemsByNumber } from '@/main/github/tracker/items'
-import { postIssueBody } from '@/main/github/writes/apply'
 import type { StateWriteContext } from '@/main/pipeline/context'
 import { writeEvent } from '@/main/pipeline/state/writer'
 
@@ -114,7 +112,7 @@ export async function applyStageTransition(ctx: StateWriteContext, params: Apply
   const prNumber = mode === 'impl' && handback?.token === 'pr-opened' ? pullRequestNumberOf(handback.arg) : null
 
   const numbers = prNumber === null ? [record.number] : [record.number, prNumber]
-  const fetched = await fetchItemsByNumber(ctx, { repo: { owner: entry.config.owner, name: entry.config.name }, numbers })
+  const fetched = await ctx.tracker.readItemsByNumber({ repo: { owner: entry.config.owner, name: entry.config.name }, numbers })
   if (!fetched.ok) return refused('write-failed', true, fetched.message)
   const itemsByNumber = new Map(fetched.resolved.filter((r) => !fetched.unavailable.includes(r.number)).map((r) => [r.number, r] as const))
   const resolved = itemsByNumber.get(record.number)
@@ -126,7 +124,7 @@ export async function applyStageTransition(ctx: StateWriteContext, params: Apply
   if (ticketEvent === null) return { kind: 'applied' }
   const ticket = ctx.stores.pipelineState.ticket(entry.id, { kind: record.kind, number: record.number })
   if (ticket !== null && event.kind === 'outcome' && event.plan?.kind === 'read' && accepts(ticket, ticketEvent, { kind: record.kind, number: record.number }, entry.id)) {
-    const posted = await postIssueBody(ctx, {
+    const posted = await ctx.tracker.postPlanBody({
       request: { repoId: entry.id, repo: entry.config.repo, kind: 'issue', number: record.number, body: event.plan.body, action: 'stage-handback-plan-body', scratchDir: params.scratchDir },
       repoRoot: entry.path,
       auditDir: params.auditDir,

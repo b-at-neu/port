@@ -12,6 +12,7 @@ import { hostFs } from '@/main/platform'
 import { takeOwnership } from '@/main/repos/ownership'
 import { createFakePlatform } from '../../../../support/fake-platform'
 import { httpOk } from '../../../../fixtures/github-http'
+import { trackerOver } from '../../../../support/fake-tracker'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 const NOT_A_REPO: CommandResult = { ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'fatal: not a git repository' }
@@ -20,7 +21,7 @@ const GH_OK: GhResult = { ok: true, stdout: '', stderr: '' }
 const TERMINAL = JSON.stringify({ repo: 'o/r', owner: 'terminal', since: '2026-01-01T00:00:00Z' })
 
 function ctxWith(ghWrite: GhRunner, githubHttp = createFakePlatform().githubHttp) {
-  return { ...createFakePlatform(), ghWrite, git: () => Promise.resolve(NOT_A_REPO), githubHttp, clock: { now } }
+  return { ...createFakePlatform(), ghWrite, git: () => Promise.resolve(NOT_A_REPO), tracker: trackerOver(githubHttp), clock: { now } }
 }
 
 const neverCalledGh: GhRunner = () => {

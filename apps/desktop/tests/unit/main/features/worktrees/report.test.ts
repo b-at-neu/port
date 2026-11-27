@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createFakeGithub, createFakeRepo, MAIN, WORKTREES } from '../../../../fixtures/reclaimer-harness'
 import type { FakeGithubOptions, FakeRepoOptions } from '../../../../fixtures/reclaimer-harness'
 import { httpFail, queryOf } from '../../../../fixtures/github-http'
+import { trackerOver } from '../../../../support/fake-tracker'
 import { readWorktreeReport } from '@/main/features/worktrees/report'
 import type { WorktreesReport } from '@/types/reclaimer'
 
@@ -16,7 +17,7 @@ const OPEN = `${WORKTREES}/impl-41`
 async function report(repoOptions: FakeRepoOptions, ghOptions: FakeGithubOptions = {}) {
   const repo = createFakeRepo(repoOptions)
   const gh = createFakeGithub(ghOptions)
-  const result = await readWorktreeReport({ ...repo.ctx, githubHttp: gh.github }, { repoRoot: MAIN, repo: 'acme/widgets', integration: 'dev' })
+  const result = await readWorktreeReport({ ...repo.ctx, tracker: trackerOver(gh.github) }, { repoRoot: MAIN, repo: 'acme/widgets', integration: 'dev' })
   return { result, repo, gh }
 }
 
@@ -146,7 +147,7 @@ describe('readWorktreeReport', () => {
   it('maps a failed worktree list straight through', async () => {
     const repo = createFakeRepo()
     const params = { repoRoot: MAIN, repo: 'acme/widgets', integration: 'dev' }
-    const base = { ...repo.ctx, githubHttp: createFakeGithub().github }
+    const base = { ...repo.ctx, tracker: trackerOver(createFakeGithub().github) }
     const failing = { ...base, git: () => Promise.resolve({ ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'fatal: not a git repository' } as const) }
     const result = await readWorktreeReport(failing, params)
     expect(result).toMatchObject({ ok: false, kind: 'not-a-repository', message: 'fatal: not a git repository' })

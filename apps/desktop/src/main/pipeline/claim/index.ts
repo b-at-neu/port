@@ -1,4 +1,4 @@
-// No `gh` import here — the read comes from `./github`, the write from `./actions`.
+// No `gh` import here — the read comes from `ctx.tracker`, the write from `./actions`.
 import { classifyPreflight, buildClaimRequest } from '@/main/pipeline/claim/classify'
 import type { ClaimApplyResponse, ClaimPreflight, ClaimPreflightResponse, PlanGateChoice } from '@/types/claim'
 import type { ClaimPreflightFetch } from '@/types/github'
@@ -8,7 +8,6 @@ import type { ReadyEntry } from '@/types/actions'
 import { storedLabels, UNSEEDED_MESSAGE } from '@/main/pipeline/state/labels'
 import { writeState } from '@/main/pipeline/state/writer'
 import { readyEntryOf, type OperatorContext } from '@/main/pipeline/context'
-import { fetchClaimPreflight } from '@/main/github/tracker/items'
 
 function resolveReadyEntry(ctx: OperatorContext, repoId: RepoId) {
   return readyEntryOf(ctx, 'claim', repoId, (message) => `claim requires the registry, which could not be listed: ${message}`)
@@ -24,7 +23,7 @@ function toClaimPreflight(ctx: OperatorContext, fetch: Extract<ClaimPreflightFet
 
 export async function claimPreflight(ctx: OperatorContext, { repoId, number }: { readonly repoId: RepoId; readonly number: number }): Promise<ClaimPreflightResponse> {
   const entry = await resolveReadyEntry(ctx, repoId)
-  const fetch = await fetchClaimPreflight(ctx, { repo: { owner: entry.config.owner, name: entry.config.name }, number })
+  const fetch = await ctx.tracker.readClaimPreflight({ repo: { owner: entry.config.owner, name: entry.config.name }, number })
   if (!fetch.ok) return { kind: 'failed', message: fetch.message }
 
   const preflight = toClaimPreflight(ctx, fetch, entry)
@@ -53,7 +52,7 @@ function sameAssigneeSet(a: readonly string[], b: readonly string[]): boolean {
 // **Re-runs the preflight itself** rather than trusting anything the renderer held.
 export async function claimApply(ctx: OperatorContext, params: ClaimApplyParams): Promise<ClaimApplyResponse> {
   const entry = await resolveReadyEntry(ctx, params.repoId)
-  const fetch = await fetchClaimPreflight(ctx, { repo: { owner: entry.config.owner, name: entry.config.name }, number: params.number })
+  const fetch = await ctx.tracker.readClaimPreflight({ repo: { owner: entry.config.owner, name: entry.config.name }, number: params.number })
   if (!fetch.ok) return { kind: 'preflight-failed', message: fetch.message }
 
   const preflight = toClaimPreflight(ctx, fetch, entry)

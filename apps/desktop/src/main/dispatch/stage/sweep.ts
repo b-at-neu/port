@@ -4,7 +4,6 @@ import type { BoardSnapshot } from '@/types/board'
 import type { RepoDispatchStatus } from '@/types/dispatch'
 import type { GitHubRepoRef } from '@/types/github'
 import type { InterruptedStage, StageRestartResult, StageResumeResult } from '@/types/stage'
-import { fetchItemsByNumber } from '@/main/github/tracker/items'
 import { pathOps } from '@/main/platform/paths'
 import { removeSessionWorktreeAt } from '@/main/repos/worktree/worktree'
 import type { SweepContext } from '@/main/dispatch/context'
@@ -80,7 +79,7 @@ export function createInterruptedSweeper(ctx: SweepContext): InterruptedSweeper 
 
       const ref = repoRefOf(repo.repo)
       if (verdict.recheck.length > 0 && ref !== null) {
-        const fetch = await fetchItemsByNumber(ctx, { repo: ref, numbers: verdict.recheck })
+        const fetch = await ctx.tracker.readItemsByNumber({ repo: ref, numbers: verdict.recheck })
         for (const id of clearedByRecheck(entries.filter((e) => verdict.recheck.includes(e.number)), fetch)) ids.add(id)
       }
 

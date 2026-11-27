@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { defineAction } from '@/main/app/define'
 import { repoId } from '@/main/app/schemas'
-import { fetchBacklog } from '@/main/github/tracker/backlog'
 import { readyEntryOf } from '@/main/pipeline/context'
 
 const SUBJECT = "'backlog:list'"
@@ -15,6 +14,6 @@ export const backlogList = defineAction({
     // An unseeded repository tracks nothing yet.
     const refs = ctx.stores.pipelineState.tracked(input.repoId) ?? []
     const tracked = new Set(refs.filter((ref) => ref.kind === 'issue').map((ref) => ref.number))
-    return fetchBacklog(ctx, { repo: { owner: entry.config.owner, name: entry.config.name }, tracked })
+    return ctx.tracker.listBacklog({ repo: { owner: entry.config.owner, name: entry.config.name }, tracked })
   },
 })

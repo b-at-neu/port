@@ -5,7 +5,6 @@ import { stateLabelsOf, UNSEEDED_MESSAGE } from '@/main/pipeline/state/labels'
 import { draftOf, refusedWriteIntent } from '@/main/pipeline/incidents/raise'
 import type { StateWriteContext } from '@/main/pipeline/context'
 import type { IncidentInputs, IncidentIntent } from '@/types/incidents'
-import { fetchItemsByNumber } from '@/main/github/tracker/items'
 import { applyLabels } from '@/main/github/writes/apply'
 import { appendAudit } from '@/main/github/writes/audit'
 import { resolveKeys } from '@/main/github/writes/command'
@@ -131,7 +130,7 @@ function mirrorHalf(ctx: StateWriteContext, mc: MirrorContext, ticket: Ticket, h
 
 /** Never changes the write's own outcome: a failure here is recorded on the ticket and retried by the poll. */
 async function mirrorCounterpart(ctx: StateWriteContext, mc: MirrorContext, ticket: Ticket, counterpart: TicketRef, action: string, known: ObservedItem | null): Promise<WriteOutcome[]> {
-  const observed = known ?? observedOf(await fetchItemsByNumber(ctx, { repo: splitRepo(mc.repo), numbers: [counterpart.number] }), counterpart.number)
+  const observed = known ?? observedOf(await ctx.tracker.readItemsByNumber({ repo: splitRepo(mc.repo), numbers: [counterpart.number] }), counterpart.number)
   if (observed === null) return []
   const names = mirrorNamesOf(displayOf(ticket), mc.mirror.labels, mc.vocabulary)
   const diff = mirrorDiff(names.desired, names.all, observed.labels)
@@ -167,7 +166,7 @@ async function attemptWrite(ctx: StateWriteContext, params: WriteEventParams, wr
   const other = stored === null ? undefined : halvesOf(stored).find((half) => half.number !== request.number)
   const numbers = other === undefined ? [request.number] : [request.number, other.number]
 
-  const read = await fetchItemsByNumber(ctx, { repo: splitRepo(request.repo), numbers })
+  const read = await ctx.tracker.readItemsByNumber({ repo: splitRepo(request.repo), numbers })
   if (!read.ok) return log(null, { kind: 'verify-failed', message: read.message })
   const item = read.resolved.find((candidate) => candidate.number === request.number)
   seen.head = item?.headRefOid ?? null
@@ -243,7 +242,7 @@ export async function mirrorItem(ctx: StateWriteContext, params: MirrorItemParam
 
   const outcomes: WriteOutcome[] = []
   for (const half of halvesOf(ticket)) {
-    const read = await fetchItemsByNumber(ctx, { repo: splitRepo(mc.repo), numbers: [half.number] })
+    const read = await ctx.tracker.readItemsByNumber({ repo: splitRepo(mc.repo), numbers: [half.number] })
     const observed = observedOf(read, half.number)
     if (!read.ok || observed === null) {
       const outcome: WriteOutcome = read.ok ? { kind: 'item-unavailable' } : { kind: 'verify-failed', message: read.message }

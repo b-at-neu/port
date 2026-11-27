@@ -2,7 +2,6 @@
 // a failed comment must still leave the state write standing.
 import type { WriteOutcome } from '@/types/writes'
 import { stateMoved } from '@/types/writes'
-import { fetchGatePreflight } from '@/main/github/tracker/gate'
 import { postComment } from '@/main/github/writes/apply'
 import type { StateWriteContext } from '@/main/pipeline/context'
 import { writeMove } from '@/main/pipeline/operator/apply'
@@ -17,7 +16,7 @@ import type { ApplyObservationResult, ApplyObservationParams } from '@/types/act
 /** Re-reads the body over GitHub: the snapshot may predate the hand-back's body edit. `null` means the plan is still missing and the write may proceed; any other outcome stops it, unwritten. */
 async function planStillMissing(ctx: StateWriteContext, params: ApplyObservationParams): Promise<WriteOutcome | null> {
   const { config } = params.entry
-  const fetch = await fetchGatePreflight(ctx, { repo: { owner: config.owner, name: config.name }, number: params.observation.number })
+  const fetch = await ctx.tracker.readGatePreflight({ repo: { owner: config.owner, name: config.name }, number: params.observation.number })
   if (!fetch.ok) return { kind: 'verify-failed', message: fetch.message }
   if (fetch.item === null || fetch.item.kind !== 'issue') return { kind: 'item-unavailable' }
   return planPresentIn(fetch.item.body) ? { kind: 'no-op' } : null

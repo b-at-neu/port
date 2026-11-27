@@ -94,7 +94,7 @@ export interface AttachedWorktree {
   readonly prunable: boolean
 }
 
-/** Why a number named by a worktree or an agent record never appeared in the open-only sweep — resolved through `fetchItemsByNumber`, never inferred. `recheck-unavailable` is never collapsed into `number-not-found`. */
+/** Why a number named by a worktree or an agent record never appeared in the open-only sweep — resolved through `tracker.readItemsByNumber`, never inferred. `recheck-unavailable` is never collapsed into `number-not-found`. */
 export type OrphanReason = 'item-merged' | 'item-closed' | 'item-open-unlabelled' | 'number-not-found' | 'recheck-unavailable'
 
 export interface OrphanItem {

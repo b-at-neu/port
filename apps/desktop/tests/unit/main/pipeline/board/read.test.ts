@@ -3,13 +3,17 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { pathOps } from '@/main/platform/paths'
-import type { CommandResult } from '@/types/platform'
+import type { CommandResult, GitHubTransport } from '@/types/platform'
+import type { SessionReader } from '@/types/sessions'
 import type { RepositoryEntry } from '@/utils/repos'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import { readPipelineState } from '@/main/pipeline/board/read'
+import { claudeHomeDir, hostFs } from '@/main/platform'
+import { defaultSdk } from '@/main/platform/sdk'
 import { makeTempDir } from '../../../../fixtures/fs'
-import { graphqlBodyOf, httpFail, httpOk } from '../../../../fixtures/github-http'
+import { boardCtx, graphqlBodyOf, httpFail, httpOk } from '../../../../fixtures/github-http'
 import { EMPTY_PIPELINE_BODY } from '../../../../fixtures/pipeline-reply'
+import { trackerOver } from '../../../../support/fake-tracker'
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -76,6 +80,16 @@ function fakeGit(): (args: readonly string[], cwd: string) => Promise<CommandRes
   }
 }
 
+interface ReadOptions {
+  readonly claudeHome?: string
+  readonly sessionReader?: SessionReader
+}
+
+function read(repositories: readonly RepositoryEntry[], transport: GitHubTransport, options: ReadOptions = {}) {
+  const ctx = { ...boardCtx(transport), git: fakeGit(), fs: hostFs, sdk: defaultSdk, claudeHome: options.claudeHome ?? claudeHomeDir() }
+  return readPipelineState(ctx, { repositories, sessionReader: options.sessionReader ?? (() => Promise.resolve({ ok: true, sessions: [] })) })
+}
+
 describe('readPipelineState', () => {
   it('two repositories reconcile from one session scan, each session attributed to the right one', async () => {
     const claudeHome = await makeTempDir('port-state-read-')
@@ -87,10 +101,7 @@ describe('readPipelineState', () => {
     await makeSession(claudeHome, 'project-b', SESSION_B)
 
     let readerCalls = 0
-    const result = await readPipelineState({
-      repositories: [readyEntry('repo-a', repoARoot, 'o/a'), readyEntry('repo-b', repoBRoot, 'o/b')],
-      github: () => Promise.resolve(httpOk(EMPTY_PIPELINE_BODY)),
-      git: fakeGit(),
+    const result = await read([readyEntry('repo-a', repoARoot, 'o/a'), readyEntry('repo-b', repoBRoot, 'o/b')], () => Promise.resolve(httpOk(EMPTY_PIPELINE_BODY)), {
       claudeHome,
       sessionReader: () => {
         readerCalls += 1
@@ -120,12 +131,7 @@ describe('readPipelineState', () => {
       problem: { kind: 'not-a-git-repository' },
       diagnostics: [],
     }
-    const result = await readPipelineState({
-      repositories: [notReady],
-      github: () => Promise.resolve(httpOk(EMPTY_PIPELINE_BODY)),
-      git: fakeGit(),
-      sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
-    })
+    const result = await read([notReady], () => Promise.resolve(httpOk(EMPTY_PIPELINE_BODY)))
     expect(result.repositories).toHaveLength(1)
     const state = result.repositories[0]
     expect(state?.ok).toBe(false)
@@ -136,15 +142,10 @@ describe('readPipelineState', () => {
   it('a GitHub failure on one repository leaves the other intact', async () => {
     const repoARoot = await makeTempDir('port-state-repo-a-')
     const repoBRoot = await makeTempDir('port-state-repo-b-')
-    const result = await readPipelineState({
-      repositories: [readyEntry('repo-a', repoARoot, 'owner-a/repo'), readyEntry('repo-b', repoBRoot, 'owner-b/repo')],
-      github: (request) => {
-        const isRepoA = graphqlBodyOf(request).variables.owner === 'owner-a'
-        if (isRepoA) return Promise.resolve(httpFail('unauthenticated', 401))
-        return Promise.resolve(httpOk(EMPTY_PIPELINE_BODY))
-      },
-      git: fakeGit(),
-      sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+    const result = await read([readyEntry('repo-a', repoARoot, 'owner-a/repo'), readyEntry('repo-b', repoBRoot, 'owner-b/repo')], (request) => {
+      const isRepoA = graphqlBodyOf(request).variables.owner === 'owner-a'
+      if (isRepoA) return Promise.resolve(httpFail('unauthenticated', 401))
+      return Promise.resolve(httpOk(EMPTY_PIPELINE_BODY))
     })
     const stateA = result.repositories.find((r) => r.repoId === 'repo-a')
     const stateB = result.repositories.find((r) => r.repoId === 'repo-b')
@@ -152,18 +153,13 @@ describe('readPipelineState', () => {
     expect(stateB?.ok).toBe(true)
   })
 
-  it('fetchItemsByNumber is not called when the orphan set is empty', async () => {
+  it('the by-number read is not called when the orphan set is empty', async () => {
     const repoRoot = await makeTempDir('port-state-repo-')
     let sawItemsByNumberCall = false
-    await readPipelineState({
-      repositories: [readyEntry('repo-a', repoRoot, 'o/a')],
-      github: (request) => {
-        const document = graphqlBodyOf(request).query
-        if (document.includes('issueOrPullRequest')) sawItemsByNumberCall = true
-        return Promise.resolve(httpOk(EMPTY_PIPELINE_BODY))
-      },
-      git: fakeGit(),
-      sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+    await read([readyEntry('repo-a', repoRoot, 'o/a')], (request) => {
+      const document = graphqlBodyOf(request).query
+      if (document.includes('issueOrPullRequest')) sawItemsByNumberCall = true
+      return Promise.resolve(httpOk(EMPTY_PIPELINE_BODY))
     })
     expect(sawItemsByNumberCall).toBe(false)
   })
@@ -190,7 +186,10 @@ describe.skipIf(!hasRealProjects)('readPipelineState — live', () => {
       }
 
       const entry = readyEntry(pathOps.pathKey(process.cwd()), process.cwd(), repoInfo.data.nameWithOwner)
-      const result = await readPipelineState({ repositories: [entry] })
+      const { githubHttp } = await import('@/main/platform/github-http')
+      const { defaultGitRunner } = await import('@/main/platform/git')
+      const live = { githubHttp, tracker: trackerOver(githubHttp), clock: { now: () => new Date() }, git: defaultGitRunner(), fs: hostFs, sdk: defaultSdk, claudeHome: claudeHomeDir() }
+      const result = await readPipelineState(live, { repositories: [entry] })
 
       const state = result.repositories[0]
       expect(state?.ok).toBe(true)

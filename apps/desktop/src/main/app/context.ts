@@ -18,6 +18,7 @@ import { stageBundleRoot } from '@/main/dispatch/stage/bundle'
 import { createStageLauncher } from '@/main/dispatch/stage/launcher'
 import { createInterruptedSweeper } from '@/main/dispatch/stage/sweep'
 import type { StateEngine } from '@/main/pipeline/context'
+import { createGithubTracker, type Tracker } from '@/main/github/tracker'
 import { createPlatform, type Platform } from '@/main/platform'
 import { nativeNotify } from '@/main/platform/notify'
 import { createRepos, type Repos } from '@/main/repos'
@@ -47,6 +48,7 @@ export type AppContext = Platform & {
   /** The one broadcast to every renderer window. */
   readonly emit: <E extends EventName>(event: E, payload: EventMap[E]) => void
   readonly repos: Repos
+  readonly tracker: Tracker
   readonly stores: {
     readonly runStates: RunStateStore
     readonly sessionIndex: SessionIndex
@@ -102,6 +104,7 @@ export function createAppContext(restart: RestartSeams): AppContext {
     },
   })
   const repos = createRepos(platform)
+  const tracker = createGithubTracker(platform)
 
   const recents = createRecentsStore(platform, { dir: userData })
 
@@ -125,6 +128,7 @@ export function createAppContext(restart: RestartSeams): AppContext {
     ...platform,
     emit,
     repos,
+    tracker,
     stores,
     get live() {
       if (live === null) throw new Error('ctx.live read during construction')

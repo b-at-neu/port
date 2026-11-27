@@ -1,15 +1,9 @@
 import type { SourceCache, RepoSessionSlice } from '@/types/state'
 
 // `watcher.ts` calls the same two primitives (`refreshGithub` and friends, `projectFromCache`) on its own cadence rather than a second copy of this composition.
-import type { GitHubTransport } from '@/types/platform'
-import { claudeHomeDir, hostFs } from '@/main/platform'
-import { defaultGitRunner } from '@/main/platform/git'
-import { readBoardIssues } from '@/main/github/tracker/board'
-import { githubHttp } from '@/main/platform/github-http'
-import type { BoardIssuesParams } from '@/main/github/tracker'
-import { defaultSdk } from '@/main/platform/sdk'
+import type { BoardReadContext } from '@/main/pipeline/context'
+import type { Platform } from '@/main/platform'
 import type { SessionReader } from '@/types/sessions'
-import type { GitRunner } from '@/types/platform'
 import type { RepositoryEntry } from '@/utils/repos'
 import { verifiableVocabularyOf } from '@/utils/labels/display'
 import type { PipelineView } from '@/types/pipeline-state'
@@ -21,12 +15,7 @@ import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refr
 
 interface ReadPipelineStateParams {
   readonly repositories: readonly RepositoryEntry[]
-  readonly github?: GitHubTransport
-  readonly git?: GitRunner
   readonly sessionReader?: SessionReader
-  /** Forwarded verbatim to `readSessionState`, so `read.test.ts` can attribute a fake session without touching the real machine's transcripts. */
-  readonly claudeHome?: string
-  readonly now?: () => Date
 }
 
 export function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { status: 'ready' }> {
@@ -67,16 +56,10 @@ export function projectFromCache(cache: SourceCache, repositories: readonly Repo
 }
 
 /** A non-`ready` entry becomes its `reason: 'not-ready'` state without any read at all. */
-export async function readPipelineState(params: ReadPipelineStateParams): Promise<PipelineState> {
-  const now = params.now ?? (() => new Date())
+export async function readPipelineState(ctx: BoardReadContext & Pick<Platform, 'git' | 'fs' | 'sdk' | 'claudeHome' | 'clock'>, params: ReadPipelineStateParams): Promise<PipelineState> {
+  const now = ctx.clock.now
   const cache = createSourceCache()
   const readyEntries = params.repositories.filter(isReady)
-  const git = params.git ?? defaultGitRunner()
-  const clock = { now }
-  const transport = params.github ?? githubHttp
-  const readCtx = { githubHttp: transport, clock }
-  const tracker = { readBoardIssues: (boardParams: BoardIssuesParams) => readBoardIssues(readCtx, boardParams) }
-  const ctx = { githubHttp: transport, git, fs: hostFs, sdk: defaultSdk, claudeHome: params.claudeHome ?? claudeHomeDir(), clock, tracker }
 
   await refreshSessions(ctx, cache, { repos: readyEntries.map((entry) => ({ id: entry.id, root: entry.path })), reader: params.sessionReader })
 
