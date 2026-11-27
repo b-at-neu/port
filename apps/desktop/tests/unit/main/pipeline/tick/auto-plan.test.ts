@@ -5,13 +5,11 @@ import type { TickReport } from '@/types/tick'
 import type { RepoId } from '@/utils/repos'
 import { autoApprovalsOf, autoPlanApprovingOf, autoPlanStatusOf, autoPlanSwapCandidatesOf } from '@/main/pipeline/tick/auto-plan'
 import { reconciledItem } from '../../../../support/board-snapshot'
+import { ticketAt } from '../../../../support/tickets'
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
   return reconciledItem({
-    stage: 'trigger',
-    stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }],
-    autoPlan: true,
-    matchedKeys: ['planReview'],
+    ticket: ticketAt('plan', { kind: 'waiting-on-you', gate: 'plan-approval', detail: '' }, { autoPlan: true }),
     ...overrides,
   })
 }
@@ -22,7 +20,8 @@ describe('autoApprovalsOf', () => {
   })
 
   it('leaves an issue without autoPlan untouched', () => {
-    expect(autoApprovalsOf([item({ autoPlan: false })], 'op')).toEqual([])
+    const plain = ticketAt('plan', { kind: 'waiting-on-you', gate: 'plan-approval', detail: '' })
+    expect(autoApprovalsOf([item({ ticket: plain })], 'op')).toEqual([])
   })
 
   it('leaves a pull request untouched, even with autoPlan set', () => {
@@ -49,7 +48,7 @@ describe('autoApprovalsOf', () => {
 const REPO = 'repo-a' as RepoId
 
 function report(overrides: Partial<TickReport> = {}): TickReport {
-  return { repoId: REPO, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [], autoApprovals: [{ number: 7 }, { number: 8 }], labelRepairs: [], ...overrides }
+  return { repoId: REPO, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], nextTickAt: null, observations: [], autoApprovals: [{ number: 7 }, { number: 8 }], labelRepairs: [], ...overrides }
 }
 
 function dispatchRow(overrides: Partial<RepoDispatchStatus> = {}): RepoDispatchStatus {

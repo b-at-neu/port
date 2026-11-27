@@ -223,7 +223,7 @@ export async function dispatchContext(options: DispatchContextOptions = {}): Pro
     ;(live as { stageLauncher: unknown }).stageLauncher = {
       launch: async (request: StageLaunchRequest) => {
         const result = await launch(request)
-        if (result.ok) await ctx.stores.runs.start(repoId, runOf({ id: `run-of-${result.sessionKey}`, stage: request.stage, item: { kind: request.kind, number: request.number }, agent: request.agent, trigger: request.trigger, model: request.model, title: request.title, sessionKey: result.sessionKey, startedAt: ctx.clock.now().toISOString() }))
+        if (result.ok) await ctx.stores.runs.start(repoId, runOf({ id: `run-of-${result.sessionKey}`, stage: request.stage, item: { kind: request.kind, number: request.number }, agent: request.agent, model: request.model, title: request.title, sessionKey: result.sessionKey, startedAt: ctx.clock.now().toISOString() }))
         return result
       },
     }

@@ -1,4 +1,4 @@
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import { resolveDisplayVocabulary } from '@/utils/labels/display'
 import type { RepositoryEntry } from '@/utils/repos'
 import type { CommandResult, ConditionalTransport, GitHubTransport } from '@/types/platform'
 import type { BoardSnapshot } from '@/types/board'
@@ -124,7 +124,7 @@ export function readyEntry(id: string, path: string, repo: string): Extract<Repo
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
       modules: { approvalGate: true, release: true, scope: true },
       reviewCycleCap: 5,
-      vocabulary: resolveVocabulary({}),
+      displayVocabulary: resolveDisplayVocabulary({}),
     },
     diagnostics: [],
   }

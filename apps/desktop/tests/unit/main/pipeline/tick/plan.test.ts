@@ -24,7 +24,6 @@ describe('planTick — blind first', () => {
     expect(report.actionable).toEqual([])
     expect(report.held).toEqual([])
     expect(report.claims).toEqual([])
-    expect(report.disabledStages).toEqual([])
     expect(report.nextTickAt).toBeNull()
   })
 
@@ -69,56 +68,56 @@ describe('planTick — trigger-stage items: actionable vs held', () => {
   it('an unassigned trigger item is held, unowned — never actionable', () => {
     const repo = readyRepo([item({ assignees: [] })])
     const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
-    expect(report.held).toEqual([{ number: 1, kind: 'issue', stage: 'plan', trigger: 'ready', reason: 'unowned', contention: null, escalation: null }])
+    expect(report.held).toEqual([{ number: 1, kind: 'issue', stage: 'plan', reason: 'unowned', contention: null, escalation: null }])
     expect(report.actionable).toEqual([])
   })
 
   it('a trigger item assigned to another operator is held, other-operator', () => {
     const repo = readyRepo([item({ assignees: ['someone-else'] })])
     const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
-    expect(report.held).toEqual([{ number: 1, kind: 'issue', stage: 'plan', trigger: 'ready', reason: 'other-operator', contention: null, escalation: null }])
+    expect(report.held).toEqual([{ number: 1, kind: 'issue', stage: 'plan', reason: 'other-operator', contention: null, escalation: null }])
   })
 
   it('a session-required trigger item owned by the viewer is held, session-required', () => {
     const repo = readyRepo([item({ sessionRequired: true })])
     const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
-    expect(report.held).toEqual([{ number: 1, kind: 'issue', stage: 'plan', trigger: 'ready', reason: 'session-required', contention: null, escalation: null }])
+    expect(report.held).toEqual([{ number: 1, kind: 'issue', stage: 'plan', reason: 'session-required', contention: null, escalation: null }])
   })
 
   it('holdSessionRequired: false dispatches a marked ticket and leaves every other gate intact', () => {
     const repo = readyRepo([item({ sessionRequired: true })])
     const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: false })
     expect(report.held).toEqual([])
-    expect(report.actionable).toEqual([{ number: 1, kind: 'issue', stage: 'plan', trigger: 'ready', agent: 'plan', unchecked: false, cycle: null }])
+    expect(report.actionable).toEqual([{ number: 1, kind: 'issue', stage: 'plan', mode: 'fresh', agent: 'plan', unchecked: false, cycle: null }])
   })
 
   it('holdSessionRequired: false still holds an other-operator item — the session-required rung is the only one it skips', () => {
     const repo = readyRepo([item({ sessionRequired: true, assignees: ['someone-else'] })])
     const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: false })
-    expect(report.held).toEqual([{ number: 1, kind: 'issue', stage: 'plan', trigger: 'ready', reason: 'other-operator', contention: null, escalation: null }])
+    expect(report.held).toEqual([{ number: 1, kind: 'issue', stage: 'plan', reason: 'other-operator', contention: null, escalation: null }])
   })
 
   it('an ordinary owned trigger item is actionable with its routed agent', () => {
     const repo = readyRepo([item()])
     const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
-    expect(report.actionable).toEqual([{ number: 1, kind: 'issue', stage: 'plan', trigger: 'ready', agent: 'plan', unchecked: false, cycle: null }])
+    expect(report.actionable).toEqual([{ number: 1, kind: 'issue', stage: 'plan', mode: 'fresh', agent: 'plan', unchecked: false, cycle: null }])
     expect(report.held).toEqual([])
   })
 
-  it('planApproved routes to impl, needsRevision to revise', () => {
+  it('a queued implement routes to impl, a queued revise to revise', () => {
     const repo = readyRepo([
-      item({ number: 2, stages: [{ key: 'planApproved', name: 'plan approved', role: 'trigger' }], claimedFiles: ['a.ts'] }),
-      item({ number: 3, kind: 'pull-request', stages: [{ key: 'needsRevision', name: 'needs revision', role: 'trigger' }] }),
+      item({ number: 2, ticket: ticketAt('implement', queuedAt(), { ticket: 2 }), claimedFiles: ['a.ts'] }),
+      item({ number: 3, kind: 'pull-request', ticket: ticketAt('revise', queuedAt('changes-requested'), { ticket: 3, pr: { number: 3, approvedAt: null } }) }),
     ])
     const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([
-      { number: 3, kind: 'pull-request', stage: 'revise', trigger: 'needsRevision', agent: 'revise', unchecked: false, cycle: null },
-      { number: 2, kind: 'issue', stage: 'implement', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null },
+      { number: 3, kind: 'pull-request', stage: 'revise', mode: 'revise', agent: 'revise', unchecked: false, cycle: null },
+      { number: 2, kind: 'issue', stage: 'implement', mode: 'implement', agent: 'impl', unchecked: false, cycle: null },
     ])
   })
 
-  it('an item with no trigger/in-flight stage at all is neither actionable nor held', () => {
-    const repo = readyRepo([item({ stage: null, stages: [] })])
+  it('an untracked item is neither actionable nor held', () => {
+    const repo = readyRepo([item({ ticket: null })])
     const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([])
     expect(report.held).toEqual([])
@@ -130,8 +129,7 @@ describe('planTick — file-contention gate (#106)', () => {
   function inProgressItem(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     return item({
       number: 67,
-      stage: 'in-flight',
-      stages: [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }],
+      ticket: ticketAt('implement', { kind: 'running', runId: 'run-1' }, { ticket: 67 }),
       status: 'in-flight',
       statusEvidence: 'agent-active',
       claimedFiles: ['src/lib/auth.ts', 'src/lib/session.ts'],
@@ -139,20 +137,21 @@ describe('planTick — file-contention gate (#106)', () => {
     })
   }
   function candidateItem(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
-    return item({ number: 52, stages: [{ key: 'planApproved', name: 'plan approved', role: 'trigger' }], claimedFiles: ['src/lib/session.ts'], ...overrides })
+    const number = overrides.number ?? 52
+    return item({ number, ticket: ticketAt('implement', queuedAt(), { ticket: number }), claimedFiles: ['src/lib/session.ts'], ...overrides })
   }
 
   it('a plan with no files fence dispatches unchecked, never held', () => {
     const repo = readyRepo([inProgressItem(), candidateItem({ claimedFiles: null })])
     const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
-    expect(report.actionable).toEqual([{ number: 52, kind: 'issue', stage: 'implement', trigger: 'planApproved', agent: 'impl', unchecked: true, cycle: null }])
+    expect(report.actionable).toEqual([{ number: 52, kind: 'issue', stage: 'implement', mode: 'implement', agent: 'impl', unchecked: true, cycle: null }])
     expect(report.held).toEqual([])
   })
 
   it('below the overlap threshold dispatches freely', () => {
     const repo = readyRepo([inProgressItem(), candidateItem()])
     const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
-    expect(report.actionable).toEqual([{ number: 52, kind: 'issue', stage: 'implement', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null }])
+    expect(report.actionable).toEqual([{ number: 52, kind: 'issue', stage: 'implement', mode: 'implement', agent: 'impl', unchecked: false, cycle: null }])
     expect(report.held).toEqual([])
   })
 
@@ -165,7 +164,6 @@ describe('planTick — file-contention gate (#106)', () => {
         number: 52,
         kind: 'issue',
         stage: 'implement',
-        trigger: 'planApproved',
         reason: 'contended',
         contention: { blocker: 67, blockerStage: 'Implementing', depth: 2, paths: ['src/lib/auth.ts', 'src/lib/session.ts'] },
         escalation: null,
@@ -178,7 +176,7 @@ describe('planTick — file-contention gate (#106)', () => {
       concurrency: { sharedFiles: ['src/lib/registry.ts'], overlapThreshold: 1 },
     })
     const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
-    expect(report.actionable).toEqual([{ number: 52, kind: 'issue', stage: 'implement', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null }])
+    expect(report.actionable).toEqual([{ number: 52, kind: 'issue', stage: 'implement', mode: 'implement', agent: 'impl', unchecked: false, cycle: null }])
     expect(report.held).toEqual([])
   })
 
@@ -195,7 +193,6 @@ describe('planTick — file-contention gate (#106)', () => {
         number: 52,
         kind: 'issue',
         stage: 'implement',
-        trigger: 'planApproved',
         reason: 'contended',
         contention: { blocker: 67, blockerStage: 'Waiting for review', depth: 2, paths: ['src/lib/auth.ts', 'src/lib/session.ts'] },
         escalation: null,
@@ -217,8 +214,7 @@ describe('planTick — forceDispatch override (#465)', () => {
   function inProgressItem(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     return item({
       number: 67,
-      stage: 'in-flight',
-      stages: [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }],
+      ticket: ticketAt('implement', { kind: 'running', runId: 'run-1' }, { ticket: 67 }),
       status: 'in-flight',
       statusEvidence: 'agent-active',
       claimedFiles: ['src/lib/auth.ts', 'src/lib/session.ts'],
@@ -226,7 +222,8 @@ describe('planTick — forceDispatch override (#465)', () => {
     })
   }
   function candidateItem(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
-    return item({ number: 52, stages: [{ key: 'planApproved', name: 'plan approved', role: 'trigger' }], claimedFiles: ['src/lib/auth.ts', 'src/lib/session.ts'], ...overrides })
+    const number = overrides.number ?? 52
+    return item({ number, ticket: ticketAt('implement', queuedAt(), { ticket: number }), claimedFiles: ['src/lib/auth.ts', 'src/lib/session.ts'], ...overrides })
   }
 
   it('a contended item held without the memo becomes actionable once forced', () => {
@@ -237,7 +234,7 @@ describe('planTick — forceDispatch override (#465)', () => {
     const forceDispatch = createForceDispatch()
     forceDispatch.set(REPO, 52)
     const forced = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true, forceDispatch })
-    expect(forced.actionable).toEqual([{ number: 52, kind: 'issue', stage: 'implement', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null }])
+    expect(forced.actionable).toEqual([{ number: 52, kind: 'issue', stage: 'implement', mode: 'implement', agent: 'impl', unchecked: false, cycle: null }])
     expect(forced.held).toEqual([])
   })
 
@@ -255,7 +252,7 @@ describe('planTick — forceDispatch override (#465)', () => {
     const forceDispatch = createForceDispatch()
     forceDispatch.set(REPO, 1)
     const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true, forceDispatch })
-    expect(report.held).toEqual([{ number: 1, kind: 'issue', stage: 'plan', trigger: 'ready', reason: 'unowned', contention: null, escalation: null }])
+    expect(report.held).toEqual([{ number: 1, kind: 'issue', stage: 'plan', reason: 'unowned', contention: null, escalation: null }])
   })
 
   it('prunes a stale entry once the number is no longer a structured candidate', () => {
@@ -269,7 +266,7 @@ describe('planTick — forceDispatch override (#465)', () => {
 
 describe('planTick — in-flight items: claims', () => {
   function inFlightItem(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
-    return item({ stage: 'in-flight', stages: [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }], status: 'stalled', statusEvidence: 'no-claimant', ...overrides })
+    return item({ ticket: ticketAt('implement', { kind: 'running', runId: 'run-1' }, { ticket: 1 }), status: 'stalled', statusEvidence: 'no-claimant', ...overrides })
   }
 
   it('a session-required in-flight item is never reported as a stall', () => {
@@ -335,17 +332,9 @@ describe('planTick — in-flight items: claims', () => {
   })
 })
 
-describe('planTick — disabledStages', () => {
-  it('carries RepositoryState.disabled through unchanged', () => {
-    const repo = readyRepo([], { disabled: ['refreshBranch'] })
-    const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
-    expect(report.disabledStages).toEqual(['refreshBranch'])
-  })
-})
-
-describe('planTick — autoApprovals (#313)', () => {
-  it('reports an autoPlan issue at planReview alone, assigned to the viewer', () => {
-    const autoPlanItem = item({ number: 7, autoPlan: true, stage: 'gate', stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }] })
+describe('planTick — autoApprovals', () => {
+  it('reports an autoPlan issue waiting on plan approval, assigned to the viewer', () => {
+    const autoPlanItem = item({ number: 7, ticket: ticketAt('plan', { kind: 'waiting-on-you', gate: 'plan-approval', detail: '' }, { ticket: 7, autoPlan: true }) })
     const repo = readyRepo([autoPlanItem])
     const report = planTick({ repository: repo, unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.autoApprovals).toEqual([{ number: 7 }])
@@ -354,7 +343,7 @@ describe('planTick — autoApprovals (#313)', () => {
 
 describe('planTick — endedStages / labelRepairs (#330)', () => {
   it('an error outcome yields no liveness-reset of its own — the app rolled the label back itself', () => {
-    const repo = readyRepo([item({ stage: 'in-flight', stages: [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }], status: 'stalled', statusEvidence: 'no-claimant' })])
+    const repo = readyRepo([item({ ticket: ticketAt('implement', { kind: 'running', runId: 'run-1' }, { ticket: 1 }), status: 'stalled', statusEvidence: 'no-claimant' })])
     const report = planTick({
       repository: repo,
       unknownStreaks: createUnknownStreaks(),

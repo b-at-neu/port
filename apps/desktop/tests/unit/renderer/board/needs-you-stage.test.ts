@@ -113,7 +113,6 @@ describe('interrupted entries', () => {
       agent: 'plan',
       number: 301,
       kind: 'issue',
-      trigger: 'ready',
       stage: 'plan',
       model: 'opus',
       claudeSessionId: null,

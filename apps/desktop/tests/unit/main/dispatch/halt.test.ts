@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import { resolveDisplayVocabulary } from '@/utils/labels/display'
 import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
 import type { ReconciledItem, RepositoryState } from '@/types/state'
@@ -12,7 +12,7 @@ import { ticketAt } from '../../../support/tickets'
 const apply = vi.hoisted(() => vi.fn<(params: unknown) => Promise<ItemActionResult>>())
 vi.mock('@/main/pipeline/operator/apply', () => ({ applyItemAction: (_ctx: unknown, params: unknown) => apply(params) }))
 
-const VOCABULARY = resolveVocabulary({})
+const VOCABULARY = resolveDisplayVocabulary({})
 const REPO_ID = 'repo-a' as RepoId
 const APPLIED: ItemActionResult = { ok: true, outcome: { kind: 'applied', argv: [] } }
 
@@ -35,7 +35,7 @@ function entry(): ReadyEntry {
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
       modules: { approvalGate: true, release: true, scope: true },
       reviewCycleCap: 5,
-      vocabulary: VOCABULARY,
+      displayVocabulary: VOCABULARY,
     },
     diagnostics: [],
   }
@@ -51,11 +51,6 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     url: 'https://github.com/o/a/issues/148',
     assignees: ['op'],
     ticket: ticketAt('review', { kind: 'running', runId: 'run-1' }),
-    stage: 'in-flight',
-    stages: [{ key: 'reviewing', name: 'reviewing', role: 'in-flight' }],
-    stageAmbiguous: false,
-    marked: true,
-    autoPlan: false,
     status: 'in-flight',
     statusEvidence: null,
     waitingOn: null,
@@ -69,8 +64,6 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     state: 'OPEN',
     mergedAt: null,
     updatedAt: null,
-    stageHistory: [],
-    matchedKeys: ['reviewing'],
     sources: ['github'],
     claimedFiles: null,
     headRefOid: null,
@@ -113,7 +106,6 @@ function repoState(items: readonly ReconciledItem[], overrides: Partial<Extract<
     viewer: 'op',
     integrationChecks: {},
     approvalGate: true,
-    disabled: [],
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
     reviewCycleCap: 5,
     ...overrides,

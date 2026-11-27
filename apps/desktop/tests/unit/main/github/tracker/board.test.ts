@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { DisplayVocabulary } from '@/utils/labels/display'
 import type { PipelineItem } from '@/types/github'
 import type { TrackedRef } from '@/types/pipeline-state'
 import { readBoardIssues } from '@/main/github/tracker/board'
@@ -7,7 +7,7 @@ import { RATE_LIMIT_REPLY, connection } from '../../../../fixtures/pipeline-repl
 import { REPO, VOCABULARY, emptyDetails, issueSweepBody, node, ok, scriptedBoard } from '../../../../fixtures/board-script'
 import { githubCtx, httpFail } from '../../../../fixtures/github-http'
 
-function issuesOf(script: Parameters<typeof scriptedBoard>[0], tracked: readonly TrackedRef[] | null = null, vocabulary: LabelVocabulary = VOCABULARY) {
+function issuesOf(script: Parameters<typeof scriptedBoard>[0], tracked: readonly TrackedRef[] | null = null, vocabulary: DisplayVocabulary = VOCABULARY) {
   const board = scriptedBoard(script)
   return { board, read: readBoardIssues(githubCtx(board.transport), { repo: REPO, vocabulary, tracked }) }
 }
@@ -17,15 +17,15 @@ const lineOf = (document: string, alias: string) => document.split('\n').find((l
 
 describe('readBoardIssues — sweep', () => {
   it('an item with two vocabulary labels and a non-vocabulary label is one item with two keys', async () => {
-    const labels = ['ready', 'bug', 'in progress']
+    const labels = ['planning', 'bug', 'needs you']
     const result = await issuesOf({ issues: () => ok(issueSweepBody({ issues: connection([node(1, labels)]) })) }).read
     expect(result.ok && result.swept).toHaveLength(1)
-    expect(result.ok && result.swept[0]?.matchedKeys).toEqual(['ready', 'inProgress'])
+    expect(result.ok && result.swept[0]?.matchedKeys).toEqual(['needsYou', 'planning'])
     expect(result.ok && result.swept[0]?.labels).toEqual(labels)
   })
 
   it('asks for no connection when no label is enabled, still reading the label list and the viewer', async () => {
-    const { board, read } = issuesOf({ issues: () => ok(issueSweepBody({ viewer: { login: 'op' } })) }, null, { labels: [], disabled: [], problems: [] })
+    const { board, read } = issuesOf({ issues: () => ok(issueSweepBody({ viewer: { login: 'op' } })) }, null, { labels: [], problems: [] })
     const result = await read
     expect(result.ok && [result.swept, result.viewer]).toEqual([[], 'op'])
     expect(board.documents).toHaveLength(1)
@@ -34,7 +34,7 @@ describe('readBoardIssues — sweep', () => {
 
   it('pages with the cursor, and only page one carries the label list and viewer', async () => {
     const { board, read } = issuesOf({
-      issues: (_document, page) => (page === 0 ? ok(issueSweepBody({ issues: connection([node(1, ['ready'])], { hasNextPage: true, endCursor: 'cursor-1' }, 2) })) : ok(issueSweepBody({ issues: connection([node(2, ['ready'])]) }))),
+      issues: (_document, page) => (page === 0 ? ok(issueSweepBody({ issues: connection([node(1, ['planning'])], { hasNextPage: true, endCursor: 'cursor-1' }, 2) })) : ok(issueSweepBody({ issues: connection([node(2, ['planning'])]) }))),
     })
     const result = await read
     expect(result.ok && result.swept.map((item) => item.number)).toEqual([1, 2])
@@ -46,7 +46,7 @@ describe('readBoardIssues — sweep', () => {
 
   it('stops at the page cap and reports the surface that still had pages', async () => {
     let next = 0
-    const { read } = issuesOf({ issues: () => ok(issueSweepBody({ issues: connection([node(++next, ['ready'])], { hasNextPage: true, endCursor: `cursor-${next}` }, 5000) })) })
+    const { read } = issuesOf({ issues: () => ok(issueSweepBody({ issues: connection([node(++next, ['planning'])], { hasNextPage: true, endCursor: `cursor-${next}` }, 5000) })) })
     const result = await read
     expect(result.ok && result.truncated).toEqual([{ alias: 'issues', surface: 'issue', totalCount: 5000, received: 10 }])
     expect(result.ok && result.swept).toHaveLength(10)
@@ -61,7 +61,7 @@ describe('readBoardIssues — sweep', () => {
   })
 
   it('a failed later page fails the half, never a short list', async () => {
-    const result = await issuesOf({ issues: (_document, page) => (page === 0 ? ok(issueSweepBody({ issues: connection([node(1, ['ready'])], { hasNextPage: true, endCursor: 'c' }, 2) })) : httpFail('network', 502)) }).read
+    const result = await issuesOf({ issues: (_document, page) => (page === 0 ? ok(issueSweepBody({ issues: connection([node(1, ['planning'])], { hasNextPage: true, endCursor: 'c' }, 2) })) : httpFail('network', 502)) }).read
     expect(result.ok).toBe(false)
     expect('swept' in result).toBe(false)
   })
@@ -87,11 +87,11 @@ describe('readBoardIssues — label list and viewer', () => {
 describe('readBoardIssues — details', () => {
   const issue = (number: number, label: string) => node(number, [label])
 
-  it('selects comments only on a blocked issue, and closing pull requests only on the four stages, mapping both', async () => {
+  it('selects comments only on a needs-you issue, and closing pull requests only on the later stages, mapping both', async () => {
     const comment = { body: 'why', createdAt: '2026-01-01T00:00:00Z', url: 'https://x/c' }
     const closing = (nodes: readonly unknown[]) => ({ ...empty, closedByPullRequestsReferences: { nodes } })
     const { board, read } = issuesOf({
-      issues: () => ok(issueSweepBody({ issues: connection([issue(1, 'pr opened'), issue(2, 'plan approved'), issue(3, 'in progress'), issue(5, 'blocked'), issue(4, 'ready')]) })),
+      issues: () => ok(issueSweepBody({ issues: connection([issue(1, 'implementing'), issue(2, 'reviewing'), issue(3, 'revising'), issue(5, 'needs you'), issue(4, 'planning')]) })),
       issueDetails: () =>
         ok({ data: { repository: { d0: closing([{ number: 9, state: 'MERGED' }]), d1: closing([]), d2: closing([]), d3: { ...closing([]), comments: { nodes: [comment] } }, d4: empty }, rateLimit: RATE_LIMIT_REPLY } }),
     })
@@ -105,16 +105,16 @@ describe('readBoardIssues — details', () => {
   })
 
   it('chunks the detail read at 100 aliases per round trip', async () => {
-    const { board, read } = issuesOf({ issues: () => ok(issueSweepBody({ issues: connection(Array.from({ length: 101 }, (_, i) => issue(i + 1, 'ready'))) })) })
+    const { board, read } = issuesOf({ issues: () => ok(issueSweepBody({ issues: connection(Array.from({ length: 101 }, (_, i) => issue(i + 1, 'planning'))) })) })
     const result = await read
     expect(result.ok && result.swept).toHaveLength(101)
     expect(board.documents.filter((document) => document.includes('d0:'))).toHaveLength(2)
   })
 
   it.each([
-    ['blockedBy', 'ready', (item: PipelineItem | undefined) => item?.blockers?.ok, false],
-    ['comments', 'blocked', (item: PipelineItem | undefined) => item?.blockerComments, null],
-    ['closedByPullRequestsReferences', 'pr opened', (item: PipelineItem | undefined) => item?.closingPullRequests, null],
+    ['blockedBy', 'planning', (item: PipelineItem | undefined) => item?.blockers?.ok, false],
+    ['comments', 'needs you', (item: PipelineItem | undefined) => item?.blockerComments, null],
+    ['closedByPullRequestsReferences', 'implementing',(item: PipelineItem | undefined) => item?.closingPullRequests, null],
   ])('an own %s error is read as unreadable, and the half still succeeds', async (field, label, read, expected) => {
     const result = await issuesOf({
       issues: () => ok(issueSweepBody({ issues: connection([node(1, [label])]) })),
@@ -128,13 +128,13 @@ describe('readBoardIssues — details', () => {
     ['an error on any other field', () => ok({ data: { repository: { d0: { timelineItems: null } }, rateLimit: RATE_LIMIT_REPLY }, errors: [{ type: 'SOME_ERROR', path: ['repository', 'd0', 'timelineItems'], message: 'boom' }] }), 'no-data'],
     ['a null node with no error', () => ok({ data: { repository: { d0: null }, rateLimit: RATE_LIMIT_REPLY } }), 'no-data'],
   ])('%s fails the half', async (_label, reply, kind) => {
-    const result = await issuesOf({ issues: () => ok(issueSweepBody({ issues: connection([node(1, ['ready'])]) })), issueDetails: reply }).read
+    const result = await issuesOf({ issues: () => ok(issueSweepBody({ issues: connection([node(1, ['planning'])]) })), issueDetails: reply }).read
     expect(!result.ok && result.kind).toBe(kind)
   })
 
   it('sums the cost of every round trip and keeps the last reply\'s budget', async () => {
     const result = await issuesOf({
-      issues: () => ok(issueSweepBody({ issues: connection([node(1, ['ready'])]), rateLimit: { cost: 2, remaining: 4990, resetAt: 'a', limit: 5000 } })),
+      issues: () => ok(issueSweepBody({ issues: connection([node(1, ['planning'])]), rateLimit: { cost: 2, remaining: 4990, resetAt: 'a', limit: 5000 } })),
       issueDetails: (document) => emptyDetails(document, { cost: 3, remaining: 4987, resetAt: 'b', limit: 5000 }),
     }).read
     expect(result.ok && result.rateLimit).toEqual({ cost: 5, remaining: 4987, resetAt: 'b', limit: 5000 })
@@ -142,25 +142,25 @@ describe('readBoardIssues — details', () => {
 })
 
 describe('readBoardIssues — tracked', () => {
-  const PLAN: TrackedRef = { kind: 'issue', number: 3, keys: ['marker', 'planReview'] }
+  const PLAN: TrackedRef = { kind: 'issue', number: 3 }
   const missing = { trackedIssues: (): ReturnType<typeof ok> => ok({ data: { repository: { t0: node(3, []) }, rateLimit: RATE_LIMIT_REPLY } }) }
 
-  it('drops a swept issue the store does not track, and keeps the store\'s keys on one whose labels disagree', async () => {
-    const { board, read } = issuesOf({ issues: () => ok(issueSweepBody({ issues: connection([node(1, ['ready']), node(3, ['ready'])]) })) }, [PLAN])
+  it('drops a swept issue the store does not track and keeps the tracked one', async () => {
+    const { board, read } = issuesOf({ issues: () => ok(issueSweepBody({ issues: connection([node(1, ['planning']), node(3, ['planning'])]) })) }, [PLAN])
     const result = await read
-    expect(result.ok && result.swept.map((item) => [item.number, item.matchedKeys])).toEqual([[3, ['marker', 'planReview']]])
+    expect(result.ok && result.swept.map((item) => [item.number, item.matchedKeys])).toEqual([[3, ['planning']]])
     expect(board.documents.some((document) => document.includes('t0:'))).toBe(false)
   })
 
-  it('reads a tracked issue whose labels were all removed by number, keeping its stored keys', async () => {
+  it('reads a tracked issue whose labels were all removed by number', async () => {
     const { board, read } = issuesOf(missing, [PLAN])
     const result = await read
-    expect(result.ok && result.read[0]).toMatchObject({ number: 3, kind: 'issue', matchedKeys: ['marker', 'planReview'] })
+    expect(result.ok && result.read[0]).toMatchObject({ number: 3, kind: 'issue', matchedKeys: [] })
     expect(board.documents.find((document) => document.includes('t0:'))).toContain('t0: issue(number: 3)')
   })
 
   it('reports a non-open tracked issue as closed rather than as an item', async () => {
-    const result = await issuesOf({ trackedIssues: () => ok({ data: { repository: { t0: node(3, ['plan review'], { state: 'CLOSED' }) }, rateLimit: RATE_LIMIT_REPLY } }) }, [PLAN]).read
+    const result = await issuesOf({ trackedIssues: () => ok({ data: { repository: { t0: node(3, ['planning'], { state: 'CLOSED' }) }, rateLimit: RATE_LIMIT_REPLY } }) }, [PLAN]).read
     expect(result.ok && [result.read, result.closed]).toEqual([[], [3]])
   })
 

@@ -1,12 +1,13 @@
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import { resolveDisplayVocabulary } from '@/utils/labels/display'
 import type { PipelineFetch, PipelineItem } from '@/types/github'
 import type { RepositoryEntry } from '@/utils/repos'
 import type { WorktreeEntry, WorktreesRead } from '@/types/local'
 import type { AgentRecord, SessionRecord } from '@/types/sessions'
 import { reconcileRepository } from '@/main/pipeline/board/reconcile'
 import type { RepoSessionSlice } from '@/types/state'
+import type { PipelineView } from '@/types/pipeline-state'
 
-const VOCABULARY = resolveVocabulary({})
+const VOCABULARY = resolveDisplayVocabulary({})
 
 export function entry(): Extract<RepositoryEntry, { status: 'ready' }> {
   return {
@@ -23,7 +24,7 @@ export function entry(): Extract<RepositoryEntry, { status: 'ready' }> {
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
       modules: { approvalGate: true, release: true, scope: true },
       reviewCycleCap: 5,
-      vocabulary: VOCABULARY,
+      displayVocabulary: VOCABULARY,
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
     sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
       checkDispositions: {},
@@ -45,8 +46,8 @@ export function item(overrides: Partial<PipelineItem> = {}): PipelineItem {
     mergedAt: null,
     updatedAt: null,
     assignees: ['op'],
-    labels: ['ready'],
-    matchedKeys: ['ready'],
+    labels: ['port'],
+    matchedKeys: ['port'],
     labelEvents: [],
     headRefOid: null,
     mergeable: null,
@@ -67,7 +68,6 @@ export function fetchOf(items: readonly PipelineItem[]): PipelineFetch {
     closed: [],
     merged: [],
     queried: [],
-    disabled: [],
     vocabulary: { verdict: 'verified', present: [], missing: [], problems: [], repoLabels: { ok: true, names: [] } },
     unavailable: [],
     truncated: [],
@@ -151,7 +151,7 @@ export function session(overrides: Partial<SessionRecord> = {}): SessionRecord {
   }
 }
 
-export function reconcile(items: readonly PipelineItem[], overrides: Partial<{ repoSessions: RepoSessionSlice; worktrees: WorktreesRead }> = {}) {
+export function reconcile(items: readonly PipelineItem[], overrides: Partial<{ repoSessions: RepoSessionSlice; worktrees: WorktreesRead; view: PipelineView }> = {}) {
   return reconcileRepository({
     entry: entry(),
     pipelineFetch: fetchOf(items),
@@ -159,5 +159,6 @@ export function reconcile(items: readonly PipelineItem[], overrides: Partial<{ r
     repoSessions: sessionsOf(overrides.repoSessions),
     worktrees: overrides.worktrees ?? worktreesOf(),
     denials: denialsOf(),
+    view: overrides.view,
   })
 }

@@ -51,7 +51,7 @@ describe('liveCount / freeSlots', () => {
   })
 })
 
-const CANDIDATE = { number: 52, kind: 'issue', stage: 'implement', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null } as TickActionable
+const CANDIDATE = { number: 52, kind: 'issue', stage: 'implement', mode: 'implement', agent: 'impl', unchecked: false, cycle: null } as TickActionable
 
 function resolved(labels: readonly string[], assignees: readonly string[] = ['op']): ResolvedItem {
   return { number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels, assignees, headRefName: null, author: null }
@@ -60,7 +60,7 @@ function resolved(labels: readonly string[], assignees: readonly string[] = ['op
 describe('survived — the ticket', () => {
   const queued = { stage: 'implement', status: queuedAt() } as const
 
-  it('does not survive an item with no ticket, even when GitHub shows the trigger label', () => {
+  it('does not survive an item with no ticket, even when GitHub shows the port label', () => {
     expect(survived(resolved(['claude', 'plan approved']), CANDIDATE, 'op', null)).toBe(false)
   })
 

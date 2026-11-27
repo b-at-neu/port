@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import { resolveDisplayVocabulary } from '@/utils/labels/display'
 import { FIRST_SWEEP_PAGE } from '@/main/github/query'
 import { buildClaimPreflightQuery, buildGatePreflightQuery, buildIssueDetailsQuery, buildIssueSweepQuery, buildItemsByNumberQuery, buildTrackedIssuesQuery } from '@/main/github/tracker/query'
 
@@ -72,7 +72,7 @@ describe('tracker point-read documents', () => {
 const lineOf = (document: string, alias: string) => document.split('\n').find((line) => line.includes(`${alias}:`)) ?? ''
 
 describe('buildIssueSweepQuery', () => {
-  const vocabulary = resolveVocabulary({})
+  const vocabulary = resolveDisplayVocabulary({})
 
   it('has one issues connection and no pull request field', () => {
     const document = buildIssueSweepQuery(vocabulary, FIRST_SWEEP_PAGE)

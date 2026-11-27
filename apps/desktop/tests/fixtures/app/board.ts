@@ -1,8 +1,7 @@
 // Canned reads pass through the real, pure `reconcileRepository` and `planTick`, so a screenshot shows exactly what the real derivation produces. Every timestamp is `now` plus a fixed offset, so "5m ago" renders the same on every run.
-import { labelName } from '@/utils/labels/vocabulary'
-import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
-import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
-import type { LabelEventNode, PipelineFetch, PipelineItem, QueriedLabel } from '@/types/github'
+import { defaultNameOf } from '@/utils/labels/display'
+import type { DisplayVocabulary } from '@/utils/labels/display'
+import type { PipelineFetch, PipelineItem, QueriedLabel } from '@/types/github'
 import type { AgentRecord, SessionRecord } from '@/types/sessions'
 import { DEFAULT_POLL_POLICY, SOURCE_BASE_INTERVAL_MS } from '@/types/board'
 import type { BoardSnapshot, RepositoryHealth, SourceKind } from '@/types/board'
@@ -12,14 +11,15 @@ import type { SessionKey } from '@/types/hosting'
 import type { InterruptedStage } from '@/types/stage'
 import { reconcileRepository } from '@/main/pipeline/board/reconcile'
 import { createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
-import type { Run } from '@/utils/pipeline/ticket'
+import type { Event, Run, Stage, Status, Ticket } from '@/utils/pipeline/ticket'
 import { planTick } from '@/main/pipeline/tick/plan'
-import { seedFrom, viewOf } from '@/main/pipeline/state/model'
+import { displayOf } from '@/main/pipeline/state/display'
+import { displayNamesOf, itemsOf } from '@/main/pipeline/state/mirror'
 import { FIXTURE_REPOSITORIES, GADGETS_ID, GADGETS_VOCABULARY_REPORT, LEGACY_SITE_ID, WIDGETS_ID, WIDGETS_VOCABULARY_REPORT } from './repos'
 import type { RepoId } from '@/utils/repos'
 import type { FixtureScenario } from '@/types/fixtures'
 import { VIEWER, itemSeedsFor } from './board-seeds'
-import type { ItemSeed } from './board-seeds'
+import type { ItemSeed, SeedPlace } from './board-seeds'
 
 function offsetMinutes(now: Date, minutes: number): string {
   return new Date(now.getTime() + minutes * 60_000).toISOString()
@@ -49,18 +49,103 @@ export function repositoryHealth(repoId: RepoId, now: Date): RepositoryHealth {
   return { repoId, github: source('github'), sessions: source('sessions'), worktrees: source('worktrees'), denials: source('denials') }
 }
 
-function pipelineItemsFor(now: Date, vocabulary: LabelVocabulary, seeds: readonly ItemSeed[]): readonly PipelineItem[] {
+interface Placed {
+  readonly stage: Stage
+  readonly status: Status
+}
+
+/** Where each seed's place stands on the ticket record: a stage and a status. */
+function placeOf(place: SeedPlace, kind: ItemSeed['kind'], at: string, blockedOn: readonly number[]): Placed {
+  const queued = (stage: Stage, reason: 'new' | 'changes-requested' = 'new'): Placed => ({ stage, status: { kind: 'queued', reason, since: at } })
+  const running = (stage: Stage): Placed => ({ stage, status: { kind: 'running', runId: null } })
+  switch (place) {
+    case 'ready':
+      return queued('plan')
+    case 'planning':
+      return running('plan')
+    case 'planReview':
+      return { stage: 'plan', status: { kind: 'waiting-on-you', gate: 'plan-approval', detail: '' } }
+    case 'planApproved':
+      return queued('implement')
+    case 'inProgress':
+      return running('implement')
+    case 'prOpened':
+    case 'readyForReview':
+      return queued('review')
+    case 'reviewing':
+      return running('review')
+    case 'needsRevision':
+      return queued('revise', 'changes-requested')
+    case 'revising':
+      return running('revise')
+    case 'approved':
+      return { stage: 'merge', status: { kind: 'waiting-on-you', gate: 'merge', detail: '' } }
+    case 'needsHuman':
+      return { stage: kind === 'pull-request' ? 'review' : 'implement', status: { kind: 'waiting-on-you', gate: 'escalation', detail: '' } }
+    case 'blocked':
+      return { stage: 'implement', status: { kind: 'blocked', on: [...blockedOn], reason: '' } }
+  }
+}
+
+const CLOSES = /\bcloses #(\d+)/i
+
+function ticketOfSeeds(now: Date, issue: ItemSeed | null, pr: ItemSeed | null, mirrorFailed: boolean): Ticket {
+  const head = pr ?? issue
+  if (head === null) throw new Error('fixtures: a ticket needs at least one seed')
+  const number = issue?.number ?? head.number
+  const blockers = issue?.blockers
+  const blockedOn = blockers?.ok === true ? blockers.open.map((blocker) => blocker.number) : []
+  const eventsOf = (seed: ItemSeed): Event[] =>
+    (seed.history ?? [{ key: seed.stageKey, actor: VIEWER, offsetMinutes: -10 }]).map((move) => {
+      const at = offsetMinutes(now, move.offsetMinutes)
+      const { stage, status } = placeOf(move.key, seed.kind, at, blockedOn)
+      return { at, action: 'fixture', actor: move.actor, to: { stage, status: status.kind }, legacy: null }
+    })
+  const { stage, status } = placeOf(head.stageKey, head.kind, offsetMinutes(now, (head.history ?? [])[(head.history ?? []).length - 1]?.offsetMinutes ?? -10), blockedOn)
+  const failure = mirrorFailed
+    ? { at: offsetMinutes(now, -3), outcome: { kind: 'write-failed' as const, classification: 'unknown' as const, stderr: "could not add label: 'implementing' not found", reread: null } }
+    : null
+  return {
+    rev: 0,
+    repo: WIDGETS_ID,
+    ticket: number,
+    pr: pr === null ? null : { number: pr.number, approvedAt: null },
+    stage,
+    status,
+    autoPlan: false,
+    reviewCycles: pr?.reviewCount ?? 0,
+    runs: [],
+    history: [...(issue === null ? [] : eventsOf(issue)), ...(pr === null ? [] : eventsOf(pr))],
+    mirror: { written: [], failure },
+  }
+}
+
+/** One ticket per seed, except that an issue a pull request closes shares that pull request's ticket. */
+function ticketsFor(now: Date, seeds: readonly ItemSeed[], mirrorFailedNumber: number | null): readonly Ticket[] {
+  const issues = new Map(seeds.filter((seed) => seed.kind === 'issue').map((seed) => [seed.number, seed]))
+  const consumed = new Set<number>()
+  const tickets: Ticket[] = []
+  for (const seed of seeds) {
+    if (seed.kind !== 'pull-request') continue
+    const closes = CLOSES.exec(seed.body ?? '')
+    const issue = closes === null ? undefined : issues.get(Number(closes[1]))
+    if (issue !== undefined) consumed.add(issue.number)
+    tickets.push(ticketOfSeeds(now, issue ?? null, seed, (issue?.number ?? seed.number) === mirrorFailedNumber))
+  }
+  for (const seed of seeds) {
+    if (seed.kind === 'issue' && !consumed.has(seed.number)) tickets.push(ticketOfSeeds(now, seed, null, seed.number === mirrorFailedNumber))
+  }
+  return tickets
+}
+
+function pipelineItemsFor(now: Date, vocabulary: DisplayVocabulary, seeds: readonly ItemSeed[], tickets: readonly Ticket[]): readonly PipelineItem[] {
   return seeds.map((seed) => {
-    const matchedKeys: readonly LabelKey[] = ['marker', seed.stageKey]
-    const labels = matchedKeys.map((key) => labelName(vocabulary, key)).filter((name): name is string => name !== undefined)
+    const ticket = tickets.find((candidate) => (seed.kind === 'issue' ? candidate.ticket === seed.number : candidate.pr?.number === seed.number))
+    if (ticket === undefined) throw new Error(`fixtures: no ticket for #${String(seed.number)}`)
+    const matchedKeys = displayOf(ticket)
+    const labels = displayNamesOf(vocabulary, matchedKeys)
     const isPr = seed.kind === 'pull-request'
     const history = seed.history ?? [{ key: seed.stageKey, actor: VIEWER, offsetMinutes: -10 }]
-    const labelEvents: readonly LabelEventNode[] = history
-      .map((move): { label: string; actor: string | null; at: string } | undefined => {
-        const name = labelName(vocabulary, move.key)
-        return name === undefined ? undefined : { label: name, actor: move.actor, at: offsetMinutes(now, move.offsetMinutes) }
-      })
-      .filter((event): event is LabelEventNode => event !== undefined)
     const updatedAt = offsetMinutes(now, seed.updatedMinutesAgo ?? (history[history.length - 1]?.offsetMinutes ?? -10))
     return {
       repo: 'acme/widgets',
@@ -75,7 +160,7 @@ function pipelineItemsFor(now: Date, vocabulary: LabelVocabulary, seeds: readonl
       assignees: seed.assignees ?? [VIEWER],
       labels,
       matchedKeys,
-      labelEvents,
+      labelEvents: [],
       headRefOid: isPr ? `fixture-sha-${String(seed.number)}` : null,
       mergeable: isPr ? (seed.mergeable ?? 'MERGEABLE') : null,
       reviews: isPr ? Array.from({ length: seed.reviewCount ?? 0 }, (_, index) => ({ body: '## Code Review\n', submittedAt: offsetMinutes(now, -(index + 1) * 10), commitOid: null })) : null,
@@ -88,14 +173,18 @@ function pipelineItemsFor(now: Date, vocabulary: LabelVocabulary, seeds: readonl
   })
 }
 
-function queriedLabelsFor(vocabulary: LabelVocabulary): readonly QueriedLabel[] {
+function queriedLabelsFor(vocabulary: DisplayVocabulary): readonly QueriedLabel[] {
   return vocabulary.labels.map((label) => ({ key: label.key, name: label.name, source: label.source }))
 }
 
+const MIRROR_FAILED_NUMBER = 46
+
 function readyRepositoryState(now: Date, scenario: FixtureScenario): RepositoryState {
   const entry = widgetsEntry()
-  const vocabulary = entry.config.vocabulary
-  const items = pipelineItemsFor(now, vocabulary, itemSeedsFor(scenario))
+  const vocabulary = entry.config.displayVocabulary
+  const seeds = itemSeedsFor(scenario)
+  const tickets = ticketsFor(now, seeds, scenario === 'attention' ? MIRROR_FAILED_NUMBER : null)
+  const items = pipelineItemsFor(now, vocabulary, seeds, tickets)
 
   const pipelineFetch: PipelineFetch = {
     ok: true,
@@ -103,7 +192,6 @@ function readyRepositoryState(now: Date, scenario: FixtureScenario): RepositoryS
     closed: [],
     merged: [],
     queried: queriedLabelsFor(vocabulary),
-    disabled: vocabulary.disabled,
     vocabulary: WIDGETS_VOCABULARY_REPORT,
     unavailable: [],
     truncated: [],
@@ -139,18 +227,8 @@ function readyRepositoryState(now: Date, scenario: FixtureScenario): RepositoryS
     worktrees: { ok: true as const, mainPath: '/home/you/src/widgets', entries: scenario === 'empty' ? [] : [OPERATOR_WORKTREE], subjectsAvailable: true, readAt: now.toISOString() },
     denials: widgetsDenialsRead(now, '/home/you/src/widgets/.agents/denials.log'),
   }
-  // The real app reconciles once unseeded, seeds the store from that read, then reads through the store, so every item carries its ticket record.
-  const unseeded = reconcileRepository(reconcileInput)
-  const state = unseeded.ok ? reconcileRepository({ ...reconcileInput, view: viewOf(seedFrom(WIDGETS_ID, unseeded, now.toISOString())) }) : unseeded
-  return scenario === 'attention' && state.ok ? withMirrorFailure(state, MIRROR_FAILED_NUMBER, now) : state
-}
-
-const MIRROR_FAILED_NUMBER = 46
-
-/** The store's recorded failed label write on one ticket, so the real `repairsOf` reports it under Label problems. */
-function withMirrorFailure(state: Extract<RepositoryState, { readonly ok: true }>, number: number, now: Date): RepositoryState {
-  const outcome = { kind: 'write-failed' as const, classification: 'unknown' as const, stderr: "could not add label: 'implementing' not found", reread: null }
-  return { ...state, items: state.items.map((item) => (item.number === number ? { ...item, mirrorFailure: { at: offsetMinutes(now, -3), outcome } } : item)) }
+  // Read through the store, so every item carries its ticket record; scenario 'attention' holds one with a failed label write for `repairsOf` to report.
+  return reconcileRepository({ ...reconcileInput, view: { kind: 'store', items: tickets.flatMap(itemsOf) } })
 }
 
 const OPERATOR_WORKTREE_PATH = '/home/you/src/widgets/.claude/worktrees/impl-46'
@@ -230,7 +308,7 @@ export function notReadyRepositoryState(): RepositoryState {
 // read carries no vocabulary label at all, so its Overview renders mis-resolved.
 export function gadgetsRepositoryState(now: Date): RepositoryState {
   const entry = gadgetsEntry()
-  const vocabulary = entry.config.vocabulary
+  const vocabulary = entry.config.displayVocabulary
 
   const pipelineFetch: PipelineFetch = {
     ok: true,
@@ -238,7 +316,6 @@ export function gadgetsRepositoryState(now: Date): RepositoryState {
     closed: [],
     merged: [],
     queried: queriedLabelsFor(vocabulary),
-    disabled: vocabulary.disabled,
     vocabulary: GADGETS_VOCABULARY_REPORT,
     unavailable: [],
     truncated: [],
@@ -277,7 +354,6 @@ export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'pop
     stage: 'implement',
     item: { kind: 'issue', number: 54 },
     agent: 'impl',
-    trigger: 'planApproved',
     model: 'sonnet',
     title: null,
     sessionKey: 'stalled-session' as SessionKey,
@@ -328,7 +404,6 @@ export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'pop
                     agent: 'impl',
                     number: 38,
                     kind: 'issue',
-                    trigger: 'planApproved',
                     state: 'started',
                     at: offsetMinutes(now, -2),
                     detail: null,
@@ -341,7 +416,6 @@ export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'pop
                     agent: 'plan',
                     number: 38,
                     kind: 'issue',
-                    trigger: 'ready',
                     state: 'ended',
                     at: offsetMinutes(now, -30),
                     detail: null,
@@ -359,7 +433,7 @@ export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'pop
           line: null,
           problem: null,
           costUsd: null,
-          notes: !attention ? [] : [{ kind: 'escalated', number: 44, needsHumanLabel: LABEL_DEFAULTS.find((def) => def.key === 'needsHuman')?.name ?? 'needsHuman', commentFailedMessage: null }],
+          notes: !attention ? [] : [{ kind: 'escalated', number: 44, needsHumanLabel: defaultNameOf('needsYou'), commentFailedMessage: null }],
         },
         observed: [],
         denials: [],
@@ -379,7 +453,6 @@ function interruptedStages(now: Date): readonly InterruptedStage[] {
     agent,
     number,
     kind: agent === 'revise' ? 'pull-request' : 'issue',
-    trigger: agent === 'plan' ? 'ready' : agent === 'revise' ? 'needsRevision' : 'planApproved',
     stage: agent === 'plan' ? 'plan' : agent === 'revise' ? 'revise' : 'implement',
     model: agent === 'plan' ? 'opus' : 'sonnet',
     claudeSessionId: `fixture-session-${id}`,

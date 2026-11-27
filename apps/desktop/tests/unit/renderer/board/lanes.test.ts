@@ -1,17 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { BoardItemRow } from '@/types/board'
-import type { ReconciledItem, StageLabel } from '@/types/state'
 import type { Ticket } from '@/types/ticket'
-import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { Stage, Status } from '@/utils/pipeline/ticket'
 import { ticketIndex } from '@/utils/tickets/ticket'
 import { boardColumns } from '@/renderer/board/columns'
 import { boardLanes, navigableLaneRows } from '@/renderer/board/lanes'
+import { reconciledItem } from '../../../support/board-snapshot'
+import { queuedAt, ticketAt } from '../../../support/tickets'
 
-function row(repoId: string, number: number, stageKey: LabelKey | null): BoardItemRow {
-  const stageLabel: StageLabel | null = stageKey !== null ? { key: stageKey, name: stageKey, role: 'trigger' } : null
-  const item = { repoId, repo: repoId, kind: 'issue', number, title: 't', url: 'https://example.com', assignees: [], stage: stageKey, stages: stageLabel !== null ? [stageLabel] : [], marked: true, autoPlan: false, status: 'waiting', state: 'OPEN', sources: ['github'] } as unknown as ReconciledItem
-  return { item, ticket: ticketIndex([item]).tickets[0] as Ticket, stageLabel, blockedOn: null } as unknown as BoardItemRow
+const RUNNING: Status = { kind: 'running', runId: null }
+
+function row(repoId: string, number: number, stage: Stage, status: Status): BoardItemRow {
+  const item = reconciledItem({ repoId: repoId as RepoId, repo: repoId, number, ticket: ticketAt(stage, status, { ticket: number }) })
+  return { item, ticket: ticketIndex([item]).tickets[0] as Ticket, blockedOn: null } as unknown as BoardItemRow
 }
 
 const A = 'repo-a' as RepoId
@@ -23,12 +25,12 @@ const REPOS = [
   { repoId: C, name: 'o/c' },
 ]
 
-const a1 = row(A, 1, 'ready')
-const a2 = row(A, 2, 'planning')
-const a3 = row(A, 3, 'inProgress')
-const b1 = row(B, 4, 'ready')
-const b2 = row(B, 5, 'reviewing')
-const aUngated = row(A, 6, 'readyForReview')
+const a1 = row(A, 1, 'plan', queuedAt('new'))
+const a2 = row(A, 2, 'plan', RUNNING)
+const a3 = row(A, 3, 'implement', RUNNING)
+const b1 = row(B, 4, 'plan', queuedAt('new'))
+const b2 = row(B, 5, 'review', RUNNING)
+const aUngated = row(A, 6, 'review', queuedAt('new'))
 const ROWS = [a1, a2, a3, b1, b2]
 
 function numbers(rows: readonly BoardItemRow[]): number[] {

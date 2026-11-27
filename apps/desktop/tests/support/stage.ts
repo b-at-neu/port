@@ -28,7 +28,6 @@ export function scriptedStage(runs: RunStore, repoId: RepoId, now: () => Date) {
         stage: request.stage,
         item: { kind: request.kind, number: request.number },
         agent: request.agent,
-        trigger: request.trigger,
         model: request.model,
         title: request.title,
         sessionKey,

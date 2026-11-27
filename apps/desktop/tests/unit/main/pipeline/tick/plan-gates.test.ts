@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 import type { ReconciledItem, RepositoryState } from '@/types/state'
 import { createRefreshMemo, createUnknownStreaks } from '@/main/pipeline/tick/ledger'
 import { planTick } from '@/main/pipeline/tick/plan'
+import type { Ticket } from '@/utils/pipeline/ticket'
 import { reconciledItem as item, repositoryState } from '../../../../support/board-snapshot'
+import { queuedAt, ticketAt } from '../../../../support/tickets'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 const NEXT_DECISION_AT = new Date('2026-01-01T01:01:00.000Z')
@@ -19,21 +21,23 @@ function plan(repository: Extract<RepositoryState, { ok: true }>, extra: { reado
 const reviewsOf = (count: number, sha = 'sha1') => Array.from({ length: count }, (_, i) => ({ body: `## Code Review — Cycle ${String(i + 1)}`, submittedAt: '2026-01-01T00:00:00Z', commitOid: sha }))
 const GRANT = { body: '## Gate cleared\n\n### Cycle grant\nOne extra review cycle for this PR only; reviewCycleCap is unchanged.', createdAt: '2026-01-01T00:00:00Z' }
 
+const prTicket = (number: number, stage: 'review' | 'revise' | 'refresh' | 'merge', status: Ticket['status'], approvedAt: string | null = null): Ticket => ticketAt(stage, status, { ticket: number, pr: { number, approvedAt } })
+
 const reviseItem = (overrides: Partial<ReconciledItem> = {}): ReconciledItem =>
-  item({ number: 204, kind: 'pull-request', stages: [{ key: 'needsRevision', name: 'needs revision', role: 'trigger' }], headRefOid: 'sha1', reviews: [], comments: [], reviewCycleCount: 0, ...overrides })
+  item({ number: 204, kind: 'pull-request', ticket: prTicket(204, 'revise', queuedAt('changes-requested')), headRefOid: 'sha1', reviews: [], comments: [], reviewCycleCount: 0, ...overrides })
 
 const reviewItem = (overrides: Partial<ReconciledItem> = {}): ReconciledItem =>
-  item({ number: 157, kind: 'pull-request', stages: [{ key: 'readyForReview', name: 'ready for review', role: 'trigger' }], headRefOid: 'sha1', mergeable: 'MERGEABLE', reviews: [], comments: [], reviewCycleCount: 0, ...overrides })
+  item({ number: 157, kind: 'pull-request', ticket: prTicket(157, 'review', queuedAt()), headRefOid: 'sha1', mergeable: 'MERGEABLE', reviews: [], comments: [], reviewCycleCount: 0, ...overrides })
 
-const REVISE = { number: 204, kind: 'pull-request', stage: 'revise', trigger: 'needsRevision' } as const
-const REVIEW = { number: 157, kind: 'pull-request', stage: 'review', trigger: 'readyForReview' } as const
-const dispatchReview = (count: number) => ({ ...REVIEW, agent: 'review', unchecked: false, cycle: { count, cap: 5 } })
+const REVISE = { number: 204, kind: 'pull-request', stage: 'revise' } as const
+const REVIEW = { number: 157, kind: 'pull-request', stage: 'review' } as const
+const dispatchReview = (count: number) => ({ ...REVIEW, mode: 'review', agent: 'review', unchecked: false, cycle: { count, cap: 5 } })
 const held = (base: typeof REVISE | typeof REVIEW, reason: string, escalation: unknown = null) => ({ ...base, reason, contention: null, escalation })
 
 describe('planTick — cycle-cap and zero-diff gates (#108)', () => {
   it('a revise candidate below the cap is actionable, carrying its cycle count', () => {
     const report = plan(readyRepo([reviseItem({ reviews: reviewsOf(1), reviewCycleCount: 1 })]))
-    expect(report.actionable).toEqual([{ ...REVISE, agent: 'revise', unchecked: false, cycle: { count: 1, cap: 5 } }])
+    expect(report.actionable).toEqual([{ ...REVISE, mode: 'revise', agent: 'revise', unchecked: false, cycle: { count: 1, cap: 5 } }])
     expect(report.held).toEqual([])
   })
 
@@ -51,7 +55,7 @@ describe('planTick — cycle-cap and zero-diff gates (#108)', () => {
 
   it('a revise candidate at cap with one grant comment dispatches, cap folded into cycle', () => {
     const report = plan(readyRepo([reviseItem({ reviews: reviewsOf(5), comments: [GRANT], reviewCycleCount: 5 })]))
-    expect(report.actionable).toEqual([{ ...REVISE, agent: 'revise', unchecked: false, cycle: { count: 5, cap: 6 } }])
+    expect(report.actionable).toEqual([{ ...REVISE, mode: 'revise', agent: 'revise', unchecked: false, cycle: { count: 5, cap: 6 } }])
     expect(report.held).toEqual([])
   })
 
@@ -62,8 +66,8 @@ describe('planTick — cycle-cap and zero-diff gates (#108)', () => {
   })
 
   it('a lone refreshBranch PR at the cap is actionable, never held on the cycle cap', () => {
-    const report = plan(readyRepo([reviseItem({ stages: [{ key: 'refreshBranch', name: 'refresh branch', role: 'trigger' }], reviewCycleCount: 5 })]))
-    expect(report.actionable).toEqual([{ number: 204, kind: 'pull-request', stage: 'refresh', trigger: 'refreshBranch', agent: 'revise', unchecked: false, cycle: null }])
+    const report = plan(readyRepo([reviseItem({ ticket: prTicket(204, 'refresh', queuedAt()), reviewCycleCount: 5 })]))
+    expect(report.actionable).toEqual([{ number: 204, kind: 'pull-request', stage: 'refresh', mode: 'refresh', agent: 'revise', unchecked: false, cycle: null }])
     expect(report.held).toEqual([])
   })
 
@@ -96,7 +100,7 @@ describe('planTick — cycle-cap and zero-diff gates (#108)', () => {
     const report = plan(readyRepo([reviewItem({ reviews, reviewCycleCount: 2 })]))
     expect(report.actionable).toEqual([])
     expect(report.held).toEqual([])
-    expect(report.observations).toEqual([{ kind: 'adopt', number: 157, itemKind: 'pull-request', agent: 'review', stage: 'review', trigger: 'readyForReview', handback: { token: 'approved', arg: null }, evidence: 'held-verdict' }])
+    expect(report.observations).toEqual([{ kind: 'adopt', number: 157, itemKind: 'pull-request', agent: 'review', stage: 'review', handback: { token: 'approved', arg: null }, evidence: 'held-verdict' }])
   })
 
   it('an approving review on an older head is not adopted for the new head', () => {
@@ -164,7 +168,7 @@ describe('planTick — approval withdrawal and CLAUDE.md-excused checks (#300)',
     item({
       number: 81,
       kind: 'pull-request',
-      stages: [{ key: 'approved', name: 'approved', role: 'terminal' }],
+      ticket: prTicket(81, 'merge', { kind: 'waiting-on-you', gate: 'merge', detail: '' }, '2026-01-01T00:00:00Z'),
       headRefOid: 'sha1',
       mergeable: 'MERGEABLE',
       checkRollup: [{ __typename: 'CheckRun', name: 'deploy-preview', conclusion: 'FAILURE', status: 'COMPLETED', state: null, startedAt: '2026-01-01T00:00:00Z', completedAt: null, createdAt: null, url: null }],

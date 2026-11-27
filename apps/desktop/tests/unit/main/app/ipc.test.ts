@@ -12,7 +12,7 @@ const REPO_ID = 'repo-1' as unknown as RepoId
 
 const READY_ENTRY = readyEntry(
   { id: REPO_ID, displayName: 'widgets' },
-  { repo: 'acme/widgets', owner: 'acme', name: 'widgets', reviewCycleCap: 3, vocabulary: {} as never, commands: { worktrees: null, budget: null } },
+  { repo: 'acme/widgets', owner: 'acme', name: 'widgets', reviewCycleCap: 3, commands: { worktrees: null, budget: null } },
 )
 
 const NOT_READY_ENTRY = {

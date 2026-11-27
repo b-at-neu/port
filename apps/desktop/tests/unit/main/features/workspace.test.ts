@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { CommandResult, GitRunner } from '@/types/platform'
 import type { RecentsStore } from '@/types/workspace'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
+import { resolveDisplayVocabulary } from '@/utils/labels/display'
 import { storeStub } from '../../../fixtures/store'
 import { createFakeFs } from '../../../support/fake-platform'
 import { callAction, createTestContext } from '../../../support/context'
@@ -36,7 +37,7 @@ function readyRepo(path: string): RepositoryEntry {
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
       modules: { approvalGate: true, release: true, scope: true },
       reviewCycleCap: 5,
-      vocabulary: { labels: [], disabled: [], problems: [] },
+      displayVocabulary: resolveDisplayVocabulary({}),
       commands: { worktrees: null, budget: null },
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
       sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],

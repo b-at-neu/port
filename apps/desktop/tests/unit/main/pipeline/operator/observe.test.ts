@@ -12,7 +12,7 @@ const pullRequestRig = (): OperatorRigOptions => ({
 })
 
 const item = (comments: ReconciledItem['comments']): ReconciledItem =>
-  reconciledItem({ repoId: REPO_ID, kind: 'pull-request', number: 52, stages: [{ key: 'readyForReview', name: 'ready for review', role: 'trigger' }], matchedKeys: ['readyForReview'], headRefOid: 'abc1234', comments })
+  reconciledItem({ repoId: REPO_ID, kind: 'pull-request', number: 52, headRefOid: 'abc1234', comments })
 
 async function observeZeroDiff(comments: ReconciledItem['comments']) {
   const rig = await operatorRig(pullRequestRig())
@@ -51,7 +51,7 @@ describe('applyObservation — plan-missing re-read', () => {
     { name: 're-read resolves to no item', body: null, labels: 'item-unavailable', comments: 0 },
   ])('$name', async ({ body, labels, comments }) => {
     const rig = await operatorRig(issueRig(body))
-    const planMissing = reconciledItem({ repoId: REPO_ID, kind: 'issue', number: 52, stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }], matchedKeys: ['planReview'], planPresent: false })
+    const planMissing = reconciledItem({ repoId: REPO_ID, kind: 'issue', number: 52, planPresent: false })
     const result = await applyObservation(rig.ctx, { entry: rig.entry, item: planMissing, observation: { kind: 'plan-missing', number: 52, itemKind: 'issue' }, auditDir: rig.auditDir, scratchDir: rig.scratchDir })
     expect(result.labels.kind).toBe(labels)
     if (body !== null) expect(rig.github.comments(52)).toHaveLength(comments)
@@ -60,7 +60,7 @@ describe('applyObservation — plan-missing re-read', () => {
   it('reports a failed re-read without writing', async () => {
     const rig = await operatorRig(issueRig('Why'))
     rig.github.failNextRead('timed out')
-    const planMissing = reconciledItem({ repoId: REPO_ID, kind: 'issue', number: 52, stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }], matchedKeys: ['planReview'], planPresent: false })
+    const planMissing = reconciledItem({ repoId: REPO_ID, kind: 'issue', number: 52, planPresent: false })
     const result = await applyObservation(rig.ctx, { entry: rig.entry, item: planMissing, observation: { kind: 'plan-missing', number: 52, itemKind: 'issue' }, auditDir: rig.auditDir, scratchDir: rig.scratchDir })
     expect(result.labels.kind).toBe('verify-failed')
     expect(result.comment).toBeNull()

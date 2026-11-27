@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary, type LabelVocabulary } from '@/utils/labels/vocabulary'
+import { resolveDisplayVocabulary, type DisplayVocabulary } from '@/utils/labels/display'
 import { FIRST_SWEEP_PAGE, buildPullDetailsQuery, buildPullSweepQuery, buildTrackedPullsQuery, graphqlStringLiteral } from '@/main/github/query'
 
 describe('graphqlStringLiteral', () => {
@@ -19,15 +19,14 @@ function countOf(document: string, needle: string): number {
 const lineOf = (document: string, alias: string) => document.split('\n').find((line) => line.includes(`${alias}:`)) ?? ''
 
 describe('buildPullSweepQuery', () => {
-  const two: LabelVocabulary = {
+  const two: DisplayVocabulary = {
     labels: [
-      { key: 'ready', name: 'ready', source: 'default', module: 'core', role: 'trigger' },
-      { key: 'blocked', name: 'blocked', source: 'default', module: 'core', role: 'gate' },
+      { key: 'port', name: 'port', source: 'default', role: 'marker', palette: null },
+      { key: 'needsYou', name: 'needs you', source: 'default', role: 'gate', palette: 'needs-you' },
     ],
-    disabled: ['refreshBranch', 'refreshing'],
     problems: [],
   }
-  const all = resolveVocabulary({})
+  const all = resolveDisplayVocabulary({})
 
   it('has one pullRequests connection and no issue field whatever the label count', () => {
     for (const vocabulary of [two, all]) {
@@ -39,10 +38,9 @@ describe('buildPullSweepQuery', () => {
     }
   })
 
-  it('lists every enabled name, none for a disabled one, and escapes a quoted name', () => {
-    expect(buildPullSweepQuery(two, FIRST_SWEEP_PAGE, 'dev')).toContain('labels: ["ready", "blocked"]')
-    expect(buildPullSweepQuery(two, FIRST_SWEEP_PAGE, 'dev')).not.toContain('refresh')
-    const quoted = resolveVocabulary({ labels: { ready: 'weird "quoted" label' } })
+  it('lists every name and escapes a quoted one', () => {
+    expect(buildPullSweepQuery(two, FIRST_SWEEP_PAGE, 'dev')).toContain('labels: ["port", "needs you"]')
+    const quoted = resolveDisplayVocabulary({ labels: { needsYou: 'weird "quoted" label' } })
     expect(buildPullSweepQuery(quoted, FIRST_SWEEP_PAGE, 'dev')).toContain(graphqlStringLiteral('weird "quoted" label'))
   })
 

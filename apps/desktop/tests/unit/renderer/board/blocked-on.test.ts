@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { BlockedOn } from '@/types/board'
 import type { BlockerRead, IssueCommentNode } from '@/types/github'
-import type { StageEntry } from '@/types/state'
+import type { Event } from '@/utils/pipeline/ticket'
 import { ticketIndex } from '@/utils/tickets/ticket'
 import { blockedOnOf, blockedOnTag } from '@/renderer/board/blocked-on'
 import { reconciledItem } from '../../../support/board-snapshot'
 import { stageSession } from '../../../support/session-snapshot'
+import { ticketOf } from '../../../support/tickets'
 
 const REPO = 'repo-a' as RepoId
 const BLOCKED_AT = '2026-01-02T00:00:00Z'
@@ -25,61 +26,66 @@ function comment(createdAt: string, body: string): IssueCommentNode {
   return { body, createdAt, url: `https://x/c/${createdAt}` }
 }
 
-function blockedIssue(overrides: Parameters<typeof reconciledItem>[0] = {}) {
-  const history: StageEntry[] = [{ key: 'blocked', actor: 'port-bot', at: BLOCKED_AT }]
-  return reconciledItem({ number: 51, stage: 'gate', stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }], matchedKeys: ['blocked'], stageHistory: history, ...overrides })
+function blockedAt(at: string): Event {
+  return { at, action: 'block', actor: 'port-bot', to: { stage: 'implement', status: 'blocked' }, legacy: null }
 }
 
-function derive(item: ReturnType<typeof reconciledItem>, stageKey: string | undefined, sessions: Parameters<typeof blockedOnOf>[0]['sessions'] = []) {
+function blockedIssue(overrides: Parameters<typeof reconciledItem>[0] = {}) {
+  return reconciledItem({ number: 51, ticket: ticketOf({ ticket: 51, stage: 'implement', status: { kind: 'blocked', on: [], reason: 'x' }, history: [blockedAt(BLOCKED_AT)] }), ...overrides })
+}
+
+function derive(item: ReturnType<typeof reconciledItem>, blocked: boolean, sessions: Parameters<typeof blockedOnOf>[0]['sessions'] = []) {
   const ticket = ticketIndex([item]).tickets[0]
   if (ticket === undefined) throw new Error('no ticket')
-  return blockedOnOf({ ticket, blocked: stageKey === 'blocked', sessions, repoId: REPO })
+  return blockedOnOf({ ticket, blocked, sessions, repoId: REPO })
 }
 
+const IMPL_TAG = { agent: 'impl', number: 51, kind: 'issue' } as const
+
 const blockedSession = (text: string, startedAt?: string, key?: string) =>
-  stageSession({ key, repoId: REPO, stage: { agent: 'impl', number: 51, kind: 'issue', trigger: 'planApproved' }, phase: 'ready', startedAt, lastResult: { subtype: 'success', isError: false, text, at: '2026-01-02T01:00:00Z' } })
+  stageSession({ key, repoId: REPO, stage: IMPL_TAG, phase: 'ready', startedAt, lastResult: { subtype: 'success', isError: false, text, at: '2026-01-02T01:00:00Z' } })
 
 describe('blockedOnOf', () => {
   it('is null for a row that is not blocked, even with open dependencies', () => {
     const item = reconciledItem({ blockers: OPEN_BLOCKERS })
-    expect(derive(item, 'ready')).toBeNull()
+    expect(derive(item, false)).toBeNull()
   })
 
-  it('is non-null for a blocked label with nothing else to say', () => {
-    expect(derive(blockedIssue(), 'blocked')).toEqual({ dependencies: null, session: null, comment: null })
+  it('is non-null for a blocked ticket with nothing else to say', () => {
+    expect(derive(blockedIssue(), true)).toEqual({ dependencies: null, session: null, comment: null })
   })
 
-  it('reads a live BLOCKED: session on a row whose label has not moved yet', () => {
+  it('reads a live BLOCKED: session on a row whose ticket has not moved yet', () => {
     const item = reconciledItem({ number: 51 })
-    const result = derive(item, 'inProgress', [blockedSession('Did work.\n\nBLOCKED: The ledger export has no currency column.')])
+    const result = derive(item, false, [blockedSession('Did work.\n\nBLOCKED: The ledger export has no currency column.')])
     expect(result?.session).toEqual({ text: 'The ledger export has no currency column.', sessionKey: 'hosted-51' })
   })
 
   it('ignores an ended session, an error result and a session on another ticket', () => {
     const item = blockedIssue()
-    const ended = stageSession({ repoId: REPO, stage: { agent: 'impl', number: 51, kind: 'issue', trigger: 'planApproved' }, phase: 'ended', lastResult: { subtype: 'success', isError: false, text: 'BLOCKED: x', at: BLOCKED_AT } })
-    const errored = stageSession({ repoId: REPO, stage: { agent: 'impl', number: 51, kind: 'issue', trigger: 'planApproved' }, phase: 'ready', lastResult: { subtype: 'error_during_execution', isError: true, text: 'BLOCKED: x', at: BLOCKED_AT } })
-    const other = stageSession({ repoId: REPO, stage: { agent: 'impl', number: 99, kind: 'issue', trigger: 'planApproved' }, phase: 'ready', lastResult: { subtype: 'success', isError: false, text: 'BLOCKED: x', at: BLOCKED_AT } })
-    expect(derive(item, 'blocked', [ended, errored, other])?.session).toBeNull()
+    const ended = stageSession({ repoId: REPO, stage: IMPL_TAG, phase: 'ended', lastResult: { subtype: 'success', isError: false, text: 'BLOCKED: x', at: BLOCKED_AT } })
+    const errored = stageSession({ repoId: REPO, stage: IMPL_TAG, phase: 'ready', lastResult: { subtype: 'error_during_execution', isError: true, text: 'BLOCKED: x', at: BLOCKED_AT } })
+    const other = stageSession({ repoId: REPO, stage: { ...IMPL_TAG, number: 99 }, phase: 'ready', lastResult: { subtype: 'success', isError: false, text: 'BLOCKED: x', at: BLOCKED_AT } })
+    expect(derive(item, true, [ended, errored, other])?.session).toBeNull()
   })
 
   it('takes the newest of two live sessions', () => {
     const older = blockedSession('BLOCKED: old reason', '2026-01-01T00:00:00Z', 'older')
     const newer = blockedSession('BLOCKED: new reason', '2026-01-01T05:00:00Z', 'newer')
-    expect(derive(blockedIssue(), 'blocked', [newer, older])?.session).toMatchObject({ text: 'new reason', sessionKey: 'newer' })
+    expect(derive(blockedIssue(), true, [newer, older])?.session).toMatchObject({ text: 'new reason', sessionKey: 'newer' })
   })
 
   it('caps a long session reason', () => {
-    const result = derive(blockedIssue(), 'blocked', [blockedSession(`BLOCKED: ${'x'.repeat(300)}`)])
+    const result = derive(blockedIssue(), true, [blockedSession(`BLOCKED: ${'x'.repeat(300)}`)])
     expect(result?.session?.text).toBe(`${'x'.repeat(120)}…`)
   })
 
   it('carries the dependency read through verbatim', () => {
-    expect(derive(blockedIssue({ blockers: OPEN_BLOCKERS }), 'blocked')?.dependencies).toBe(OPEN_BLOCKERS)
+    expect(derive(blockedIssue({ blockers: OPEN_BLOCKERS }), true)?.dependencies).toBe(OPEN_BLOCKERS)
   })
 
   describe('the ticket comment', () => {
-    const pick = (comments: readonly IssueCommentNode[] | null, overrides: Parameters<typeof reconciledItem>[0] = {}) => derive(blockedIssue({ blockerComments: comments, ...overrides }), 'blocked')?.comment
+    const pick = (comments: readonly IssueCommentNode[] | null, overrides: Parameters<typeof reconciledItem>[0] = {}) => derive(blockedIssue({ blockerComments: comments, ...overrides }), true)?.comment
 
     it('is the newest comment at or before the latest blocked event', () => {
       const comments = [comment('2026-01-01T00:00:00Z', 'older'), comment('2026-01-01T23:59:00Z', 'the reason'), comment(BLOCKED_AT, 'at the event')]
@@ -92,16 +98,17 @@ describe('blockedOnOf', () => {
     })
 
     it('is none without a blocked event, never an unrelated comment', () => {
-      expect(pick([comment('2026-01-01T00:00:00Z', 'something')], { stageHistory: [] })).toBeNull()
+      expect(pick([comment('2026-01-01T00:00:00Z', 'something')], { ticket: ticketOf({ ticket: 51, stage: 'implement', status: { kind: 'blocked', on: [], reason: 'x' } }) })).toBeNull()
     })
 
     it('uses the latest of several blocked events', () => {
-      const history: StageEntry[] = [
-        { key: 'blocked', actor: 'a', at: '2026-01-01T00:00:00Z' },
-        { key: 'inProgress', actor: 'a', at: '2026-01-01T12:00:00Z' },
-        { key: 'blocked', actor: 'a', at: '2026-01-03T00:00:00Z' },
+      const history: Event[] = [
+        blockedAt('2026-01-01T00:00:00Z'),
+        { at: '2026-01-01T12:00:00Z', action: 'unblock', actor: 'a', to: { stage: 'implement', status: 'running' }, legacy: null },
+        blockedAt('2026-01-03T00:00:00Z'),
       ]
-      expect(pick([comment('2026-01-01T00:00:00Z', 'first block'), comment('2026-01-02T00:00:00Z', 'second block')], { stageHistory: history })?.text).toBe('second block')
+      const ticket = ticketOf({ ticket: 51, stage: 'implement', status: { kind: 'blocked', on: [], reason: 'x' }, history })
+      expect(pick([comment('2026-01-01T00:00:00Z', 'first block'), comment('2026-01-02T00:00:00Z', 'second block')], { ticket })?.text).toBe('second block')
     })
 
     it('skips heading lines and blank lines to the first text line, and caps it', () => {

@@ -48,7 +48,7 @@ describe('liveUserSession', () => {
 
   it('skips ended and stage sessions', () => {
     const ended = snapshot({ sessionKey: 'ended' as SessionKey, claudeSessionId: 'claude-x', phase: 'ended' })
-    const stage = snapshot({ sessionKey: 'stage' as SessionKey, claudeSessionId: 'claude-x', stage: { agent: 'impl', number: 1, kind: 'issue', trigger: 'planApproved' } })
+    const stage = snapshot({ sessionKey: 'stage' as SessionKey, claudeSessionId: 'claude-x', stage: { agent: 'impl', number: 1, kind: 'issue' } })
     expect(liveUserSession([ended, stage], 'claude-x')).toBeNull()
   })
 
@@ -69,7 +69,7 @@ describe('orderSessions', () => {
   it('excludes ended and stage sessions', () => {
     const live = snapshot({ sessionKey: 'live' as SessionKey })
     const ended = snapshot({ sessionKey: 'ended' as SessionKey, phase: 'ended' })
-    const stage = snapshot({ sessionKey: 'stage' as SessionKey, stage: { agent: 'impl', number: 1, kind: 'issue', trigger: 'planApproved' } })
+    const stage = snapshot({ sessionKey: 'stage' as SessionKey, stage: { agent: 'impl', number: 1, kind: 'issue' } })
     const ordered = orderSessions([live, ended, stage], undefined)
     expect(ordered.map((s) => s.sessionKey)).toEqual(['live'])
   })

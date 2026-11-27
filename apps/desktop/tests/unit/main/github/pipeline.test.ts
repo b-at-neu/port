@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { DisplayVocabulary } from '@/utils/labels/display'
 import type { TrackedRef } from '@/types/pipeline-state'
 import { fetchBoardPulls } from '@/main/github/pipeline'
 import { RATE_LIMIT_REPLY, connection } from '../../../fixtures/pipeline-reply'
 import { REPO, VOCABULARY, emptyDetails, integrationHistoryOf, node, ok, pullSweepBody, scriptedBoard } from '../../../fixtures/board-script'
 import { githubCtx, httpFail } from '../../../fixtures/github-http'
 
-function pullsOf(script: Parameters<typeof scriptedBoard>[0], tracked: readonly TrackedRef[] | null = null, vocabulary: LabelVocabulary = VOCABULARY) {
+function pullsOf(script: Parameters<typeof scriptedBoard>[0], tracked: readonly TrackedRef[] | null = null, vocabulary: DisplayVocabulary = VOCABULARY) {
   const board = scriptedBoard(script)
   return { board, read: fetchBoardPulls(githubCtx(board.transport), { repo: REPO, vocabulary, integration: 'dev', tracked }) }
 }
@@ -22,7 +22,7 @@ describe('fetchBoardPulls — sweep', () => {
   })
 
   it('asks for no connection when no label is enabled, still reading the integration branch', async () => {
-    const { board, read } = pullsOf({}, null, { labels: [], disabled: [], problems: [] })
+    const { board, read } = pullsOf({}, null, { labels: [], problems: [] })
     const result = await read
     expect(result.ok && result.swept).toEqual([])
     expect(board.documents).toHaveLength(1)
@@ -84,11 +84,11 @@ describe('fetchBoardPulls — integration checks', () => {
 })
 
 describe('fetchBoardPulls — details', () => {
-  const sweep = () => ok(pullSweepBody({ pullRequests: connection([pull(2, ['approved']), pull(3, ['ready for review']), pull(4, ['in progress'])]) }))
+  const sweep = () => ok(pullSweepBody({ pullRequests: connection([pull(2, ['approved']), pull(3, ['reviewing']), pull(4, ['implementing'])]) }))
   const rollup = { commits: { nodes: [{ commit: { statusCheckRollup: { state: 'FAILURE', contexts: { nodes: [{ __typename: 'CheckRun', name: 'build', conclusion: 'FAILURE', status: 'COMPLETED' }] } } } }] } }
   const detail = { timelineItems: { nodes: [] }, reviews: { nodes: [] }, comments: { nodes: [] } }
 
-  it('selects the rollup only for a pull request at the approved or ready-for-review stage', async () => {
+  it('selects the rollup only for a pull request at the approved or reviewing stage', async () => {
     const { board, read } = pullsOf({ pulls: sweep, pullDetails: () => ok({ data: { repository: { d0: { ...detail, ...rollup }, d1: { ...detail, ...rollup }, d2: detail }, rateLimit: RATE_LIMIT_REPLY } }) })
     const result = await read
     expect(result.ok && result.swept.map((item) => item.checkRollup?.map((check) => check.name) ?? null)).toEqual([['build'], ['build'], null])
@@ -123,30 +123,30 @@ describe('fetchBoardPulls — details', () => {
 })
 
 describe('fetchBoardPulls — tracked', () => {
-  const PR_REF: TrackedRef = { kind: 'pull-request', number: 9, keys: ['marker', 'approved'] }
-  const CLOSED_REF: TrackedRef = { kind: 'pull-request', number: 10, keys: ['marker', 'readyForReview'] }
+  const PR_REF: TrackedRef = { kind: 'pull-request', number: 9 }
+  const CLOSED_REF: TrackedRef = { kind: 'pull-request', number: 10 }
 
-  it('reads a tracked pull request whose labels are gone by number, keeping its stored keys, and drops an untracked swept one', async () => {
+  it('reads a tracked pull request whose labels are gone by number, and drops an untracked swept one', async () => {
     const { board, read } = pullsOf({ pulls: () => ok(pullSweepBody({ pullRequests: connection([pull(1, ['approved'])]) })), trackedPulls: () => ok({ data: { repository: { t0: pull(9, []) }, rateLimit: RATE_LIMIT_REPLY } }) }, [PR_REF])
     const result = await read
     expect(result.ok && result.swept).toEqual([])
-    expect(result.ok && result.read[0]).toMatchObject({ number: 9, kind: 'pull-request', matchedKeys: ['marker', 'approved'] })
+    expect(result.ok && result.read[0]).toMatchObject({ number: 9, kind: 'pull-request', matchedKeys: [] })
     expect(board.documents.find((document) => document.includes('t0:'))).toContain('t0: pullRequest(number: 9)')
   })
 
   it('reports a merged tracked pull request in merged and closed, and an unmerged close in closed only', async () => {
     const { read } = pullsOf(
-      { trackedPulls: () => ok({ data: { repository: { t0: pull(9, ['approved'], { state: 'MERGED', mergedAt: '2026-01-01T00:00:00Z' }), t1: pull(10, ['ready for review'], { state: 'CLOSED' }) }, rateLimit: RATE_LIMIT_REPLY } }) },
+      { trackedPulls: () => ok({ data: { repository: { t0: pull(9, ['approved'], { state: 'MERGED', mergedAt: '2026-01-01T00:00:00Z' }), t1: pull(10, ['reviewing'], { state: 'CLOSED' }) }, rateLimit: RATE_LIMIT_REPLY } }) },
       [PR_REF, CLOSED_REF],
     )
     const result = await read
     expect(result.ok && [result.closed, result.merged]).toEqual([[9, 10], [9]])
   })
 
-  it('costs no by-number read when every tracked pull request was swept, and keeps the store\'s keys', async () => {
-    const { board, read } = pullsOf({ pulls: () => ok(pullSweepBody({ pullRequests: connection([pull(9, ['ready for review'])]) })) }, [PR_REF])
+  it('costs no by-number read when every tracked pull request was swept', async () => {
+    const { board, read } = pullsOf({ pulls: () => ok(pullSweepBody({ pullRequests: connection([pull(9, ['reviewing'])]) })) }, [PR_REF])
     const result = await read
-    expect(result.ok && result.swept[0]?.matchedKeys).toEqual(['marker', 'approved'])
+    expect(result.ok && result.swept[0]?.matchedKeys).toEqual(['reviewing'])
     expect(board.documents.some((document) => document.includes('t0:'))).toBe(false)
   })
 

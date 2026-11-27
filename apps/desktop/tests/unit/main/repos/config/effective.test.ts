@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { displayOverridesOf, foldDispositions, fromShape, labelOverridesOf, parseExcusedCheckName, toShape } from '@/main/repos/config/effective'
+import { displayOverridesOf, foldDispositions, fromShape, parseExcusedCheckName, toShape } from '@/main/repos/config/effective'
 import type { PortResolved } from '@/main/repos/config/effective'
 import type { AppliedOverride } from '@/utils/repos'
 
@@ -17,11 +17,10 @@ function override(path: string, value: AppliedOverride['value']): AppliedOverrid
 }
 
 describe('toShape', () => {
-  it('maps a non-blank raw label to its own name, and a blank or absent one to the default', () => {
-    const shape = toShape(BASE, { ready: 'go', blocked: '  ', planning: 42 })
-    expect(shape.labels.ready).toBe('go')
-    expect(shape.labels.blocked).toBe('blocked')
-    expect(shape.labels.planning).toBe('planning')
+  it('maps a non-blank raw display name to itself, and a blank, non-string or absent one to the default', () => {
+    const shape = toShape(BASE, { port: 'ship', needsYou: '  ' }, { planning: 42, approved: 'shipped' })
+    expect(shape.labels).toEqual({ port: 'ship', needsYou: 'needs you' })
+    expect(shape.states).toMatchObject({ planning: 'planning', approved: 'shipped' })
   })
 
   it('carries branches, models, modules, reviewCycleCap, concurrency, and sessionRequiredPaths straight through', () => {
@@ -36,17 +35,11 @@ describe('toShape', () => {
   })
 })
 
-describe('toShape — app-only', () => {
-  it('splits the display names across labels and states, and drops the legacy keys', () => {
-    const shape = toShape(BASE, { needsYou: 'Needs Attention', ready: 'go' }, { implementing: 'Building', planning: '  ' }, true)
+describe('toShape — display names', () => {
+  it('splits the display names across labels and states, and ignores any other key', () => {
+    const shape = toShape(BASE, { needsYou: 'Needs Attention', ready: 'go' }, { implementing: 'Building', planning: '  ' })
     expect(shape.labels).toEqual({ port: 'port', needsYou: 'Needs Attention' })
     expect(shape.states).toEqual({ planning: 'planning', implementing: 'Building', reviewing: 'reviewing', revising: 'revising', approved: 'approved' })
-  })
-
-  it('keeps the legacy labels and no states when not app-only', () => {
-    const shape = toShape(BASE, { ready: 'go' })
-    expect(shape.labels.ready).toBe('go')
-    expect(shape.states).toEqual({})
   })
 })
 
@@ -77,22 +70,6 @@ describe('fromShape', () => {
   it('carries a null production through, single-branch mode', () => {
     const shape = toShape({ ...BASE, branches: { integration: 'dev', production: null } }, {})
     expect(fromShape(shape).branches).toEqual({ integration: 'dev', production: null })
-  })
-})
-
-describe('labelOverridesOf', () => {
-  it('extracts only the labels.<key> entries, by their key', () => {
-    const applied = [override('labels.ready', 'go'), override('reviewCycleCap', 3)]
-    expect(labelOverridesOf(applied)).toEqual({ ready: 'go' })
-  })
-
-  it('ignores a labels.<key> entry naming a key outside the vocabulary', () => {
-    const applied = [override('labels.notARealKey', 'x')]
-    expect(labelOverridesOf(applied)).toEqual({})
-  })
-
-  it('returns {} for no label overrides', () => {
-    expect(labelOverridesOf([])).toEqual({})
   })
 })
 

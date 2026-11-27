@@ -83,7 +83,7 @@ export function TicketCard({ row, ungated, rowProps }: TicketCardProps) {
           </span>
         ) : null}
         <span className="flex-1" />
-        {row.item.autoPlan ? (
+        {row.item.ticket?.autoPlan ? (
           <IconTag label={AUTO_PLAN_TAG_TITLE}>
             <Sparkles aria-hidden="true" className="size-4" />
           </IconTag>

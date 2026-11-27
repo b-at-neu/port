@@ -3,13 +3,8 @@
 import type { GatePreflightResponse } from '@/types/gate'
 import type { ClaimPreflightResponse } from '@/types/claim'
 import type { OwnershipSummary } from '@/types/writes'
-import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 
 const VIEWER = 'octo-dev'
-
-function labelNameOf(key: 'ready'): string {
-  return LABEL_DEFAULTS.find((def) => def.key === key)?.name ?? key
-}
 
 const PLAN_MARKDOWN = `## Implementation Plan
 
@@ -69,7 +64,7 @@ export function fixtureClaimPreflight(now: Date): ClaimPreflightResponse {
       title: 'Show the build number in the footer',
       url: 'https://github.com/acme/widgets/issues/44',
       state: 'OPEN',
-      labels: [labelNameOf('ready')],
+      labels: [],
       assignees: [],
       viewer: VIEWER,
       blockers: { ok: true, open: [], shown: 0, total: 0 },

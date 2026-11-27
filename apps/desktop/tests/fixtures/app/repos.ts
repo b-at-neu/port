@@ -1,6 +1,7 @@
 // Built the same way `main/repos/inspect.ts` resolves a real one, never a hand-retyped config shape. `acme/widgets` is `ready`; `acme/legacy-site` is `config-invalid`.
 import { CONFIG_DEFAULTS } from '@/main/repos/config/schema'
-import { resolveVocabulary, verifyVocabulary } from '@/utils/labels/vocabulary'
+import { defaultNameOf, resolveDisplayVocabulary } from '@/utils/labels/display'
+import { verifyVocabulary } from '@/utils/labels/vocabulary'
 import type { VocabularyReport } from '@/utils/labels/vocabulary'
 import type { RepoId, RepositoryEntry, ResolvedRepoConfig } from '@/utils/repos'
 import type { FixtureScenario } from '@/types/fixtures'
@@ -9,7 +10,7 @@ export const WIDGETS_ID = 'fixture-acme-widgets' as RepoId
 export const LEGACY_SITE_ID = 'fixture-acme-legacy-site' as RepoId
 export const GADGETS_ID = 'fixture-acme-gadgets' as RepoId
 
-const WIDGETS_VOCABULARY = resolveVocabulary({ modules: CONFIG_DEFAULTS.modules })
+const WIDGETS_VOCABULARY = resolveDisplayVocabulary({})
 
 const WIDGETS_CONFIG: ResolvedRepoConfig = {
   repo: 'acme/widgets',
@@ -19,7 +20,7 @@ const WIDGETS_CONFIG: ResolvedRepoConfig = {
   models: CONFIG_DEFAULTS.models,
   modules: CONFIG_DEFAULTS.modules,
   reviewCycleCap: CONFIG_DEFAULTS.reviewCycleCap,
-  vocabulary: WIDGETS_VOCABULARY,
+  displayVocabulary: WIDGETS_VOCABULARY,
   // A real commands.worktrees, not CONFIG_DEFAULTS' own null, so the Worktrees tab has an Inspect button.
   commands: { ...CONFIG_DEFAULTS.commands, worktrees: 'node plugins/port/bin/worktrees.mjs' },
   concurrency: CONFIG_DEFAULTS.concurrency,
@@ -31,10 +32,9 @@ const WIDGETS_CONFIG: ResolvedRepoConfig = {
 /** The fixture's own GitHub read always carries every label it resolved, so `verifyVocabulary` reports `verified`. */
 export const WIDGETS_VOCABULARY_REPORT: VocabularyReport = verifyVocabulary(WIDGETS_VOCABULARY, { ok: true, names: WIDGETS_VOCABULARY.labels.map((label) => label.name) })
 
-// `labels.ready` overridden to `'queued'` via a CLAUDE.md override — its own
+// `labels.needsYou` overridden to `'attention'` via a CLAUDE.md override — its own
 // GitHub read carries no vocabulary label at all, so it resolves mis-resolved.
-const GADGETS_OVERRIDES = { ready: 'queued' } as const
-const GADGETS_VOCABULARY = resolveVocabulary({ modules: CONFIG_DEFAULTS.modules, overrides: GADGETS_OVERRIDES })
+const GADGETS_VOCABULARY = resolveDisplayVocabulary({ overrides: { needsYou: 'attention' } })
 
 export const GADGETS_VOCABULARY_REPORT: VocabularyReport = verifyVocabulary(GADGETS_VOCABULARY, { ok: true, names: [] })
 
@@ -46,12 +46,12 @@ const GADGETS_CONFIG: ResolvedRepoConfig = {
   models: CONFIG_DEFAULTS.models,
   modules: CONFIG_DEFAULTS.modules,
   reviewCycleCap: CONFIG_DEFAULTS.reviewCycleCap,
-  vocabulary: GADGETS_VOCABULARY,
+  displayVocabulary: GADGETS_VOCABULARY,
   commands: { ...CONFIG_DEFAULTS.commands, worktrees: 'node plugins/port/bin/worktrees.mjs' },
   concurrency: CONFIG_DEFAULTS.concurrency,
   sessionRequiredPaths: CONFIG_DEFAULTS.sessionRequiredPaths,
   checkDispositions: {},
-  overrides: [{ path: 'labels.ready', value: 'queued', reason: 'CLAUDE.md port-overrides', portDefault: 'ready', source: 'CLAUDE.md' }],
+  overrides: [{ path: 'labels.needsYou', value: 'attention', reason: 'CLAUDE.md port-overrides', portDefault: defaultNameOf('needsYou'), source: 'CLAUDE.md' }],
 }
 
 export const FIXTURE_REPOSITORIES: readonly RepositoryEntry[] = [

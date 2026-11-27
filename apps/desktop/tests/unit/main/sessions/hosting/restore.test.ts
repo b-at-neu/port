@@ -52,7 +52,7 @@ describe('persistedOpen', () => {
   })
 
   it('excludes a stage session — it belongs to the dispatch loop, never the operator restore banner', () => {
-    expect(persistedOpen([snapshot({ stage: { agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved' } })])).toEqual([])
+    expect(persistedOpen([snapshot({ stage: { agent: 'impl', number: 52, kind: 'issue' } })])).toEqual([])
   })
 })
 

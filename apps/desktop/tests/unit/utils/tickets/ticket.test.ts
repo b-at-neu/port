@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { ReconciledItem } from '@/types/state'
 import { bareTicketLabel, prSuffixOf, ticketAssignedTo, ticketIndex, ticketLabel, ticketLabelFor } from '@/utils/tickets/ticket'
+import { ticketOf } from '../../../support/tickets'
 
-const LABELLED = { stage: 'trigger', stages: [{ key: 'ready', name: 'ready', role: 'trigger' }] } as const
+const TRACKED = { ticket: ticketOf() }
 
 function issue(number: number, overrides: Partial<ReconciledItem> = {}): ReconciledItem {
-  return { repoId: 'repo-a' as RepoId, repo: 'o/a', kind: 'issue', number, title: `issue ${String(number)}`, url: `https://github.com/o/a/issues/${String(number)}`, stage: null, stages: [], linked: null, ...overrides } as unknown as ReconciledItem
+  return { repoId: 'repo-a' as RepoId, repo: 'o/a', kind: 'issue', number, title: `issue ${String(number)}`, url: `https://github.com/o/a/issues/${String(number)}`, ticket: null, linked: null, ...overrides } as unknown as ReconciledItem
 }
 
 function pullRequest(number: number, overrides: Partial<ReconciledItem> = {}): ReconciledItem {
@@ -61,25 +62,25 @@ describe('ticketIndex', () => {
   })
 
   describe('primary', () => {
-    it('is the pull request when it carries a stage label', () => {
-      const [ticket] = ticketIndex([issue(1, { linked: 2, ...LABELLED }), pullRequest(2, { linked: 1, ...LABELLED })]).tickets
+    it('is the pull request when both halves are tracked', () => {
+      const [ticket] = ticketIndex([issue(1, { linked: 2, ...TRACKED }), pullRequest(2, { linked: 1, ...TRACKED })]).tickets
       expect(ticket?.primary.number).toBe(2)
     })
 
-    it('is the pull request when the issue has lost its stage label', () => {
-      const [ticket] = ticketIndex([issue(1, { linked: 2 }), pullRequest(2, { linked: 1, ...LABELLED })]).tickets
+    it('is the pull request when only it is tracked', () => {
+      const [ticket] = ticketIndex([issue(1, { linked: 2 }), pullRequest(2, { linked: 1, ...TRACKED })]).tickets
       expect(ticket?.primary.number).toBe(2)
     })
 
-    it('is the issue when only the issue carries a stage label', () => {
-      const [ticket] = ticketIndex([issue(1, { linked: 2, ...LABELLED }), pullRequest(2, { linked: 1 })]).tickets
+    it('is the issue when only the issue is tracked', () => {
+      const [ticket] = ticketIndex([issue(1, { linked: 2, ...TRACKED }), pullRequest(2, { linked: 1 })]).tickets
       expect(ticket?.primary.number).toBe(1)
     })
 
-    it('is the stranded pull request when neither carries a stage label, so the status stays Unstaged', () => {
+    it('is the stranded pull request when neither is tracked', () => {
       const [ticket] = ticketIndex([issue(1, { linked: 2 }), pullRequest(2, { linked: 1 })]).tickets
       expect(ticket?.primary.number).toBe(2)
-      expect(ticket?.primary.stage).toBeNull()
+      expect(ticket?.primary.ticket).toBeNull()
     })
   })
 })

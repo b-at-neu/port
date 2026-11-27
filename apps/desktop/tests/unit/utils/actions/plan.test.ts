@@ -12,7 +12,7 @@ const PAUSED = ticketAt('implement', { kind: 'held', on: 'paused', detail: '' })
 const RUNNING = ticketAt('implement', { kind: 'running', runId: 'run-1' })
 
 function item(ticket: Ticket | null, overrides: Partial<ReconciledItem> = {}): ReconciledItem {
-  return reconciledItem({ kind: 'issue', number: 148, assignees: [], marked: false, ticket, ...overrides })
+  return reconciledItem({ kind: 'issue', number: 148, assignees: [], ticket, ...overrides })
 }
 
 function actions(ticket: Ticket | null, overrides: Partial<ReconciledItem> = {}, viewer: string | null = 'op', approvalGate = true) {
@@ -67,20 +67,20 @@ describe('actionsFor — retry and stop', () => {
 })
 
 describe('actionsFor — gate', () => {
-  const pr = (overrides: Partial<ReconciledItem> = {}) => ({ kind: 'pull-request' as const, stages: [{ key: 'reviewing' as const, name: 'reviewing', role: 'in-flight' as const }], ...overrides })
+  const pr = (overrides: Partial<ReconciledItem> = {}) => ({ kind: 'pull-request' as const, ...overrides })
 
-  it('is offered on an ungated pull request regardless of assignee', () => {
-    expect(actions(RUNNING, pr({ assignees: ['someone-else'] })).gate).toEqual({ available: true, plan: { move: null, addAssignees: [] } })
+  it('is offered on an untracked pull request regardless of assignee', () => {
+    expect(actions(null, pr({ assignees: ['someone-else'] })).gate).toEqual({ available: true, plan: { move: null, addAssignees: [] } })
   })
 
-  it('is not-applicable when approvalGate is false, on an issue, or once marked', () => {
-    expect(actions(RUNNING, pr(), 'op', false).gate).toEqual(NOT_APPLICABLE)
-    expect(actions(RUNNING, { stages: pr().stages }).gate).toEqual(NOT_APPLICABLE)
-    expect(actions(RUNNING, pr({ marked: true })).gate).toEqual(NOT_APPLICABLE)
+  it('is not-applicable when approvalGate is false, on an issue, or once the record tracks it', () => {
+    expect(actions(null, pr(), 'op', false).gate).toEqual(NOT_APPLICABLE)
+    expect(actions(null, { kind: 'issue' }).gate).toEqual(NOT_APPLICABLE)
+    expect(actions(RUNNING, pr()).gate).toEqual(NOT_APPLICABLE)
   })
 
   it('is available even when viewer is unknown — gate runs no ownership check', () => {
-    expect(actions(RUNNING, pr(), null).gate.available).toBe(true)
+    expect(actions(null, pr(), null).gate.available).toBe(true)
   })
 })
 

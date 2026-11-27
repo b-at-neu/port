@@ -54,7 +54,7 @@ export function TicketRow({ row, rowProps, operatorJoined = false }: TicketRowPr
         </span>
       ) : null}
       <span className="shrink-0 text-meta text-muted-foreground">{item.repo}</span>
-      {item.autoPlan ? (
+      {item.ticket?.autoPlan ? (
         <span title={AUTO_PLAN_TAG_TITLE} className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-meta text-foreground-secondary">
           {AUTO_PLAN_TAG_LABEL}
         </span>

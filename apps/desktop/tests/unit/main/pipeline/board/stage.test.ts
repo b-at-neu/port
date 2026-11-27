@@ -1,51 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
-import { stageOf } from '@/main/pipeline/board/stage'
+import { roleOfTicket } from '@/main/pipeline/board/stage'
+import type { Ticket } from '@/utils/pipeline/ticket'
+import { NOW } from '../../../../support/tickets'
 
-const VOCABULARY = resolveVocabulary({})
-
-describe('stageOf', () => {
-  it('resolves each role alone', () => {
-    expect(stageOf(['ready'], VOCABULARY).stage).toBe('trigger')
-    expect(stageOf(['inProgress'], VOCABULARY).stage).toBe('in-flight')
-    expect(stageOf(['blocked'], VOCABULARY).stage).toBe('gate')
-    expect(stageOf(['prOpened'], VOCABULARY).stage).toBe('terminal')
-  })
-
-  it('refreshing + approved resolves to the in-flight winner, both in stages, stageAmbiguous true', () => {
-    const result = stageOf(['refreshing', 'approved'], VOCABULARY)
-    expect(result.stage).toBe('in-flight')
-    expect(result.stageAmbiguous).toBe(true)
-    expect(result.stages.map((s) => s.key).sort()).toEqual(['approved', 'refreshing'].sort())
-  })
-
-  it('blocked + ready resolves to the gate', () => {
-    const result = stageOf(['blocked', 'ready'], VOCABULARY)
-    expect(result.stage).toBe('gate')
-    expect(result.stageAmbiguous).toBe(true)
-  })
-
-  it('markers only yield stage: null, and set marked/autoPlan', () => {
-    const result = stageOf(['marker', 'autoPlan'], VOCABULARY)
-    expect(result.stage).toBeNull()
-    expect(result.stages).toEqual([])
-    expect(result.marked).toBe(true)
-    expect(result.autoPlan).toBe(true)
-    expect(result.stageAmbiguous).toBe(false)
-  })
-
-  it('no labels at all yields stage: null and no markers', () => {
-    const result = stageOf([], VOCABULARY)
-    expect(result.stage).toBeNull()
-    expect(result.marked).toBe(false)
-    expect(result.autoPlan).toBe(false)
-  })
-
-  it('a module-disabled key never appears in stages', () => {
-    const vocabulary = resolveVocabulary({ modules: {} })
-    // Asserts the skip behaviour holds for any key the vocabulary genuinely does not resolve.
-    const result = stageOf(['ready'], { ...vocabulary, labels: vocabulary.labels.filter((l) => l.key !== 'ready') })
-    expect(result.stages).toEqual([])
-    expect(result.stage).toBeNull()
+describe('roleOfTicket', () => {
+  it.each([
+    ['running', { kind: 'running', runId: null }, 'in-flight'],
+    ['queued', { kind: 'queued', reason: 'new', since: NOW }, 'trigger'],
+    ['held', { kind: 'held', on: 'paused', detail: '' }, 'trigger'],
+    ['waiting-on-you', { kind: 'waiting-on-you', gate: 'merge', detail: '' }, 'gate'],
+    ['blocked', { kind: 'blocked', on: [4], reason: '' }, 'gate'],
+    ['done', { kind: 'done', at: NOW }, 'terminal'],
+  ] as const satisfies readonly (readonly [string, Ticket['status'], string])[])('a %s ticket is %s', (_name, status, role) => {
+    expect(roleOfTicket({ status })).toBe(role)
   })
 })

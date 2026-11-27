@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { labelName } from '@/utils/labels/vocabulary'
-import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { CommandResult, PlatformFs } from '@/types/platform'
 import { inspectRepository } from '@/main/repos/inspect'
 import type { GitRunner } from '@/types/platform'
@@ -150,28 +148,18 @@ describe('inspectRepository', () => {
     expect(schemaDiagnostic).toBeDefined()
   })
 
-  it('resolves refreshBranch/refreshing as core, always enabled', async () => {
+  it('a labels override reaches the display vocabulary with source: config', async () => {
     const repo = await makeRepo()
-    writeConfig(repo, JSON.stringify({ repo: 'o/n' }))
+    writeConfig(repo, JSON.stringify({ repo: 'o/n', labels: { needsYou: 'help' } }))
     const entry = await readyEntry(repo)
-    expect(entry.config.vocabulary.disabled).toEqual([])
-    expect(labelName(entry.config.vocabulary, 'refreshBranch')).toBe('refresh branch')
+    expect(entry.config.displayVocabulary.labels.find((l) => l.key === 'needsYou')).toMatchObject({ name: 'help', source: 'config' })
   })
 
-  it('a labels override reaches the vocabulary with source: config', async () => {
-    const repo = await makeRepo()
-    writeConfig(repo, JSON.stringify({ repo: 'o/n', labels: { ready: 'go' } }))
-    const entry = await readyEntry(repo)
-    const readyLabel = entry.config.vocabulary.labels.find((l) => l.key === ('ready' satisfies LabelKey))
-    expect(readyLabel).toEqual({ key: 'ready', name: 'go', source: 'config', module: 'core', role: 'trigger' })
-  })
-
-  it('keeps a legacy labels override working and reports it as one legacy-label-overrides diagnostic, not a schema violation', async () => {
+  it('reports a legacy labels override as one legacy-label-overrides diagnostic, not a schema violation', async () => {
     const repo = await makeRepo()
     writeConfig(repo, JSON.stringify({ repo: 'o/n', labels: { ready: 'go', blocked: 'stuck' } }))
     const entry = await readyEntry(repo)
     expect(entry.config.appOnly).toBe(false)
-    expect(entry.config.vocabulary.labels.find((l) => l.key === 'ready')?.name).toBe('go')
     expect(entry.diagnostics).toContainEqual({ kind: 'legacy-label-overrides', keys: ['ready', 'blocked'] })
     expect(entry.diagnostics.some((d) => d.kind === 'schema-violations')).toBe(false)
   })
@@ -184,14 +172,12 @@ describe('inspectRepository', () => {
     expect(entry.diagnostics.filter((d) => d.kind === 'schema-violations')).toHaveLength(1)
   })
 
-  it('resolves an app-only repository to the seven display labels, leaving the stage vocabulary on defaults', async () => {
+  it('resolves an app-only repository to the seven display labels', async () => {
     const repo = await makeRepo()
     writeConfig(repo, JSON.stringify({ repo: 'o/n', appOnly: true, labels: { needsYou: 'Needs Attention' }, states: { implementing: 'Building' } }))
     const entry = await readyEntry(repo)
     expect(entry.config.appOnly).toBe(true)
-    expect(entry.config.displayVocabulary?.labels.map((l) => l.name)).toEqual(['port', 'Needs Attention', 'planning', 'Building', 'reviewing', 'revising', 'approved'])
-    expect(entry.config.vocabulary.labels.find((l) => l.key === 'inProgress')?.name).toBe('in progress')
-    expect(entry.config.vocabulary.problems).toEqual([])
+    expect(entry.config.displayVocabulary.labels.map((l) => l.name)).toEqual(['port', 'Needs Attention', 'planning', 'Building', 'reviewing', 'revising', 'approved'])
     expect(entry.diagnostics.some((d) => d.kind === 'legacy-label-overrides' || d.kind === 'schema-violations')).toBe(false)
   })
 
@@ -203,7 +189,7 @@ describe('inspectRepository', () => {
       '<!-- port-overrides:begin -->\n```port-overrides\nstates.approved = shipped  # we call it shipped\nlabels.ready = go  # legacy key\n```\n<!-- port-overrides:end -->\n',
     )
     const entry = await readyEntry(repo)
-    expect(entry.config.displayVocabulary?.labels.find((l) => l.key === 'approved')).toMatchObject({ name: 'shipped', source: 'CLAUDE.md' })
+    expect(entry.config.displayVocabulary.labels.find((l) => l.key === 'approved')).toMatchObject({ name: 'shipped', source: 'CLAUDE.md' })
     expect(entry.diagnostics.filter((d) => d.kind === 'override-refused')).toHaveLength(1)
   })
 
@@ -353,14 +339,13 @@ describe('inspectRepository — the default branch at origin/HEAD', () => {
 })
 
 describe('inspectRepository — CLAUDE.md port-overrides', () => {
-  it('applies a labels.<key> override onto the vocabulary, with source CLAUDE.md, and lists it', async () => {
+  it('applies a labels.<key> override onto the display vocabulary, with source CLAUDE.md, and lists it', async () => {
     const repo = await makeRepo()
     writeConfig(repo, JSON.stringify({ repo: 'o/n' }))
-    writeClaudeMd(repo, '<!-- port-overrides:begin -->\n```port-overrides\nlabels.ready = go  # this repo already used this word\n```\n<!-- port-overrides:end -->\n')
+    writeClaudeMd(repo, '<!-- port-overrides:begin -->\n```port-overrides\nlabels.needsYou = help  # this repo already used this word\n```\n<!-- port-overrides:end -->\n')
     const entry = await readyEntry(repo)
-    const readyLabel = entry.config.vocabulary.labels.find((l) => l.key === ('ready' satisfies LabelKey))
-    expect(readyLabel).toEqual({ key: 'ready', name: 'go', source: 'CLAUDE.md', module: 'core', role: 'trigger' })
-    expect(entry.config.overrides).toEqual([{ path: 'labels.ready', value: 'go', reason: 'this repo already used this word', portDefault: 'ready', source: 'CLAUDE.md' }])
+    expect(entry.config.displayVocabulary.labels.find((l) => l.key === 'needsYou')).toMatchObject({ name: 'help', source: 'CLAUDE.md' })
+    expect(entry.config.overrides).toEqual([{ path: 'labels.needsYou', value: 'help', reason: 'this repo already used this word', portDefault: 'needs you', source: 'CLAUDE.md' }])
   })
 
   it('applies a reviewCycleCap override onto the config', async () => {

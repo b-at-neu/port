@@ -4,12 +4,18 @@ import type { PipelineState, ReconciledItem, RepositoryState } from '@/types/sta
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS, initialHealth } from '@/types/board'
 import type { BoardSnapshot, RepositoryHealth } from '@/types/board'
 import type { TickHeld, TickReport } from '@/types/tick'
-import { boardSignature, displayStatus, projectBoard, stageLabelOf } from '@/renderer/board/project'
+import type { Stage, Status } from '@/utils/pipeline/ticket'
+import { boardSignature, displayStatus, projectBoard } from '@/renderer/board/project'
 import { boardSections } from '@/renderer/board/sections'
 import { reconciledItem } from '../../../support/board-snapshot'
 import { stageSession } from '../../../support/session-snapshot'
+import { ticketAt } from '../../../support/tickets'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
+
+const RUNNING: Status = { kind: 'running', runId: null }
+const BLOCKED: Status = { kind: 'blocked', on: [], reason: 'x' }
+const at = (stage: Stage, status: Status): ReconciledItem['ticket'] => ticketAt(stage, status)
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
   return reconciledItem({
@@ -20,11 +26,6 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     title: 'a ticket',
     url: 'https://github.com/o/a/issues/1',
     assignees: ['op'],
-    stage: 'trigger',
-    stages: [{ key: 'ready', name: 'ready', role: 'trigger' }],
-    stageAmbiguous: false,
-    marked: true,
-    autoPlan: false,
     status: 'waiting',
     statusEvidence: null,
     waitingOn: 'cockpit',
@@ -38,8 +39,6 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     state: 'OPEN',
     mergedAt: null,
     updatedAt: null,
-    stageHistory: [],
-    matchedKeys: ['ready'],
     sources: ['github'],
     claimedFiles: null,
     headRefOid: null,
@@ -82,7 +81,6 @@ function readyRepo(overrides: Partial<Extract<RepositoryState, { ok: true }>> = 
     viewer: 'op',
     integrationChecks: {},
     approvalGate: true,
-    disabled: [],
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
     reviewCycleCap: 5,
     ...overrides,
@@ -158,17 +156,6 @@ describe('displayStatus — Decision 5 suppression', () => {
   })
 })
 
-describe('stageLabelOf', () => {
-  it('returns the stage label whose role matches the winning stage', () => {
-    const label = stageLabelOf(item({ stage: 'trigger', stages: [{ key: 'ready', name: 'ready', role: 'trigger' }] }))
-    expect(label?.key).toBe('ready')
-  })
-
-  it('returns null when stage is null', () => {
-    expect(stageLabelOf(item({ stage: null, stages: [] }))).toBeNull()
-  })
-})
-
 describe('projectBoard — rows', () => {
   it('projects rows from two repositories, sorted by repository display name', () => {
     const repoA = readyRepo({ repoId: 'repo-a' as RepoId, displayName: 'o/a', items: [item({ repoId: 'repo-a' as RepoId, number: 1 })] })
@@ -227,9 +214,9 @@ describe('projectBoard — ownership filter', () => {
 })
 
 describe('projectBoard — one row per ticket', () => {
-  const REVIEWING = { stage: 'trigger', stages: [{ key: 'reviewing', name: 'reviewing', role: 'trigger' }], status: 'in-flight' } as const
+  const REVIEWING = { ticket: at('review', RUNNING), status: 'in-flight' } as const
   const linkedPair = (issueOverrides: Partial<ReconciledItem> = {}) => [
-    item({ number: 464, title: 'the ticket', stage: null, stages: [], status: 'unstaged', linked: 537, ...issueOverrides }),
+    item({ number: 464, title: 'the ticket', ticket: null, status: 'unstaged', linked: 537, ...issueOverrides }),
     item({ number: 537, kind: 'pull-request', title: 'the pull request', url: 'https://github.com/o/a/pull/537', linked: 464, ...REVIEWING }),
   ]
   const project = (items: readonly ReconciledItem[], sessions: Parameters<typeof projectBoard>[0]['sessions'] = []) =>
@@ -241,7 +228,7 @@ describe('projectBoard — one row per ticket', () => {
     const [row] = projection.rows
     expect(row?.ticket.ref).toMatchObject({ kind: 'issue', number: 464, title: 'the ticket', pullRequest: { number: 537 } })
     expect(row?.item.number).toBe(537)
-    expect(row?.stageLabel?.key).toBe('reviewing')
+    expect(row?.item.ticket?.stage).toBe('review')
     expect(row?.displayStatus.status).toBe('in-flight')
     const subGroups = boardSections(projection.rows, { repo: null }).flatMap((section) => section.subGroups)
     expect(subGroups.map((subGroup) => subGroup.key)).toEqual(['review:running'])
@@ -249,7 +236,7 @@ describe('projectBoard — one row per ticket', () => {
 
   describe('a pr opened issue whose pull request is gone from the sweep', () => {
     const prOpened = (linkReason: ReconciledItem['linkReason']) =>
-      item({ number: 644, stage: 'terminal', stages: [{ key: 'prOpened', name: 'pr opened', role: 'terminal' }], matchedKeys: ['prOpened'], status: 'terminal', linkReason, ticket: null })
+      item({ number: 644, status: 'terminal', linkReason, ticket: null })
 
     it('is absent when its pull request merged in the gap, so it never lands under Unstaged', () => {
       const projection = project([prOpened('counterpart-merged')])
@@ -279,9 +266,9 @@ describe('projectBoard — one row per ticket', () => {
   })
 
   it("matches a live session on either of the ticket's numbers", () => {
-    const review = stageSession({ repoId: 'repo-a' as RepoId, key: 'hosted-review', stage: { agent: 'review', number: 537, kind: 'pull-request', trigger: 'readyForReview' } })
+    const review = stageSession({ repoId: 'repo-a' as RepoId, key: 'hosted-review', stage: { agent: 'review', number: 537, kind: 'pull-request' } })
     expect(project(linkedPair(), [review]).rows[0]?.liveStage?.sessionKey).toBe('hosted-review')
-    const plan = stageSession({ repoId: 'repo-a' as RepoId, key: 'hosted-plan', stage: { agent: 'plan', number: 464, kind: 'issue', trigger: 'ready' } })
+    const plan = stageSession({ repoId: 'repo-a' as RepoId, key: 'hosted-plan', stage: { agent: 'plan', number: 464, kind: 'issue' } })
     expect(project(linkedPair(), [plan]).rows[0]?.liveStage?.sessionKey).toBe('hosted-plan')
   })
 
@@ -298,7 +285,7 @@ describe('projectBoard — one row per ticket', () => {
 
   describe('held', () => {
     const REPO_A = 'repo-a' as RepoId
-    const entry: TickHeld = { number: 5, kind: 'issue', stage: 'plan', trigger: 'ready', reason: 'check-hold', contention: null, escalation: { kind: 'check-hold', checks: ['e2e'], state: 'red', escalateAt: null } }
+    const entry: TickHeld = { number: 5, kind: 'issue', stage: 'plan', reason: 'check-hold', contention: null, escalation: { kind: 'check-hold', checks: ['e2e'], state: 'red', escalateAt: null } }
     const tick = (overrides: Partial<TickReport>): TickReport => ({
       repoId: REPO_A,
       displayName: 'o/a',
@@ -306,7 +293,6 @@ describe('projectBoard — one row per ticket', () => {
       actionable: [],
       held: [entry],
       claims: [],
-      disabledStages: [],
       nextTickAt: NOW.toISOString(),
       observations: [],
       autoApprovals: [],
@@ -338,13 +324,13 @@ describe('projectBoard — one row per ticket', () => {
 describe('projectBoard — live stage sessions', () => {
   const REPO = 'repo-a' as RepoId
   const planSession = (overrides: Partial<Parameters<typeof stageSession>[0]> = {}) =>
-    stageSession({ repoId: REPO, stage: { agent: 'plan', number: 1, kind: 'issue', trigger: 'ready' }, ...overrides })
+    stageSession({ repoId: REPO, stage: { agent: 'plan', number: 1, kind: 'issue' }, ...overrides })
   const project = (items: readonly ReconciledItem[], sessions: Parameters<typeof projectBoard>[0]['sessions']) =>
     projectBoard({ snapshot: snapshotOf([readyRepo({ items })], [health()]), now: NOW, sessions })
 
   it('marks a queued item with a streaming stage session as in flight, with liveStage set', () => {
     const [row] = project([item()], [planSession({ key: 'hosted-plan' })]).rows
-    expect(row?.liveStage).toEqual({ agent: 'plan', trigger: 'ready', sessionKey: 'hosted-plan' })
+    expect(row?.liveStage).toEqual({ agent: 'plan', sessionKey: 'hosted-plan' })
     expect(row?.displayStatus.status).toBe('in-flight')
     expect(row?.item.status).toBe('waiting')
   })
@@ -362,7 +348,7 @@ describe('projectBoard — live stage sessions', () => {
   })
 
   it('does not match a session for the same number of the other kind', () => {
-    const session = planSession({ stage: { agent: 'plan', number: 1, kind: 'pull-request', trigger: 'ready' } })
+    const session = planSession({ stage: { agent: 'plan', number: 1, kind: 'pull-request' } })
     expect(project([item()], [session]).rows[0]?.liveStage).toBeNull()
   })
 
@@ -377,14 +363,14 @@ describe('projectBoard — live stage sessions', () => {
   })
 
   it('leaves an in-flight item in flight, with liveStage still set', () => {
-    const inFlight = item({ status: 'in-flight', stage: 'in-flight', stages: [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }] })
+    const inFlight = item({ status: 'in-flight', ticket: at('implement', RUNNING) })
     const [row] = project([inFlight], [planSession()]).rows
     expect(row?.displayStatus.status).toBe('in-flight')
     expect(row?.liveStage).not.toBeNull()
   })
 
   describe('a stalled item', () => {
-    const stalled = () => item({ status: 'stalled', statusEvidence: 'no-claimant', stage: 'in-flight', stages: [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }] })
+    const stalled = () => item({ status: 'stalled', statusEvidence: 'no-claimant', ticket: at('implement', RUNNING) })
 
     it.each([['ready'], ['interrupting']] as const)('renders in flight while its %s hosted session is live', (phase) => {
       const [row] = project([stalled()], [planSession({ phase })]).rows
@@ -409,7 +395,7 @@ describe('projectBoard — live stage sessions', () => {
   })
 
   it('stamps blockedOn on a blocked row, and leaves every other row null', () => {
-    const blocked = item({ number: 1, status: 'gated', stage: 'gate', stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }] })
+    const blocked = item({ number: 1, status: 'gated', ticket: at('implement', BLOCKED) })
     const queued = item({ number: 2 })
     const rows = project([blocked, queued], []).rows
     expect(rows.find((r) => r.item.number === 1)?.blockedOn).toEqual({ dependencies: null, session: null, comment: null })
@@ -423,7 +409,7 @@ describe('projectBoard — live stage sessions', () => {
   })
 
   it('refuses unblock with agent-live for a blocked issue that has a live session', () => {
-    const blocked = item({ status: 'gated', stage: 'gate', stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }] })
+    const blocked = item({ status: 'gated', ticket: at('implement', BLOCKED) })
     expect(project([blocked], [planSession()]).rows[0]?.decisions.unblock).toEqual({ available: false, reason: 'agent-live' })
     expect(project([blocked], []).rows[0]?.decisions.unblock).toMatchObject({ available: true })
   })
@@ -463,7 +449,7 @@ describe('projectBoard — denial burst (Decision 7)', () => {
 describe('boardSignature — Decision 1 no-op guard', () => {
   it('changes when a rendered field changes', () => {
     const repoQuiet = readyRepo({ items: [item({ status: 'waiting' })] })
-    const repoChanged = readyRepo({ items: [item({ status: 'gated', stage: 'gate', stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }] })] })
+    const repoChanged = readyRepo({ items: [item({ status: 'gated', ticket: at('implement', BLOCKED) })] })
     const a = projectBoard({ snapshot: snapshotOf([repoQuiet], [health()]), now: NOW })
     const b = projectBoard({ snapshot: snapshotOf([repoChanged], [health()]), now: NOW })
     expect(boardSignature(a)).not.toBe(boardSignature(b))

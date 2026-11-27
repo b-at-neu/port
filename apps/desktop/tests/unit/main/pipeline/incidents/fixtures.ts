@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import type { ReadyEntry } from '@/types/actions'
 import type { IncidentDraft } from '@/types/incidents'
 import type { ReconciledItem } from '@/types/state'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import { resolveDisplayVocabulary } from '@/utils/labels/display'
 import type { RepoId } from '@/utils/repos'
 import { createTestContext } from '../../../../support/context'
 import { createFakeGitHub } from '../../../../support/fake-github'
@@ -14,8 +14,7 @@ import { ticketOf } from '../../../../support/tickets'
 
 export const REPO_ID = 'repo-a' as RepoId
 export const REPO = 'o/r'
-export const VOCABULARY = resolveVocabulary({})
-export const ENTRY = { id: REPO_ID, path: '/repo', config: { repo: REPO, owner: 'o', name: 'r', vocabulary: VOCABULARY, branches: { integration: 'dev' } } } as unknown as ReadyEntry
+export const ENTRY = { id: REPO_ID, path: '/repo', config: { repo: REPO, owner: 'o', name: 'r', displayVocabulary: resolveDisplayVocabulary({}), branches: { integration: 'dev' } } } as unknown as ReadyEntry
 
 export function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
   return {
@@ -27,11 +26,6 @@ export function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     url: 'https://github.com/o/r/pull/789',
     assignees: ['op'],
     ticket: null,
-    stage: 'trigger',
-    stages: [{ key: 'readyForReview', name: 'ready for review', role: 'trigger' }],
-    stageAmbiguous: false,
-    marked: true,
-    autoPlan: false,
     status: 'waiting',
     statusEvidence: null,
     waitingOn: null,
@@ -45,8 +39,6 @@ export function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     state: 'OPEN',
     mergedAt: null,
     updatedAt: null,
-    stageHistory: [{ key: 'readyForReview', actor: null, at: '2026-11-16T10:00:00.000Z' }],
-    matchedKeys: ['readyForReview'],
     sources: ['github'],
     claimedFiles: null,
     headRefOid: 'f19c6d5',

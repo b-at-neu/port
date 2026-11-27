@@ -3,42 +3,41 @@ import type { RepoId } from '@/utils/repos'
 import { OPERATOR_ACTIONS, OPERATOR_DECISIONS } from '@/types/actions'
 import type { ActionAvailability, DecisionAvailability, OperatorAction, OperatorDecision } from '@/types/actions'
 import type { BlockedOn, BoardColumnKey, BoardItemRow } from '@/types/board'
-import type { StageLabel } from '@/types/state'
 import type { Ticket } from '@/types/ticket'
-import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
-import { LABEL_KEYS } from '@/utils/labels/vocabulary'
-import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { Stage, Status } from '@/utils/pipeline/ticket'
 import { ticketIndex } from '@/utils/tickets/ticket'
 import { boardColumns } from '@/renderer/board/columns'
 import { reconciledItem } from '../../../support/board-snapshot'
+import { NOW, queuedAt, ticketAt } from '../../../support/tickets'
 
 const NO_ACTIONS = Object.fromEntries(OPERATOR_ACTIONS.map((a): [OperatorAction, ActionAvailability] => [a, { available: false, reason: 'not-applicable' }])) as Record<OperatorAction, ActionAvailability>
 const NO_DECISIONS = Object.fromEntries(OPERATOR_DECISIONS.map((d): [OperatorDecision, DecisionAvailability] => [d, { available: false, reason: 'not-applicable' }])) as Record<OperatorDecision, DecisionAvailability>
 
-function row(overrides: {
-  readonly repoId?: string
-  readonly number?: number
-  readonly stageKey?: LabelKey | null
-  readonly blockedOn?: BlockedOn
-}): BoardItemRow {
+const RUNNING: Status = { kind: 'running', runId: null }
+const waiting = (gate: 'plan-approval' | 'merge' | 'escalation'): Status => ({ kind: 'waiting-on-you', gate, detail: '' })
+
+interface At {
+  readonly stage: Stage
+  readonly status: Status
+}
+
+function row(overrides: { readonly repoId?: string; readonly number?: number; readonly at?: At | null; readonly blockedOn?: BlockedOn }): BoardItemRow {
   const repoId = (overrides.repoId ?? 'repo-a') as RepoId
-  const stageLabel: StageLabel | null = overrides.stageKey != null ? { key: overrides.stageKey, name: overrides.stageKey, role: LABEL_DEFAULTS.find((def) => def.key === overrides.stageKey)?.role ?? 'trigger' } : null
+  const number = overrides.number ?? 1
+  const at = overrides.at === undefined ? { stage: 'plan' as const, status: queuedAt('new') } : overrides.at
   const item = reconciledItem({
     repoId,
-    number: overrides.number ?? 1,
+    number,
     url: 'https://example.com',
     assignees: [],
-    stage: stageLabel?.role ?? null,
-    stages: stageLabel !== null ? [stageLabel] : [],
     waitingOn: null,
-    matchedKeys: [],
+    ticket: at === null ? null : ticketAt(at.stage, at.status, { ticket: number }),
   })
   return {
     item,
     ticket: ticketIndex([item]).tickets[0] as Ticket,
     displayStatus: { status: 'waiting', staleGithub: false, githubAgeMs: null },
     liveStage: null,
-    stageLabel,
     actions: NO_ACTIONS,
     decisions: NO_DECISIONS,
     viewer: null,
@@ -54,26 +53,22 @@ function columnOfRow(r: BoardItemRow): BoardColumnKey | undefined {
   return boardColumns([r], [], { repo: null }).find((column) => column.cards.length > 0)?.key
 }
 
-const EXPECTED: Readonly<Record<LabelKey, BoardColumnKey>> = {
-  marker: 'queued',
-  autoPlan: 'queued',
-  ready: 'queued',
-  planChangesRequested: 'plan',
-  planning: 'plan',
-  planReview: 'needs-you',
-  planApproved: 'implement',
-  inProgress: 'implement',
-  prOpened: 'queued',
-  readyForReview: 'review',
-  reviewing: 'review',
-  needsRevision: 'revise',
-  revising: 'revise',
-  approved: 'needs-you',
-  needsHuman: 'needs-you',
-  blocked: 'queued',
-  refreshBranch: 'revise',
-  refreshing: 'revise',
-}
+const CASES: readonly (readonly [string, At, BoardColumnKey])[] = [
+  ['a new plan', { stage: 'plan', status: queuedAt('new') }, 'queued'],
+  ['a replan', { stage: 'plan', status: queuedAt('changes-requested') }, 'plan'],
+  ['a running plan', { stage: 'plan', status: RUNNING }, 'plan'],
+  ['a plan awaiting approval', { stage: 'plan', status: waiting('plan-approval') }, 'needs-you'],
+  ['a queued implement', { stage: 'implement', status: queuedAt('new') }, 'implement'],
+  ['a running implement', { stage: 'implement', status: RUNNING }, 'implement'],
+  ['a queued review', { stage: 'review', status: queuedAt('new') }, 'review'],
+  ['a running review', { stage: 'review', status: RUNNING }, 'review'],
+  ['a queued revise', { stage: 'revise', status: queuedAt('changes-requested') }, 'revise'],
+  ['a running revise', { stage: 'revise', status: RUNNING }, 'revise'],
+  ['a running refresh', { stage: 'refresh', status: RUNNING }, 'revise'],
+  ['an escalated implement', { stage: 'implement', status: waiting('escalation') }, 'needs-you'],
+  ['a merge awaiting the operator', { stage: 'merge', status: waiting('merge') }, 'needs-you'],
+  ['a merged ticket', { stage: 'merge', status: { kind: 'done', at: NOW } }, 'needs-you'],
+]
 
 describe('boardColumns', () => {
   it('returns the six columns in order, even for no rows', () => {
@@ -83,31 +78,21 @@ describe('boardColumns', () => {
     expect(columns.every((c) => c.cards.length === 0)).toBe(true)
   })
 
-  it('classifies every label key, with none left out of the table', () => {
-    expect(Object.keys(EXPECTED).sort()).toEqual([...LABEL_KEYS].sort())
+  it.each(CASES)('puts %s in %s', (_name, at, column) => {
+    expect(columnOfRow(row({ at }))).toBe(column)
   })
 
-  it.each(LABEL_KEYS.map((key): [LabelKey, BoardColumnKey] => [key, EXPECTED[key]]))('puts %s in %s', (key, column) => {
-    const r = row({ stageKey: key, blockedOn: key === 'blocked' ? HELD : undefined })
-    expect(columnOfRow(r)).toBe(column)
+  it('puts a blocked ticket in Queued, whatever stage it was in', () => {
+    expect(columnOfRow(row({ at: { stage: 'implement', status: RUNNING }, blockedOn: HELD }))).toBe('queued')
   })
 
-  it('puts a blocked hand-back on an in-flight stage in Queued', () => {
-    expect(columnOfRow(row({ stageKey: 'inProgress', blockedOn: HELD }))).toBe('queued')
-  })
-
-  it('keeps an approved ticket in Needs you and a refreshing one in Revise', () => {
-    expect(columnOfRow(row({ stageKey: 'approved' }))).toBe('needs-you')
-    expect(columnOfRow(row({ stageKey: 'refreshing' }))).toBe('revise')
-  })
-
-  it('puts a row with no stage in Queued', () => {
-    expect(columnOfRow(row({ stageKey: null }))).toBe('queued')
+  it('puts an untracked row in Queued', () => {
+    expect(columnOfRow(row({ at: null }))).toBe('queued')
   })
 
   it('puts an ungated row in Needs you, flagged, ahead of the others', () => {
-    const gated = row({ stageKey: 'approved', number: 2 })
-    const ungated = row({ stageKey: 'readyForReview', number: 3 })
+    const gated = row({ at: { stage: 'merge', status: waiting('merge') }, number: 2 })
+    const ungated = row({ at: { stage: 'review', status: queuedAt('new') }, number: 3 })
     const needsYou = boardColumns([gated], [ungated], { repo: null }).find((c) => c.key === 'needs-you')
     expect(needsYou?.cards.map((card) => [card.row.item.number, card.ungated])).toEqual([
       [3, true],
@@ -116,22 +101,26 @@ describe('boardColumns', () => {
   })
 
   it('shows every input row exactly once', () => {
-    const rows = LABEL_KEYS.map((key, i) => row({ stageKey: key, number: i + 1, blockedOn: key === 'blocked' ? HELD : undefined }))
-    const ungated = row({ stageKey: 'inProgress', number: 99 })
+    const rows = CASES.map(([, at], i) => row({ at, number: i + 1 }))
+    const ungated = row({ at: { stage: 'implement', status: RUNNING }, number: 99 })
     const numbers = boardColumns(rows, [ungated], { repo: null }).flatMap((c) => c.cards.map((card) => card.row.item.number))
     expect([...numbers].sort((a, b) => a - b)).toEqual([...rows.map((r) => r.item.number), 99].sort((a, b) => a - b))
   })
 
   it('applies the repo filter to rows and ungated rows alike', () => {
-    const a = row({ repoId: 'repo-a', stageKey: 'planning', number: 1 })
-    const b = row({ repoId: 'repo-b', stageKey: 'planning', number: 2 })
-    const ungatedB = row({ repoId: 'repo-b', stageKey: 'approved', number: 3 })
+    const a = row({ repoId: 'repo-a', at: { stage: 'plan', status: RUNNING }, number: 1 })
+    const b = row({ repoId: 'repo-b', at: { stage: 'plan', status: RUNNING }, number: 2 })
+    const ungatedB = row({ repoId: 'repo-b', at: { stage: 'merge', status: waiting('merge') }, number: 3 })
     const columns = boardColumns([a, b], [ungatedB], { repo: 'repo-a' as RepoId })
     expect(columns.flatMap((c) => c.cards.map((card) => card.row.item.number))).toEqual([1])
   })
 
   it('orders a column by pipeline stage, then by input order', () => {
-    const rows = [row({ stageKey: 'reviewing', number: 1 }), row({ stageKey: 'readyForReview', number: 2 }), row({ stageKey: 'reviewing', number: 3 })]
+    const rows = [
+      row({ at: { stage: 'review', status: RUNNING }, number: 1 }),
+      row({ at: { stage: 'review', status: queuedAt('new') }, number: 2 }),
+      row({ at: { stage: 'review', status: RUNNING }, number: 3 }),
+    ]
     const review = boardColumns(rows, [], { repo: null }).find((c) => c.key === 'review')
     expect(review?.cards.map((card) => card.row.item.number)).toEqual([2, 1, 3])
   })

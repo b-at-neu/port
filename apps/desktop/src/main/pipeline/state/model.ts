@@ -6,7 +6,6 @@ import type { DispatchEntry, MirrorFailure, PipelineStateFile, PipelineView, Rep
 import type { RepositoryState } from '@/types/state'
 import type { WriteOutcome } from '@/types/writes'
 import { ticketSchema, type Ticket } from '@/utils/pipeline/ticket'
-import type { RepoId } from '@/utils/repos'
 
 export const FILE_VERSION = 3
 

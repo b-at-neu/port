@@ -14,7 +14,7 @@ import { AT, memoryStore, STATE_PATH, storeCtx, USER_DATA } from '../../../../su
 import { runOf, ticketOf } from '../../../../support/tickets'
 
 const REPO = 'repo-a' as RepoId
-const READY = repositoryState([reconciledItem({ number: 7, matchedKeys: ['marker', 'ready'] })])
+const READY = repositoryState([reconciledItem({ number: 7, ticket: ticketOf({ ticket: 7, stage: 'plan', status: { kind: 'queued', reason: 'new', since: AT } }) })])
 const ISSUE = { kind: 'issue' as const, number: 7 }
 const CLAIM: TicketEvent = { kind: 'claim', stage: 'plan' }
 
@@ -224,10 +224,9 @@ describe('createPipelineStateStore — apply', () => {
     expect(await store.apply(REPO, ISSUE, CLAIM, null)).toEqual({ ok: false, reason: 'unseeded' })
   })
 
-  it('reports no change, and writes nothing, for an event that lands where the ticket already is', async () => {
+  it('refuses a track event for an item that already has a ticket', async () => {
     const { store, writes } = memoryStore(REPO, { tickets: [queued()] })
-    const labels: TicketEvent = { kind: 'labels', itemKind: 'issue', add: ['ready'], remove: [], expect: { present: [], absent: [] }, action: 'noop', issue: null }
-    expect(await store.apply(REPO, ISSUE, labels, null)).toMatchObject({ ok: true, changed: false })
+    expect(await store.apply(REPO, ISSUE, { kind: 'track', autoPlan: false }, null)).toEqual({ ok: false, reason: 'moved' })
     expect(writes).toEqual([])
   })
 })
@@ -250,7 +249,7 @@ describe('createPipelineStateStore — mirror failures and pruning', () => {
 
   it('prunes closed tickets and tracks the rest', async () => {
     const { store } = rig()
-    await store.seed(REPO, repositoryState([reconciledItem({ number: 1 }), reconciledItem({ number: 2 })]))
+    await store.seed(REPO, repositoryState([reconciledItem({ number: 1, ticket: ticketOf({ ticket: 1 }) }), reconciledItem({ number: 2, ticket: ticketOf({ ticket: 2 }) })]))
     await store.prune(REPO, [1])
     expect(store.tracked(REPO)?.map((ref) => ref.number)).toEqual([2])
   })

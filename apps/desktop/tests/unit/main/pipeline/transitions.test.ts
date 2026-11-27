@@ -143,12 +143,10 @@ describe('merged', () => {
 })
 
 describe('what a commit records', () => {
-  it('bumps rev and appends one event with the stage, the status and the label diff of both halves', () => {
+  it('bumps rev and appends one event with the stage and the status', () => {
     const { ticket } = ok(at('implement', running), handback('implement', 'pr-opened', '9', 9))
     expect(ticket.rev).toBe(1)
-    expect(ticket.history).toEqual([
-      { at: LATER, action: 'stage-handback-pr-opened', actor: null, to: { stage: 'review', status: 'queued' }, legacy: { add: ['issue:prOpened', 'pull-request:marker', 'pull-request:readyForReview'], remove: ['issue:inProgress'] } },
-    ])
+    expect(ticket.history).toEqual([{ at: LATER, action: 'stage-handback-pr-opened', actor: null, to: { stage: 'review', status: 'queued' }, legacy: null }])
   })
 
   it('leaves rev alone when nothing changed', () => {
@@ -197,56 +195,26 @@ describe('what a commit records', () => {
   })
 })
 
-describe('labels, the transitional event', () => {
-  const labels = (overrides: Partial<Extract<TicketEvent, { kind: 'labels' }>> = {}): TicketEvent => ({ kind: 'labels', itemKind: 'issue', add: [], remove: [], expect: { present: [], absent: [] }, action: 'gate-approve', issue: null, ...overrides })
-
-  it('creates a ticket from nothing, which Work on can then claim', () => {
-    const { ticket } = ok(null, labels({ add: ['marker', 'ready'], expect: { present: [], absent: ['marker'] } }))
-    expect(ticket).toMatchObject({ rev: 0, ticket: 843, stage: 'plan', status: { kind: 'queued', reason: 'new' } })
-    expect(ticket.history[0]).toMatchObject({ legacy: { add: ['issue:marker', 'issue:ready'], remove: [] } })
+describe('track and gate, the two creations', () => {
+  it.each([false, true])('tracks an untracked issue queued for planning, autoPlan %s', (autoPlan) => {
+    const { ticket } = ok(null, { kind: 'track', autoPlan })
+    expect(ticket).toMatchObject({ rev: 0, ticket: 843, pr: null, stage: 'plan', status: { kind: 'queued', reason: 'new', since: LATER }, autoPlan })
+    expect(ticket.history).toEqual([{ at: LATER, action: 'claim-issue', actor: null, to: { stage: 'plan', status: 'queued' }, legacy: null }])
   })
 
-  it('creates a pull request under the issue its branch names', () => {
-    const event = labels({ itemKind: 'pull-request', add: ['readyForReview'], issue: 12 })
-    expect(applyEvent(null, event, { ...CTX, ref: { kind: 'pull-request', number: 40 } })).toMatchObject({ ok: true, ticket: { ticket: 12, pr: { number: 40 }, stage: 'review' } })
+  it('gates an untracked pull request held at review, under the issue its branch names', () => {
+    const result = applyEvent(null, { kind: 'gate', issue: 12 }, { ...CTX, ref: { kind: 'pull-request', number: 40 } })
+    expect(result).toMatchObject({ ok: true, ticket: { ticket: 12, pr: { number: 40, approvedAt: null }, stage: 'review', status: { kind: 'held', on: 'paused', detail: 'stopped' } } })
+    expect(result.ok && result.ticket.history.map((row) => row.action)).toEqual(['gate-pull-request'])
   })
 
-  it.each([
-    ['an expected key that is not there', { expect: { present: ['planApproved' as const], absent: [] } }],
-    ['an expected-absent key that is', { expect: { present: [], absent: ['ready' as const] } }],
-  ])('refuses %s', (_name, overrides) => {
-    expect(refusal(at('plan', queued()), labels(overrides))).toBe('moved')
+  it('gates a pull request under its own number when no issue is named', () => {
+    const result = applyEvent(null, { kind: 'gate', issue: null }, { ...CTX, ref: { kind: 'pull-request', number: 40 } })
+    expect(result).toMatchObject({ ok: true, ticket: { ticket: 40 } })
   })
 
-  it('refuses an expectation of a missing ticket', () => {
-    expect(refusal(null, labels({ expect: { present: ['ready'], absent: [] } }))).toBe('moved')
-  })
-
-  it('swaps keys, and records the swap in the history', () => {
-    const { ticket } = ok(at('plan', queued()), labels({ add: ['planning'], remove: ['ready'], action: 'stage-claim' }))
-    expect(ticket).toMatchObject({ rev: 1, status: { kind: 'running' } })
-    expect(ticket.history.at(-1)).toMatchObject({ action: 'stage-claim', legacy: { add: ['issue:planning'], remove: ['issue:ready'] } })
-  })
-
-  it('reports no change for keys that land where the ticket already is, and for a marker a ticket cannot lose', () => {
-    const ticket = at('plan', queued())
-    expect(ok(ticket, labels({ add: ['ready'] }))).toMatchObject({ changed: false, ticket })
-    expect(ok(ticket, labels({ remove: ['marker'] }))).toMatchObject({ changed: false })
-  })
-
-  it('writes the pull request half, and sets approval when the keys say approved', () => {
-    const result = applyEvent(at('review', queued(), pr()), labels({ itemKind: 'pull-request', add: ['approved'], remove: ['readyForReview'] }), { ...CTX, ref: { kind: 'pull-request', number: 9 } })
-    expect(result.ok && result.ticket).toMatchObject({ stage: 'merge', status: { kind: 'waiting-on-you', gate: 'merge' }, pr: { number: 9, approvedAt: LATER } })
-  })
-
-  it('keeps the stage a lone needsHuman interrupted, and the stage a stop left behind', () => {
-    const escalate = applyEvent(at('review', running, pr()), labels({ itemKind: 'pull-request', add: ['needsHuman'], remove: ['reviewing'] }), { ...CTX, ref: { kind: 'pull-request', number: 9 } })
-    expect(escalate.ok && escalate.ticket).toMatchObject({ stage: 'review', status: { kind: 'waiting-on-you', gate: 'escalation' } })
-    expect(ok(at('implement', running), labels({ remove: ['inProgress'] })).ticket).toMatchObject({ stage: 'implement', status: { kind: 'held' } })
-  })
-
-  it('toggles auto-plan', () => {
-    expect(ok(at('plan', queued()), labels({ add: ['autoPlan'] })).ticket.autoPlan).toBe(true)
+  it.each([{ kind: 'track', autoPlan: false }, { kind: 'gate', issue: null }] as const)('refuses a %j of a ticket the record already holds', (event) => {
+    expect(refusal(at('plan', queued()), event)).toBe('moved')
   })
 })
 

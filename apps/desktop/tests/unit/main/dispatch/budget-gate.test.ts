@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { pathOps } from '@/main/platform/paths'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import { resolveDisplayVocabulary } from '@/utils/labels/display'
 import type { RepoId } from '@/utils/repos'
 import type { CommandResult, FileResult, GhResult, GhRunner, GitHubHttpResult, GitHubRequest, GitHubTransport, GitRunner } from '@/types/platform'
 import type { ReadyEntry } from '@/types/actions'
@@ -31,7 +31,7 @@ function entry(): ReadyEntry {
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
       modules: { approvalGate: true, release: true, scope: true },
       reviewCycleCap: 3,
-      vocabulary: resolveVocabulary({}),
+      displayVocabulary: resolveDisplayVocabulary({}),
       commands: { worktrees: null, budget: 'node scripts/budget.mjs' },
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
       sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
