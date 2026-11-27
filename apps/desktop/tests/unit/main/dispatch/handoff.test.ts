@@ -177,29 +177,33 @@ describe('createStageHandoff', () => {
 
   it('serializes one repository’s writes', async () => {
     const { handoff } = await rig()
-    const order: string[] = []
     let release: () => void = () => undefined
+    let running = 0
+    let overlapped = false
+    const started = new Set<number>()
     apply.mockReset().mockImplementation((params) => {
       const { number } = (params as { readonly record: { readonly number: number } }).record
-      order.push(`start ${String(number)}`)
+      started.add(number)
+      if (running > 0) overlapped = true
       if (number === 52) {
+        running += 1
         return new Promise<StageTransitionResult>((resolve) => {
           release = () => {
-            order.push('end 52')
+            running -= 1
             resolve(APPLIED)
           }
         })
       }
-      order.push(`end ${String(number)}`)
       return Promise.resolve(APPLIED)
     })
     handoff.settle(REPO, RECORD, outcome('completed', PR_OPENED), null)
     handoff.settle(REPO, { ...RECORD, sessionKey: 'hosted-2' as SessionKey, number: 53 }, outcome('completed', { token: 'pr-opened', arg: '#9' }), null)
     await flush()
-    expect(order).toEqual(['start 52'])
+    expect([...started]).toEqual([52])
     release()
     await flush()
-    expect(order).toEqual(['start 52', 'end 52', 'start 53', 'end 53'])
+    expect([...started].sort()).toEqual([52, 53])
+    expect(overlapped).toBe(false)
   })
 
   it('retryPending touches only its own repository', async () => {

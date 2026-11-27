@@ -27,6 +27,7 @@
     "src/renderer/board/tick.ts",
     "src/types/**/*",
     "src/utils/**/*",
+    "tests/scenarios/**/*",
     "tests/unit/eslint/**/*",
     "tests/unit/main/**/*",
     "tests/unit/preload/**/*",

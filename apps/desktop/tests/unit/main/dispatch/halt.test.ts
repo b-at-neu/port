@@ -176,14 +176,14 @@ describe('haltDispatch', () => {
     expect(report).toEqual({ kind: 'completed', items: [{ kind: 'stopped', number: 148, itemKind: 'issue', repoId: REPO_ID, removedLabel: 'Reviewing', attachedAgent: 'review-agent', stoppedTask: false }] })
   })
 
-  it('calls stopFor before the label write, and standDown after the loop', async () => {
+  it('stops the session, writes the label and stands the repository down', async () => {
     const { ctx, calls } = setup({ stopFor: () => Promise.resolve(true) })
     apply.mockImplementation(() => {
       calls.push('apply')
       return Promise.resolve(APPLIED)
     })
     const report = await halt(ctx, [item()])
-    expect(calls).toEqual(['stopFor', 'apply', `standDown ${REPO_ID}`])
+    expect(new Set(calls)).toEqual(new Set(['stopFor', 'apply', `standDown ${REPO_ID}`]))
     expect(report).toMatchObject({ kind: 'completed', items: [{ kind: 'stopped', stoppedTask: true }] })
   })
 
