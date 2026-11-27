@@ -82,7 +82,7 @@ describe('survived — the ticket', () => {
 })
 
 function actionableOf(overrides: Partial<TickActionable> = {}): TickActionable {
-  return { number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null, ...overrides }
+  return { number: 52, kind: 'issue', stage: 'implement', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null, ...overrides }
 }
 
 describe('promptFor', () => {

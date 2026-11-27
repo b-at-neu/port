@@ -48,7 +48,9 @@ export async function diskWith(...tickets: readonly Ticket[]): Promise<PlatformF
 
 type Actionable = TickReport['actionable'][number]
 
-export const actionable = (number: number, trigger: Actionable['trigger'], agent: Actionable['agent'], kind: Actionable['kind'] = 'issue'): Actionable => ({ number, kind, trigger, agent, unchecked: false, cycle: null })
+const STAGE_OF_AGENT: Record<Actionable['agent'], Actionable['stage']> = { plan: 'plan', impl: 'implement', review: 'review', revise: 'revise' }
+
+export const actionable = (number: number, trigger: Actionable['trigger'], agent: Actionable['agent'], kind: Actionable['kind'] = 'issue'): Actionable => ({ number, kind, stage: STAGE_OF_AGENT[agent], trigger, agent, unchecked: false, cycle: null })
 
 export const tickReport = (overrides: Partial<TickReport> = {}): TickReport => ({ repoId: SCENARIO_REPO, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [], autoApprovals: [], labelRepairs: [], ...overrides })
 
