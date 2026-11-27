@@ -105,7 +105,7 @@ describe('promptFor', () => {
   })
 
   it('names the refresh stage for a refreshBranch trigger, with the number twice', () => {
-    const prompt = promptFor(actionableOf({ kind: 'pull-request', trigger: 'refreshBranch', agent: 'revise' }))
+    const prompt = promptFor(actionableOf({ kind: 'pull-request', trigger: 'refreshBranch', agent: 'revise', stage: 'refresh' }))
     expect(prompt).toBe('Refresh stage for pull request #52. Run your pipeline stage for pull request #52 in refresh mode.')
     expect(REFRESH_PROMPT.split('<n>')).toHaveLength(3)
   })
